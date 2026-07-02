@@ -55,10 +55,11 @@ discussion/
     implementation/
     research/
     screens/
-  model-authoring/      # LLM(Fable)によるモデル制作挑戦。前提合意、閉問題、制作定石
+  model-authoring/      # LLM(Fable)によるモデル制作挑戦。前提合意、閉問題、調査事実、制作定石
     _map.md
     premises/
     closed-problems/
+    research/
     craft/
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md

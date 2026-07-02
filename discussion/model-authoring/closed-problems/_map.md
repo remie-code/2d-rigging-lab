@@ -12,7 +12,7 @@
 
 | Path | 内容 | Status |
 |---|---|---|
-| [01-eyeball-x/](01-eyeball-x/) | 眼球メッシュ生成〜Eyeball_X 移動 rigging〜クリッピング | Problem defined / API survey pending |
+| [01-eyeball-x/](01-eyeball-x/) | 眼球メッシュ生成〜Eyeball_X 移動 rigging〜クリッピング | Problem defined / API survey done（[api-requirements.md](01-eyeball-x/api-requirements.md)）/ 分岐議論待ち |
 
 ## 次の行動
 
