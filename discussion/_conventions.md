@@ -55,6 +55,11 @@ discussion/
     implementation/
     research/
     screens/
+  model-authoring/      # LLM(Fable)によるモデル制作挑戦。前提合意、閉問題、制作定石
+    _map.md
+    premises/
+    closed-problems/
+    craft/
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
@@ -106,6 +111,7 @@ discussion/
 | `development_convention/` | P0/P1開発規約、/goal実装オーケストレーション規約、basis、review | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | L0用の薄いorchestration contractとdomain agent向け詳細規約を分離して管理する |
 | `implementation/` | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | Accepted development conventionに従い、実装証拠とレビュー成果物を永続化する |
 | `runtime-player/` | Editorが出力したRuntime Exportを読む外部Runtime Player / Capture Host appの調査、UX、設計、未決事項 | Undine / Sylph / Gnome | Editor本体と分離し、tracking input、runtime display、OBS想定、外部app境界を扱う |
+| `model-authoring/` | LLM(Fable)が作者として2Dモデルを制作する挑戦の前提合意、閉問題定義と結果、制作定石 | Undine / ユーザー | [design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) の後継トピック。実装waveが必要になった場合の置き場は未決 |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。

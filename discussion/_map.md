@@ -37,6 +37,7 @@
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
 | [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave53 final integration report/review `pass` が最新 final implementation-proven baseline。Workspace Layout Migration v0 は bounded pass 記録済み |
 | [runtime-player/](runtime-player/) | Editor外のRuntime Player / Capture Host appの調査、UX、設計、未決事項 | iFacialMocap input adapter調査、初期画面UX、Electron固定後の技術スタック判断を記録 |
+| [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 前提合意3文書と第一閉問題（01-eyeball-x）定義を記録済み。craft/ 成果物イメージは未合意 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
@@ -54,20 +55,22 @@
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | Codex-friendly automation | [design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) で、Editor/repoは提案・推論・自動分類を行わず、外部Codex/LLMが人間同等操作をdeterministic API経由で実行する方針をAccepted user decisionとして記録済み |
 | Development Convention | `development_convention/` にP0/P1規約16本とsource file organization規約を追加済み。旧 `implementation-orchestration-policy.md` と `/goal` companion文書は破棄済み |
-| Implementation baseline | Wave53 final integration report/review `pass` が最新 final implementation-proven baseline。詳細なwave履歴は [implementation/_map.md](implementation/_map.md) と下層wave/review文書へ委譲 |
-| Current implementation work | Wave53 `workspace-layout-migration-v0` は [implementation/orchestration/wave53-plan.md](implementation/orchestration/wave53-plan.md) に基づき、final integration `pass`。Authoring Workspace v0 skeleton、App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip placement、Toolbox経由の PSD Import Task Shell reachability、desktop/mobile smoke、既存 PSD focused paths、guard checks は記録済み。full visual redesign、final modal/task-window/dedicated-view policy、Diagnostics / Evidence final view、Codex / Automation final view、Mesh / Atlas / Parameter / Variant UI は未実装 |
+| Implementation baseline | **Editor実装は Wave102 をもって一旦完成（ユーザー決定、2026-07-02記録）**。wave plan は [implementation/orchestration/](implementation/orchestration/) に wave102-plan.md まで実在する。詳細なwave履歴は [implementation/_map.md](implementation/_map.md) と下層wave/review文書へ委譲。ただし implementation/_map.md の記録は Wave93 で止まっており、Wave94-102 の反映は未了（既知のドキュメント更新もれ） |
+| Current implementation work | Editor実装は Wave102 で一旦停止中。現在の主戦場は [model-authoring/](model-authoring/)（Fableによるモデル制作挑戦）の対話フェーズと Runtime Player。Wave53 時代の詳細記述は superseded（履歴は implementation/ 下層に残存） |
 | Implementation maps | 次Wave判断前は [implementation/current-capability-map.md](implementation/current-capability-map.md) と [implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md) を正として読む |
 | Runtime Player topic | Editor外の追加appとして [runtime-player/](runtime-player/) を作成。iFacialMocapをv0 tracking input adapter候補にする調査は [runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、初期画面UXは [runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、Electron固定後の技術スタックは [runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、Runtime Player Wave1計画は [runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) に記録 |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
+| Model Authoring topic | 「Fableに2Dモデルを作らせる」挑戦を [model-authoring/](model-authoring/) として作成（2026-07-02）。可解性分析・運用方針（ヘッドレス専有 / Git巻き戻し / 判定の梯子）・閉問題アプローチを premises/ に合意記録済み。第一閉問題は [model-authoring/closed-problems/01-eyeball-x/problem-definition.md](model-authoring/closed-problems/01-eyeball-x/problem-definition.md) |
 
 ## 次の行動
 
-1. 次の実装判断では [implementation/current-capability-map.md](implementation/current-capability-map.md)、[implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md)、[design/screen-design/_map.md](design/screen-design/_map.md)、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md)、および必要に応じて [implementation/orchestration/wave53-plan.md](implementation/orchestration/wave53-plan.md) をbasisにし、Wave53を最新final baselineとして扱う。
+1. 次の実装判断では [implementation/_map.md](implementation/_map.md)、[implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md)、[design/screen-design/_map.md](design/screen-design/_map.md)、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) をbasisにし、Editor実装はWave102で一旦完成として扱う（implementation/_map.md の Wave94-102 反映は未了である点に注意）。
 2. external HTTP / WebSocket / MCP API work と LLM provider integration は、MVP境界が明示変更されるまで Future scope に留める。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
 5. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。
-6. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
+6. Fableによるモデル制作の検討では [model-authoring/_map.md](model-authoring/_map.md) を入口にする。
+7. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
 
 ## 未決事項
 
@@ -77,3 +80,5 @@
 | Live2D Feature Proposal のテンプレート | 作成済み。個別提案draftは未作成 |
 | Domain AC / scenario のmemo対応 | 完了 |
 | Future Public Clean Subset の具体範囲 | 現在MVP外。必要時に別途再設計 |
+| implementation/_map.md の Wave94-102 バックフィル | 未了。既知のドキュメント更新もれ。orchestration/ に plan は実在する |
+| model-authoring/craft/ の成果物イメージ | 未合意。次の議題 |
