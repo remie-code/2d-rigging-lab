@@ -22,6 +22,9 @@ import {
 import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
 
 export interface RuntimeExportPoseEvaluation {
   readonly adapter: RuntimeExportRuntimeGraphAdapterResult;
@@ -58,6 +61,7 @@ export type RuntimeExportPoseEvaluationOptions = {
   readonly previousState?: RuntimeStateDto;
   readonly resetReasons?: readonly RuntimeResetReason[];
   readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
+  readonly effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null;
   readonly adapter?: RuntimeExportRuntimeGraphAdapterResult;
   readonly compiledRuntimeModel?: CompiledRuntimeModel;
   readonly runtimeModelInstance?: RuntimeModelInstance;
@@ -231,7 +235,8 @@ function createRuntimeExportPoseEvaluationRuntime(
 } {
   const adapter = options.adapter ?? createRuntimeExportRuntimeGraph({
     ...input,
-    activeVariantSelection: options.activeVariantSelection ?? null
+    activeVariantSelection: options.activeVariantSelection ?? null,
+    effectiveDynamicsTuning: options.effectiveDynamicsTuning ?? null
   });
   const transientCompileCount =
     options.runtimeModelInstance === undefined &&

@@ -37,7 +37,7 @@ The Control Window must not claim OBS is capturing or streaming. It can report R
 Wave8 native Stage Window controls remain implemented:
 
 - Runtime Export startup restore.
-- Control Window close-hide recovery through tray/application menu.
+- Wave20 supersedes the original Control Window close-hide recovery: Control close now requests app quit, while direct Stage close is recoverable from Control through `Focus Stage`.
 - explicit quit path.
 - Stage Arrange mode with temporary native drag handle.
 - click-through toggle, default off and not persisted.
@@ -239,7 +239,8 @@ Browser Source manual checks:
 
 Native Stage Window fallback checks:
 
-- Control close hides/reopens from tray/menu.
+- Control close exits the app through the normal quit path.
+- Direct Stage close leaves Control alive and can be recovered with `Focus Stage`.
 - explicit quit flushes and exits.
 - Runtime Export valid/invalid startup restore.
 - Stage Arrange drag handle moves the native Stage Window.

@@ -13,6 +13,11 @@ import {
   runtimePlayerActiveVariantSelectionSchemaVersion,
   type RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import {
+  runtimePlayerEffectiveDynamicsTuningSchemaVersion,
+  type RuntimePlayerDynamicsTuningGroupOverride,
+  type RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
 
 const RUNTIME_EXPORT_STATUS_STATES = new Set([
   "empty",
@@ -50,6 +55,9 @@ export function readBrowserSourceRuntimeExportResponse(
   const activeVariantSelection = readActiveVariantSelection(
     value.activeVariantSelection
   );
+  const effectiveDynamicsTuning = readEffectiveDynamicsTuning(
+    value.effectiveDynamicsTuning
+  );
   if (runtimeExportStatus === null) {
     return null;
   }
@@ -59,6 +67,13 @@ export function readBrowserSourceRuntimeExportResponse(
   if (activeVariantSelection === null) {
     return null;
   }
+  if (
+    effectiveDynamicsTuning === null &&
+    value.effectiveDynamicsTuning !== null &&
+    value.effectiveDynamicsTuning !== undefined
+  ) {
+    return null;
+  }
 
   if (value.status === "not-loaded" && value.runtimeExport === null) {
     return {
@@ -66,6 +81,7 @@ export function readBrowserSourceRuntimeExportResponse(
       runtimeExportStatus,
       stageDisplayState,
       activeVariantSelection,
+      effectiveDynamicsTuning,
       runtimeExport: null
     };
   }
@@ -81,6 +97,7 @@ export function readBrowserSourceRuntimeExportResponse(
       runtimeExportStatus,
       stageDisplayState,
       activeVariantSelection,
+      effectiveDynamicsTuning,
       runtimeExport
     };
   }
@@ -120,13 +137,19 @@ function readBrowserSourceServerMessageValue(
     const activeVariantSelection = readActiveVariantSelection(
       value.activeVariantSelection
     );
+    const effectiveDynamicsTuning = readEffectiveDynamicsTuning(
+      value.effectiveDynamicsTuning
+    );
 
     if (
       runtimeExportStatus === null ||
       runtimeExport === null && value.runtimeExport !== null ||
       latestFrame === null && value.latestFrame !== null ||
       stageDisplayState === null ||
-      activeVariantSelection === null
+      activeVariantSelection === null ||
+      effectiveDynamicsTuning === null &&
+        value.effectiveDynamicsTuning !== null &&
+        value.effectiveDynamicsTuning !== undefined
     ) {
       return null;
     }
@@ -139,6 +162,7 @@ function readBrowserSourceServerMessageValue(
       latestFrame,
       stageDisplayState,
       activeVariantSelection,
+      effectiveDynamicsTuning,
       sentAtIso: value.sentAtIso
     };
   }
@@ -151,11 +175,17 @@ function readBrowserSourceServerMessageValue(
     const activeVariantSelection = readActiveVariantSelection(
       value.activeVariantSelection
     );
+    const effectiveDynamicsTuning = readEffectiveDynamicsTuning(
+      value.effectiveDynamicsTuning
+    );
 
     if (
       runtimeExportStatus === null ||
       runtimeExport === null && value.runtimeExport !== null ||
-      activeVariantSelection === null
+      activeVariantSelection === null ||
+      effectiveDynamicsTuning === null &&
+        value.effectiveDynamicsTuning !== null &&
+        value.effectiveDynamicsTuning !== undefined
     ) {
       return null;
     }
@@ -166,6 +196,26 @@ function readBrowserSourceServerMessageValue(
       runtimeExport,
       runtimeExportStatus,
       activeVariantSelection,
+      effectiveDynamicsTuning,
+      sentAtIso: value.sentAtIso
+    };
+  }
+
+  if (value.type === "dynamics-tuning-changed") {
+    const effectiveDynamicsTuning = readEffectiveDynamicsTuning(
+      value.effectiveDynamicsTuning
+    );
+    if (
+      effectiveDynamicsTuning === null &&
+      value.effectiveDynamicsTuning !== null
+    ) {
+      return null;
+    }
+
+    return {
+      type: "dynamics-tuning-changed",
+      protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
+      effectiveDynamicsTuning,
       sentAtIso: value.sentAtIso
     };
   }
@@ -314,6 +364,164 @@ function readRuntimeExportStatus(
     loadedAtIso: value.loadedAtIso,
     summary
   };
+}
+
+function readEffectiveDynamicsTuning(
+  value: unknown
+): RuntimePlayerEffectiveDynamicsTuningProfile | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !== runtimePlayerEffectiveDynamicsTuningSchemaVersion ||
+    !isFiniteNumber(value.revision) ||
+    typeof value.fingerprint !== "string" ||
+    typeof value.updatedAtIso !== "string" ||
+    !isRecord(value.exportIdentity) ||
+    typeof value.dynamicsSignatureHash !== "string" ||
+    !isRecord(value.groups)
+  ) {
+    return null;
+  }
+
+  const exportIdentity = readDynamicsTuningExportIdentity(
+    value.exportIdentity
+  );
+  if (exportIdentity === null) {
+    return null;
+  }
+
+  const groups: Record<string, RuntimePlayerDynamicsTuningGroupOverride> = {};
+  for (const [groupId, overrideValue] of Object.entries(value.groups)) {
+    if (groupId.trim().length === 0) {
+      return null;
+    }
+
+    const override = readDynamicsTuningGroupOverride(overrideValue);
+    if (override === null) {
+      return null;
+    }
+
+    groups[groupId] = override;
+  }
+
+  return {
+    schemaVersion: runtimePlayerEffectiveDynamicsTuningSchemaVersion,
+    revision: value.revision,
+    fingerprint: value.fingerprint,
+    updatedAtIso: value.updatedAtIso,
+    exportIdentity,
+    dynamicsSignatureHash: value.dynamicsSignatureHash,
+    groups
+  };
+}
+
+function readDynamicsTuningExportIdentity(
+  value: Record<string, unknown>
+): RuntimePlayerEffectiveDynamicsTuningProfile["exportIdentity"] | null {
+  if (
+    typeof value.packageId !== "string" ||
+    !isFiniteNumber(value.packageRevision) ||
+    typeof value.parameterSignatureHash !== "string"
+  ) {
+    return null;
+  }
+
+  if (
+    value.packageHash !== undefined &&
+    typeof value.packageHash !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    packageId: value.packageId,
+    packageRevision: value.packageRevision,
+    ...(value.packageHash === undefined
+      ? {}
+      : { packageHash: value.packageHash }),
+    parameterSignatureHash: value.parameterSignatureHash
+  };
+}
+
+function readDynamicsTuningGroupOverride(
+  value: unknown
+): RuntimePlayerDynamicsTuningGroupOverride | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const enabled = readOptionalBoolean(value.enabled);
+  const strength = readOptionalFiniteNumber(value.strength);
+  const limit = readOptionalNonNegativeNumber(value.limit);
+  const length = readOptionalPositiveNumber(value.length);
+  const sway = readOptionalNonNegativeNumber(value.sway);
+  const reactionSpeed = readOptionalNonNegativeNumber(value.reactionSpeed);
+  const convergenceSpeed = readOptionalNonNegativeNumber(
+    value.convergenceSpeed
+  );
+
+  if (
+    enabled === null ||
+    strength === null ||
+    limit === null ||
+    length === null ||
+    sway === null ||
+    reactionSpeed === null ||
+    convergenceSpeed === null
+  ) {
+    return null;
+  }
+
+  return {
+    ...(enabled === undefined ? {} : { enabled }),
+    ...(strength === undefined ? {} : { strength }),
+    ...(limit === undefined ? {} : { limit }),
+    ...(length === undefined ? {} : { length }),
+    ...(sway === undefined ? {} : { sway }),
+    ...(reactionSpeed === undefined ? {} : { reactionSpeed }),
+    ...(convergenceSpeed === undefined ? {} : { convergenceSpeed })
+  };
+}
+
+function readOptionalBoolean(value: unknown): boolean | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return typeof value === "boolean" ? value : null;
+}
+
+function readOptionalFiniteNumber(value: unknown): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return isFiniteNumber(value) ? value : null;
+}
+
+function readOptionalNonNegativeNumber(
+  value: unknown
+): number | null | undefined {
+  const numberValue = readOptionalFiniteNumber(value);
+  if (numberValue === undefined || numberValue === null) {
+    return numberValue;
+  }
+
+  return numberValue >= 0 ? numberValue : null;
+}
+
+function readOptionalPositiveNumber(
+  value: unknown
+): number | null | undefined {
+  const numberValue = readOptionalFiniteNumber(value);
+  if (numberValue === undefined || numberValue === null) {
+    return numberValue;
+  }
+
+  return numberValue > 0 ? numberValue : null;
 }
 
 function readActiveVariantSelection(

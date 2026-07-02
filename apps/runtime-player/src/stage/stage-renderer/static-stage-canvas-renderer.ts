@@ -14,6 +14,9 @@ import type {
 } from "../../preload/performance-diagnostics-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 import {
@@ -54,6 +57,9 @@ export interface StaticStageCanvasRenderer {
   ): StaticStageRenderResult;
   setActiveVariantSelection(
     activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+  ): void;
+  setDynamicsTuning(
+    effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null
   ): void;
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void;
   clearLiveParameterFrame(): void;
@@ -118,6 +124,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
   private renderInput: RuntimeExportStageRenderInput | null = null;
   private liveRuntimeState: RuntimeStateDto | null = null;
   private activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
+    null;
+  private effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null =
     null;
   private latestLiveParameterFrame: RuntimePlayerLiveParameterFrame | null = null;
   private hasPendingLiveParameterFrame = false;
@@ -198,6 +206,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.runtimeModelInstances.clear();
     const renderInput = createEvaluatedRuntimeExportStageRenderInput(payload, {
       activeVariantSelection: this.activeVariantSelection,
+      effectiveDynamicsTuning: this.effectiveDynamicsTuning,
       evaluationCache: this.evaluationCache,
       runtimeModelInstanceCache: this.runtimeModelInstances,
       poseEvaluationMode: "snapshot"
@@ -227,7 +236,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       ? null
       : createRuntimeExportEvaluationCacheKey({
           payload,
-          activeVariantSelection: this.activeVariantSelection
+          activeVariantSelection: this.activeVariantSelection,
+          effectiveDynamicsTuning: this.effectiveDynamicsTuning
         });
     this.activeVariantSelection = cloneActiveVariantSelectionState(
       activeVariantSelection
@@ -236,7 +246,8 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       ? null
       : createRuntimeExportEvaluationCacheKey({
           payload,
-          activeVariantSelection: this.activeVariantSelection
+          activeVariantSelection: this.activeVariantSelection,
+          effectiveDynamicsTuning: this.effectiveDynamicsTuning
         });
 
     if (payload === null || this.disposed) {
@@ -263,6 +274,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       payload,
       {
         activeVariantSelection: this.activeVariantSelection,
+        effectiveDynamicsTuning: this.effectiveDynamicsTuning,
         evaluationCache: this.evaluationCache,
         runtimeModelInstanceCache: this.runtimeModelInstances
       }
@@ -270,6 +282,57 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     this.renderInput = renderInput;
     this.liveRuntimeState = renderInput.poseEvaluation.nextState;
     this.cancelScheduledRender();
+    this.renderCurrentImmediate();
+  }
+
+  setDynamicsTuning(
+    effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ): void {
+    const previousKey = createDynamicsTuningRendererKey(
+      this.effectiveDynamicsTuning
+    );
+    const nextProfile = cloneEffectiveDynamicsTuningProfile(
+      effectiveDynamicsTuning
+    );
+    const nextKey = createDynamicsTuningRendererKey(nextProfile);
+
+    if (previousKey === nextKey) {
+      return;
+    }
+
+    this.effectiveDynamicsTuning = nextProfile;
+    this.evaluationCache.clear();
+    this.runtimeModelInstances.clear();
+    this.liveRuntimeState = null;
+    this.lastLiveSourceTimestampMs = null;
+    this.hasPendingLiveParameterFrame = false;
+    this.cancelScheduledRender();
+
+    const payload = this.payload;
+    if (payload === null || this.disposed) {
+      return;
+    }
+
+    if (
+      this.latestLiveParameterFrame !== null &&
+      canApplyLiveParameterFrame(this.latestLiveParameterFrame, payload)
+    ) {
+      this.applyLatestLiveParameterFrameToRenderInput();
+      this.renderCurrentImmediate();
+      return;
+    }
+
+    const renderInput = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        activeVariantSelection: this.activeVariantSelection,
+        effectiveDynamicsTuning: this.effectiveDynamicsTuning,
+        evaluationCache: this.evaluationCache,
+        runtimeModelInstanceCache: this.runtimeModelInstances
+      }
+    );
+    this.renderInput = renderInput;
+    this.liveRuntimeState = renderInput.poseEvaluation.nextState;
     this.renderCurrentImmediate();
   }
 
@@ -308,6 +371,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       this.payload,
       {
         activeVariantSelection: this.activeVariantSelection,
+        effectiveDynamicsTuning: this.effectiveDynamicsTuning,
         evaluationCache: this.evaluationCache,
         runtimeModelInstanceCache: this.runtimeModelInstances
       }
@@ -542,6 +606,7 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
       payload,
       {
         activeVariantSelection: this.activeVariantSelection,
+        effectiveDynamicsTuning: this.effectiveDynamicsTuning,
         evaluationCache: this.evaluationCache,
         runtimeModelInstanceCache: this.runtimeModelInstances,
         authoredParameterValues: liveFrame.parameterValues,
@@ -877,6 +942,51 @@ function getDevicePixelRatio(): number {
   return Number.isFinite(window.devicePixelRatio)
     ? Math.max(1, window.devicePixelRatio)
     : 1;
+}
+
+function cloneEffectiveDynamicsTuningProfile(
+  profile: RuntimePlayerEffectiveDynamicsTuningProfile | null
+): RuntimePlayerEffectiveDynamicsTuningProfile | null {
+  if (profile === null) {
+    return null;
+  }
+
+  return {
+    schemaVersion: profile.schemaVersion,
+    revision: profile.revision,
+    fingerprint: profile.fingerprint,
+    updatedAtIso: profile.updatedAtIso,
+    exportIdentity: {
+      packageId: profile.exportIdentity.packageId,
+      packageRevision: profile.exportIdentity.packageRevision,
+      ...(profile.exportIdentity.packageHash === undefined
+        ? {}
+        : { packageHash: profile.exportIdentity.packageHash }),
+      parameterSignatureHash: profile.exportIdentity.parameterSignatureHash
+    },
+    dynamicsSignatureHash: profile.dynamicsSignatureHash,
+    groups: Object.fromEntries(
+      Object.entries(profile.groups).map(([groupId, override]) => [
+        groupId,
+        { ...override }
+      ])
+    )
+  };
+}
+
+function createDynamicsTuningRendererKey(
+  profile: RuntimePlayerEffectiveDynamicsTuningProfile | null
+): string {
+  if (profile === null) {
+    return "none";
+  }
+
+  return [
+    profile.schemaVersion,
+    profile.revision,
+    profile.fingerprint,
+    profile.dynamicsSignatureHash
+  ].join("|");
 }
 
 function getCanvasViewportPoint(

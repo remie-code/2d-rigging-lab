@@ -441,7 +441,7 @@ Problem:
 
 - Before Wave8, Runtime Player could move the model naturally and persist mapping/stage state, but the Stage was not yet comfortable as a broadcast capture target.
 - Stage Window is frameless, so it needs an explicit arrangement path.
-- If Control Window is closed, the user needed a reliable way to recover it.
+- Before Wave20, closing Control hid the window and required a recovery path. Current behavior is Control close requests app quit; direct Stage close remains recoverable through `Focus Stage`.
 - Click-through is useful for broadcast but dangerous without a recovery path.
 - OBS integration should not be overclaimed; Runtime Player can prepare the Stage as a capture target but cannot know whether OBS is actually capturing it.
 
@@ -451,7 +451,7 @@ Implemented outcome:
 - Startup restore runs from Control after initial renderer effect/status setup and uses the same load workflow as manual open.
 - Missing/invalid saved Runtime Export paths show a non-crashing restore failure and remain available for Retry/Open New behavior.
 - Input Source auto-connect remains out of scope; iFacialMocap connect stays manual.
-- Control Window close hides the window; tray/application menu can show Control, focus Stage, disable click-through, and explicitly quit.
+- Wave20 supersedes the original close-hide behavior: Control Window close requests app quit and closes Stage, while direct Stage close leaves Control alive and recoverable through `Focus Stage`.
 - Explicit Quit flushes input disconnect, Model Mapping Profile, and Window State through the quit controller.
 - Stage Arrange mode shows a temporary native drag handle/overlay and disables normal Stage pan/zoom while active.
 - Normal Stage mode remains model-only.
@@ -480,8 +480,9 @@ Source:
 
 Remaining manual verification:
 
-- Control close hides/reopens from tray/menu.
-- Explicit Quit flushes and exits.
+- Control close exits the app and closes Stage through the normal quit path.
+- Direct Stage close leaves Control alive, reports Stage unavailable, and `Focus Stage` reopens/focuses Stage.
+- Quit flushes input disconnect, Model Mapping Profile, Window State, and Runtime Dynamics Tune Profile where pending.
 - Runtime Export valid/invalid startup restore.
 - Stage Arrange drag handle moves the native Stage Window.
 - Click-through toggle and tray recovery.
@@ -491,8 +492,8 @@ Remaining manual verification:
 
 ### 3.12 OBS Browser Source Probe
 
-- Status: Done at source/test level through Wave12 Live Controller Variant Switching; Wave13 adds Browser Source Performance Diagnostics metrics; manual OBS verification pending
-- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)); Wave12 Domain A parent verdict passed; Wave13 final integration pass ([../implementation/waves/wave13/wave13-final-integration-report.md](../implementation/waves/wave13/wave13-final-integration-report.md))
+- Status: Done at source/test level through Wave21 Dynamics Tune Profile; manual OBS verification pending
+- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)); Wave12 Domain A parent verdict passed; Wave13 final integration pass ([../implementation/waves/wave13/wave13-final-integration-report.md](../implementation/waves/wave13/wave13-final-integration-report.md)); Wave21 Domain A/B pass ([../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md](../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md), [../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md](../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md))
 - Kind: Broadcast output probe completed by Runtime Player Wave9
 - Priority: Manual verification is high before treating Browser Source as product-ready
 
@@ -510,7 +511,7 @@ Implemented outcome:
 - `/stage`, Runtime Export status/payload, and WebSocket live transport are implemented.
 - Generated Browser Source JS/CSS assets are tokenless by accepted design, with `.js` / `.css` allowlist and path containment.
 - Browser Source Stage client is transparent, model-only, and independent of Electron preload APIs.
-- Browser Source receives Runtime Export payload plus sanitized live parameter frames, Stage display state, and active Variant selection.
+- Browser Source receives Runtime Export payload plus sanitized live parameter frames, Stage display state, active Variant selection, and effective dynamics tuning.
 - Raw tracking frames, raw iFacialMocap diagnostics, debug calibration data, private paths, and Control-only status fields do not cross into Browser Source.
 - Control shows connected client count, heartbeat, WebGL2, renderer status, Browser Source Runtime Export status, frame age, and FPS.
 - Native Stage Window controls remain available under `Local Preview / Fallback`.
@@ -521,6 +522,7 @@ Implemented outcome:
 - Wave11 adds Stage Motion to the same Browser Source path: Browser Source receives the sanitized composed Stage transform and no raw tracking/debug/calibration data.
 - Wave12 adds active Variant selection to the same Browser Source path: reload/resync receives the current session active Variant selection, and updates carry sanitized active Variant selection without raw tracking/debug/calibration data.
 - Wave13 adds sanitized Browser Source renderer diagnostics/metrics for Performance Diagnostics reports. Reports separate source/input FPS from render FPS and exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Wave21 adds Runtime Dynamics Tune effective tuning to Browser Source startup/resync and separate `dynamics-tuning-changed` messages. Browser Source uses the same effective tuning as Native Stage without receiving Player-local profile paths or raw tracking/debug data.
 - Spout2, obs-websocket, automatic OBS source creation, and automatic OBS capture verification remain out of scope.
 
 Source:
@@ -555,6 +557,8 @@ Remaining manual verification:
 - Confirm Control reports local preview live rendering suspension while Browser Source is connected.
 - Move face/head with iFacialMocap and confirm model motion.
 - Confirm body follow/dynamics remain visible in Browser Source while native local preview live rendering is suspended.
+- Tune a visible dynamics group in `Dynamics Tune` and confirm Browser Source matches Native Stage behavior.
+- Reset the tuned dynamics group and confirm Browser Source returns to exported defaults.
 - Enable Stage Motion and confirm left/right Stage offset in Browser Source.
 - Confirm near/far depth scale in Browser Source after explicit near/far calibration.
 - Confirm Browser Source composition matches native local preview when native preview is active.
@@ -714,3 +718,50 @@ Suggested next action:
 
 - Run the manual OBS Browser Source performance checklist with a real Runtime Export and iFacialMocap input, then save the copied deep report to `tmp/report.log`.
 - If smoothness still feels wrong after Wave17, use the copied Performance Diagnostics report to decide whether the next narrow follow-up should target deformer vertex transform cost, render-frame vertex copy cost, or renderer upload/draw cost.
+
+### 3.15 Runtime Dynamics Tune Profile
+
+- Status: Done at source/test/domain-review level through Runtime Player Wave21; real-device Native Stage / OBS Browser Source manual tuning checks pending
+- Kind: Runtime tuning feature completed by Runtime Player Wave21
+- Priority: Manual verification is high before treating defaults and profile restore as product-ready
+
+Problem:
+
+- Editor dynamics preview uses controlled slider input, while real iFacialMocap motion has different velocity, acceleration, range, and rhythm.
+- Users need to tune exported dynamics against real tracking motion without returning to Editor for small operational adjustments.
+- Player tuning must not become Dynamics authoring and must not rewrite the Runtime Export artifact.
+
+Implemented outcome:
+
+- Control Window includes `Dynamics Tune` after `Mapping` and before `Stage`.
+- Runtime Export Dynamics Groups are listed when available.
+- Empty states cover no Runtime Export and Runtime Exports with no dynamics groups.
+- Quick tune controls cover `enabled`, `strength`, `limit`, `length`, `sway`, `reaction`, and `convergence`.
+- Per-group reset restores exported defaults.
+- Runtime Dynamics Tune Profile auto-saves under `<electron userData>/dynamics-tuning-profiles/<safe-package-id>/<fingerprint>.json`.
+- Profile identity prefers `packageHash` and otherwise uses package/revision/parameter signature fallback; `dynamicsSignatureHash` prevents stale dynamics structure reuse.
+- Effective dynamics are layered over exported base dynamics before runtime evaluation without mutating Runtime Export DTOs or artifact files.
+- Native Stage and Browser Source use the same effective dynamics tuning. Browser Source receives sanitized effective tuning in payload/resync and `dynamics-tuning-changed` messages.
+- Runtime Export schema, package-format schema, Editor source, dependencies, and lockfile remain unchanged.
+
+Source:
+
+- [../screens/dynamics-tune-profile.md](../screens/dynamics-tune-profile.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/browser-source-output-probe-v0.md](../screens/browser-source-output-probe-v0.md)
+- [../implementation/orchestration/player-wave21-plan.md](../implementation/orchestration/player-wave21-plan.md)
+- [../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md](../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md)
+- [../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md](../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md)
+
+Remaining manual verification:
+
+- Open a Runtime Export with visible dynamics.
+- Connect iFacialMocap.
+- Open `Dynamics Tune`.
+- Adjust `Strength`, `Reaction`, `Convergence`, and `Sway` while moving naturally.
+- Confirm Native Stage motion changes immediately.
+- Restart Runtime Player and confirm tuning restores.
+- Open OBS Browser Source and confirm Browser Source uses the same tuning.
+- Switch to a different Runtime Export and confirm stale tuning does not leak.
+- Reset a group to exported defaults and confirm behavior returns.
+- Confirm Runtime Export artifact files remain unmodified on disk.

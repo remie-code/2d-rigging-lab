@@ -1,10 +1,14 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
+import { dynamicsTuningBridgeChannels } from "./dynamics-tuning-bridge-channels";
 import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
 import { runtimeVariantBridgeChannels } from "./runtime-variant-bridge-channels";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 import type { RuntimePlayerLiveParameterFrame } from "./live-parameter-bridge-contract";
+import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "./dynamics-tuning-bridge-contract";
 import type {
   RuntimePlayerStageApi
 } from "./runtime-player-stage-bridge-contract";
@@ -33,6 +37,15 @@ export function installRuntimePlayerStageBridge(): void {
       onLoadedPayload: (callback) =>
         subscribeToRuntimeExportEvent(
           runtimeExportBridgeChannels.loadedPayload,
+          callback
+        )
+    },
+    dynamicsTuning: {
+      getEffectiveProfile: () =>
+        ipcRenderer.invoke(dynamicsTuningBridgeChannels.getEffectiveProfile),
+      onEffectiveProfileChanged: (callback) =>
+        subscribeToDynamicsTuningEffectiveProfileEvent(
+          dynamicsTuningBridgeChannels.effectiveProfileChanged,
           callback
         )
     },
@@ -169,6 +182,26 @@ function subscribeToRuntimeExportEvent<TPayload extends
   callback: (payload: TPayload) => void
 ): () => void {
   const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToDynamicsTuningEffectiveProfileEvent(
+  channel: string,
+  callback: (
+    payload: RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ) => {
     callback(payload);
   };
 

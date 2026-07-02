@@ -19,6 +19,9 @@ import {
 
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 import {
@@ -305,6 +308,62 @@ describe("Runtime Export evaluation cache", () => {
     expect(getSceneDrawable(defaultFrame, "draw_smile").visible).toBe(false);
     expect(getSceneDrawable(defaultFrame, "draw_expression_default").visible)
       .toBe(true);
+  });
+
+  it("invalidates scaffolds when the dynamics tuning revision changes", () => {
+    const payload = createRuntimeExportPayload();
+    const cache = new RuntimeExportEvaluationCache();
+    const firstTuning = createEffectiveDynamicsTuning({
+      revision: 1,
+      strength: 0.25
+    });
+    const sameRevisionTuning = createEffectiveDynamicsTuning({
+      revision: 1,
+      strength: 0.25
+    });
+    const nextRevisionTuning = createEffectiveDynamicsTuning({
+      revision: 2,
+      strength: 0.75
+    });
+
+    const firstFrame = createEvaluatedRuntimeExportStageRenderInput(payload, {
+      evaluationCache: cache,
+      effectiveDynamicsTuning: firstTuning
+    });
+    const sameRevisionFrame = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        evaluationCache: cache,
+        effectiveDynamicsTuning: sameRevisionTuning
+      }
+    );
+    const nextRevisionFrame = createEvaluatedRuntimeExportStageRenderInput(
+      payload,
+      {
+        evaluationCache: cache,
+        effectiveDynamicsTuning: nextRevisionTuning
+      }
+    );
+
+    expect(sameRevisionFrame.poseEvaluation.adapter)
+      .toBe(firstFrame.poseEvaluation.adapter);
+    expect(nextRevisionFrame.poseEvaluation.adapter)
+      .not.toBe(firstFrame.poseEvaluation.adapter);
+    expect(
+      nextRevisionFrame.poseEvaluation.adapter.graph.dynamicsGroups.get(
+        dynamicsGroupId("dyn_hair_sway")
+      )?.outputs[0]?.strength
+    ).toBe(0.75);
+    expect(cache.size).toBe(2);
+    expect(createRuntimeExportEvaluationCacheKey({
+      payload,
+      activeVariantSelection: null,
+      effectiveDynamicsTuning: firstTuning
+    })).not.toBe(createRuntimeExportEvaluationCacheKey({
+      payload,
+      activeVariantSelection: null,
+      effectiveDynamicsTuning: nextRevisionTuning
+    }));
   });
 
   it("invalidates scaffolds through clear and separates reload or texture keys", () => {
@@ -935,6 +994,30 @@ function createVariants(): RuntimeExportModelDto["variants"] {
         }
       }
     ]
+  };
+}
+
+function createEffectiveDynamicsTuning(input: {
+  readonly revision: number;
+  readonly strength: number;
+}): RuntimePlayerEffectiveDynamicsTuningProfile {
+  return {
+    schemaVersion: "runtime-player-effective-dynamics-tuning-v1",
+    revision: input.revision,
+    fingerprint: "package-hash-runtime-eval-cache",
+    updatedAtIso: "2026-06-30T00:00:00.000Z",
+    exportIdentity: {
+      packageId: "pkg_runtime_eval_cache",
+      packageRevision: 5,
+      packageHash: "hash_runtime_eval_cache",
+      parameterSignatureHash: "sha256:parameters"
+    },
+    dynamicsSignatureHash: "sha256:dynamics",
+    groups: {
+      dyn_hair_sway: {
+        strength: input.strength
+      }
+    }
   };
 }
 

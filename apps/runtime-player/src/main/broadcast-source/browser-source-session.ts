@@ -11,6 +11,9 @@ import {
   type RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerBrowserSourceAssetRequestDiagnostic,
   RuntimePlayerBrowserSourceClientDiagnostic,
   RuntimePlayerBrowserSourceStageDisplayState,
@@ -70,6 +73,8 @@ export class RuntimePlayerBrowserSourceSession {
     createEmptyStageDisplayState();
   #activeVariantSelection: RuntimePlayerActiveVariantSelectionState =
     createDisabledActiveVariantSelectionState();
+  #effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null =
+    null;
 
   constructor(input: {
     readonly token: string;
@@ -128,6 +133,11 @@ export class RuntimePlayerBrowserSourceSession {
 
   getActiveVariantSelection(): RuntimePlayerActiveVariantSelectionState {
     return this.#activeVariantSelection;
+  }
+
+  getEffectiveDynamicsTuning():
+    RuntimePlayerEffectiveDynamicsTuningProfile | null {
+    return this.#effectiveDynamicsTuning;
   }
 
   onStatusChanged(
@@ -195,11 +205,17 @@ export class RuntimePlayerBrowserSourceSession {
   publishRuntimeExportLoaded(
     payload: RuntimeExportLoadedPayload,
     activeVariantSelection: RuntimePlayerActiveVariantSelectionState =
-      this.#activeVariantSelection
+      this.#activeVariantSelection,
+    effectiveDynamicsTuning:
+      RuntimePlayerEffectiveDynamicsTuningProfile | null =
+      this.#effectiveDynamicsTuning
   ): void {
     this.#runtimeExport = toBrowserSourceRuntimeExportPayload(payload);
     this.#activeVariantSelection =
       cloneActiveVariantSelectionState(activeVariantSelection);
+    this.#effectiveDynamicsTuning = cloneEffectiveDynamicsTuningProfile(
+      effectiveDynamicsTuning
+    );
     this.#updateStatus({
       runtimeExport: createBrowserSourceLoadedRuntimeExportStatus(payload)
     });
@@ -209,6 +225,7 @@ export class RuntimePlayerBrowserSourceSession {
       runtimeExport: this.#runtimeExport,
       runtimeExportStatus: this.#status.runtimeExport,
       activeVariantSelection: this.#activeVariantSelection,
+      effectiveDynamicsTuning: this.#effectiveDynamicsTuning,
       sentAtIso: this.#nowIso()
     });
   }
@@ -216,6 +233,7 @@ export class RuntimePlayerBrowserSourceSession {
   clearRuntimeExport(statusLabel = "No Runtime Export loaded"): void {
     this.#runtimeExport = null;
     this.#activeVariantSelection = createDisabledActiveVariantSelectionState();
+    this.#effectiveDynamicsTuning = null;
     this.clearLatestFrame();
     this.#updateStatus({
       runtimeExport: createBrowserSourceEmptyRuntimeExportStatus(statusLabel)
@@ -226,6 +244,22 @@ export class RuntimePlayerBrowserSourceSession {
       runtimeExport: null,
       runtimeExportStatus: this.#status.runtimeExport,
       activeVariantSelection: this.#activeVariantSelection,
+      effectiveDynamicsTuning: null,
+      sentAtIso: this.#nowIso()
+    });
+  }
+
+  publishDynamicsTuningProfile(
+    effectiveDynamicsTuning:
+      RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ): void {
+    this.#effectiveDynamicsTuning = cloneEffectiveDynamicsTuningProfile(
+      effectiveDynamicsTuning
+    );
+    this.#broadcast({
+      type: "dynamics-tuning-changed",
+      protocolVersion: runtimePlayerBrowserSourceProtocolVersion,
+      effectiveDynamicsTuning: this.#effectiveDynamicsTuning,
       sentAtIso: this.#nowIso()
     });
   }
@@ -476,6 +510,7 @@ export class RuntimePlayerBrowserSourceSession {
       latestFrame: this.#latestFrame,
       stageDisplayState: this.#stageDisplayState,
       activeVariantSelection: this.#activeVariantSelection,
+      effectiveDynamicsTuning: this.#effectiveDynamicsTuning,
       sentAtIso: this.#nowIso()
     });
   }
@@ -637,6 +672,36 @@ function cloneActiveVariantSelectionState(
           }
     })),
     updatedAtIso: state.updatedAtIso
+  };
+}
+
+function cloneEffectiveDynamicsTuningProfile(
+  profile: RuntimePlayerEffectiveDynamicsTuningProfile | null
+): RuntimePlayerEffectiveDynamicsTuningProfile | null {
+  if (profile === null) {
+    return null;
+  }
+
+  return {
+    schemaVersion: profile.schemaVersion,
+    revision: profile.revision,
+    fingerprint: profile.fingerprint,
+    updatedAtIso: profile.updatedAtIso,
+    exportIdentity: {
+      packageId: profile.exportIdentity.packageId,
+      packageRevision: profile.exportIdentity.packageRevision,
+      ...(profile.exportIdentity.packageHash === undefined
+        ? {}
+        : { packageHash: profile.exportIdentity.packageHash }),
+      parameterSignatureHash: profile.exportIdentity.parameterSignatureHash
+    },
+    dynamicsSignatureHash: profile.dynamicsSignatureHash,
+    groups: Object.fromEntries(
+      Object.entries(profile.groups).map(([groupId, override]) => [
+        groupId,
+        { ...override }
+      ])
+    )
   };
 }
 

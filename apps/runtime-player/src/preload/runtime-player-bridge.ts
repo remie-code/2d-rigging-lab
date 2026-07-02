@@ -9,6 +9,7 @@ import {
   runtimePlayerPlaceholderActions
 } from "./runtime-player-bridge-contract";
 import { browserSourceBridgeChannels } from "./browser-source-bridge-channels";
+import { dynamicsTuningBridgeChannels } from "./dynamics-tuning-bridge-channels";
 import { inputBridgeChannels } from "./input-bridge-channels";
 import { inputProfileBridgeChannels } from "./input-profile-bridge-channels";
 import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
@@ -44,6 +45,10 @@ import type {
 import type {
   RuntimePlayerBrowserSourceStatus
 } from "./browser-source-status-contract";
+import type {
+  RuntimePlayerDynamicsTuningActionResult,
+  RuntimePlayerDynamicsTuningStatus
+} from "./dynamics-tuning-bridge-contract";
 
 const placeholderActionSet = new Set<string>(runtimePlayerPlaceholderActions);
 
@@ -147,6 +152,21 @@ export function installRuntimePlayerBridge(): void {
       onStatusChanged: (callback) =>
         subscribeToModelMappingEvent(
           modelMappingBridgeChannels.statusChanged,
+          callback
+        )
+    },
+    dynamicsTuning: {
+      getStatus: () =>
+        ipcRenderer.invoke(dynamicsTuningBridgeChannels.getStatus),
+      updateGroup: (request) =>
+        ipcRenderer.invoke(dynamicsTuningBridgeChannels.updateGroup, request),
+      resetGroup: (request) =>
+        ipcRenderer.invoke(dynamicsTuningBridgeChannels.resetGroup, request),
+      retryProfileSave: () =>
+        ipcRenderer.invoke(dynamicsTuningBridgeChannels.retryProfileSave),
+      onStatusChanged: (callback) =>
+        subscribeToDynamicsTuningEvent(
+          dynamicsTuningBridgeChannels.statusChanged,
           callback
         )
     },
@@ -433,6 +453,22 @@ function subscribeToInputProfileEvent<TPayload extends
 
 function subscribeToModelMappingEvent<TPayload extends
   RuntimePlayerMappingStatus | RuntimePlayerMappingActionResult>(
+  channel: string,
+  callback: (payload: TPayload) => void
+): () => void {
+  const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToDynamicsTuningEvent<TPayload extends
+  RuntimePlayerDynamicsTuningStatus | RuntimePlayerDynamicsTuningActionResult>(
   channel: string,
   callback: (payload: TPayload) => void
 ): () => void {

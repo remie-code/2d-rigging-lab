@@ -2,6 +2,9 @@ import type {
   RuntimeExportLoadedPayload,
   RuntimeExportStatus
 } from "./runtime-export-bridge-contract";
+import type {
+  RuntimePlayerStageDynamicsTuningApi
+} from "./dynamics-tuning-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
 import type {
   RuntimePlayerVariantControllerStatus
@@ -57,6 +60,7 @@ export type RuntimePlayerStageVariantApi = {
 
 export type RuntimePlayerStageApi = {
   readonly runtimeExport: RuntimePlayerStageRuntimeExportApi;
+  readonly dynamicsTuning: RuntimePlayerStageDynamicsTuningApi;
   readonly variants: RuntimePlayerStageVariantApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewReporterApi;

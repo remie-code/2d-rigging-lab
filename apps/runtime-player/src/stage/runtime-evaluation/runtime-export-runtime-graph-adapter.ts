@@ -31,15 +31,22 @@ import type {
 import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
 import {
   resolveRuntimeVariantDrawableVisible
 } from "../../shared/runtime-export-variant-selection";
+import {
+  createEffectiveRuntimeExportDynamicsGroups
+} from "./effective-dynamics-tuning";
 
 export interface RuntimeExportRuntimeGraphAdapterInput {
   readonly model: RuntimeExportModelDto;
   readonly atlas?: RuntimeExportAtlasDto;
   readonly texturePages?: readonly RuntimeExportTexturePageMetadataDto[];
   readonly activeVariantSelection?: RuntimePlayerActiveVariantSelectionState | null;
+  readonly effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null;
 }
 
 export interface RuntimeExportDrawableRenderResource {
@@ -84,7 +91,7 @@ export function createRuntimeExportRuntimeGraph(
       : { packageHash: input.model.sourcePackage.packageHash }),
     coordinateSystem: input.model.canvas.coordinateSystem,
     parameters: createParameterMap(input.model),
-    dynamicsGroups: createDynamicsGroupMap(input.model),
+    dynamicsGroups: createDynamicsGroupMap(input),
     drawables: createDrawableMap({
       model: input.model,
       meshesById,
@@ -142,10 +149,15 @@ function createParameterMap(
 }
 
 function createDynamicsGroupMap(
-  model: RuntimeExportModelDto
+  input: RuntimeExportRuntimeGraphAdapterInput
 ): ReadonlyMap<DynamicsGroupId, NormalizedDynamicsGroup> {
+  const dynamicsGroups = createEffectiveRuntimeExportDynamicsGroups({
+    model: input.model,
+    effectiveDynamicsTuning: input.effectiveDynamicsTuning ?? null
+  });
+
   return new Map(
-    model.dynamicsGroups.map((group) => [
+    dynamicsGroups.map((group) => [
       group.dynamicsGroupId,
       {
         dynamicsGroupId: group.dynamicsGroupId,

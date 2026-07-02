@@ -1,5 +1,8 @@
 import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerBrowserSourceStageViewTransform
 } from "../../preload/browser-source-status-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
@@ -29,6 +32,9 @@ export interface BrowserSourceStageRenderer {
   setPayload(payload: RuntimeExportLoadedPayload): StaticStageRenderResult;
   setActiveVariantSelection(
     activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
+  ): void;
+  setDynamicsTuning(
+    effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null
   ): void;
   setViewTransform(
     transform: RuntimePlayerBrowserSourceStageViewTransform
@@ -74,6 +80,12 @@ class BrowserSourceStageRendererAdapter implements BrowserSourceStageRenderer {
     activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
   ): void {
     this.renderer.setActiveVariantSelection(activeVariantSelection);
+  }
+
+  setDynamicsTuning(
+    effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ): void {
+    this.renderer.setDynamicsTuning(effectiveDynamicsTuning);
   }
 
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {

@@ -6,6 +6,9 @@ import type {
   RuntimeExportLoadedPayload
 } from "../preload/runtime-export-bridge-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerStageArrangeState,
   RuntimePlayerStageViewStatusReport
 } from "../preload/runtime-player-bridge-contract";
@@ -59,6 +62,7 @@ export function StageWindowApp(): ReactElement {
 
     applyStoredStageViewTransform(renderer);
     applyActiveVariantSelection(renderer);
+    applyEffectiveDynamicsTuning(renderer);
     reportStageViewStatus(createStageEmptyStatusReport());
 
     const applyArrangeState = (state: RuntimePlayerStageArrangeState): void => {
@@ -137,6 +141,26 @@ export function StageWindowApp(): ReactElement {
 
         applyRuntimeVariantStatusToStageRenderer(renderer, status);
       });
+    const unsubscribeDynamicsTuning =
+      window.runtimePlayerStage.dynamicsTuning.onEffectiveProfileChanged(
+        (profile) => {
+          if (!active) {
+            return;
+          }
+
+          try {
+            renderer.setDynamicsTuning(profile);
+          } catch (error) {
+            console.error("Stage dynamics tuning apply failed.", error);
+            clearRendererAfterError(renderer);
+            reportStageViewStatus(createStageErrorStatusReport({
+              message: "Stage dynamics tuning apply failed.",
+              error
+            }));
+            setRenderState("error");
+          }
+        }
+      );
     const unsubscribeStageViewTransform =
       window.runtimePlayerStage.stageView.onApplyViewTransformRequested((transform) => {
         if (!active) {
@@ -210,6 +234,7 @@ export function StageWindowApp(): ReactElement {
       unsubscribe();
       unsubscribeStatus();
       unsubscribeVariantStatus();
+      unsubscribeDynamicsTuning();
       unsubscribeStageViewTransform();
       unsubscribeStageDisplayViewTransform();
       unsubscribeArrangeState();
@@ -252,6 +277,18 @@ export function applyRuntimeVariantStatusToStageRenderer(
   status: RuntimePlayerVariantControllerStatus
 ): void {
   renderer.setActiveVariantSelection(status.activeVariantSelection);
+}
+
+function applyEffectiveDynamicsTuning(
+  renderer: Pick<StaticStageCanvasRenderer, "setDynamicsTuning">
+): void {
+  window.runtimePlayerStage.dynamicsTuning.getEffectiveProfile()
+    .then((profile: RuntimePlayerEffectiveDynamicsTuningProfile | null) => {
+      renderer.setDynamicsTuning(profile);
+    })
+    .catch((error: unknown) => {
+      console.error("Stage dynamics tuning read failed.", error);
+    });
 }
 
 export function StageArrangeOverlay({

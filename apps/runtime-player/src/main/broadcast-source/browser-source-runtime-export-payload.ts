@@ -10,6 +10,9 @@ import type {
 import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
 
 export function toBrowserSourceRuntimeExportPayload(
   payload: RuntimeExportLoadedPayload
@@ -64,6 +67,8 @@ export function createBrowserSourceRuntimeExportResponse(input: {
   readonly runtimeExportStatus: RuntimePlayerBrowserSourceRuntimeExportStatus;
   readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
   readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+  readonly effectiveDynamicsTuning:
+    RuntimePlayerEffectiveDynamicsTuningProfile | null;
   readonly runtimeExport:
     RuntimePlayerBrowserSourceRuntimeExportPayload
     | null;
@@ -74,6 +79,7 @@ export function createBrowserSourceRuntimeExportResponse(input: {
       runtimeExportStatus: input.runtimeExportStatus,
       stageDisplayState: input.stageDisplayState,
       activeVariantSelection: input.activeVariantSelection,
+      effectiveDynamicsTuning: input.effectiveDynamicsTuning,
       runtimeExport: input.runtimeExport
     };
   }
@@ -83,6 +89,7 @@ export function createBrowserSourceRuntimeExportResponse(input: {
     runtimeExportStatus: input.runtimeExportStatus,
     stageDisplayState: input.stageDisplayState,
     activeVariantSelection: input.activeVariantSelection,
+    effectiveDynamicsTuning: input.effectiveDynamicsTuning,
     runtimeExport: null
   };
 }

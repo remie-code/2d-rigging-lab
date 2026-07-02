@@ -1,7 +1,7 @@
 # Control Window Screen Structure
 
 > Runtime Player Control Windowを、1枚の縦積み設定画面ではなく、責務別の小さな管理アプリとして扱うための画面構成。
-> Wave13実装事実: Runtime Playerは `Header + Overview / Live Controller / Input / Mapping / Stage / Performance Diagnostics` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。Wave8はStage pageへRuntime Export startup restore status、Capture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleを追加した。Wave9/Wave10はBrowser Source Outputとnative local preview suspensionを追加した。Wave11はInput Profile near/far calibrationとStage page上のStage Motion panelを追加した。Wave12はLive Controllerでsession-only active Variant switchingを追加し、Stage WindowとBrowser Sourceへ同じsanitized active Variant selectionを反映する。Wave13はshared Stage renderer frame pacingとPerformance Diagnostics pageを追加する。`Model` page と raw/input 用の専用 `Diagnostics` page はまだ公開しない。
+> Wave21実装事実: Runtime Playerは `Header + Overview / Live Controller / Input / Mapping / Dynamics Tune / Stage / Performance Diagnostics` を実体ページとして公開する。Wave6はInput head position calibrationとMapping Body groupを追加し、Wave7はModel Mapping Profile auto-saveとStage Page + Window State auto-saveを追加した。Wave8はStage pageへRuntime Export startup restore status、Capture Target checklist、Arrange Stage、click-through、always-on-top、Copy Window Titleを追加した。Wave9/Wave10はBrowser Source Outputとnative local preview suspensionを追加した。Wave11はInput Profile near/far calibrationとStage page上のStage Motion panelを追加した。Wave12はLive Controllerでsession-only active Variant switchingを追加し、Stage WindowとBrowser Sourceへ同じsanitized active Variant selectionを反映する。Wave13はshared Stage renderer frame pacingとPerformance Diagnostics pageを追加した。Wave20はControl closeをapp quitへ変更し、Stage direct closeはFocus Stageで復旧できる。Wave21は`Dynamics Tune` pageとRuntime Dynamics Tune Profileを追加し、Native StageとBrowser Sourceへ同じeffective dynamics tuningを反映する。`Model` page と raw/input 用の専用 `Diagnostics` page はまだ公開しない。
 
 ## 1. Position
 
@@ -25,6 +25,7 @@ Runtime Playerは、Stage WindowをCleanな配信対象として保ち、Control
 | Live Controller      |  selected page content                                  |
 | Input                |                                                         |
 | Mapping              |                                                         |
+| Dynamics Tune        |                                                         |
 | Stage                |                                                         |
 | Performance Diag.    |                                                         |
 +----------------------+---------------------------------------------------------+
@@ -80,6 +81,7 @@ Headerに置かない操作:
 | Live Controller      |
 | Input                |
 | Mapping              |
+| Dynamics Tune        |
 | Stage                |
 | Performance Diag.    |
 +----------------------+
@@ -93,6 +95,7 @@ Headerに置かない操作:
 | Live Controller | Variant差分切替、Reset to Model Default、Look Forward、Center Model、Stage Motion On/Off |
 | Input | iFacialMocap接続、transport、port、local IP、Input Profile、near/farを含むhead position calibration |
 | Mapping | Auto Mapping結果、semantic slot、strength/invert |
+| Dynamics Tune | Export済みDynamics Groupsのenabled / strength / limit / length / sway / reaction / convergence runtime tuning、reset、profile save retry |
 | Stage | Stage Window bounds、Stage view transform、focus、view reset/center、Window State保存状態、Stage Motion、Browser Source Output、Local Preview / Fallback、Capture Target readiness、Arrange Stage、click-through、always-on-top |
 | Performance Diagnostics | Native Stage / Browser Source / Both のtimed capture、source/input FPSとrender FPSの分離、frame pacing/render metrics report、Copy Report |
 
@@ -107,7 +110,7 @@ Future page候補:
 
 raw/input diagnosticsは専用navではなく、Control内のsecondary collapsible debug panelとして残す。Wave13の`Performance Diagnostics` pageは公開済みだが、raw tracking frameを見るための画面ではない。
 
-Stage pageは、Wave7で空のplaceholderではなく実体を持つページとして追加済みである。Wave8ではBroadcast/OBSを自動操作せず、Stage Windowをlocal capture targetとして整える操作を追加した。Live ControllerはWave12で実体pageとして追加済みであり、Stage pageの詳細設定を複製しない。Performance DiagnosticsはWave13で低優先度pageとして追加され、通常live操作導線とは分ける。
+Stage pageは、Wave7で空のplaceholderではなく実体を持つページとして追加済みである。Wave8ではBroadcast/OBSを自動操作せず、Stage Windowをlocal capture targetとして整える操作を追加した。Live ControllerはWave12で実体pageとして追加済みであり、Stage pageの詳細設定を複製しない。Dynamics TuneはWave21で実体pageとして追加済みであり、Mapping pageやStage pageに混ぜず、Export済みDynamics Groupsのruntime-only tuningを扱う。Performance DiagnosticsはWave13で低優先度pageとして追加され、通常live操作導線とは分ける。
 
 ## 4. Overview Page
 
@@ -660,6 +663,62 @@ Runtime Export auto restoreはWindow Stateの保存対象ではないが、Wave8
 
 保存失敗は通常UXを邪魔しない。Stage pageまたはDiagnostics/Overviewに小さく出す程度にする。
 
+### 9.3 Dynamics Tune Page
+
+Wave21の`Dynamics Tune` pageは、Editorでauthoring済みのDynamics GroupsをRuntime Player運用向けに微調整する画面である。
+
+このページはMapping pageではない。Mapping pageはtracking inputをexternal-input parametersへ割り当てる。`Dynamics Tune`は、Runtime Exportに含まれるDynamics GroupsへPlayer-owned tuning profileをlayeringし、real face-tracking motionでの揺れ方を調整する。
+
+```text
++--------------------------------------------------------------------------------+
+| DYNAMICS TUNE                                                                  |
++--------------------------------------------------------------------------------+
+| Profile: Saved                  Runtime Export: kipfel-black.runtime-export     |
+| Storage: dynamics-tuning-profiles/<safe-package-id>/<fingerprint>.json          |
+|--------------------------------------------------------------------------------|
+| Hair Dynamics                                                                  |
+|   Enabled: On                                                                  |
+|   Inputs: Face Angle X, Face Angle Z      Outputs: Hair Sway X, Hair Sway Y    |
+|   Strength  [---------|------]  Limit [------|---------]                       |
+|   Length    [-----|----------]  Sway  [--------|-------]                       |
+|   Reaction  [----------|-----]  Convergence [-------|--------]                 |
+|   [Reset Hair Dynamics]                                                        |
++--------------------------------------------------------------------------------+
+```
+
+Dynamics Tune pageに置くもの:
+
+- Runtime Export dynamics group list。
+- group enabled override。
+- quick tune controls: `Strength` / `Limit` / `Length` / `Sway` / `Reaction` / `Convergence`。
+- read-only input/output summary。
+- per-group reset。
+- save-failed時だけの`Retry`。
+
+Dynamics Tune pageに置かないもの:
+
+- Dynamics Group creation/deletion。
+- input/output parameter reassignment。
+- output kind editing。
+- pendulum count editing。
+- keyform、mesh、Variant、rig editing。
+- Runtime Export artifact write。
+- package-format schema migration。
+- raw tracking diagnostics。
+
+Persistence:
+
+```text
+<electron userData>/
+  dynamics-tuning-profiles/
+    <safe-package-id>/
+      <fingerprint>.json
+```
+
+Runtime Export identityは`packageHash`優先、hashなしでは`packageId + packageRevision + parameterSignatureHash` fallbackを使う。`dynamicsSignatureHash`でDynamics構造の変化を検出し、違うRuntime Exportや古いDynamics構造へstale tuningを適用しない。
+
+Native StageとBrowser Sourceは同じeffective dynamics tuningを使う。Browser SourceにはRuntime Export payload/resyncと`dynamics-tuning-changed` messageでsanitized effective tuningだけを渡し、raw tracking frame、calibration internals、private path、Control-only debug stateは渡さない。
+
 ## 10. Diagnostics Separation
 
 Runtime Playerには、用途の違うdiagnosticsが2種類ある。
@@ -738,10 +797,10 @@ Stage Windowに出さないもの:
 
 ## 12. Current Implementation Shape
 
-Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11/Wave12/Wave13で実装された現在の形状:
+Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11/Wave12/Wave13/Wave20/Wave21で実装された現在の形状:
 
 - Persistent Header。
-- `Overview` / `Live Controller` / `Input` / `Mapping` / `Stage` / `Performance Diagnostics` のnavigation。
+- `Overview` / `Live Controller` / `Input` / `Mapping` / `Dynamics Tune` / `Stage` / `Performance Diagnostics` のnavigation。
 - Runtime Export open/status、input connection、profile/calibration、mapping/live readinessをControlで扱う。
 - raw/input Diagnosticsはsecondary collapsible debug panelとして残す。
 - Stage Windowはcanvas model-onlyで、debug overlay、raw tracking text、parameter sliderを出さない。
@@ -750,6 +809,8 @@ Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11/Wave12/Wave13で実装された現�
 - Mappingは既存9個のhead/eyes/mouth slotsを保ち、Body X/Z slotsとBody Follow controlsを追加する。
 - Mapping / Body Follow controlsはModel Mapping ProfileとしてRuntime Export identityごとに自動保存/復元する。
 - Model Mapping Profileは`<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`へ保存する。
+- Dynamics Tune controlsはRuntime Dynamics Tune ProfileとしてRuntime Export identityごとに自動保存/復元する。
+- Runtime Dynamics Tune Profileは`<electron userData>/dynamics-tuning-profiles/<safe-package-id>/<fingerprint>.json`へ保存し、Runtime Export artifactには書き戻さない。
 - Body Follow outputはmain-owned sanitized parameter frameとしてStageへ届く。Stageはraw tracking/head-position/debug body dataを受け取らない。
 - Stage pageはStage Window bounds、Stage view pan/zoom、Focus Stage、Reset View、Center Model、window-state保存状態を扱う。
 - Window Stateは`<electron userData>/window-state/runtime-player.json`へ保存し、Model Mapping Profileとは分ける。
@@ -769,13 +830,14 @@ Wave5/Wave6/Wave7/Wave8/Wave9/Wave10/Wave11/Wave12/Wave13で実装された現�
 - New Runtime Exports with drawable `baseVisible` support runtime Variant switching; legacy exports without complete `baseVisible` still load but switching is disabled with re-export guidance.
 - Native Stage Window and Browser Source use the same session active Variant selection. Browser Source reload/resync includes the current active selection.
 - Browser Source receives sanitized active Variant selection only; raw tracking frames, iFacialMocap diagnostics, calibration internals, and private file paths do not cross into Browser Source for Variant switching.
+- Native Stage Window and Browser Source use the same effective dynamics tuning profile. Browser Source reload/resync and dynamics-tuning update messages carry sanitized effective tuning only.
 - Wave13でshared Stage renderer frame pacingを追加し、live framesとStage view/display transform invalidationは可能な範囲でscheduled rAF renderingへ合流する。
 - duplicate unchanged Stage view/display transformsはskipされ、skip countとしてmetricsに出る。
 - Native StageはStage view IPC経由でrenderer metricsをControlへ渡す。
 - Browser SourceはBrowser Source diagnostics pathでsanitized renderer diagnostics/metricsを渡す。
 - Performance Diagnostics pageはtarget Native Stage / Browser Source / Both、duration 10s / 30s、Start/Stop Capture、Copy Report、Clear Report、report preview、target availability、comparison run guidanceを扱う。
 - Performance Diagnostics reportはsource/input FPSとrender FPSを分け、agentsへ戻せるcounterを含むが、raw tracking frames、calibration internals、Browser Source token、private file paths、full Runtime Export payloadは含めない。
-- Wave10 local preview suspension、Wave11 Stage Motion、Wave12 Variant switchingはWave13後も維持する意図で扱う。
+- Wave10 local preview suspension、Wave11 Stage Motion、Wave12 Variant switching、Wave21 Dynamics Tune are preserved together on the Native Stage / Browser Source paths.
 
 Future page候補:
 
@@ -783,6 +845,7 @@ Future page候補:
 - Dedicated raw/input diagnostics page。
 - Hide Control / display settings。
 - Persistent Model Mapping Profile management。
+- Runtime Dynamics Tune Profile management beyond per-group reset/retry。
 - Last-active Variant persistence。
 
 この順なら、今の縦積み画面から段階的に移行できる。
@@ -790,9 +853,9 @@ Future page候補:
 ## 13. Open Questions
 
 - Dedicated Model / raw-input Diagnostics pagesをどのwaveで実体化するか。Performance DiagnosticsはWave13で別pageとして実体化済み。
-- Header上に明示的な`Hide Control`操作を置くか。Wave8ではControl close-hideとtray/menu recoveryを実装済み。
+- Header上に明示的な`Hide Control`操作を置くか。Wave20後のControl closeはapp quitなので、hideを再導入する場合はclose動作ではなく明示操作として設計する。
 - background previewを扱うか。
 - Stage Motionのreal-device default tuningをどこまで詰めるか。
 - Player last-active Variant persistenceを将来実装するか。
 - Spout Output、OBS automationをどのwaveで扱うか。
-- Wave8のElectron/OBS-adjacent手動確認: Control close-hide/reopen、Explicit Quit flush/exit、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Window Capture title/alpha smoke。
+- Wave20/Wave21のElectron/OBS-adjacent手動確認: Control close process exit、Stage direct close recovery、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Browser Source dynamics tuning parity、OBS Window Capture title/alpha fallback smoke。

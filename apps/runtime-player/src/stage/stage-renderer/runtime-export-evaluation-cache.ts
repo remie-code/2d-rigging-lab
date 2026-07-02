@@ -20,10 +20,16 @@ import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-br
 import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
 import {
   createRuntimeExportRuntimeGraph,
   type RuntimeExportRuntimeGraphAdapterResult
 } from "../runtime-evaluation/runtime-export-runtime-graph-adapter";
+import {
+  createEffectiveDynamicsTuningCacheKey
+} from "../runtime-evaluation/effective-dynamics-tuning";
 import type { StageModelBounds } from "./runtime-export-stage-scene";
 
 export interface RuntimeExportDrawableRenderTemplate {
@@ -87,6 +93,7 @@ export class RuntimeExportEvaluationCache {
   getOrCreate(input: {
     readonly payload: RuntimeExportLoadedPayload;
     readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null;
+    readonly effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null;
   }): RuntimeExportEvaluationScaffold {
     return this.getOrCreateWithDiagnostics(input).scaffold;
   }
@@ -94,6 +101,7 @@ export class RuntimeExportEvaluationCache {
   getOrCreateWithDiagnostics(input: {
     readonly payload: RuntimeExportLoadedPayload;
     readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null;
+    readonly effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null;
   }): RuntimeExportEvaluationCacheAccess {
     const cacheKey = createRuntimeExportEvaluationCacheKey(input);
     const existing = this.#scaffoldsByKey.get(cacheKey);
@@ -146,6 +154,7 @@ export class RuntimeExportEvaluationCache {
 export function createRuntimeExportEvaluationCacheKey(input: {
   readonly payload: RuntimeExportLoadedPayload;
   readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null;
+  readonly effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null;
 }): string {
   const payload = input.payload;
   const sourcePackage = payload.artifacts.model.sourcePackage;
@@ -175,6 +184,9 @@ export function createRuntimeExportEvaluationCacheKey(input: {
     atlasSourceSignature: payload.artifacts.atlas.sourceSignature.digest,
     activeVariantSelection: createSemanticActiveVariantSelectionKey(
       input.activeVariantSelection
+    ),
+    effectiveDynamicsTuning: createEffectiveDynamicsTuningCacheKey(
+      input.effectiveDynamicsTuning ?? null
     )
   });
 }
@@ -182,6 +194,7 @@ export function createRuntimeExportEvaluationCacheKey(input: {
 export function createRuntimeExportEvaluationScaffold(input: {
   readonly payload: RuntimeExportLoadedPayload;
   readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null;
+  readonly effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null;
   readonly cacheKey?: string;
 }): RuntimeExportEvaluationScaffold {
   const startedAtMs = readCurrentTimeMs();
@@ -190,7 +203,8 @@ export function createRuntimeExportEvaluationScaffold(input: {
     model: input.payload.artifacts.model,
     atlas: input.payload.artifacts.atlas,
     texturePages: input.payload.artifacts.manifest.texturePages,
-    activeVariantSelection: input.activeVariantSelection
+    activeVariantSelection: input.activeVariantSelection,
+    effectiveDynamicsTuning: input.effectiveDynamicsTuning ?? null
   });
   const adapterEndedAtMs = readCurrentTimeMs();
   const runtimeModelCompileStartedAtMs = adapterEndedAtMs;

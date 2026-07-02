@@ -8,6 +8,9 @@ import type {
 import type {
   RuntimePlayerBrowserSourceStageViewTransform
 } from "../../preload/browser-source-status-contract";
+import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
 import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-bridge-contract";
 import type {
   RuntimePlayerActiveVariantSelectionState
@@ -314,6 +317,43 @@ describe("BrowserSourceStageClient", () => {
     ]);
   });
 
+  it("applies dynamics tuning updates without reapplying Runtime Export payload", () => {
+    const renderer = new FakeStageRenderer();
+    const client = new BrowserSourceStageClient({
+      config: createConfig(),
+      renderer,
+      webgl2Available: "available",
+      fetcher: createFetch(createNotLoadedResponse()),
+      webSocketFactory: createFakeWebSocketFactory().factory,
+      location: createLocation(),
+      timers: createManualTimers(),
+      heartbeatIntervalMs: 0
+    });
+
+    client.handleServerMessageData(JSON.stringify({
+      type: "runtime-export-resync",
+      protocolVersion: 1,
+      runtimeExport: createBrowserSourcePayload(),
+      runtimeExportStatus: createLoadedStatus(),
+      stageDisplayState: createStageDisplayState(),
+      activeVariantSelection: createActiveVariantSelection(),
+      effectiveDynamicsTuning: createEffectiveDynamicsTuning(1),
+      latestFrame: null,
+      sentAtIso: "2026-06-23T01:00:03.000Z"
+    }));
+    client.handleServerMessageData(JSON.stringify({
+      type: "dynamics-tuning-changed",
+      protocolVersion: 1,
+      effectiveDynamicsTuning: createEffectiveDynamicsTuning(2),
+      sentAtIso: "2026-06-23T01:00:04.000Z"
+    }));
+
+    expect(renderer.payloads).toHaveLength(1);
+    expect(renderer.dynamicsTuningProfiles.map((profile) =>
+      profile?.revision ?? null
+    )).toEqual([1, 1, 2]);
+  });
+
   it("samples renderer diagnostics for live frames without throttling renderer frame application", async () => {
     const baseMs = Date.parse("2026-06-23T01:00:05.000Z");
     let nowMs = baseMs;
@@ -508,6 +548,7 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
   readonly frames: RuntimePlayerLiveParameterFrame[] = [];
   readonly transforms: RuntimePlayerBrowserSourceStageViewTransform[] = [];
   readonly activeVariantSelections: Array<RuntimePlayerActiveVariantSelectionState | null> = [];
+  readonly dynamicsTuningProfiles: Array<RuntimePlayerEffectiveDynamicsTuningProfile | null> = [];
   clearCount = 0;
   clearFrameCount = 0;
   disposed = false;
@@ -525,6 +566,12 @@ class FakeStageRenderer implements BrowserSourceStageRenderer {
     activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null
   ): void {
     this.activeVariantSelections.push(activeVariantSelection);
+  }
+
+  setDynamicsTuning(
+    effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ): void {
+    this.dynamicsTuningProfiles.push(effectiveDynamicsTuning);
   }
 
   setLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {
@@ -762,6 +809,7 @@ function createLoadedResponse(): RuntimePlayerBrowserSourceRuntimeExportResponse
     runtimeExportStatus: createLoadedStatus(),
     stageDisplayState: createStageDisplayState(),
     activeVariantSelection: createActiveVariantSelection(),
+    effectiveDynamicsTuning: null,
     runtimeExport: createBrowserSourcePayload()
   };
 }
@@ -778,6 +826,7 @@ function createNotLoadedResponse(): RuntimePlayerBrowserSourceRuntimeExportRespo
     },
     stageDisplayState: createStageDisplayState(),
     activeVariantSelection: createDisabledActiveVariantSelection(),
+    effectiveDynamicsTuning: null,
     runtimeExport: null
   };
 }
@@ -798,6 +847,35 @@ function createActiveVariantSelection(
         }
       }
     ]
+  };
+}
+
+function createEffectiveDynamicsTuning(
+  revision: number
+): RuntimePlayerEffectiveDynamicsTuningProfile {
+  return {
+    schemaVersion: "runtime-player-effective-dynamics-tuning-v1",
+    revision,
+    fingerprint: "fingerprint_fixture",
+    updatedAtIso: "2026-06-23T01:00:00.000Z",
+    exportIdentity: {
+      packageId: "pkg_fixture",
+      packageRevision: 7,
+      packageHash: "package_hash_fixture",
+      parameterSignatureHash: "parameter_signature_fixture"
+    },
+    dynamicsSignatureHash: "dynamics_signature_fixture",
+    groups: {
+      dyn_head: {
+        enabled: true,
+        strength: revision,
+        limit: 30,
+        length: 1,
+        sway: 0.25,
+        reactionSpeed: 0.4,
+        convergenceSpeed: 0.7
+      }
+    }
   };
 }
 

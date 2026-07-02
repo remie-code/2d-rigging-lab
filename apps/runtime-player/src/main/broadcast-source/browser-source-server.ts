@@ -12,6 +12,9 @@ import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerBrowserSourceStageDisplayState,
   RuntimePlayerBrowserSourceClientDiagnostic,
   RuntimePlayerBrowserSourceClientDiagnosticEvent,
@@ -199,18 +202,33 @@ export class RuntimePlayerBrowserSourceServer {
 
   publishRuntimeExportLoaded(
     payload: RuntimeExportLoadedPayload,
-    activeVariantSelection?: RuntimePlayerActiveVariantSelectionState
+    activeVariantSelection?: RuntimePlayerActiveVariantSelectionState,
+    effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null
   ): void {
-    if (activeVariantSelection === undefined) {
+    if (
+      activeVariantSelection === undefined &&
+      effectiveDynamicsTuning === undefined
+    ) {
       this.#session.publishRuntimeExportLoaded(payload);
       return;
     }
 
-    this.#session.publishRuntimeExportLoaded(payload, activeVariantSelection);
+    this.#session.publishRuntimeExportLoaded(
+      payload,
+      activeVariantSelection,
+      effectiveDynamicsTuning
+    );
   }
 
   clearRuntimeExport(statusLabel?: string): void {
     this.#session.clearRuntimeExport(statusLabel);
+  }
+
+  publishDynamicsTuningProfile(
+    effectiveDynamicsTuning:
+      RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ): void {
+    this.#session.publishDynamicsTuningProfile(effectiveDynamicsTuning);
   }
 
   publishLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {
@@ -371,6 +389,7 @@ export class RuntimePlayerBrowserSourceServer {
         runtimeExportStatus: this.#session.getStatus().runtimeExport,
         stageDisplayState: this.#session.getStageDisplayState(),
         activeVariantSelection: this.#session.getActiveVariantSelection(),
+        effectiveDynamicsTuning: this.#session.getEffectiveDynamicsTuning(),
         runtimeExport: this.#session.getRuntimeExportPayload()
       }));
       return;

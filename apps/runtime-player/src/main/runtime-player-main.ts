@@ -4,6 +4,15 @@ import { registerBrowserSourceBridgeHandlers } from "./broadcast-source/browser-
 import { RuntimePlayerBrowserSourceConfigStore } from "./broadcast-source/browser-source-config-store";
 import { RuntimePlayerBrowserSourceServer } from "./broadcast-source/browser-source-server";
 import { LocalPreviewLiveRenderSuspensionPolicy } from "./broadcast-source/local-preview-live-render-suspension";
+import {
+  registerDynamicsTuningBridgeHandlers
+} from "./dynamics-tuning-bridge-handlers";
+import {
+  DynamicsTuningProfileStore
+} from "./dynamics-tuning-profiles/dynamics-tuning-profile-store";
+import {
+  RuntimePlayerDynamicsTuningState
+} from "./dynamics-tuning-profiles/dynamics-tuning-state";
 import type { TrackingFrame } from "../preload/input-tracking-frame-contract";
 import type {
   RuntimePlayerInputSessionNeutralSnapshot
@@ -260,6 +269,10 @@ export function startRuntimePlayerMain(): void {
     const modelMappingProfileStore = new ModelMappingProfileStore({
       userDataPath: app.getPath("userData")
     });
+    const dynamicsTuningState = new RuntimePlayerDynamicsTuningState();
+    const dynamicsTuningProfileStore = new DynamicsTuningProfileStore({
+      userDataPath: app.getPath("userData")
+    });
     const startupStateStore = new RuntimePlayerStartupStateStore({
       userDataPath: app.getPath("userData")
     });
@@ -308,13 +321,23 @@ export function startRuntimePlayerMain(): void {
     publishLatestParameterFrame = modelMappingBridge.publishLatestParameterFrame;
     publishMappingStatus = modelMappingBridge.publishStatus;
     clearLiveParameterFrame = modelMappingBridge.clearLiveParameterFrame;
+    const dynamicsTuningBridge = registerDynamicsTuningBridgeHandlers({
+      windows,
+      tuningState: dynamicsTuningState,
+      profileStore: dynamicsTuningProfileStore,
+      publishEffectiveProfile: (profile) => {
+        browserSourceServer.publishDynamicsTuningProfile(profile);
+      }
+    });
     registerRuntimeExportBridgeHandlers({
       windows,
       startupStateStore,
       onRuntimeExportChanging: async () => {
         await modelMappingBridge.flushPendingProfileSave();
+        await dynamicsTuningBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         modelMappingBridge.clearRuntimeExport();
+        dynamicsTuningBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
         clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("Runtime Export changing");
@@ -323,20 +346,25 @@ export function startRuntimePlayerMain(): void {
       onRuntimeExportLoaded: async (payload) => {
         bodyFollowState.reset();
         await modelMappingBridge.setRuntimeExportPayload(payload);
+        await dynamicsTuningBridge.setRuntimeExportPayload(payload);
         const variantStatus =
           runtimeVariantBridge.setRuntimeExportPayload(payload);
         clearLiveParameterFrame();
         browserSourceServer.publishRuntimeExportLoaded(
           payload,
-          variantStatus.activeVariantSelection
+          variantStatus.activeVariantSelection,
+          dynamicsTuningState.getEffectiveProfile()
         );
         publishMappingStatus();
+        dynamicsTuningBridge.publishStatus();
         void publishLatestParameterFrame();
       },
       onRuntimeExportCleared: async () => {
         await modelMappingBridge.flushPendingProfileSave();
+        await dynamicsTuningBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         modelMappingBridge.clearRuntimeExport();
+        dynamicsTuningBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
         clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("No Runtime Export loaded");
@@ -348,8 +376,10 @@ export function startRuntimePlayerMain(): void {
         app.quit();
       },
       disconnectInput: () => inputBridge.disconnect(),
-      flushModelMappingProfile: () =>
-        modelMappingBridge.flushPendingProfileSave(),
+      flushModelMappingProfile: async () => {
+        await modelMappingBridge.flushPendingProfileSave();
+        await dynamicsTuningBridge.flushPendingProfileSave();
+      },
       flushWindowState: () => windowState.flush()
     });
     isRuntimePlayerQuitInProgress = () => quitController.isQuitInProgress();

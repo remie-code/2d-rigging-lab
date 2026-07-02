@@ -8,6 +8,9 @@ import type {
   RuntimePlayerStageRenderMetricsSnapshot
 } from "./performance-diagnostics-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "./dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerActiveVariantSelectionState
 } from "./runtime-variant-bridge-contract";
 
@@ -33,6 +36,8 @@ export type RuntimePlayerBrowserSourceRuntimeExportResponse =
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
       readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly effectiveDynamicsTuning:
+        RuntimePlayerEffectiveDynamicsTuningProfile | null;
       readonly runtimeExport: RuntimePlayerBrowserSourceRuntimeExportPayload;
     }
   | {
@@ -41,6 +46,8 @@ export type RuntimePlayerBrowserSourceRuntimeExportResponse =
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
       readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly effectiveDynamicsTuning:
+        RuntimePlayerEffectiveDynamicsTuningProfile | null;
       readonly runtimeExport: null;
     };
 
@@ -61,6 +68,8 @@ export type RuntimePlayerBrowserSourceServerMessage =
       readonly latestFrame: RuntimePlayerLiveParameterFrame | null;
       readonly stageDisplayState: RuntimePlayerBrowserSourceStageDisplayState;
       readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly effectiveDynamicsTuning:
+        RuntimePlayerEffectiveDynamicsTuningProfile | null;
       readonly sentAtIso: string;
     }
   | {
@@ -72,6 +81,15 @@ export type RuntimePlayerBrowserSourceServerMessage =
       readonly runtimeExportStatus:
         RuntimePlayerBrowserSourceRuntimeExportStatus;
       readonly activeVariantSelection: RuntimePlayerActiveVariantSelectionState;
+      readonly effectiveDynamicsTuning:
+        RuntimePlayerEffectiveDynamicsTuningProfile | null;
+      readonly sentAtIso: string;
+    }
+  | {
+      readonly type: "dynamics-tuning-changed";
+      readonly protocolVersion: typeof runtimePlayerBrowserSourceProtocolVersion;
+      readonly effectiveDynamicsTuning:
+        RuntimePlayerEffectiveDynamicsTuningProfile | null;
       readonly sentAtIso: string;
     }
   | {

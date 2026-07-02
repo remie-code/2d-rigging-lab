@@ -5,6 +5,9 @@ import type {
   RuntimePlayerBrowserSourceStatus
 } from "../../preload/browser-source-status-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
 import {
@@ -222,6 +225,43 @@ describe("RuntimePlayerBrowserSourceSession status sampling", () => {
     expect(JSON.stringify(resync)).not.toContain("calibration");
   });
 
+  it("syncs effective dynamics tuning through resync and separate update messages", () => {
+    const session = new RuntimePlayerBrowserSourceSession({
+      token: "token_fixture"
+    });
+    const client = createClient();
+
+    session.publishDynamicsTuningProfile(createEffectiveDynamicsTuning(1));
+    session.addClient(client);
+
+    const resync = client.messages.find((message) =>
+      message.type === "runtime-export-resync"
+    );
+    expect(resync).toMatchObject({
+      effectiveDynamicsTuning: {
+        revision: 1,
+        dynamicsSignatureHash: "sha256:dynamics",
+        groups: {
+          dyn_hair_sway: {
+            strength: 0.5
+          }
+        }
+      }
+    });
+    expect(JSON.stringify(resync)).not.toContain("tracking");
+    expect(JSON.stringify(resync)).not.toContain("private");
+
+    client.messages.length = 0;
+    session.publishDynamicsTuningProfile(createEffectiveDynamicsTuning(2));
+
+    expect(client.messages).toContainEqual(expect.objectContaining({
+      type: "dynamics-tuning-changed",
+      effectiveDynamicsTuning: expect.objectContaining({
+        revision: 2
+      })
+    }));
+  });
+
   it("does not include product runtime-core profiling controls in broadcasts or resync", () => {
     const session = new RuntimePlayerBrowserSourceSession({
       token: "token_fixture"
@@ -311,6 +351,29 @@ function createActiveVariantSelection(): RuntimePlayerActiveVariantSelectionStat
       }
     ],
     updatedAtIso: "2026-06-24T00:00:00.000Z"
+  };
+}
+
+function createEffectiveDynamicsTuning(
+  revision: number
+): RuntimePlayerEffectiveDynamicsTuningProfile {
+  return {
+    schemaVersion: "runtime-player-effective-dynamics-tuning-v1",
+    revision,
+    fingerprint: "package-hash-fixture",
+    updatedAtIso: "2026-06-30T00:00:00.000Z",
+    exportIdentity: {
+      packageId: "pkg_fixture",
+      packageRevision: 7,
+      packageHash: "sha256:fixture",
+      parameterSignatureHash: "sha256:parameters"
+    },
+    dynamicsSignatureHash: "sha256:dynamics",
+    groups: {
+      dyn_hair_sway: {
+        strength: 0.5
+      }
+    }
   };
 }
 

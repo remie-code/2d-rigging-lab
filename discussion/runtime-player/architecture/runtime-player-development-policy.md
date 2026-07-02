@@ -170,6 +170,7 @@ Avoid the same authoritative state living in multiple places.
 | Input connection state | Main process | Renderer subscribes |
 | Latest normalized tracking frame | Input adapter / Stage bridge | UI debug display should be throttled |
 | Runtime simulation state | Stage runtime loop | Reset through explicit command |
+| Runtime Dynamics Tune Profile | Main process | Stored under `userData`; renderer requests updates through preload; Stage and Browser Source receive sanitized effective tuning |
 | Control UI state | Control renderer | Zustand/React is fine |
 | Persistent player settings | Main process | Renderer requests changes through preload |
 
@@ -225,6 +226,7 @@ Debug drawer should have room for:
 - Normalized frame summary.
 - Mapped parameter values.
 - Dynamics enabled / reset state.
+- Dynamics tuning profile status and stale/signature warnings.
 - Last renderer/runtime error.
 
 ## 11. Naming Policy
@@ -237,6 +239,8 @@ Use these terms consistently:
 | `normalized frame` | Adapter-independent input frame shape consumed by mapping |
 | `parameter mapping` | Conversion from normalized frame to runtime parameter values |
 | `runtime frame` | One evaluated display frame after parameter mapping and dynamics |
+| `dynamics tuning profile` | Player-owned per Runtime Export profile that layers runtime dynamics tuning over exported dynamics without mutating Runtime Export artifacts |
+| `effective dynamics tuning` | Sanitized runtime tuning applied by Native Stage and Browser Source for the currently loaded Runtime Export |
 | `control window` | Setup/operation window |
 | `stage window` | Transparent capture-friendly display window |
 | `input adapter` | Source-specific receiver/parser/normalizer boundary |

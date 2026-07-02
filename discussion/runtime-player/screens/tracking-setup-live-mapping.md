@@ -1,7 +1,7 @@
 # Tracking Setup / Live Mapping UX
 
 > iFacialMocapなどのtracking inputを、Runtime Exportのモデルへ自然に反映するためのSetup / Calibration / Auto Mapping / Live確認UX。
-> Wave11実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / near/far calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application / Model Mapping Profile auto-save / Stage Page + Window State auto-save / Runtime Export startup restore / Stage Capture Target controls / Browser Source Output / Stage Motion が実装済み。Input Source auto-connect、advanced source selection、mapping deadzone/curve、Spout/OBS automationはfuture。
+> Wave21実装事実: Input Profile / Look Forward / Guided Calibration v0 / head position left/right calibration / near/far calibration / Auto Mapping v0 + Body X/Z / Stage Live Parameter Application / Model Mapping Profile auto-save / Runtime Dynamics Tune Profile auto-save / Stage Page + Window State auto-save / Runtime Export startup restore / Stage Capture Target controls / Browser Source Output / Stage Motion が実装済み。Input Source auto-connect、advanced source selection、mapping deadzone/curve、Spout/OBS automationはfuture。
 
 ## 1. Goal
 
@@ -18,7 +18,7 @@
 - Stage上でモデルがLiveに動き、ユーザーが自然さを確認できる。
 - 違和感がある箇所だけ、意味単位で調整できる。
 
-Wave5/Wave6/Wave7 source/test evidence:
+Wave5/Wave6/Wave7/Wave21 source/test evidence:
 
 - Control Window exposes `Overview` / `Input` / `Mapping` / `Stage`.
 - Input Profile persists to `<electron userData>/input-profiles/ifacialmocap/profiles.json`.
@@ -34,6 +34,8 @@ Wave5/Wave6/Wave7 source/test evidence:
 - Wave8 adds Stage Capture Target controls while preserving the Stage model-only boundary.
 - Wave11 adds explicit Input Profile near/far head-position calibration and Stage Motion. Stage Motion is a Stage-level display transform, not Model Mapping.
 - Browser Source receives the composed Stage transform for Stage Motion and does not receive raw tracking/debug/calibration data.
+- Wave21 adds Runtime Dynamics Tune Profile auto-save/restore for exported Dynamics Groups. Dynamics tuning is Player runtime behavior layered over exported dynamics, not Model Mapping and not Runtime Export authoring.
+- Native Stage and Browser Source receive the same effective dynamics tuning without mutating Runtime Export artifacts.
 - Manual real-device Stage body motion verification remains required for closeout confidence.
 
 ## 2. Concept Split
@@ -46,6 +48,7 @@ Tracking Setupは3層に分ける。
 | Input Profile | その人、端末、カメラ位置、iFacialMocapのキャリブレーション | No |
 | Model Mapping State v0 | そのモデルをどのparameterでどう動かすか。現在の実行中slot stateで、Mapping変更はStageへ即時反映する | Yes |
 | Model Mapping Profile | そのモデルをどう動かすかを次回起動へ持ち越す保存済みmapping設定。Wave7でRuntime Export identityごとの自動保存/復元を実装済み | Yes |
+| Runtime Dynamics Tune Profile | Export済みDynamics Groupsの揺れ方をreal tracking motionに合わせてPlayer側で微調整する保存済みruntime tuning。Wave21でRuntime Export identityごとの自動保存/復元を実装済み | Yes |
 
 この分離は複数モデル・複数ユーザーに対応するために必要である。
 
@@ -356,6 +359,48 @@ Mapping Profileに保存する対象:
 - Stage pan/zoom。
 - Stage / Control window bounds。
 
+### 6.1 Wave21 Runtime Dynamics Tune Profile
+
+Runtime Dynamics Tune Profileはモデル依存のPlayer設定だが、Model Mapping Profileとは別物である。
+
+違い:
+
+- Model Mapping Profile: tracking inputをどのexternal-input parameterへどう反映するか。
+- Runtime Dynamics Tune Profile: Runtime Exportに含まれるDynamics Groupsのruntime behaviorをどう微調整するか。
+
+保存先:
+
+```text
+<electron userData>/
+  dynamics-tuning-profiles/
+    <safe-package-id>/
+      <fingerprint>.json
+```
+
+保存する対象:
+
+- group enabled override。
+- output strength。
+- output limit。
+- pendulum length。
+- pendulum sway。
+- pendulum reaction speed。
+- pendulum convergence speed。
+
+保存しない対象:
+
+- Dynamics Group creation/deletion。
+- input/output parameter identity。
+- output kind。
+- pendulum count。
+- keyforms、meshes、variants、rigs。
+- Runtime Export artifact changes。
+- Runtime Export/package-format schema changes。
+
+Runtime Export identityは`packageHash`優先、hashなしでは`packageId + packageRevision + parameterSignatureHash` fallbackを使う。`dynamicsSignatureHash`でDynamics構造の変化を検出し、異なるRuntime Exportや古いDynamics構造にstale tuningを適用しない。
+
+Stage上の反映は即時で、永続保存はdebounceする。Native StageとBrowser Sourceは同じeffective dynamics tuningを使う。
+
 ## 7. Mapping Edit UX
 
 ユーザーが見るべきものはraw field名ではなく、「顔向き」「まばたき」「目線」「口」などの意味である。
@@ -503,7 +548,7 @@ Wave8実装済み範囲:
 - Last successful Runtime Export directory is saved separately from Window State and restored on startup after Control's initial renderer effect/status setup.
 - Invalid/missing startup restore path reports a non-crashing restore failure and remains available for Retry/Open New behavior.
 - Runtime Export startup restore does not auto-connect Input Source.
-- Control Window close hides the window; tray/application menu can show Control, focus Stage, disable click-through, and quit.
+- Wave20 supersedes the old Control close-hide behavior: Control Window close requests app quit and closes Stage; direct Stage close leaves Control alive and can be recovered through `Focus Stage`.
 - Stage page adds Capture Target checklist, Arrange Stage, click-through, always-on-top, and Copy Window Title.
 - Click-through always starts Off and is not persisted.
 - Always-on-top defaults Off and is persisted in Window State.
@@ -540,6 +585,7 @@ Future:
 - `Use temporary defaults`はWave5 v0に含める。保存はしない。
 - Gaze X/Yはv0ではeye Eulerを優先する。
 - Model Mapping Profile永続保存はWave7で実装済み。手動`Save`ではなく自動保存である。
+- Runtime Dynamics Tune Profile永続保存はWave21で実装済み。手動`Save`ではなく自動保存であり、Model Mapping Profile / Runtime Export artifactとは分ける。
 - Head position calibrationはInput Profileに含め、Runtime Export固有のModel Mapping Profileには含めない。
 - Near/far calibration is explicit Input Profile data and is required for production-grade Stage Motion depth scale.
 - Body Follow controlsはWave7でModel Mapping Profileへ永続保存する。
@@ -549,6 +595,7 @@ Future:
 - Runtime Export startup restoreはStartup Stateとして`<electron userData>/startup-state/runtime-player-startup.json`へ保存する。Input Source auto-connectはしない。
 - Broadcast Stage Setup v0はWave8でControl recovery、Stage Arrange、click-through、always-on-top、Capture Target checklistまで実装済み。
 - Stage Motion / near-far depth scaleはWave11で実装済み。これはStage pageのdisplay transformであり、Mapping page / Model Mapping Profile / Runtime Exportには含めない。
+- Dynamics TuneはWave21で実装済み。これはControl Windowの`Dynamics Tune` pageで扱うruntime-only tuningであり、Editor Dynamics authoring / Runtime Export schema / package-format schemaには含めない。
 - OBS automation、Spout、Body Angle Yは未実装でfuture。
 
 ## 12. Open Questions
@@ -557,4 +604,4 @@ Future:
 - Dedicated Model / Diagnostics pagesをどのwaveで実体化するか。
 - Stage Motionのleft/right方向、near/far scale方向、strength/limit/dead-zone/reaction defaultsを実機とOBS Browser Sourceでどう調整するか。
 - Spout output、OBS automationをどのwaveで扱うか。
-- Wave8のElectron/OBS-adjacent手動確認: Control close-hide/reopen、Explicit Quit flush/exit、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、OBS Window Capture title/alpha smoke。
+- Wave20/Wave21のElectron/OBS-adjacent手動確認: Control close process exit、Stage direct close recovery、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、Capture Target checklist/Copy Window Title、Dynamics Tune Native Stage / OBS Browser Source parity、OBS Window Capture title/alpha fallback smoke。

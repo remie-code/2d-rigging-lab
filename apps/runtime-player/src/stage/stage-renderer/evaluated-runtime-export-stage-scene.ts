@@ -15,6 +15,9 @@ import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-br
 import type {
   RuntimePlayerActiveVariantSelectionState
 } from "../../preload/runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
 import {
   createRuntimeExportRuntimeModelInitialStateRequest,
   evaluateRuntimeExportRenderFrame,
@@ -74,6 +77,7 @@ export type EvaluatedRuntimeExportStageRenderInputOptions =
     readonly evaluationCache?: RuntimeExportEvaluationCache;
     readonly runtimeModelInstanceCache?: RuntimeExportRuntimeModelInstanceCache;
     readonly poseEvaluationMode?: RuntimeExportStagePoseEvaluationMode;
+    readonly effectiveDynamicsTuning?: RuntimePlayerEffectiveDynamicsTuningProfile | null;
   };
 
 export function createEvaluatedRuntimeExportStageRenderInput(
@@ -81,9 +85,11 @@ export function createEvaluatedRuntimeExportStageRenderInput(
   options: EvaluatedRuntimeExportStageRenderInputOptions = {}
 ): EvaluatedRuntimeExportStageRenderInput {
   const activeVariantSelection = options.activeVariantSelection ?? null;
+  const effectiveDynamicsTuning = options.effectiveDynamicsTuning ?? null;
   const scaffoldAccess = createEvaluationScaffoldAccess({
     payload,
     activeVariantSelection,
+    effectiveDynamicsTuning,
     ...(options.evaluationCache === undefined
       ? {}
       : { evaluationCache: options.evaluationCache })
@@ -91,7 +97,8 @@ export function createEvaluatedRuntimeExportStageRenderInput(
   const scaffold = scaffoldAccess.scaffold;
   const poseEvaluationInput = createPoseEvaluationInput(payload, {
     ...options,
-    activeVariantSelection
+    activeVariantSelection,
+    effectiveDynamicsTuning
   });
   const runtimeModelInstance = options.runtimeModelInstance ??
     options.runtimeModelInstanceCache?.getOrCreate(scaffold, {
@@ -104,6 +111,7 @@ export function createEvaluatedRuntimeExportStageRenderInput(
   const poseEvaluationOptions = {
     ...options,
     activeVariantSelection,
+    effectiveDynamicsTuning,
     adapter: scaffold.adapter,
     compiledRuntimeModel: scaffold.compiledRuntimeModel,
     ...(runtimeModelInstance === undefined
@@ -177,6 +185,7 @@ function createEvaluationScaffoldAccess(input: {
   readonly payload: RuntimeExportLoadedPayload;
   readonly activeVariantSelection:
     RuntimePlayerActiveVariantSelectionState | null;
+  readonly effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null;
   readonly evaluationCache?: RuntimeExportEvaluationCache;
 }): {
   readonly scaffold: RuntimeExportEvaluationScaffold;
@@ -186,13 +195,15 @@ function createEvaluationScaffoldAccess(input: {
   if (input.evaluationCache !== undefined) {
     return input.evaluationCache.getOrCreateWithDiagnostics({
       payload: input.payload,
-      activeVariantSelection: input.activeVariantSelection
+      activeVariantSelection: input.activeVariantSelection,
+      effectiveDynamicsTuning: input.effectiveDynamicsTuning
     });
   }
 
   const scaffold = createRuntimeExportEvaluationScaffold({
     payload: input.payload,
-    activeVariantSelection: input.activeVariantSelection
+    activeVariantSelection: input.activeVariantSelection,
+    effectiveDynamicsTuning: input.effectiveDynamicsTuning
   });
 
   return {
@@ -210,7 +221,8 @@ function createPoseEvaluationInput(
     model: payload.artifacts.model,
     atlas: payload.artifacts.atlas,
     texturePages: payload.artifacts.manifest.texturePages,
-    activeVariantSelection: options.activeVariantSelection ?? null
+    activeVariantSelection: options.activeVariantSelection ?? null,
+    effectiveDynamicsTuning: options.effectiveDynamicsTuning ?? null
   };
 }
 

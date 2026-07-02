@@ -30,6 +30,7 @@
 - iFacialMocap連携ではhead rotationだけでなくhead positionも取得し、後続のbody follow / Stage motionに備える。
 - OBS等でcaptureされる表示はtransparent Stage Windowに分離する。
 - Runtime Player開発では、process boundary、runtime hot path、IPC contract、state ownership、file splitを明示的なreview対象にする。
+- Runtime Dynamics Tune ProfileはRuntime Player-owned stateとしてElectron `userData`へ保存し、effective tuningだけをNative Stage / Browser Sourceへ渡す。Runtime Export artifactやpackage-format schemaは変更しない。
 - 開発中はRuntime Player main/preloadで使うworkspace packageをElectron bundleへ含める。長期的には `packages/**` をbuild済みJS exportsへ移行する。
 
 ## 4. Next Reads
@@ -37,8 +38,9 @@
 1. Runtime Playerの起動画面・Control Window・Stage Window UXは [../screens/initial-runtime-player-screen.md](../screens/initial-runtime-player-screen.md) を読む。
 2. iFacialMocap入力仕様とadapter境界は [../research/ifacialmocap-input-adapter-research.md](../research/ifacialmocap-input-adapter-research.md) を読む。
 3. iFacialMocapや将来input sourceをRuntime parameterへ割り当てる場合は [tracking-input-mapping-baseline.md](tracking-input-mapping-baseline.md) を読む。
-4. 実装計画を作る場合は [technology-stack-decision.md](technology-stack-decision.md) と [runtime-player-development-policy.md](runtime-player-development-policy.md) をbasisにする。
-5. workspace packageをElectron main/preloadから使う場合は [workspace-package-bundling-decision.md](workspace-package-bundling-decision.md) を読む。
+4. Runtime Dynamics Tune Profileやeffective tuningのstate ownershipを確認する場合は [runtime-player-development-policy.md](runtime-player-development-policy.md) と [../screens/dynamics-tune-profile.md](../screens/dynamics-tune-profile.md) を読む。
+5. 実装計画を作る場合は [technology-stack-decision.md](technology-stack-decision.md) と [runtime-player-development-policy.md](runtime-player-development-policy.md) をbasisにする。
+6. workspace packageをElectron main/preloadから使う場合は [workspace-package-bundling-decision.md](workspace-package-bundling-decision.md) を読む。
 
 ## 5. Open Questions
 

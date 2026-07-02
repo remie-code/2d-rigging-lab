@@ -1,13 +1,14 @@
 # Browser Source Output Probe v0
 
-> Runtime Player Wave9/Wave10 の OBS Browser Source 向け出力画面・経路の実装事実と手動プローブ手順。
+> Runtime Player Wave9/Wave10 の OBS Browser Source 向け出力画面・経路に、Wave21 の Dynamics Tune parity を含めた実装事実と手動プローブ手順。
 
 ## 1. Status
 
-- Status: Implemented in Runtime Player Wave9 source/tests; Wave10 performance foundation source/tests integrated; manual OBS probe pending.
+- Status: Implemented in Runtime Player Wave9 source/tests; Wave10 performance foundation source/tests integrated; Wave21 Dynamics Tune effective tuning parity integrated; manual OBS probe pending.
 - Date: 2026-06-23
 - Implementation basis: [../implementation/orchestration/player-wave9-plan.md](../implementation/orchestration/player-wave9-plan.md)
 - Wave10 basis: [../implementation/orchestration/player-wave10-plan.md](../implementation/orchestration/player-wave10-plan.md), [../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)
+- Wave21 basis: [../implementation/orchestration/player-wave21-plan.md](../implementation/orchestration/player-wave21-plan.md), [../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md](../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md), [../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md](../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md)
 - Research basis: [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
 
 Wave9 introduced OBS Browser Source as the primary broadcast candidate. Wave10 keeps Browser Source as the fixed primary broadcast path and reduces duplicate local rendering work. The native Stage Window remains local preview/fallback; while at least one Browser Source client is connected, only the native local preview live rendering path is suspended.
@@ -43,6 +44,7 @@ Browser Source Stage client:
 - It has no setup/debug UI in normal operation.
 - It does not depend on Electron preload, IPC, `window.runtimePlayer`, `window.runtimePlayerStage`, or Node APIs.
 - It fetches Runtime Export payload and receives sanitized live parameter frames.
+- It receives the same effective dynamics tuning as Native Stage through Runtime Export payload/resync and `dynamics-tuning-changed` messages.
 - It sends heartbeat and renderer diagnostics to Control.
 - It applies every live frame it receives while sampling renderer diagnostics sent back to Control.
 - It de-duplicates identical Runtime Export payload application during startup/resync while still applying replacement payload identities.
@@ -67,6 +69,7 @@ Allowed Browser Source data:
 - server heartbeat/resync messages.
 - Browser Source client renderer diagnostics back to Control.
 - sampled Browser Source performance/status diagnostics.
+- sanitized effective dynamics tuning profile for the currently loaded Runtime Export.
 
 Forbidden Browser Source data:
 
@@ -76,6 +79,7 @@ Forbidden Browser Source data:
 - Control-only Browser Source status fields.
 - private Runtime Export directory paths.
 - arbitrary local files.
+- Player-local dynamics tuning profile file paths.
 
 ## 5. Manual OBS Probe Checklist
 
@@ -93,6 +97,8 @@ Forbidden Browser Source data:
 - Confirm Control reports local preview live rendering suspension while Browser Source is connected.
 - Move face/head with iFacialMocap and confirm model motion.
 - Confirm body follow/dynamics remain visible in Browser Source while the native local preview is suspended.
+- Tune a visible dynamics group in `Dynamics Tune` and confirm Browser Source motion changes in the same way as Native Stage.
+- Reset the tuned dynamics group and confirm Browser Source returns to exported defaults.
 - Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync without broken reload behavior.
 - Disconnect/close OBS Browser Source and confirm the native Stage local preview resumes after the grace period.
 - Compare CPU/GPU usage or perceived smoothness against the Wave9 duplicate-render baseline.
@@ -119,6 +125,7 @@ Source/test verified:
   - reconnect during the grace period avoids preview bounce.
 - Browser Source live frames continue while native local preview live rendering is suspended.
 - Runtime Export state, Stage transform sync, input processing, mapping, body follow, and dynamics remain outside the suspension boundary.
+- Browser Source receives effective dynamics tuning in initial payload/resync and separate tuning update messages.
 - Control-facing Browser Source status/diagnostics are sampled without hiding important server/client/export/render transitions.
 - Browser Source resync de-duplicates identical Runtime Export payload application while preserving replacement payload application.
 - No raw tracking/debug data crosses into Browser Source.

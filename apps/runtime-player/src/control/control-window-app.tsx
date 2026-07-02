@@ -27,11 +27,17 @@ import {
   type InputDiagnosticsCopyState
 } from "./input-diagnostics-panel";
 import { InputPage } from "./input-page";
+import { DynamicsTunePage } from "./dynamics-tune-page";
 import { LiveControllerPage } from "./live-controller-page";
 import { MappingPage } from "./mapping-page";
 import { OverviewPage } from "./overview-page";
 import { PerformanceDiagnosticsPage } from "./performance-diagnostics-page";
 import { StagePage } from "./stage-page";
+import type {
+  RuntimePlayerDynamicsTuningActionResult,
+  RuntimePlayerDynamicsTuningGroupUpdateRequest,
+  RuntimePlayerDynamicsTuningStatus
+} from "../preload/dynamics-tuning-bridge-contract";
 import type {
   RuntimePlayerInputDiagnosticsSnapshot,
   RuntimePlayerInputStatus
@@ -53,6 +59,7 @@ import type {
   RuntimePlayerStageRenderMetricsSnapshot
 } from "../preload/performance-diagnostics-contract";
 import type {
+  RuntimePlayerApi,
   RuntimePlayerStageStateSnapshot,
   RuntimePlayerStageViewActionResult,
   RuntimePlayerStageViewStatus,
@@ -90,6 +97,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerInputProfileStatus | null>(null);
   const [mappingStatus, setMappingStatus] =
     useState<RuntimePlayerMappingStatus | null>(null);
+  const [dynamicsTuningStatus, setDynamicsTuningStatus] =
+    useState<RuntimePlayerDynamicsTuningStatus | null>(null);
   const [variantStatus, setVariantStatus] =
     useState<RuntimePlayerVariantControllerStatus | null>(null);
   const [stageViewStatus, setStageViewStatus] =
@@ -204,6 +213,12 @@ export function ControlWindowApp(): ReactElement {
         setMappingStatus(status);
       }
     });
+    const unsubscribeDynamicsTuning =
+      connectControlWindowDynamicsTuningStatusBridge({
+        runtimePlayer: window.runtimePlayer,
+        isActive: () => active,
+        onStatus: setDynamicsTuningStatus
+      });
     window.runtimePlayer.variants.getStatus().then((status) => {
       if (active) {
         setVariantStatus(status);
@@ -294,6 +309,7 @@ export function ControlWindowApp(): ReactElement {
       unsubscribeInputDiagnostics();
       unsubscribeInputProfile();
       unsubscribeModelMapping();
+      unsubscribeDynamicsTuning();
       unsubscribeVariants();
       unsubscribeBrowserSource();
     };
@@ -480,6 +496,24 @@ export function ControlWindowApp(): ReactElement {
     }
   }
 
+  async function runDynamicsTuneAction(
+    action: () => Promise<RuntimePlayerDynamicsTuningActionResult>
+  ): Promise<void> {
+    try {
+      const result = await action();
+      setDynamicsTuningStatus(result.status);
+      setFeedback({
+        message: result.message,
+        tone: result.result === "ok" ? "success" : "error"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
   async function runVariantAction(
     action: () => Promise<RuntimePlayerVariantActionResult>
   ): Promise<void> {
@@ -516,6 +550,7 @@ export function ControlWindowApp(): ReactElement {
     inputStatus,
     inputProfileStatus,
     mappingStatus,
+    dynamicsTuningStatus,
     variantStatus,
     stageViewStatus,
     stageState,
@@ -539,6 +574,7 @@ export function ControlWindowApp(): ReactElement {
     copyPerformanceDiagnosticsReport,
     runInputProfileAction,
     runMappingAction,
+    runDynamicsTuneAction,
     runVariantAction,
     runStageAction
   });
@@ -597,7 +633,54 @@ export function shouldRenderInputDiagnosticsPanel(
 ): boolean {
   return (
     activePage !== "live-controller" &&
+    activePage !== "dynamics-tune" &&
     activePage !== "performance-diagnostics"
+  );
+}
+
+export function connectControlWindowDynamicsTuningStatusBridge(input: {
+  readonly runtimePlayer: Pick<RuntimePlayerApi, "dynamicsTuning">;
+  readonly isActive: () => boolean;
+  readonly onStatus: (status: RuntimePlayerDynamicsTuningStatus) => void;
+}): () => void {
+  input.runtimePlayer.dynamicsTuning.getStatus().then((status) => {
+    if (input.isActive()) {
+      input.onStatus(status);
+    }
+  });
+
+  return input.runtimePlayer.dynamicsTuning.onStatusChanged((status) => {
+    if (input.isActive()) {
+      input.onStatus(status);
+    }
+  });
+}
+
+export function renderControlWindowDynamicsTuneRoute(input: {
+  readonly dynamicsTuningStatus: RuntimePlayerDynamicsTuningStatus | null;
+  readonly runDynamicsTuneAction: (
+    action: () => Promise<RuntimePlayerDynamicsTuningActionResult>
+  ) => Promise<void>;
+}): ReactElement {
+  return (
+    <DynamicsTunePage
+      dynamicsStatus={input.dynamicsTuningStatus}
+      onUpdateGroup={(request: RuntimePlayerDynamicsTuningGroupUpdateRequest) =>
+        void input.runDynamicsTuneAction(() =>
+          window.runtimePlayer.dynamicsTuning.updateGroup(request)
+        )
+      }
+      onResetGroup={(groupId) =>
+        void input.runDynamicsTuneAction(() =>
+          window.runtimePlayer.dynamicsTuning.resetGroup({ groupId })
+        )
+      }
+      onRetryProfileSave={() =>
+        void input.runDynamicsTuneAction(() =>
+          window.runtimePlayer.dynamicsTuning.retryProfileSave()
+        )
+      }
+    />
   );
 }
 
@@ -607,6 +690,7 @@ function renderActivePage(input: {
   readonly inputStatus: RuntimePlayerInputStatus | null;
   readonly inputProfileStatus: RuntimePlayerInputProfileStatus | null;
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
+  readonly dynamicsTuningStatus: RuntimePlayerDynamicsTuningStatus | null;
   readonly variantStatus: RuntimePlayerVariantControllerStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
@@ -635,6 +719,9 @@ function renderActivePage(input: {
   ) => Promise<void>;
   readonly runMappingAction: (
     action: () => Promise<RuntimePlayerMappingActionResult>
+  ) => Promise<void>;
+  readonly runDynamicsTuneAction: (
+    action: () => Promise<RuntimePlayerDynamicsTuningActionResult>
   ) => Promise<void>;
   readonly runVariantAction: (
     action: () => Promise<RuntimePlayerVariantActionResult>
@@ -792,6 +879,13 @@ function renderActivePage(input: {
         }
       />
     );
+  }
+
+  if (input.activePage === "dynamics-tune") {
+    return renderControlWindowDynamicsTuneRoute({
+      dynamicsTuningStatus: input.dynamicsTuningStatus,
+      runDynamicsTuneAction: input.runDynamicsTuneAction
+    });
   }
 
   if (input.activePage === "stage") {

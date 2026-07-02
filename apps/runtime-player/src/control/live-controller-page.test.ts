@@ -120,7 +120,7 @@ describe("LiveControllerPage", () => {
 });
 
 describe("ControlWindowShell navigation", () => {
-  it("shows Live Controller and Performance Diagnostics in navigation", () => {
+  it("shows Runtime Player pages in accepted navigation order", () => {
     const markup = renderToStaticMarkup(
       createElement(
         ControlWindowShell,
@@ -147,13 +147,17 @@ describe("ControlWindowShell navigation", () => {
     const overviewNavIndex = markup.indexOf(">Overview<");
     const liveControllerNavIndex = markup.indexOf(">Live Controller<");
     const inputNavIndex = markup.indexOf(">Input<");
+    const mappingNavIndex = markup.indexOf(">Mapping<");
+    const dynamicsTuneNavIndex = markup.indexOf(">Dynamics Tune<");
     const stageNavIndex = markup.indexOf(">Stage<");
     const diagnosticsNavIndex = markup.indexOf(">Performance Diagnostics<");
 
     expect(overviewNavIndex).toBeGreaterThanOrEqual(0);
     expect(liveControllerNavIndex).toBeGreaterThan(overviewNavIndex);
     expect(inputNavIndex).toBeGreaterThan(liveControllerNavIndex);
-    expect(stageNavIndex).toBeGreaterThan(inputNavIndex);
+    expect(mappingNavIndex).toBeGreaterThan(inputNavIndex);
+    expect(dynamicsTuneNavIndex).toBeGreaterThan(mappingNavIndex);
+    expect(stageNavIndex).toBeGreaterThan(dynamicsTuneNavIndex);
     expect(diagnosticsNavIndex).toBeGreaterThan(stageNavIndex);
   });
 });
@@ -165,6 +169,7 @@ describe("ControlWindowApp diagnostics panel policy", () => {
       "live-controller",
       "input",
       "mapping",
+      "dynamics-tune",
       "stage",
       "performance-diagnostics"
     ];
@@ -177,6 +182,7 @@ describe("ControlWindowApp diagnostics panel policy", () => {
       ["live-controller", false],
       ["input", true],
       ["mapping", true],
+      ["dynamics-tune", false],
       ["stage", true],
       ["performance-diagnostics", false]
     ]);

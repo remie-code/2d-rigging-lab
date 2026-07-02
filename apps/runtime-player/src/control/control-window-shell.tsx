@@ -8,6 +8,7 @@ export type ControlWindowPage =
   | "live-controller"
   | "input"
   | "mapping"
+  | "dynamics-tune"
   | "stage"
   | "performance-diagnostics";
 
@@ -19,6 +20,7 @@ const controlWindowPages: readonly {
   { id: "live-controller", label: "Live Controller" },
   { id: "input", label: "Input" },
   { id: "mapping", label: "Mapping" },
+  { id: "dynamics-tune", label: "Dynamics Tune" },
   { id: "stage", label: "Stage" },
   { id: "performance-diagnostics", label: "Performance Diagnostics" }
 ];

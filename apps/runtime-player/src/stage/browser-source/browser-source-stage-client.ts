@@ -4,6 +4,9 @@ import {
   type RuntimePlayerBrowserSourceRuntimeExportPayload
 } from "../../preload/browser-source-transport-contract";
 import type {
+  RuntimePlayerEffectiveDynamicsTuningProfile
+} from "../../preload/dynamics-tuning-bridge-contract";
+import type {
   RuntimePlayerBrowserSourceStageDisplayState
 } from "../../preload/browser-source-status-contract";
 import type {
@@ -172,6 +175,8 @@ export class BrowserSourceStageClient {
   #runtimeExportPayloadKey: string | null = null;
   #activeVariantSelection: RuntimePlayerActiveVariantSelectionState | null =
     null;
+  #effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null =
+    null;
   #runtimeExportApplyCount = 0;
   #started = false;
   #snapshot: BrowserSourceStageClientSnapshot;
@@ -279,6 +284,7 @@ export class BrowserSourceStageClient {
     if (message.type === "runtime-export-resync") {
       this.#applyStageDisplayState(message.stageDisplayState);
       this.#applyActiveVariantSelection(message.activeVariantSelection);
+      this.#applyDynamicsTuning(message.effectiveDynamicsTuning);
       this.#applyRuntimeExportPayload(message.runtimeExport);
       if (message.latestFrame !== null) {
         this.#applyLiveParameterFrame(message.latestFrame);
@@ -288,7 +294,13 @@ export class BrowserSourceStageClient {
 
     if (message.type === "runtime-export-changed") {
       this.#applyActiveVariantSelection(message.activeVariantSelection);
+      this.#applyDynamicsTuning(message.effectiveDynamicsTuning);
       this.#applyRuntimeExportPayload(message.runtimeExport);
+      return;
+    }
+
+    if (message.type === "dynamics-tuning-changed") {
+      this.#applyDynamicsTuning(message.effectiveDynamicsTuning);
       return;
     }
 
@@ -413,6 +425,9 @@ export class BrowserSourceStageClient {
       this.#applyActiveVariantSelection(
         runtimeExportResponse.activeVariantSelection
       );
+      this.#applyDynamicsTuning(
+        runtimeExportResponse.effectiveDynamicsTuning
+      );
       this.#applyRuntimeExportPayload(runtimeExportResponse.runtimeExport);
     } catch (error) {
       this.#updateSnapshot({
@@ -442,6 +457,7 @@ export class BrowserSourceStageClient {
       this.#metrics.clear();
       this.#runtimeExportPayloadKey = null;
       this.#activeVariantSelection = null;
+      this.#effectiveDynamicsTuning = null;
       this.#renderer?.clear();
       this.#updateSnapshot({
         runtimeExportLoaded: false,
@@ -496,6 +512,7 @@ export class BrowserSourceStageClient {
     payloadKey: string
   ): void {
     this.#renderer?.setActiveVariantSelection(this.#activeVariantSelection);
+    this.#renderer?.setDynamicsTuning(this.#effectiveDynamicsTuning);
     const result = this.#renderer?.setPayload(payload);
     this.#runtimeExportPayloadKey = payloadKey;
     this.#runtimeExportApplyCount += 1;
@@ -516,6 +533,13 @@ export class BrowserSourceStageClient {
   ): void {
     this.#activeVariantSelection = activeVariantSelection;
     this.#renderer?.setActiveVariantSelection(activeVariantSelection);
+  }
+
+  #applyDynamicsTuning(
+    effectiveDynamicsTuning: RuntimePlayerEffectiveDynamicsTuningProfile | null
+  ): void {
+    this.#effectiveDynamicsTuning = effectiveDynamicsTuning;
+    this.#renderer?.setDynamicsTuning(effectiveDynamicsTuning);
   }
 
   #applyLiveParameterFrame(frame: RuntimePlayerLiveParameterFrame): void {
