@@ -37,7 +37,7 @@
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
 | [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave53 final integration report/review `pass` が最新 final implementation-proven baseline。Workspace Layout Migration v0 は bounded pass 記録済み |
 | [runtime-player/](runtime-player/) | Editor外のRuntime Player / Capture Host appの調査、UX、設計、未決事項 | iFacialMocap input adapter調査、初期画面UX、Electron固定後の技術スタック判断を記録 |
-| [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 前提合意3文書と第一閉問題（01-eyeball-x）定義を記録済み。craft/ 成果物イメージは未合意 |
+| [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 前提合意4文書（可解性 / 運用方針 / 閉問題アプローチ / craft設計）と第一閉問題（01-eyeball-x）定義を記録済み |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
@@ -81,4 +81,3 @@
 | Domain AC / scenario のmemo対応 | 完了 |
 | Future Public Clean Subset の具体範囲 | 現在MVP外。必要時に別途再設計 |
 | implementation/_map.md の Wave94-102 バックフィル | 未了。既知のドキュメント更新もれ。orchestration/ に plan は実在する |
-| model-authoring/craft/ の成果物イメージ | 未合意。次の議題 |
