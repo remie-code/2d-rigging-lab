@@ -7,6 +7,7 @@ export * from "./ai-command-response-payload.js";
 export * from "./ai-command-response.js";
 export * from "./ai-command-host.js";
 export * from "./ai-approval-policy.js";
+export * from "./ai-auto-approval-policy.js";
 export * from "./ai-command-transcript.js";
 export * from "./ai-command-executor.js";
 export * from "./ai-editor-state.js";

@@ -9,6 +9,8 @@
     "typecheck:root": "tsc --noEmit",
     "test": "pnpm run test:unit",
     "test:unit": "vitest run packages --exclude packages/runtime-core/src/preview-viewer-equivalence-fixture.test.ts",
+    "test:authoring-host": "vitest run --root apps/authoring-host",
+    "typecheck:authoring-host": "tsc --noEmit -p apps/authoring-host/tsconfig.json",
     "smoke:wave44:psd-parser": "node scripts/wave44-psd-parser-smoke.mjs --psd test_data/sample_model.psd",
     "check:deps": "node scripts/check-dependencies.mjs",
     "check:source": "node scripts/check-source-organization.mjs",

@@ -1,0 +1,26 @@
+{
+  "name": "@private-2d-rigging-lab/authoring-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "authoring-host": "./src/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run -c vitest.config.ts"
+  },
+  "dependencies": {
+    "@private-2d-rigging-lab/ai-interface": "workspace:*",
+    "@private-2d-rigging-lab/authoring-core": "workspace:*",
+    "@private-2d-rigging-lab/contracts": "workspace:*",
+    "@private-2d-rigging-lab/operation-core": "workspace:*",
+    "@private-2d-rigging-lab/package-format": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.29",
+    "typescript": "5.8.3"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@private-2d-rigging-lab/ai-interface": ["../../packages/ai-interface/src/index.ts"],
+      "@private-2d-rigging-lab/authoring-core": ["../../packages/authoring-core/src/index.ts"],
+      "@private-2d-rigging-lab/contracts": ["../../packages/contracts/src/index.ts"],
+      "@private-2d-rigging-lab/operation-core": ["../../packages/operation-core/src/index.ts"],
+      "@private-2d-rigging-lab/package-format": ["../../packages/package-format/src/index.ts"],
+      "zod": ["../../node_modules/.pnpm/zod@4.4.3/node_modules/zod"]
+    }
+  },
+  "include": ["src/**/*.ts", "vitest.config.ts"]
+}

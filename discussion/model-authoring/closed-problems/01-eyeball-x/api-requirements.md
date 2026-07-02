@@ -27,9 +27,13 @@
 2. **Validate の外部入口が無い。** `validatePackage` コマンドは `not_implemented` 固定。`ai-validation-command.ts` に型定義のみ存在しディスパッチ未接続。product-preflight 系 3 コマンドは生成済み report の観測・差分のみ。（`ai-command-executor.ts:79, 161-178, 228-258`）
 3. **CLI / スクリプトのエントリポイントが無い。** ai-interface を叩く scripts は 0 件。ライブラリとしてのみ存在。
 
+## 解消済みの不確実性（Wave103 Domain A で実証、2026-07-02）
+
+- **`createEndsCenter` の keyform set 未存在からの単独実行 → 動作する（committed）**。実証: `apps/authoring-host/src/closed-problem-01-smoke.test.ts:132-181`（事前 `keyformSets: []` アサート → CLI 経由単独実行 → 新規 keyformSet 1 件・3 キー生成）。注意: parameter の min/default/max は**相異なる値が前提**（同値は `operation.editKeyformKey.duplicateKey` で reject される既存仕様）。Eyeball_X のレンジ設計時に留意。
+- **6 操作すべてが CLI ホスト経由でヘッドレス実行可能**。5 operation スモーク（generateMesh → createWarpDeformer → createParameter → createEndsCenter → setMaskRelation）が全件 committed。
+
 ## 残る不確実性
 
 - `MESH_GENERATION_METHOD_IDS` の値集合（authoring-core 側、未読）。UI 3 プリセットとの対応確定に必要
-- `createEndsCenter` を keyform set 未存在から単独で呼んだ場合の動作（機構上は動くはず。実装時に最優先で実証）
 - 横幅スケールの専用プロパティ（scaleX 等）の有無（確認済み 4 種以外）
 - 承認の自動化可否と ai-interface 層の要否: `approveDryRunCommand` を誰が呼ぶか、自己承認ポリシーが許されるか、そもそもホストが ai-interface 層を通すか operation-core 直叩きか（**設計分岐 → ユーザー議論事項**）

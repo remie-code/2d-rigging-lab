@@ -36,15 +36,16 @@
 
 ## 現在の状態サマリ
 
-- 2026-07-02: 可解性分析・運用方針・閉問題アプローチ・craft 設計・モデル配分を合意し、第一閉問題（眼球 X）を定義した。
-- 2026-07-02: planning-gate（Inventory then discuss）に基づき API 調査を実施。**6 操作はすべて既存 operation で対応可能**。欠落はヘッドレスホスト / Validate 入口 / 知覚経路の画像化の一段に局在。
-- 追加調査 2 本（host 実装の apps/ 内存在、package → Runtime Export 変換パス）を実施中。
+- 2026-07-02: 前提 5 文書合意、第一閉問題（眼球 X）定義、API 調査完了（6 操作すべて既存 operation で対応可能）。
+- 2026-07-02: **Wave103 `headless-authoring-host-foundation` final complete / pass**（[計画](../implementation/orchestration/wave103-plan.md) / [最終報告](../implementation/waves/wave103/wave103-final-integration-report.md)）。武器の第 1 陣が完成:
+  - **手**: `apps/authoring-host` — ワンショット CLI。load → dry-run → 自動承認 → commit → save。閉問題 01 の 5 操作スモーク全 committed、`createEndsCenter` 単独新規作成も実証済み
+  - **網膜**: `packages/render-software` — 依存ゼロ・完全決定論の RenderScene → RGBA8 → PNG。ビュー変換順逆 API 公開済み（サイドカー用）
+- Wave103 からの引き継ぎリスク（非ブロッキング）: state-dir パッケージ内誤用ガード無し / 実 WebGL2 とのピクセル同値性未検証（ref e2e で扱う）/ 依存ガード偽陽性（別タスク化済み）
 
 ## 次の行動
 
-1. Wave103 の実行（[../implementation/orchestration/wave103-plan.md](../implementation/orchestration/wave103-plan.md): ヘッドレスホスト CLI + ソフトウェアラスタライザ。全分岐ユーザー合意済み）
-2. Wave103 完了後、Wave104 計画（知覚コマンド面 renderView / コンタクトシート / ビュー変換サイドカー + 測量コマンド + validatePackage 接続 + ref/ e2e スモーク）
-3. Wave104 完了後、閉問題 01 の実験実行（B の検証 = Fable の視覚弁別力の初実測）
+1. Wave104 計画（planning-gate から）: 知覚コマンド面 renderView / コンタクトシート / ビュー変換サイドカー + 測量コマンド + validatePackage 接続 + ref/ e2e スモーク
+2. Wave104 完了後、閉問題 01 の実験実行（B の検証 = Fable の視覚弁別力の初実測）
 
 ## 決着済みの元・未決事項（2026-07-02 ユーザー決定）
 
