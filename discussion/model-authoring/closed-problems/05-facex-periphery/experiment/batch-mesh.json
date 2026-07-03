@@ -1,0 +1,68 @@
+[
+  {
+    "file": "mesh-ears-r.json",
+    "operationId": "op_cp05_mesh_ears_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_5c3cadc5_ears-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05] mesh ears-r (medium)"
+  },
+  {
+    "file": "mesh-ears-l.json",
+    "operationId": "op_cp05_mesh_ears_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_5c3cade4_ears-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05] mesh ears-l (medium)"
+  },
+  {
+    "file": "mesh-hair-f-r.json",
+    "operationId": "op_cp05_mesh_hair_f_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_21b4da82_hair_f_r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05] mesh hair_f_r (medium)"
+  },
+  {
+    "file": "mesh-hair-f-l.json",
+    "operationId": "op_cp05_mesh_hair_f_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_21b4da21_hair_f_l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05] mesh hair_f_l (medium)"
+  },
+  {
+    "file": "mesh-back-hair-r.json",
+    "operationId": "op_cp05_mesh_back_hair_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_f26916b1_back_hair_r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05] mesh back_hair_r (medium)"
+  },
+  {
+    "file": "mesh-back-hair-l.json",
+    "operationId": "op_cp05_mesh_back_hair_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_f2691750_back_hair_l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05] mesh back_hair_l (medium)"
+  }
+]

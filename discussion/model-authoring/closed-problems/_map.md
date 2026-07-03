@@ -16,11 +16,15 @@
 | [02-eye-open-close/](02-eye-open-close/) | 目の開閉（状態デフォーマ3基×両眼、変形+opacity切替）| **通過（2026-07-03、ユーザー判定 100/100「文句のつけようもない」）**。[results.md](02-eye-open-close/results.md) / [実装記録](02-eye-open-close/build-log.md)。craft/05 へ蒸留済み |
 
 | [03-face-angle-x/](03-face-angle-x/) | Face Angle X 最小核（鼻・顔輪郭・左目）| **二重通過（2026-07-03）**: 答え移植版 100点 + **盲目再構成版も満点**（craft のみのクリーン Fable、ゲイン=1 世界線を正典採用）。[results.md](03-face-angle-x/results.md)。発見「field = 構造 × ゲイン」をレシピ06へ恒久化 |
+| [04-facex-expansion/](04-facex-expansion/) | FaceX 展開（口・右目・両眉・前髪）= craft 追試験 | **通過（2026-07-03、3ラウンドの gate ループ）**。[results.md](04-facex-expansion/results.md)。最大の獲得 = **回転射影則**（dx = u(cosΔ−1) + z·sinΔ、設計対象は奥行きプロファイル z に一本化）。クリーン Fable 3 代の委任で reject 累計ゼロ |
+| [05-facex-periphery/](05-facex-periphery/) | FaceX 頭部外周（耳×2・房×2・後ろ髪×2 + 追加の後頭部×2）= 未踏 z 域3種の追試験 | **通過（2026-07-03、2ラウンド）**: 本体（五代目）+ fix（六代目 = 後頭部層・付け根絞り）。ユーザー判定**「これに文句を言うやつはこの世にいないだろう」**。[results.md](05-facex-periphery/results.md)。獲得 = 未踏 z 域3種の実証 + **隠蔽維持拘束** + 同一モデル内拡張の作法 + 差動パララックス。計 28 op reject ゼロ |
 
 ## 次の行動
 
-1. 04 の問題定義（ユーザーの次の工程提示を待つ。候補: FaceX 残り12要素の展開（craft 適用の機械的反復、閉問題ではない可能性）/ Face Angle Y / 口の開閉等）
+1. 06 の問題定義（候補: アクセサリ——眼鏡 = 顔造作への追随 / 帽子 = 頭部との接続線の視覚補正、いずれも craft 上 optional —— / Face Angle Y / 口の開閉。ユーザーの実工程順に従う）
 
 ## 未決事項
 
-- 04 以降の問題列（ユーザーの実工程順に従う）
+- 目・眉の遠側キーへの弦の項適用（04 の未適用提案）→ craft 完成後の通し確認で扱う（2026-07-03 ユーザー決定）
+- front_hair テクスチャ左端 x≈690 の迷いピクセル列（cp04 由来、暗背景でのみ視認）の掃除要否
+- 06 以降の問題列
