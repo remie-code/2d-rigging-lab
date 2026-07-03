@@ -1,7 +1,8 @@
 import type {
   RenderViewSidecar,
   RenderViewSweepLayout,
-  RenderViewTextureDimensionSource
+  RenderViewTextureDimensionSource,
+  ResolvedVariantSelectionEntry
 } from "@private-2d-rigging-lab/ai-interface";
 import { RenderViewSidecarSchema } from "@private-2d-rigging-lab/ai-interface";
 import type { ResolvedSoftwareRenderView } from "@private-2d-rigging-lab/render-software";
@@ -40,6 +41,13 @@ export const buildRenderViewSidecar = (input: {
    * derived-verified), sorted by textureId by the resolver.
    */
   readonly textureDimensionSources?: readonly RenderViewTextureDimensionSource[];
+  /**
+   * The RESOLVED active Variant selection the visibility gate used (Wave105
+   * §3.1), one entry per group, sorted by variantGroupId by the resolver. Always
+   * passed by the producer (empty array when the package has no Variant Groups)
+   * so the sidecar always records which outfit the photo was taken in.
+   */
+  readonly variantSelections?: readonly ResolvedVariantSelectionEntry[];
 }): RenderViewSidecar =>
   RenderViewSidecarSchema.parse({
     schemaVersion: "render-view-sidecar-v1",
@@ -63,7 +71,10 @@ export const buildRenderViewSidecar = (input: {
     ...(input.sweep === undefined ? {} : { sweep: input.sweep }),
     ...(input.textureDimensionSources === undefined
       ? {}
-      : { textureDimensionSources: input.textureDimensionSources })
+      : { textureDimensionSources: input.textureDimensionSources }),
+    ...(input.variantSelections === undefined
+      ? {}
+      : { variantSelections: input.variantSelections })
   });
 
 /**

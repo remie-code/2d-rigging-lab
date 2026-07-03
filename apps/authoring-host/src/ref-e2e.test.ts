@@ -115,6 +115,86 @@ const rectContains = (
   inner.x + inner.width <= outer.x + outer.width &&
   inner.y + inner.height <= outer.y + outer.height;
 
+// The Ware Variant Group (singleSelect) from ref/model/variants.json, read at
+// runtime so the gate assertions are derived from the package data — not
+// transcribed. The group targets 15 outfit drawables; which ones pass depends on
+// the active variant's membership.
+interface RefVariantGroup {
+  readonly variantGroupId: string;
+  readonly mode: string;
+  readonly targetDrawableIds: readonly string[];
+  readonly memberships: readonly {
+    readonly drawableId: string;
+    readonly variantIds: readonly string[];
+  }[];
+  readonly variants: readonly { readonly variantId: string }[];
+  readonly defaultActive: { readonly kind: string; readonly variantId?: string };
+}
+
+const readRefWareGroup = async (): Promise<RefVariantGroup> => {
+  const text = await readFile(join(REF_DIR, "model", "variants.json"), "utf8");
+  const file = JSON.parse(text) as { readonly variantGroups: readonly RefVariantGroup[] };
+  const group = file.variantGroups.find((candidate) => candidate.variantGroupId === "vgrp_expression");
+  if (group === undefined) {
+    throw new Error("ref variants.json is missing the vgrp_expression group");
+  }
+  return group;
+};
+
+// The set of target drawables a given variantId passes: membership.variantIds
+// contains that variantId. Derived purely from the group data (the same rule the
+// pure predicate applies), so the e2e assertion has an INDEPENDENT expectation to
+// compare the evaluated snapshot against.
+const targetsPassingVariant = (group: RefVariantGroup, variantId: string): Set<string> =>
+  new Set(
+    group.memberships
+      .filter((membership) => membership.variantIds.includes(variantId))
+      .map((membership) => membership.drawableId)
+  );
+
+const inspectRefGeometry = async (
+  targets: readonly { readonly kind: "drawable"; readonly drawableId: string }[],
+  variantSelections?: readonly object[]
+): Promise<InspectEvaluatedGeometryResult> => {
+  const stateDirectory = await makeStateDir();
+  const response = await runAuthoringHostCommand({
+    packageDirectory: REF_DIR,
+    stateDirectory,
+    command: readCommand("inspectEvaluatedGeometry", {
+      targets,
+      includeVertices: false,
+      ...(variantSelections === undefined ? {} : { variantSelections })
+    })
+  });
+  expect(response.aiCommandStatus).toBe("ok");
+  return response.aiCommandResponse?.payload as InspectEvaluatedGeometryResult;
+};
+
+// Which of the group's 15 target drawables the gated snapshot reports visible,
+// measured through inspectEvaluatedGeometry (the SAME gated snapshot the render
+// consumes). Returns the drawableIds whose measurement flag is visible=true.
+const measureVisibleTargets = async (
+  group: RefVariantGroup,
+  variantSelections?: readonly object[]
+): Promise<Set<string>> => {
+  const targets = group.targetDrawableIds.map((drawableId) => ({
+    kind: "drawable" as const,
+    drawableId
+  }));
+  const result = await inspectRefGeometry(targets, variantSelections);
+  const visible = new Set<string>();
+  for (const entry of result.results) {
+    if (entry.kind !== "drawable") {
+      continue;
+    }
+    expect(entry.found).toBe(true);
+    if (entry.visible === true) {
+      visible.add(entry.drawableId);
+    }
+  }
+  return visible;
+};
+
 describe("ref e2e smoke (read-only)", () => {
   it("loads ref and runs validatePackage (report returned; diagnostics recorded, not gated)", async () => {
     const stateDirectory = await makeStateDir();
@@ -312,5 +392,88 @@ describe("ref e2e smoke (read-only)", () => {
       )}\n`,
       "utf8"
     );
+  }, 120_000);
+
+  it("gates the Ware group to the Default outfit at the snapshot level (6 pass / 9 blocked, derived from the package)", async () => {
+    const group = await readRefWareGroup();
+    // Sanity: the survey's 15 targets and 3 variants, as data.
+    expect(group.mode).toBe("singleSelect");
+    expect(group.targetDrawableIds).toHaveLength(15);
+    expect(group.defaultActive.variantId).toBe("var_expression_default");
+
+    // INDEPENDENT expectation: derive from the group memberships which targets
+    // the Default variant should pass. This is computed from the package data,
+    // not transcribed from the prompt.
+    const expectedDefaultPass = targetsPassingVariant(group, "var_expression_default");
+    const expectedDefaultBlocked = group.targetDrawableIds.filter(
+      (drawableId) => !expectedDefaultPass.has(drawableId)
+    );
+    // Guard against a vacuous assertion: the survey's headline numbers.
+    expect(expectedDefaultPass.size).toBe(6);
+    expect(expectedDefaultBlocked).toHaveLength(9);
+
+    // OBSERVED: what the gated snapshot actually reports visible (measured
+    // through the same gated snapshot renderView consumes). Default selection is
+    // used when variantSelections is omitted.
+    const observedVisible = await measureVisibleTargets(group);
+
+    // The gated snapshot's visible set equals the membership-derived Default set,
+    // and every non-member target is blocked.
+    expect([...observedVisible].sort()).toEqual([...expectedDefaultPass].sort());
+    for (const blockedDrawableId of expectedDefaultBlocked) {
+      expect(observedVisible.has(blockedDrawableId)).toBe(false);
+    }
+  }, 120_000);
+
+  it("changes the passing set when the Rodos variant is selected (override)", async () => {
+    const group = await readRefWareGroup();
+
+    const expectedRodosPass = targetsPassingVariant(group, "var_rodos");
+    expect(expectedRodosPass.size).toBeGreaterThan(0);
+
+    const observedRodosVisible = await measureVisibleTargets(group, [
+      { kind: "singleSelect", variantGroupId: "vgrp_expression", variantId: "var_rodos" }
+    ]);
+
+    // Rodos passes its own members exactly...
+    expect([...observedRodosVisible].sort()).toEqual([...expectedRodosPass].sort());
+
+    // ...and the passing set genuinely differs from Default (proof the override
+    // reshaped the visibility world, not just re-rendered the same outfit).
+    const defaultVisible = await measureVisibleTargets(group);
+    expect([...observedRodosVisible].sort()).not.toEqual([...defaultVisible].sort());
+
+    // The measurement result echoes the resolved outfit so the reader can prove
+    // which selection produced these numbers.
+    const oneTarget = [
+      { kind: "drawable" as const, drawableId: group.targetDrawableIds[0]! }
+    ];
+    const rodosResult = await inspectRefGeometry(oneTarget, [
+      { kind: "singleSelect", variantGroupId: "vgrp_expression", variantId: "var_rodos" }
+    ]);
+    expect(rodosResult.variantSelections).toEqual([
+      { kind: "singleSelect", variantGroupId: "vgrp_expression", variantId: "var_rodos" }
+    ]);
+  }, 120_000);
+
+  it("rejects an unknown variant reference deterministically (does not silently fall back to default)", async () => {
+    const stateDirectory = await makeStateDir();
+    await expect(
+      runAuthoringHostCommand({
+        packageDirectory: REF_DIR,
+        stateDirectory,
+        command: readCommand("inspectEvaluatedGeometry", {
+          targets: [{ kind: "drawable", drawableId: "draw_r0_1cea4f6f_ea30e9c4_tie" }],
+          includeVertices: false,
+          variantSelections: [
+            {
+              kind: "singleSelect",
+              variantGroupId: "vgrp_expression",
+              variantId: "var_does_not_exist"
+            }
+          ]
+        })
+      })
+    ).rejects.toThrow();
   }, 120_000);
 });

@@ -109,11 +109,20 @@ export const unionBounds = (
 };
 
 /**
- * The model-wide bounds: the union of every drawable's evaluated bounds. This
- * is the default framing region for `renderView` when no explicit view is
- * given.
+ * The model-wide bounds: the union of the VISIBLE drawables' evaluated bounds.
+ * This is the default framing region for `renderView` when no explicit view is
+ * given. Gated-hidden drawables (Wave105 Variant gate — `visible === false`)
+ * are excluded so the framing shares the same visibility world as the render
+ * and the tape measure: `modelBounds` frames only what is actually drawn. When
+ * no Variant gate hides anything (every drawable visible, e.g. a gate-free
+ * package) this is identical to unioning every drawable, so gate-free framing is
+ * unchanged.
  */
 export const modelEvaluatedBounds = (
   snapshot: RuntimeSnapshotDto
 ): RectDto | undefined =>
-  unionBounds(snapshot.drawables.map((drawable) => drawable.bounds));
+  unionBounds(
+    snapshot.drawables
+      .filter((drawable) => drawable.visible)
+      .map((drawable) => drawable.bounds)
+  );

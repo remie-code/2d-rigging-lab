@@ -45,8 +45,20 @@
 
 ## 次の行動
 
-1. **ユーザー目視 gate**: [experiments/ref-render-gate/](experiments/ref-render-gate/README.md) の PNG 3 枚（全身 / 顔 / 両目）をユーザーが確認。注意書き: マスクソース drawable は通常描画もされる仕様（wave103 承認済み）のため、白目層らしきものが見えても renderer 疑義とは限らない。
-2. gate 通過後、**閉問題 01 の実験実行**（B の検証 = Fable の視覚弁別力の初実測）。craft 蒸留候補が既に 4 点蓄積済み（wave104 最終報告書に記録。例: `addKeyform` 単キー set の罠 → `editKeyformKey(createEnds)` が正道）。
+1. **閉問題 01 の実験実行**（B の検証 = Fable の視覚弁別力の初実測）。craft 蒸留候補が蓄積済み（wave104 最終報告書 + wave105 の知見。例: `addKeyform` 単キー set の罠 → `editKeyformKey(createEnds)` が正道）。
+
+## ユーザー目視 gate: 通過（2026-07-03）
+
+**ユーザー判定: 「完璧だ、これであっている」。** Wave105 再生成の PNG 3 枚（Default 衣装）に対する人間承認が成立。これにより:
+
+- ソフトウェアラスタライザの描画正しさが、配信実証済み実モデルに対して**人間の目で承認された**（wave103 の accepted リスク「実 WebGL2 とのピクセル同値性未検証」は実用上closed）
+- 判定梯子の最上段（段 5: ユーザーの目）が初めて行使・通過
+- **知覚経路は全段が実証済み**となり、閉問題 01 の実験を開始できる状態が整った
+
+## 補記（2026-07-03）
+
+- **Wave105 final complete / pass**（[計画](../implementation/orchestration/wave105-plan.md) / [最終報告](../implementation/waves/wave105/wave105-final-integration-report.md)）: Variant 可視性ゲート（snapshot レベル、目と巻尺が同一の可視性世界を共有、optional `variantSelections`、空ケース挙動不変）。wave104 版 PNG の約 9 drawable 余分描画は解消、Fable 自身も新旧 PNG の差（3 衣装重畳 → Default 単独）を視覚で明確に弁別できることを確認（弁別力データ点）。
+- **artifact-wait プロトコル実戦実証**: Orch-Sylph の在席ポーリング（PowerShell Start-Sleep）で L0 中継ゼロのドメインループ完走を二度実証。確定版は `.claude/skills/implementation-orchestration/SKILL.md` 規則 1-5、統制実験の記録は [research/delegation-calibration-log.md](research/delegation-calibration-log.md) Round 4。
 
 ## 決着済みの元・未決事項（2026-07-02 ユーザー決定）
 

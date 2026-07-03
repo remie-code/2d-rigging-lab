@@ -1,6 +1,11 @@
 import { ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
+import {
+  ResolvedVariantSelectionEntrySchema,
+  VariantSelectionsPayloadSchema
+} from "./ai-variant-selection.js";
+
 /**
  * Zod schemas for the `renderView` perception command (Wave104 Domain A).
  *
@@ -60,6 +65,15 @@ export const RenderViewPayloadSchema = z.object({
   outputWidth: z.number().int().min(1).max(8192).optional(),
   outputHeight: z.number().int().min(1).max(8192).optional(),
   sweep: RenderViewSweepSchema.optional(),
+  /**
+   * Optional per-group active Variant selection (Wave105 §3.1). Omitted →
+   * every Variant Group resolves to its `defaultActive`. Present → the named
+   * groups use the given selection while the perception visibility gate is
+   * applied at the snapshot level (base visible AND variant predicate). Unknown
+   * group / variant references or a mode mismatch are rejected deterministically
+   * by the host resolver.
+   */
+  variantSelections: VariantSelectionsPayloadSchema,
   outDir: z.string().min(1),
   /** Base filename (without extension) for produced artifacts. */
   outputName: z.string().min(1).default("render")
@@ -144,7 +158,15 @@ export const RenderViewSidecarSchema = z.object({
    * Per-texture dimension-source records (sorted by textureId). Optional so
    * pre-revision sidecars still parse; producers always emit it.
    */
-  textureDimensionSources: z.array(RenderViewTextureDimensionSourceSchema).optional()
+  textureDimensionSources: z.array(RenderViewTextureDimensionSourceSchema).optional(),
+  /**
+   * The RESOLVED active Variant selection the visibility gate used, one entry
+   * per Variant Group, sorted by `variantGroupId`. This records "which outfit
+   * this photo was taken in" (Wave105 §3.1). Empty array when the package has no
+   * Variant Groups. Optional so pre-revision sidecars still parse; producers
+   * always emit it (empty array included).
+   */
+  variantSelections: z.array(ResolvedVariantSelectionEntrySchema).optional()
 });
 export type RenderViewSidecar = z.infer<typeof RenderViewSidecarSchema>;
 

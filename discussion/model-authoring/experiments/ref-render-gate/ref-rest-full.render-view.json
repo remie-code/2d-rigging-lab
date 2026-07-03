@@ -9,12 +9,12 @@
     "stageViewport": {
       "minX": 410,
       "minY": 89,
-      "width": 1093,
+      "width": 1085,
       "height": 2857
     },
-    "outputWidth": 392,
+    "outputWidth": 389,
     "outputHeight": 1024,
-    "pixelsPerStageX": 0.3586459286367795,
+    "pixelsPerStageX": 0.3585253456221198,
     "pixelsPerStageY": 0.3584179208960448
   },
   "textureDimensionSources": [
@@ -773,6 +773,13 @@
       "dimensionSource": "derived-verified",
       "width": 314,
       "height": 326
+    }
+  ],
+  "variantSelections": [
+    {
+      "kind": "singleSelect",
+      "variantGroupId": "vgrp_expression",
+      "variantId": "var_expression_default"
     }
   ]
 }

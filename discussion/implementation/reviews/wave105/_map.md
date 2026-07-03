@@ -1,0 +1,18 @@
+# Wave105 Review Map
+
+> Lightweight map for Wave105 Review-Sylph artifacts.
+
+## Entries
+
+| Path | Lane | Verdict | Notes |
+|---|---|---|---|
+| [wave105-domain-a-spec-compliance-review.md](wave105-domain-a-spec-compliance-review.md) | Domain A Spec Compliance Review | pass | Gate semantics (`base && predicate`) same-shape as Export reference impl (`runtime-export-materialization.ts:146,154-155`) and Editor applied reality (`canvas-evaluation.ts:320-323`, minus session-local `!hiddenByPart`); snapshot-level application shared by render/measurement/framing; empty-case byte-identical via identity return; sidecar/measurement selection record; ref e2e 6/9 assert data-derived from `ref/model/variants.json` with vacuous-pass guard. Ruled the Gnome `modelEvaluatedBounds` visible-only flag valid/keep. Probe residue-zero proven. |
+| [wave105-domain-a-design-development-review.md](wave105-domain-a-design-development-review.md) | Domain A Design / Development Review | pass | authoring-core pure-function consumption (no re-impl), runtime-core/authoring-core unchanged, boundary unrelaxed (ai-variant-selection.ts inlines id patterns matching package-format's real defs, no import), write scope honored, deterministic localeCompare sort, new-snapshot/non-mutating design. Raised a non-blocking question about 2 scope-external files (SKILL.md / delegation-calibration-log.md) = L0 experiment records (Undine classification 3). |
+| [wave105-domain-a-test-adequacy-review.md](wave105-domain-a-test-adequacy-review.md) | Domain A Test Adequacy Review | pass (initial needs_fix P5 -> fix loop 1 -> re-verified pass) | Required tests strong/non-vacuous (probes P1-P4 reddened corresponding tests, ref 6/9 data-derived). One genuine gap P5: `modelEvaluatedBounds` visible-only framing was unguarded (union-all revert stayed green); closed by test-only Gnome follow-up adding a direct `modelEvaluatedBounds` unit test with a hidden drawable outside the visible union bbox. All probes restored, residue-zero proven. |
+| [wave105-final-clean-integration-review.md](wave105-final-clean-integration-review.md) | Final Clean Integration Review | pass | Independent integration verification of Wave105; §7 Required checks self-reproduced (241 passed, root/app tsc exit 0, source-organization pass, check-dependencies cmo3 only, git diff --check clean, forbidden-scope empty, lockfile/package.json unchanged); single gated snapshot sharing confirmed; empty-case structural byte invariance; P5 fix non-vacuous (read from test code); sidecar/measurement selection record confirmed on real ref artifacts; §10 Domain A artifacts complete; protocol observation present in Domain A report §5. 1 non-blocking observation: `ref-measurement-gate.json` report-text inaccuracy (top-level variantSelections absent in that artifact, but the "record resolved selection in measurement result" requirement is met via the `inspectEvaluatedGeometry` command result `InspectEvaluatedGeometryResult.variantSelections`, ref e2e asserted) -- report-wording only, not a requirement/impl break. |
+
+## Final Gate
+
+- Final clean integration review is recorded as `pass`; no Wave105 review artifacts remain pending.
+- Classifications 1-4 (cmo3 false positive / clean-HEAD prior fails / L0 operational-doc working-tree changes / wave104-origin uncommitted coexistence) applied per Undine; none treated as violations.
+- The user visual gate (regenerated ref-render-gate PNG approval, Default outfit) is a model-authoring-side gate outside this wave's technical gate.

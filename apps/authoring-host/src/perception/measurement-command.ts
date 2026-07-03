@@ -9,6 +9,7 @@ import { InspectEvaluatedGeometryResultSchema } from "@private-2d-rigging-lab/ai
 import type { RuntimeSnapshotDto } from "@private-2d-rigging-lab/runtime-core";
 
 import { evaluatePerceptionSnapshot } from "./evaluation-adapter.js";
+import { resolveVariantSelections } from "./variant-selection-resolution.js";
 
 /**
  * Measurement (`inspectEvaluatedGeometry`) resolver for the authoring-host
@@ -32,8 +33,19 @@ export const measureEvaluatedGeometry = (input: {
   readonly payload: InspectEvaluatedGeometryPayload;
 }): InspectEvaluatedGeometryResult => {
   const { session, payload } = input;
+
+  // Resolve + validate the requested Variant selection (Wave105 §3.1); reject
+  // unknown group / variant references and mode mismatches deterministically.
+  // Measurement gates the SAME snapshot renderView does, so a measured
+  // drawable's `visible` flag reflects the resolved outfit.
+  const variant = resolveVariantSelections({
+    variantGroups: session.graph.variantGroups,
+    variantSelections: payload.variantSelections
+  });
+
   const { snapshot } = evaluatePerceptionSnapshot(session, {
-    parameterOverrides: payload.parameterOverrides
+    parameterOverrides: payload.parameterOverrides,
+    variantSelections: variant.activeSelections
   });
 
   const drawableById = new Map<string, EvaluatedDrawable>(
@@ -62,6 +74,7 @@ export const measureEvaluatedGeometry = (input: {
     schemaVersion: "inspect-evaluated-geometry-result-v1",
     packageRevision: snapshot.packageRevision,
     parameterOverrides,
+    variantSelections: variant.resolved,
     results
   });
 };
@@ -86,6 +99,10 @@ const resolveTarget = (input: {
       kind: "drawable",
       drawableId: input.target.drawableId,
       found: true,
+      // The gated snapshot visibility (Wave105 §3.1): a drawable hidden by the
+      // Variant gate still returns geometry but reports `visible: false` — the
+      // gate is announced, not silenced.
+      visible: drawable.visible,
       bounds: drawable.bounds,
       ...(input.includeVertices && drawable.vertices !== undefined
         ? { vertices: drawable.vertices.map((vertex) => ({ x: vertex.x, y: vertex.y })) }

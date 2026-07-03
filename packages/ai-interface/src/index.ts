@@ -17,6 +17,7 @@ export * from "./ai-operation-log-query.js";
 export * from "./ai-read-command.js";
 export * from "./ai-render-view-command.js";
 export * from "./ai-validation-command.js";
+export * from "./ai-variant-selection.js";
 export * from "./ai-product-preflight-observation.js";
 export * from "./ai-product-preflight-command.js";
 export * from "./ai-codex-proposal-command.js";

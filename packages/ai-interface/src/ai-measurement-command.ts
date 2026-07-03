@@ -7,6 +7,11 @@ import {
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
+import {
+  ResolvedVariantSelectionEntrySchema,
+  VariantSelectionsPayloadSchema
+} from "./ai-variant-selection.js";
+
 /**
  * Zod schemas for the `inspectEvaluatedGeometry` measurement command (Wave104
  * Domain C, §3.3).
@@ -52,7 +57,18 @@ export const InspectEvaluatedGeometryPayloadSchema = z.object({
    * coordinates (from the `full`-detail snapshot). Off by default because the
    * vertex arrays can be large.
    */
-  includeVertices: z.boolean().default(false)
+  includeVertices: z.boolean().default(false),
+  /**
+   * Optional per-group active Variant selection (Wave105 §3.1). Omitted → every
+   * Variant Group resolves to its `defaultActive`. Measurement evaluates the
+   * SAME gated snapshot that `renderView` does, so a measured drawable's
+   * `visible` flag reflects the resolved outfit. Unknown group / variant
+   * references or a mode mismatch are rejected deterministically by the host
+   * resolver. Geometry is still computed and returned for gated-hidden
+   * drawables — the gate is reflected in the `visible` flag, not by silencing
+   * the measurement (§3.1).
+   */
+  variantSelections: VariantSelectionsPayloadSchema
 });
 export type InspectEvaluatedGeometryPayload = z.infer<
   typeof InspectEvaluatedGeometryPayloadSchema
@@ -69,6 +85,14 @@ export const InspectDrawableGeometryResultSchema = z.object({
   kind: z.literal("drawable"),
   drawableId: DrawableIdSchema,
   found: z.boolean(),
+  /**
+   * The evaluated snapshot visibility AFTER the Variant gate (Wave105 §3.1):
+   * `base visible AND variantVisibilityPredicate`. Present only when
+   * `found === true`. A gated-hidden drawable still returns its geometry
+   * (bounds/vertices) but reports `visible === false` — the gate is announced,
+   * never silenced. Absent for `found === false`.
+   */
+  visible: z.boolean().optional(),
   bounds: RectDtoSchema.optional(),
   vertices: z.array(Vec2DtoSchema).optional()
 });
@@ -121,6 +145,14 @@ export const InspectEvaluatedGeometryResultSchema = z.object({
       value: z.number().finite()
     })
   ),
+  /**
+   * The RESOLVED active Variant selection the visibility gate used, one entry
+   * per Variant Group, sorted by `variantGroupId` (Wave105 §3.1). Records which
+   * outfit these measurements describe. Empty array when the package has no
+   * Variant Groups. Optional so pre-revision results still parse; the host
+   * always emits it (empty array included).
+   */
+  variantSelections: z.array(ResolvedVariantSelectionEntrySchema).optional(),
   /** One result per requested target, in request order. */
   results: z.array(InspectGeometryTargetResultSchema)
 });

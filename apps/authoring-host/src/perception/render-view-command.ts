@@ -16,6 +16,7 @@ import { computeSweptParameterValues } from "./parameter-sweep.js";
 import { createPerceptionRenderScene } from "./render-scene-adapter.js";
 import { buildRenderViewSidecar } from "./render-view-sidecar.js";
 import { resolveTextureDimensionSources } from "./texture-resolution.js";
+import { resolveVariantSelections } from "./variant-selection-resolution.js";
 import { resolvePerceptionRenderView } from "./view-resolution.js";
 
 /**
@@ -52,10 +53,20 @@ export const renderPerceptionView = (input: {
   const packageRevision = session.packageRevision;
   const packageId = session.packageIdentity.packageId;
 
+  // Resolve + validate the requested Variant selection ONCE (Wave105 §3.1).
+  // Unknown group / variant references and mode mismatches reject here
+  // deterministically. The resolved authoring-core form gates every snapshot;
+  // the resolved echo is recorded in the sidecar.
+  const variant = resolveVariantSelections({
+    variantGroups: session.graph.variantGroups,
+    variantSelections: payload.variantSelections
+  });
+
   // Base pose evaluation: frames the view (even for a sweep, the framing is
   // computed once from the base overrides so cells share a stable viewport).
   const base = evaluatePerceptionSnapshot(session, {
-    parameterOverrides: payload.parameterOverrides
+    parameterOverrides: payload.parameterOverrides,
+    variantSelections: variant.activeSelections
   });
   const view = resolvePerceptionRenderView({
     snapshot: base.snapshot,
@@ -96,7 +107,8 @@ export const renderPerceptionView = (input: {
           pngPath,
           parameterOverrides: payload.parameterOverrides,
           resolvedView,
-          textureDimensionSources
+          textureDimensionSources,
+          variantSelections: variant.resolved
         })
     };
   }
@@ -114,7 +126,8 @@ export const renderPerceptionView = (input: {
       parameterOverrides: {
         ...payload.parameterOverrides,
         [sweep.parameterId]: swept.value
-      }
+      },
+      variantSelections: variant.activeSelections
     });
     const scene = createPerceptionRenderScene({
       session,
@@ -164,7 +177,8 @@ export const renderPerceptionView = (input: {
         parameterOverrides: payload.parameterOverrides,
         resolvedView,
         sweep: sweepLayout,
-        textureDimensionSources
+        textureDimensionSources,
+        variantSelections: variant.resolved
       })
   };
 };

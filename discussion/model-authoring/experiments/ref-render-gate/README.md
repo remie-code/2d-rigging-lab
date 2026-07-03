@@ -1,4 +1,4 @@
-# ref render gate (Wave104 Domain C)
+# ref render gate (Wave104 Domain C → regenerated Wave105 Domain A)
 
 This directory holds the **judgement-ladder top rung**: artifacts generated against the
 delivered, rights-cleared `ref/` model that **you (the user) review visually to approve
@@ -11,6 +11,28 @@ Everything here is produced by the ref e2e smoke
 directory is always outside `ref/`; nothing is ever written into `ref/`) through the
 same CLI entry point (`runAuthoringHostCommand`) that the perception / read command
 surface uses in production.
+
+## Wave105: these PNGs are now the **Default outfit** (Variant gate applied)
+
+The Wave104 version of these PNGs was rendered **without the Variant visibility
+gate**, so all three of `ref/`'s outfits (the "Ware" Variant Group: Default / Rodos /
+Endoministorator) drew on top of each other — about **9 extra outfit drawables** were
+painted that the model, in its Default configuration, does not show. **That caveat is
+now resolved.**
+
+Wave105 Domain A composes `base visible AND variantVisibilityPredicate(activeSelections)`
+at the snapshot level, so render, measurement and framing share one visibility world.
+With no `variantSelections` in the request, the gate resolves to the package
+`defaultActive` = the **Default** outfit. The `ref/model/variants.json` "Ware" group
+(`singleSelect`, 15 target drawables) therefore passes exactly **6** drawables and
+blocks the other **9** (5 Rodos + 4 Endoministorator; the shared `bottomwear` is a
+Default member so it stays). The e2e derives that 6/9 partition from the package
+memberships and asserts the evaluated snapshot matches — see the
+`gates the Ware group to the Default outfit ... (6 pass / 9 blocked ...)` test.
+
+Concretely, the `ref-rest-full.png` model-bounds framing tightened from 392×1024 (with
+the extra outfits) to 389×1024 (Default only), and the stacked Rodos/Endoministorator
+top/bottom/hand wear no longer overpaint the Default outfit.
 
 ## Reproduce
 
@@ -43,6 +65,12 @@ stale image and (b) translate image pixels back into model (stage) coordinates:
 - `packageRevision` — the ref revision the image was rendered from (currently 1844).
   If it does not match `ref/manifest.json`, the image is stale — do not judge from it.
 - `parameterOverrides` — the resolved pose (empty here = rest).
+- `variantSelections` — **which outfit this photo was taken in** (Wave105). One entry
+  per Variant Group, sorted by `variantGroupId`. For these Default renders it reads
+  `[{ "kind": "singleSelect", "variantGroupId": "vgrp_expression", "variantId":
+  "var_expression_default" }]`. If you regenerate with an explicit selection (e.g. Rodos),
+  this field records that instead, so the image is self-describing — you always know
+  which outfit you are judging. Empty array `[]` means the package has no Variant Groups.
 - `resolvedView` — the image↔stage transform: `stageViewport` (the stage rectangle the
   image covers), `outputWidth/Height`, and `pixelsPerStageX/Y`. To translate an image
   pixel (px, py) to stage coordinates:
@@ -78,6 +106,12 @@ The e2e asserts both eye drawables lie strictly inside the face bbox, and that r
 requests return identical numbers. These are the NUMBERS a spatial judgement should use
 instead of eyeballing pixels (§3.2 Forbidden: "視覚判定に必要な数値を画像目測で代替させ
 る設計"); the sidecar transform above connects them to the images.
+
+Wave105 additions to the measurement result: each drawable result carries the gated
+`visible` flag (`base visible AND` the Variant predicate) so a gated-hidden outfit
+drawable still returns geometry but is clearly marked `visible: false` — the gate is
+announced, never silenced. The result also echoes the resolved `variantSelections`, so
+the measurement numbers are as self-describing as the PNGs.
 
 ## Renderer note (read before judging)
 

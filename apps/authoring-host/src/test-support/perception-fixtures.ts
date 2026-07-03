@@ -9,6 +9,7 @@ import {
 import { createOperationCore } from "@private-2d-rigging-lab/operation-core";
 import {
   BinaryAssetReferenceSchema,
+  VariantGroupSchema,
   type BinaryAssetReferenceDto
 } from "@private-2d-rigging-lab/package-format";
 
@@ -181,6 +182,67 @@ const buildPerceptionFixture = (
  */
 export const createEmptyParameterPerceptionFixture = (): PerceptionFixture =>
   buildPerceptionFixture({ includeOpacityKeyform: false });
+
+export const PERCEPTION_VARIANT_GROUP_ID = "vgrp_perception_outfit";
+export const PERCEPTION_VARIANT_DEFAULT_ID = "var_perception_default";
+export const PERCEPTION_VARIANT_ALT_ID = "var_perception_alt";
+
+export interface VariantPerceptionFixtureIds extends PerceptionFixtureIds {
+  readonly variantGroupId: string;
+  readonly defaultVariantId: string;
+  readonly altVariantId: string;
+}
+
+export interface VariantPerceptionFixture {
+  readonly session: AuthoringSession;
+  readonly ids: VariantPerceptionFixtureIds;
+}
+
+/**
+ * The keyform-free two-drawable model, PLUS a `singleSelect` Variant Group over
+ * both drawables (Wave105 Domain A test support). The group gates:
+ *  - `Default` variant → the eye drawable is a member (visible), the eye-mask
+ *    drawable is NOT (hidden by the gate).
+ *  - `Alt` variant → the eye-mask drawable is a member (visible), the eye
+ *    drawable is NOT.
+ * So switching the active selection flips which of the two drawables the gate
+ * passes — a clean, self-contained membership to assert the gate against by both
+ * the snapshot `visible` flag and the rendered bytes. Keyform-free so the only
+ * driver of the pixel difference between two selections is the Variant gate
+ * itself. Rights-clean (synthetic).
+ */
+export const createVariantPerceptionFixture = (): VariantPerceptionFixture => {
+  const base = buildPerceptionFixture({ includeOpacityKeyform: false });
+  // Parse through the package-format schema so the drawable ids are branded and
+  // every group invariant (ownership, membership coverage, mode match) is
+  // enforced on the fixture itself.
+  const group = VariantGroupSchema.parse({
+    variantGroupId: PERCEPTION_VARIANT_GROUP_ID,
+    displayName: "Perception Outfit",
+    mode: "singleSelect",
+    variants: [
+      { variantId: PERCEPTION_VARIANT_DEFAULT_ID, displayName: "Default" },
+      { variantId: PERCEPTION_VARIANT_ALT_ID, displayName: "Alt" }
+    ],
+    targetDrawableIds: [base.ids.eyeDrawableId, base.ids.eyeMaskDrawableId],
+    memberships: [
+      { drawableId: base.ids.eyeDrawableId, variantIds: [PERCEPTION_VARIANT_DEFAULT_ID] },
+      { drawableId: base.ids.eyeMaskDrawableId, variantIds: [PERCEPTION_VARIANT_ALT_ID] }
+    ],
+    defaultActive: { kind: "singleSelect", variantId: PERCEPTION_VARIANT_DEFAULT_ID }
+  });
+  base.session.graph.variantGroups = [group];
+
+  return {
+    session: base.session,
+    ids: {
+      ...base.ids,
+      variantGroupId: PERCEPTION_VARIANT_GROUP_ID,
+      defaultVariantId: PERCEPTION_VARIANT_DEFAULT_ID,
+      altVariantId: PERCEPTION_VARIANT_ALT_ID
+    }
+  };
+};
 
 /**
  * Registers a texture entry's binary bytes AND sets its declared `dimensions`.
