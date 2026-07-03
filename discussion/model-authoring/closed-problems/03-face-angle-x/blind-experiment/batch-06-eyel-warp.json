@@ -1,0 +1,21 @@
+[
+  {
+    "file": "op-eyel-warp.json",
+    "operationId": "op_blind_facex_warp_eye_l",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Eye L",
+      "wrapChildren": [
+        {"kind": "rigControl", "id": "rig_eye_l_open"},
+        {"kind": "rigControl", "id": "rig_eye_l_half"},
+        {"kind": "rigControl", "id": "rig_eye_l_close"}
+      ],
+      "domainBounds": {"x": 976, "y": 376, "width": 190, "height": 118},
+      "transformColumns": 5,
+      "transformRows": 5,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[blind] facex: create FaceX Eye L deformer wrapping eye L tower"
+  }
+]

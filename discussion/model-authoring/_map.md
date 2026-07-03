@@ -16,9 +16,9 @@
 | Path | Role | Status |
 |---|---|---|
 | [premises/](premises/) | 前提合意層。この挑戦のオラクル | Accepted 5 文書を記録済み |
-| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01 通過（100/100）・02 通過（100/100）**。03 定義待ち |
-| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ） | 知覚経路調査・較正ログ Round 1 を記録済み |
-| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 6 枚（00-05）+ 不変量 8 種**。01系は3周目実証済み、05（状態切替）は満点 gate 通過の蒸留 |
+| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01・02・03 すべて満点通過**（03 は盲目再構成でも満点 = craft 自己完結性テスト完全版合格）。04 定義待ち |
+| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ） | 較正ログ Round 5 まで（Round 5 = 初の Fable 委任、満点） |
+| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 7 枚（00-06）+ 不変量 9 種**。06 は盲目再構成で言語の運搬能力を実証済み（構造は運んだ、ゲインは分離して gate のダイヤルへ） |
 
 ## Key Files
 

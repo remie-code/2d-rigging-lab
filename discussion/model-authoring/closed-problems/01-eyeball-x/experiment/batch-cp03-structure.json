@@ -1,0 +1,92 @@
+[
+  {
+    "file": "r3-90-mesh-nose.json",
+    "operationId": "op_cp03_mesh_nose",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_5c3cad87_nose",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp03] generateMesh nose 10 (base nose)"
+  },
+  {
+    "file": "r3-91-def-nose-facex.json",
+    "operationId": "op_cp03_def_nose_facex",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Nose FaceX",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5c3cad87_nose"
+      ],
+      "childRigControlIds": [],
+      "domainBounds": {
+        "x": 991,
+        "y": 467,
+        "width": 19,
+        "height": 32
+      },
+      "transformColumns": 5,
+      "transformRows": 5,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp03] createWarpDeformer Nose FaceX (ref domain transplant)"
+  },
+  {
+    "file": "r3-92-def-face-x.json",
+    "operationId": "op_cp03_def_face_x",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Face X",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5c3cada6_face"
+      ],
+      "childRigControlIds": [],
+      "domainBounds": {
+        "x": 861,
+        "y": 303,
+        "width": 278,
+        "height": 275
+      },
+      "transformColumns": 7,
+      "transformRows": 7,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp03] createWarpDeformer Face X (ref domain transplant, 7x7)"
+  },
+  {
+    "file": "r3-93-def-eye-l-facex.json",
+    "operationId": "op_cp03_def_eye_l_facex",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye L FaceX",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_eye_l_open"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_eye_l_half"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_eye_l_close"
+        }
+      ],
+      "domainBounds": {
+        "x": 1007,
+        "y": 381,
+        "width": 134,
+        "height": 108
+      },
+      "transformColumns": 5,
+      "transformRows": 5,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp03] createWarpDeformer Eye L FaceX (wrapChildren insertion over state tower)"
+  }
+]

@@ -1,0 +1,13 @@
+[
+  {
+    "file": "op-nose-mesh.json",
+    "operationId": "op_blind_facex_mesh_nose_base",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_5c3cad87_nose",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[blind] facex: generate mesh for base nose"
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "file": "op-face-warp.json",
+    "operationId": "op_blind_facex_warp_face",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Face",
+      "childDrawableIds": ["draw_r0_1cea4f6f_5c3cada6_face"],
+      "domainBounds": {"x": 847, "y": 289, "width": 306, "height": 303},
+      "transformColumns": 7,
+      "transformRows": 7,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[blind] facex: create FaceX Face warp deformer 7x7"
+  }
+]
