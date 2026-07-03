@@ -13,11 +13,12 @@
 | Path | 内容 | Status |
 |---|---|---|
 | [01-eyeball-x/](01-eyeball-x/) | 眼球メッシュ生成〜Eyeball_X 移動 rigging〜クリッピング | **通過（2026-07-03、ユーザー判定 100/100）**。[results.md](01-eyeball-x/results.md) / [実験ログ](01-eyeball-x/experiment/experiment-log.md)。craft/ へ蒸留済み（レシピ 00-03） |
+| [02-eye-open-close/](02-eye-open-close/) | 目の開閉（状態デフォーマ3基×両眼、変形+opacity切替）| **通過（2026-07-03、ユーザー判定 100/100「文句のつけようもない」）**。[results.md](02-eye-open-close/results.md) / [実装記録](02-eye-open-close/build-log.md)。craft/05 へ蒸留済み |
 
 ## 次の行動
 
-1. 02 の問題定義（次候補: 目の開閉。ユーザーと工程スコープの認識合わせから）
+1. 03 の問題定義（ユーザーの次の工程提示を待つ。候補: 他表情セットへの展開 / 口の開閉 / 眉 / 顔の傾き等）
 
 ## 未決事項
 
-- 03 以降の問題列（02 通過後に更新）
+- 03 以降の問題列（ユーザーの実工程順に従う）

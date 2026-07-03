@@ -1,0 +1,76 @@
+{
+  "openL": {
+    "x": 1012,
+    "y": 386,
+    "width": 122,
+    "height": 93
+  },
+  "openR": {
+    "x": 855,
+    "y": 394,
+    "width": 133,
+    "height": 94
+  },
+  "halfL": {
+    "x": 1010,
+    "y": 411,
+    "width": 121,
+    "height": 66
+  },
+  "halfR": {
+    "x": 856,
+    "y": 420,
+    "width": 126,
+    "height": 65
+  },
+  "closeL": {
+    "x": 1024,
+    "y": 434,
+    "width": 108,
+    "height": 50
+  },
+  "closeR": {
+    "x": 857,
+    "y": 440,
+    "width": 109,
+    "height": 52
+  },
+  "lashBounds": {
+    "normalL": {
+      "height": 72,
+      "width": 89,
+      "x": 1031,
+      "y": 396
+    },
+    "halfL": {
+      "height": 42,
+      "width": 95,
+      "x": 1026,
+      "y": 421
+    },
+    "closeL": {
+      "height": 30,
+      "width": 88,
+      "x": 1034,
+      "y": 444
+    },
+    "normalR": {
+      "height": 72,
+      "width": 101,
+      "x": 865,
+      "y": 404
+    },
+    "halfR": {
+      "height": 45,
+      "width": 95,
+      "x": 866,
+      "y": 430
+    },
+    "closeR": {
+      "height": 32,
+      "width": 89,
+      "x": 867,
+      "y": 450
+    }
+  }
+}

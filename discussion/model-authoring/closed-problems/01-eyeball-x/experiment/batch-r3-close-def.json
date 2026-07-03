@@ -1,0 +1,48 @@
+[
+  {
+    "file": "r3-43-def-close-l.json",
+    "operationId": "op_r3_def_close_l",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye L Close",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5246caa2_eyelash-l"
+      ],
+      "childRigControlIds": [],
+      "domainBounds": {
+        "x": 1022,
+        "y": 434,
+        "width": 108,
+        "height": 50
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[r3-cp02] createWarpDeformer Eye L Close"
+  },
+  {
+    "file": "r3-44-def-close-r.json",
+    "operationId": "op_r3_def_close_r",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye R Close",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5246ca83_eyelash-r"
+      ],
+      "childRigControlIds": [],
+      "domainBounds": {
+        "x": 867,
+        "y": 440,
+        "width": 109,
+        "height": 52
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[r3-cp02] createWarpDeformer Eye R Close"
+  }
+]

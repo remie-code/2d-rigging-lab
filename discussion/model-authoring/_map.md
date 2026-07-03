@@ -16,9 +16,9 @@
 | Path | Role | Status |
 |---|---|---|
 | [premises/](premises/) | 前提合意層。この挑戦のオラクル | Accepted 5 文書を記録済み |
-| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01-eyeball-x 通過（100/100）**。02 定義待ち |
+| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01 通過（100/100）・02 通過（100/100）**。03 定義待ち |
 | [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ） | 知覚経路調査・較正ログ Round 1 を記録済み |
-| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **開設済み（2026-07-03）**: 地図 + レシピ 4 枚（00 開眼 / 01 メッシュ / 02 眼球X / 03 クリッピング）、全て実証済み状態 |
+| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 6 枚（00-05）+ 不変量 8 種**。01系は3周目実証済み、05（状態切替）は満点 gate 通過の蒸留 |
 
 ## Key Files
 

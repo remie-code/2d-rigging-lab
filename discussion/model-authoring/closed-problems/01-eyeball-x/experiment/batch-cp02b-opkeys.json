@@ -1,0 +1,254 @@
+[
+  {
+    "file": "95-opkey-l-open-a.json",
+    "operationId": "op_cp02b_opkey_l_open_a",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_open"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.6,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 1
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_l_open 1@0.6"
+  },
+  {
+    "file": "95-opkey-l-open-b.json",
+    "operationId": "op_cp02b_opkey_l_open_b",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_open"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.5,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 0
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_l_open 0@0.5"
+  },
+  {
+    "file": "95-opkey-r-open-a.json",
+    "operationId": "op_cp02b_opkey_r_open_a",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_open"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.6,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 1
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_r_open 1@0.6"
+  },
+  {
+    "file": "95-opkey-r-open-b.json",
+    "operationId": "op_cp02b_opkey_r_open_b",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_open"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.5,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 0
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_r_open 0@0.5"
+  },
+  {
+    "file": "95-opkey-l-half-a.json",
+    "operationId": "op_cp02b_opkey_l_half_a",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_half"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.05,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 1
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_l_half 1@0.05"
+  },
+  {
+    "file": "95-opkey-l-half-b.json",
+    "operationId": "op_cp02b_opkey_l_half_b",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_half"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 0
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_l_half 0@0"
+  },
+  {
+    "file": "95-opkey-r-half-a.json",
+    "operationId": "op_cp02b_opkey_r_half_a",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_half"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.05,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 1
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_r_half 1@0.05"
+  },
+  {
+    "file": "95-opkey-r-half-b.json",
+    "operationId": "op_cp02b_opkey_r_half_b",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_half"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 0
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_r_half 0@0"
+  },
+  {
+    "file": "95-opkey-l-close-a.json",
+    "operationId": "op_cp02b_opkey_l_close_a",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_close"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 1
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_l_close 1@0"
+  },
+  {
+    "file": "95-opkey-l-close-b.json",
+    "operationId": "op_cp02b_opkey_l_close_b",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_close"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.07,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 0
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_l_close 0@0.07"
+  },
+  {
+    "file": "95-opkey-r-close-a.json",
+    "operationId": "op_cp02b_opkey_r_close_a",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_close"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 1
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_r_close 1@0"
+  },
+  {
+    "file": "95-opkey-r-close-b.json",
+    "operationId": "op_cp02b_opkey_r_close_b",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_close"
+      },
+      "targetProperty": "opacityMultiplier",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.07,
+      "statePatch": {
+        "propertyPath": "opacityMultiplier",
+        "value": 0
+      }
+    },
+    "gitMessage": "[cp02] opacity key rig_eye_r_close 0@0.07"
+  }
+]

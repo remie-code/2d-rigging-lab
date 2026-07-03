@@ -1,0 +1,792 @@
+{
+  "schemaVersion": "render-view-sidecar-v1",
+  "packagePath": "C:/workspace/remie/rigging/llm-rigging",
+  "packageId": "pkg_editor_workspace",
+  "packageRevision": 70,
+  "pngPath": "C:/workspace/remie/code/ai-native-live2d-editor/discussion/model-authoring/closed-problems/01-eyeball-x/experiment/renders/cp02-06-composite-open0.7-gaze+1.png",
+  "parameterOverrides": [
+    {
+      "parameterId": "param_eye_left_open",
+      "value": 0.7
+    },
+    {
+      "parameterId": "param_eye_right_open",
+      "value": 0.7
+    },
+    {
+      "parameterId": "param_eyeball_x",
+      "value": 1
+    }
+  ],
+  "resolvedView": {
+    "stageViewport": {
+      "minX": 855,
+      "minY": 395,
+      "width": 280,
+      "height": 95
+    },
+    "outputWidth": 1024,
+    "outputHeight": 347,
+    "pixelsPerStageX": 3.657142857142857,
+    "pixelsPerStageY": 3.6526315789473682
+  },
+  "textureDimensionSources": [
+    {
+      "textureId": "tex_r0_1cea4f6f_030b7f85_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 92,
+      "height": 35
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_030b7fa4_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 85,
+      "height": 30
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_030b8001_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 73,
+      "height": 12
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_030b8020_nose",
+      "dimensionSource": "derived-verified",
+      "width": 13,
+      "height": 23
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_030b8047_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 32,
+      "height": 9
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_030b8066_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 75,
+      "height": 17
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf60a_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 77,
+      "height": 16
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf625_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 32,
+      "height": 8
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf66b_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 76,
+      "height": 8
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf686_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 74,
+      "height": 46
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf6a1_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 54,
+      "height": 45
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf6c4_nose",
+      "dimensionSource": "derived-verified",
+      "width": 11,
+      "height": 16
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf6e7_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 69,
+      "height": 44
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf702_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 100,
+      "height": 66
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf740_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 54,
+      "height": 44
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_05ccf763_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 92,
+      "height": 65
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2d88f_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 60,
+      "height": 16
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2d8ae_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 67,
+      "height": 13
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2d987_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 52,
+      "height": 54
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2d9a6_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 93,
+      "height": 72
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2d9c5_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 52,
+      "height": 53
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2d9e4_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 98,
+      "height": 71
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2da03_nose",
+      "dimensionSource": "derived-verified",
+      "width": 9,
+      "height": 15
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2da22_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 33,
+      "height": 8
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2da41_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 73,
+      "height": 46
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_1ac2da60_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 68,
+      "height": 47
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_21b4da21_hair_f_l",
+      "dimensionSource": "derived-verified",
+      "width": 200,
+      "height": 666
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_21b4da82_hair_f_r",
+      "dimensionSource": "derived-verified",
+      "width": 215,
+      "height": 687
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_21b4dac0_front_hair",
+      "dimensionSource": "derived-verified",
+      "width": 620,
+      "height": 620
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_26f93e8b_topwear",
+      "dimensionSource": "derived-verified",
+      "width": 430,
+      "height": 575
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_26f93eaa_bottomwear",
+      "dimensionSource": "derived-verified",
+      "width": 644,
+      "height": 474
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_26f93ec9_handwear-l",
+      "dimensionSource": "derived-verified",
+      "width": 414,
+      "height": 928
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_26f93ee8_handwear-r",
+      "dimensionSource": "derived-verified",
+      "width": 422,
+      "height": 929
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f6fa8_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 29,
+      "height": 7
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f7005_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 75,
+      "height": 50
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f7024_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 70,
+      "height": 51
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f7081_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 53,
+      "height": 52
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f70a0_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 89,
+      "height": 72
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f70c7_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 71,
+      "height": 11
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f70e6_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 76,
+      "height": 17
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f7143_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 53,
+      "height": 50
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_3a8f7162_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 101,
+      "height": 72
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_50f72ab2_back_hair",
+      "dimensionSource": "derived-verified",
+      "width": 299,
+      "height": 508
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_50f72ad1_back_hair_l",
+      "dimensionSource": "derived-verified",
+      "width": 463,
+      "height": 1433
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_50f72af0_back_hair_r",
+      "dimensionSource": "derived-verified",
+      "width": 592,
+      "height": 1448
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5246ca07_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 70,
+      "height": 14
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5246ca26_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 72,
+      "height": 19
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5246ca83_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 89,
+      "height": 32
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5246caa2_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 88,
+      "height": 30
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5246cac1_nose",
+      "dimensionSource": "derived-verified",
+      "width": 21,
+      "height": 22
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5246cae0_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 31,
+      "height": 8
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_55c1e394_rodos_back",
+      "dimensionSource": "derived-verified",
+      "width": 398,
+      "height": 94
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5c3cad87_nose",
+      "dimensionSource": "derived-verified",
+      "width": 13,
+      "height": 26
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5c3cada6_face",
+      "dimensionSource": "derived-verified",
+      "width": 272,
+      "height": 269
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5c3cadc5_ears-r",
+      "dimensionSource": "derived-verified",
+      "width": 57,
+      "height": 72
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_5c3cade4_ears-l",
+      "dimensionSource": "derived-verified",
+      "width": 59,
+      "height": 72
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_691e2e90_neck_back",
+      "dimensionSource": "derived-verified",
+      "width": 146,
+      "height": 98
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_691e2eb3_neck",
+      "dimensionSource": "derived-verified",
+      "width": 99,
+      "height": 94
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_691e2ef1_topwear",
+      "dimensionSource": "derived-verified",
+      "width": 145,
+      "height": 78
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_691e2f52_endomi_neck",
+      "dimensionSource": "derived-verified",
+      "width": 517,
+      "height": 1736
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3c8c_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 75,
+      "height": 43
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3caf_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 30,
+      "height": 23
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3ced_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 69,
+      "height": 45
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3d08_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 54,
+      "height": 43
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3d2b_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 99,
+      "height": 57
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3d4e_nose",
+      "dimensionSource": "derived-verified",
+      "width": 21,
+      "height": 24
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3d69_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 92,
+      "height": 55
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3dca_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 55,
+      "height": 42
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3e00_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 77,
+      "height": 20
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_814e3e61_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 72,
+      "height": 27
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_8b5c5408_handwear-l",
+      "dimensionSource": "derived-verified",
+      "width": 388,
+      "height": 927
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_8b5c542b_handwear-r",
+      "dimensionSource": "derived-verified",
+      "width": 391,
+      "height": 927
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_8b5c5469_bottomwear",
+      "dimensionSource": "derived-verified",
+      "width": 644,
+      "height": 474
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_8b5c54ca_topwear",
+      "dimensionSource": "derived-verified",
+      "width": 993,
+      "height": 1862
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_9dc00e87_eyewear",
+      "dimensionSource": "derived-verified",
+      "width": 265,
+      "height": 110
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_9dc00ec5_headwear",
+      "dimensionSource": "derived-verified",
+      "width": 400,
+      "height": 286
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_9dc00ee4_headwear",
+      "dimensionSource": "derived-verified",
+      "width": 400,
+      "height": 288
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_a43f1585_topwear",
+      "dimensionSource": "derived-verified",
+      "width": 660,
+      "height": 1630
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_a43f15a4_bottomwear",
+      "dimensionSource": "derived-verified",
+      "width": 521,
+      "height": 364
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_a43f1647_handwear-r",
+      "dimensionSource": "derived-verified",
+      "width": 390,
+      "height": 957
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_a43f1666_handwear-l",
+      "dimensionSource": "derived-verified",
+      "width": 383,
+      "height": 956
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ab0c_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 72,
+      "height": 18
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ab6d_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 75,
+      "height": 20
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ac04_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 94,
+      "height": 74
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ac27_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 49,
+      "height": 52
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ac65_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 91,
+      "height": 76
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ac80_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 74,
+      "height": 55
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691aca3_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 24,
+      "height": 23
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691acc6_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 49,
+      "height": 52
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ace1_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 69,
+      "height": 58
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_b691ad42_nose",
+      "dimensionSource": "derived-verified",
+      "width": 15,
+      "height": 20
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc8100d_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 71,
+      "height": 29
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc8102c_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 70,
+      "height": 29
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc81089_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 54,
+      "height": 24
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc810a8_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 89,
+      "height": 42
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc810cf_nose",
+      "dimensionSource": "derived-verified",
+      "width": 24,
+      "height": 27
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc810ee_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 30,
+      "height": 7
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc8114b_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 94,
+      "height": 43
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc8116a_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 52,
+      "height": 23
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc81181_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 71,
+      "height": 12
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_cdc811a0_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 74,
+      "height": 14
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce49050e_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 73,
+      "height": 15
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce49056f_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 74,
+      "height": 19
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce4905a5_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 93,
+      "height": 70
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce490606_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 51,
+      "height": 38
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce490621_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 31,
+      "height": 8
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce490644_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 53,
+      "height": 39
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce490667_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 93,
+      "height": 67
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce490682_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 73,
+      "height": 49
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce4906c0_nose",
+      "dimensionSource": "derived-verified",
+      "width": 8,
+      "height": 14
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ce4906e3_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 68,
+      "height": 48
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ea30e9c4_tie",
+      "dimensionSource": "derived-verified",
+      "width": 104,
+      "height": 560
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159c08_eyebrow-r",
+      "dimensionSource": "derived-verified",
+      "width": 73,
+      "height": 14
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159c69_eyebrow-l",
+      "dimensionSource": "derived-verified",
+      "width": 70,
+      "height": 9
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159c84_eyewhite-r",
+      "dimensionSource": "derived-verified",
+      "width": 72,
+      "height": 29
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159ca7_mouth",
+      "dimensionSource": "derived-verified",
+      "width": 26,
+      "height": 6
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159ce5_eyewhite-l",
+      "dimensionSource": "derived-verified",
+      "width": 69,
+      "height": 32
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159d00_eyelash-r",
+      "dimensionSource": "derived-verified",
+      "width": 95,
+      "height": 45
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159d23_irides-l",
+      "dimensionSource": "derived-verified",
+      "width": 54,
+      "height": 32
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159d46_nose",
+      "dimensionSource": "derived-verified",
+      "width": 22,
+      "height": 24
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159d61_eyelash-l",
+      "dimensionSource": "derived-verified",
+      "width": 95,
+      "height": 42
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_ee159dc2_irides-r",
+      "dimensionSource": "derived-verified",
+      "width": 53,
+      "height": 32
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_f26916b1_legwear",
+      "dimensionSource": "derived-verified",
+      "width": 451,
+      "height": 1301
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_f2691712_tail",
+      "dimensionSource": "derived-verified",
+      "width": 348,
+      "height": 1085
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_f2691750_endomi_back",
+      "dimensionSource": "derived-verified",
+      "width": 633,
+      "height": 1736
+    },
+    {
+      "textureId": "tex_r0_1cea4f6f_f2691773_footwear",
+      "dimensionSource": "derived-verified",
+      "width": 314,
+      "height": 326
+    }
+  ],
+  "variantSelections": []
+}

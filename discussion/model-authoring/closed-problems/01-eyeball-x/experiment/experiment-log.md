@@ -38,6 +38,18 @@ rest 実測: 虹彩 w53、白目 w70(L)/75(R)。遊び = 白目と虹彩の幅�
 5. Editor「標準プリセット」の実体 = `auto-outline-v6d-adaptive-contour-constrainautor` + `densityHint: medium`（`mesh-tool-state.ts:70`）。
 6. 計測の bounds は rest では mesh.bounds（宣言値）、変形時は評価済み頂点範囲を返す（rest w53 vs 変形時基底 w57）。数値比較は同種同士で行うこと。
 
+## 追記: 半目セットへの2周目再走（2026-07-03、閉問題02の前哨）
+
+閉問題02（目の開閉）の準備として、半目セット（`表情 > 半目`、サフィックス2）に craft レシピ 01-03 を再適用 + 表示切替の足場（新レシピ 04）。
+
+- **18 operations（足場6 + メッシュ6 + デフォーマ2 + キー2 + マスク2）、reject ゼロ、一発完走**（rev 18→36）。1周目の罠2件（preset パラメータ / translation 不可）はレシピの罠警告が事前回避——**自己完結性テストの実地合格**
+- 部品構造の発見: Parts Container に PSD グループ名が残存（`表情 > 通常/半目/閉じ目/微笑み/微笑み閉じ/驚き/困り/上向き/下向き/怒り` の10表情）。part → partId → drawables.json フィルタで配下列挙可能
+- `setRuntimeVisibility` は既存 operation（衣装差分6枚がインポート時から hidden という前例もパッケージ内に発見）
+- 不変量の初適用: **視線の一致**（半目の振幅も ±11。眼窩の狭さはクリッピングに任せる）
+- 数値検証: +1 で左端 1047.92 / 909.84 = 理論値一致、幅 53.36 = 0.92×58 両眼一致
+- 実行系改善: run-batch.mjs（basePackageRevision を manifest から自動充填、revision 手動追跡を廃止）
+- 終了状態: **半目が可視・通常の目6枚が hidden**（ユーザーの Editor 確認向け。gate 後にデフォルト表情へ復元予定）
+
 ## 運用面の記録
 
 - ワークスペース外パッケージ（`--package-dir` 絶対パス指定）で全コマンド動作。コード変更ゼロ。

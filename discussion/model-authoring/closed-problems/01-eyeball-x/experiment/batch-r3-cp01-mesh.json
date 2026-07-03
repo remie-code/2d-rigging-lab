@@ -1,0 +1,79 @@
+[
+  {
+    "file": "r3-10-mesh-irides-l.json",
+    "operationId": "op_r3_mesh_irides_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_3a8f7081_irides-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp01] generateMesh irides-l (standard preset)"
+  },
+  {
+    "file": "r3-10-mesh-irides-r.json",
+    "operationId": "op_r3_mesh_irides_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_3a8f7143_irides-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp01] generateMesh irides-r (standard preset)"
+  },
+  {
+    "file": "r3-10-mesh-eyewhite-l.json",
+    "operationId": "op_r3_mesh_eyewhite_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_3a8f7024_eyewhite-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp01] generateMesh eyewhite-l (standard preset)"
+  },
+  {
+    "file": "r3-10-mesh-eyewhite-r.json",
+    "operationId": "op_r3_mesh_eyewhite_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_3a8f7005_eyewhite-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp01] generateMesh eyewhite-r (standard preset)"
+  },
+  {
+    "file": "r3-10-mesh-face.json",
+    "operationId": "op_r3_mesh_face",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_5c3cada6_face",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp01] generateMesh face (standard preset)"
+  },
+  {
+    "file": "r3-10-mesh-eyelash-l.json",
+    "operationId": "op_r3_mesh_eyelash_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_3a8f70a0_eyelash-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp01] generateMesh eyelash-l (standard preset)"
+  },
+  {
+    "file": "r3-10-mesh-eyelash-r.json",
+    "operationId": "op_r3_mesh_eyelash_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_3a8f7162_eyelash-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp01] generateMesh eyelash-r (standard preset)"
+  }
+]

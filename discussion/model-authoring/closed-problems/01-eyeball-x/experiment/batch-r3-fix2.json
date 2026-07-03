@@ -1,0 +1,410 @@
+[
+  {
+    "file": "r3-80-core-l_half-near.json",
+    "operationId": "op_r3_core_l_half_near",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "updateCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.07,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 1.9175,
+            "y": 26.4
+          },
+          {
+            "x": -0.044,
+            "y": 26.4
+          },
+          {
+            "x": -2.0055,
+            "y": 26.4
+          },
+          {
+            "x": -3.9669,
+            "y": 26.4
+          },
+          {
+            "x": -5.9284,
+            "y": 26.4
+          },
+          {
+            "x": 1.9175,
+            "y": 23.485
+          },
+          {
+            "x": -0.044,
+            "y": 23.485
+          },
+          {
+            "x": -2.0055,
+            "y": 23.485
+          },
+          {
+            "x": -3.9669,
+            "y": 23.485
+          },
+          {
+            "x": -5.9284,
+            "y": 23.485
+          },
+          {
+            "x": 1.9175,
+            "y": 5.335
+          },
+          {
+            "x": -0.044,
+            "y": 5.335
+          },
+          {
+            "x": -2.0055,
+            "y": 5.335
+          },
+          {
+            "x": -3.9669,
+            "y": 5.335
+          },
+          {
+            "x": -5.9284,
+            "y": 5.335
+          },
+          {
+            "x": 1.9175,
+            "y": 2.2
+          },
+          {
+            "x": -0.044,
+            "y": 2.2
+          },
+          {
+            "x": -2.0055,
+            "y": 2.2
+          },
+          {
+            "x": -3.9669,
+            "y": 2.2
+          },
+          {
+            "x": -5.9284,
+            "y": 2.2
+          }
+        ]
+      }
+    },
+    "gitMessage": "[r3-fix2] rig_eye_l_half collapse onto measured lash-line core @0.07"
+  },
+  {
+    "file": "r3-80-core-l_half-full.json",
+    "operationId": "op_r3_core_l_half_full",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "updateCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 2.1789,
+            "y": 30
+          },
+          {
+            "x": -0.05,
+            "y": 30
+          },
+          {
+            "x": -2.2789,
+            "y": 30
+          },
+          {
+            "x": -4.5079,
+            "y": 30
+          },
+          {
+            "x": -6.7368,
+            "y": 30
+          },
+          {
+            "x": 2.1789,
+            "y": 26.6875
+          },
+          {
+            "x": -0.05,
+            "y": 26.6875
+          },
+          {
+            "x": -2.2789,
+            "y": 26.6875
+          },
+          {
+            "x": -4.5079,
+            "y": 26.6875
+          },
+          {
+            "x": -6.7368,
+            "y": 26.6875
+          },
+          {
+            "x": 2.1789,
+            "y": 6.0625
+          },
+          {
+            "x": -0.05,
+            "y": 6.0625
+          },
+          {
+            "x": -2.2789,
+            "y": 6.0625
+          },
+          {
+            "x": -4.5079,
+            "y": 6.0625
+          },
+          {
+            "x": -6.7368,
+            "y": 6.0625
+          },
+          {
+            "x": 2.1789,
+            "y": 2.5
+          },
+          {
+            "x": -0.05,
+            "y": 2.5
+          },
+          {
+            "x": -2.2789,
+            "y": 2.5
+          },
+          {
+            "x": -4.5079,
+            "y": 2.5
+          },
+          {
+            "x": -6.7368,
+            "y": 2.5
+          }
+        ]
+      }
+    },
+    "gitMessage": "[r3-fix2] rig_eye_l_half collapse onto measured lash-line core @0"
+  },
+  {
+    "file": "r3-80-core-r_half-near.json",
+    "operationId": "op_r3_core_r_half_near",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "updateCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.07,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 6.7158,
+            "y": 24.64
+          },
+          {
+            "x": 4.9651,
+            "y": 24.64
+          },
+          {
+            "x": 3.2143,
+            "y": 24.64
+          },
+          {
+            "x": 1.4636,
+            "y": 24.64
+          },
+          {
+            "x": -0.2872,
+            "y": 24.64
+          },
+          {
+            "x": 6.7158,
+            "y": 21.8938
+          },
+          {
+            "x": 4.9651,
+            "y": 21.8938
+          },
+          {
+            "x": 3.2143,
+            "y": 21.8938
+          },
+          {
+            "x": 1.4636,
+            "y": 21.8938
+          },
+          {
+            "x": -0.2872,
+            "y": 21.8938
+          },
+          {
+            "x": 6.7158,
+            "y": 4.1421
+          },
+          {
+            "x": 4.9651,
+            "y": 4.1421
+          },
+          {
+            "x": 3.2143,
+            "y": 4.1421
+          },
+          {
+            "x": 1.4636,
+            "y": 4.1421
+          },
+          {
+            "x": -0.2872,
+            "y": 4.1421
+          },
+          {
+            "x": 6.7158,
+            "y": -2.2
+          },
+          {
+            "x": 4.9651,
+            "y": -2.2
+          },
+          {
+            "x": 3.2143,
+            "y": -2.2
+          },
+          {
+            "x": 1.4636,
+            "y": -2.2
+          },
+          {
+            "x": -0.2872,
+            "y": -2.2
+          }
+        ]
+      }
+    },
+    "gitMessage": "[r3-fix2] rig_eye_r_half collapse onto measured lash-line core @0.07"
+  },
+  {
+    "file": "r3-80-core-r_half-full.json",
+    "operationId": "op_r3_core_r_half_full",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "updateCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 7.6316,
+            "y": 28
+          },
+          {
+            "x": 5.6421,
+            "y": 28
+          },
+          {
+            "x": 3.6526,
+            "y": 28
+          },
+          {
+            "x": 1.6632,
+            "y": 28
+          },
+          {
+            "x": -0.3263,
+            "y": 28
+          },
+          {
+            "x": 7.6316,
+            "y": 24.8793
+          },
+          {
+            "x": 5.6421,
+            "y": 24.8793
+          },
+          {
+            "x": 3.6526,
+            "y": 24.8793
+          },
+          {
+            "x": 1.6632,
+            "y": 24.8793
+          },
+          {
+            "x": -0.3263,
+            "y": 24.8793
+          },
+          {
+            "x": 7.6316,
+            "y": 4.7069
+          },
+          {
+            "x": 5.6421,
+            "y": 4.7069
+          },
+          {
+            "x": 3.6526,
+            "y": 4.7069
+          },
+          {
+            "x": 1.6632,
+            "y": 4.7069
+          },
+          {
+            "x": -0.3263,
+            "y": 4.7069
+          },
+          {
+            "x": 7.6316,
+            "y": -2.5
+          },
+          {
+            "x": 5.6421,
+            "y": -2.5
+          },
+          {
+            "x": 3.6526,
+            "y": -2.5
+          },
+          {
+            "x": 1.6632,
+            "y": -2.5
+          },
+          {
+            "x": -0.3263,
+            "y": -2.5
+          }
+        ]
+      }
+    },
+    "gitMessage": "[r3-fix2] rig_eye_r_half collapse onto measured lash-line core @0"
+  }
+]

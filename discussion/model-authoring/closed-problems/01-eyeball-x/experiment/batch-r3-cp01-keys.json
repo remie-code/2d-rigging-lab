@@ -1,0 +1,578 @@
+[
+  {
+    "file": "r3-22-keys-l.json",
+    "operationId": "op_r3_keys_l",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "createEndsCenter",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eyeball_l_warp"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eyeball_x",
+      "interpolation": "linear-1d-v1",
+      "statePatches": {
+        "min": {
+          "propertyPath": "controlPointOffsets",
+          "value": [
+            {
+              "x": -6.92,
+              "y": 0
+            },
+            {
+              "x": -8.96,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.04,
+              "y": 0
+            },
+            {
+              "x": -15.08,
+              "y": 0
+            },
+            {
+              "x": -6.92,
+              "y": 0
+            },
+            {
+              "x": -8.96,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.04,
+              "y": 0
+            },
+            {
+              "x": -15.08,
+              "y": 0
+            },
+            {
+              "x": -6.92,
+              "y": 0
+            },
+            {
+              "x": -8.96,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.04,
+              "y": 0
+            },
+            {
+              "x": -15.08,
+              "y": 0
+            },
+            {
+              "x": -6.92,
+              "y": 0
+            },
+            {
+              "x": -8.96,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.04,
+              "y": 0
+            },
+            {
+              "x": -15.08,
+              "y": 0
+            }
+          ]
+        },
+        "default": {
+          "propertyPath": "controlPointOffsets",
+          "value": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            }
+          ]
+        },
+        "max": {
+          "propertyPath": "controlPointOffsets",
+          "value": [
+            {
+              "x": 15.08,
+              "y": 0
+            },
+            {
+              "x": 13.04,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.96,
+              "y": 0
+            },
+            {
+              "x": 6.92,
+              "y": 0
+            },
+            {
+              "x": 15.08,
+              "y": 0
+            },
+            {
+              "x": 13.04,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.96,
+              "y": 0
+            },
+            {
+              "x": 6.92,
+              "y": 0
+            },
+            {
+              "x": 15.08,
+              "y": 0
+            },
+            {
+              "x": 13.04,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.96,
+              "y": 0
+            },
+            {
+              "x": 6.92,
+              "y": 0
+            },
+            {
+              "x": 15.08,
+              "y": 0
+            },
+            {
+              "x": 13.04,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.96,
+              "y": 0
+            },
+            {
+              "x": 6.92,
+              "y": 0
+            }
+          ]
+        }
+      }
+    },
+    "gitMessage": "[r3-cp01] eyeball keys rig_eyeball_l_warp +/-11 x0.92"
+  },
+  {
+    "file": "r3-22-keys-r.json",
+    "operationId": "op_r3_keys_r",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "createEndsCenter",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eyeball_r_warp"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eyeball_x",
+      "interpolation": "linear-1d-v1",
+      "statePatches": {
+        "min": {
+          "propertyPath": "controlPointOffsets",
+          "value": [
+            {
+              "x": -6.72,
+              "y": 0
+            },
+            {
+              "x": -8.86,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.14,
+              "y": 0
+            },
+            {
+              "x": -15.28,
+              "y": 0
+            },
+            {
+              "x": -6.72,
+              "y": 0
+            },
+            {
+              "x": -8.86,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.14,
+              "y": 0
+            },
+            {
+              "x": -15.28,
+              "y": 0
+            },
+            {
+              "x": -6.72,
+              "y": 0
+            },
+            {
+              "x": -8.86,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.14,
+              "y": 0
+            },
+            {
+              "x": -15.28,
+              "y": 0
+            },
+            {
+              "x": -6.72,
+              "y": 0
+            },
+            {
+              "x": -8.86,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            },
+            {
+              "x": -13.14,
+              "y": 0
+            },
+            {
+              "x": -15.28,
+              "y": 0
+            }
+          ]
+        },
+        "default": {
+          "propertyPath": "controlPointOffsets",
+          "value": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0,
+              "y": 0
+            }
+          ]
+        },
+        "max": {
+          "propertyPath": "controlPointOffsets",
+          "value": [
+            {
+              "x": 15.28,
+              "y": 0
+            },
+            {
+              "x": 13.14,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.86,
+              "y": 0
+            },
+            {
+              "x": 6.72,
+              "y": 0
+            },
+            {
+              "x": 15.28,
+              "y": 0
+            },
+            {
+              "x": 13.14,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.86,
+              "y": 0
+            },
+            {
+              "x": 6.72,
+              "y": 0
+            },
+            {
+              "x": 15.28,
+              "y": 0
+            },
+            {
+              "x": 13.14,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.86,
+              "y": 0
+            },
+            {
+              "x": 6.72,
+              "y": 0
+            },
+            {
+              "x": 15.28,
+              "y": 0
+            },
+            {
+              "x": 13.14,
+              "y": 0
+            },
+            {
+              "x": 11,
+              "y": 0
+            },
+            {
+              "x": 8.86,
+              "y": 0
+            },
+            {
+              "x": 6.72,
+              "y": 0
+            }
+          ]
+        }
+      }
+    },
+    "gitMessage": "[r3-cp01] eyeball keys rig_eyeball_r_warp +/-11 x0.92"
+  },
+  {
+    "file": "r3-23-mask-l.json",
+    "operationId": "op_r3_mask_l",
+    "operationType": "setMaskRelation",
+    "payload": {
+      "maskDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f7024_eyewhite-l"
+      ],
+      "targetDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f7081_irides-l"
+      ],
+      "enabled": true
+    },
+    "gitMessage": "[r3-cp01] mask eyewhite-l clips irides-l"
+  },
+  {
+    "file": "r3-24-mask-r.json",
+    "operationId": "op_r3_mask_r",
+    "operationType": "setMaskRelation",
+    "payload": {
+      "maskDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f7005_eyewhite-r"
+      ],
+      "targetDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f7143_irides-r"
+      ],
+      "enabled": true
+    },
+    "gitMessage": "[r3-cp01] mask eyewhite-r clips irides-r"
+  }
+]
