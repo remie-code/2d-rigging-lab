@@ -32,6 +32,12 @@
 - **`createEndsCenter` の keyform set 未存在からの単独実行 → 動作する（committed）**。実証: `apps/authoring-host/src/closed-problem-01-smoke.test.ts:132-181`（事前 `keyformSets: []` アサート → CLI 経由単独実行 → 新規 keyformSet 1 件・3 キー生成）。注意: parameter の min/default/max は**相異なる値が前提**（同値は `operation.editKeyformKey.duplicateKey` で reject される既存仕様）。Eyeball_X のレンジ設計時に留意。
 - **6 操作すべてが CLI ホスト経由でヘッドレス実行可能**。5 operation スモーク（generateMesh → createWarpDeformer → createParameter → createEndsCenter → setMaskRelation）が全件 committed。
 
+## 実験実走による訂正（2026-07-03、[experiment-log.md](experiment/experiment-log.md)）
+
+- **工程4 の訂正**: `targetProperty: "translation"` は **rotation2d 専用**で warpLattice2d には reject される（`linear-keyform-editing.ts:396`）。ワープデフォーマの平行移動+横幅スケールは **`controlPointOffsets` への一様オフセット + 線形スケール項の畳み込み**で表現する（1 keyform set で両方賄える）。
+- **工程3 の訂正**: `param_eyeball_x` は preset カタログ（`package-format/src/parameter-presets.ts`）に常在し createParameter は duplicate reject。標準パラメータは作らず preset をそのまま使う。
+- 残る不確実性だった「横幅スケール専用プロパティの有無」→ **無しで確定、controlPointOffsets で表現**（上記）。
+
 ## 残る不確実性
 
 - `MESH_GENERATION_METHOD_IDS` の値集合（authoring-core 側、未読）。UI 3 プリセットとの対応確定に必要

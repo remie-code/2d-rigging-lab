@@ -12,13 +12,12 @@
 
 | Path | 内容 | Status |
 |---|---|---|
-| [01-eyeball-x/](01-eyeball-x/) | 眼球メッシュ生成〜Eyeball_X 移動 rigging〜クリッピング | Problem defined / API survey done（[api-requirements.md](01-eyeball-x/api-requirements.md)）/ 分岐議論待ち |
+| [01-eyeball-x/](01-eyeball-x/) | 眼球メッシュ生成〜Eyeball_X 移動 rigging〜クリッピング | **通過（2026-07-03、ユーザー判定 100/100）**。[results.md](01-eyeball-x/results.md) / [実験ログ](01-eyeball-x/experiment/experiment-log.md)。craft/ へ蒸留済み（レシピ 00-03） |
 
 ## 次の行動
 
-1. craft/ 成果物イメージの認識合わせ（ユーザーと。closed problem 開始前）
-2. 01-eyeball-x の API 調査（A）
+1. 02 の問題定義（次候補: 目の開閉。ユーザーと工程スコープの認識合わせから）
 
 ## 未決事項
 
-- 02 以降の問題定義（01 通過後、次候補は目の開閉）
+- 03 以降の問題列（02 通過後に更新）

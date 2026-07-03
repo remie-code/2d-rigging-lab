@@ -16,9 +16,9 @@
 | Path | Role | Status |
 |---|---|---|
 | [premises/](premises/) | 前提合意層。この挑戦のオラクル | Accepted 5 文書を記録済み |
-| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | 01-eyeball-x 定義済み・API 調査完了 |
+| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01-eyeball-x 通過（100/100）**。02 定義待ち |
 | [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ） | 知覚経路調査・較正ログ Round 1 を記録済み |
-| `craft/` | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)） | **未作成**（設計合意済み。初エッセンス獲得時に作成） |
+| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **開設済み（2026-07-03）**: 地図 + レシピ 4 枚（00 開眼 / 01 メッシュ / 02 眼球X / 03 クリッピング）、全て実証済み状態 |
 
 ## Key Files
 
@@ -45,7 +45,15 @@
 
 ## 次の行動
 
-1. **閉問題 01 の実験実行**（B の検証 = Fable の視覚弁別力の初実測）。craft 蒸留候補が蓄積済み（wave104 最終報告書 + wave105 の知見。例: `addKeyform` 単キー set の罠 → `editKeyformKey(createEnds)` が正道）。
+1. **閉問題 02 の定義**（次候補: 目の開閉。ユーザーと工程スコープの認識合わせから）。
+
+## 閉問題 01: 通過（2026-07-03、ユーザー判定 100/100）
+
+**「100点満点で評価するなら文句なしの100点だ。期待していたものとの差、という意味なら君は期待の数段上を超えてきた」**——問い B は Yes、初回満点。閉問題アプローチの第 1 サイクル（定義→A調査→武器製造→実験→gate→蒸留）が完全に一周し、craft/ が開設された。詳細: [results.md](closed-problems/01-eyeball-x/results.md)。
+
+## 閉問題 01 実験: 完走記録
+
+新規ワークスペース `C:/workspace/remie/rigging/llm-rigging`（ref と同一 PSD、ユーザーがインポート・保存・git init）に対し、Fable が L0 直接・委任なしで 6 操作全てを headless CLI 経由で committed（rev 5→18、git 原子コミット 13）。三段検証（dry-run スキーマ / 巻尺の数値が設計値と小数点一致 / sweep + 高倍率ズームの自己目視）通過。reject 2 回（preset 重複・warp への translation）はいずれも無傷回復し craft 発見に転化。詳細: [experiment-log.md](closed-problems/01-eyeball-x/experiment/experiment-log.md)。
 
 ## ユーザー目視 gate: 通過（2026-07-03）
 
