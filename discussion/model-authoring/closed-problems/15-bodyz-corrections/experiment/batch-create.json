@@ -1,0 +1,205 @@
+[
+  {
+    "file": "create-hair_front.json",
+    "operationId": "op_cp15_create_hair_front",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp15] warp BodyZ Hair Front (11x11) wrapping rig_facez_hair_front (BodyZ in-rotation correction layer)",
+    "payload": {
+      "displayName": "BodyZ Hair Front",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 559,
+        "y": 35,
+        "width": 884,
+        "height": 838
+      },
+      "transformColumns": 11,
+      "transformRows": 11,
+      "bezierColumns": 11,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_hair_front"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-hair_f_r.json",
+    "operationId": "op_cp15_create_hair_f_r",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp15] warp BodyZ Hair F R (7x11) wrapping rig_facez_hair_f_r (BodyZ in-rotation correction layer)",
+    "payload": {
+      "displayName": "BodyZ Hair F R",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 912,
+        "y": 127,
+        "width": 480,
+        "height": 921
+      },
+      "transformColumns": 7,
+      "transformRows": 11,
+      "bezierColumns": 7,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_hair_f_r"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-hair_f_l.json",
+    "operationId": "op_cp15_create_hair_f_l",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp15] warp BodyZ Hair F L (7x11) wrapping rig_facez_hair_f_l (BodyZ in-rotation correction layer)",
+    "payload": {
+      "displayName": "BodyZ Hair F L",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 599,
+        "y": 167,
+        "width": 466,
+        "height": 899
+      },
+      "transformColumns": 7,
+      "transformRows": 11,
+      "bezierColumns": 7,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_hair_f_l"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-back_hair_r.json",
+    "operationId": "op_cp15_create_back_hair_r",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp15] warp BodyZ Back Hair R (11x13) wrapping rig_facez_back_hair_r (BodyZ in-rotation correction layer)",
+    "payload": {
+      "displayName": "BodyZ Back Hair R",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 279,
+        "y": 210,
+        "width": 854,
+        "height": 1720
+      },
+      "transformColumns": 11,
+      "transformRows": 13,
+      "bezierColumns": 11,
+      "bezierRows": 13,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_back_hair_r"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-back_hair_l.json",
+    "operationId": "op_cp15_create_back_hair_l",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp15] warp BodyZ Back Hair L (11x13) wrapping rig_facez_back_hair_l (BodyZ in-rotation correction layer)",
+    "payload": {
+      "displayName": "BodyZ Back Hair L",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 871,
+        "y": 172,
+        "width": 729,
+        "height": 1705
+      },
+      "transformColumns": 11,
+      "transformRows": 13,
+      "bezierColumns": 11,
+      "bezierRows": 13,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_back_hair_l"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-tie.json",
+    "operationId": "op_cp15_create_tie",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp15] warp BodyZ Tie (5x7) wrapping rig_bodyx_tie (BodyZ in-rotation correction layer)",
+    "payload": {
+      "displayName": "BodyZ Tie",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 919,
+        "y": 620,
+        "width": 147,
+        "height": 603
+      },
+      "transformColumns": 5,
+      "transformRows": 7,
+      "bezierColumns": 5,
+      "bezierRows": 7,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_tie"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-topwear.json",
+    "operationId": "op_cp15_create_topwear",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp15] warp BodyZ Topwear (13x13) wrapping rig_bodyx_topwear (BodyZ in-rotation correction layer)",
+    "payload": {
+      "displayName": "BodyZ Topwear",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 739,
+        "y": 555,
+        "width": 516,
+        "height": 613
+      },
+      "transformColumns": 13,
+      "transformRows": 13,
+      "bezierColumns": 13,
+      "bezierRows": 13,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_topwear"
+        }
+      ]
+    }
+  }
+]

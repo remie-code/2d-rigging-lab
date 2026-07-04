@@ -16,9 +16,9 @@
 | Path | Role | Status |
 |---|---|---|
 | [premises/](premises/) | 前提合意層。この挑戦のオラクル | Accepted 5 文書を記録済み |
-| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜06 すべて通過**（03 = 盲目再構成満点、04 = 回転射影則、05 = 頭部外周 + 隠蔽維持拘束、06 = 立体物の回転表現 + **FaceX 完結・着地**）。07 定義待ち |
-| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ） | 較正ログ Round 8 まで（Fable 委任10代 reject 累計ゼロ。planning-gate 実戦 + 拘束台帳 + 人間仕上げ境界の初測定） |
-| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 8 枚（00-07）+ 不変量 12 種**。06 の頂点に**回転射影則**、07（optional）に**ステッカー↔立体物スペクトラム + 技法6種 + 拘束台帳運用 + 人間仕上げ境界** |
+| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜15 すべて通過**（FaceX / FaceY / BodyX / FaceZ / BodyZ の**5パラメータ制覇**。相似則・rotation2d 入れ子・重力最終形・固定線テンプレ統一）。次戦線の定義待ち（口の開閉 / 表情差分 / 尻尾等） |
+| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ) | 較正ログ Round 12 まで（Fable 委任25代 reject 累計ゼロ。設計ログの世代間記憶の回収実績） |
+| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 8 枚（00-07）+ 不変量 14 種**。06 は**両軸転置 + 相似則 + rotation2d + 重力テンプレ最終形 + 縫い付けアンカー**まで成長——**X・Y・Z・BodyX の4パラメータで実証済み** |
 
 ## Key Files
 

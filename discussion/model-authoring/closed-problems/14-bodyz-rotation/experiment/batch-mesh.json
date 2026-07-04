@@ -1,0 +1,13 @@
+[
+  {
+    "file": "op-backhair-mesh.json",
+    "operationId": "op_cp14_backhair_mesh",
+    "operationType": "generateMesh",
+    "gitMessage": "[cp14] generate mesh for back_hair shadow drawable (was an empty placeholder; rigid rider under BodyZ, density low)",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_f2691773_back_hair",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "low"
+    }
+  }
+]

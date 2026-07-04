@@ -1,0 +1,31 @@
+[
+  {
+    "file": "create-hair_front.json",
+    "operationId": "op_cp13_create_hair_front",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp13] warp FaceZ Hair Front (11x11) wrapping rig_bodyx_hair_front",
+    "payload": {
+      "displayName": "FaceZ Hair Front",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 619,
+        "y": 95,
+        "width": 764,
+        "height": 718
+      },
+      "transformColumns": 11,
+      "transformRows": 11,
+      "bezierColumns": 11,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_hair_front"
+        }
+      ]
+    }
+  }
+]

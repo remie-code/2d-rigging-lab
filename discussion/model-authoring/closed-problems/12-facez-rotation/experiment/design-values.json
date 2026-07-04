@@ -1,0 +1,25 @@
+{
+  "FACEZ_ID": "rig_facez_head",
+  "PIVOT": {
+    "x": 995.5,
+    "y": 596
+  },
+  "ANGLE_MAX_DEG": 10,
+  "PARAM": "param_face_angle_z",
+  "WRAP_IDS": [
+    "rig_bodyx_face",
+    "rig_bodyx_eye_l",
+    "rig_bodyx_eye_r",
+    "rig_bodyx_mouth",
+    "rig_bodyx_nose",
+    "rig_bodyx_eyewear",
+    "rig_bodyx_brow_l",
+    "rig_bodyx_brow_r",
+    "rig_bodyx_headwear",
+    "rig_bodyx_ears_l",
+    "rig_bodyx_ears_r",
+    "rig_bodyx_hair_front",
+    "rig_bodyx_back_top_hair_l",
+    "rig_bodyx_back_top_hair_r"
+  ]
+}

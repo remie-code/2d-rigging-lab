@@ -1,0 +1,93 @@
+[
+  {
+    "file": "op-bodyz-create.json",
+    "operationId": "op_cp14_bodyz_create",
+    "operationType": "createRotation2dRigControl",
+    "gitMessage": "[cp14] create BodyZ rotation2d control (pivot=waist, wrap 10 tower roots incl. nested FaceZ rotation2d + back_hair shadow drawable)",
+    "payload": {
+      "displayName": "BodyZ Upper Body",
+      "pivot": {
+        "x": 997.25,
+        "y": 1124
+      },
+      "restAngleDegrees": 0,
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_head"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_hair_f_l"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_hair_f_r"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_back_hair_l"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_facez_back_hair_r"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_topwear"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_arm_r"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_arm_l"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_tie"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_neck"
+        },
+        {
+          "kind": "drawable",
+          "id": "draw_r0_1cea4f6f_f2691773_back_hair"
+        }
+      ]
+    }
+  },
+  {
+    "file": "op-bodyz-key.json",
+    "operationId": "op_cp14_bodyz_key",
+    "operationType": "editKeyformKey",
+    "gitMessage": "[cp14] BodyZ angleDegrees three-point key (-6/0/+6 deg, translation untouched)",
+    "payload": {
+      "action": "createEndsCenter",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_bodyz_upper_body"
+      },
+      "targetProperty": "angleDegrees",
+      "parameterId": "param_body_angle_z",
+      "interpolation": "linear-1d-v1",
+      "compositionMode": "replace",
+      "statePatches": {
+        "min": {
+          "propertyPath": "angleDegrees",
+          "value": -6
+        },
+        "default": {
+          "propertyPath": "angleDegrees",
+          "value": 0
+        },
+        "max": {
+          "propertyPath": "angleDegrees",
+          "value": 6
+        }
+      }
+    }
+  }
+]

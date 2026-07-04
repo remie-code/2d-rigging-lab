@@ -1,0 +1,34 @@
+{
+ "hair_f_r": {
+  "yTop": 242,
+  "yBot": 933,
+  "yAttMean": 267.9001222222222,
+  "xCentroid": 1107.3302066666665,
+  "xLo": 1072,
+  "xHi": 1158
+ },
+ "hair_f_l": {
+  "yTop": 282,
+  "yBot": 951,
+  "yAttMean": 310.6828321111111,
+  "xCentroid": 869.307283,
+  "xLo": 826,
+  "xHi": 904
+ },
+ "back_hair_r": {
+  "yTop": 344,
+  "yBot": 1796,
+  "yAttMean": 369.126953125,
+  "xCentroid": 858.443359375,
+  "xLo": 827.703125,
+  "xHi": 883
+ },
+ "back_hair_l": {
+  "yTop": 306,
+  "yBot": 1743,
+  "yAttMean": 328.13846159999997,
+  "xCentroid": 1102.8923077,
+  "xLo": 1046,
+  "xHi": 1171.846154
+ }
+}

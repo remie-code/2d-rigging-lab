@@ -1,0 +1,105 @@
+[
+  {
+    "file": "op-facez-create.json",
+    "operationId": "op_cp12_facez_create",
+    "operationType": "createRotation2dRigControl",
+    "gitMessage": "[cp12] create FaceZ rotation2d control (pivot=neck base, wrap 14 head towers)",
+    "payload": {
+      "displayName": "FaceZ Head",
+      "pivot": {
+        "x": 995.5,
+        "y": 596
+      },
+      "restAngleDegrees": 0,
+      "wrapChildren": [
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_face"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_eye_l"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_eye_r"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_mouth"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_nose"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_eyewear"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_brow_l"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_brow_r"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_headwear"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_ears_l"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_ears_r"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_hair_front"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_back_top_hair_l"
+        },
+        {
+          "kind": "rigControl",
+          "id": "rig_bodyx_back_top_hair_r"
+        }
+      ]
+    }
+  },
+  {
+    "file": "op-facez-key.json",
+    "operationId": "op_cp12_facez_key",
+    "operationType": "editKeyformKey",
+    "gitMessage": "[cp12] FaceZ angleDegrees three-point key (-10/0/+10 deg, translation untouched)",
+    "payload": {
+      "action": "createEndsCenter",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_facez_head"
+      },
+      "targetProperty": "angleDegrees",
+      "parameterId": "param_face_angle_z",
+      "interpolation": "linear-1d-v1",
+      "compositionMode": "replace",
+      "statePatches": {
+        "min": {
+          "propertyPath": "angleDegrees",
+          "value": -10
+        },
+        "default": {
+          "propertyPath": "angleDegrees",
+          "value": 0
+        },
+        "max": {
+          "propertyPath": "angleDegrees",
+          "value": 10
+        }
+      }
+    }
+  }
+]
