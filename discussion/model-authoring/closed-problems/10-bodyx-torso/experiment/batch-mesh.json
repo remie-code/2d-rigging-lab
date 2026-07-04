@@ -1,0 +1,79 @@
+[
+  {
+    "file": "mesh-topwear.json",
+    "operationId": "op_cp10_mesh_topwear",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_26f93e8b_topwear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp10] mesh topwear (auto-outline medium)"
+  },
+  {
+    "file": "mesh-bottomwear.json",
+    "operationId": "op_cp10_mesh_bottomwear",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_26f93eaa_bottomwear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp10] mesh bottomwear (auto-outline medium)"
+  },
+  {
+    "file": "mesh-handwear_r.json",
+    "operationId": "op_cp10_mesh_handwear_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_26f93ee8_handwear-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp10] mesh handwear_r (auto-outline medium)"
+  },
+  {
+    "file": "mesh-handwear_l.json",
+    "operationId": "op_cp10_mesh_handwear_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_26f93ec9_handwear-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp10] mesh handwear_l (auto-outline medium)"
+  },
+  {
+    "file": "mesh-tie.json",
+    "operationId": "op_cp10_mesh_tie",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_ea30e9c4_tie",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp10] mesh tie (auto-outline medium)"
+  },
+  {
+    "file": "mesh-neck.json",
+    "operationId": "op_cp10_mesh_neck",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_691e2eb3_neck",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp10] mesh neck (auto-outline medium)"
+  },
+  {
+    "file": "mesh-neck_back.json",
+    "operationId": "op_cp10_mesh_neck_back",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_691e2e90_neck_back",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp10] mesh neck_back (auto-outline medium)"
+  }
+]
