@@ -1,0 +1,24 @@
+[
+  {
+    "file": "mesh-headwear.json",
+    "operationId": "op_cp06_mesh_headwear",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_9dc00ee4_headwear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp06] mesh headwear (medium)"
+  },
+  {
+    "file": "mesh-eyewear.json",
+    "operationId": "op_cp06_mesh_eyewear",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_9dc00e87_eyewear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp06] mesh eyewear (medium)"
+  }
+]

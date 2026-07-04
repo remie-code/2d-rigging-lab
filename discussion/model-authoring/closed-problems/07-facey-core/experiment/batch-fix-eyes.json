@@ -1,0 +1,246 @@
+[
+  {
+    "file": "fix-foreshorten-eye_l.json",
+    "operationId": "op_cp07fix_foreshorten_eye_l",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_facey_eye_l"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_face_angle_y",
+      "interpolation": "linear-1d-v1",
+      "action": "updateCurrent",
+      "keyValue": -30,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 32.7
+          },
+          {
+            "x": 0,
+            "y": 32.7
+          },
+          {
+            "x": 0,
+            "y": 32.7
+          },
+          {
+            "x": 0,
+            "y": 32.7
+          },
+          {
+            "x": 0,
+            "y": 32.7
+          },
+          {
+            "x": 0,
+            "y": 26.5
+          },
+          {
+            "x": 0,
+            "y": 26.5
+          },
+          {
+            "x": 0,
+            "y": 26.5
+          },
+          {
+            "x": 0,
+            "y": 26.5
+          },
+          {
+            "x": 0,
+            "y": 26.5
+          },
+          {
+            "x": 0,
+            "y": 20.31
+          },
+          {
+            "x": 0,
+            "y": 20.31
+          },
+          {
+            "x": 0,
+            "y": 20.31
+          },
+          {
+            "x": 0,
+            "y": 20.31
+          },
+          {
+            "x": 0,
+            "y": 20.31
+          },
+          {
+            "x": 0,
+            "y": 14.12
+          },
+          {
+            "x": 0,
+            "y": 14.12
+          },
+          {
+            "x": 0,
+            "y": 14.12
+          },
+          {
+            "x": 0,
+            "y": 14.12
+          },
+          {
+            "x": 0,
+            "y": 14.12
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp07fix] key FaceY eye_l down(-30): intra-element vertical gradient (squash 0.1, yref 439) — displacement/scale agreement"
+  },
+  {
+    "file": "fix-foreshorten-eye_r.json",
+    "operationId": "op_cp07fix_foreshorten_eye_r",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_facey_eye_r"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_face_angle_y",
+      "interpolation": "linear-1d-v1",
+      "action": "updateCurrent",
+      "keyValue": -30,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 38.79
+          },
+          {
+            "x": 0,
+            "y": 38.79
+          },
+          {
+            "x": 0,
+            "y": 38.79
+          },
+          {
+            "x": 0,
+            "y": 38.79
+          },
+          {
+            "x": 0,
+            "y": 38.79
+          },
+          {
+            "x": 0,
+            "y": 32.6
+          },
+          {
+            "x": 0,
+            "y": 32.6
+          },
+          {
+            "x": 0,
+            "y": 32.6
+          },
+          {
+            "x": 0,
+            "y": 32.6
+          },
+          {
+            "x": 0,
+            "y": 32.6
+          },
+          {
+            "x": 0,
+            "y": 26.4
+          },
+          {
+            "x": 0,
+            "y": 26.4
+          },
+          {
+            "x": 0,
+            "y": 26.4
+          },
+          {
+            "x": 0,
+            "y": 26.4
+          },
+          {
+            "x": 0,
+            "y": 26.4
+          },
+          {
+            "x": 0,
+            "y": 20.21
+          },
+          {
+            "x": 0,
+            "y": 20.21
+          },
+          {
+            "x": 0,
+            "y": 20.21
+          },
+          {
+            "x": 0,
+            "y": 20.21
+          },
+          {
+            "x": 0,
+            "y": 20.21
+          },
+          {
+            "x": 0,
+            "y": 14.02
+          },
+          {
+            "x": 0,
+            "y": 14.02
+          },
+          {
+            "x": 0,
+            "y": 14.02
+          },
+          {
+            "x": 0,
+            "y": 14.02
+          },
+          {
+            "x": 0,
+            "y": 14.02
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp07fix] key FaceY eye_r down(-30): intra-element vertical gradient (squash 0.1, yref 448) — displacement/scale agreement"
+  }
+]

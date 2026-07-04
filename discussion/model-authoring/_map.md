@@ -16,9 +16,9 @@
 | Path | Role | Status |
 |---|---|---|
 | [premises/](premises/) | 前提合意層。この挑戦のオラクル | Accepted 5 文書を記録済み |
-| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜05 すべて通過**（03 = 盲目再構成満点、04 = 回転射影則の獲得、05 = 頭部外周 = 未踏 z 域3種 + 隠蔽維持拘束）。06 定義待ち |
-| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ） | 較正ログ Round 7 まで（Fable 委任6代全成功・reject 累計ゼロ。gate→言語化→craft→新エージェントのループ確立） |
-| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 7 枚（00-06）+ 不変量 10 種**。06 の頂点に**回転射影則**（dx = u(cosΔ−1) + z·sinΔ）、05 で頭部外周 z 域テンプレ + **隠蔽維持拘束** + 同一モデル内拡張の作法まで成長 |
+| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜06 すべて通過**（03 = 盲目再構成満点、04 = 回転射影則、05 = 頭部外周 + 隠蔽維持拘束、06 = 立体物の回転表現 + **FaceX 完結・着地**）。07 定義待ち |
+| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ） | 較正ログ Round 8 まで（Fable 委任10代 reject 累計ゼロ。planning-gate 実戦 + 拘束台帳 + 人間仕上げ境界の初測定） |
+| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 8 枚（00-07）+ 不変量 12 種**。06 の頂点に**回転射影則**、07（optional）に**ステッカー↔立体物スペクトラム + 技法6種 + 拘束台帳運用 + 人間仕上げ境界** |
 
 ## Key Files
 
