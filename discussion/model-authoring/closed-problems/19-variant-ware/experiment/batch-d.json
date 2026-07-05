@@ -1,0 +1,106 @@
+[
+ {
+  "file": "show-topwear_a43f.json",
+  "operationId": "op_cp19_show_topwear_a43f",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1585_topwear"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true topwear_a43f (variant gate now owns hiding)"
+ },
+ {
+  "file": "show-bottomwear_a43f.json",
+  "operationId": "op_cp19_show_bottomwear_a43f",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f15a4_bottomwear"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true bottomwear_a43f (variant gate now owns hiding)"
+ },
+ {
+  "file": "show-handwearr_a43f.json",
+  "operationId": "op_cp19_show_handwearr_a43f",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1647_handwear-r"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true handwearr_a43f (variant gate now owns hiding)"
+ },
+ {
+  "file": "show-handwearl_a43f.json",
+  "operationId": "op_cp19_show_handwearl_a43f",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1666_handwear-l"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true handwearl_a43f (variant gate now owns hiding)"
+ },
+ {
+  "file": "show-topwear_8b5c.json",
+  "operationId": "op_cp19_show_topwear_8b5c",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c54ca_topwear"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true topwear_8b5c (variant gate now owns hiding)"
+ },
+ {
+  "file": "show-bottomwear_8b5c.json",
+  "operationId": "op_cp19_show_bottomwear_8b5c",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c5469_bottomwear"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true bottomwear_8b5c (variant gate now owns hiding)"
+ },
+ {
+  "file": "show-handwearr_8b5c.json",
+  "operationId": "op_cp19_show_handwearr_8b5c",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c542b_handwear-r"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true handwearr_8b5c (variant gate now owns hiding)"
+ },
+ {
+  "file": "show-handwearl_8b5c.json",
+  "operationId": "op_cp19_show_handwearl_8b5c",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c5408_handwear-l"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp19] restore runtimeVisibility=true handwearl_8b5c (variant gate now owns hiding)"
+ }
+]

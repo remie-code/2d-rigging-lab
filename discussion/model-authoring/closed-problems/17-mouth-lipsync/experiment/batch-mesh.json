@@ -1,0 +1,57 @@
+[
+ {
+  "file": "mesh-mouth_a.json",
+  "operationId": "op_cp17_mesh_mouth_a",
+  "operationType": "generateMesh",
+  "gitMessage": "[cp17] generateMesh mouth_a (high)",
+  "payload": {
+   "drawableId": "draw_r463_780c04ef_dc637e24_mouth_a",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "high"
+  }
+ },
+ {
+  "file": "mesh-mouth_i.json",
+  "operationId": "op_cp17_mesh_mouth_i",
+  "operationType": "generateMesh",
+  "gitMessage": "[cp17] generateMesh mouth_i (medium)",
+  "payload": {
+   "drawableId": "draw_r463_780c04ef_dc637e05_mouth_i",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  }
+ },
+ {
+  "file": "mesh-mouth_u.json",
+  "operationId": "op_cp17_mesh_mouth_u",
+  "operationType": "generateMesh",
+  "gitMessage": "[cp17] generateMesh mouth_u (medium)",
+  "payload": {
+   "drawableId": "draw_r463_780c04ef_dc637ee6_mouth_u",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  }
+ },
+ {
+  "file": "mesh-mouth_e.json",
+  "operationId": "op_cp17_mesh_mouth_e",
+  "operationType": "generateMesh",
+  "gitMessage": "[cp17] generateMesh mouth_e (medium)",
+  "payload": {
+   "drawableId": "draw_r463_780c04ef_dc637ec7_mouth_e",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  }
+ },
+ {
+  "file": "mesh-mouth_o.json",
+  "operationId": "op_cp17_mesh_mouth_o",
+  "operationType": "generateMesh",
+  "gitMessage": "[cp17] generateMesh mouth_o (medium)",
+  "payload": {
+   "drawableId": "draw_r463_780c04ef_dc637ea0_mouth_o",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  }
+ }
+]

@@ -16,9 +16,9 @@
 | Path | Role | Status |
 |---|---|---|
 | [premises/](premises/) | 前提合意層。この挑戦のオラクル | Accepted 5 文書を記録済み |
-| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜15 すべて通過**（FaceX / FaceY / BodyX / FaceZ / BodyZ の**5パラメータ制覇**。相似則・rotation2d 入れ子・重力最終形・固定線テンプレ統一）。次戦線の定義待ち（口の開閉 / 表情差分 / 尻尾等） |
-| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ) | 較正ログ Round 12 まで（Fable 委任25代 reject 累計ゼロ。設計ログの世代間記憶の回収実績） |
-| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 8 枚（00-07）+ 不変量 14 種**。06 は**両軸転置 + 相似則 + rotation2d + 重力テンプレ最終形 + 縫い付けアンカー**まで成長——**X・Y・Z・BodyX の4パラメータで実証済み** |
+| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜18 通過**（回転5種 + 揺れ4系統 + 口パク + **別衣装 = 場の空間再標本化**）。次: 差分管理（Variant）の定義 |
+| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ) | 較正ログ Round 15 まで（Fable 委任30代 reject 累計ゼロ。制限死復元・逸脱の自律処置の模範例を記録） |
+| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 10 枚（00-09）+ 不変量 20 種**。新: 場は空間の属性（再標本化）・服の固定の2型・最大情報素材・合法オラクル |
 
 ## Key Files
 

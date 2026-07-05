@@ -1,0 +1,288 @@
+[
+ {
+  "file": "target-topwear_26f9.json",
+  "operationId": "op_cp19_target_topwear_26f9",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93e8b_topwear"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable topwear_26f9"
+ },
+ {
+  "file": "target-bottomwear_26f9.json",
+  "operationId": "op_cp19_target_bottomwear_26f9",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93eaa_bottomwear"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable bottomwear_26f9"
+ },
+ {
+  "file": "target-handwearl_26f9.json",
+  "operationId": "op_cp19_target_handwearl_26f9",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93ec9_handwear-l"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable handwearl_26f9"
+ },
+ {
+  "file": "target-handwearr_26f9.json",
+  "operationId": "op_cp19_target_handwearr_26f9",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93ee8_handwear-r"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable handwearr_26f9"
+ },
+ {
+  "file": "target-tie_ea30.json",
+  "operationId": "op_cp19_target_tie_ea30",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_ea30e9c4_tie"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable tie_ea30"
+ },
+ {
+  "file": "target-topwear_a43f.json",
+  "operationId": "op_cp19_target_topwear_a43f",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f1585_topwear"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable topwear_a43f"
+ },
+ {
+  "file": "target-bottomwear_a43f.json",
+  "operationId": "op_cp19_target_bottomwear_a43f",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f15a4_bottomwear"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable bottomwear_a43f"
+ },
+ {
+  "file": "target-handwearr_a43f.json",
+  "operationId": "op_cp19_target_handwearr_a43f",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f1647_handwear-r"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable handwearr_a43f"
+ },
+ {
+  "file": "target-handwearl_a43f.json",
+  "operationId": "op_cp19_target_handwearl_a43f",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f1666_handwear-l"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable handwearl_a43f"
+ },
+ {
+  "file": "target-topwear_8b5c.json",
+  "operationId": "op_cp19_target_topwear_8b5c",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c54ca_topwear"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable topwear_8b5c"
+ },
+ {
+  "file": "target-bottomwear_8b5c.json",
+  "operationId": "op_cp19_target_bottomwear_8b5c",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c5469_bottomwear"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable bottomwear_8b5c"
+ },
+ {
+  "file": "target-handwearr_8b5c.json",
+  "operationId": "op_cp19_target_handwearr_8b5c",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c542b_handwear-r"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable handwearr_8b5c"
+ },
+ {
+  "file": "target-handwearl_8b5c.json",
+  "operationId": "op_cp19_target_handwearl_8b5c",
+  "operationType": "addVariantTargetDrawable",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c5408_handwear-l"
+  },
+  "gitMessage": "[cp19] addVariantTargetDrawable handwearl_8b5c"
+ },
+ {
+  "file": "member-topwear_26f9.json",
+  "operationId": "op_cp19_member_topwear_26f9",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93e8b_topwear",
+   "variantId": "var_default",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership topwear_26f9 -> var_default"
+ },
+ {
+  "file": "member-bottomwear_26f9.json",
+  "operationId": "op_cp19_member_bottomwear_26f9",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93eaa_bottomwear",
+   "variantId": "var_default",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership bottomwear_26f9 -> var_default"
+ },
+ {
+  "file": "member-handwearl_26f9.json",
+  "operationId": "op_cp19_member_handwearl_26f9",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93ec9_handwear-l",
+   "variantId": "var_default",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership handwearl_26f9 -> var_default"
+ },
+ {
+  "file": "member-handwearr_26f9.json",
+  "operationId": "op_cp19_member_handwearr_26f9",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_26f93ee8_handwear-r",
+   "variantId": "var_default",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership handwearr_26f9 -> var_default"
+ },
+ {
+  "file": "member-tie_ea30.json",
+  "operationId": "op_cp19_member_tie_ea30",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_ea30e9c4_tie",
+   "variantId": "var_default",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership tie_ea30 -> var_default"
+ },
+ {
+  "file": "member-topwear_a43f.json",
+  "operationId": "op_cp19_member_topwear_a43f",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f1585_topwear",
+   "variantId": "var_rodos",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership topwear_a43f -> var_rodos"
+ },
+ {
+  "file": "member-bottomwear_a43f.json",
+  "operationId": "op_cp19_member_bottomwear_a43f",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+   "variantId": "var_rodos",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership bottomwear_a43f -> var_rodos"
+ },
+ {
+  "file": "member-handwearr_a43f.json",
+  "operationId": "op_cp19_member_handwearr_a43f",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f1647_handwear-r",
+   "variantId": "var_rodos",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership handwearr_a43f -> var_rodos"
+ },
+ {
+  "file": "member-handwearl_a43f.json",
+  "operationId": "op_cp19_member_handwearl_a43f",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_a43f1666_handwear-l",
+   "variantId": "var_rodos",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership handwearl_a43f -> var_rodos"
+ },
+ {
+  "file": "member-topwear_8b5c.json",
+  "operationId": "op_cp19_member_topwear_8b5c",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c54ca_topwear",
+   "variantId": "var_endoministrator",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership topwear_8b5c -> var_endoministrator"
+ },
+ {
+  "file": "member-bottomwear_8b5c.json",
+  "operationId": "op_cp19_member_bottomwear_8b5c",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c5469_bottomwear",
+   "variantId": "var_endoministrator",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership bottomwear_8b5c -> var_endoministrator"
+ },
+ {
+  "file": "member-handwearr_8b5c.json",
+  "operationId": "op_cp19_member_handwearr_8b5c",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c542b_handwear-r",
+   "variantId": "var_endoministrator",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership handwearr_8b5c -> var_endoministrator"
+ },
+ {
+  "file": "member-handwearl_8b5c.json",
+  "operationId": "op_cp19_member_handwearl_8b5c",
+  "operationType": "setVariantMembership",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "drawableId": "draw_r0_1cea4f6f_8b5c5408_handwear-l",
+   "variantId": "var_endoministrator",
+   "member": true
+  },
+  "gitMessage": "[cp19] setVariantMembership handwearl_8b5c -> var_endoministrator"
+ }
+]

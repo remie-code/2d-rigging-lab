@@ -34,13 +34,17 @@
 | [14-bodyz-rotation/](14-bodyz-rotation/) | BodyZ 回転コア（腰から上を傾ける） | **通過・100点（2026-07-04、一発・3 op）**。[results.md](14-bodyz-rotation/results.md)。獲得 = **rotation2d 入れ子**（合成は Runtime、設計者負担ゼロ）+ 空メッシュの罠 + 差分画素の局在化手続き |
 | [15-bodyz-corrections/](15-bodyz-corrections/) | BodyZ 補正ワープ7基 = BodyZ 完結 | **通過（2026-07-04、一発・「完璧だ」）**。[results.md](15-bodyz-corrections/results.md)。獲得 = **固定線テンプレの統一**（7基が同一文、固定線実測3型）+ 回転内差分の厳密形デフォルト化 + 設計ログの世代間記憶の回収実績。**BodyZ 完結 = X・Y・Z・BodyX・BodyZ の5パラメータ制覇** |
 
-| [16-hair-sway/](16-hair-sway/) | 髪揺れ（Hair Sway X 3系統 = 揺れモード場 + dynamics v3 初運用） | **Problem defined（2026-07-05）**。前提 = wave106 の dynamics 世界系チェーン置換（ユーザー実機確認済み）。ゲイン=1 世界線 / 左右1パラメータ / 長さ別3分割（周期√則の配当）。[problem-definition.md](16-hair-sway/problem-definition.md) |
-| 17-tie-sway（未作成） | ネクタイ揺れ（Accessory Sway X、Body 入力のみ、結び目固定線の変奏） | 候補。cp16 の後 |
+| [16-hair-sway/](16-hair-sway/) | 髪揺れ + タイ揺れ（Sway X 4系統 = 揺れモード場 + dynamics v3 初運用） | **通過（2026-07-05、本体 + fix×2、ユーザー判定「全体的に非常によくなった」→「うん、いいと思う」）**。獲得 = **揺れモード場は等長写像**（接線積分、κ 剛性ダイヤル）/ **静的リグ=定常・dynamics=過渡**（angle 入力全廃、静定=静的ポーズの構造保証）/ 実測ベース物理定数（2/3則・レバー線形化）。26〜28代 reject ゼロ。蒸留未（cp17 と並行で実施） |
+| [17-mouth-lipsync/](17-mouth-lipsync/) | 口パク（Mouth Open × 母音、最大情報素材の単一変形 + パッケージ内参照オラクル） | **通過（2026-07-05、一発・二十九代目）**。格子自己修正2ラウンド込み・weekly 制限死からの**初の遺失報告復元**（損失は所見文のみ）。口形の軽い崩れは素材起因（ユーザー切り分け、素材更新で対応）。[results.md](17-mouth-lipsync/results.md)。craft/09 へ蒸留済み |
+
+| [18-alt-outfit-rigging/](18-alt-outfit-rigging/) | 別衣装 rigging（rodos_ware / endoministrator の topwear+両腕 ×2 = 場の空間再標本化） | **通過（2026-07-05、一発・三十代目、「破綻なし、もう本当に好みの問題」）**。獲得 = **場は空間の属性**（人間補正場の衣装横断再利用を実証）+ **服の固定の2型**（羽織りフェード帯は未適用・磨き候補）。[results.md](18-alt-outfit-rigging/results.md) |
+
+| [19-variant-ware/](19-variant-ware/) | 差分管理（Ware グループ singleSelect 3択 = variant operation 列の初運用 + レンダ自己検証） | **Problem defined（2026-07-06）**。A ギャップなし（書き側 op 10種実在・player ライブ切替実装済み）。[problem-definition.md](19-variant-ware/problem-definition.md) |
 
 ## 次の行動
 
-1. cp16 の A 調査（dynamics op の CLI 実運用形 / Sway プリセット / 塔挿入点 / px→cm スケール / input scale 実測材料）→ 実験
-2. 期限考慮: Fable 使用可能は 2026-07-07 まで（ユーザー通告）——残り時間の配分はユーザーと相談
+1. cp19 実験 → gate → 蒸留
+2. 期限考慮: Fable 使用可能の当初期限 2026-07-07（weekly 制限は 2026-07-05 に一度発動・回復済み）——残り時間の配分はユーザーと相談
 
 ## FaceY フェーズ蒸留（2026-07-04 完了）
 

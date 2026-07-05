@@ -1,0 +1,46 @@
+[
+  {
+    "file": "mesh-legwear_c7ac.json",
+    "operationId": "op_cp19b_mesh_legwear_c7ac",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_c7ac42f2_legwear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp19b] generateMesh legwear"
+  },
+  {
+    "file": "mesh-footwear_c7ac.json",
+    "operationId": "op_cp19b_mesh_footwear_c7ac",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_c7ac4230_footwear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp19b] generateMesh footwear"
+  },
+  {
+    "file": "mesh-tail_c7ac.json",
+    "operationId": "op_cp19b_mesh_tail_c7ac",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_c7ac4211_tail",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp19b] generateMesh tail"
+  },
+  {
+    "file": "mesh-endomiback_c7ac.json",
+    "operationId": "op_cp19b_mesh_endomiback_c7ac",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_c7ac42d3_endomi_back",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp19b] generateMesh endomi_back"
+  }
+]

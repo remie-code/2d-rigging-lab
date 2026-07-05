@@ -1,0 +1,183 @@
+[
+ {
+  "file": "create-bodyz-topwear-rodos.json",
+  "operationId": "op_cp18_create_bodyz_topwear_rodos",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp18] warp BodyZ Topwear Rodos (17x34) adopting rig_bodyx_topwear_rodos under rig_bodyz_upper_body",
+  "payload": {
+   "displayName": "BodyZ Topwear Rodos",
+   "childDrawableIds": [],
+   "childRigControlIds": [
+    "rig_bodyx_topwear_rodos"
+   ],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 634,
+    "y": 535,
+    "width": 708,
+    "height": 1661
+   },
+   "transformColumns": 17,
+   "transformRows": 34,
+   "bezierColumns": 17,
+   "bezierRows": 34,
+   "bezierEditType": "cubicBezierSurfaceV1",
+   "parentRigControlId": "rig_bodyz_upper_body"
+  }
+ },
+ {
+  "file": "create-bodyx-arm_r-rodos.json",
+  "operationId": "op_cp18_create_bodyx_arm_r_rodos",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp18] warp BodyX Arm R Rodos (8x14, domain 462,618 456x1043) under rig_bodyz_upper_body",
+  "payload": {
+   "displayName": "BodyX Arm R Rodos",
+   "childDrawableIds": [
+    "draw_r0_1cea4f6f_a43f1647_handwear-r"
+   ],
+   "childRigControlIds": [],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 462,
+    "y": 618,
+    "width": 456,
+    "height": 1043
+   },
+   "transformColumns": 8,
+   "transformRows": 14,
+   "bezierColumns": 8,
+   "bezierRows": 14,
+   "bezierEditType": "cubicBezierSurfaceV1",
+   "parentRigControlId": "rig_bodyz_upper_body"
+  }
+ },
+ {
+  "file": "create-bodyx-arm_l-rodos.json",
+  "operationId": "op_cp18_create_bodyx_arm_l_rodos",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp18] warp BodyX Arm L Rodos (8x14, domain 1072,619 449x1042) under rig_bodyz_upper_body",
+  "payload": {
+   "displayName": "BodyX Arm L Rodos",
+   "childDrawableIds": [
+    "draw_r0_1cea4f6f_a43f1666_handwear-l"
+   ],
+   "childRigControlIds": [],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 1072,
+    "y": 619,
+    "width": 449,
+    "height": 1042
+   },
+   "transformColumns": 8,
+   "transformRows": 14,
+   "bezierColumns": 8,
+   "bezierRows": 14,
+   "bezierEditType": "cubicBezierSurfaceV1",
+   "parentRigControlId": "rig_bodyz_upper_body"
+  }
+ },
+ {
+  "file": "create-bodyx-topwear-endo.json",
+  "operationId": "op_cp18_create_bodyx_topwear_endo",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp18] warp BodyX Topwear Endo (25x38, domain 484,547 1041x1911) on bare drawable",
+  "payload": {
+   "displayName": "BodyX Topwear Endo",
+   "childDrawableIds": [
+    "draw_r0_1cea4f6f_8b5c54ca_topwear"
+   ],
+   "childRigControlIds": [],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 484,
+    "y": 547,
+    "width": 1041,
+    "height": 1911
+   },
+   "transformColumns": 25,
+   "transformRows": 38,
+   "bezierColumns": 25,
+   "bezierRows": 38,
+   "bezierEditType": "cubicBezierSurfaceV1"
+  }
+ },
+ {
+  "file": "create-bodyz-topwear-endo.json",
+  "operationId": "op_cp18_create_bodyz_topwear_endo",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp18] warp BodyZ Topwear Endo (25x38) adopting rig_bodyx_topwear_endo under rig_bodyz_upper_body",
+  "payload": {
+   "displayName": "BodyZ Topwear Endo",
+   "childDrawableIds": [],
+   "childRigControlIds": [
+    "rig_bodyx_topwear_endo"
+   ],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 484,
+    "y": 547,
+    "width": 1041,
+    "height": 1911
+   },
+   "transformColumns": 25,
+   "transformRows": 38,
+   "bezierColumns": 25,
+   "bezierRows": 38,
+   "bezierEditType": "cubicBezierSurfaceV1",
+   "parentRigControlId": "rig_bodyz_upper_body"
+  }
+ },
+ {
+  "file": "create-bodyx-arm_r-endo.json",
+  "operationId": "op_cp18_create_bodyx_arm_r_endo",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp18] warp BodyX Arm R Endo (8x13, domain 475,642 457x1013) under rig_bodyz_upper_body",
+  "payload": {
+   "displayName": "BodyX Arm R Endo",
+   "childDrawableIds": [
+    "draw_r0_1cea4f6f_8b5c542b_handwear-r"
+   ],
+   "childRigControlIds": [],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 475,
+    "y": 642,
+    "width": 457,
+    "height": 1013
+   },
+   "transformColumns": 8,
+   "transformRows": 13,
+   "bezierColumns": 8,
+   "bezierRows": 13,
+   "bezierEditType": "cubicBezierSurfaceV1",
+   "parentRigControlId": "rig_bodyz_upper_body"
+  }
+ },
+ {
+  "file": "create-bodyx-arm_l-endo.json",
+  "operationId": "op_cp18_create_bodyx_arm_l_endo",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp18] warp BodyX Arm L Endo (8x14, domain 1075,642 454x1013) under rig_bodyz_upper_body",
+  "payload": {
+   "displayName": "BodyX Arm L Endo",
+   "childDrawableIds": [
+    "draw_r0_1cea4f6f_8b5c5408_handwear-l"
+   ],
+   "childRigControlIds": [],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 1075,
+    "y": 642,
+    "width": 454,
+    "height": 1013
+   },
+   "transformColumns": 8,
+   "transformRows": 14,
+   "bezierColumns": 8,
+   "bezierRows": 14,
+   "bezierEditType": "cubicBezierSurfaceV1",
+   "parentRigControlId": "rig_bodyz_upper_body"
+  }
+ }
+]

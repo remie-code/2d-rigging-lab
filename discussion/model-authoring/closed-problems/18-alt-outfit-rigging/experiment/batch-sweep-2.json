@@ -1,0 +1,80 @@
+[
+ {
+  "file": "sweep-s2-hide-rodos-topwear.json",
+  "operationId": "op_cp18_sweep_s2_hide_rodos_topwear",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1585_topwear"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s2: temp hide rodos-topwear"
+ },
+ {
+  "file": "sweep-s2-hide-rodos-handwear_r.json",
+  "operationId": "op_cp18_sweep_s2_hide_rodos_handwear_r",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1647_handwear-r"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s2: temp hide rodos-handwear_r"
+ },
+ {
+  "file": "sweep-s2-hide-rodos-handwear_l.json",
+  "operationId": "op_cp18_sweep_s2_hide_rodos_handwear_l",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1666_handwear-l"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s2: temp hide rodos-handwear_l"
+ },
+ {
+  "file": "sweep-s2-show-endo-topwear.json",
+  "operationId": "op_cp18_sweep_s2_show_endo_topwear",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c54ca_topwear"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s2: temp show endo-topwear"
+ },
+ {
+  "file": "sweep-s2-show-endo-handwear_r.json",
+  "operationId": "op_cp18_sweep_s2_show_endo_handwear_r",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c542b_handwear-r"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s2: temp show endo-handwear_r"
+ },
+ {
+  "file": "sweep-s2-show-endo-handwear_l.json",
+  "operationId": "op_cp18_sweep_s2_show_endo_handwear_l",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c5408_handwear-l"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s2: temp show endo-handwear_l"
+ }
+]

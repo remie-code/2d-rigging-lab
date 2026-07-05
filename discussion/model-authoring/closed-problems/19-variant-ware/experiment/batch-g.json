@@ -1,0 +1,46 @@
+[
+  {
+    "file": "deformer-bottoms-static.json",
+    "operationId": "op_cp19b_deformer_bottoms_static",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Bottoms Static",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_c7ac42f2_legwear",
+        "draw_r0_1cea4f6f_c7ac4230_footwear",
+        "draw_r0_1cea4f6f_c7ac4211_tail",
+        "draw_r0_1cea4f6f_26f93eaa_bottomwear",
+        "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+        "draw_r0_1cea4f6f_8b5c5469_bottomwear"
+      ],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": { "x": 659, "y": 1107, "width": 793, "height": 1869 },
+      "transformColumns": 6,
+      "transformRows": 13,
+      "bezierColumns": 2,
+      "bezierRows": 2,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp19b] createWarpDeformer Bottoms Static (root, keyless, 6 bottoms drawables)"
+  },
+  {
+    "file": "deformer-endomi-back-carrier.json",
+    "operationId": "op_cp19b_deformer_endomi_back_carrier",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Endomi Back Carrier",
+      "parentRigControlId": "rig_bodyz_upper_body",
+      "childDrawableIds": ["draw_r0_1cea4f6f_c7ac42d3_endomi_back"],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": { "x": 713, "y": 556, "width": 669, "height": 1733 },
+      "transformColumns": 5,
+      "transformRows": 12,
+      "bezierColumns": 2,
+      "bezierRows": 2,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp19b] createWarpDeformer Endomi Back Carrier (under rig_bodyz_upper_body, keyless, endomi_back)"
+  }
+]

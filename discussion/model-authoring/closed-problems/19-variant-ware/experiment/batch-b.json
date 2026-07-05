@@ -1,0 +1,37 @@
+[
+ {
+  "file": "create-group.json",
+  "operationId": "op_cp19_create_vgrp_ware",
+  "operationType": "createVariantGroup",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "displayName": "Ware",
+   "mode": "singleSelect",
+   "initialVariantId": "var_default",
+   "initialVariantName": "Default"
+  },
+  "gitMessage": "[cp19] createVariantGroup vgrp_ware (singleSelect, initial=Default)"
+ },
+ {
+  "file": "create-var_rodos.json",
+  "operationId": "op_cp19_create_var_rodos",
+  "operationType": "createVariant",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "variantId": "var_rodos",
+   "displayName": "Rodos"
+  },
+  "gitMessage": "[cp19] createVariant var_rodos (Rodos)"
+ },
+ {
+  "file": "create-var_endoministrator.json",
+  "operationId": "op_cp19_create_var_endoministrator",
+  "operationType": "createVariant",
+  "payload": {
+   "variantGroupId": "vgrp_ware",
+   "variantId": "var_endoministrator",
+   "displayName": "Endoministrator"
+  },
+  "gitMessage": "[cp19] createVariant var_endoministrator (Endoministrator)"
+ }
+]

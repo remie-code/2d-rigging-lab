@@ -1,0 +1,128 @@
+[
+ {
+  "file": "create-mouth_vowel_o.json",
+  "operationId": "op_cp17_create_mouth_vowel_o",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp17] create Mouth Vowel O warp (9x7, domain 962,497 74x68)",
+  "payload": {
+   "displayName": "Mouth Vowel O",
+   "childDrawableIds": [
+    "draw_r463_780c04ef_dc637e24_mouth_a"
+   ],
+   "childRigControlIds": [],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 962,
+    "y": 497,
+    "width": 74,
+    "height": 68
+   },
+   "transformColumns": 9,
+   "transformRows": 7,
+   "bezierColumns": 9,
+   "bezierRows": 7,
+   "bezierEditType": "cubicBezierSurfaceV1"
+  }
+ },
+ {
+  "file": "create-mouth_vowel_e.json",
+  "operationId": "op_cp17_create_mouth_vowel_e",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp17] create Mouth Vowel E warp (9x7, domain 962,497 74x68)",
+  "payload": {
+   "displayName": "Mouth Vowel E",
+   "childDrawableIds": [],
+   "childRigControlIds": [
+    "rig_mouth_vowel_o"
+   ],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 962,
+    "y": 497,
+    "width": 74,
+    "height": 68
+   },
+   "transformColumns": 9,
+   "transformRows": 7,
+   "bezierColumns": 9,
+   "bezierRows": 7,
+   "bezierEditType": "cubicBezierSurfaceV1"
+  }
+ },
+ {
+  "file": "create-mouth_vowel_u.json",
+  "operationId": "op_cp17_create_mouth_vowel_u",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp17] create Mouth Vowel U warp (9x7, domain 962,497 74x68)",
+  "payload": {
+   "displayName": "Mouth Vowel U",
+   "childDrawableIds": [],
+   "childRigControlIds": [
+    "rig_mouth_vowel_e"
+   ],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 962,
+    "y": 497,
+    "width": 74,
+    "height": 68
+   },
+   "transformColumns": 9,
+   "transformRows": 7,
+   "bezierColumns": 9,
+   "bezierRows": 7,
+   "bezierEditType": "cubicBezierSurfaceV1"
+  }
+ },
+ {
+  "file": "create-mouth_vowel_i.json",
+  "operationId": "op_cp17_create_mouth_vowel_i",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp17] create Mouth Vowel I warp (9x7, domain 962,497 74x68)",
+  "payload": {
+   "displayName": "Mouth Vowel I",
+   "childDrawableIds": [],
+   "childRigControlIds": [
+    "rig_mouth_vowel_u"
+   ],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 962,
+    "y": 497,
+    "width": 74,
+    "height": 68
+   },
+   "transformColumns": 9,
+   "transformRows": 7,
+   "bezierColumns": 9,
+   "bezierRows": 7,
+   "bezierEditType": "cubicBezierSurfaceV1"
+  }
+ },
+ {
+  "file": "create-mouth_open.json",
+  "operationId": "op_cp17_create_mouth_open",
+  "operationType": "createWarpDeformer",
+  "gitMessage": "[cp17] create Mouth Open warp (9x7, domain 962,497 74x68) under rig_facex_mouth",
+  "payload": {
+   "displayName": "Mouth Open",
+   "childDrawableIds": [],
+   "childRigControlIds": [
+    "rig_mouth_vowel_i"
+   ],
+   "opacityMultiplier": 1,
+   "domainBounds": {
+    "x": 962,
+    "y": 497,
+    "width": 74,
+    "height": 68
+   },
+   "transformColumns": 9,
+   "transformRows": 7,
+   "bezierColumns": 9,
+   "bezierRows": 7,
+   "bezierEditType": "cubicBezierSurfaceV1",
+   "parentRigControlId": "rig_facex_mouth"
+  }
+ }
+]
