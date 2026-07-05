@@ -76,10 +76,14 @@ export const RuntimeDiffSchema = z.object({
         outputParameterId: ParameterIdSchema.optional(),
         stateChanged: z.boolean(),
         outputChanged: z.boolean(),
-        angleBefore: z.number().finite().optional(),
-        angleAfter: z.number().finite().optional(),
-        angularVelocityBefore: z.number().finite().optional(),
-        angularVelocityAfter: z.number().finite().optional(),
+        // World-frame chain state summary (design §5): particle count, max particle
+        // speed [cm/s], and the tip segment's local angle [deg].
+        particleCountBefore: z.number().int().nonnegative().optional(),
+        particleCountAfter: z.number().int().nonnegative().optional(),
+        maxParticleSpeedBefore: z.number().finite().optional(),
+        maxParticleSpeedAfter: z.number().finite().optional(),
+        tipAngleLocalDegBefore: z.number().finite().optional(),
+        tipAngleLocalDegAfter: z.number().finite().optional(),
         outputOffsetBefore: z.number().finite().optional(),
         outputOffsetAfter: z.number().finite().optional(),
         effectiveOutputValueBefore: z.number().finite().optional(),

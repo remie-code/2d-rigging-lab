@@ -334,32 +334,25 @@ const addDynamicsRequests = (addRequest: AddTutorialRequest): void => {
       {
         parameterId: TUTORIAL_MINI_MODEL_IDS.parameters.faceYaw,
         kind: "angle",
-        influencePercent: 60,
-        invert: false,
-        normalization: { min: -1, center: 0, max: 1 }
+        scale: 30
       },
       {
         parameterId: TUTORIAL_MINI_MODEL_IDS.parameters.bodyBob,
         kind: "positionY",
-        influencePercent: 40,
-        invert: false,
-        normalization: { min: -1, center: 0, max: 1 }
+        scale: 6
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.32,
-        reactionSpeed: 10,
-        convergenceSpeed: 6.8
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: TUTORIAL_MINI_MODEL_IDS.parameters.hairSway,
-        kind: "angle",
-        strength: 1,
-        invert: false,
+        segmentIndex: 1,
+        scale: 0.0333,
         limit: 1
       }
     ]

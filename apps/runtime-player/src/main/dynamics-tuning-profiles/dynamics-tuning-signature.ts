@@ -19,28 +19,31 @@ export function createDynamicsTuningSignatureHash(
           .map((input) => ({
             parameterId: input.parameterId,
             kind: input.kind,
-            influencePercent: input.influencePercent,
-            invert: input.invert,
-            normalization: {
-              min: input.normalization.min,
-              max: input.normalization.max,
-              center: input.normalization.center
-            }
+            scale: input.scale
           }))
           .sort((left, right) =>
             left.parameterId.localeCompare(right.parameterId) ||
             left.kind.localeCompare(right.kind)
           ),
-        pendulumCount: group.pendulums.length,
+        chain: {
+          rootOffset: {
+            x: group.chain.rootOffset.x,
+            y: group.chain.rootOffset.y
+          },
+          segmentLengths: [...group.chain.segmentLengths],
+          damping: group.chain.damping,
+          gravityScale: group.chain.gravityScale
+        },
         outputs: group.outputs
           .map((output) => ({
             parameterId: output.parameterId,
-            kind: output.kind,
-            invert: output.invert
+            segmentIndex: output.segmentIndex,
+            scale: output.scale,
+            limit: output.limit
           }))
           .sort((left, right) =>
             left.parameterId.localeCompare(right.parameterId) ||
-            left.kind.localeCompare(right.kind)
+            left.segmentIndex - right.segmentIndex
           )
       }))
       .sort((left, right) =>

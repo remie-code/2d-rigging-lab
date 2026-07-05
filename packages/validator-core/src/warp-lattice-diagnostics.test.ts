@@ -607,7 +607,7 @@ const createWarpPackage = (overrides: {
       rigControls: overrides.rigControls ?? [createWarpRigControl()]
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v2",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: []
     },
     masks: {

@@ -69,7 +69,7 @@
       {
         "parameterId": "param_hair_sway",
         "valueSource": "computedDynamics",
-        "effectiveValue": 1,
+        "effectiveValue": -0.9990000000000001,
         "source": "dynamicsAdditive"
       }
     ],
@@ -80,16 +80,18 @@
           "param_face_yaw": 1
         },
         "outputParameterId": "param_hair_sway",
-        "outputOffset": 1,
-        "effectiveOutputValue": 1,
-        "angle": 1,
-        "angularVelocity": 0,
+        "outputOffset": -0.9990000000000001,
+        "effectiveOutputValue": -0.9990000000000001,
+        "particleCount": 1,
+        "maxParticleSpeed": 0,
+        "tipAngleLocalDeg": -30,
         "tick": 1,
         "resetCounter": 1,
         "debug": {
-          "rawTarget": 1,
-          "source": 1,
-          "rawOffset": 1,
+          "anchorPhiDeg": 30,
+          "pinX": 0,
+          "pinY": 0,
+          "rawOffset": -0.9990000000000001,
           "outputClamped": false,
           "resetApplied": false,
           "resetReasons": []
@@ -100,10 +102,10 @@
       {
         "keyformSetId": "keyset_hair_sway_vertices",
         "sampledCoordinates": {
-          "param_hair_sway": 1
+          "param_hair_sway": 0
         },
         "target": "mesh:mesh_hair.vertices",
-        "samplingStatus": "exact"
+        "samplingStatus": "clamped-min"
       }
     ],
     "drawable": {
@@ -111,22 +113,22 @@
       "meshId": "mesh_hair",
       "bounds": {
         "x": 0,
-        "y": 0.5,
+        "y": 0,
         "width": 2,
         "height": 2
       },
       "vertices": [
         {
           "x": 0,
-          "y": 0.5
+          "y": 0
         },
         {
           "x": 2,
-          "y": 0.5
+          "y": 0
         },
         {
           "x": 0,
-          "y": 2.5
+          "y": 2
         }
       ]
     },
@@ -142,10 +144,14 @@
     "frameIndex": 1,
     "dynamicsGroups": {
       "dyn_hair_sway": {
-        "angle": 1,
-        "angularVelocity": 0,
-        "previousSource": 1,
-        "previousSourceVelocity": 0,
+        "particles": [
+          {
+            "x": 0,
+            "y": 14,
+            "px": 0,
+            "py": 14
+          }
+        ],
         "tick": 1,
         "resetCounter": 1
       }

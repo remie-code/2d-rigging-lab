@@ -167,12 +167,20 @@ function createDynamicsGroupMap(
         inputs: group.inputs.map((input) => ({
           parameterId: input.parameterId,
           kind: input.kind,
-          influencePercent: input.influencePercent,
-          invert: input.invert,
-          normalization: { ...input.normalization }
+          scale: input.scale
         })),
-        pendulums: group.pendulums.map((pendulum) => ({ ...pendulum })),
-        outputs: group.outputs.map((output) => ({ ...output }))
+        chain: {
+          rootOffset: { ...group.chain.rootOffset },
+          segmentLengths: [...group.chain.segmentLengths],
+          damping: group.chain.damping,
+          gravityScale: group.chain.gravityScale
+        },
+        outputs: group.outputs.map((output) => ({
+          parameterId: output.parameterId,
+          segmentIndex: output.segmentIndex,
+          scale: output.scale,
+          limit: output.limit
+        }))
       }
     ])
   );

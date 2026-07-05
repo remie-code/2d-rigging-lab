@@ -1,0 +1,44 @@
+[
+  {
+    "file": "dyn-fix2-hair_front_sway_x.json",
+    "operationId": "op_cp16fix2_dyn_hair_front_sway_x",
+    "operationType": "updateDynamicsGroup",
+    "gitMessage": "[cp16-fix2] dynamics dyn_hair_front_sway_x: fixed line 540->454 follow-up — segmentLengths [11.8], FaceZ posX 0.046, BodyZ posX 0.39 (FaceX/BodyX/damping/outputs unchanged)",
+    "payload": {
+      "dynamicsGroupId": "dyn_hair_front_sway_x",
+      "inputs": [
+        {
+          "parameterId": "param_face_angle_x",
+          "kind": "positionX",
+          "scale": 0.031
+        },
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": 0.056
+        },
+        {
+          "parameterId": "param_face_angle_z",
+          "kind": "positionX",
+          "scale": 0.046
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.39
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "segmentLengths": [
+          11.8
+        ],
+        "damping": 2.5,
+        "gravityScale": 1
+      }
+    }
+  }
+]

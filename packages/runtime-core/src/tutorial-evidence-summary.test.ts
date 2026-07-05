@@ -359,29 +359,20 @@ const createTutorialGraph = (input: { readonly editedFaceMesh: boolean }): Norma
             {
               parameterId: paramHeadYaw,
               kind: "angle",
-              influencePercent: 35,
-              invert: false,
-              normalization: {
-                min: -1,
-                center: 0,
-                max: 1
-              }
+              scale: 1
             }
           ],
-          pendulums: [
-            {
-              length: 1,
-              sway: 0.35,
-              reactionSpeed: 8,
-              convergenceSpeed: 4
-            }
-          ],
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [1],
+            damping: 2.5,
+            gravityScale: 1
+          },
           outputs: [
             {
               parameterId: paramHairSway,
-              kind: "angle",
-              strength: 1,
-              invert: false,
+              segmentIndex: 1,
+              scale: 1,
               limit: 1
             }
           ]

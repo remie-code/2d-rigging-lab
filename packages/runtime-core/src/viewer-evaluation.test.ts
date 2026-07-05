@@ -110,9 +110,11 @@ describe("viewer runtime evaluation", () => {
         outputParameterId: fixture.hairSwayParameterId,
         outputOffset: 1,
         effectiveOutputValue: 1,
+        solverKind: "worldFrameChainV1",
         stateSummary: expect.objectContaining({
-          angle: 1,
-          angularVelocity: 0
+          particleCount: 1,
+          maxParticleSpeed: 0,
+          tipAngleLocalDeg: 45
         })
       })
     ]);
@@ -248,29 +250,20 @@ const createViewerEvaluationFixture = (
                   {
                     parameterId: runtimeDriverParameterId,
                     kind: "angle",
-                    influencePercent: 100,
-                    invert: false,
-                    normalization: {
-                      min: -1,
-                      center: 0,
-                      max: 1
-                    }
+                    scale: -45
                   }
                 ],
-                pendulums: [
-                  {
-                    length: 1,
-                    sway: 0.35,
-                    reactionSpeed: 8,
-                    convergenceSpeed: 4
-                  }
-                ],
+                chain: {
+                  rootOffset: { x: 0, y: 0 },
+                  segmentLengths: [1],
+                  damping: 2.5,
+                  gravityScale: 1
+                },
                 outputs: [
                   {
                     parameterId: hairSwayParameterId,
-                    kind: "angle",
-                    strength: 1,
-                    invert: false,
+                    segmentIndex: 1,
+                    scale: 1,
                     limit: 1
                   }
                 ]

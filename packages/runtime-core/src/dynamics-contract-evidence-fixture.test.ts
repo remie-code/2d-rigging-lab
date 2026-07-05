@@ -166,8 +166,9 @@ const summarizeSnapshot = (snapshot: RuntimeSnapshotDto) => ({
     outputParameterId: dynamics.outputParameterId,
     outputOffset: dynamics.outputOffset,
     effectiveOutputValue: dynamics.effectiveOutputValue,
-    angle: dynamics.stateSummary.angle,
-    angularVelocity: dynamics.stateSummary.angularVelocity,
+    particleCount: dynamics.stateSummary.particleCount,
+    maxParticleSpeed: dynamics.stateSummary.maxParticleSpeed,
+    tipAngleLocalDeg: dynamics.stateSummary.tipAngleLocalDeg,
     tick: dynamics.tick,
     resetCounter: dynamics.resetCounter,
     debug: dynamics.debug
@@ -284,16 +285,18 @@ const createRuntimeDynamicsGroup = (payload: any): NormalizedDynamicsGroup => ({
   inputs: payload.inputs.map((input: any) => ({
     parameterId: ParameterIdSchema.parse(input.parameterId),
     kind: input.kind,
-    influencePercent: input.influencePercent,
-    invert: input.invert,
-    normalization: input.normalization
+    scale: input.scale
   })),
-  pendulums: payload.pendulums,
+  chain: {
+    rootOffset: payload.chain.rootOffset ?? { x: 0, y: 0 },
+    segmentLengths: payload.chain.segmentLengths,
+    damping: payload.chain.damping,
+    gravityScale: payload.chain.gravityScale
+  },
   outputs: payload.outputs.map((output: any) => ({
     parameterId: ParameterIdSchema.parse(output.parameterId),
-    kind: output.kind,
-    strength: output.strength,
-    invert: output.invert,
+    segmentIndex: output.segmentIndex ?? 1,
+    scale: output.scale,
     limit: output.limit
   }))
 });

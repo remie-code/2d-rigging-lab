@@ -34,9 +34,12 @@
 | [14-bodyz-rotation/](14-bodyz-rotation/) | BodyZ 回転コア（腰から上を傾ける） | **通過・100点（2026-07-04、一発・3 op）**。[results.md](14-bodyz-rotation/results.md)。獲得 = **rotation2d 入れ子**（合成は Runtime、設計者負担ゼロ）+ 空メッシュの罠 + 差分画素の局在化手続き |
 | [15-bodyz-corrections/](15-bodyz-corrections/) | BodyZ 補正ワープ7基 = BodyZ 完結 | **通過（2026-07-04、一発・「完璧だ」）**。[results.md](15-bodyz-corrections/results.md)。獲得 = **固定線テンプレの統一**（7基が同一文、固定線実測3型）+ 回転内差分の厳密形デフォルト化 + 設計ログの世代間記憶の回収実績。**BodyZ 完結 = X・Y・Z・BodyX・BodyZ の5パラメータ制覇** |
 
+| [16-hair-sway/](16-hair-sway/) | 髪揺れ（Hair Sway X 3系統 = 揺れモード場 + dynamics v3 初運用） | **Problem defined（2026-07-05）**。前提 = wave106 の dynamics 世界系チェーン置換（ユーザー実機確認済み）。ゲイン=1 世界線 / 左右1パラメータ / 長さ別3分割（周期√則の配当）。[problem-definition.md](16-hair-sway/problem-definition.md) |
+| 17-tie-sway（未作成） | ネクタイ揺れ（Accessory Sway X、Body 入力のみ、結び目固定線の変奏） | 候補。cp16 の後 |
+
 ## 次の行動
 
-1. 次戦線の問題定義（候補: 口の開閉 / 表情差分 / 尻尾（新素材）/ 呼吸等。ユーザーの実工程順に従う）
+1. cp16 の A 調査（dynamics op の CLI 実運用形 / Sway プリセット / 塔挿入点 / px→cm スケール / input scale 実測材料）→ 実験
 2. 期限考慮: Fable 使用可能は 2026-07-07 まで（ユーザー通告）——残り時間の配分はユーザーと相談
 
 ## FaceY フェーズ蒸留（2026-07-04 完了）

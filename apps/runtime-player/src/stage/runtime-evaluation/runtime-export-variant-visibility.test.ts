@@ -183,7 +183,7 @@ function createModel(input: {
     rigControls: [],
     keyforms: [],
     dynamicsSolver: {
-      solverVersion: "runtime-dynamics-pendulum-v1",
+      solverVersion: "runtime-dynamics-chain-v1",
       fixedStepMs: 1000 / 60,
       resetPolicy: "reset-to-default-parameters-v1"
     },
@@ -202,7 +202,7 @@ function createModel(input: {
         maskChannels: "alpha-v1"
       },
       dynamics: {
-        solverVersion: "runtime-dynamics-pendulum-v1",
+        solverVersion: "runtime-dynamics-chain-v1",
         fixedStepMs: 1000 / 60,
         resetPolicy: "reset-to-default-parameters-v1"
       }

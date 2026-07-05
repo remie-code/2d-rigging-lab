@@ -24,7 +24,8 @@ describe("authoring-core dependency boundary", () => {
       "runtime-graph-rig-controls.ts",
       "runtime-graph-keyforms.ts",
       "to-runtime-graph.ts",
-      "runtime-graph-adapter.test.ts"
+      "runtime-graph-adapter.test.ts",
+      "portable-project-bundle.test.ts"
     ]);
     const runtimeOffenders = sourceFiles.filter((filePath) => {
       if (!runtimeImportPattern.test(readFileSync(filePath, "utf8"))) {

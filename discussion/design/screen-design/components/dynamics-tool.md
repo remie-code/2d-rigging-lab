@@ -151,6 +151,15 @@ source(t) =
 
 ### 3.2 Pendulum
 
+> **Superseded by [design/dynamics-world-frame-chain.md](../../dynamics-world-frame-chain.md)（dynamics-file-v3）**。
+> v0 の Pendulum（length / sway / reactionSpeed / convergenceSpeed の 4 ノブ）と入力正規化
+> （min/center/max・influencePercent・invert）は破棄され、以下へ置換された:
+> - **入力**: `{ kind, scale }`（rest 基準は常にパラメータ default、重み・反転は scale の符号と大きさへ一本化）
+> - **チェーン**: `{ rootOffset, segmentLengths[], damping, gravityScale }`（世界系 Verlet 質点チェーン、グループに 1 本・N≥1 段）
+> - **出力**: `{ segmentIndex, scale, limit }`（頭フレームから見た振り子角 θ_local = θ_world − φ を読む。§3.5）
+> - **実行時状態**: `{ particles:[{x,y,px,py}], tick, resetCounter }`（旧 angle/angularVelocity/previousSource* は消滅）
+> 以下 §3.2 の pendulum 記述は歴史的経緯として残す。
+
 v0では1つの仮想振り子を持つ。
 
 ```text
@@ -434,7 +443,20 @@ Preview Areaに表示しないもの:
 
 Quick Tuneは、Previewを見ながら頻繁に触る係数だけをExisting Group Inspectorに出す簡易調整UIである。
 
-Quick Tuneに出す項目:
+> **Superseded by [design/dynamics-world-frame-chain.md](../../dynamics-world-frame-chain.md) §9（player v2 語彙）**。
+> Quick Tune の項目は runtime-player チューニングプロファイル v2 の語彙へ揃えた（下表 v0 は破棄）:
+>
+> | Control | 種別 | 適用先 |
+> |---|---|---|
+> | Output x（`outputScale`）| 乗数 | 出力 `scale` への倍率 |
+> | Limit（`limit`）| 直接値 | 出力オフセット絶対値の上限 |
+> | Damping（`damping`）| 直接値 | チェーン減衰 [1/s] |
+> | Gravity（`gravityScale`）| 直接値 | 重力倍率 |
+> | Length x（`lengthScale`）| 乗数 | 全 `segmentLengths` への倍率（周期の微調整）|
+>
+> 倍率フィールドは committed base に対する係数（既定 1.0）、直接値は group.chain / output の値をそのまま編集する。
+
+Quick Tuneに出す項目（v0。上記 v3 で置換済み）:
 
 | Control | Source field | 意味 | 優先度 |
 |---|---|---|---|
@@ -749,6 +771,14 @@ Viewerで扱わないもの:
 
 ## 9. Cubism風UI項目との対応
 
+> **Superseded by [design/dynamics-world-frame-chain.md](../../dynamics-world-frame-chain.md)（dynamics-file-v3）**。
+> v3 での主な差分:
+> - **Cardinality**: pendulum は「チェーン 1 本・セグメント N≥1」へ、output は複数解禁（segmentIndex で紐付け）。
+> - **入力 rows**: 影響度/反転/正規化は撤去し `kind + scale`（deg/unit または cm/unit、符号で反転）。
+> - **物理ノブ**: 長さ/揺れやすさ/反応速度/収束の速さ → `segmentLengths[] / damping / gravityScale`。
+> - **出力設定**: kind/strength/invert は撤去し `segmentIndex + scale + limit`。
+> - **Quick Tune**: §5.2.2 の player v2 語彙（Output x / Limit / Damping / Gravity / Length x）。
+
 参考画像にあるCubism風項目を、このEditorでどう扱うか:
 
 | Cubism風項目 | v0方針 | 理由 |
@@ -806,6 +836,13 @@ Warning:
 - Viewer / Runtime Controls上でDynamics-owned output parameterが直接編集可能に見えている。v0ではread-only / derived表示にする。
 
 ## 12. 確定事項と残る設計余地
+
+> **Superseded by [design/dynamics-world-frame-chain.md](../../dynamics-world-frame-chain.md)（dynamics-file-v3）**。
+> 以下の確定事項のうち、pendulum ノブ・output kind/strength/invert・input normalization に関する項目は v3 で失効:
+> - validation の改廃は v3 §7 が正（新設 `chainSegmentsInvalid` / `outputSegmentIndexOutOfRange` / `zeroInputScale` / `outputScaleZero`、改定 `unstableSettings`、廃止 `normalizationInvalid` / cardinality / `outputStrengthZero` / `inputInfluenceZero`）。
+> - Quick Tune の語彙は v3 §9（player v2）。
+> - output kind は撤去（出力は `segmentIndex + scale + limit`）。normalization は撤去（入力は `kind + scale`）。
+> time progression / reset simulation / preview を進める UX 方針は v3 でも維持。
 
 確定事項:
 

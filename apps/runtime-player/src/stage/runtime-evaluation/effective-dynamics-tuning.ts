@@ -48,24 +48,28 @@ function applyDynamicsTuningToGroup(
     return cloneDynamicsGroup(group);
   }
 
+  // dynamics-world-frame-chain.md §9 tuning profile v2 semantics.
+  // "Scale"-suffixed knobs (outputScale, lengthScale) are multipliers on the
+  // exported values; the rest (limit, damping, gravityScale, enabled) replace.
+  const lengthScale = override.lengthScale ?? 1;
+  const outputScale = override.outputScale ?? 1;
+
   return {
     ...group,
     enabled: override.enabled ?? group.enabled,
-    inputs: group.inputs.map((input) => ({
-      ...input,
-      normalization: { ...input.normalization }
-    })),
-    pendulums: group.pendulums.map((pendulum) => ({
-      ...pendulum,
-      length: override.length ?? pendulum.length,
-      sway: override.sway ?? pendulum.sway,
-      reactionSpeed: override.reactionSpeed ?? pendulum.reactionSpeed,
-      convergenceSpeed:
-        override.convergenceSpeed ?? pendulum.convergenceSpeed
-    })),
+    inputs: group.inputs.map((input) => ({ ...input })),
+    chain: {
+      ...group.chain,
+      rootOffset: { ...group.chain.rootOffset },
+      segmentLengths: group.chain.segmentLengths.map(
+        (segmentLength) => segmentLength * lengthScale
+      ),
+      damping: override.damping ?? group.chain.damping,
+      gravityScale: override.gravityScale ?? group.chain.gravityScale
+    },
     outputs: group.outputs.map((output) => ({
       ...output,
-      strength: override.strength ?? output.strength,
+      scale: output.scale * outputScale,
       limit: override.limit ?? output.limit
     }))
   };
@@ -76,11 +80,12 @@ function cloneDynamicsGroup(
 ): RuntimeExportDynamicsGroupDto {
   return {
     ...group,
-    inputs: group.inputs.map((input) => ({
-      ...input,
-      normalization: { ...input.normalization }
-    })),
-    pendulums: group.pendulums.map((pendulum) => ({ ...pendulum })),
+    inputs: group.inputs.map((input) => ({ ...input })),
+    chain: {
+      ...group.chain,
+      rootOffset: { ...group.chain.rootOffset },
+      segmentLengths: [...group.chain.segmentLengths]
+    },
     outputs: group.outputs.map((output) => ({ ...output }))
   };
 }

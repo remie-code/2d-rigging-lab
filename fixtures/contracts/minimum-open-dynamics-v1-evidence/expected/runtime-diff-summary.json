@@ -8,7 +8,7 @@
       {
         "path": "/parameters/param_hair_sway/effectiveValue",
         "before": 0,
-        "after": 1
+        "after": -0.9990000000000001
       }
     ],
     "dynamicsChanges": [
@@ -17,15 +17,16 @@
         "outputParameterId": "param_hair_sway",
         "stateChanged": true,
         "outputChanged": true,
-        "angleAfter": 1,
-        "angularVelocityAfter": 0,
-        "outputOffsetAfter": 1,
-        "effectiveOutputValueAfter": 1,
+        "particleCountAfter": 1,
+        "maxParticleSpeedAfter": 0,
+        "tipAngleLocalDegAfter": -30,
+        "outputOffsetAfter": -0.9990000000000001,
+        "effectiveOutputValueAfter": -0.9990000000000001,
         "tickAfter": 1,
         "resetCounterAfter": 1
       }
     ],
-    "drawableChangeCount": 1,
+    "drawableChangeCount": 0,
     "diagnosticDeltaCount": 0
   }
 }

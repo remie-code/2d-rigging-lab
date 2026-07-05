@@ -39,8 +39,9 @@ import { applyKeyformTargetPatches } from "./keyform-target-application.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { sampleRuntimeKeyforms } from "./keyform-sampling.js";
 import {
-  computeDynamicsOutputOffsets,
-  computeDynamicsSourceSample
+  computeDynamicsOutputOffsetsWithAnchor,
+  computeDynamicsSourceSample,
+  createResetDynamicsState
 } from "./dynamics-evaluation.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
@@ -119,24 +120,27 @@ export type EvaluatedDrawableDto = z.infer<typeof EvaluatedDrawableSchema>;
 export const EvaluatedDynamicsGroupSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   enabled: z.boolean(),
-  solverKind: z.literal("additivePendulumV0"),
+  solverKind: z.literal("worldFrameChainV1"),
   inputValues: z.record(ParameterIdSchema, z.number().finite()),
   outputParameterId: ParameterIdSchema,
   outputOffset: z.number().finite(),
   effectiveOutputValue: z.number().finite(),
+  // World-frame chain state summary (design §5): particle count, max particle speed [cm/s], and the
+  // tip segment's local angle [deg].
   stateSummary: z.object({
-    angle: z.number().finite(),
-    angularVelocity: z.number().finite(),
-    previousSource: z.number().finite(),
-    previousSourceVelocity: z.number().finite()
+    particleCount: z.number().int().nonnegative(),
+    maxParticleSpeed: z.number().finite(),
+    tipAngleLocalDeg: z.number().finite()
   }),
   tick: z.number().int().nonnegative(),
   fixedStepMs: z.number().positive(),
   resetCounter: z.number().int().nonnegative(),
   debug: z
     .object({
-      rawTarget: z.number().finite().optional(),
-      source: z.number().finite().optional(),
+      // World-frame anchor pose (§3.2): head-frame rotation [deg] and kinematic pin position [cm].
+      anchorPhiDeg: z.number().finite().optional(),
+      pinX: z.number().finite().optional(),
+      pinY: z.number().finite().optional(),
       rawOffset: z.number().finite().optional(),
       outputClamped: z.boolean().optional(),
       resetApplied: z.boolean().optional(),
@@ -481,34 +485,34 @@ const createEvaluatedDynamics = (
     .map((group) => {
       const groupState = state.dynamicsGroups[group.dynamicsGroupId];
       const source = computeDynamicsSourceSample(graph, group, input.authoredParameterValues);
-      const resetState = {
-        angle: source.source,
-        angularVelocity: 0,
-        previousSource: source.source,
-        previousSourceVelocity: 0,
-        tick: 0,
-        resetCounter: 0
-      };
-      const stateSummary = groupState ?? resetState;
+      const stateSummary =
+        groupState ?? createResetDynamicsState(group, source.anchor, 0, false);
       const output = group.outputs[0];
-      const outputOffset = computeDynamicsOutputOffsets(group, stateSummary)[0];
+      const outputOffsets = computeDynamicsOutputOffsetsWithAnchor(group, stateSummary, source.anchor);
+      const outputOffset = outputOffsets[0];
       const evaluatedOutputParameter = output === undefined
         ? undefined
         : parameterResolution.values.find((parameter) => parameter.parameterId === output.parameterId);
 
+      const dtSeconds = state.fixedStepMs / 1000;
+      const maxParticleSpeed = stateSummary.particles.reduce((maxSpeed, particle) => {
+        const speed = Math.hypot(particle.x - particle.px, particle.y - particle.py) / dtSeconds;
+        return Math.max(maxSpeed, speed);
+      }, 0);
+      const tipOffset = outputOffsets[outputOffsets.length - 1];
+
       return EvaluatedDynamicsGroupSchema.parse({
         dynamicsGroupId: group.dynamicsGroupId,
         enabled: group.enabled,
-        solverKind: "additivePendulumV0",
+        solverKind: "worldFrameChainV1",
         inputValues: source.inputValues,
         outputParameterId: outputOffset?.outputParameterId ?? output?.parameterId,
         outputOffset: outputOffset?.offset ?? 0,
         effectiveOutputValue: evaluatedOutputParameter?.effectiveValue ?? 0,
         stateSummary: {
-          angle: stateSummary.angle,
-          angularVelocity: stateSummary.angularVelocity,
-          previousSource: stateSummary.previousSource,
-          previousSourceVelocity: stateSummary.previousSourceVelocity
+          particleCount: stateSummary.particles.length,
+          maxParticleSpeed,
+          tipAngleLocalDeg: tipOffset?.thetaLocalDeg ?? 0
         },
         tick: stateSummary.tick,
         fixedStepMs: state.fixedStepMs,
@@ -517,8 +521,9 @@ const createEvaluatedDynamics = (
           ? {}
           : {
               debug: {
-                rawTarget: source.rawSource,
-                source: source.source,
+                anchorPhiDeg: source.anchor.phiDeg,
+                pinX: source.anchor.pin.x,
+                pinY: source.anchor.pin.y,
                 rawOffset: outputOffset?.rawOffset ?? 0,
                 outputClamped: outputOffset?.outputClamped ?? false,
                 resetApplied: input.resetReasons.length > 0,

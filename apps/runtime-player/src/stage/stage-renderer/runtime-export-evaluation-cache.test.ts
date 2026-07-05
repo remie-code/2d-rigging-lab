@@ -315,15 +315,15 @@ describe("Runtime Export evaluation cache", () => {
     const cache = new RuntimeExportEvaluationCache();
     const firstTuning = createEffectiveDynamicsTuning({
       revision: 1,
-      strength: 0.25
+      outputScale: 0.25
     });
     const sameRevisionTuning = createEffectiveDynamicsTuning({
       revision: 1,
-      strength: 0.25
+      outputScale: 0.25
     });
     const nextRevisionTuning = createEffectiveDynamicsTuning({
       revision: 2,
-      strength: 0.75
+      outputScale: 0.75
     });
 
     const firstFrame = createEvaluatedRuntimeExportStageRenderInput(payload, {
@@ -352,8 +352,8 @@ describe("Runtime Export evaluation cache", () => {
     expect(
       nextRevisionFrame.poseEvaluation.adapter.graph.dynamicsGroups.get(
         dynamicsGroupId("dyn_hair_sway")
-      )?.outputs[0]?.strength
-    ).toBe(0.75);
+      )?.outputs[0]?.scale
+    ).toBeCloseTo(0.375, 10);
     expect(cache.size).toBe(2);
     expect(createRuntimeExportEvaluationCacheKey({
       payload,
@@ -701,7 +701,7 @@ function createRuntimeExportPayload(input: {
           "materialized-atlas-uvs-v1",
           "transparent-background-v1",
           "alpha-mask-clipping-v1",
-          "dynamics-pendulum-solver-v1"
+          "dynamics-chain-solver-v1"
         ],
         renderAssumptions
       },
@@ -734,7 +734,7 @@ function createRuntimeExportPayload(input: {
         "materialized-atlas-uvs-v1",
         "transparent-background-v1",
         "alpha-mask-clipping-v1",
-        "dynamics-pendulum-solver-v1"
+        "dynamics-chain-solver-v1"
       ]
     },
     loadedAtIso: input.loadedAtIso ?? "2026-06-22T00:00:00.000Z"
@@ -918,29 +918,20 @@ function createDynamicsGroup(): RuntimeExportDynamicsGroupDto {
       {
         parameterId: "param_face_angle_x",
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -1,
-          center: 0,
-          max: 1
-        }
+        scale: 1
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 1,
-        reactionSpeed: 1,
-        convergenceSpeed: 1
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: "param_hair_sway",
-        kind: "angle",
-        strength: 0.5,
-        invert: false,
+        segmentIndex: 1,
+        scale: 0.5,
         limit: 1
       }
     ]
@@ -999,7 +990,7 @@ function createVariants(): RuntimeExportModelDto["variants"] {
 
 function createEffectiveDynamicsTuning(input: {
   readonly revision: number;
-  readonly strength: number;
+  readonly outputScale: number;
 }): RuntimePlayerEffectiveDynamicsTuningProfile {
   return {
     schemaVersion: "runtime-player-effective-dynamics-tuning-v1",
@@ -1015,7 +1006,7 @@ function createEffectiveDynamicsTuning(input: {
     dynamicsSignatureHash: "sha256:dynamics",
     groups: {
       dyn_hair_sway: {
-        strength: input.strength
+        outputScale: input.outputScale
       }
     }
   };
@@ -1142,7 +1133,7 @@ function createRenderAssumptions() {
       maskChannels: "alpha-v1"
     },
     dynamics: {
-      solverVersion: "runtime-dynamics-pendulum-v1",
+      solverVersion: "runtime-dynamics-chain-v1",
       fixedStepMs: 1000 / 60,
       resetPolicy: "reset-to-default-parameters-v1"
     }

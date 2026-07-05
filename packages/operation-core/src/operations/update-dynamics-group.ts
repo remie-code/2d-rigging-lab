@@ -73,7 +73,7 @@ const applyUpdateDynamicsGroup = (
       ...(request.payload.enabled === undefined ? {} : { enabled: request.payload.enabled }),
       ...(request.payload.presetId === undefined ? {} : { presetId: request.payload.presetId }),
       ...(request.payload.inputs === undefined ? {} : { inputs: request.payload.inputs }),
-      ...(request.payload.pendulums === undefined ? {} : { pendulums: request.payload.pendulums }),
+      ...(request.payload.chain === undefined ? {} : { chain: request.payload.chain }),
       ...(request.payload.outputs === undefined ? {} : { outputs: request.payload.outputs })
     });
     const result = createUpdateDynamicsGroupResult({

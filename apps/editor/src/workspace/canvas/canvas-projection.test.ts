@@ -589,34 +589,31 @@ describe("canvas render projection", () => {
         {
           parameterId: FACE_ANGLE_X,
           kind: "angle",
-          influencePercent: 100,
-          invert: false,
-          normalization: {
-            min: -30,
-            center: 0,
-            max: 30
-          }
-        }
+        scale: 1}
       ],
-      pendulums: [
-        {
-          length: 0.8,
-          sway: 0.7,
-          reactionSpeed: 12,
-          convergenceSpeed: 4
-        }
-      ],
+      chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
       outputs: [
         {
           parameterId: DYNAMICS_OUTPUT,
-          kind: "angle",
-          strength: 10,
-          invert: false,
+          segmentIndex: 1,
+          scale: 1,
           limit: 20
         }
       ]
     });
 
+    // §3.2 φ = 30° (FACE_ANGLE_X 30, scale 1), rootOffset (0,0) → pin at origin. Place the single
+    // particle at θ_world = 35° so θ_local = θ_world − φ = 5°; output scale 1 → offset = 5.
+    const worldAngleRad = (35 * Math.PI) / 180;
+    const tip = {
+      x: 14 * Math.sin(worldAngleRad),
+      y: 14 * Math.cos(worldAngleRad)
+    };
     const dynamicsEvaluation = createDynamicsToolPreviewEvaluation(session, {
       selectedGroupId: DYNAMICS_GROUP,
       driverValuesByGroupId: {
@@ -626,10 +623,7 @@ describe("canvas render projection", () => {
       },
       simulationStatesByGroupId: {
         [DYNAMICS_GROUP]: {
-          angle: 0.5,
-          angularVelocity: 0,
-          previousSource: 0,
-          previousSourceVelocity: 0,
+          particles: [{ x: tip.x, y: tip.y, px: tip.x, py: tip.y }],
           tick: 1,
           resetCounter: 1
         }
@@ -648,15 +642,13 @@ describe("canvas render projection", () => {
       }
     );
 
-    expect(dynamicsEvaluation.output).toMatchObject({
-      baseValue: 0,
-      offset: 5,
-      effectiveValue: 5
-    });
-    expect(projection.deformerOverlay).toMatchObject({
-      kind: "rotation",
-      evaluatedAngleDegrees: 5
-    });
+    expect(dynamicsEvaluation.output?.baseValue).toBe(0);
+    expect(dynamicsEvaluation.output?.offset ?? 0).toBeCloseTo(5, 6);
+    expect(dynamicsEvaluation.output?.effectiveValue ?? 0).toBeCloseTo(5, 6);
+    expect(projection.deformerOverlay?.kind).toBe("rotation");
+    expect(
+      (projection.deformerOverlay as { readonly evaluatedAngleDegrees: number }).evaluatedAngleDegrees
+    ).toBeCloseTo(5, 6);
   });
 
   it("projects Rotation preview into overlay and evaluated drawable geometry", () => {

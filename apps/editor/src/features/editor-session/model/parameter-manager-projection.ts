@@ -233,7 +233,7 @@ function createUsageIndex(
       addUsage(output.parameterId, {
         targetLabel: `Dynamics: ${group.displayName}`,
         propertyLabel: "output target parameter",
-        detailLabel: `Output ${index + 1} / ${output.kind}`
+        detailLabel: `Output ${index + 1} / segment ${output.segmentIndex}`
       });
     });
   });

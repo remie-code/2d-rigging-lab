@@ -25,7 +25,7 @@
     "runtimeSnapshotId": "snap_minimum_open_dynamics_v1_evidence_1",
     "computedOutput": {
       "parameterId": "param_hair_sway",
-      "value": 1,
+      "value": -0.9990000000000001,
       "source": "dynamicsAdditive"
     },
     "projectedDrawable": {
@@ -33,7 +33,7 @@
       "meshId": "mesh_hair",
       "bounds": {
         "x": 0,
-        "y": 0.5,
+        "y": 0,
         "width": 2,
         "height": 2
       },

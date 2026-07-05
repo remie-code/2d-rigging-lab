@@ -150,25 +150,19 @@ function createToolboxWarningSession() {
       {
         parameterId: missingDriverId,
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: { min: -30, center: 0, max: 30 }
-      }
+        scale: 1}
     ],
-    pendulums: [
-      {
-        length: 0.8,
-        sway: 0.7,
-        reactionSpeed: 12,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: missingOutputId,
-        kind: "angle",
-        strength: 10,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 15
       }
     ]

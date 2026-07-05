@@ -109,7 +109,7 @@ export function createDynamicsTuningGroupStatuses(input: {
       outputSummary: group.outputs.map((output) =>
         createParameterRef({
           parameterId: output.parameterId,
-          kind: output.kind,
+          kind: `segment ${output.segmentIndex}`,
           parameterDisplayNames
         })
       ),
@@ -160,19 +160,22 @@ export function sanitizeGroupOverrides(
 export function sanitizeGroupOverride(
   override: RuntimePlayerDynamicsTuningGroupOverride
 ): RuntimePlayerDynamicsTuningGroupOverride {
+  // dynamics-world-frame-chain.md §9. "Scale"-suffixed knobs are multipliers
+  // (positive-only; 0 or negative is meaningless), the rest are replacements.
   return {
     ...(override.enabled === undefined ? {} : { enabled: override.enabled }),
-    ...(isFiniteNumber(override.strength)
-      ? { strength: override.strength }
+    ...(isPositiveNumber(override.outputScale)
+      ? { outputScale: override.outputScale }
       : {}),
     ...(isNonNegativeNumber(override.limit) ? { limit: override.limit } : {}),
-    ...(isPositiveNumber(override.length) ? { length: override.length } : {}),
-    ...(isNonNegativeNumber(override.sway) ? { sway: override.sway } : {}),
-    ...(isNonNegativeNumber(override.reactionSpeed)
-      ? { reactionSpeed: override.reactionSpeed }
+    ...(isNonNegativeNumber(override.damping)
+      ? { damping: override.damping }
       : {}),
-    ...(isNonNegativeNumber(override.convergenceSpeed)
-      ? { convergenceSpeed: override.convergenceSpeed }
+    ...(isNonNegativeNumber(override.gravityScale)
+      ? { gravityScale: override.gravityScale }
+      : {}),
+    ...(isPositiveNumber(override.lengthScale)
+      ? { lengthScale: override.lengthScale }
       : {})
   };
 }
@@ -181,28 +184,17 @@ function createExportedValues(
   group: RuntimeExportLoadedPayload["artifacts"]["model"]["dynamicsGroups"][number]
 ): RuntimePlayerDynamicsTuningValues {
   const output = group.outputs[0];
-  const pendulum = group.pendulums[0];
 
-  if (output === undefined || pendulum === undefined) {
-    return {
-      enabled: group.enabled,
-      strength: 0,
-      limit: 0,
-      length: 1,
-      sway: 0,
-      reactionSpeed: 0,
-      convergenceSpeed: 0
-    };
-  }
-
+  // Multiplier knobs (outputScale, lengthScale) have identity 1.0 as their
+  // display baseline; replacement knobs read the actual exported chain/output
+  // values. dynamics-world-frame-chain.md §9.
   return {
     enabled: group.enabled,
-    strength: output.strength,
-    limit: output.limit,
-    length: pendulum.length,
-    sway: pendulum.sway,
-    reactionSpeed: pendulum.reactionSpeed,
-    convergenceSpeed: pendulum.convergenceSpeed
+    outputScale: 1,
+    limit: output === undefined ? 0 : output.limit,
+    damping: group.chain.damping,
+    gravityScale: group.chain.gravityScale,
+    lengthScale: 1
   };
 }
 
@@ -216,13 +208,11 @@ function applyGroupOverride(
 
   return {
     enabled: override.enabled ?? exportedValues.enabled,
-    strength: override.strength ?? exportedValues.strength,
+    outputScale: override.outputScale ?? exportedValues.outputScale,
     limit: override.limit ?? exportedValues.limit,
-    length: override.length ?? exportedValues.length,
-    sway: override.sway ?? exportedValues.sway,
-    reactionSpeed: override.reactionSpeed ?? exportedValues.reactionSpeed,
-    convergenceSpeed:
-      override.convergenceSpeed ?? exportedValues.convergenceSpeed
+    damping: override.damping ?? exportedValues.damping,
+    gravityScale: override.gravityScale ?? exportedValues.gravityScale,
+    lengthScale: override.lengthScale ?? exportedValues.lengthScale
   };
 }
 

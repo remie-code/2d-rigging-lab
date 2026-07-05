@@ -46,8 +46,8 @@ describe("RuntimePlayerDynamicsTuningState", () => {
         identity: oldIdentity,
         groups: {
           dyn_hair_sway: {
-            strength: 0.25,
-            length: 2
+            outputScale: 1.25,
+            lengthScale: 2
           }
         },
         createdAtIso: "2026-06-30T00:00:00.000Z",
@@ -63,8 +63,8 @@ describe("RuntimePlayerDynamicsTuningState", () => {
     );
     expect(status.groups[0]?.override).toBeNull();
     expect(status.groups[0]?.effectiveValues).toMatchObject({
-      strength: 1,
-      length: 1
+      outputScale: 1,
+      lengthScale: 1
     });
     expect(state.getEffectiveProfile()?.groups).toEqual({});
   });
@@ -78,11 +78,11 @@ describe("RuntimePlayerDynamicsTuningState", () => {
       groups: {
         dyn_hair_sway: {
           enabled: false,
-          strength: 0.4,
-          reactionSpeed: 14
+          outputScale: 0.4,
+          damping: 14
         },
         dyn_removed: {
-          strength: 0.1
+          outputScale: 0.1
         }
       },
       createdAtIso: "2026-06-30T00:00:00.000Z",
@@ -102,14 +102,14 @@ describe("RuntimePlayerDynamicsTuningState", () => {
     expect(status.profileStatus.warningMessages[0]).toContain("dyn_removed");
     expect(status.groups[0]?.effectiveValues).toMatchObject({
       enabled: false,
-      strength: 0.4,
-      reactionSpeed: 14
+      outputScale: 0.4,
+      damping: 14
     });
     expect(state.getEffectiveProfile()?.groups).toEqual({
       dyn_hair_sway: {
         enabled: false,
-        strength: 0.4,
-        reactionSpeed: 14
+        outputScale: 0.4,
+        damping: 14
       }
     });
   });
@@ -124,13 +124,13 @@ describe("RuntimePlayerDynamicsTuningState", () => {
     const initialRevision = state.getEffectiveProfile()?.revision;
     state.updateGroup({
       groupId: "dyn_hair_sway",
-      strength: 0.3
+      outputScale: 0.3
     });
     const updated = state.getEffectiveProfile();
 
     expect(updated?.revision).toBe((initialRevision ?? 0) + 1);
     expect(updated?.groups.dyn_hair_sway).toEqual({
-      strength: 0.3
+      outputScale: 0.3
     });
   });
 });
@@ -201,7 +201,7 @@ function createPayload(input: {
           hiddenDirectControlParameterIds: ["param_hair_sway"]
         },
         dynamicsSolver: {
-          solverVersion: "runtime-dynamics-pendulum-v1",
+          solverVersion: "runtime-dynamics-chain-v1",
           fixedStepMs: 16.6667,
           resetPolicy: "reset-to-default-parameters-v1"
         },
@@ -246,29 +246,20 @@ function createDynamicsGroup(input: {
       {
         parameterId: input.inputParameterId ?? "param_face_angle_x",
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
+        scale: 1
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.5,
-        reactionSpeed: 8,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: "param_hair_sway",
-        kind: "angle",
-        strength: 1,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 1
       }
     ]

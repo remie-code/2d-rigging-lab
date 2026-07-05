@@ -337,7 +337,7 @@ const createPackageDocument = (binaryAssetRef?: BinaryAssetReferenceDto): Packag
         rigControls: []
       },
       dynamics: {
-        schemaVersion: "dynamics-file-v2",
+        schemaVersion: "dynamics-file-v3",
         dynamicsGroups: []
       },
       masks: {

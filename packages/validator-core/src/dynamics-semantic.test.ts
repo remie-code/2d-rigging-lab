@@ -54,12 +54,7 @@ describe("validator dynamics semantic checks", () => {
         createDynamicsGroup({
           inputs: [
             createDynamicsInput({
-              parameterId: PRESET_INPUT_PARAMETER_ID,
-              normalization: {
-                min: -30,
-                center: 0,
-                max: 30
-              }
+              parameterId: PRESET_INPUT_PARAMETER_ID
             })
           ],
           outputs: [
@@ -81,12 +76,7 @@ describe("validator dynamics semantic checks", () => {
         createDynamicsGroup({
           inputs: [
             createDynamicsInput({
-              parameterId: PRESET_INPUT_PARAMETER_ID,
-              normalization: {
-                min: -30,
-                center: 0,
-                max: 30
-              }
+              parameterId: PRESET_INPUT_PARAMETER_ID
             })
           ],
           outputs: [
@@ -167,13 +157,13 @@ describe("validator dynamics semantic checks", () => {
     ]);
   });
 
-  it("reports invalid v0 group cardinality directly from dynamics semantics", () => {
+  it("reports missing inputs and an invalid empty chain directly from dynamics semantics", () => {
     const checks = validateDynamicsSemantics(createDynamicsPackage({
       dynamicsGroups: [
         createDynamicsGroup({
           inputs: [],
-          pendulums: [],
-          outputs: []
+          chain: createDynamicsChain({ segmentLengths: [] }),
+          outputs: [createDynamicsOutput()]
         })
       ]
     }) as unknown as Parameters<typeof validateDynamicsSemantics>[0]);
@@ -189,54 +179,70 @@ describe("validator dynamics semantic checks", () => {
         ]
       },
       {
-        checkId: "dynamics.invalidPendulumCardinality",
+        checkId: "dynamics.chainSegmentsInvalid",
         targetId: DYNAMICS_GROUP_ID,
-        targetPath: "/model/dynamics/dynamicsGroups/0/pendulums",
+        targetPath: "/model/dynamics/dynamicsGroups/0/chain/segmentLengths",
         evidence: [
           "dynamicsGroupId=dyn_hair_sway",
-          "pendulumCount=0"
+          "segmentCount=0",
+          "segmentLengths="
         ]
       },
       {
-        checkId: "dynamics.invalidOutputCardinality",
+        checkId: "dynamics.outputSegmentIndexOutOfRange",
         targetId: DYNAMICS_GROUP_ID,
-        targetPath: "/model/dynamics/dynamicsGroups/0/outputs",
+        targetPath: "/model/dynamics/dynamicsGroups/0/outputs/0/segmentIndex",
         evidence: [
           "dynamicsGroupId=dyn_hair_sway",
-          "outputCount=0"
+          "outputIndex=0",
+          "segmentIndex=1",
+          "segmentCount=0"
         ]
       }
     ]);
   });
 
-  it("reports invalid input normalization directly from dynamics semantics", () => {
+  it("reports an out-of-range output segment index directly from dynamics semantics", () => {
     const checks = validateDynamicsSemantics(createDynamicsPackage({
       dynamicsGroups: [
         createDynamicsGroup({
-          inputs: [
-            createDynamicsInput({
-              normalization: {
-                min: 0,
-                center: 0,
-                max: 1
-              }
-            })
-          ]
+          chain: createDynamicsChain({ segmentLengths: [14] }),
+          outputs: [createDynamicsOutput({ segmentIndex: 3 })]
         })
       ]
     }) as unknown as Parameters<typeof validateDynamicsSemantics>[0]);
 
     expect(checks.map(toDiagnosticSummary)).toEqual([
       {
-        checkId: "dynamics.normalizationInvalid",
+        checkId: "dynamics.outputSegmentIndexOutOfRange",
         targetId: DYNAMICS_GROUP_ID,
-        targetPath: "/model/dynamics/dynamicsGroups/0/inputs/0/normalization",
+        targetPath: "/model/dynamics/dynamicsGroups/0/outputs/0/segmentIndex",
         evidence: [
           "dynamicsGroupId=dyn_hair_sway",
-          "inputIndex=0",
-          "min=0",
-          "center=0",
-          "max=1"
+          "outputIndex=0",
+          "segmentIndex=3",
+          "segmentCount=1"
+        ]
+      }
+    ]);
+  });
+
+  it("reports zero input scale as a warning directly from dynamics semantics", () => {
+    const checks = validateDynamicsSemantics(createDynamicsPackage({
+      dynamicsGroups: [
+        createDynamicsGroup({
+          inputs: [createDynamicsInput({ scale: 0 })]
+        })
+      ]
+    }) as unknown as Parameters<typeof validateDynamicsSemantics>[0]);
+
+    expect(checks.map(toDiagnosticSummary)).toEqual([
+      {
+        checkId: "dynamics.zeroInputScale",
+        targetId: DYNAMICS_GROUP_ID,
+        targetPath: "/model/dynamics/dynamicsGroups/0/inputs",
+        evidence: [
+          "dynamicsGroupId=dyn_hair_sway"
         ]
       }
     ]);
@@ -276,20 +282,16 @@ describe("validator dynamics semantic checks", () => {
           createDynamicsGroup({
             inputs: [
               createDynamicsInput({
-                influencePercent: 0
+                scale: 0
               })
             ],
-            pendulums: [
-              {
-                length: 1,
-                sway: 101,
-                reactionSpeed: 8,
-                convergenceSpeed: 4
-              }
-            ],
+            chain: createDynamicsChain({
+              segmentLengths: [14],
+              gravityScale: 20
+            }),
             outputs: [
               createDynamicsOutput({
-                strength: 0,
+                scale: 0,
                 limit: 0
               })
             ]
@@ -301,8 +303,8 @@ describe("validator dynamics semantic checks", () => {
     });
 
     expect(report.checks.map((check) => check.checkId)).toEqual([
-      "dynamics.zeroInputInfluence",
-      "dynamics.outputStrengthZero",
+      "dynamics.zeroInputScale",
+      "dynamics.outputScaleZero",
       "dynamics.outputLimitTooSmall",
       "dynamics.unstableSettings",
       "dynamics.runtimeEvidenceMismatch"
@@ -432,7 +434,7 @@ const createDynamicsPackage = (overrides: {
       rigControls: []
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v2",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: overrides.dynamicsGroups ?? [createDynamicsGroup()]
     },
     masks: {
@@ -511,42 +513,36 @@ const createDynamicsGroup = (overrides: {
   readonly dynamicsGroupId?: string;
   readonly displayName?: string;
   readonly inputs?: readonly unknown[];
-  readonly pendulums?: readonly unknown[];
+  readonly chain?: unknown;
   readonly outputs?: readonly unknown[];
 } = {}) => ({
   dynamicsGroupId: overrides.dynamicsGroupId ?? DYNAMICS_GROUP_ID,
   displayName: overrides.displayName ?? "Hair Sway",
   enabled: true,
   inputs: overrides.inputs ?? [createDynamicsInput()],
-  pendulums: overrides.pendulums ?? [
-    {
-      length: 1,
-      sway: 0.35,
-      reactionSpeed: 8,
-      convergenceSpeed: 4
-    }
-  ],
+  chain: overrides.chain ?? createDynamicsChain(),
   outputs: overrides.outputs ?? [createDynamicsOutput()]
+});
+
+const createDynamicsChain = (overrides: Record<string, unknown> = {}) => ({
+  rootOffset: { x: 0, y: 0 },
+  segmentLengths: [14],
+  damping: 2.5,
+  gravityScale: 1,
+  ...overrides
 });
 
 const createDynamicsInput = (overrides: Record<string, unknown> = {}) => ({
   parameterId: INPUT_PARAMETER_ID,
   kind: "angle",
-  influencePercent: 100,
-  invert: false,
-  normalization: {
-    min: -1,
-    center: 0,
-    max: 1
-  },
+  scale: 30,
   ...overrides
 });
 
 const createDynamicsOutput = (overrides: Record<string, unknown> = {}) => ({
   parameterId: OUTPUT_PARAMETER_ID,
-  kind: "angle",
-  strength: 1,
-  invert: false,
+  segmentIndex: 1,
+  scale: 0.0333,
   limit: 1,
   ...overrides
 });
@@ -569,7 +565,7 @@ const createRuntimeSnapshot = (overrides: Record<string, unknown> = {}) => ({
   evaluation: {
     snapshotDetail: "summary",
     evaluatorVersions: {
-      dynamics: "additivePendulumV0",
+      dynamics: "worldFrameChainV1",
       keyform1d: "linear-1d-v1",
       keyformGrid2d: "parameter-grid-2d-v1",
       warpLattice: "bilinear-grid-v1",
@@ -600,7 +596,7 @@ const createRuntimeSnapshot = (overrides: Record<string, unknown> = {}) => ({
     {
       dynamicsGroupId: DYNAMICS_GROUP_ID,
       enabled: true,
-      solverKind: "additivePendulumV0",
+      solverKind: "worldFrameChainV1",
       inputValues: {
         [INPUT_PARAMETER_ID]: 0.5
       },
@@ -608,10 +604,9 @@ const createRuntimeSnapshot = (overrides: Record<string, unknown> = {}) => ({
       outputOffset: 0.25,
       effectiveOutputValue: 0.25,
       stateSummary: {
-        angle: 0.25,
-        angularVelocity: 0,
-        previousSource: 0.5,
-        previousSourceVelocity: 0
+        particleCount: 1,
+        maxParticleSpeed: 0,
+        tipAngleLocalDeg: 15
       },
       tick: 1,
       fixedStepMs: 16.6666667,

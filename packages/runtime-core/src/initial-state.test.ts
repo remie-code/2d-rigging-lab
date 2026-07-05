@@ -72,29 +72,20 @@ describe("createInitialRuntimeState", () => {
               {
                 parameterId: driverParameterId,
                 kind: "angle",
-                influencePercent: 100,
-                invert: false,
-                normalization: {
-                  min: -1,
-                  center: 0,
-                  max: 1
-                }
+                scale: 1
               }
             ],
-            pendulums: [
-              {
-                length: 1,
-                sway: 0.35,
-                reactionSpeed: 8,
-                convergenceSpeed: 4
-              }
-            ],
+            chain: {
+              rootOffset: { x: 0, y: 0 },
+              segmentLengths: [1],
+              damping: 2.5,
+              gravityScale: 1
+            },
             outputs: [
               {
                 parameterId: outputParameterId,
-                kind: "angle",
-                strength: 1,
-                invert: false,
+                segmentIndex: 1,
+                scale: 1,
                 limit: 1
               }
             ]
@@ -112,12 +103,11 @@ describe("createInitialRuntimeState", () => {
       resetReasons: ["packageLoad"]
     });
 
+    // §3.4: with rootOffset {0,0}, the anchor pin is at the origin regardless of φ; the single
+    // particle aligns straight below it (0, L) with zero velocity.
     expect(Object.keys(state.dynamicsGroups)).toEqual([dynamicsGroupId]);
     expect(state.dynamicsGroups[dynamicsGroupId]).toEqual({
-      angle: 0.5,
-      angularVelocity: 0,
-      previousSource: 0.5,
-      previousSourceVelocity: 0,
+      particles: [{ x: 0, y: 1, px: 0, py: 1 }],
       tick: 0,
       resetCounter: 1
     });

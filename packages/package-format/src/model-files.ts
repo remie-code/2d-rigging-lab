@@ -172,52 +172,30 @@ export type KeyformSetDto = z.infer<typeof KeyformSetSchema>;
 export const DynamicsAxisKindSchema = z.enum(["angle", "positionX", "positionY"]);
 export type DynamicsAxisKindDto = z.infer<typeof DynamicsAxisKindSchema>;
 
-export const DynamicsNormalizationSchema = z
-  .object({
-    min: z.number().finite(),
-    center: z.number().finite(),
-    max: z.number().finite()
-  })
-  .superRefine((normalization, context) => {
-    if (normalization.min >= normalization.center) {
-      context.addIssue({
-        code: "custom",
-        path: ["min"],
-        message: "Dynamics input normalization requires min < center."
-      });
-    }
-    if (normalization.center >= normalization.max) {
-      context.addIssue({
-        code: "custom",
-        path: ["max"],
-        message: "Dynamics input normalization requires center < max."
-      });
-    }
-  });
-export type DynamicsNormalizationDto = z.infer<typeof DynamicsNormalizationSchema>;
-
+// dynamics-file-v3 (world-frame Verlet chain). See discussion/design/dynamics-world-frame-chain.md §4.
+// Input: rest basis is always the parameter default; weight and inversion are unified into the sign
+// and magnitude of `scale` (deg/unit for angle, cm/unit for positionX/Y). §3.2 / §4.
 export const DynamicsInputSchema = z.object({
   parameterId: ParameterIdSchema,
   kind: DynamicsAxisKindSchema,
-  influencePercent: z.number().finite(),
-  invert: z.boolean().default(false),
-  normalization: DynamicsNormalizationSchema
+  scale: z.number().finite()
 });
 export type DynamicsInputDto = z.infer<typeof DynamicsInputSchema>;
 
-export const DynamicsPendulumSchema = z.object({
-  length: z.number().finite().positive(),
-  sway: z.number().finite().nonnegative(),
-  reactionSpeed: z.number().finite().nonnegative(),
-  convergenceSpeed: z.number().finite().nonnegative()
+// Chain (one per group; successor of the old single-element pendulums array). §4.
+export const DynamicsChainSchema = z.object({
+  rootOffset: Vec2Schema.default({ x: 0, y: 0 }),
+  segmentLengths: z.array(z.number().finite().positive()).min(1),
+  damping: z.number().finite().nonnegative(),
+  gravityScale: z.number().finite().nonnegative()
 });
-export type DynamicsPendulumDto = z.infer<typeof DynamicsPendulumSchema>;
+export type DynamicsChainDto = z.infer<typeof DynamicsChainSchema>;
 
+// Output reads the angle of one chain segment (segmentIndex ≥ 1). §3.5 / §4.
 export const DynamicsOutputSchema = z.object({
   parameterId: ParameterIdSchema,
-  kind: DynamicsAxisKindSchema,
-  strength: z.number().finite(),
-  invert: z.boolean().default(false),
+  segmentIndex: z.number().int().min(1).default(1),
+  scale: z.number().finite(),
   limit: z.number().finite().nonnegative()
 });
 export type DynamicsOutputDto = z.infer<typeof DynamicsOutputSchema>;
@@ -228,8 +206,8 @@ export const DynamicsGroupSchema = z.object({
   enabled: z.boolean().default(true),
   presetId: z.string().min(1).optional(),
   inputs: z.array(DynamicsInputSchema).min(1),
-  pendulums: z.array(DynamicsPendulumSchema).length(1),
-  outputs: z.array(DynamicsOutputSchema).length(1)
+  chain: DynamicsChainSchema,
+  outputs: z.array(DynamicsOutputSchema).min(1)
 });
 export type DynamicsGroupDto = z.infer<typeof DynamicsGroupSchema>;
 
@@ -372,7 +350,7 @@ export const RigControlsFileSchema = z.object({
 export type RigControlsFileDto = z.infer<typeof RigControlsFileSchema>;
 
 export const DynamicsFileSchema = z.object({
-  schemaVersion: z.literal("dynamics-file-v2"),
+  schemaVersion: z.literal("dynamics-file-v3"),
   dynamicsGroups: z.array(DynamicsGroupSchema)
 });
 export type DynamicsFileDto = z.infer<typeof DynamicsFileSchema>;

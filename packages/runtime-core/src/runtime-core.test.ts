@@ -609,29 +609,20 @@ describe("runtime-core foundation evaluation", () => {
         {
           parameterId: driverParameterId,
           kind: "angle",
-          influencePercent: 100,
-          invert: false,
-          normalization: {
-            min: 0,
-            center: 0,
-            max: 1
-          }
+          scale: -45
         }
       ],
-      pendulums: [
-        {
-          length: 1,
-          sway: 0.35,
-          reactionSpeed: 8,
-          convergenceSpeed: 4
-        }
-      ],
+      chain: {
+        rootOffset: { x: 0, y: 0 },
+        segmentLengths: [1],
+        damping: 2.5,
+        gravityScale: 1
+      },
       outputs: [
         {
           parameterId: dynamicOpacityParameterId,
-          kind: "angle",
-          strength: 1,
-          invert: false,
+          segmentIndex: 1,
+          scale: 1,
           limit: 1
         }
       ]
@@ -827,8 +818,10 @@ describe("runtime-core foundation evaluation", () => {
       drawOrder: -2,
       visible: false
     });
+    // deltaTimeMs 0 + previewRestart reset → chain aligned straight below the pin (§3.4);
+    // driver 1 with input scale −45 gives φ = −45°, so θ_local = +45° and the output clamps to 1.
     expect(renderResult.nextState.dynamicsGroups[dynamicsGroupId]).toMatchObject({
-      angle: 1,
+      particles: [{ x: 0, y: 1, px: 0, py: 1 }],
       resetCounter: 2
     });
     expect("snapshot" in renderResult).toBe(false);

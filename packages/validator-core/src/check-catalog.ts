@@ -1622,23 +1622,23 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     defaultSeverity: "error",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics v0 additive pendulum group has no input parameter."
+    description: "Dynamics world-frame chain group has no input parameter."
   },
   {
-    checkId: "dynamics.invalidPendulumCardinality",
+    checkId: "dynamics.chainSegmentsInvalid",
     phase: "dynamics_semantic",
-    defaultSeverity: "error",
+    defaultSeverity: "blocking",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics v0 group must contain exactly one pendulum."
+    description: "Dynamics chain segmentLengths must be non-empty and all positive."
   },
   {
-    checkId: "dynamics.invalidOutputCardinality",
+    checkId: "dynamics.outputSegmentIndexOutOfRange",
     phase: "dynamics_semantic",
-    defaultSeverity: "error",
+    defaultSeverity: "blocking",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics v0 group must contain exactly one output."
+    description: "Dynamics output segmentIndex must reference an existing chain segment (1 to segment count)."
   },
   {
     checkId: "dynamics.driverMissing",
@@ -1665,28 +1665,20 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Multiple dynamics groups target the same additive output parameter."
   },
   {
-    checkId: "dynamics.normalizationInvalid",
-    phase: "dynamics_semantic",
-    defaultSeverity: "error",
-    profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
-    relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics input normalization must satisfy min < center < max."
-  },
-  {
-    checkId: "dynamics.zeroInputInfluence",
+    checkId: "dynamics.zeroInputScale",
     phase: "dynamics_semantic",
     defaultSeverity: "warning",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics inputs all have zero influence."
+    description: "Dynamics inputs all have zero scale, so the chain cannot be driven by input."
   },
   {
-    checkId: "dynamics.outputStrengthZero",
+    checkId: "dynamics.outputScaleZero",
     phase: "dynamics_semantic",
     defaultSeverity: "warning",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics output strength is zero."
+    description: "Dynamics output scale is zero, so the additive offset is always zero."
   },
   {
     checkId: "dynamics.outputLimitTooSmall",
@@ -1702,7 +1694,7 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     defaultSeverity: "warning",
     profiles: ["viewer", "strict", "acceptance", "aiDryRun"],
     relatedAC: ["AC-MVP-010", "AC-MVP-013"],
-    description: "Dynamics pendulum coefficients are statically unsafe or likely unstable."
+    description: "Dynamics chain coefficients are statically unsafe or likely unstable."
   },
   {
     checkId: "dynamics.runtimeEvidenceMismatch",

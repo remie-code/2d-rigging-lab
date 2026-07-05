@@ -45,8 +45,8 @@ describe("DynamicsTuningProfileSaveController", () => {
     state.updateGroup({
       groupId: "dyn_hair_sway",
       enabled: false,
-      strength: 0.35,
-      reactionSpeed: 12
+      outputScale: 0.35,
+      damping: 12
     });
     controller.scheduleSave();
 
@@ -59,8 +59,8 @@ describe("DynamicsTuningProfileSaveController", () => {
     expect(savedUpdate.profile?.groups).toEqual({
       dyn_hair_sway: {
         enabled: false,
-        strength: 0.35,
-        reactionSpeed: 12
+        outputScale: 0.35,
+        damping: 12
       }
     });
     expect(savedUpdate.profile?.createdAtIso).toBe(
@@ -106,8 +106,8 @@ describe("DynamicsTuningProfileSaveController", () => {
     state.setRuntimeExportPayload(payload);
     state.updateGroup({
       groupId: "dyn_hair_sway",
-      strength: 0.42,
-      convergenceSpeed: 6
+      outputScale: 0.42,
+      gravityScale: 0.6
     });
     controller.scheduleSave();
 
@@ -124,8 +124,8 @@ describe("DynamicsTuningProfileSaveController", () => {
     expect(savedUpdate.state).toBe("loaded");
     expect(savedUpdate.profile?.groups).toEqual({
       dyn_hair_sway: {
-        strength: 0.42,
-        convergenceSpeed: 6
+        outputScale: 0.42,
+        gravityScale: 0.6
       }
     });
     expect(savedUpdate.profile?.createdAtIso).toBe(
@@ -193,7 +193,7 @@ function createPayload(input: {
           hiddenDirectControlParameterIds: ["param_hair_sway"]
         },
         dynamicsSolver: {
-          solverVersion: "runtime-dynamics-pendulum-v1",
+          solverVersion: "runtime-dynamics-chain-v1",
           fixedStepMs: 16.6667,
           resetPolicy: "reset-to-default-parameters-v1"
         },
@@ -254,29 +254,20 @@ function createDynamicsGroup(): RuntimeExportDynamicsGroupDto {
       {
         parameterId: "param_face_angle_x",
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
+        scale: 1
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.5,
-        reactionSpeed: 8,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: "param_hair_sway",
-        kind: "angle",
-        strength: 1,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 1
       }
     ]

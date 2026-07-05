@@ -56,38 +56,30 @@ export interface NormalizedDynamicsGroup {
   readonly enabled: boolean;
   readonly presetId?: string;
   readonly inputs: readonly NormalizedDynamicsInput[];
-  readonly pendulums: readonly NormalizedDynamicsPendulum[];
+  readonly chain: NormalizedDynamicsChain;
   readonly outputs: readonly NormalizedDynamicsOutput[];
 }
 
 export type NormalizedDynamicsAxisKind = "angle" | "positionX" | "positionY";
 
+// dynamics-file-v3 world-frame chain. See dynamics-world-frame-chain.md §3 / §4.
 export interface NormalizedDynamicsInput {
   readonly parameterId: ParameterId;
   readonly kind: NormalizedDynamicsAxisKind;
-  readonly influencePercent: number;
-  readonly invert: boolean;
-  readonly normalization: NormalizedDynamicsNormalization;
+  readonly scale: number;
 }
 
-export interface NormalizedDynamicsNormalization {
-  readonly min: number;
-  readonly center: number;
-  readonly max: number;
-}
-
-export interface NormalizedDynamicsPendulum {
-  readonly length: number;
-  readonly sway: number;
-  readonly reactionSpeed: number;
-  readonly convergenceSpeed: number;
+export interface NormalizedDynamicsChain {
+  readonly rootOffset: Vec2Dto;
+  readonly segmentLengths: readonly number[];
+  readonly damping: number;
+  readonly gravityScale: number;
 }
 
 export interface NormalizedDynamicsOutput {
   readonly parameterId: ParameterId;
-  readonly kind: NormalizedDynamicsAxisKind;
-  readonly strength: number;
-  readonly invert: boolean;
+  readonly segmentIndex: number;
+  readonly scale: number;
   readonly limit: number;
 }
 

@@ -23,7 +23,7 @@ const UPDATED_PRESET_DRIVER_ID = ParameterIdSchema.parse("param_body_angle_x");
 const UPDATED_PRESET_OUTPUT_ID = ParameterIdSchema.parse("param_hair_side_sway_x");
 
 describe("dynamics mutations", () => {
-  it("creates a package-valid dynamics-file-v2 group", () => {
+  it("creates a package-valid dynamics-file-v3 group", () => {
     const session = createDynamicsFixtureSession();
     const dynamicsGroup = createTestDynamicsGroup();
 
@@ -41,7 +41,7 @@ describe("dynamics mutations", () => {
       "dyn_hair_sway"
     ]);
     expect(materialized.model.dynamics.dynamicsGroups).toEqual([dynamicsGroup]);
-    expect(materialized.model.dynamics.schemaVersion).toBe("dynamics-file-v2");
+    expect(materialized.model.dynamics.schemaVersion).toBe("dynamics-file-v3");
   });
 
   it("allows additive outputs to target authored scalar parameters", () => {
@@ -72,11 +72,7 @@ describe("dynamics mutations", () => {
         {
           ...dynamicsGroup.inputs[0]!,
           parameterId: UPDATED_PRESET_DRIVER_ID,
-          normalization: {
-            min: -10,
-            center: 0,
-            max: 10
-          }
+          scale: 12
         }
       ],
       outputs: [
@@ -108,7 +104,7 @@ describe("dynamics mutations", () => {
     expect(session.authoringRevision).toBe(1);
   });
 
-  it("updates and deletes v2 dynamics groups", () => {
+  it("updates and deletes v3 dynamics groups", () => {
     const session = createDynamicsFixtureSession();
     const dynamicsGroup = createTestDynamicsGroup();
     createDynamicsGroup(session, dynamicsGroup);
@@ -119,16 +115,15 @@ describe("dynamics mutations", () => {
       outputs: [
         {
           parameterId: ParameterIdSchema.parse("param_hair_sway"),
-          kind: "angle",
-          strength: 0.5,
-          invert: true,
+          segmentIndex: 1,
+          scale: -0.5,
           limit: 0.4
         }
       ]
     });
 
     expect(update.dynamicsGroup.displayName).toBe("Updated Hair Sway");
-    expect(update.dynamicsGroup.outputs[0]).toMatchObject({ strength: 0.5, invert: true, limit: 0.4 });
+    expect(update.dynamicsGroup.outputs[0]).toMatchObject({ segmentIndex: 1, scale: -0.5, limit: 0.4 });
 
     const deletion = deleteDynamicsGroup(session, dynamicsGroup.dynamicsGroupId);
 
@@ -147,29 +142,20 @@ const createTestDynamicsGroup = (): Parameters<typeof createDynamicsGroup>[1] =>
     {
       parameterId: ParameterIdSchema.parse("param_face_yaw"),
       kind: "angle",
-      influencePercent: 100,
-      invert: false,
-      normalization: {
-        min: -1,
-        center: 0,
-        max: 1
-      }
+      scale: 30
     }
   ],
-  pendulums: [
-    {
-      length: 1,
-      sway: 0.35,
-      reactionSpeed: 8,
-      convergenceSpeed: 4
-    }
-  ],
+  chain: {
+    rootOffset: { x: 0, y: 0 },
+    segmentLengths: [14],
+    damping: 2.5,
+    gravityScale: 1
+  },
   outputs: [
     {
       parameterId: ParameterIdSchema.parse("param_hair_sway"),
-      kind: "angle",
-      strength: 1,
-      invert: false,
+      segmentIndex: 1,
+      scale: 0.0333,
       limit: 1
     }
   ]
@@ -183,29 +169,20 @@ const createInitializedPresetDynamicsGroup = (): Parameters<typeof createDynamic
     {
       parameterId: PRESET_DRIVER_ID,
       kind: "angle",
-      influencePercent: 100,
-      invert: false,
-      normalization: {
-        min: -30,
-        center: 0,
-        max: 30
-      }
+      scale: 30
     }
   ],
-  pendulums: [
-    {
-      length: 1,
-      sway: 0.35,
-      reactionSpeed: 8,
-      convergenceSpeed: 4
-    }
-  ],
+  chain: {
+    rootOffset: { x: 0, y: 0 },
+    segmentLengths: [14],
+    damping: 2.5,
+    gravityScale: 1
+  },
   outputs: [
     {
       parameterId: PRESET_OUTPUT_ID,
-      kind: "angle",
-      strength: 1,
-      invert: false,
+      segmentIndex: 1,
+      scale: 0.0333,
       limit: 1
     }
   ]
@@ -365,7 +342,7 @@ const createBasePackageDocument = (): PackageDocumentDto => ({
       rigControls: []
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v2",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: []
     },
     masks: {

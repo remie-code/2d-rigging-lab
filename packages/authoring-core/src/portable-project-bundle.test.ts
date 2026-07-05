@@ -95,7 +95,7 @@ describe("authoring portable project bundle adapter", () => {
 
     expect(exported.binaryPayloadCount).toBe(1);
     expect(exportedDocument.model.dynamics).toEqual({
-      schemaVersion: "dynamics-file-v2",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: session.graph.dynamicsGroups
     });
     expect(exportedDocument.manifest.schemaVersions.editorState).toBe("editor-state-v1");
@@ -208,29 +208,20 @@ describe("authoring portable project bundle adapter", () => {
         {
           parameterId: PARAM_ANGLE_X,
           kind: "angle",
-          influencePercent: 75,
-          invert: true,
-          normalization: {
-            min: -1,
-            center: 0,
-            max: 1
-          }
+          scale: -18
         }
       ],
-      pendulums: [
-        {
-          length: 1.25,
-          sway: 0.4,
-          reactionSpeed: 7,
-          convergenceSpeed: 3.5
-        }
-      ],
+      chain: {
+        rootOffset: { x: 0, y: 0 },
+        segmentLengths: [12.5],
+        damping: 3,
+        gravityScale: 1
+      },
       outputs: [
         {
           parameterId: PARAM_HAIR_SWAY,
-          kind: "positionX",
-          strength: 0.8,
-          invert: true,
+          segmentIndex: 1,
+          scale: -0.03,
           limit: 0.45
         }
       ]
@@ -615,29 +606,20 @@ function createRiggedTextureSession(
             {
               parameterId: PARAM_ANGLE_X,
               kind: "angle",
-              influencePercent: 75,
-              invert: true,
-              normalization: {
-                min: -1,
-                center: 0,
-                max: 1
-              }
+              scale: -18
             }
           ],
-          pendulums: [
-            {
-              length: 1.25,
-              sway: 0.4,
-              reactionSpeed: 7,
-              convergenceSpeed: 3.5
-            }
-          ],
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [12.5],
+            damping: 3,
+            gravityScale: 1
+          },
           outputs: [
             {
               parameterId: PARAM_HAIR_SWAY,
-              kind: "positionX",
-              strength: 0.8,
-              invert: true,
+              segmentIndex: 1,
+              scale: -0.03,
               limit: 0.45
             }
           ]
@@ -743,29 +725,20 @@ function createPresetDynamicsOnlySession(): AuthoringSession {
             {
               parameterId: PRESET_FACE_ANGLE_X,
               kind: "angle",
-              influencePercent: 100,
-              invert: false,
-              normalization: {
-                min: -30,
-                center: 0,
-                max: 30
-              }
+              scale: 30
             }
           ],
-          pendulums: [
-            {
-              length: 1,
-              sway: 0.35,
-              reactionSpeed: 8,
-              convergenceSpeed: 4
-            }
-          ],
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [14],
+            damping: 2.5,
+            gravityScale: 1
+          },
           outputs: [
             {
               parameterId: PRESET_HAIR_FRONT_SWAY_X,
-              kind: "angle",
-              strength: 1,
-              invert: false,
+              segmentIndex: 1,
+              scale: 0.0333,
               limit: 1
             }
           ]

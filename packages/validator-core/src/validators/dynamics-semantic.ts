@@ -96,36 +96,39 @@ const validateDynamicsGroupShape = (entry: DynamicsGroupEntry): readonly Validat
       targetPath: `${groupBasePath(entry.index)}/inputs`,
       message: `Dynamics group ${entry.group.dynamicsGroupId} has no inputs.`,
       evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, "inputs=0"],
-      impact: "A Dynamics v0 group needs at least one driver input."
+      impact: "A Dynamics group needs at least one driver input."
     }));
   }
 
-  if (entry.group.pendulums.length !== 1) {
-    checks.push(createGroupShapeCheck({
-      entry,
-      checkId: "dynamics.invalidPendulumCardinality",
-      targetPath: `${groupBasePath(entry.index)}/pendulums`,
-      message: `Dynamics group ${entry.group.dynamicsGroupId} must have exactly one pendulum in v0.`,
-      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `pendulumCount=${entry.group.pendulums.length}`],
-      impact: "Wave81 Dynamics v0 evaluates exactly one pendulum per group."
+  // §7 new: chainSegmentsInvalid (empty or non-positive segment lengths, blocking).
+  const segmentLengths = entry.group.chain.segmentLengths;
+  if (segmentLengths.length < 1 || segmentLengths.some((length) => !(length > 0))) {
+    checks.push(createDynamicsCheck({
+      checkId: "dynamics.chainSegmentsInvalid",
+      status: "fail",
+      severity: "blocking",
+      phase: "dynamics_semantic",
+      target: {
+        kind: "dynamicsGroup",
+        id: entry.group.dynamicsGroupId,
+        path: `${groupBasePath(entry.index)}/chain/segmentLengths`
+      },
+      targetPath: `${groupBasePath(entry.index)}/chain/segmentLengths`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} has an invalid chain: segmentLengths must be non-empty and all positive.`,
+      evidence: [
+        `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
+        `segmentCount=${segmentLengths.length}`,
+        `segmentLengths=${segmentLengths.join(",")}`
+      ],
+      impact: "A world-frame chain requires at least one positive segment length to simulate."
     }));
   }
 
-  if (entry.group.outputs.length !== 1) {
-    checks.push(createGroupShapeCheck({
-      entry,
-      checkId: "dynamics.invalidOutputCardinality",
-      targetPath: `${groupBasePath(entry.index)}/outputs`,
-      message: `Dynamics group ${entry.group.dynamicsGroupId} must have exactly one output in v0.`,
-      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `outputCount=${entry.group.outputs.length}`],
-      impact: "Wave81 Dynamics v0 applies one additive output offset per group."
-    }));
-  }
-
-  for (const inputEntry of createSortedInputEntries(entry.group)) {
-    const normalization = inputEntry.input.normalization;
-    if (normalization.min >= normalization.center || normalization.center >= normalization.max) {
-      checks.push(createNormalizationInvalidCheck(entry, inputEntry));
+  // §7 new: outputSegmentIndexOutOfRange (segmentIndex outside 1..N, blocking).
+  const segmentCount = segmentLengths.length;
+  for (const [outputIndex, output] of entry.group.outputs.entries()) {
+    if (output.segmentIndex < 1 || output.segmentIndex > segmentCount) {
+      checks.push(createOutputSegmentIndexOutOfRangeCheck(entry, outputIndex, output.segmentIndex, segmentCount));
     }
   }
 
@@ -158,60 +161,64 @@ const validateDynamicsGroupRelations = (input: {
 
 const validateDynamicsGroupWarnings = (entry: DynamicsGroupEntry): readonly ValidationCheckResultDto[] => {
   const checks: ValidationCheckResultDto[] = [];
-  const output = entry.group.outputs[0];
-  const pendulum = entry.group.pendulums[0];
+  const chain = entry.group.chain;
 
-  if (entry.group.inputs.length > 0 && entry.group.inputs.every((input) => input.influencePercent === 0)) {
+  // §7 new: zeroInputScale (all input scales zero → no input-driven motion, warning).
+  if (entry.group.inputs.length > 0 && entry.group.inputs.every((input) => input.scale === 0)) {
     checks.push(createWarningCheck({
       entry,
-      checkId: "dynamics.zeroInputInfluence",
+      checkId: "dynamics.zeroInputScale",
       targetPath: `${groupBasePath(entry.index)}/inputs`,
-      message: `Dynamics group ${entry.group.dynamicsGroupId} has zero influence across all inputs.`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} has zero scale across all inputs.`,
       evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`],
       impact: "The group is valid but cannot produce visible input-driven motion."
     }));
   }
 
-  if (output !== undefined && output.strength === 0) {
-    checks.push(createWarningCheck({
-      entry,
-      checkId: "dynamics.outputStrengthZero",
-      targetPath: `${groupBasePath(entry.index)}/outputs/0/strength`,
-      message: `Dynamics group ${entry.group.dynamicsGroupId} output strength is zero.`,
-      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `outputParameterId=${output.parameterId}`],
-      impact: "The additive output offset will always be zero."
-    }));
+  // §7 new: outputScaleZero (per output, warning). §7 maintained: outputLimitTooSmall (per output).
+  for (const [outputIndex, output] of entry.group.outputs.entries()) {
+    if (output.scale === 0) {
+      checks.push(createWarningCheck({
+        entry,
+        checkId: "dynamics.outputScaleZero",
+        targetPath: `${groupBasePath(entry.index)}/outputs/${outputIndex}/scale`,
+        message: `Dynamics group ${entry.group.dynamicsGroupId} output scale is zero.`,
+        evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `outputParameterId=${output.parameterId}`],
+        impact: "The additive output offset will always be zero."
+      }));
+    }
+
+    if (output.limit <= 0.000001) {
+      checks.push(createWarningCheck({
+        entry,
+        checkId: "dynamics.outputLimitTooSmall",
+        targetPath: `${groupBasePath(entry.index)}/outputs/${outputIndex}/limit`,
+        message: `Dynamics group ${entry.group.dynamicsGroupId} output limit is too small to show visible motion.`,
+        evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `limit=${output.limit}`],
+        impact: "The additive output offset will be clamped to zero or a visually negligible range."
+      }));
+    }
   }
 
-  if (output !== undefined && output.limit <= 0.000001) {
-    checks.push(createWarningCheck({
-      entry,
-      checkId: "dynamics.outputLimitTooSmall",
-      targetPath: `${groupBasePath(entry.index)}/outputs/0/limit`,
-      message: `Dynamics group ${entry.group.dynamicsGroupId} output limit is too small to show visible motion.`,
-      evidence: [`dynamicsGroupId=${entry.group.dynamicsGroupId}`, `limit=${output.limit}`],
-      impact: "The additive output offset will be clamped to zero or a visually negligible range."
-    }));
-  }
-
+  // §7 revised: unstableSettings = damping > 60 || segmentLengths.some(L < 0.1) || N > 16 || gravityScale > 10.
+  const segmentCount = chain.segmentLengths.length;
   if (
-    pendulum !== undefined &&
-    (pendulum.length < 0.001 ||
-      pendulum.sway > 100 ||
-      pendulum.reactionSpeed > 100 ||
-      pendulum.convergenceSpeed > 100)
+    chain.damping > 60 ||
+    chain.segmentLengths.some((length) => length < 0.1) ||
+    segmentCount > 16 ||
+    chain.gravityScale > 10
   ) {
     checks.push(createWarningCheck({
       entry,
       checkId: "dynamics.unstableSettings",
-      targetPath: `${groupBasePath(entry.index)}/pendulums/0`,
-      message: `Dynamics group ${entry.group.dynamicsGroupId} has extreme pendulum coefficients.`,
+      targetPath: `${groupBasePath(entry.index)}/chain`,
+      message: `Dynamics group ${entry.group.dynamicsGroupId} has extreme chain coefficients.`,
       evidence: [
         `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-        `length=${pendulum.length}`,
-        `sway=${pendulum.sway}`,
-        `reactionSpeed=${pendulum.reactionSpeed}`,
-        `convergenceSpeed=${pendulum.convergenceSpeed}`
+        `damping=${chain.damping}`,
+        `segmentCount=${segmentCount}`,
+        `minSegmentLength=${segmentCount === 0 ? "n/a" : Math.min(...chain.segmentLengths)}`,
+        `gravityScale=${chain.gravityScale}`
       ],
       impact: "The group is valid but may produce unstable or hard-to-control additive motion."
     }));
@@ -325,30 +332,31 @@ const createOutputMissingCheck = (
   });
 };
 
-const createNormalizationInvalidCheck = (
+const createOutputSegmentIndexOutOfRangeCheck = (
   entry: DynamicsGroupEntry,
-  inputEntry: DynamicsInputEntry
+  outputIndex: number,
+  segmentIndex: number,
+  segmentCount: number
 ): ValidationCheckResultDto =>
   createDynamicsCheck({
-    checkId: "dynamics.normalizationInvalid",
+    checkId: "dynamics.outputSegmentIndexOutOfRange",
     status: "fail",
-    severity: "error",
+    severity: "blocking",
     phase: "dynamics_semantic",
     target: {
       kind: "dynamicsGroup",
       id: entry.group.dynamicsGroupId,
-      path: `${groupInputBasePath(entry.index, inputEntry.index)}/normalization`
+      path: `${groupBasePath(entry.index)}/outputs/${outputIndex}/segmentIndex`
     },
-    targetPath: `${groupInputBasePath(entry.index, inputEntry.index)}/normalization`,
-    message: `Dynamics group ${entry.group.dynamicsGroupId} has invalid input normalization.`,
+    targetPath: `${groupBasePath(entry.index)}/outputs/${outputIndex}/segmentIndex`,
+    message: `Dynamics group ${entry.group.dynamicsGroupId} output ${outputIndex} references segmentIndex ${segmentIndex} outside the chain range 1..${segmentCount}.`,
     evidence: [
       `dynamicsGroupId=${entry.group.dynamicsGroupId}`,
-      `inputIndex=${inputEntry.index}`,
-      `min=${inputEntry.input.normalization.min}`,
-      `center=${inputEntry.input.normalization.center}`,
-      `max=${inputEntry.input.normalization.max}`
+      `outputIndex=${outputIndex}`,
+      `segmentIndex=${segmentIndex}`,
+      `segmentCount=${segmentCount}`
     ],
-    impact: "Dynamics input normalization must satisfy min < center < max."
+    impact: "An output must read a chain segment that exists (1 ≤ segmentIndex ≤ segment count)."
   });
 
 const createOutputTargetDuplicateCheck = (
@@ -374,7 +382,7 @@ const createOutputTargetDuplicateCheck = (
       `targetParameterId=${parameterId}`,
       ...sortedEntries.map((entry) => `ownerGroupId=${entry.group.dynamicsGroupId}`)
     ],
-    impact: "Dynamics v0 allows only one group to own an output parameter."
+    impact: "Dynamics allows only one group to own an output parameter."
   });
 };
 

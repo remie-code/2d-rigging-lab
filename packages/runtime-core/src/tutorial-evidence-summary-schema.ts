@@ -188,7 +188,7 @@ export type TutorialRigControlKeyformEvidenceRefDto = z.infer<typeof TutorialRig
 export const TutorialDynamicsEvidenceRefSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   enabled: z.boolean(),
-  solverKind: z.literal("additivePendulumV0"),
+  solverKind: z.literal("worldFrameChainV1"),
   inputParameterIds: z.array(ParameterIdSchema),
   outputParameterId: ParameterIdSchema,
   outputOffset: z.number().finite(),

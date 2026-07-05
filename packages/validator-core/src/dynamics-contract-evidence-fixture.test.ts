@@ -391,16 +391,18 @@ const createRuntimeDynamicsGroup = (payload: any): NormalizedDynamicsGroup => ({
   inputs: payload.inputs.map((input: any) => ({
     parameterId: ParameterIdSchema.parse(input.parameterId),
     kind: input.kind,
-    influencePercent: input.influencePercent,
-    invert: input.invert,
-    normalization: input.normalization
+    scale: input.scale
   })),
-  pendulums: payload.pendulums,
+  chain: {
+    rootOffset: { x: payload.chain.rootOffset.x, y: payload.chain.rootOffset.y },
+    segmentLengths: [...payload.chain.segmentLengths],
+    damping: payload.chain.damping,
+    gravityScale: payload.chain.gravityScale
+  },
   outputs: payload.outputs.map((output: any) => ({
     parameterId: ParameterIdSchema.parse(output.parameterId),
-    kind: output.kind,
-    strength: output.strength,
-    invert: output.invert,
+    segmentIndex: output.segmentIndex,
+    scale: output.scale,
     limit: output.limit
   }))
 });

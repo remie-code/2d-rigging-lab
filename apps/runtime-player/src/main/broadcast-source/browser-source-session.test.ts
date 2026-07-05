@@ -243,7 +243,7 @@ describe("RuntimePlayerBrowserSourceSession status sampling", () => {
         dynamicsSignatureHash: "sha256:dynamics",
         groups: {
           dyn_hair_sway: {
-            strength: 0.5
+            outputScale: 0.5
           }
         }
       }
@@ -371,7 +371,7 @@ function createEffectiveDynamicsTuning(
     dynamicsSignatureHash: "sha256:dynamics",
     groups: {
       dyn_hair_sway: {
-        strength: 0.5
+        outputScale: 0.5
       }
     }
   };

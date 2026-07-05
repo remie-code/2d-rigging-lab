@@ -48,8 +48,10 @@ export const resolveEffectiveParameterValues = (input: {
     const outputOffset = dynamicsGroup === undefined
       ? undefined
       : getDynamicsOutputOffsetForParameter(
+        input.graph,
         dynamicsGroup,
         input.state.dynamicsGroups[dynamicsGroup.dynamicsGroupId],
+        input.authoredParameterValues,
         parameter.id
       );
     const rawEffectiveValue = baseValue + (outputOffset?.offset ?? 0);
@@ -78,6 +80,10 @@ export const resolveEffectiveParameterValues = (input: {
   };
 };
 
+// Routes each output parameter to the dynamics group that drives it. dynamics-file-v3 allows
+// multiple outputs per group (§4, segmentIndex-keyed), so every output is indexed (not just the
+// first). A parameter driven by more than one enabled output — across or within groups — is treated
+// as ambiguous and dropped (the additive-composition arithmetic downstream is unchanged).
 const createEnabledDynamicsByOutputParameterId = (
   graph: NormalizedRuntimeGraph
 ): ReadonlyMap<ParameterId, NormalizedDynamicsGroup> => {
@@ -85,18 +91,21 @@ const createEnabledDynamicsByOutputParameterId = (
   const duplicateParameterIds = new Set<ParameterId>();
 
   for (const group of graph.dynamicsGroups.values()) {
-    const output = group.outputs[0];
-    if (!group.enabled || output === undefined) {
+    if (!group.enabled) {
       continue;
     }
 
-    if (groupsByParameterId.has(output.parameterId)) {
-      groupsByParameterId.delete(output.parameterId);
-      duplicateParameterIds.add(output.parameterId);
-      continue;
-    }
+    for (const output of group.outputs) {
+      if (duplicateParameterIds.has(output.parameterId)) {
+        continue;
+      }
 
-    if (!duplicateParameterIds.has(output.parameterId)) {
+      if (groupsByParameterId.has(output.parameterId)) {
+        groupsByParameterId.delete(output.parameterId);
+        duplicateParameterIds.add(output.parameterId);
+        continue;
+      }
+
       groupsByParameterId.set(output.parameterId, group);
     }
   }

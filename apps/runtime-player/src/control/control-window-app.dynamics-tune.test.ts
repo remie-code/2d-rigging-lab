@@ -84,7 +84,7 @@ describe("ControlWindowApp Dynamics Tune bridge wiring", () => {
     });
 
     changeCheckbox(tree, "Dynamics Tune Hair Dynamics Enabled", false);
-    changeRange(tree, "Dynamics Tune Hair Dynamics Strength", "0.65");
+    changeRange(tree, "Dynamics Tune Hair Dynamics Output Scale", "0.65");
     clickButton(tree, "Reset Hair Dynamics");
     clickButton(tree, "Retry");
 
@@ -94,7 +94,7 @@ describe("ControlWindowApp Dynamics Tune bridge wiring", () => {
     });
     expect(bridge.updateGroup).toHaveBeenNthCalledWith(2, {
       groupId: "grp_hair",
-      strength: 0.65
+      outputScale: 0.65
     });
     expect(bridge.resetGroup).toHaveBeenCalledWith({
       groupId: "grp_hair"
@@ -268,8 +268,8 @@ function createReadyDynamicsStatus(
       dynamicsSignatureHash: "dynamics-signature-fixture",
       groups: {
         grp_hair: {
-          strength: 0.5,
-          reactionSpeed: 10
+          outputScale: 0.5,
+          damping: 10
         }
       }
     },
@@ -292,35 +292,32 @@ function createDynamicsGroupStatus(): RuntimePlayerDynamicsTuningStatus["groups"
     outputSummary: [
       {
         parameterId: "ParamHairFront",
-        kind: "angle",
+        kind: "segment 1",
         displayName: "Front Hair"
       }
     ],
     exportedValues: {
       enabled: true,
-      strength: 1,
+      outputScale: 1,
       limit: 0.4,
-      length: 1.2,
-      sway: 0.3,
-      reactionSpeed: 8,
-      convergenceSpeed: 12
+      damping: 2.5,
+      gravityScale: 1,
+      lengthScale: 1
     },
     effectiveValues: {
       enabled: true,
-      strength: 0.5,
+      outputScale: 0.5,
       limit: 0.7,
-      length: 1.4,
-      sway: 0.6,
-      reactionSpeed: 10,
-      convergenceSpeed: 14
+      damping: 3.5,
+      gravityScale: 0.6,
+      lengthScale: 1.4
     },
     override: {
-      strength: 0.5,
+      outputScale: 0.5,
       limit: 0.7,
-      length: 1.4,
-      sway: 0.6,
-      reactionSpeed: 10,
-      convergenceSpeed: 14
+      damping: 3.5,
+      gravityScale: 0.6,
+      lengthScale: 1.4
     },
     hasOverride: true,
     warningMessages: []

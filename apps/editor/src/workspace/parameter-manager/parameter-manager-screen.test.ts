@@ -82,29 +82,19 @@ describe("ParameterManagerTable", () => {
         {
           parameterId,
           kind: "angle",
-          influencePercent: 100,
-          invert: false,
-          normalization: {
-            min: 0,
-            center: 0.5,
-            max: 1
-          }
-        }
+        scale: 1}
       ],
-      pendulums: [
-        {
-          length: 1,
-          sway: 0.35,
-          reactionSpeed: 8,
-          convergenceSpeed: 4
-        }
-      ],
+      chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
       outputs: [
         {
           parameterId: ParameterIdSchema.parse("param_mouth_open"),
-          kind: "angle",
-          strength: 1,
-          invert: false,
+          segmentIndex: 1,
+          scale: 1,
           limit: 1
         }
       ]

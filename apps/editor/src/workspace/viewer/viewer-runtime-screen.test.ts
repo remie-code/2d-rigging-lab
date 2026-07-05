@@ -448,12 +448,18 @@ describe("ViewerRuntimeScreen integration", () => {
     expect(firstState?.tick).toBe(1);
     expect(settledState?.tick).toBe(121);
     expect(firstFrame.parameterValues[HAIR_SWAY_X]).not.toBe(0);
-    expect(Math.abs(settledState?.angularVelocity ?? 0)).toBeLessThan(
-      Math.abs(firstState?.angularVelocity ?? 0)
-    );
-    expect(Math.abs((settledState?.angle ?? 0) - 1)).toBeLessThan(
-      Math.abs((firstState?.angle ?? 0) - 1)
-    );
+
+    // §3.7: the max particle speed (|x − px|) decays as the chain settles.
+    const maxParticleSpeed = (
+      state: typeof settledState
+    ): number =>
+      Math.max(
+        ...(state?.particles ?? []).map((particle) =>
+          Math.hypot(particle.x - particle.px, particle.y - particle.py)
+        ),
+        0
+      );
+    expect(maxParticleSpeed(settledState)).toBeLessThan(maxParticleSpeed(firstState));
   });
 
   it("reuses active Viewer Runtime frame parameter values for Clean Stage projection", () => {
@@ -629,16 +635,20 @@ describe("ViewerRuntimeScreen integration", () => {
   it("injects Dynamics output offsets into the Viewer Clean Stage before keyform evaluation", () => {
     const session = createRuntimeScreenSessionWithDynamics();
     const model = createViewerRuntimePlaybackModel(session);
+    // §3.2 pin under FACE_ANGLE_X = 30 (φ = 30°) with rootOffset (5,0): P = R(30°)·(5,0).
+    // Place the single chain particle directly below the pin so the chain hangs straight down
+    // (θ_world = 0). §3.5: θ_local = θ_world − φ = −30°, output scale 1 → offset = clamp(−30, ±10)
+    // = −10. HAIR_SWAY_X keyform maps −10 → warp offset −4, so bounds.x = −4.
+    const pinX = 5 * Math.cos(Math.PI / 6);
+    const pinY = 5 * Math.sin(Math.PI / 6);
+    const restParticle = { x: pinX, y: pinY + 10, px: pinX, py: pinY + 10 };
     const runtimeState = {
       ...createViewerRuntimeInitialState(model, {
         [FACE_ANGLE_X]: 0
       }),
       dynamicsGroups: {
         [DYNAMICS_GROUP]: {
-          angle: 0.5,
-          angularVelocity: 0,
-          previousSource: 0,
-          previousSourceVelocity: 0,
+          particles: [restParticle],
           tick: 4,
           resetCounter: 1
         }
@@ -659,9 +669,10 @@ describe("ViewerRuntimeScreen integration", () => {
     });
 
     expect(projection.baseParameterValues[FACE_ANGLE_X]).toBe(30);
+    // Dynamics owns HAIR_SWAY_X, so the manual override (9) is ignored.
     expect(projection.baseParameterValues[HAIR_SWAY_X]).toBeUndefined();
-    expect(projection.parameterValues[HAIR_SWAY_X]).toBe(5);
-    expect(requireDrawable(projection.projection, DRAW_FACE).bounds.x).toBe(2);
+    expect(projection.parameterValues[HAIR_SWAY_X]).toBe(-10);
+    expect(requireDrawable(projection.projection, DRAW_FACE).bounds.x).toBe(-4);
   });
 
   it("resets Viewer simulation state without changing Runtime Controls overrides", () => {
@@ -685,13 +696,14 @@ describe("ViewerRuntimeScreen integration", () => {
       "manualCommand"
     );
 
-    expect(resetState.dynamicsGroups[DYNAMICS_GROUP]).toMatchObject({
-      angle: 1,
-      angularVelocity: 0,
-      previousSource: 1,
-      previousSourceVelocity: 0,
-      tick: 0
-    });
+    // §3.4 reset: particles aligned straight below the pin with zero velocity (x === px, y === py).
+    const resetGroupState = resetState.dynamicsGroups[DYNAMICS_GROUP];
+    expect(resetGroupState?.tick).toBe(0);
+    expect(resetGroupState?.particles).toHaveLength(1);
+    for (const particle of resetGroupState?.particles ?? []) {
+      expect(particle.x).toBe(particle.px);
+      expect(particle.y).toBe(particle.py);
+    }
     expect(runtimeControlsState.parameterOverrides[FACE_ANGLE_X]).toBe(30);
     expect(session.dirty).toBe(false);
   });
@@ -699,16 +711,14 @@ describe("ViewerRuntimeScreen integration", () => {
   it("discards stale Dynamics state when a new project reuses a Dynamics Group id", () => {
     const oldSession = createRuntimeScreenSessionWithDynamics();
     const oldModel = createViewerRuntimePlaybackModel(oldSession);
+    const staleParticle = { x: 7, y: 3, px: 6.5, py: 2 };
     const staleState = {
       ...createViewerRuntimeInitialState(oldModel, {
         [FACE_ANGLE_X]: 0
       }),
       dynamicsGroups: {
         [DYNAMICS_GROUP]: {
-          angle: 0.75,
-          angularVelocity: 3,
-          previousSource: 0.5,
-          previousSourceVelocity: 2,
+          particles: [staleParticle],
           tick: 99,
           resetCounter: 4
         }
@@ -736,19 +746,16 @@ describe("ViewerRuntimeScreen integration", () => {
       session: nextSession
     });
 
-    expect(evaluated.nextState.dynamicsGroups[DYNAMICS_GROUP]).toMatchObject({
-      angle: 0,
-      angularVelocity: 0,
-      previousSource: 0,
-      previousSourceVelocity: 0,
-      tick: 0
-    });
-    expect(evaluated.nextState.dynamicsGroups[DYNAMICS_GROUP]).not.toMatchObject({
-      angle: 0.75,
-      angularVelocity: 3,
-      previousSource: 0.5,
-      previousSourceVelocity: 2
-    });
+    // The stale particle (velocity x ≠ px) is discarded; the fresh state resets straight-down with
+    // zero velocity.
+    const freshGroupState = evaluated.nextState.dynamicsGroups[DYNAMICS_GROUP];
+    expect(freshGroupState?.tick).toBe(0);
+    expect(freshGroupState?.particles).toHaveLength(1);
+    for (const particle of freshGroupState?.particles ?? []) {
+      expect(particle.x).toBe(particle.px);
+      expect(particle.y).toBe(particle.py);
+    }
+    expect(freshGroupState?.particles[0]).not.toEqual(staleParticle);
     expect(projection.parameterValues[HAIR_SWAY_X]).toBe(0);
   });
 
@@ -1288,29 +1295,22 @@ function createRuntimeScreenSessionWithDynamics(
       {
         parameterId: FACE_ANGLE_X,
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
+        scale: 1
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.05,
-        reactionSpeed: 8,
-        convergenceSpeed: 10
-      }
-    ],
+    // rootOffset != 0 gives the angle driver a lever arm (§3.6) so the chain is excited and settles.
+    chain: {
+      rootOffset: { x: 5, y: 0 },
+      segmentLengths: [10],
+      damping: 4,
+      gravityScale: 1
+    },
+    // scale 1 (unit/deg) maps θ_local 1:1 to the output offset, clamped to ±10.
     outputs: [
       {
         parameterId: HAIR_SWAY_X,
-        kind: "angle",
-        strength: 10,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 10
       }
     ]

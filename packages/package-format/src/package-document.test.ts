@@ -80,7 +80,7 @@ const minimalDocument = {
       rigControls: []
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v2",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: []
     },
     masks: {
@@ -126,9 +126,9 @@ describe("package-format DTO schemas", () => {
     expect(parsed.assets.sourceManifest.sourceAssets[0]?.kind).toBe("split-png-set-v1");
   });
 
-  it("accepts dynamics-file-v2 additive pendulum groups", () => {
+  it("accepts dynamics-file-v3 world-frame chain groups (chain + multiple outputs)", () => {
     const parsed = DynamicsFileSchema.parse({
-      schemaVersion: "dynamics-file-v2",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: [
         {
           dynamicsGroupId: "dyn_hair_sway",
@@ -138,25 +138,26 @@ describe("package-format DTO schemas", () => {
             {
               parameterId: "param_face_yaw",
               kind: "angle",
-              influencePercent: 100,
-              invert: false,
-              normalization: { min: -1, center: 0, max: 1 }
+              scale: 1
             }
           ],
-          pendulums: [
-            {
-              length: 1,
-              sway: 0.35,
-              reactionSpeed: 8,
-              convergenceSpeed: 4
-            }
-          ],
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [14, 10],
+            damping: 2.5,
+            gravityScale: 1
+          },
           outputs: [
             {
               parameterId: "param_hair_sway",
-              kind: "angle",
-              strength: 1,
-              invert: false,
+              segmentIndex: 1,
+              scale: 0.0333,
+              limit: 1
+            },
+            {
+              parameterId: "param_hair_sway_tip",
+              segmentIndex: 2,
+              scale: 0.0333,
               limit: 1
             }
           ]
@@ -164,12 +165,43 @@ describe("package-format DTO schemas", () => {
       ]
     });
 
-    expect(parsed.dynamicsGroups[0]?.outputs[0]?.parameterId).toBe("param_hair_sway");
+    expect(parsed.dynamicsGroups[0]?.outputs[1]?.segmentIndex).toBe(2);
+    expect(parsed.dynamicsGroups[0]?.chain.segmentLengths).toEqual([14, 10]);
   });
 
-  it("rejects unsupported dynamics v0 cardinality and invalid normalization", () => {
-    const invalid = DynamicsFileSchema.safeParse({
+  it("applies dynamics-file-v3 defaults (rootOffset {0,0}, segmentIndex 1)", () => {
+    const parsed = DynamicsFileSchema.parse({
+      schemaVersion: "dynamics-file-v3",
+      dynamicsGroups: [
+        {
+          dynamicsGroupId: "dyn_defaults",
+          displayName: "Defaults",
+          enabled: true,
+          inputs: [{ parameterId: "param_face_yaw", kind: "angle", scale: 1 }],
+          chain: { segmentLengths: [14], damping: 2, gravityScale: 1 },
+          outputs: [{ parameterId: "param_hair_sway", scale: 0.0333, limit: 1 }]
+        }
+      ]
+    });
+
+    expect(parsed.dynamicsGroups[0]?.chain.rootOffset).toEqual({ x: 0, y: 0 });
+    expect(parsed.dynamicsGroups[0]?.outputs[0]?.segmentIndex).toBe(1);
+  });
+
+  it("rejects the retired dynamics-file-v2 schemaVersion", () => {
+    const rejected = DynamicsFileSchema.safeParse({
       schemaVersion: "dynamics-file-v2",
+      dynamicsGroups: []
+    });
+    expect(rejected.success).toBe(false);
+  });
+
+  it("rejects payloads carrying retired pendulum / normalization / strength fields", () => {
+    // The v3 chain/input/output object shapes are non-strict, but the retired fields no longer
+    // satisfy the required v3 fields (chain, input.scale, output.scale/segmentIndex), so a v2-shaped
+    // payload fails to parse.
+    const invalid = DynamicsFileSchema.safeParse({
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: [
         {
           dynamicsGroupId: "dyn_invalid",
@@ -184,7 +216,36 @@ describe("package-format DTO schemas", () => {
               normalization: { min: 0, center: 0, max: 1 }
             }
           ],
-          pendulums: [],
+          pendulums: [{ length: 1, sway: 0.35, reactionSpeed: 8, convergenceSpeed: 4 }],
+          outputs: [{ parameterId: "param_hair_sway", kind: "angle", strength: 1, invert: false, limit: 1 }]
+        }
+      ]
+    });
+
+    expect(invalid.success).toBe(false);
+    if (!invalid.success) {
+      const paths = invalid.error.issues.map((issue) => issue.path.join("."));
+      // Missing chain, missing input scale, and missing output scale are all flagged.
+      expect(paths).toEqual(
+        expect.arrayContaining([
+          "dynamicsGroups.0.chain",
+          "dynamicsGroups.0.inputs.0.scale",
+          "dynamicsGroups.0.outputs.0.scale"
+        ])
+      );
+    }
+  });
+
+  it("rejects an empty chain (segmentLengths must be non-empty) and empty outputs", () => {
+    const invalid = DynamicsFileSchema.safeParse({
+      schemaVersion: "dynamics-file-v3",
+      dynamicsGroups: [
+        {
+          dynamicsGroupId: "dyn_empty",
+          displayName: "Empty",
+          enabled: true,
+          inputs: [{ parameterId: "param_face_yaw", kind: "angle", scale: 1 }],
+          chain: { segmentLengths: [], damping: 2, gravityScale: 1 },
           outputs: []
         }
       ]
@@ -192,10 +253,10 @@ describe("package-format DTO schemas", () => {
 
     expect(invalid.success).toBe(false);
     if (!invalid.success) {
-      expect(invalid.error.issues.map((issue) => issue.path.join("."))).toEqual(
+      const paths = invalid.error.issues.map((issue) => issue.path.join("."));
+      expect(paths).toEqual(
         expect.arrayContaining([
-          "dynamicsGroups.0.inputs.0.normalization.min",
-          "dynamicsGroups.0.pendulums",
+          "dynamicsGroups.0.chain.segmentLengths",
           "dynamicsGroups.0.outputs"
         ])
       );

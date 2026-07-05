@@ -1,5 +1,5 @@
 export const runtimePlayerDynamicsTuningProfileSchemaVersion =
-  "runtime-player-dynamics-tuning-profile-v1" as const;
+  "runtime-player-dynamics-tuning-profile-v2" as const;
 
 export const runtimePlayerEffectiveDynamicsTuningSchemaVersion =
   "runtime-player-effective-dynamics-tuning-v1" as const;
@@ -13,12 +13,11 @@ export type RuntimePlayerDynamicsTuningExportIdentity = {
 
 export type RuntimePlayerDynamicsTuningGroupOverride = {
   readonly enabled?: boolean;
-  readonly strength?: number;
+  readonly outputScale?: number;
   readonly limit?: number;
-  readonly length?: number;
-  readonly sway?: number;
-  readonly reactionSpeed?: number;
-  readonly convergenceSpeed?: number;
+  readonly damping?: number;
+  readonly gravityScale?: number;
+  readonly lengthScale?: number;
 };
 
 export type RuntimePlayerEffectiveDynamicsTuningProfile = {
@@ -34,12 +33,11 @@ export type RuntimePlayerEffectiveDynamicsTuningProfile = {
 
 export type RuntimePlayerDynamicsTuningValues = {
   readonly enabled: boolean;
-  readonly strength: number;
+  readonly outputScale: number;
   readonly limit: number;
-  readonly length: number;
-  readonly sway: number;
-  readonly reactionSpeed: number;
-  readonly convergenceSpeed: number;
+  readonly damping: number;
+  readonly gravityScale: number;
+  readonly lengthScale: number;
 };
 
 export type RuntimePlayerDynamicsTuningParameterRef = {

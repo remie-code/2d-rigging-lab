@@ -868,12 +868,11 @@ function createEffectiveDynamicsTuning(
     groups: {
       dyn_head: {
         enabled: true,
-        strength: revision,
+        outputScale: revision,
         limit: 30,
-        length: 1,
-        sway: 0.25,
-        reactionSpeed: 0.4,
-        convergenceSpeed: 0.7
+        lengthScale: 1,
+        damping: 0.4,
+        gravityScale: 0.7
       }
     }
   };

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,6 +59,14 @@ describe("preview-viewer equivalence contract fixture", () => {
       preview,
       viewer
     });
+
+    if (process.env.WAVE106_REGEN === "1") {
+      writeFileSync(
+        join(fixtureRootDirectory, "expected/preview-viewer-equivalence-summary.json"),
+        `${JSON.stringify(summary, null, 2)}\n`,
+        "utf8"
+      );
+    }
 
     expect(summary.equivalence).toEqual({
       snapshotSummary: true,
@@ -288,10 +296,9 @@ const createComparableRuntimeSummary = (
     outputParameterId: dynamics.outputParameterId,
     outputOffset: dynamics.outputOffset,
     effectiveOutputValue: dynamics.effectiveOutputValue,
-    angle: dynamics.stateSummary.angle,
-    angularVelocity: dynamics.stateSummary.angularVelocity,
-    previousSource: dynamics.stateSummary.previousSource,
-    previousSourceVelocity: dynamics.stateSummary.previousSourceVelocity,
+    particleCount: dynamics.stateSummary.particleCount,
+    maxParticleSpeed: dynamics.stateSummary.maxParticleSpeed,
+    tipAngleLocalDeg: dynamics.stateSummary.tipAngleLocalDeg,
     tick: dynamics.tick,
     resetCounter: dynamics.resetCounter
   })),
@@ -425,16 +432,18 @@ const createDynamicsGroupEntry = (
       inputs: group.inputs.map((input: any) => ({
         parameterId: ParameterIdSchema.parse(input.parameterId),
         kind: input.kind,
-        influencePercent: input.influencePercent,
-        invert: input.invert,
-        normalization: input.normalization
+        scale: input.scale
       })),
-      pendulums: group.pendulums,
+      chain: {
+        rootOffset: group.chain.rootOffset ?? { x: 0, y: 0 },
+        segmentLengths: group.chain.segmentLengths,
+        damping: group.chain.damping,
+        gravityScale: group.chain.gravityScale
+      },
       outputs: group.outputs.map((output: any) => ({
         parameterId: ParameterIdSchema.parse(output.parameterId),
-        kind: output.kind,
-        strength: output.strength,
-        invert: output.invert,
+        segmentIndex: output.segmentIndex ?? 1,
+        scale: output.scale,
         limit: output.limit
       }))
     }

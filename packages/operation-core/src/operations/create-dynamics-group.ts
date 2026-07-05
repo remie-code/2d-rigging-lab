@@ -129,21 +129,21 @@ const evaluateInitialBindingPreconditions = (
     );
   }
 
-  if (request.payload.pendulums === undefined || request.payload.pendulums.length !== 1) {
+  if (request.payload.chain === undefined) {
     diagnostics.push(
       createOperationDiagnostic({
-        checkId: "operation.createDynamicsGroup.invalidPendulumCardinality",
-        message: "createDynamicsGroup requires exactly one Dynamics pendulum for v0 package materialization.",
-        target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/pendulums" }
+        checkId: "operation.createDynamicsGroup.missingChain",
+        message: "createDynamicsGroup requires a Dynamics chain for package materialization.",
+        target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/chain" }
       })
     );
   }
 
-  if (request.payload.outputs === undefined || request.payload.outputs.length !== 1) {
+  if (request.payload.outputs === undefined || request.payload.outputs.length === 0) {
     diagnostics.push(
       createOperationDiagnostic({
-        checkId: "operation.createDynamicsGroup.invalidOutputCardinality",
-        message: "createDynamicsGroup requires exactly one additive output binding for v0 package materialization.",
+        checkId: "operation.createDynamicsGroup.missingOutputBinding",
+        message: "createDynamicsGroup requires at least one additive output binding for package materialization.",
         target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/outputs" }
       })
     );
@@ -157,11 +157,11 @@ const createPackageDynamicsGroup = (
   dynamicsGroupId: DynamicsGroupId
 ): PackageDynamicsGroup => {
   const inputs = request.payload.inputs ?? [];
-  const pendulums = request.payload.pendulums ?? [];
+  const chain = request.payload.chain;
   const outputs = request.payload.outputs ?? [];
 
-  if (pendulums.length !== 1 || outputs.length !== 1) {
-    throw new Error("createPackageDynamicsGroup requires v0 cardinality after precondition evaluation.");
+  if (chain === undefined || inputs.length === 0 || outputs.length === 0) {
+    throw new Error("createPackageDynamicsGroup requires inputs, a chain, and outputs after precondition evaluation.");
   }
 
   return {
@@ -172,25 +172,18 @@ const createPackageDynamicsGroup = (
     inputs: inputs.map((input) => ({
       parameterId: input.parameterId,
       kind: input.kind,
-      influencePercent: input.influencePercent,
-      invert: input.invert,
-      normalization: {
-        min: input.normalization.min,
-        center: input.normalization.center,
-        max: input.normalization.max
-      }
+      scale: input.scale
     })),
-    pendulums: pendulums.map((pendulum) => ({
-      length: pendulum.length,
-      sway: pendulum.sway,
-      reactionSpeed: pendulum.reactionSpeed,
-      convergenceSpeed: pendulum.convergenceSpeed
-    })),
+    chain: {
+      rootOffset: { x: chain.rootOffset.x, y: chain.rootOffset.y },
+      segmentLengths: [...chain.segmentLengths],
+      damping: chain.damping,
+      gravityScale: chain.gravityScale
+    },
     outputs: outputs.map((output) => ({
       parameterId: output.parameterId,
-      kind: output.kind,
-      strength: output.strength,
-      invert: output.invert,
+      segmentIndex: output.segmentIndex,
+      scale: output.scale,
       limit: output.limit
     }))
   };

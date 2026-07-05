@@ -88,7 +88,7 @@ describe("createDynamicsGroup operation", () => {
 
     expect(outcome.result.status).toBe("rejected");
     expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toEqual([
-      "operation.createDynamicsGroup.invalidOutputCardinality"
+      "operation.createDynamicsGroup.missingOutputBinding"
     ]);
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
@@ -179,32 +179,23 @@ const createDynamicsGroupRequest = (options: {
       {
         parameterId: "param_face_yaw",
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -1,
-          center: 0,
-          max: 1
-        }
+        scale: 30
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.35,
-        reactionSpeed: 8,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     ...(options.includeOutput === false
       ? {}
       : {
           outputs: [
             {
               parameterId: "param_hair_sway",
-              kind: "angle",
-              strength: 1,
-              invert: false,
+              segmentIndex: 1,
+              scale: 0.0333,
               limit: 1
             }
           ]
@@ -243,29 +234,20 @@ const createPresetDynamicsGroupRequest = () => ({
       {
         parameterId: PRESET_DRIVER_ID,
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
+        scale: 30
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.35,
-        reactionSpeed: 8,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: PRESET_OUTPUT_ID,
-        kind: "angle",
-        strength: 1,
-        invert: false,
+        segmentIndex: 1,
+        scale: 0.0333,
         limit: 1
       }
     ]
@@ -286,21 +268,14 @@ const createPresetDynamicsGroupUpdateRequest = () => ({
       {
         parameterId: UPDATED_PRESET_DRIVER_ID,
         kind: "angle",
-        influencePercent: 50,
-        invert: true,
-        normalization: {
-          min: -10,
-          center: 0,
-          max: 10
-        }
+        scale: -15
       }
     ],
     outputs: [
       {
         parameterId: UPDATED_PRESET_OUTPUT_ID,
-        kind: "angle",
-        strength: 0.5,
-        invert: true,
+        segmentIndex: 1,
+        scale: -0.025,
         limit: 0.75
       }
     ]

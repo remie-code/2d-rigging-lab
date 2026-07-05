@@ -22,6 +22,9 @@ import {
   createDynamicsTuningProfileDocument
 } from "./dynamics-tuning-profile-groups";
 import { DynamicsTuningProfileStore } from "./dynamics-tuning-profile-store";
+import {
+  createEffectiveRuntimeExportDynamicsGroups
+} from "../../stage/runtime-evaluation/effective-dynamics-tuning";
 
 describe("DynamicsTuningProfileStore", () => {
   it("uses the Runtime Player userData dynamics tuning profile path", async () => {
@@ -61,12 +64,11 @@ describe("DynamicsTuningProfileStore", () => {
       groups: {
         dyn_hair_sway: {
           enabled: false,
-          strength: 0.25,
+          outputScale: 0.25,
           limit: 0.75,
-          length: 1.4,
-          sway: 2,
-          reactionSpeed: 12,
-          convergenceSpeed: 4
+          damping: 1.4,
+          gravityScale: 0.8,
+          lengthScale: 2
         }
       },
       createdAtIso: "2026-06-30T00:00:00.000Z",
@@ -86,8 +88,8 @@ describe("DynamicsTuningProfileStore", () => {
       groups: {
         dyn_hair_sway: {
           enabled: false,
-          strength: 0.25,
-          reactionSpeed: 12
+          outputScale: 0.25,
+          damping: 1.4
         }
       }
     });
@@ -95,8 +97,70 @@ describe("DynamicsTuningProfileStore", () => {
     expect(loaded.profile?.groups.dyn_hair_sway).toMatchObject({
       enabled: false,
       limit: 0.75,
-      convergenceSpeed: 4
+      lengthScale: 2
     });
+  });
+
+  it("discards a saved v1 (pendulum vocabulary) profile as read-failed", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-dynamics-tuning-profiles-")
+    );
+    const payload = createPayload();
+    const identity = createDynamicsTuningRuntimeExportIdentity(payload);
+    const store = new DynamicsTuningProfileStore({ userDataPath });
+    const profileFilePath = store.getProfileFilePath(identity);
+    await mkdir(path.dirname(profileFilePath), { recursive: true });
+
+    // A legacy v1 profile: old schemaVersion literal and old pendulum/strength
+    // vocabulary. dynamics-world-frame-chain.md decision #2: it is discarded by
+    // the strict schemaVersion check, not migrated.
+    const legacyV1Profile = {
+      schemaVersion: "runtime-player-dynamics-tuning-profile-v1",
+      createdAtIso: "2026-06-30T00:00:00.000Z",
+      updatedAtIso: "2026-06-30T00:01:00.000Z",
+      exportIdentity: {
+        packageId: identity.packageId,
+        packageRevision: identity.packageRevision,
+        packageHash: identity.packageHash,
+        parameterSignatureHash: identity.parameterSignatureHash
+      },
+      dynamicsSignatureHash: identity.dynamicsSignatureHash,
+      groups: {
+        dyn_hair_sway: {
+          enabled: true,
+          strength: 0.5,
+          length: 1.8,
+          sway: 2.5,
+          reactionSpeed: 14,
+          convergenceSpeed: 6
+        }
+      }
+    };
+    await writeFile(
+      profileFilePath,
+      `${JSON.stringify(legacyV1Profile, null, 2)}\n`,
+      "utf8"
+    );
+
+    const loaded = await store.loadProfile(payload);
+
+    expect(loaded.state).toBe("read-failed");
+    expect(loaded.profile).toBeNull();
+    expect(loaded.warningMessages.join(" ")).toContain("schema version");
+
+    // End-to-end (plan §8): a discarded v1 profile yields no override, so the
+    // model runs on exported defaults. The discard surfaces to state as a null
+    // effective profile (loaded.profile is null above); feeding that null to the
+    // effective-dynamics adapter returns an identity clone of the exported
+    // dynamics group (no multiplier/replacement applied).
+    const discardedEffectiveProfile = loaded.profile as null;
+    const exportedGroup = payload.artifacts.model.dynamicsGroups[0];
+    const effectiveGroups = createEffectiveRuntimeExportDynamicsGroups({
+      model: payload.artifacts.model,
+      effectiveDynamicsTuning: discardedEffectiveProfile
+    });
+    expect(effectiveGroups[0]).toEqual(exportedGroup);
+    expect(effectiveGroups[0]).not.toBe(exportedGroup);
   });
 
   it("falls back safely when the profile file contains corrupt JSON", async () => {
@@ -153,7 +217,7 @@ function createPayload(input: {
           hiddenDirectControlParameterIds: ["param_hair_sway"]
         },
         dynamicsSolver: {
-          solverVersion: "runtime-dynamics-pendulum-v1",
+          solverVersion: "runtime-dynamics-chain-v1",
           fixedStepMs: 16.6667,
           resetPolicy: "reset-to-default-parameters-v1"
         },
@@ -219,29 +283,20 @@ function createDynamicsGroup(
       {
         parameterId: input.inputParameterId ?? "param_face_angle_x",
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
+        scale: 1
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.5,
-        reactionSpeed: 8,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: "param_hair_sway",
-        kind: "angle",
-        strength: 1,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 1
       }
     ]

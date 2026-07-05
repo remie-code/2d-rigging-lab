@@ -258,25 +258,20 @@ describe("texture atlas core mutation", () => {
           {
             parameterId: ParameterIdSchema.parse("param_atlas_non_source"),
             kind: "angle",
-            influencePercent: 100,
-            invert: false,
-            normalization: { min: 0, center: 0.5, max: 1 }
+            scale: 30
           }
         ],
-        pendulums: [
-          {
-            length: 1,
-            sway: 0.25,
-            reactionSpeed: 6,
-            convergenceSpeed: 3
-          }
-        ],
+        chain: {
+          rootOffset: { x: 0, y: 0 },
+          segmentLengths: [14],
+          damping: 2.5,
+          gravityScale: 1
+        },
         outputs: [
           {
             parameterId: ParameterIdSchema.parse("param_atlas_non_source_output"),
-            kind: "angle",
-            strength: 1,
-            invert: false,
+            segmentIndex: 1,
+            scale: 0.0333,
             limit: 1
           }
         ]

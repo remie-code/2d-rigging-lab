@@ -129,29 +129,19 @@ describe("parameter manager projection", () => {
         {
           parameterId: dynamicsDriverParameterId,
           kind: "angle",
-          influencePercent: 100,
-          invert: false,
-          normalization: {
-            min: 0,
-            center: 0.5,
-            max: 1
-          }
-        }
+        scale: 1}
       ],
-      pendulums: [
-        {
-          length: 1,
-          sway: 0.35,
-          reactionSpeed: 8,
-          convergenceSpeed: 4
-        }
-      ],
+      chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
       outputs: [
         {
           parameterId: dynamicsOutputParameterId,
-          kind: "angle",
-          strength: 1,
-          invert: false,
+          segmentIndex: 1,
+          scale: 1,
           limit: 1
         }
       ]
@@ -181,7 +171,7 @@ describe("parameter manager projection", () => {
     expect(outputRow?.usageItems[0]).toMatchObject({
       targetLabel: "Dynamics: Smile Follow",
       propertyLabel: "output target parameter",
-      detailLabel: "Output 1 / angle"
+      detailLabel: "Output 1 / segment 1"
     });
     expect(projection.checks).not.toContainEqual(
       expect.objectContaining({

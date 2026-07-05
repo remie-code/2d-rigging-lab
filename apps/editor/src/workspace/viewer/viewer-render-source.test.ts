@@ -393,29 +393,19 @@ describe("viewer render source projection", () => {
         {
           parameterId: PARAM_NON_SOURCE,
           kind: "angle",
-          influencePercent: 100,
-          invert: false,
-          normalization: {
-            min: -30,
-            center: 0,
-            max: 30
-          }
-        }
+        scale: 1}
       ],
-      pendulums: [
-        {
-          length: 1,
-          sway: 0.05,
-          reactionSpeed: 8,
-          convergenceSpeed: 10
-        }
-      ],
+      chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
       outputs: [
         {
           parameterId: PARAM_NON_SOURCE,
-          kind: "angle",
-          strength: 10,
-          invert: false,
+          segmentIndex: 1,
+          scale: 1,
           limit: 10
         }
       ]

@@ -1,9 +1,9 @@
 import type { DynamicsGroupId, ParameterId } from "@private-2d-rigging-lab/contracts";
 import {
   createDynamicsGroupIdFromDisplayName,
+  type DynamicsChainPayloadDto,
   type DynamicsInputPayloadDto,
   type DynamicsOutputPayloadDto,
-  type DynamicsPendulumPayloadDto,
   type UpdateDynamicsGroupPayloadDto
 } from "@private-2d-rigging-lab/operation-core";
 import {
@@ -34,9 +34,9 @@ import {
   getDynamicsToolPreset,
   hasBlockingDynamicsToolIssues,
   removeInputFromDynamicsDraft,
+  updateDynamicsDraftChain,
   updateDynamicsDraftInput,
   updateDynamicsDraftOutput,
-  updateDynamicsDraftPendulum,
   validateDynamicsToolDraft,
   type DynamicsAxisKind,
   type DynamicsToolDraft,
@@ -169,11 +169,11 @@ export function DynamicsToolInspector() {
     setDraft({
       ...draft,
       presetId,
-      pendulums: [structuredClone(preset.pendulum)],
+      chain: structuredClone(preset.chain),
       outputs:
         outputParameter === undefined
           ? draft.outputs
-          : [createDefaultDynamicsOutput(outputParameter, preset)]
+          : [createDefaultDynamicsOutput(outputParameter)]
     });
   };
 
@@ -250,8 +250,8 @@ export function DynamicsToolInspector() {
     setDraft((current) => updateDynamicsDraftOutput(session, current, patch));
   };
 
-  const updatePendulum = (patch: Partial<DynamicsPendulumPayloadDto>) => {
-    setDraft((current) => updateDynamicsDraftPendulum(current, patch));
+  const updateChain = (patch: Partial<DynamicsChainPayloadDto>) => {
+    setDraft((current) => updateDynamicsDraftChain(current, patch));
   };
 
   return (
@@ -298,7 +298,7 @@ export function DynamicsToolInspector() {
           onCancel={returnToList}
           onInputChange={updateInput}
           onOutputChange={updateOutput}
-          onPendulumChange={updatePendulum}
+          onChainChange={updateChain}
           onPresetChange={applyPreset}
           onSetDraft={setDraft}
           operationMessage={operationMessage}
@@ -319,7 +319,7 @@ export function DynamicsToolInspector() {
           onCancel={() => returnToGroup(activeGroup.dynamicsGroupId)}
           onInputChange={updateInput}
           onOutputChange={updateOutput}
-          onPendulumChange={updatePendulum}
+          onChainChange={updateChain}
           onPresetChange={applyPreset}
           onSetDraft={setDraft}
           operationMessage={operationMessage}
@@ -431,7 +431,7 @@ function ExistingGroupInspector({
 }: {
   readonly dynamicsToolPreview: ReturnType<typeof useEditorSession>["dynamicsToolPreview"];
   readonly group: DynamicsToolGroup;
-  readonly groupDiagnosticSummary?: DynamicsToolGroupDiagnosticSummary;
+  readonly groupDiagnosticSummary?: DynamicsToolGroupDiagnosticSummary | undefined;
   readonly onAdvancePreview: (
     dynamicsGroupId: DynamicsGroupId,
     dtMs: number
@@ -520,7 +520,7 @@ function ExistingGroupInspector({
     const nextGroup = applyQuickTuneDraftToGroup(group, nextDraft);
     const committed = onQuickTuneCommit({
       dynamicsGroupId: group.dynamicsGroupId,
-      pendulums: nextGroup.pendulums.map(cloneDynamicsPendulumForPayload),
+      chain: cloneDynamicsChainForPayload(nextGroup.chain),
       outputs: nextGroup.outputs.map(cloneDynamicsOutputForPayload)
     });
     if (committed) {
@@ -555,7 +555,7 @@ function ExistingGroupInspector({
             const value =
               previewDriverValues[input.parameterId] ??
               parameter?.default ??
-              input.normalization.center;
+              0;
 
             return (
               <PreviewDriverControl
@@ -648,8 +648,8 @@ function PreviewDriverControl({
       <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] items-center gap-2">
         <input
           className="h-2 accent-teal-400"
-          max={parameter?.max ?? input.normalization.max}
-          min={parameter?.min ?? input.normalization.min}
+          max={parameter?.max ?? 1}
+          min={parameter?.min ?? -1}
           onBlur={sliderCommit.flush}
           onChange={(event) =>
             sliderCommit.schedule(readFiniteInputValue(event.currentTarget.value, value))
@@ -663,8 +663,8 @@ function PreviewDriverControl({
         <input
           aria-label={`${parameter?.displayName ?? input.parameterId} preview value`}
           className="h-8 rounded border border-neutral-800 bg-neutral-950 px-2 text-right text-xs text-neutral-100 outline-none focus:border-teal-500"
-          max={parameter?.max ?? input.normalization.max}
-          min={parameter?.min ?? input.normalization.min}
+          max={parameter?.max ?? 1}
+          min={parameter?.min ?? -1}
           onChange={(event) =>
             onChange(
               groupId,
@@ -681,30 +681,32 @@ function PreviewDriverControl({
   );
 }
 
+// §9 runtime-player tuning profile v2 vocabulary. outputScale / lengthScale are multipliers on the
+// committed base (default 1.0); limit / damping / gravityScale are direct values. Quick Tune is a
+// live delta over the committed group, so multipliers read back as 1.0 after each commit.
 type QuickTuneField =
-  | "strength"
+  | "outputScale"
   | "limit"
-  | "length"
-  | "sway"
-  | "reactionSpeed"
-  | "convergenceSpeed";
+  | "damping"
+  | "gravityScale"
+  | "lengthScale";
+
+const QUICK_TUNE_MULTIPLIER_FIELDS = new Set<QuickTuneField>(["outputScale", "lengthScale"]);
 
 interface QuickTuneDraft {
-  readonly strength: number;
+  readonly outputScale: number;
   readonly limit: number;
-  readonly length: number;
-  readonly sway: number;
-  readonly reactionSpeed: number;
-  readonly convergenceSpeed: number;
+  readonly damping: number;
+  readonly gravityScale: number;
+  readonly lengthScale: number;
 }
 
 const QUICK_TUNE_FIELDS: readonly QuickTuneField[] = [
-  "strength",
+  "outputScale",
   "limit",
-  "length",
-  "sway",
-  "reactionSpeed",
-  "convergenceSpeed"
+  "damping",
+  "gravityScale",
+  "lengthScale"
 ];
 
 function QuickTuneControl({
@@ -801,16 +803,15 @@ function QuickTuneControl({
 }
 
 function createQuickTuneDraftFromGroup(group: DynamicsToolGroup): QuickTuneDraft {
-  const pendulum = group.pendulums[0];
   const output = group.outputs[0];
 
+  // Multipliers read back as 1.0 over the committed base; direct values mirror the committed group.
   return {
-    strength: output?.strength ?? 0,
+    outputScale: 1,
     limit: output?.limit ?? 0,
-    length: pendulum?.length ?? 1,
-    sway: pendulum?.sway ?? 0,
-    reactionSpeed: pendulum?.reactionSpeed ?? 0,
-    convergenceSpeed: pendulum?.convergenceSpeed ?? 0
+    damping: group.chain.damping,
+    gravityScale: group.chain.gravityScale,
+    lengthScale: 1
   };
 }
 
@@ -840,23 +841,22 @@ function applyQuickTuneDraftToGroup(
     enabled: group.enabled,
     ...(group.presetId === undefined ? {} : { presetId: group.presetId }),
     inputs: group.inputs.map(cloneDynamicsInputForPayload),
-    pendulums: [
-      {
-        length: draft.length,
-        sway: draft.sway,
-        reactionSpeed: draft.reactionSpeed,
-        convergenceSpeed: draft.convergenceSpeed
-      }
-    ],
+    chain: {
+      rootOffset: { x: group.chain.rootOffset.x, y: group.chain.rootOffset.y },
+      // §9 lengthScale: multiplier on every segment length.
+      segmentLengths: group.chain.segmentLengths.map((length) => length * draft.lengthScale),
+      damping: draft.damping,
+      gravityScale: draft.gravityScale
+    },
     outputs:
       output === undefined
         ? []
         : [
             {
               parameterId: output.parameterId,
-              kind: output.kind,
-              strength: draft.strength,
-              invert: output.invert,
+              segmentIndex: output.segmentIndex,
+              // §9 outputScale: multiplier on the committed output scale.
+              scale: output.scale * draft.outputScale,
               limit: draft.limit
             }
           ]
@@ -869,57 +869,51 @@ function sameQuickTuneDraftAsGroup(
 ): boolean {
   const committed = createQuickTuneDraftFromGroup(group);
   return (
-    sameNumericValue(committed.strength, draft.strength) &&
+    sameNumericValue(committed.outputScale, draft.outputScale) &&
     sameNumericValue(committed.limit, draft.limit) &&
-    sameNumericValue(committed.length, draft.length) &&
-    sameNumericValue(committed.sway, draft.sway) &&
-    sameNumericValue(committed.reactionSpeed, draft.reactionSpeed) &&
-    sameNumericValue(committed.convergenceSpeed, draft.convergenceSpeed)
+    sameNumericValue(committed.damping, draft.damping) &&
+    sameNumericValue(committed.gravityScale, draft.gravityScale) &&
+    sameNumericValue(committed.lengthScale, draft.lengthScale)
   );
 }
 
 function createQuickTuneSignature(draft: QuickTuneDraft): string {
   return [
-    draft.strength,
+    draft.outputScale,
     draft.limit,
-    draft.length,
-    draft.sway,
-    draft.reactionSpeed,
-    draft.convergenceSpeed
+    draft.damping,
+    draft.gravityScale,
+    draft.lengthScale
   ].join(":");
 }
 
 function getQuickTuneLabel(field: QuickTuneField): string {
   switch (field) {
-    case "strength":
-      return "Strength";
+    case "outputScale":
+      return "Output x";
     case "limit":
       return "Limit";
-    case "length":
-      return "Length";
-    case "sway":
-      return "Sway";
-    case "reactionSpeed":
-      return "Reaction";
-    case "convergenceSpeed":
-      return "Convergence";
+    case "damping":
+      return "Damping";
+    case "gravityScale":
+      return "Gravity";
+    case "lengthScale":
+      return "Length x";
   }
 }
 
 function getQuickTuneDescription(field: QuickTuneField): string {
   switch (field) {
-    case "strength":
-      return "揺れの大きさ。上げると出力パラメータの動きが大きくなります。";
+    case "outputScale":
+      return "出力の倍率。上げると出力パラメータの動きが大きくなります。";
     case "limit":
-      return "最大振れ幅。上げると大きく揺れますが、暴れやすくなります。";
-    case "length":
-      return "揺れの重さや周期。上げるとゆったり遅れて揺れます。";
-    case "sway":
-      return "入力変化への揺れやすさ。上げると動き出しや切り返しで大きく振れます。";
-    case "reactionSpeed":
-      return "入力へ追従する速さ。上げると素早く反応します。";
-    case "convergenceSpeed":
-      return "揺れの収まりやすさ。上げると揺れが早く止まります。";
+      return "最大振れ幅。出力オフセットの絶対値の上限です。";
+    case "damping":
+      return "減衰の強さ。上げると揺れが早く収まります。";
+    case "gravityScale":
+      return "重力の強さ。上げると速く戻り、周期が短くなります。";
+    case "lengthScale":
+      return "チェーン長の倍率。上げるとゆったり長い周期で揺れます。";
   }
 }
 
@@ -933,27 +927,25 @@ function getQuickTuneBounds(
 } {
   const magnitude = Math.abs(value);
   switch (field) {
-    case "strength":
-      return { min: 0, max: Math.max(1, magnitude * 2), step: 0.01 };
+    case "outputScale":
+      return { min: 0, max: Math.max(3, magnitude * 2), step: 0.01 };
     case "limit":
       return { min: 0, max: Math.max(1, magnitude * 2), step: 0.01 };
-    case "length":
-      return { min: 0.01, max: Math.max(2.5, magnitude * 2), step: 0.01 };
-    case "sway":
-      return { min: 0, max: Math.max(2, magnitude * 2), step: 0.01 };
-    case "reactionSpeed":
-      return { min: 0, max: Math.max(30, magnitude * 2), step: 0.1 };
-    case "convergenceSpeed":
-      return { min: 0, max: Math.max(20, magnitude * 2), step: 0.1 };
+    case "damping":
+      return { min: 0, max: Math.max(60, magnitude * 2), step: 0.1 };
+    case "gravityScale":
+      return { min: 0, max: Math.max(5, magnitude * 2), step: 0.05 };
+    case "lengthScale":
+      return { min: 0.01, max: Math.max(3, magnitude * 2), step: 0.01 };
   }
 }
 
 function normalizeQuickTuneValue(field: QuickTuneField, value: number): number {
+  const min = QUICK_TUNE_MULTIPLIER_FIELDS.has(field) ? 0.01 : 0;
   if (!Number.isFinite(value)) {
-    return field === "length" ? 0.01 : 0;
+    return min;
   }
 
-  const min = field === "length" ? 0.01 : 0;
   return Number(Math.max(value, min).toFixed(6));
 }
 
@@ -961,33 +953,24 @@ function cloneDynamicsInputForPayload(input: DynamicsInputPayloadDto): DynamicsI
   return {
     parameterId: input.parameterId,
     kind: input.kind,
-    influencePercent: input.influencePercent,
-    invert: input.invert,
-    normalization: {
-      min: input.normalization.min,
-      center: input.normalization.center,
-      max: input.normalization.max
-    }
+    scale: input.scale
   };
 }
 
-function cloneDynamicsPendulumForPayload(
-  pendulum: DynamicsPendulumPayloadDto
-): DynamicsPendulumPayloadDto {
+function cloneDynamicsChainForPayload(chain: DynamicsChainPayloadDto): DynamicsChainPayloadDto {
   return {
-    length: pendulum.length,
-    sway: pendulum.sway,
-    reactionSpeed: pendulum.reactionSpeed,
-    convergenceSpeed: pendulum.convergenceSpeed
+    rootOffset: { x: chain.rootOffset.x, y: chain.rootOffset.y },
+    segmentLengths: [...chain.segmentLengths],
+    damping: chain.damping,
+    gravityScale: chain.gravityScale
   };
 }
 
 function cloneDynamicsOutputForPayload(output: DynamicsOutputPayloadDto): DynamicsOutputPayloadDto {
   return {
     parameterId: output.parameterId,
-    kind: output.kind,
-    strength: output.strength,
-    invert: output.invert,
+    segmentIndex: output.segmentIndex,
+    scale: output.scale,
     limit: output.limit
   };
 }
@@ -1037,6 +1020,99 @@ function useDynamicsPreviewAnimationLoop({
   }, [enabled, groupId, onAdvance]);
 }
 
+function ChainEditor({
+  chain,
+  onChainChange
+}: {
+  readonly chain: DynamicsChainPayloadDto;
+  readonly onChainChange: (patch: Partial<DynamicsChainPayloadDto>) => void;
+}) {
+  const setSegmentLength = (index: number, length: number) => {
+    const next = chain.segmentLengths.map((current, currentIndex) =>
+      currentIndex === index ? length : current
+    );
+    onChainChange({ segmentLengths: next });
+  };
+
+  const addSegment = () => {
+    const last = chain.segmentLengths[chain.segmentLengths.length - 1] ?? 10;
+    onChainChange({ segmentLengths: [...chain.segmentLengths, last] });
+  };
+
+  const removeSegment = (index: number) => {
+    if (chain.segmentLengths.length <= 1) {
+      return;
+    }
+    onChainChange({
+      segmentLengths: chain.segmentLengths.filter((_, currentIndex) => currentIndex !== index)
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="dynamics-chain-editor">
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField
+          label="Root Offset X (cm)"
+          onChange={(x) => onChainChange({ rootOffset: { ...chain.rootOffset, x } })}
+          value={chain.rootOffset.x}
+        />
+        <NumberField
+          label="Root Offset Y (cm)"
+          onChange={(y) => onChainChange({ rootOffset: { ...chain.rootOffset, y } })}
+          value={chain.rootOffset.y}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="text-xs text-neutral-500">Segment Lengths (cm)</div>
+        {chain.segmentLengths.map((length, index) => (
+          <div
+            className="grid grid-cols-[minmax(0,1fr)_2rem] items-end gap-2"
+            data-testid="dynamics-chain-segment-row"
+            key={index}
+          >
+            <NumberField
+              label={`Segment ${index + 1}`}
+              min={0}
+              onChange={(nextLength) => setSegmentLength(index, nextLength)}
+              value={length}
+            />
+            <IconPanelButton
+              disabled={chain.segmentLengths.length <= 1}
+              label={`Remove segment ${index + 1}`}
+              onClick={() => removeSegment(index)}
+            >
+              <Trash2 aria-hidden="true" size={13} strokeWidth={1.8} />
+            </IconPanelButton>
+          </div>
+        ))}
+        <button
+          className="flex min-h-8 items-center justify-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs font-medium text-neutral-300 transition hover:border-teal-700 hover:text-teal-100"
+          data-testid="dynamics-add-segment"
+          onClick={addSegment}
+          type="button"
+        >
+          <Plus aria-hidden="true" size={14} strokeWidth={1.8} />
+          Add Segment
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField
+          label="Damping (1/s)"
+          min={0}
+          onChange={(damping) => onChainChange({ damping })}
+          value={chain.damping}
+        />
+        <NumberField
+          label="Gravity Scale"
+          min={0}
+          onChange={(gravityScale) => onChainChange({ gravityScale })}
+          value={chain.gravityScale}
+        />
+      </div>
+    </div>
+  );
+}
+
 function DraftInspector({
   actionLabel,
   actionTestId,
@@ -1048,7 +1124,7 @@ function DraftInspector({
   onCancel,
   onInputChange,
   onOutputChange,
-  onPendulumChange,
+  onChainChange,
   onPresetChange,
   onSetDraft,
   operationMessage,
@@ -1065,7 +1141,7 @@ function DraftInspector({
   readonly onCancel: () => void;
   readonly onInputChange: (index: number, patch: Partial<DynamicsInputPayloadDto>) => void;
   readonly onOutputChange: (patch: Partial<DynamicsOutputPayloadDto>) => void;
-  readonly onPendulumChange: (patch: Partial<DynamicsPendulumPayloadDto>) => void;
+  readonly onChainChange: (patch: Partial<DynamicsChainPayloadDto>) => void;
   readonly onPresetChange: (presetId: DynamicsToolPresetId) => void;
   readonly onSetDraft: (updater: (current: DynamicsToolDraft) => DynamicsToolDraft) => void;
   readonly operationMessage: string | null;
@@ -1159,22 +1235,12 @@ function DraftInspector({
                   <Trash2 aria-hidden="true" size={13} strokeWidth={1.8} />
                 </IconPanelButton>
               </div>
-              <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+              <div className="mt-2 grid grid-cols-[minmax(0,1fr)] items-end gap-2">
                 <NumberField
-                  label="Influence"
-                  onChange={(influencePercent) => onInputChange(index, { influencePercent })}
-                  step={1}
-                  value={input.influencePercent}
+                  label={input.kind === "angle" ? "Scale (deg/unit)" : "Scale (cm/unit)"}
+                  onChange={(scale) => onInputChange(index, { scale })}
+                  value={input.scale}
                 />
-                <label className="flex h-8 items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300">
-                  <input
-                    checked={input.invert}
-                    className="accent-teal-400"
-                    onChange={(event) => onInputChange(index, { invert: event.currentTarget.checked })}
-                    type="checkbox"
-                  />
-                  Invert
-                </label>
               </div>
             </div>
           ))}
@@ -1191,67 +1257,8 @@ function DraftInspector({
         </div>
       </Section>
 
-      <Section title="Advanced">
-        <div className="flex flex-col gap-2">
-          {draft.inputs.map((input, index) => (
-            <div
-              className="grid grid-cols-3 gap-2"
-              data-testid="dynamics-normalization-row"
-              key={`${input.parameterId}:${index}:normalization`}
-            >
-              <NumberField
-                label={`Min ${index + 1}`}
-                onChange={(min) =>
-                  onInputChange(index, { normalization: { ...input.normalization, min } })
-                }
-                value={input.normalization.min}
-              />
-              <NumberField
-                label="Center"
-                onChange={(center) =>
-                  onInputChange(index, { normalization: { ...input.normalization, center } })
-                }
-                value={input.normalization.center}
-              />
-              <NumberField
-                label="Max"
-                onChange={(max) =>
-                  onInputChange(index, { normalization: { ...input.normalization, max } })
-                }
-                value={input.normalization.max}
-              />
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Pendulum">
-        <div className="grid grid-cols-2 gap-2">
-          <NumberField
-            label="Length"
-            min={0}
-            onChange={(length) => onPendulumChange({ length })}
-            value={draft.pendulums[0]?.length ?? 0}
-          />
-          <NumberField
-            label="Sway"
-            min={0}
-            onChange={(sway) => onPendulumChange({ sway })}
-            value={draft.pendulums[0]?.sway ?? 0}
-          />
-          <NumberField
-            label="Reaction"
-            min={0}
-            onChange={(reactionSpeed) => onPendulumChange({ reactionSpeed })}
-            value={draft.pendulums[0]?.reactionSpeed ?? 0}
-          />
-          <NumberField
-            label="Converge"
-            min={0}
-            onChange={(convergenceSpeed) => onPendulumChange({ convergenceSpeed })}
-            value={draft.pendulums[0]?.convergenceSpeed ?? 0}
-          />
-        </div>
+      <Section title="Chain">
+        <ChainEditor chain={draft.chain} onChainChange={onChainChange} />
       </Section>
 
       <Section title="Outputs">
@@ -1264,24 +1271,22 @@ function DraftInspector({
             >
               {renderParameterOptions(parameters)}
             </SelectField>
-            <SelectField
-              label="Kind"
-              onChange={(value) => onOutputChange({ kind: value as DynamicsAxisKind })}
-              testId="dynamics-output-kind"
-              value={draft.outputs[0]?.kind ?? "angle"}
-            >
-              {AXIS_KIND_OPTIONS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {kind}
-                </option>
-              ))}
-            </SelectField>
-          </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
             <NumberField
-              label="Strength"
-              onChange={(strength) => onOutputChange({ strength })}
-              value={draft.outputs[0]?.strength ?? 0}
+              label="Segment"
+              min={1}
+              onChange={(segmentIndex) =>
+                onOutputChange({ segmentIndex: Math.max(1, Math.round(segmentIndex)) })
+              }
+              step={1}
+              testId="dynamics-output-segment"
+              value={draft.outputs[0]?.segmentIndex ?? 1}
+            />
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-end gap-2">
+            <NumberField
+              label="Scale (unit/deg)"
+              onChange={(scale) => onOutputChange({ scale })}
+              value={draft.outputs[0]?.scale ?? 0}
             />
             <NumberField
               label="Limit"
@@ -1289,15 +1294,6 @@ function DraftInspector({
               onChange={(limit) => onOutputChange({ limit })}
               value={draft.outputs[0]?.limit ?? 0}
             />
-            <label className="flex h-8 items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-300">
-              <input
-                checked={draft.outputs[0]?.invert ?? false}
-                className="accent-teal-400"
-                onChange={(event) => onOutputChange({ invert: event.currentTarget.checked })}
-                type="checkbox"
-              />
-              Invert
-            </label>
           </div>
         </div>
       </Section>
@@ -1399,7 +1395,7 @@ function ValidationIssues({
 function GroupDiagnosticIssues({
   summary
 }: {
-  readonly summary?: DynamicsToolGroupDiagnosticSummary;
+  readonly summary?: DynamicsToolGroupDiagnosticSummary | undefined;
 }) {
   if (summary === undefined || summary.issues.length === 0) {
     return (
@@ -1482,6 +1478,7 @@ function NumberField({
   min,
   onChange,
   step,
+  testId,
   value
 }: {
   readonly label: string;
@@ -1489,6 +1486,7 @@ function NumberField({
   readonly min?: number;
   readonly onChange: (value: number) => void;
   readonly step?: number;
+  readonly testId?: string;
   readonly value: number;
 }) {
   return (
@@ -1497,6 +1495,7 @@ function NumberField({
       <input
         aria-label={label}
         className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-right text-xs text-neutral-100 outline-none focus:border-teal-500"
+        {...(testId === undefined ? {} : { "data-testid": testId })}
         {...(max === undefined ? {} : { max })}
         {...(min === undefined ? {} : { min })}
         onChange={(event) => {

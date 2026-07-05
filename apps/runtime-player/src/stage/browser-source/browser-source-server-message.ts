@@ -454,35 +454,30 @@ function readDynamicsTuningGroupOverride(
   }
 
   const enabled = readOptionalBoolean(value.enabled);
-  const strength = readOptionalFiniteNumber(value.strength);
+  const outputScale = readOptionalPositiveNumber(value.outputScale);
   const limit = readOptionalNonNegativeNumber(value.limit);
-  const length = readOptionalPositiveNumber(value.length);
-  const sway = readOptionalNonNegativeNumber(value.sway);
-  const reactionSpeed = readOptionalNonNegativeNumber(value.reactionSpeed);
-  const convergenceSpeed = readOptionalNonNegativeNumber(
-    value.convergenceSpeed
-  );
+  const damping = readOptionalNonNegativeNumber(value.damping);
+  const gravityScale = readOptionalNonNegativeNumber(value.gravityScale);
+  const lengthScale = readOptionalPositiveNumber(value.lengthScale);
 
   if (
     enabled === null ||
-    strength === null ||
+    outputScale === null ||
     limit === null ||
-    length === null ||
-    sway === null ||
-    reactionSpeed === null ||
-    convergenceSpeed === null
+    damping === null ||
+    gravityScale === null ||
+    lengthScale === null
   ) {
     return null;
   }
 
   return {
     ...(enabled === undefined ? {} : { enabled }),
-    ...(strength === undefined ? {} : { strength }),
+    ...(outputScale === undefined ? {} : { outputScale }),
     ...(limit === undefined ? {} : { limit }),
-    ...(length === undefined ? {} : { length }),
-    ...(sway === undefined ? {} : { sway }),
-    ...(reactionSpeed === undefined ? {} : { reactionSpeed }),
-    ...(convergenceSpeed === undefined ? {} : { convergenceSpeed })
+    ...(damping === undefined ? {} : { damping }),
+    ...(gravityScale === undefined ? {} : { gravityScale }),
+    ...(lengthScale === undefined ? {} : { lengthScale })
   };
 }
 

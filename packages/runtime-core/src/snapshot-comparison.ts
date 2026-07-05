@@ -65,8 +65,9 @@ export const compareRuntimeSnapshots = (
             outputParameterId: afterDynamics.outputParameterId,
             stateChanged: true,
             outputChanged: true,
-            angleAfter: afterDynamics.stateSummary.angle,
-            angularVelocityAfter: afterDynamics.stateSummary.angularVelocity,
+            particleCountAfter: afterDynamics.stateSummary.particleCount,
+            maxParticleSpeedAfter: afterDynamics.stateSummary.maxParticleSpeed,
+            tipAngleLocalDegAfter: afterDynamics.stateSummary.tipAngleLocalDeg,
             outputOffsetAfter: afterDynamics.outputOffset,
             effectiveOutputValueAfter: afterDynamics.effectiveOutputValue,
             tickAfter: afterDynamics.tick,
@@ -76,10 +77,9 @@ export const compareRuntimeSnapshots = (
       }
 
       const stateChanged =
-        beforeDynamics.stateSummary.angle !== afterDynamics.stateSummary.angle ||
-        beforeDynamics.stateSummary.angularVelocity !== afterDynamics.stateSummary.angularVelocity ||
-        beforeDynamics.stateSummary.previousSource !== afterDynamics.stateSummary.previousSource ||
-        beforeDynamics.stateSummary.previousSourceVelocity !== afterDynamics.stateSummary.previousSourceVelocity ||
+        beforeDynamics.stateSummary.particleCount !== afterDynamics.stateSummary.particleCount ||
+        beforeDynamics.stateSummary.maxParticleSpeed !== afterDynamics.stateSummary.maxParticleSpeed ||
+        beforeDynamics.stateSummary.tipAngleLocalDeg !== afterDynamics.stateSummary.tipAngleLocalDeg ||
         beforeDynamics.tick !== afterDynamics.tick ||
         beforeDynamics.resetCounter !== afterDynamics.resetCounter;
       const outputChanged =
@@ -96,10 +96,12 @@ export const compareRuntimeSnapshots = (
           outputParameterId: afterDynamics.outputParameterId,
           stateChanged,
           outputChanged,
-          angleBefore: beforeDynamics.stateSummary.angle,
-          angleAfter: afterDynamics.stateSummary.angle,
-          angularVelocityBefore: beforeDynamics.stateSummary.angularVelocity,
-          angularVelocityAfter: afterDynamics.stateSummary.angularVelocity,
+          particleCountBefore: beforeDynamics.stateSummary.particleCount,
+          particleCountAfter: afterDynamics.stateSummary.particleCount,
+          maxParticleSpeedBefore: beforeDynamics.stateSummary.maxParticleSpeed,
+          maxParticleSpeedAfter: afterDynamics.stateSummary.maxParticleSpeed,
+          tipAngleLocalDegBefore: beforeDynamics.stateSummary.tipAngleLocalDeg,
+          tipAngleLocalDegAfter: afterDynamics.stateSummary.tipAngleLocalDeg,
           outputOffsetBefore: beforeDynamics.outputOffset,
           outputOffsetAfter: afterDynamics.outputOffset,
           effectiveOutputValueBefore: beforeDynamics.effectiveOutputValue,
@@ -122,8 +124,9 @@ export const compareRuntimeSnapshots = (
           outputParameterId: beforeDynamics.outputParameterId,
           stateChanged: true,
           outputChanged: true,
-          angleBefore: beforeDynamics.stateSummary.angle,
-          angularVelocityBefore: beforeDynamics.stateSummary.angularVelocity,
+          particleCountBefore: beforeDynamics.stateSummary.particleCount,
+          maxParticleSpeedBefore: beforeDynamics.stateSummary.maxParticleSpeed,
+          tipAngleLocalDegBefore: beforeDynamics.stateSummary.tipAngleLocalDeg,
           outputOffsetBefore: beforeDynamics.outputOffset,
           effectiveOutputValueBefore: beforeDynamics.effectiveOutputValue,
           tickBefore: beforeDynamics.tick,

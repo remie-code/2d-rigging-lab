@@ -457,20 +457,17 @@ describe("EditorSessionProvider history integration", () => {
       await act(async () => {
         const result = harness.context().updateDynamicsGroup({
           dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID,
-          pendulums: [
-            {
-              length: 0.9,
-              sway: 0.5,
-              reactionSpeed: 10,
-              convergenceSpeed: 6
-            }
-          ],
+          chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
           outputs: [
             {
               parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
-              kind: "angle",
-              strength: 8,
-              invert: false,
+              segmentIndex: 1,
+              scale: 1,
               limit: 12
             }
           ]
@@ -479,13 +476,14 @@ describe("EditorSessionProvider history integration", () => {
       });
 
       expect(harness.context().canUndo).toBe(true);
-      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.strength).toBe(8);
+      // The update changed the output limit (12); undo restores the committed value (20).
+      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.limit).toBe(12);
 
       await act(async () => {
         harness.context().undo();
       });
 
-      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.strength).toBe(10);
+      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.limit).toBe(20);
     } finally {
       await harness.cleanup();
     }
@@ -1497,29 +1495,19 @@ function createDynamicsHistoryPayload() {
       {
         parameterId: DYNAMICS_HISTORY_DRIVER_ID,
         kind: "angle" as const,
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
-      }
+        scale: 1}
     ],
-    pendulums: [
-      {
-        length: 0.8,
-        sway: 0.7,
-        reactionSpeed: 12,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
-        kind: "angle" as const,
-        strength: 10,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 20
       }
     ]
@@ -1536,29 +1524,19 @@ function createPresetDynamicsHistoryPayload() {
       {
         parameterId: DYNAMICS_PRESET_HISTORY_DRIVER_ID,
         kind: "angle" as const,
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
-      }
+        scale: 1}
     ],
-    pendulums: [
-      {
-        length: 0.8,
-        sway: 0.7,
-        reactionSpeed: 12,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: DYNAMICS_PRESET_HISTORY_OUTPUT_ID,
-        kind: "angle" as const,
-        strength: 10,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 20
       }
     ]
@@ -1575,29 +1553,19 @@ function createUpdatedPresetDynamicsHistoryPayload() {
       {
         parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_DRIVER_ID,
         kind: "angle" as const,
-        influencePercent: 50,
-        invert: true,
-        normalization: {
-          min: -10,
-          center: 0,
-          max: 10
-        }
-      }
+        scale: 1}
     ],
-    pendulums: [
-      {
-        length: 0.8,
-        sway: 0.7,
-        reactionSpeed: 12,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_OUTPUT_ID,
-        kind: "angle" as const,
-        strength: 5,
-        invert: true,
+        segmentIndex: 1,
+        scale: 1,
         limit: 10
       }
     ]

@@ -50,14 +50,17 @@ describe("DynamicsTunePage", () => {
     expect(markup).toContain("Outputs");
     expect(markup).toContain("1 input / 1 output");
     expect(markup).toContain("Head X (angle)");
-    expect(markup).toContain("Front Hair (angle)");
-    expect(markup).toContain("Strength");
+    expect(markup).toContain("Front Hair (segment 1)");
+    expect(markup).toContain("Output Scale");
+    expect(markup).toContain("Length Scale");
     expect(markup).toContain("Limit");
-    expect(markup).toContain("Length");
-    expect(markup).toContain("Sway");
-    expect(markup).toContain("Reaction");
-    expect(markup).toContain("Convergence");
+    expect(markup).toContain("Damping");
+    expect(markup).toContain("Gravity Scale");
     expect(markup).not.toContain("grp_hair");
+    expect(markup).not.toContain("Strength");
+    expect(markup).not.toContain("Sway");
+    expect(markup).not.toContain("Reaction");
+    expect(markup).not.toContain("Convergence");
     expect(markup).not.toContain("Create Dynamics Group");
     expect(markup).not.toContain("Delete Dynamics Group");
     expect(markup).not.toContain("Output invert");
@@ -69,12 +72,11 @@ describe("DynamicsTunePage", () => {
     const tree = createDynamicsTunePageTree({ onUpdateGroup });
 
     changeCheckbox(tree, "Dynamics Tune Hair Dynamics Enabled", false);
-    changeRange(tree, "Dynamics Tune Hair Dynamics Strength", "0.65");
+    changeRange(tree, "Dynamics Tune Hair Dynamics Output Scale", "0.65");
+    changeRange(tree, "Dynamics Tune Hair Dynamics Length Scale", "1.6");
     changeRange(tree, "Dynamics Tune Hair Dynamics Limit", "0.85");
-    changeRange(tree, "Dynamics Tune Hair Dynamics Length", "1.6");
-    changeRange(tree, "Dynamics Tune Hair Dynamics Sway", "0.7");
-    changeRange(tree, "Dynamics Tune Hair Dynamics Reaction", "11.5");
-    changeRange(tree, "Dynamics Tune Hair Dynamics Convergence", "13.5");
+    changeRange(tree, "Dynamics Tune Hair Dynamics Damping", "11.5");
+    changeRange(tree, "Dynamics Tune Hair Dynamics Gravity Scale", "0.7");
 
     expect(onUpdateGroup).toHaveBeenNthCalledWith(1, {
       groupId: "grp_hair",
@@ -82,27 +84,23 @@ describe("DynamicsTunePage", () => {
     });
     expect(onUpdateGroup).toHaveBeenNthCalledWith(2, {
       groupId: "grp_hair",
-      strength: 0.65
+      outputScale: 0.65
     });
     expect(onUpdateGroup).toHaveBeenNthCalledWith(3, {
       groupId: "grp_hair",
-      limit: 0.85
+      lengthScale: 1.6
     });
     expect(onUpdateGroup).toHaveBeenNthCalledWith(4, {
       groupId: "grp_hair",
-      length: 1.6
+      limit: 0.85
     });
     expect(onUpdateGroup).toHaveBeenNthCalledWith(5, {
       groupId: "grp_hair",
-      sway: 0.7
+      damping: 11.5
     });
     expect(onUpdateGroup).toHaveBeenNthCalledWith(6, {
       groupId: "grp_hair",
-      reactionSpeed: 11.5
-    });
-    expect(onUpdateGroup).toHaveBeenNthCalledWith(7, {
-      groupId: "grp_hair",
-      convergenceSpeed: 13.5
+      gravityScale: 0.7
     });
   });
 
@@ -332,8 +330,8 @@ function createReadyDynamicsStatus(
       dynamicsSignatureHash: "dynamics-signature-fixture",
       groups: {
         grp_hair: {
-          strength: 0.5,
-          reactionSpeed: 10
+          outputScale: 0.5,
+          damping: 10
         }
       }
     },
@@ -360,27 +358,25 @@ function createDynamicsGroupStatus(
     outputSummary: [
       {
         parameterId: "ParamHairFront",
-        kind: "angle",
+        kind: "segment 1",
         displayName: "Front Hair"
       }
     ],
     exportedValues,
     effectiveValues: {
       enabled: true,
-      strength: 0.5,
+      outputScale: 0.5,
       limit: 0.7,
-      length: 1.4,
-      sway: 0.6,
-      reactionSpeed: 10,
-      convergenceSpeed: 14
+      damping: 3.5,
+      gravityScale: 0.6,
+      lengthScale: 1.4
     },
     override: {
-      strength: 0.5,
+      outputScale: 0.5,
       limit: 0.7,
-      length: 1.4,
-      sway: 0.6,
-      reactionSpeed: 10,
-      convergenceSpeed: 14
+      damping: 3.5,
+      gravityScale: 0.6,
+      lengthScale: 1.4
     },
     hasOverride: true,
     warningMessages: [],
@@ -391,12 +387,11 @@ function createDynamicsGroupStatus(
 function createExportedDynamicsValues(): RuntimePlayerDynamicsTuningStatus["groups"][number]["exportedValues"] {
   return {
     enabled: true,
-    strength: 1,
+    outputScale: 1,
     limit: 0.4,
-    length: 1.2,
-    sway: 0.3,
-    reactionSpeed: 8,
-    convergenceSpeed: 12
+    damping: 2.5,
+    gravityScale: 1,
+    lengthScale: 1
   };
 }
 

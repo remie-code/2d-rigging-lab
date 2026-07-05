@@ -25,6 +25,14 @@ const OUTPUT = ParameterIdSchema.parse("param_dynamics_output");
 const GROUP_ID = DynamicsGroupIdSchema.parse("dyn_inspector_sway");
 const DUPLICATE_GROUP_ID = DynamicsGroupIdSchema.parse("dyn_inspector_duplicate");
 
+// dynamics-file-v3 committed base values. Direct-value Quick Tune fields (limit / damping /
+// gravityScale) mirror these; the multiplier fields (outputScale / lengthScale) read back as 1.0.
+const GROUP_OUTPUT_SCALE = 0.5;
+const GROUP_OUTPUT_LIMIT = 8;
+const GROUP_SEGMENT_LENGTHS = [14, 10] as const;
+const GROUP_DAMPING = 2.5;
+const GROUP_GRAVITY_SCALE = 1;
+
 describe("DynamicsToolInspector", () => {
   it("initially renders only the group list and New Group action", () => {
     const session = createDynamicsSession();
@@ -55,15 +63,17 @@ describe("DynamicsToolInspector", () => {
     expect(markup).toContain('data-testid="dynamics-group-warning-icon"');
     expect(markup).toContain("Dynamics output keyform is missing");
     expect(markup).toContain('data-testid="dynamics-new-draft"');
+    // The list view surfaces neither the draft/group inspector sections nor the removed v0 UI.
     expect(markup).not.toContain("Settings");
     expect(markup).not.toContain("Inputs");
-    expect(markup).not.toContain("Advanced");
-    expect(markup).not.toContain("Pendulum");
+    expect(markup).not.toContain("Chain");
+    expect(markup).not.toContain("Quick Tune");
     expect(markup).not.toContain("Outputs");
     expect(markup).not.toContain("Validation");
-    expect(markup).not.toContain("Preview");
-    expect(markup).not.toContain("Apply");
     expect(markup).not.toContain("Delete Group");
+    // Removed v0 vocabulary must not leak anywhere in the rendered tree.
+    expect(markup).not.toContain("Pendulum");
+    expect(markup).not.toContain("Normalization");
   });
 
   it("surfaces loaded Dynamics diagnostics in the group list and group inspector", async () => {
@@ -151,43 +161,55 @@ describe("DynamicsToolInspector", () => {
       expect(setDynamicsToolPreviewGroupId).toHaveBeenLastCalledWith(GROUP_ID);
       expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
         .toContain("Inspector Sway");
+      // Two v3 driver inputs render two preview sliders.
       expect(getFakeElementsByTestId(harness.container, "dynamics-preview-driver")).toHaveLength(2);
+
+      // Quick Tune exposes the §9 player-v2 vocabulary (outputScale / limit / damping /
+      // gravityScale / lengthScale). The removed v0 fields must not render.
       expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune")).toHaveLength(1);
-      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-strength")).toHaveLength(1);
-      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-limit")).toHaveLength(1);
-      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-length")).toHaveLength(1);
-      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-sway")).toHaveLength(1);
-      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-reactionSpeed")).toHaveLength(1);
-      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-convergenceSpeed")).toHaveLength(1);
-      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-strength")).toBe(
-        "Strengthの説明: 揺れの大きさ。上げると出力パラメータの動きが大きくなります。"
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-outputScale"))
+        .toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-limit"))
+        .toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-damping"))
+        .toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-gravityScale"))
+        .toHaveLength(1);
+      expect(getFakeElementsByTestId(harness.container, "dynamics-quick-tune-lengthScale"))
+        .toHaveLength(1);
+      // Exactly the five v3 fields render — no removed v0 tuning controls linger.
+      expect(collectQuickTuneFieldTestIds(harness.container)).toEqual([
+        "dynamics-quick-tune-outputScale",
+        "dynamics-quick-tune-limit",
+        "dynamics-quick-tune-damping",
+        "dynamics-quick-tune-gravityScale",
+        "dynamics-quick-tune-lengthScale"
+      ]);
+
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-outputScale")).toBe(
+        "Output xの説明: 出力の倍率。上げると出力パラメータの動きが大きくなります。"
       );
       expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-limit")).toBe(
-        "Limitの説明: 最大振れ幅。上げると大きく揺れますが、暴れやすくなります。"
+        "Limitの説明: 最大振れ幅。出力オフセットの絶対値の上限です。"
       );
-      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-length")).toBe(
-        "Lengthの説明: 揺れの重さや周期。上げるとゆったり遅れて揺れます。"
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-damping")).toBe(
+        "Dampingの説明: 減衰の強さ。上げると揺れが早く収まります。"
       );
-      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-sway")).toBe(
-        "Swayの説明: 入力変化への揺れやすさ。上げると動き出しや切り返しで大きく振れます。"
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-gravityScale")).toBe(
+        "Gravityの説明: 重力の強さ。上げると速く戻り、周期が短くなります。"
       );
-      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-reactionSpeed")).toBe(
-        "Reactionの説明: 入力へ追従する速さ。上げると素早く反応します。"
+      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-lengthScale")).toBe(
+        "Length xの説明: チェーン長の倍率。上げるとゆったり長い周期で揺れます。"
       );
-      expect(getQuickTuneHelpLabel(harness.container, "dynamics-quick-tune-convergenceSpeed")).toBe(
-        "Convergenceの説明: 揺れの収まりやすさ。上げると揺れが早く止まります。"
-      );
-      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
-        .not.toContain("Source");
-      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
-        .not.toContain("Angle");
-      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
-        .not.toContain("Offset");
-      expect(getFakeElementByTestId(harness.container, "dynamics-group-inspector").textContent)
-        .not.toContain("Effective");
+
+      // The group view shows a read-only summary + preview + quick tune; the editable draft
+      // sections (input rows, chain editor) belong to the edit view only.
       expect(getMaybeFakeElementByTestId(harness.container, "dynamics-input-row")).toBeUndefined();
+      expect(getMaybeFakeElementByTestId(harness.container, "dynamics-chain-editor"))
+        .toBeUndefined();
       expect(getFakeElementByTestId(harness.container, "dynamics-edit-group")).toBeDefined();
       expect(getFakeElementByTestId(harness.container, "dynamics-delete-group")).toBeDefined();
+
       expect(animationFrame.pendingCount()).toBe(1);
       animationFrame.flushNext(10);
       expect(advanceDynamicsToolPreviewSimulation).toHaveBeenCalledWith(GROUP_ID, 16.6666667);
@@ -206,69 +228,107 @@ describe("DynamicsToolInspector", () => {
       animationFrame.flushAll();
       expect(setDynamicsToolPreviewDriverValue).toHaveBeenCalledTimes(1);
 
-      const quickTuneStrength = getFakeElementByTestId(
+      // Live editing a direct-value Quick Tune field (damping) pushes a preview definition
+      // override: the whole v3 group with chain.damping updated, outputs unchanged.
+      const quickTuneDamping = getFakeElementByTestId(
         harness.container,
-        "dynamics-quick-tune-strength"
+        "dynamics-quick-tune-damping"
       );
-      const quickTuneStrengthNumber = getFakeInputsIn(quickTuneStrength).find(
+      const quickTuneDampingNumber = getFakeInputsIn(quickTuneDamping).find(
         (input) => input.type === "number"
       );
-      if (quickTuneStrengthNumber === undefined) {
-        throw new Error("Expected Strength Quick Tune number input.");
+      if (quickTuneDampingNumber === undefined) {
+        throw new Error("Expected Damping Quick Tune number input.");
       }
-      quickTuneStrengthNumber.value = "6";
+      quickTuneDampingNumber.value = "5";
       await act(async () => {
-        getFakeReactProps(quickTuneStrengthNumber).onChange?.({
-          currentTarget: quickTuneStrengthNumber
+        getFakeReactProps(quickTuneDampingNumber).onChange?.({
+          currentTarget: quickTuneDampingNumber
         });
       });
       expect(setDynamicsToolPreviewDefinitionOverride).toHaveBeenLastCalledWith(
         GROUP_ID,
         expect.objectContaining({
+          dynamicsGroupId: GROUP_ID,
+          chain: expect.objectContaining({ damping: 5 }),
           outputs: [
             expect.objectContaining({
-              strength: 6
+              parameterId: OUTPUT,
+              scale: GROUP_OUTPUT_SCALE,
+              limit: GROUP_OUTPUT_LIMIT
             })
           ]
         })
       );
 
-      const quickTuneStrengthRange = getFakeInputsIn(quickTuneStrength).find(
+      // Dragging the damping slider coalesces live changes; only pointer-up finalizes into a
+      // committed update payload of shape { dynamicsGroupId, chain, outputs }.
+      const quickTuneDampingRange = getFakeInputsIn(quickTuneDamping).find(
         (input) => input.type === "range"
       );
-      if (quickTuneStrengthRange === undefined) {
-        throw new Error("Expected Strength Quick Tune range input.");
+      if (quickTuneDampingRange === undefined) {
+        throw new Error("Expected Damping Quick Tune range input.");
       }
       await act(async () => {
-        quickTuneStrengthRange.value = "7";
-        getFakeReactProps(quickTuneStrengthRange).onChange?.({
-          currentTarget: quickTuneStrengthRange
+        quickTuneDampingRange.value = "7";
+        getFakeReactProps(quickTuneDampingRange).onChange?.({
+          currentTarget: quickTuneDampingRange
         });
-        quickTuneStrengthRange.value = "8";
-        getFakeReactProps(quickTuneStrengthRange).onChange?.({
-          currentTarget: quickTuneStrengthRange
+        quickTuneDampingRange.value = "8";
+        getFakeReactProps(quickTuneDampingRange).onChange?.({
+          currentTarget: quickTuneDampingRange
         });
       });
       expect(updateDynamicsGroup).not.toHaveBeenCalled();
       await act(async () => {
-        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+        getFakeReactProps(quickTuneDampingRange).onPointerUp?.();
       });
       expect(updateDynamicsGroup).toHaveBeenCalledTimes(1);
       expect(updateDynamicsGroup).toHaveBeenCalledWith(
         expect.objectContaining({
           dynamicsGroupId: GROUP_ID,
+          chain: expect.objectContaining({
+            damping: 8,
+            gravityScale: GROUP_GRAVITY_SCALE,
+            segmentLengths: [...GROUP_SEGMENT_LENGTHS]
+          }),
           outputs: [
             expect.objectContaining({
-              strength: 8
+              parameterId: OUTPUT,
+              segmentIndex: 1,
+              scale: GROUP_OUTPUT_SCALE,
+              limit: GROUP_OUTPUT_LIMIT
             })
           ]
         })
       );
+      // The commit payload is exactly the v3 update shape { dynamicsGroupId, chain, outputs };
+      // it carries no v0 keys and each output only exposes the v3 fields.
+      const committedPayload = (updateDynamicsGroup.mock.calls[0] as readonly unknown[])[0] as {
+        readonly outputs?: readonly Record<string, unknown>[];
+      };
+      expect(Object.keys(committedPayload).sort()).toEqual([
+        "chain",
+        "dynamicsGroupId",
+        "outputs"
+      ]);
+      expect(Object.keys(committedPayload.outputs?.[0] ?? {}).sort()).toEqual([
+        "limit",
+        "parameterId",
+        "scale",
+        "segmentIndex"
+      ]);
 
       await clickTestId(harness.container, "dynamics-edit-group");
       expect(getFakeElementByTestId(harness.container, "dynamics-edit-inspector")).toBeDefined();
       expect(animationFrame.pendingCount()).toBe(0);
+      // Edit view exposes the editable draft: two input rows and the chain editor.
       expect(getFakeElementsByTestId(harness.container, "dynamics-input-row")).toHaveLength(2);
+      expect(getFakeElementByTestId(harness.container, "dynamics-chain-editor")).toBeDefined();
+      expect(getFakeElementsByTestId(harness.container, "dynamics-chain-segment-row"))
+        .toHaveLength(GROUP_SEGMENT_LENGTHS.length);
+      expect(getFakeElementByTestId(harness.container, "dynamics-add-segment")).toBeDefined();
+      expect(getFakeElementByTestId(harness.container, "dynamics-output-segment")).toBeDefined();
       expect(getFakeElementByTestId(harness.container, "dynamics-apply-group")).toBeDefined();
       expect(getFakeElementByTestId(harness.container, "dynamics-cancel")).toBeDefined();
       expect(getMaybeFakeElementByTestId(harness.container, "dynamics-preview-reset")).toBeUndefined();
@@ -285,6 +345,7 @@ describe("DynamicsToolInspector", () => {
       expect(getFakeElementByTestId(harness.container, "dynamics-create-inspector")).toBeDefined();
       expect(animationFrame.pendingCount()).toBe(0);
       expect(getFakeElementByTestId(harness.container, "dynamics-create-group")).toBeDefined();
+      expect(getFakeElementByTestId(harness.container, "dynamics-chain-editor")).toBeDefined();
       expect(getMaybeFakeElementByTestId(harness.container, "dynamics-delete-group")).toBeUndefined();
 
       await clickTestId(harness.container, "dynamics-cancel");
@@ -336,19 +397,20 @@ describe("DynamicsToolInspector", () => {
 
     try {
       await clickTestId(harness.container, "dynamics-group-row");
-      const quickTuneStrength = getFakeElementByTestId(
+      const quickTuneDamping = getFakeElementByTestId(
         harness.container,
-        "dynamics-quick-tune-strength"
+        "dynamics-quick-tune-damping"
       );
-      const quickTuneStrengthRange = getFakeInputsIn(quickTuneStrength).find(
+      const quickTuneDampingRange = getFakeInputsIn(quickTuneDamping).find(
         (input) => input.type === "range"
       );
-      if (quickTuneStrengthRange === undefined) {
-        throw new Error("Expected Strength Quick Tune range input.");
+      if (quickTuneDampingRange === undefined) {
+        throw new Error("Expected Damping Quick Tune range input.");
       }
 
+      // Finalizing without changing the value away from the committed base must not commit.
       await act(async () => {
-        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+        getFakeReactProps(quickTuneDampingRange).onPointerUp?.();
       });
 
       expect(updateDynamicsGroup).not.toHaveBeenCalled();
@@ -384,59 +446,55 @@ describe("DynamicsToolInspector", () => {
 
     try {
       await clickTestId(harness.container, "dynamics-group-row");
-      const quickTuneStrength = getFakeElementByTestId(
+      const quickTuneDamping = getFakeElementByTestId(
         harness.container,
-        "dynamics-quick-tune-strength"
+        "dynamics-quick-tune-damping"
       );
-      const quickTuneStrengthRange = getFakeInputsIn(quickTuneStrength).find(
+      const quickTuneDampingRange = getFakeInputsIn(quickTuneDamping).find(
         (input) => input.type === "range"
       );
-      if (quickTuneStrengthRange === undefined) {
-        throw new Error("Expected Strength Quick Tune range input.");
+      if (quickTuneDampingRange === undefined) {
+        throw new Error("Expected Damping Quick Tune range input.");
       }
 
       await act(async () => {
-        quickTuneStrengthRange.value = "8";
-        getFakeReactProps(quickTuneStrengthRange).onChange?.({
-          currentTarget: quickTuneStrengthRange
+        quickTuneDampingRange.value = "8";
+        getFakeReactProps(quickTuneDampingRange).onChange?.({
+          currentTarget: quickTuneDampingRange
         });
       });
       await act(async () => {
-        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+        getFakeReactProps(quickTuneDampingRange).onPointerUp?.();
       });
+      // A redundant blur for the same finalized draft must not re-commit.
       await act(async () => {
-        getFakeReactProps(quickTuneStrengthRange).onBlur?.();
+        getFakeReactProps(quickTuneDampingRange).onBlur?.();
       });
 
       expect(updateDynamicsGroup).toHaveBeenCalledTimes(1);
       expect(updateDynamicsGroup).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          outputs: [
-            expect.objectContaining({
-              strength: 8
-            })
-          ]
+          dynamicsGroupId: GROUP_ID,
+          chain: expect.objectContaining({ damping: 8 })
         })
       );
 
+      // A genuinely new finalized value commits again.
       await act(async () => {
-        quickTuneStrengthRange.value = "9";
-        getFakeReactProps(quickTuneStrengthRange).onChange?.({
-          currentTarget: quickTuneStrengthRange
+        quickTuneDampingRange.value = "9";
+        getFakeReactProps(quickTuneDampingRange).onChange?.({
+          currentTarget: quickTuneDampingRange
         });
       });
       await act(async () => {
-        getFakeReactProps(quickTuneStrengthRange).onPointerUp?.();
+        getFakeReactProps(quickTuneDampingRange).onPointerUp?.();
       });
 
       expect(updateDynamicsGroup).toHaveBeenCalledTimes(2);
       expect(updateDynamicsGroup).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          outputs: [
-            expect.objectContaining({
-              strength: 9
-            })
-          ]
+          dynamicsGroupId: GROUP_ID,
+          chain: expect.objectContaining({ damping: 9 })
         })
       );
     } finally {
@@ -477,6 +535,8 @@ function createDynamicsSession(): AuthoringSession {
       recommendedUiStep: 0.1
     }
   );
+  // dynamics-file-v3 world-frame Verlet chain group: inputs carry only { parameterId, kind, scale };
+  // the chain owns the physics; outputs carry { parameterId, segmentIndex, scale, limit }.
   session.graph.dynamicsGroups.push({
     dynamicsGroupId: GROUP_ID,
     displayName: "Inspector Sway",
@@ -486,33 +546,26 @@ function createDynamicsSession(): AuthoringSession {
       {
         parameterId: DRIVER_X,
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: { min: -30, center: 0, max: 30 }
+        scale: 1
       },
       {
         parameterId: DRIVER_Y,
         kind: "positionX",
-        influencePercent: 50,
-        invert: false,
-        normalization: { min: -20, center: 0, max: 20 }
+        scale: 0.5
       }
     ],
-    pendulums: [
-      {
-        length: 0.8,
-        sway: 0.7,
-        reactionSpeed: 12,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [...GROUP_SEGMENT_LENGTHS],
+      damping: GROUP_DAMPING,
+      gravityScale: GROUP_GRAVITY_SCALE
+    },
     outputs: [
       {
         parameterId: OUTPUT,
-        kind: "angle",
-        strength: 5,
-        invert: false,
-        limit: 10
+        segmentIndex: 1,
+        scale: GROUP_OUTPUT_SCALE,
+        limit: GROUP_OUTPUT_LIMIT
       }
     ]
   });
@@ -842,6 +895,15 @@ function getFakeInputByType(root: FakeElement, type: string): FakeElement {
 
 function getFakeInputsIn(root: FakeElement): FakeElement[] {
   return findFakeElements(root, (candidate) => candidate.localName === "input");
+}
+
+function collectQuickTuneFieldTestIds(root: FakeElement): string[] {
+  return findFakeElements(root, (candidate) => {
+    const testId = candidate.getAttribute("data-testid");
+    return testId !== null && testId.startsWith("dynamics-quick-tune-");
+  })
+    .map((element) => element.getAttribute("data-testid"))
+    .filter((testId): testId is string => testId !== null);
 }
 
 function getQuickTuneHelpLabel(root: FakeElement, testId: string): string | null {

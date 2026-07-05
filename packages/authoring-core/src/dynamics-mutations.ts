@@ -22,7 +22,7 @@ export interface UpdateDynamicsGroupInput {
   readonly enabled?: boolean;
   readonly presetId?: string;
   readonly inputs?: DynamicsGroupDto["inputs"];
-  readonly pendulums?: DynamicsGroupDto["pendulums"];
+  readonly chain?: DynamicsGroupDto["chain"];
   readonly outputs?: DynamicsGroupDto["outputs"];
 }
 
@@ -94,7 +94,7 @@ export const updateDynamicsGroup = (
     ...(update.enabled === undefined ? {} : { enabled: update.enabled }),
     ...(update.presetId === undefined ? {} : { presetId: update.presetId }),
     ...(update.inputs === undefined ? {} : { inputs: structuredClone(update.inputs) }),
-    ...(update.pendulums === undefined ? {} : { pendulums: structuredClone(update.pendulums) }),
+    ...(update.chain === undefined ? {} : { chain: structuredClone(update.chain) }),
     ...(update.outputs === undefined ? {} : { outputs: structuredClone(update.outputs) })
   };
   const parsedNextDynamicsGroup = parseDynamicsGroupForMutation(nextDynamicsGroup);
@@ -194,12 +194,14 @@ const assertValidDynamicsGroupParameterBindings = (
     );
   }
 
-  const outputParameter = getInitializedParameterById(session.graph, output.parameterId);
-  if (outputParameter === undefined) {
-    throw new AuthoringMutationError(
-      "missing_dynamics_output_parameter",
-      `Dynamics output parameter does not exist: ${output.parameterId}`
-    );
+  for (const candidate of dynamicsGroup.outputs) {
+    const outputParameter = getInitializedParameterById(session.graph, candidate.parameterId);
+    if (outputParameter === undefined) {
+      throw new AuthoringMutationError(
+        "missing_dynamics_output_parameter",
+        `Dynamics output parameter does not exist: ${candidate.parameterId}`
+      );
+    }
   }
 };
 
@@ -208,21 +210,18 @@ const assertUniqueDynamicsOutputParameter = (
   dynamicsGroup: DynamicsGroupDto,
   ignoredDynamicsGroupId?: DynamicsGroupId
 ): void => {
-  const output = dynamicsGroup.outputs[0];
-  if (output === undefined) {
-    return;
-  }
-
-  const existingGroup = session.graph.dynamicsGroups.find(
-    (group) =>
-      group.dynamicsGroupId !== ignoredDynamicsGroupId &&
-      group.outputs.some((candidate) => candidate.parameterId === output.parameterId)
-  );
-
-  if (existingGroup !== undefined) {
-    throw new AuthoringMutationError(
-      "duplicate_dynamics_output_parameter",
-      `Dynamics output parameter is already owned by ${existingGroup.dynamicsGroupId}: ${output.parameterId}`
+  for (const output of dynamicsGroup.outputs) {
+    const existingGroup = session.graph.dynamicsGroups.find(
+      (group) =>
+        group.dynamicsGroupId !== ignoredDynamicsGroupId &&
+        group.outputs.some((candidate) => candidate.parameterId === output.parameterId)
     );
+
+    if (existingGroup !== undefined) {
+      throw new AuthoringMutationError(
+        "duplicate_dynamics_output_parameter",
+        `Dynamics output parameter is already owned by ${existingGroup.dynamicsGroupId}: ${output.parameterId}`
+      );
+    }
   }
 };

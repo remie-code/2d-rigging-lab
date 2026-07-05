@@ -2,11 +2,18 @@ import { z } from "zod";
 
 import { DynamicsGroupIdSchema, PackageIdSchema } from "./ids.js";
 
+// World-frame Verlet chain state. Each particle stores its current position (x, y) and its
+// previous-step position (px, py). See discussion/design/dynamics-world-frame-chain.md §3.3 / §4.
+export const RuntimeDynamicsParticleSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  px: z.number().finite(),
+  py: z.number().finite()
+});
+export type RuntimeDynamicsParticle = z.infer<typeof RuntimeDynamicsParticleSchema>;
+
 export const RuntimeDynamicsGroupStateSchema = z.object({
-  angle: z.number().finite(),
-  angularVelocity: z.number().finite(),
-  previousSource: z.number().finite(),
-  previousSourceVelocity: z.number().finite(),
+  particles: z.array(RuntimeDynamicsParticleSchema),
   tick: z.number().int().nonnegative(),
   resetCounter: z.number().int().nonnegative()
 });

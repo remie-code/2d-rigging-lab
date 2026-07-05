@@ -18,12 +18,11 @@ import type {
 } from "../preload/dynamics-tuning-bridge-contract";
 
 type DynamicsTuneNumericField =
-  | "strength"
+  | "outputScale"
   | "limit"
-  | "length"
-  | "sway"
-  | "reactionSpeed"
-  | "convergenceSpeed";
+  | "damping"
+  | "gravityScale"
+  | "lengthScale";
 
 type DynamicsTuneSliderSpec = {
   readonly field: DynamicsTuneNumericField;
@@ -36,11 +35,19 @@ type DynamicsTuneSliderSpec = {
 
 const dynamicsTuneSliderSpecs: readonly DynamicsTuneSliderSpec[] = [
   {
-    field: "strength",
-    label: "Strength",
-    ariaLabel: "Strength",
-    defaultMax: 2,
-    min: 0,
+    field: "outputScale",
+    label: "Output Scale",
+    ariaLabel: "Output Scale",
+    defaultMax: 3,
+    min: 0.1,
+    step: 0.05
+  },
+  {
+    field: "lengthScale",
+    label: "Length Scale",
+    ariaLabel: "Length Scale",
+    defaultMax: 3,
+    min: 0.1,
     step: 0.05
   },
   {
@@ -52,36 +59,20 @@ const dynamicsTuneSliderSpecs: readonly DynamicsTuneSliderSpec[] = [
     step: 0.05
   },
   {
-    field: "length",
-    label: "Length",
-    ariaLabel: "Length",
-    defaultMax: 5,
-    min: 0.05,
-    step: 0.05
-  },
-  {
-    field: "sway",
-    label: "Sway",
-    ariaLabel: "Sway",
-    defaultMax: 2,
-    min: 0,
-    step: 0.05
-  },
-  {
-    field: "reactionSpeed",
-    label: "Reaction",
-    ariaLabel: "Reaction",
-    defaultMax: 30,
+    field: "damping",
+    label: "Damping",
+    ariaLabel: "Damping",
+    defaultMax: 60,
     min: 0,
     step: 0.1
   },
   {
-    field: "convergenceSpeed",
-    label: "Convergence",
-    ariaLabel: "Convergence",
-    defaultMax: 30,
+    field: "gravityScale",
+    label: "Gravity Scale",
+    ariaLabel: "Gravity Scale",
+    defaultMax: 10,
     min: 0,
-    step: 0.1
+    step: 0.05
   }
 ];
 

@@ -361,7 +361,7 @@ function createStagePayload(input: {
           "materialized-atlas-uvs-v1",
           "transparent-background-v1",
           "alpha-mask-clipping-v1",
-          "dynamics-pendulum-solver-v1"
+          "dynamics-chain-solver-v1"
         ],
         renderAssumptions
       },
@@ -485,7 +485,7 @@ function createStagePayload(input: {
         "materialized-atlas-uvs-v1",
         "transparent-background-v1",
         "alpha-mask-clipping-v1",
-        "dynamics-pendulum-solver-v1"
+        "dynamics-chain-solver-v1"
       ]
     },
     loadedAtIso: "2026-06-22T00:00:00.000Z"
@@ -701,7 +701,7 @@ function createRenderAssumptions() {
       maskChannels: "alpha-v1"
     },
     dynamics: {
-      solverVersion: "runtime-dynamics-pendulum-v1",
+      solverVersion: "runtime-dynamics-chain-v1",
       fixedStepMs: 1000 / 60,
       resetPolicy: "reset-to-default-parameters-v1"
     }

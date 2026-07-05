@@ -76,16 +76,16 @@ describe("registerDynamicsTuningBridgeHandlers", () => {
       Promise<RuntimePlayerDynamicsTuningActionResult>
     >(dynamicsTuningBridgeChannels.updateGroup, {
       groupId: "dyn_hair_sway",
-      strength: 0.42,
-      reactionSpeed: 12
+      outputScale: 0.42,
+      damping: 12
     });
 
     expect(updateResult.result).toBe("ok");
     expect(updateResult.status.profileStatus.kind).toBe("unsaved");
     expect(updateResult.status.effectiveProfile?.groups).toEqual({
       dyn_hair_sway: {
-        strength: 0.42,
-        reactionSpeed: 12
+        outputScale: 0.42,
+        damping: 12
       }
     });
 
@@ -96,8 +96,8 @@ describe("registerDynamicsTuningBridgeHandlers", () => {
     expect(savedUpdate.state).toBe("loaded");
     expect(savedUpdate.profile?.groups).toEqual({
       dyn_hair_sway: {
-        strength: 0.42,
-        reactionSpeed: 12
+        outputScale: 0.42,
+        damping: 12
       }
     });
 
@@ -204,7 +204,7 @@ function createPayload(input: {
           hiddenDirectControlParameterIds: ["param_hair_sway"]
         },
         dynamicsSolver: {
-          solverVersion: "runtime-dynamics-pendulum-v1",
+          solverVersion: "runtime-dynamics-chain-v1",
           fixedStepMs: 16.6667,
           resetPolicy: "reset-to-default-parameters-v1"
         },
@@ -265,29 +265,20 @@ function createDynamicsGroup(): RuntimeExportDynamicsGroupDto {
       {
         parameterId: "param_face_angle_x",
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -30,
-          center: 0,
-          max: 30
-        }
+        scale: 1
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 0.5,
-        reactionSpeed: 8,
-        convergenceSpeed: 4
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: "param_hair_sway",
-        kind: "angle",
-        strength: 1,
-        invert: false,
+        segmentIndex: 1,
+        scale: 1,
         limit: 1
       }
     ]

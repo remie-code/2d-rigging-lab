@@ -12,28 +12,29 @@ export function readDynamicsTuningGroupUpdateRequest(
 
   const groupId = readGroupId(value.groupId);
   const enabled = readOptionalBoolean(value.enabled, "enabled");
-  const strength = readOptionalFiniteNumber(value.strength, "strength");
-  const limit = readOptionalNonNegativeNumber(value.limit, "limit");
-  const length = readOptionalPositiveNumber(value.length, "length");
-  const sway = readOptionalNonNegativeNumber(value.sway, "sway");
-  const reactionSpeed = readOptionalNonNegativeNumber(
-    value.reactionSpeed,
-    "reactionSpeed"
+  const outputScale = readOptionalPositiveNumber(
+    value.outputScale,
+    "outputScale"
   );
-  const convergenceSpeed = readOptionalNonNegativeNumber(
-    value.convergenceSpeed,
-    "convergenceSpeed"
+  const limit = readOptionalNonNegativeNumber(value.limit, "limit");
+  const damping = readOptionalNonNegativeNumber(value.damping, "damping");
+  const gravityScale = readOptionalNonNegativeNumber(
+    value.gravityScale,
+    "gravityScale"
+  );
+  const lengthScale = readOptionalPositiveNumber(
+    value.lengthScale,
+    "lengthScale"
   );
 
   return {
     groupId,
     ...(enabled === undefined ? {} : { enabled }),
-    ...(strength === undefined ? {} : { strength }),
+    ...(outputScale === undefined ? {} : { outputScale }),
     ...(limit === undefined ? {} : { limit }),
-    ...(length === undefined ? {} : { length }),
-    ...(sway === undefined ? {} : { sway }),
-    ...(reactionSpeed === undefined ? {} : { reactionSpeed }),
-    ...(convergenceSpeed === undefined ? {} : { convergenceSpeed })
+    ...(damping === undefined ? {} : { damping }),
+    ...(gravityScale === undefined ? {} : { gravityScale }),
+    ...(lengthScale === undefined ? {} : { lengthScale })
   };
 }
 

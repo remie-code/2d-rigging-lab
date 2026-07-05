@@ -124,29 +124,20 @@ describe("authoring runtime graph adapter", () => {
             {
               parameterId: faceYawId,
               kind: "angle",
-              influencePercent: 100,
-              invert: false,
-              normalization: {
-                min: -1,
-                center: 0,
-                max: 1
-              }
+              scale: 30
             }
           ],
-          pendulums: [
-            {
-              length: 1,
-              sway: 0.35,
-              reactionSpeed: 8,
-              convergenceSpeed: 4
-            }
-          ],
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [14],
+            damping: 2.5,
+            gravityScale: 1
+          },
           outputs: [
             {
               parameterId: hairSwayId,
-              kind: "angle",
-              strength: 1,
-              invert: false,
+              segmentIndex: 1,
+              scale: 0.0333,
               limit: 1
             }
           ]

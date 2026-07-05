@@ -572,7 +572,7 @@ const createRigControlPackage = (overrides: {
       ]
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v2",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: []
     },
     masks: {
@@ -671,7 +671,7 @@ const createRuntimeSnapshot = (overrides: {
   evaluation: {
     snapshotDetail: "summary",
     evaluatorVersions: {
-      dynamics: "additivePendulumV0",
+      dynamics: "worldFrameChainV1",
       keyform1d: "linear-1d-v1",
       keyformGrid2d: "parameter-grid-2d-v1",
       warpLattice: "bilinear-grid-v1",

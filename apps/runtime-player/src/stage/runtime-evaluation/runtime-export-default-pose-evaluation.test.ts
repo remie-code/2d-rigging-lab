@@ -92,21 +92,19 @@ describe("Runtime Export default pose evaluation", () => {
         {
           parameterId: "param_face_angle_x",
           kind: "angle",
-          influencePercent: 100,
-          invert: false,
-          normalization: {
-            min: -1,
-            center: 0,
-            max: 1
-          }
+          scale: 1
         }
       ],
+      chain: {
+        segmentLengths: [14],
+        damping: 2.5,
+        gravityScale: 1
+      },
       outputs: [
         {
           parameterId: "param_hair_sway",
-          kind: "angle",
-          strength: 0.5,
-          invert: false,
+          segmentIndex: 1,
+          scale: 0.5,
           limit: 1
         }
       ]
@@ -688,7 +686,7 @@ function createRuntimeExportPayload(input: {
           "materialized-atlas-uvs-v1",
           "transparent-background-v1",
           "alpha-mask-clipping-v1",
-          "dynamics-pendulum-solver-v1"
+          "dynamics-chain-solver-v1"
         ],
         renderAssumptions
       },
@@ -721,7 +719,7 @@ function createRuntimeExportPayload(input: {
         "materialized-atlas-uvs-v1",
         "transparent-background-v1",
         "alpha-mask-clipping-v1",
-        "dynamics-pendulum-solver-v1"
+        "dynamics-chain-solver-v1"
       ]
     },
     loadedAtIso: "2026-06-22T00:00:00.000Z"
@@ -1013,29 +1011,20 @@ function createDynamicsGroup(): RuntimeExportDynamicsGroupDto {
       {
         parameterId: "param_face_angle_x",
         kind: "angle",
-        influencePercent: 100,
-        invert: false,
-        normalization: {
-          min: -1,
-          center: 0,
-          max: 1
-        }
+        scale: 1
       }
     ],
-    pendulums: [
-      {
-        length: 1,
-        sway: 1,
-        reactionSpeed: 1,
-        convergenceSpeed: 1
-      }
-    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     outputs: [
       {
         parameterId: "param_hair_sway",
-        kind: "angle",
-        strength: 0.5,
-        invert: false,
+        segmentIndex: 1,
+        scale: 0.5,
         limit: 1
       }
     ]
@@ -1158,7 +1147,7 @@ function createRenderAssumptions() {
       maskChannels: "alpha-v1"
     },
     dynamics: {
-      solverVersion: "runtime-dynamics-pendulum-v1",
+      solverVersion: "runtime-dynamics-chain-v1",
       fixedStepMs: 1000 / 60,
       resetPolicy: "reset-to-default-parameters-v1"
     }

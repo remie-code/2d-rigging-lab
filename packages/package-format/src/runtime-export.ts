@@ -129,7 +129,7 @@ export type RuntimeExportCanvasMetadataDto = z.infer<
 >;
 
 export const RuntimeExportDynamicsSolverContractSchema = z.object({
-  solverVersion: z.literal("runtime-dynamics-pendulum-v1"),
+  solverVersion: z.literal("runtime-dynamics-chain-v1"),
   fixedStepMs: z.number().positive(),
   resetPolicy: z.literal("reset-to-default-parameters-v1")
 }).strict();
@@ -165,7 +165,7 @@ export const RuntimeExportRequiredCapabilitySchema = z.enum([
   "materialized-atlas-uvs-v1",
   "transparent-background-v1",
   "alpha-mask-clipping-v1",
-  "dynamics-pendulum-solver-v1"
+  "dynamics-chain-solver-v1"
 ]);
 export type RuntimeExportRequiredCapabilityDto = z.infer<
   typeof RuntimeExportRequiredCapabilitySchema

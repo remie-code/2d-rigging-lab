@@ -21,6 +21,7 @@
 | [ai-agent-connection-and-technology-stack.md](ai-agent-connection-and-technology-stack.md) | AI assistant 接続方式と技術スタック方針 | Private baseline語彙へ整理済み |
 | [codex-friendly-automation-policy.md](codex-friendly-automation-policy.md) | Editor/repo は提案・推論・自動分類を持たず、Codex/LLM が人間同等操作を deterministic API で実行するための自動化境界。Wave50の explicit PSD structural expansion は semantic recognition ではなく、明示選択された構造初期状態 scaffold に限定 | Accepted user decision / Wave49-Wave50 basis |
 | [parameter-preset-ecosystem.md](parameter-preset-ecosystem.md) | Parameter presetをCore Parameter / Preset Profile / Ecosystem Facadeに分け、Camera Captureを中心にsemantic consumer、role catalog、初期preset候補を整理する設計メモ | Draft design basis |
+| [dynamics-world-frame-chain.md](dynamics-world-frame-chain.md) | Dynamics v1 = 世界系 Verlet 質点チェーン（`dynamics-file-v3`）。v0 `additivePendulumV0` の平衡点欠陥（重力項不在）の診断、物理式の正、単位ベース新スキーマ、判断要7件の裁定、破壊半径台帳へのリンク | Accepted / wave106 implemented（全層置換完了・final clean integration review pass。実装記録: `../implementation/waves/wave106/_map.md`） |
 | [canvas-evaluation/](canvas-evaluation/_map.md) | Canvas / Previewに描くための評価パイプライン、parameter-driven deformation、draft合成、overlay / hit test の設計トピック | Draft design basis |
 | [screen-design/](screen-design/_map.md) | GUI Editorを中心とする画面設計、画面遷移、主要領域、表示情報分類、人間向けUIとCodex/evidence surface境界の設計トピック | In discussion |
 | [mesh-generation/](mesh-generation/_map.md) | Drawable RGBA alpha maskから初期meshを生成するアルゴリズム、品質基準、fallback境界の設計トピック | Draft algorithm design |

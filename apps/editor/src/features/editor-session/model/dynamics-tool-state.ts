@@ -6,15 +6,17 @@ import type {
 } from "@private-2d-rigging-lab/contracts";
 import { recordLive2dPerformanceCounter } from "@private-2d-rigging-lab/render-core";
 import {
-  computeDynamicsOutputOffsets,
+  computeDynamicsOutputOffsetsWithAnchor,
   stepDynamics,
-  type DynamicsSourceSample
+  type DynamicsAnchorPose,
+  type DynamicsSourceSample,
+  type NormalizedDynamicsGroup
 } from "@private-2d-rigging-lab/runtime-core";
 import type {
   CreateDynamicsGroupPayloadDto,
+  DynamicsChainPayloadDto,
   DynamicsInputPayloadDto,
   DynamicsOutputPayloadDto,
-  DynamicsPendulumPayloadDto,
   UpdateDynamicsGroupPayloadDto
 } from "@private-2d-rigging-lab/operation-core";
 
@@ -29,16 +31,26 @@ import {
   type EditorDiagnosticItem
 } from "./editor-diagnostics-state";
 
+// dynamics-file-v3 editor tool state. The physics + schema is fixed in
+// discussion/design/dynamics-world-frame-chain.md (world-frame Verlet chain). The editor UI edits
+// the §4 schema (inputs.scale / chain / outputs.{segmentIndex,scale,limit}), previews via the
+// runtime-core solver (stepDynamics), and reads §3.5 output offsets through the anchor.
+
 export type DynamicsAxisKind = "angle" | "positionX" | "positionY";
 export type DynamicsToolPresetId = "hair" | "ribbon" | "softCloth" | "rigidAccessory";
 export type DynamicsToolGroup = AuthoringSession["graph"]["dynamicsGroups"][number];
 
+// §8: rest → 30° maps to a parameter delta of 1.0, so scale = 1/30 as the output-scale starting
+// point ("parameter 1.0 = 30°"). Callers scale limit off the parameter range.
+export const DEFAULT_OUTPUT_SCALE_PER_DEG = 1 / 30;
+// §10: angle drivers default to 1 deg per parameter unit (FaceZ example). A conservative starting
+// point; deg-valued parameters (±10, ±30) then map directly to head rotation.
+export const DEFAULT_INPUT_ANGLE_SCALE = 1;
+
 export interface DynamicsToolPreset {
   readonly presetId: DynamicsToolPresetId;
   readonly label: string;
-  readonly pendulum: DynamicsPendulumPayloadDto;
-  readonly outputStrengthScale: number;
-  readonly outputLimitScale: number;
+  readonly chain: DynamicsChainPayloadDto;
 }
 
 export interface DynamicsToolDraft {
@@ -47,7 +59,7 @@ export interface DynamicsToolDraft {
   readonly enabled: boolean;
   readonly presetId: DynamicsToolPresetId;
   readonly inputs: readonly DynamicsInputPayloadDto[];
-  readonly pendulums: readonly DynamicsPendulumPayloadDto[];
+  readonly chain: DynamicsChainPayloadDto;
   readonly outputs: readonly DynamicsOutputPayloadDto[];
 }
 
@@ -73,6 +85,8 @@ export interface DynamicsToolPreviewState {
 
 export interface DynamicsToolPreviewOutputSummary {
   readonly outputParameterId: ParameterId;
+  readonly segmentIndex: number;
+  readonly thetaLocalDeg: number;
   readonly baseValue: number;
   readonly rawOffset: number;
   readonly offset: number;
@@ -86,8 +100,10 @@ export interface DynamicsToolPreviewEvaluation {
   readonly selectedGroupId: DynamicsGroupId | null;
   readonly parameterValues: ParameterValueMap;
   readonly driverValues: Readonly<Record<ParameterId, number>>;
-  readonly source: number;
-  readonly rawSource: number;
+  // §3.2 anchor pose (φ [deg] + world pin) derived from the current inputs. Replaces the old scalar
+  // {source, rawSource}; the world-frame chain has no scalar "source" — the driver signal is the
+  // anchor pose, and the output is read from the head-frame segment angle (§3.5).
+  readonly anchor: DynamicsAnchorPose;
   readonly state: RuntimeDynamicsGroupState | null;
   readonly output: DynamicsToolPreviewOutputSummary | null;
 }
@@ -95,54 +111,28 @@ export interface DynamicsToolPreviewEvaluation {
 export const DYNAMICS_TOOL_PREVIEW_STEP_MS = 16.6666667;
 export const DYNAMICS_TOOL_PREVIEW_MAX_ELAPSED_MS = 100;
 
+// §8 preset initial values (segmentLengths [cm], damping [1/s], gravityScale). rootOffset default
+// {0,0}. Numbers are calibration starting points, tuned later in the Editor preview.
 export const DYNAMICS_TOOL_PRESETS: readonly DynamicsToolPreset[] = [
   {
     presetId: "hair",
     label: "Hair",
-    pendulum: {
-      length: 0.85,
-      sway: 0.75,
-      reactionSpeed: 12,
-      convergenceSpeed: 4
-    },
-    outputStrengthScale: 0.35,
-    outputLimitScale: 0.5
+    chain: { rootOffset: { x: 0, y: 0 }, segmentLengths: [14], damping: 2.5, gravityScale: 1.0 }
   },
   {
     presetId: "ribbon",
     label: "Ribbon",
-    pendulum: {
-      length: 0.55,
-      sway: 0.9,
-      reactionSpeed: 16,
-      convergenceSpeed: 5
-    },
-    outputStrengthScale: 0.45,
-    outputLimitScale: 0.55
+    chain: { rootOffset: { x: 0, y: 0 }, segmentLengths: [10], damping: 1.2, gravityScale: 0.8 }
   },
   {
     presetId: "softCloth",
     label: "Soft Cloth",
-    pendulum: {
-      length: 1.15,
-      sway: 0.55,
-      reactionSpeed: 8,
-      convergenceSpeed: 3
-    },
-    outputStrengthScale: 0.3,
-    outputLimitScale: 0.45
+    chain: { rootOffset: { x: 0, y: 0 }, segmentLengths: [18], damping: 4.0, gravityScale: 1.0 }
   },
   {
     presetId: "rigidAccessory",
     label: "Rigid Accessory",
-    pendulum: {
-      length: 0.4,
-      sway: 0.35,
-      reactionSpeed: 22,
-      convergenceSpeed: 8
-    },
-    outputStrengthScale: 0.2,
-    outputLimitScale: 0.35
+    chain: { rootOffset: { x: 0, y: 0 }, segmentLengths: [6], damping: 8.0, gravityScale: 1.0 }
   }
 ] as const;
 
@@ -174,11 +164,11 @@ export const createDynamicsGroupDraftFromSession = (
     enabled: true,
     presetId,
     inputs: inputParameter === undefined ? [] : [createDefaultDynamicsInput(inputParameter)],
-    pendulums: [structuredClone(preset.pendulum)],
+    chain: cloneDynamicsChain(preset.chain),
     outputs:
       outputParameter === undefined
         ? []
-        : [createDefaultDynamicsOutput(outputParameter, preset)]
+        : [createDefaultDynamicsOutput(outputParameter)]
   };
 };
 
@@ -190,7 +180,7 @@ export const createDynamicsGroupDraftFromGroup = (
   enabled: group.enabled,
   presetId: isDynamicsToolPresetId(group.presetId) ? group.presetId : "hair",
   inputs: group.inputs.map(cloneDynamicsInput),
-  pendulums: group.pendulums.map(cloneDynamicsPendulum),
+  chain: cloneDynamicsChain(group.chain),
   outputs: group.outputs.map(cloneDynamicsOutput)
 });
 
@@ -203,7 +193,7 @@ export const createDynamicsGroupCreatePayloadFromDraft = (
   enabled: draft.enabled,
   presetId: draft.presetId,
   inputs: draft.inputs.map(cloneDynamicsInput),
-  pendulums: draft.pendulums.map(cloneDynamicsPendulum),
+  chain: cloneDynamicsChain(draft.chain),
   outputs: draft.outputs.map(cloneDynamicsOutput)
 });
 
@@ -216,7 +206,7 @@ export const createDynamicsGroupUpdatePayloadFromDraft = (
   enabled: draft.enabled,
   presetId: draft.presetId,
   inputs: draft.inputs.map(cloneDynamicsInput),
-  pendulums: draft.pendulums.map(cloneDynamicsPendulum),
+  chain: cloneDynamicsChain(draft.chain),
   outputs: draft.outputs.map(cloneDynamicsOutput)
 });
 
@@ -225,28 +215,21 @@ export const createDefaultDynamicsInput = (
 ): DynamicsInputPayloadDto => ({
   parameterId: parameter.parameterId,
   kind: "angle",
-  influencePercent: 100,
-  invert: false,
-  normalization: {
-    min: parameter.min,
-    center: parameter.default,
-    max: parameter.max
-  }
+  scale: DEFAULT_INPUT_ANGLE_SCALE
 });
 
 export const createDefaultDynamicsOutput = (
-  parameter: EditorParameter,
-  preset: DynamicsToolPreset = getDynamicsToolPreset("hair")
+  parameter: EditorParameter
 ): DynamicsOutputPayloadDto => {
   const range = Math.max(Math.abs(parameter.max - parameter.min), parameter.recommendedUiStep, 1);
-  const limit = normalizePreviewNumber(range * preset.outputLimitScale);
-
+  // §8: scale starts at "parameter 1.0 = 30°" (1/30). limit is left to UI calibration; a reasonable
+  // default is the parameter's half-range so an offset can carry the value from default to an edge
+  // without clipping normal motion.
   return {
     parameterId: parameter.parameterId,
-    kind: "angle",
-    strength: normalizePreviewNumber(limit * preset.outputStrengthScale),
-    invert: false,
-    limit
+    segmentIndex: 1,
+    scale: normalizePreviewNumber(DEFAULT_OUTPUT_SCALE_PER_DEG),
+    limit: normalizePreviewNumber(range / 2)
   };
 };
 
@@ -277,40 +260,23 @@ export const removeInputFromDynamicsDraft = (
 });
 
 export const updateDynamicsDraftInput = (
-  session: AuthoringSession,
+  _session: AuthoringSession,
   draft: DynamicsToolDraft,
   inputIndex: number,
   patch: Partial<DynamicsInputPayloadDto>
 ): DynamicsToolDraft => ({
   ...draft,
-  inputs: draft.inputs.map((input, index) => {
-    if (index !== inputIndex) {
-      return input;
-    }
-
-    const parameter = findEditorParameter(session, patch.parameterId ?? input.parameterId);
-    return {
-      ...input,
-      ...patch,
-      normalization:
-        patch.parameterId !== undefined && parameter !== undefined
-          ? createDefaultDynamicsInput(parameter).normalization
-          : patch.normalization ?? input.normalization
-    };
-  })
+  inputs: draft.inputs.map((input, index) =>
+    index === inputIndex ? { ...input, ...patch } : input
+  )
 });
 
-export const updateDynamicsDraftPendulum = (
+export const updateDynamicsDraftChain = (
   draft: DynamicsToolDraft,
-  patch: Partial<DynamicsPendulumPayloadDto>
+  patch: Partial<DynamicsChainPayloadDto>
 ): DynamicsToolDraft => ({
   ...draft,
-  pendulums: [
-    {
-      ...(draft.pendulums[0] ?? getDynamicsToolPreset(draft.presetId).pendulum),
-      ...patch
-    }
-  ]
+  chain: cloneDynamicsChain({ ...draft.chain, ...patch })
 });
 
 export const updateDynamicsDraftOutput = (
@@ -322,9 +288,7 @@ export const updateDynamicsDraftOutput = (
   const parameter = findEditorParameter(session, patch.parameterId ?? currentOutput?.parameterId);
   const nextOutput =
     currentOutput ??
-    (parameter === undefined
-      ? undefined
-      : createDefaultDynamicsOutput(parameter, getDynamicsToolPreset(draft.presetId)));
+    (parameter === undefined ? undefined : createDefaultDynamicsOutput(parameter));
 
   if (nextOutput === undefined) {
     return draft;
@@ -332,7 +296,7 @@ export const updateDynamicsDraftOutput = (
 
   const resetForParameter =
     patch.parameterId !== undefined && parameter !== undefined
-      ? createDefaultDynamicsOutput(parameter, getDynamicsToolPreset(draft.presetId))
+      ? createDefaultDynamicsOutput(parameter)
       : nextOutput;
 
   return {
@@ -375,73 +339,63 @@ export const validateDynamicsToolDraft = (
       );
     }
 
-    if (
-      input.normalization.min >= input.normalization.center ||
-      input.normalization.center >= input.normalization.max
-    ) {
+    if (input.scale === 0) {
       issues.push(
-        errorIssue(
-          "dynamicsTool.normalizationInvalid",
-          "Input normalization requires min < center < max.",
-          `/inputs/${index}/normalization`
+        warningIssue(
+          "dynamicsTool.zeroInputScale",
+          "Input scale is zero, so this driver has no effect.",
+          `/inputs/${index}/scale`
         )
       );
     }
   });
 
-  if (draft.pendulums.length !== 1) {
+  // §7: chainSegmentsInvalid (empty or non-positive lengths) is blocking.
+  const segmentLengths = draft.chain.segmentLengths;
+  const segmentCount = segmentLengths.length;
+  if (segmentCount < 1 || segmentLengths.some((length) => !(length > 0))) {
     issues.push(
       errorIssue(
-        "dynamicsTool.pendulumCardinalityInvalid",
-        "Dynamics v0 requires exactly one pendulum.",
-        "/pendulums"
+        "dynamicsTool.chainSegmentsInvalid",
+        "Chain requires at least one segment, and every segment length must be positive.",
+        "/chain/segmentLengths"
       )
     );
   }
 
-  const pendulum = draft.pendulums[0];
-  if (pendulum !== undefined) {
-    if (pendulum.length <= 0) {
-      issues.push(errorIssue("dynamicsTool.pendulumLengthInvalid", "Length must be greater than 0.", "/pendulums/0/length"));
-    }
-    if (pendulum.sway < 0 || pendulum.reactionSpeed < 0 || pendulum.convergenceSpeed < 0) {
-      issues.push(
-        errorIssue(
-          "dynamicsTool.pendulumCoefficientInvalid",
-          "Pendulum coefficients must be non-negative.",
-          "/pendulums/0"
-        )
-      );
-    }
-    if (pendulum.reactionSpeed > 60 || pendulum.convergenceSpeed > 30 || pendulum.sway > 10) {
-      issues.push(
-        warningIssue(
-          "dynamicsTool.pendulumCoefficientExtreme",
-          "Pendulum coefficients are high and may be unstable.",
-          "/pendulums/0"
-        )
-      );
-    }
-  }
-
-  if (draft.outputs.length !== 1) {
+  // §7 revised unstable-settings basis.
+  if (
+    draft.chain.damping > 60 ||
+    segmentLengths.some((length) => length < 0.1) ||
+    segmentCount > 16 ||
+    draft.chain.gravityScale > 10
+  ) {
     issues.push(
-      errorIssue(
-        "dynamicsTool.outputCardinalityInvalid",
-        "Dynamics v0 requires exactly one output.",
-        "/outputs"
+      warningIssue(
+        "dynamicsTool.unstableSettings",
+        "Chain settings are extreme and may be unstable.",
+        "/chain"
       )
     );
   }
 
-  const output = draft.outputs[0];
-  if (output !== undefined) {
+  draft.outputs.forEach((output, index) => {
     if (!parametersById.has(output.parameterId)) {
       issues.push(
         errorIssue(
           "dynamicsTool.outputParameterMissing",
           `Output parameter is missing: ${output.parameterId}.`,
-          "/outputs/0/parameterId"
+          `/outputs/${index}/parameterId`
+        )
+      );
+    }
+
+    if (segmentCount >= 1 && (output.segmentIndex < 1 || output.segmentIndex > segmentCount)) {
+      issues.push(
+        errorIssue(
+          "dynamicsTool.outputSegmentIndexOutOfRange",
+          `Output segment index ${output.segmentIndex} is out of range (1..${segmentCount}).`,
+          `/outputs/${index}/segmentIndex`
         )
       );
     }
@@ -456,17 +410,17 @@ export const validateDynamicsToolDraft = (
         errorIssue(
           "dynamicsTool.outputOwnershipDuplicate",
           `Output is already owned by ${existingOwner.displayName}.`,
-          "/outputs/0/parameterId"
+          `/outputs/${index}/parameterId`
         )
       );
     }
 
-    if (output.strength === 0) {
+    if (output.scale === 0) {
       issues.push(
         warningIssue(
-          "dynamicsTool.outputStrengthZero",
-          "Output strength is zero.",
-          "/outputs/0/strength"
+          "dynamicsTool.outputScaleZero",
+          "Output scale is zero, so this output produces no motion.",
+          `/outputs/${index}/scale`
         )
       );
     }
@@ -475,21 +429,11 @@ export const validateDynamicsToolDraft = (
         warningIssue(
           "dynamicsTool.outputLimitTooSmall",
           "Output limit is too small to show visible motion.",
-          "/outputs/0/limit"
+          `/outputs/${index}/limit`
         )
       );
     }
-  }
-
-  if (draft.inputs.length > 0 && draft.inputs.every((input) => input.influencePercent === 0)) {
-    issues.push(
-      warningIssue(
-        "dynamicsTool.inputInfluenceZero",
-        "All input influences are zero.",
-        "/inputs"
-      )
-    );
-  }
+  });
 
   return issues;
 };
@@ -561,7 +505,7 @@ export const selectDynamicsToolPreviewGroup = (
       existingState === undefined
         ? {
             ...state.simulationStatesByGroupId,
-            [selectedGroupId]: createResetDynamicsToolPreviewState(group, driverValues)
+            [selectedGroupId]: createResetDynamicsToolPreviewState(session, group, driverValues)
           }
         : state.simulationStatesByGroupId
   };
@@ -634,6 +578,7 @@ export const advanceDynamicsToolPreviewSimulation = (
     createDefaultDriverValues(session, definition);
   const previousState = state.simulationStatesByGroupId[input.dynamicsGroupId];
   const stepped = stepDynamicsToolPreview({
+    session,
     definition,
     inputValues: driverValues,
     previousState,
@@ -730,7 +675,7 @@ export const resetDynamicsToolPreviewSimulation = (
     },
     simulationStatesByGroupId: {
       ...state.simulationStatesByGroupId,
-      [dynamicsGroupId]: createResetDynamicsToolPreviewState(group, driverValues, previousState)
+      [dynamicsGroupId]: createResetDynamicsToolPreviewState(session, group, driverValues, previousState)
     },
     resetSerial: state.resetSerial + 1
   };
@@ -747,8 +692,7 @@ export const createDynamicsToolPreviewEvaluation = (
       selectedGroupId,
       parameterValues: baseParameterValues,
       driverValues: {},
-      source: 0,
-      rawSource: 0,
+      anchor: ZERO_ANCHOR,
       state: null,
       output: null
     };
@@ -760,8 +704,7 @@ export const createDynamicsToolPreviewEvaluation = (
       selectedGroupId: null,
       parameterValues: baseParameterValues,
       driverValues: {},
-      source: 0,
-      rawSource: 0,
+      anchor: ZERO_ANCHOR,
       state: null,
       output: null
     };
@@ -772,6 +715,7 @@ export const createDynamicsToolPreviewEvaluation = (
     ...(state.driverValuesByGroupId[selectedGroupId] ?? {})
   } as Readonly<Record<ParameterId, number>>;
   const sampled = stepDynamicsToolPreview({
+    session,
     definition: group,
     inputValues: driverValues,
     previousState: state.simulationStatesByGroupId[selectedGroupId],
@@ -788,7 +732,7 @@ export const createDynamicsToolPreviewEvaluation = (
   const output =
     group.enabled === false
       ? createDisabledOutputSummary(session, group, parameterValues)
-      : createPreviewOutputSummary(session, group, parameterValues, dynamicsState);
+      : createPreviewOutputSummary(session, group, parameterValues, dynamicsState, sampled.source.anchor);
 
   if (output !== null) {
     parameterValues[output.outputParameterId] = output.effectiveValue;
@@ -798,8 +742,7 @@ export const createDynamicsToolPreviewEvaluation = (
     selectedGroupId,
     parameterValues,
     driverValues,
-    source: sampled.source.source,
-    rawSource: sampled.source.rawSource,
+    anchor: sampled.source.anchor,
     state: dynamicsState,
     output
   };
@@ -832,6 +775,18 @@ export const createNextDynamicsGroupDisplayName = (
   return `${base} ${session.graph.dynamicsGroups.length + 1}`;
 };
 
+// §3.2 parameter defaults are the rest basis for the anchor pose; the solver requires them.
+const createParameterDefaultsForGroup = (
+  session: AuthoringSession,
+  group: DynamicsToolGroup
+): Readonly<Record<ParameterId, number>> =>
+  Object.fromEntries(
+    group.inputs.map((input) => {
+      const parameter = findEditorParameter(session, input.parameterId);
+      return [input.parameterId, parameter?.default ?? 0];
+    })
+  ) as Readonly<Record<ParameterId, number>>;
+
 const createDefaultDriverValues = (
   session: AuthoringSession,
   group: DynamicsToolGroup
@@ -839,11 +794,12 @@ const createDefaultDriverValues = (
   Object.fromEntries(
     group.inputs.map((input) => {
       const parameter = findEditorParameter(session, input.parameterId);
-      return [input.parameterId, parameter?.default ?? input.normalization.center];
+      return [input.parameterId, parameter?.default ?? 0];
     })
   ) as Readonly<Record<ParameterId, number>>;
 
 const stepDynamicsToolPreview = (input: {
+  readonly session: AuthoringSession;
   readonly definition: DynamicsToolGroup;
   readonly previousState: RuntimeDynamicsGroupState | undefined;
   readonly inputValues: Readonly<Record<string, number>>;
@@ -853,12 +809,13 @@ const stepDynamicsToolPreview = (input: {
   readonly state: RuntimeDynamicsGroupState;
   readonly source: DynamicsSourceSample;
 } => {
-  const pendulum = input.definition.pendulums[0];
+  const parameterDefaults = createParameterDefaultsForGroup(input.session, input.definition);
   const dtMs = clamp(input.dtMs, 0, DYNAMICS_TOOL_PREVIEW_MAX_ELAPSED_MS);
   const reset = stepDynamics({
-    definition: input.definition,
+    definition: input.definition as NormalizedDynamicsGroup,
     previousState: input.previousState,
     inputValues: input.inputValues,
+    parameterDefaults,
     resetApplied: input.resetApplied || input.previousState === undefined,
     dtMs: 0
   });
@@ -866,7 +823,7 @@ const stepDynamicsToolPreview = (input: {
     input.resetApplied || input.previousState === undefined
       ? reset.state
       : input.previousState;
-  if (input.resetApplied || pendulum === undefined || !input.definition.enabled || dtMs === 0) {
+  if (input.resetApplied || !input.definition.enabled || dtMs === 0) {
     return {
       state: previousState,
       source: reset.source
@@ -880,9 +837,10 @@ const stepDynamicsToolPreview = (input: {
   while (remainingMs > 0.000001) {
     const stepMs = Math.min(DYNAMICS_TOOL_PREVIEW_STEP_MS, remainingMs);
     const stepped = stepDynamics({
-      definition: input.definition,
+      definition: input.definition as NormalizedDynamicsGroup,
       previousState: nextState,
       inputValues: input.inputValues,
+      parameterDefaults,
       resetApplied: false,
       dtMs: stepMs
     });
@@ -901,7 +859,8 @@ const createPreviewOutputSummary = (
   session: AuthoringSession,
   group: DynamicsToolGroup,
   parameterValues: Readonly<Record<string, number>>,
-  state: RuntimeDynamicsGroupState
+  state: RuntimeDynamicsGroupState,
+  anchor: DynamicsAnchorPose
 ): DynamicsToolPreviewOutputSummary | null => {
   const output = group.outputs[0];
   if (output === undefined) {
@@ -910,7 +869,13 @@ const createPreviewOutputSummary = (
 
   const parameter = findEditorParameter(session, output.parameterId);
   const baseValue = parameterValues[output.parameterId] ?? parameter?.default ?? 0;
-  const outputOffset = computeDynamicsOutputOffsets(group, state)[0];
+  // §3.5 output offset read in the head frame via the anchor (θ_local = θ_world − φ).
+  const outputOffset = computeDynamicsOutputOffsetsWithAnchor(
+    group as NormalizedDynamicsGroup,
+    state,
+    anchor
+  ).find((candidate) => candidate.outputParameterId === output.parameterId);
+  const thetaLocalDeg = outputOffset?.thetaLocalDeg ?? 0;
   const rawOffset = outputOffset?.rawOffset ?? 0;
   const offset = outputOffset?.offset ?? 0;
   const rawEffectiveValue = baseValue + offset;
@@ -921,6 +886,8 @@ const createPreviewOutputSummary = (
 
   return {
     outputParameterId: output.parameterId,
+    segmentIndex: output.segmentIndex,
+    thetaLocalDeg,
     baseValue,
     rawOffset,
     offset,
@@ -945,6 +912,8 @@ const createDisabledOutputSummary = (
   const baseValue = parameterValues[output.parameterId] ?? parameter?.default ?? 0;
   return {
     outputParameterId: output.parameterId,
+    segmentIndex: output.segmentIndex,
+    thetaLocalDeg: 0,
     baseValue,
     rawOffset: 0,
     offset: 0,
@@ -956,14 +925,16 @@ const createDisabledOutputSummary = (
 };
 
 const createResetDynamicsToolPreviewState = (
+  session: AuthoringSession,
   definition: DynamicsToolGroup,
   inputValues: Readonly<Record<string, number>>,
   previousState?: RuntimeDynamicsGroupState
 ): RuntimeDynamicsGroupState =>
   stepDynamics({
-    definition,
+    definition: definition as NormalizedDynamicsGroup,
     previousState,
     inputValues,
+    parameterDefaults: createParameterDefaultsForGroup(session, definition),
     resetApplied: true,
     dtMs: 0
   }).state;
@@ -1001,29 +972,20 @@ const findEditorParameter = (
 const cloneDynamicsInput = (input: DynamicsInputPayloadDto): DynamicsInputPayloadDto => ({
   parameterId: input.parameterId,
   kind: input.kind,
-  influencePercent: input.influencePercent,
-  invert: input.invert,
-  normalization: {
-    min: input.normalization.min,
-    center: input.normalization.center,
-    max: input.normalization.max
-  }
+  scale: input.scale
 });
 
-const cloneDynamicsPendulum = (
-  pendulum: DynamicsPendulumPayloadDto
-): DynamicsPendulumPayloadDto => ({
-  length: pendulum.length,
-  sway: pendulum.sway,
-  reactionSpeed: pendulum.reactionSpeed,
-  convergenceSpeed: pendulum.convergenceSpeed
+const cloneDynamicsChain = (chain: DynamicsChainPayloadDto): DynamicsChainPayloadDto => ({
+  rootOffset: { x: chain.rootOffset.x, y: chain.rootOffset.y },
+  segmentLengths: [...chain.segmentLengths],
+  damping: chain.damping,
+  gravityScale: chain.gravityScale
 });
 
 const cloneDynamicsOutput = (output: DynamicsOutputPayloadDto): DynamicsOutputPayloadDto => ({
   parameterId: output.parameterId,
-  kind: output.kind,
-  strength: output.strength,
-  invert: output.invert,
+  segmentIndex: output.segmentIndex,
+  scale: output.scale,
   limit: output.limit
 });
 
@@ -1033,7 +995,7 @@ const cloneDynamicsGroup = (group: DynamicsToolGroup): DynamicsToolGroup => ({
   enabled: group.enabled,
   ...(group.presetId === undefined ? {} : { presetId: group.presetId }),
   inputs: group.inputs.map(cloneDynamicsInput),
-  pendulums: group.pendulums.map(cloneDynamicsPendulum),
+  chain: cloneDynamicsChain(group.chain),
   outputs: group.outputs.map(cloneDynamicsOutput)
 });
 
@@ -1046,7 +1008,7 @@ const sameDynamicsDefinition = (
   left.enabled === right.enabled &&
   left.presetId === right.presetId &&
   sameDynamicsInputs(left.inputs, right.inputs) &&
-  sameDynamicsPendulums(left.pendulums, right.pendulums) &&
+  sameDynamicsChain(left.chain, right.chain) &&
   sameDynamicsOutputs(left.outputs, right.outputs);
 
 const sameDynamicsInputs = (
@@ -1060,29 +1022,20 @@ const sameDynamicsInputs = (
       other !== undefined &&
       input.parameterId === other.parameterId &&
       input.kind === other.kind &&
-      input.influencePercent === other.influencePercent &&
-      input.invert === other.invert &&
-      input.normalization.min === other.normalization.min &&
-      input.normalization.center === other.normalization.center &&
-      input.normalization.max === other.normalization.max
+      input.scale === other.scale
     );
   });
 
-const sameDynamicsPendulums = (
-  left: readonly DynamicsPendulumPayloadDto[],
-  right: readonly DynamicsPendulumPayloadDto[]
+const sameDynamicsChain = (
+  left: DynamicsChainPayloadDto,
+  right: DynamicsChainPayloadDto
 ): boolean =>
-  left.length === right.length &&
-  left.every((pendulum, index) => {
-    const other = right[index];
-    return (
-      other !== undefined &&
-      pendulum.length === other.length &&
-      pendulum.sway === other.sway &&
-      pendulum.reactionSpeed === other.reactionSpeed &&
-      pendulum.convergenceSpeed === other.convergenceSpeed
-    );
-  });
+  left.rootOffset.x === right.rootOffset.x &&
+  left.rootOffset.y === right.rootOffset.y &&
+  left.damping === right.damping &&
+  left.gravityScale === right.gravityScale &&
+  left.segmentLengths.length === right.segmentLengths.length &&
+  left.segmentLengths.every((length, index) => length === right.segmentLengths[index]);
 
 const sameDynamicsOutputs = (
   left: readonly DynamicsOutputPayloadDto[],
@@ -1094,9 +1047,8 @@ const sameDynamicsOutputs = (
     return (
       other !== undefined &&
       output.parameterId === other.parameterId &&
-      output.kind === other.kind &&
-      output.strength === other.strength &&
-      output.invert === other.invert &&
+      output.segmentIndex === other.segmentIndex &&
+      output.scale === other.scale &&
       output.limit === other.limit
     );
   });
@@ -1152,6 +1104,8 @@ const normalizePreviewNumber = (value: number): number => Number(value.toFixed(6
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
+
+const ZERO_ANCHOR: DynamicsAnchorPose = { phiDeg: 0, pin: { x: 0, y: 0 } };
 
 function sameDynamicsPreviewValue(left: number, right: number): boolean {
   return Math.abs(left - right) <= 0.000001;

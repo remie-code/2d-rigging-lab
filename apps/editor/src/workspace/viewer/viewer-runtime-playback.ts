@@ -13,13 +13,14 @@ import {
   startLive2dPerformanceTiming
 } from "@private-2d-rigging-lab/render-core";
 import {
-  computeDynamicsSource,
+  computeDynamicsOutputOffsetsFromGraph,
   createInitialRuntimeState,
   defaultRuntimeEvaluationOptions,
   evaluateRuntimeFrame,
   type NormalizedDynamicsGroup,
   type NormalizedRuntimeGraph
 } from "@private-2d-rigging-lab/runtime-core";
+import type { RuntimeDynamicsGroupState } from "@private-2d-rigging-lab/contracts";
 
 import type { ParameterValueMap } from "../../features/editor-session/model/parameter-keyform-state";
 
@@ -28,12 +29,14 @@ export const VIEWER_RUNTIME_MAX_ELAPSED_MS = 100;
 const VIEWER_RUNTIME_MAX_SUB_STEPS = 6;
 // Viewer idle detection favors extra invisible frames over cutting off visible sway.
 export const VIEWER_RUNTIME_SETTLED_MIN_EVALUATED_FRAMES = 36;
-// Runtime dynamics source/angle values are normalized; this maps to sub-pixel Viewer motion.
-export const VIEWER_RUNTIME_SETTLED_ANGULAR_VELOCITY_EPSILON = 0.01;
-export const VIEWER_RUNTIME_SETTLED_SOURCE_VELOCITY_EPSILON = 0.0005;
-export const VIEWER_RUNTIME_SETTLED_ANGLE_TO_SOURCE_EPSILON = 0.01;
-// Output distance uses authored strength/limit units; 0.1 is at or below visible slider precision.
-export const VIEWER_RUNTIME_SETTLED_OUTPUT_TO_TARGET_EPSILON = 0.1;
+// §3.7 world-frame chain settled thresholds. The dynamics state is now a Verlet particle chain
+// (cm, y-down); the old angle/source-velocity epsilons no longer have meaning.
+// Max particle speed = max_i |x_i − x̂_i| / dt (cm/s). At the fixed step this is a per-frame
+// displacement of ~0.017 cm — sub-pixel motion in the virtual dynamics space.
+export const VIEWER_RUNTIME_SETTLED_PARTICLE_SPEED_EPSILON = 1.0;
+// Per-frame change of the effective output offset (parameter units). At or below visible slider
+// precision, so a still-moving output keeps the RAF loop alive but sub-precision drift is idle.
+export const VIEWER_RUNTIME_SETTLED_OUTPUT_OFFSET_DELTA_EPSILON = 0.001;
 
 export interface ViewerRuntimePlaybackModel {
   readonly graph: NormalizedRuntimeGraph;
@@ -224,31 +227,75 @@ export const isViewerRuntimePlaybackStateSettled = ({
     return false;
   }
 
+  const dtSeconds = VIEWER_RUNTIME_FIXED_STEP_MS / 1000;
+
   return listPlayableDynamicsGroups(model.graph).every((group) => {
     const groupState = state.dynamicsGroups[group.dynamicsGroupId];
-    if (groupState === undefined) {
+    if (groupState === undefined || groupState.particles.length === 0) {
       return false;
     }
 
-    const targetSource = computeDynamicsSource(model.graph, group, authoredParameterValues);
-    const angleToSource = Math.abs(groupState.angle - targetSource);
-    const maxOutputDistance = Math.max(
-      ...group.outputs.map((output) => {
-        const rawDistance = Math.abs(angleToSource * output.strength);
-        return Math.min(rawDistance, Math.abs(output.limit));
-      }),
+    // §3.7: max_i |x_i − x̂_i| / dt (cm/s). px,py hold the previous-step position.
+    const maxParticleSpeed = Math.max(
+      ...groupState.particles.map((particle) =>
+        Math.hypot(particle.x - particle.px, particle.y - particle.py)
+      ),
       0
+    ) / dtSeconds;
+
+    // §3.7: change of the effective output offset per frame. Reconstruct the previous frame's
+    // segment angles from the stored px,py so the offset delta needs no extra state.
+    const maxOutputOffsetDelta = computeMaxOutputOffsetDelta(
+      model.graph,
+      group,
+      groupState,
+      authoredParameterValues
     );
 
     return (
-      Math.abs(groupState.angularVelocity) <=
-        VIEWER_RUNTIME_SETTLED_ANGULAR_VELOCITY_EPSILON &&
-      Math.abs(groupState.previousSourceVelocity) <=
-        VIEWER_RUNTIME_SETTLED_SOURCE_VELOCITY_EPSILON &&
-      angleToSource <= VIEWER_RUNTIME_SETTLED_ANGLE_TO_SOURCE_EPSILON &&
-      maxOutputDistance <= VIEWER_RUNTIME_SETTLED_OUTPUT_TO_TARGET_EPSILON
+      maxParticleSpeed <= VIEWER_RUNTIME_SETTLED_PARTICLE_SPEED_EPSILON &&
+      maxOutputOffsetDelta <= VIEWER_RUNTIME_SETTLED_OUTPUT_OFFSET_DELTA_EPSILON
     );
   });
+};
+
+// §3.7 output-offset settled term: |offset(current particles) − offset(previous particles)| taken
+// over every output, using the anchor from the current authored inputs (θ_local = θ_world − φ).
+const computeMaxOutputOffsetDelta = (
+  graph: NormalizedRuntimeGraph,
+  group: NormalizedDynamicsGroup,
+  groupState: RuntimeDynamicsGroupState,
+  authoredParameterValues: ParameterValueMap
+): number => {
+  const previousState: RuntimeDynamicsGroupState = {
+    ...groupState,
+    particles: groupState.particles.map((particle) => ({
+      x: particle.px,
+      y: particle.py,
+      px: particle.px,
+      py: particle.py
+    }))
+  };
+
+  const currentOffsets = computeDynamicsOutputOffsetsFromGraph(
+    graph,
+    group,
+    groupState,
+    authoredParameterValues
+  );
+  const previousOffsets = computeDynamicsOutputOffsetsFromGraph(
+    graph,
+    group,
+    previousState,
+    authoredParameterValues
+  );
+
+  return Math.max(
+    ...currentOffsets.map((current, index) =>
+      Math.abs(current.offset - (previousOffsets[index]?.offset ?? current.offset))
+    ),
+    0
+  );
 };
 
 export const resolveViewerRuntimeParameterValues = (input: {
@@ -317,7 +364,7 @@ const listPlayableDynamicsGroups = (
     (group) =>
       group.enabled &&
       group.inputs.length > 0 &&
-      group.pendulums.length > 0 &&
+      group.chain.segmentLengths.length > 0 &&
       group.outputs.length > 0
   );
 
