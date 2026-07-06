@@ -38,6 +38,7 @@
 | [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave53 final integration report/review `pass` が最新 final implementation-proven baseline。Workspace Layout Migration v0 は bounded pass 記録済み |
 | [runtime-player/](runtime-player/) | Editor外のRuntime Player / Capture Host appの調査、UX、設計、未決事項 | iFacialMocap input adapter調査、初期画面UX、Electron固定後の技術スタック判断を記録 |
 | [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 前提合意4文書（可解性 / 運用方針 / 閉問題アプローチ / craft設計）と第一閉問題（01-eyeball-x）定義を記録済み |
+| [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | 概念設計Accepted・現状調査Recorded（2026-07-07）。実装計画は未着手 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
@@ -61,6 +62,7 @@
 | Runtime Player topic | Editor外の追加appとして [runtime-player/](runtime-player/) を作成。iFacialMocapをv0 tracking input adapter候補にする調査は [runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、初期画面UXは [runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、Electron固定後の技術スタックは [runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、Runtime Player Wave1計画は [runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) に記録 |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
 | Model Authoring topic | 「Fableに2Dモデルを作らせる」挑戦を [model-authoring/](model-authoring/) として作成（2026-07-02）。可解性分析・運用方針（ヘッドレス専有 / Git巻き戻し / 判定の梯子）・閉問題アプローチを premises/ に合意記録済み。第一閉問題は [model-authoring/closed-problems/01-eyeball-x/problem-definition.md](model-authoring/closed-problems/01-eyeball-x/problem-definition.md) |
+| Mesh Generation topic | メッシュ自動生成の商用風改修を [mesh-generation/](mesh-generation/) として作成（2026-07-07）。概念設計合意・現状実装調査を記録済み。v7新methodとして実装し、v6/v7 UI切替→品質評価→v6系削除まで扱う。Editor実装（Wave102停止中）の部分的再開 |
 
 ## 次の行動
 
@@ -70,7 +72,8 @@
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
 5. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。
 6. Fableによるモデル制作の検討では [model-authoring/_map.md](model-authoring/_map.md) を入口にする。
-7. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
+7. メッシュ自動生成の商用風改修では [mesh-generation/_map.md](mesh-generation/_map.md) を入口にする。
+8. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
 
 ## 未決事項
 

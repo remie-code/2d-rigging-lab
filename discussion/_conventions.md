@@ -61,6 +61,10 @@ discussion/
     closed-problems/
     research/
     craft/
+  mesh-generation/      # メッシュ自動生成の商用風改修(v7)。概念設計、現状調査、実装、品質評価、v6系整理
+    _map.md
+    *.md
+    implementation/     # 実装フェーズ開始時に作成。wave計画・実装報告・レビューをトピック内に閉じる
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
@@ -113,6 +117,7 @@ discussion/
 | `implementation/` | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | Accepted development conventionに従い、実装証拠とレビュー成果物を永続化する |
 | `runtime-player/` | Editorが出力したRuntime Exportを読む外部Runtime Player / Capture Host appの調査、UX、設計、未決事項 | Undine / Sylph / Gnome | Editor本体と分離し、tracking input、runtime display、OBS想定、外部app境界を扱う |
 | `model-authoring/` | LLM(Fable)が作者として2Dモデルを制作する挑戦の前提合意、閉問題定義と結果、制作定石 | Undine / ユーザー | [design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) の後継トピック。実装waveが必要になった場合の置き場は未決 |
+| `mesh-generation/` | メッシュ自動生成の商用風改修(v7)。概念設計、現状実装調査、実装計画、品質評価、v6系整理 | Undine / Sylph / Gnome | 実装成果物(wave計画等)はトピック内 `implementation/` に置く(runtime-player方式)。Editor実装(Wave102停止中)の部分的再開 |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。
