@@ -33,6 +33,12 @@ describe("InputProfileCalibrationSession", () => {
     recordCurrentPrompt(session, "head-position-right");
     recordCurrentPrompt(session, "head-position-near");
     recordCurrentPrompt(session, "head-position-far");
+    recordCurrentPrompt(session, "vowel-neutral");
+    recordCurrentPrompt(session, "vowel-a");
+    recordCurrentPrompt(session, "vowel-i");
+    recordCurrentPrompt(session, "vowel-u");
+    recordCurrentPrompt(session, "vowel-e");
+    recordCurrentPrompt(session, "vowel-o");
 
     expect(session.getSnapshot().canFinish).toBe(true);
 
@@ -81,6 +87,57 @@ describe("InputProfileCalibrationSession", () => {
         bodyFar: { axis: "z", direction: 1 }
       }
     });
+    expect(profile.calibration.vowels?.windowFrameCount).toBe(8);
+    expect(profile.calibration.vowels?.samples.a?.jawOpen).toBe(0.6);
+    expect(profile.calibration.vowels?.samples.neutral?.jawOpen).toBe(0.05);
+    expect(profile.calibration.vowels?.samples.o?.jawOpen).toBe(0.27);
+  });
+
+  it("advances the vowel section prompts through waiting -> ok and enables finish", () => {
+    const session = new InputProfileCalibrationSession({
+      sessionId: "calibration_test",
+      displayName: "Desk",
+      mode: "section",
+      section: "vowels",
+      targetProfileId: "profile_desk",
+      promptKeys: [
+        "look-forward",
+        "vowel-neutral",
+        "vowel-a",
+        "vowel-i",
+        "vowel-u",
+        "vowel-e",
+        "vowel-o"
+      ],
+      startedAtMs: 0
+    });
+
+    recordCurrentPrompt(session, "look-forward");
+
+    // The vowel prompt starts waiting and needs a window of frames before "ok".
+    expect(session.getSnapshot().currentPrompt?.key).toBe("vowel-neutral");
+    expect(session.getSnapshot().currentPrompt?.status).toBe("waiting");
+
+    const partial = session.recordSample(createFrame("vowel-neutral"));
+    expect(partial.recorded).toBe(false);
+    expect(partial.snapshot.currentPrompt?.status).toBe("needs-more");
+    expect(partial.snapshot.currentPrompt?.sampleCount).toBe(1);
+
+    const required =
+      session.getSnapshot().currentPrompt?.requiredSampleCount ?? 0;
+    for (let index = 1; index < required; index += 1) {
+      session.recordSample(createFrame("vowel-neutral"));
+    }
+    expect(session.getSnapshot().currentPrompt?.status).toBe("ok");
+    session.advancePrompt();
+
+    recordCurrentPrompt(session, "vowel-a");
+    recordCurrentPrompt(session, "vowel-i");
+    recordCurrentPrompt(session, "vowel-u");
+    recordCurrentPrompt(session, "vowel-e");
+    recordCurrentPrompt(session, "vowel-o");
+
+    expect(session.getSnapshot().canFinish).toBe(true);
   });
 
   it("does not complete a directional prompt until stable samples match", () => {
@@ -233,9 +290,10 @@ function recordCurrentPrompt(
   session: InputProfileCalibrationSession,
   promptKey: RuntimePlayerInputCalibrationPromptKey
 ): void {
-  expect(session.getSnapshot().currentPrompt?.key).toBe(promptKey);
+  const current = session.getSnapshot().currentPrompt;
+  expect(current?.key).toBe(promptKey);
 
-  const sampleCount = promptKey === "look-forward" ? 1 : 2;
+  const sampleCount = current?.requiredSampleCount ?? 1;
 
   for (let index = 0; index < sampleCount; index += 1) {
     session.recordSample(createFrame(promptKey));
@@ -346,11 +404,39 @@ function createEyeRotation(
 function createBlendshapes(
   promptKey: RuntimePlayerInputCalibrationPromptKey
 ): Record<string, number> {
+  const vowelJawOpen = vowelJawOpenFor(promptKey);
+
   return {
     eyeBlink_L: promptKey === "blink" ? 0.8 : 0,
     eyeBlink_R: promptKey === "blink" ? 0.75 : 0,
-    jawOpen: promptKey === "open-mouth" ? 0.7 : 0,
+    jawOpen:
+      promptKey === "open-mouth"
+        ? 0.7
+        : vowelJawOpen !== null
+          ? vowelJawOpen
+          : 0,
     mouthSmile_L: promptKey === "smile" ? 0.6 : 0,
     mouthSmile_R: promptKey === "smile" ? 0.6 : 0
   };
+}
+
+function vowelJawOpenFor(
+  promptKey: RuntimePlayerInputCalibrationPromptKey
+): number | null {
+  switch (promptKey) {
+    case "vowel-neutral":
+      return 0.05;
+    case "vowel-a":
+      return 0.6;
+    case "vowel-i":
+      return 0.11;
+    case "vowel-u":
+      return 0.15;
+    case "vowel-e":
+      return 0.24;
+    case "vowel-o":
+      return 0.27;
+    default:
+      return null;
+  }
 }

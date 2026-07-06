@@ -41,7 +41,8 @@ export function MappingPage({
   onStartCalibration,
   onResetToAutoMap,
   onRetryProfileSave,
-  onUpdateSlot
+  onUpdateSlot,
+  onSetVowelLipsyncEnabled
 }: {
   readonly runtimeExportStatus: RuntimeExportStatus | null;
   readonly inputStatus: RuntimePlayerInputStatus | null;
@@ -53,6 +54,7 @@ export function MappingPage({
   readonly onResetToAutoMap: () => void;
   readonly onRetryProfileSave: () => void;
   readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
+  readonly onSetVowelLipsyncEnabled: (enabled: boolean) => void;
 }): ReactElement {
   return (
     <div className="grid gap-4">
@@ -146,6 +148,13 @@ export function MappingPage({
               <h3 className="text-xs font-semibold uppercase text-neutral-500">
                 {group.label}
               </h3>
+              {group.label === "Mouth" &&
+              mappingStatus?.vowelLipsyncSupported ? (
+                <VowelLipsyncToggle
+                  enabled={mappingStatus.vowelLipsyncEnabled}
+                  onSetVowelLipsyncEnabled={onSetVowelLipsyncEnabled}
+                />
+              ) : null}
               <div className="grid gap-2">
                 {group.slots.map((slot) => (
                   <MappingSlotRow
@@ -159,6 +168,36 @@ export function MappingPage({
           ))}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+function VowelLipsyncToggle({
+  enabled,
+  onSetVowelLipsyncEnabled
+}: {
+  readonly enabled: boolean;
+  readonly onSetVowelLipsyncEnabled: (enabled: boolean) => void;
+}): ReactElement {
+  return (
+    <div className="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm">
+      <div className="min-w-0">
+        <div className="font-medium text-neutral-100">Vowel lipsync</div>
+        <div className="mt-1 text-xs text-neutral-500">
+          Estimate A/I/U/E/O mouth shapes from tracking
+        </div>
+      </div>
+      <label className="inline-flex min-h-8 items-center gap-2 text-xs font-semibold text-neutral-200">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(event) =>
+            onSetVowelLipsyncEnabled(event.currentTarget.checked)
+          }
+          className="size-4 accent-teal-400"
+        />
+        Enabled
+      </label>
     </div>
   );
 }

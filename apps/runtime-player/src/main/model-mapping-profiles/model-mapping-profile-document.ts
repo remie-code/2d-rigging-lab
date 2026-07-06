@@ -46,4 +46,11 @@ export type ModelMappingProfileDocument = {
   readonly exportIdentity: ModelMappingProfileExportIdentity;
   readonly autoMappingVersion: typeof modelMappingProfileAutoMappingVersion;
   readonly slots: readonly ModelMappingProfileSlot[];
+  /**
+   * Per-model vowel lipsync toggle (design §3.2). Optional so profiles written
+   * before this field load unchanged; a missing value resolves to the default
+   * (ON when the model resolved vowel targets). schemaVersion is held at v1
+   * because this is a purely additive optional field.
+   */
+  readonly vowelLipsyncEnabled?: boolean;
 };

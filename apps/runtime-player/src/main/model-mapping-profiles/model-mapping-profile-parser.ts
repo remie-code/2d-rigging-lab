@@ -81,6 +81,8 @@ export function parseModelMappingProfileDocument(
     }
   });
 
+  const vowelLipsyncEnabled = readOptionalBoolean(value.vowelLipsyncEnabled);
+
   return {
     ok: true,
     profile: {
@@ -89,7 +91,10 @@ export function parseModelMappingProfileDocument(
       updatedAtIso,
       exportIdentity,
       autoMappingVersion: modelMappingProfileAutoMappingVersion,
-      slots
+      slots,
+      ...(vowelLipsyncEnabled === undefined || vowelLipsyncEnabled === null
+        ? {}
+        : { vowelLipsyncEnabled })
     },
     warningMessages
   };

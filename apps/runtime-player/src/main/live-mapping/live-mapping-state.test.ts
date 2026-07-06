@@ -113,3 +113,76 @@ describe("RuntimePlayerLiveMappingState profile restore status", () => {
     });
   });
 });
+
+describe("RuntimePlayerLiveMappingState vowel lipsync toggle", () => {
+  it("reports unsupported and disabled when the model has no vowel targets", () => {
+    const payload = createModelMappingProfileTestPayload();
+    const state = new RuntimePlayerLiveMappingState();
+
+    const status = state.setRuntimeExportPayload(payload);
+
+    expect(status.vowelLipsyncSupported).toBe(false);
+    expect(status.vowelLipsyncEnabled).toBe(false);
+    expect(state.isVowelLipsyncSupported()).toBe(false);
+  });
+
+  it("defaults to enabled when the model resolves a vowel target", () => {
+    const payload = createVowelPayload();
+    const state = new RuntimePlayerLiveMappingState();
+
+    const status = state.setRuntimeExportPayload(payload);
+
+    expect(status.vowelLipsyncSupported).toBe(true);
+    expect(status.vowelLipsyncEnabled).toBe(true);
+  });
+
+  it("honors an explicit disable override", () => {
+    const payload = createVowelPayload();
+    const state = new RuntimePlayerLiveMappingState();
+    state.setRuntimeExportPayload(payload);
+
+    const status = state.setVowelLipsyncEnabled(false);
+
+    expect(status.vowelLipsyncEnabled).toBe(false);
+    expect(state.isVowelLipsyncEnabled()).toBe(false);
+  });
+
+  it("restores the persisted toggle from a saved profile", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-live-mapping-vowel-")
+    );
+    const payload = createVowelPayload();
+    const identity = createModelMappingRuntimeExportIdentity(payload);
+    const store = new ModelMappingProfileStore({ userDataPath });
+    await store.saveProfile({
+      identity,
+      profile: createModelMappingProfileDocument({
+        identity,
+        slots: createAutoMappingSlots(payload),
+        createdAtIso: "2026-06-23T00:00:00.000Z",
+        updatedAtIso: "2026-06-23T00:01:00.000Z",
+        vowelLipsyncEnabled: false
+      })
+    });
+    const loadResult = await store.loadProfile(payload);
+    const state = new RuntimePlayerLiveMappingState();
+
+    const status = state.setRuntimeExportPayload(payload, loadResult);
+
+    expect(status.vowelLipsyncSupported).toBe(true);
+    expect(status.vowelLipsyncEnabled).toBe(false);
+  });
+});
+
+function createVowelPayload() {
+  return createModelMappingProfileTestPayload({
+    parameters: [
+      createModelMappingProfileTestParameter(
+        "param_mouth_vowel_a",
+        "Mouth Vowel A",
+        "mouth.vowel.a",
+        { min: 0, max: 1 }
+      )
+    ]
+  });
+}

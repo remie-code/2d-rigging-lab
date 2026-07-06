@@ -82,6 +82,50 @@ describe("ModelMappingProfileStore", () => {
     });
   });
 
+  it("persists and reloads the vowel lipsync toggle when set", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-model-mapping-profiles-")
+    );
+    const payload = createModelMappingProfileTestPayload();
+    const identity = createModelMappingRuntimeExportIdentity(payload);
+    const store = new ModelMappingProfileStore({ userDataPath });
+    const profile = createModelMappingProfileDocument({
+      identity,
+      slots: createAutoMappingSlots(payload),
+      createdAtIso: "2026-06-23T00:00:00.000Z",
+      updatedAtIso: "2026-06-23T00:01:00.000Z",
+      vowelLipsyncEnabled: false
+    });
+
+    await store.saveProfile({ identity, profile });
+    const loaded = await store.loadProfile(payload);
+
+    expect(loaded.state).toBe("loaded");
+    expect(loaded.profile?.vowelLipsyncEnabled).toBe(false);
+  });
+
+  it("loads legacy profiles that omit the vowel lipsync toggle", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-model-mapping-profiles-")
+    );
+    const payload = createModelMappingProfileTestPayload();
+    const identity = createModelMappingRuntimeExportIdentity(payload);
+    const store = new ModelMappingProfileStore({ userDataPath });
+    const profile = createModelMappingProfileDocument({
+      identity,
+      slots: createAutoMappingSlots(payload),
+      createdAtIso: "2026-06-23T00:00:00.000Z",
+      updatedAtIso: "2026-06-23T00:01:00.000Z"
+    });
+
+    await store.saveProfile({ identity, profile });
+    const loaded = await store.loadProfile(payload);
+
+    expect(loaded.state).toBe("loaded");
+    // Missing field resolves to undefined (state layer defaults it to ON).
+    expect(loaded.profile?.vowelLipsyncEnabled).toBeUndefined();
+  });
+
   it("treats matching packageHash as authoritative across revision and signature changes", async () => {
     const userDataPath = await mkdtemp(
       path.join(os.tmpdir(), "runtime-player-model-mapping-profiles-")

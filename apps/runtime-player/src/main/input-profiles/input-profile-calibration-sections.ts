@@ -45,6 +45,15 @@ const headPositionNearFarPromptKeys = [
   "head-position-far"
 ] as const satisfies readonly RuntimePlayerInputCalibrationPromptKey[];
 
+const vowelPromptKeys = [
+  "vowel-neutral",
+  "vowel-a",
+  "vowel-i",
+  "vowel-u",
+  "vowel-e",
+  "vowel-o"
+] as const satisfies readonly RuntimePlayerInputCalibrationPromptKey[];
+
 export const inputProfileHeadPositionCalibrationSectionKeys = [
   "head-position-left-right",
   "head-position-near-far"
@@ -148,6 +157,9 @@ export function getCalibrationPromptKeysForSections(
         break;
       case "head-position-near-far":
         promptKeys.push(...headPositionNearFarPromptKeys);
+        break;
+      case "vowels":
+        promptKeys.push(...vowelPromptKeys);
         break;
     }
   }

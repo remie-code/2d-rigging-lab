@@ -8,6 +8,11 @@ export const runtimePlayerMappingSlotIds = [
   "gaze-vertical",
   "mouth-open",
   "mouth-smile",
+  "mouth-vowel-a",
+  "mouth-vowel-i",
+  "mouth-vowel-u",
+  "mouth-vowel-e",
+  "mouth-vowel-o",
   "body-x",
   "body-z"
 ] as const;
@@ -82,6 +87,14 @@ export type RuntimePlayerMappingStatus = {
   readonly mappedSlotCount: number;
   readonly enabledSlotCount: number;
   readonly missingSlotCount: number;
+  /**
+   * Whether vowel lipsync estimation is active for this model (design §3.2).
+   * When false the estimator is short-circuited and no vowel parameterId is
+   * emitted. `vowelLipsyncSupported` is true only when the model resolved vowel
+   * targets, which drives whether the toggle is shown/actionable.
+   */
+  readonly vowelLipsyncSupported: boolean;
+  readonly vowelLipsyncEnabled: boolean;
   readonly updatedAtIso: string;
 };
 
@@ -109,6 +122,10 @@ export type RuntimePlayerMappingActionResult = {
   readonly status: RuntimePlayerMappingStatus;
 };
 
+export type RuntimePlayerMappingVowelLipsyncUpdateRequest = {
+  readonly enabled: boolean;
+};
+
 export type RuntimePlayerModelMappingApi = {
   readonly getStatus: () => Promise<RuntimePlayerMappingStatus>;
   readonly regenerateAutoMapping: () => Promise<RuntimePlayerMappingActionResult>;
@@ -116,6 +133,9 @@ export type RuntimePlayerModelMappingApi = {
   readonly retryProfileSave: () => Promise<RuntimePlayerMappingActionResult>;
   readonly updateSlot: (
     request: RuntimePlayerMappingSlotUpdateRequest
+  ) => Promise<RuntimePlayerMappingActionResult>;
+  readonly setVowelLipsyncEnabled: (
+    request: RuntimePlayerMappingVowelLipsyncUpdateRequest
   ) => Promise<RuntimePlayerMappingActionResult>;
   readonly onStatusChanged: (
     callback: (status: RuntimePlayerMappingStatus) => void

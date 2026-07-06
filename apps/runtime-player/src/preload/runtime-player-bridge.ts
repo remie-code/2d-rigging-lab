@@ -149,6 +149,11 @@ export function installRuntimePlayerBridge(): void {
         ipcRenderer.invoke(modelMappingBridgeChannels.retryProfileSave),
       updateSlot: (request) =>
         ipcRenderer.invoke(modelMappingBridgeChannels.updateSlot, request),
+      setVowelLipsyncEnabled: (request) =>
+        ipcRenderer.invoke(
+          modelMappingBridgeChannels.setVowelLipsyncEnabled,
+          request
+        ),
       onStatusChanged: (callback) =>
         subscribeToModelMappingEvent(
           modelMappingBridgeChannels.statusChanged,

@@ -13,6 +13,13 @@ import {
   type SemanticSlotDefinition
 } from "./semantic-slot-definitions";
 import type { RuntimePlayerBodyFollowState } from "./body-follow-state";
+import {
+  defaultVowelReferenceVectors,
+  extractVowelFeatureVector,
+  RuntimePlayerVowelLipsyncState,
+  type VowelEstimate
+} from "./vowel-lipsync-estimator";
+import { convertInputProfileVowelCalibrationToReferences } from "../input-profiles/input-profile-vowel-references";
 
 export type CreateRuntimeParameterFrameInput = {
   readonly runtimeExportPayload: RuntimeExportLoadedPayload;
@@ -23,12 +30,42 @@ export type CreateRuntimeParameterFrameInput = {
   readonly sequence: number;
   readonly producedAtMs?: number;
   readonly bodyFollowState?: RuntimePlayerBodyFollowState;
+  /**
+   * Whether vowel lipsync is enabled for the active model (design §3.2). When
+   * false (or omitted) the estimator is short-circuited and no vowel
+   * parameterId is emitted. Defaults to false to keep callers that never opt in
+   * on the mouth-open-only path.
+   */
+  readonly vowelLipsyncEnabled?: boolean;
+  readonly vowelLipsyncState?: RuntimePlayerVowelLipsyncState;
 };
 
 export function createRuntimeParameterFrame(
   input: CreateRuntimeParameterFrameInput
 ): RuntimePlayerLiveParameterFrame {
   const parameterValues: Record<string, number> = {};
+  const vowelLipsyncEnabled = input.vowelLipsyncEnabled ?? false;
+
+  // Shared vowel estimator: run at most once per frame and memoize, so the five
+  // vowel slots read a single classification result (design §3 "共有推定器").
+  // When disabled the estimator is never invoked (short-circuit, zero cost).
+  let vowelEstimate: VowelEstimate | null = null;
+  const readVowelEstimate = (): VowelEstimate => {
+    if (vowelEstimate === null) {
+      const state = input.vowelLipsyncState ?? new RuntimePlayerVowelLipsyncState();
+      vowelEstimate = state.estimate({
+        features: extractVowelFeatureVector(input.trackingFrame),
+        references:
+          input.inputProfile.calibration.vowels === undefined
+            ? defaultVowelReferenceVectors
+            : convertInputProfileVowelCalibrationToReferences(
+                input.inputProfile.calibration.vowels
+              )
+      });
+    }
+
+    return vowelEstimate;
+  };
 
   for (const slot of input.slots) {
     if (!slot.enabled || slot.target === null) {
@@ -36,6 +73,13 @@ export function createRuntimeParameterFrame(
     }
 
     const definition = findSemanticSlotDefinition(slot.slotId);
+
+    // Toggle OFF: do not emit any vowel parameterId (design §3.2 — keys are not
+    // published rather than published as 0), and never run the estimator.
+    if (definition.sourceKind === "mouth-vowel" && !vowelLipsyncEnabled) {
+      continue;
+    }
+
     const value = createSlotParameterValue({
       definition,
       slot,
@@ -44,7 +88,10 @@ export function createRuntimeParameterFrame(
       calibration: input.inputProfile.calibration,
       ...(input.bodyFollowState === undefined
         ? {}
-        : { bodyFollowState: input.bodyFollowState })
+        : { bodyFollowState: input.bodyFollowState }),
+      ...(definition.sourceKind === "mouth-vowel"
+        ? { readVowelEstimate }
+        : {})
     });
 
     if (value === null || !Number.isFinite(value)) {
@@ -81,6 +128,7 @@ function createSlotParameterValue(input: {
   readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
   readonly calibration: InputProfileCalibration;
   readonly bodyFollowState?: RuntimePlayerBodyFollowState;
+  readonly readVowelEstimate?: () => VowelEstimate;
 }): number | null {
   switch (input.definition.sourceKind) {
     case "head-centered":
@@ -123,6 +171,8 @@ function createSlotParameterValue(input: {
           input.calibration.mouth.smileMax
         )
       });
+    case "mouth-vowel":
+      return createVowelValue(input);
     case "body-x":
       return createBodyXValue(input);
     case "body-z":
@@ -276,6 +326,32 @@ function createWeightValue(input: {
 
   return input.slot.target.default +
     (targetValue - input.slot.target.default) * input.slot.strength;
+}
+
+function createVowelValue(input: {
+  readonly definition: SemanticSlotDefinition;
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly readVowelEstimate?: () => VowelEstimate;
+}): number | null {
+  const vowelLabel = input.definition.vowelLabel;
+  if (vowelLabel === undefined || input.readVowelEstimate === undefined) {
+    return null;
+  }
+
+  const estimate = input.readVowelEstimate();
+
+  // Argmax structure: only the winning vowel emits a value; the other four
+  // return null so their parameterId is not published (design §3, single-Vowel
+  // non-zero). The intensity w is fed through the shared weight path so that
+  // per-slot strength scales it (0 default → w × strength).
+  if (estimate.winner !== vowelLabel) {
+    return null;
+  }
+
+  return createWeightValue({
+    slot: input.slot,
+    activation: estimate.weight
+  });
 }
 
 function createBodyXValue(input: {

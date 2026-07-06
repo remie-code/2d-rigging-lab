@@ -55,7 +55,13 @@ export type RuntimePlayerInputCalibrationPromptKey =
   | "head-position-left"
   | "head-position-right"
   | "head-position-near"
-  | "head-position-far";
+  | "head-position-far"
+  | "vowel-neutral"
+  | "vowel-a"
+  | "vowel-i"
+  | "vowel-u"
+  | "vowel-e"
+  | "vowel-o";
 
 export type RuntimePlayerInputCalibrationMode =
   | "full"
@@ -66,7 +72,8 @@ export type RuntimePlayerInputCalibrationSectionKey =
   | "head-rotation"
   | "eyes-mouth"
   | "head-position-left-right"
-  | "head-position-near-far";
+  | "head-position-near-far"
+  | "vowels";
 
 export type RuntimePlayerInputCalibrationSectionReadiness =
   | "ready"

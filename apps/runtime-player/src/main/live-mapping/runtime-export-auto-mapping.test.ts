@@ -54,7 +54,7 @@ describe("Runtime Player auto mapping", () => {
       ]
     }));
 
-    expect(slots).toHaveLength(11);
+    expect(slots).toHaveLength(16);
     expect(slots.map((slot) => [slot.slotId, slot.target?.parameterId])).toEqual([
       ["head-horizontal", "param_face_angle_x"],
       ["head-vertical", "param_face_angle_y"],
@@ -65,6 +65,13 @@ describe("Runtime Player auto mapping", () => {
       ["gaze-vertical", "param_eyeball_y"],
       ["mouth-open", "param_mouth_open"],
       ["mouth-smile", "param_mouth_smile"],
+      // Vowel slots are auto-enumerated but stay unmapped when the model has no
+      // vowel targets (design §3 / §3.2 — no vowel targets means unsupported).
+      ["mouth-vowel-a", undefined],
+      ["mouth-vowel-i", undefined],
+      ["mouth-vowel-u", undefined],
+      ["mouth-vowel-e", undefined],
+      ["mouth-vowel-o", undefined],
       ["body-x", "param_body_angle_x"],
       ["body-z", "param_body_angle_z"]
     ]);
@@ -201,7 +208,12 @@ describe("Runtime Player auto mapping", () => {
       enabled: false,
       status: "missing-target"
     });
-    expect(slots.filter((slot) => slot.group !== "body")).toHaveLength(9);
+    // 9 non-body semantic slots (head/eyes/mouth-open/mouth-smile) plus the 5
+    // vowel slots, which are also non-body (group=mouth) and unmapped here.
+    expect(slots.filter((slot) => slot.group !== "body")).toHaveLength(14);
+    expect(
+      slots.filter((slot) => slot.slotId.startsWith("mouth-vowel"))
+    ).toHaveLength(5);
   });
 });
 

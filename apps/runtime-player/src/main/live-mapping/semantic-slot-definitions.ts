@@ -7,6 +7,7 @@ import type {
   InputProfileDirection,
   InputProfileLearnedSign
 } from "../input-profiles/input-profile-document";
+import type { VowelLabel } from "./vowel-lipsync-estimator";
 
 export type SemanticSlotSourceKind =
   | "head-centered"
@@ -15,6 +16,7 @@ export type SemanticSlotSourceKind =
   | "blink-right"
   | "mouth-open"
   | "mouth-smile"
+  | "mouth-vowel"
   | "body-x"
   | "body-z";
 
@@ -33,6 +35,7 @@ export type SemanticSlotDefinition = {
   readonly defaultBodyRotationInvert?: boolean;
   readonly defaultBodyPositionInvert?: boolean;
   readonly fallbackPositiveSign?: InputProfileLearnedSign;
+  readonly vowelLabel?: VowelLabel;
 };
 
 export const semanticSlotDefinitions: readonly SemanticSlotDefinition[] = [
@@ -130,6 +133,61 @@ export const semanticSlotDefinitions: readonly SemanticSlotDefinition[] = [
     sourceKind: "mouth-smile",
     defaultInvert: false,
     defaultStrength: 1
+  },
+  {
+    slotId: "mouth-vowel-a",
+    label: "Mouth vowel A",
+    group: "mouth",
+    targetAliases: ["mouth.vowel.a"],
+    targetDisplayName: "Mouth Vowel A",
+    sourceKind: "mouth-vowel",
+    defaultInvert: false,
+    defaultStrength: 1,
+    vowelLabel: "a"
+  },
+  {
+    slotId: "mouth-vowel-i",
+    label: "Mouth vowel I",
+    group: "mouth",
+    targetAliases: ["mouth.vowel.i"],
+    targetDisplayName: "Mouth Vowel I",
+    sourceKind: "mouth-vowel",
+    defaultInvert: false,
+    defaultStrength: 1,
+    vowelLabel: "i"
+  },
+  {
+    slotId: "mouth-vowel-u",
+    label: "Mouth vowel U",
+    group: "mouth",
+    targetAliases: ["mouth.vowel.u"],
+    targetDisplayName: "Mouth Vowel U",
+    sourceKind: "mouth-vowel",
+    defaultInvert: false,
+    defaultStrength: 1,
+    vowelLabel: "u"
+  },
+  {
+    slotId: "mouth-vowel-e",
+    label: "Mouth vowel E",
+    group: "mouth",
+    targetAliases: ["mouth.vowel.e"],
+    targetDisplayName: "Mouth Vowel E",
+    sourceKind: "mouth-vowel",
+    defaultInvert: false,
+    defaultStrength: 1,
+    vowelLabel: "e"
+  },
+  {
+    slotId: "mouth-vowel-o",
+    label: "Mouth vowel O",
+    group: "mouth",
+    targetAliases: ["mouth.vowel.o"],
+    targetDisplayName: "Mouth Vowel O",
+    sourceKind: "mouth-vowel",
+    defaultInvert: false,
+    defaultStrength: 1,
+    vowelLabel: "o"
   },
   {
     slotId: "body-x",

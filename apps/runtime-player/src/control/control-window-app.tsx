@@ -877,6 +877,13 @@ function renderActivePage(input: {
             window.runtimePlayer.modelMapping.updateSlot(request)
           )
         }
+        onSetVowelLipsyncEnabled={(enabled: boolean) =>
+          void input.runMappingAction(() =>
+            window.runtimePlayer.modelMapping.setVowelLipsyncEnabled({
+              enabled
+            })
+          )
+        }
       />
     );
   }

@@ -2,12 +2,16 @@ import type { TrackingVector3 } from "../../preload/input-tracking-frame-contrac
 import {
   createEmptyInputProfileDocument,
   inputProfileDocumentSchemaVersion,
+  inputProfileVowelLabels,
   type InputProfile,
   type InputProfileAxis,
   type InputProfileCalibration,
   type InputProfileDirection,
   type InputProfileDocument,
-  type InputProfileLearnedSign
+  type InputProfileLearnedSign,
+  type InputProfileVowelBlendshapeMeans,
+  type InputProfileVowelCalibration,
+  type InputProfileVowelLabel
 } from "./input-profile-document";
 import { isInputProfileHeadPositionLeftRightCalibrationReady } from "./input-profile-calibration-sections";
 
@@ -159,12 +163,80 @@ function parseInputProfileCalibration(
     return null;
   }
 
+  // Vowels are optional and non-fatal: a missing section is the backward-compat
+  // path, and malformed vowels are dropped (rather than failing the whole
+  // profile) so the rest of the calibration survives (wave107 Domain B).
+  const vowels = parseVowelCalibration(value.vowels);
+
   return {
     headRotationEulerDeg,
     ...(headPositionRaw === undefined ? {} : { headPositionRaw }),
     eyes,
-    mouth
+    mouth,
+    ...(vowels === undefined ? {} : { vowels })
   };
+}
+
+function parseVowelCalibration(
+  value: unknown
+): InputProfileVowelCalibration | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!isRecord(value) || !isRecord(value.samples)) {
+    return undefined;
+  }
+
+  const samples: Partial<
+    Record<InputProfileVowelLabel, InputProfileVowelBlendshapeMeans>
+  > = {};
+
+  for (const label of inputProfileVowelLabels) {
+    const labelSamples = parseVowelBlendshapeMeans(value.samples[label]);
+
+    if (labelSamples === null) {
+      return undefined;
+    }
+
+    samples[label] = labelSamples;
+  }
+
+  const capturedAtIso = readRequiredString(value.capturedAtIso);
+  const windowFrameCount = readFiniteNumber(value.windowFrameCount);
+  const windowDurationMs = readFiniteNumber(value.windowDurationMs);
+
+  return {
+    samples: samples as Record<
+      InputProfileVowelLabel,
+      InputProfileVowelBlendshapeMeans
+    >,
+    ...(capturedAtIso === null ? {} : { capturedAtIso }),
+    ...(windowFrameCount === null ? {} : { windowFrameCount }),
+    ...(windowDurationMs === null ? {} : { windowDurationMs })
+  };
+}
+
+function parseVowelBlendshapeMeans(
+  value: unknown
+): InputProfileVowelBlendshapeMeans | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const means: Record<string, number> = {};
+
+  for (const [name, rawValue] of Object.entries(value)) {
+    const numericValue = readFiniteNumber(rawValue);
+
+    if (numericValue === null) {
+      return null;
+    }
+
+    means[name] = numericValue;
+  }
+
+  return means;
 }
 
 function parseHeadCalibration(

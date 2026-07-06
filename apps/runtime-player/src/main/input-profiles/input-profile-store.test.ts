@@ -60,6 +60,64 @@ describe("InputProfileStore", () => {
     });
   });
 
+  it("round-trips a saved profile with vowel calibration", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-input-profiles-")
+    );
+    const store = new InputProfileStore({ userDataPath });
+    const base = createTemporaryDefaultInputProfile("2026-07-06T00:00:00.000Z");
+    const vowels = {
+      samples: {
+        neutral: { jawOpen: 0.05 },
+        a: { jawOpen: 0.6, mouthLowerDown_L: 0.6, mouthLowerDown_R: 0.6 },
+        i: { jawOpen: 0.11, mouthSmile_L: 0.12, mouthSmile_R: 0.12 },
+        u: { jawOpen: 0.15, mouthFunnel: 0.46, mouthPucker: 0.4 },
+        e: { jawOpen: 0.24 },
+        o: { jawOpen: 0.27, mouthClose: 0.22 }
+      },
+      capturedAtIso: "2026-07-06T00:00:00.000Z",
+      windowFrameCount: 8
+    } as const;
+    const profile = {
+      ...base,
+      profileId: "profile_vowels",
+      displayName: "Vowels",
+      calibration: { ...base.calibration, vowels }
+    };
+
+    await store.saveProfile(profile);
+
+    const reloaded = new InputProfileStore({
+      profileFilePath: store.getProfileFilePath()
+    });
+    const snapshot = await reloaded.getSnapshot();
+
+    expect(snapshot.state).toBe("loaded");
+    expect(snapshot.document.profiles[0]?.calibration.vowels).toEqual(vowels);
+  });
+
+  it("round-trips a saved profile without vowel calibration", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-input-profiles-")
+    );
+    const store = new InputProfileStore({ userDataPath });
+    const profile = {
+      ...createTemporaryDefaultInputProfile("2026-07-06T00:00:00.000Z"),
+      profileId: "profile_no_vowels",
+      displayName: "No vowels"
+    };
+
+    await store.saveProfile(profile);
+
+    const reloaded = new InputProfileStore({
+      profileFilePath: store.getProfileFilePath()
+    });
+    const snapshot = await reloaded.getSnapshot();
+
+    expect(snapshot.state).toBe("loaded");
+    expect(snapshot.document.profiles[0]?.calibration.vowels).toBeUndefined();
+  });
+
   it("falls back safely when the profile file contains corrupt JSON", async () => {
     const tempRoot = await mkdtemp(
       path.join(os.tmpdir(), "runtime-player-input-profiles-")

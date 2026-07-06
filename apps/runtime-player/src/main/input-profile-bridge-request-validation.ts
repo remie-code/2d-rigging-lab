@@ -138,7 +138,8 @@ function readCalibrationSection(
     value === "head-rotation" ||
     value === "eyes-mouth" ||
     value === "head-position-left-right" ||
-    value === "head-position-near-far"
+    value === "head-position-near-far" ||
+    value === "vowels"
   ) {
     return value;
   }

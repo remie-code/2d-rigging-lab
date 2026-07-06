@@ -8,9 +8,13 @@ import type {
 import type { InputProfile } from "./input-profiles/input-profile-document";
 import type { RuntimePlayerLiveParameterBridgeRegistration } from "./live-parameter-bridge-handlers";
 import type { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-state";
+import type { RuntimePlayerVowelLipsyncState } from "./live-mapping/vowel-lipsync-estimator";
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
 import { createRuntimeParameterFrame } from "./live-mapping/runtime-parameter-frame";
-import { readMappingSlotUpdateRequest } from "./model-mapping-bridge-request-validation";
+import {
+  readMappingSlotUpdateRequest,
+  readMappingVowelLipsyncUpdateRequest
+} from "./model-mapping-bridge-request-validation";
 import { ModelMappingProfileSaveController } from "./model-mapping-profiles/model-mapping-profile-save-controller";
 import type { ModelMappingProfileStore } from "./model-mapping-profiles/model-mapping-profile-store";
 import type { RuntimePlayerInputSessionState } from "./input-session-state";
@@ -22,6 +26,7 @@ export type RegisterModelMappingBridgeHandlersInput = {
   readonly inputState: RuntimePlayerInputSessionState;
   readonly mappingState: RuntimePlayerLiveMappingState;
   readonly bodyFollowState?: RuntimePlayerBodyFollowState;
+  readonly vowelLipsyncState?: RuntimePlayerVowelLipsyncState;
   readonly profileStore?: ModelMappingProfileStore;
   readonly profileSaveDebounceMs?: number;
   readonly liveParameters: RuntimePlayerLiveParameterBridgeRegistration;
@@ -109,9 +114,13 @@ export function registerModelMappingBridgeHandlers(
       slots: input.mappingState.getSlots(),
       sequence: ++liveFrameSequence,
       producedAtMs: nowMs(),
+      vowelLipsyncEnabled: input.mappingState.isVowelLipsyncEnabled(),
       ...(input.bodyFollowState === undefined
         ? {}
-        : { bodyFollowState: input.bodyFollowState })
+        : { bodyFollowState: input.bodyFollowState }),
+      ...(input.vowelLipsyncState === undefined
+        ? {}
+        : { vowelLipsyncState: input.vowelLipsyncState })
     });
 
     input.liveParameters.publishFrame(frame);
@@ -210,6 +219,29 @@ export function registerModelMappingBridgeHandlers(
       }
 
       return publishActionResult("ok", "Mapping slot updated.");
+    }
+  );
+  ipcMain.handle(
+    modelMappingBridgeChannels.setVowelLipsyncEnabled,
+    async (_event, request: unknown) => {
+      try {
+        const command = readMappingVowelLipsyncUpdateRequest(request);
+
+        if (!input.mappingState.isVowelLipsyncSupported()) {
+          return publishActionResult(
+            "unavailable",
+            "This model has no vowel lipsync targets."
+          );
+        }
+
+        input.mappingState.setVowelLipsyncEnabled(command.enabled);
+        input.vowelLipsyncState?.reset();
+        profileSaveController?.scheduleSave();
+      } catch (error) {
+        return publishActionResult("validation-error", toErrorMessage(error));
+      }
+
+      return publishActionResult("ok", "Vowel lipsync updated.");
     }
   );
 

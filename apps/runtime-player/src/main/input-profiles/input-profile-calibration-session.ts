@@ -14,12 +14,20 @@ import type {
   InputProfileAxis,
   InputProfileCalibration,
   InputProfileDirection,
-  InputProfileLearnedSign
+  InputProfileLearnedSign,
+  InputProfileVowelBlendshapeMeans,
+  InputProfileVowelCalibration,
+  InputProfileVowelLabel
 } from "./input-profile-document";
 import {
   getCalibrationPromptKeysForSections,
   inputProfileCalibrationSectionKeys
 } from "./input-profile-calibration-sections";
+import {
+  summarizeVowelWindow,
+  toVowelBlendshapeMeans
+} from "./input-profile-vowel-window";
+import { hasAllVowelLabels } from "./input-profile-vowel-references";
 
 const directionalSampleThresholdDeg = 5;
 const eyeDirectionalSampleThresholdDeg = 3;
@@ -28,8 +36,42 @@ const blinkSampleThreshold = 0.35;
 const mouthOpenSampleThreshold = 0.2;
 const smileSampleThreshold = 0.18;
 const stableSamplesRequired = 2;
+
+/**
+ * Vowel prompts capture a window mean (design §4) rather than a single frame or
+ * a direction threshold. Each Record press adds the current frame to the label's
+ * window buffer; the prompt completes once this many frames are collected. Chosen
+ * as a small, ergonomic count (a few presses) that still averages out ARKit
+ * per-frame jitter (design §2.3 notes ARKit funnel/pucker swing during "う").
+ */
+const vowelWindowFrameCount = 8;
+
+const vowelPromptLabelBySection: Readonly<
+  Record<
+    Extract<RuntimePlayerInputCalibrationPromptKey, `vowel-${string}`>,
+    InputProfileVowelLabel
+  >
+> = {
+  "vowel-neutral": "neutral",
+  "vowel-a": "a",
+  "vowel-i": "i",
+  "vowel-u": "u",
+  "vowel-e": "e",
+  "vowel-o": "o"
+};
+
+/**
+ * Full calibration now also captures the vowel section (design §4). Kept as a
+ * dedicated list rather than mutating `inputProfileCalibrationSectionKeys` so
+ * section-status/missing-only reporting (head-position only) is unaffected.
+ */
+const fullCalibrationSectionKeys = [
+  ...inputProfileCalibrationSectionKeys,
+  "vowels"
+] as const satisfies readonly RuntimePlayerInputCalibrationSectionKey[];
+
 const fullCalibrationPromptKeys = getCalibrationPromptKeysForSections(
-  inputProfileCalibrationSectionKeys
+  fullCalibrationSectionKeys
 );
 
 type CalibrationPromptDefinition = {
@@ -110,7 +152,13 @@ const calibrationPromptDefinitions = [
   { key: "head-position-left", label: "Move upper body left", requiredSampleCount: stableSamplesRequired },
   { key: "head-position-right", label: "Move upper body right", requiredSampleCount: stableSamplesRequired },
   { key: "head-position-near", label: "Move closer", requiredSampleCount: stableSamplesRequired },
-  { key: "head-position-far", label: "Move farther", requiredSampleCount: stableSamplesRequired }
+  { key: "head-position-far", label: "Move farther", requiredSampleCount: stableSamplesRequired },
+  { key: "vowel-neutral", label: "Vowel neutral (relax mouth)", requiredSampleCount: vowelWindowFrameCount },
+  { key: "vowel-a", label: 'Say "あ" (a)', requiredSampleCount: vowelWindowFrameCount },
+  { key: "vowel-i", label: 'Say "い" (i)', requiredSampleCount: vowelWindowFrameCount },
+  { key: "vowel-u", label: 'Say "う" (u)', requiredSampleCount: vowelWindowFrameCount },
+  { key: "vowel-e", label: 'Say "え" (e)', requiredSampleCount: vowelWindowFrameCount },
+  { key: "vowel-o", label: 'Say "お" (o)', requiredSampleCount: vowelWindowFrameCount }
 ] as const satisfies readonly CalibrationPromptDefinition[];
 
 const calibrationPromptDefinitionsByKey = new Map<
@@ -159,6 +207,7 @@ export class InputProfileCalibrationSession {
   private readonly headLearnedSigns: MutableHeadLearnedSigns = {};
   private readonly eyeLearnedSigns: MutableEyeLearnedSigns = {};
   private readonly headPositionLearnedSigns: MutableHeadPositionLearnedSigns = {};
+  private readonly vowelWindows = new Map<InputProfileVowelLabel, TrackingFrame[]>();
 
   constructor(options: InputProfileCalibrationSessionOptions) {
     this.sessionId = options.sessionId;
@@ -265,6 +314,12 @@ export class InputProfileCalibrationSession {
       };
     }
 
+    const vowelLabel = getVowelLabelForPrompt(prompt.key);
+
+    if (vowelLabel !== null) {
+      return this.recordVowelWindowSample(prompt, vowelLabel, frame);
+    }
+
     this.range = expandRange(this.range, values);
 
     const evaluation = evaluatePromptSample(prompt.key, values, this.neutral);
@@ -304,6 +359,34 @@ export class InputProfileCalibrationSession {
       message: complete
         ? "Prompt recorded."
         : "Stable sample recorded; hold briefly.",
+      snapshot: this.getSnapshot()
+    };
+  }
+
+  private recordVowelWindowSample(
+    prompt: PromptState,
+    label: InputProfileVowelLabel,
+    frame: TrackingFrame
+  ): InputProfileCalibrationRecordResult {
+    const window = this.vowelWindows.get(label) ?? [];
+    window.push(frame);
+    this.vowelWindows.set(label, window);
+
+    const complete = window.length >= prompt.requiredSampleCount;
+
+    this.updatePrompt(prompt.key, {
+      status: complete ? "ok" : "needs-more",
+      sampleCount: window.length,
+      message: complete
+        ? "Vowel window captured."
+        : `Hold the vowel (${window.length}/${prompt.requiredSampleCount}).`
+    });
+
+    return {
+      recorded: complete,
+      message: complete
+        ? "Vowel window captured."
+        : "Vowel frame recorded; keep holding the shape.",
       snapshot: this.getSnapshot()
     };
   }
@@ -389,7 +472,8 @@ export class InputProfileCalibrationSession {
           jawOpenMax: this.range.jawOpenMax,
           smileMin: this.range.smileMin,
           smileMax: this.range.smileMax
-        }
+        },
+        ...this.createVowelCalibrationSpread(input.createdAtIso)
       }
     };
   }
@@ -506,6 +590,39 @@ export class InputProfileCalibrationSession {
       learnedSigns: {
         ...base?.learnedSigns,
         ...this.headPositionLearnedSigns
+      }
+    };
+  }
+
+  /**
+   * Build the optional `calibration.vowels` spread from the captured windows.
+   * Returns an empty object (no vowels field) unless every vowel label has a
+   * non-empty window, so partial vowel capture never writes a broken section.
+   */
+  private createVowelCalibrationSpread(
+    capturedAtIso: string
+  ): { vowels: InputProfileVowelCalibration } | Record<string, never> {
+    const samples: Partial<
+      Record<InputProfileVowelLabel, InputProfileVowelBlendshapeMeans>
+    > = {};
+
+    for (const [label, window] of this.vowelWindows.entries()) {
+      const summary = summarizeVowelWindow(window);
+
+      if (summary !== null) {
+        samples[label] = toVowelBlendshapeMeans(summary);
+      }
+    }
+
+    if (!hasAllVowelLabels(samples)) {
+      return {};
+    }
+
+    return {
+      vowels: {
+        samples,
+        capturedAtIso,
+        windowFrameCount: vowelWindowFrameCount
       }
     };
   }
@@ -739,6 +856,16 @@ function evaluatePromptSample(
         accepted: false,
         message: "Look forward prompt is recorded separately."
       };
+    case "vowel-neutral":
+    case "vowel-a":
+    case "vowel-i":
+    case "vowel-u":
+    case "vowel-e":
+    case "vowel-o":
+      return {
+        accepted: false,
+        message: "Vowel prompts capture a window mean and are recorded separately."
+      };
   }
 }
 
@@ -964,6 +1091,16 @@ function maxVector3(left: TrackingVector3, right: TrackingVector3): TrackingVect
 
 function createZeroVector3(): TrackingVector3 {
   return { x: 0, y: 0, z: 0 };
+}
+
+function getVowelLabelForPrompt(
+  promptKey: RuntimePlayerInputCalibrationPromptKey
+): InputProfileVowelLabel | null {
+  return promptKey in vowelPromptLabelBySection
+    ? vowelPromptLabelBySection[
+        promptKey as keyof typeof vowelPromptLabelBySection
+      ]
+    : null;
 }
 
 function toPromptSnapshot(

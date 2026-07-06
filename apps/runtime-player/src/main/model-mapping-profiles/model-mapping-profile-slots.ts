@@ -24,6 +24,7 @@ export function createModelMappingProfileDocument(input: {
   readonly slots: readonly RuntimePlayerMappingSlot[];
   readonly createdAtIso: string;
   readonly updatedAtIso: string;
+  readonly vowelLipsyncEnabled?: boolean;
 }): ModelMappingProfileDocument {
   return {
     schemaVersion: modelMappingProfileSchemaVersion,
@@ -38,7 +39,10 @@ export function createModelMappingProfileDocument(input: {
       parameterSignatureHash: input.identity.parameterSignatureHash
     },
     autoMappingVersion: modelMappingProfileAutoMappingVersion,
-    slots: input.slots.map(toProfileSlot)
+    slots: input.slots.map(toProfileSlot),
+    ...(input.vowelLipsyncEnabled === undefined
+      ? {}
+      : { vowelLipsyncEnabled: input.vowelLipsyncEnabled })
   };
 }
 

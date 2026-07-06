@@ -43,6 +43,9 @@ export class RuntimePlayerLiveMappingState {
   private slots: readonly RuntimePlayerMappingSlot[] = [];
   private updatedAtMs: number;
   private revision = 0;
+  // null = not explicitly set for this model; resolves to the default (ON when
+  // vowel targets are supported). A boolean means the user chose it (design §3.2).
+  private vowelLipsyncEnabledOverride: boolean | null = null;
 
   constructor(options: RuntimePlayerLiveMappingStateOptions = {}) {
     this.nowMs = options.nowMs ?? Date.now;
@@ -57,6 +60,31 @@ export class RuntimePlayerLiveMappingState {
     return this.slots;
   }
 
+  isVowelLipsyncSupported(): boolean {
+    return this.slots.some((slot) =>
+      slot.group === "mouth" &&
+      slot.slotId.startsWith("mouth-vowel") &&
+      slot.target !== null
+    );
+  }
+
+  isVowelLipsyncEnabled(): boolean {
+    if (!this.isVowelLipsyncSupported()) {
+      return false;
+    }
+
+    // Default ON for models that resolved vowel targets (design §3.2).
+    return this.vowelLipsyncEnabledOverride ?? true;
+  }
+
+  setVowelLipsyncEnabled(enabled: boolean): RuntimePlayerMappingStatus {
+    this.vowelLipsyncEnabledOverride = enabled;
+    this.revision += 1;
+    this.updatedAtMs = this.nowMs();
+
+    return this.getStatus();
+  }
+
   setRuntimeExportPayload(
     payload: RuntimeExportLoadedPayload,
     profileLoadResult?: ModelMappingProfileStoreLoadResult
@@ -68,6 +96,7 @@ export class RuntimePlayerLiveMappingState {
     this.profileIdentity = identity;
     this.profileCreatedAtIso = null;
     this.profileUpdatedAtIso = null;
+    this.vowelLipsyncEnabledOverride = null;
     this.slots = autoSlots;
     this.profileStatus = createProfileStatus(
       "auto-mapped",
@@ -98,6 +127,7 @@ export class RuntimePlayerLiveMappingState {
       "Runtime Export required"
     );
     this.slots = [];
+    this.vowelLipsyncEnabledOverride = null;
     this.revision += 1;
     this.updatedAtMs = this.nowMs();
 
@@ -261,7 +291,10 @@ export class RuntimePlayerLiveMappingState {
         identity: this.profileIdentity,
         slots: this.slots,
         createdAtIso,
-        updatedAtIso
+        updatedAtIso,
+        ...(this.vowelLipsyncEnabledOverride === null
+          ? {}
+          : { vowelLipsyncEnabled: this.vowelLipsyncEnabledOverride })
       }),
       revision: this.revision
     };
@@ -291,6 +324,8 @@ export class RuntimePlayerLiveMappingState {
       mappedSlotCount,
       enabledSlotCount,
       missingSlotCount,
+      vowelLipsyncSupported: this.isVowelLipsyncSupported(),
+      vowelLipsyncEnabled: this.isVowelLipsyncEnabled(),
       updatedAtIso: new Date(this.updatedAtMs).toISOString()
     };
   }
@@ -330,6 +365,8 @@ export class RuntimePlayerLiveMappingState {
     ];
 
     this.slots = restoreResult.slots;
+    this.vowelLipsyncEnabledOverride =
+      loadResult.profile.vowelLipsyncEnabled ?? null;
     this.profileCreatedAtIso = loadResult.profile.createdAtIso;
     this.profileUpdatedAtIso = loadResult.profile.updatedAtIso;
     this.profileStatus = warningMessages.length > 0

@@ -148,6 +148,81 @@ describe("parseInputProfileDocument", () => {
     });
   });
 
+  it("loads a profile with vowel calibration and preserves it verbatim", () => {
+    const vowels = createVowelCalibration();
+    const profile = {
+      ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z"),
+      calibration: {
+        ...createTemporaryDefaultInputProfile("2026-06-22T00:00:00.000Z")
+          .calibration,
+        vowels
+      }
+    };
+    const result = parseInputProfileDocument({
+      schemaVersion: "runtime-player-input-profiles-v1",
+      activeProfileId: profile.profileId,
+      profiles: [profile]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      result.ok ? result.document.profiles[0]?.calibration.vowels : null
+    ).toEqual(vowels);
+  });
+
+  it("loads an old profile without vowel calibration (backward compatible)", () => {
+    const oldProfile = createTemporaryDefaultInputProfile(
+      "2026-06-22T00:00:00.000Z"
+    );
+    const result = parseInputProfileDocument({
+      schemaVersion: "runtime-player-input-profiles-v1",
+      activeProfileId: oldProfile.profileId,
+      profiles: [oldProfile]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.document.profiles.length : 0).toBe(1);
+    expect(
+      result.ok ? result.document.profiles[0]?.calibration.vowels : "unset"
+    ).toBeUndefined();
+  });
+
+  it("drops malformed vowel calibration while keeping the rest of the profile", () => {
+    const base = createTemporaryDefaultInputProfile(
+      "2026-06-22T00:00:00.000Z"
+    );
+    const profile = {
+      ...base,
+      calibration: {
+        ...base.calibration,
+        // Missing the "o" label -> vowels dropped, profile still loads.
+        vowels: {
+          samples: {
+            neutral: { jawOpen: 0.05 },
+            a: { jawOpen: 0.6 },
+            i: { jawOpen: 0.11 },
+            u: { jawOpen: 0.15 },
+            e: { jawOpen: 0.24 }
+          }
+        }
+      }
+    };
+    const result = parseInputProfileDocument({
+      schemaVersion: "runtime-player-input-profiles-v1",
+      activeProfileId: profile.profileId,
+      profiles: [profile]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.ok ? result.document.profiles.length : 0).toBe(1);
+    expect(
+      result.ok ? result.document.profiles[0]?.calibration.vowels : "unset"
+    ).toBeUndefined();
+    expect(
+      result.ok ? result.document.profiles[0]?.calibration.mouth : null
+    ).toEqual(base.calibration.mouth);
+  });
+
   it("skips profiles with invalid head position learned signs", () => {
     const profile = createProfileWithHeadPositionRaw({
       learnedSigns: {
@@ -173,6 +248,21 @@ describe("parseInputProfileDocument", () => {
     });
   });
 });
+
+function createVowelCalibration() {
+  return {
+    samples: {
+      neutral: { jawOpen: 0.05, mouthFunnel: 0.02 },
+      a: { jawOpen: 0.6, mouthLowerDown_L: 0.6, mouthLowerDown_R: 0.6 },
+      i: { jawOpen: 0.11, mouthSmile_L: 0.12, mouthSmile_R: 0.12 },
+      u: { jawOpen: 0.15, mouthFunnel: 0.46, mouthPucker: 0.4 },
+      e: { jawOpen: 0.24, mouthLowerDown_L: 0.3, mouthLowerDown_R: 0.3 },
+      o: { jawOpen: 0.27, mouthClose: 0.22, mouthPucker: 0.19 }
+    },
+    capturedAtIso: "2026-07-06T00:00:00.000Z",
+    windowFrameCount: 8
+  } as const;
+}
 
 function createProfileWithHeadPositionRaw(
   headPositionRaw: Record<string, unknown>

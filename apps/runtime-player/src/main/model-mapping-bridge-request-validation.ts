@@ -1,7 +1,8 @@
 import {
   runtimePlayerMappingSlotIds,
   type RuntimePlayerMappingSlotId,
-  type RuntimePlayerMappingSlotUpdateRequest
+  type RuntimePlayerMappingSlotUpdateRequest,
+  type RuntimePlayerMappingVowelLipsyncUpdateRequest
 } from "../preload/model-mapping-bridge-contract";
 
 const slotIdSet = new Set<string>(runtimePlayerMappingSlotIds);
@@ -51,6 +52,21 @@ export function readMappingSlotUpdateRequest(
     ...(bodyRotationInvert === undefined ? {} : { bodyRotationInvert }),
     ...(bodyPositionInvert === undefined ? {} : { bodyPositionInvert })
   };
+}
+
+export function readMappingVowelLipsyncUpdateRequest(
+  value: unknown
+): RuntimePlayerMappingVowelLipsyncUpdateRequest {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Vowel lipsync update request must be an object.");
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.enabled !== "boolean") {
+    throw new Error("Vowel lipsync update field enabled must be boolean.");
+  }
+
+  return { enabled: record.enabled };
 }
 
 function readSlotId(value: unknown): RuntimePlayerMappingSlotId {

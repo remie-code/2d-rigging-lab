@@ -9,7 +9,9 @@ import type { TrackingFrame } from "../../preload/input-tracking-frame-contract"
 import type { InputProfile } from "../input-profiles/input-profile-document";
 import { createTemporaryDefaultInputProfile } from "../input-profiles/input-profile-defaults";
 import { RuntimePlayerBodyFollowState } from "./body-follow-state";
+import { RuntimePlayerVowelLipsyncState } from "./vowel-lipsync-estimator";
 import { createRuntimeParameterFrame } from "./runtime-parameter-frame";
+import vowelCaptures from "../../../../../test_data/iFaceMocap/vowels/vowel-captures.json";
 
 describe("Runtime Player parameter frame mapping", () => {
   it("creates finite sanitized values from tracking frame, neutral, profile, and slots", () => {
@@ -332,7 +334,130 @@ describe("Runtime Player parameter frame mapping", () => {
       param_body_angle_x: 3.5
     });
   });
+
+  it("emits only the winning vowel parameter when vowel lipsync is enabled", () => {
+    const frame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame: createVowelTrackingFrame("a"),
+      sessionNeutral: null,
+      inputProfile: createTemporaryDefaultInputProfile(),
+      slots: createVowelSlots(),
+      sequence: 20,
+      producedAtMs: 2000,
+      vowelLipsyncEnabled: true,
+      vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
+    });
+
+    const vowelKeys = [
+      "param_mouth_vowel_a",
+      "param_mouth_vowel_i",
+      "param_mouth_vowel_u",
+      "param_mouth_vowel_e",
+      "param_mouth_vowel_o"
+    ];
+    const nonZero = vowelKeys.filter((key) =>
+      (frame.parameterValues[key] ?? 0) !== 0
+    );
+
+    expect(nonZero).toEqual(["param_mouth_vowel_a"]);
+    expect(frame.parameterValues.param_mouth_vowel_a).toBeGreaterThan(0.99);
+    // Losing vowels are not published at all (argmax → single non-zero).
+    expect(frame.parameterValues.param_mouth_vowel_i).toBeUndefined();
+    expect(frame.parameterValues.param_mouth_vowel_o).toBeUndefined();
+  });
+
+  it("does not emit any vowel parameterId when vowel lipsync is disabled", () => {
+    const frame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame: createVowelTrackingFrame("a"),
+      sessionNeutral: null,
+      inputProfile: createTemporaryDefaultInputProfile(),
+      slots: createVowelSlots(),
+      sequence: 21,
+      producedAtMs: 2100,
+      vowelLipsyncEnabled: false,
+      vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
+    });
+
+    expect(frame.parameterValues.param_mouth_vowel_a).toBeUndefined();
+    expect(frame.parameterValues.param_mouth_vowel_i).toBeUndefined();
+    expect(frame.parameterValues.param_mouth_vowel_u).toBeUndefined();
+    expect(frame.parameterValues.param_mouth_vowel_e).toBeUndefined();
+    expect(frame.parameterValues.param_mouth_vowel_o).toBeUndefined();
+  });
+
+  it("scales the winning vowel intensity by per-slot strength (weight path)", () => {
+    const state = new RuntimePlayerVowelLipsyncState();
+    const trackingFrame = createVowelTrackingFrame("a");
+    const inputProfile = createTemporaryDefaultInputProfile();
+
+    const fullFrame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame,
+      sessionNeutral: null,
+      inputProfile,
+      slots: [createSlot("mouth-vowel-a", target("param_mouth_vowel_a", 0, 1, 0))],
+      sequence: 22,
+      producedAtMs: 2200,
+      vowelLipsyncEnabled: true,
+      vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
+    });
+    const halfFrame = createRuntimeParameterFrame({
+      runtimeExportPayload: createPayload(),
+      trackingFrame,
+      sessionNeutral: null,
+      inputProfile,
+      slots: [
+        createSlot("mouth-vowel-a", target("param_mouth_vowel_a", 0, 1, 0), {
+          strength: 0.5
+        })
+      ],
+      sequence: 23,
+      producedAtMs: 2300,
+      vowelLipsyncEnabled: true,
+      vowelLipsyncState: state
+    });
+
+    const full = fullFrame.parameterValues.param_mouth_vowel_a ?? 0;
+    const half = halfFrame.parameterValues.param_mouth_vowel_a ?? 0;
+    // default=0 so value = w × strength; strength 0.5 halves the emitted value.
+    expect(half).toBeCloseTo(full * 0.5, 6);
+  });
 });
+
+function createVowelTrackingFrame(label: string): TrackingFrame {
+  const source = (
+    vowelCaptures.labels as Readonly<
+      Record<string, { readonly blendshapes: Record<string, { mean: number }> }>
+    >
+  )[label];
+  if (source === undefined) {
+    throw new Error(`Missing capture label: ${label}`);
+  }
+
+  const blendshapes: Record<string, number> = {};
+  for (const [name, value] of Object.entries(source.blendshapes)) {
+    blendshapes[name] = value.mean;
+  }
+
+  return {
+    source: "ifacialmocap",
+    timestampMs: 970,
+    transport: "udp",
+    blendshapes,
+    head: {}
+  };
+}
+
+function createVowelSlots(): readonly RuntimePlayerMappingSlot[] {
+  return [
+    createSlot("mouth-vowel-a", target("param_mouth_vowel_a", 0, 1, 0)),
+    createSlot("mouth-vowel-i", target("param_mouth_vowel_i", 0, 1, 0)),
+    createSlot("mouth-vowel-u", target("param_mouth_vowel_u", 0, 1, 0)),
+    createSlot("mouth-vowel-e", target("param_mouth_vowel_e", 0, 1, 0)),
+    createSlot("mouth-vowel-o", target("param_mouth_vowel_o", 0, 1, 0))
+  ];
+}
 
 function createPayload(): RuntimeExportLoadedPayload {
   return {

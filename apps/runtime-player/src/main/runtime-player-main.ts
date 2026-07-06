@@ -25,6 +25,7 @@ import { registerInputProfileBridgeHandlers } from "./input-profile-bridge-handl
 import type { InputProfile } from "./input-profiles/input-profile-document";
 import { registerLiveParameterBridgeHandlers } from "./live-parameter-bridge-handlers";
 import { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-state";
+import { RuntimePlayerVowelLipsyncState } from "./live-mapping/vowel-lipsync-estimator";
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
 import { registerModelMappingBridgeHandlers } from "./model-mapping-bridge-handlers";
 import { ModelMappingProfileStore } from "./model-mapping-profiles/model-mapping-profile-store";
@@ -266,6 +267,7 @@ export function startRuntimePlayerMain(): void {
     };
     const liveMappingState = new RuntimePlayerLiveMappingState();
     const bodyFollowState = new RuntimePlayerBodyFollowState();
+    const vowelLipsyncState = new RuntimePlayerVowelLipsyncState();
     const modelMappingProfileStore = new ModelMappingProfileStore({
       userDataPath: app.getPath("userData")
     });
@@ -286,6 +288,7 @@ export function startRuntimePlayerMain(): void {
       onTrackingFrame: () => publishLatestParameterFrame(),
       onInputReset: () => {
         bodyFollowState.reset();
+        vowelLipsyncState.reset();
         stageMotionRuntime.reset();
         clearLiveParameterFrame();
       }
@@ -300,6 +303,7 @@ export function startRuntimePlayerMain(): void {
       userDataPath: app.getPath("userData"),
       onProfileChanged: () => {
         bodyFollowState.reset();
+        vowelLipsyncState.reset();
         stageMotionRuntime.reset();
         void publishLatestStageMotionDisplayState({
           notify: "immediate"
@@ -314,6 +318,7 @@ export function startRuntimePlayerMain(): void {
       inputState: inputBridge.state,
       mappingState: liveMappingState,
       bodyFollowState,
+      vowelLipsyncState,
       profileStore: modelMappingProfileStore,
       liveParameters,
       getActiveInputProfile: inputProfileBridge.getActiveInputProfile
@@ -336,6 +341,7 @@ export function startRuntimePlayerMain(): void {
         await modelMappingBridge.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
         bodyFollowState.reset();
+        vowelLipsyncState.reset();
         modelMappingBridge.clearRuntimeExport();
         dynamicsTuningBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
@@ -345,6 +351,7 @@ export function startRuntimePlayerMain(): void {
       },
       onRuntimeExportLoaded: async (payload) => {
         bodyFollowState.reset();
+        vowelLipsyncState.reset();
         await modelMappingBridge.setRuntimeExportPayload(payload);
         await dynamicsTuningBridge.setRuntimeExportPayload(payload);
         const variantStatus =
@@ -363,6 +370,7 @@ export function startRuntimePlayerMain(): void {
         await modelMappingBridge.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
         bodyFollowState.reset();
+        vowelLipsyncState.reset();
         modelMappingBridge.clearRuntimeExport();
         dynamicsTuningBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
