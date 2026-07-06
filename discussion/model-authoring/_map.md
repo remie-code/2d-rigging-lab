@@ -16,9 +16,9 @@
 | Path | Role | Status |
 |---|---|---|
 | [premises/](premises/) | 前提合意層。この挑戦のオラクル | Accepted 5 文書を記録済み |
-| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜18 通過**（回転5種 + 揺れ4系統 + 口パク + **別衣装 = 場の空間再標本化**）。次: 差分管理（Variant）の定義 |
-| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ) | 較正ログ Round 15 まで（Fable 委任30代 reject 累計ゼロ。制限死復元・逸脱の自律処置の模範例を記録） |
-| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 10 枚（00-09）+ 不変量 20 種**。新: 場は空間の属性（再標本化）・服の固定の2型・最大情報素材・合法オラクル |
+| [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜19 すべて通過 = 1周目完了**（2026-07-06。追従5軸・揺れ4系統・口パク・別衣装・差分管理——配信導線一周をユーザー実機確認） |
+| [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ) | 較正ログ Round 16 まで（**Fable 委任32代 reject 累計ゼロで1周目完了**） |
+| [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 11 枚（00-10）+ 不変量 20 種 + 周回指揮書（[_conductor.md](craft/_conductor.md)）**。回転射影の統一原理・2周目実施事項3件・遡及の物差しを焼き込み済み |
 
 ## Key Files
 

@@ -39,11 +39,11 @@
 
 | [18-alt-outfit-rigging/](18-alt-outfit-rigging/) | 別衣装 rigging（rodos_ware / endoministrator の topwear+両腕 ×2 = 場の空間再標本化） | **通過（2026-07-05、一発・三十代目、「破綻なし、もう本当に好みの問題」）**。獲得 = **場は空間の属性**（人間補正場の衣装横断再利用を実証）+ **服の固定の2型**（羽織りフェード帯は未適用・磨き候補）。[results.md](18-alt-outfit-rigging/results.md) |
 
-| [19-variant-ware/](19-variant-ware/) | 差分管理（Ware グループ singleSelect 3択 = variant operation 列の初運用 + レンダ自己検証） | **Problem defined（2026-07-06）**。A ギャップなし（書き側 op 10種実在・player ライブ切替実装済み）。[problem-definition.md](19-variant-ware/problem-definition.md) |
+| [19-variant-ware/](19-variant-ware/) | 差分管理（Ware グループ singleSelect 3択 + 在庫の形式所属） | **通過（2026-07-06、本体+追補とも一発、player ライブ切替実機確認）**。獲得 = 順序則4段・レンダ3点セット・形式所属2型 → craft/10。**これにて1周目完了**。[results.md](19-variant-ware/results.md) |
 
 ## 次の行動
 
-1. cp19 実験 → gate → 蒸留
+1. 2周目の準備: 周回指揮書（craft/_conductor.md）の空実行テストによる較正 → 2周目（craft 自己完結の検証走）
 2. 期限考慮: Fable 使用可能の当初期限 2026-07-07（weekly 制限は 2026-07-05 に一度発動・回復済み）——残り時間の配分はユーザーと相談
 
 ## FaceY フェーズ蒸留（2026-07-04 完了）
