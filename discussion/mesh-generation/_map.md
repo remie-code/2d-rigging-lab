@@ -12,15 +12,18 @@
 |---|---|---|
 | [concept-design.md](concept-design.md) | 合意済み概念設計。パイプライン、不変条件(被覆保証・ε<r・決定性)、3プリセット方針、実装方針(v7新method / v6削除)、実装委任時の3層優先順位 | Accepted(2026-07-07) |
 | [current-implementation-survey.md](current-implementation-survey.md) | 現状実装(v1〜v6、17 method)のSylph調査。所在、アルゴリズム工程分解、MeshDto構造、パラメータ、概念設計との差分分析、改修時の制約 | Recorded(2026-07-07)。未確認箇所は文書内に明示 |
+| [pre-wave-inventory.md](pre-wave-inventory.md) | 計画前の境界調査。UI露出面、レンダラ前提、export互換、validator検査項目、自前DP実装の所在、AI契約面、既存テスト地形と計画への含意 | Recorded(2026-07-07)。survey §6 の未確認項目を解消 |
 
-## 計画済みの子ディレクトリ
+## 子ディレクトリ
 
-- `implementation/` — v7実装フェーズのwave計画・実装報告・レビューを、このトピック内に閉じて置く(runtime-player方式、ユーザー合意済み 2026-07-07)。実装フェーズ開始時に作成する
+| Path | Role | Status |
+|---|---|---|
+| [implementation/](implementation/) | wave計画・実装報告・レビュー(トピック内に閉じる、runtime-player方式) | [mesh-wave1-plan.md](implementation/orchestration/mesh-wave1-plan.md) Planned |
 
 ## 次の行動
 
-1. 実装計画への落とし込み(ファイル構成、中立部品の抽出計画、工程の切り方、ACシナリオ)。委任時は [concept-design.md](concept-design.md) §6 の3層優先順位に従う
-2. 調査未了項目の解消: UI の既定 method、mesh-tool-inspector の公開パラメータ、レンダラの三角形向き/UV前提、runtime-export のシリアライズ形式(survey §6「未確認」参照)
+1. Mesh Wave 1 の起動(Batch 1: Domain A 中立部品抽出から)。計画は [implementation/orchestration/mesh-wave1-plan.md](implementation/orchestration/mesh-wave1-plan.md) が正
+2. wave 完了後: ユーザー目視評価 gate → 合格なら v6削除を Mesh Wave 2 として計画
 
 ## 未決事項
 
