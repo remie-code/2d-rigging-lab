@@ -28,6 +28,7 @@ Live2D / Cubism 関連レポートは過去調査・リスク確認用の privat
 | [viewer-preview-reference/](viewer-preview-reference/) | Editor preview / Viewer 設計に向けた過去参照調査 | Private research archive / UX oracleではない |
 | [runtime-evaluation-semantics-reference/](runtime-evaluation-semantics-reference/) | Runtime評価セマンティクス設計に向けた過去参照調査 | Private research archive / runtime oracleではない |
 | [rights-risk-cleanup/](rights-risk-cleanup/) | 権利・商標・互換誤認リスク整理 | 参考。Demo and Proposal Hygieneへ接続 |
+| [editor-render-performance/](editor-render-performance/) | Editor/Viewer 描画パフォーマンスの現状調査(ホットパス・評価層・描画層・ボトルネック仮説の順位付け) | Recorded(2026-07-07)。改善方針の議論に接続する現行調査 |
 
 ## 次の行動
 

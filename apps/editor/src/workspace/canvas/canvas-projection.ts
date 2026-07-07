@@ -20,6 +20,7 @@ import {
   type CanvasEvaluatedDrawable,
   type CanvasEvaluatedMesh,
   type CanvasEvaluatedRigControl,
+  type CanvasEvaluationCaller,
   type CanvasEvaluationControlPointPreview,
   type CanvasEvaluationRotationPreview,
   type CanvasEvaluationRigDraft
@@ -120,6 +121,12 @@ export interface CanvasRenderProjection {
 
 export interface CanvasProjectionOptions {
   readonly editorHiddenPartIds?: ReadonlySet<PartId>;
+  /**
+   * Read-only diagnostics tag forwarded to `createCanvasEvaluatedScene` to record which surface
+   * drove the evaluation (`canvas.evaluation.caller.*` counter). Never affects the projection or
+   * evaluation result.
+   */
+  readonly evaluationCaller?: CanvasEvaluationCaller;
   readonly meshDraft?: {
     readonly drawableId: DrawableId;
     readonly mesh: MeshDto;
@@ -189,6 +196,9 @@ export function createCanvasRenderProjection(
     ...(options.meshPreviewDrawableId === undefined ? [] : [options.meshPreviewDrawableId])
   ]);
   const evaluatedScene = createCanvasEvaluatedScene(session, {
+    ...(options.evaluationCaller === undefined
+      ? {}
+      : { evaluationCaller: options.evaluationCaller }),
     meshDraft: options.meshDraft ?? null,
     meshDrafts: options.meshDrafts ?? null,
     rigDraft: createEvaluationRigDraftFromProjectionDraft(options.deformerDraft ?? null),
@@ -358,12 +368,24 @@ function resolveDrawableRenderDimensions(input: {
   };
 }
 
+/**
+ * Projects an evaluated mesh onto the projection's renderable drawable.
+ *
+ * Clone reduction (Perf Wave 2, Domain G / design §3-2): the incoming `mesh` is the display-only
+ * `evaluatedMesh` produced fresh this evaluation by `createCanvasEvaluatedScene` and owned solely by
+ * this projection — nothing shares it with the `session.graph` original or across projections. The
+ * downstream consumers (`createRenderSceneFromCanvasProjection`, the canvas renderer, the mesh
+ * overlay) only ever read the vertex/uv arrays, and the adapter re-clones them into the RenderScene
+ * anyway, so this layer's per-vertex `.map(clonePoint)` was a redundant middle copy of the three-deep
+ * clone chain. We pass the vertex/uv arrays through by reference and keep only the small metadata
+ * copies (bounds / triangles / stable ids) as defensive shallow copies.
+ */
 function cloneEvaluatedMesh(mesh: CanvasEvaluatedMesh): CanvasEvaluatedMesh {
   return {
     source: mesh.source,
     ...(mesh.sourceMeshId === undefined ? {} : { sourceMeshId: mesh.sourceMeshId }),
-    vertices: mesh.vertices.map(clonePoint),
-    uvs: mesh.uvs.map(clonePoint),
+    vertices: mesh.vertices,
+    uvs: mesh.uvs,
     triangles: mesh.triangles.map(
       (triangle): readonly [number, number, number] => [triangle[0], triangle[1], triangle[2]]
     ),

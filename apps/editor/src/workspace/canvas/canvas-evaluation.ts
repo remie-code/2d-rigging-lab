@@ -11,6 +11,7 @@ import type {
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 import {
+  recordLive2dPerformanceCounter,
   recordLive2dPerformanceTiming,
   startLive2dPerformanceTiming
 } from "@private-2d-rigging-lab/render-core";
@@ -105,8 +106,17 @@ export interface CanvasEvaluatedRotationRigControl extends CanvasEvaluatedRigCon
   readonly evaluatedAngleDegrees: number;
 }
 
+/**
+ * Identifies which surface/path drove this evaluation. Read-only diagnostics tag: it is only
+ * used to record a performance counter (`canvas.evaluation.caller.*`) and never influences the
+ * evaluation result, order, or any numeric output. Off when performance instrumentation is
+ * disabled (the counter helper is a no-op).
+ */
+export type CanvasEvaluationCaller = "canvas" | "viewerRuntime" | "viewerCleanStage";
+
 export interface CanvasEvaluationOptions {
   readonly editorHiddenPartIds?: ReadonlySet<PartId>;
+  readonly evaluationCaller?: CanvasEvaluationCaller;
   readonly meshDraft?: {
     readonly drawableId: DrawableId;
     readonly mesh: MeshDto;
@@ -209,6 +219,7 @@ export function createCanvasEvaluatedScene(
   options: CanvasEvaluationOptions = {}
 ): CanvasEvaluatedScene {
   const timingStart = startLive2dPerformanceTiming();
+  const indexBuildTimingStart = startLive2dPerformanceTiming();
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
   const meshesById = new Map(session.graph.meshes.map((mesh) => [mesh.meshId, mesh]));
   const textureEntriesById = new Map(
@@ -220,10 +231,14 @@ export function createCanvasEvaluatedScene(
   const sourceLayerByDrawableId = createSourceLayerIndex(session);
   const editorHiddenPartIds = options.editorHiddenPartIds ?? new Set<PartId>();
   const frontOrderByDrawableId = createStructureDrawOrderIndex(session.graph);
+  recordLive2dPerformanceTiming("canvas.evaluation.indexBuild.ms", indexBuildTimingStart);
+  const keyformTimingStart = startLive2dPerformanceTiming();
   const evaluatedKeyforms = createEvaluatedParameterKeyformState(
     session,
     options.parameterValues ?? {}
   );
+  recordLive2dPerformanceTiming("canvas.evaluation.keyform.ms", keyformTimingStart);
+  const rigControlEvalTimingStart = startLive2dPerformanceTiming();
   const rigControls = createEvaluationRigControls({
     evaluatedKeyforms,
     preview: options.controlPointPreview ?? null,
@@ -232,6 +247,7 @@ export function createCanvasEvaluatedScene(
     session
   });
   const rigControlsById = new Map(rigControls.map((rigControl) => [rigControl.id, rigControl]));
+  const requiredEvaluatedRigControlIds = resolveRequiredEvaluatedRigControlIds(options);
   const rigControlOrder = createRigControlEvaluationOrder(rigControls);
   const directRigControlByDrawableId = createDirectRigControlByDrawableId(
     rigControlOrder,
@@ -240,7 +256,9 @@ export function createCanvasEvaluatedScene(
   const maskSourcesByTargetId = createMaskSourceIndex(session);
   const meshDraftsByDrawableId = createMeshDraftIndex(options);
   const variantVisibilityPredicate = options.variantVisibilityPredicate ?? (() => true);
+  recordLive2dPerformanceTiming("canvas.evaluation.rigControlEval.ms", rigControlEvalTimingStart);
 
+  const deformerVertexTimingStart = startLive2dPerformanceTiming();
   const drawables = session.graph.drawables
     .map((drawable): CanvasEvaluatedDrawable | undefined => {
       const texture = textureEntriesById.get(drawable.textureId);
@@ -330,17 +348,34 @@ export function createCanvasEvaluatedScene(
     })
     .filter(isDefined)
     .sort(compareBackToFront);
+  recordLive2dPerformanceTiming("canvas.evaluation.deformerVertex.ms", deformerVertexTimingStart);
+  const artworkBoundsAndAssemblyTimingStart = startLive2dPerformanceTiming();
+  const assemblyRigControlsTimingStart = startLive2dPerformanceTiming();
+  const evaluatedRigControls = createCanvasEvaluatedRigControls(
+    rigControls,
+    rigControlsById,
+    requiredEvaluatedRigControlIds
+  );
+  recordLive2dPerformanceTiming(
+    "canvas.evaluation.assembly.rigControls.ms",
+    assemblyRigControlsTimingStart
+  );
+  const assemblyArtworkBoundsTimingStart = startLive2dPerformanceTiming();
   const artworkBounds = unionRects(
     drawables
       .filter((drawable) => drawable.visible)
       .map((drawable) => drawable.bounds)
   );
-
+  recordLive2dPerformanceTiming(
+    "canvas.evaluation.assembly.artworkBounds.ms",
+    assemblyArtworkBoundsTimingStart
+  );
+  const assemblyRestTimingStart = startLive2dPerformanceTiming();
   const scene = {
     canvasBounds: resolveEvaluationCanvasBounds(session),
     ...(artworkBounds === undefined ? {} : { artworkBounds }),
     drawables,
-    rigControls: createCanvasEvaluatedRigControls(rigControls, rigControlsById),
+    rigControls: evaluatedRigControls,
     maskRelations: session.graph.masks
       .filter((relation) => relation.enabled)
       .map((relation) => ({
@@ -349,6 +384,12 @@ export function createCanvasEvaluatedScene(
         targetDrawableIds: [...relation.targetDrawableIds]
       }))
   };
+  recordLive2dPerformanceTiming("canvas.evaluation.assembly.rest.ms", assemblyRestTimingStart);
+  recordLive2dPerformanceTiming(
+    "canvas.evaluation.artworkBoundsAndAssembly.ms",
+    artworkBoundsAndAssemblyTimingStart
+  );
+  recordLive2dPerformanceCounter(`canvas.evaluation.caller.${options.evaluationCaller ?? "unknown"}`);
   recordLive2dPerformanceTiming("canvas.evaluation.ms", timingStart);
   return scene;
 }
@@ -527,15 +568,74 @@ function createEvaluationRigDraft(
   };
 }
 
+/**
+ * Selection-driven partial evaluation (Perf Wave 2, Domain F / plan A).
+ *
+ * `CanvasEvaluatedScene.rigControls` used to hold the evaluated shape of every rig control, but the
+ * only consumer (`resolveDeformerOverlay` in canvas-projection.ts) keeps at most one entry: the
+ * selected rig control (matched by `rigControlId`) or the single preview draft. Every other entry
+ * was rebuilt each evaluation and immediately discarded. We now evaluate only the required subset —
+ * the rig controls whose evaluated shape a consumer can actually read this frame — and return an
+ * empty array when nothing is selected/previewed.
+ *
+ * The subset is computed from `requiredIds` (see `resolveRequiredEvaluatedRigControlIds`). Ancestor
+ * chains do NOT need to appear in the subset: `createCanvasEvaluated{Warp,Rotation}RigControl`
+ * resolves each entry's ancestor chain through the full `rigControlsById` map, so evaluating a
+ * single required rig control already folds in its ancestors' transforms. The subset therefore
+ * matches the old full-array output exactly for any id it contains (byte-identical evaluated
+ * shapes), it is only narrowed to the ids that can be consumed.
+ */
 function createCanvasEvaluatedRigControls(
   rigControls: readonly EvaluationRigControl[],
-  rigControlsById: ReadonlyMap<EvaluationRigControlId, EvaluationRigControl>
+  rigControlsById: ReadonlyMap<EvaluationRigControlId, EvaluationRigControl>,
+  requiredIds: ReadonlySet<EvaluationRigControlId>
 ): readonly CanvasEvaluatedRigControl[] {
-  return rigControls.map((rigControl) =>
-    rigControl.kind === "warp"
-      ? createCanvasEvaluatedWarpRigControl(rigControl, rigControlsById)
-      : createCanvasEvaluatedRotationRigControl(rigControl, rigControlsById)
-  );
+  if (requiredIds.size === 0) {
+    return [];
+  }
+
+  return rigControls
+    .filter((rigControl) => requiredIds.has(rigControl.id))
+    .map((rigControl) =>
+      rigControl.kind === "warp"
+        ? createCanvasEvaluatedWarpRigControl(rigControl, rigControlsById)
+        : createCanvasEvaluatedRotationRigControl(rigControl, rigControlsById)
+    );
+}
+
+/**
+ * The set of internal evaluation rig-control ids whose evaluated shape a consumer may read this
+ * frame. Mirrors what `resolveDeformerOverlay` (canvas-projection.ts) can pick up:
+ * - the selected rig control (`selection.kind === "rigControl"`), matched by its source id;
+ * - the preview draft (`rigDraft`), which the overlay finds by `status === "draft"`;
+ * - the rig control targeted by a drag preview (`controlPointPreview` / `rotationPreview`), so the
+ *   rig-tool preview path is covered even if the preview id ever diverges from the selection.
+ *
+ * A rig control's internal evaluation id equals its `RigControlId` for committed controls and the
+ * synthetic `DRAFT_RIG_CONTROL_ID` for the draft.
+ */
+function resolveRequiredEvaluatedRigControlIds(
+  options: CanvasEvaluationOptions
+): ReadonlySet<EvaluationRigControlId> {
+  const required = new Set<EvaluationRigControlId>();
+
+  if (options.selection?.kind === "rigControl") {
+    required.add(options.selection.id);
+  }
+
+  if (options.rigDraft !== undefined && options.rigDraft !== null) {
+    required.add(DRAFT_RIG_CONTROL_ID);
+  }
+
+  if (options.controlPointPreview?.rigControlId !== undefined) {
+    required.add(options.controlPointPreview.rigControlId);
+  }
+
+  if (options.rotationPreview?.rigControlId !== undefined) {
+    required.add(options.rotationPreview.rigControlId);
+  }
+
+  return required;
 }
 
 function createCanvasEvaluatedWarpRigControl(
@@ -715,19 +815,36 @@ function createDrawableRigControlChain(
   return chain;
 }
 
+/**
+ * Applies a rig-control chain to a drawable's evaluated vertices (deformerVertex display path).
+ *
+ * Clone reduction (Perf Wave 2, Domain G / design §3-2): the input `currentVertices` come from
+ * `cloneMesh`, which already materialized fresh, display-only vertex objects from the `session.graph`
+ * original. This helper therefore does not need its own defensive `.map(cloneVec2)` of the inputs —
+ * that was a redundant second copy of the same throwaway vertices. `applyRigControlToPoint` returns a
+ * fresh object whenever it transforms a point (and `cloneVec2` for the disabled/identity case), so any
+ * chain stage that runs already produces new objects; the reference points are only ever read
+ * (`applyWarpLatticeToPoint` reads `referencePoint`, never mutates it). When the chain is empty (the
+ * common no-deformer drawable) we now return the already-fresh `currentVertices` directly instead of
+ * copying them once more.
+ */
 function applyRigControlChainToVertices(input: {
   readonly currentVertices: readonly Vec2Dto[];
   readonly referenceVertices: readonly Vec2Dto[];
   readonly chain: readonly EvaluationRigControl[];
 }): readonly Vec2Dto[] {
-  if (input.currentVertices.length !== input.referenceVertices.length) {
-    return input.currentVertices.map(cloneVec2);
+  const localSpaceChain = createLocalSpaceEvaluationChain(input.chain);
+  if (
+    localSpaceChain.length === 0 ||
+    input.currentVertices.length !== input.referenceVertices.length
+  ) {
+    return input.currentVertices;
   }
 
-  let current = input.currentVertices.map(cloneVec2);
-  const reference = input.referenceVertices.map(cloneVec2);
+  const reference = input.referenceVertices;
+  let current = input.currentVertices;
 
-  for (const rigControl of createLocalSpaceEvaluationChain(input.chain)) {
+  for (const rigControl of localSpaceChain) {
     current = current.map((vertex, index) =>
       applyRigControlToPoint({
         currentPoint: vertex,
@@ -886,8 +1003,14 @@ function cloneMesh(mesh: MeshDto, source: "committed" | "draft"): CanvasEvaluate
   return {
     source,
     sourceMeshId: mesh.meshId,
-    vertices: mesh.vertices.map(cloneVec2),
-    uvs: mesh.uvs.map(cloneVec2),
+    // Clone reduction (Perf Wave 2, Domain G / design §3-2): this is the display/save boundary
+    // (design-inputs §5) — its only job is to materialize fresh vertex objects so the evaluated,
+    // display-only mesh never aliases the `session.graph` original. The original mesh coordinates are
+    // already stored in normalized form, so re-running `normalizeTransformNumber` (via `cloneVec2`)
+    // over them here is a redundant per-vertex pass; a plain shallow copy isolates the original just
+    // as well while dropping that work from the hot path.
+    vertices: mesh.vertices.map(shallowCloneVec2),
+    uvs: mesh.uvs.map(shallowCloneVec2),
     triangles: mesh.triangles.map(cloneTriangle),
     bounds: structuredClone(mesh.bounds),
     vertexStableIds: [...mesh.vertexStableIds]
@@ -1076,16 +1199,36 @@ function computeEvaluatedMeshBounds(
     : computeBoundsFromVertices(vertices);
 }
 
+/**
+ * Union of positive-area rects (Perf Wave 2, Domain G / design §3-3, case E).
+ *
+ * The spread form `Math.min(...positive.map(...))` allocates four intermediate arrays and pushes every
+ * element onto the call stack (a stack-overflow hazard at large N). A single reduce pass over the
+ * filtered rects computes the same four extrema with no intermediate arrays and no spread, keeping the
+ * numeric result identical.
+ */
 function unionRects(rects: readonly RectDto[]): RectDto | undefined {
-  const positive = rects.filter((rect) => rect.width > 0 && rect.height > 0);
-  if (positive.length === 0) {
-    return undefined;
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  let hasPositive = false;
+
+  for (const rect of rects) {
+    if (rect.width <= 0 || rect.height <= 0) {
+      continue;
+    }
+
+    hasPositive = true;
+    left = Math.min(left, rect.x);
+    top = Math.min(top, rect.y);
+    right = Math.max(right, rect.x + rect.width);
+    bottom = Math.max(bottom, rect.y + rect.height);
   }
 
-  const left = Math.min(...positive.map((rect) => rect.x));
-  const top = Math.min(...positive.map((rect) => rect.y));
-  const right = Math.max(...positive.map((rect) => rect.x + rect.width));
-  const bottom = Math.max(...positive.map((rect) => rect.y + rect.height));
+  if (!hasPositive) {
+    return undefined;
+  }
 
   return {
     x: left,
@@ -1124,6 +1267,15 @@ function cloneVec2(value: Vec2Dto): Vec2Dto {
   };
 }
 
+/**
+ * Shallow vertex copy that isolates a fresh object without re-normalizing (Perf Wave 2, Domain G).
+ * Used at the `cloneMesh` display boundary where the source coordinates are already normalized and we
+ * only need a new object to avoid aliasing the `session.graph` original.
+ */
+function shallowCloneVec2(value: Vec2Dto): Vec2Dto {
+  return { x: value.x, y: value.y };
+}
+
 function interpolateVec2(left: Vec2Dto, right: Vec2Dto, t: number): Vec2Dto {
   return {
     x: normalizeTransformNumber(left.x + (right.x - left.x) * t),
@@ -1156,12 +1308,23 @@ function toFiniteNumber(value: number | undefined, fallback: number): number {
   return value === undefined || !Number.isFinite(value) ? fallback : value;
 }
 
+/**
+ * Display-path number normalization (Perf Wave 2, Domain G / design §3-1).
+ *
+ * Every caller of this helper lives inside `createCanvasEvaluatedScene`, whose output is display-only
+ * (consumed by canvas-projection → adapter → RenderScene and by tests/benches). Save / export /
+ * provenance read `session.graph` originals, never these evaluated values (design-inputs §2/§5), so
+ * this normalization never touches a byte-compatible persisted value.
+ *
+ * The old implementation rounded to 12 fractional digits via the string round-trip
+ * `Number(value.toFixed(12))`, which allocates and parses a string for every coordinate of every
+ * deformer chain stage. We drop the round-trip and keep only the tiny-magnitude snap-to-zero. The
+ * removed 12-digit rounding changes each result by at most ~9.1e-13 versus the old output (verified
+ * numerically across the coordinate range), well inside the required display epsilon of 1e-9, so the
+ * rendered geometry stays equivalent while the string allocation on the hot path disappears.
+ */
 function normalizeTransformNumber(value: number): number {
-  if (Math.abs(value) < 1e-12) {
-    return 0;
-  }
-
-  return Number(value.toFixed(12));
+  return Math.abs(value) < 1e-12 ? 0 : value;
 }
 
 function isWarpLatticeRigControl(

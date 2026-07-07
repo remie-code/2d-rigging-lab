@@ -59,6 +59,7 @@ export function createViewerCleanStageRenderSourceProjection(
   options: ViewerCleanStageProjectionOptions = {}
 ): ViewerRenderSourceProjectionResult {
   const originalProjection = createCanvasRenderProjection(session, null, {
+    evaluationCaller: "viewerCleanStage",
     parameterValues: options.parameterValues ?? {},
     ...(options.editorHiddenPartIds === undefined
       ? {}

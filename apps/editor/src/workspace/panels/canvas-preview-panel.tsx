@@ -161,6 +161,7 @@ export function CanvasPreviewPanel() {
           : parameterValues;
 
       return createCanvasRenderProjection(session, selection, {
+        evaluationCaller: "canvas",
         editorHiddenPartIds,
         meshDraft,
         deformerDraft: rigDraft,

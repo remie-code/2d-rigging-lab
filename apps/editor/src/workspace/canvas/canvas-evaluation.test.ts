@@ -64,14 +64,19 @@ describe("canvas evaluation", () => {
     const restScene = createCanvasEvaluatedScene(session, {
       parameterValues: { [FACE_ANGLE_X]: -30 }
     });
+    // Selection-driven partial evaluation (Perf Wave 2 / plan A): the evaluated rig-control subset
+    // only holds a rig control when it (or a preview/draft) is selected. Select the face warp so its
+    // evaluated shape is present and numerically identical to the old full-array evaluation.
     const evaluatedScene = createCanvasEvaluatedScene(session, {
-      parameterValues: { [FACE_ANGLE_X]: 30 }
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      selection: { kind: "rigControl", id: RIG_FACE_WARP }
     });
     const restFace = requireDrawable(restScene, DRAW_FACE);
     const evaluatedFace = requireDrawable(evaluatedScene, DRAW_FACE);
 
     expect(evaluatedFace.bounds.x).toBeCloseTo(restFace.bounds.x + 20);
     expect(evaluatedFace.evaluatedMesh.vertices[0]).toEqual({ x: 20, y: 0 });
+    expect(evaluatedScene.rigControls).toHaveLength(1);
     expect(evaluatedScene.rigControls[0]).toMatchObject({
       kind: "warp",
       rigControlId: RIG_FACE_WARP,
@@ -186,8 +191,11 @@ describe("canvas evaluation", () => {
       ])
     );
 
+    // Select the child warp so its evaluated overlay is present in the partial subset. Its evaluated
+    // shape must still fold in the parent warp (resolved through the full ancestor chain internally).
     const scene = createCanvasEvaluatedScene(session, {
-      parameterValues: { [FACE_ANGLE_X]: 30 }
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      selection: { kind: "rigControl", id: RIG_CHILD_WARP }
     });
     const face = requireDrawable(scene, DRAW_FACE);
     const childOverlay = requireRigControl(scene, RIG_CHILD_WARP);
@@ -371,7 +379,11 @@ describe("canvas evaluation", () => {
     }));
     restSession.graph.rigControlRootIds.push(RIG_FACE_ROTATION);
 
-    const restScene = createCanvasEvaluatedScene(restSession);
+    // Select the rotation deformer so its evaluated overlay lands in the partial subset (Perf Wave 2
+    // / plan A). Every scene in this test selects RIG_FACE_ROTATION for the same reason.
+    const restScene = createCanvasEvaluatedScene(restSession, {
+      selection: { kind: "rigControl", id: RIG_FACE_ROTATION }
+    });
     const restFace = requireDrawable(restScene, DRAW_FACE);
     const restRigControl = requireRigControl(restScene, RIG_FACE_ROTATION);
 
@@ -391,7 +403,8 @@ describe("canvas evaluation", () => {
     ]));
 
     const keyedScene = createCanvasEvaluatedScene(keyedSession, {
-      parameterValues: { [FACE_ANGLE_X]: 30 }
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      selection: { kind: "rigControl", id: RIG_FACE_ROTATION }
     });
     expect(requireDrawable(keyedScene, DRAW_FACE).evaluatedMesh.vertices[0]).toEqual({
       x: 8,
@@ -403,7 +416,8 @@ describe("canvas evaluation", () => {
     });
 
     const midpointScene = createCanvasEvaluatedScene(keyedSession, {
-      parameterValues: { [FACE_ANGLE_X]: 0 }
+      parameterValues: { [FACE_ANGLE_X]: 0 },
+      selection: { kind: "rigControl", id: RIG_FACE_ROTATION }
     });
     expect(requireDrawable(midpointScene, DRAW_FACE).evaluatedMesh.vertices[0]).toEqual({
       x: 4,
@@ -567,6 +581,274 @@ describe("canvas evaluation", () => {
       source: "draft",
       vertices: hiddenDraft.vertices
     });
+  });
+});
+
+describe("canvas evaluation — display/save two-layer separation (Perf Wave 2 / Domain G)", () => {
+  // Domain G replaced the display-path `normalizeTransformNumber` string round-trip
+  // (`Number(value.toFixed(12))`) with a pure numeric snap and removed redundant vertex clones. The
+  // core invariant of that change is a two-layer separation:
+  //   (save layer) the `session.graph` originals stay byte-identical across evaluation;
+  //   (display layer) the evaluated vertices stay within epsilon (1e-9) of the old toFixed output.
+  const DISPLAY_EPSILON = 1e-9;
+
+  // A 45-degree rotation forces irrational coordinates, so the toFixed-vs-numeric difference is
+  // actually exercised (an integer-only fixture would pass trivially). These are the values the OLD
+  // `Number(value.toFixed(12))` normalization produced for the unit square rotated 45deg about
+  // (50,50) — the display layer must reproduce them within DISPLAY_EPSILON.
+  const OLD_TOFIXED_ROTATED_SQUARE: readonly Vec2Dto[] = [
+    { x: 50, y: -20.710678118655 },
+    { x: 120.710678118655, y: 50 },
+    { x: 50, y: 120.710678118655 },
+    { x: -20.710678118655, y: 50 }
+  ];
+
+  function expectVerticesWithinEpsilon(
+    actual: readonly Vec2Dto[],
+    expected: readonly Vec2Dto[]
+  ): void {
+    expect(actual).toHaveLength(expected.length);
+    actual.forEach((vertex, index) => {
+      const reference = expected[index];
+      if (reference === undefined) {
+        throw new Error(`Missing expected vertex at index ${index}.`);
+      }
+      expect(Math.abs(vertex.x - reference.x)).toBeLessThanOrEqual(DISPLAY_EPSILON);
+      expect(Math.abs(vertex.y - reference.y)).toBeLessThanOrEqual(DISPLAY_EPSILON);
+    });
+  }
+
+  function createRotatedSquareSession(): AuthoringSession {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(
+      createRotationRigControl({ childDrawableIds: [DRAW_FACE] })
+    );
+    session.graph.rigControlRootIds.push(RIG_FACE_ROTATION);
+    session.graph.keyformSets.push(
+      createRigNumberKeyformSet(RIG_FACE_ROTATION, "angleDegrees", [
+        [-30, 0],
+        [30, 45]
+      ])
+    );
+    return session;
+  }
+
+  // Display layer: evaluated vertices reproduce the old toFixed output within epsilon on irrational
+  // (non-integer) coordinates. This is what proves the toFixed removal preserved display equivalence
+  // rather than merely passing because every fixture was integer-valued.
+  it("keeps evaluated (display) vertices within 1e-9 of the old toFixed normalization", () => {
+    const session = createRotatedSquareSession();
+
+    const face = requireDrawable(
+      createCanvasEvaluatedScene(session, { parameterValues: { [FACE_ANGLE_X]: 30 } }),
+      DRAW_FACE
+    );
+
+    expectVerticesWithinEpsilon(face.evaluatedMesh.vertices, OLD_TOFIXED_ROTATED_SQUARE);
+  });
+
+  // Save layer: the `session.graph` originals (meshes, rig controls, everything) are byte-identical
+  // before and after an evaluation that produces irrational display coordinates. The evaluated,
+  // display-only scene never writes back to the save/export/provenance source of truth, and the
+  // clone-reduction pass-throughs never alias — let alone mutate — the originals.
+  it("leaves the session.graph save-layer originals byte-identical across evaluation", () => {
+    const session = createRotatedSquareSession();
+    const before = JSON.stringify(session);
+
+    createCanvasEvaluatedScene(session, { parameterValues: { [FACE_ANGLE_X]: 30 } });
+
+    expect(JSON.stringify(session)).toBe(before);
+  });
+
+  // Clone isolation: mutating the evaluated (display) vertices must not reach back into the original
+  // mesh. Proves the display boundary still hands out fresh vertex objects even though the redundant
+  // extra copies were removed.
+  it("isolates evaluated display vertices from the original mesh objects", () => {
+    const session = createRotatedSquareSession();
+    const originalMesh = session.graph.meshes.find((mesh) => mesh.meshId === MESH_FACE);
+    if (originalMesh === undefined) {
+      throw new Error("Expected face mesh.");
+    }
+    const originalFirstVertex = { ...originalMesh.vertices[0] };
+
+    const face = requireDrawable(
+      createCanvasEvaluatedScene(session, { parameterValues: { [FACE_ANGLE_X]: 0 } }),
+      DRAW_FACE
+    );
+    const evaluatedFirst = face.evaluatedMesh.vertices[0];
+    if (evaluatedFirst === undefined) {
+      throw new Error("Expected an evaluated vertex.");
+    }
+    // The evaluated vertex is a distinct object from the original; mutating it is inert on the source.
+    (evaluatedFirst as { x: number }).x = 9999;
+
+    expect(originalMesh.vertices[0]).toEqual(originalFirstVertex);
+  });
+
+  // Clone isolation on the deformer-free path (this is the line Domain G actually changed:
+  // `cloneMesh` uses `shallowCloneVec2` for `vertices`/`uvs`). An unrigged drawable's evaluated
+  // vertices come straight out of `cloneMesh` — `applyRigControlChainToVertices` short-circuits and
+  // returns them untouched when the chain is empty — so no deformer transform intervenes to
+  // manufacture fresh objects. If `shallowCloneVec2` regressed to `return value;` (aliasing the
+  // original), the evaluated vertices would BE the `session.graph.meshes[...]` vertex objects, and
+  // this destructive write would corrupt the save-layer original. DRAW_HIDDEN is deformer-free: no
+  // rig control binds it in `createRotatedSquareSession` (only DRAW_FACE gets the rotation), so its
+  // rig-control chain is empty.
+  it("isolates evaluated display vertices for a deformer-free drawable from the original mesh", () => {
+    const session = createRotatedSquareSession();
+    const hiddenControl = session.graph.rigControls.find(
+      (rigControl) =>
+        rigControl.childDrawableIds !== undefined &&
+        rigControl.childDrawableIds.includes(DRAW_HIDDEN)
+    );
+    // Guard the fixture premise: DRAW_HIDDEN must remain unrigged (empty deformer chain) for this
+    // test to actually step on the `cloneMesh`/`shallowCloneVec2` boundary rather than a deformer.
+    expect(hiddenControl).toBeUndefined();
+
+    const originalMesh = session.graph.meshes.find((mesh) => mesh.meshId === MESH_HIDDEN);
+    if (originalMesh === undefined) {
+      throw new Error("Expected hidden mesh.");
+    }
+    const originalFirstVertex = { ...originalMesh.vertices[0] };
+
+    const hidden = requireDrawable(
+      createCanvasEvaluatedScene(session, { parameterValues: { [FACE_ANGLE_X]: 30 } }),
+      DRAW_HIDDEN
+    );
+    const evaluatedFirst = hidden.evaluatedMesh.vertices[0];
+    if (evaluatedFirst === undefined) {
+      throw new Error("Expected an evaluated vertex.");
+    }
+    // With no deformer to interpose fresh objects, this only stays inert if `cloneMesh` handed out a
+    // shallow copy rather than aliasing the original mesh vertex.
+    (evaluatedFirst as { x: number }).x = 9999;
+
+    expect(originalMesh.vertices[0]).toEqual(originalFirstVertex);
+  });
+});
+
+describe("canvas evaluation — selection-driven rig-control subset (Perf Wave 2 / plan A)", () => {
+  // Gate: drawable equivalence (core). The rig-control subset change must never perturb the drawable
+  // output. Evaluating with no rig selected vs. with a rig selected must yield byte-identical
+  // drawables — the "which rig to evaluate" narrowing touches only `scene.rigControls`.
+  it("produces byte-identical drawables whether or not a rig control is selected", () => {
+    const session = createTwoWarpFixtureSession();
+
+    const unselected = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 }
+    });
+    const selected = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      selection: { kind: "rigControl", id: RIG_FACE_WARP }
+    });
+
+    expect(JSON.stringify(selected.drawables)).toBe(JSON.stringify(unselected.drawables));
+    // Same rest-of-scene fields (bounds, masks) are unaffected too.
+    expect(JSON.stringify(selected.canvasBounds)).toBe(JSON.stringify(unselected.canvasBounds));
+    expect(JSON.stringify(selected.maskRelations)).toBe(JSON.stringify(unselected.maskRelations));
+  });
+
+  // Gate: lazy structure (call-structure assertion, no timing). With no selection / preview / draft
+  // the rig-control subset is empty — no rig control evaluated shape is built.
+  it("evaluates zero rig controls when nothing is selected, previewed, or drafted", () => {
+    const session = createTwoWarpFixtureSession();
+
+    const scene = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 }
+    });
+
+    expect(scene.rigControls).toEqual([]);
+  });
+
+  // Gate: lazy structure — only the required subset is materialized. Selecting one of two rig
+  // controls yields exactly that one evaluated overlay; the other is never built.
+  it("evaluates only the selected rig control, leaving the rest of the subset empty", () => {
+    const session = createTwoWarpFixtureSession();
+
+    const faceSelected = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      selection: { kind: "rigControl", id: RIG_FACE_WARP }
+    });
+    const hiddenSelected = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      selection: { kind: "rigControl", id: RIG_PARENT_WARP }
+    });
+
+    expect(faceSelected.rigControls.map((rigControl) => rigControl.rigControlId)).toEqual([
+      RIG_FACE_WARP
+    ]);
+    expect(hiddenSelected.rigControls.map((rigControl) => rigControl.rigControlId)).toEqual([
+      RIG_PARENT_WARP
+    ]);
+  });
+
+  // Gate: selection-time equivalence. A selected rig control's evaluated shape must be independent of
+  // which sibling (or no sibling) is also present — i.e. the subset narrowing does not change the
+  // numeric evaluation of any rig it does contain. We compare the evaluated overlay for RIG_FACE_WARP
+  // taken alone against the same overlay when the (unrelated) sibling would otherwise be present.
+  it("keeps the selected rig control's evaluated shape numerically identical to full evaluation", () => {
+    const session = createTwoWarpFixtureSession();
+
+    const faceSelected = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 30 },
+      selection: { kind: "rigControl", id: RIG_FACE_WARP }
+    });
+    const faceOverlay = requireRigControl(faceSelected, RIG_FACE_WARP);
+    if (faceOverlay.kind !== "warp") {
+      throw new Error("Expected warp overlay.");
+    }
+
+    // The face warp keys +20 on X at param 30, so every evaluated control point shifts by +20.
+    expect(faceOverlay.evaluatedControlPoints).toEqual([
+      { x: 20, y: 0 },
+      { x: 120, y: 0 },
+      { x: 20, y: 100 },
+      { x: 120, y: 100 }
+    ]);
+    expect(faceOverlay.domainBounds).toEqual({ x: 20, y: 0, width: 100, height: 100 });
+  });
+
+  // Gate: the drag-preview path shares the same lazy evaluation. A control-point preview whose
+  // rigControlId is set must pull that rig control into the subset even without a matching selection.
+  it("includes a control-point preview's rig control in the subset without a selection", () => {
+    const session = createTwoWarpFixtureSession();
+
+    const scene = createCanvasEvaluatedScene(session, {
+      parameterValues: { [FACE_ANGLE_X]: 0 },
+      controlPointPreview: {
+        rigControlId: RIG_FACE_WARP,
+        controlPointOffsets: createOffsets(4, 12, -3)
+      }
+    });
+
+    const overlay = requireRigControl(scene, RIG_FACE_WARP);
+    if (overlay.kind !== "warp") {
+      throw new Error("Expected warp overlay.");
+    }
+    expect(scene.rigControls.map((rigControl) => rigControl.rigControlId)).toEqual([RIG_FACE_WARP]);
+    expect(overlay.evaluatedControlPoints[0]).toEqual({ x: 12, y: -3 });
+  });
+
+  // Gate: the draft path is covered too — a rigDraft lands in the subset even when the selection is a
+  // plain drawable (mirrors the projection's `resolveDeformerOverlay` draft branch).
+  it("includes the rig draft in the subset even when a drawable is selected", () => {
+    const session = createFixtureSession();
+
+    const scene = createCanvasEvaluatedScene(session, {
+      selection: { kind: "drawable", id: DRAW_FACE },
+      rigDraft: {
+        kind: "warp",
+        childDrawableIds: [DRAW_FACE],
+        childRigControlIds: [],
+        domainBounds: { x: 0, y: 0, width: 100, height: 100 },
+        transformColumns: 2,
+        transformRows: 2,
+        controlPointOffsets: createOffsets(4, 5, 0)
+      }
+    });
+
+    expect(scene.rigControls).toHaveLength(1);
+    expect(scene.rigControls[0]?.status).toBe("draft");
   });
 });
 
@@ -816,6 +1098,27 @@ function createOffsets(count: number, x: number, y: number) {
 
 function cloneVec2(value: Vec2Dto): Vec2Dto {
   return { x: value.x, y: value.y };
+}
+
+// Two unrelated committed warp rig controls (RIG_FACE_WARP over DRAW_FACE, RIG_PARENT_WARP over
+// DRAW_HIDDEN). Only RIG_FACE_WARP is keyed (+20 on X at param 30) so selection-equivalence
+// assertions have concrete evaluated values; the second exists so the "only the selected rig is
+// evaluated" subset gate has a sibling to exclude.
+function createTwoWarpFixtureSession(): AuthoringSession {
+  const session = createFixtureSession();
+  session.graph.rigControls.push(
+    createWarpRigControl(RIG_FACE_WARP, { childDrawableIds: [DRAW_FACE] }),
+    createWarpRigControl(RIG_PARENT_WARP, { childDrawableIds: [DRAW_HIDDEN] })
+  );
+  session.graph.rigControlRootIds.push(RIG_FACE_WARP, RIG_PARENT_WARP);
+  session.graph.keyformSets.push(
+    createWarpOffsetsKeyformSet(RIG_FACE_WARP, [
+      { value: -30, statePatch: createOffsets(4, 0, 0) },
+      { value: 30, statePatch: createOffsets(4, 20, 0) }
+    ])
+  );
+
+  return session;
 }
 
 function createFixtureSession(): AuthoringSession {

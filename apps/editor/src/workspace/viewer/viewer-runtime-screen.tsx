@@ -437,6 +437,7 @@ export function createViewerRuntimeCleanStageProjection({
         : { state: runtimePlaybackState })
     });
     const originalProjection = createCanvasRenderProjection(session, null, {
+      evaluationCaller: "viewerRuntime",
       parameterValues,
       ...(editorHiddenPartIds === undefined ? {} : { editorHiddenPartIds }),
       ...(variantVisibilityPredicate === undefined ? {} : { variantVisibilityPredicate })
