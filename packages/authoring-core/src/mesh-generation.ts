@@ -5,7 +5,9 @@ import type { AuthoringSession } from "./authoring-session.js";
 import { getDrawableById, getMeshById } from "./drawable-selectors.js";
 import {
   getV6MeshGenerationCandidate,
+  getV7MeshGenerationCandidate,
   isV6MeshGenerationMethod,
+  isV7MeshGenerationMethod,
   type DrawableGeneratedMeshSource,
   type MeshDensityHint,
   type MeshGenerationFallbackReason,
@@ -13,6 +15,7 @@ import {
   type MeshGenerationMethod,
   type V6MeshGenerationCandidate
 } from "./mesh-generation-contract.js";
+import { createAutoOutlineV7MarginContourMesh } from "./mesh-generation-v7-margin-contour.js";
 import { createAutoOutlineV6ALocalMesh } from "./mesh-generation-v6a-local.js";
 import { createAutoOutlineV6BConstrainautorMesh } from "./mesh-generation-v6b-constrainautor.js";
 import {
@@ -137,6 +140,16 @@ export const createGeneratedMeshForDrawable = (
   }
 
   const textureBytes = resolveDrawableTextureBytes(input.session, drawable.textureId, existingMesh.bounds);
+
+  if (isV7MeshGenerationMethod(input.method)) {
+    return createV7MarginContourMeshResult({
+      existingMesh,
+      drawableId: drawable.drawableId,
+      provenanceId: input.provenanceId,
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+      ...(textureBytes === undefined ? {} : { textureBytes })
+    });
+  }
 
   if (isV6MeshGenerationMethod(input.method)) {
     if (input.method === "auto-outline-v6a-local") {
@@ -1039,6 +1052,86 @@ type ResolvedDrawableTextureBytes = {
   readonly textureSize: {
     readonly width: number;
     readonly height: number;
+  };
+};
+
+const createV7MarginContourMeshResult = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const candidate = getV7MeshGenerationCandidate("auto-outline-v7-margin-contour");
+  if (input.textureBytes === undefined) {
+    return createV7FallbackToV6Chain({
+      existingMesh: input.existingMesh,
+      drawableId: input.drawableId,
+      provenanceId: input.provenanceId,
+      fallbackReason: "texture-bytes-unavailable",
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+    });
+  }
+
+  const generated = createAutoOutlineV7MarginContourMesh({
+    meshId: input.existingMesh.meshId,
+    drawableId: input.drawableId,
+    bounds: input.existingMesh.bounds,
+    provenanceId: input.provenanceId,
+    textureSize: input.textureBytes.textureSize,
+    rgbaBytes: input.textureBytes.bytes,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+  });
+
+  if (generated.status === "generated") {
+    return {
+      mesh: generated.mesh,
+      source: candidate.sourceId,
+      alphaBounds: generated.alphaBounds,
+      qualityMetrics: generated.qualityMetrics
+    };
+  }
+
+  return createV7FallbackToV6Chain({
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    fallbackReason: generated.reason,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(input.textureBytes === undefined ? {} : { textureBytes: input.textureBytes })
+  });
+};
+
+/**
+ * When v7 is blocked, connect to the existing fallback chain starting at
+ * v6d-adaptive-contour-constrainautor (the current default). The v7 blocked
+ * reason is recorded as the leading fallback step so provenance shows v7 was
+ * attempted first.
+ */
+const createV7FallbackToV6Chain = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly fallbackReason: MeshGenerationFallbackReason;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const downstream = createV6DAdaptiveContourConstrainautorMeshResult({
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(input.textureBytes === undefined ? {} : { textureBytes: input.textureBytes })
+  });
+  const v7Step: MeshGenerationFallbackStep = {
+    method: "auto-outline-v7-margin-contour",
+    reason: input.fallbackReason
+  };
+
+  return {
+    ...downstream,
+    fallbackReason: input.fallbackReason,
+    fallbackSteps: [v7Step, ...(downstream.fallbackSteps ?? [])]
   };
 };
 

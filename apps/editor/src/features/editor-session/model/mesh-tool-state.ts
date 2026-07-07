@@ -70,6 +70,32 @@ export const DEFAULT_MESH_GENERATION_PRESET_ID: MeshGenerationPresetId = "standa
 export const DEFAULT_MESH_GENERATION_METHOD: GeneratedMeshPreviewCommitMethod =
   "auto-outline-v6d-adaptive-contour-constrainautor";
 
+// 世代切替トグルの選択肢（評価用の薄い実装）。
+// 先頭要素が既定であり、初期選択・未操作時のフォールバックはこの先頭を指す。
+// v6削除時は、この配列から v6 の1行を消し、mesh-tool-inspector.tsx のトグル UI
+// ブロックを撤去するだけで評価機構が消える(分岐を UI 全体に散らさないための単一箇所)。
+export interface MeshGenerationMethodChoice {
+  readonly method: GeneratedMeshPreviewCommitMethod;
+  readonly label: string;
+}
+
+export const MESH_GENERATION_METHOD_CHOICES: readonly [
+  MeshGenerationMethodChoice,
+  ...MeshGenerationMethodChoice[]
+] = [
+  {
+    method: "auto-outline-v6d-adaptive-contour-constrainautor",
+    label: "v6"
+  },
+  {
+    method: "auto-outline-v7-margin-contour",
+    label: "v7"
+  }
+];
+
+export const DEFAULT_MESH_GENERATION_METHOD_CHOICE: MeshGenerationMethodChoice =
+  MESH_GENERATION_METHOD_CHOICES[0];
+
 export const getMeshGenerationPreset = (
   presetId: MeshGenerationPresetId
 ): MeshGenerationPreset =>

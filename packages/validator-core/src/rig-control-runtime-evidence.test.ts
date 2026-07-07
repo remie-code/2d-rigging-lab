@@ -409,6 +409,18 @@ describe("validator rig control runtime evidence checks", () => {
     expect(report.summary.status).toBe("fail");
     expect(report.checks.map(toDiagnosticSummary)).toEqual([
       {
+        checkId: "keyform.unsupportedTargetProperty",
+        targetId: warpKeyformSetId,
+        targetPath: "/model/keyforms/keyformSets/0/target",
+        severity: "error",
+        evidence: [
+          `keyformSetId=${warpKeyformSetId}`,
+          "targetKind=rigControl",
+          "targetId=rig_warp",
+          "targetProperty=angleDegrees"
+        ]
+      },
+      {
         checkId: "rigControl.warpLatticeUnsupportedProperty",
         targetId: warpKeyformSetId,
         targetPath: "/model/keyforms/keyformSets/0/target/property",

@@ -272,6 +272,16 @@ describe("validator warpLattice2d diagnostics", () => {
 
     expect(report.checks.map(toDiagnosticSummary)).toEqual([
       {
+        checkId: "keyform.unsupportedTargetProperty",
+        targetPath: "/model/keyforms/keyformSets/0/target",
+        evidence: [
+          "keyformSetId=keyset_rig_warp_angle_param_faceYaw",
+          "targetKind=rigControl",
+          "targetId=rig_warp",
+          "targetProperty=angleDegrees"
+        ]
+      },
+      {
         checkId: "rigControl.warpLatticeUnsupportedProperty",
         targetPath: "/model/keyforms/keyformSets/0/target/property",
         evidence: [

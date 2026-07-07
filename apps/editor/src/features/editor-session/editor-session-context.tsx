@@ -461,11 +461,13 @@ interface EditorSessionContextValue {
   readonly moveStructureChild: (moved: StructureOrderItem, drop: StructureOrderDrop) => void;
   readonly previewMeshDraft: (
     drawableId: DrawableId,
-    presetId: MeshGenerationPresetId
+    presetId: MeshGenerationPresetId,
+    method?: GeneratedMeshPreviewCommitMethod
   ) => void;
   readonly previewMeshDrafts: (
     drawableIds: readonly DrawableId[],
-    presetId: MeshGenerationPresetId
+    presetId: MeshGenerationPresetId,
+    method?: GeneratedMeshPreviewCommitMethod
   ) => void;
   readonly applyMeshDraft: () => void;
   readonly cancelMeshDraft: () => void;
@@ -1877,12 +1879,14 @@ export function EditorSessionProvider({
   const previewMeshDraft = useCallback(
     (
       drawableId: DrawableId,
-      presetId: MeshGenerationPresetId
+      presetId: MeshGenerationPresetId,
+      method: GeneratedMeshPreviewCommitMethod = DEFAULT_MESH_GENERATION_METHOD
     ) => {
       const result = createMeshToolDraft({
         commitMode: "single",
         drawableId,
         presetId,
+        method,
         session
       });
 
@@ -1895,7 +1899,8 @@ export function EditorSessionProvider({
   const previewMeshDrafts = useCallback(
     (
       drawableIds: readonly DrawableId[],
-      presetId: MeshGenerationPresetId
+      presetId: MeshGenerationPresetId,
+      method: GeneratedMeshPreviewCommitMethod = DEFAULT_MESH_GENERATION_METHOD
     ) => {
       const eligibleDrawableIds = createMeshDrawableBatchTargets(session, drawableIds)
         .filter((target) => target.eligible)
@@ -1905,6 +1910,7 @@ export function EditorSessionProvider({
           commitMode: "batchEligible",
           drawableId,
           presetId,
+          method,
           session
         })
       );
@@ -2663,10 +2669,11 @@ interface MeshToolDraftResult {
   readonly diagnostic: MeshToolGenerationDiagnostic | null;
 }
 
-function createMeshToolDraft(input: {
+export function createMeshToolDraft(input: {
   readonly session: AuthoringSession;
   readonly drawableId: DrawableId;
   readonly presetId: MeshGenerationPresetId;
+  readonly method: GeneratedMeshPreviewCommitMethod;
   readonly commitMode: MeshToolDraft["commitMode"];
 }): MeshToolDraftResult {
   const preset = getMeshGenerationPreset(input.presetId);
@@ -2683,16 +2690,16 @@ function createMeshToolDraft(input: {
     provenanceId: createMeshPreviewProvenanceId(
       input.drawableId,
       input.presetId,
-      DEFAULT_MESH_GENERATION_METHOD
+      input.method
     ),
-    method: DEFAULT_MESH_GENERATION_METHOD,
+    method: input.method,
     densityHint: preset.densityHint
   });
   logMeshGenerationPreviewDebug({
     session: input.session,
     drawableId: input.drawableId,
     presetId: input.presetId,
-    method: DEFAULT_MESH_GENERATION_METHOD,
+    method: input.method,
     densityHint: preset.densityHint,
     generated
   });
@@ -2705,7 +2712,7 @@ function createMeshToolDraft(input: {
         ...(drawable === undefined ? {} : { drawableName: drawable.displayName }),
         presetId: input.presetId,
         densityHint: preset.densityHint,
-        method: DEFAULT_MESH_GENERATION_METHOD,
+        method: input.method,
         ...(existingMesh === undefined ? {} : { meshBounds: existingMesh.bounds }),
         vertexCount: 0,
         triangleCount: 0,
@@ -2719,7 +2726,7 @@ function createMeshToolDraft(input: {
       drawableId: input.drawableId,
       presetId: input.presetId,
       commitMode: input.commitMode,
-      method: DEFAULT_MESH_GENERATION_METHOD,
+      method: input.method,
       mesh: generated.mesh,
       source: generated.source,
       ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),

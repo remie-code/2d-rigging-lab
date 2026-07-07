@@ -41,6 +41,7 @@ Planning Gate result: `Proceed`（inventory first を実施済み・充足）。
 2. **v7診断**: preview 契約のスキーマ（`model-edit.ts` の `v6Metrics` 固定枠）は**変更しない**。v7 の品質診断は provenance 焼き込みのみ
 3. **ID系統**: 契約内の v7 定数・診断ID・フォールバック理由は **V7専用系統として新設分離**（将来の v6一括削除を機械的にするため）
 4. **プリセット対応**: 「大きく動く」= `high` / 「標準」= `medium` / 「あまり動かない」= `low`（既存 `MeshDensityHint` 3値に1:1で載せる。enum 変更なし）
+5. **既存 baseline fail は本waveで是正する**（2026-07-07 追加判断）: check:deps の fail（lockfile 内の禁止依存クラス言及）と mesh 無関係の横断テスト約12件 fail（rig-control / warp-lattice / tutorial系、pristine baseline で再現確認済み）を Domain R として追加し、Domain D の「モノレポ全体 green」を差分greenでなく真の全体greenで締める
 
 ### 3.3 Model Allocation（従来通り）
 
@@ -53,8 +54,9 @@ Batch 1:
   Domain A: 中立部品抽出（v6挙動バイト同一ゲート）
 Batch 2（A 完了後）:
   Domain B: v7 コア（パイプライン + 契約登録 + プリセット導出）
-Batch 3（B 完了後）:
+Batch 3（B 完了後、C と R は並列）:
   Domain C: 世代切替 UI（v6/v7 トグル + 3プリセット）
+  Domain R: 既存 baseline fail 是正（check:deps + 横断テスト約12件）
 Batch 4:
   Domain D: Final Integration / Clean Review / Map Closeout
 ```
@@ -160,11 +162,41 @@ Required tests: トグルで generateMesh payload の method が切り替わる 
 
 Escalate if: mesh-tool-state の method 定数が想定以上に広く配線されておりトグル化が UI 再設計を要する場合。
 
-## 8. Domain D: Final Integration / Clean Review / Map Closeout
+## 8. Domain R: 既存 baseline fail 是正（2026-07-07 ユーザー判断で追加）
+
+Domain id: `mesh-wave1-baseline-remediation`
+
+対象は本waveの実装と無関係に baseline で fail している2種:
+
+1. `pnpm run check:deps` の fail（lockfile が禁止依存クラス〔外部リギングランタイム互換系〕に言及、との判定）
+2. mesh 無関係の横断テスト約12件（rig-control / warp-lattice / tutorial 系。Domain A/B が pristine baseline〔git stash〕で再現を二重確認済み）
+
+Allowed write scope:
+
+- 診断で特定された fail 起因のソース・テスト（rig-control / warp-lattice / tutorial 系ほか診断結果に従う）
+- check:deps が誤検知の場合のチェッカー設定・判定ロジック
+- Domain report / review files
+
+Forbidden write scope:
+
+- mesh-generation の v6/v7 実装と mesh-geometry/**（Domain A/B の成果に触れない）
+- mesh-tool UI（Domain C が並列稼働中。衝突禁止）
+- **依存の追加・削除・lockfile 変更・`pnpm install` は実行禁止**。実依存の除去が必要と診断された場合は、正確な変更計画（対象 package.json・除去手順・影響）を作成して escalate（L0 がユーザーと調整して実行する）
+
+Required behavior:
+
+- まず診断: 12件の fail の正体（回帰か・環境か・仕様変更の追従漏れか）と、check:deps 判定の誘発エントリ・引き込み元・実依存/誤検知の別を file:line 付きで確定
+- 是正: テスト fail はユーザー判断を要さない範囲で修正（設計判断が必要なものは escalate）。check:deps は誤検知ならチェッカー側を修正、実依存なら escalate
+- Gate: 対象12件が green / 新規 fail ゼロ / mesh 系テスト（v6回帰14個・v7 16件）無傷 / typecheck・check:source pass
+
+Escalate if: fail の是正に仕様・設計のユーザー判断が要る / 依存・lockfile 変更が必要 / fail がユーザーの WIP 由来と診断された場合（勝手に「直す」とWIPを壊すため）。
+
+## 9. Domain D: Final Integration / Clean Review / Map Closeout
 
 Domain id: `mesh-wave1-final-integration`
 
-- モノレポ全体 tsc + 全テストスイート green の確認
+- モノレポ全体 tsc + 全テストスイート green の確認（**Domain R 是正後の真の全体 green**。check:deps を含む。R で escalate された残件がある場合はユーザー裁定の記録を添えて既知として明示）
+- Domain B 申し送りの記録: v7 が統合層ヘルパ `computeMeshQualityMetrics`（V6型参照）に依存している事実を、v6削除（Mesh Wave 2）計画の入力として文書に残す
 - クリーンレビュー（concept-design §2-6 と実装の突合、Review-Sylph 独立）
 - 実装事実に合わせて関連ドキュメントを更新する。
   - [concept-design.md](../../concept-design.md) の Status を Implemented へ / [mesh-generation/_map.md](../../_map.md) / [implementation/_map.md](../_map.md) / 必要なら root [_map.md](../../../_map.md) の状態行
@@ -172,7 +204,7 @@ Domain id: `mesh-wave1-final-integration`
 - wave final report（`discussion/mesh-generation/implementation/waves/mesh-wave1/final-report.md`）
 - **ユーザー目視評価 gate（wave外）の手順を final report に含める**: 髪など有機的パーツで生成→世代トグルで v6/v7 比較→3プリセット比較→3特徴（マージン付き簡略輪郭 / 疎な頂点 / 毛先の粗い包み）のゲシュタルトを商用参照画像と目視突合→パラメータ初期値の調整要否を判断
 
-## 9. Acceptance Criteria
+## 10. Acceptance Criteria
 
 - v7 method が契約に V7系統として登録され、UI 世代トグルから選択・生成できる
 - v7 出力が3特徴を構造的に持つ（テストで: 被覆保証 / 輪郭頂点間隔 ≈ L / 細長領域の内部点0）
@@ -181,9 +213,10 @@ Domain id: `mesh-wave1-final-integration`
 - v7 実装ファイルが v6系ファイルを import していない
 - preview スキーマ・package-format スキーマ・外部依存・lockfile が無変更
 - `pnpm install` をエージェントが実行していない
+- baseline の既存 fail（check:deps / 横断テスト約12件）が是正済み、または escalate 残件がユーザー裁定付きで明示されている
 - 関連ドキュメントが実装事実に整合している
 
-## 10. Out of Scope
+## 11. Out of Scope
 
 - v6系コードの削除（評価合格後の Mesh Wave 2）
 - 品質評価の定量化・自動化（目視 gate で開始）
@@ -191,10 +224,11 @@ Domain id: `mesh-wave1-final-integration`
 - preview qualityMetrics スキーマ拡張 / 17 method の UI 全露出
 - 新規依存・lockfile 変更・`pnpm install`
 
-## 11. Handling Rules
+## 12. Handling Rules
 
 - `.claude/skills/implementation-orchestration/SKILL.md` の全規則に従う（Orch 自身は実装しない / Gnome 実装・Review-Sylph レビューの分離 / ループ上限5 / 在席ポーリングによる子待機 / 孤児を残さない / 環境操作は escalate / モデル明示指定）
 - 各委任契約に完了成果物パスを必須で含める（Gnome: `discussion/mesh-generation/implementation/waves/mesh-wave1/domain-{a,b,c}-report.md`、Review-Sylph: `.../reviews/mesh-wave1/domain-{a,b,c}-review.md`）
 - 必須文言: 「Orch-Sylph自身は実装担当ではない。source implementation は必ず別コンテキストの Gnome に委譲し、レビューは必ず別コンテキストの Review-Sylph に委譲すること。これを分離できない場合は実装せず escalate / blocked として報告すること。」
-- レビュー構成: Domain A / C は単一 Review-Sylph、Domain B は2レーン（設計適合=concept-design突合 / テスト妥当性）を別コンテキストで
+- レビュー構成: Domain A / C / R は単一 Review-Sylph、Domain B は2レーン（設計適合=concept-design突合 / テスト妥当性）を別コンテキストで
+- Domain R の成果物パス: `discussion/mesh-generation/implementation/waves/mesh-wave1/domain-r-report.md` / `.../reviews/mesh-wave1/domain-r-review.md`
 - 設計文書に無い判断分岐を見つけたら実装で埋めず escalate（L0 が裁定して concept-design を改訂する）

@@ -21,11 +21,14 @@ import {
 } from "../../features/editor-session/editor-session-context";
 import {
   createMeshDrawableBatchTargets,
+  DEFAULT_MESH_GENERATION_METHOD_CHOICE,
   getMeshGenerationPreset,
+  MESH_GENERATION_METHOD_CHOICES,
   MESH_GENERATION_PRESETS,
   type MeshDrawableBatchTarget,
   type MeshGenerationPresetId
 } from "../../features/editor-session/model/mesh-tool-state";
+import type { GeneratedMeshPreviewCommitMethod } from "@private-2d-rigging-lab/authoring-core";
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
 import { cn } from "../../lib/class-name";
 import { useEditorUiStore } from "../../state/editor-ui-store";
@@ -50,6 +53,9 @@ export function MeshToolInspector() {
   const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
   const setMeshOverlayVisible = useEditorUiStore((state) => state.setMeshOverlayVisible);
   const [presetId, setPresetId] = useState<MeshGenerationPresetId>("standard");
+  const [method, setMethod] = useState<GeneratedMeshPreviewCommitMethod>(
+    DEFAULT_MESH_GENERATION_METHOD_CHOICE.method
+  );
   const [autoPreviewKey, setAutoPreviewKey] = useState<string | undefined>(undefined);
   const target = useMemo(
     () => resolveMeshToolTarget(session, selection, editorHiddenPartIds),
@@ -88,15 +94,15 @@ export function MeshToolInspector() {
     }
 
     const meshEmpty = target.mesh === undefined || target.mesh.vertices.length === 0 || target.mesh.triangles.length === 0;
-    const key = createPreviewKey(target.drawable.drawableId, presetId);
+    const key = createPreviewKey(target.drawable.drawableId, presetId, method);
     if (!meshEmpty || autoPreviewKey === key) {
       return;
     }
 
     setAutoPreviewKey(key);
-    previewMeshDraft(target.drawable.drawableId, presetId);
+    previewMeshDraft(target.drawable.drawableId, presetId, method);
     setMeshOverlayVisible(true);
-  }, [autoPreviewKey, presetId, previewMeshDraft, setMeshOverlayVisible, target]);
+  }, [autoPreviewKey, method, presetId, previewMeshDraft, setMeshOverlayVisible, target]);
 
   if (target.kind === "part") {
     return (
@@ -150,7 +156,10 @@ export function MeshToolInspector() {
     ? formatBatchWorkflowStatus(eligibleBatchTargets, excludedBatchTargets, draftsForTarget)
     : resolveWorkflowStatus(target.mesh, currentDraft !== null);
   const preset = getMeshGenerationPreset(presetId);
-  const generatePreview = (nextPresetId: MeshGenerationPresetId) => {
+  const generatePreviewWithMethod = (
+    nextPresetId: MeshGenerationPresetId,
+    nextMethod: GeneratedMeshPreviewCommitMethod
+  ) => {
     if (target.kind === "drawableSet" && eligibleBatchTargets.length === 0) {
       return;
     }
@@ -158,11 +167,12 @@ export function MeshToolInspector() {
     setIsGenerating(true);
     try {
       if (target.kind === "drawable") {
-        previewMeshDraft(target.drawable.drawableId, nextPresetId);
+        previewMeshDraft(target.drawable.drawableId, nextPresetId, nextMethod);
       } else if (target.kind === "drawableSet") {
         previewMeshDrafts(
           eligibleBatchTargets.map((candidate) => candidate.drawableId),
-          nextPresetId
+          nextPresetId,
+          nextMethod
         );
       }
       setMeshOverlayVisible(true);
@@ -170,12 +180,26 @@ export function MeshToolInspector() {
       setIsGenerating(false);
     }
   };
+  const generatePreview = (nextPresetId: MeshGenerationPresetId) => {
+    generatePreviewWithMethod(nextPresetId, method);
+  };
   const previewPreset = (nextPresetId: MeshGenerationPresetId) => {
     setPresetId(nextPresetId);
     if (target.kind === "drawable") {
-      setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, nextPresetId));
+      setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, nextPresetId, method));
     }
     generatePreview(nextPresetId);
+  };
+  const selectMethod = (nextMethod: GeneratedMeshPreviewCommitMethod) => {
+    if (nextMethod === method) {
+      return;
+    }
+
+    setMethod(nextMethod);
+    if (target.kind === "drawable") {
+      setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId, nextMethod));
+    }
+    generatePreviewWithMethod(presetId, nextMethod);
   };
   const canGeneratePreview = target.kind === "drawable"
     ? !isGenerating
@@ -237,6 +261,38 @@ export function MeshToolInspector() {
         <ExistingMeshWarning targets={excludedBatchTargets} />
       )}
 
+      {/*
+        世代切替トグル(評価用の薄い実装)。v6削除時はこの section ブロックごと撤去し、
+        MESH_GENERATION_METHOD_CHOICES から v7 行を残すか配列自体を畳めば評価機構が消える。
+      */}
+      <section
+        className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3"
+        data-testid="mesh-tool-generation-toggle"
+      >
+        <h3 className="text-xs font-semibold uppercase text-neutral-500">Generation</h3>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {MESH_GENERATION_METHOD_CHOICES.map((candidate) => (
+            <button
+              aria-label={`Use ${candidate.label} mesh generation`}
+              aria-pressed={method === candidate.method}
+              className={cn(
+                "flex min-h-8 items-center justify-center gap-2 rounded border px-2 text-xs font-medium transition",
+                method === candidate.method
+                  ? "border-teal-500/70 bg-teal-950/25 text-teal-100"
+                  : "border-neutral-800 bg-neutral-950 text-neutral-200 hover:border-neutral-700"
+              )}
+              data-testid="mesh-tool-generation-choice"
+              data-method={candidate.method}
+              key={candidate.method}
+              onClick={() => selectMethod(candidate.method)}
+              type="button"
+            >
+              {candidate.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <h3 className="text-xs font-semibold uppercase text-neutral-500">Preset</h3>
         <div className="mt-3 grid gap-2">
@@ -282,7 +338,7 @@ export function MeshToolInspector() {
             className="flex min-h-8 items-center justify-center gap-2 rounded border border-amber-600/70 bg-amber-950/25 px-2 text-xs font-semibold text-amber-100 transition enabled:hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-950 disabled:text-neutral-600"
             onClick={() => {
               if (target.kind === "drawable") {
-                setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId));
+                setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId, method));
               }
               generatePreview(presetId);
             }}
@@ -509,9 +565,10 @@ function formatMeshStatus(mesh: MeshDto | undefined): string {
 
 function createPreviewKey(
   drawableId: DrawableId,
-  presetId: MeshGenerationPresetId
+  presetId: MeshGenerationPresetId,
+  method: GeneratedMeshPreviewCommitMethod
 ): string {
-  return `${drawableId}:${presetId}`;
+  return `${drawableId}:${presetId}:${method}`;
 }
 
 function formatBatchWorkflowStatus(

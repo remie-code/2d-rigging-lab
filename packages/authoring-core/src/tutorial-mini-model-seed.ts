@@ -73,7 +73,7 @@ export const TUTORIAL_MINI_MODEL_IDS = {
   parameters: {
     faceYaw: "param_face_yaw",
     bodyBob: "param_body_bob",
-    mouthOpen: "param_mouth_open",
+    mouthOpen: "param_tutorial_mouth_open",
     hairSway: "param_hair_sway"
   },
   rigControls: {
@@ -88,7 +88,7 @@ export const TUTORIAL_MINI_MODEL_IDS = {
   keyformSets: {
     headRotationAngle:
       "keyset_rigcontrol_rig_tutorial_head_rotation_angledegrees_face_yaw_1",
-    mouthOpacity: "keyset_drawable_draw_tutorial_mouth_opacity_mouth_open_1",
+    mouthOpacity: "keyset_drawable_draw_tutorial_mouth_opacity_tutorial_mouth_open_1",
     frontHairSway: "keyset_mesh_mesh_tutorial_front_hair_vertices_hair_sway_1"
   }
 } as const;

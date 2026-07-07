@@ -14,8 +14,7 @@
       "operationType": "createWarpLattice2dRigControl",
       "status": "committed",
       "targetIds": [
-        "rig_wave32_body_warp_lattice",
-        "part_root"
+        "rig_wave32_body_warp_lattice"
       ],
       "addedTargets": [
         "rigControl:rig_wave32_body_warp_lattice"

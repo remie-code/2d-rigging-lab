@@ -103,7 +103,7 @@
     "operationLogPath": "operations/log.jsonl",
     "operationLogTrailingNewline": true,
     "operationLogEntryPresent": true,
-    "fileSetEntryCount": 18,
+    "fileSetEntryCount": 19,
     "generatedArtifactPaths": [
       "runtime/snapshots/snap_rig_control_keyform_angle_operation_0.runtime-snapshot.json",
       "runtime/snapshots/snap_rig_control_keyform_angle_operation_1.runtime-snapshot.json",

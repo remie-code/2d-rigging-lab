@@ -13,7 +13,6 @@
     "addedParameter": {
       "parameterId": "param_fixture_smile",
       "displayName": "Fixture Smile",
-      "semanticRole": "mouth",
       "valueSource": "authoredInput",
       "min": 0,
       "max": 1,

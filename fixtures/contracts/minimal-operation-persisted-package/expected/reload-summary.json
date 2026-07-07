@@ -10,8 +10,6 @@
   "committedParameter": {
     "parameterId": "param_persisted_smile",
     "displayName": "Persisted Smile",
-    "semanticRole": "mouth",
-    "projectPresetAlias": "private-persisted-smile-control",
     "valueSource": "authoredInput",
     "min": 0,
     "max": 1,

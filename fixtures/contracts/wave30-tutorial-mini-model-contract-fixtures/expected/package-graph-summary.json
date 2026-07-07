@@ -59,7 +59,7 @@
       "maskrel_tutorial_eye_mask_to_eye"
     ],
     "opacityKeyformIds": [
-      "keyset_drawable_draw_tutorial_mouth_opacity_mouth_open_1"
+      "keyset_drawable_draw_tutorial_mouth_opacity_tutorial_mouth_open_1"
     ]
   },
   "rigControlKeyform": {
@@ -69,7 +69,7 @@
   },
   "dynamics": {
     "dynamicsGroupId": "dyn_tutorial_hair_sway",
-    "driverParameterIds": [
+    "inputParameterIds": [
       "param_face_yaw",
       "param_body_bob"
     ],
