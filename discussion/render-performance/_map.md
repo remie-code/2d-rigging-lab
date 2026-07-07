@@ -32,11 +32,14 @@
 - 二重評価(評価=描画の2倍)は **StrictMode の開発モード二重実行**で確定([double-evaluation-diagnosis.md](double-evaluation-diagnosis.md))。本番には無いが、ユーザーの日常作業は dev server のため体感に直撃
 - 第二標的: deformerVertex 17%(オブジェクト生成+toFixed+クローン)。副次: 全メッシュ毎フレーム WebGL 再アップロード
 
+## Editor 側クローズ(2026-07-08 ユーザー受け入れ)
+
+Perf Wave 2 の成果をユーザーが実モデルで確認し「**Editor の動作としては十分**」と受け入れ。**案C(レンダー外化)と60fps続行は不要としてクローズ**(必要が再燃したら improvement-design §4 から再開)。
+
 ## 次の行動
 
-1. **Perf Wave 2 完了**([implementation/orchestration/perf-wave2-plan.md](implementation/orchestration/perf-wave2-plan.md)): Batch1 案A(選択駆動遅延化)・Batch2 案D+E(表示経路最適化)・Batch3 統合(before/after・計測003手順)すべて完了。合成ベンチで主経路の evaluation 全体を大幅削減(§measurements)。詳細は [final-report.md](implementation/waves/perf-wave2/final-report.md)。
-2. **→ ユーザー実モデル計測003**: final-report §「ユーザー実モデル計測003の手順と30fps判定方法」に従い、実モデルでスライダー操作の `canvas.evaluation.ms` avg を計測。**avg ≤ 33ms なら 30fps 達成**。dev の StrictMode 二重評価は「本番相当=1回分 / dev 体感=2回分」の両面で読む。
-3. 計測003の結果で続行(案C レンダー外化 / 60fps狙い)の要否を実数判断。**案C は保留のまま**。
+1. **Runtime Player 側の調査**(Sylph 委任済み): Player のホットパス・既存キャッシュの被覆・Editor と同型の非効率(毎フレーム全量頂点評価・toFixed・クローン)の有無・Editor 改善(案D系)の移植可能性 → [player-survey.md](player-survey.md) に記録予定
+2. 調査結果を見て Player 改善の要否・スコープをユーザーと判断(未決事項の解消)
 
 ## 確定済み(設計・実装)
 
