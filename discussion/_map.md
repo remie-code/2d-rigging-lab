@@ -40,6 +40,7 @@
 | [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 前提合意4文書（可解性 / 運用方針 / 閉問題アプローチ / craft設計）と第一閉問題（01-eyeball-x）定義を記録済み |
 | [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | Wave 1/1.1 実装完了。往復2所見「v6/v7一長一短」により保留中(v6/v7併存・トグル残置) |
 | [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | 現状調査Recorded・方針Accepted(2026-07-07)。Perf Wave 1(計測基盤)進行中 |
+| [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | why合意・分解Accepted(2026-07-08)。第一手=WS1(shell)未着手。詳細は下層mapへ委譲 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
@@ -65,6 +66,7 @@
 | Model Authoring topic | 「Fableに2Dモデルを作らせる」挑戦を [model-authoring/](model-authoring/) として作成（2026-07-02）。可解性分析・運用方針（ヘッドレス専有 / Git巻き戻し / 判定の梯子）・閉問題アプローチを premises/ に合意記録済み。第一閉問題は [model-authoring/closed-problems/01-eyeball-x/problem-definition.md](model-authoring/closed-problems/01-eyeball-x/problem-definition.md) |
 | Mesh Generation topic | メッシュ自動生成の商用風改修を [mesh-generation/](mesh-generation/) として作成（2026-07-07）。Wave 1(v7実装)・Wave 1.1(境界非クランプ+密度)完了。目視評価 往復2 の所見「v6/v7一長一短」により**保留中**(v6/v7併存・トグル残置・Wave 2棚上げ)。経緯は [mesh-generation/evaluation-log.md](mesh-generation/evaluation-log.md) |
 | Render Performance topic | Editor/Viewer 描画パフォーマンス改善を [render-performance/](render-performance/) として作成（2026-07-07）。現状調査は [reports/editor-render-performance/](reports/editor-render-performance/)。方針合意済み(主戦場=Editor共有経路 / 決定性二層分離 / 計測→設計)。Perf Wave 1(計測基盤)から実行 |
+| Editor Electron Migration topic | apps/editor の Web→Electron 移行を [editor-electron-migration/](editor-electron-migration/) として作成（2026-07-08）。why合意・分解(3系統コード調査由来)をAccepted。第一手=WS1(shell)、本丸=WS2(persistence node:fs化)。FS Access は Electron Chromium で存続するため移行は非破壊・段階的。permanent除去(portable-JSON)のみ要確認 |
 
 ## 次の行動
 
@@ -77,6 +79,7 @@
 7. メッシュ自動生成の商用風改修では [mesh-generation/_map.md](mesh-generation/_map.md) を入口にする(現在保留中)。
 8. 描画パフォーマンス改善では [render-performance/_map.md](render-performance/_map.md) を入口にする。
 9. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
+10. editor の Electron 移行では [editor-electron-migration/_map.md](editor-electron-migration/_map.md) を入口にする。第一手は WS1(shell)実装→実機観測。
 
 ## 未決事項
 
