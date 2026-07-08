@@ -1,7 +1,11 @@
 # 母音リップシンクの形状ブレンド — 単一勝者(argmax)から正規化凸ブレンドへ
 
-> Status: **Draft**（設計合意 2026-07-08。ユーザーとの往復で方針・τ 接地・え 目視・強度 s まで合意。未実装）。
+> Status: **Implemented**（wave23 / source・tests complete / clean review pass。設計合意 2026-07-08。**実機ユーザー gate 待ち → §5 検証2**）。実装レポート: `../runtime-player/implementation/waves/wave23/wave23-final-integration-report.md` / Domain A レポート: `../runtime-player/implementation/waves/wave23/wave23-domain-a-vowel-shape-blend-report.md` / クリーンレビュー: `../runtime-player/implementation/reviews/wave23/wave23-final-clean-integration-review.md`
 > 関係: [vowel-lipsync-mouth-open-coupling.md](vowel-lipsync-mouth-open-coupling.md)（Wave22, Implemented）の後続。Wave22 の「mouth_open = 勝者 w」を「mouth_open = ブレンド強度 s」へ一般化し、[vowel-lipsync-mapping.md](vowel-lipsync-mapping.md) のリグ契約 **cp17「単一 Vowel 非ゼロ」を意図的に解除**する。
+>
+> 実装確定事実（wave23）:
+> - 推定器の返り値 `VowelEstimate` を `{ winner, weight }` → **`{ s, weightByVowel }`**（正規化済み重みベクトル + 強度 s）へ拡張。**正規化（softmax → per-母音 strength 前段 bias → 正規化）を estimator に集約**し、写像層は `weightByVowel[v]` を読み `s × 重み` を出すだけ（strength の末端二重適用なし）。ヒステリシス撤去・ゲート維持。τ = 0.30 × median(母音間 Δ 距離) を参照確定時1回キャッシュ。
+> - publish 挙動: リップシンク**有効・ゲート開**で5母音 `param_mouth_vowel_*` を**毎フレーム発行**（softmax は厳密非0）。**ゲート閉/中立**は s=0 で全母音を**有限値0**で発行（旧 argmax の敗者 null＝未発行から変化）。disabled/非対応は従来どおり未発行で jawOpen フォールバック。
 > データ基盤: `test_data/iFaceMocap/vowels/vowel-captures.json`（推定器と同一の8次元縮約・`weightedDistance` で解析。母音間距離 中央値≈0.51 等 → §6）。
 
 ## 1. 問題（病巣）

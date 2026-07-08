@@ -2,6 +2,7 @@
 
 > Status: **Implemented**（wave107 final complete / clean review pass。実機ユーザー gate 待ち → §5 検証2）。2026-07-06 ユーザー承認「dynamicsと同じ流れだ」。承認時の追加要件 = リップシンクの ON/OFF トグル → §3.2。細部の初期値は実装 wave で実測から導出。実装レポート: `../implementation/waves/wave107/wave107-final-integration-report.md` / クリーンレビュー: `../implementation/reviews/wave107/final-clean-review.md`
 > 後続（mouth-open 駆動）: `param_mouth_open` の駆動元は wave22 で生 jawOpen → 発話強度 w へ差し替えられた（リップシンク有効時のみ。無効/非対応は本文どおり jawOpen 駆動を温存）。後続設計と実装事実は [vowel-lipsync-mouth-open-coupling.md](vowel-lipsync-mouth-open-coupling.md)（Implemented, wave22）を参照。本文の設計判断は不変。
+> 後続（cp17 解除）: 本文が明言し写像層が構造的に強制していた**リグ契約 cp17「単一の Vowel が非ゼロ」は wave23 で意図的に解除された**。母音出力は「勝者のみ非ゼロ」→「各母音に `s × 正規化重み`（合計≈s）」の正規化凸ブレンドへ一般化（有効・ゲート開で5母音同時発行）。後続設計と実装事実は [vowel-lipsync-shape-blend.md](vowel-lipsync-shape-blend.md)（Implemented, wave23）を参照。§2〜§4 の分類/強度/スロット/キャリブレーション設計は不変。
 > 調査事実: [research/player-ifacialmocap-survey.md](../model-authoring/research/player-ifacialmocap-survey.md) / [player-calibration-survey.md](../model-authoring/research/player-calibration-survey.md) / [player-mapping-strength-survey.md](../model-authoring/research/player-mapping-strength-survey.md)
 > 実測一次データ: `test_data/iFaceMocap/vowels/vowel-captures.json`（2026-07-06、ユーザー本人の発音を各ラベル約90フレーム窓平均。採取ツール: `apps/runtime-player/tools/capture-vowel-frames.ts`）
 

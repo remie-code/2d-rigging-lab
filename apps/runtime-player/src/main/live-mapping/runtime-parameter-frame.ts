@@ -374,7 +374,9 @@ function createVowelValue(input: {
   // so it is NOT reapplied here (that would double-count strength — invariant
   // §3.2 C). This deliberately bypasses createWeightValue's tail strength
   // multiply; with strength omitted the emitted value is just the target-mapped
-  // activation.
+  // activation. It also deliberately skips createWeightValue's `target.default`
+  // pivot, mapping activation linearly across target.min..max so a future vowel
+  // target with default ≠ 0 still yields the intended min..max blend.
   const activation = estimate.s * estimate.weightByVowel[vowelLabel];
   const targetActivation = input.slot.invert ? 1 - activation : activation;
 

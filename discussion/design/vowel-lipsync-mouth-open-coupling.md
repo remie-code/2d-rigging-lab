@@ -2,6 +2,7 @@
 
 > Status: **Implemented**（wave22 / source・tests complete / clean review pass。第一増分＝最小構成。実機ユーザー gate 待ち → §5 検証1）。2026-07-08 ユーザーとの往復で方針合意。実装レポート: `../runtime-player/implementation/waves/wave22/wave22-final-integration-report.md` / Domain A レポート: `../runtime-player/implementation/waves/wave22/wave22-domain-a-mouth-open-vowel-coupling-report.md` / クリーンレビュー: `../runtime-player/implementation/reviews/wave22/wave22-final-clean-integration-review.md`
 > 関係: [vowel-lipsync-mapping.md](vowel-lipsync-mapping.md)（Implemented, wave107）の後続。既存の §3.2 トグルと §2.3 強度 w を再利用し、`param_mouth_open` の駆動元だけを変える。リグ契約「単一 Vowel 非ゼロ」（cp17）は不変。
+> 後続（mouth_open=s へ一般化）: wave23 で母音出力が単一勝者 → 正規化凸ブレンド化（cp17 解除）されたのに伴い、本設計の `mouth_open = 勝者 w` は **`mouth_open = ブレンド強度 s`** へ一般化された（τ→0 で s→w に収束し本設計と後方互換）。後続設計と実装事実は [vowel-lipsync-shape-blend.md](vowel-lipsync-shape-blend.md)（Implemented, wave23）を参照。本設計の「箱の開きを発話強度で駆動する」判断は不変。
 > 実測一次データ: `test_data/iFaceMocap/vowels/vowel-captures.json`（母音別 jawOpen 平均: あ=.61 / い=.11 / う=.15 / え=.24 / お=.27 / neutral=.04）。
 
 ## 1. 問題（病巣）

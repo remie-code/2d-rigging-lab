@@ -583,7 +583,10 @@ describe("Runtime Player parameter frame mapping", () => {
       trackingFrame: createVowelTrackingFrame("neutral"),
       sessionNeutral: null,
       inputProfile: createTemporaryDefaultInputProfile(),
-      slots: [createSlot("mouth-open", target("param_mouth_open", 0, 1, 0))],
+      slots: [
+        createSlot("mouth-open", target("param_mouth_open", 0, 1, 0)),
+        ...createVowelSlots()
+      ],
       sequence: 28,
       producedAtMs: 2800,
       vowelLipsyncEnabled: true,
@@ -593,6 +596,20 @@ describe("Runtime Player parameter frame mapping", () => {
     // neutral activity (~0.0001) is below the gate → { s: 0, weightByVowel: 0… } →
     // activation 0. mouth-open never returns null, so a finite 0 is emitted.
     expect(frame.parameterValues.param_mouth_open).toBe(0);
+
+    // cp17 lifted: with the gate closed the five vowel params must still each be
+    // emitted as a finite 0 (not undefined). s = 0 → every activation 0 →
+    // target.min (= 0). This pins that output-contract change at the mapping layer.
+    for (const key of [
+      "param_mouth_vowel_a",
+      "param_mouth_vowel_i",
+      "param_mouth_vowel_u",
+      "param_mouth_vowel_e",
+      "param_mouth_vowel_o"
+    ] as const) {
+      expect(key in frame.parameterValues).toBe(true);
+      expect(frame.parameterValues[key]).toBe(0);
+    }
   });
 
   it("shifts the dominant vowel immediately when the input vowel changes (no hysteresis)", () => {
