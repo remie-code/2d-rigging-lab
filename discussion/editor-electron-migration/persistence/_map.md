@@ -10,7 +10,7 @@
 |---|---|---|
 | [ws2-design.md](ws2-design.md) | node:fs アダプタ契約 / IPC / write-read プロトコル / 設計判断 | Accepted |
 | [ws2-plan.md](ws2-plan.md) | WS2 wave-plan | Accepted |
-| [ws2-domain-report.md](ws2-domain-report.md) | Domain A 完了報告 | pass(smoke 待ち) |
+| [ws2-domain-report.md](ws2-domain-report.md) | Domain A 完了報告 | 完了 / pass |
 | [ws2-review.md](ws2-review.md) | Lane A/B 判定 | pass / pass |
 
 ## 結果

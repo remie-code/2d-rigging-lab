@@ -40,6 +40,8 @@ WS2 実装は Gnome が完了。最初の Orch-Sylph はレビュー2本を放�
 - 実 Electron IPC 越しの Uint8Array structured-clone 往復(現状は手動 smoke のみ)。
 - Windows UNC 絶対 relPath / drive-relative(`C:foo`)の境界テスト固定。
 
+**決定(ユーザー、2026-07-08)**: 設計残差2件(symlink / 種別衝突丸め)は **accepted** — いずれも発火条件が現行の脅威モデル(単一ユーザー・ローカル private lab)の外で、web 版と同等以上の姿勢。将来 network / multi-user 文脈に出る場合に realpath 化を再検討する記録として残す。テスト強化4件は **deferred(任意フォロー)** — レビューが構造的正しさを確認済みで WS2 の pass は不変。
+
 ## 判定
 
 **pass。** ブロッカー・needs_fix なし。残差はいずれも accepted / 任意フォロー。
