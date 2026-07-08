@@ -17,7 +17,8 @@ import {
   defaultVowelReferenceVectors,
   extractVowelFeatureVector,
   RuntimePlayerVowelLipsyncState,
-  type VowelEstimate
+  type VowelEstimate,
+  type VowelLabel
 } from "./vowel-lipsync-estimator";
 import { convertInputProfileVowelCalibrationToReferences } from "../input-profiles/input-profile-vowel-references";
 
@@ -46,6 +47,12 @@ export function createRuntimeParameterFrame(
   const parameterValues: Record<string, number> = {};
   const vowelLipsyncEnabled = input.vowelLipsyncEnabled ?? false;
 
+  // Per-vowel strength is a normalization-stage bias (design §2.3): gather the
+  // five mouth-vowel slots' strengths once so the estimator can fold them into
+  // the blend BEFORE normalizing. Applied here means it must NOT be reapplied at
+  // the tail (see createVowelValue) — that would double-count strength.
+  const vowelStrengthByVowel = collectVowelStrengths(input.slots);
+
   // Shared vowel estimator: run at most once per frame and memoize, so the five
   // vowel slots read a single classification result (design §3 "共有推定器").
   // When disabled the estimator is never invoked (short-circuit, zero cost).
@@ -60,7 +67,8 @@ export function createRuntimeParameterFrame(
             ? defaultVowelReferenceVectors
             : convertInputProfileVowelCalibrationToReferences(
                 input.inputProfile.calibration.vowels
-              )
+              ),
+        strengthByVowel: vowelStrengthByVowel
       });
     }
 
@@ -155,19 +163,19 @@ function createSlotParameterValue(input: {
         )
       });
     case "mouth-open":
-      // Design vowel-lipsync-mouth-open-coupling §2.2/§3.2: when vowel lipsync is
-      // enabled+supported (signalled by readVowelEstimate being wired in for this
-      // case), the box opening is driven by the winning vowel's intensity w so it
-      // matches how the vowel shapes are authored ("開き切り前提"). A closed vowel
-      // like "い" (low jawOpen) still opens the box because w ≈ 1 for a well-formed
-      // vowel. When the gate is closed / no winner (winner === null → weight 0) the
-      // activation is 0 (box closes). Otherwise (disabled/unsupported) keep the
-      // legacy jawOpen normalization as a fallback.
+      // Design vowel-lipsync-shape-blend §2.4 (generalizes Wave22): when vowel
+      // lipsync is enabled+supported (signalled by readVowelEstimate being wired
+      // in for this case), the box opening is driven by the blend intensity s so
+      // it matches how the vowel shapes are authored ("開き切り前提"). A closed
+      // vowel like "い" (low jawOpen) still opens the box because s ≈ 1 for a
+      // well-formed vowel. When the gate is closed the activation is 0 (box
+      // closes, s = 0). Otherwise (disabled/unsupported) keep the legacy jawOpen
+      // normalization as a fallback.
       if (input.readVowelEstimate !== undefined) {
         const estimate = input.readVowelEstimate();
         return createWeightValue({
           slot: input.slot,
-          activation: estimate.winner === null ? 0 : estimate.weight
+          activation: estimate.s
         });
       }
       return createWeightValue({
@@ -350,24 +358,66 @@ function createVowelValue(input: {
   readonly readVowelEstimate?: () => VowelEstimate;
 }): number | null {
   const vowelLabel = input.definition.vowelLabel;
-  if (vowelLabel === undefined || input.readVowelEstimate === undefined) {
+  if (
+    vowelLabel === undefined ||
+    input.readVowelEstimate === undefined ||
+    input.slot.target === null
+  ) {
     return null;
   }
 
   const estimate = input.readVowelEstimate();
 
-  // Argmax structure: only the winning vowel emits a value; the other four
-  // return null so their parameterId is not published (design §3, single-Vowel
-  // non-zero). The intensity w is fed through the shared weight path so that
-  // per-slot strength scales it (0 default → w × strength).
-  if (estimate.winner !== vowelLabel) {
-    return null;
+  // Convex-blend structure (design vowel-lipsync-shape-blend §2.1, cp17 lifted):
+  // every vowel emits `s × normalized weight` (Σ over vowels = s). Per-vowel
+  // strength was already folded into weightByVowel as a pre-normalization bias,
+  // so it is NOT reapplied here (that would double-count strength — invariant
+  // §3.2 C). This deliberately bypasses createWeightValue's tail strength
+  // multiply; with strength omitted the emitted value is just the target-mapped
+  // activation.
+  const activation = estimate.s * estimate.weightByVowel[vowelLabel];
+  const targetActivation = input.slot.invert ? 1 - activation : activation;
+
+  return (
+    input.slot.target.min +
+    targetActivation * (input.slot.target.max - input.slot.target.min)
+  );
+}
+
+/**
+ * Gather the per-vowel strength bias from the five mouth-vowel slots so the
+ * estimator can apply it once, before normalizing the blend (design §2.3). A
+ * vowel with no enabled/targeted slot defaults to strength 1 (neutral bias);
+ * `strength = 0` drops that vowel from the blend. This must run before any
+ * readVowelEstimate() call, since mouth-open may trigger the estimate before the
+ * vowel slots are reached in the main loop.
+ */
+function collectVowelStrengths(
+  slots: readonly RuntimePlayerMappingSlot[]
+): Record<VowelLabel, number> {
+  const strengths: Record<VowelLabel, number> = {
+    a: 1,
+    i: 1,
+    u: 1,
+    e: 1,
+    o: 1
+  };
+
+  for (const slot of slots) {
+    if (!slot.enabled || slot.target === null) {
+      continue;
+    }
+
+    const definition = findSemanticSlotDefinition(slot.slotId);
+    if (
+      definition.sourceKind === "mouth-vowel" &&
+      definition.vowelLabel !== undefined
+    ) {
+      strengths[definition.vowelLabel] = slot.strength;
+    }
   }
 
-  return createWeightValue({
-    slot: input.slot,
-    activation: estimate.weight
-  });
+  return strengths;
 }
 
 function createBodyXValue(input: {

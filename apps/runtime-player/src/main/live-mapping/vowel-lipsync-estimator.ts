@@ -45,9 +45,19 @@ export type VowelReferenceVectors = {
   readonly o: VowelFeatureVector;
 };
 
+/**
+ * Normalized vowel-blend estimate (design vowel-lipsync-shape-blend §2.1).
+ *
+ * `s` is the overall mouth-open intensity `s = activity / (activity + d_min)`
+ * (0 at rest, → 1 near a vowel reference). `weightByVowel` is the softmax blend
+ * over the five vowels, normalized to sum to 1 (per-vowel strength already folded
+ * in as a pre-normalization bias — see `computeVowelBlend`). The mapping layer
+ * emits `s × weightByVowel[v]` per vowel (Σ = s) and `mouth_open = s`. When gated
+ * below the activity threshold `s = 0` and every weight is 0 (mouth closed).
+ */
 export type VowelEstimate = {
-  readonly winner: VowelLabel | null;
-  readonly weight: number;
+  readonly s: number;
+  readonly weightByVowel: Readonly<Record<VowelLabel, number>>;
 };
 
 const featureKeys: readonly (keyof VowelFeatureVector)[] = [
@@ -93,25 +103,17 @@ export const vowelDimensionWeights: VowelFeatureVector = {
 export const vowelGateActivityThreshold = 0.15;
 
 /**
- * Hysteresis margin: a challenger vowel must beat the current winner's distance
- * by at least this much (i.e. be this much closer) before it is allowed to take
- * over (design §2.3 hysteresis).
+ * Softmax temperature factor `k` (design vowel-lipsync-shape-blend §2.2).
  *
- * Derivation: during "u" the ARKit funnel/pucker channels swing wildly
- * (mouthFunnel 0.31..0.71, mouthPucker 0.25..0.61). At the low-funnel/low-pucker
- * corner the raw nearest reference flips to "o" by only 0.017. A margin of 0.05
- * absorbs that flip so "u" is held. Source data:
+ * The blend temperature is `τ = k × (median pairwise inter-vowel distance)`, so
+ * the sharpness is anchored to the calibrated reference geometry and stays
+ * portable across users/calibrations. `k = 0.30` sits in the design's 0.25–0.35
+ * range (measured τ ≈ 0.13–0.18 for the bundled references, median ≈ 0.51).
+ * Smaller τ sharpens toward argmax (Wave22 single-winner backward compat);
+ * larger τ mixes more. Source data:
  * test_data/iFaceMocap/vowels/vowel-captures.json (captured 2026-07-06).
  */
-export const vowelHysteresisMargin = 0.05;
-
-/**
- * Hysteresis frame count: a challenger must remain the margin-dominant candidate
- * for this many consecutive frames before the winner changes (design §2.3).
- * Three frames (~50ms at 60fps) rejects single-frame ARKit spikes without adding
- * perceptible latency.
- */
-export const vowelHysteresisFrames = 3;
+export const vowelBlendTemperatureFactor = 0.3;
 
 /**
  * Default reference vectors bundled for users who have not calibrated their own
@@ -259,11 +261,14 @@ function scoreVowels(
 }
 
 /**
- * Intensity `w = d(Δ, neutral) / (d(Δ, neutral) + d(Δ, nearest vowel))`
- * clamped to 0..1 (design §2.3). 0 near neutral, → 1 near a vowel reference.
+ * Blend intensity `s = activity / (activity + d_min)` clamped to 0..1
+ * (design vowel-lipsync-shape-blend §2.4). `activity` = distance of the live
+ * delta from neutral; `d_min` = **raw argmax nearest-vowel distance** (NOT a
+ * hysteresis winner distance). 0 near neutral, → 1 near a vowel reference. As
+ * τ→0 this collapses to Wave22's `w` (single-winner backward compat).
  */
-function computeIntensity(activity: number, winnerDistance: number): number {
-  const denominator = activity + winnerDistance;
+function computeIntensity(activity: number, dMin: number): number {
+  const denominator = activity + dMin;
   if (denominator <= 0) {
     return 0;
   }
@@ -272,98 +277,203 @@ function computeIntensity(activity: number, winnerDistance: number): number {
 }
 
 /**
- * Per-frame estimator state (design §2.3): holds the confirmed winner plus a
- * candidate/streak counter for hysteresis. Mirrors RuntimePlayerBodyFollowState
- * (class + reset()) so it can be injected and unit-tested deterministically.
+ * Median of the pairwise `weightedDistance` between the five calibrated vowel
+ * deltas `Δ_v = subtract(references.v, references.neutral)` (design §2.2/§6).
+ * Ten pairs → median is the mean of the 5th/6th order statistics. Used to derive
+ * the blend temperature `τ = k × median`; computed once per reference set and
+ * cached by the estimator (never per frame).
+ */
+export function computeVowelBlendTemperature(
+  references: VowelReferenceVectors
+): number {
+  const deltas = vowelLabels.map((label) =>
+    subtract(references[label], references.neutral)
+  );
+
+  const distances: number[] = [];
+  for (let i = 0; i < deltas.length; i += 1) {
+    for (let j = i + 1; j < deltas.length; j += 1) {
+      distances.push(weightedDistance(deltas[i]!, deltas[j]!));
+    }
+  }
+
+  distances.sort((a, b) => a - b);
+  const mid = distances.length / 2;
+  const median =
+    distances.length % 2 === 0
+      ? (distances[mid - 1]! + distances[mid]!) / 2
+      : distances[Math.floor(mid)]!;
+
+  return vowelBlendTemperatureFactor * median;
+}
+
+/**
+ * Softmax vowel blend (design §2.1 stages ①②③). Given per-vowel classification
+ * distances, per-vowel strength bias, and the temperature τ, produces the
+ * normalized weight vector (Σ = 1 when any mass survives):
+ *
+ *   raw_v = exp(−(d_v − d_min) / τ)     ① softmax (d_min subtracted for
+ *                                          numerical stability; a common factor
+ *                                          that cancels under normalization)
+ *   biased_v = raw_v × strength_v       ② per-vowel pre-normalization bias
+ *   weight_v = biased_v / Σ_j biased_j  ③ normalize to a convex blend
+ *
+ * strength is applied here ONCE (the mapping layer must NOT reapply it at the
+ * tail). `strength_v = 0` drops that vowel from the blend. As τ→0 the nearest
+ * vowel's weight → 1 and the rest → 0 (single-winner backward compat). If every
+ * strength is 0 (or τ ≤ 0 with no unique nearest) the result is all zeros.
+ */
+export function computeVowelBlend(
+  distanceByVowel: Readonly<Record<VowelLabel, number>>,
+  strengthByVowel: Readonly<Record<VowelLabel, number>>,
+  tau: number
+): Record<VowelLabel, number> {
+  let minDistance = Number.POSITIVE_INFINITY;
+  for (const label of vowelLabels) {
+    if (distanceByVowel[label] < minDistance) {
+      minDistance = distanceByVowel[label];
+    }
+  }
+
+  const biased: Record<VowelLabel, number> = { a: 0, i: 0, u: 0, e: 0, o: 0 };
+  let sum = 0;
+  for (const label of vowelLabels) {
+    const raw =
+      tau > 0
+        ? Math.exp(-(distanceByVowel[label] - minDistance) / tau)
+        : distanceByVowel[label] <= minDistance
+          ? 1
+          : 0;
+    const value = raw * Math.max(0, strengthByVowel[label]);
+    biased[label] = value;
+    sum += value;
+  }
+
+  const weights: Record<VowelLabel, number> = { a: 0, i: 0, u: 0, e: 0, o: 0 };
+  if (sum > 0) {
+    for (const label of vowelLabels) {
+      weights[label] = biased[label] / sum;
+    }
+  }
+
+  return weights;
+}
+
+/**
+ * Per-frame estimator state (design vowel-lipsync-shape-blend §3). The blend is
+ * memoryless (no hysteresis — a continuous convex blend has no discrete winner
+ * to debounce), so the only persistent state is the cached blend temperature τ:
+ * `τ = k × median(inter-vowel distance)` is derived once per reference set and
+ * reused every frame. Mirrors RuntimePlayerBodyFollowState (class + reset()) so
+ * it can be injected and unit-tested deterministically.
  */
 export class RuntimePlayerVowelLipsyncState {
-  private confirmedWinner: VowelLabel | null = null;
-  private candidate: VowelLabel | null = null;
-  private candidateStreak = 0;
+  private cachedReferences: VowelReferenceVectors | null = null;
+  private cachedTemperature = 0;
 
   reset(): void {
-    this.confirmedWinner = null;
-    this.candidate = null;
-    this.candidateStreak = 0;
+    this.cachedReferences = null;
+    this.cachedTemperature = 0;
   }
 
   /**
-   * Advance the estimator by one frame and return the confirmed winner + its
-   * intensity. Returns { winner: null, weight: 0 } when gated below the activity
-   * threshold or before any winner is confirmed.
+   * Advance the estimator by one frame and return the normalized vowel blend +
+   * intensity `s`. Returns `{ s: 0, weightByVowel: 0… }` when gated below the
+   * activity threshold (mouth at rest). `strengthByVowel` are the per-vowel
+   * pre-normalization biases supplied by the mapping layer (default 1 each);
+   * they are applied ONCE inside the blend and must NOT be reapplied downstream.
    */
   estimate(input: {
     readonly features: VowelFeatureVector;
     readonly references: VowelReferenceVectors;
+    readonly strengthByVowel?: Readonly<Record<VowelLabel, number>>;
   }): VowelEstimate {
     const scores = scoreVowels(input.features, input.references);
 
-    // Gate: below the activity threshold the mouth is at rest. Clear state so a
-    // fresh vowel must re-confirm through hysteresis rather than snapping back.
+    // Gate: below the activity threshold the mouth is at rest → s = 0, all
+    // vowels 0 (box closes, design §2.4 / §3.1 gate).
     if (scores.activity < vowelGateActivityThreshold) {
-      this.confirmedWinner = null;
-      this.candidate = null;
-      this.candidateStreak = 0;
-      return emptyEstimate;
+      return gatedEstimate;
     }
 
-    this.updateConfirmedWinner(scores);
+    const tau = this.resolveTemperature(input.references);
+    const weightByVowel = computeVowelBlend(
+      scores.distanceByVowel,
+      input.strengthByVowel ?? defaultStrengthByVowel,
+      tau
+    );
+    // s uses the RAW argmax nearest distance (design §2.4 / invariant), not a
+    // per-vowel or hysteresis distance.
+    const s = computeIntensity(scores.activity, scores.winnerDistance);
 
-    if (this.confirmedWinner === null) {
-      return emptyEstimate;
-    }
-
-    const winnerDistance = scores.distanceByVowel[this.confirmedWinner];
-    const weight = computeIntensity(scores.activity, winnerDistance);
-
-    return { winner: this.confirmedWinner, weight };
+    return { s, weightByVowel };
   }
 
-  private updateConfirmedWinner(scores: VowelScores): void {
-    // First confirmation after a gate: adopt the raw nearest vowel immediately.
-    if (this.confirmedWinner === null) {
-      this.confirmedWinner = scores.winner;
-      this.candidate = null;
-      this.candidateStreak = 0;
-      return;
+  /**
+   * Resolve the cached blend temperature, recomputing the median only when the
+   * reference set actually changes (identity fast-path for the bundled default;
+   * content comparison for calibrated references, which are rebuilt each frame
+   * as fresh objects). Never recomputes per frame for a stable reference set.
+   */
+  private resolveTemperature(references: VowelReferenceVectors): number {
+    if (
+      this.cachedReferences === null ||
+      !referencesEqual(this.cachedReferences, references)
+    ) {
+      this.cachedTemperature = computeVowelBlendTemperature(references);
+      this.cachedReferences = references;
     }
 
-    if (scores.winner === this.confirmedWinner) {
-      this.candidate = null;
-      this.candidateStreak = 0;
-      return;
-    }
-
-    // A different vowel is closest. It may only take over if it beats the current
-    // winner by the hysteresis margin for N consecutive frames (design §2.3).
-    const currentWinnerDistance =
-      scores.distanceByVowel[this.confirmedWinner];
-    const challengerDistance = scores.distanceByVowel[scores.winner];
-    const marginDominant =
-      currentWinnerDistance - challengerDistance >= vowelHysteresisMargin;
-
-    if (!marginDominant) {
-      this.candidate = null;
-      this.candidateStreak = 0;
-      return;
-    }
-
-    if (this.candidate === scores.winner) {
-      this.candidateStreak += 1;
-    } else {
-      this.candidate = scores.winner;
-      this.candidateStreak = 1;
-    }
-
-    if (this.candidateStreak >= vowelHysteresisFrames) {
-      this.confirmedWinner = scores.winner;
-      this.candidate = null;
-      this.candidateStreak = 0;
-    }
+    return this.cachedTemperature;
   }
 }
 
-const emptyEstimate: VowelEstimate = { winner: null, weight: 0 };
+const zeroWeights: Readonly<Record<VowelLabel, number>> = {
+  a: 0,
+  i: 0,
+  u: 0,
+  e: 0,
+  o: 0
+};
+
+const gatedEstimate: VowelEstimate = { s: 0, weightByVowel: zeroWeights };
+
+const defaultStrengthByVowel: Readonly<Record<VowelLabel, number>> = {
+  a: 1,
+  i: 1,
+  u: 1,
+  e: 1,
+  o: 1
+};
+
+function referencesEqual(
+  a: VowelReferenceVectors,
+  b: VowelReferenceVectors
+): boolean {
+  if (a === b) {
+    return true;
+  }
+
+  const labels: readonly (keyof VowelReferenceVectors)[] = [
+    "neutral",
+    "a",
+    "i",
+    "u",
+    "e",
+    "o"
+  ];
+  for (const label of labels) {
+    const va = a[label];
+    const vb = b[label];
+    for (const key of featureKeys) {
+      if (va[key] !== vb[key]) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
 
 const zeroDelta: VowelFeatureVector = {
   jawOpen: 0,

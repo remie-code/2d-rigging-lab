@@ -335,13 +335,16 @@ describe("Runtime Player parameter frame mapping", () => {
     });
   });
 
-  it("emits only the winning vowel parameter when vowel lipsync is enabled", () => {
+  it("emits all five vowels as s × normalized weight when vowel lipsync is enabled", () => {
     const frame = createRuntimeParameterFrame({
       runtimeExportPayload: createPayload(),
       trackingFrame: createVowelTrackingFrame("a"),
       sessionNeutral: null,
       inputProfile: createTemporaryDefaultInputProfile(),
-      slots: createVowelSlots(),
+      slots: [
+        createSlot("mouth-open", target("param_mouth_open", 0, 1, 0)),
+        ...createVowelSlots()
+      ],
       sequence: 20,
       producedAtMs: 2000,
       vowelLipsyncEnabled: true,
@@ -354,16 +357,26 @@ describe("Runtime Player parameter frame mapping", () => {
       "param_mouth_vowel_u",
       "param_mouth_vowel_e",
       "param_mouth_vowel_o"
-    ];
-    const nonZero = vowelKeys.filter((key) =>
-      (frame.parameterValues[key] ?? 0) !== 0
-    );
+    ] as const;
 
-    expect(nonZero).toEqual(["param_mouth_vowel_a"]);
-    expect(frame.parameterValues.param_mouth_vowel_a).toBeGreaterThan(0.99);
-    // Losing vowels are not published at all (argmax → single non-zero).
-    expect(frame.parameterValues.param_mouth_vowel_i).toBeUndefined();
-    expect(frame.parameterValues.param_mouth_vowel_o).toBeUndefined();
+    // cp17 lifted: every vowel is now published (convex blend, softmax never
+    // exactly 0). "a" dominates at its own reference.
+    for (const key of vowelKeys) {
+      expect(frame.parameterValues[key]).toBeGreaterThan(0);
+    }
+    const aValue = frame.parameterValues.param_mouth_vowel_a ?? 0;
+    for (const key of vowelKeys) {
+      if (key !== "param_mouth_vowel_a") {
+        expect(aValue).toBeGreaterThan(frame.parameterValues[key] ?? 0);
+      }
+    }
+
+    // Σ over vowels = s = mouth-open (each vowel = s × weight, Σ weight = 1).
+    const vowelSum = vowelKeys.reduce(
+      (total, key) => total + (frame.parameterValues[key] ?? 0),
+      0
+    );
+    expect(vowelSum).toBeCloseTo(frame.parameterValues.param_mouth_open ?? 0, 6);
   });
 
   it("does not emit any vowel parameterId when vowel lipsync is disabled", () => {
@@ -386,48 +399,108 @@ describe("Runtime Player parameter frame mapping", () => {
     expect(frame.parameterValues.param_mouth_vowel_o).toBeUndefined();
   });
 
-  it("scales the winning vowel intensity by per-slot strength (weight path)", () => {
-    const state = new RuntimePlayerVowelLipsyncState();
+  it("applies per-vowel strength as a pre-normalization bias without double-applying", () => {
     const trackingFrame = createVowelTrackingFrame("a");
     const inputProfile = createTemporaryDefaultInputProfile();
+    const vowelKeys = [
+      "param_mouth_vowel_a",
+      "param_mouth_vowel_i",
+      "param_mouth_vowel_u",
+      "param_mouth_vowel_e",
+      "param_mouth_vowel_o"
+    ] as const;
+    const run = (
+      slots: readonly RuntimePlayerMappingSlot[],
+      sequence: number
+    ) =>
+      createRuntimeParameterFrame({
+        runtimeExportPayload: createPayload(),
+        trackingFrame,
+        sessionNeutral: null,
+        inputProfile,
+        slots: [createSlot("mouth-open", target("param_mouth_open", 0, 1, 0)), ...slots],
+        sequence,
+        producedAtMs: 2200 + sequence,
+        vowelLipsyncEnabled: true,
+        vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
+      });
 
-    const fullFrame = createRuntimeParameterFrame({
+    const baseline = run(createVowelSlots(), 22);
+    // Boost "i" strength: its relative share must rise (pre-normalization bias).
+    const boosted = run(
+      [
+        createSlot("mouth-vowel-a", target("param_mouth_vowel_a", 0, 1, 0)),
+        createSlot("mouth-vowel-i", target("param_mouth_vowel_i", 0, 1, 0), {
+          strength: 3
+        }),
+        createSlot("mouth-vowel-u", target("param_mouth_vowel_u", 0, 1, 0)),
+        createSlot("mouth-vowel-e", target("param_mouth_vowel_e", 0, 1, 0)),
+        createSlot("mouth-vowel-o", target("param_mouth_vowel_o", 0, 1, 0))
+      ],
+      23
+    );
+
+    expect(boosted.parameterValues.param_mouth_vowel_i ?? 0).toBeGreaterThan(
+      baseline.parameterValues.param_mouth_vowel_i ?? 0
+    );
+
+    // Double-apply pin: strength is folded into the blend once. Σ vowels stays
+    // = s (= mouth-open) even with a non-uniform strength. Were strength also
+    // reapplied at the tail, Σ would be s × Σ(weight × strength) ≠ s.
+    const sum = (values: Record<string, number>) =>
+      vowelKeys.reduce((total, key) => total + (values[key] ?? 0), 0);
+    expect(sum(baseline.parameterValues)).toBeCloseTo(
+      baseline.parameterValues.param_mouth_open ?? 0,
+      6
+    );
+    expect(sum(boosted.parameterValues)).toBeCloseTo(
+      boosted.parameterValues.param_mouth_open ?? 0,
+      6
+    );
+    // s itself is strength-independent, so mouth-open is unchanged by the boost.
+    expect(boosted.parameterValues.param_mouth_open).toBeCloseTo(
+      baseline.parameterValues.param_mouth_open ?? 0,
+      6
+    );
+  });
+
+  it("drops a vowel from the blend when its per-slot strength is 0", () => {
+    const frame = createRuntimeParameterFrame({
       runtimeExportPayload: createPayload(),
-      trackingFrame,
+      trackingFrame: createVowelTrackingFrame("a"),
       sessionNeutral: null,
-      inputProfile,
-      slots: [createSlot("mouth-vowel-a", target("param_mouth_vowel_a", 0, 1, 0))],
-      sequence: 22,
-      producedAtMs: 2200,
+      inputProfile: createTemporaryDefaultInputProfile(),
+      slots: [
+        createSlot("mouth-open", target("param_mouth_open", 0, 1, 0)),
+        createSlot("mouth-vowel-a", target("param_mouth_vowel_a", 0, 1, 0)),
+        createSlot("mouth-vowel-i", target("param_mouth_vowel_i", 0, 1, 0)),
+        createSlot("mouth-vowel-u", target("param_mouth_vowel_u", 0, 1, 0)),
+        createSlot("mouth-vowel-e", target("param_mouth_vowel_e", 0, 1, 0), {
+          strength: 0
+        }),
+        createSlot("mouth-vowel-o", target("param_mouth_vowel_o", 0, 1, 0))
+      ],
+      sequence: 29,
+      producedAtMs: 2900,
       vowelLipsyncEnabled: true,
       vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
     });
-    const halfFrame = createRuntimeParameterFrame({
-      runtimeExportPayload: createPayload(),
-      trackingFrame,
-      sessionNeutral: null,
-      inputProfile,
-      slots: [
-        createSlot("mouth-vowel-a", target("param_mouth_vowel_a", 0, 1, 0), {
-          strength: 0.5
-        })
-      ],
-      sequence: 23,
-      producedAtMs: 2300,
-      vowelLipsyncEnabled: true,
-      vowelLipsyncState: state
-    });
 
-    const full = fullFrame.parameterValues.param_mouth_vowel_a ?? 0;
-    const half = halfFrame.parameterValues.param_mouth_vowel_a ?? 0;
-    // default=0 so value = w × strength; strength 0.5 halves the emitted value.
-    expect(half).toBeCloseTo(full * 0.5, 6);
+    // "e" excluded from the blend (weight 0 → emitted 0); the rest still sum to s.
+    expect(frame.parameterValues.param_mouth_vowel_e).toBe(0);
+    const others = [
+      "param_mouth_vowel_a",
+      "param_mouth_vowel_i",
+      "param_mouth_vowel_u",
+      "param_mouth_vowel_o"
+    ].reduce((total, key) => total + (frame.parameterValues[key] ?? 0), 0);
+    expect(others).toBeCloseTo(frame.parameterValues.param_mouth_open ?? 0, 6);
   });
 
-  it("drives mouth-open from the winning vowel intensity when vowel lipsync is enabled", () => {
+  it("drives mouth-open from the blend intensity s when vowel lipsync is enabled", () => {
     // For every vowel the capture-mean frame reproduces that vowel's reference, so
-    // winnerDistance ≈ 0 and w ≈ 1. The box therefore opens fully even for the
-    // closed vowel "i" (jawOpen ≈ 0.11) — the design point of Wave22.
+    // d_min ≈ 0 and s ≈ 1. The box therefore opens fully even for the closed vowel
+    // "i" (jawOpen ≈ 0.11) — mouth_open = s (design vowel-lipsync-shape-blend §2.4).
     for (const label of ["a", "i"] as const) {
       const frame = createRuntimeParameterFrame({
         runtimeExportPayload: createPayload(),
@@ -441,7 +514,7 @@ describe("Runtime Player parameter frame mapping", () => {
         vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
       });
 
-      // w ≈ 1 for the capture mean; assert it clearly opens (well above the raw
+      // s ≈ 1 for the capture mean; assert it clearly opens (well above the raw
       // jawOpen normalization the fallback would produce, see the "i" case below).
       expect(frame.parameterValues.param_mouth_open).toBeGreaterThan(0.9);
     }
@@ -475,7 +548,7 @@ describe("Runtime Player parameter frame mapping", () => {
       vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
     });
 
-    // Enabled: w-driven → box wide open.
+    // Enabled: s-driven → box wide open.
     expect(enabled.parameterValues.param_mouth_open).toBeGreaterThan(0.5);
     // Disabled: legacy jawOpen normalization → (jawOpen - jawOpenMin) / (max - min)
     // = 0.1102 / 0.8, box nearly closed. This gap is the whole point of Wave22.
@@ -517,12 +590,12 @@ describe("Runtime Player parameter frame mapping", () => {
       vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
     });
 
-    // neutral activity (~0.0001) is below the gate → { winner: null, weight: 0 } →
+    // neutral activity (~0.0001) is below the gate → { s: 0, weightByVowel: 0… } →
     // activation 0. mouth-open never returns null, so a finite 0 is emitted.
     expect(frame.parameterValues.param_mouth_open).toBe(0);
   });
 
-  it("follows the new winner's intensity after a hysteresis-confirmed vowel switch", () => {
+  it("shifts the dominant vowel immediately when the input vowel changes (no hysteresis)", () => {
     const state = new RuntimePlayerVowelLipsyncState();
     const inputProfile = createTemporaryDefaultInputProfile();
     const slots = [
@@ -543,25 +616,20 @@ describe("Runtime Player parameter frame mapping", () => {
         vowelLipsyncState: state
       });
 
-    // Confirm "i": first winner after a gate is adopted immediately.
+    // "i" input → "i" dominates the blend.
     const iFrame = runFrame("i");
-    expect(iFrame.parameterValues.param_mouth_vowel_i).toBeGreaterThan(0.9);
-    expect(iFrame.parameterValues.param_mouth_vowel_a).toBeUndefined();
+    const iValue = iFrame.parameterValues.param_mouth_vowel_i ?? 0;
+    expect(iValue).toBeGreaterThan(iFrame.parameterValues.param_mouth_vowel_a ?? 0);
     expect(iFrame.parameterValues.param_mouth_open).toBeGreaterThan(0.9);
 
-    // Feed "a" until hysteresis (vowelHysteresisFrames = 3) confirms the switch.
-    let aFrame = iFrame;
-    for (let i = 0; i < 4; i += 1) {
-      aFrame = runFrame("a");
-    }
-
-    // Winner switched to "a"; mouth-open now follows the new winner's w (≈ 1).
-    expect(aFrame.parameterValues.param_mouth_vowel_a).toBeGreaterThan(0.9);
-    expect(aFrame.parameterValues.param_mouth_vowel_i).toBeUndefined();
+    // A single "a" frame flips dominance immediately — no hysteresis debounce.
+    const aFrame = runFrame("a");
+    const aValue = aFrame.parameterValues.param_mouth_vowel_a ?? 0;
+    expect(aValue).toBeGreaterThan(aFrame.parameterValues.param_mouth_vowel_i ?? 0);
     expect(aFrame.parameterValues.param_mouth_open).toBeGreaterThan(0.9);
   });
 
-  it("emits mouth-open and the winning vowel together without disturbing each other", () => {
+  it("emits mouth-open and the full vowel blend together (Σ vowels = s)", () => {
     const frame = createRuntimeParameterFrame({
       runtimeExportPayload: createPayload(),
       trackingFrame: createVowelTrackingFrame("a"),
@@ -577,13 +645,26 @@ describe("Runtime Player parameter frame mapping", () => {
       vowelLipsyncState: new RuntimePlayerVowelLipsyncState()
     });
 
-    // Box opens (w-driven) and only the winning vowel "a" is published.
+    // Box opens (s-driven); "a" dominates and every vowel is published (blend).
     expect(frame.parameterValues.param_mouth_open).toBeGreaterThan(0.9);
-    expect(frame.parameterValues.param_mouth_vowel_a).toBeGreaterThan(0.9);
-    expect(frame.parameterValues.param_mouth_vowel_i).toBeUndefined();
-    expect(frame.parameterValues.param_mouth_vowel_u).toBeUndefined();
-    expect(frame.parameterValues.param_mouth_vowel_e).toBeUndefined();
-    expect(frame.parameterValues.param_mouth_vowel_o).toBeUndefined();
+    const aValue = frame.parameterValues.param_mouth_vowel_a ?? 0;
+    expect(aValue).toBeGreaterThan(0.5);
+    const vowelSum = [
+      "param_mouth_vowel_a",
+      "param_mouth_vowel_i",
+      "param_mouth_vowel_u",
+      "param_mouth_vowel_e",
+      "param_mouth_vowel_o"
+    ].reduce((total, key) => total + (frame.parameterValues[key] ?? 0), 0);
+    for (const key of [
+      "param_mouth_vowel_i",
+      "param_mouth_vowel_u",
+      "param_mouth_vowel_e",
+      "param_mouth_vowel_o"
+    ]) {
+      expect(aValue).toBeGreaterThan(frame.parameterValues[key] ?? 0);
+    }
+    expect(vowelSum).toBeCloseTo(frame.parameterValues.param_mouth_open ?? 0, 6);
   });
 });
 
