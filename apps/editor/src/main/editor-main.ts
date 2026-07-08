@@ -4,9 +4,17 @@ import {
   createEditorWindow,
   loadEditorWindow
 } from "./window-management/editor-window";
+import { registerWorkspaceFsBridgeHandlers } from "./workspace-fs/workspace-fs-bridge-handlers";
 
 export function startEditorMain(): void {
   app.whenReady().then(async () => {
+    registerWorkspaceFsBridgeHandlers({
+      getParentWindow: () =>
+        BrowserWindow.getFocusedWindow() ??
+        BrowserWindow.getAllWindows()[0] ??
+        null
+    });
+
     const editorWindow = createEditorWindow();
     await loadEditorWindow(editorWindow);
 
