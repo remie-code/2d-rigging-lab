@@ -2,8 +2,16 @@
 
 > editor Electron 移行の第一手。runtime-player を最小複製し、renderer を無改造で Electron に載せる。
 
-状態: **未着手**。
+状態: **計画 Draft**(実装未着手)。
 
-スコープ・成立条件・写経元は [../01-decomposition.md](../01-decomposition.md) の「work-stream」表 WS1 と「第一手」節を参照。
+## 直下のファイル
 
-実装は Gnome に委任し、実機で「空ウィンドウで EditorApp が起動する」を観測ゲートとする。通過して初めて WS2 設計に降りる。
+| Path | 役割 | 状態 |
+|---|---|---|
+| [ws1-shell-plan.md](ws1-shell-plan.md) | WS1 wave-plan(1波・1ドメイン・緩和側・dev 起動のみ) | Draft(2026-07-08) |
+
+## 進め方
+
+1波・1実装ドメイン。Undine → Orch-Sylph → Gnome(実装)+ Review-Sylph 1本。実装は Gnome に委任し、**ユーザーによる実機起動観測**(単窓で既存 UI が従来通り載る)を wave 完了判定の外の手動ゲートとする。通過して初めて WS2 設計に降りる。
+
+想定成果物: `ws1-shell-domain-report.md`(完了報告)、`ws1-shell-review.md`(レビュー判定)。

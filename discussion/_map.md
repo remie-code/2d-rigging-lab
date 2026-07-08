@@ -66,7 +66,7 @@
 | Model Authoring topic | 「Fableに2Dモデルを作らせる」挑戦を [model-authoring/](model-authoring/) として作成（2026-07-02）。可解性分析・運用方針（ヘッドレス専有 / Git巻き戻し / 判定の梯子）・閉問題アプローチを premises/ に合意記録済み。第一閉問題は [model-authoring/closed-problems/01-eyeball-x/problem-definition.md](model-authoring/closed-problems/01-eyeball-x/problem-definition.md) |
 | Mesh Generation topic | メッシュ自動生成の商用風改修を [mesh-generation/](mesh-generation/) として作成（2026-07-07）。Wave 1(v7実装)・Wave 1.1(境界非クランプ+密度)完了。目視評価 往復2 の所見「v6/v7一長一短」により**保留中**(v6/v7併存・トグル残置・Wave 2棚上げ)。経緯は [mesh-generation/evaluation-log.md](mesh-generation/evaluation-log.md) |
 | Render Performance topic | Editor/Viewer 描画パフォーマンス改善を [render-performance/](render-performance/) として作成（2026-07-07）。現状調査は [reports/editor-render-performance/](reports/editor-render-performance/)。方針合意済み(主戦場=Editor共有経路 / 決定性二層分離 / 計測→設計)。Perf Wave 1(計測基盤)から実行 |
-| Editor Electron Migration topic | apps/editor の Web→Electron 移行を [editor-electron-migration/](editor-electron-migration/) として作成（2026-07-08）。why合意・分解(3系統コード調査由来)をAccepted。第一手=WS1(shell)、本丸=WS2(persistence node:fs化)。FS Access は Electron Chromium で存続するため移行は非破壊・段階的。permanent除去(portable-JSON)のみ要確認 |
+| Editor Electron Migration topic | apps/editor の Web→Electron 移行を [editor-electron-migration/](editor-electron-migration/) として作成（2026-07-08）。why合意・分解(3系統コード調査由来)をAccepted。第一手=WS1(shell)、本丸=WS2(persistence node:fs化)。FS Access は Electron Chromium で存続するため移行は非破壊・段階的。portable-JSON は消費者なし(本エディタのみ)のため廃止確定 |
 
 ## 次の行動
 

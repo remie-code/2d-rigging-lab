@@ -43,19 +43,18 @@ runtime-player を最小複製し「空ウィンドウで EditorApp が起動す
 
 | 項目 | 扱い |
 |---|---|
-| portable-JSON 経路の廃止 | **廃止方針(暫定・要確認)**。単一ファイル可搬は「ワークスペースを zip」で代替。下記「portable-JSON について」参照 |
-| ワークスペース zip 可搬 | 将来の小機能。portable-JSON 廃止とセット。余裕があるとき |
+| portable-JSON 経路の廃止 | **廃止確定(Accepted 2026-07-08)**。消費者は本エディタのみ(他になし・ユーザー確認済み)。下記「portable-JSON について」参照 |
+| ワークスペース zip 可搬 | **機能実装不要**。単一ファイル可搬が要る場合は人間がワークスペースフォルダを手動 zip する |
 | 再起動後のワークスペース自動復帰 | 現状未実装。node:fs ならパス保存で軽い。**park(余裕があるとき)**。「移行」でなく「新機能」 |
 | save-plan の atomicity 契約 | authoring-core が `createWritable` のトランザクション性にどこまで依存するか未検証。**WS2 着手時に確認** |
 | sandbox true/false | runtime-player 慣行(`sandbox:false`)を踏襲。厳格化は後で判断 |
 | implementation/ の背骨(単一 spine か自己完結サブトピックか) | **WS1 通過後に判断**(現時点で決めない) |
 
-## portable-JSON について(要確認)
+## portable-JSON について(廃止確定)
 
 - 現状 editor は同一 PackageDocument を2形式で保存する:
   - **(B) ディレクトリワークスペース** — フォルダ(複数 JSON + 実バイナリ)。FS Access ディレクトリハンドル。
   - **(A) portable プロジェクト** — 単一 JSON `<slug>-rev<n>.portable-project.json`。バイナリを base64 で inline 埋め込み(`portable-package-bundle-v0`)。
 - portable の入出力は現状ブラウザ依存: 出力=Blob+`<a download>`(`browser-portable-project-transfer.ts:6-40`)、入力=`<input type=file>`(`project-storage-screen.tsx`)。E2E 1 本が使用(`e2e/portable-project-save-load.e2e.spec.ts`)。
-- **方針(暫定・設計判断)**: portable-JSON を**廃止**し、可搬は「ワークスペースディレクトリを zip」で代替。理由: 直列化面を 2→1 に畳める / base64 は +33% 肥大 + 独自スキーマ保守が消える / ディレクトリワークスペースは既に LLM-Readable な JSON 群で zip 解凍しても可読性を失わない。
-- 影響: WS2b(portable の node:fs 移植)は**不要化** → WS3 の廃止対象に吸収。E2E `portable-project-save-load` は zip 機能実装時に置換/削除。
-- **未確認(要最終確認)**: portable 形式に依存する他の消費者がいないか。現状の把握では authoring-host=ディレクトリパッケージ、runtime-player=runtime-export を消費し、portable は人間の単一ファイル共有用途と見られる。
+- **方針(Accepted 2026-07-08)**: portable-JSON を**廃止**する。消費者は本エディタが読めるだけで、他に存在しない(ユーザー確認済み)。単一ファイル可搬が要る場合は人間がワークスペースフォルダを手動で zip すればよく、専用機能は実装しない。理由: 直列化面を 2→1 に畳める / base64 は +33% 肥大 + 独自スキーマ保守が消える / ディレクトリワークスペースは既に LLM-Readable な JSON 群。
+- 影響: WS2b(portable の node:fs 移植)は**不要化** → WS3 の廃止対象に吸収。E2E `portable-project-save-load` は廃止に伴い削除。

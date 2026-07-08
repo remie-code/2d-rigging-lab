@@ -11,7 +11,7 @@ apps/editor の責務(ローカルワークスペース所有)に技術スタッ
 | Path | 役割 | 状態 |
 |---|---|---|
 | [00-agreement.md](00-agreement.md) | why とスコープの確定記録 | Accepted(2026-07-08) |
-| [01-decomposition.md](01-decomposition.md) | 継ぎ目(work-stream)、依存背骨、第一手。3系統コード調査から導出 | Accepted(2026-07-08、portable 廃止のみ要確認) |
+| [01-decomposition.md](01-decomposition.md) | 継ぎ目(work-stream)、依存背骨、第一手。3系統コード調査から導出 | Accepted(2026-07-08) |
 
 ## 子ディレクトリ(work-stream)
 
@@ -30,5 +30,4 @@ WS3(Web 退役)/ WS4(E2E `_electron` 化)は現時点で小さく、独立ディ
 
 ## 未決事項
 
-- portable-JSON 廃止 + zip 可搬の最終確認([01-decomposition.md](01-decomposition.md)「portable-JSON について」)。
 - implementation/ の背骨(単一 spine か自己完結サブトピックか)は WS1 通過後に判断。
