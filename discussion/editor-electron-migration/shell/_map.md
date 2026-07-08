@@ -1,17 +1,21 @@
 # shell/ (WS1: Electron 殻 & build)
 
-> editor Electron 移行の第一手。runtime-player を最小複製し、renderer を無改造で Electron に載せる。
+> editor Electron 移行の第一手。runtime-player を最小複製し、renderer を無改造で Electron に載せた。
 
-状態: **計画 Draft**(実装未着手)。
+状態: **完了 / pass**(2026-07-08)。実機観測ゲート緑(ユーザー確認)。install は Undine が実行済み。
 
 ## 直下のファイル
 
 | Path | 役割 | 状態 |
 |---|---|---|
-| [ws1-shell-plan.md](ws1-shell-plan.md) | WS1 wave-plan(1波・1ドメイン・緩和側・dev 起動のみ) | Draft(2026-07-08) |
+| [ws1-shell-plan.md](ws1-shell-plan.md) | WS1 wave-plan | Accepted |
+| [ws1-shell-domain-report.md](ws1-shell-domain-report.md) | Domain A 完了報告 | 完了 / pass |
+| [ws1-shell-review.md](ws1-shell-review.md) | closeout 検証 | pass |
 
-## 進め方
+## 結果
 
-1波・1実装ドメイン。Undine → Orch-Sylph → Gnome(実装)+ Review-Sylph 1本。実装は Gnome に委任し、**ユーザーによる実機起動観測**(単窓で既存 UI が従来通り載る)を wave 完了判定の外の手動ゲートとする。通過して初めて WS2 設計に降りる。
+既存 renderer 無改造で Electron 殻に配線。`electron-vite build` 緑、shell テスト緑、実機 smoke 緑(単窓・drawable 変形・ワークスペース保存ロード)。**de-risk 実証済み。**
 
-想定成果物: `ws1-shell-domain-report.md`(完了報告)、`ws1-shell-review.md`(レビュー判定)。
+先在の型/テスト債務(editor の typecheck 赤 + unit test 4件失敗)は WS1 スコープ外 → `task_c8fc5155`。
+
+次: WS2(永続化 node:fs/IPC 化)。着手前に save-plan の atomicity 契約を確認。

@@ -3,12 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./out/main/main.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "pnpm run typecheck && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:e2e:psd-import": "playwright test -c playwright.config.ts",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "electron:dev": "electron-vite dev",
+    "electron:build": "electron-vite build",
+    "electron:preview": "electron-vite preview",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run -c vitest.config.ts"
   },
   "dependencies": {
     "@private-2d-rigging-lab/authoring-core": "workspace:*",
@@ -32,9 +38,12 @@
   "devDependencies": {
     "@playwright/test": "^1.56.0",
     "@tailwindcss/vite": "^4.3.0",
+    "@types/node": "22.15.29",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^42.4.1",
+    "electron-vite": "^5.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "5.8.3",
     "vite": "6.4.2"
