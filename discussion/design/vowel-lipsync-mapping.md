@@ -1,6 +1,7 @@
 # 母音リップシンク設計 — 写像層の nearest-reference 推定スロット
 
 > Status: **Implemented**（wave107 final complete / clean review pass。実機ユーザー gate 待ち → §5 検証2）。2026-07-06 ユーザー承認「dynamicsと同じ流れだ」。承認時の追加要件 = リップシンクの ON/OFF トグル → §3.2。細部の初期値は実装 wave で実測から導出。実装レポート: `../implementation/waves/wave107/wave107-final-integration-report.md` / クリーンレビュー: `../implementation/reviews/wave107/final-clean-review.md`
+> 後続（mouth-open 駆動）: `param_mouth_open` の駆動元は wave22 で生 jawOpen → 発話強度 w へ差し替えられた（リップシンク有効時のみ。無効/非対応は本文どおり jawOpen 駆動を温存）。後続設計と実装事実は [vowel-lipsync-mouth-open-coupling.md](vowel-lipsync-mouth-open-coupling.md)（Implemented, wave22）を参照。本文の設計判断は不変。
 > 調査事実: [research/player-ifacialmocap-survey.md](../model-authoring/research/player-ifacialmocap-survey.md) / [player-calibration-survey.md](../model-authoring/research/player-calibration-survey.md) / [player-mapping-strength-survey.md](../model-authoring/research/player-mapping-strength-survey.md)
 > 実測一次データ: `test_data/iFaceMocap/vowels/vowel-captures.json`（2026-07-06、ユーザー本人の発音を各ラベル約90フレーム窓平均。採取ツール: `apps/runtime-player/tools/capture-vowel-frames.ts`）
 

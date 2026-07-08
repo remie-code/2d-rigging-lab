@@ -89,7 +89,8 @@ export function createRuntimeParameterFrame(
       ...(input.bodyFollowState === undefined
         ? {}
         : { bodyFollowState: input.bodyFollowState }),
-      ...(definition.sourceKind === "mouth-vowel"
+      ...(definition.sourceKind === "mouth-vowel" ||
+      (definition.sourceKind === "mouth-open" && vowelLipsyncEnabled)
         ? { readVowelEstimate }
         : {})
     });
@@ -154,6 +155,21 @@ function createSlotParameterValue(input: {
         )
       });
     case "mouth-open":
+      // Design vowel-lipsync-mouth-open-coupling §2.2/§3.2: when vowel lipsync is
+      // enabled+supported (signalled by readVowelEstimate being wired in for this
+      // case), the box opening is driven by the winning vowel's intensity w so it
+      // matches how the vowel shapes are authored ("開き切り前提"). A closed vowel
+      // like "い" (low jawOpen) still opens the box because w ≈ 1 for a well-formed
+      // vowel. When the gate is closed / no winner (winner === null → weight 0) the
+      // activation is 0 (box closes). Otherwise (disabled/unsupported) keep the
+      // legacy jawOpen normalization as a fallback.
+      if (input.readVowelEstimate !== undefined) {
+        const estimate = input.readVowelEstimate();
+        return createWeightValue({
+          slot: input.slot,
+          activation: estimate.winner === null ? 0 : estimate.weight
+        });
+      }
       return createWeightValue({
         slot: input.slot,
         activation: readRangeActivation(
