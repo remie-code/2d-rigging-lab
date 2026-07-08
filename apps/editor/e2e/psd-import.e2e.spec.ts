@@ -1,15 +1,43 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { _electron, expect, test as base, type Locator, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const e2eDirectory = path.dirname(fileURLToPath(import.meta.url));
 const fixturePsdPath = path.resolve(e2eDirectory, "../../../test_data/sample_model.psd");
+const mainEntryPath = path.resolve(e2eDirectory, "../out/main/main.js");
+
+function createElectronLaunchEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key === "ELECTRON_RENDERER_URL" || value === undefined) {
+      continue;
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+// Drive the built Electron shell directly. Omitting ELECTRON_RENDERER_URL forces
+// the main process to load the bundled renderer (out/renderer/index.html) instead
+// of a dev server. Each test launches a fresh app for isolated renderer state.
+const test = base.extend<{ page: Page }>({
+  page: async ({}, use) => {
+    const app = await _electron.launch({
+      args: [mainEntryPath],
+      env: createElectronLaunchEnv()
+    });
+    const page = await app.firstWindow();
+    try {
+      await use(page);
+    } finally {
+      await app.close();
+    }
+  }
+});
 
 test("imports a fixture PSD and reflects the generated structure in the workspace", async ({
   page
 }) => {
-  await page.goto("/");
-
   await expect(page.getByText("Authoring Workspace")).toBeVisible();
   await page.getByRole("button", { name: "Import PSD" }).first().click();
   await expect(page.getByRole("dialog", { name: "Import PSD" })).toBeVisible();
@@ -723,7 +751,7 @@ test("authors Rotation angle and translation keyforms from Parameter Bar and can
 });
 
 async function importFixturePsd(page: Page): Promise<void> {
-  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Import PSD" }).first()).toBeVisible();
   await page.getByRole("button", { name: "Import PSD" }).first().click();
   await page.getByLabel("PSD file").setInputFiles(fixturePsdPath);
   await expect(page.getByTestId("psd-import-review")).toBeVisible();

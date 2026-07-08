@@ -39,17 +39,10 @@ const viewerRuntimeTestState = vi.hoisted(() => ({
     canUndo: false,
     createWorkspace: vi.fn(),
     editorHiddenPartIds: new Set(),
-    exportPortableProject: vi.fn(),
     hasOpenWorkspace: true,
-    openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
     openWorkspace: vi.fn(),
     parameterValues: {},
-    projectIdentityLabel: "Viewer Fixture · rev 7",
-    projectSaveStatusLabel: "Saved",
-    projectStorage: {
-      status: "idle"
-    },
     redo: vi.fn(),
     resetActiveParameterValue: vi.fn(),
     saveWorkspaceAs: vi.fn(),
@@ -192,12 +185,8 @@ describe("ViewerRuntimeScreen integration", () => {
     viewerRuntimeTestState.editorSession.canRedo = false;
     viewerRuntimeTestState.editorSession.canUndo = false;
     viewerRuntimeTestState.editorSession.editorHiddenPartIds = new Set();
-    viewerRuntimeTestState.editorSession.openProjectFile.mockClear();
     viewerRuntimeTestState.editorSession.openPsdImport.mockClear();
     viewerRuntimeTestState.editorSession.parameterValues = {};
-    viewerRuntimeTestState.editorSession.projectIdentityLabel = "Viewer Fixture · rev 7";
-    viewerRuntimeTestState.editorSession.projectSaveStatusLabel = "Saved";
-    viewerRuntimeTestState.editorSession.projectStorage.status = "idle";
     viewerRuntimeTestState.editorSession.redo.mockClear();
     viewerRuntimeTestState.editorSession.resetActiveParameterValue.mockClear();
     viewerRuntimeTestState.editorSession.saveProject.mockClear();

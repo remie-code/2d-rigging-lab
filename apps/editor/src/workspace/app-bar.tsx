@@ -1,7 +1,5 @@
 import {
   ChevronDown,
-  Download,
-  FileInput,
   FolderOpen,
   FolderPlus,
   PanelLeft,
@@ -10,7 +8,7 @@ import {
   SaveAll,
   Undo2
 } from "lucide-react";
-import { useMemo, useRef, type ChangeEvent, type MutableRefObject, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { StatusBadge } from "../components/status-badge";
 import { useEditorSession } from "../features/editor-session/editor-session-context";
@@ -28,10 +26,7 @@ export function AppBar() {
     canRedo,
     canUndo,
     createWorkspace,
-    exportPortableProject,
     hasOpenWorkspace,
-    openProjectFile,
-    projectStorage,
     redo,
     saveProject,
     saveWorkspaceAs,
@@ -42,11 +37,7 @@ export function AppBar() {
     workspaceSaveStatusLabel,
     workspaceStorage
   } = useEditorSession();
-  const openProjectInputRef = useRef<HTMLInputElement | null>(null);
-  const storageBusy =
-    isWorkspaceStorageBusy(workspaceStorage) ||
-    projectStorage.status === "loading" ||
-    projectStorage.status === "saving";
+  const storageBusy = isWorkspaceStorageBusy(workspaceStorage);
   const workspaceUnsupported = workspaceStorage.status === "unsupported";
   const workspaceModeLabel =
     activeEntry === "viewer" ? "Viewer / Runtime View" : "Authoring Workspace";
@@ -55,8 +46,6 @@ export function AppBar() {
     [session]
   );
   const showDiagnosticsBadge = activeEntry !== "viewer" && diagnosticsWarningCount > 0;
-
-  const handleOpenProjectFile = createOpenProjectFileChangeHandler(openProjectFile);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-neutral-800 bg-[#151514] px-4">
@@ -74,14 +63,6 @@ export function AppBar() {
 
       {!hasOpenWorkspace ? (
         <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
-          <input
-            accept="application/json,.json"
-            aria-label="Import Portable JSON file"
-            className="sr-only"
-            onChange={handleOpenProjectFile}
-            ref={openProjectInputRef}
-            type="file"
-          />
           <WorkspaceActionButton
             disabled={storageBusy || workspaceUnsupported}
             icon={<FolderPlus aria-hidden="true" size={15} strokeWidth={1.8} />}
@@ -97,12 +78,6 @@ export function AppBar() {
             onClick={() => {
               void openWorkspace();
             }}
-          />
-          <WorkspaceActionButton
-            disabled={storageBusy}
-            icon={<FileInput aria-hidden="true" size={15} strokeWidth={1.8} />}
-            label="Import Portable JSON"
-            onClick={() => openProjectInputRef.current?.click()}
           />
         </div>
       ) : (
@@ -156,9 +131,6 @@ export function AppBar() {
             <WorkspaceMenu
               busy={storageBusy}
               createWorkspace={createWorkspace}
-              exportPortableProject={exportPortableProject}
-              importInputRef={openProjectInputRef}
-              onImportFileChange={handleOpenProjectFile}
               openWorkspace={openWorkspace}
               saveProject={saveProject}
               saveWorkspaceAs={saveWorkspaceAs}
@@ -170,33 +142,15 @@ export function AppBar() {
   );
 }
 
-export const createOpenProjectFileChangeHandler =
-  (openProjectFile: (file: File) => Promise<void>) =>
-  (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (file === undefined) {
-      return;
-    }
-
-    void openProjectFile(file);
-  };
-
 function WorkspaceMenu({
   busy,
   createWorkspace,
-  exportPortableProject,
-  importInputRef,
-  onImportFileChange,
   openWorkspace,
   saveProject,
   saveWorkspaceAs
 }: {
   readonly busy: boolean;
   readonly createWorkspace: () => Promise<void>;
-  readonly exportPortableProject: () => Promise<void>;
-  readonly importInputRef: MutableRefObject<HTMLInputElement | null>;
-  readonly onImportFileChange: ReturnType<typeof createOpenProjectFileChangeHandler>;
   readonly openWorkspace: () => Promise<void>;
   readonly saveProject: () => Promise<void>;
   readonly saveWorkspaceAs: () => Promise<void>;
@@ -208,14 +162,6 @@ function WorkspaceMenu({
         <ChevronDown aria-hidden="true" size={15} strokeWidth={1.8} />
       </summary>
       <div className="absolute right-0 z-20 mt-2 grid w-56 gap-1 rounded-md border border-neutral-800 bg-[#151514] p-2 shadow-xl">
-        <input
-          accept="application/json,.json"
-          aria-label="Import Portable JSON file"
-          className="sr-only"
-          onChange={onImportFileChange}
-          ref={importInputRef}
-          type="file"
-        />
         <WorkspaceMenuButton
           disabled={busy}
           icon={<Save aria-hidden="true" size={15} strokeWidth={1.8} />}
@@ -247,21 +193,6 @@ function WorkspaceMenu({
           onClick={() => {
             void createWorkspace();
           }}
-        />
-        <div className="my-1 h-px bg-neutral-800" />
-        <WorkspaceMenuButton
-          disabled={busy}
-          icon={<Download aria-hidden="true" size={15} strokeWidth={1.8} />}
-          label="Export Portable JSON..."
-          onClick={() => {
-            void exportPortableProject();
-          }}
-        />
-        <WorkspaceMenuButton
-          disabled={busy}
-          icon={<FileInput aria-hidden="true" size={15} strokeWidth={1.8} />}
-          label="Import Portable JSON..."
-          onClick={() => importInputRef.current?.click()}
         />
       </div>
     </details>

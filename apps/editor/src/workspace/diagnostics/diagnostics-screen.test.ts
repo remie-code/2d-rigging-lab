@@ -218,16 +218,9 @@ function createEditorSessionMock(session: AuthoringSession) {
     closePsdImport: vi.fn(),
     commitPsdImport: vi.fn(),
     createWorkspace: vi.fn(),
-    exportPortableProject: vi.fn(),
     hasOpenWorkspace: true,
-    openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
     openWorkspace: vi.fn(),
-    projectIdentityLabel: "Diagnostics Fixture",
-    projectSaveStatusLabel: "Saved",
-    projectStorage: {
-      status: "idle"
-    },
     psdImportOpen: false,
     redo: vi.fn(),
     resolvePsdImportDestination: vi.fn(() => ({

@@ -510,17 +510,10 @@ function createEditorSessionMock(
     canUndo: false,
     createWorkspace: vi.fn(),
     editorHiddenPartIds,
-    exportPortableProject: vi.fn(),
     hasOpenWorkspace: true,
-    openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
     openWorkspace: vi.fn(),
     parameterValues: {},
-    projectIdentityLabel: "Atlas Fixture",
-    projectSaveStatusLabel: "Saved",
-    projectStorage: {
-      status: "idle"
-    },
     psdImportOpen: false,
     redo: vi.fn(),
     resetActiveParameterValue: vi.fn(),

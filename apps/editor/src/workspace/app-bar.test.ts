@@ -1,6 +1,5 @@
 import type {
   ButtonHTMLAttributes,
-  ChangeEvent as ReactChangeEvent,
   MouseEvent as ReactMouseEvent,
   ReactNode
 } from "react";
@@ -17,15 +16,8 @@ const appBarTestState = vi.hoisted(() => ({
     canUndo: false,
     canRedo: false,
     createWorkspace: vi.fn(),
-    exportPortableProject: vi.fn(),
     hasOpenWorkspace: true,
-    openProjectFile: vi.fn(),
     openWorkspace: vi.fn(),
-    projectIdentityLabel: "Loaded model · rev 7",
-    projectSaveStatusLabel: "Saved",
-    projectStorage: {
-      status: "idle"
-    },
     undo: vi.fn(),
     redo: vi.fn(),
     saveWorkspaceAs: vi.fn(),
@@ -96,7 +88,7 @@ vi.mock("../ui/icon-button", () => ({
   }
 }));
 
-import { AppBar, createOpenProjectFileChangeHandler } from "./app-bar";
+import { AppBar } from "./app-bar";
 
 describe("AppBar history controls", () => {
   beforeEach(() => {
@@ -104,17 +96,12 @@ describe("AppBar history controls", () => {
     appBarTestState.editorSession.canUndo = false;
     appBarTestState.editorSession.canRedo = false;
     appBarTestState.editorSession.hasOpenWorkspace = true;
-    appBarTestState.editorSession.projectIdentityLabel = "Loaded model · rev 7";
-    appBarTestState.editorSession.projectSaveStatusLabel = "Saved";
-    appBarTestState.editorSession.projectStorage.status = "idle";
     appBarTestState.editorSession.workspaceIdentityLabel = "Loaded workspace · rev 7";
     appBarTestState.editorSession.workspaceSaveStatusLabel = "Saved";
     appBarTestState.editorSession.workspaceStorage.status = "saved";
     appBarTestState.editorSession.workspaceStorage.message = "Workspace ready.";
     appBarTestState.editorSession.session = createEmptyAuthoringSession();
     appBarTestState.editorSession.createWorkspace.mockClear();
-    appBarTestState.editorSession.exportPortableProject.mockClear();
-    appBarTestState.editorSession.openProjectFile.mockClear();
     appBarTestState.editorSession.openWorkspace.mockClear();
     appBarTestState.editorSession.undo.mockClear();
     appBarTestState.editorSession.redo.mockClear();
@@ -160,7 +147,7 @@ describe("AppBar history controls", () => {
     expect(markup).not.toContain("Untitled model");
   });
 
-  it("wires Save Workspace to the workspace save action without portable export", () => {
+  it("wires Save Workspace to the workspace save action", () => {
     renderToStaticMarkup(createElement(AppBar));
 
     const saveButton = findIconButton("Save Workspace");
@@ -169,38 +156,14 @@ describe("AppBar history controls", () => {
     saveButton.onClick?.({} as ReactMouseEvent<HTMLButtonElement>);
 
     expect(appBarTestState.editorSession.saveProject).toHaveBeenCalledTimes(1);
-    expect(appBarTestState.editorSession.exportPortableProject).not.toHaveBeenCalled();
   });
 
-  it("renders explicit Portable JSON import/export and disables save while busy", () => {
+  it("disables Save Workspace while workspace storage is busy", () => {
     appBarTestState.editorSession.workspaceStorage.status = "saving";
 
-    const markup = renderToStaticMarkup(createElement(AppBar));
+    renderToStaticMarkup(createElement(AppBar));
 
-    expect(markup).toContain("Import Portable JSON file");
-    expect(markup).toContain("Export Portable JSON...");
     expect(findIconButton("Save Workspace").disabled).toBe(true);
-  });
-
-  it("passes the selected Portable JSON File from the hidden input to openProjectFile", () => {
-    const file = new File(["{}"], "loaded.portable-project.json", {
-      type: "application/json"
-    });
-    const input = {
-      files: [file],
-      value: "C:\\fakepath\\loaded.portable-project.json"
-    };
-    const handler = createOpenProjectFileChangeHandler(
-      appBarTestState.editorSession.openProjectFile
-    );
-
-    handler({
-      currentTarget: input
-    } as unknown as ReactChangeEvent<HTMLInputElement>);
-
-    expect(appBarTestState.editorSession.openProjectFile).toHaveBeenCalledTimes(1);
-    expect(appBarTestState.editorSession.openProjectFile).toHaveBeenCalledWith(file);
-    expect(input.value).toBe("");
   });
 
   it("starts in the Workspace Gate header when no workspace is open", () => {
@@ -211,7 +174,6 @@ describe("AppBar history controls", () => {
 
     expect(markup).toContain("Create Workspace");
     expect(markup).toContain("Open Workspace");
-    expect(markup).toContain("Import Portable JSON");
     expect(markup).not.toContain("Save Workspace");
     expect(markup).not.toContain("Parameters");
     expect(markup).not.toContain("Texture Atlas");

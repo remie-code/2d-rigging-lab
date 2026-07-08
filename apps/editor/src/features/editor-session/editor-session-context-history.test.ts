@@ -5,7 +5,6 @@ import type {
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   createInitialAuthoringRevision,
-  exportAuthoringSessionPortableBundle,
   registerAuthoringSessionBinaryBytes
 } from "@private-2d-rigging-lab/authoring-core";
 import {
@@ -637,7 +636,7 @@ describe("EditorSessionProvider history integration", () => {
       });
 
       expect(harness.context().session.dirty).toBe(true);
-      expect(harness.context().projectSaveStatusLabel).toBe("Unsaved changes");
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Unsaved changes");
 
       await act(async () => {
         await harness.context().saveProject();
@@ -645,7 +644,7 @@ describe("EditorSessionProvider history integration", () => {
 
       expect(harness.context().session.dirty).toBe(false);
       expect(harness.context().workspaceStorage.status).toBe("saved");
-      expect(harness.context().projectSaveStatusLabel).toBe("Saved");
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Saved");
       expect(workspaceDirectory.readTextFile("workspace.json")).toContain(
         "directory-workspace-v1"
       );
@@ -735,50 +734,6 @@ describe("EditorSessionProvider history integration", () => {
       );
       expect(harness.context().session.packageIdentity.packageDisplayName).toBe("Loaded Project");
       expect(harness.context().workspaceIdentityLabel).toContain("next-open.ail2d-workspace");
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("cancels Portable JSON import replacement when dirty replacement is canceled", async () => {
-    const currentDirectory = createFakeWorkspaceDirectoryHandle({
-      name: "current-import-cancel.ail2d-workspace"
-    });
-    const importedDirectory = createFakeWorkspaceDirectoryHandle({
-      name: "imported-portable.ail2d-workspace"
-    });
-    const picker: WorkspaceDirectoryPicker = {
-      pickDirectory: vi.fn(async () => importedDirectory)
-    };
-    const confirmDirtyWorkspaceReplacement = vi.fn(async () => "cancel" as const);
-    const loadedBundle = await exportAuthoringSessionPortableBundle({
-      session: createLoadedProjectSession(),
-      updatedAt: "2026-06-20T00:00:00.000Z"
-    });
-    const harness = await renderEditorSessionProbe({
-      confirmDirtyWorkspaceReplacement,
-      initialWorkspaceDirectory: currentDirectory,
-      workspaceDirectoryPicker: picker
-    });
-
-    try {
-      await act(async () => {
-        const result = harness.context().createCustomParameter(createCustomParameterPayload());
-        expect(result.committed).toBe(true);
-      });
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle(loadedBundle.bundleJson, {
-          fileName: "loaded.portable-project.json"
-        });
-      });
-
-      expect(confirmDirtyWorkspaceReplacement).toHaveBeenCalledWith(
-        expect.objectContaining({ reason: "import-portable-json" })
-      );
-      expect(picker.pickDirectory).not.toHaveBeenCalled();
-      expect(hasCustomParameter(harness.context())).toBe(true);
-      expect(harness.context().session.packageIdentity.packageDisplayName).toBe("Untitled model");
     } finally {
       await harness.cleanup();
     }
@@ -875,125 +830,6 @@ describe("EditorSessionProvider history integration", () => {
 
       expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
     } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("loads a portable bundle by replacing session and clearing transient editor state", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const currentWorkspaceDirectory = createFakeWorkspaceDirectoryHandle({
-      name: "current-loaded-portable.ail2d-workspace"
-    });
-    const importedWorkspaceDirectory = createFakeWorkspaceDirectoryHandle({
-      name: "loaded-portable.ail2d-workspace"
-    });
-    const harness = await renderEditorSessionProbe({
-      confirmDirtyWorkspaceReplacement: async () => "save-and-open" as const,
-      initialSession: createTextureBundleSession(),
-      initialWorkspaceDirectory: currentWorkspaceDirectory,
-      workspaceDirectoryPicker: {
-        pickDirectory: async () => importedWorkspaceDirectory
-      }
-    });
-
-    try {
-      const activeParameterId = requireActiveParameterId(harness.context());
-
-      await act(async () => {
-        harness.context().selectPart(PartIdSchema.parse("part_root"));
-        harness.context().togglePartCollapse(PartIdSchema.parse("part_root"));
-        harness.context().togglePartEditorVisibility(PartIdSchema.parse("part_root"));
-        harness.context().openPsdImport();
-        harness.context().setActiveParameterValue(1);
-        const result = harness.context().createCustomParameter(createCustomParameterPayload());
-        expect(result.committed).toBe(true);
-        harness.context().startWarpDeformerDraftForDrawable(TRANSIENT_DRAFT_DRAWABLE_ID);
-        harness.context().previewMeshDraft(TRANSIENT_DRAFT_DRAWABLE_ID, "standard");
-      });
-
-      expect(harness.context().selection).toEqual({
-        kind: "drawable",
-        id: TRANSIENT_DRAFT_DRAWABLE_ID
-      });
-      expect(harness.context().psdImportOpen).toBe(true);
-      expect(harness.context().parameterValues[activeParameterId]).toBe(1);
-      expect(harness.context().collapsedPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
-      expect(harness.context().editorHiddenPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
-      expect(harness.context().meshDraft).toMatchObject({
-        drawableId: TRANSIENT_DRAFT_DRAWABLE_ID,
-        presetId: "standard"
-      });
-      expect(harness.context().rigDraft).toMatchObject({
-        childDrawableIds: [TRANSIENT_DRAFT_DRAWABLE_ID]
-      });
-      expect(harness.context().canUndo).toBe(true);
-
-      await act(async () => {
-        harness.context().createRotationDeformerForDrawable(
-          DrawableIdSchema.parse("draw_missing_operation_feedback")
-        );
-        const duplicatePresetResult = harness.context().createCustomParameter({
-          parameterId: ParameterIdSchema.parse("param_face_angle_x"),
-          displayName: "Duplicate Preset",
-          valueSource: "authoredInput",
-          min: -1,
-          default: 0,
-          max: 1,
-          recommendedUiStep: 0.01
-        });
-        expect(duplicatePresetResult.committed).toBe(false);
-      });
-
-      expect(harness.context().rigOperationFeedback).toBe(
-        "Rotation Deformer could not be created for the selected Drawable."
-      );
-      expect(harness.context().parameterOperationFeedback).not.toBeNull();
-
-      const loadedBundle = await exportAuthoringSessionPortableBundle({
-        session: createLoadedProjectSession(),
-        editorHiddenPartIds: [LOADED_CHILD_PART_ID],
-        updatedAt: "2026-06-15T02:00:00.000Z"
-      });
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle(loadedBundle.bundleJson, {
-          fileName: "loaded-project.portable-project.json"
-        });
-      });
-
-      expect(harness.context().session.packageIdentity.packageDisplayName).toBe(
-        "Loaded Project"
-      );
-      expect(harness.context().hasOpenWorkspace).toBe(true);
-      expect(harness.context().workspaceStorage.status).toBe("saved");
-      expect(importedWorkspaceDirectory.readTextFile("workspace.json")).toContain(
-        "directory-workspace-v1"
-      );
-      expect(importedWorkspaceDirectory.readTextFile("manifest.json")).toContain(
-        "Loaded Project"
-      );
-      expect(harness.context().session.graph.parameters.map((parameter) => parameter.parameterId))
-        .toEqual([ParameterIdSchema.parse("param_loaded_wave72")]);
-      expect(harness.context().selection).toBeNull();
-      expect(harness.context().psdImportOpen).toBe(false);
-      expect(harness.context().parameterValues).toEqual({});
-      expect(harness.context().meshDraft).toBeNull();
-      expect(harness.context().meshGenerationDiagnostic).toBeNull();
-      expect(harness.context().rigDraft).toBeNull();
-      expect(harness.context().rigOperationFeedback).toBeNull();
-      expect(harness.context().parameterOperationFeedback).toBeNull();
-      expect(harness.context().collapsedPartIds.has(LOADED_CHILD_PART_ID)).toBe(true);
-      expect(harness.context().collapsedPartIds.has(PartIdSchema.parse("part_root"))).toBe(false);
-      expect(harness.context().editorHiddenPartIds.has(LOADED_CHILD_PART_ID)).toBe(true);
-      expect(harness.context().editorHiddenPartIds.has(PartIdSchema.parse("part_root"))).toBe(false);
-      expect(harness.context().canUndo).toBe(false);
-      expect(harness.context().canRedo).toBe(false);
-      expect(harness.context().projectStorage.status).toBe("loaded");
-      expect(harness.context().projectStorage.fileName).toBe(
-        "loaded-project.portable-project.json"
-      );
-    } finally {
-      warn.mockRestore();
       await harness.cleanup();
     }
   });
@@ -1261,108 +1097,6 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
-  it("preserves the current session and reports invalid bundle import errors", async () => {
-    const harness = await renderEditorSessionProbe();
-
-    try {
-      const initialSession = harness.context().session;
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle("{", {
-          fileName: "invalid.portable-project.json"
-        });
-      });
-
-      expect(harness.context().session).toBe(initialSession);
-      expect(harness.context().projectStorage).toMatchObject({
-        status: "error",
-        lastAction: "open",
-        fileName: "invalid.portable-project.json",
-        errorCode: "invalidBundle"
-      });
-      expect(harness.context().projectStorage.issues).toEqual([
-        expect.objectContaining({ code: "portableBundle.json.invalid" })
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("preserves the current session and reports missing payload import errors", async () => {
-    const harness = await renderEditorSessionProbe();
-
-    try {
-      const initialSession = harness.context().session;
-      const exported = await exportAuthoringSessionPortableBundle({
-        session: createTextureBundleSession()
-      });
-      const bundle = JSON.parse(exported.bundleJson) as { binaryPayloads: unknown[] };
-      bundle.binaryPayloads = [];
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle(JSON.stringify(bundle), {
-          fileName: "missing-payload.portable-project.json"
-        });
-      });
-
-      expect(harness.context().session).toBe(initialSession);
-      expect(harness.context().projectStorage).toMatchObject({
-        status: "error",
-        lastAction: "open",
-        fileName: "missing-payload.portable-project.json",
-        errorCode: "missingBytes"
-      });
-      expect(harness.context().projectStorage.issues).toEqual([
-        expect.objectContaining({
-          code: "portableBundle.binaryPayload.missing",
-          targetPath: "/binaryPayloads"
-        })
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("preserves the current session and reports digest mismatch import errors", async () => {
-    const harness = await renderEditorSessionProbe();
-
-    try {
-      const initialSession = harness.context().session;
-      const exported = await exportAuthoringSessionPortableBundle({
-        session: createTextureBundleSession()
-      });
-      const bundle = JSON.parse(exported.bundleJson) as {
-        binaryPayloads: Array<{ payloadBase64: string }>;
-      };
-      const firstPayload = bundle.binaryPayloads[0];
-      if (firstPayload === undefined) {
-        throw new Error("Expected provider test bundle payload.");
-      }
-      firstPayload.payloadBase64 = "YWJk";
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle(JSON.stringify(bundle), {
-          fileName: "digest-mismatch.portable-project.json"
-        });
-      });
-
-      expect(harness.context().session).toBe(initialSession);
-      expect(harness.context().projectStorage).toMatchObject({
-        status: "error",
-        lastAction: "open",
-        fileName: "digest-mismatch.portable-project.json",
-        errorCode: "digestMismatch"
-      });
-      expect(harness.context().projectStorage.issues).toEqual([
-        expect.objectContaining({
-          code: "portableBundle.digest.mismatch",
-          targetPath: "/binaryPayloads/0"
-        })
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
 });
 
 function Probe({

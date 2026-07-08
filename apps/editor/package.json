@@ -5,11 +5,8 @@
   "type": "module",
   "main": "./out/main/main.js",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "pnpm run typecheck && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:e2e:psd-import": "playwright test -c playwright.config.ts",
-    "preview": "vite preview --host 127.0.0.1",
+    "test:e2e:psd-import": "pnpm run electron:build && playwright test -c playwright.config.ts",
     "electron:dev": "electron-vite dev",
     "electron:build": "electron-vite build",
     "electron:preview": "electron-vite preview",

@@ -22,7 +22,6 @@ describe("AuthoringWorkspace Workspace Gate", () => {
 
     expect(markup).toContain("Create Workspace");
     expect(markup).toContain("Open Workspace");
-    expect(markup).toContain("Import Portable JSON");
     expect(markup).toContain("No workspace is open");
     expect(markup).not.toContain("Toolbox");
     expect(markup).not.toContain("Canvas");

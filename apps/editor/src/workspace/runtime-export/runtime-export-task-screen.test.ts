@@ -362,9 +362,8 @@ describe("RuntimeExportTaskScreen", () => {
     expect(actionMarkup).toContain('disabled=""');
   });
 
-  it("writes picked Runtime Export directories without calling Workspace Save or Portable JSON export", async () => {
+  it("writes picked Runtime Export directories without calling Workspace Save", async () => {
     const saveProject = vi.fn();
-    const exportPortableProject = vi.fn();
     const session = await createAppliedRuntimeExportFixtureSession();
     const assembly = await assembleRuntimeExport(session);
     if (assembly.status !== "ready") {
@@ -381,7 +380,6 @@ describe("RuntimeExportTaskScreen", () => {
       "runtime-export-manifest-v0"
     );
     expect(saveProject).not.toHaveBeenCalled();
-    expect(exportPortableProject).not.toHaveBeenCalled();
   });
 });
 
@@ -408,17 +406,10 @@ function createEditorSessionMock(session: AuthoringSession) {
     commitPsdImport: vi.fn(),
     createWorkspace: vi.fn(),
     editorHiddenPartIds: new Set(),
-    exportPortableProject: vi.fn(),
     hasOpenWorkspace: true,
-    openProjectFile: vi.fn(),
     openPsdImport: vi.fn(),
     openWorkspace: vi.fn(),
     parameterValues: {},
-    projectIdentityLabel: "Runtime Export Fixture",
-    projectSaveStatusLabel: "Saved",
-    projectStorage: {
-      status: "idle"
-    },
     psdImportOpen: false,
     redo: vi.fn(),
     resetActiveParameterValue: vi.fn(),

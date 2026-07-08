@@ -52,24 +52,6 @@ import {
   type ReactNode
 } from "react";
 
-import {
-  exportEditorProjectBundle,
-  importEditorProjectBundle,
-  toEditorProjectStorageError
-} from "../project-storage/model/editor-project-storage";
-import {
-  readPortableProjectFileText,
-  triggerPortableProjectDownload
-} from "../project-storage/model/browser-portable-project-transfer";
-import {
-  createIdleProjectStorageState,
-  createLoadedProjectStorageState,
-  createLoadingProjectStorageState,
-  createProjectStorageErrorState,
-  createSavedProjectStorageState,
-  createSavingProjectStorageState,
-  type ProjectStorageState
-} from "../project-storage/model/project-storage-state";
 import { commitPsdImportPlan } from "../psd-import/model/psd-import-commit";
 import type { PsdImportPlan } from "../psd-import/model/psd-import-types";
 import {
@@ -375,9 +357,6 @@ interface EditorSessionContextValue {
   readonly rigOperationFeedback: string | null;
   readonly parameterOperationFeedback: string | null;
   readonly variantPreviewActiveSelections: readonly VariantActiveSelectionEntry[];
-  readonly projectStorage: ProjectStorageState;
-  readonly projectIdentityLabel: string;
-  readonly projectSaveStatusLabel: string;
   readonly workspaceStorage: WorkspaceStorageState;
   readonly workspaceIdentityLabel: string;
   readonly workspaceSaveStatusLabel: string;
@@ -391,12 +370,6 @@ interface EditorSessionContextValue {
   readonly openWorkspace: () => Promise<void>;
   readonly saveWorkspaceAs: () => Promise<void>;
   readonly saveProject: () => Promise<void>;
-  readonly exportPortableProject: () => Promise<void>;
-  readonly openProjectFile: (file: File) => Promise<void>;
-  readonly openProjectFromPortableBundle: (
-    bundleText: string,
-    options?: { readonly fileName?: string }
-  ) => Promise<void>;
   readonly openPsdImport: () => void;
   readonly closePsdImport: () => void;
   readonly openParameterManager: () => void;
@@ -648,9 +621,6 @@ export function EditorSessionProvider({
   const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
   const [rigOperationFeedback, setRigOperationFeedback] = useState<string | null>(null);
   const [parameterOperationFeedback, setParameterOperationFeedback] = useState<string | null>(null);
-  const [projectStorage, setProjectStorage] = useState<ProjectStorageState>(() =>
-    createIdleProjectStorageState()
-  );
   const workspaceDirectoryAccess = useMemo(
     () => detectWorkspaceDirectoryAccess(workspaceGlobalObject),
     [workspaceGlobalObject]
@@ -741,9 +711,6 @@ export function EditorSessionProvider({
       }),
     [hasOpenWorkspace, session, workspaceStorage]
   );
-  const projectIdentityLabel = workspaceIdentityLabel;
-  const projectSaveStatusLabel = workspaceSaveStatusLabel;
-
   useEffect(() => {
     if (activeParameterId !== resolvedActiveParameterId) {
       setActiveParameterIdState(resolvedActiveParameterId);
@@ -1152,114 +1119,6 @@ export function EditorSessionProvider({
     workspaceGlobalObject,
     workspaceTarget
   ]);
-
-  const exportPortableProject = useCallback(async () => {
-    const currentState = editorStateRef.current;
-    setProjectStorage(createSavingProjectStorageState());
-
-    try {
-      const result = await exportEditorProjectBundle({
-        session: currentState.session,
-        baseDocument: currentState.baseDocument,
-        editorHiddenPartIds
-      });
-      triggerPortableProjectDownload({
-        bundleJson: result.bundleJson,
-        fileName: result.fileName
-      });
-
-      setProjectStorage(createSavedProjectStorageState(result));
-    } catch (error) {
-      setProjectStorage(
-        createProjectStorageErrorState(toEditorProjectStorageError(error, "save"), "save")
-      );
-    }
-  }, [editorHiddenPartIds]);
-
-  const openProjectFromPortableBundle = useCallback(
-    async (bundleText: string, options: { readonly fileName?: string } = {}) => {
-      if (!(await prepareDirtyWorkspaceReplacement("import-portable-json"))) {
-        return;
-      }
-
-      setProjectStorage(createLoadingProjectStorageState(options.fileName));
-
-      try {
-        const result = await importEditorProjectBundle({ bundleText });
-        setWorkspaceStorage(createCreatingWorkspaceStorageState());
-        const workspaceResult = await createEditorWorkspace({
-          session: result.session,
-          baseDocument: result.packageDocument,
-          editorHiddenPartIds: result.editorHiddenPartIds,
-          ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
-          ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
-        });
-        setWorkspaceTarget(workspaceResult.target);
-        setWorkspaceOpenOverride(true);
-        setActiveEntry("workspace");
-        setEditorSessionState({
-          session: workspaceResult.session,
-          history: createEmptyEditorSessionHistory(),
-          baseDocument: workspaceResult.packageDocument
-        });
-        resetEditorLocalStateAfterProjectLoad({
-          loadedSession: workspaceResult.session,
-          editorHiddenPartIds: result.editorHiddenPartIds
-        });
-        setProjectStorage(createLoadedProjectStorageState(result, options.fileName));
-        setWorkspaceStorage(
-          createSavedWorkspaceStorageState({
-            workspaceName: workspaceResult.target.workspaceName,
-            binaryWriteCount: workspaceResult.binaryFileCount,
-            binarySkipCount: 0,
-            message: `Imported portable JSON into ${workspaceResult.target.workspaceName}.`,
-            completedAt: workspaceResult.openedAt
-          })
-        );
-      } catch (error) {
-        const workspaceError = toEditorWorkspaceStorageError(error);
-        if (!workspaceError.code.startsWith("workspace.unknown")) {
-          applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
-        }
-        setProjectStorage(
-          createProjectStorageErrorState(
-            toEditorProjectStorageError(error, "open"),
-            "open",
-            options.fileName
-          )
-        );
-      }
-    },
-    [
-      applyWorkspaceStorageError,
-      prepareDirtyWorkspaceReplacement,
-      resetEditorLocalStateAfterProjectLoad,
-      setActiveEntry,
-      setEditorSessionState,
-      workspaceDirectoryPicker,
-      workspaceGlobalObject,
-      workspaceTarget
-    ]
-  );
-
-  const openProjectFile = useCallback(
-    async (file: File) => {
-      try {
-        await openProjectFromPortableBundle(await readPortableProjectFileText(file), {
-          fileName: file.name
-        });
-      } catch (error) {
-        setProjectStorage(
-          createProjectStorageErrorState(
-            toEditorProjectStorageError(error, "open"),
-            "open",
-            file.name
-          )
-        );
-      }
-    },
-    [openProjectFromPortableBundle]
-  );
 
   const commitPsdImport = useCallback(
     (plan: PsdImportPlan) => {
@@ -2430,9 +2289,6 @@ export function EditorSessionProvider({
       rigOperationFeedback,
       parameterOperationFeedback,
       variantPreviewActiveSelections,
-      projectStorage,
-      projectIdentityLabel,
-      projectSaveStatusLabel,
       workspaceStorage,
       workspaceIdentityLabel,
       workspaceSaveStatusLabel,
@@ -2446,9 +2302,6 @@ export function EditorSessionProvider({
       openWorkspace,
       saveWorkspaceAs,
       saveProject,
-      exportPortableProject,
-      openProjectFile,
-      openProjectFromPortableBundle,
       openPsdImport,
       closePsdImport: () => setPsdImportOpen(false),
       openParameterManager,
@@ -2586,19 +2439,14 @@ export function EditorSessionProvider({
       meshDrafts,
       meshGenerationDiagnostic,
       moveDrawableRigControlBinding,
-      openProjectFile,
-      openProjectFromPortableBundle,
       openParameterManager,
       parameterBar,
       parameterOperationFeedback,
       parameterValues,
-      projectIdentityLabel,
-      projectSaveStatusLabel,
       workspaceStorage,
       workspaceIdentityLabel,
       workspaceSaveStatusLabel,
       hasOpenWorkspace,
-      projectStorage,
       psdImportOpen,
       previewMeshDraft,
       previewMeshDrafts,
@@ -2606,7 +2454,6 @@ export function EditorSessionProvider({
       createWorkspace,
       openWorkspace,
       saveWorkspaceAs,
-      exportPortableProject,
       openPsdImport,
       redo,
       reparentRigControl,
