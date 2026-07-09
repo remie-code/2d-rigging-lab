@@ -10,6 +10,7 @@
     "pack": "pnpm run build && electron-builder --dir",
     "dist": "pnpm run dist:win",
     "dist:win": "pnpm run build && electron-builder --win --x64",
+    "generate-icon": "node scripts/generate-icon.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "pnpm run test:unit",
     "test:unit": "vitest run -c vitest.config.ts",
@@ -40,6 +41,7 @@
     "electron": "^42.4.1",
     "electron-builder": "^26.0.12",
     "electron-vite": "^5.0.0",
+    "png-to-ico": "^3.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "5.8.3",
     "vite": "6.4.2"
@@ -63,7 +65,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "build/icon.ico"
     }
   }
 }
