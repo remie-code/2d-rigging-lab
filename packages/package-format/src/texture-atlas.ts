@@ -60,15 +60,38 @@ export const TexturePreviewAssetSchema = z.object({
 });
 export type TexturePreviewAssetDto = z.infer<typeof TexturePreviewAssetSchema>;
 
+// Content inset (source texture pixels) describing where the tightly-cropped
+// content region sits inside a padded layer raster. See §3.1/§5 of
+// discussion/design/mesh-rendering/boundary-transparent-margin-design.md:
+// layer rasters carry a transparent alpha-edge border so contour overshoot
+// (covering margin) samples transparency rather than stretched edge texels.
+// This breaks the historical `bounds ≡ raster` identity, so the inset is the
+// explicit bridge between padded raster dimensions (`dimensions`) and content
+// bounds (stage `mesh.bounds`). Four-sided form stays robust to future
+// non-uniform padding; today all four sides equal the per-layer padding P
+// (= maxCoverageMarginSourcePixels(longEdge)).
+export const TextureContentInsetSchema = z.object({
+  left: z.number().int().nonnegative(),
+  top: z.number().int().nonnegative(),
+  right: z.number().int().nonnegative(),
+  bottom: z.number().int().nonnegative()
+});
+export type TextureContentInsetDto = z.infer<typeof TextureContentInsetSchema>;
+
 export const TextureAtlasEntrySchema = z.object({
   textureId: TextureIdSchema,
   filePath: PackageLocalTextureAssetPathSchema,
   contentHash: z.string().optional(),
+  // `dimensions` are the padded raster dimensions (content + 2K border) once
+  // transparent padding has been baked. Consumers that need the content region
+  // must combine `dimensions` with `contentInset` (below) — do not assume
+  // `dimensions` equal the content bounds.
   dimensions: z.object({
     width: z.number().int().positive(),
     height: z.number().int().positive(),
     pixelFormat: z.literal("rgba8")
   }).optional(),
+  contentInset: TextureContentInsetSchema.optional(),
   sourceAssetId: SourceAssetIdSchema.optional(),
   sourceLayerId: z.string().optional(),
   provenanceId: ProvenanceIdSchema.optional(),

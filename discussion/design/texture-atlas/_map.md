@@ -20,7 +20,8 @@ Texture Atlas Taskの画面UXは [../screen-design/screens/texture-atlas-task.md
 - 現行の `single-page-shelf-v1` は、draw order順のnext-fit shelfであり、混在サイズのDrawableでは隙間が出やすい。
 - 次の改善対象は、alpha trimやrotationではなく、矩形packingそのものをSkyline方式へ置き換えること。
 - 新しいalgorithm idは `single-page-skyline-v1` として扱い、旧layout / 旧artifactとの互換性を保つ。
-- Texture Atlas対象抽出、padding、edge extrusion、single-page方針、Apply時のartifact-only commit方針は維持する。
+- Texture Atlas対象抽出、padding、single-page方針、Apply時のartifact-only commit方針は維持する。
+- **edge extrusion は覆いマージンについて透明gutterへ上書きされる**（[../mesh-rendering/boundary-transparent-margin-design.md](../mesh-rendering/boundary-transparent-margin-design.md) A1決定。**Wave108 で実装済み / Option E**）。メッシュ境界頂点が drawable 外へ延ばした overshoot を、端色の複製ではなく透明で受ける。透明パディング P は per-tile `content-inset`（`maxCoverageMarginSourcePixels(longEdge)`、層サイズ別・ソース画素）としてラスタに焼き込まれ、overshoot を自タイルの透明帯へ収束させる（クロス滲み無し）。実装は `extrudeTexturePlacementEdges` を**コード無改変**のまま（透明 raster 外縁が透明 gutter を自動生成し §9 の不透明 extrude を上書き）、`texture-atlas-targets.ts`/`texture-atlas-packing.ts` を padded raster 基準＋`uvRect`=content sub-rect へ整合。atlas gutter(`paddingPixels`)は既存幅据置（overshoot はラスタ内透明帯が吸収）。premultiplied のため透明 gutter は暗い fringe を出さない。
 
 ## 次の作業候補
 

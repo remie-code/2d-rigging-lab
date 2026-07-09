@@ -239,10 +239,28 @@ const materializeLayerIntoSession = (input: {
         })
       : undefined;
 
+  const materialization = input.request.payload.materialization;
+  // Padded raster dimensions (content + transparent alpha-edge border) and the
+  // content inset that locates the content region inside that padded raster.
+  // These break the historical `bounds ≡ raster` identity: `dimensions` are the
+  // padded raster, `mesh.bounds` (below) stay content-sized, and `contentInset`
+  // is the explicit bridge. Domain C (D-atlas) consumes all three.
+  const paddedDimensions =
+    materialization.width === undefined || materialization.height === undefined
+      ? undefined
+      : {
+          width: materialization.width,
+          height: materialization.height,
+          pixelFormat: "rgba8" as const
+        };
   const textureResult = upsertTexturePreviewAssetMetadata(input.session, {
     textureEntry: {
       textureId: input.targets.textureId,
       filePath: binaryAssetRef.packageRelativePath,
+      ...(paddedDimensions === undefined ? {} : { dimensions: paddedDimensions }),
+      ...(materialization.contentInset === undefined
+        ? {}
+        : { contentInset: structuredClone(materialization.contentInset) }),
       sourceAssetId: input.targets.sourceAssetId,
       sourceLayerId: input.targets.sourceLayerId,
       provenanceId: binaryAssetRef.provenanceId,

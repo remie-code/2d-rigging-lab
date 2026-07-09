@@ -55,7 +55,7 @@ function isDrawableRenderable(drawable: RenderDrawable): boolean {
  *  - renderable = visible && opacity > 0 && texture source present
  *  - mesh validity per webgl2-mesh (vertexCount = min(vertices, uvs); triangles
  *    fully in range)
- *  - NEAREST + CLAMP_TO_EDGE texture sampling
+ *  - LINEAR (bilinear) + CLAMP_TO_EDGE texture sampling
  *  - premultiplied "over" blend, transparent (0,0,0,0) clear
  *  - drawable-alpha mask via a separate viewport-sized mask pass
  */

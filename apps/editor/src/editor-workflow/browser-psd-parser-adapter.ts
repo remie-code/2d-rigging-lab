@@ -9,6 +9,7 @@ import type {
 } from "@private-2d-rigging-lab/operation-core";
 
 import { PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE } from "@private-2d-rigging-lab/operation-core";
+import { maxCoverageMarginSourcePixels } from "@private-2d-rigging-lab/authoring-core";
 import {
   ProvenanceIdSchema,
   SourceAssetIdSchema,
@@ -93,6 +94,78 @@ interface RectLike {
   readonly y: number;
   readonly width: number;
   readonly height: number;
+}
+
+// Transparent alpha-edge padding baked around every extracted PSD layer raster,
+// measured in source-texture pixels.
+//
+// Why: contour meshes extend a "covering margin" a few pixels beyond the
+// drawable boundary. With a tightly-cropped raster and CLAMP/edge-extrude, those
+// overshoot vertices sample stretched edge texels and bloom. A1
+// (boundary-transparent-margin-design.md §5) instead receives the overshoot on
+// *transparency*: the raster grows on every side, filled with
+// premultiplied-transparent (0,0,0,0), so overshoot UV lands on transparent
+// texels.
+//
+// Option E (2026-07-09): the padding width is a FUNCTION of the layer's long
+// edge, not a fixed constant. `maxCoverageMarginSourcePixels(longEdge)` (the
+// authoring-core canonical bound, re-exported from
+// @private-2d-rigging-lab/authoring-core) returns the widest overshoot any live
+// generator can produce for that layer size — ceil(clamp(0.012×longEdge,4,16)+1)
+// source pixels: 5px for small layers, 17px for large, long-edge-proportional in
+// between. Baking per layer keeps the padding generator-independent (it bounds
+// v6d's constant ~3px and v7's proportional r alike) and needs no re-bake.
+export const layerTransparentPaddingSourcePixels = (longEdgePixels: number): number =>
+  maxCoverageMarginSourcePixels(longEdgePixels);
+
+export interface PaddedLayerRaster {
+  readonly bytes: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+  readonly contentInset: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
+}
+
+/**
+ * Bakes a uniform transparent border of `padding` source pixels around an RGBA
+ * layer raster. The content is copied, row by row, to offset (padding, padding)
+ * inside a (width + 2*padding) x (height + 2*padding) buffer that is zero-filled
+ * (premultiplied-transparent (0,0,0,0)). Pure and deterministic: identical input
+ * yields identical output bytes.
+ */
+export function padLayerRasterWithTransparentBorder(
+  content: Uint8Array,
+  contentWidth: number,
+  contentHeight: number,
+  padding: number
+): PaddedLayerRaster {
+  const paddedWidth = contentWidth + padding * 2;
+  const paddedHeight = contentHeight + padding * 2;
+  const bytes = new Uint8Array(paddedWidth * paddedHeight * 4);
+  const contentRowBytes = contentWidth * 4;
+  const paddedRowBytes = paddedWidth * 4;
+
+  for (let row = 0; row < contentHeight; row += 1) {
+    const srcStart = row * contentRowBytes;
+    const dstStart = (row + padding) * paddedRowBytes + padding * 4;
+    bytes.set(content.subarray(srcStart, srcStart + contentRowBytes), dstStart);
+  }
+
+  return {
+    bytes,
+    width: paddedWidth,
+    height: paddedHeight,
+    contentInset: {
+      left: padding,
+      top: padding,
+      right: padding,
+      bottom: padding
+    }
+  };
 }
 
 const PARSER_EVIDENCE: PsdAdapterParserEvidenceDto = {
@@ -293,7 +366,7 @@ function walkPsdChildren(input: {
   return unionBounds(childBounds);
 }
 
-async function createLayerMaterializationEvidence(input: {
+export async function createLayerMaterializationEvidence(input: {
   readonly fileName: string;
   readonly layer: ParsedLayerNode;
   readonly planToken: string;
@@ -302,7 +375,24 @@ async function createLayerMaterializationEvidence(input: {
   readonly sourceByteLength: number;
 }): Promise<CreatedLayerMaterialization> {
   const rgbaBytes = await input.layer.layer.composite(false, false);
-  const digest = await sha256Bytes(rgbaBytes);
+  // Bake a transparent alpha-edge border so contour covering-margin overshoot
+  // samples transparency instead of stretched edge texels (A1). The border width
+  // is a FUNCTION of the layer's long edge (Option E): P px on every side, where
+  // P bounds the widest overshoot any generator can produce at this layer size.
+  // All downstream evidence (byteLength/width/height/digest) is recomputed
+  // against the padded raster; stage bounds stay content-sized and are bridged by
+  // contentInset (all four sides = P).
+  const contentRgba = rgbaBytes instanceof Uint8Array ? rgbaBytes : new Uint8Array(rgbaBytes);
+  const longEdge = Math.max(input.layer.bounds.width, input.layer.bounds.height);
+  const padding = layerTransparentPaddingSourcePixels(longEdge);
+  const padded = padLayerRasterWithTransparentBorder(
+    contentRgba,
+    input.layer.bounds.width,
+    input.layer.bounds.height,
+    padding
+  );
+  const paddedBytes = padded.bytes;
+  const digest = await sha256Bytes(paddedBytes);
   const layerToken = sanitizeIdToken(input.layer.sourceLayerId);
   const textureId = TextureIdSchema.parse(`tex_${input.planToken}_${layerToken}`);
   const provenanceId = ProvenanceIdSchema.parse(`prov_${input.planToken}_${layerToken}`);
@@ -311,7 +401,7 @@ async function createLayerMaterializationEvidence(input: {
     binaryAssetId: `bin_${input.planToken}_${layerToken}_rgba`,
     packageRelativePath: `assets/textures/psd/${input.planToken}/${layerToken}.raw-rgba`,
     digest,
-    byteLength: rgbaBytes.byteLength,
+    byteLength: paddedBytes.byteLength,
     mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
     storageStatus: "stored-package-local-v1",
     provenanceId,
@@ -328,10 +418,11 @@ async function createLayerMaterializationEvidence(input: {
       sourceLayerPath: [...input.layer.groupPath, input.layer.originalName]
     },
     mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
-    byteLength: rgbaBytes.byteLength,
+    byteLength: paddedBytes.byteLength,
     digest,
-    width: input.layer.bounds.width,
-    height: input.layer.bounds.height,
+    width: padded.width,
+    height: padded.height,
+    contentInset: padded.contentInset,
     binaryAssetRef,
     textureId,
     provenance: {
@@ -364,9 +455,9 @@ async function createLayerMaterializationEvidence(input: {
       sourceLayerId: input.layer.sourceLayerId,
       materializationId: evidence.materializationId,
       binaryAssetRef,
-      width: input.layer.bounds.width,
-      height: input.layer.bounds.height,
-      bytes: new Uint8Array(rgbaBytes)
+      width: padded.width,
+      height: padded.height,
+      bytes: paddedBytes
     }
   };
 }

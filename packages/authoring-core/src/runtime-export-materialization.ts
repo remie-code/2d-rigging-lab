@@ -549,7 +549,14 @@ const materializeRuntimeExportKeyformBinding = (
   } as RuntimeExportKeyformBindingDto;
 };
 
-const mapSourceUvToAtlasUv = (
+// Exported for unit testing (Wave108 Domain E). Logic is unchanged: under a full
+// `sourceRectPixels = (0, 0, sourceTextureSize)`, local normalization is the identity
+// (`localX = uv.x`), so this reduces to `atlasUv = uvRect.topLeft + uv · uvRectSpan` —
+// the same single linear consume of the content-inset `uvRect` that the editor
+// atlasRuntime remap (`viewer-render-source.ts remapUvIntoPlacement`) performs. See
+// boundary-transparent-margin-design.md §3.2/§4/§7 and the D-atlas placement contract
+// (`uvRect` = content sub-rect, the single source of truth — do not re-inset here).
+export const mapSourceUvToAtlasUv = (
   uv: Vec2Dto,
   placement: TextureAtlasPlacementDto
 ): Vec2Dto => {

@@ -28,6 +28,7 @@ import {
 
 type MeshDto = AuthoringSession["graph"]["meshes"][number];
 type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
+type TextureAtlasEntryDto = NonNullable<AuthoringSession["graph"]["textureAtlas"]>["textures"][number];
 
 export interface CanvasPoint {
   readonly x: number;
@@ -182,6 +183,9 @@ export function createCanvasRenderProjection(
   const binaryEntriesByPath = new Map(
     session.binaryAssets?.fileEntries.map((entry) => [entry.path, entry]) ?? []
   );
+  const textureEntriesById = new Map<string, TextureAtlasEntryDto>(
+    session.graph.textureAtlas?.textures.map((entry) => [entry.textureId, entry]) ?? []
+  );
   const sourceLayerByDrawableId = createSourceLayerIndex(session);
   const selectedDrawableIds = resolveSelectedDrawableIds(
     session,
@@ -225,10 +229,12 @@ export function createCanvasRenderProjection(
         drawable.evaluatedMesh.sourceMeshId === undefined
           ? undefined
           : meshesById.get(drawable.evaluatedMesh.sourceMeshId as MeshDto["meshId"]);
+      const rasterDimensions = textureEntriesById.get(drawable.textureRef.textureId)?.dimensions;
       const renderDimensions = resolveDrawableRenderDimensions({
         drawable,
         ...(baseMesh === undefined ? {} : { baseMesh }),
-        ...(sourceLayer === undefined ? {} : { sourceLayer })
+        ...(sourceLayer === undefined ? {} : { sourceLayer }),
+        ...(rasterDimensions === undefined ? {} : { rasterDimensions })
       });
       const selected = isDrawableSelected(selection, drawable.drawableId);
       const selectedBySubtree = !selected && selectedDrawableIds.has(drawable.drawableId);
@@ -355,7 +361,27 @@ function resolveDrawableRenderDimensions(input: {
   readonly drawable: CanvasEvaluatedDrawable;
   readonly sourceLayer?: AuthoringSession["graph"]["sourceAssets"][number]["layers"][number];
   readonly baseMesh?: MeshDto;
+  readonly rasterDimensions?: TextureAtlasEntryDto["dimensions"];
 }): { readonly width: number; readonly height: number } {
+  // Wave108 D-atlas: the per-texture (`original` mode) render bytes are the layer
+  // raster, which since D-texprep carries a baked transparent covering-margin border
+  // — so its byte dimensions are the padded `textureEntry.dimensions`, not the content
+  // `bounds` (the historical `bounds ≡ raster` identity is broken). Prefer the padded
+  // raster dims here so `renderWidth * renderHeight * 4 === renderBytes.byteLength` and
+  // `isRenderableDrawable` keeps the drawable in the render set. Legacy entries without
+  // `dimensions` fall back to the content bounds chain (raster == content).
+  //
+  // This only sizes the sampled texture; `original` display may show the content
+  // offset by the padding (content-space UV sampled against a padded raster under
+  // CLAMP_TO_EDGE). That offset is design §5.5-de-scoped — atlasRuntime is the canonical
+  // preview and remaps render dims to the atlas page, so it is unaffected.
+  if (input.rasterDimensions !== undefined) {
+    return {
+      width: Math.max(1, Math.round(input.rasterDimensions.width)),
+      height: Math.max(1, Math.round(input.rasterDimensions.height))
+    };
+  }
+
   const bounds =
     input.sourceLayer?.bounds ??
     input.baseMesh?.bounds ??

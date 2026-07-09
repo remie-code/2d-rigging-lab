@@ -964,6 +964,44 @@ describe("canvas render projection", () => {
     expect(overlay.evaluatedControlPoints[3]).toEqual(front?.evaluatedMesh.vertices[2]);
   });
 
+  it("keeps a padded-raster drawable renderable using padded texture dimensions (Wave108 D-atlas)", () => {
+    // D-texprep bakes a transparent covering-margin border into the layer raster, so its
+    // bytes are the padded raster (content 20 + 2·4 = 28) while the stage bounds stay
+    // content-sized (20). resolveDrawableRenderDimensions must report the padded dims from
+    // textureEntry.dimensions so isRenderableDrawable's byteLength check passes.
+    const PADDING = 4;
+    const CONTENT = 20;
+    const PADDED = CONTENT + PADDING * 2;
+    const session = createFixtureSession();
+    const frontEntry = session.graph.textureAtlas?.textures.find(
+      (entry) => entry.textureId === TEX_FRONT
+    );
+    const frontBinary = session.binaryAssets?.fileEntries.find(
+      (entry) => entry.path === frontEntry?.binaryAssetRef.packageRelativePath
+    );
+    if (frontEntry === undefined || frontBinary === undefined) {
+      throw new Error("Expected front texture entry and binary bytes.");
+    }
+    frontEntry.dimensions = { width: PADDED, height: PADDED, pixelFormat: "rgba8" };
+    frontEntry.contentInset = { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING };
+    frontBinary.bytes = new Uint8Array(PADDED * PADDED * 4);
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "drawable",
+      id: DRAW_FRONT
+    });
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+
+    expect(front?.renderWidth).toBe(PADDED);
+    expect(front?.renderHeight).toBe(PADDED);
+    expect(front?.renderBytes?.byteLength).toBe(PADDED * PADDED * 4);
+    // Stage bounds remain content-sized (bounds != raster).
+    expect(front?.bounds).toEqual({ x: 5, y: 5, width: CONTENT, height: CONTENT });
+    // Still renderable (byteLength matches padded render dims) and drives artwork bounds.
+    expect(hitTestTopmostDrawable(projection, { x: 6, y: 6 })).toBe(DRAW_FRONT);
+    expect(projection.hasRenderableArtwork).toBe(true);
+  });
+
   it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
     const session = createFixtureSession();
     const projection = createCanvasRenderProjection(

@@ -4,7 +4,9 @@
  * Orchestrates the pixel-space v7 pipeline into a MeshDto: it maps pixel-space
  * points to stage/UV coordinates using the same transform convention as the v6
  * backends (stage = bounds.origin + bounds.size * (pixel / textureSize); uv =
- * clamp(pixel / textureSize, 0, 1)), handles multi-island drawables by placing
+ * pixel / textureSize, UNclamped since Wave108 D-gen so covering-margin vertices
+ * spill past [0,1] into the transparent gutter), handles multi-island drawables
+ * by placing
  * each valid island as an independent sub-mesh in a single MeshDto (§4), and
  * bakes v7 provenance into the quality metrics (provenance-only diagnostics per
  * the wave decision — no preview-schema changes).
@@ -28,7 +30,6 @@ import {
   type AlphaIslandDescriptor
 } from "./mesh-geometry/alpha-island-components.js";
 import {
-  clamp,
   roundCoordinate,
   type GeometryPoint,
   type PixelBounds
@@ -256,7 +257,9 @@ const unionStageAlphaBounds = (input: {
   };
 };
 
-const mapPixelPointToStagePoint = (
+// Exported for unit tests (mesh-generation-v7-margin-contour.test.ts) to assert
+// the stage/UV symmetry and non-clamp directly; runtime behaviour is unchanged.
+export const mapPixelPointToStagePoint = (
   point: GeometryPoint,
   bounds: RectDto,
   textureWidth: number,
@@ -266,13 +269,19 @@ const mapPixelPointToStagePoint = (
   y: roundCoordinate(bounds.y + bounds.height * (point.y / textureHeight))
 });
 
-const mapPixelPointToUv = (
+// UV maps pixel/textureSize WITHOUT clamping to [0,1] (Wave108 D-gen), matching
+// the shared v6 helper mapV6ContourPointToUv. Covering-margin vertices pushed
+// outside the texture keep layer-local UVs that spill past [0,1]; the transparent
+// gutter (the per-layer padding P, sized by maxCoverageMarginSourcePixels)
+// receives them. Same pixel/size basis as the stage mapping
+// above so stage and UV stay symmetric.
+export const mapPixelPointToUv = (
   point: GeometryPoint,
   textureWidth: number,
   textureHeight: number
 ): GeometryPoint => ({
-  x: roundCoordinate(clamp(point.x / textureWidth, 0, 1)),
-  y: roundCoordinate(clamp(point.y / textureHeight, 0, 1))
+  x: roundCoordinate(point.x / textureWidth),
+  y: roundCoordinate(point.y / textureHeight)
 });
 
 const mapPixelBoundsToStageRect = (

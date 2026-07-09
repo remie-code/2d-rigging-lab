@@ -8,6 +8,7 @@
 |---|---|---|
 | [_map.md](_map.md) | このディレクトリの入口地図 | Active |
 | [mesh-image-rendering-architecture.md](mesh-image-rendering-architecture.md) | Mesh image rendering contract、WebGL2 primary renderer、texture preparation / atlas境界、Canvas2D撤退条件の設計 | Draft architecture basis |
+| [boundary-transparent-margin-design.md](boundary-transparent-margin-design.md) | 輪郭メッシュが drawable 境界外へ延ばした頂点付近のにじみを、覆いマージン透明化(A1)で根絶する設計。生成UV非クランプ + Texture Prep/Atlas透明gutter + LINEAR化。§9 edge-extrude を覆いマージンについて上書き。export不可侵層に触れる | **Implemented (Wave108, Option E)** — clean review PASS・権威検証 green。実機 atlasRuntime 目視はユーザー gate（wave 外）。final report: [../../implementation/waves/wave108/wave108-final-integration-report.md](../../implementation/waves/wave108/wave108-final-integration-report.md) |
 
 ## 境界
 

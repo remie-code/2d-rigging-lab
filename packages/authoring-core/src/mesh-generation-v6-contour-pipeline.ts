@@ -15,7 +15,6 @@ import {
   selectMainComponent
 } from "./mesh-geometry/connected-components.js";
 import {
-  clamp,
   type GeometryPoint,
   type PixelBounds,
   roundCoordinate
@@ -251,13 +250,20 @@ export const mapV6ContourPointToStagePoint = (
   y: roundCoordinate(bounds.y + bounds.height * (point.y / textureHeight))
 });
 
+// UV maps pixel/textureSize WITHOUT clamping to [0,1] (Wave108 D-gen). Boundary
+// vertices that the covering margin pushes outside the texture carry layer-local
+// UVs that spill slightly past [0,1]; the transparent texture gutter (the
+// per-layer padding P, sized by maxCoverageMarginSourcePixels(longEdge) in
+// mesh-generation-coverage-margin.ts) receives that overshoot. This uses the
+// exact same pixel/size basis as mapV6ContourPointToStagePoint so stage and UV
+// stay symmetric (stage = bounds.origin + bounds.size*ratio, uv = ratio).
 export const mapV6ContourPointToUv = (
   point: V6ContourPoint,
   textureWidth: number,
   textureHeight: number
 ): V6ContourPoint => ({
-  x: roundCoordinate(clamp(point.x / textureWidth, 0, 1)),
-  y: roundCoordinate(clamp(point.y / textureHeight, 0, 1))
+  x: roundCoordinate(point.x / textureWidth),
+  y: roundCoordinate(point.y / textureHeight)
 });
 
 const createConstraintEdges = (

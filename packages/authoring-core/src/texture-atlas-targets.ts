@@ -7,7 +7,8 @@ import type {
 import type {
   DrawableDto,
   MeshDto,
-  TextureAtlasEntryDto
+  TextureAtlasEntryDto,
+  TextureContentInsetDto
 } from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringSession } from "./authoring-session.js";
@@ -70,10 +71,26 @@ export interface TextureAtlasPackableTarget {
   readonly mesh: MeshDto;
   readonly textureEntry: TextureAtlasEntryDto;
   readonly textureBytes: Uint8Array;
+  /**
+   * Raster dimensions of `textureBytes`. Since Wave108 D-texprep bakes a transparent
+   * covering-margin border into the layer raster, this is the **padded raster** size
+   * (content + `contentInset` on every side), not the content bounds. It equals
+   * `textureEntry.dimensions` when present and falls back to rounded content
+   * `mesh.bounds` for legacy entries without baked padding (`bounds ≡ raster`).
+   * `textureBytes.byteLength === textureSize.width * textureSize.height * 4`.
+   */
   readonly textureSize: {
     readonly width: number;
     readonly height: number;
   };
+  /**
+   * Per-side transparent padding (source-texture pixels) baked into the raster by
+   * D-texprep, bridging padded `textureSize` ⇄ content bounds. Undefined for legacy
+   * entries. Consumed by packing to inset the placement `uvRect` onto the content
+   * sub-rect so covering-margin overshoot UV lands in the raster's own transparent
+   * band. See boundary-transparent-margin-design.md §3.1/§4/§5.
+   */
+  readonly contentInset?: TextureContentInsetDto;
   readonly currentlyHidden: boolean;
   readonly hiddenReasons: readonly TextureAtlasHiddenReason[];
 }
@@ -351,8 +368,7 @@ const validateTextureBytesForAtlas = (
     })];
   }
 
-  const width = Math.round(mesh.bounds.width);
-  const height = Math.round(mesh.bounds.height);
+  const { width, height } = resolvePackedRasterSize(mesh, textureEntry);
   const expectedByteLength = width * height * 4;
   if (binaryEntry.bytes.byteLength !== expectedByteLength) {
     return [createDrawableWarning({
@@ -404,12 +420,38 @@ const createPackableTarget = (
     mesh: structuredClone(mesh),
     textureEntry: structuredClone(textureEntry),
     textureBytes: binaryEntry.bytes,
-    textureSize: {
-      width: Math.round(mesh.bounds.width),
-      height: Math.round(mesh.bounds.height)
-    },
+    textureSize: resolvePackedRasterSize(mesh, textureEntry),
+    ...(textureEntry.contentInset === undefined
+      ? {}
+      : { contentInset: { ...textureEntry.contentInset } }),
     currentlyHidden: hiddenReasons.length > 0,
     hiddenReasons: [...hiddenReasons]
+  };
+};
+
+/**
+ * Raster (byte) dimensions for an atlas source tile.
+ *
+ * Wave108 D-atlas: `textureEntry.dimensions` are the **padded raster** dims once
+ * D-texprep has baked the transparent covering-margin border (content + 2·inset),
+ * and they — not the content `mesh.bounds` — match the stored `binaryAssetRef`
+ * bytes. We derive the packed size from `dimensions` when present so `copyTexture…`
+ * strides by the true raster width and `validateTextureBytesForAtlas` does not
+ * under-count the padded bytes. Legacy entries without `dimensions` keep the
+ * historical `bounds ≡ raster` behaviour (rounded content bounds).
+ */
+const resolvePackedRasterSize = (
+  mesh: MeshDto,
+  textureEntry: TextureAtlasEntryDto
+): { readonly width: number; readonly height: number } => {
+  const dimensions = textureEntry.dimensions;
+  if (dimensions !== undefined) {
+    return { width: dimensions.width, height: dimensions.height };
+  }
+
+  return {
+    width: Math.round(mesh.bounds.width),
+    height: Math.round(mesh.bounds.height)
   };
 };
 

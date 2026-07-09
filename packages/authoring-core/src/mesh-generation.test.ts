@@ -29,6 +29,7 @@ import {
   createV6MeshGenerationFixtureRgbaBytes,
   getV6MeshGenerationContractFixture
 } from "./mesh-generation-v6-fixtures.js";
+import { maxCoverageMarginSourcePixels } from "./mesh-generation-coverage-margin.js";
 import { createV6ContourCandidateInput } from "./mesh-generation-v6-contour-pipeline.js";
 import { resolveV6DAdaptiveDensityForTest } from "./mesh-generation-v6d-adaptive-density.js";
 import {
@@ -2088,7 +2089,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: meshBounds
+      bounds: meshBounds,
+      textureSize
     });
     const outsideVertexIndexes =
       generated?.mesh.vertices
@@ -2102,18 +2104,95 @@ describe("alpha-aware mesh generation", () => {
         .map(({ index }) => index) ?? [];
 
     expect(outsideVertexIndexes.length).toBeGreaterThan(0);
+    // Non-clamp (Wave108 D-gen): vertices pushed outside the mesh bounds now
+    // carry UVs that spill PAST [0,1] by the covering margin, symmetric with the
+    // (already unclamped) stage vertices — no longer pinned to the [0,1] edge.
+    const maxMarginPixels = maxCoverageMarginSourcePixels(
+      Math.max(textureSize.width, textureSize.height)
+    );
+    const marginX = (maxMarginPixels + 1) / textureSize.width;
+    const marginY = (maxMarginPixels + 1) / textureSize.height;
     for (const index of outsideVertexIndexes) {
       const uv = generated?.mesh.uvs[index];
       expect(uv).toBeDefined();
-      expect(uv?.x).toBeGreaterThanOrEqual(0);
-      expect(uv?.x).toBeLessThanOrEqual(1);
-      expect(uv?.y).toBeGreaterThanOrEqual(0);
-      expect(uv?.y).toBeLessThanOrEqual(1);
+      expect(uv?.x ?? 0).toBeGreaterThanOrEqual(-marginX);
+      expect(uv?.x ?? 0).toBeLessThanOrEqual(1 + marginX);
+      expect(uv?.y ?? 0).toBeGreaterThanOrEqual(-marginY);
+      expect(uv?.y ?? 0).toBeLessThanOrEqual(1 + marginY);
     }
+    // At least one out-of-bounds vertex spills past [0,1] rather than pinning to 0/1.
     expect(outsideVertexIndexes.some((index) => {
       const uv = generated?.mesh.uvs[index];
-      return uv?.x === 0 || uv?.y === 0;
+      return uv !== undefined && (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1);
     })).toBe(true);
+  });
+
+  it("recovers content raster from Wave108 padded texture bytes so v6d generation stays content-normalized and never falls back", () => {
+    // Regression (Wave108 followup): layer rasters are stored PADDED (content plus
+    // a transparent alpha-edge border). resolveDrawableTextureBytes must crop the
+    // content sub-rectangle back out (content-normalized UV contract) instead of
+    // matching padded byteLength against unpadded bounds and returning
+    // `texture-bytes-unavailable` for every drawable.
+    const contentInset = { left: 5, top: 5, right: 5, bottom: 5 } as const;
+    const textureSize = { width: 24, height: 20 }; // content extents
+    const meshBounds = { x: 10, y: 20, width: 24, height: 20 }; // content-sized bounds
+    const opaquePixels = createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) =>
+      x >= 0 && x <= 13 && y >= 0 && y <= 11
+    );
+
+    const paddedSession = createFixtureSession({
+      includeBytes: true,
+      textureSize,
+      meshBounds,
+      opaquePixels,
+      contentInset
+    });
+
+    // Sanity: the fixture genuinely stores PADDED bytes ((cw+2P)(ch+2P)*4), so this
+    // test walks the real padded seam rather than an unpadded stand-in.
+    const storedEntry = paddedSession.binaryAssets?.fileEntries.find(
+      (entry) => entry.path === "assets/textures/body.raw-rgba"
+    );
+    const paddedWidth = textureSize.width + contentInset.left + contentInset.right;
+    const paddedHeight = textureSize.height + contentInset.top + contentInset.bottom;
+    expect(storedEntry?.bytes.byteLength).toBe(paddedWidth * paddedHeight * 4);
+    expect(storedEntry?.bytes.byteLength).not.toBe(textureSize.width * textureSize.height * 4);
+
+    const generated = createGeneratedMeshForDrawable({
+      session: paddedSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    // Did NOT fall back: real backend output, no texture-bytes-unavailable.
+    expect(generated?.source).toBe("outline-v6d-adaptive-contour-constrainautor-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.fallbackSteps).toBeUndefined();
+
+    // Content-normalization proof: cropping the padded raster yields byte-identical
+    // input to the equivalent unpadded fixture, so a deterministic generator must
+    // emit byte-identical UVs/vertices — no padding-derived P/pw offset baked in.
+    const unpaddedGenerated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({ includeBytes: true, textureSize, meshBounds, opaquePixels }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+    expect(generated?.mesh.uvs).toEqual(unpaddedGenerated?.mesh.uvs);
+    expect(generated?.mesh.vertices).toEqual(unpaddedGenerated?.mesh.vertices);
+
+    // UVs stay within the covering-margin band around content-normalized [0,1]; a
+    // padding offset (P/pw ~= 5/34) would push edge UVs well outside this band.
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds,
+      textureSize
+    });
   });
 
   it("generates disconnected v6d adaptive contour geometry for two separated alpha islands", () => {
@@ -2150,7 +2229,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: meshBounds
+      bounds: meshBounds,
+      textureSize
     });
     expectNoDuplicateStableIds(generated?.mesh);
     expect(countTriangleVertexConnectedComponents(generated?.mesh)).toBe(2);
@@ -2241,7 +2321,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: meshBounds
+      bounds: meshBounds,
+      textureSize
     });
     expect(meshHasVertexInRect(generated?.mesh, { x: 56, y: 3, width: 7, height: 6 })).toBe(false);
     expect(countTriangleCentroidsInRect(generated?.mesh, { x: 56, y: 3, width: 7, height: 6 })).toBe(0);
@@ -2345,7 +2426,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: meshBounds
+      bounds: meshBounds,
+      textureSize
     });
     expect(countTriangleVertexConnectedComponents(generated?.mesh)).toBe(2);
     expect(meshHasVertexInRect(generated?.mesh, { x: 52, y: 8, width: 7, height: 19 })).toBe(true);
@@ -2801,7 +2883,8 @@ describe("alpha-aware mesh generation", () => {
         meshId: MeshIdSchema.parse("mesh_body"),
         drawableId: baseInput.drawableId,
         generationProvenanceId: baseInput.provenanceId,
-        bounds: fixture.meshBounds
+        bounds: fixture.meshBounds,
+        textureSize: fixture.textureSize
       });
       expect(first?.alphaBounds).toBeDefined();
       if (first?.alphaBounds !== undefined) {
@@ -2931,7 +3014,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: meshBounds
+      bounds: meshBounds,
+      textureSize
     });
     expect(
       generated?.mesh.vertices.some(
@@ -3311,7 +3395,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: fixture.meshBounds
+      bounds: fixture.meshBounds,
+      textureSize: fixture.textureSize
     });
     const v6Metrics = generated?.qualityMetrics?.v6Metrics;
     const adaptiveDiagnostics = v6Metrics?.adaptiveStaggeredBandDiagnostics;
@@ -4543,6 +4628,12 @@ function expectValidMeshDtoAllowingOutsideBounds(
     readonly drawableId?: MeshDto["drawableId"];
     readonly generationProvenanceId?: MeshDto["generationProvenanceId"];
     readonly bounds?: RectDto;
+    // Texture size lets this helper bound the (Wave108 D-gen) covering-margin UV
+    // overshoot. v6d-family generators push boundary vertices outside the texture,
+    // so with the UV clamp removed their layer-local UVs spill past [0,1] by at
+    // most K source pixels (mesh-generation-coverage-margin.ts). When omitted the
+    // UVs are asserted strictly inside [0,1] (no-overshoot generators).
+    readonly textureSize?: { readonly width: number; readonly height: number };
   }
 ): void {
   expect(mesh).toBeDefined();
@@ -4572,13 +4663,26 @@ function expectValidMeshDtoAllowingOutsideBounds(
     expect(Number.isFinite(vertex.y)).toBe(true);
   }
 
+  // Covering-margin UV overshoot budget: the size-dependent maximum covering
+  // margin in source pixels (+1 for rounding), expressed per axis in UV. 0 when
+  // textureSize is not supplied (strict [0,1]).
+  const maxMarginPixels =
+    expected?.textureSize === undefined
+      ? 0
+      : maxCoverageMarginSourcePixels(
+          Math.max(expected.textureSize.width, expected.textureSize.height)
+        );
+  const marginX =
+    expected?.textureSize === undefined ? 0 : (maxMarginPixels + 1) / expected.textureSize.width;
+  const marginY =
+    expected?.textureSize === undefined ? 0 : (maxMarginPixels + 1) / expected.textureSize.height;
   for (const uv of mesh.uvs) {
     expect(Number.isFinite(uv.x)).toBe(true);
     expect(Number.isFinite(uv.y)).toBe(true);
-    expect(uv.x).toBeGreaterThanOrEqual(0);
-    expect(uv.x).toBeLessThanOrEqual(1);
-    expect(uv.y).toBeGreaterThanOrEqual(0);
-    expect(uv.y).toBeLessThanOrEqual(1);
+    expect(uv.x).toBeGreaterThanOrEqual(-marginX);
+    expect(uv.x).toBeLessThanOrEqual(1 + marginX);
+    expect(uv.y).toBeGreaterThanOrEqual(-marginY);
+    expect(uv.y).toBeLessThanOrEqual(1 + marginY);
   }
 
   for (const stableId of mesh.vertexStableIds) {
@@ -5087,14 +5191,42 @@ function createFixtureSession({
     [2, 1],
     [1, 2],
     [2, 2]
-  ]
+  ],
+  contentInset
 }: {
   readonly includeBytes: boolean;
   readonly textureSize?: { readonly width: number; readonly height: number };
   readonly meshBounds?: RectDto;
   readonly opaquePixels?: readonly (readonly [number, number])[];
+  // When provided, `textureSize`/`opaquePixels`/`meshBounds` describe the CONTENT
+  // raster and the fixture bakes a Wave108 padded raster around it (transparent
+  // border of the given inset), storing padded bytes + `dimensions`(padded) +
+  // `contentInset` on the texture entry — exactly like a real post-Wave108 import.
+  readonly contentInset?: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
 }): AuthoringSession {
-  const bytes = createAlphaBytes(textureSize.width, textureSize.height, opaquePixels);
+  const contentBytes = createAlphaBytes(textureSize.width, textureSize.height, opaquePixels);
+  const paddedDimensions =
+    contentInset === undefined
+      ? undefined
+      : {
+          width: textureSize.width + contentInset.left + contentInset.right,
+          height: textureSize.height + contentInset.top + contentInset.bottom,
+          pixelFormat: "rgba8" as const
+        };
+  const bytes =
+    contentInset === undefined || paddedDimensions === undefined
+      ? contentBytes
+      : padAlphaBytesWithTransparentBorder(
+          contentBytes,
+          textureSize.width,
+          textureSize.height,
+          contentInset
+        );
 
   return {
     packageIdentity: {
@@ -5167,6 +5299,8 @@ function createFixtureSession({
           {
             textureId: TextureIdSchema.parse("tex_body"),
             filePath: "assets/textures/body.raw-rgba",
+            ...(paddedDimensions === undefined ? {} : { dimensions: paddedDimensions }),
+            ...(contentInset === undefined ? {} : { contentInset }),
             sourceAssetId: SourceAssetIdSchema.parse("src_body"),
             binaryAssetRef: {
               referenceKind: "package-binary-asset-ref-v1",
@@ -5223,6 +5357,29 @@ function createAlphaBytes(
     bytes[index + 3] = 255;
   }
 
+  return bytes;
+}
+
+// Bake a Wave108-style padded raster: place `content` (contentWidth x contentHeight)
+// inside a transparent border of `inset` px per side. Mirror of the production
+// padLayerRasterWithTransparentBorder so the padded-seam regression test exercises
+// real padded bytes rather than an unpadded stand-in.
+function padAlphaBytesWithTransparentBorder(
+  content: Uint8Array,
+  contentWidth: number,
+  contentHeight: number,
+  inset: { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number }
+): Uint8Array {
+  const paddedWidth = contentWidth + inset.left + inset.right;
+  const paddedHeight = contentHeight + inset.top + inset.bottom;
+  const bytes = new Uint8Array(paddedWidth * paddedHeight * 4);
+  const contentRowBytes = contentWidth * 4;
+  const paddedRowBytes = paddedWidth * 4;
+  for (let row = 0; row < contentHeight; row += 1) {
+    const srcStart = row * contentRowBytes;
+    const dstStart = (row + inset.top) * paddedRowBytes + inset.left * 4;
+    bytes.set(content.subarray(srcStart, srcStart + contentRowBytes), dstStart);
+  }
   return bytes;
 }
 

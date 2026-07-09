@@ -52,7 +52,7 @@ export const createSolidTexture = (
 
 /**
  * A 2x2 checkerboard texture with four distinct opaque colors, useful for
- * exercising NEAREST texel selection and UV mapping. Texel layout (top-left
+ * exercising LINEAR texel interpolation and UV mapping. Texel layout (top-left
  * origin):
  *   (0,0) red    (1,0) green
  *   (0,1) blue   (1,1) white

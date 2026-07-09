@@ -117,6 +117,15 @@ const copyTextureIntoPlacement = (input: {
   }
 };
 
+// Clamps the source raster's outer edge outward into the surrounding atlas gutter
+// (`paddedRect` minus `contentRect`), leaving the copied content untouched. Wave108
+// D-atlas note: `contentRectPixels` is the placement of the **whole padded raster**,
+// whose outer edge is now the transparent covering-margin border baked by D-texprep.
+// Clamp-extruding a transparent edge therefore yields a **transparent** gutter for
+// free — no logic change is needed to override §9's opaque edge-extrude for the
+// covering margin (boundary-transparent-margin-design.md §4/§5/§9). The internal
+// transparent band (raster interior, inside `contentRectPixels`) is skipped by the
+// in-content `continue` below, so extrude never overwrites it with an opaque texel.
 const extrudeTexturePlacementEdges = (input: {
   readonly pageBytes: Uint8Array;
   readonly pageWidth: number;

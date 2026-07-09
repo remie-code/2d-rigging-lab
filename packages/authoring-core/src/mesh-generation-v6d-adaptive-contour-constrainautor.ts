@@ -48,8 +48,17 @@ import {
   type MeshGenerationV6ContourPipelineDiagnostics
 } from "./mesh-quality-metrics.js";
 
-const ADAPTIVE_CONTOUR_MASK_EXPANSION_PIXELS = 2;
-const ADAPTIVE_CONTOUR_VIRTUAL_PADDING_PIXELS = 4;
+// Outward covering margin for v6d-adaptive: the mask is dilated by this many
+// pixels so the traced outline sits outside the artwork (texture-size
+// independent). Natural value 2px. Under Option E (Wave108 D-gen) the generator
+// radius is NOT bound to any coverage constant; the transparent padding baked at
+// import time (maxCoverageMarginSourcePixels) covers this ~2..3px overshoot.
+// Exported for the v6d covering-margin test.
+export const ADAPTIVE_CONTOUR_MASK_EXPANSION_PIXELS = 2;
+// The virtual padding is a buffer that must CONTAIN the mask expansion so the
+// dilation never clamps at the canvas edge (virtual padding >= mask expansion).
+// Natural value 4px. Exported for the v6d covering-margin test.
+export const ADAPTIVE_CONTOUR_VIRTUAL_PADDING_PIXELS = 4;
 
 export interface AutoOutlineV6DAdaptiveContourConstrainautorMeshInput {
   readonly meshId: MeshId;

@@ -2,7 +2,7 @@ import type { RenderPoint } from "@private-2d-rigging-lab/render-core";
 
 import { blendFragmentOver } from "./blend.js";
 import type { SoftwareFramebuffer } from "./framebuffer.js";
-import { sampleTextureNearest, type PreparedTexture } from "./texture-sampler.js";
+import { sampleTextureLinear, type PreparedTexture } from "./texture-sampler.js";
 
 /**
  * Per-vertex data for one triangle: image-pixel-space position (continuous
@@ -60,9 +60,10 @@ function edgeIsTopLeft(from: RenderPoint, to: RenderPoint): boolean {
  * Rasterize a single textured triangle into the framebuffer.
  *
  * Coverage is decided by pixel-center sampling with a deterministic top-left
- * rule. UVs are barycentric-interpolated, the texture is sampled NEAREST, the
- * texel (premultiplied) is scaled by `opacity * maskAlpha` on all channels, and
- * the result is composited with premultiplied "over".
+ * rule. UVs are barycentric-interpolated, the texture is sampled LINEAR
+ * (bilinear with CLAMP_TO_EDGE), the sampled (premultiplied) colour is scaled by
+ * `opacity * maskAlpha` on all channels, and the result is composited with
+ * premultiplied "over".
  *
  * Degenerate (zero signed area) triangles are skipped.
  */
@@ -149,7 +150,7 @@ export const rasterizeTriangle = (
       const u = b0 * v0.uv.x + b1 * v1.uv.x + b2 * v2.uv.x;
       const vCoord = b0 * v0.uv.y + b1 * v1.uv.y + b2 * v2.uv.y;
 
-      const sample = sampleTextureNearest(texture, u, vCoord);
+      const sample = sampleTextureLinear(texture, u, vCoord);
       const scale = opacity * maskAlpha;
       if (scale <= 0) {
         continue;

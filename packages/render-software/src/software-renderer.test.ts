@@ -85,7 +85,7 @@ describe("software-renderer golden output", () => {
     expect(Array.from(result.premultipliedRgba8)).toEqual(Array.from(expected));
   });
 
-  it("maps a four-color texture with NEAREST sampling (golden bytes)", () => {
+  it("maps a four-color texture with LINEAR sampling (golden bytes)", () => {
     const scene = createScene({
       textureSources: [createFourColorTexture("four")],
       drawables: [
@@ -100,7 +100,9 @@ describe("software-renderer golden output", () => {
       ]
     });
     const result = renderSceneToRgba8(scene, view2x2);
-    // top-left origin: (0,0)=red (1,0)=green (0,1)=blue (1,1)=white
+    // top-left origin: (0,0)=red (1,0)=green (0,1)=blue (1,1)=white.
+    // Each output pixel centre maps exactly onto a texel centre (UV 0.25/0.75),
+    // so LINEAR has zero fractional weight and reproduces the exact texel colour.
     expect(Array.from(result.premultipliedRgba8)).toEqual([
       255, 0, 0, 255,
       0, 255, 0, 255,

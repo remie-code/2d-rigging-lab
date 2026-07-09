@@ -46,6 +46,50 @@ describe("WebGl2Renderer", () => {
     expect(gl.calls.some((call) => call.name === "bufferData" && call.args[1] instanceof Float32Array)).toBe(true);
   });
 
+  it("uploads layer source textures with LINEAR min/mag filtering and CLAMP_TO_EDGE wrap", () => {
+    const gl = new FakeWebGl2Context();
+    const renderer = new WebGl2Renderer(gl);
+
+    // No masks: the only texParameteri filter calls come from the layer source
+    // texture upload path (webgl2-textures.ts).
+    renderer.render(createRenderScene({
+      textureSources: [createTextureSource("tex_main")],
+      drawables: [createDrawable("draw_main", "tex_main")]
+    }), createViewport());
+
+    const filterCalls = gl.calls.filter(
+      (call) =>
+        call.name === "texParameteri" &&
+        (call.args[1] === gl.TEXTURE_MIN_FILTER || call.args[1] === gl.TEXTURE_MAG_FILTER)
+    );
+    expect(filterCalls.length).toBeGreaterThan(0);
+    expect(
+      filterCalls.some((call) => call.args[1] === gl.TEXTURE_MIN_FILTER && call.args[2] === gl.LINEAR)
+    ).toBe(true);
+    expect(
+      filterCalls.some((call) => call.args[1] === gl.TEXTURE_MAG_FILTER && call.args[2] === gl.LINEAR)
+    ).toBe(true);
+    // No layer source texture is sampled with NEAREST.
+    expect(filterCalls.every((call) => call.args[2] === gl.LINEAR)).toBe(true);
+    // Wrap stays CLAMP_TO_EDGE.
+    expect(
+      gl.calls.some(
+        (call) =>
+          call.name === "texParameteri" &&
+          call.args[1] === gl.TEXTURE_WRAP_S &&
+          call.args[2] === gl.CLAMP_TO_EDGE
+      )
+    ).toBe(true);
+    expect(
+      gl.calls.some(
+        (call) =>
+          call.name === "texParameteri" &&
+          call.args[1] === gl.TEXTURE_WRAP_T &&
+          call.args[2] === gl.CLAMP_TO_EDGE
+      )
+    ).toBe(true);
+  });
+
   it("reuses cached textures for an unchanged signature", () => {
     const gl = new FakeWebGl2Context();
     const renderer = new WebGl2Renderer(gl);

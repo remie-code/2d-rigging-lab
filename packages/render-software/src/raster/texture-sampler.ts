@@ -18,7 +18,7 @@ export interface PreparedTexture {
 }
 
 /**
- * Prepare a texture source for NEAREST sampling. Matches the WebGL2 upload
+ * Prepare a texture source for LINEAR sampling. Matches the WebGL2 upload
  * premultiply exactly: for "straight" sources, premultiplied byte value is
  * round(c * a / 255) before normalization.
  */
@@ -76,30 +76,76 @@ export interface TextureSample {
 }
 
 /**
- * NEAREST sample with CLAMP_TO_EDGE.
- *
- * Texel selection rule (matches GL NEAREST for normalized UVs, top-left UV
- * origin as declared by RenderUvSpace "layer-local-top-left-0-1-v1"):
- * texelIndex = floor(uv * dimension), then clamped to [0, dimension - 1].
- * UVs outside [0,1) map to the nearest edge texel (CLAMP_TO_EDGE).
+ * Bilinearly interpolate one channel of the four neighbouring texels in
+ * premultiplied normalized float space.
  */
-export const sampleTextureNearest = (
+function bilerpChannel(
+  data: Float64Array,
+  base00: number,
+  base10: number,
+  base01: number,
+  base11: number,
+  channel: number,
+  fracX: number,
+  fracY: number
+): number {
+  const c00 = data[base00 + channel] ?? 0;
+  const c10 = data[base10 + channel] ?? 0;
+  const c01 = data[base01 + channel] ?? 0;
+  const c11 = data[base11 + channel] ?? 0;
+  const top = c00 + (c10 - c00) * fracX;
+  const bottom = c01 + (c11 - c01) * fracX;
+  return top + (bottom - top) * fracY;
+}
+
+/**
+ * LINEAR (bilinear) sample with CLAMP_TO_EDGE.
+ *
+ * Matches GL LINEAR + CLAMP_TO_EDGE for normalized UVs with a top-left UV
+ * origin (RenderUvSpace "layer-local-top-left-0-1-v1"):
+ *
+ *   coord = uv * dimension - 0.5   (texel centres sit at integer indices)
+ *   i0    = floor(coord),  i1 = i0 + 1,  frac = coord - i0
+ *   i0, i1 are each clamped to [0, dimension - 1] (CLAMP_TO_EDGE)
+ *
+ * The two axes are combined as a bilinear blend of the four neighbouring
+ * texels, weighted by fracX / fracY. Interpolation happens in the prepared
+ * premultiplied normalized float space, so the transparent (0,0,0,0) padding
+ * around a layer attenuates colour toward transparency without introducing a
+ * dark or white fringe at the edge.
+ */
+export const sampleTextureLinear = (
   texture: PreparedTexture,
   u: number,
   v: number
 ): TextureSample => {
-  if (texture.width <= 0 || texture.height <= 0) {
+  const { width, height, data } = texture;
+  if (width <= 0 || height <= 0) {
     return { r: 0, g: 0, b: 0, a: 0 };
   }
 
-  const texelX = clampInt(Math.floor(u * texture.width), texture.width);
-  const texelY = clampInt(Math.floor(v * texture.height), texture.height);
-  const base = (texelY * texture.width + texelX) * 4;
-  const data = texture.data;
+  const coordX = u * width - 0.5;
+  const coordY = v * height - 0.5;
+
+  const floorX = Math.floor(coordX);
+  const floorY = Math.floor(coordY);
+  const fracX = coordX - floorX;
+  const fracY = coordY - floorY;
+
+  const x0 = clampInt(floorX, width);
+  const x1 = clampInt(floorX + 1, width);
+  const y0 = clampInt(floorY, height);
+  const y1 = clampInt(floorY + 1, height);
+
+  const base00 = (y0 * width + x0) * 4;
+  const base10 = (y0 * width + x1) * 4;
+  const base01 = (y1 * width + x0) * 4;
+  const base11 = (y1 * width + x1) * 4;
+
   return {
-    r: data[base] ?? 0,
-    g: data[base + 1] ?? 0,
-    b: data[base + 2] ?? 0,
-    a: data[base + 3] ?? 0
+    r: bilerpChannel(data, base00, base10, base01, base11, 0, fracX, fracY),
+    g: bilerpChannel(data, base00, base10, base01, base11, 1, fracX, fracY),
+    b: bilerpChannel(data, base00, base10, base01, base11, 2, fracX, fracY),
+    a: bilerpChannel(data, base00, base10, base01, base11, 3, fracX, fracY)
   };
 };

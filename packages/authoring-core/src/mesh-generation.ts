@@ -2465,10 +2465,73 @@ const resolveDrawableTextureBytes = (
   const binaryEntry = session.binaryAssets?.fileEntries.find(
     (entry) => entry.path === binaryAssetRef.packageRelativePath
   );
+  if (binaryEntry === undefined) {
+    return undefined;
+  }
+
+  // Wave108 (boundary transparent margin / Option E): layer rasters are stored
+  // padded — the content plus a transparent alpha-edge border of P px on every
+  // side — with the padded extents in `texture.dimensions` and the border widths
+  // in `texture.contentInset`. The generator normalizes UV as pixel/textureSize
+  // (mapV6ContourPointToUv) and the atlas assumes layer-local UV 0/1 map to the
+  // CONTENT edges, so we must feed the generator the CONTENT raster (border
+  // cropped away) with CONTENT dimensions. Handing over padded bytes/size would
+  // emit padding-normalized UVs that shear every drawable against the atlas.
+  const inset = texture?.contentInset;
+  const isPadded =
+    inset !== undefined && (inset.left > 0 || inset.top > 0 || inset.right > 0 || inset.bottom > 0);
+
+  if (isPadded) {
+    const paddedDimensions = texture?.dimensions;
+    if (paddedDimensions === undefined) {
+      // contentInset without padded dimensions is a malformed/ambiguous record;
+      // fall back safely rather than guess the padded extents.
+      return undefined;
+    }
+
+    const paddedWidth = paddedDimensions.width;
+    const paddedHeight = paddedDimensions.height;
+    // Self-consistency: the stored bytes must be exactly the padded raster.
+    if (binaryEntry.bytes.byteLength !== paddedWidth * paddedHeight * 4) {
+      return undefined;
+    }
+
+    const contentWidth = paddedWidth - (inset.left + inset.right);
+    const contentHeight = paddedHeight - (inset.top + inset.bottom);
+    if (contentWidth <= 0 || contentHeight <= 0) {
+      return undefined;
+    }
+
+    // Crop the content sub-rectangle (left, top, contentWidth, contentHeight) out
+    // of the padded raster row by row — the exact inverse of
+    // padLayerRasterWithTransparentBorder. Pure and deterministic.
+    const contentBytes = new Uint8Array(contentWidth * contentHeight * 4);
+    const paddedRowBytes = paddedWidth * 4;
+    const contentRowBytes = contentWidth * 4;
+    for (let row = 0; row < contentHeight; row += 1) {
+      const srcStart = (row + inset.top) * paddedRowBytes + inset.left * 4;
+      const dstStart = row * contentRowBytes;
+      contentBytes.set(binaryEntry.bytes.subarray(srcStart, srcStart + contentRowBytes), dstStart);
+    }
+
+    // textureSize MUST be the cropped raster's real pixel extents so the
+    // generator's pixel/textureSize indexing and UV normalization stay in sync
+    // with the bytes returned here — never derive it from `bounds`.
+    return {
+      bytes: contentBytes,
+      textureSize: {
+        width: contentWidth,
+        height: contentHeight
+      }
+    };
+  }
+
+  // Legacy / unpadded path: bytes are the raw content raster and `bounds` are the
+  // raster extents (historical `bounds ≡ raster`). Preserve prior behavior exactly
+  // so Wave108-era packages without padding keep generating.
   const width = Math.round(bounds.width);
   const height = Math.round(bounds.height);
   if (
-    binaryEntry === undefined ||
     width <= 0 ||
     height <= 0 ||
     binaryEntry.bytes.byteLength !== width * height * 4

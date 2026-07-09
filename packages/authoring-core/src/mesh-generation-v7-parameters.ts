@@ -123,7 +123,9 @@ export const V7_SOFT_MASK_GROWTH_PIXELS = 2;
  * softMaskGrowth⌉. r is already an integer here (rounded in deriveV7Parameters),
  * so ⌈⌉ is a no-op, but Math.ceil is kept for intent and robustness. Vertices
  * that land in the pad region map to stage coordinates OUTSIDE the original
- * drawable bounds (that is the whole point) and their UVs clamp to [0,1].
+ * drawable bounds (that is the whole point); their UVs are NOT clamped (Wave108
+ * D-gen) and spill freely past [0,1], where the transparent per-layer padding P
+ * receives them.
  */
 export const deriveV7VirtualPaddingPixels = (marginRadiusPixels: number): number =>
   Math.ceil(marginRadiusPixels + V7_SOFT_MASK_GROWTH_PIXELS);

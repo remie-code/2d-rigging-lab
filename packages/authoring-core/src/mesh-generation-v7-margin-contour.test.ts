@@ -21,7 +21,13 @@ import {
   getV7MeshGenerationCandidate
 } from "./mesh-generation-contract.js";
 import {
+  mapPixelPointToStagePoint,
+  mapPixelPointToUv
+} from "./mesh-generation-v7-margin-contour.js";
+import {
   deriveV7Parameters,
+  V7_MARGIN_RADIUS_MAX_PIXELS,
+  V7_MARGIN_RADIUS_MIN_PIXELS,
   V7_SOFT_MASK_GROWTH_PIXELS,
   V7_VERTEX_SPACING_PIXELS
 } from "./mesh-generation-v7-parameters.js";
@@ -88,9 +94,99 @@ describe("v7 parameter derivation", () => {
     expect(V7_VERTEX_SPACING_PIXELS).toEqual({ high: 28, medium: 42, low: 64 });
   });
 
-  it("clamps the margin radius to the [4, 16]px band", () => {
-    expect(deriveV7Parameters({ textureWidth: 100, textureHeight: 100 }).marginRadiusPixels).toBe(4);
-    expect(deriveV7Parameters({ textureWidth: 2000, textureHeight: 2000 }).marginRadiusPixels).toBe(16);
+  it("leaves the margin radius r at its natural long-edge-proportional value (Option E, Wave108 D-gen)", () => {
+    // Option E does NOT bind r to any coverage constant: r stays on the natural
+    // band r = clamp(0.012·longEdge, 4, 16). Tiny textures pin to the 4px floor,
+    // huge textures to the 16px ceiling, and mid textures scale with the edge.
+    // A large part (longEdge 1000 → 0.012·1000 = 12) must therefore exceed 4.
+    const rSmall = deriveV7Parameters({ textureWidth: 100, textureHeight: 100 }).marginRadiusPixels;
+    expect(rSmall).toBe(V7_MARGIN_RADIUS_MIN_PIXELS); // 0.012·100 = 1.2 → floor 4.
+
+    const rLarge = deriveV7Parameters({ textureWidth: 1000, textureHeight: 500 }).marginRadiusPixels;
+    expect(rLarge).toBeGreaterThan(V7_MARGIN_RADIUS_MIN_PIXELS); // 0.012·1000 = 12 > 4.
+    expect(rLarge).toBe(12);
+
+    const rHuge = deriveV7Parameters({ textureWidth: 4096, textureHeight: 4096 }).marginRadiusPixels;
+    expect(rHuge).toBe(V7_MARGIN_RADIUS_MAX_PIXELS); // 0.012·4096 = 49 → ceiling 16.
+
+    for (const size of [16, 100, 512, 1000, 2000, 4096]) {
+      const r = deriveV7Parameters({ textureWidth: size, textureHeight: size }).marginRadiusPixels;
+      expect(r).toBeGreaterThanOrEqual(V7_MARGIN_RADIUS_MIN_PIXELS);
+      expect(r).toBeLessThanOrEqual(V7_MARGIN_RADIUS_MAX_PIXELS);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UV mapping: non-clamp + stage/UV symmetry (Wave108 D-gen)
+// ---------------------------------------------------------------------------
+
+describe("v7 pixel-to-UV mapping (non-clamp)", () => {
+  // Frozen-case shape (mouth_u): boundary vertices sit OUTSIDE the texture, so
+  // their pixel coords fall outside [0, textureSize] and the UV must spill past
+  // [0,1] rather than pin to the edge.
+  const textureWidth = 17;
+  const textureHeight = 16;
+  const bounds: RectDto = { x: 992, y: 519, width: 17, height: 16 };
+
+  it("does NOT clamp UV to [0,1] for out-of-texture (overshoot) pixels", () => {
+    // Pixels below 0 and above textureSize (covering-margin overshoot).
+    const overshoot = [
+      { x: -3, y: -2 },
+      { x: 20, y: 19 }
+    ] as const;
+    for (const point of overshoot) {
+      const uv = mapPixelPointToUv(point, textureWidth, textureHeight);
+      // Straight pixel/size, no clamp: values fall outside [0,1].
+      expect(uv.x).toBeCloseTo(point.x / textureWidth, 6);
+      expect(uv.y).toBeCloseTo(point.y / textureHeight, 6);
+      expect(uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1).toBe(true);
+    }
+  });
+
+  it("maps stage and UV on the SAME pixel/size basis (stage = origin + size*ratio, uv = ratio)", () => {
+    const points = [
+      { x: -3, y: -2 },
+      { x: 20, y: 19 },
+      { x: 8, y: 8 }
+    ] as const;
+    for (const point of points) {
+      const ratioX = point.x / textureWidth;
+      const ratioY = point.y / textureHeight;
+      const uv = mapPixelPointToUv(point, textureWidth, textureHeight);
+      const stage = mapPixelPointToStagePoint(point, bounds, textureWidth, textureHeight);
+      // UV is the bare ratio.
+      expect(uv.x).toBeCloseTo(ratioX, 6);
+      expect(uv.y).toBeCloseTo(ratioY, 6);
+      // Stage is bounds.origin + bounds.size * (same ratio).
+      expect(stage.x).toBeCloseTo(bounds.x + bounds.width * ratioX, 6);
+      expect(stage.y).toBeCloseTo(bounds.y + bounds.height * ratioY, 6);
+    }
+  });
+
+  it("keeps stage vertices unclamped: out-of-texture pixels extend outside bounds", () => {
+    const stageBelow = mapPixelPointToStagePoint({ x: -3, y: -2 }, bounds, textureWidth, textureHeight);
+    const stageAbove = mapPixelPointToStagePoint({ x: 20, y: 19 }, bounds, textureWidth, textureHeight);
+    // Negative pixel -> stage left/above the bounds origin.
+    expect(stageBelow.x).toBeLessThan(bounds.x);
+    expect(stageBelow.y).toBeLessThan(bounds.y);
+    // Over-size pixel -> stage beyond the far edge.
+    expect(stageAbove.x).toBeGreaterThan(bounds.x + bounds.width);
+    expect(stageAbove.y).toBeGreaterThan(bounds.y + bounds.height);
+  });
+
+  it("leaves matching (in-texture) UV inside [0,1] — no regression when there is no overshoot", () => {
+    for (const point of [
+      { x: 0, y: 0 },
+      { x: 8, y: 8 },
+      { x: 17, y: 16 }
+    ] as const) {
+      const uv = mapPixelPointToUv(point, textureWidth, textureHeight);
+      expect(uv.x).toBeGreaterThanOrEqual(0);
+      expect(uv.x).toBeLessThanOrEqual(1);
+      expect(uv.y).toBeGreaterThanOrEqual(0);
+      expect(uv.y).toBeLessThanOrEqual(1);
+    }
   });
 });
 
@@ -286,7 +382,7 @@ describe("v7 bounds expansion", () => {
     }
   });
 
-  it("keeps UVs clamped to [0,1] even for vertices pushed outside the texture", () => {
+  it("leaves UVs UNclamped for vertices pushed outside the texture, bounded by the covering margin (Wave108 D-gen)", () => {
     const width = 120;
     const height = 100;
     const generated = createGeneratedMeshForDrawable({
@@ -307,18 +403,26 @@ describe("v7 bounds expansion", () => {
       return;
     }
 
+    // Full-bleed => the outline is pushed outside the texture on every side.
+    // With the clamp removed, UVs spill PAST [0,1] instead of pinning to 0/1.
+    expect(mesh.uvs.some((uv) => uv.x < 0)).toBe(true);
+    expect(mesh.uvs.some((uv) => uv.x > 1)).toBe(true);
+    expect(mesh.uvs.some((uv) => uv.y < 0)).toBe(true);
+    expect(mesh.uvs.some((uv) => uv.y > 1)).toBe(true);
+
+    // The overshoot is BOUNDED by the covering margin (r plus the soft-mask growth
+    // the dilation can add stays within the per-layer padding P =
+    // maxCoverageMarginSourcePixels(size), i.e. r + soft-mask blur <= P), never a
+    // wild value. +1px for rounding.
+    const params = deriveV7Parameters({ textureWidth: width, textureHeight: height });
+    const marginX = (params.marginRadiusPixels + V7_SOFT_MASK_GROWTH_PIXELS + 1) / width;
+    const marginY = (params.marginRadiusPixels + V7_SOFT_MASK_GROWTH_PIXELS + 1) / height;
     for (const uv of mesh.uvs) {
-      expect(uv.x).toBeGreaterThanOrEqual(0);
-      expect(uv.x).toBeLessThanOrEqual(1);
-      expect(uv.y).toBeGreaterThanOrEqual(0);
-      expect(uv.y).toBeLessThanOrEqual(1);
+      expect(uv.x).toBeGreaterThanOrEqual(-marginX);
+      expect(uv.x).toBeLessThanOrEqual(1 + marginX);
+      expect(uv.y).toBeGreaterThanOrEqual(-marginY);
+      expect(uv.y).toBeLessThanOrEqual(1 + marginY);
     }
-    // Full-bleed => at least one vertex reaches each texture extreme, so UVs
-    // must include the clamped extremes 0 and 1.
-    expect(mesh.uvs.some((uv) => uv.x === 0)).toBe(true);
-    expect(mesh.uvs.some((uv) => uv.x === 1)).toBe(true);
-    expect(mesh.uvs.some((uv) => uv.y === 0)).toBe(true);
-    expect(mesh.uvs.some((uv) => uv.y === 1)).toBe(true);
   });
 });
 
@@ -493,7 +597,7 @@ describe("v7 preset output monotonicity", () => {
 // ---------------------------------------------------------------------------
 
 describe("v7 mesh validity", () => {
-  it("keeps all UVs in [0,1] and every triangle non-zero-area", () => {
+  it("keeps all UVs within the covering margin of [0,1] and every triangle non-zero-area", () => {
     const generated = createGeneratedMeshForDrawable({
       session: createV7FixtureSession({
         textureSize: { width: 48, height: 44 },
@@ -517,11 +621,19 @@ describe("v7 mesh validity", () => {
       return;
     }
 
+    // Non-clamp (Wave108 D-gen): UVs may spill past [0,1] where the outline is
+    // pushed outside the texture, but only by the covering margin (r plus
+    // soft-mask growth stays within the per-layer padding P =
+    // maxCoverageMarginSourcePixels(size), i.e. r + soft-mask blur <= P, +1px
+    // rounding).
+    const params = deriveV7Parameters({ textureWidth: 48, textureHeight: 44 });
+    const marginX = (params.marginRadiusPixels + V7_SOFT_MASK_GROWTH_PIXELS + 1) / 48;
+    const marginY = (params.marginRadiusPixels + V7_SOFT_MASK_GROWTH_PIXELS + 1) / 44;
     for (const uv of mesh.uvs) {
-      expect(uv.x).toBeGreaterThanOrEqual(0);
-      expect(uv.x).toBeLessThanOrEqual(1);
-      expect(uv.y).toBeGreaterThanOrEqual(0);
-      expect(uv.y).toBeLessThanOrEqual(1);
+      expect(uv.x).toBeGreaterThanOrEqual(-marginX);
+      expect(uv.x).toBeLessThanOrEqual(1 + marginX);
+      expect(uv.y).toBeGreaterThanOrEqual(-marginY);
+      expect(uv.y).toBeLessThanOrEqual(1 + marginY);
     }
 
     expect(mesh.vertices).toHaveLength(mesh.uvs.length);

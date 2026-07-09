@@ -513,17 +513,49 @@ const mergeAdjacentSkylineNodes = (
   return merged;
 };
 
+// No baked transparent covering-margin border (legacy `bounds ≡ raster` tiles):
+// the content sub-rect equals the whole raster placement.
+const ZERO_CONTENT_INSET: {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+} = { left: 0, top: 0, right: 0, bottom: 0 };
+
 const createTextureAtlasPlacement = (input: {
   readonly target: TextureAtlasPackableTarget;
   readonly atlasTextureId: TextureId;
   readonly settings: TextureAtlasLayoutSettingsDto;
   readonly paddedRect: TextureAtlasRectPixelsDto;
 }): TextureAtlasPlacementDto => {
+  // `contentRect` is the placement of the **whole source raster** (which, since
+  // Wave108 D-texprep, includes the transparent covering-margin border) inside the
+  // padded/gutter rect. `sourceRectPixels` spans it fully, so both the atlas bake
+  // (copyTextureIntoPlacement / extrudeTexturePlacementEdges) and export
+  // materialization stride by the true raster size.
   const contentRect: TextureAtlasRectPixelsDto = {
     x: input.paddedRect.x + input.settings.paddingPixels,
     y: input.paddedRect.y + input.settings.paddingPixels,
     width: input.target.textureSize.width,
     height: input.target.textureSize.height
+  };
+
+  // Atlas copy is native-resolution 1:1 (source pixel → atlas pixel, scale 1), so the
+  // per-side `contentInset` (source pixels) applies directly in atlas pixels. `uvRect`
+  // is the **content sub-rect** — the raster placement inset by `contentInset` — so
+  // that layer-local UV 0/1 map to the content edges (which sit `inset` px inside the
+  // raster) and covering-margin overshoot (UV just outside [0,1], ≤ inset px) lands in
+  // the raster's own transparent band, never reaching the neighbouring placement
+  // (boundary-transparent-margin-design.md §4 cross-bleed avoidance). Folding the inset
+  // into `uvRect` keeps it the single source of truth for both the editor atlasRuntime
+  // remap (remapUvIntoPlacement) and export (mapSourceUvToAtlasUv), with no double
+  // correction.
+  const inset = input.target.contentInset ?? ZERO_CONTENT_INSET;
+  const contentUvRect: TextureAtlasRectPixelsDto = {
+    x: contentRect.x + inset.left,
+    y: contentRect.y + inset.top,
+    width: contentRect.width - inset.left - inset.right,
+    height: contentRect.height - inset.top - inset.bottom
   };
 
   return {
@@ -547,12 +579,12 @@ const createTextureAtlasPlacement = (input: {
     paddedRectPixels: input.paddedRect,
     uvRect: {
       topLeft: {
-        x: contentRect.x / input.settings.pageWidth,
-        y: contentRect.y / input.settings.pageHeight
+        x: contentUvRect.x / input.settings.pageWidth,
+        y: contentUvRect.y / input.settings.pageHeight
       },
       bottomRight: {
-        x: (contentRect.x + contentRect.width) / input.settings.pageWidth,
-        y: (contentRect.y + contentRect.height) / input.settings.pageHeight
+        x: (contentUvRect.x + contentUvRect.width) / input.settings.pageWidth,
+        y: (contentUvRect.y + contentUvRect.height) / input.settings.pageHeight
       }
     },
     hiddenAtApply: input.target.currentlyHidden,

@@ -186,6 +186,21 @@ export type PsdAdapterLayerExtractionOptionsDto = z.infer<
   typeof PsdAdapterLayerExtractionOptionsSchema
 >;
 
+// Content inset (source pixels) locating the tightly-cropped content region
+// inside a padded layer raster. Mirrors package-format TextureContentInsetSchema
+// (kept as an independent copy because operation-core does not depend on
+// package-format). See boundary-transparent-margin-design.md §3.1: layer
+// rasters carry a transparent alpha-edge border, breaking `bounds ≡ raster`,
+// so this inset bridges padded raster dims (width/height below) and content
+// bounds (stage mesh.bounds). Four-sided form; today all sides equal padding P.
+export const PsdAdapterContentInsetSchema = z.object({
+  left: z.number().int().nonnegative(),
+  top: z.number().int().nonnegative(),
+  right: z.number().int().nonnegative(),
+  bottom: z.number().int().nonnegative()
+});
+export type PsdAdapterContentInsetDto = z.infer<typeof PsdAdapterContentInsetSchema>;
+
 export const PsdAdapterLayerMaterializationEvidenceSchema = z.object({
   evidenceKind: z.literal("psd-layer-materialization-evidence-v1"),
   materializationId: z.string().regex(PSD_MATERIALIZATION_ID_PATTERN),
@@ -193,8 +208,10 @@ export const PsdAdapterLayerMaterializationEvidenceSchema = z.object({
   mediaType: PsdAdapterMediaTypeSchema,
   byteLength: PsdAdapterByteLengthSchema,
   digest: PsdAdapterDigestSchema,
+  // width/height are padded raster dimensions (content + transparent border).
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
+  contentInset: PsdAdapterContentInsetSchema.optional(),
   binaryAssetRef: BinaryAssetReferenceSchema.optional(),
   textureId: TextureIdSchema.optional(),
   provenance: PsdAdapterLayerMaterializationProvenanceSchema,
