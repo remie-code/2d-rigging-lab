@@ -4,7 +4,7 @@
 
 ## 1. Status
 
-- Status: **実装完了(Domain A/B/C)。パッケージ版の手動ゲート待ち**(2026-07-10)。Domain A/B いずれも 3 レーン Review-Sylph PASS、Domain C(統合・検証・docs)完了 → [../waves/c1/domain-a-slot-foundation.md](../waves/c1/domain-a-slot-foundation.md) / [../waves/c1/domain-b-role-composition-identity.md](../waves/c1/domain-b-role-composition-identity.md) / [../waves/c1/domain-c-final-integration.md](../waves/c1/domain-c-final-integration.md)、レビュー [../reviews/c1/](../reviews/c1/)。残タスク: §8 Manual Check Notes のパッケージ版手動ゲート(ユーザー実施)と、下記 §13 の上位判断・申し送り。(初稿 Status: Ready to launch。)
+- Status: **完全閉鎖(2026-07-10)**。パッケージ版手動ゲート合格(ユーザー実施・全項目パス: 二体同居/別モデル同時表示/profile非混在/port・token分離/同役割二重起動エラー/**片方kill耐性**/legacy引き継ぎ/引数なしスタブの約束履行)。§14の上位判断7件はすべて推奨どおり裁定(下記)。**既知制限**: devの引数なし起動はスタブのrelaunchがelectron-viteのdev serverと非両立で真っ黒になる([../waves/c1/black-screen-investigation.md](../waves/c1/black-screen-investigation.md))。devは `pnpm exec electron-vite dev -- --role=<役割>` で役割明示のこと。修正案(a)(devは約束する前に断る+`dev:tracking`/`dev:autonomous`スクリプト)はユーザー判断で**当面見送り**(パッケージ運用で足りる。必要になれば後続waveで拾う)。パッケージ版はこの問題の影響を受けない(実機確認済み)。(旧Status: 実装完了(Domain A/B/C)、パッケージ版の手動ゲート待ち。)Domain A/B いずれも 3 レーン Review-Sylph PASS、Domain C(統合・検証・docs)完了 → [../waves/c1/domain-a-slot-foundation.md](../waves/c1/domain-a-slot-foundation.md) / [../waves/c1/domain-b-role-composition-identity.md](../waves/c1/domain-b-role-composition-identity.md) / [../waves/c1/domain-c-final-integration.md](../waves/c1/domain-c-final-integration.md)、レビュー [../reviews/c1/](../reviews/c1/)。残タスク: §8 Manual Check Notes のパッケージ版手動ゲート(ユーザー実施)と、下記 §13 の上位判断・申し送り。(初稿 Status: Ready to launch。)
 - Planning gate: inventory then plan(実施済み → [c1-planning-inventory.md](c1-planning-inventory.md)。Verdict `needs_design` → 下記ユーザー裁定で解消)。
 - Model Allocation: **L0 = fable / Orch-Sylph・Gnome・Review-Sylph = opus 明示必須**。
 - ユーザー裁定(2026-07-10):
@@ -238,9 +238,9 @@ Suggested subagent name: `cohost-c1-final-integration`
 - **legacy 採用の全エラー silent catch(診断ログ追加候補)**: `runtime-player-main.ts` の legacy 採用は `.catch(() => undefined)` で、cp 途中失敗など異常な legacy レイアウト起因の例外も無言で握り潰す(マーカー未書き = 次回再試行、元データ非破壊でデータ損失なし)。ホワイトリスト方式で「採用マッピングの判断」は生じず §4.2 escalate 条件は不成立だが、「黙って推測しない」精神から**診断ログを残す**検討余地(後続 wave)。
 - **防御テスト補強候補(後続 or C1 追撃、いずれも non-blocking)**: (a) 他 store(window-state / model-mapping / dynamics-tuning / input-profile / startup-state)の二スロット独立性の直接テスト(現状は単一基点差し替え機構と config store の独立性テストで担保)、(b) busy 検出前の空スロットディレクトリ作成(cosmetic)、(c) legacy 採用の異常レイアウト時挙動。レーン3 は「合格・要修正なし、補強は推奨に留める」と判定。
 
-## 14. 上位判断待ち(Domain A/B が実装で埋めず上げた質問)
+## 14. 上位判断(裁定済み 2026-07-10、すべてUndine推奨どおりユーザー承認)
 
-> あなた(Undine / ユーザー)裁定事項。C1 実装は暫定値で動いており、確定は後続 wave / 手動ゲートで拾える。
+> 裁定: 1=teal/violet暫定のまま受理(最終色はUX磨きwaveで実物を見て変更可) / 2=文言確定 / 3=legacy値保持で確定(従来等価優先、正規化しない) / 4=拡張前提を承認 / 5=C4まで据え置き / 6=C4まで据え置き(手動ゲートでconsoleノイズは判定の妨げにならないことを確認済み) / 7=後続waveへ。以下は裁定時の原文。
 
 1. **役割アクセント色の最終確定**: tracking = teal / autonomous = violet を**実装で暫定採用**(既存テーマ整合)。ブランド指定色の有無・最終確定。
 2. **busy ダイアログ文言**: `This profile is already in use by a running <役割ラベル>.`(スロット名非露出)を採用。身元表示語彙(Tracking Host / Autonomous Host)と整合済み。最終文言でよいか。

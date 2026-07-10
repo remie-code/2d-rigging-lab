@@ -37,11 +37,11 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 - **振る舞いモデル(存在の解剖学)をAccepted(2026-07-10)**: 三層(生理/情動/知性)+一知覚、梯子(質感/単語/文)、演出エンベロープのパッケージ帰属 → [concept/behavior-model.md](concept/behavior-model.md)。
 - **Runtime Player=モデルホスト、案(c)役割つき起動をAccepted(2026-07-10)**: 二役割(トラッキングホスト/自律ホスト)、起動UX(三つの扉)、生理自動/チャネル手動 → [architecture/runtime-player-model-host-roles.md](architecture/runtime-player-model-host-roles.md)。
 - 会話パイプライン(テキストパイプライン+二層設計「AIは全部聞くが全部では考えない」)はDraft。
-- **C1 wave 実装完了(2026-07-10)**: 二役割の合成骨格(スロット基盤 / 役割合成 / 身元表示)を Domain A/B/C で実装、3レーンレビュー PASS、typecheck + runtime-player 全体スイート緑(既存 baseline 2 件を除き回帰ゼロ)。残るは**パッケージ版の手動ゲート**(片方kill耐性など、ユーザー実施)。C2 以降は未着手。
+- **C1 完全閉鎖(2026-07-10)**: 二役割の合成骨格(スロット基盤 / 役割合成 / 身元表示)を実装、3レーンレビュー PASS、回帰ゼロ、**パッケージ版手動ゲート全項目合格(ユーザー実施。二体同居・profile非混在・片方kill耐性・引数なしスタブ含む)**、上位判断7件裁定済み。既知制限: dev引数なし起動([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status)。C2 以降は未着手。
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1 は wave 実装まで完了(Domain A/B/C、3レーンレビュー PASS)**、次の一手は **C1 のパッケージ版手動ゲート**(ユーザー実施。手順書 [implementation/waves/c1/domain-c-final-integration.md](implementation/waves/c1/domain-c-final-integration.md))+ [wave計画](implementation/orchestration/c1-wave-plan.md) §14 上位判断の裁定 → C1 完全閉鎖。以後 C2 へ。C3/C4のUX定義は各wave直前にjust-in-time。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1 は完全閉鎖(2026-07-10)**。次の一手は **C2「身体が呼吸する」の議論**(基盤: [architecture/physiological-layer-and-envelope.md](architecture/physiological-layer-and-envelope.md))→ planning gate棚卸し → wave計画。C3/C4のUX定義は各wave直前にjust-in-time。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
