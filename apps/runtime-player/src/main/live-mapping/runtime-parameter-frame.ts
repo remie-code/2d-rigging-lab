@@ -13,6 +13,7 @@ import {
   type SemanticSlotDefinition
 } from "./semantic-slot-definitions";
 import type { RuntimePlayerBodyFollowState } from "./body-follow-state";
+import { resolveSemanticSlotParameterValues } from "./headless-slot-resolver";
 import {
   defaultVowelReferenceVectors,
   extractVowelFeatureVector,
@@ -44,13 +45,13 @@ export type CreateRuntimeParameterFrameInput = {
 export function createRuntimeParameterFrame(
   input: CreateRuntimeParameterFrameInput
 ): RuntimePlayerLiveParameterFrame {
-  const parameterValues: Record<string, number> = {};
   const vowelLipsyncEnabled = input.vowelLipsyncEnabled ?? false;
 
   // Per-vowel strength is a normalization-stage bias (design §2.3): gather the
   // five mouth-vowel slots' strengths once so the estimator can fold them into
   // the blend BEFORE normalizing. Applied here means it must NOT be reapplied at
-  // the tail (see createVowelValue) — that would double-count strength.
+  // the tail (see the resolver's createVowelTargetValue) — that would
+  // double-count strength.
   const vowelStrengthByVowel = collectVowelStrengths(input.slots);
 
   // Shared vowel estimator: run at most once per frame and memoize, so the five
@@ -75,6 +76,12 @@ export function createRuntimeParameterFrame(
     return vowelEstimate;
   };
 
+  // Stage 1 — activation: turn TrackingFrame + calibration (and the shared vowel
+  // estimate / body-smoothing memory) into one scalar per slot. The scalar is
+  // exactly what the transform stage used to receive inline; the head-less
+  // resolver (stage 2) is agnostic to how it was produced, which is what lets
+  // the autonomous generator reuse the same mapping knowledge.
+  const activations: Record<string, number | null> = {};
   for (const slot of input.slots) {
     if (!slot.enabled || slot.target === null) {
       continue;
@@ -88,31 +95,27 @@ export function createRuntimeParameterFrame(
       continue;
     }
 
-    const value = createSlotParameterValue({
+    activations[slot.slotId] = computeSlotActivation({
       definition,
       slot,
       trackingFrame: input.trackingFrame,
       sessionNeutral: input.sessionNeutral,
       calibration: input.inputProfile.calibration,
-      ...(input.bodyFollowState === undefined
-        ? {}
-        : { bodyFollowState: input.bodyFollowState }),
       ...(definition.sourceKind === "mouth-vowel" ||
       (definition.sourceKind === "mouth-open" && vowelLipsyncEnabled)
         ? { readVowelEstimate }
         : {})
     });
-
-    if (value === null || !Number.isFinite(value)) {
-      continue;
-    }
-
-    parameterValues[slot.target.parameterId] = clamp(
-      value,
-      slot.target.min,
-      slot.target.max
-    );
   }
+
+  // Stage 2 — resolve: shared head-less slot→parameter transform.
+  const parameterValues = resolveSemanticSlotParameterValues({
+    slots: input.slots,
+    activations,
+    ...(input.bodyFollowState === undefined
+      ? {}
+      : { bodyFollowState: input.bodyFollowState })
+  });
 
   const producedAtMs = input.producedAtMs ?? Date.now();
 
@@ -130,38 +133,41 @@ export function createRuntimeParameterFrame(
   };
 }
 
-function createSlotParameterValue(input: {
+/**
+ * Stage 1 dispatch. Returns the per-slot scalar the resolver consumes: an
+ * activation (0..1) for weight/vowel kinds, a normalized value (-1..1) for
+ * centered/body kinds, or `null` when the source is missing/non-finite. The
+ * transform, invert/strength application, body smoothing, and clamp all live in
+ * the resolver — this stage only reads the tracking signal.
+ */
+function computeSlotActivation(input: {
   readonly definition: SemanticSlotDefinition;
   readonly slot: RuntimePlayerMappingSlot;
   readonly trackingFrame: TrackingFrame;
   readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
   readonly calibration: InputProfileCalibration;
-  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
   readonly readVowelEstimate?: () => VowelEstimate;
 }): number | null {
   switch (input.definition.sourceKind) {
     case "head-centered":
-      return createHeadCenteredValue(input);
+    case "body-x":
+      // body-x shares head-rotation normalization with head-centered; the two
+      // diverge only in the transform (body-x adds smoothing, done in stage 2).
+      return computeHeadRotationNormalized(input);
     case "gaze-centered":
-      return createGazeCenteredValue(input);
+      return computeGazeNormalized(input);
     case "blink-left":
-      return createWeightValue({
-        slot: input.slot,
-        activation: readRangeActivation(
-          input.trackingFrame.blendshapes.eyeBlink_L,
-          input.calibration.eyes.blinkLeftMin,
-          input.calibration.eyes.blinkLeftMax
-        )
-      });
+      return readRangeActivation(
+        input.trackingFrame.blendshapes.eyeBlink_L,
+        input.calibration.eyes.blinkLeftMin,
+        input.calibration.eyes.blinkLeftMax
+      );
     case "blink-right":
-      return createWeightValue({
-        slot: input.slot,
-        activation: readRangeActivation(
-          input.trackingFrame.blendshapes.eyeBlink_R,
-          input.calibration.eyes.blinkRightMin,
-          input.calibration.eyes.blinkRightMax
-        )
-      });
+      return readRangeActivation(
+        input.trackingFrame.blendshapes.eyeBlink_R,
+        input.calibration.eyes.blinkRightMin,
+        input.calibration.eyes.blinkRightMax
+      );
     case "mouth-open":
       // Design vowel-lipsync-shape-blend §2.4 (generalizes Wave22): when vowel
       // lipsync is enabled+supported (signalled by readVowelEstimate being wired
@@ -172,41 +178,28 @@ function createSlotParameterValue(input: {
       // closes, s = 0). Otherwise (disabled/unsupported) keep the legacy jawOpen
       // normalization as a fallback.
       if (input.readVowelEstimate !== undefined) {
-        const estimate = input.readVowelEstimate();
-        return createWeightValue({
-          slot: input.slot,
-          activation: estimate.s
-        });
+        return input.readVowelEstimate().s;
       }
-      return createWeightValue({
-        slot: input.slot,
-        activation: readRangeActivation(
-          input.trackingFrame.blendshapes.jawOpen,
-          input.sessionNeutral?.jawOpen ?? input.calibration.mouth.jawOpenMin,
-          input.calibration.mouth.jawOpenMax
-        )
-      });
+      return readRangeActivation(
+        input.trackingFrame.blendshapes.jawOpen,
+        input.sessionNeutral?.jawOpen ?? input.calibration.mouth.jawOpenMin,
+        input.calibration.mouth.jawOpenMax
+      );
     case "mouth-smile":
-      return createWeightValue({
-        slot: input.slot,
-        activation: readRangeActivation(
-          readMouthSmile(input.trackingFrame),
-          input.sessionNeutral?.mouthSmile ?? input.calibration.mouth.smileMin,
-          input.calibration.mouth.smileMax
-        )
-      });
+      return readRangeActivation(
+        readMouthSmile(input.trackingFrame),
+        input.sessionNeutral?.mouthSmile ?? input.calibration.mouth.smileMin,
+        input.calibration.mouth.smileMax
+      );
     case "mouth-vowel":
-      return createVowelValue(input);
-    case "body-x":
-      return createBodyXValue(input);
+      return computeVowelActivation(input);
     case "body-z":
-      return createBodyZValue(input);
+      return computeBodyZNormalized(input);
   }
 }
 
-function createHeadCenteredValue(input: {
+function computeHeadRotationNormalized(input: {
   readonly definition: SemanticSlotDefinition;
-  readonly slot: RuntimePlayerMappingSlot;
   readonly trackingFrame: TrackingFrame;
   readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
   readonly calibration: InputProfileCalibration;
@@ -217,24 +210,18 @@ function createHeadCenteredValue(input: {
   }
 
   const sign = getHeadPositiveSign(input.definition, input.calibration);
-  return createCenteredTargetValue({
-    slot: input.slot,
-    normalized: readCenteredNormalizedValue({
-      current: rotation[sign.axis],
-      sessionNeutral: input.sessionNeutral?.headRotationEulerDeg?.[sign.axis],
-      profileNeutral: input.calibration.headRotationEulerDeg.neutral[sign.axis],
-      profileMin: input.calibration.headRotationEulerDeg.min[sign.axis],
-      profileMax: input.calibration.headRotationEulerDeg.max[sign.axis],
-      positiveDirection: sign.direction
-    }),
-    invert: input.slot.invert,
-    strength: input.slot.strength
+  return readCenteredNormalizedValue({
+    current: rotation[sign.axis],
+    sessionNeutral: input.sessionNeutral?.headRotationEulerDeg?.[sign.axis],
+    profileNeutral: input.calibration.headRotationEulerDeg.neutral[sign.axis],
+    profileMin: input.calibration.headRotationEulerDeg.min[sign.axis],
+    profileMax: input.calibration.headRotationEulerDeg.max[sign.axis],
+    positiveDirection: sign.direction
   });
 }
 
-function createGazeCenteredValue(input: {
+function computeGazeNormalized(input: {
   readonly definition: SemanticSlotDefinition;
-  readonly slot: RuntimePlayerMappingSlot;
   readonly trackingFrame: TrackingFrame;
   readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
   readonly calibration: InputProfileCalibration;
@@ -254,19 +241,54 @@ function createGazeCenteredValue(input: {
     input.sessionNeutral?.rightEyeEulerDeg
   ], sign.axis);
 
-  return createCenteredTargetValue({
-    slot: input.slot,
-    normalized: readCenteredNormalizedValue({
-      current,
-      sessionNeutral,
-      profileNeutral: input.calibration.eyes.neutral[sign.axis],
-      profileMin: input.calibration.eyes.min[sign.axis],
-      profileMax: input.calibration.eyes.max[sign.axis],
-      positiveDirection: sign.direction
-    }),
-    invert: input.slot.invert,
-    strength: input.slot.strength
+  return readCenteredNormalizedValue({
+    current,
+    sessionNeutral,
+    profileNeutral: input.calibration.eyes.neutral[sign.axis],
+    profileMin: input.calibration.eyes.min[sign.axis],
+    profileMax: input.calibration.eyes.max[sign.axis],
+    positiveDirection: sign.direction
   });
+}
+
+function computeVowelActivation(input: {
+  readonly definition: SemanticSlotDefinition;
+  readonly readVowelEstimate?: () => VowelEstimate;
+}): number | null {
+  const vowelLabel = input.definition.vowelLabel;
+  if (vowelLabel === undefined || input.readVowelEstimate === undefined) {
+    return null;
+  }
+
+  const estimate = input.readVowelEstimate();
+
+  // Convex-blend structure (design vowel-lipsync-shape-blend §2.1, cp17 lifted):
+  // every vowel emits `s × normalized weight` (Σ over vowels = s). Per-vowel
+  // strength was already folded into weightByVowel as a pre-normalization bias,
+  // so it is NOT reapplied here (that would double-count strength — invariant
+  // §3.2 C). The resolver maps this activation linearly across target.min..max.
+  return estimate.s * estimate.weightByVowel[vowelLabel];
+}
+
+function computeBodyZNormalized(input: {
+  readonly definition: SemanticSlotDefinition;
+  readonly slot: RuntimePlayerMappingSlot;
+  readonly trackingFrame: TrackingFrame;
+  readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
+  readonly calibration: InputProfileCalibration;
+}): number | null {
+  const rotationComponent = readBodyZRotationComponent(input);
+  const positionComponent = readBodyZPositionComponent(input);
+
+  if (rotationComponent === null && positionComponent === null) {
+    return null;
+  }
+
+  return clamp(
+    (rotationComponent ?? 0) + (positionComponent ?? 0),
+    -1,
+    1
+  );
 }
 
 function readCenteredNormalizedValue(input: {
@@ -312,80 +334,6 @@ function readCenteredNormalizedValue(input: {
   return clamp(normalized, -1, 1);
 }
 
-function createCenteredTargetValue(input: {
-  readonly slot: RuntimePlayerMappingSlot;
-  readonly normalized: number | null;
-  readonly invert: boolean;
-  readonly strength: number;
-}): number | null {
-  if (input.slot.target === null || input.normalized === null) {
-    return null;
-  }
-
-  const adjusted = clamp(input.normalized, -1, 1) *
-    (input.invert ? -1 : 1);
-  const targetValue = adjusted >= 0
-    ? input.slot.target.default +
-      adjusted * (input.slot.target.max - input.slot.target.default)
-    : input.slot.target.default +
-      adjusted * (input.slot.target.default - input.slot.target.min);
-
-  return input.slot.target.default +
-    (targetValue - input.slot.target.default) * input.strength;
-}
-
-function createWeightValue(input: {
-  readonly slot: RuntimePlayerMappingSlot;
-  readonly activation: number | null;
-}): number | null {
-  if (input.activation === null || input.slot.target === null) {
-    return null;
-  }
-
-  const targetActivation = input.slot.invert
-    ? 1 - input.activation
-    : input.activation;
-  const targetValue = input.slot.target.min +
-    targetActivation * (input.slot.target.max - input.slot.target.min);
-
-  return input.slot.target.default +
-    (targetValue - input.slot.target.default) * input.slot.strength;
-}
-
-function createVowelValue(input: {
-  readonly definition: SemanticSlotDefinition;
-  readonly slot: RuntimePlayerMappingSlot;
-  readonly readVowelEstimate?: () => VowelEstimate;
-}): number | null {
-  const vowelLabel = input.definition.vowelLabel;
-  if (
-    vowelLabel === undefined ||
-    input.readVowelEstimate === undefined ||
-    input.slot.target === null
-  ) {
-    return null;
-  }
-
-  const estimate = input.readVowelEstimate();
-
-  // Convex-blend structure (design vowel-lipsync-shape-blend §2.1, cp17 lifted):
-  // every vowel emits `s × normalized weight` (Σ over vowels = s). Per-vowel
-  // strength was already folded into weightByVowel as a pre-normalization bias,
-  // so it is NOT reapplied here (that would double-count strength — invariant
-  // §3.2 C). This deliberately bypasses createWeightValue's tail strength
-  // multiply; with strength omitted the emitted value is just the target-mapped
-  // activation. It also deliberately skips createWeightValue's `target.default`
-  // pivot, mapping activation linearly across target.min..max so a future vowel
-  // target with default ≠ 0 still yields the intended min..max blend.
-  const activation = estimate.s * estimate.weightByVowel[vowelLabel];
-  const targetActivation = input.slot.invert ? 1 - activation : activation;
-
-  return (
-    input.slot.target.min +
-    targetActivation * (input.slot.target.max - input.slot.target.min)
-  );
-}
-
 /**
  * Gather the per-vowel strength bias from the five mouth-vowel slots so the
  * estimator can apply it once, before normalizing the blend (design §2.3). A
@@ -420,67 +368,6 @@ function collectVowelStrengths(
   }
 
   return strengths;
-}
-
-function createBodyXValue(input: {
-  readonly definition: SemanticSlotDefinition;
-  readonly slot: RuntimePlayerMappingSlot;
-  readonly trackingFrame: TrackingFrame;
-  readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
-  readonly calibration: InputProfileCalibration;
-  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
-}): number | null {
-  const rotation = input.trackingFrame.head.rotationEulerDeg;
-  if (rotation === undefined) {
-    return null;
-  }
-
-  const sign = getHeadPositiveSign(input.definition, input.calibration);
-  const targetValue = createCenteredTargetValue({
-    slot: input.slot,
-    normalized: readCenteredNormalizedValue({
-      current: rotation[sign.axis],
-      sessionNeutral: input.sessionNeutral?.headRotationEulerDeg?.[sign.axis],
-      profileNeutral: input.calibration.headRotationEulerDeg.neutral[sign.axis],
-      profileMin: input.calibration.headRotationEulerDeg.min[sign.axis],
-      profileMax: input.calibration.headRotationEulerDeg.max[sign.axis],
-      positiveDirection: sign.direction
-    }),
-    invert: input.slot.invert,
-    strength: input.slot.strength
-  });
-
-  return applyBodySmoothing(input.slot, targetValue, input.bodyFollowState);
-}
-
-function createBodyZValue(input: {
-  readonly definition: SemanticSlotDefinition;
-  readonly slot: RuntimePlayerMappingSlot;
-  readonly trackingFrame: TrackingFrame;
-  readonly sessionNeutral: RuntimePlayerInputSessionNeutralSnapshot | null;
-  readonly calibration: InputProfileCalibration;
-  readonly bodyFollowState?: RuntimePlayerBodyFollowState;
-}): number | null {
-  const rotationComponent = readBodyZRotationComponent(input);
-  const positionComponent = readBodyZPositionComponent(input);
-
-  if (rotationComponent === null && positionComponent === null) {
-    return null;
-  }
-
-  const normalized = clamp(
-    (rotationComponent ?? 0) + (positionComponent ?? 0),
-    -1,
-    1
-  );
-  const targetValue = createCenteredTargetValue({
-    slot: input.slot,
-    normalized,
-    invert: false,
-    strength: 1
-  });
-
-  return applyBodySmoothing(input.slot, targetValue, input.bodyFollowState);
 }
 
 function readBodyZRotationComponent(input: {
@@ -548,22 +435,6 @@ function readBodyZPositionComponent(input: {
   return normalized *
     (input.slot.bodyPositionInvert === true ? -1 : 1) *
     (input.slot.bodyPositionStrength ?? 0);
-}
-
-function applyBodySmoothing(
-  slot: RuntimePlayerMappingSlot,
-  targetValue: number | null,
-  bodyFollowState: RuntimePlayerBodyFollowState | undefined
-): number | null {
-  if (targetValue === null) {
-    return null;
-  }
-
-  return bodyFollowState?.apply({
-    slotId: slot.slotId,
-    targetValue,
-    smoothing: slot.smoothing ?? 0
-  }) ?? targetValue;
 }
 
 function getHeadPositiveSign(

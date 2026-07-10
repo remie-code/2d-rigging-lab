@@ -6,9 +6,9 @@
 |---|---|---|
 | [conversation-pipeline-direction.md](conversation-pipeline-direction.md) | 会話パイプラインの設計方向: テキストパイプライン採用、二層設計(反射層+LLM)、宛先判定、割り込み、音声ルーティング、候補スタック | Draft |
 | [runtime-player-control-channel.md](runtime-player-control-channel.md) | runtime-playerへのAI操縦チャネル: 挿入点、セマンティック注入契約、表現力の三階建て(変調/エンベロープ付きインテント/Variant)、不変条件、トランスポート | 方向=Accepted(境界改定 案A)、契約詳細=Draft |
-| [physiological-layer-and-envelope.md](physiological-layer-and-envelope.md) | 生理層生成器: 表現レパートリー、定義の所在(四層優先順位)、駆動と合成、Editor第一弾(エンベロープ宣言+アイドルプレビュー)、等価性検証 | 意味レベル=Accepted(2026-07-10) |
+| [physiological-layer-and-envelope.md](physiological-layer-and-envelope.md) | 生理層生成器: 表現レパートリー、定義の所在(四層優先順位)、駆動と合成、Editor第一弾(エンベロープ宣言+アイドルプレビュー)、等価性検証 | 意味レベル=Accepted(2026-07-10)。**§2/§5/§6 に C2 実装事実を追記(physiology は apps/ 配置=裁定2 実装済み、packages 移設・Editor↔Player 等価性は第二段繰延。将来方針は不変)** |
 | [runtime-player-model-host-roles.md](runtime-player-model-host-roles.md) | Runtime Player=モデルホストの責務再定義、案(c)役割つき起動、前提条件(状態/ポート/身元)、防波堤(役割は構成で表現)、起動UX(三つの扉、生理自動/チャネル手動) | Accepted(2026-07-10) |
-| [c2-blink-and-generator-skeleton.md](c2-blink-and-generator-skeleton.md) | C2設計: まばたきゴール、体験=無、生成器は意味スロットで喋る(もう一人の入力ソース)、失敗も沈黙、シード決定論、ツマミ語彙の先行解剖(内部スキーマ/質感語露出/baseline×modulation) | 設計方向=Accepted(2026-07-10)。棚卸し必須項目2件は§3.3 |
+| [c2-blink-and-generator-skeleton.md](c2-blink-and-generator-skeleton.md) | C2設計: まばたきゴール、体験=無、生成器は意味スロットで喋る(もう一人の入力ソース)、失敗も沈黙、シード決定論、ツマミ語彙の先行解剖(内部スキーマ/質感語露出/baseline×modulation) | 設計方向=Accepted(2026-07-10)。**実装=C2 wave 完了(A→B→C→D、機械ゲート green・レビュー全PASS、手動美的ゲート待ち。§3.3 に実装事実)**。棚卸し必須項目2件は§3.3 |
 
 ## 未決事項(主要な設計分岐)
 

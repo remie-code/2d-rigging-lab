@@ -21,6 +21,8 @@
 ## 2. 定義の所在
 
 - **生成の機構**(ノイズ、イベントスケジューラ、合成規則): モデル非依存の普遍的機械。決定論(シード付き乱数)でテスト可能。**第二段でEditorのアイドルプレビューと共有されるため、最終的にはpackages側に住む**(§5)。**繰延注記(ユーザー裁定 2026-07-10、C2棚卸しを受けて)**: 物理的なpackage新設はlockfile変更を伴うため、Editorが消費者になる日(第二段)まで繰延。当面は `apps/runtime-player/src/main/physiology/` にElectron importゼロの純関数として置き、「package-readyな純度」をレビューのblocking観点で守る(「Editor責務は繰延」と同じ賭けの一貫)。
+  - **実装事実(C2 wave 完了、2026-07-10。リポジトリ事実)**: 上記裁定2どおり、まばたき生成器骨格を `apps/runtime-player/src/main/physiology/`(`physiology-generator.ts` / `blink-behavior.ts` / `behavior-class.ts` / `deterministic-hash.ts`)に純関数群として実装した。physiology/ 純度(Electron import ゼロ・論理時刻を `sample(logicalTimeMs)` の引数で受ける・hash-seed 決定論のみ・壁時計/Math.random 非依存)は自動構造テストとレビューの blocking 観点で担保。**packages への物理移設は未実施(第二段=Editor が消費者になる日まで繰延のまま)。** `pnpm install`・lockfile・`pnpm-workspace.yaml` はいずれも無変更。
+  - **意味スロットの受け口(頭無しリゾルバ)を新設した事実**: 生成器が意味スロット活性度(`eye.*.open` 相当)で喋り既存写像層で解決する、という設計(c2-blink-and-generator-skeleton §3)の適用シームは C2 以前のコードに存在しなかった(写像適用点 `createRuntimeParameterFrame` は TrackingFrame 形状のみを受けていた=C2 棚卸しの不整合2)。C2 で頭無しリゾルバ `resolveSemanticSlotParameterValues`(`apps/runtime-player/src/main/live-mapping/headless-slot-resolver.ts`)を Option B で非破壊抽出・新設し、`{slotId→活性度}+slots→parameterValues` を受ける口を用意した。トラッキング経路も同一リゾルバを通る(知識一箇所)。
 - **演出エンベロープ(③)の供給**: 四層の優先順位で積む:
 
 ```
@@ -53,9 +55,11 @@
 
 preview/viewer equivalenceの文化をそのまま拡張する: **同じ生成器+同じエンベロープ+同じシード → EditorのアイドルプレビューとPlayerの生理層は同じ動きをする**。決定論・シード付きのため、fixture契約テストとして検証可能。
 
+- **実装事実(C2、2026-07-10。将来方針は不変)**: C2 は Player 側のみ(Editor のアイドルプレビュー不在)を対象としたため、**Editor↔Player 間の等価性契約は未実現=第二段まで繰延**。C2 では Player 内の生成器決定論を fixture(「種+設定→意味スロット列」の golden、固定タイムステップ 16ms×900frame、同種同列・異種異列)として機械固定済み。生成器は physiology/ の純関数として packages 移設可能な純度で実装されており、第二段でこの等価性文化(Editor と同じ生成器・シード・fixture 契約)へ接続できる土台は満たしている。本節の将来方針(packages の等価性文化)自体は変更しない——現状が繰延であることの記録に留める。
+
 ## 6. 未決事項
 
-- 生成器の置き場所となるpackageの特定(既存packageか新設か)は実装計画時に決める。
+- 生成器の置き場所となるpackageの特定(既存packageか新設か)は実装計画時に決める。→ **C2 裁定2/実装(2026-07-10)で当面保留**: C2 は移設せず `apps/runtime-player/src/main/physiology/` に純関数として置く形を採ったため、「どの package に住むか(既存 or 新設)」の特定は**第二段(Editor が消費者になる日)の宿題**として残る。C2 で解消された論点ではない。
 - 振る舞いクラスとプリセット語彙の対応表の具体化。
 - 情動ツマミの状態語彙(behavior-model §8と共通)。
 - Fableによるエンベロープの動的検証方法(第二段の宿題)。

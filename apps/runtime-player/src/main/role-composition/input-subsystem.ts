@@ -5,6 +5,11 @@ import type { InputProfile } from "../input-profiles/input-profile-document";
 import { registerInputBridgeHandlers as defaultRegisterInputBridgeHandlers } from "../input-bridge-handlers";
 import { registerInputProfileBridgeHandlers as defaultRegisterInputProfileBridgeHandlers } from "../input-profile-bridge-handlers";
 import { registerModelMappingBridgeHandlers as defaultRegisterModelMappingBridgeHandlers } from "../model-mapping-bridge-handlers";
+import { createAutoMappingSlots } from "../live-mapping/runtime-export-auto-mapping";
+import {
+  createAutonomousFrameHeart as defaultCreateAutonomousFrameHeart,
+  deriveAutonomousSessionSeed
+} from "./autonomous-frame-heart";
 import type { RuntimePlayerBodyFollowState } from "../live-mapping/body-follow-state";
 import type { RuntimePlayerVowelLipsyncState } from "../live-mapping/vowel-lipsync-estimator";
 import type { RuntimePlayerLiveMappingState } from "../live-mapping/live-mapping-state";
@@ -56,6 +61,9 @@ export type RuntimePlayerInputSubsystemDependencies = {
   readonly registerInputBridgeHandlers?: typeof defaultRegisterInputBridgeHandlers;
   readonly registerInputProfileBridgeHandlers?: typeof defaultRegisterInputProfileBridgeHandlers;
   readonly registerModelMappingBridgeHandlers?: typeof defaultRegisterModelMappingBridgeHandlers;
+  // Autonomous-only seam (the tracking composer ignores it): lets tests inject a
+  // fake frame heart. Defaults to the real 60Hz heart.
+  readonly createAutonomousFrameHeart?: typeof defaultCreateAutonomousFrameHeart;
 };
 
 export type RuntimePlayerInputSubsystemComposer = (
@@ -141,29 +149,52 @@ export const composeTrackingHostInputSubsystem: RuntimePlayerInputSubsystemCompo
 
 /**
  * Autonomous Host: no input/tracking registrars at all — no UDP receiver, no
- * input IPC handlers, no model-mapping engine. The model is restored and shown
- * statically (default pose) by the shared Browser Source / runtime-export path;
- * this subsystem is inert. Clearing live parameters still flushes the shared
- * live-parameter registration so no stale frame lingers (matches the historical
- * pre-mapping default).
+ * input IPC handlers, no model-mapping engine. Instead the body beats on its own
+ * (C2 Domain C): a 60Hz frame heart drives the physiology generator through the
+ * shared head-less resolver and publishes frames on the same
+ * `liveParameters.publishFrame` seam the tracking path uses. The role difference
+ * stays a single data-lookup choice (see the composer table below); there is no
+ * runtime `if (role === ...)` branch anywhere.
+ *
+ * Lifecycle: `setRuntimeExportPayload` starts the heart (Runtime Export load =
+ * heartbeat epoch); `clearRuntimeExport` (unload) and `disconnect` (quit) stop
+ * it and dispose the timer, so no timer leaks and quit is never blocked. Because
+ * the first frame only arrives on the first interval tick (never synchronously
+ * in `start`), it lands after the load handler's `clearLiveParameterFrame()`.
  */
 export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = (
   deps
-) => ({
-  usesTrackingInput: false,
-  getLatestTrackingFrame: () => null,
-  getSessionNeutral: () => null,
-  getActiveInputProfile: async () => null,
-  publishLatestParameterFrame: async () => {},
-  publishMappingStatus: () => {},
-  clearLiveParameterFrame: () => {
-    deps.liveParameters.clear();
-  },
-  setRuntimeExportPayload: async () => {},
-  clearRuntimeExport: () => {},
-  flushPendingProfileSave: async () => {},
-  disconnect: async () => {}
-});
+) => {
+  const createHeart =
+    deps.createAutonomousFrameHeart ?? defaultCreateAutonomousFrameHeart;
+  const heart = createHeart({ liveParameters: deps.liveParameters });
+
+  return {
+    usesTrackingInput: false,
+    getLatestTrackingFrame: () => null,
+    getSessionNeutral: () => null,
+    getActiveInputProfile: async () => null,
+    publishLatestParameterFrame: async () => {},
+    publishMappingStatus: () => {},
+    clearLiveParameterFrame: () => {
+      deps.liveParameters.clear();
+    },
+    setRuntimeExportPayload: async (payload) => {
+      heart.start({
+        payload,
+        slots: createAutoMappingSlots(payload),
+        seed: deriveAutonomousSessionSeed(payload)
+      });
+    },
+    clearRuntimeExport: () => {
+      heart.stop();
+    },
+    flushPendingProfileSave: async () => {},
+    disconnect: async () => {
+      heart.stop();
+    }
+  };
+};
 
 /**
  * The single composition-root selection: role -> which registrar set to build.

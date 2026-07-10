@@ -1,6 +1,7 @@
 # C2設計: まばたきと生成器骨格
 
-> Status: 設計方向=Accepted(ユーザー合意 2026-07-10)。閉問題C2「身体が呼吸する」のwave化前設計討議のまとめ。
+> Status: 設計方向=Accepted(ユーザー合意 2026-07-10)。**実装=C2 wave 完了(Domain A→B→C→D、2026-07-10)。機械ゲート green(等価性golden・fixture・typecheck・アプリ回帰)、3レーンレビュー全 PASS。手動美的ゲート(§2「30秒眺めて死体に見えないか」)はユーザー実施待ち。**閉問題C2「身体が呼吸する」のwave化前設計討議のまとめ。
+> 実装成果物: wave計画 [../implementation/orchestration/c2-wave-plan.md](../implementation/orchestration/c2-wave-plan.md)、実装報告 [../implementation/waves/c2/](../implementation/waves/c2/)、レビュー [../implementation/reviews/c2/](../implementation/reviews/c2/)。
 > 親設計: [physiological-layer-and-envelope.md](physiological-layer-and-envelope.md)(生理層の意味レベル)。事実接地: [../research/runtime-player-input-integration.md](../research/runtime-player-input-integration.md)。
 
 ## 1. スコープ: まばたきを当面のゴールにする(ユーザー決定 2026-07-10)
@@ -46,6 +47,13 @@ C2では四層優先順位の上三層(パッケージ宣言/プロファイル�
 1. ~~写像機構が「頭無し」に回るか~~ → **回る**(auto-mappingはpayloadのみの純関数、UI非依存)。ただし**意味スロット値を受け取る口が未実装**という構造ギャップが発見され、頭無しリゾルバの非破壊抽出(Option B)+**トラッキング経路も同一リゾルバを呼ぶ**(知識一箇所)をユーザー裁定([../implementation/orchestration/c2-planning-inventory.md](../implementation/orchestration/c2-planning-inventory.md)、wave計画Status)。
 2. ~~素の既定でまぶた写像はまともか~~ → **まとも**(`eye-blink` の defaultInvert:true/strength:1 は正しい向き。キャリブレーション依存はTrackingFrame→活性度の変換段のみで、活性度を直接出す生成器には無関係)。
 3. 追加裁定: 生成器の極性=既存スロット語彙の意味論(blink活性度 0=開/1=閉)、左右同値供給、フレーム心臓=60Hz(生成器芯は「種+設定+論理時刻→スロット列」の純関数、fixtureは固定タイムステップ)。
+
+**実装事実(C2 wave 完了、2026-07-10。リポジトリ事実)**:
+
+- **Option B が実装された**: 頭無しリゾルバ `resolveSemanticSlotParameterValues` を新規ファイル `apps/runtime-player/src/main/live-mapping/headless-slot-resolver.ts` として非破壊抽出。`createRuntimeParameterFrame()` は「活性度計算段(TrackingFrame+calibration→slotIdごとのスカラー)→リゾルバ呼び出し」の二段構成に書き換え、**トラッキング経路も同一リゾルバを通る**(裁定1「まぶたの解決の知識を一箇所」を実現)。上記1の構造ギャップ(意味スロット値を受け取る口の不在)は、`{slotId→活性度}+slots→parameterValues` を受けるリゾルバの新設で解消。退行ゼロは等価性 golden(代表 TrackingFrame 20シナリオの完全一致)+既存 frame テスト19件の無変更全通過で機械固定。
+- **生成器骨格**: `apps/runtime-player/src/main/physiology/`(Electron import ゼロ・壁時計/Math.random 非依存の純関数群)に実装。まばたき振る舞いクラス(内部スキーマ6要素・baseline×modulation・C2 は恒等 modulation)、hash-seed 決定論、レパートリー拡張点(`PhysiologyBehavior`)。決定論 fixture(固定 16ms×900frame の golden、同種同列・異種異列)で機械固定。極性 0=開/1=閉・左右同値供給を実装。
+- **フレーム心臓**: `apps/runtime-player/src/main/role-composition/autonomous-frame-heart.ts`(main の 60Hz 周期タイマー、壁時計→論理時刻変換、生成器→リゾルバ→`publishFrame`、単調 sequence/timestamp、ライフサイクル)。autonomousHost composer(`input-subsystem.ts`)の中身を inert→生成器駆動へ差し替えて結線。**実行時 `if (role===...)` 分岐ゼロ**(役割差は C1 の合成テーブル一点のまま)、trackingHost composer は無変更。
+- **ゲート状態**: 機械ゲート(等価性・fixture・typecheck・アプリ回帰)は green、3レーンレビュー全 PASS。§2 の手動美的ゲート(30秒眺めて死体/機械ループに見えないか)はユーザー実施待ち。
 
 ## 4. 失敗も沈黙
 
