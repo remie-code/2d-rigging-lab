@@ -17,9 +17,10 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [concept/](concept/) | 目標像、成功基準、非目標、4トラック/MVP境界との関係 | Created |
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
-| [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル) | Created(Draft) |
+| [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
+| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。wave未着手 |
 
-実装waveが必要になった段階で、runtime-player方式によりトピック内 `implementation/` を作成する。実測(レイテンシ・会話品質・費用)を始める段階で `experiments/` を、AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
+実測(レイテンシ・会話品質・費用)を始める段階で `experiments/` を、AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
 ## 3. Reading Routes
 
@@ -40,7 +41,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装に向かう場合は、トピック内 `implementation/` を作成しwave計画へ(第一waveの自然な候補: 役割つき起動+生理層生成器第一段+操縦チャネルv0)。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。次の一手は **C1/C3/C4のUX定義文書の作成**、その後C1のwave計画。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions

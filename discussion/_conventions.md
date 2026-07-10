@@ -81,6 +81,7 @@ discussion/
     premises/
     research/
     architecture/
+    implementation/     # 閉問題分解、wave計画・実装報告・レビュー(runtime-player方式)
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
