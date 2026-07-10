@@ -42,7 +42,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2 は完全閉鎖(C1=2026-07-10、C2=2026-07-11)**。次の一手は **C3「視線と頭が生きる」の議論**——C3はUX定義文書(生理プロファイル画面)が必須(材料: c2設計討議§6.3の質感語、§6.2の視線×瞬きカップリング)→ planning gate棚卸し → wave計画。C4のUX定義は各wave直前にjust-in-time。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2 は完全閉鎖(C1=2026-07-10、C2=2026-07-11)**。C3は設計討議・UX定義・棚卸し・裁定・wave計画まで完了([implementation/orchestration/c3-wave-plan.md](implementation/orchestration/c3-wave-plan.md)、Ready to launch)。次の一手は **C3のwave実行**。C4のUX定義はC4直前にjust-in-time。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions

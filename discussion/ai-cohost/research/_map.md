@@ -9,6 +9,7 @@
 | [runtime-player-input-integration.md](runtime-player-input-integration.md) | リポジトリ事実: runtime-player入力パイプラインの構造とAI入力の統合点 | Recorded(2026-07-10) |
 | [llm-cost-estimate.md](llm-cost-estimate.md) | 会話ループのLLM費用試算(料金は2026-07時点) | Recorded(2026-07-10) |
 | [gpt-live-impact-2026-07.md](gpt-live-impact-2026-07.md) | GPT-Live(OpenAI 2026-07-08発表)の調査とS2S不採用理由への影響判定(覆らない)、コモディティ化への戦略判断と監視条件 | Recorded+戦略判断Accepted(2026-07-10) |
+| [stage-motion-for-autonomous-idle.md](stage-motion-for-autonomous-idle.md) | リポジトリ事実: Stage Motionの3層構造(純計算器はhead-less)、自律ホストでの不活性状態、生理駆動の継ぎ目候補比較(候補c推奨)とリスク | Recorded(2026-07-11)。裁定は [../architecture/c3-gaze-head-posture.md](../architecture/c3-gaze-head-posture.md) §5 |
 
 ## 注意
 

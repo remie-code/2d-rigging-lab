@@ -8,3 +8,5 @@
 | [c1-wave-plan.md](c1-wave-plan.md) | **完全閉鎖(2026-07-10)**: 実装+3レーンレビューPASS+パッケージ版手動ゲート全項目合格+§14裁定済み | C1「二体が同居できる」wave計画: スロット基盤(Domain A)→役割合成と身元表示(Domain B)→最終統合(Domain C)。既知制限: dev引数なし起動(Status参照) |
 | [c2-planning-inventory.md](c2-planning-inventory.md) | 完了(2026-07-10)。Verdict needs_design → ユーザー裁定5件で解消 | C2のコード接地棚卸し(頭無し写像の可否、素の既定の挙動、意味スロット受け口の構造ギャップ、フレーム心臓の空白、決定論流儀) |
 | [c2-wave-plan.md](c2-wave-plan.md) | **完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS確認・二体非干渉) | C2「身体が呼吸する(まばたき)」wave計画: 頭無しリゾルバ(A)→生成器骨格(B)→フレーム心臓と統合(C)→最終統合(D)。単一Orch-Sylph順次。実装報告 [../waves/c2/](../waves/c2/)、レビュー [../reviews/c2/](../reviews/c2/) |
+| [c3-planning-inventory.md](c3-planning-inventory.md) | 完了(2026-07-11)。Verdict needs_design → ユーザー裁定8件で解消 | C3のコード接地棚卸し(生成器拡張適合性、連続系スロット既定、body平滑交差、永続化テンプレ、ツマミ即時反映の口の不在=主コスト、quick toggle実体、fixture配分) |
+| [c3-wave-plan.md](c3-wave-plan.md) | Ready to launch | C3「視線と頭が生きる」wave計画: ノイズ/バネ基盤+即時反映seam(A)→振る舞いクラス3種+結合(B)→Physiologyページ+プロファイル(C)→Stage Presence(D)→最終統合(E)。単一Orch-Sylph順次 |

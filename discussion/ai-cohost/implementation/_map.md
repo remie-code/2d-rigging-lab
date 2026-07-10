@@ -18,5 +18,5 @@
 
 1. **C1 = 完全閉鎖(2026-07-10)**: パッケージ版手動ゲート全項目合格(ユーザー実施)+§14裁定済み。
 2. **C2「身体が呼吸する(まばたき)」= 完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS Browser Source確認・トラッキングとの二体非干渉確認)。
-3. **次の閉問題 = C3「視線と頭が生きる」**。進め方(§6)どおり議論から。C3は**UX定義文書(生理プロファイル画面)が必須**([screens/](screens/) にjust-in-timeで作成)→ planning gate棚卸し → wave計画。C2で先行解剖済みの材料: 質感語露出([../architecture/c2-blink-and-generator-skeleton.md](../architecture/c2-blink-and-generator-skeleton.md) §6.3)、視線×瞬きの連動カップリング(同§6.2)。
+3. **次の閉問題 = C3「視線と頭が生きる」**。設計討議・UX定義・棚卸し・裁定8件・**wave計画Ready to launch**([orchestration/c3-wave-plan.md](orchestration/c3-wave-plan.md))まで完了(2026-07-11)。次はC3のwave実行。
 4. C4のUX定義(チャネル診断画面)はC4のwave直前に(自律ホストの Control degraded ページ解消は C4)。
