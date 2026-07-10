@@ -75,6 +75,12 @@ discussion/
     *.md
     shell/              # WS1: Electron殻 & build(第一手)
     persistence/        # WS2: 永続化のnode:fs/IPC化(本丸)
+  ai-cohost/            # ユーザー×自律AIの共演配信構想。コンセプト、前提合意、調査事実、設計判断
+    _map.md
+    concept/
+    premises/
+    research/
+    architecture/
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
@@ -130,6 +136,7 @@ discussion/
 | `mesh-generation/` | メッシュ自動生成の商用風改修(v7)。概念設計、現状実装調査、実装計画、品質評価、v6系整理 | Undine / Sylph / Gnome | 実装成果物(wave計画等)はトピック内 `implementation/` に置く(runtime-player方式)。Editor実装(Wave102停止中)の部分的再開 |
 | `render-performance/` | Editor/Viewer 描画パフォーマンス改善。計測基盤、実測、改善設計、実装、再計測 | Undine / Sylph / Gnome | 実装成果物はトピック内 `implementation/`、計測結果は `measurements/` に置く。現状調査は `reports/editor-render-performance/` を参照で繋ぐ |
 | `editor-electron-migration/` | apps/editor を Web(React/Vite) から Electron デスクトップへ移行する取り組み。why 合意、分解、work-stream 別設計・実装 | Undine / Gnome / Sylph | Undine が議論と地図を管理。runtime-player の Electron 構成を下敷きにする。実装成果物は runtime-player 方式でトピック内 `implementation/`(将来)。可視な work-stream(shell/persistence)のみ器を切り、必要に応じて増やす |
+| `ai-cohost/` | ユーザー×自律AI(別モデル)の共演配信構想。コンセプト、前提合意、調査事実、設計判断 | Undine / ユーザー | 実装成果物が必要になったらトピック内 `implementation/`(runtime-player方式)。実測は `experiments/`、キャラクター設計は `persona/` を必要時に追加する。runtime-player側の操縦チャネル議論も本トピックに置き、`runtime-player/_map.md` からリンクで繋ぐ |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。

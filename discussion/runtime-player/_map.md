@@ -107,6 +107,10 @@ Editor本体のauthoring UX、Workspace Save、Portable JSON、Texture Atlas aut
 - Native Stage WindowのElectron manual verificationはlocal preview/fallback観点で未完了: Control close process exit、Stage direct close recovery、Runtime Export valid/invalid startup restore、Arrange drag、click-through tray recovery、always-on-top persistence、fallback controls、Dynamics Tune immediate live motion。
 - advanced mapping editor、Spout Output、TCP transport、dedicated Model page、dedicated raw/input Diagnostics pageはfuture。Performance Diagnostics pageはWave13で別枠として実体化済み。
 
-## 5. Next Navigation
+## 5. Related Topics
+
+- AI共演者(ai-cohost)構想による外部操縦チャネル(AI入力ソース)の議論は [../ai-cohost/architecture/runtime-player-control-channel.md](../ai-cohost/architecture/runtime-player-control-channel.md) に置く(2026-07-10 規約合意)。runtime-player 側の実装が始まる場合も、議論の正は ai-cohost トピックとする。
+
+## 6. Next Navigation
 
 Wave21の実装事実を確認する時は [implementation/orchestration/player-wave21-plan.md](implementation/orchestration/player-wave21-plan.md)、[implementation/waves/wave21/_map.md](implementation/waves/wave21/_map.md)、[implementation/reviews/wave21/_map.md](implementation/reviews/wave21/_map.md)、[screens/dynamics-tune-profile.md](screens/dynamics-tune-profile.md) を読む。Dynamics Tune / Browser Source parity確認では [screens/browser-source-output-probe-v0.md](screens/browser-source-output-probe-v0.md)、Control Window navigation確認では [screens/control-window-screen-structure.md](screens/control-window-screen-structure.md)、Tracking/Input boundaryは [screens/tracking-setup-live-mapping.md](screens/tracking-setup-live-mapping.md) を読む。さらに次候補を再検討する時は、まず [backlog/](backlog/) で延期タスクと実行triggerを確認する。

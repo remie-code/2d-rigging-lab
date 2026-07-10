@@ -1,0 +1,15 @@
+# AI Cohost Research Map
+
+> `ai-cohost/research/` の地図。調査事実(出典付き)を保持する。仮説・設計判断は architecture/ に分離する。
+
+| Path | Content | Status |
+|---|---|---|
+| [aituber-landscape-2026-07.md](aituber-landscape-2026-07.md) | 外部技術地形(2026-07): 標準パイプライン、TTS/感情駆動/チャット取得の選択肢、運用の落とし穴 | Recorded(2026-07-10) |
+| [human-ai-cohost-precedents.md](human-ai-cohost-precedents.md) | 人間×自律AI共演配信の先例と成立性、ASR選択肢、音声ルーティング、共演特有の落とし穴 | Recorded(2026-07-10) |
+| [runtime-player-input-integration.md](runtime-player-input-integration.md) | リポジトリ事実: runtime-player入力パイプラインの構造とAI入力の統合点 | Recorded(2026-07-10) |
+| [llm-cost-estimate.md](llm-cost-estimate.md) | 会話ループのLLM費用試算(料金は2026-07時点) | Recorded(2026-07-10) |
+| [gpt-live-impact-2026-07.md](gpt-live-impact-2026-07.md) | GPT-Live(OpenAI 2026-07-08発表)の調査とS2S不採用理由への影響判定(覆らない)、コモディティ化への戦略判断と監視条件 | Recorded+戦略判断Accepted(2026-07-10) |
+
+## 注意
+
+- 外部調査の内容は2026-07-10時点のスナップショットである。TTS/ASR/API料金は変動が速いため、実装着手時に主要な選定根拠(AivisSpeechの状況、料金)を再確認すること。

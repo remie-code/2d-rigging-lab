@@ -41,6 +41,7 @@
 | [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | Wave 1/1.1 実装完了。往復2所見「v6/v7一長一短」により保留中(v6/v7併存・トグル残置) |
 | [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | 現状調査Recorded・方針Accepted(2026-07-07)。Perf Wave 1(計測基盤)進行中 |
 | [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | why合意・分解Accepted(2026-07-08)。第一手=WS1(shell)未着手。詳細は下層mapへ委譲 |
+| [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | 目標像・成功基準・境界改定(案A)・振る舞いモデル・モデルホスト役割つき起動・D4(YouTube)/D6(キー操作)/D7(当面対象外)までAccepted(2026-07-10)。概念・設計分岐は一巡し、次はpersona議論か実装wave計画。実装未着手 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
@@ -68,10 +69,12 @@
 | Render Performance topic | Editor/Viewer 描画パフォーマンス改善を [render-performance/](render-performance/) として作成（2026-07-07）。現状調査は [reports/editor-render-performance/](reports/editor-render-performance/)。方針合意済み(主戦場=Editor共有経路 / 決定性二層分離 / 計測→設計)。Perf Wave 1(計測基盤)から実行 |
 | Editor Electron Migration topic | apps/editor の Web→Electron 移行を [editor-electron-migration/](editor-electron-migration/) として作成（2026-07-08）。why合意・分解(3系統コード調査由来)をAccepted。第一手=WS1(shell)、本丸=WS2(persistence node:fs化)。FS Access は Electron Chromium で存続するため移行は非破壊・段階的。portable-JSON は消費者なし(本エディタのみ)のため廃止確定。**WS1〜WS4 完了 = editor Web→Electron 移行の全 work-stream 完了(2026-07-08)**。WS1 殻 / WS2 永続化 node:fs / WS3 Web退役 / WS4 E2E `_electron`。E2E ハーネスは `_electron` 実証、stale テストは `task_2d91b388`。次フェーズ=パッケージング(electron-builder + アイコン)。先在債務 `task_c8fc5155`(editor typecheck/test 赤)は独立処理 |
 
+| AI Cohost topic | ユーザー×自律AI(別モデル)の共演配信構想を [ai-cohost/](ai-cohost/) として作成(2026-07-10)。当初MVP全達成(LLM rigging含む、ユーザー宣言 2026-07-10)後の次期構想。同日中に以下をAccepted: 目標像・成功基準(「AIの間も演出」) / **MVP境界改定 案A**(魂=別リポジトリ、器は操縦チャネル+生理層生成器のみ解禁、リポジトリ内LLM・知覚は禁止継続) / 振る舞いモデル(三層+一知覚、梯子、演出エンベロープのパッケージ帰属) / Runtime Player=モデルホスト+案(c)役割つき起動。残る未決はD4/D6/D7・AIの身体の制作者。入口は [ai-cohost/_map.md](ai-cohost/_map.md) |
+
 ## 次の行動
 
 1. 次の実装判断では [implementation/_map.md](implementation/_map.md)、[implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md)、[design/screen-design/_map.md](design/screen-design/_map.md)、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) をbasisにし、Editor実装はWave102で一旦完成として扱う（implementation/_map.md の Wave94-102 反映は未了である点に注意）。
-2. external HTTP / WebSocket / MCP API work と LLM provider integration は、MVP境界が明示変更されるまで Future scope に留める。
+2. external HTTP / WebSocket / MCP API work と LLM provider integration の Future scope 指定は、[ai-cohost/concept/mvp-boundary-amendment.md](ai-cohost/concept/mvp-boundary-amendment.md)(Accepted 2026-07-10、案A)により一部改定された: runtime-player の loopback 操縦チャネルと生理層生成器は解禁。**リポジトリ内の LLM provider integration・知覚(画面キャプチャ/視覚モデル)は引き続き禁止**(魂は別リポジトリ)。それ以外の external API は引き続き Future scope。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
 5. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。
@@ -80,6 +83,7 @@
 8. 描画パフォーマンス改善では [render-performance/_map.md](render-performance/_map.md) を入口にする。
 9. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
 10. editor の Electron 移行では [editor-electron-migration/_map.md](editor-electron-migration/_map.md) を入口にする。第一手は WS1(shell)実装→実機観測。
+11. AI共演配信構想では [ai-cohost/_map.md](ai-cohost/_map.md) を入口にする。概念・境界・アプリ形状・主要設計分岐(D1/D4/D6/D7)はAccepted済み。次の一手はpersona議論(persona/新設)か実装wave計画の起草。
 
 ## 未決事項
 
