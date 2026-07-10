@@ -17,5 +17,6 @@
 ## 次の行動
 
 1. **C1 = 完全閉鎖(2026-07-10)**: パッケージ版手動ゲート全項目合格(ユーザー実施)+§14裁定済み。
-2. **C2「身体が呼吸する」= wave 実装完了(2026-07-10)**: Domain A→B→C→D 完了、3レーンレビュー全 PASS、機械ゲート green(等価性golden・fixture・typecheck・アプリ回帰606pass/既知baseline2fail・root typecheck・packages 1492pass)、Editor/package-format/schema/lockfile 無変更・`pnpm install` 不実施・実行時role分岐ゼロを確認。**残: ユーザー手動美的ゲート**(自律ホストで瞬き開始/30秒「死体・機械ループでないか」/OBS Browser Source/トラッキングホスト退行なし/二体並走の非干渉)——手順は [waves/c2/domain-d-final-integration.md](waves/c2/domain-d-final-integration.md) に記載。合格すれば C2 完全閉鎖。
-3. C3/C4のUX定義はそれぞれのwave直前にjust-in-timeで作成する(自律ホストの Control degraded ページ解消は C4)。
+2. **C2「身体が呼吸する(まばたき)」= 完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS Browser Source確認・トラッキングとの二体非干渉確認)。
+3. **次の閉問題 = C3「視線と頭が生きる」**。進め方(§6)どおり議論から。C3は**UX定義文書(生理プロファイル画面)が必須**([screens/](screens/) にjust-in-timeで作成)→ planning gate棚卸し → wave計画。C2で先行解剖済みの材料: 質感語露出([../architecture/c2-blink-and-generator-skeleton.md](../architecture/c2-blink-and-generator-skeleton.md) §6.3)、視線×瞬きの連動カップリング(同§6.2)。
+4. C4のUX定義(チャネル診断画面)はC4のwave直前に(自律ホストの Control degraded ページ解消は C4)。

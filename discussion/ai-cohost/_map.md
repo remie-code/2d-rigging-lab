@@ -18,7 +18,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
 | [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
-| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。**C1 完全閉鎖**、**C2「身体が呼吸する(まばたき)」wave 実装完了(Domain A/B/C/D、機械ゲート green・レビュー全PASS、手動美的ゲート待ち)**、C3〜C7 未着手 |
+| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。**C1 完全閉鎖(2026-07-10)、C2 完全閉鎖(2026-07-11)**、C3〜C7 未着手 |
 
 実測(レイテンシ・会話品質・費用)を始める段階で `experiments/` を、AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
@@ -38,11 +38,11 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 - **Runtime Player=モデルホスト、案(c)役割つき起動をAccepted(2026-07-10)**: 二役割(トラッキングホスト/自律ホスト)、起動UX(三つの扉)、生理自動/チャネル手動 → [architecture/runtime-player-model-host-roles.md](architecture/runtime-player-model-host-roles.md)。
 - 会話パイプライン(テキストパイプライン+二層設計「AIは全部聞くが全部では考えない」)はDraft。
 - **C1 完全閉鎖(2026-07-10)**: 二役割の合成骨格(スロット基盤 / 役割合成 / 身元表示)を実装、3レーンレビュー PASS、回帰ゼロ、**パッケージ版手動ゲート全項目合格(ユーザー実施。二体同居・profile非混在・片方kill耐性・引数なしスタブ含む)**、上位判断7件裁定済み。既知制限: dev引数なし起動([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status)。
-- **C2「身体が呼吸する(まばたき)」wave 実装完了(2026-07-10)**: 頭無しリゾルバの非破壊抽出(トラッキング経路も同一リゾルバ・等価性 golden)/ physiology 生成器骨格(Electron import ゼロ純関数・決定論 fixture)/ フレーム心臓(main 60Hz・autonomousHost composer 差し替え・実行時 role 分岐ゼロ)を Domain A→B→C で実装、Domain D で統合検証。機械ゲート green(等価性・fixture・typecheck・アプリ回帰606pass/既知baseline2fail・packages 1492pass)、3レーンレビュー全 PASS、Editor/package-format/schema/lockfile 無変更。**残: ユーザー手動美的ゲート**(自律ホストで瞬き開始 / 30秒「死体・機械ループでないか」 / OBS Browser Source / トラッキングホスト退行なし / 二体並走の非干渉)——手順は [implementation/waves/c2/domain-d-final-integration.md](implementation/waves/c2/domain-d-final-integration.md)。合格で C2 完全閉鎖。C3 以降は未着手。
+- **C2「身体が呼吸する(まばたき)」完全閉鎖(2026-07-11)**: 頭無しリゾルバの非破壊抽出(トラッキング経路も同一リゾルバ・等価性 golden)/ physiology 生成器骨格(Electron import ゼロ純関数・決定論 fixture)/ フレーム心臓(main 60Hz・autonomousHost composer 差し替え・実行時 role 分岐ゼロ)。機械ゲート green、3レーンレビュー全 PASS、**手動美的ゲート合格(ユーザー実施: 瞬きに違和感なし・OBS Browser Source 確認・トラッキングとの二体非干渉確認)**。普遍既定値の賭け(第一段の質感)は初戦勝利。C3 以降は未着手。
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1 は完全閉鎖(2026-07-10)**。**C2 は wave 実装完了(2026-07-10)**、機械ゲート green・レビュー全 PASS([implementation/orchestration/c2-wave-plan.md](implementation/orchestration/c2-wave-plan.md))。次の一手は **C2 のユーザー手動美的ゲート**([implementation/waves/c2/domain-d-final-integration.md](implementation/waves/c2/domain-d-final-integration.md) の手順)。合格で C2 完全閉鎖 → C3 へ。C3/C4のUX定義は各wave直前にjust-in-time。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2 は完全閉鎖(C1=2026-07-10、C2=2026-07-11)**。次の一手は **C3「視線と頭が生きる」の議論**——C3はUX定義文書(生理プロファイル画面)が必須(材料: c2設計討議§6.3の質感語、§6.2の視線×瞬きカップリング)→ planning gate棚卸し → wave計画。C4のUX定義は各wave直前にjust-in-time。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
