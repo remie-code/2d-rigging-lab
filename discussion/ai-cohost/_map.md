@@ -41,7 +41,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。C1のUX定義はAccepted済みで、次の一手は **C1のwave計画**。C3/C4のUX定義は各wave直前にjust-in-time。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。C1はUX定義・棚卸し・wave計画まで完了、次の一手は **C1のwave実行**([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md))。C3/C4のUX定義は各wave直前にjust-in-time。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
@@ -57,5 +57,5 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | Variant切替のAI制御面包含(D7) | **解決: 当面対象外(2026-07-10)** |
 | AIの身体(モデル)の制作者 | **本トピックの設計事項ではないと確認(2026-07-10)**。persona確定後にリグ要件を添えてmodel-authoring手順へ |
 | 知覚の段階の具体化 / 情動層の状態語彙 / 第二段のFable検証方法 | 未決([concept/behavior-model.md](concept/behavior-model.md) §8) |
-| 役割別userData分離・ポート割当の具体方式 | 未決(実装計画時) |
+| 役割別userData分離・ポート割当の具体方式 | **解決: プロファイルスロット方式+スロットごと自動採番(2026-07-10)**([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status) |
 | **監視条件(常設)**: S2S級応答+カスタムキャラ声+外部アバター同期面の三点が揃った製品の出現でS2S再評価 | 監視中([research/gpt-live-impact-2026-07.md](research/gpt-live-impact-2026-07.md) §4。GPT-Live/Gemini Liveは三点未達で採用転換なし) |
