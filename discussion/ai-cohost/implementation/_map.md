@@ -15,5 +15,5 @@
 ## 次の行動
 
 1. **C1 = 完全閉鎖(2026-07-10)**: パッケージ版手動ゲート全項目合格(ユーザー実施)+§14裁定済み。
-2. **次の閉問題 = C2「身体が呼吸する」**。進め方(§6)どおり、まず議論を閉じる(基盤: [../architecture/physiological-layer-and-envelope.md](../architecture/physiological-layer-and-envelope.md))→ planning gate棚卸し → wave計画。C2のUX定義文書は不要(要るのはC3/C4のみ)。
+2. **次の閉問題 = C2「身体が呼吸する」**。設計討議Accepted・棚卸し完了・裁定5件済み・**wave計画Ready to launch**([orchestration/c2-wave-plan.md](orchestration/c2-wave-plan.md))。次はC2のwave実行。
 3. C3/C4のUX定義はそれぞれのwave直前にjust-in-timeで作成する(自律ホストの Control degraded ページ解消は C4)。
