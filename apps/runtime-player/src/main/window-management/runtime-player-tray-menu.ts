@@ -19,6 +19,12 @@ export type RuntimePlayerClickThroughRecoveryState = {
 export type RuntimePlayerTrayMenuOptions = {
   readonly actions: RuntimePlayerTrayMenuActions;
   readonly getClickThroughRecoveryState?: () => RuntimePlayerClickThroughRecoveryState;
+  /**
+   * Identity tooltip provider ("Runtime Player — <role> / <model>"). Re-read on
+   * every `refresh()` so a newly loaded model name updates the tooltip. Defaults
+   * to the plain "Runtime Player" when omitted.
+   */
+  readonly getToolTip?: () => string;
   readonly electron?: RuntimePlayerTrayMenuElectron;
 };
 
@@ -62,17 +68,20 @@ export function registerRuntimePlayerTrayMenu(
 
   const tray = electron.createTray(trayIcon);
 
+  const resolveToolTip = (): string =>
+    options.getToolTip?.() ?? "Runtime Player";
   const buildContextMenu = (): ElectronMenu =>
     electron.buildMenu(createRuntimePlayerTrayMenuTemplate(options));
   const refresh = (): void => {
     const contextMenu = buildContextMenu();
     tray.setContextMenu(contextMenu);
+    tray.setToolTip(resolveToolTip());
     electron.setApplicationMenu(
       electron.buildMenu(createRuntimePlayerApplicationMenuTemplate(options))
     );
   };
 
-  tray.setToolTip("Runtime Player");
+  tray.setToolTip(resolveToolTip());
   tray.on("click", () => {
     options.actions.showControl();
   });

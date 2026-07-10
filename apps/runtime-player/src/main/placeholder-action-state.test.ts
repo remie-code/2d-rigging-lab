@@ -24,6 +24,22 @@ describe("Runtime Player Wave1 placeholder state", () => {
     });
   });
 
+  it("carries no role by default", () => {
+    expect(createStartupStatus().role).toBeNull();
+  });
+
+  it("carries the composed host role for renderer display", () => {
+    const status = createStartupStatus({
+      id: "autonomousHost",
+      label: "Autonomous Host"
+    });
+
+    expect(status.role).toEqual({
+      id: "autonomousHost",
+      label: "Autonomous Host"
+    });
+  });
+
   it("reports Stage as a transparent placeholder target", () => {
     expect(createStageStatus()).toEqual({
       windowState: "created",

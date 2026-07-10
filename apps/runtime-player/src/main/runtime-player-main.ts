@@ -1,5 +1,16 @@
-import { app } from "electron";
+import { app, dialog } from "electron";
 
+import { runtimePlayerHostRoleLabels } from "./profile-slots/host-role";
+import { adoptRuntimePlayerLegacyDefaults } from "./profile-slots/legacy-adoption";
+import {
+  resolveRuntimePlayerSlotLaunch,
+  type RuntimePlayerSlotLaunch
+} from "./profile-slots/role-launch-resolution";
+import {
+  acquireRuntimePlayerSlotLock,
+  type RuntimePlayerSlotLock
+} from "./profile-slots/slot-lock";
+import { createPreferredPortFactory } from "./profile-slots/slot-preferred-port";
 import { registerBrowserSourceBridgeHandlers } from "./broadcast-source/browser-source-bridge-handlers";
 import { RuntimePlayerBrowserSourceConfigStore } from "./broadcast-source/browser-source-config-store";
 import { RuntimePlayerBrowserSourceServer } from "./broadcast-source/browser-source-server";
@@ -20,15 +31,17 @@ import type {
 import type {
   RuntimePlayerStageViewTransform
 } from "../preload/runtime-player-bridge-contract";
-import { registerInputBridgeHandlers } from "./input-bridge-handlers";
-import { registerInputProfileBridgeHandlers } from "./input-profile-bridge-handlers";
 import type { InputProfile } from "./input-profiles/input-profile-document";
 import { registerLiveParameterBridgeHandlers } from "./live-parameter-bridge-handlers";
 import { RuntimePlayerBodyFollowState } from "./live-mapping/body-follow-state";
 import { RuntimePlayerVowelLipsyncState } from "./live-mapping/vowel-lipsync-estimator";
 import { RuntimePlayerLiveMappingState } from "./live-mapping/live-mapping-state";
-import { registerModelMappingBridgeHandlers } from "./model-mapping-bridge-handlers";
 import { ModelMappingProfileStore } from "./model-mapping-profiles/model-mapping-profile-store";
+import { composeRuntimePlayerInputSubsystem } from "./role-composition/input-subsystem";
+import {
+  createRuntimePlayerRoleSelectionStubIo,
+  presentRuntimePlayerRoleSelectionStub
+} from "./role-composition/role-selection-stub";
 import { registerPlaceholderBridgeHandlers } from "./placeholder-bridge-handlers";
 import { registerRuntimeExportBridgeHandlers } from "./runtime-export-loader/runtime-export-bridge-handlers";
 import { registerRuntimeVariantBridgeHandlers } from "./variant-controller/runtime-variant-bridge-handlers";
@@ -55,6 +68,12 @@ import {
 } from "./window-management/control-window-recovery";
 import { registerRuntimePlayerTrayMenu } from "./window-management/runtime-player-tray-menu";
 import type { RuntimePlayerTrayMenuRegistration } from "./window-management/runtime-player-tray-menu";
+import {
+  composeRuntimePlayerControlWindowTitle,
+  composeRuntimePlayerStageWindowTitle,
+  composeRuntimePlayerTrayTooltip
+} from "./window-management/window-title";
+import type { RuntimePlayerHostRoleIdentity } from "../preload/runtime-player-bridge-contract";
 
 export function startRuntimePlayerMain(): void {
   let isRuntimePlayerQuitInProgress = (): boolean => false;
@@ -62,7 +81,110 @@ export function startRuntimePlayerMain(): void {
     app.quit();
   };
 
+  // --- Profile-slot foundation (Domain A) ---------------------------------
+  // Resolve the launch role/slot once, at the composition-root entry, from the
+  // process arguments. The `role` on a resolved launch is the single seam
+  // Domain B uses to select the registrar set; nothing below re-tests the role
+  // value at runtime.
+  const defaultUserDataPath = app.getPath("userData");
+  const launch: RuntimePlayerSlotLaunch = resolveRuntimePlayerSlotLaunch({
+    argv: process.argv,
+    defaultUserDataPath
+  });
+
+  const exitWithFatalDialog = (message: string): void => {
+    void app.whenReady().then(() => {
+      dialog.showErrorBox("Runtime Player", message);
+      app.quit();
+    });
+  };
+
+  if (launch.kind === "error") {
+    exitWithFatalDialog(launch.message);
+    return;
+  }
+
+  let slotLock: RuntimePlayerSlotLock | null = null;
+
+  if (launch.kind === "role-resolved") {
+    // Claim the slot before doing anything else. A second instance of the same
+    // slot fails fast with a clear dialog; a stale lock from an abnormal exit
+    // is reclaimed inside acquire. No single-instance lock is used.
+    const lockResult = acquireRuntimePlayerSlotLock({
+      slotUserDataPath: launch.slotUserDataPath,
+      role: launch.role
+    });
+
+    if (!lockResult.ok) {
+      exitWithFatalDialog(
+        `This profile is already in use by a running ${runtimePlayerHostRoleLabels[launch.role]}.`
+      );
+      return;
+    }
+
+    slotLock = lockResult.lock;
+    // Point the effective userData base at the slot before `app` is ready. All
+    // stores are `{ userDataPath }`-DI'd, so this single redirect moves every
+    // artifact into the slot with no store changes.
+    app.setPath("userData", launch.slotUserDataPath);
+  }
+
   app.whenReady().then(async () => {
+    if (launch.kind !== "role-resolved") {
+      // No-role launch (the `error` kind is handled synchronously above). Show
+      // the minimal role selection stub: it asks, never implicitly binds a role,
+      // and remembers nothing. It builds no windows/slots of its own.
+      await presentRuntimePlayerRoleSelectionStub(
+        createRuntimePlayerRoleSelectionStubIo()
+      );
+      return;
+    }
+
+    // `launch` is now narrowed to the resolved role. The role is carried as data
+    // (identity + registrar-set selection); no `if (role === ...)` runtime
+    // branch is introduced anywhere below.
+    const roleIdentity: RuntimePlayerHostRoleIdentity = {
+      id: launch.role,
+      label: runtimePlayerHostRoleLabels[launch.role]
+    };
+
+    if (launch.adoptsLegacyDefaults) {
+      // One-time, idempotent, non-destructive adoption of the pre-slot data so
+      // today's single Tracking Host keeps its calibration/mappings/etc.
+      await adoptRuntimePlayerLegacyDefaults({
+        defaultUserDataPath: launch.defaultUserDataPath,
+        slotUserDataPath: launch.slotUserDataPath
+      }).catch(() => undefined);
+    }
+
+    // Identity: role-in-title receptacle. Windows are created with the role
+    // title; the controller weaves the loaded model name in on Runtime Export
+    // load and re-applies it when the Stage window is recreated.
+    let loadedModelName: string | null = null;
+    let refreshTrayIdentity = (): void => {};
+    const applyWindowTitles = (): void => {
+      const controlTitle = composeRuntimePlayerControlWindowTitle({
+        role: launch.role,
+        modelName: loadedModelName
+      });
+      const stageTitle = composeRuntimePlayerStageWindowTitle({
+        role: launch.role,
+        modelName: loadedModelName
+      });
+
+      if (!windows.controlWindow.isDestroyed()) {
+        windows.controlWindow.setTitle(controlTitle);
+      }
+      if (!windows.stageWindow.isDestroyed()) {
+        windows.stageWindow.setTitle(stageTitle);
+      }
+    };
+    const setLoadedModelName = (modelName: string | null): void => {
+      loadedModelName = modelName;
+      applyWindowTitles();
+      refreshTrayIdentity();
+    };
+
     const windowStateStore = new RuntimePlayerWindowStateStore({
       userDataPath: app.getPath("userData")
     });
@@ -73,12 +195,19 @@ export function startRuntimePlayerMain(): void {
     });
     const windows = createRuntimePlayerWindows({
       windowState: windowState.getDocument(),
-      getWindowStateDocument: () => windowState.getDocument()
+      getWindowStateDocument: () => windowState.getDocument(),
+      controlWindowTitle: composeRuntimePlayerControlWindowTitle({
+        role: launch.role
+      }),
+      stageWindowTitle: composeRuntimePlayerStageWindowTitle({
+        role: launch.role
+      })
     });
     attachRuntimePlayerWindowStateTracking({ windows, windowState });
-    registerPlaceholderBridgeHandlers({ windows });
+    registerPlaceholderBridgeHandlers({ windows, role: roleIdentity });
     const browserSourceConfigStore = new RuntimePlayerBrowserSourceConfigStore({
-      userDataPath: app.getPath("userData")
+      userDataPath: app.getPath("userData"),
+      createPreferredPort: createPreferredPortFactory(launch.preferredPort)
     });
     const browserSourceConfig =
       await browserSourceConfigStore.getOrCreateConfig();
@@ -192,6 +321,9 @@ export function startRuntimePlayerMain(): void {
         trayMenu?.refresh();
       },
       onStageWindowReopened: () => {
+        // The recreated Stage window starts with the role-only title; re-apply
+        // the current model name so its title stays distinguishable.
+        applyWindowTitles();
         runtimeVariantBridge.publishStatus();
         if (!isLocalPreviewLiveRenderSuspended) {
           stageLiveParameters.publishLatestFrameToStageWindow({
@@ -278,54 +410,31 @@ export function startRuntimePlayerMain(): void {
     const startupStateStore = new RuntimePlayerStartupStateStore({
       userDataPath: app.getPath("userData")
     });
-    let publishLatestParameterFrame = async (): Promise<void> => {};
-    let publishMappingStatus = (): void => {};
-    let clearLiveParameterFrame = (): void => {
-      liveParameters.clear();
-    };
-    const inputBridge = registerInputBridgeHandlers({
+    // Role composition, single point: the role selects which input subsystem to
+    // assemble (data lookup, not an `if (role === ...)` runtime branch). The
+    // Tracking Host builds the full input/tracking registrars; the Autonomous
+    // Host builds an inert subsystem (no UDP receiver, no input registrars). The
+    // rest of the composition wires to `inputSubsystem` uniformly.
+    const inputSubsystem = composeRuntimePlayerInputSubsystem(launch.role, {
       windows,
-      onTrackingFrame: () => publishLatestParameterFrame(),
-      onInputReset: () => {
-        bodyFollowState.reset();
-        vowelLipsyncState.reset();
-        stageMotionRuntime.reset();
-        clearLiveParameterFrame();
-      }
-    });
-    getLatestTrackingFrameForStageMotion = () =>
-      inputBridge.state.getLatestTrackingFrame();
-    getSessionNeutralForStageMotion = () =>
-      inputBridge.state.getSessionNeutral();
-    const inputProfileBridge = registerInputProfileBridgeHandlers({
-      windows,
-      inputState: inputBridge.state,
       userDataPath: app.getPath("userData"),
-      onProfileChanged: () => {
-        bodyFollowState.reset();
-        vowelLipsyncState.reset();
+      liveMappingState,
+      bodyFollowState,
+      vowelLipsyncState,
+      modelMappingProfileStore,
+      liveParameters,
+      resetStageMotion: () => {
         stageMotionRuntime.reset();
+      },
+      requestStageMotionRepublish: () => {
         void publishLatestStageMotionDisplayState({
           notify: "immediate"
         });
-        return publishLatestParameterFrame();
       }
     });
-    getActiveInputProfileForStageMotion =
-      inputProfileBridge.getActiveInputProfile;
-    const modelMappingBridge = registerModelMappingBridgeHandlers({
-      windows,
-      inputState: inputBridge.state,
-      mappingState: liveMappingState,
-      bodyFollowState,
-      vowelLipsyncState,
-      profileStore: modelMappingProfileStore,
-      liveParameters,
-      getActiveInputProfile: inputProfileBridge.getActiveInputProfile
-    });
-    publishLatestParameterFrame = modelMappingBridge.publishLatestParameterFrame;
-    publishMappingStatus = modelMappingBridge.publishStatus;
-    clearLiveParameterFrame = modelMappingBridge.clearLiveParameterFrame;
+    getLatestTrackingFrameForStageMotion = inputSubsystem.getLatestTrackingFrame;
+    getSessionNeutralForStageMotion = inputSubsystem.getSessionNeutral;
+    getActiveInputProfileForStageMotion = inputSubsystem.getActiveInputProfile;
     const dynamicsTuningBridge = registerDynamicsTuningBridgeHandlers({
       windows,
       tuningState: dynamicsTuningState,
@@ -338,54 +447,57 @@ export function startRuntimePlayerMain(): void {
       windows,
       startupStateStore,
       onRuntimeExportChanging: async () => {
-        await modelMappingBridge.flushPendingProfileSave();
+        await inputSubsystem.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         vowelLipsyncState.reset();
-        modelMappingBridge.clearRuntimeExport();
+        inputSubsystem.clearRuntimeExport();
         dynamicsTuningBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
-        clearLiveParameterFrame();
+        inputSubsystem.clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("Runtime Export changing");
-        publishMappingStatus();
+        inputSubsystem.publishMappingStatus();
+        setLoadedModelName(null);
       },
       onRuntimeExportLoaded: async (payload) => {
         bodyFollowState.reset();
         vowelLipsyncState.reset();
-        await modelMappingBridge.setRuntimeExportPayload(payload);
+        await inputSubsystem.setRuntimeExportPayload(payload);
         await dynamicsTuningBridge.setRuntimeExportPayload(payload);
         const variantStatus =
           runtimeVariantBridge.setRuntimeExportPayload(payload);
-        clearLiveParameterFrame();
+        inputSubsystem.clearLiveParameterFrame();
         browserSourceServer.publishRuntimeExportLoaded(
           payload,
           variantStatus.activeVariantSelection,
           dynamicsTuningState.getEffectiveProfile()
         );
-        publishMappingStatus();
+        inputSubsystem.publishMappingStatus();
         dynamicsTuningBridge.publishStatus();
-        void publishLatestParameterFrame();
+        void inputSubsystem.publishLatestParameterFrame();
+        setLoadedModelName(payload.summary.modelDisplayName);
       },
       onRuntimeExportCleared: async () => {
-        await modelMappingBridge.flushPendingProfileSave();
+        await inputSubsystem.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         vowelLipsyncState.reset();
-        modelMappingBridge.clearRuntimeExport();
+        inputSubsystem.clearRuntimeExport();
         dynamicsTuningBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
-        clearLiveParameterFrame();
+        inputSubsystem.clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("No Runtime Export loaded");
-        publishMappingStatus();
+        inputSubsystem.publishMappingStatus();
+        setLoadedModelName(null);
       }
     });
     const quitController = new RuntimePlayerQuitController({
       quit: () => {
         app.quit();
       },
-      disconnectInput: () => inputBridge.disconnect(),
+      disconnectInput: () => inputSubsystem.disconnect(),
       flushModelMappingProfile: async () => {
-        await modelMappingBridge.flushPendingProfileSave();
+        await inputSubsystem.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
       },
       flushWindowState: () => windowState.flush()
@@ -427,8 +539,16 @@ export function startRuntimePlayerMain(): void {
       },
       getClickThroughRecoveryState: () => ({
         enabled: stageViewBridge?.getCaptureState().clickThroughEnabled ?? false
-      })
+      }),
+      getToolTip: () =>
+        composeRuntimePlayerTrayTooltip({
+          role: launch.role,
+          modelName: loadedModelName
+        })
     });
+    refreshTrayIdentity = () => {
+      trayMenu?.refresh();
+    };
     await loadRuntimePlayerWindows(windows);
 
     app.on("activate", () => {
@@ -443,6 +563,7 @@ export function startRuntimePlayerMain(): void {
       unsubscribeRuntimeVariantBridge();
       browserSourceBridge.dispose();
       void browserSourceServer.stop();
+      slotLock?.release();
     });
   });
 

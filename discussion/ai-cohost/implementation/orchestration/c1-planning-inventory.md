@@ -197,3 +197,17 @@ userData配下に保存される全成果物(store→相対パス):
 - **Q2(引数)**: 起動引数の第一義キーは「役割」か「プロファイルスロット名(役割は属性)」か。玄関が作るショートカットがどちらを埋め込むかで D-A の契約が変わる。
 - **Q3(kill耐性ゲート)**: 「片方kill耐性」をパッケージ版の手動ゲート(人間観測)で閉じてよいか、それともElectron E2Eハーネスを新設して機械ゲート化するか(後者はC1のスコープを広げる)。
 - **Q4(C1の自律ホスト)**: 生成器不在のC1で自律ホストは「入力未接続の静止モデル表示+役割ラベル」で足りるという理解でよいか(呼吸はC2)。
+
+---
+
+## 実装後の確定注記(C1 Domain A/B 完了。2026-07-10)
+
+> 本節は棚卸し本文(上記)を書き換えず、棚卸しが「推測」としていた点のうち **C1 実装で確定した事実**だけを追記する。上位判断待ちの質問(色の最終確定等)は解消していない(→ [c1-wave-plan.md](c1-wave-plan.md) §13、[../waves/c1/domain-c-final-integration.md](../waves/c1/domain-c-final-integration.md))。
+
+- **観点2 の推測「`app.setPath("userData")` は ready 前が安全」→ 採用で確定**: Domain A は `startRuntimePlayerMain()` の**同期先頭**(`app.whenReady` 登録前)で `app.setPath("userData", <slot path>)` を一度呼ぶ方式(観点2 の選択肢2)を実装した。全 store は `{ userDataPath }` DI 済みのため store 改修ゼロで全成果物がスロット内へ連動。役割選択スタブが `app.relaunch` を採るのも、この ready 前不変条件をプロセス再起動で再走させるため。**ただし実機(パッケージ版)での ready 前挙動の最終確定は手動ゲート待ち**(機械テストは Electron 起動を要するため未検証。棚卸しリスク欄「setPath タイミング制約」は未クローズ)。
+- **観点5 の推測「自律ホストは入力3レジストラを組み立てないことで UDP 経路を素直に外せる」→ 確定**: Domain B は入力サブシステムを一つの seam(`RuntimePlayerInputSubsystem`)に抽象化し、`Record<role, composer>` の data lookup で trackingHost=フル入力3レジストラ / autonomousHost=inert(レジストラ0)を選ぶ合成一点で表現した。**autonomousHost では UDP 受信器 factory 自体に到達しない**(iFacialMocap を送っても受信しない)。実行時 `if (role===...)` 分岐なし。棚卸しが懸念した `modelMappingBridge` の下流クロージャ参照(runtime export ハンドラ / quit controller)は seam 経由の均一参照に整理され、inert でも壊れない。
+- **観点6 の推測「role は startup status pull に相乗りできる(新チャネル不要)」→ 確定**: `RuntimePlayerStartupStatus` に `role: { id, label } | null` を追加し、`createStartupStatus(role?)` → 既存 `getStartupStatus` pull で renderer へ届けた。新 IPC チャネルは不要だった。renderer は role を**表示専用**(label 表示 / id→色クラス lookup)に使い、挙動分岐しない。
+- **観点6 の推測「タイトル定数を動的値に変える小改修が要る」→ 確定**: Control/Stage の固定タイトル定数は「役割+モデル名を織り込んだ動的タイトル」に置換され、Copy Window Title は実 OS タイトルを配るようになった(§7.7 実装反映)。
+- **観点4「token/preferredPort の per-slot 化」→ 確定**: browser-source config を userData 基点差し替えで自然に per-slot 化。token はスロット初回に自動生成、preferredPort は役割既定スロット(tracking-default=17308 / autonomous-default=17309)+ 非既定スロットは空きポート自動採番で永続化。手動ポート設定 UI は作っていない。EADDRINUSE 時の揮発ポート降格は既存挙動を維持。
+- **観点1「単一インスタンスロックを置かない」→ 追認して確定**: `app.requestSingleInstanceLock` は導入せず、スロットディレクトリ内 `slot.lock`(pid/role/取得時刻)による**スロット使用中ロック**で代替。二重取得は明確なエラー、stale lock は `process.kill(pid, 0)` の生存確認で回復。
+- **観点8「片方kill耐性はユニット層に落ちない」→ 追認**: E2E ハーネスは新設せず、**パッケージ版の手動ゲート**(不変条件2)に落とした([../waves/c1/domain-c-final-integration.md](../waves/c1/domain-c-final-integration.md) の手順書 項目7)。

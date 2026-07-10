@@ -80,6 +80,82 @@ describe("RuntimePlayerBrowserSourceConfigStore", () => {
     });
   });
 
+  it("uses an injected createPreferredPort when creating a fresh config", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-browser-source-config-")
+    );
+    const store = new RuntimePlayerBrowserSourceConfigStore({
+      userDataPath,
+      createToken: () => TEST_TOKEN,
+      createPreferredPort: () => 17309
+    });
+
+    await expect(store.getOrCreateConfig()).resolves.toStrictEqual({
+      token: TEST_TOKEN,
+      preferredPort: 17309
+    });
+  });
+
+  it("supports an async createPreferredPort (auto-assigned free port)", async () => {
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-browser-source-config-")
+    );
+    const store = new RuntimePlayerBrowserSourceConfigStore({
+      userDataPath,
+      createToken: () => TEST_TOKEN,
+      createPreferredPort: () => Promise.resolve(51000)
+    });
+
+    await expect(store.getOrCreateConfig()).resolves.toStrictEqual({
+      token: TEST_TOKEN,
+      preferredPort: 51000
+    });
+  });
+
+  it("keeps token and preferred port independent across two slots", async () => {
+    const slotsRoot = await mkdtemp(
+      path.join(os.tmpdir(), "runtime-player-browser-source-slots-")
+    );
+    const slotAPath = path.join(slotsRoot, "slots", "tracking-default");
+    const slotBPath = path.join(slotsRoot, "slots", "autonomous-default");
+
+    const slotAStore = new RuntimePlayerBrowserSourceConfigStore({
+      userDataPath: slotAPath,
+      createToken: () => TEST_TOKEN,
+      createPreferredPort: () => 17308
+    });
+    const slotBStore = new RuntimePlayerBrowserSourceConfigStore({
+      userDataPath: slotBPath,
+      createToken: () => REPLACEMENT_TOKEN,
+      createPreferredPort: () => 17309
+    });
+
+    const slotAConfig = await slotAStore.getOrCreateConfig();
+    const slotBConfig = await slotBStore.getOrCreateConfig();
+
+    expect(slotAConfig).toStrictEqual({
+      token: TEST_TOKEN,
+      preferredPort: 17308
+    });
+    expect(slotBConfig).toStrictEqual({
+      token: REPLACEMENT_TOKEN,
+      preferredPort: 17309
+    });
+    expect(slotAConfig.token).not.toBe(slotBConfig.token);
+    expect(slotAConfig.preferredPort).not.toBe(slotBConfig.preferredPort);
+
+    // Each slot persisted to its own file; neither contaminates the other.
+    expect(slotAStore.getConfigFilePath()).not.toBe(
+      slotBStore.getConfigFilePath()
+    );
+    const slotAFile = await readFile(slotAStore.getConfigFilePath(), "utf8");
+    const slotBFile = await readFile(slotBStore.getConfigFilePath(), "utf8");
+    expect(slotAFile).toContain(TEST_TOKEN);
+    expect(slotAFile).not.toContain(REPLACEMENT_TOKEN);
+    expect(slotBFile).toContain(REPLACEMENT_TOKEN);
+    expect(slotBFile).not.toContain(TEST_TOKEN);
+  });
+
   it("replaces corrupt persisted config with a fresh stable token document", async () => {
     const userDataPath = await mkdtemp(
       path.join(os.tmpdir(), "runtime-player-browser-source-config-")

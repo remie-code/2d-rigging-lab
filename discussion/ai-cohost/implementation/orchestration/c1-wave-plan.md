@@ -4,7 +4,7 @@
 
 ## 1. Status
 
-- Status: Ready to launch。
+- Status: **実装完了(Domain A/B/C)。パッケージ版の手動ゲート待ち**(2026-07-10)。Domain A/B いずれも 3 レーン Review-Sylph PASS、Domain C(統合・検証・docs)完了 → [../waves/c1/domain-a-slot-foundation.md](../waves/c1/domain-a-slot-foundation.md) / [../waves/c1/domain-b-role-composition-identity.md](../waves/c1/domain-b-role-composition-identity.md) / [../waves/c1/domain-c-final-integration.md](../waves/c1/domain-c-final-integration.md)、レビュー [../reviews/c1/](../reviews/c1/)。残タスク: §8 Manual Check Notes のパッケージ版手動ゲート(ユーザー実施)と、下記 §13 の上位判断・申し送り。(初稿 Status: Ready to launch。)
 - Planning gate: inventory then plan(実施済み → [c1-planning-inventory.md](c1-planning-inventory.md)。Verdict `needs_design` → 下記ユーザー裁定で解消)。
 - Model Allocation: **L0 = fable / Orch-Sylph・Gnome・Review-Sylph = opus 明示必須**。
 - ユーザー裁定(2026-07-10):
@@ -228,3 +228,24 @@ Suggested subagent name: `cohost-c1-final-integration`
 - 必須文言: 「Orch-Sylph自身は実装担当ではない。source implementation は必ず別コンテキストの Gnome に委譲し、レビューは必ず別コンテキストの Review-Sylph に委譲すること。これを分離できない場合は実装せず escalate / blocked として報告すること。」
 - 設計に無い判断分岐は実装で埋めず escalate(L0が裁定して本計画/UX定義を改訂)。
 - 子が未完・実行中・未解決のままwave gateを通過しない。
+
+## 13. C1 実装後の申し送り(non-blocking。後続 wave が拾う)
+
+> Domain A/B の 3 レーンレビューはいずれも **blocking ゼロで PASS**。以下は将来 wave 向けの non-blocking 事項(いずれも C1 の受け入れを妨げない)。実装事実は [../waves/c1/domain-c-final-integration.md](../waves/c1/domain-c-final-integration.md) にも集約。
+
+- **N1: 自律ホスト Control の未処理 promise rejection(console ノイズ)**: `control-window-app.tsx` の入力系 pull(input / mapping / input-profile)は `.catch` を持たず、autonomousHost では毎起動 4 件の未処理 rejection を出す。クラッシュ・秘匿漏れ・main ログ汚染はなく非 blocking。**正規解 = C4 の自律 Control UX**(role を表示専用に使い degraded ページを畳む)。暫定 `.catch`(no-handler 握り潰し + pending 表示維持)を C1 で入れるかは据え置き(renderer pull 配線に触れ Domain B の最小スコープ外)。→ §14 質問参照。
+- **pid 再利用による false-busy(将来堅牢化候補)**: `slot-lock.ts` の stale 判定は `process.kill(pid, 0)`。Windows で死んだ owner の pid が無関係プロセスに再利用されると busy 誤検出し得る(安全側だが稀に手動 lock 削除が要る)。owner record の `acquiredAtIso` を使った boot-time / max-age フォールバックは未実装。通常ケース(pid が真に死ぬ)では回復済みのため blocking ではない。手動ゲート項目7で挙動を観察。
+- **legacy 採用の全エラー silent catch(診断ログ追加候補)**: `runtime-player-main.ts` の legacy 採用は `.catch(() => undefined)` で、cp 途中失敗など異常な legacy レイアウト起因の例外も無言で握り潰す(マーカー未書き = 次回再試行、元データ非破壊でデータ損失なし)。ホワイトリスト方式で「採用マッピングの判断」は生じず §4.2 escalate 条件は不成立だが、「黙って推測しない」精神から**診断ログを残す**検討余地(後続 wave)。
+- **防御テスト補強候補(後続 or C1 追撃、いずれも non-blocking)**: (a) 他 store(window-state / model-mapping / dynamics-tuning / input-profile / startup-state)の二スロット独立性の直接テスト(現状は単一基点差し替え機構と config store の独立性テストで担保)、(b) busy 検出前の空スロットディレクトリ作成(cosmetic)、(c) legacy 採用の異常レイアウト時挙動。レーン3 は「合格・要修正なし、補強は推奨に留める」と判定。
+
+## 14. 上位判断待ち(Domain A/B が実装で埋めず上げた質問)
+
+> あなた(Undine / ユーザー)裁定事項。C1 実装は暫定値で動いており、確定は後続 wave / 手動ゲートで拾える。
+
+1. **役割アクセント色の最終確定**: tracking = teal / autonomous = violet を**実装で暫定採用**(既存テーマ整合)。ブランド指定色の有無・最終確定。
+2. **busy ダイアログ文言**: `This profile is already in use by a running <役割ラベル>.`(スロット名非露出)を採用。身元表示語彙(Tracking Host / Autonomous Host)と整合済み。最終文言でよいか。
+3. **legacy browser-source config の port 正規化**: legacy config が 17308 以外の preferredPort を永続していた場合、**現状は等価優先で legacy 値を保持**(tracking-default に引き継ぐ)。役割既定 17308 に正規化すべきか。
+4. **relaunch args 契約の将来拡張**: 役割選択スタブは `…argv.slice(1).concat(['--role=<選択>'])` で relaunch。玄関完全版で `--profile` も選ばせる際、この契約を拡張する前提でよいか。
+5. **contract `windowTitle` リテラル型を表示も動的に揃えるか**: 現状は配布=実タイトル / 表示 base=定数の二層。表示側も動的タイトルに揃えるなら型を `string` に widen する小改修が要る(C4 の自律 UX と併せて判断可)。
+6. **degraded ページの暫定 `.catch` を C1 で入れるか C4 まで据え置くか**(N1 と同): 据え置きが design 上は素直。手動ゲートで console ノイズがゲート判断の妨げにならないかを確認。
+7. **防御テスト補強を C1 でやるか後続か**: §13 の補強候補(a)〜(c)。レーン3 判定は「後続で拾う/推奨に留める」。

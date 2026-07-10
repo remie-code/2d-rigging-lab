@@ -44,6 +44,8 @@ export type RuntimePlayerWindowSetWithLifecycle = RuntimePlayerWindowSet & {
 export type CreateRuntimePlayerWindowsOptions = {
   readonly windowState?: RuntimePlayerWindowStateDocument;
   readonly getWindowStateDocument?: () => RuntimePlayerWindowStateDocument;
+  readonly controlWindowTitle?: string;
+  readonly stageWindowTitle?: string;
 };
 
 export function createRuntimePlayerWindows(
@@ -54,13 +56,19 @@ export function createRuntimePlayerWindows(
   const controlWindow = new BrowserWindow(
     createControlWindowOptions(
       controlPreloadFilePath,
-      options.windowState?.windows.control?.bounds
+      options.windowState?.windows.control?.bounds,
+      options.controlWindowTitle === undefined
+        ? {}
+        : { title: options.controlWindowTitle }
     )
   );
   const stageWindowLifecycle = createStageWindowLifecycle({
     stagePreloadFilePath,
     getWindowStateDocument: () =>
-      options.getWindowStateDocument?.() ?? options.windowState
+      options.getWindowStateDocument?.() ?? options.windowState,
+    ...(options.stageWindowTitle === undefined
+      ? {}
+      : { stageWindowTitle: options.stageWindowTitle })
   });
 
   controlWindow.once("ready-to-show", () => {
@@ -127,11 +135,17 @@ function createStageWindowLifecycle(input: {
   readonly stagePreloadFilePath: string;
   readonly getWindowStateDocument: () =>
     RuntimePlayerWindowStateDocument | undefined;
+  readonly stageWindowTitle?: string;
 }): RuntimePlayerStageWindowLifecycle {
   const listeners = new Set<RuntimePlayerStageWindowLifecycleChangedListener>();
+  const stageWindowTitleOption =
+    input.stageWindowTitle === undefined
+      ? {}
+      : { stageWindowTitle: input.stageWindowTitle };
   let stageWindow = createStageWindow({
     stagePreloadFilePath: input.stagePreloadFilePath,
     getWindowStateDocument: input.getWindowStateDocument,
+    ...stageWindowTitleOption,
     onClosed: (window) => {
       notifyStageWindowLifecycleChanged({
         listeners,
@@ -153,6 +167,7 @@ function createStageWindowLifecycle(input: {
       stageWindow = createStageWindow({
         stagePreloadFilePath: input.stagePreloadFilePath,
         getWindowStateDocument: input.getWindowStateDocument,
+        ...stageWindowTitleOption,
         onClosed: (window) => {
           notifyStageWindowLifecycleChanged({
             listeners,
@@ -201,6 +216,7 @@ function createStageWindow(input: {
   readonly stagePreloadFilePath: string;
   readonly getWindowStateDocument: () =>
     RuntimePlayerWindowStateDocument | undefined;
+  readonly stageWindowTitle?: string;
   readonly onClosed: (window: BrowserWindow) => void;
 }): BrowserWindow {
   const windowState = input.getWindowStateDocument();
@@ -209,7 +225,10 @@ function createStageWindow(input: {
       input.stagePreloadFilePath,
       windowState?.windows.stage?.bounds,
       {
-        alwaysOnTop: windowState?.stageEnvironment.alwaysOnTop ?? false
+        alwaysOnTop: windowState?.stageEnvironment.alwaysOnTop ?? false,
+        ...(input.stageWindowTitle === undefined
+          ? {}
+          : { title: input.stageWindowTitle })
       }
     )
   );

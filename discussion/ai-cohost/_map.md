@@ -18,7 +18,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
 | [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
-| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。wave未着手 |
+| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。**C1 wave 実装完了(Domain A/B/C、パッケージ版手動ゲート待ち)**、C2〜C7 未着手 |
 
 実測(レイテンシ・会話品質・費用)を始める段階で `experiments/` を、AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
@@ -37,11 +37,11 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 - **振る舞いモデル(存在の解剖学)をAccepted(2026-07-10)**: 三層(生理/情動/知性)+一知覚、梯子(質感/単語/文)、演出エンベロープのパッケージ帰属 → [concept/behavior-model.md](concept/behavior-model.md)。
 - **Runtime Player=モデルホスト、案(c)役割つき起動をAccepted(2026-07-10)**: 二役割(トラッキングホスト/自律ホスト)、起動UX(三つの扉)、生理自動/チャネル手動 → [architecture/runtime-player-model-host-roles.md](architecture/runtime-player-model-host-roles.md)。
 - 会話パイプライン(テキストパイプライン+二層設計「AIは全部聞くが全部では考えない」)はDraft。
-- 実装は未着手。wave計画なし。
+- **C1 wave 実装完了(2026-07-10)**: 二役割の合成骨格(スロット基盤 / 役割合成 / 身元表示)を Domain A/B/C で実装、3レーンレビュー PASS、typecheck + runtime-player 全体スイート緑(既存 baseline 2 件を除き回帰ゼロ)。残るは**パッケージ版の手動ゲート**(片方kill耐性など、ユーザー実施)。C2 以降は未着手。
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。C1はUX定義・棚卸し・wave計画まで完了、次の一手は **C1のwave実行**([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md))。C3/C4のUX定義は各wave直前にjust-in-time。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1 は wave 実装まで完了(Domain A/B/C、3レーンレビュー PASS)**、次の一手は **C1 のパッケージ版手動ゲート**(ユーザー実施。手順書 [implementation/waves/c1/domain-c-final-integration.md](implementation/waves/c1/domain-c-final-integration.md))+ [wave計画](implementation/orchestration/c1-wave-plan.md) §14 上位判断の裁定 → C1 完全閉鎖。以後 C2 へ。C3/C4のUX定義は各wave直前にjust-in-time。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions

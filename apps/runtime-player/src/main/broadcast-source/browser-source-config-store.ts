@@ -24,12 +24,19 @@ export type RuntimePlayerBrowserSourceConfigStoreOptions = {
   readonly configFilePath?: string;
   readonly createToken?: () => string;
   readonly nowIso?: () => string;
+  /**
+   * Preferred port to persist the first time this slot's config is created.
+   * Defaults to the fixed default port to preserve pre-slot behaviour. Later
+   * runs reuse the persisted port, so this factory only runs once per slot.
+   */
+  readonly createPreferredPort?: () => number | Promise<number>;
 };
 
 export class RuntimePlayerBrowserSourceConfigStore {
   readonly #configFilePath: string;
   readonly #createToken: () => string;
   readonly #nowIso: () => string;
+  readonly #createPreferredPort: () => number | Promise<number>;
   #document: RuntimePlayerBrowserSourceConfigDocument | null = null;
 
   constructor(options: RuntimePlayerBrowserSourceConfigStoreOptions) {
@@ -51,6 +58,9 @@ export class RuntimePlayerBrowserSourceConfigStore {
 
     this.#createToken = options.createToken ?? createBrowserSourceToken;
     this.#nowIso = options.nowIso ?? (() => new Date().toISOString());
+    this.#createPreferredPort =
+      options.createPreferredPort ??
+      (() => runtimePlayerBrowserSourceDefaultPort);
   }
 
   getConfigFilePath(): string {
@@ -68,7 +78,7 @@ export class RuntimePlayerBrowserSourceConfigStore {
       return toConfig(persisted);
     }
 
-    const document = this.#createDocument();
+    const document = await this.#createDocument();
     await this.#saveDocument(document);
     return toConfig(document);
   }
@@ -93,12 +103,13 @@ export class RuntimePlayerBrowserSourceConfigStore {
     return parseRuntimePlayerBrowserSourceConfigDocument(parsedJson);
   }
 
-  #createDocument(): RuntimePlayerBrowserSourceConfigDocument {
+  async #createDocument(): Promise<RuntimePlayerBrowserSourceConfigDocument> {
+    const preferredPort = await this.#createPreferredPort();
     return {
       schemaVersion: runtimePlayerBrowserSourceConfigSchemaVersion,
       updatedAtIso: this.#nowIso(),
       token: this.#createToken(),
-      preferredPort: runtimePlayerBrowserSourceDefaultPort
+      preferredPort
     };
   }
 

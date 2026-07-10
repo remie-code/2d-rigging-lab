@@ -20,14 +20,17 @@ export const stageWindowDefaultBounds = {
 
 export function createControlWindowOptions(
   preloadFilePath: string,
-  restoredBounds?: RuntimePlayerWindowBounds
+  restoredBounds?: RuntimePlayerWindowBounds,
+  options: {
+    readonly title?: string;
+  } = {}
 ): BrowserWindowConstructorOptions {
   return {
     ...createRestoredBoundsOptions(
       controlWindowDefaultBounds,
       restoredBounds
     ),
-    title: "Runtime Player",
+    title: options.title ?? "Runtime Player",
     show: false,
     backgroundColor: "#101214",
     webPreferences: {
@@ -44,6 +47,7 @@ export function createStageWindowOptions(
   restoredBounds?: RuntimePlayerWindowBounds,
   options: {
     readonly alwaysOnTop?: boolean;
+    readonly title?: string;
   } = {}
 ): BrowserWindowConstructorOptions {
   return {
@@ -51,7 +55,7 @@ export function createStageWindowOptions(
       stageWindowDefaultBounds,
       restoredBounds
     ),
-    title: runtimePlayerStageWindowTitle,
+    title: options.title ?? runtimePlayerStageWindowTitle,
     show: false,
     frame: false,
     transparent: true,

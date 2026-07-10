@@ -2,6 +2,7 @@ import { ipcMain, type BrowserWindow } from "electron";
 
 import { placeholderBridgeChannels } from "../preload/placeholder-bridge-channels";
 import { stageViewBridgeChannels } from "../preload/stage-view-bridge-channels";
+import type { RuntimePlayerHostRoleIdentity } from "../preload/runtime-player-bridge-contract";
 import {
   createPlaceholderResult,
   createStageStatus,
@@ -12,13 +13,16 @@ import type { RuntimePlayerWindowSet } from "./window-management/runtime-player-
 
 export interface RegisterPlaceholderBridgeHandlersInput {
   readonly windows?: RuntimePlayerWindowSet;
+  readonly role?: RuntimePlayerHostRoleIdentity | null;
 }
 
 export function registerPlaceholderBridgeHandlers(
   input: RegisterPlaceholderBridgeHandlersInput = {}
 ): void {
+  const role = input.role ?? null;
+
   ipcMain.handle(placeholderBridgeChannels.getStartupStatus, () =>
-    createStartupStatus()
+    createStartupStatus(role)
   );
 
   ipcMain.handle(placeholderBridgeChannels.getStageStatus, () =>

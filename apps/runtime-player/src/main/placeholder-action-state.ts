@@ -1,4 +1,5 @@
 import {
+  type RuntimePlayerHostRoleIdentity,
   type RuntimePlayerPlaceholderAction,
   type RuntimePlayerPlaceholderResult,
   type RuntimePlayerStageStatus,
@@ -24,8 +25,11 @@ export function isRuntimePlayerPlaceholderAction(
   return typeof action === "string" && placeholderActionSet.has(action);
 }
 
-export function createStartupStatus(): RuntimePlayerStartupStatus {
+export function createStartupStatus(
+  role: RuntimePlayerHostRoleIdentity | null = null
+): RuntimePlayerStartupStatus {
   return {
+    role,
     runtimeExport: {
       status: "empty",
       loaded: false,

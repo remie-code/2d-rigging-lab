@@ -152,3 +152,20 @@
 - 大きい扉は二枚だけ(いつもの自分/二人セット)。自律ホスト単独は隅の小さいリンク(§2: 一等地に置かない)。
 - 各扉の `Create shortcut` で玄関がショートカット製造所を兼ねる。
 - **意図的に置かないもの: 「次からこれにする/今後表示しない」チェックボックス**。置いた瞬間「引数なし=役割への暗黙束縛の禁止(恒久)」を破る。玄関は恒久に玄関である。
+
+## 7.7 実装反映(C1 実装後の事実。2026-07-10)
+
+> この節は §7 の Accepted な UX 定義を書き換えるものではなく、**C1(Domain A/B)が実際に実装した事実**を追記して記録する。玄関完全版(§7.6 のカードUI/Create shortcut/Autonomous only リンク)・Companion カード(§7.3)・閉扉ダイアログ(§7.5)・トレイ役割色ドット(§7.4)は C1 スコープ外で**未実装**(後続 UX 磨き wave / C4)。
+
+C1 で実装された身元表示・扉まわりの具体:
+
+- **動的ウインドウタイトル**(§7.2「タイトルに役割名を含める」の実装形。区切りは em dash ` — `):
+  - Control: `Runtime Player — Tracking Host`(モデル未ロード)→ ロード後 `Runtime Player — Tracking Host — <model name>`。
+  - Stage: `Runtime Player Stage — <役割> — <model name>`。
+  - role が無い経路(役割なし起動など)は従来どおり素の定数(`Runtime Player` / `Runtime Player Stage`)。役割は data lookup(ラベル表)で織り込み、実行時 role 分岐はしない。
+- **Header 役割バッジ**(§7.2「文字+色の二重」の実装形): Control Window Header 先頭(Monitor アイコンの前)に役割ラベルのバッジを置き、`role.id` 別のアクセント色クラスを敷く。**アクセント色は実装で暫定採用: tracking = teal / autonomous = violet**(既存テーマ色に整合させた暫定値。**ユーザーによる最終確定は未**。ブランド指定色があれば差し替える)。色は renderer 表示専用の静的 class lookup で、挙動分岐ではない。
+- **トレイツールチップ**(§7.4 の記法どおり): `Runtime Player — <役割> / <モデル名>`(役割は em dash、モデル名は ` / ` 区切り)。役割色ドットは C1 未実装(ツールチップのみ)。
+- **役割選択スタブ = relaunch 方式**(§7.6 玄関の C1 最小版): 引数なし起動は `dialog.showMessageBox`(ボタン=役割ラベル + Cancel、`noLink`)の素のダイアログを出す。役割を選ぶと `app.relaunch({ args: … .concat(['--role=<選択>']) })` + `app.quit()` で**自プロセスを役割付きで再起動**し、その役割の合成で立ち上がる(Domain A の同期先頭スロット解決 = `app.setPath('userData')` の ready 前呼び出し不変条件をそのまま再走させるため)。**「次回から/今後表示しない」チェックは置いていない**(§2 恒久禁止を構造で担保。スタブは状態を一切ディスクに書かない)。
+- **Copy Window Title = 実 OS タイトルを配る**(§7.2): `copyStageWindowTitle` は固定定数ではなく **`stageWindow.getTitle()` の実タイトル**(役割・モデル名込み)をクリップボードへ配る(窓破棄時は従来定数へフォールバック)。二体で異なるタイトルがそのままコピーできる。
+  - なお内部 IPC contract 上の `windowTitle` リテラル型(capture state の表示用 base ラベル)は C1 では据え置き。配布は実タイトルが担い、表示 base は定数のままの二層構成(表示も動的に揃えるかは後続判断。§Domain B 質問参照)。
+- **自律ホスト Control の degraded ページ = C4 スコープ**: 自律ホスト(`--role=autonomousHost`)は入力系 IPC ハンドラ(input / mapping / input-profile)を合成に**組み込まない**ため、Control の Input / Mapping ページは pending / error(degraded)表示になる。ただし **Control shell 自体は生存する**(React ツリーは startup status ベースで描画済み、pull の reject は tree を落とさない)。これは **C1 の想定内**(wave plan §3.2: 自律ホスト版 Overview / Control UX は C4)。C4 の自律ホスト UX 設計時に、role を**表示専用**に使って該当ページを畳む/差し替える(実行時 role 分岐にならない形で)方針を決める。

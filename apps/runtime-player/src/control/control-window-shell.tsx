@@ -2,6 +2,34 @@ import type { ReactElement, ReactNode } from "react";
 import { Crosshair, FolderOpen, Monitor } from "lucide-react";
 
 import { IconTextButton, StatusPill } from "./control-window-components";
+import type { RuntimePlayerHostRoleIdentity } from "../preload/runtime-player-bridge-contract";
+
+/**
+ * Display-only accent styling per role id. Text + colour double-encoding
+ * (c1-role-skeleton §7.2): the label carries the meaning, the colour helps in
+ * peripheral vision. This is a static style lookup, not a behavioural branch.
+ */
+const roleBadgeAccentClassName: Record<
+  RuntimePlayerHostRoleIdentity["id"],
+  string
+> = {
+  trackingHost: "border-teal-500/60 bg-teal-950/60 text-teal-200",
+  autonomousHost: "border-violet-500/60 bg-violet-950/60 text-violet-200"
+};
+
+export function ControlWindowRoleBadge({
+  role
+}: {
+  readonly role: RuntimePlayerHostRoleIdentity;
+}): ReactElement {
+  return (
+    <span
+      className={`shrink-0 rounded-md border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${roleBadgeAccentClassName[role.id]}`}
+    >
+      {role.label}
+    </span>
+  );
+}
 
 export type ControlWindowPage =
   | "overview"
@@ -28,6 +56,7 @@ const controlWindowPages: readonly {
 export function ControlWindowShell({
   activePage,
   children,
+  role = null,
   runtimeExportLabel,
   runtimeExportTone,
   inputLabel,
@@ -44,6 +73,7 @@ export function ControlWindowShell({
 }: {
   readonly activePage: ControlWindowPage;
   readonly children: ReactNode;
+  readonly role?: RuntimePlayerHostRoleIdentity | null;
   readonly runtimeExportLabel: string;
   readonly runtimeExportTone: "amber" | "teal" | "red";
   readonly inputLabel: string;
@@ -63,6 +93,7 @@ export function ControlWindowShell({
       <header className="border-b border-neutral-800 bg-[#151716] px-5 py-4">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
+            {role === null ? null : <ControlWindowRoleBadge role={role} />}
             <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-teal-600/60 bg-teal-950/50 text-teal-100">
               <Monitor aria-hidden="true" className="size-5" />
             </span>

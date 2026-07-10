@@ -37,7 +37,20 @@ export type RuntimePlayerInputSourceSnapshot = {
   readonly connectionState: "not-connected";
 };
 
+/**
+ * The composed host role of this Runtime Player process, carried to the renderer
+ * for display only (role badge, titles). `id` drives display styling lookups;
+ * `label` is the ready-to-render English wording. `null` when the process was
+ * not launched with a role (e.g. legacy/no-role path). The renderer MUST use
+ * this for display only and never branch behaviour on it.
+ */
+export type RuntimePlayerHostRoleIdentity = {
+  readonly id: "trackingHost" | "autonomousHost";
+  readonly label: string;
+};
+
 export type RuntimePlayerStartupStatus = {
+  readonly role: RuntimePlayerHostRoleIdentity | null;
   readonly runtimeExport: RuntimeExportStatus;
   readonly input: RuntimePlayerInputSourceSnapshot;
   readonly stage: RuntimePlayerStageStatus;

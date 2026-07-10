@@ -557,10 +557,18 @@ function copyStageWindowTitle(
   input: RegisterStageViewBridgeHandlersInput,
   getState: () => RuntimePlayerStageStateSnapshot
 ): RuntimePlayerStageViewActionResult {
-  clipboard.writeText(runtimePlayerStageWindowTitle);
+  // Copy the live OS window title so the role- (and model-) suffixed title the
+  // Stage window actually carries is what lands on the clipboard, keeping the
+  // two instances distinguishable in OBS window pickers.
+  const stageWindow = input.windows.stageWindow;
+  const windowTitle = stageWindow.isDestroyed()
+    ? runtimePlayerStageWindowTitle
+    : stageWindow.getTitle();
+
+  clipboard.writeText(windowTitle);
 
   return createStageViewActionResult({
-    message: `Stage window title copied: ${runtimePlayerStageWindowTitle}`,
+    message: `Stage window title copied: ${windowTitle}`,
     status: getState()
   });
 }

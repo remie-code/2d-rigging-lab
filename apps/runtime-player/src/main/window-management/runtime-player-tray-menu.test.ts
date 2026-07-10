@@ -133,6 +133,47 @@ describe("Runtime Player tray/menu actions", () => {
     expect(tray.destroy).toHaveBeenCalledTimes(1);
   });
 
+  it("applies the identity tooltip and re-reads it on refresh", () => {
+    const actions = createActions();
+    let tooltip = "Runtime Player — Tracking Host";
+    const fakeImage = {
+      isEmpty: vi.fn(() => false)
+    } as unknown as Parameters<
+      RuntimePlayerTrayMenuElectron["createTray"]
+    >[0];
+    const fakeContextMenu = {} as ReturnType<
+      RuntimePlayerTrayMenuElectron["buildMenu"]
+    >;
+    const tray = {
+      setToolTip: vi.fn(),
+      setContextMenu: vi.fn(),
+      on: vi.fn(),
+      destroy: vi.fn()
+    };
+    const electron: RuntimePlayerTrayMenuElectron = {
+      createNativeImageFromDataUrl: vi.fn(() => fakeImage),
+      createTray: vi.fn(() => tray),
+      buildMenu: vi.fn(() => fakeContextMenu),
+      setApplicationMenu: vi.fn()
+    };
+
+    const registration = registerRuntimePlayerTrayMenu({
+      actions,
+      electron,
+      getToolTip: () => tooltip
+    });
+
+    expect(tray.setToolTip).toHaveBeenLastCalledWith(
+      "Runtime Player — Tracking Host"
+    );
+
+    tooltip = "Runtime Player — Tracking Host / Aqua";
+    registration.refresh();
+    expect(tray.setToolTip).toHaveBeenLastCalledWith(
+      "Runtime Player — Tracking Host / Aqua"
+    );
+  });
+
   it("rejects an empty tray icon image before exposing tray/menu recovery", () => {
     const actions = createActions();
     const fakeImage = {

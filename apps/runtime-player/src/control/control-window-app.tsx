@@ -582,6 +582,7 @@ export function ControlWindowApp(): ReactElement {
   return (
     <ControlWindowShell
       activePage={activePage}
+      role={startupStatus?.role ?? null}
       runtimeExportLabel={runtimeExportLoadedLabel}
       runtimeExportTone={getRuntimeExportTone(runtimeExportStatus)}
       inputLabel={getInputStatusPillLabel(inputStatus)}
