@@ -4,7 +4,11 @@
 
 ## 1. Status
 
-- Status: Ready to launch。
+- Status: **実装完了(Domain A/B 合格、Domain C 統合)**。機械ゲート(凸恒等・再調音ディップ・undershoot・512拒否・無退行)は実装・検証済み。**最終審=比較ゲートはユーザー人間ゲート待ち**(手順 → [../waves/c6/c6-comparison-gate.md](../waves/c6/c6-comparison-gate.md))。
+  - Domain A: 口グループ・タイムライン評価器 + store 統合(3レーンレビュー合格、[../waves/c6/domain-a-report.md](../waves/c6/domain-a-report.md))。
+  - Domain B: 契約 `intent.speech`(可変長モーラ列)additive 縦貫 + validation + dispatch + server 配線 + fixture + 参照ドライバ発話シナリオ(3レーンレビュー合格、[../waves/c6/domain-b-report.md](../waves/c6/domain-b-report.md))。
+  - Domain C: モノレポ検証(typecheck 0 error / test:unit 904 pass・既知 baseline 2件のみ / check:source 既知 C3 1件のみ / check:soul-zone pass)・無変更確認(physiology・resolver・Editor/schema/lockfile・心臓 seam・apps/soul package.json 不在・role 分岐不在)・docs 更新・比較ゲート手順([../waves/c6/domain-c-report.md](../waves/c6/domain-c-report.md))。
+  - **オープン項目(Undine 裁定待ち)**: 後着置換 direction(a)——`setSpeech` 時の口 per-slot 曲線の **delete vs release**(Domain A 報告 §5-5 の裁量、現状 delete で専有)。Domain C は触らず現状維持のまま裁定に委ねる。
 - Planning gate: context-check(前提監査)→ inventory(実施済み → [c6-planning-inventory.md](c6-planning-inventory.md)。Verdict `needs_design` → ユーザー裁定で解消、設計討議§7に記録済み。留保:「実際できた結果を見ないと厳密にはわからない」=最終審は比較ゲート)。
 - Model Allocation: **L0 = fable / Orch-Sylph・Gnome・Review-Sylph = opus 明示必須**。
 - ユーザー裁定(2026-07-11、[../../architecture/c6-mouth-phoneme-timeline.md](../../architecture/c6-mouth-phoneme-timeline.md) §7):

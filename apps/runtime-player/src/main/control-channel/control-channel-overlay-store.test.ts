@@ -6,6 +6,16 @@ import {
   RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS,
   RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE
 } from "./slot-curve-state";
+import {
+  RUNTIME_PLAYER_SPEECH_DIP_FLOOR,
+  RUNTIME_PLAYER_SPEECH_DIP_MS,
+  RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS,
+  RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
+  RUNTIME_PLAYER_SPEECH_ONSET_MS,
+  RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+  RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS,
+  type SpeechMora
+} from "./speech-timeline-state";
 
 /**
  * C5 Domain A: the overlay store is now a single time-evolving SLOT CURVE STATE
@@ -459,5 +469,181 @@ describe("RuntimePlayerControlChannelOverlayStore — continuity property (導�
     // documented decay-to-0 semantics — yet the whole walk stayed within the derived
     // bound (continuous, no snap).
     expect(sawDipBelowBase).toBe(true);
+  });
+});
+
+/**
+ * C6 Domain A: the store now also holds a single SPEECH TIMELINE group evaluator
+ * (setSpeech). These tests pin the STORE integration — the group's 6 mouth values land
+ * in the snapshot Record, the 後着置換 arbitration (group ↔ per-slot never both live on a
+ * mouth slot), 切断release (releaseAll), and that the whole thing is additive (the
+ * curve-only paths above are unchanged). The pure evaluator math is pinned in
+ * speech-timeline-state.test.ts.
+ */
+const PHRASE: readonly SpeechMora[] = [
+  { timeMs: 0, vowel: "a", s: 0.6 },
+  { timeMs: 140, vowel: "i", s: 0.8 },
+  { timeMs: 280, vowel: "o", s: 0.6 }
+];
+
+function vowelSumOf(snap: Record<string, number>): number {
+  return (
+    (snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a] ?? 0) +
+    (snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.i] ?? 0) +
+    (snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.u] ?? 0) +
+    (snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.e] ?? 0) +
+    (snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.o] ?? 0)
+  );
+}
+
+describe("RuntimePlayerControlChannelOverlayStore — speech timeline (C6 group)", () => {
+  it("drives the 6 mouth-group slots from a mora列, convex identity intact", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0); // anchor lastNowMs
+    store.setSpeech(PHRASE, 0);
+
+    // Mid-segment [0,140] (p≈0.5 at e=70): both a and i active, Σvowel = mouth.open.
+    const snap = store.snapshot(70);
+    expect(vowelSumOf(snap)).toBeCloseTo(
+      snap[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0,
+      9
+    );
+    expect(snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a] ?? 0).toBeGreaterThan(0);
+    expect(snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.i] ?? 0).toBeGreaterThan(0);
+    // A non-mouth generator slot is untouched by the group (only the 6 are written).
+    expect(snap["head-horizontal"]).toBeUndefined();
+  });
+
+  it("prunes the timeline after the terminal release (mouth returns to base)", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.setSpeech(PHRASE, 0);
+
+    // hold = last interval 140ms after the last mora (280) then 400ms release → gone.
+    expect(store.snapshot(300)[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0).toBeGreaterThan(0);
+    expect(store.snapshot(280 + 140 + 400 + 50)).toStrictEqual({});
+  });
+
+  it("setSpeech drops any per-slot curve on the 6 mouth slots (group takes over, no competition)", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    // A per-slot envelope is driving a vowel slot BEFORE speech.
+    store.setEnvelope(
+      RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a,
+      { peak: 0.9, attackMs: 100, sustainMs: 1000, decayMs: 0 },
+      0
+    );
+    expect(store.snapshot(200)[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a]).toBeCloseTo(0.9, 6);
+
+    // Speech arrives → the per-slot curve on mouth-vowel-a is dropped; the group owns it.
+    store.setSpeech(PHRASE, 200);
+    const snap = store.snapshot(270); // mid-segment [200,340]
+    // mouth-vowel-a is now the GROUP value (part of a→i cross-fade), NOT the 0.9 curve,
+    // and the convex identity holds → proof the group solely owns the slot.
+    expect(vowelSumOf(snap)).toBeCloseTo(snap[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0, 9);
+    expect(snap[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a] ?? 0).toBeLessThan(0.9);
+  });
+
+  it("a per-slot mouth intent DURING speech forced-releases the group; per-slot wins its slot", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.setSpeech(PHRASE, 0);
+    // Thread prevResolved as the heart would, so the per-slot re-attacks continuously.
+    const mid = store.snapshot(70, {}, {});
+    store.snapshot(70, {}, mid);
+
+    // A per-slot envelope now targets mouth-vowel-a → the group yields (forced release),
+    // the per-slot curve takes that slot over.
+    store.setEnvelope(
+      RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a,
+      { peak: 0.95, attackMs: 100, sustainMs: 1000, decayMs: 0 },
+      70
+    );
+    // After the per-slot attack completes, mouth-vowel-a shows the PER-SLOT peak (0.95),
+    // which the group (whose s is scaled to ≤0.8) could never produce — proof per-slot won.
+    const after = store.snapshot(200, {}, mid);
+    expect(after[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a] ?? 0).toBeCloseTo(0.95, 6);
+
+    // The group's OTHER mouth slots eased to base over the release (no lingering group);
+    // once the group is fully released, only the per-slot curve remains — exactly one
+    // owner per slot (mouth-open is only ever the group's, so it is absent = base 0).
+    const settled = store.snapshot(70 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 50, {}, mid);
+    expect(settled[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.i]).toBeUndefined();
+    expect(settled[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT]).toBeUndefined();
+    // The per-slot curve on mouth-vowel-a still drives (its long sustain), sole owner.
+    expect(settled[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a] ?? 0).toBeCloseTo(0.95, 6);
+  });
+
+  it("releaseAll eases the group's 6 slots from their current values to base (切断→閉口)", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.setSpeech(PHRASE, 0);
+
+    const driving = store.snapshot(210); // mid-segment [140,280], group active
+    expect(driving[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0).toBeGreaterThan(0);
+
+    store.releaseAll(210);
+    // Immediately after: still present at the hand-off value (no snap), identity intact.
+    const atStart = store.snapshot(210);
+    expect(atStart[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0).toBeGreaterThan(0);
+    expect(vowelSumOf(atStart)).toBeCloseTo(atStart[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0, 9);
+
+    // Fully closed after the release window → all 6 gone (base 0).
+    expect(store.snapshot(210 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS)).toStrictEqual({});
+  });
+
+  it("keeps every adjacent-tick step within a DERIVED bound across a setSpeech→releaseAll walk", () => {
+    // 連続性 bound (same derivation as the pure evaluator test): the two steepest
+    // smoothstep factors that can coincide at a boundary are the onset (full 0→valueRange
+    // over ONSET_MS) and the dip ((1−FLOOR)·value over DIP_MS). The forced-release tail
+    // (releaseMs) and the cross-fade (mora interval) are shallower and are NOT summed in
+    // (the old 4-way sum inflated the bound past the value range → vacuous). NO magic
+    // number: every factor is an evaluator constant.
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.setSpeech(PHRASE, 0);
+
+    const frameIntervalMs = 16;
+    const releaseMs = RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS;
+    const slope = RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE;
+    const maxS = Math.max(...PHRASE.map((m) => m.s));
+    const valueRange = RUNTIME_PLAYER_SPEECH_OPEN_SCALE * maxS; // no slot exceeds this.
+
+    const onsetSlopePerMs = slope / RUNTIME_PLAYER_SPEECH_ONSET_MS;
+    const dipSlopePerMs =
+      (slope * (1 - RUNTIME_PLAYER_SPEECH_DIP_FLOOR)) / RUNTIME_PLAYER_SPEECH_DIP_MS;
+    const bound = valueRange * (onsetSlopePerMs + dipSlopePerMs) * frameIntervalMs;
+
+    // GATE (kills the vacuous case): a bound ≥ valueRange could never catch a whole-range
+    // snap, so it must be strictly below the value range to be a real no-snap guard.
+    expect(bound).toBeLessThan(valueRange);
+
+    let previous: Record<string, number> | undefined;
+    let observedMax = 0;
+    for (let now = 0; now <= 280 + releaseMs + 200; now += frameIntervalMs) {
+      if (now === 160) {
+        store.releaseAll(now); // disconnect mid-utterance
+      }
+      const snap = store.snapshot(now);
+      if (previous !== undefined) {
+        for (const slot of RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS) {
+          const step = Math.abs((snap[slot] ?? 0) - (previous[slot] ?? 0));
+          observedMax = Math.max(observedMax, step);
+          expect(step).toBeLessThanOrEqual(bound);
+        }
+      }
+      previous = { ...snap };
+    }
+    // The real walk stays well under the bound — the gate has genuine headroom.
+    expect(observedMax).toBeLessThan(bound);
+  });
+
+  it("clearAll drops the speech timeline immediately (model unload path)", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.setSpeech(PHRASE, 0);
+    expect(store.snapshot(70)[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0).toBeGreaterThan(0);
+
+    store.clearAll();
+    expect(store.snapshot(70)).toStrictEqual({});
   });
 });

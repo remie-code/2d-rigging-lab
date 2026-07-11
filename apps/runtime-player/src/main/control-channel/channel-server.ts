@@ -14,6 +14,7 @@ import {
 import { dispatchControlChannelRequest } from "./channel-request-dispatch";
 import { createControlChannelServerHello } from "./channel-protocol-messages";
 import type { RuntimePlayerControlChannelOverlayStore } from "./control-channel-overlay-store";
+import { RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT } from "./speech-timeline-state";
 import { createControlChannelToken, isControlChannelTokenMatch } from "./channel-token";
 import { runtimePlayerControlChannelDefaultPort } from "./channel-slot-ports";
 import {
@@ -313,6 +314,17 @@ export class RuntimePlayerControlChannelServer {
         kind: "accepted",
         slotId: dispatch.envelope.slotId,
         value: dispatch.envelope.spec.peak
+      });
+    } else if (dispatch.speech !== undefined) {
+      // intent.speech → mora列 into the Domain A group timeline evaluator. startAtMs =
+      // the acceptance time (受理時刻); the evaluator plays the timeline from there. The
+      // accepted event surfaces the group's anchor slot (mouth-open) + the first mora's
+      // opening strength as its diagnostic value (the whole group is driven as a unit).
+      this.#overlayStore.setSpeech(dispatch.speech.moras, this.#nowMs());
+      this.#emitEvent({
+        kind: "accepted",
+        slotId: RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
+        value: dispatch.speech.moras[0]?.s ?? 0
       });
     } else if (dispatch.reply.result === "rejected") {
       this.#emitEvent({

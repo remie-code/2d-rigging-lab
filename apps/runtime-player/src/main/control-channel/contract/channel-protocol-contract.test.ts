@@ -15,11 +15,14 @@ import {
 import {
   runtimePlayerControlChannelProtocolVersion,
   runtimePlayerControlChannelRejectionCodes,
+  runtimePlayerControlChannelSpeechMaxTimelineLength,
+  runtimePlayerControlChannelSpeechVowels,
   runtimePlayerControlChannelSupportedKinds
 } from "./channel-protocol-contract";
 import envelopeSchema from "./channel-envelope-schema.json";
 import intentSetPayloadSchema from "./channel-intent-set-payload-schema.json";
 import intentEnvelopePayloadSchema from "./channel-intent-envelope-payload-schema.json";
+import intentSpeechPayloadSchema from "./channel-intent-speech-payload-schema.json";
 import exchangeExamples from "./channel-exchange-examples.json";
 
 describe("Control Channel contract JSON ↔ TS sync", () => {
@@ -58,13 +61,31 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
     );
   });
 
-  it("emits a server.hello that matches the schema and examples (announces both kinds, C5 additive)", () => {
+  it("keeps the intent.speech payload schema's vowel enum synced with the speech vowel vocabulary (C6 additive)", () => {
+    expect(
+      intentSpeechPayloadSchema.properties.timeline.items.properties.vowel.enum
+    ).toStrictEqual([...runtimePlayerControlChannelSpeechVowels]);
+  });
+
+  it("keeps the intent.speech payload schema's maxItems synced with the timeline cap (裁定4 512)", () => {
+    expect(intentSpeechPayloadSchema.properties.timeline.maxItems).toBe(
+      runtimePlayerControlChannelSpeechMaxTimelineLength
+    );
+    // The first variable-length payload must also declare a floor of 1 (empty is
+    // rejected with invalidPayload).
+    expect(intentSpeechPayloadSchema.properties.timeline.minItems).toBe(1);
+  });
+
+  it("emits a server.hello that matches the schema and examples (announces all three kinds, C6 additive)", () => {
     const hello = createControlChannelServerHello();
 
     expect(hello).toStrictEqual({
       v: 1,
       kind: "server.hello",
-      payload: { protocol: 1, supportedKinds: ["intent.set", "intent.envelope"] }
+      payload: {
+        protocol: 1,
+        supportedKinds: ["intent.set", "intent.envelope", "intent.speech"]
+      }
     });
     expect(exchangeExamples.happyPath.messages[0]?.message).toStrictEqual(hello);
   });
@@ -75,6 +96,9 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
         .filter((entry) => entry.direction === "clientToServer")
         .map((entry) => entry.message),
       ...exchangeExamples.envelopePath.messages
+        .filter((entry) => entry.direction === "clientToServer")
+        .map((entry) => entry.message),
+      ...exchangeExamples.speechPath.messages
         .filter((entry) => entry.direction === "clientToServer")
         .map((entry) => entry.message),
       ...exchangeExamples.rejections.map((entry) => entry.request)
@@ -104,6 +128,43 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
     );
     expect(accepted?.message).toStrictEqual(
       createControlChannelAcceptedResponse("req-70")
+    );
+  });
+
+  it("carries a worked intent.speech exchange whose accepted reply matches the builder (C6 additive)", () => {
+    const request = exchangeExamples.speechPath.messages.find(
+      (entry) => entry.direction === "clientToServer"
+    );
+    expect(request?.message.kind).toBe("intent.speech");
+    // The fixture phrase 「これじっさいのところどうなってるの」: 15 moras, a same-vowel run
+    // (o×5, indices 5..9), monotonically increasing timeMs, vowels from the vocabulary,
+    // s in the mouth-vowel 0..1 domain.
+    const timeline = request?.message.payload?.timeline ?? [];
+    expect(timeline).toHaveLength(15);
+    let previous = -Infinity;
+    for (const mora of timeline) {
+      expect(mora.timeMs).toBeGreaterThan(previous);
+      previous = mora.timeMs;
+      expect([...runtimePlayerControlChannelSpeechVowels]).toContain(mora.vowel);
+      expect(mora.s).toBeGreaterThanOrEqual(0);
+      expect(mora.s).toBeLessThanOrEqual(1);
+    }
+    expect(timeline.slice(5, 10).map((mora) => mora.vowel)).toStrictEqual([
+      "o",
+      "o",
+      "o",
+      "o",
+      "o"
+    ]);
+
+    const accepted = exchangeExamples.speechPath.messages.find(
+      (entry) =>
+        entry.direction === "serverToClient" &&
+        "result" in entry.message &&
+        entry.message.result === "accepted"
+    );
+    expect(accepted?.message).toStrictEqual(
+      createControlChannelAcceptedResponse("req-90")
     );
   });
 
@@ -175,6 +236,21 @@ describe("Control Channel contract normalizedRanges ↔ TS classifier sync", () 
     // no drift) — this is what the soul reads to learn peak's domain.
     expect(intentEnvelopePayloadSchema.normalizedRanges).toStrictEqual(
       intentSetPayloadSchema.normalizedRanges
+    );
+  });
+
+  it("keeps the intent.speech schema's mouth-vowel range synced with semanticSlotNormalizedRange() (s shares mouth-vowel's domain)", () => {
+    // The speech mora `s` is validated against the mouth-vowel normalized domain
+    // (0..1); the JSON must not drift from the TS source of truth the runtime rejects
+    // against. The schema carries only the mouth-vowel range (the sole slot family the
+    // group evaluator drives).
+    expect(intentSpeechPayloadSchema.normalizedRanges).toStrictEqual({
+      "mouth-vowel": semanticSlotNormalizedRange("mouth-vowel")
+    });
+    // The per-item s bounds must match the same domain.
+    const sSchema = intentSpeechPayloadSchema.properties.timeline.items.properties.s;
+    expect({ min: sSchema.minimum, max: sSchema.maximum }).toStrictEqual(
+      semanticSlotNormalizedRange("mouth-vowel")
     );
   });
 });

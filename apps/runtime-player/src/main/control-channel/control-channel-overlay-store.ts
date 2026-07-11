@@ -23,6 +23,19 @@
  *
  * There are at most 16 semantic slots, so the map is naturally bounded; a new
  * intent for the same slotId overwrites the previous curve (re-attack, not stacking).
+ *
+ * C6 Domain A adds a SECOND kind of entry alongside the per-slot curve map: a single
+ * optional SPEECH TIMELINE (`#speech`, a `SpeechTimelineState`) that owns the 6
+ * mouth-group slots (mouth.open + 5 vowels) as a UNIT and is driven by a mora列
+ * (`setSpeech`). It is evaluated in {@link snapshot} from the SAME wall-clock `nowMs`
+ * as the curves and merged into the same live Record. The two machines never both
+ * drive one slot ambiguously — a single 後着置換 arbitration lives here (see
+ * {@link setSpeech} / {@link #yieldSpeechForSlot}): setSpeech drops the per-slot
+ * curves on the 6 mouth slots (the group takes exclusive ownership), and a per-slot
+ * `set`/`envelope` landing on a mouth slot during speech forced-releases the group
+ * (per-slot then wins that slot; the group's other slots ease to base). In the merge,
+ * per-slot curves are written AFTER the group so a per-slot curve deterministically
+ * overrides the group on any shared slot.
  */
 
 import {
@@ -32,6 +45,13 @@ import {
   slotCurveDriveEndMs,
   type SlotCurveState
 } from "./slot-curve-state";
+import {
+  isSpeechMouthGroupSlot,
+  RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS,
+  sampleSpeechTimeline,
+  type SpeechMora,
+  type SpeechTimelineState
+} from "./speech-timeline-state";
 
 /**
  * An `intent.envelope` shape (Domain B wires `intent.envelope` payloads to this).
@@ -65,6 +85,8 @@ export type RuntimePlayerControlChannelOverlayStoreOptions = {
 
 export class RuntimePlayerControlChannelOverlayStore {
   readonly #curves = new Map<string, SlotCurveState>();
+  /** The single live speech timeline (C6, 一発話=一タイムライン §7 裁定4), or null. */
+  #speech: SpeechTimelineState | null = null;
   readonly #releaseMs: number;
   /** Last query time observed via {@link snapshot} — the set curve's start anchor. */
   #lastNowMs = 0;
@@ -93,6 +115,7 @@ export class RuntimePlayerControlChannelOverlayStore {
    * signature is unchanged so Domain B / the existing dispatch call it as before.
    */
   setOverlay(slotId: string, value: number, expiresAtMs: number): void {
+    this.#yieldSpeechForSlot(slotId, this.#lastNowMs);
     const startAtMs = this.#lastNowMs;
     const windowMs = Math.max(0, expiresAtMs - startAtMs);
     const attackMs = Math.min(
@@ -120,6 +143,7 @@ export class RuntimePlayerControlChannelOverlayStore {
     spec: RuntimePlayerControlChannelEnvelopeSpec,
     startAtMs: number
   ): void {
+    this.#yieldSpeechForSlot(slotId, startAtMs);
     this.#curves.set(slotId, {
       startAtMs,
       startValue: this.#effectiveStart(slotId),
@@ -132,19 +156,45 @@ export class RuntimePlayerControlChannelOverlayStore {
   }
 
   /**
+   * Record an accepted `intent.speech` as the single live SPEECH TIMELINE (C6 Domain A,
+   * §7 裁定1). `moras` is the validated mora列 (relative times; validation = Domain B),
+   * `startAtMs` the acceptance instant (absolute mora time = startAtMs + mora.timeMs).
+   * The group evaluator (evaluated in {@link snapshot}) then drives the 6 mouth-group
+   * slots as a unit — the convex identity Σvowel = s = mouth.open holds structurally
+   * (speech-timeline-state.ts).
+   *
+   * 後着置換 (裁定3): the new speech drive REPLACES any prior mouth drive. Per-slot
+   * curves on the 6 mouth slots are dropped so the group takes EXCLUSIVE ownership
+   * (no slot is ever driven by both the group and a per-slot curve at once — the single
+   * arbitration point). The group's onset ramps from the base (mouth base = 0, §2.8) so
+   * an idle mouth opens continuously (no snap); a rare concurrent per-slot mouth drive
+   * is superseded (裁量, see domain-a report). A prior speech timeline is likewise
+   * replaced (the later utterance wins).
+   */
+  setSpeech(moras: readonly SpeechMora[], startAtMs: number): void {
+    for (const slotId of RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS) {
+      this.#curves.delete(slotId);
+    }
+    this.#speech = { moras: [...moras], startAtMs };
+  }
+
+  /**
    * Hard-drop every curve (immediate, no release). Used only where there is no
    * living body to ease toward — model unload / runtime-export teardown
    * (runtime-player-main.ts). Client disconnect uses {@link releaseAll} instead.
    */
   clearAll(): void {
     this.#curves.clear();
+    this.#speech = null;
   }
 
   /**
    * Disconnect → every slot eases to the living base over the universal release
    * (§2.3「魂の死=表情がすっと解けて呼吸だけが残る」). Each live curve is switched to
    * a forced release from its CURRENT effective value; a curve already fully returned
-   * is dropped. No immediate snap (that was C4).
+   * is dropped. No immediate snap (that was C4). The speech timeline (if any) is
+   * forced-released the same way — the 6 mouth slots ease from their current values to
+   * base (口がすっと閉じる, §2.8).
    */
   releaseAll(nowMs: number): void {
     this.#lastNowMs = nowMs;
@@ -160,6 +210,7 @@ export class RuntimePlayerControlChannelOverlayStore {
         forcedReleaseFromValue: sample.value
       });
     }
+    this.#forceReleaseSpeech(nowMs);
   }
 
   /**
@@ -182,6 +233,22 @@ export class RuntimePlayerControlChannelOverlayStore {
     this.#lastResolved = prevResolved;
 
     const live: Record<string, number> = {};
+
+    // Group timeline FIRST (lower merge priority): its 6 mouth-slot values are written
+    // before the per-slot curves, so a per-slot curve on a shared mouth slot (only ever
+    // present after a 後着置換 that forced-released the group) deterministically wins.
+    if (this.#speech !== null) {
+      const sample = sampleSpeechTimeline(this.#speech, nowMs, {
+        releaseMs: this.#releaseMs,
+        baseFor: (slotId) => this.#livingBase(slotId)
+      });
+      if (sample.done) {
+        this.#speech = null;
+      } else {
+        Object.assign(live, sample.values);
+      }
+    }
+
     for (const [slotId, curve] of this.#curves) {
       const sample = sampleSlotCurve(curve, nowMs, this.#livingBase(slotId));
       if (sample.done) {
@@ -223,6 +290,47 @@ export class RuntimePlayerControlChannelOverlayStore {
     }
 
     return live;
+  }
+
+  /**
+   * 後着置換 (裁定3), per-slot side: if a per-slot `set`/`envelope` lands on one of the
+   * 6 mouth-group slots while a speech timeline is live, the whole group YIELDS —
+   * forced-released to base — so the per-slot curve can take over that slot (the group
+   * cannot partially own the six, or Σvowel = mouth.open would break). The group's other
+   * five slots ease to base; the targeted slot is driven by the incoming per-slot curve,
+   * which re-attacks from the current effective value (案B) for continuity. This is the
+   * single point where a per-slot drive overrides the group.
+   */
+  #yieldSpeechForSlot(slotId: string, nowMs: number): void {
+    if (this.#speech !== null && isSpeechMouthGroupSlot(slotId)) {
+      this.#forceReleaseSpeech(nowMs);
+    }
+  }
+
+  /**
+   * Switch the live speech timeline (if any) into a forced release from its CURRENT 6
+   * values toward the living base, mirroring a per-slot curve's forced release. A
+   * timeline already fully closed is dropped. Idempotent-ish: a timeline already in
+   * forced release keeps its original anchor (re-capturing would restart the ease).
+   */
+  #forceReleaseSpeech(nowMs: number): void {
+    const speech = this.#speech;
+    if (speech === null || speech.forcedReleaseAtMs !== undefined) {
+      return;
+    }
+    const sample = sampleSpeechTimeline(speech, nowMs, {
+      releaseMs: this.#releaseMs,
+      baseFor: (slotId) => this.#livingBase(slotId)
+    });
+    if (sample.done) {
+      this.#speech = null;
+      return;
+    }
+    this.#speech = {
+      ...speech,
+      forcedReleaseAtMs: nowMs,
+      forcedReleaseFrom: sample.values
+    };
   }
 
   /** Case B (連続性 3.1): the effective value the slot is currently showing. */

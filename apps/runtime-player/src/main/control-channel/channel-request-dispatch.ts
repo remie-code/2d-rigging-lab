@@ -5,13 +5,15 @@ import {
 } from "./contract/channel-protocol-contract";
 import {
   validateControlChannelIntentEnvelope,
-  validateControlChannelIntentSet
+  validateControlChannelIntentSet,
+  validateControlChannelIntentSpeech
 } from "./channel-intent-validation";
 import {
   createControlChannelAcceptedResponse,
   createControlChannelRejectedResponse,
   parseControlChannelRequestEnvelope
 } from "./channel-protocol-messages";
+import type { SpeechMora } from "./speech-timeline-state";
 
 /**
  * The pure decision core of the Control Channel server (C4 §3). Turns one raw
@@ -48,6 +50,16 @@ export type ControlChannelEnvelopeWrite = {
   };
 };
 
+/**
+ * The speech write for an accepted `intent.speech` (C6 §2). Carries the validated
+ * mora列 (Domain A's {@link SpeechMora} shape). Like the envelope write there is NO
+ * absolute instant here: `startAtMs` = the acceptance time is supplied by the server
+ * (`setSpeech(moras, nowMs())`), so the group evaluator owns its own clock.
+ */
+export type ControlChannelSpeechWrite = {
+  readonly moras: readonly SpeechMora[];
+};
+
 export type ControlChannelRequestDispatch =
   | { readonly kind: "ignore" }
   | {
@@ -55,6 +67,7 @@ export type ControlChannelRequestDispatch =
       readonly reply: RuntimePlayerControlChannelResponseEnvelope;
       readonly overlay?: ControlChannelOverlayWrite;
       readonly envelope?: ControlChannelEnvelopeWrite;
+      readonly speech?: ControlChannelSpeechWrite;
     };
 
 export type DispatchControlChannelRequestInput = {
@@ -103,8 +116,12 @@ export function dispatchControlChannelRequest(
     };
   }
 
-  // Branch on the (now two) supported kinds. intent.set → overlay write (C4 path,
-  // UNCHANGED); intent.envelope → envelope write into the Domain A curve machine.
+  // Branch on the (now three) supported kinds. intent.set → overlay write (C4 path,
+  // UNCHANGED); intent.envelope → envelope write into the per-slot curve machine;
+  // intent.speech → speech write into the Domain A group timeline evaluator.
+  if (envelope.kind === "intent.speech") {
+    return dispatchIntentSpeech(envelope.id, envelope.payload, input);
+  }
   if (envelope.kind === "intent.envelope") {
     return dispatchIntentEnvelope(envelope.id, envelope.payload, input);
   }
@@ -176,6 +193,36 @@ function dispatchIntentEnvelope(
         sustainMs: validation.sustainMs,
         decayMs: validation.decayMs
       }
+    }
+  };
+}
+
+function dispatchIntentSpeech(
+  id: string,
+  payload: unknown,
+  input: DispatchControlChannelRequestInput
+): ControlChannelRequestDispatch {
+  const validation = validateControlChannelIntentSpeech({
+    payload,
+    getCurrentSlots: input.getCurrentSlots
+  });
+
+  if (!validation.ok) {
+    return {
+      kind: "reply",
+      reply: createControlChannelRejectedResponse({
+        replyTo: id,
+        code: validation.code,
+        message: validation.message
+      })
+    };
+  }
+
+  return {
+    kind: "reply",
+    reply: createControlChannelAcceptedResponse(id),
+    speech: {
+      moras: validation.moras
     }
   };
 }

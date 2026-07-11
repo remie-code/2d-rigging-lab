@@ -78,6 +78,20 @@
 6. 棚卸しの接地事実: 母音スロット経路はC5でenum済み・開通済み(C6で新設しない)。生理は口を産まないためrelease先=閉口が自動成立。
 7. **fixtureフレーズ=「これじっさいのところどうなってるの」**(全母音+同母音連続を含む——再調音ディップの試金石。ユーザー選定)。テストモデル=ユーザー本番Runtime Export(mouth.vowel.*+mouth.open のexternal-input保有をユーザー確認済み)。
 
+### 7.1 実装後の状況(C6実装完了、Domain C統合 2026-07-12)
+
+§7の留保「実際できた結果を見ないと厳密にはわからない=最終審は比較ゲート」に対し、**機械ゲートは実装・検証で満たされた**(Domain A/B 合格、Domain C モノレポ検証済み):
+
+- **凸恒等 Σvowel = s = mouth.open**: 全tick性質テスト(代表フレーズを4ms刻み全域走査)で成立。相補式が単一進行度pと単一sから代数導出し、後段補正(Σを計算して合わせる)は一切書いていない=構造保証。
+- **再調音ディップ**: 「のところど」(o×5)で境界<中央・非静止を assert。相補式だけなら凍る区間が拍ごとに動く。
+- **undershoot**: fastモーラの母音ピーク < slow(頂点に登り切る前に折れる混合)を assert。attackはモーラ間隔から動的導出(payload非搭載)。
+- **512拒否**: timeline長 > 512 を `invalidPayload` で拒否(クランプ/切詰め禁止)。単調違反/空配列/未知vowelも `invalidPayload`、s域外は `slotValueOutOfRange`——新rejection code不増。
+- **無退行**: C4/C5契約fixture・圧縮/知覚シナリオ・physiology golden・リゾルバ・トラッキング経路が無変更で通過。実行時role分岐ゼロ。
+
+**ただし比較ゲート(§5の二体並置=「生きた発話中の口に見えるか」)は未実施——ユーザーの人間ゲート待ち**が正しい状態。機械が保証できるのは性質(凸恒等・非静止・undershoot・拒否・無退行)までで、最終審は依然として本設計§5の比較ゲート。実運用手順は [../implementation/waves/c6/c6-comparison-gate.md](../implementation/waves/c6/c6-comparison-gate.md)。
+
+**オープン項目(Undine裁定待ち)**: 後着置換 direction(a)——発話開始時(`setSpeech`)に既存の口per-slot曲線を **delete で専有する**か **release経由で置換する**か。実装は現状 delete(口idleの常況では連続、Domain A報告§5-5の裁量)。裁定が済むまで実装は現状維持。
+
 ## 8. 次の行動
 
 1. context-check → planning gate棚卸し(観点: C5曲線機構へのタイムライン再生の載せ方、vowelスロットの現状、fixture音素列の形式、参照ドライバの発話シナリオ、比較ゲートの手順)。

@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "runtime-player/control-channel/envelope",
   "title": "Runtime Player Control Channel envelope (C4 outer shell)",
-  "description": "The transport-neutral outer shell of the control channel (C4 §3). New request kinds are added additively without changing this envelope. v0 owned intent.set; C5 adds intent.envelope additively (see channel-intent-envelope-payload-schema.json).",
+  "description": "The transport-neutral outer shell of the control channel (C4 §3). New request kinds are added additively without changing this envelope. v0 owned intent.set; C5 adds intent.envelope additively (see channel-intent-envelope-payload-schema.json); C6 adds intent.speech additively (see channel-intent-speech-payload-schema.json).",
   "protocolVersion": 1,
-  "supportedKinds": ["intent.set", "intent.envelope"],
+  "supportedKinds": ["intent.set", "intent.envelope", "intent.speech"],
   "rejectionCodes": [
     "unknownKind",
     "invalidPayload",
@@ -28,10 +28,10 @@
         },
         "kind": {
           "type": "string",
-          "description": "Additive-extension slot. The 器 understands intent.set and intent.envelope; any other kind is rejected with unknownKind but the connection is kept."
+          "description": "Additive-extension slot. The 器 understands intent.set, intent.envelope, and intent.speech; any other kind is rejected with unknownKind but the connection is kept."
         },
         "payload": {
-          "description": "Kind-specific payload. For intent.set see channel-intent-set-payload-schema.json; for intent.envelope see channel-intent-envelope-payload-schema.json."
+          "description": "Kind-specific payload. For intent.set see channel-intent-set-payload-schema.json; for intent.envelope see channel-intent-envelope-payload-schema.json; for intent.speech see channel-intent-speech-payload-schema.json."
         }
       }
     },

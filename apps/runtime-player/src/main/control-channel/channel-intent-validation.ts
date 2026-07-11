@@ -4,8 +4,17 @@ import {
   type RuntimePlayerMappingSlotId
 } from "../../preload/model-mapping-bridge-contract";
 import { findSemanticSlotDefinition } from "../live-mapping/semantic-slot-definitions";
-import type { RuntimePlayerControlChannelRejectionCode } from "./contract/channel-protocol-contract";
+import {
+  runtimePlayerControlChannelSpeechMaxTimelineLength,
+  runtimePlayerControlChannelSpeechVowels,
+  type RuntimePlayerControlChannelRejectionCode
+} from "./contract/channel-protocol-contract";
 import { semanticSlotNormalizedRange } from "./semantic-slot-normalized-range";
+import {
+  RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS,
+  type SpeechMora,
+  type SpeechVowel
+} from "./speech-timeline-state";
 
 /**
  * intent.set validation — the pre-gate that sits IN FRONT of the head-less
@@ -298,6 +307,156 @@ function parseDurationMs(value: unknown): number | null {
     return null;
   }
   return value;
+}
+
+/**
+ * intent.speech validation (C6 §2/§7 裁定4). The SAME pre-gate discipline as the
+ * set/envelope validators, adapted to the FIRST variable-length payload — a mora列
+ * `{ timeMs, vowel, s }[]`. Rejection reuses the EXISTING enumeration only — NO new
+ * code (拒否語彙の不増殖, 裁定4):
+ *
+ *  1. payload/shape parse → invalidPayload
+ *       - non-record, `timeline` non-array, EMPTY timeline
+ *       - timeline length > 512 (裁定4 上限。超過は畳む、クランプ禁止)
+ *       - a mora non-record; timeMs non-finite / negative / NOT strictly increasing
+ *         (前要素以下は拒否 — the mora列 must be a monotone schedule); vowel not a/i/u/e/o;
+ *         s non-finite
+ *  2. s domain (mouth-vowel 0..1, NO clamp) → slotValueOutOfRange
+ *       (the same domain概念 as intent.set's value / intent.envelope's peak; a value
+ *        outside 0..1 is a range refusal, distinct from a non-finite parse failure)
+ *  3. the fixed 6 mouth-group slots (mouth-open + 5 vowel slots) ALL writable →
+ *     slotNotWritable (§2.1 gate依存). There is NO slotId in the payload, so this is
+ *     the group form: any of the 6 not writable ⇒ refuse. There is likewise NO
+ *     unknownSlot path — the slots are fixed, not carried on the wire.
+ *
+ * On ok it returns the validated `SpeechMora[]` (Domain A's store-facing shape); the
+ * server hands it to `store.setSpeech(moras, nowMs)`.
+ */
+export type ControlChannelIntentSpeechValidation =
+  | {
+      readonly ok: true;
+      readonly moras: readonly SpeechMora[];
+    }
+  | {
+      readonly ok: false;
+      readonly code: RuntimePlayerControlChannelRejectionCode;
+      readonly message: string;
+    };
+
+export type ValidateControlChannelIntentSpeechInput = {
+  readonly payload: unknown;
+  readonly getCurrentSlots: () => readonly RuntimePlayerMappingSlot[] | null;
+};
+
+export function validateControlChannelIntentSpeech(
+  input: ValidateControlChannelIntentSpeechInput
+): ControlChannelIntentSpeechValidation {
+  const parsed = parseIntentSpeechTimeline(input.payload);
+  if (parsed === null) {
+    return {
+      ok: false,
+      code: "invalidPayload",
+      message: "intent.speech payload is malformed."
+    };
+  }
+
+  // s domain (mouth-vowel 0..1) — a range refusal, never clamped (same rule as
+  // intent.set's value / intent.envelope's peak). Non-finite s was already a parse
+  // failure above; here we only reject out-of-DOMAIN finite values.
+  const range = semanticSlotNormalizedRange("mouth-vowel");
+  for (const mora of parsed) {
+    if (mora.s < range.min || mora.s > range.max) {
+      return {
+        ok: false,
+        code: "slotValueOutOfRange",
+        message: `mora s ${mora.s} is outside the ${range.min}..${range.max} mouth-vowel range.`
+      };
+    }
+  }
+
+  // The 6 mouth-group slots are driven as a UNIT — all must be writable.
+  if (!speechMouthGroupWritable(input.getCurrentSlots())) {
+    return {
+      ok: false,
+      code: "slotNotWritable",
+      message: "The mouth group (mouth-open + mouth-vowel-*) is not writable on the loaded model."
+    };
+  }
+
+  return { ok: true, moras: parsed };
+}
+
+/**
+ * Parse + shape-validate the mora列. Returns the validated `SpeechMora[]` or null
+ * (⇒ invalidPayload). Shape-only: the s DOMAIN (0..1) and slot writability are checked
+ * by the caller with their own codes. Non-finite s IS a shape failure here (null);
+ * an out-of-range but finite s is left for the caller's slotValueOutOfRange.
+ */
+function parseIntentSpeechTimeline(
+  value: unknown
+): readonly SpeechMora[] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const { timeline } = value;
+  if (!Array.isArray(timeline)) {
+    return null;
+  }
+  // Empty timeline (no drive) and over-cap timeline (裁定4 DoS bound) are both
+  // malformed → invalidPayload (no new code, never clamped/truncated).
+  if (
+    timeline.length === 0 ||
+    timeline.length > runtimePlayerControlChannelSpeechMaxTimelineLength
+  ) {
+    return null;
+  }
+
+  const moras: SpeechMora[] = [];
+  let previousTimeMs = Number.NEGATIVE_INFINITY;
+  for (const entry of timeline) {
+    if (!isRecord(entry)) {
+      return null;
+    }
+    const { timeMs, vowel, s } = entry;
+    if (
+      typeof timeMs !== "number" ||
+      !Number.isFinite(timeMs) ||
+      timeMs < 0 ||
+      timeMs <= previousTimeMs
+    ) {
+      // Non-finite / negative / non-monotonic (≤ previous) time → malformed schedule.
+      return null;
+    }
+    if (!isSpeechVowel(vowel)) {
+      return null;
+    }
+    if (typeof s !== "number" || !Number.isFinite(s)) {
+      return null;
+    }
+    previousTimeMs = timeMs;
+    moras.push({ timeMs, vowel, s });
+  }
+  return moras;
+}
+
+function isSpeechVowel(value: unknown): value is SpeechVowel {
+  return (
+    typeof value === "string" &&
+    (runtimePlayerControlChannelSpeechVowels as readonly string[]).includes(value)
+  );
+}
+
+/** True iff every one of the 6 mouth-group slots is writable on the loaded model. */
+function speechMouthGroupWritable(
+  slots: readonly RuntimePlayerMappingSlot[] | null
+): boolean {
+  for (const slotId of RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS) {
+    if (!isMappingSlotId(slotId) || !isSlotWritable(slotId, slots)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

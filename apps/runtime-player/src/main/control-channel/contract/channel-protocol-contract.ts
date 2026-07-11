@@ -13,8 +13,8 @@ import type { RuntimePlayerMappingSlotId } from "../../../preload/model-mapping-
  * The outer envelope is an ADDITIVE EXTENSION基礎 (C4 §2): new `kind`s are added
  * by later closed problems (C5 envelope intents, C6 phoneme timelines) without
  * changing the envelope. v0 owned exactly one kind (`intent.set`); C5 adds
- * `intent.envelope` ADDITIVELY — the `intent.set` shape/validation/examples are
- * byte-identical, only the announced kind set grows.
+ * `intent.envelope` ADDITIVELY; C6 adds `intent.speech` ADDITIVELY — the earlier
+ * shapes/validation/examples stay byte-identical, only the announced kind set grows.
  */
 
 /** Wire protocol version. v0 speaks version 1 only. */
@@ -25,13 +25,15 @@ export type RuntimePlayerControlChannelProtocolVersion =
 
 /**
  * The request kinds this server understands (advertised in `server.hello`).
- * v0 = `intent.set`; C5 adds `intent.envelope` additively. Growth is additive:
- * older souls simply never send a kind they were not told about, and a soul that
- * only ever sends `intent.set` keeps working unchanged (C4 §3.4/§3.5 寛容規則).
+ * v0 = `intent.set`; C5 adds `intent.envelope`; C6 adds `intent.speech`, all
+ * additively. Growth is additive: older souls simply never send a kind they were
+ * not told about, and a soul that only ever sends `intent.set` keeps working
+ * unchanged (C4 §3.4/§3.5 寛容規則).
  */
 export const runtimePlayerControlChannelSupportedKinds = [
   "intent.set",
-  "intent.envelope"
+  "intent.envelope",
+  "intent.speech"
 ] as const;
 
 export type RuntimePlayerControlChannelRequestKind =
@@ -143,4 +145,59 @@ export type RuntimePlayerControlChannelIntentEnvelopePayload = {
   readonly attackMs: number;
   readonly sustainMs: number;
   readonly decayMs: number;
+};
+
+/**
+ * The five Japanese vowels an `intent.speech` mora speaks in (C6 §2). The 器 is
+ * language-neutral: the phoneme→vowel mapping lives 魂側 (設計 §6), so the wire
+ * contract only carries a vowel LABEL, never a slot id — the 器 maps the label to
+ * the fixed 6-slot mouth group internally. This const is the source of truth the
+ * speech payload schema's `vowel` enum is byte-synced against.
+ */
+export const runtimePlayerControlChannelSpeechVowels = [
+  "a",
+  "i",
+  "u",
+  "e",
+  "o"
+] as const;
+
+export type RuntimePlayerControlChannelSpeechVowel =
+  (typeof runtimePlayerControlChannelSpeechVowels)[number];
+
+/**
+ * The maximum mora-timeline length an `intent.speech` payload may carry (C6 §7
+ * 裁定4). `intent.speech` is the FIRST variable-length payload in the contract, so
+ * an unbounded timeline is a DoS surface on the heart's per-tick scan. Over the cap
+ * the request is refused with `invalidPayload` (拒否語彙の不増殖 — no new code, never
+ * clamped). This const is the source of truth the speech payload schema's
+ * `maxItems` is byte-synced against.
+ */
+export const runtimePlayerControlChannelSpeechMaxTimelineLength = 512;
+
+/**
+ * C6 `intent.speech` payload (C6 §2). A VARIABLE-LENGTH mora列 — the first variable
+ * payload in the contract. Each mora is `{ timeMs, vowel, s }`: `timeMs` is the
+ * relative time (ms from timeline start, monotonically increasing, non-negative);
+ * `vowel` is one of the five vowel LABELS (a/i/u/e/o) — NOT a slot id, the 器 maps it
+ * to the fixed 6-slot mouth group (mouth-open + mouth-vowel-*) itself; `s` is the
+ * opening strength in the mouth-vowel normalized domain 0..1 (out-of-range is refused
+ * with `slotValueOutOfRange`, never clamped). A malformed shape — non-record, empty
+ * timeline, non-monotonic/negative/non-finite `timeMs`, unknown `vowel`, non-finite
+ * `s`, or a timeline longer than {@link runtimePlayerControlChannelSpeechMaxTimelineLength}
+ * — is refused with `invalidPayload`; NO new rejection code is added (裁定4). There is
+ * deliberately NO attack field: attack ≈ the mora interval, derived by the 器's group
+ * evaluator (設計 §3.2), not carried on the wire.
+ *
+ * NOTE — name collision (C6 命名規律): "speech timeline" is the GROUP mouth timeline
+ * (5 vowels + mouth.open evaluated as a unit), a DIFFERENT concept from the C5
+ * per-slot animation "envelope" (attack/sustain/decay) and the C4 message 封筒. This
+ * payload's schema is channel-intent-speech-payload-schema.json.
+ */
+export type RuntimePlayerControlChannelIntentSpeechPayload = {
+  readonly timeline: readonly {
+    readonly timeMs: number;
+    readonly vowel: RuntimePlayerControlChannelSpeechVowel;
+    readonly s: number;
+  }[];
 };

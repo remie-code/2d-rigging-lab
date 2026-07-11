@@ -229,4 +229,91 @@ describe("dispatchControlChannelRequest", () => {
       reply: { replyTo: "req-10", error: { code: "channelClosed" } }
     });
   });
+
+  const mouthGroupSlots: readonly RuntimePlayerMappingSlotId[] = [
+    "mouth-open",
+    "mouth-vowel-a",
+    "mouth-vowel-i",
+    "mouth-vowel-u",
+    "mouth-vowel-e",
+    "mouth-vowel-o"
+  ];
+  const mouthGroupWritable = (): readonly RuntimePlayerMappingSlot[] =>
+    mouthGroupSlots.map((slotId) => writableSlot(slotId));
+
+  it("accepts an intent.speech and returns a speech write (no overlay, no envelope)", () => {
+    const timeline = [
+      { timeMs: 0, vowel: "o", s: 0.6 },
+      { timeMs: 120, vowel: "e", s: 0.7 }
+    ];
+    const dispatch = dispatchControlChannelRequest({
+      ...baseInput,
+      getCurrentSlots: mouthGroupWritable,
+      text: request("req-11", "intent.speech", { timeline })
+    });
+    expect(dispatch).toStrictEqual({
+      kind: "reply",
+      reply: { v: 1, replyTo: "req-11", result: "accepted" },
+      speech: { moras: timeline }
+    });
+    // The speech write rides neither the overlay nor the envelope field.
+    expect(dispatch.kind === "reply" && dispatch.overlay).toBeUndefined();
+    expect(dispatch.kind === "reply" && dispatch.envelope).toBeUndefined();
+  });
+
+  it("surfaces speech validation rejection codes (existing enumeration only) without a write", () => {
+    // Empty timeline → invalidPayload.
+    const empty = dispatchControlChannelRequest({
+      ...baseInput,
+      getCurrentSlots: mouthGroupWritable,
+      text: request("req-12", "intent.speech", { timeline: [] })
+    });
+    expect(empty).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-12", error: { code: "invalidPayload" } }
+    });
+    expect(empty.kind === "reply" && empty.speech).toBeUndefined();
+
+    // s out of the mouth-vowel 0..1 domain → slotValueOutOfRange.
+    const outOfRange = dispatchControlChannelRequest({
+      ...baseInput,
+      getCurrentSlots: mouthGroupWritable,
+      text: request("req-13", "intent.speech", {
+        timeline: [{ timeMs: 0, vowel: "a", s: 1.5 }]
+      })
+    });
+    expect(outOfRange).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-13", error: { code: "slotValueOutOfRange" } }
+    });
+    expect(outOfRange.kind === "reply" && outOfRange.speech).toBeUndefined();
+
+    // The mouth group is not writable (baseInput only has head-horizontal) → slotNotWritable.
+    const notWritable = dispatchControlChannelRequest({
+      ...baseInput,
+      text: request("req-14", "intent.speech", {
+        timeline: [{ timeMs: 0, vowel: "a", s: 0.5 }]
+      })
+    });
+    expect(notWritable).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-14", error: { code: "slotNotWritable" } }
+    });
+    expect(notWritable.kind === "reply" && notWritable.speech).toBeUndefined();
+  });
+
+  it("still rejects intent.speech with channelClosed when not accepting (kind-agnostic gate)", () => {
+    const dispatch = dispatchControlChannelRequest({
+      ...baseInput,
+      accepting: false,
+      getCurrentSlots: mouthGroupWritable,
+      text: request("req-15", "intent.speech", {
+        timeline: [{ timeMs: 0, vowel: "a", s: 0.5 }]
+      })
+    });
+    expect(dispatch).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-15", error: { code: "channelClosed" } }
+    });
+  });
 });

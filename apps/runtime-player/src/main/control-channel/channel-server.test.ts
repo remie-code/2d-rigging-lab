@@ -86,7 +86,7 @@ describe("RuntimePlayerControlChannelServer", () => {
         kind: "server.hello",
         payload: {
           protocol: 1,
-          supportedKinds: ["intent.set", "intent.envelope"]
+          supportedKinds: ["intent.set", "intent.envelope", "intent.speech"]
         }
       });
     await waitFor(() => server.getState().kind === "connected");
@@ -167,6 +167,52 @@ describe("RuntimePlayerControlChannelServer", () => {
     expect(store.snapshot(FIXED_NOW_MS + 300)).toStrictEqual({
       "head-horizontal": 0.6
     });
+
+    socket.close();
+  });
+
+  it("accepts an intent.speech and plays the mora timeline into the group evaluator", async () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const server = await startOpenServer({
+      store,
+      getCurrentSlots: () => MOUTH_GROUP_SLOTS.map((slotId) => writableSlot(slotId))
+    });
+    const socket = connect(server);
+    const messages = collectMessages(socket);
+
+    await waitForWebSocketOpen(socket);
+    socket.send(JSON.stringify({
+      v: 1,
+      id: "req-speech",
+      kind: "intent.speech",
+      payload: {
+        timeline: [
+          { timeMs: 0, vowel: "o", s: 0.7 },
+          { timeMs: 120, vowel: "a", s: 0.8 }
+        ]
+      }
+    }));
+
+    await waitFor(() =>
+      messages.some((message) => message.replyTo === "req-speech")
+    );
+    expect(messages.find((message) => message.replyTo === "req-speech"))
+      .toStrictEqual({ v: 1, replyTo: "req-speech", result: "accepted" });
+
+    // setSpeech wired with startAtMs = server nowMs (FIXED_NOW_MS). Mid-timeline the
+    // mouth group is driven: mouth-open is between the base (0) and the scaled peak,
+    // and the convex identity Σ(5 vowels) = mouth-open survives the wiring.
+    const frame = store.snapshot(FIXED_NOW_MS + 100);
+    const mouthOpen = frame["mouth-open"] ?? 0;
+    expect(mouthOpen).toBeGreaterThan(0);
+    expect(mouthOpen).toBeLessThanOrEqual(1);
+    const vowelSum =
+      (frame["mouth-vowel-a"] ?? 0) +
+      (frame["mouth-vowel-i"] ?? 0) +
+      (frame["mouth-vowel-u"] ?? 0) +
+      (frame["mouth-vowel-e"] ?? 0) +
+      (frame["mouth-vowel-o"] ?? 0);
+    expect(vowelSum).toBeCloseTo(mouthOpen, 9);
 
     socket.close();
   });
@@ -284,19 +330,30 @@ describe("RuntimePlayerControlChannelServer", () => {
 
 async function startOpenServer(options: {
   readonly store?: RuntimePlayerControlChannelOverlayStore;
+  readonly getCurrentSlots?: () => readonly RuntimePlayerMappingSlot[] | null;
 } = {}): Promise<RuntimePlayerControlChannelServer> {
   const server = new RuntimePlayerControlChannelServer({
     overlayStore:
       options.store ?? new RuntimePlayerControlChannelOverlayStore(),
     token: TEST_TOKEN,
     port: 0,
-    getCurrentSlots: () => [writableSlot("head-horizontal")],
+    getCurrentSlots:
+      options.getCurrentSlots ?? (() => [writableSlot("head-horizontal")]),
     nowMs: () => FIXED_NOW_MS
   });
   runningServers.push(server);
   await server.open();
   return server;
 }
+
+const MOUTH_GROUP_SLOTS: readonly RuntimePlayerMappingSlotId[] = [
+  "mouth-open",
+  "mouth-vowel-a",
+  "mouth-vowel-i",
+  "mouth-vowel-u",
+  "mouth-vowel-e",
+  "mouth-vowel-o"
+];
 
 function portOf(state: RuntimePlayerControlChannelServerState): number {
   if (state.kind === "closed") {

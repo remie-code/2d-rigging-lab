@@ -7,13 +7,13 @@
     "messages": [
       {
         "direction": "serverToClient",
-        "note": "Sent immediately on connect (C4 §3.4). C5 additively advertises intent.envelope alongside intent.set.",
+        "note": "Sent immediately on connect (C4 §3.4). C5 additively advertises intent.envelope; C6 additively advertises intent.speech, alongside intent.set.",
         "message": {
           "v": 1,
           "kind": "server.hello",
           "payload": {
             "protocol": 1,
-            "supportedKinds": ["intent.set", "intent.envelope"]
+            "supportedKinds": ["intent.set", "intent.envelope", "intent.speech"]
           }
         }
       },
@@ -69,6 +69,43 @@
       {
         "direction": "serverToClient",
         "message": { "v": 1, "replyTo": "req-70", "result": "accepted" }
+      }
+    ]
+  },
+  "speechPath": {
+    "description": "C6 intent.speech worked exchange (additive over intent.set/intent.envelope). The soul sends ONE variable-length mora列 and the 器's group evaluator plays it back — the mouth speaks 「これじっさいのところどうなってるの」 (fixture phrase, 設計 §7 裁定7: all five vowels + a same-vowel run 「のところど」= o×5, the re-articulation-dip 試金石). No slotId on the wire — vowel labels map to the fixed mouth group. No attack field — attack ≈ the mora interval, derived by the 器. The reply is accepted, correlated by replyTo. The intent.set/intent.envelope paths above are unchanged.",
+    "messages": [
+      {
+        "direction": "clientToServer",
+        "note": "Speak 「これじっさいのところどうなってるの」. 15 moras (促音「っ」dropped): o,e,i,a,i, o,o,o,o,o, u,a,e,u,o. timeMs monotonically increasing (~110-130ms beats); s = pre-scale opening strength 0.5..0.9 (the 器 applies its universal 0.8 scale + re-articulation dip).",
+        "message": {
+          "v": 1,
+          "id": "req-90",
+          "kind": "intent.speech",
+          "payload": {
+            "timeline": [
+              { "timeMs": 0, "vowel": "o", "s": 0.6 },
+              { "timeMs": 120, "vowel": "e", "s": 0.7 },
+              { "timeMs": 250, "vowel": "i", "s": 0.5 },
+              { "timeMs": 380, "vowel": "a", "s": 0.85 },
+              { "timeMs": 510, "vowel": "i", "s": 0.55 },
+              { "timeMs": 630, "vowel": "o", "s": 0.7 },
+              { "timeMs": 740, "vowel": "o", "s": 0.65 },
+              { "timeMs": 850, "vowel": "o", "s": 0.7 },
+              { "timeMs": 960, "vowel": "o", "s": 0.65 },
+              { "timeMs": 1070, "vowel": "o", "s": 0.7 },
+              { "timeMs": 1190, "vowel": "u", "s": 0.6 },
+              { "timeMs": 1320, "vowel": "a", "s": 0.8 },
+              { "timeMs": 1450, "vowel": "e", "s": 0.7 },
+              { "timeMs": 1580, "vowel": "u", "s": 0.55 },
+              { "timeMs": 1700, "vowel": "o", "s": 0.6 }
+            ]
+          }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-90", "result": "accepted" }
       }
     ]
   },

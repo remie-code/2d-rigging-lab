@@ -26,6 +26,8 @@
  *     node apps/soul/reference-driver/reference-driver.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
  *   人間ゲート（知覚シナリオ・envelope 主体・attack 200〜400ms・現実的な間合い）:
  *     node apps/soul/reference-driver/reference-driver.mjs "ws://.../channel?token=..." --scenario=perceptual
+ *   発話シナリオ（C6 intent.speech・fixture モーラ列「これじっさいのところどうなってるの」を一発送る）:
+ *     node apps/soul/reference-driver/reference-driver.mjs "ws://.../channel?token=..." --scenario=speech
  *   タイムライン印字（WS 不要・URL 不要。ドライバ単体検証の土台）:
  *     node apps/soul/reference-driver/reference-driver.mjs --scenario=perceptual --print-timeline
  *
@@ -105,7 +107,7 @@ async function main() {
   const url = positionals[0];
   if (typeof url !== "string" || url.length === 0) {
     process.stderr.write(
-      "usage: node reference-driver.mjs <ws-url> [--scenario=compressed|perceptual] [--print-timeline]\n" +
+      "usage: node reference-driver.mjs <ws-url> [--scenario=compressed|perceptual|speech] [--print-timeline]\n" +
         '  e.g. node reference-driver.mjs "ws://127.0.0.1:17310/channel?token=..."\n'
     );
     process.exit(2);
@@ -115,6 +117,10 @@ async function main() {
   const contract = loadContract();
   if (scenarioName === "perceptual") {
     await runPerceptualScenario(url, contract);
+    return;
+  }
+  if (scenarioName === "speech") {
+    await runSpeechScenario(url, contract);
     return;
   }
   await runCompressedScenario(url, contract);
@@ -259,7 +265,7 @@ async function runCompressedScenario(url, contract) {
   process.exit(0);
 }
 
-/** `--scenario=perceptual|compressed`（既定=compressed）。値不正も compressed に倒す。 */
+/** `--scenario=perceptual|speech|compressed`（既定=compressed）。値不正も compressed に倒す。 */
 function parseScenarioFlag(flags) {
   const flag = flags.find(
     (arg) => arg === "--scenario" || arg.startsWith("--scenario=")
@@ -269,7 +275,13 @@ function parseScenarioFlag(flags) {
   }
   const eq = flag.indexOf("=");
   const value = eq >= 0 ? flag.slice(eq + 1) : "";
-  return value === "perceptual" ? "perceptual" : "compressed";
+  if (value === "perceptual") {
+    return "perceptual";
+  }
+  if (value === "speech") {
+    return "speech";
+  }
+  return "compressed";
 }
 
 /**
@@ -397,10 +409,56 @@ function compressedSections() {
   ];
 }
 
+/**
+ * 発話シナリオの fixture モーラ列（--scenario=speech, C6）。「これじっさいのところどうなってるの」
+ * を器の口に喋らせる。促音「っ」は母音を持たないため省略（15 モーラ: o,e,i,a,i / o,o,o,o,o /
+ * u,a,e,u,o）。「のところど」= o×5 連続は再調音ディップの試金石（同母音連続でも拍ごとに口が動くか）。
+ * timeMs は単調増加（〜110〜130ms 間隔）、s は器の s 縮小前の開き強度 0.5〜0.9（手書き）。
+ * 契約 examples（channel-exchange-examples.json の speechPath）の payload と同一に保つ（手写し）。
+ * 音素→母音写像は魂側だが fixture モーラ列の作成例は参照ドライバに含めてよい（設計 §6）。
+ */
+function speechTimelineMoras() {
+  return [
+    { timeMs: 0, vowel: "o", s: 0.6 },
+    { timeMs: 120, vowel: "e", s: 0.7 },
+    { timeMs: 250, vowel: "i", s: 0.5 },
+    { timeMs: 380, vowel: "a", s: 0.85 },
+    { timeMs: 510, vowel: "i", s: 0.55 },
+    { timeMs: 630, vowel: "o", s: 0.7 },
+    { timeMs: 740, vowel: "o", s: 0.65 },
+    { timeMs: 850, vowel: "o", s: 0.7 },
+    { timeMs: 960, vowel: "o", s: 0.65 },
+    { timeMs: 1070, vowel: "o", s: 0.7 },
+    { timeMs: 1190, vowel: "u", s: 0.6 },
+    { timeMs: 1320, vowel: "a", s: 0.8 },
+    { timeMs: 1450, vowel: "e", s: 0.7 },
+    { timeMs: 1580, vowel: "u", s: 0.55 },
+    { timeMs: 1700, vowel: "o", s: 0.6 }
+  ];
+}
+
+/** 発話シナリオを --print-timeline 用の節列に射影する（一発話=一 intent.speech=一節）。 */
+function speechSections() {
+  return [
+    {
+      section: "speech",
+      kind: "intent.speech",
+      slotId: null,
+      timeline: speechTimelineMoras()
+    }
+  ];
+}
+
 /** 選択シナリオのタイムライン（kind マーカー + scenario id + 節列）。--print-timeline 用。 */
 function buildTimeline(scenarioName) {
-  const sections =
-    scenarioName === "perceptual" ? perceptualSections() : compressedSections();
+  let sections;
+  if (scenarioName === "perceptual") {
+    sections = perceptualSections();
+  } else if (scenarioName === "speech") {
+    sections = speechSections();
+  } else {
+    sections = compressedSections();
+  }
   return {
     kind: "reference-driver-timeline",
     version: 1,
@@ -497,6 +555,72 @@ async function runPerceptualScenario(url, contract) {
 }
 
 /**
+ * 発話シナリオ（--scenario=speech, C6）: fixture モーラ列を一発 intent.speech で送り、器の口に
+ * 「これじっさいのところどうなってるの」と喋らせる（音は無い・口だけ）。RTT は sendSpeech の
+ * replyTo 相関で計測。intent.speech の payload は slotId を持たない（母音ラベル→固定口グループ）
+ * ため、語彙自己照合は N/A（kind 照合は connect() の hello 側で済む）。受理されたらシナリオ完遂
+ * = exit 0、想定外拒否 = exit 1。
+ */
+async function runSpeechScenario(url, contract) {
+  const timeline = speechTimelineMoras();
+  const rttSamples = [];
+  let acceptedCount = 0;
+  let rejectedCount = 0;
+  let unknownEventsIgnored = 0;
+
+  try {
+    const connection = await connect(url, contract);
+    unknownEventsIgnored += connection.consumeUnknownEventCount();
+
+    // 一発話 = 一タイムライン。器の口グループ評価器が 60Hz でモーラ列を再生する。
+    const outcome = await connection.sendSpeech(timeline);
+    rttSamples.push(outcome.rttMs);
+    if (outcome.result === "accepted") {
+      acceptedCount += 1;
+    } else {
+      rejectedCount += 1;
+    }
+
+    // 発話が最後まで喋り終わる尺だけ観測してから切断（終端 release で口が閉じる）。
+    const speechSpanMs = timeline[timeline.length - 1]?.timeMs ?? 0;
+    await delay(speechSpanMs + 600);
+    unknownEventsIgnored += connection.consumeUnknownEventCount();
+    await connection.close();
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+
+  const rtt = summarizeRtt(rttSamples);
+  const report = {
+    kind: "reference-driver-report",
+    version: 1,
+    scenario: "speech",
+    url: redactToken(url),
+    intentCount: rttSamples.length,
+    acceptedCount,
+    rejectedCount,
+    reconnected: false,
+    unknownEventsIgnored,
+    contractSource: contract.source,
+    moraCount: timeline.length,
+    rttMs: rtt,
+    gate: { p95BudgetMs: 100, p95WithinBudget: rtt.p95 < 100 }
+  };
+  process.stdout.write(`${JSON.stringify(report)}\n`);
+  process.stderr.write(
+    `reference-driver[speech]: 1 speech intent (${timeline.length} moras) ` +
+      `(${acceptedCount} accepted, ${rejectedCount} rejected) — ` +
+      `「これじっさいのところどうなってるの」\n`
+  );
+
+  if (rejectedCount > 0) {
+    process.exit(1);
+    return;
+  }
+  process.exit(0);
+}
+
+/**
  * 契約 JSON（器側の payload schema / exchange examples）を読む。魂は契約=fixture の
  * 「読むだけ」が許される（憲章 §6.2）。読めない環境ではフォールバック語彙を使う。
  */
@@ -521,7 +645,8 @@ function loadContract() {
     const expectedKinds =
       helloExample?.message?.payload?.supportedKinds ?? [
         "intent.set",
-        "intent.envelope"
+        "intent.envelope",
+        "intent.speech"
       ];
     if (slotIds.size === 0) {
       throw new Error("contract payload schema had no slotId enum");
@@ -536,7 +661,7 @@ function loadContract() {
     return {
       source: "fallback",
       slotIds: new Set(FALLBACK_SLOT_IDS),
-      expectedKinds: ["intent.set", "intent.envelope"]
+      expectedKinds: ["intent.set", "intent.envelope", "intent.speech"]
     };
   }
 }
@@ -658,6 +783,19 @@ async function connect(url, contract) {
         REPLY_TIMEOUT_MS,
         `envelope reply for ${intent.slotId}`
       );
+    },
+    sendSpeech(timeline) {
+      // C6 intent.speech: 魂はモーラ列（可変長タイムライン）を一発送り、器の口グループ評価器が
+      // 60Hz で再生する。payload に slotId は無い（母音ラベル→固定口グループ）。RTT 計測は
+      // sendIntent/sendEnvelope と同じ replyTo 相関を流用。
+      const id = `req-${(idCounter += 1)}`;
+      const payload = { timeline };
+      const t0 = performance.now();
+      const settled = new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject, t0 });
+      });
+      socket.send(JSON.stringify({ v: 1, id, kind: "intent.speech", payload }));
+      return withTimeout(settled, REPLY_TIMEOUT_MS, "speech reply");
     },
     consumeUnknownEventCount() {
       const count = unknownEventCount;
