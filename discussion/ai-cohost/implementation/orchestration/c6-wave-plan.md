@@ -4,7 +4,8 @@
 
 ## 1. Status
 
-- Status: **実装完了(Domain A/B 合格、Domain C 統合)**。機械ゲート(凸恒等・再調音ディップ・undershoot・512拒否・無退行)は実装・検証済み。**最終審=比較ゲートはユーザー人間ゲート待ち**(手順 → [../waves/c6/c6-comparison-gate.md](../waves/c6/c6-comparison-gate.md))。
+- Status: **完全閉鎖(2026-07-12)**。本編(Domain A/B/C)+統合追撃(E改=グループre-attack+Articulationスライダー+--loop、§13補遺)+ホットフィックス(F=Speech bridge検証欠落+parser欠落、白名単の網羅導出化)を経て、**比較ゲート合格(ユーザー: 「完璧だ」——Articulationスライダーで探索の上、比較法4項目クリア)**。経緯の教訓2件: ①追撃Domain Dの三代不成立(§12補遺=観測捏造インシデント等。ツリー無傷) ②レビューのnon-blocking観察が予告した配線穴が実機で発現(Domain F)——「**配線の存在の確認と疎通の確認は別物**」。以下は実装完了時の記録:
+- (実装完了記録) 実装完了(Domain A/B 合格、Domain C 統合)。機械ゲート(凸恒等・再調音ディップ・undershoot・512拒否・無退行)は実装・検証済み。
   - Domain A: 口グループ・タイムライン評価器 + store 統合(3レーンレビュー合格、[../waves/c6/domain-a-report.md](../waves/c6/domain-a-report.md))。
   - Domain B: 契約 `intent.speech`(可変長モーラ列)additive 縦貫 + validation + dispatch + server 配線 + fixture + 参照ドライバ発話シナリオ(3レーンレビュー合格、[../waves/c6/domain-b-report.md](../waves/c6/domain-b-report.md))。
   - Domain C: モノレポ検証(typecheck 0 error / test:unit 904 pass・既知 baseline 2件のみ / check:source 既知 C3 1件のみ / check:soul-zone pass)・無変更確認(physiology・resolver・Editor/schema/lockfile・心臓 seam・apps/soul package.json 不在・role 分岐不在)・docs 更新・比較ゲート手順([../waves/c6/domain-c-report.md](../waves/c6/domain-c-report.md))。
