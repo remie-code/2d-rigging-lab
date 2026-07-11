@@ -9,6 +9,9 @@ import type {
 import type {
   RuntimePlayerPhysiologyApi
 } from "./physiology-bridge-contract";
+import type {
+  RuntimePlayerControlChannelApi
+} from "./channel-bridge-contract";
 import type { RuntimePlayerInputApi } from "./input-bridge-contract";
 import type { RuntimePlayerInputProfileApi } from "./input-profile-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
@@ -236,6 +239,7 @@ export type RuntimePlayerApi = {
   readonly modelMapping: RuntimePlayerModelMappingApi;
   readonly dynamicsTuning: RuntimePlayerDynamicsTuningApi;
   readonly physiology: RuntimePlayerPhysiologyApi;
+  readonly channel: RuntimePlayerControlChannelApi;
   readonly variants: RuntimePlayerVariantControllerApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewApi;

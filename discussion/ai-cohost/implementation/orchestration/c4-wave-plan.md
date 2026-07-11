@@ -4,7 +4,16 @@
 
 ## 1. Status
 
-- Status: Ready to launch。
+- Status: **実装完了(Domain A〜E 実装+3レーンレビュー合格、機械ゲート緑)。C4 閉鎖判定待ち。**
+  - Domain A(契約の家+チャネルWSサーバ+拒否列挙6件+port/token採番): 完了・3レーン合格 → [../waves/c4/domain-a-report.md](../waves/c4/domain-a-report.md)。
+  - Domain B(粗いオーバーレイprovider・心臓tick統合・TTL・切断→基底復帰・physiology純度不変): 完了・3レーン合格 → [../waves/c4/domain-b-report.md](../waves/c4/domain-b-report.md)。
+  - Domain C(Channelページ+bridge+自律版Overview+degraded 6面解消+合成根のサーバ配線): 完了・3レーン合格 → [../waves/c4/domain-c-report.md](../waves/c4/domain-c-report.md)。
+  - Domain D(特区 `apps/soul`+依存ゼロ参照ドライバ+持続駆動テスト RTT p95≈1.5〜2ms+方向ルール検査2ルール): 完了・3レーン合格 → [../waves/c4/domain-d-report.md](../waves/c4/domain-d-report.md)。
+  - Domain E(最終統合: モノレポ検証・無変更確認・docs更新・fixture最終整合・follow-up記録): 完了 → [../waves/c4/domain-e-report.md](../waves/c4/domain-e-report.md)。
+  - 機械ゲート: runtime-player typecheck 緑 / root typecheck 緑 / runtime-player 全体テスト **823 passed / 2 failed**(既知baseline Wave21 browser-source系2件は不変)/ check:deps 緑 / check:soul-zone 緑(1243 files)+ fixtures 5ケース緑。
+  - **既知 baseline(C4起因でない)**: (a) 全体テストの2 fail = Wave21 browser-source系(`browser-source-server.test.ts`・`browser-source-server-message.test.ts` の `effectiveDynamicsTuning` 不一致、Domain A〜D 全報告で同一・browser-source は無変更)。(b) check:source の唯一の違反 = `apps/runtime-player/src/main/physiology/index.ts`(C3 既存 committed、C4 で未接触)。この2つ以外の fail・違反は無い。
+  - 無変更確認(git): `pnpm-lock.yaml`・`pnpm-workspace.yaml`・Editorソース・package-format・Runtime Export schema・`physiology/` 配下(golden JSON 含む)・`headless-slot-resolver.ts` すべて無変更。`apps/soul` に package.json 無し。`pnpm install` 未実行。
+  - 残: 人間の一目確認(§7、美的判定ではない)→ C4 閉鎖。外部駆動の美的ゲートは C5。
 - Planning gate: context-check(前提監査)→ inventory(実施済み → [c4-planning-inventory.md](c4-planning-inventory.md)。Verdict `needs_design` → 下記ユーザー裁定で解消)。
 - Model Allocation: **L0 = fable / Orch-Sylph・Gnome・Review-Sylph = opus 明示必須**。
 - ユーザー裁定(2026-07-11):

@@ -6,6 +6,7 @@ import { registerInputBridgeHandlers as defaultRegisterInputBridgeHandlers } fro
 import { registerInputProfileBridgeHandlers as defaultRegisterInputProfileBridgeHandlers } from "../input-profile-bridge-handlers";
 import { registerModelMappingBridgeHandlers as defaultRegisterModelMappingBridgeHandlers } from "../model-mapping-bridge-handlers";
 import { createAutoMappingSlots } from "../live-mapping/runtime-export-auto-mapping";
+import { RuntimePlayerControlChannelOverlayStore } from "../control-channel/control-channel-overlay-store";
 import {
   createAutonomousFrameHeart as defaultCreateAutonomousFrameHeart,
   deriveAutonomousSessionSeed
@@ -57,6 +58,20 @@ export type RuntimePlayerInputSubsystem = {
    * Physiology state stays inert exactly as before Domain D.
    */
   readonly getStageMotionDrive: () => RuntimePlayerStageMotionDrive | null;
+  /**
+   * The Control Channel overlay store (C4 Domain B), or null when this subsystem
+   * has no channel. Channel is autonomous-host専有 (裁定2): the Autonomous Host
+   * creates ONE store instance that is shared two ways —
+   *  - the frame heart's `getChannelOverlay` provider READS `snapshot(nowMs)` each
+   *    tick (wired here, Domain B), and
+   *  - the Channel WS server WRITES it (`setOverlay` on accept, `clearAll` on
+   *    disconnect), wired by Domain C's composition root, which obtains the same
+   *    instance through this getter.
+   * The Tracking Host returns null (no channel subsystem in its composition), so
+   * the composition root never needs a runtime `if (role === ...)` — availability
+   * is DATA, exactly like `providesPhysiology` / `getStageMotionDrive`.
+   */
+  readonly getControlChannelOverlayStore: () => RuntimePlayerControlChannelOverlayStore | null;
   readonly publishLatestParameterFrame: () => Promise<void>;
   readonly publishMappingStatus: () => void;
   readonly clearLiveParameterFrame: () => void;
@@ -170,6 +185,9 @@ export const composeTrackingHostInputSubsystem: RuntimePlayerInputSubsystemCompo
       // The Tracking Host keeps its existing head-position Stage Motion path; it
       // never drives Stage Presence from posture (no physiology generator here).
       getStageMotionDrive: () => null,
+      // Channel is autonomous-host専有 (裁定2): the tracking composition has no
+      // Control Channel overlay store at all — no runtime `if (role === ...)`.
+      getControlChannelOverlayStore: () => null,
       publishLatestParameterFrame: () => publishLatestParameterFrame(),
       publishMappingStatus: modelMappingBridge.publishStatus,
       clearLiveParameterFrame: () => clearLiveParameterFrame(),
@@ -204,12 +222,26 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
 ) => {
   const createHeart =
     deps.createAutonomousFrameHeart ?? defaultCreateAutonomousFrameHeart;
+  // C4 Domain B: the ONE Control Channel overlay store for this composition
+  // (channel = autonomous専有, 裁定2). It is shared two ways — the heart READS its
+  // `snapshot(nowMs)` each tick through the `getChannelOverlay` provider below,
+  // and Domain C's composition root obtains the SAME instance via
+  // `getControlChannelOverlayStore()` to hand to the Channel WS server (which
+  // WRITES setOverlay/clearAll). Starts empty, so until a channel accepts an
+  // intent `snapshot` is `{}` and the heart's merge is byte-identical to the pure
+  // C2/C3 activations.
+  const controlChannelOverlayStore =
+    new RuntimePlayerControlChannelOverlayStore();
   // Only the autonomous composer forwards the config provider to the heart. When
   // no provider is injected the heart falls back to the universal-default config
   // internally, so this stays a pure pass-through of the seam. The property is
   // omitted (not set to undefined) when absent for exactOptionalPropertyTypes.
   const heart = createHeart({
     liveParameters: deps.liveParameters,
+    // 粗いオーバーレイ第二seam (Domain B): read the un-expired overlay values at the
+    // WALL clock. The heart passes its own `wallNowMs` (absolute), matching the
+    // absolute `expiresAtMs` the server stamps — never the generator's logical time.
+    getChannelOverlay: (nowMs) => controlChannelOverlayStore.snapshot(nowMs),
     ...(deps.physiologyConfigProvider !== undefined
       ? { getPhysiologyConfig: deps.physiologyConfigProvider }
       : {})
@@ -239,6 +271,9 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
         timestampMs: signal.timestampMs
       };
     },
+    // Domain C wires this store's setOverlay/clearAll to the Channel WS server;
+    // the heart above already reads its snapshot each tick (same instance).
+    getControlChannelOverlayStore: () => controlChannelOverlayStore,
     publishLatestParameterFrame: async () => {},
     publishMappingStatus: () => {},
     clearLiveParameterFrame: () => {

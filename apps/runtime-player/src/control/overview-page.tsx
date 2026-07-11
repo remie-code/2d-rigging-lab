@@ -1,8 +1,10 @@
 import type { ReactElement } from "react";
 import {
+  Activity,
   Crosshair,
   FolderOpen,
   Plug,
+  PlugZap,
   RefreshCcw,
   SlidersHorizontal
 } from "lucide-react";
@@ -43,6 +45,12 @@ import type {
 import type {
   RuntimeExportStatus
 } from "../preload/runtime-export-bridge-contract";
+import type {
+  PhysiologyStatus
+} from "../preload/physiology-bridge-contract";
+import type {
+  RuntimePlayerControlChannelStatus
+} from "../preload/channel-bridge-contract";
 
 export function OverviewPage({
   runtimeExportStatus,
@@ -51,6 +59,10 @@ export function OverviewPage({
   mappingStatus,
   stageViewStatus,
   stageWindowStatus,
+  physiologyStatus,
+  channelStatus,
+  providesPhysiology,
+  providesChannel,
   onOpenRuntimeExport,
   onRetryRuntimeExportRestore,
   onConnectInput,
@@ -67,6 +79,12 @@ export function OverviewPage({
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageWindowStatus: string;
+  readonly physiologyStatus: PhysiologyStatus | null;
+  readonly channelStatus: RuntimePlayerControlChannelStatus | null;
+  /** DATA: this host drives a physiology subsystem (Autonomous Host). */
+  readonly providesPhysiology: boolean;
+  /** DATA: this host owns a control channel subsystem (Autonomous Host). */
+  readonly providesChannel: boolean;
   readonly onOpenRuntimeExport: () => void;
   readonly onRetryRuntimeExportRestore: () => void;
   readonly onConnectInput: () => void;
@@ -84,61 +102,44 @@ export function OverviewPage({
     erroredRuntimeExport?.operation === "startup-restore" ||
     erroredRuntimeExport?.operation === "retry-restore";
 
+  const modelPanel = (
+    <ModelOverviewPanel
+      runtimeExportStatus={runtimeExportStatus}
+      erroredRuntimeExport={erroredRuntimeExport}
+      restoreFailed={restoreFailed}
+      onOpenRuntimeExport={onOpenRuntimeExport}
+      onRetryRuntimeExportRestore={onRetryRuntimeExportRestore}
+    />
+  );
+
+  // Autonomous Host Overview (UX §2): the设計済みの姿 = Model / Physiology / Channel
+  // cards, chosen by subsystem-availability DATA (providesPhysiology / providesChannel),
+  // not a role query. The Tracking Host keeps its existing 4-panel layout below (no
+  // channel card, since the subsystem is absent).
+  if (providesPhysiology) {
+    return (
+      <div className="grid gap-4">
+        <section className="grid gap-4 lg:grid-cols-2">
+          {modelPanel}
+          <PhysiologyOverviewPanel
+            physiologyStatus={physiologyStatus}
+            onSelectPage={onSelectPage}
+          />
+        </section>
+        {providesChannel ? (
+          <ChannelOverviewPanel
+            channelStatus={channelStatus}
+            onSelectPage={onSelectPage}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Runtime Export">
-          <StatusRow
-            label="Loaded"
-            value={getRuntimeExportLoadedLabel(runtimeExportStatus)}
-          />
-          <StatusRow
-            label="Directory"
-            value={getRuntimeExportDirectoryLabel(runtimeExportStatus)}
-          />
-          {runtimeExportStatus?.status === "loaded" ? (
-            <>
-              <StatusRow
-                label="Model"
-                value={runtimeExportStatus.summary.modelDisplayName}
-              />
-              <StatusRow
-                label="Drawables"
-                value={`${runtimeExportStatus.summary.drawableCount} drawables / ${runtimeExportStatus.summary.meshCount} meshes`}
-              />
-            </>
-          ) : null}
-          {erroredRuntimeExport ? (
-            <ErrorNotice
-              title={erroredRuntimeExport.error.message}
-              details={erroredRuntimeExport.error.details}
-            />
-          ) : null}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {restoreFailed ? (
-              <IconTextButton
-                icon={RefreshCcw}
-                label="Retry Restore"
-                onClick={onRetryRuntimeExportRestore}
-                variant="secondary"
-                disabled={runtimeExportStatus?.status === "loading"}
-              />
-            ) : null}
-            <IconTextButton
-              icon={FolderOpen}
-              label={
-                runtimeExportStatus?.status === "loaded"
-                  ? "Open Different Export"
-                  : runtimeExportStatus?.status === "error"
-                    ? "Open New Export"
-                  : "Open Runtime Export"
-              }
-              onClick={onOpenRuntimeExport}
-              variant="primary"
-              disabled={runtimeExportStatus?.status === "loading"}
-            />
-          </div>
-        </Panel>
+        {modelPanel}
 
         <Panel title="Input Source">
           <StatusRow
@@ -246,4 +247,166 @@ export function OverviewPage({
       </section>
     </div>
   );
+}
+
+function ModelOverviewPanel({
+  runtimeExportStatus,
+  erroredRuntimeExport,
+  restoreFailed,
+  onOpenRuntimeExport,
+  onRetryRuntimeExportRestore
+}: {
+  readonly runtimeExportStatus: RuntimeExportStatus | null;
+  readonly erroredRuntimeExport: RuntimeExportStatus | null;
+  readonly restoreFailed: boolean;
+  readonly onOpenRuntimeExport: () => void;
+  readonly onRetryRuntimeExportRestore: () => void;
+}): ReactElement {
+  return (
+    <Panel title="Model">
+      <StatusRow
+        label="Loaded"
+        value={getRuntimeExportLoadedLabel(runtimeExportStatus)}
+      />
+      <StatusRow
+        label="Directory"
+        value={getRuntimeExportDirectoryLabel(runtimeExportStatus)}
+      />
+      {runtimeExportStatus?.status === "loaded" ? (
+        <>
+          <StatusRow
+            label="Model"
+            value={runtimeExportStatus.summary.modelDisplayName}
+          />
+          <StatusRow
+            label="Drawables"
+            value={`${runtimeExportStatus.summary.drawableCount} drawables / ${runtimeExportStatus.summary.meshCount} meshes`}
+          />
+        </>
+      ) : null}
+      {erroredRuntimeExport !== null &&
+      erroredRuntimeExport.status === "error" ? (
+        <ErrorNotice
+          title={erroredRuntimeExport.error.message}
+          details={erroredRuntimeExport.error.details}
+        />
+      ) : null}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {restoreFailed ? (
+          <IconTextButton
+            icon={RefreshCcw}
+            label="Retry Restore"
+            onClick={onRetryRuntimeExportRestore}
+            variant="secondary"
+            disabled={runtimeExportStatus?.status === "loading"}
+          />
+        ) : null}
+        <IconTextButton
+          icon={FolderOpen}
+          label={
+            runtimeExportStatus?.status === "loaded"
+              ? "Open Different Export"
+              : runtimeExportStatus?.status === "error"
+                ? "Open New Export"
+                : "Open Runtime Export"
+          }
+          onClick={onOpenRuntimeExport}
+          variant="primary"
+          disabled={runtimeExportStatus?.status === "loading"}
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function PhysiologyOverviewPanel({
+  physiologyStatus,
+  onSelectPage
+}: {
+  readonly physiologyStatus: PhysiologyStatus | null;
+  readonly onSelectPage: (page: ControlWindowPage) => void;
+}): ReactElement {
+  return (
+    <Panel title="Physiology">
+      <StatusRow
+        label="Subsystem"
+        value={physiologyStatus === null ? "Checking" : "Present"}
+      />
+      <StatusRow
+        label="State"
+        value={formatPhysiologyStateLabel(physiologyStatus)}
+      />
+      <StatusRow
+        label="Runtime Export"
+        value={physiologyStatus?.runtimeExport?.modelDisplayName ?? "Not loaded"}
+      />
+      <div className="mt-4">
+        <IconTextButton
+          icon={Activity}
+          label="Open Physiology"
+          onClick={() => onSelectPage("physiology")}
+          variant="secondary"
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function ChannelOverviewPanel({
+  channelStatus,
+  onSelectPage
+}: {
+  readonly channelStatus: RuntimePlayerControlChannelStatus | null;
+  readonly onSelectPage: (page: ControlWindowPage) => void;
+}): ReactElement {
+  return (
+    <Panel title="Channel">
+      <StatusRow label="Status" value={formatChannelStateLabel(channelStatus)} />
+      <StatusRow
+        label="Active overlays"
+        value={
+          channelStatus === null
+            ? "Checking"
+            : String(channelStatus.activeOverlays.length)
+        }
+      />
+      <div className="mt-4">
+        <IconTextButton
+          icon={PlugZap}
+          label="Open Channel"
+          onClick={() => onSelectPage("channel")}
+          variant="secondary"
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function formatPhysiologyStateLabel(
+  status: PhysiologyStatus | null
+): string {
+  if (status === null) {
+    return "Checking";
+  }
+
+  return status.status === "ready" ? "Driving" : "Awaiting Runtime Export";
+}
+
+function formatChannelStateLabel(
+  status: RuntimePlayerControlChannelStatus | null
+): string {
+  if (status === null) {
+    return "Checking";
+  }
+
+  const connection = status.connection;
+  if (connection.kind === "connected") {
+    return `Connected (protocol ${connection.protocolVersion})`;
+  }
+
+  if (connection.kind === "open") {
+    return "Open — no client connected";
+  }
+
+  return "Closed";
 }

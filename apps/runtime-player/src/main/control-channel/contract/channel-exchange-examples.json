@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Runtime Player Control Channel worked exchange examples (C4 §3/§8)",
+  "description": "Pure-JSON message sequences the soul zone reads to learn the wire contract. `direction` is serverToClient (器 -> 魂) or clientToServer (魂 -> 器). The happy path is connect -> server.hello -> intent.set -> accepted; each rejection code has one rejected example. The 器 keeps the connection open for every rejection (C4 §3.5).",
+  "happyPath": {
+    "description": "Connect, receive capabilities, set one intent, get accepted.",
+    "messages": [
+      {
+        "direction": "serverToClient",
+        "note": "Sent immediately on connect (C4 §3.4).",
+        "message": {
+          "v": 1,
+          "kind": "server.hello",
+          "payload": { "protocol": 1, "supportedKinds": ["intent.set"] }
+        }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "Turn the head via the head-horizontal slot for 800ms.",
+        "message": {
+          "v": 1,
+          "id": "req-42",
+          "kind": "intent.set",
+          "payload": { "slotId": "head-horizontal", "value": 0.4, "ttlMs": 800 }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-42", "result": "accepted" }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "ttlMs omitted -> the 器's default window applies (streaming style).",
+        "message": {
+          "v": 1,
+          "id": "req-43",
+          "kind": "intent.set",
+          "payload": { "slotId": "eye-blink-left", "value": 1 }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-43", "result": "accepted" }
+      }
+    ]
+  },
+  "rejections": [
+    {
+      "code": "unknownKind",
+      "note": "Unknown kind is rejected; the connection is KEPT (C4 §3.5).",
+      "request": {
+        "v": 1,
+        "id": "req-100",
+        "kind": "intent.wave",
+        "payload": {}
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-100",
+        "result": "rejected",
+        "error": {
+          "code": "unknownKind",
+          "message": "Unsupported request kind: intent.wave."
+        }
+      }
+    },
+    {
+      "code": "invalidPayload",
+      "note": "value is not a finite number.",
+      "request": {
+        "v": 1,
+        "id": "req-101",
+        "kind": "intent.set",
+        "payload": { "slotId": "head-horizontal", "value": "left" }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-101",
+        "result": "rejected",
+        "error": {
+          "code": "invalidPayload",
+          "message": "intent.set payload is malformed."
+        }
+      }
+    },
+    {
+      "code": "unknownSlot",
+      "note": "slotId is not part of the semantic-slot vocabulary.",
+      "request": {
+        "v": 1,
+        "id": "req-102",
+        "kind": "intent.set",
+        "payload": { "slotId": "left-elbow", "value": 0.2 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-102",
+        "result": "rejected",
+        "error": {
+          "code": "unknownSlot",
+          "message": "Unknown semantic slot: left-elbow."
+        }
+      }
+    },
+    {
+      "code": "slotValueOutOfRange",
+      "note": "head-horizontal is a centered slot (-1..1); 1.5 is out of range and is NOT clamped.",
+      "request": {
+        "v": 1,
+        "id": "req-103",
+        "kind": "intent.set",
+        "payload": { "slotId": "head-horizontal", "value": 1.5 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-103",
+        "result": "rejected",
+        "error": {
+          "code": "slotValueOutOfRange",
+          "message": "value 1.5 is outside the -1..1 range for slot head-horizontal."
+        }
+      }
+    },
+    {
+      "code": "slotNotWritable",
+      "note": "The loaded model has no enabled+targeted slot for body-z (or no model is loaded).",
+      "request": {
+        "v": 1,
+        "id": "req-104",
+        "kind": "intent.set",
+        "payload": { "slotId": "body-z", "value": 0.3 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-104",
+        "result": "rejected",
+        "error": {
+          "code": "slotNotWritable",
+          "message": "Slot body-z is not writable on the loaded model."
+        }
+      }
+    },
+    {
+      "code": "channelClosed",
+      "note": "A request arrived while the channel is not accepting intents.",
+      "request": {
+        "v": 1,
+        "id": "req-105",
+        "kind": "intent.set",
+        "payload": { "slotId": "head-horizontal", "value": 0.1 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-105",
+        "result": "rejected",
+        "error": {
+          "code": "channelClosed",
+          "message": "The control channel is not accepting intents."
+        }
+      }
+    }
+  ]
+}

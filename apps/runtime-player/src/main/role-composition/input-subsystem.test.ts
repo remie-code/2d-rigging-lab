@@ -219,9 +219,13 @@ describe("Runtime Player input subsystem composition", () => {
     // in these deps, so the config seam forwards `undefined` (heart falls back to
     // the universal-default config = C2 behavior).
     expect(harness.createAutonomousFrameHeart).toHaveBeenCalledTimes(1);
+    // The heart is also wired the C4 Domain B overlay provider (a function that
+    // reads the composition's overlay store snapshot). The config seam still
+    // forwards `undefined` here (no provider in these deps = C2 fallback).
     expect(harness.createAutonomousFrameHeart.mock.calls[0]?.[0]).toEqual({
       liveParameters: harness.deps.liveParameters,
-      getPhysiologyConfig: undefined
+      getPhysiologyConfig: undefined,
+      getChannelOverlay: expect.any(Function)
     });
 
     // Load = heartbeat start, with auto-mapping slots and a non-exposed seed.
@@ -254,9 +258,11 @@ describe("Runtime Player input subsystem composition", () => {
     });
 
     // The config seam reaches the heart only through the autonomous composer.
+    // The overlay provider (Domain B) is wired alongside it.
     expect(harness.createAutonomousFrameHeart.mock.calls[0]?.[0]).toEqual({
       liveParameters: harness.deps.liveParameters,
-      getPhysiologyConfig: physiologyConfigProvider
+      getPhysiologyConfig: physiologyConfigProvider,
+      getChannelOverlay: expect.any(Function)
     });
   });
 
@@ -371,5 +377,58 @@ describe("Runtime Player input subsystem composition", () => {
     // Without a provider there is no stagePresence field → Stage Motion stays inert
     // exactly as before Domain D (no regression for compositions lacking a state).
     expect(subsystem.getStageMotionDrive()).toBeNull();
+  });
+
+  // --- C4 Domain B: Control Channel overlay store seam ------------------------
+
+  it("Tracking Host has no Control Channel overlay store (channel = autonomous専有)", () => {
+    const harness = createDependencies();
+
+    const subsystem = composeRuntimePlayerInputSubsystem(
+      "trackingHost",
+      harness.deps
+    );
+
+    // The role difference is DATA: the tracking composition has no channel, so
+    // the composition root wires no Channel server for it (no runtime role query).
+    expect(subsystem.getControlChannelOverlayStore()).toBeNull();
+  });
+
+  it("Autonomous Host exposes ONE overlay store shared with the heart's overlay provider", () => {
+    const harness = createDependencies();
+
+    const subsystem = composeRuntimePlayerInputSubsystem(
+      "autonomousHost",
+      harness.deps
+    );
+
+    const store = subsystem.getControlChannelOverlayStore();
+    expect(store).not.toBeNull();
+
+    // The heart was wired a getChannelOverlay provider reading THIS store.
+    const heartArg = harness.createAutonomousFrameHeart.mock.calls[0]?.[0];
+    expect(typeof heartArg.getChannelOverlay).toBe("function");
+
+    // Same instance: an overlay written through the exposed store (what Domain C
+    // hands the Channel server) is visible through the heart's provider — and
+    // honours the wall-clock TTL boundary (live strictly before expiresAtMs).
+    store?.setOverlay("eye-blink-left", 0.3, 1000);
+    expect(heartArg.getChannelOverlay(500)).toEqual({ "eye-blink-left": 0.3 });
+    expect(heartArg.getChannelOverlay(999)).toEqual({ "eye-blink-left": 0.3 });
+    expect(heartArg.getChannelOverlay(1000)).toEqual({}); // expired at the boundary
+  });
+
+  it("Autonomous overlay store is idle at rest (empty snapshot ⇒ C2/C3 baseline)", () => {
+    const harness = createDependencies();
+
+    const subsystem = composeRuntimePlayerInputSubsystem(
+      "autonomousHost",
+      harness.deps
+    );
+
+    // Before any channel intent the store is empty, so the heart's overlay merge
+    // is byte-identical to the pure activations (no channel ⇒ no override).
+    const heartArg = harness.createAutonomousFrameHeart.mock.calls[0]?.[0];
+    expect(heartArg.getChannelOverlay(12345)).toEqual({});
   });
 });

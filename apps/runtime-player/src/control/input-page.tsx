@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import {
+  EmptySubsystemNotice,
   ErrorNotice,
   IconTextButton,
   Panel,
@@ -44,6 +45,7 @@ export function InputPage({
   inputBusy,
   calibrationName,
   lookForwardAvailable,
+  drivenByPhysiology,
   onReceivePortInputChange,
   onIphoneHostInputChange,
   onConnectInput,
@@ -65,6 +67,8 @@ export function InputPage({
   readonly inputBusy: boolean;
   readonly calibrationName: string;
   readonly lookForwardAvailable: boolean;
+  /** DATA: this host has no tracking input (Autonomous Host, driven by physiology). */
+  readonly drivenByPhysiology: boolean;
   readonly onReceivePortInputChange: (value: string) => void;
   readonly onIphoneHostInputChange: (value: string) => void;
   readonly onConnectInput: () => void;
@@ -81,6 +85,21 @@ export function InputPage({
   readonly onFinishCalibration: () => void;
   readonly onCalibrationNameChange: (value: string) => void;
 }): ReactElement {
+  // Degraded解消 (UX §3): the Autonomous Host has no tracking input, so instead of
+  // 劣化 connection controls it shows a品位ある一文. DATA-driven, never a role query.
+  if (drivenByPhysiology) {
+    return (
+      <div className="grid gap-4">
+        <Panel title="Input">
+          <EmptySubsystemNotice
+            title="No tracking input on this host"
+            message="This host has no tracking input; the body is driven by physiology and the channel."
+          />
+        </Panel>
+      </div>
+    );
+  }
+
   const inputActive = isInputReceiverActive(inputStatus);
   const inputDisconnectEnabled =
     inputStatus !== null && inputStatus.connectionState !== "idle";

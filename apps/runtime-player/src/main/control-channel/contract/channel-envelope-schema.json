@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runtime-player/control-channel/envelope",
+  "title": "Runtime Player Control Channel envelope (C4 outer shell)",
+  "description": "The transport-neutral outer shell of the control channel (C4 §3). New request kinds are added additively without changing this envelope. v0 owns exactly one kind: intent.set.",
+  "protocolVersion": 1,
+  "supportedKinds": ["intent.set"],
+  "rejectionCodes": [
+    "unknownKind",
+    "invalidPayload",
+    "unknownSlot",
+    "slotValueOutOfRange",
+    "slotNotWritable",
+    "channelClosed"
+  ],
+  "$defs": {
+    "request": {
+      "type": "object",
+      "description": "Request envelope (client -> 器).",
+      "required": ["v", "id", "kind", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "v": { "const": 1, "description": "Protocol version." },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Client-assigned correlation id, echoed back as replyTo."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Additive-extension slot. v0 understands only intent.set; any other kind is rejected with unknownKind but the connection is kept."
+        },
+        "payload": {
+          "description": "Kind-specific payload. For intent.set see channel-intent-set-payload-schema.json."
+        }
+      }
+    },
+    "acceptedResponse": {
+      "type": "object",
+      "description": "Accepted response (器 -> client).",
+      "required": ["v", "replyTo", "result"],
+      "additionalProperties": false,
+      "properties": {
+        "v": { "const": 1 },
+        "replyTo": { "type": "string", "minLength": 1 },
+        "result": { "const": "accepted" }
+      }
+    },
+    "rejectedResponse": {
+      "type": "object",
+      "description": "Rejected response (器 -> client). Rejections never clamp.",
+      "required": ["v", "replyTo", "result", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "v": { "const": 1 },
+        "replyTo": { "type": "string", "minLength": 1 },
+        "result": { "const": "rejected" },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "unknownKind",
+                "invalidPayload",
+                "unknownSlot",
+                "slotValueOutOfRange",
+                "slotNotWritable",
+                "channelClosed"
+              ]
+            },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    },
+    "serverHello": {
+      "type": "object",
+      "description": "Capabilities announcement (器 -> client, immediately on connect, C4 §3.4).",
+      "required": ["v", "kind", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "server.hello" },
+        "payload": {
+          "type": "object",
+          "required": ["protocol", "supportedKinds"],
+          "additionalProperties": false,
+          "properties": {
+            "protocol": { "const": 1 },
+            "supportedKinds": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

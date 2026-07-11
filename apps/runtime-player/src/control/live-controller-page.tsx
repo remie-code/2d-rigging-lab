@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import {
+  EmptySubsystemNotice,
   IconTextButton,
   Panel,
   StatusPill,
@@ -38,12 +39,14 @@ export function LiveControllerPage({
   browserSourceStatus,
   stageState,
   lookForwardAvailable,
+  drivenByPhysiology = false,
   onSelectSingleVariant,
   onToggleMultiVariant,
   onResetVariants,
   onLookForward,
   onCenterModel,
-  onUpdateStageMotionSettings
+  onUpdateStageMotionSettings,
+  onOpenPhysiology = () => undefined
 }: {
   readonly variantStatus: RuntimePlayerVariantControllerStatus | null;
   readonly runtimeExportStatus: RuntimeExportStatus | null;
@@ -51,6 +54,12 @@ export function LiveControllerPage({
   readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
   readonly lookForwardAvailable: boolean;
+  /**
+   * DATA: Stage presence is driven by Physiology on this host (Autonomous Host).
+   * Optional so tracking-host tests keep their existing call sites; the app always
+   * supplies it. Defaults to the tracking path (false).
+   */
+  readonly drivenByPhysiology?: boolean;
   readonly onSelectSingleVariant: (
     group: RuntimePlayerVariantControlGroup,
     variantId: string
@@ -66,6 +75,7 @@ export function LiveControllerPage({
   readonly onUpdateStageMotionSettings: (
     update: RuntimePlayerStageMotionSettingsUpdate
   ) => void;
+  readonly onOpenPhysiology?: () => void;
 }): ReactElement {
   const stageMotionEnabled =
     stageState?.stageMotion.settings.enabled ?? false;
@@ -115,25 +125,36 @@ export function LiveControllerPage({
         </Panel>
 
         <Panel title="Motion Safety">
-          <button
-            type="button"
-            aria-label="Toggle Stage Motion"
-            aria-pressed={stageMotionEnabled}
-            disabled={stageState === null}
-            onClick={() =>
-              onUpdateStageMotionSettings({
-                enabled: !stageMotionEnabled
-              })
-            }
-            className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
-              stageMotionEnabled
-                ? "border-teal-500 bg-teal-500 text-neutral-950 hover:bg-teal-400"
-                : "border-neutral-700 bg-neutral-900 text-neutral-100 hover:border-teal-500/70 hover:text-teal-100"
-            }`}
-          >
-            <Activity aria-hidden="true" className="size-4 shrink-0" />
-            <span>Stage Motion {stageMotionEnabled ? "On" : "Off"}</span>
-          </button>
+          {drivenByPhysiology ? (
+            // Degraded解消 (UX §3): the Stage Motion toggle is押せるが効かない on the
+            // Autonomous Host (input null で毎tick reset). Show the品位ある一文 and
+            // route to Physiology (別意味論の生理駆動Stage) instead. DATA-driven.
+            <EmptySubsystemNotice
+              title="Driven by Physiology"
+              message="Stage presence is driven by Physiology on this host."
+              action={{ label: "Open Physiology", onClick: onOpenPhysiology }}
+            />
+          ) : (
+            <button
+              type="button"
+              aria-label="Toggle Stage Motion"
+              aria-pressed={stageMotionEnabled}
+              disabled={stageState === null}
+              onClick={() =>
+                onUpdateStageMotionSettings({
+                  enabled: !stageMotionEnabled
+                })
+              }
+              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                stageMotionEnabled
+                  ? "border-teal-500 bg-teal-500 text-neutral-950 hover:bg-teal-400"
+                  : "border-neutral-700 bg-neutral-900 text-neutral-100 hover:border-teal-500/70 hover:text-teal-100"
+              }`}
+            >
+              <Activity aria-hidden="true" className="size-4 shrink-0" />
+              <span>Stage Motion {stageMotionEnabled ? "On" : "Off"}</span>
+            </button>
+          )}
         </Panel>
 
         <Panel title="View Recovery">

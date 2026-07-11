@@ -29,6 +29,7 @@ import {
 import { InputPage } from "./input-page";
 import { DynamicsTunePage } from "./dynamics-tune-page";
 import { PhysiologyPage } from "./physiology-page";
+import { ChannelPage } from "./channel-page";
 import { LiveControllerPage } from "./live-controller-page";
 import { MappingPage } from "./mapping-page";
 import { OverviewPage } from "./overview-page";
@@ -46,6 +47,10 @@ import type {
   PhysiologyStatus,
   PhysiologyToneUpdateRequest
 } from "../preload/physiology-bridge-contract";
+import type {
+  RuntimePlayerControlChannelActionResult,
+  RuntimePlayerControlChannelStatus
+} from "../preload/channel-bridge-contract";
 import type {
   RuntimePlayerInputDiagnosticsSnapshot,
   RuntimePlayerInputStatus
@@ -109,6 +114,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerDynamicsTuningStatus | null>(null);
   const [physiologyStatus, setPhysiologyStatus] =
     useState<PhysiologyStatus | null>(null);
+  const [channelStatus, setChannelStatus] =
+    useState<RuntimePlayerControlChannelStatus | null>(null);
   const [variantStatus, setVariantStatus] =
     useState<RuntimePlayerVariantControllerStatus | null>(null);
   const [stageViewStatus, setStageViewStatus] =
@@ -235,6 +242,12 @@ export function ControlWindowApp(): ReactElement {
         isActive: () => active,
         onStatus: setPhysiologyStatus
       });
+    const unsubscribeChannel =
+      connectControlWindowChannelStatusBridge({
+        runtimePlayer: window.runtimePlayer,
+        isActive: () => active,
+        onStatus: setChannelStatus
+      });
     window.runtimePlayer.variants.getStatus().then((status) => {
       if (active) {
         setVariantStatus(status);
@@ -327,6 +340,7 @@ export function ControlWindowApp(): ReactElement {
       unsubscribeModelMapping();
       unsubscribeDynamicsTuning();
       unsubscribePhysiology();
+      unsubscribeChannel();
       unsubscribeVariants();
       unsubscribeBrowserSource();
     };
@@ -549,6 +563,49 @@ export function ControlWindowApp(): ReactElement {
     }
   }
 
+  async function runChannelAction(
+    action: () => Promise<RuntimePlayerControlChannelActionResult>
+  ): Promise<void> {
+    try {
+      const result = await action();
+      setChannelStatus(result.status);
+      setFeedback({
+        message: result.message,
+        tone: result.result === "ok" ? "success" : "error"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
+  async function copyChannelUrl(): Promise<void> {
+    const endpointUrl = channelStatus?.endpointUrl ?? null;
+
+    if (endpointUrl === null) {
+      setFeedback({
+        message: "Open the channel to get a Channel URL to copy.",
+        tone: "error"
+      });
+      return;
+    }
+
+    try {
+      await writeClipboardText(endpointUrl);
+      setFeedback({
+        message: "Channel URL copied.",
+        tone: "success"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
   async function runVariantAction(
     action: () => Promise<RuntimePlayerVariantActionResult>
   ): Promise<void> {
@@ -579,6 +636,13 @@ export function ControlWindowApp(): ReactElement {
     getRuntimeExportLoadedLabel(runtimeExportStatus);
   const lookForwardAvailable =
     inputDiagnostics?.trackingFrame !== undefined;
+  // DATA: subsystem-availability markers (both are autonomous-host専有). The
+  // Autonomous Host drives the body from physiology + channel, so its tracking
+  // surfaces show品位ある空状態 and its header reads「Drive: Physiology」— never a
+  // role query (C4 §3/§4).
+  const providesPhysiology = physiologyStatus?.available === true;
+  const providesChannel = channelStatus?.available === true;
+  const drivenByPhysiology = providesPhysiology;
   const page = renderActivePage({
     activePage,
     runtimeExportStatus,
@@ -587,6 +651,10 @@ export function ControlWindowApp(): ReactElement {
     mappingStatus,
     dynamicsTuningStatus,
     physiologyStatus,
+    channelStatus,
+    providesPhysiology,
+    providesChannel,
+    drivenByPhysiology,
     variantStatus,
     stageViewStatus,
     stageState,
@@ -607,11 +675,13 @@ export function ControlWindowApp(): ReactElement {
     connectInputSource,
     disconnectInputSource,
     copyBrowserSourceUrl,
+    copyChannelUrl,
     copyPerformanceDiagnosticsReport,
     runInputProfileAction,
     runMappingAction,
     runDynamicsTuneAction,
     runPhysiologyAction,
+    runChannelAction,
     runVariantAction,
     runStageAction
   });
@@ -622,8 +692,14 @@ export function ControlWindowApp(): ReactElement {
       role={startupStatus?.role ?? null}
       runtimeExportLabel={runtimeExportLoadedLabel}
       runtimeExportTone={getRuntimeExportTone(runtimeExportStatus)}
-      inputLabel={getInputStatusPillLabel(inputStatus)}
-      inputTone={getInputStatusPillTone(inputStatus)}
+      inputLabel={getControlWindowHeaderInputLabel({
+        drivenByPhysiology,
+        inputStatus
+      })}
+      inputTone={getControlWindowHeaderInputTone({
+        drivenByPhysiology,
+        inputStatus
+      })}
       profileLabel={getProfileStatusLabel(inputProfileStatus)}
       profileTone={getProfileTone(inputProfileStatus)}
       liveLabel={getLiveReadinessLabel({
@@ -673,7 +749,75 @@ export function shouldRenderInputDiagnosticsPanel(
     activePage !== "live-controller" &&
     activePage !== "dynamics-tune" &&
     activePage !== "physiology" &&
+    activePage !== "channel" &&
     activePage !== "performance-diagnostics"
+  );
+}
+
+/**
+ * Header `Input:` pill label (C4 degraded解消, UX §3). The Autonomous Host has no
+ * tracking input, so its header reads「Drive: Physiology」instead of the near-lie
+ * "Disconnected". DATA-driven (`drivenByPhysiology`), never a role query; the
+ * Tracking Host keeps its existing input-status label (no退行).
+ */
+export function getControlWindowHeaderInputLabel(input: {
+  readonly drivenByPhysiology: boolean;
+  readonly inputStatus: RuntimePlayerInputStatus | null;
+}): string {
+  return input.drivenByPhysiology
+    ? "Drive: Physiology"
+    : getInputStatusPillLabel(input.inputStatus);
+}
+
+export function getControlWindowHeaderInputTone(input: {
+  readonly drivenByPhysiology: boolean;
+  readonly inputStatus: RuntimePlayerInputStatus | null;
+}): "amber" | "teal" | "red" {
+  return input.drivenByPhysiology
+    ? "teal"
+    : getInputStatusPillTone(input.inputStatus);
+}
+
+export function connectControlWindowChannelStatusBridge(input: {
+  readonly runtimePlayer: Pick<RuntimePlayerApi, "channel">;
+  readonly isActive: () => boolean;
+  readonly onStatus: (status: RuntimePlayerControlChannelStatus) => void;
+}): () => void {
+  input.runtimePlayer.channel.getStatus().then((status) => {
+    if (input.isActive()) {
+      input.onStatus(status);
+    }
+  });
+
+  return input.runtimePlayer.channel.onStatusChanged((status) => {
+    if (input.isActive()) {
+      input.onStatus(status);
+    }
+  });
+}
+
+export function renderControlWindowChannelRoute(input: {
+  readonly channelStatus: RuntimePlayerControlChannelStatus | null;
+  readonly runChannelAction: (
+    action: () => Promise<RuntimePlayerControlChannelActionResult>
+  ) => Promise<void>;
+  readonly onCopyChannelUrl: () => void;
+}): ReactElement {
+  return (
+    <ChannelPage
+      channelStatus={input.channelStatus}
+      onOpenChannel={() =>
+        void input.runChannelAction(() =>
+          window.runtimePlayer.channel.openChannel()
+        )
+      }
+      onCloseChannel={() =>
+        void input.runChannelAction(() =>
+          window.runtimePlayer.channel.closeChannel()
+        )
+      }
+      onCopyChannelUrl={input.onCopyChannelUrl}
+    />
   );
 }
 
@@ -784,6 +928,10 @@ function renderActivePage(input: {
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
   readonly dynamicsTuningStatus: RuntimePlayerDynamicsTuningStatus | null;
   readonly physiologyStatus: PhysiologyStatus | null;
+  readonly channelStatus: RuntimePlayerControlChannelStatus | null;
+  readonly providesPhysiology: boolean;
+  readonly providesChannel: boolean;
+  readonly drivenByPhysiology: boolean;
   readonly variantStatus: RuntimePlayerVariantControllerStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
@@ -804,6 +952,7 @@ function renderActivePage(input: {
   readonly connectInputSource: () => Promise<void>;
   readonly disconnectInputSource: () => Promise<void>;
   readonly copyBrowserSourceUrl: () => Promise<void>;
+  readonly copyChannelUrl: () => Promise<void>;
   readonly copyPerformanceDiagnosticsReport: (
     reportText: string
   ) => Promise<void>;
@@ -818,6 +967,9 @@ function renderActivePage(input: {
   ) => Promise<void>;
   readonly runPhysiologyAction: (
     action: () => Promise<PhysiologyActionResult>
+  ) => Promise<void>;
+  readonly runChannelAction: (
+    action: () => Promise<RuntimePlayerControlChannelActionResult>
   ) => Promise<void>;
   readonly runVariantAction: (
     action: () => Promise<RuntimePlayerVariantActionResult>
@@ -835,6 +987,8 @@ function renderActivePage(input: {
         browserSourceStatus={input.browserSourceStatus}
         stageState={input.stageState}
         lookForwardAvailable={input.lookForwardAvailable}
+        drivenByPhysiology={input.drivenByPhysiology}
+        onOpenPhysiology={() => input.setActivePage("physiology")}
         onSelectSingleVariant={(group, variantId) =>
           void input.runVariantAction(() =>
             window.runtimePlayer.variants.selectSingle({
@@ -886,6 +1040,7 @@ function renderActivePage(input: {
         inputBusy={input.inputBusy}
         calibrationName={input.calibrationName}
         lookForwardAvailable={input.lookForwardAvailable}
+        drivenByPhysiology={input.drivenByPhysiology}
         onReceivePortInputChange={input.setReceivePortInput}
         onIphoneHostInputChange={input.setIphoneHostInput}
         onConnectInput={() => void input.connectInputSource()}
@@ -947,6 +1102,7 @@ function renderActivePage(input: {
         inputStatus={input.inputStatus}
         profileStatus={input.inputProfileStatus}
         mappingStatus={input.mappingStatus}
+        drivenByPhysiology={input.drivenByPhysiology}
         onOpenRuntimeExport={() => void input.openRuntimeExportDirectory()}
         onConnectInput={() => void input.connectInputSource()}
         onStartCalibration={() => {
@@ -998,6 +1154,14 @@ function renderActivePage(input: {
     });
   }
 
+  if (input.activePage === "channel") {
+    return renderControlWindowChannelRoute({
+      channelStatus: input.channelStatus,
+      runChannelAction: input.runChannelAction,
+      onCopyChannelUrl: () => void input.copyChannelUrl()
+    });
+  }
+
   if (input.activePage === "stage") {
     return (
       <StagePage
@@ -1005,6 +1169,7 @@ function renderActivePage(input: {
         inputProfileStatus={input.inputProfileStatus}
         runtimeExportStatus={input.runtimeExportStatus}
         browserSourceStatus={input.browserSourceStatus}
+        drivenByPhysiology={input.drivenByPhysiology}
         onFocusStage={() =>
           void input.runStageAction(() => window.runtimePlayer.focusStage())
         }
@@ -1085,6 +1250,10 @@ function renderActivePage(input: {
       mappingStatus={input.mappingStatus}
       stageViewStatus={input.stageViewStatus}
       stageWindowStatus={input.stageWindowStatus}
+      physiologyStatus={input.physiologyStatus}
+      channelStatus={input.channelStatus}
+      providesPhysiology={input.providesPhysiology}
+      providesChannel={input.providesChannel}
       onOpenRuntimeExport={() => void input.openRuntimeExportDirectory()}
       onRetryRuntimeExportRestore={() =>
         void input.retryRuntimeExportRestore()

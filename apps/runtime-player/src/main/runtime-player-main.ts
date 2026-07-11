@@ -10,7 +10,10 @@ import {
   acquireRuntimePlayerSlotLock,
   type RuntimePlayerSlotLock
 } from "./profile-slots/slot-lock";
-import { createPreferredPortFactory } from "./profile-slots/slot-preferred-port";
+import {
+  createPreferredPortFactory,
+  findFreeLoopbackPort
+} from "./profile-slots/slot-preferred-port";
 import { registerBrowserSourceBridgeHandlers } from "./broadcast-source/browser-source-bridge-handlers";
 import { RuntimePlayerBrowserSourceConfigStore } from "./broadcast-source/browser-source-config-store";
 import { RuntimePlayerBrowserSourceServer } from "./broadcast-source/browser-source-server";
@@ -27,6 +30,16 @@ import {
 import {
   registerPhysiologyBridgeHandlers
 } from "./physiology-bridge-handlers";
+import {
+  registerControlChannelBridgeHandlers
+} from "./channel-bridge-handlers";
+import { RuntimePlayerControlChannelServer } from "./control-channel/channel-server";
+import { RuntimePlayerControlChannelConfigStore } from "./control-channel/channel-config-store";
+import { runtimePlayerControlChannelDefaultPort } from "./control-channel/channel-slot-ports";
+import { createAutoMappingSlots } from "./live-mapping/runtime-export-auto-mapping";
+import type {
+  RuntimePlayerMappingSlot
+} from "../preload/model-mapping-bridge-contract";
 import {
   PhysiologyProfileStore
 } from "./physiology-profiles/physiology-profile-store";
@@ -479,6 +492,45 @@ export function startRuntimePlayerMain(): void {
       physiologyState,
       profileStore: physiologyProfileStore
     });
+    // Control Channel (C4 Domain C). Autonomous-host専有 (裁定2), expressed as DATA:
+    // the overlay store is non-null only when the composed subsystem provides a
+    // channel (Domain B's `getControlChannelOverlayStore`). The server is created
+    // but NOT started (起動時Closed, UX §1); open/close flow through the Channel
+    // bridge. The Tracking Host wires a null server → the bridge reports
+    // available:false with no runtime `if (role === ...)`.
+    const controlChannelOverlayStore =
+      inputSubsystem.getControlChannelOverlayStore();
+    // The loaded model's current auto-mapping slots, tracked here for the channel
+    // server's writability validation. Recomputed from the same payload the heart
+    // feeds to createAutoMappingSlots (a pure function → identical slots), so the
+    // two never diverge. Null when no model is loaded → every write is
+    // slotNotWritable (Domain A validation).
+    let currentControlChannelSlots:
+      readonly RuntimePlayerMappingSlot[] | null = null;
+    let controlChannelServer: RuntimePlayerControlChannelServer | null = null;
+    if (controlChannelOverlayStore !== null) {
+      const channelConfigStore = new RuntimePlayerControlChannelConfigStore({
+        userDataPath: app.getPath("userData"),
+        // autonomous-default → fixed 17310; a custom autonomous slot auto-assigns a
+        // free loopback port (手動ポート設定なしの規律維持), like Browser Source.
+        createPreferredPort: () =>
+          launch.preferredPort.mode === "fixed"
+            ? runtimePlayerControlChannelDefaultPort
+            : findFreeLoopbackPort()
+      });
+      const channelConfig = await channelConfigStore.getOrCreateConfig();
+      controlChannelServer = new RuntimePlayerControlChannelServer({
+        overlayStore: controlChannelOverlayStore,
+        token: channelConfig.token,
+        port: channelConfig.preferredPort,
+        getCurrentSlots: () => currentControlChannelSlots
+      });
+    }
+    const controlChannelBridge = registerControlChannelBridgeHandlers({
+      windows,
+      server: controlChannelServer,
+      overlayStore: controlChannelOverlayStore
+    });
     const dynamicsTuningBridge = registerDynamicsTuningBridgeHandlers({
       windows,
       tuningState: dynamicsTuningState,
@@ -501,6 +553,12 @@ export function startRuntimePlayerMain(): void {
         physiologyBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
         inputSubsystem.clearLiveParameterFrame();
+        // Model unload: forget the writable slots (new writes → slotNotWritable) and
+        // drop any live overlays now so the体 falls to the生理 baseline immediately,
+        // rather than waiting for each overlay's TTL (Domain A 引き継ぎ #3).
+        currentControlChannelSlots = null;
+        controlChannelOverlayStore?.clearAll();
+        controlChannelBridge.publishStatus();
         browserSourceServer.clearRuntimeExport("Runtime Export changing");
         inputSubsystem.publishMappingStatus();
         physiologyBridge.publishStatus();
@@ -514,6 +572,9 @@ export function startRuntimePlayerMain(): void {
         await physiologyBridge.setRuntimeExportPayload(payload);
         const variantStatus =
           runtimeVariantBridge.setRuntimeExportPayload(payload);
+        // The channel's writability check reads the loaded model's auto-mapping
+        // slots (same pure derivation the heart uses).
+        currentControlChannelSlots = createAutoMappingSlots(payload);
         inputSubsystem.clearLiveParameterFrame();
         browserSourceServer.publishRuntimeExportLoaded(
           payload,
@@ -537,6 +598,9 @@ export function startRuntimePlayerMain(): void {
         physiologyBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
         inputSubsystem.clearLiveParameterFrame();
+        currentControlChannelSlots = null;
+        controlChannelOverlayStore?.clearAll();
+        controlChannelBridge.publishStatus();
         browserSourceServer.clearRuntimeExport("No Runtime Export loaded");
         inputSubsystem.publishMappingStatus();
         physiologyBridge.publishStatus();
@@ -616,6 +680,8 @@ export function startRuntimePlayerMain(): void {
       unsubscribeRuntimeVariantBridge();
       browserSourceBridge.dispose();
       void browserSourceServer.stop();
+      controlChannelBridge.dispose();
+      void controlChannelServer?.close();
       slotLock?.release();
     });
   });

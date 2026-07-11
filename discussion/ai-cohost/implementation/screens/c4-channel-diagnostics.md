@@ -54,6 +54,8 @@
 - **自律ホストのStage Motionパネル / Live ControllerのMotion Safety**(押せるが効かないUI。C3裁定8で据え置き): 同じ空状態パターンで「Stage presence is driven by Physiology on this host.」を出し、Physiologyページへ誘導。
 - **Header**: 自律ホストでの `Input: Disconnected`(嘘に近い表示)を、サブシステム有無のdataで差し替える(例: `Drive: Physiology`)。
 
+**実装注記(C4 Domain C・構成不変条件)**: degraded 6面の解消は実装上、**physiology availability(`physiologyStatus.available`= `drivenByPhysiology`)を単一 data源**として描き分ける(channel status を無関係ページへ通さないための過結合回避)。これは「自律ホストでは physiology と channel が**常に共在**する(両者とも自律composerでのみ生成され、トラッキングホストでは両者とも不在)」という**構成上の不変条件**に依存している。v0 ではこの不変条件が成立するため physiology availability と channel availability は等価で、degraded 判定の data源として physiology マーカーを流用してよい。**回帰防止メモ**: 将来「physiology 有・channel 無」(あるいは逆)というホスト形態が現れたら、この等価性は破れ、degraded の data源を physiology から各サブシステム個別の availability へ分離する見直しが要る(Domain C Lane2 レビュー観点6)。
+
 ## 4. 規律(既存方針の継承)
 
 - UI語彙は英語。実行時role分岐禁止(描き分けはすべてサブシステム有無のdata経由)。

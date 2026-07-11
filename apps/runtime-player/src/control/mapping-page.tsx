@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { FolderOpen, Plug, RefreshCw, RotateCcw, SlidersHorizontal } from "lucide-react";
 
 import {
+  EmptySubsystemNotice,
   ErrorNotice,
   IconTextButton,
   Panel,
@@ -36,6 +37,7 @@ export function MappingPage({
   inputStatus,
   profileStatus,
   mappingStatus,
+  drivenByPhysiology,
   onOpenRuntimeExport,
   onConnectInput,
   onStartCalibration,
@@ -48,6 +50,8 @@ export function MappingPage({
   readonly inputStatus: RuntimePlayerInputStatus | null;
   readonly profileStatus: RuntimePlayerInputProfileStatus | null;
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
+  /** DATA: this host has no tracking input (Autonomous Host, driven by physiology). */
+  readonly drivenByPhysiology: boolean;
   readonly onOpenRuntimeExport: () => void;
   readonly onConnectInput: () => void;
   readonly onStartCalibration: () => void;
@@ -56,6 +60,20 @@ export function MappingPage({
   readonly onUpdateSlot: (request: RuntimePlayerMappingSlotUpdateRequest) => void;
   readonly onSetVowelLipsyncEnabled: (enabled: boolean) => void;
 }): ReactElement {
+  // Degraded解消 (UX §3): the Autonomous Host maps nothing from tracking. DATA-driven.
+  if (drivenByPhysiology) {
+    return (
+      <div className="grid gap-4">
+        <Panel title="Mapping">
+          <EmptySubsystemNotice
+            title="No tracking input on this host"
+            message="This host has no tracking input; the body is driven by physiology and the channel."
+          />
+        </Panel>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <Panel title="Mapping Profile">

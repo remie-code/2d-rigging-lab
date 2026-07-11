@@ -15,7 +15,9 @@
     "smoke:wave44:psd-parser": "node scripts/wave44-psd-parser-smoke.mjs --psd test_data/sample_model.psd",
     "check:deps": "node scripts/check-dependencies.mjs",
     "check:source": "node scripts/check-source-organization.mjs",
-    "check": "pnpm run typecheck && pnpm run test:unit && pnpm run check:deps && pnpm run check:source",
+    "check:soul-zone": "node scripts/check-soul-zone-boundary.mjs",
+    "check:soul-zone:fixtures": "node scripts/check-soul-zone-boundary-fixtures.mjs",
+    "check": "pnpm run typecheck && pnpm run test:unit && pnpm run check:deps && pnpm run check:source && pnpm run check:soul-zone",
     "runtime-player:install-electron": "pnpm --config.offline=false --filter @private-2d-rigging-lab/runtime-player exec install-electron --no"
   },
   "devDependencies": {

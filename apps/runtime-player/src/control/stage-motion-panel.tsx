@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { Crosshair } from "lucide-react";
 
 import {
+  EmptySubsystemNotice,
   Panel,
   StatusPill,
   StatusRow
@@ -19,17 +20,33 @@ export function StageMotionPanel({
   settings,
   persistenceLabel,
   inputProfileStatus,
+  drivenByPhysiology,
   onUpdateSettings,
   onStartDepthScaleCalibration
 }: {
   readonly settings: RuntimePlayerStageMotionSettings | null;
   readonly persistenceLabel: string;
   readonly inputProfileStatus: RuntimePlayerInputProfileStatus | null;
+  /** DATA: Stage presence is driven by Physiology on this host (Autonomous Host). */
+  readonly drivenByPhysiology: boolean;
   readonly onUpdateSettings: (
     update: RuntimePlayerStageMotionSettingsUpdate
   ) => void;
   readonly onStartDepthScaleCalibration: () => void;
 }): ReactElement {
+  // Degraded解消 (UX §3): on the Autonomous Host the tracking-driven Stage Motion
+  // sliders are inert (押せるが効かない). Show the品位ある一文 instead. DATA-driven.
+  if (drivenByPhysiology) {
+    return (
+      <Panel title="Stage Motion">
+        <EmptySubsystemNotice
+          title="Driven by Physiology"
+          message="Stage presence is driven by Physiology on this host."
+        />
+      </Panel>
+    );
+  }
+
   const disabled = settings === null;
   const depthCalibration = getDepthScaleCalibrationState(inputProfileStatus);
   const horizontal = settings?.horizontal ?? {

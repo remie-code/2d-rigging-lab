@@ -93,8 +93,12 @@ describe("Runtime Player process boundaries", () => {
       const source = readFileSync(filePath, "utf8");
 
       expect(source, filePath).not.toMatch(/\bfrom\s+["']react/);
-      expect(source, filePath).not.toMatch(/\bfrom\s+["']\.\.\/control/);
-      expect(source, filePath).not.toMatch(/\bfrom\s+["']\.\.\/stage/);
+      // The trailing [/"'] anchors the match to the `control` / `stage` renderer
+      // DIRECTORIES (`../control/…`, `../control"`), so a main-process sibling
+      // whose name merely starts with `control` (e.g. `../control-channel/…`, the
+      // C4 Control Channel main module) is NOT a false positive.
+      expect(source, filePath).not.toMatch(/\bfrom\s+["']\.\.\/control[/"']/);
+      expect(source, filePath).not.toMatch(/\bfrom\s+["']\.\.\/stage[/"']/);
     }
   });
 });

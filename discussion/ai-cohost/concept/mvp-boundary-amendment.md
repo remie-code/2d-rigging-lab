@@ -41,6 +41,8 @@
 
 **訂正(2026-07-11、C4棚卸しで発覚)**: 本改定の当初文面は「`check:deps` の非循環DAG検証が既にある」と述べたが、これは**事実誤認**だった(実物の `check:deps` は禁止パッケージ名のスキャナであり、import方向の検証機構はリポジトリに存在しない)。よって「境界の機械検証」は既存機構への相乗りではなく、**C4で特区専用の方向ルール検査を新設して実体化する**(①特区外から `apps/soul` をimportしたら違反 ②特区内から器のコードをimportしたら違反、の2ルール。汎用DAG検証は作らない。ユーザー裁定 2026-07-11)。
 
+**実体化の完了(2026-07-11、C4 Domain D 実装済み)**: 上記の方向ルール検査は `scripts/check-soul-zone-boundary.mjs`(純関数 `findSoulZoneBoundaryViolations({ files })` + standalone CLI)として**実在**する。2ルールのみ(器→魂 import 禁止・魂→器コード import 禁止。ただし契約 `.json`(型・fixture)への魂側参照は許容)。root `package.json` の composite `check` に `check:soul-zone` として連結され**検証パイプラインに座っている**。違反 fixture(`scripts/soul-zone-boundary-fixtures/` の invalid ケース)で**赤くなること**を `check:soul-zone:fixtures`(自己テスト、5ケース: valid緑 + 単一行/多行の両違反2種を赤で固定)が実証し、実リポジトリでは緑(1243 source files scanned; no 器→魂 imports and no 魂→器 code imports)。参照ドライバ(`apps/soul/reference-driver/reference-driver.mjs`、依存ゼロ `.mjs`)が**特区の最初の住人**として器コードを一切 import せずに座り、方向検査で緑を保っている。これにより本§6末尾の「境界が機械検証可能になる分だけ強くなる」は**C4で実際に成立した**(思想の宣言から、CI が回る強制力へ)。
+
 **特区憲章**(「不問」を野放しにしないための明文):
 
 1. LLMプロバイダ統合・知覚(画面キャプチャ/視覚モデル)は **`apps/<魂>` 配下でのみ**許される。他の場所では従来どおり禁止(§3は特区外について不変)。

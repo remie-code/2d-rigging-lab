@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import { Activity, AlertTriangle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { RuntimePlayerStageViewStatus } from "../preload/runtime-player-bridge-contract";
@@ -94,6 +94,49 @@ export function IconTextButton({
       <Icon aria-hidden="true" className="size-4 shrink-0" />
       <span className="truncate">{label}</span>
     </button>
+  );
+}
+
+/**
+ * The one-line degraded / empty state shared across subsystem pages (C3/C4 方式):
+ * a host without a given subsystem shows this品位ある一文 instead of劣化 controls.
+ * Driven by subsystem-availability DATA (never a role query). Optionally carries a
+ * single guidance action (e.g. Physiologyページ誘導, C4 §3).
+ */
+export function EmptySubsystemNotice({
+  title,
+  message,
+  action
+}: {
+  readonly title: string;
+  readonly message: string;
+  readonly action?: {
+    readonly label: string;
+    readonly onClick: () => void;
+  };
+}): ReactElement {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-neutral-700 bg-neutral-900 text-neutral-200">
+          <Activity aria-hidden="true" className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-neutral-100">{title}</p>
+          <p className="mt-1 text-sm text-neutral-400">{message}</p>
+          {action === undefined ? null : (
+            <div className="mt-3">
+              <IconTextButton
+                icon={Activity}
+                label={action.label}
+                onClick={action.onClick}
+                variant="secondary"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -110,6 +110,24 @@ export type CreateAutonomousFrameHeartInput = {
    * state (every existing test / the tracking composer) behaves exactly as C2.
    */
   readonly getPhysiologyConfig?: PhysiologyConfigProvider;
+  /**
+   * Reads the current Control Channel overlay each tick (粗いオーバーレイ seam,
+   * 裁定1). A SECOND provider, PARALLEL to `getPhysiologyConfig` but a DIFFERENT
+   * concern: it carries live value+TTL runtime state, not config, so it triggers
+   * NO generator rebuild — it is merged over the sampled `activations` just
+   * before the resolver (§6「有効な間チャネル値が生成器値を上書き、失効・切断で
+   * 基底へ戻る」). It is queried with the WALL clock (`wallNowMs`, absolute
+   * Date.now-space) — NOT the generator's epoch-relative `logicalTimeMs` — because
+   * overlay TTLs are absolute wall-clock instants. Returns the un-expired
+   * `slotId → value` Record, or `null` for「オーバーレイ無し」. Defaults to a
+   * provider returning `null`, so every existing test / the tracking composer
+   * behaves byte-identically to C2/C3 (the pure sample flows straight to the
+   * resolver). The overlay never touches the generator `sample()` output — the
+   * fixture-pinned determinism boundary stays clean.
+   */
+  readonly getChannelOverlay?: (
+    nowMs: number
+  ) => Record<string, number> | null;
 };
 
 type Heartbeat = {
@@ -135,6 +153,9 @@ export function createAutonomousFrameHeart(
   const createGenerator = deps.createGenerator ?? createPhysiologyGenerator;
   const getPhysiologyConfig =
     deps.getPhysiologyConfig ?? (() => DEFAULT_PHYSIOLOGY_CONFIG);
+  // 粗いオーバーレイ (裁定1): defaults to「常にオーバーレイ無し」so the tracking
+  // composer / every existing test flows the pure sample straight to the resolver.
+  const getChannelOverlay = deps.getChannelOverlay ?? (() => null);
 
   const buildGenerator = (
     seed: number,
@@ -186,9 +207,24 @@ export function createAutonomousFrameHeart(
       depth: readSignedActivation(activations[BODY_Z_SLOT_ID]),
       timestampMs: wallNowMs
     };
+    // C4 Domain B: merge the coarse Control Channel overlay just BEFORE the
+    // resolver (裁定1 / §6). The overlay is queried with the WALL clock
+    // (`wallNowMs`, absolute) — NOT `logicalTimeMs` (epoch-relative, the
+    // generator's deterministic time) — because overlay TTLs are absolute
+    // wall-clock instants the server stamped at acceptance. A live overlay
+    // value overrides the generator activation for that slotId; on expiry /
+    // disconnect the Record shrinks and the slot falls back to the生理 baseline
+    // for free. The merge builds a NEW record so the pure `activations` sample
+    // output is never mutated (fixture境界の外, 純度不変). The Stage Presence
+    // snapshot above intentionally reads the PURE `activations` (C3 Domain D
+    // concern), so channel overlays do not perturb the Stage transform here.
+    // null (default provider) ⇒ the pure sample is passed straight through.
+    const overlay = getChannelOverlay(wallNowMs);
+    const resolvedActivations =
+      overlay === null ? activations : { ...activations, ...overlay };
     const parameterValues = resolveSemanticSlotParameterValues({
       slots: heartbeat.slots,
-      activations
+      activations: resolvedActivations
     });
 
     sequence += 1;

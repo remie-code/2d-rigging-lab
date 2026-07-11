@@ -11,6 +11,7 @@ import {
 import { browserSourceBridgeChannels } from "./browser-source-bridge-channels";
 import { dynamicsTuningBridgeChannels } from "./dynamics-tuning-bridge-channels";
 import { physiologyBridgeChannels } from "./physiology-bridge-channels";
+import { channelBridgeChannels } from "./channel-bridge-channels";
 import { inputBridgeChannels } from "./input-bridge-channels";
 import { inputProfileBridgeChannels } from "./input-profile-bridge-channels";
 import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
@@ -54,6 +55,10 @@ import type {
   PhysiologyActionResult,
   PhysiologyStatus
 } from "./physiology-bridge-contract";
+import type {
+  RuntimePlayerControlChannelActionResult,
+  RuntimePlayerControlChannelStatus
+} from "./channel-bridge-contract";
 
 const placeholderActionSet = new Set<string>(runtimePlayerPlaceholderActions);
 
@@ -197,6 +202,19 @@ export function installRuntimePlayerBridge(): void {
       onStatusChanged: (callback) =>
         subscribeToPhysiologyEvent(
           physiologyBridgeChannels.statusChanged,
+          callback
+        )
+    },
+    channel: {
+      getStatus: () =>
+        ipcRenderer.invoke(channelBridgeChannels.getStatus),
+      openChannel: () =>
+        ipcRenderer.invoke(channelBridgeChannels.openChannel),
+      closeChannel: () =>
+        ipcRenderer.invoke(channelBridgeChannels.closeChannel),
+      onStatusChanged: (callback) =>
+        subscribeToChannelEvent(
+          channelBridgeChannels.statusChanged,
           callback
         )
     },
@@ -515,6 +533,22 @@ function subscribeToDynamicsTuningEvent<TPayload extends
 
 function subscribeToPhysiologyEvent<TPayload extends
   PhysiologyStatus | PhysiologyActionResult>(
+  channel: string,
+  callback: (payload: TPayload) => void
+): () => void {
+  const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToChannelEvent<TPayload extends
+  RuntimePlayerControlChannelStatus | RuntimePlayerControlChannelActionResult>(
   channel: string,
   callback: (payload: TPayload) => void
 ): () => void {

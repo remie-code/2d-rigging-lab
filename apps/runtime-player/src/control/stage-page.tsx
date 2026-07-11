@@ -40,6 +40,7 @@ export function StagePage({
   inputProfileStatus,
   runtimeExportStatus,
   browserSourceStatus,
+  drivenByPhysiology = false,
   onFocusStage,
   onResetView,
   onCenterModel,
@@ -57,6 +58,11 @@ export function StagePage({
   readonly inputProfileStatus: RuntimePlayerInputProfileStatus | null;
   readonly runtimeExportStatus: RuntimeExportStatus | null;
   readonly browserSourceStatus: RuntimePlayerBrowserSourceStatus | null;
+  /**
+   * DATA: Stage presence is driven by Physiology on this host (Autonomous Host).
+   * Optional so tracking-host tests keep their call sites; defaults to tracking.
+   */
+  readonly drivenByPhysiology?: boolean;
   readonly onFocusStage: () => void;
   readonly onResetView: () => void;
   readonly onCenterModel: () => void;
@@ -156,6 +162,7 @@ export function StagePage({
           settings={stageMotionSettings}
           persistenceLabel={persistence?.statusLabel ?? "Checking"}
           inputProfileStatus={inputProfileStatus}
+          drivenByPhysiology={drivenByPhysiology}
           onUpdateSettings={onUpdateStageMotionSettings}
           onStartDepthScaleCalibration={onStartDepthScaleCalibration}
         />
