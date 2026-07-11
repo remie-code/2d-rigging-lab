@@ -27,4 +27,5 @@
 3. **C3「視線と頭が生きる」= 完全閉鎖(2026-07-11)**: Domain A→B→C→D→E+追撃F(キャプション・Stage Presence知覚性)完了、レビュー全PASS、手動ゲート合格(30秒判定・ツマミ即時反映・プロファイル復元・トラッキング退行なし・OBS parity・キャプション・Stage Presence on/off差)。
 4. **C4「外から動かせる(操縦チャネルv0)」= 完全閉鎖(2026-07-11)**: 実装+レビュー全PASS+一目確認合格。特区 `apps/soul` 稼働(参照ドライバ+方向ルール検査)。持ち越し: Stage Presence×チャネル結合の裁定([waves/c4/c4-followup.md](waves/c4/c4-followup.md) ⚠)+v0繰延5件。
 5. **C5「合成が正しい」= 完全閉鎖(2026-07-11)**: Domain A→B→C→D+追撃G(set既定ease-in 100ms+知覚シナリオ)完了、レビュー全合格、**人間ゲート合格**(再ゲートで「滑らかに動く」——立ち上がり・符号反転re-attack・魂殺し・dip再観察の4点全クリア)。decay意味論は現状維持で確定。教訓: 人間ゲートの証人シナリオは機械テストの圧縮シナリオと別に知覚のために設計する。
-6. **次の閉問題 = C6「口が話せる」**。進め方(§6)どおり議論から。基盤: 音素タイムスタンプ列の注入・凸ブレンド不変条件(Σvowel=s=mouth.open、[../research/runtime-player-input-integration.md](../research/runtime-player-input-integration.md) §2)・C5曲線機構への相乗り(c5設計討議§6の前方互換)。TTSは実物でなくfixture音素列でよい。ゲート: 固定の音素タイムラインで口パクが見える(機械+人間一目)。
+6. **次の閉問題 = C6「口が話せる」**。設計討議Accepted([../architecture/c6-mouth-phoneme-timeline.md](../architecture/c6-mouth-phoneme-timeline.md)、2026-07-11。モーラ契約(案c)・時間仮説(実測不採用)・C5相乗り・比較ゲート)。C6にUX定義は不要(新画面なし)。次は**context-check → 棚卸し → wave計画**。
+7. **S系列(魂の実装)はC7閉鎖後に別途分解**(ユーザー確認 2026-07-11): 器の完成(C6→C7)→魂の前提討議(知性のアクセス経路・会話パイプライン最終化・選定再確認)→S系列の閉問題分解→S1=歩くスケルトン(一文の縦貫通)。persona/(声・人格・身体→model-authoring)はコードと独立の並行トラック。S系列開始と同時に `experiments/` を切る(P3コストメーター+レイテンシ実測)。
