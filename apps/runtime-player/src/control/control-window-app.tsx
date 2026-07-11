@@ -28,6 +28,7 @@ import {
 } from "./input-diagnostics-panel";
 import { InputPage } from "./input-page";
 import { DynamicsTunePage } from "./dynamics-tune-page";
+import { PhysiologyPage } from "./physiology-page";
 import { LiveControllerPage } from "./live-controller-page";
 import { MappingPage } from "./mapping-page";
 import { OverviewPage } from "./overview-page";
@@ -38,6 +39,13 @@ import type {
   RuntimePlayerDynamicsTuningGroupUpdateRequest,
   RuntimePlayerDynamicsTuningStatus
 } from "../preload/dynamics-tuning-bridge-contract";
+import type {
+  PhysiologyActionResult,
+  PhysiologySectionResetRequest,
+  PhysiologyStagePresenceEnabledRequest,
+  PhysiologyStatus,
+  PhysiologyToneUpdateRequest
+} from "../preload/physiology-bridge-contract";
 import type {
   RuntimePlayerInputDiagnosticsSnapshot,
   RuntimePlayerInputStatus
@@ -99,6 +107,8 @@ export function ControlWindowApp(): ReactElement {
     useState<RuntimePlayerMappingStatus | null>(null);
   const [dynamicsTuningStatus, setDynamicsTuningStatus] =
     useState<RuntimePlayerDynamicsTuningStatus | null>(null);
+  const [physiologyStatus, setPhysiologyStatus] =
+    useState<PhysiologyStatus | null>(null);
   const [variantStatus, setVariantStatus] =
     useState<RuntimePlayerVariantControllerStatus | null>(null);
   const [stageViewStatus, setStageViewStatus] =
@@ -219,6 +229,12 @@ export function ControlWindowApp(): ReactElement {
         isActive: () => active,
         onStatus: setDynamicsTuningStatus
       });
+    const unsubscribePhysiology =
+      connectControlWindowPhysiologyStatusBridge({
+        runtimePlayer: window.runtimePlayer,
+        isActive: () => active,
+        onStatus: setPhysiologyStatus
+      });
     window.runtimePlayer.variants.getStatus().then((status) => {
       if (active) {
         setVariantStatus(status);
@@ -310,6 +326,7 @@ export function ControlWindowApp(): ReactElement {
       unsubscribeInputProfile();
       unsubscribeModelMapping();
       unsubscribeDynamicsTuning();
+      unsubscribePhysiology();
       unsubscribeVariants();
       unsubscribeBrowserSource();
     };
@@ -514,6 +531,24 @@ export function ControlWindowApp(): ReactElement {
     }
   }
 
+  async function runPhysiologyAction(
+    action: () => Promise<PhysiologyActionResult>
+  ): Promise<void> {
+    try {
+      const result = await action();
+      setPhysiologyStatus(result.status);
+      setFeedback({
+        message: result.message,
+        tone: result.result === "ok" ? "success" : "error"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
   async function runVariantAction(
     action: () => Promise<RuntimePlayerVariantActionResult>
   ): Promise<void> {
@@ -551,6 +586,7 @@ export function ControlWindowApp(): ReactElement {
     inputProfileStatus,
     mappingStatus,
     dynamicsTuningStatus,
+    physiologyStatus,
     variantStatus,
     stageViewStatus,
     stageState,
@@ -575,6 +611,7 @@ export function ControlWindowApp(): ReactElement {
     runInputProfileAction,
     runMappingAction,
     runDynamicsTuneAction,
+    runPhysiologyAction,
     runVariantAction,
     runStageAction
   });
@@ -635,7 +672,61 @@ export function shouldRenderInputDiagnosticsPanel(
   return (
     activePage !== "live-controller" &&
     activePage !== "dynamics-tune" &&
+    activePage !== "physiology" &&
     activePage !== "performance-diagnostics"
+  );
+}
+
+export function connectControlWindowPhysiologyStatusBridge(input: {
+  readonly runtimePlayer: Pick<RuntimePlayerApi, "physiology">;
+  readonly isActive: () => boolean;
+  readonly onStatus: (status: PhysiologyStatus) => void;
+}): () => void {
+  input.runtimePlayer.physiology.getStatus().then((status) => {
+    if (input.isActive()) {
+      input.onStatus(status);
+    }
+  });
+
+  return input.runtimePlayer.physiology.onStatusChanged((status) => {
+    if (input.isActive()) {
+      input.onStatus(status);
+    }
+  });
+}
+
+export function renderControlWindowPhysiologyRoute(input: {
+  readonly physiologyStatus: PhysiologyStatus | null;
+  readonly runPhysiologyAction: (
+    action: () => Promise<PhysiologyActionResult>
+  ) => Promise<void>;
+}): ReactElement {
+  return (
+    <PhysiologyPage
+      physiologyStatus={input.physiologyStatus}
+      onUpdateTone={(request: PhysiologyToneUpdateRequest) =>
+        void input.runPhysiologyAction(() =>
+          window.runtimePlayer.physiology.updateTone(request)
+        )
+      }
+      onSetStagePresenceEnabled={(
+        request: PhysiologyStagePresenceEnabledRequest
+      ) =>
+        void input.runPhysiologyAction(() =>
+          window.runtimePlayer.physiology.setStagePresenceEnabled(request)
+        )
+      }
+      onResetSection={(request: PhysiologySectionResetRequest) =>
+        void input.runPhysiologyAction(() =>
+          window.runtimePlayer.physiology.resetSection(request)
+        )
+      }
+      onRetryProfileSave={() =>
+        void input.runPhysiologyAction(() =>
+          window.runtimePlayer.physiology.retryProfileSave()
+        )
+      }
+    />
   );
 }
 
@@ -692,6 +783,7 @@ function renderActivePage(input: {
   readonly inputProfileStatus: RuntimePlayerInputProfileStatus | null;
   readonly mappingStatus: RuntimePlayerMappingStatus | null;
   readonly dynamicsTuningStatus: RuntimePlayerDynamicsTuningStatus | null;
+  readonly physiologyStatus: PhysiologyStatus | null;
   readonly variantStatus: RuntimePlayerVariantControllerStatus | null;
   readonly stageViewStatus: RuntimePlayerStageViewStatus | null;
   readonly stageState: RuntimePlayerStageStateSnapshot | null;
@@ -723,6 +815,9 @@ function renderActivePage(input: {
   ) => Promise<void>;
   readonly runDynamicsTuneAction: (
     action: () => Promise<RuntimePlayerDynamicsTuningActionResult>
+  ) => Promise<void>;
+  readonly runPhysiologyAction: (
+    action: () => Promise<PhysiologyActionResult>
   ) => Promise<void>;
   readonly runVariantAction: (
     action: () => Promise<RuntimePlayerVariantActionResult>
@@ -893,6 +988,13 @@ function renderActivePage(input: {
     return renderControlWindowDynamicsTuneRoute({
       dynamicsTuningStatus: input.dynamicsTuningStatus,
       runDynamicsTuneAction: input.runDynamicsTuneAction
+    });
+  }
+
+  if (input.activePage === "physiology") {
+    return renderControlWindowPhysiologyRoute({
+      physiologyStatus: input.physiologyStatus,
+      runPhysiologyAction: input.runPhysiologyAction
     });
   }
 

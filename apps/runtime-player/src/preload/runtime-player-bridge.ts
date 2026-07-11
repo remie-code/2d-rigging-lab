@@ -10,6 +10,7 @@ import {
 } from "./runtime-player-bridge-contract";
 import { browserSourceBridgeChannels } from "./browser-source-bridge-channels";
 import { dynamicsTuningBridgeChannels } from "./dynamics-tuning-bridge-channels";
+import { physiologyBridgeChannels } from "./physiology-bridge-channels";
 import { inputBridgeChannels } from "./input-bridge-channels";
 import { inputProfileBridgeChannels } from "./input-profile-bridge-channels";
 import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
@@ -49,6 +50,10 @@ import type {
   RuntimePlayerDynamicsTuningActionResult,
   RuntimePlayerDynamicsTuningStatus
 } from "./dynamics-tuning-bridge-contract";
+import type {
+  PhysiologyActionResult,
+  PhysiologyStatus
+} from "./physiology-bridge-contract";
 
 const placeholderActionSet = new Set<string>(runtimePlayerPlaceholderActions);
 
@@ -172,6 +177,26 @@ export function installRuntimePlayerBridge(): void {
       onStatusChanged: (callback) =>
         subscribeToDynamicsTuningEvent(
           dynamicsTuningBridgeChannels.statusChanged,
+          callback
+        )
+    },
+    physiology: {
+      getStatus: () =>
+        ipcRenderer.invoke(physiologyBridgeChannels.getStatus),
+      updateTone: (request) =>
+        ipcRenderer.invoke(physiologyBridgeChannels.updateTone, request),
+      setStagePresenceEnabled: (request) =>
+        ipcRenderer.invoke(
+          physiologyBridgeChannels.setStagePresenceEnabled,
+          request
+        ),
+      resetSection: (request) =>
+        ipcRenderer.invoke(physiologyBridgeChannels.resetSection, request),
+      retryProfileSave: () =>
+        ipcRenderer.invoke(physiologyBridgeChannels.retryProfileSave),
+      onStatusChanged: (callback) =>
+        subscribeToPhysiologyEvent(
+          physiologyBridgeChannels.statusChanged,
           callback
         )
     },
@@ -474,6 +499,22 @@ function subscribeToModelMappingEvent<TPayload extends
 
 function subscribeToDynamicsTuningEvent<TPayload extends
   RuntimePlayerDynamicsTuningStatus | RuntimePlayerDynamicsTuningActionResult>(
+  channel: string,
+  callback: (payload: TPayload) => void
+): () => void {
+  const listener = (_event: IpcRendererEvent, payload: TPayload) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToPhysiologyEvent<TPayload extends
+  PhysiologyStatus | PhysiologyActionResult>(
   channel: string,
   callback: (payload: TPayload) => void
 ): () => void {

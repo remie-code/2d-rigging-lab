@@ -4,8 +4,14 @@ import type { RuntimeExportLoadedPayload } from "../../preload/runtime-export-br
 import { resolveSemanticSlotParameterValues } from "../live-mapping/headless-slot-resolver";
 import type { RuntimePlayerLiveParameterBridgeRegistration } from "../live-parameter-bridge-handlers";
 import {
+  BODY_X_SLOT_ID,
+  BODY_Z_SLOT_ID,
+  createPhysiologyBehaviorsFromConfig,
   createPhysiologyGenerator,
+  DEFAULT_PHYSIOLOGY_CONFIG,
   hashStringToSeed,
+  type PhysiologyConfig,
+  type PhysiologyConfigProvider,
   type PhysiologyGenerator,
   type PhysiologyGeneratorConfig
 } from "../physiology";
@@ -47,6 +53,20 @@ export type AutonomousFrameHeartStartInput = {
   readonly seed: number;
 };
 
+/**
+ * The latest posture signal for Stage Presence (C3 Domain D). body-x → horizontal,
+ * body-z → depth (both centered -1..1), stamped with the sampling wall clock so the
+ * Stage Motion smoothing stays frame-rate-independent. Each is null when the current
+ * config carries no posture behavior (e.g. blink-only). Read by the subsystem's
+ * `getStageMotionDrive` seam; NEVER leaves the process as a raw signal (only the
+ * sanitized composed Stage transform crosses the Browser Source boundary).
+ */
+export type AutonomousStageMotionSignal = {
+  readonly horizontal: number | null;
+  readonly depth: number | null;
+  readonly timestampMs: number;
+};
+
 export type AutonomousFrameHeart = {
   /**
    * Begin beating for a freshly loaded body. Stops any prior heartbeat first so
@@ -56,6 +76,12 @@ export type AutonomousFrameHeart = {
   /** Stop beating and dispose the timer. Idempotent; safe to call when stopped. */
   readonly stop: () => void;
   readonly isRunning: () => boolean;
+  /**
+   * The most recent posture activation as a Stage Presence signal (C3 Domain D).
+   * Returns nulls while stopped / before the first tick. This is a pure read of the
+   * last sampled body-x/body-z — it never samples the generator or the clock itself.
+   */
+  readonly getLatestStageMotionSignal: () => AutonomousStageMotionSignal;
 };
 
 export type CreateAutonomousFrameHeartInput = {
@@ -75,12 +101,25 @@ export type CreateAutonomousFrameHeartInput = {
   readonly createGenerator?: (
     config: PhysiologyGeneratorConfig
   ) => PhysiologyGenerator;
+  /**
+   * Reads the current physiology config each tick (ツマミ即時反映 seam, 裁定3).
+   * The heart rebuilds its generator when this returns a NEW reference (config
+   * changed), so a knob change reflects on the next tick. Phase discontinuity is
+   * accepted (rebuild may make activity jump). Defaults to a provider returning
+   * the universal-default config, so a caller that does not wire a Physiology
+   * state (every existing test / the tracking composer) behaves exactly as C2.
+   */
+  readonly getPhysiologyConfig?: PhysiologyConfigProvider;
 };
 
 type Heartbeat = {
   readonly payload: RuntimeExportLoadedPayload;
   readonly slots: readonly RuntimePlayerMappingSlot[];
-  readonly generator: PhysiologyGenerator;
+  /** Generator built from `config`; rebuilt in-place when `config` changes. */
+  generator: PhysiologyGenerator;
+  /** Reference-compared each tick to detect a config change (裁定3). */
+  config: PhysiologyConfig;
+  readonly seed: number;
   readonly epochMs: number;
 };
 
@@ -94,16 +133,43 @@ export function createAutonomousFrameHeart(
     deps.clearIntervalFn ?? ((handle) => clearInterval(handle));
   const frameIntervalMs = deps.frameIntervalMs ?? DEFAULT_FRAME_INTERVAL_MS;
   const createGenerator = deps.createGenerator ?? createPhysiologyGenerator;
+  const getPhysiologyConfig =
+    deps.getPhysiologyConfig ?? (() => DEFAULT_PHYSIOLOGY_CONFIG);
+
+  const buildGenerator = (
+    seed: number,
+    config: PhysiologyConfig
+  ): PhysiologyGenerator =>
+    createGenerator({
+      seed,
+      behaviors: createPhysiologyBehaviorsFromConfig(config)
+    });
 
   let timer: ReturnType<typeof setInterval> | null = null;
   let heartbeat: Heartbeat | null = null;
   // Strictly monotonic across the heart's whole lifetime, never reset on
   // load→load, so the sequence downstream sees is always increasing.
   let sequence = 0;
+  // Latest posture signal for Stage Presence (C3 Domain D). Updated each tick from
+  // the sampled body-x/body-z; cleared to nulls on start/stop so a fresh body (or a
+  // stopped heart) never leaks a stale offset into the Stage transform.
+  let latestStageMotionSignal: AutonomousStageMotionSignal = EMPTY_STAGE_MOTION_SIGNAL;
 
   const tick = (): void => {
     if (heartbeat === null) {
       return;
+    }
+
+    // ツマミ即時反映 (裁定3): re-read the config each tick; when the provider
+    // hands back a NEW reference (a knob moved) rebuild the generator with the
+    // same session seed so the next frame reflects the new config. A stable ref
+    // (default provider / unchanged state) skips the rebuild — no per-tick cost,
+    // no phase churn. A rebuild may make activity jump (phase discontinuity is
+    // accepted). Same seed → same identity rhythm family.
+    const config = getPhysiologyConfig();
+    if (config !== heartbeat.config) {
+      heartbeat.config = config;
+      heartbeat.generator = buildGenerator(heartbeat.seed, config);
     }
 
     const wallNowMs = now();
@@ -111,6 +177,15 @@ export function createAutonomousFrameHeart(
     // logical time never goes negative before the generator.
     const logicalTimeMs = Math.max(0, wallNowMs - heartbeat.epochMs);
     const activations = heartbeat.generator.sample(logicalTimeMs);
+    // Snapshot the posture activation for Stage Presence (C3 Domain D) BEFORE
+    // resolving to parameter values. body-x/body-z are the SAME centered -1..1
+    // signal that drives body.angle downstream, so the Stage offset couples to the
+    // posture structurally. Absent (blink-only config) ⇒ null ⇒ no Stage offset.
+    latestStageMotionSignal = {
+      horizontal: readSignedActivation(activations[BODY_X_SLOT_ID]),
+      depth: readSignedActivation(activations[BODY_Z_SLOT_ID]),
+      timestampMs: wallNowMs
+    };
     const parameterValues = resolveSemanticSlotParameterValues({
       slots: heartbeat.slots,
       activations
@@ -139,17 +214,26 @@ export function createAutonomousFrameHeart(
       timer = null;
     }
     heartbeat = null;
+    latestStageMotionSignal = EMPTY_STAGE_MOTION_SIGNAL;
   };
 
   const start = (input: AutonomousFrameHeartStartInput): void => {
     // Dispose any prior heartbeat first: load→load must not leave the old timer
-    // running (no leak, no two competing frame sources).
+    // running (no leak, no two competing frame sources). stop() also clears the
+    // Stage Presence signal so the new body starts from a neutral offset.
     stop();
 
+    // Build the generator from the CURRENT physiology config (裁定3 / 柱3): blink
+    // baseline now comes through the config path, not a hard-coded default. With
+    // the default provider this is byte-identical to the C2 default blink (the
+    // retirement gate), so the blink golden is unchanged.
+    const config = getPhysiologyConfig();
     heartbeat = {
       payload: input.payload,
       slots: input.slots,
-      generator: createGenerator({ seed: input.seed }),
+      generator: buildGenerator(input.seed, config),
+      config,
+      seed: input.seed,
       epochMs: now()
     };
     // The first frame arrives on the first interval tick (after this call
@@ -161,8 +245,20 @@ export function createAutonomousFrameHeart(
   return {
     start,
     stop,
-    isRunning: () => timer !== null
+    isRunning: () => timer !== null,
+    getLatestStageMotionSignal: () => latestStageMotionSignal
   };
+}
+
+const EMPTY_STAGE_MOTION_SIGNAL: AutonomousStageMotionSignal = {
+  horizontal: null,
+  depth: null,
+  timestampMs: 0
+};
+
+/** Read a centered signed activation, guarding absent / non-finite values → null. */
+function readSignedActivation(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 /**

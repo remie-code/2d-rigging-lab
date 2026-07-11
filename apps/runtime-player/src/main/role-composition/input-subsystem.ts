@@ -10,6 +10,11 @@ import {
   createAutonomousFrameHeart as defaultCreateAutonomousFrameHeart,
   deriveAutonomousSessionSeed
 } from "./autonomous-frame-heart";
+import type { PhysiologyConfigProvider } from "../physiology";
+import {
+  deriveStagePresenceStageMotionSettings,
+  type RuntimePlayerStageMotionDrive
+} from "../presence/stage-presence-drive";
 import type { RuntimePlayerBodyFollowState } from "../live-mapping/body-follow-state";
 import type { RuntimePlayerVowelLipsyncState } from "../live-mapping/vowel-lipsync-estimator";
 import type { RuntimePlayerLiveMappingState } from "../live-mapping/live-mapping-state";
@@ -29,9 +34,29 @@ import type { RuntimePlayerWindowSet } from "../window-management/runtime-player
 export type RuntimePlayerInputSubsystem = {
   /** Diagnostic marker only (never used to branch behaviour at runtime). */
   readonly usesTrackingInput: boolean;
+  /**
+   * Whether this subsystem DRIVES a physiology generator (C3 Domain C). DATA that
+   * expresses「生理サブシステムの有無」— the Autonomous Host's frame heart drives
+   * physiology (true); the Tracking Host has none (false). The composition root
+   * hands this to the Physiology bridge so `getStatus` reports availability as data,
+   * never a runtime `if (role === ...)`.
+   */
+  readonly providesPhysiology: boolean;
   readonly getLatestTrackingFrame: () => TrackingFrame | null;
   readonly getSessionNeutral: () => RuntimePlayerInputSessionNeutralSnapshot | null;
   readonly getActiveInputProfile: () => Promise<InputProfile | null>;
+  /**
+   * Stage Presence supply (C3 Domain D). The role difference is expressed HERE as a
+   * subsystem seam (like `getLatestTrackingFrame`), never a runtime `if (role)`:
+   *  - the Autonomous Host returns a drive (posture signal + settings derived from
+   *    the Physiology `stagePresence` config) so posture nudges the Stage transform;
+   *  - the Tracking Host returns null → the composition root keeps its existing
+   *    tracking Stage Motion path untouched (既存挙動を一切変えない).
+   * Returns null on the Autonomous Host too when no Physiology config provider is
+   * wired (the `stagePresence` field is absent), so a composition without a
+   * Physiology state stays inert exactly as before Domain D.
+   */
+  readonly getStageMotionDrive: () => RuntimePlayerStageMotionDrive | null;
   readonly publishLatestParameterFrame: () => Promise<void>;
   readonly publishMappingStatus: () => void;
   readonly clearLiveParameterFrame: () => void;
@@ -64,6 +89,13 @@ export type RuntimePlayerInputSubsystemDependencies = {
   // Autonomous-only seam (the tracking composer ignores it): lets tests inject a
   // fake frame heart. Defaults to the real 60Hz heart.
   readonly createAutonomousFrameHeart?: typeof defaultCreateAutonomousFrameHeart;
+  // ツマミ即時反映 config seam (裁定3). The持ち主 is the main-process Physiology
+  // state (both roles共通); ONLY the autonomous composer wires it to the heart
+  // (the tracking composer ignores it — role差は合成テーブルのこの1点のみ, no
+  // runtime `if (role === ...)`). Optional: the heart defaults to the universal
+  // config when absent, so a composition without a Physiology state (or every
+  // existing test) behaves exactly as C2. Domain C supplies the real provider.
+  readonly physiologyConfigProvider?: PhysiologyConfigProvider;
 };
 
 export type RuntimePlayerInputSubsystemComposer = (
@@ -130,9 +162,14 @@ export const composeTrackingHostInputSubsystem: RuntimePlayerInputSubsystemCompo
 
     return {
       usesTrackingInput: true,
+      // The Tracking Host body is driven by tracking, not a physiology generator.
+      providesPhysiology: false,
       getLatestTrackingFrame: () => inputBridge.state.getLatestTrackingFrame(),
       getSessionNeutral: () => inputBridge.state.getSessionNeutral(),
       getActiveInputProfile: inputProfileBridge.getActiveInputProfile,
+      // The Tracking Host keeps its existing head-position Stage Motion path; it
+      // never drives Stage Presence from posture (no physiology generator here).
+      getStageMotionDrive: () => null,
       publishLatestParameterFrame: () => publishLatestParameterFrame(),
       publishMappingStatus: modelMappingBridge.publishStatus,
       clearLiveParameterFrame: () => clearLiveParameterFrame(),
@@ -167,13 +204,41 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
 ) => {
   const createHeart =
     deps.createAutonomousFrameHeart ?? defaultCreateAutonomousFrameHeart;
-  const heart = createHeart({ liveParameters: deps.liveParameters });
+  // Only the autonomous composer forwards the config provider to the heart. When
+  // no provider is injected the heart falls back to the universal-default config
+  // internally, so this stays a pure pass-through of the seam. The property is
+  // omitted (not set to undefined) when absent for exactOptionalPropertyTypes.
+  const heart = createHeart({
+    liveParameters: deps.liveParameters,
+    ...(deps.physiologyConfigProvider !== undefined
+      ? { getPhysiologyConfig: deps.physiologyConfigProvider }
+      : {})
+  });
 
   return {
     usesTrackingInput: false,
+    // The Autonomous Host's frame heart drives the physiology generator.
+    providesPhysiology: true,
     getLatestTrackingFrame: () => null,
     getSessionNeutral: () => null,
     getActiveInputProfile: async () => null,
+    // Stage Presence supply (C3 Domain D). Reads the current `stagePresence` config
+    // (既定 Off) and the heart's latest posture signal, then derives Stage Motion
+    // settings from strength (別意味論・別フィールド; never the window-state settings).
+    // Absent config provider / stagePresence ⇒ null ⇒ Stage Motion stays inert.
+    getStageMotionDrive: (): RuntimePlayerStageMotionDrive | null => {
+      const stagePresence = deps.physiologyConfigProvider?.().stagePresence;
+      if (stagePresence === undefined) {
+        return null;
+      }
+      const signal = heart.getLatestStageMotionSignal();
+      return {
+        settings: deriveStagePresenceStageMotionSettings(stagePresence),
+        horizontalInput: signal.horizontal,
+        depthInput: signal.depth,
+        timestampMs: signal.timestampMs
+      };
+    },
     publishLatestParameterFrame: async () => {},
     publishMappingStatus: () => {},
     clearLiveParameterFrame: () => {

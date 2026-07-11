@@ -6,6 +6,9 @@ import type { RuntimePlayerBrowserSourceApi } from "./browser-source-status-cont
 import type {
   RuntimePlayerDynamicsTuningApi
 } from "./dynamics-tuning-bridge-contract";
+import type {
+  RuntimePlayerPhysiologyApi
+} from "./physiology-bridge-contract";
 import type { RuntimePlayerInputApi } from "./input-bridge-contract";
 import type { RuntimePlayerInputProfileApi } from "./input-profile-bridge-contract";
 import type { RuntimePlayerLiveParameterApi } from "./live-parameter-bridge-contract";
@@ -232,6 +235,7 @@ export type RuntimePlayerApi = {
   readonly inputProfile: RuntimePlayerInputProfileApi;
   readonly modelMapping: RuntimePlayerModelMappingApi;
   readonly dynamicsTuning: RuntimePlayerDynamicsTuningApi;
+  readonly physiology: RuntimePlayerPhysiologyApi;
   readonly variants: RuntimePlayerVariantControllerApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewApi;

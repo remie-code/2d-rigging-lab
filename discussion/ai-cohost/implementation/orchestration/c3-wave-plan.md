@@ -4,7 +4,11 @@
 
 ## 1. Status
 
-- Status: Ready to launch。
+- Status: **実装完了・機械ゲート green・3レーンレビュー全 PASS(2026-07-11)。手動ゲート(§7、ユーザー実施)待ち。**
+  - Domain A→B→C→D→E を単一 Orch-Sylph が順次実行。各実装は別コンテキスト Gnome、レビューは別コンテキスト Review-Sylph(ネスト分離)。実装報告=[../waves/c3/](../waves/c3/)、レビュー=[../reviews/c3/](../reviews/c3/)。
+  - **レビュー判定**: Domain A/B/D は spec/design/test 3レーンとも PASS。Domain C は lane2(design)が Strength スライダー機能不全の確定バグで一旦「要修正」→ Gnome の F1 修正(`physiology-state.ts` 一点、`assertNumericField`→`assertToneField` 緩和)で解消・再レビュー合格、lane1/lane3 は PASS。**全12レーン最終 PASS、blocking ゼロ。**
+  - **Domain E 最終統合(2026-07-11)**: 全体テスト **729 passed / 2 failed**(731、失敗は既知 Wave21 browser-source baseline のみ・下記)、typecheck パス。§2 無変更確認を git 証拠つきで完了(blink golden 2本・resolver 等価 golden・`headless-slot-resolver`/`body-follow-state`/`semantic-slot-definitions`/window-state stageMotion.settings・`stage-motion-transform`/transport・Editor/package-format/Runtime Export schema/lockfile・自律ホスト既存 Stage Motion UI いずれも無変更)。全差分は `apps/runtime-player/` + `discussion/` に限局。Domain D レビュー Lane3 N1(deadZone/reaction 未固定)を回収する test-only スナップショット1本を `stage-presence-drive.test.ts` に追加。詳細=[../waves/c3/domain-e-final-integration.md](../waves/c3/domain-e-final-integration.md)。
+  - **既知 baseline fail(C3 対象外・無変更)**: `src/main/broadcast-source/browser-source-server.test.ts` + `src/stage/browser-source/browser-source-server-message.test.ts`。差分は `effectiveDynamicsTuning: null` の1キーのみ(Wave21 由来)。live HTTP server 群で失敗数が 2〜3 に揺れる flaky(どの test が落ちるかは run 毎に変動するが常に同2ファイル・同 shape)。physiology/stage-presence/role-composition 系は3連続実行で一度も失敗せず。
 - Planning gate: context-check(前提監査)→ inventory(実施済み → [c3-planning-inventory.md](c3-planning-inventory.md)。Verdict `needs_design` → 下記ユーザー裁定で解消)。
 - Model Allocation: **L0 = fable / Orch-Sylph・Gnome・Review-Sylph = opus 明示必須**。
 - ユーザー裁定(2026-07-11):

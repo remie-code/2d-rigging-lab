@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_PHYSIOLOGY_CONFIG, type PhysiologyConfig } from "../physiology";
+import { deriveStagePresenceStageMotionSettings } from "../presence/stage-presence-drive";
 import {
   composeRuntimePlayerInputSubsystem,
   runtimePlayerInputSubsystemComposers,
@@ -37,7 +39,12 @@ function createFakeHeart() {
   return {
     start: vi.fn(),
     stop: vi.fn(),
-    isRunning: vi.fn(() => false)
+    isRunning: vi.fn(() => false),
+    getLatestStageMotionSignal: vi.fn(() => ({
+      horizontal: 0.5,
+      depth: -0.5,
+      timestampMs: 1234
+    }))
   };
 }
 
@@ -208,10 +215,13 @@ describe("Runtime Player input subsystem composition", () => {
     );
 
     // Exactly one heart is constructed for the composition, wired to the shared
-    // publishFrame seam (sanitization boundary preserved).
+    // publishFrame seam (sanitization boundary preserved). No config provider is
+    // in these deps, so the config seam forwards `undefined` (heart falls back to
+    // the universal-default config = C2 behavior).
     expect(harness.createAutonomousFrameHeart).toHaveBeenCalledTimes(1);
     expect(harness.createAutonomousFrameHeart.mock.calls[0]?.[0]).toEqual({
-      liveParameters: harness.deps.liveParameters
+      liveParameters: harness.deps.liveParameters,
+      getPhysiologyConfig: undefined
     });
 
     // Load = heartbeat start, with auto-mapping slots and a non-exposed seed.
@@ -234,6 +244,36 @@ describe("Runtime Player input subsystem composition", () => {
     expect(harness.heart.stop).toHaveBeenCalledTimes(2);
   });
 
+  it("Autonomous Host forwards the physiology config provider to the heart (裁定3)", () => {
+    const harness = createDependencies();
+    const physiologyConfigProvider = vi.fn(() => DEFAULT_PHYSIOLOGY_CONFIG);
+
+    composeRuntimePlayerInputSubsystem("autonomousHost", {
+      ...harness.deps,
+      physiologyConfigProvider
+    });
+
+    // The config seam reaches the heart only through the autonomous composer.
+    expect(harness.createAutonomousFrameHeart.mock.calls[0]?.[0]).toEqual({
+      liveParameters: harness.deps.liveParameters,
+      getPhysiologyConfig: physiologyConfigProvider
+    });
+  });
+
+  it("Tracking Host ignores the physiology config provider (role差は合成テーブル1点)", () => {
+    const harness = createDependencies();
+    const physiologyConfigProvider = vi.fn(() => DEFAULT_PHYSIOLOGY_CONFIG);
+
+    composeRuntimePlayerInputSubsystem("trackingHost", {
+      ...harness.deps,
+      physiologyConfigProvider
+    });
+
+    // The tracking composer builds no heart and never reads the provider.
+    expect(harness.createAutonomousFrameHeart).not.toHaveBeenCalled();
+    expect(physiologyConfigProvider).not.toHaveBeenCalled();
+  });
+
   it("Autonomous Host restart (load→load) re-starts the same heart (no second heart)", async () => {
     const harness = createDependencies();
 
@@ -251,5 +291,85 @@ describe("Runtime Player input subsystem composition", () => {
     // prior timer internally — see autonomous-frame-heart.test.ts).
     expect(harness.createAutonomousFrameHeart).toHaveBeenCalledTimes(1);
     expect(harness.heart.start).toHaveBeenCalledTimes(2);
+  });
+
+  // --- C3 Domain D: Stage Presence supply seam --------------------------------
+
+  it("Tracking Host never drives Stage Presence (getStageMotionDrive → null)", () => {
+    const harness = createDependencies();
+    const physiologyConfigProvider = vi.fn(
+      (): PhysiologyConfig => ({
+        ...DEFAULT_PHYSIOLOGY_CONFIG,
+        stagePresence: { enabled: true, strength: 1 }
+      })
+    );
+
+    const subsystem = composeRuntimePlayerInputSubsystem("trackingHost", {
+      ...harness.deps,
+      physiologyConfigProvider
+    });
+
+    // The role difference is expressed HERE as data: the tracking subsystem returns
+    // null so the composition root keeps its existing head-position Stage Motion.
+    expect(subsystem.getStageMotionDrive()).toBeNull();
+  });
+
+  it("Autonomous Host supplies a Stage Presence drive from posture + config (Domain D)", () => {
+    const harness = createDependencies();
+    const physiologyConfigProvider = vi.fn(
+      (): PhysiologyConfig => ({
+        ...DEFAULT_PHYSIOLOGY_CONFIG,
+        stagePresence: { enabled: true, strength: 1 }
+      })
+    );
+
+    const subsystem = composeRuntimePlayerInputSubsystem("autonomousHost", {
+      ...harness.deps,
+      physiologyConfigProvider
+    });
+
+    const drive = subsystem.getStageMotionDrive();
+    expect(drive).not.toBeNull();
+    // Posture signal from the heart (body-x → horizontal, body-z → depth).
+    expect(drive?.horizontalInput).toBe(0.5);
+    expect(drive?.depthInput).toBe(-0.5);
+    expect(drive?.timestampMs).toBe(1234);
+    // Settings derived from the Physiology stagePresence config, NOT window-state.
+    expect(drive?.settings).toEqual(
+      deriveStagePresenceStageMotionSettings({ enabled: true, strength: 1 })
+    );
+    expect(harness.heart.getLatestStageMotionSignal).toHaveBeenCalled();
+  });
+
+  it("Autonomous Host still supplies a (disabled) drive when Stage Presence is off", () => {
+    const harness = createDependencies();
+    const physiologyConfigProvider = vi.fn(
+      (): PhysiologyConfig => ({
+        ...DEFAULT_PHYSIOLOGY_CONFIG,
+        stagePresence: { enabled: false, strength: 0.3 }
+      })
+    );
+
+    const subsystem = composeRuntimePlayerInputSubsystem("autonomousHost", {
+      ...harness.deps,
+      physiologyConfigProvider
+    });
+
+    // Off is carried in settings.enabled (the runtime returns base for it); the seam
+    // still expresses「Autonomous drives Stage Presence」as data.
+    expect(subsystem.getStageMotionDrive()?.settings.enabled).toBe(false);
+  });
+
+  it("Autonomous Host returns null drive with no physiology config provider", () => {
+    const harness = createDependencies();
+
+    const subsystem = composeRuntimePlayerInputSubsystem(
+      "autonomousHost",
+      harness.deps
+    );
+
+    // Without a provider there is no stagePresence field → Stage Motion stays inert
+    // exactly as before Domain D (no regression for compositions lacking a state).
+    expect(subsystem.getStageMotionDrive()).toBeNull();
   });
 });

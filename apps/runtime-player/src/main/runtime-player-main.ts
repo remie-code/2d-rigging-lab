@@ -24,6 +24,15 @@ import {
 import {
   RuntimePlayerDynamicsTuningState
 } from "./dynamics-tuning-profiles/dynamics-tuning-state";
+import {
+  registerPhysiologyBridgeHandlers
+} from "./physiology-bridge-handlers";
+import {
+  PhysiologyProfileStore
+} from "./physiology-profiles/physiology-profile-store";
+import {
+  RuntimePlayerPhysiologyState
+} from "./physiology-profiles/physiology-state";
 import type { TrackingFrame } from "../preload/input-tracking-frame-contract";
 import type {
   RuntimePlayerInputSessionNeutralSnapshot
@@ -50,6 +59,7 @@ import {
   type RuntimePlayerStageViewBridgeRegistration
 } from "./stage-view-bridge-handlers";
 import { RuntimePlayerStageMotionRuntime } from "./stage-motion/stage-motion-runtime";
+import type { RuntimePlayerStageMotionDrive } from "./presence/stage-presence-drive";
 import {
   publishRuntimePlayerStageMotionDisplayState
 } from "./stage-motion/stage-motion-transport";
@@ -238,6 +248,11 @@ export function startRuntimePlayerMain(): void {
       (): RuntimePlayerInputSessionNeutralSnapshot | null => null;
     let getActiveInputProfileForStageMotion:
       () => Promise<InputProfile | null> = async () => null;
+    // Stage Presence drive seam (C3 Domain D): the Autonomous Host supplies a posture
+    // drive, the Tracking Host returns null. Assigned from the composed subsystem
+    // below (DATA, not a role query); until then it is inert (tracking path unchanged).
+    let getStageMotionDriveForStageMotion =
+      (): RuntimePlayerStageMotionDrive | null => null;
     const getStageWindowBoundsForBrowserSource = () =>
       windows.stageWindow.isDestroyed()
         ? null
@@ -281,7 +296,11 @@ export function startRuntimePlayerMain(): void {
         settings: windowState.getStageMotionSettings(),
         trackingFrame,
         inputProfile,
-        sessionNeutral: inputBridgeSessionNeutralForStageMotion()
+        sessionNeutral: inputBridgeSessionNeutralForStageMotion(),
+        // Stage Presence (C3 Domain D): when the Autonomous Host supplies a posture
+        // drive the runtime composes it instead of the tracking path (data branch).
+        // The Tracking Host returns null → its existing Stage Motion is untouched.
+        drive: getStageMotionDriveForStageMotion()
       });
 
       latestNativeStageDisplayTransform = result.nativeDisplayTransform;
@@ -410,6 +429,19 @@ export function startRuntimePlayerMain(): void {
     const startupStateStore = new RuntimePlayerStartupStateStore({
       userDataPath: app.getPath("userData")
     });
+    // Physiology state (C3 Domain C). The持ち主 of the ツマミ即時反映 config, common to
+    // both roles; ONLY the Autonomous composer wires its provider to the heart (the
+    // provider seam below). `physiologyAvailable` is set from the composed subsystem's
+    // `providesPhysiology` DATA marker after composition — never a role query. The
+    // state reads it lazily so it can be created here (before composition) yet report
+    // availability once the subsystem is composed.
+    let physiologyAvailable = false;
+    const physiologyState = new RuntimePlayerPhysiologyState({
+      isAvailable: () => physiologyAvailable
+    });
+    const physiologyProfileStore = new PhysiologyProfileStore({
+      userDataPath: app.getPath("userData")
+    });
     // Role composition, single point: the role selects which input subsystem to
     // assemble (data lookup, not an `if (role === ...)` runtime branch). The
     // Tracking Host builds the full input/tracking registrars; the Autonomous
@@ -430,11 +462,23 @@ export function startRuntimePlayerMain(): void {
         void publishLatestStageMotionDisplayState({
           notify: "immediate"
         });
-      }
+      },
+      // ツマミ即時反映 config seam (裁定3). Only the Autonomous composer forwards this
+      // to the heart; the Tracking composer ignores it (role差は合成テーブルのこの1点のみ).
+      physiologyConfigProvider: () => physiologyState.getPhysiologyConfig()
     });
     getLatestTrackingFrameForStageMotion = inputSubsystem.getLatestTrackingFrame;
     getSessionNeutralForStageMotion = inputSubsystem.getSessionNeutral;
     getActiveInputProfileForStageMotion = inputSubsystem.getActiveInputProfile;
+    getStageMotionDriveForStageMotion = inputSubsystem.getStageMotionDrive;
+    // Availability is DATA from the composed subsystem (生理サブシステムの有無), not a role
+    // check: the Autonomous subsystem drives physiology, the Tracking one does not.
+    physiologyAvailable = inputSubsystem.providesPhysiology;
+    const physiologyBridge = registerPhysiologyBridgeHandlers({
+      windows,
+      physiologyState,
+      profileStore: physiologyProfileStore
+    });
     const dynamicsTuningBridge = registerDynamicsTuningBridgeHandlers({
       windows,
       tuningState: dynamicsTuningState,
@@ -449,14 +493,17 @@ export function startRuntimePlayerMain(): void {
       onRuntimeExportChanging: async () => {
         await inputSubsystem.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
+        await physiologyBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         vowelLipsyncState.reset();
         inputSubsystem.clearRuntimeExport();
         dynamicsTuningBridge.clearRuntimeExport();
+        physiologyBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
         inputSubsystem.clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("Runtime Export changing");
         inputSubsystem.publishMappingStatus();
+        physiologyBridge.publishStatus();
         setLoadedModelName(null);
       },
       onRuntimeExportLoaded: async (payload) => {
@@ -464,6 +511,7 @@ export function startRuntimePlayerMain(): void {
         vowelLipsyncState.reset();
         await inputSubsystem.setRuntimeExportPayload(payload);
         await dynamicsTuningBridge.setRuntimeExportPayload(payload);
+        await physiologyBridge.setRuntimeExportPayload(payload);
         const variantStatus =
           runtimeVariantBridge.setRuntimeExportPayload(payload);
         inputSubsystem.clearLiveParameterFrame();
@@ -474,20 +522,24 @@ export function startRuntimePlayerMain(): void {
         );
         inputSubsystem.publishMappingStatus();
         dynamicsTuningBridge.publishStatus();
+        physiologyBridge.publishStatus();
         void inputSubsystem.publishLatestParameterFrame();
         setLoadedModelName(payload.summary.modelDisplayName);
       },
       onRuntimeExportCleared: async () => {
         await inputSubsystem.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
+        await physiologyBridge.flushPendingProfileSave();
         bodyFollowState.reset();
         vowelLipsyncState.reset();
         inputSubsystem.clearRuntimeExport();
         dynamicsTuningBridge.clearRuntimeExport();
+        physiologyBridge.clearRuntimeExport();
         runtimeVariantBridge.clearRuntimeExport();
         inputSubsystem.clearLiveParameterFrame();
         browserSourceServer.clearRuntimeExport("No Runtime Export loaded");
         inputSubsystem.publishMappingStatus();
+        physiologyBridge.publishStatus();
         setLoadedModelName(null);
       }
     });
@@ -499,6 +551,7 @@ export function startRuntimePlayerMain(): void {
       flushModelMappingProfile: async () => {
         await inputSubsystem.flushPendingProfileSave();
         await dynamicsTuningBridge.flushPendingProfileSave();
+        await physiologyBridge.flushPendingProfileSave();
       },
       flushWindowState: () => windowState.flush()
     });

@@ -48,6 +48,19 @@ export function mixSeeds(seedA: number, seedB: number): number {
 }
 
 /**
+ * Derive a behavior's decorrelated sub-seed from the session seed + its stable
+ * behavior id. This is THE single derivation the generator uses to seed each
+ * behavior, extracted so a COUPLED behavior can recompute a SIBLING's exact
+ * sub-seed from the shared coupling seed (= session seed) and reference the
+ * sibling's deterministic schedule (C3 Domain B, design §3 結合). Because both
+ * the generator and any coupling call this same function, the seeds agree by
+ * construction — no state is shared, only the pure derivation.
+ */
+export function deriveBehaviorSeed(sessionSeed: number, behaviorId: string): number {
+  return mixSeeds(sessionSeed >>> 0, hashStringToSeed(behaviorId));
+}
+
+/**
  * Deterministic value in [0, 1] from an integer seed plus two integer
  * coordinates (typically an event index and a channel discriminator). Identical
  * construction to the mesh-outline `hashUnit` precedent.

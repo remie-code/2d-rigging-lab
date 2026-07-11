@@ -37,6 +37,20 @@ export type BehaviorSampleInput = {
    * time enters through this argument (裁定3).
    */
   readonly logicalTimeMs: number;
+  /**
+   * The generator's SESSION seed (C3 Domain B coupling seam, design §3 結合).
+   * Every behavior receives its own decorrelated `seed`; `couplingSeed` is the
+   * shared parent seed the generator derives each `seed` from. A COUPLED behavior
+   * (head follows gaze; a saccade syncs a blink; the body parents the head)
+   * recomputes a SIBLING's exact sub-seed via
+   * `deriveBehaviorSeed(couplingSeed, siblingId)` and re-derives the sibling's
+   * pure schedule — no state is shared between behaviors, only this seed and each
+   * sibling's config. The generator always provides it; an isolated unit test may
+   * omit it, in which case a coupled behavior simply does not couple (it degrades
+   * to its own independent motion). It stays inside the main process and is never
+   * written into a frame — the sanitization boundary is unchanged.
+   */
+  readonly couplingSeed?: number;
 };
 
 export interface PhysiologyBehavior {

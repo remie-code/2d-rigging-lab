@@ -37,6 +37,7 @@ export type ControlWindowPage =
   | "input"
   | "mapping"
   | "dynamics-tune"
+  | "physiology"
   | "stage"
   | "performance-diagnostics";
 
@@ -49,6 +50,7 @@ const controlWindowPages: readonly {
   { id: "input", label: "Input" },
   { id: "mapping", label: "Mapping" },
   { id: "dynamics-tune", label: "Dynamics Tune" },
+  { id: "physiology", label: "Physiology" },
   { id: "stage", label: "Stage" },
   { id: "performance-diagnostics", label: "Performance Diagnostics" }
 ];

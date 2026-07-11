@@ -1,6 +1,6 @@
 import type { PhysiologyBehavior } from "./behavior-class";
 import { createBlinkBehavior } from "./blink-behavior";
-import { hashStringToSeed, mixSeeds } from "./deterministic-hash";
+import { deriveBehaviorSeed } from "./deterministic-hash";
 
 /**
  * Physiology generator (C2 Domain B). Composes one or more behavior classes into
@@ -57,10 +57,14 @@ export function createPhysiologyGenerator(
     seen.add(behavior.behaviorId);
   }
 
-  // Pre-derive a decorrelated sub-seed per behavior from the session seed.
+  // Pre-derive a decorrelated sub-seed per behavior from the session seed. The
+  // session seed is ALSO threaded to each behavior as `couplingSeed` so a coupled
+  // behavior can recompute a sibling's sub-seed via the SAME derivation (design
+  // §3 結合); the two agree by construction.
+  const couplingSeed = config.seed >>> 0;
   const seededBehaviors = behaviors.map((behavior) => ({
     behavior,
-    seed: mixSeeds(config.seed >>> 0, hashStringToSeed(behavior.behaviorId))
+    seed: deriveBehaviorSeed(couplingSeed, behavior.behaviorId)
   }));
 
   return {
@@ -68,12 +72,24 @@ export function createPhysiologyGenerator(
     sample(logicalTimeMs: number): Record<string, number> {
       const activations: Record<string, number> = {};
       for (const { behavior, seed } of seededBehaviors) {
-        const contribution = behavior.sample({ seed, logicalTimeMs });
+        const contribution = behavior.sample({ seed, logicalTimeMs, couplingSeed });
         for (const slotId of Object.keys(contribution)) {
           const value = contribution[slotId];
-          if (value !== undefined) {
-            activations[slotId] = value;
+          if (value === undefined) {
+            continue;
           }
+          const existing = activations[slotId];
+          // Slots are single-owner by construction (gaze/head/body each belong to
+          // one behavior), so the common case is a plain assignment. The ONE
+          // deliberate collision is the eye-blink slots: the natural blink and the
+          // saccade-synced blink (coupling 2, design §3-2) both contribute a
+          // closedness in [0, 1]. A synced blink is a UNION with the natural one,
+          // so on collision we keep the larger-magnitude contribution (max) — a
+          // synced blink can only deepen, never cut short, a natural blink.
+          activations[slotId] =
+            existing === undefined || Math.abs(value) > Math.abs(existing)
+              ? value
+              : existing;
         }
       }
       return activations;
