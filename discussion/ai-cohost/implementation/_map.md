@@ -21,4 +21,4 @@
 1. **C1 = 完全閉鎖(2026-07-10)**: パッケージ版手動ゲート全項目合格(ユーザー実施)+§14裁定済み。
 2. **C2「身体が呼吸する(まばたき)」= 完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS Browser Source確認・トラッキングとの二体非干渉確認)。
 3. **C3「視線と頭が生きる」= 完全閉鎖(2026-07-11)**: Domain A→B→C→D→E+追撃F(キャプション・Stage Presence知覚性)完了、レビュー全PASS、手動ゲート合格(30秒判定・ツマミ即時反映・プロファイル復元・トラッキング退行なし・OBS parity・キャプション・Stage Presence on/off差)。
-4. **次の閉問題 = C4「外から動かせる」**(操縦チャネルv0)。進め方(§6)どおり議論から。C4は**UX定義文書(チャネル診断画面)が必須**([screens/](screens/) にjust-in-time)——自律ホストControlのdegradedページ解消(自律ホスト版Overview含む)もC4の領分。基盤: [../architecture/runtime-player-control-channel.md](../architecture/runtime-player-control-channel.md)(契約詳細=Draft)。
+4. **次の閉問題 = C4「外から動かせる」**。設計討議Accepted([../architecture/c4-control-channel-v0.md](../architecture/c4-control-channel-v0.md)、契約二層化・外殻5点・TTL統一・参照ドライバ)・UX定義Accepted([screens/c4-channel-diagnostics.md](screens/c4-channel-diagnostics.md)、Channelページ+自律Overview+degraded解消)まで完了(2026-07-11)。ゲートはC4二相化改定済み(機械のみ+参照ドライバ持続駆動)。次は**context-check → 棚卸し → wave計画**。

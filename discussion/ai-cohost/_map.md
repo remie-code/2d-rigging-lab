@@ -43,7 +43,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2・C3 は完全閉鎖(C1=2026-07-10、C2/C3=2026-07-11)**。次の一手は **C4「外から動かせる」(操縦チャネルv0)の議論**——C4はUX定義文書(チャネル診断画面。自律ホストControlのdegradedページ解消を含む)が必須 → context-check → 棚卸し → wave計画。基盤: [architecture/runtime-player-control-channel.md](architecture/runtime-player-control-channel.md)(契約詳細=Draft)。C4のテストスクリプトはチャネル契約のfixtureとして魂側開発の受け入れ基準に輸出される(閉問題分解§4)。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2・C3 は完全閉鎖(C1=2026-07-10、C2/C3=2026-07-11)**。C4は設計討議([architecture/c4-control-channel-v0.md](architecture/c4-control-channel-v0.md))とUX定義([implementation/screens/c4-channel-diagnostics.md](implementation/screens/c4-channel-diagnostics.md))までAccepted(2026-07-11。契約二層化=外殻additive extension+TTL統一機構、参照ドライバ=特区最初の住人、C4二相化改定)。次の一手は **C4のcontext-check → 棚卸し → wave計画**。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
@@ -58,6 +58,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | 宛先判定の初手(D6) | **解決: キー操作から、実機ゲートを経て段階的自動化(2026-07-10)** |
 | Variant切替のAI制御面包含(D7) | **解決: 当面対象外(2026-07-10)** |
 | AIの身体(モデル)の制作者 | **本トピックの設計事項ではないと確認(2026-07-10)**。persona確定後にリグ要件を添えてmodel-authoring手順へ |
-| 知覚の段階の具体化 / 情動層の状態語彙 / 第二段のFable検証方法 | 未決([concept/behavior-model.md](concept/behavior-model.md) §8) |
+| 知覚の段階の具体化 / 情動層の状態語彙 / 第二段のFable検証方法 | 未決([concept/behavior-model.md](concept/behavior-model.md) §8。情動語彙は変調payloadの前提でもある) |
+| **魂の知性のアクセス経路**(API従量 vs Max枠/Agent SDK) | 未決(魂の実装着手時に裁定)。Max枠なら費用前提P3が根底から変わるが、①常駐配信エージェントへのサブスク枠利用の規約適合 ②会話レイテンシ の検証が要る([architecture/c4-control-channel-v0.md](architecture/c4-control-channel-v0.md) §9) |
 | 役割別userData分離・ポート割当の具体方式 | **解決: プロファイルスロット方式+スロットごと自動採番(2026-07-10)**([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status) |
 | **監視条件(常設)**: S2S級応答+カスタムキャラ声+外部アバター同期面の三点が揃った製品の出現でS2S再評価 | 監視中([research/gpt-live-impact-2026-07.md](research/gpt-live-impact-2026-07.md) §4。GPT-Live/Gemini Liveは三点未達で採用転換なし) |
