@@ -122,6 +122,19 @@ const physiologySectionSpecs: readonly PhysiologySectionSpec[] = [
           "How often the body re-seats. Right = more often. Takes minutes to observe."
       }
     ]
+  },
+  {
+    // Speech (C6 Domain E改, §13): the Articulation slider tunes how crisply the mouth
+    // re-forms between beats (the re-articulation dip depth). Quality word, no numbers.
+    section: "speech",
+    title: "Speech",
+    sliders: [
+      {
+        field: "articulation",
+        label: "Articulation",
+        caption: "How sharply the mouth re-forms between beats. Right = crisper."
+      }
+    ]
   }
 ];
 

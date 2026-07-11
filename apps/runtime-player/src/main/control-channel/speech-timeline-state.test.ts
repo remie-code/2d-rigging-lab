@@ -13,6 +13,12 @@ import {
   type SpeechMora,
   type SpeechTimelineState
 } from "./speech-timeline-state";
+// The ACTUAL Articulation slider range endpoints (§13) — imported so the range-end tests
+// cover the real floor extremes the slider produces, not arbitrary literals.
+import {
+  ARTICULATION_FLOOR_CRISP,
+  ARTICULATION_FLOOR_SOFT
+} from "../physiology-profiles/physiology-tone-config";
 
 /**
  * C6 Domain A: property + 決定論golden tests for the PURE speech timeline group
@@ -334,5 +340,132 @@ describe("sampleSpeechTimeline — continuity (導出bound, マジックナン�
     // Sanity: the real walk stays well UNDER the bound (the bound is not just barely
     // above the data), so the gate has real headroom — the evaluator is continuous.
     expect(observedMax).toBeLessThan(boundPerTick);
+  });
+});
+
+// C6 Domain E改 (§13): the dip floor is now the Articulation slider quantity. The three core
+// properties (convex identity / o×5 非静止 / continuity bound) must hold across the WHOLE
+// slider range — pinned here at BOTH real endpoints (floor最小=crisp, floor最大=soft).
+const O_RUN: readonly SpeechMora[] = [
+  { timeMs: 0, vowel: "o", s: 0.6 },
+  { timeMs: 140, vowel: "o", s: 0.6 },
+  { timeMs: 280, vowel: "o", s: 0.6 },
+  { timeMs: 420, vowel: "o", s: 0.6 },
+  { timeMs: 560, vowel: "o", s: 0.6 }
+];
+
+describe("sampleSpeechTimeline — Articulation floor range ends (§13, スライダー全域)", () => {
+  for (const floor of [ARTICULATION_FLOOR_CRISP, ARTICULATION_FLOOR_SOFT]) {
+    it(`holds the convex identity at EVERY tick for floor=${floor}`, () => {
+      const speech = timeline(REPRESENTATIVE);
+      const lastMs = REPRESENTATIVE[REPRESENTATIVE.length - 1]!.timeMs;
+      for (let now = 0; now <= lastMs + 800; now += 4) {
+        const { values } = sampleSpeechTimeline(speech, now, { dipFloor: floor });
+        expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
+      }
+    });
+
+    it(`keeps the o×5 run 非静止 (dip present) for floor=${floor}`, () => {
+      // Even at the SOFT end (barely dips) the floor is strictly < 1, so o×5 still moves.
+      // Threshold DERIVED from the constants: peak-to-trough of a boundary ≈ OPEN_SCALE·s·
+      // (1−floor); require the observed swing to exceed HALF that (no magic number).
+      const speech = timeline(O_RUN);
+      const minS = Math.min(...O_RUN.map((m) => m.s));
+      const expectedSwing = RUNTIME_PLAYER_SPEECH_OPEN_SCALE * minS * (1 - floor);
+      let min = Infinity;
+      let max = -Infinity;
+      for (let now = 100; now <= 560; now += 4) {
+        const v = mouthOpen(sampleSpeechTimeline(speech, now, { dipFloor: floor }).values);
+        min = Math.min(min, v);
+        max = Math.max(max, v);
+      }
+      expect(max - min).toBeGreaterThan(0.5 * expectedSwing);
+      expect(expectedSwing).toBeGreaterThan(0); // floor < 1 at both ends ⇒ always some dip.
+    });
+
+    it(`keeps every adjacent-tick step within a DERIVED bound for floor=${floor}`, () => {
+      const speech = timeline(REPRESENTATIVE);
+      const frameIntervalMs = 16;
+      const releaseMs = 400;
+      const slope = RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE;
+      const maxS = Math.max(...REPRESENTATIVE.map((m) => m.s));
+      const valueRange = RUNTIME_PLAYER_SPEECH_OPEN_SCALE * maxS;
+      // Same two dominant slopes as the base test, but the dip slope now scales with THIS
+      // floor — so the bound tightens toward the soft end (shallow dip) and widens toward
+      // the crisp end. Every factor is an evaluator constant or this floor (no magic number).
+      const onsetSlopePerMs = slope / RUNTIME_PLAYER_SPEECH_ONSET_MS;
+      const dipSlopePerMs = (slope * (1 - floor)) / RUNTIME_PLAYER_SPEECH_DIP_MS;
+      const boundPerTick =
+        valueRange * (onsetSlopePerMs + dipSlopePerMs) * frameIntervalMs;
+      expect(boundPerTick).toBeLessThan(valueRange); // gate: real no-snap guard.
+
+      const lastMs = REPRESENTATIVE[REPRESENTATIVE.length - 1]!.timeMs;
+      let previous: Record<string, number> | undefined;
+      let observedMax = 0;
+      for (let now = 0; now <= lastMs + releaseMs + 200; now += frameIntervalMs) {
+        const { values } = sampleSpeechTimeline(speech, now, { dipFloor: floor });
+        if (previous !== undefined) {
+          for (const slot of RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS) {
+            const step = Math.abs((values[slot] ?? 0) - (previous[slot] ?? 0));
+            observedMax = Math.max(observedMax, step);
+            expect(step).toBeLessThanOrEqual(boundPerTick);
+          }
+        }
+        previous = { ...values };
+      }
+      expect(observedMax).toBeLessThan(boundPerTick);
+    });
+  }
+});
+
+describe("sampleSpeechTimeline — group re-attack (onsetFromOpen, §12項目2 同時ケース)", () => {
+  it("lifts mouth.open FROM the captured effective value at onset, not 0 (no snap)", () => {
+    const from = 0.5;
+    const withReattack: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetFromOpen: from
+    };
+    // At the onset instant mouth.open == the captured effective value (continuous).
+    expect(mouthOpen(sampleSpeechTimeline(withReattack, 0).values)).toBeCloseTo(from, 9);
+    // Contrast: WITHOUT the re-attack (idle常況, onsetFromOpen absent ⇒ 0) it starts at 0 —
+    // this is the snap the re-attack removes when the mouth is already open.
+    expect(mouthOpen(sampleSpeechTimeline(timeline(REPRESENTATIVE), 0).values)).toBeCloseTo(
+      0,
+      9
+    );
+  });
+
+  it("stays within a DERIVED continuity bound across the onset re-attack, identity intact", () => {
+    const from = 0.5;
+    const speech: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetFromOpen: from
+    };
+    const frameIntervalMs = 16;
+    const slope = RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE;
+    const maxS = Math.max(...REPRESENTATIVE.map((m) => m.s));
+    const valueRange = RUNTIME_PLAYER_SPEECH_OPEN_SCALE * maxS;
+    // The onset now blends s over |sNatural − from|; the widest that lerp can swing is
+    // bounded by max(valueRange, from). Adding the dip slope upper-bounds every tick.
+    const onsetRange = Math.max(valueRange, from);
+    const onsetSlopePerMs = slope / RUNTIME_PLAYER_SPEECH_ONSET_MS;
+    const dipSlopePerMs =
+      (slope * (1 - RUNTIME_PLAYER_SPEECH_DIP_FLOOR)) / RUNTIME_PLAYER_SPEECH_DIP_MS;
+    const boundPerTick =
+      onsetRange * (onsetSlopePerMs + dipSlopePerMs) * frameIntervalMs;
+
+    let previousOpen: number | undefined;
+    for (let now = 0; now <= 420; now += frameIntervalMs) {
+      const { values } = sampleSpeechTimeline(speech, now);
+      // Convex identity holds through the re-attack (structural, single s).
+      expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
+      const open = mouthOpen(values);
+      if (previousOpen !== undefined) {
+        expect(Math.abs(open - previousOpen)).toBeLessThanOrEqual(boundPerTick);
+      }
+      previousOpen = open;
+    }
   });
 });

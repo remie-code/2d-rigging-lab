@@ -230,8 +230,16 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
   // WRITES setOverlay on accept / releaseAll on disconnect). Starts empty, so until
   // a channel accepts an intent `snapshot` is `{}` and the heart's merge is
   // byte-identical to the pure C2/C3 activations.
-  const controlChannelOverlayStore =
-    new RuntimePlayerControlChannelOverlayStore();
+  const controlChannelOverlayStore = new RuntimePlayerControlChannelOverlayStore({
+    // Re-articulation dip floor (C6 Domain E改, §13): read the Player-side Articulation
+    // profile from the SAME Physiology config seam the heart uses (DATA, not a role query).
+    // Absent provider / speech field ⇒ undefined ⇒ the evaluator's universal default floor,
+    // so a composition without a Physiology state behaves exactly as C6 Domain A. Read fresh
+    // each snapshot inside the store so an Articulation slider move takes effect即時 even mid
+    // (looping) utterance.
+    dipFloorProvider: () =>
+      deps.physiologyConfigProvider?.().speech?.articulationFloor
+  });
   // Only the autonomous composer forwards the config provider to the heart. When
   // no provider is injected the heart falls back to the universal-default config
   // internally, so this stays a pure pass-through of the seam. The property is

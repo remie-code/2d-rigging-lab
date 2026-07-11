@@ -4,8 +4,10 @@ import type {
   PhysiologyHeadToneField,
   PhysiologyPostureToneField,
   PhysiologySectionId,
+  PhysiologySpeechToneField,
   PhysiologyToneOverrides
 } from "../../preload/physiology-bridge-contract";
+import { RUNTIME_PLAYER_SPEECH_DIP_FLOOR } from "../control-channel/speech-timeline-state";
 import {
   DEFAULT_BLINK_BASELINE,
   DEFAULT_GAZE_BASELINE,
@@ -15,6 +17,7 @@ import {
   type GazeBaselineConfig,
   type HeadBaselineConfig,
   type PhysiologyConfig,
+  type PhysiologySpeechConfig,
   type PostureBaselineConfig
 } from "../physiology";
 
@@ -40,6 +43,22 @@ import {
 
 /** Default tone for every exposed numeric slider (midpoint = universal baseline). */
 export const DEFAULT_TONE = 0.5;
+
+/**
+ * Articulation → re-articulation dip floor range (C6 Domain E改, §13). Unlike the other
+ * sliders, the 0.5 midpoint here does NOT map to the evaluator's universal default (0.4):
+ * §13 deliberately makes the DEFAULT position a WEAKER floor (弱値, ちらつきにくい) so the
+ * shipped articulation is gentle and the user hunts a crisper spot with the slider. Endpoints:
+ *  - left (tone 0)  = {@link ARTICULATION_FLOOR_SOFT}   ≈ barely dips (「floor≈1.0=沈まない」),
+ *    kept STRICTLY below 1 so the o×5 run is never fully static (非静止 must hold at both ends);
+ *  - mid  (tone .5) = {@link ARTICULATION_FLOOR_DEFAULT} = the weak default floor (0.75相当);
+ *  - right (tone 1) = {@link RUNTIME_PLAYER_SPEECH_DIP_FLOOR} = the universal/crispest floor —
+ *    「現行値 floor 0.4 は範囲の中に含める(右端)」verbatim (imported, not a magic literal).
+ * Caption: 右=crisper = deeper dip = lower floor.
+ */
+export const ARTICULATION_FLOOR_SOFT = 0.9;
+export const ARTICULATION_FLOOR_DEFAULT = 0.75;
+export const ARTICULATION_FLOOR_CRISP = RUNTIME_PLAYER_SPEECH_DIP_FLOOR;
 /** Stage Presence strength default tone (small — 既定は控えめ, UX §2). */
 export const DEFAULT_STAGE_PRESENCE_STRENGTH = 0.3;
 /** Stage Presence toggle default (既定 Off, 設計§5 裁定). */
@@ -62,6 +81,8 @@ export const PHYSIOLOGY_HEAD_TONE_FIELDS: readonly PhysiologyHeadToneField[] = [
 ];
 export const PHYSIOLOGY_POSTURE_TONE_FIELDS: readonly PhysiologyPostureToneField[] =
   ["drift", "restlessness"];
+export const PHYSIOLOGY_SPEECH_TONE_FIELDS: readonly PhysiologySpeechToneField[] =
+  ["articulation"];
 
 /** The exposed numeric slider fields per section (Stage Presence handled apart). */
 export const PHYSIOLOGY_SECTION_TONE_FIELDS: Readonly<
@@ -71,6 +92,7 @@ export const PHYSIOLOGY_SECTION_TONE_FIELDS: Readonly<
   gaze: PHYSIOLOGY_GAZE_TONE_FIELDS,
   head: PHYSIOLOGY_HEAD_TONE_FIELDS,
   posture: PHYSIOLOGY_POSTURE_TONE_FIELDS,
+  speech: PHYSIOLOGY_SPEECH_TONE_FIELDS,
   stagePresence: ["strength"]
 };
 
@@ -224,6 +246,26 @@ function mapPostureBaseline(
 }
 
 /**
+ * Map the Articulation tone → the re-articulation dip floor (C6 Domain E改, §13). The
+ * anchored endpoints are SOFT (barely dips) at tone 0, the WEAK DEFAULT (0.75相当) at the
+ * 0.5 midpoint, and CRISP (= the evaluator's universal/current floor) at tone 1. Read by the
+ * control-channel speech evaluator via the config seam, not the heart's behavior fan-out.
+ */
+function mapSpeechConfig(
+  overrides: PhysiologyToneOverrides["speech"]
+): PhysiologySpeechConfig {
+  const record = toneRecord(overrides);
+  return {
+    articulationFloor: anchoredLerp(
+      toneOf(record, "articulation"),
+      ARTICULATION_FLOOR_SOFT,
+      ARTICULATION_FLOOR_DEFAULT,
+      ARTICULATION_FLOOR_CRISP
+    )
+  };
+}
+
+/**
  * Build the full PhysiologyConfig the config provider hands to the heart. Starts
  * from the universal full-baseline grammar (blink + gaze + head + posture, so the
  * Autonomous Host is fully alive「設定なしで視線・頭・姿勢が生きる」) and applies the tone
@@ -238,6 +280,7 @@ export function physiologyOverridesToConfig(
     gaze: mapGazeBaseline(overrides.gaze),
     head: mapHeadBaseline(overrides.head),
     posture: mapPostureBaseline(overrides.posture),
+    speech: mapSpeechConfig(overrides.speech),
     stagePresence: {
       enabled:
         overrides.stagePresence?.enabled ?? DEFAULT_STAGE_PRESENCE_ENABLED,

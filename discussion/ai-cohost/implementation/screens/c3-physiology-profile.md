@@ -35,12 +35,16 @@
 |   Drift          --o------                       |
 |   Restlessness   --o------   (座り直しの頻度)     |
 |                                                  |
+|  Speech                                 [Reset]  |
+|   Articulation   --o------   (口の作り直しの鋭さ) |
+|                                                  |
 |  Stage Presence                    [Off | On]    |
 |   Strength       -o-------   (既定Off)           |
 +--------------------------------------------------+
 ```
 
-- セクション=振る舞いファミリー(Blink / Gaze / Head / Posture / Stage Presence)。各セクションに `Reset`(普遍既定値へ)。
+- セクション=振る舞いファミリー(Blink / Gaze / Head / Posture / Speech / Stage Presence)。各セクションに `Reset`(普遍既定値へ)。
+- **Speech(C6 Domain E改, §13)**: スライダー1本 `Articulation`。再調音ディップの深さ(口が拍ごとにどれだけ作り直すか)を質感語で調整する。値は器側普遍既定値層(control-channelの発話評価器)のディップ floor へ写像され、発話評価器へ届く(心臓の生理系とは別系統。既定=弱値でちらつきにくい)。トラッキングホストでは他セクション同様、生理不在の空状態②のまま。
 - **Stage Presenceのみトグル持ち・既定Off**——実機ゲートでのon/off比較装置を画面に埋めておく(設計討議§5の裁定1/3)。
 
 ## 3. 語彙の規律
@@ -68,6 +72,7 @@
 | Head: Follow | How deeply the head follows big gaze jumps. Right = deeper. |
 | Posture: Drift | Slow sway of the body's center. Right = larger. |
 | Posture: Restlessness | How often the body re-seats. Right = more often. Takes minutes to observe. |
+| Speech: Articulation | How sharply the mouth re-forms between beats. Right = crisper. |
 | Stage Presence: Strength | How far the stage position follows posture. Right = farther. |
 
 ## 4. 永続化(Dynamics Tune方式そのまま)

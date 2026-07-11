@@ -130,6 +130,32 @@ describe("RuntimePlayerPhysiologyState", () => {
     expect(posture?.tones.drift).toBe(0.5);
   });
 
+  it("carries the Speech Articulation tone into the config dip floor and resets it (§13)", () => {
+    const state = new RuntimePlayerPhysiologyState();
+    state.setRuntimeExportPayload(createPayload());
+
+    const before = state.getPhysiologyConfig().speech?.articulationFloor ?? 1;
+    // Crisper (tone 1) = deeper dip = LOWER floor.
+    state.updateTone({ section: "speech", field: "articulation", tone: 1 });
+    const after = state.getPhysiologyConfig().speech?.articulationFloor ?? 1;
+    expect(after).toBeLessThan(before);
+
+    const speechSection = state
+      .getStatus()
+      .sections.find((section) => section.section === "speech");
+    expect(speechSection?.hasOverride).toBe(true);
+    expect(speechSection?.tones.articulation).toBe(1);
+
+    state.resetSection("speech");
+    expect(
+      state
+        .getStatus()
+        .sections.find((section) => section.section === "speech")?.hasOverride
+    ).toBe(false);
+    // Back to the weak default floor.
+    expect(state.getPhysiologyConfig().speech?.articulationFloor).toBe(before);
+  });
+
   it("writes the Stage Presence Strength tone through updateTone (F1 regression)", () => {
     const state = new RuntimePlayerPhysiologyState();
     state.setRuntimeExportPayload(createPayload());

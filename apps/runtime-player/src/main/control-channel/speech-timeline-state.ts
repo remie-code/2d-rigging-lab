@@ -77,11 +77,20 @@ export function isSpeechMouthGroupSlot(slotId: string): boolean {
 export const RUNTIME_PLAYER_SPEECH_OPEN_SCALE = 0.8;
 
 /**
- * Re-articulation dip floor (設計 §3.5). Non-exposed universal const. At every mora
- * BOUNDARY the opening strength `s` sinks to this fraction (~40%) — the近似 of a
- * consonant closure gesture the mora contract drops. Multiplying `s` by the dip keeps
- * the convex identity intact (Σvowel = s = mouth.open) because the dip folds into the
- * single `s`.
+ * Re-articulation dip floor — the UNIVERSAL DEFAULT layer value (設計 §3.5). Non-exposed
+ * universal const. At every mora BOUNDARY the opening strength `s` sinks to this fraction
+ * of its value — the近似 of a consonant closure gesture the mora contract drops.
+ * Multiplying `s` by the dip keeps the convex identity intact (Σvowel = s = mouth.open)
+ * because the dip folds into the single `s`.
+ *
+ * C6 Domain E改 (§13): the floor is now PARAMETERIZED — `sampleSpeechTimeline` accepts a
+ * per-call `dipFloor` (see {@link SpeechTimelineSampleOptions}) so the Player-side profile
+ * correction layer (the Physiology page's `Articulation` slider) can raise it toward 1.0
+ * (barely dips) or push it to this value (crispest). This const stays the four-layer
+ * UNIVERSAL default used when no profile floor is supplied (tests / a composition with no
+ * Physiology config). It is the RIGHT-END (crispest) of the Articulation range (§13補遺:
+ * 「現行値 floor 0.4 は範囲の中に含める」). It is NEVER in the intent.speech payload/contract —
+ * the floor is an internal 器側普遍既定値層→Player側プロファイル補正層 quantity.
  */
 export const RUNTIME_PLAYER_SPEECH_DIP_FLOOR = 0.4;
 
@@ -118,6 +127,18 @@ export type SpeechTimelineState = {
   readonly startAtMs: number;
   readonly forcedReleaseAtMs?: number;
   readonly forcedReleaseFrom?: Readonly<Record<string, number>>;
+  /**
+   * Group re-attack onset floor (C6 Domain E改, §12項目2 / §7.1 裁定B). The mouth-open
+   * effective value the group is立ち上がる FROM at onset — captured by the store from the
+   * 案B effective-value feedback (prevResolved) at `setSpeech` time. The onset ramp blends
+   * `s` from THIS value (not 0) up to the natural timeline `s`, so when speech starts while
+   * the mouth is already open (a concurrent per-slot mouth drive) the group opens
+   * CONTINUOUSLY from the current effective openness rather than snapping. Absent (or 0) →
+   * the idle常況 (mouth base = 0): the onset rises from 0 exactly as before (the forward
+   * version of the existing reverse re-attack機構; no new machine). Because the whole group
+   * is still read off the SINGLE `s`, the convex identity holds through the re-attack.
+   */
+  readonly onsetFromOpen?: number;
 };
 
 export type SpeechTimelineSample = {
@@ -137,6 +158,15 @@ export type SpeechTimelineSampleOptions = {
    * 産まない (§2.8) so the base is 0 (closed mouth). Injectable for symmetry with the
    * per-slot machine. */
   readonly baseFor?: (slotId: string) => number;
+  /**
+   * Re-articulation dip floor (C6 Domain E改, §13). The Player-side profile correction
+   * layer (Physiology `Articulation` slider) supplies this at runtime so the dip depth is
+   * tunable: near 1.0 = barely dips, down to {@link RUNTIME_PLAYER_SPEECH_DIP_FLOOR} =
+   * crispest. Clamped to [0, 1]. Defaults to the universal {@link
+   * RUNTIME_PLAYER_SPEECH_DIP_FLOOR} when absent (no profile / tests). Folded into the
+   * single `s`, so it never breaks the convex identity.
+   */
+  readonly dipFloor?: number;
 };
 
 /** 写経元: slot-curve-state.ts:79-82 (NOT imported from physiology — boundary規律). */
@@ -155,14 +185,15 @@ function clamp01(x: number): number {
 
 /**
  * The re-articulation dip factor for a point whose distance to the nearest boundary is
- * `dtMs` (>=0). Floor at the boundary (dt=0), smoothstep up to 1 at dt=DIP_MS. Symmetric
+ * `dtMs` (>=0). `floor` at the boundary (dt=0), smoothstep up to 1 at dt=DIP_MS. Symmetric
  * on both sides, so taking `min(dipLeft, dipRight)` gives a valley that is continuous
  * across a boundary and for ANY mora interval (even shorter than the dip window: both
- * sides just stay nearer the floor).
+ * sides just stay nearer the floor). `floor` is the tunable Articulation depth (§13);
+ * floor→1 flattens the valley (barely dips), lower floor deepens it (crisper).
  */
-function dipFactor(dtMs: number): number {
+function dipFactor(dtMs: number, floor: number): number {
   return lerp(
-    RUNTIME_PLAYER_SPEECH_DIP_FLOOR,
+    floor,
     1,
     smoothstep(clamp01(dtMs / RUNTIME_PLAYER_SPEECH_DIP_MS))
   );
@@ -198,7 +229,9 @@ function baseValuesRecord(baseFor: (slotId: string) => number): Record<string, n
  * blend table, no payload attack field.
  *
  * Boundaries (設計 §4, 裁量 documented in the report):
- *  - onset  [0, ONSET_MS): a global smoothstep 0→1 lifts s FROM the base (0) — no snap.
+ *  - onset  [0, ONSET_MS): a global smoothstep 0→1 blends s FROM `onsetFromOpen` (the
+ *    captured effective mouth-open, §12項目2 group re-attack; 0 in the idle常況) up to the
+ *    natural value — no snap.
  *  - terminal (e ≥ last mora): hold the last vowel for `holdMs` (= the last mora interval
  *    for a multi-mora列, else ONSET_MS for a single mora), then a smoothstep release to 0
  *    over `releaseMs` — 発話後に口が自然に閉じる. `done` once fully closed → pruned.
@@ -211,6 +244,9 @@ export function sampleSpeechTimeline(
   const releaseMs =
     options?.releaseMs ?? RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS;
   const baseFor = options?.baseFor ?? (() => 0);
+  // Dip floor: the Player-side profile correction layer (Articulation slider, §13) or the
+  // universal default. Clamped defensively (it is a runtime value from a config seam).
+  const dipFloor = clamp01(options?.dipFloor ?? RUNTIME_PLAYER_SPEECH_DIP_FLOOR);
 
   // Forced release (disconnect / per-slot mouth intent 後着置換): ease the captured 6
   // values to the living base. A UNIFORM scale by `w` preserves the convex identity —
@@ -308,17 +344,28 @@ export function sampleSpeechTimeline(
   }
 
   // Re-articulation dip: floor at each boundary, recovering mid-segment (§3.5). The min
-  // of the two nearest-boundary ramps is a valley continuous across every boundary.
-  const dipLeft = dipFactor(e - leftBoundaryMs);
+  // of the two nearest-boundary ramps is a valley continuous across every boundary. The
+  // floor is the tunable Articulation depth (§13); a floor of 1 flattens the valley.
+  const dipLeft = dipFactor(e - leftBoundaryMs, dipFloor);
   const dipRight =
-    rightBoundaryMs !== undefined ? dipFactor(rightBoundaryMs - e) : 1;
+    rightBoundaryMs !== undefined ? dipFactor(rightBoundaryMs - e, dipFloor) : 1;
   const dip = Math.min(dipLeft, dipRight);
 
-  // Onset: a global rise from the base (0) so the mouth does not snap open (§4).
+  // Onset: a global smoothstep 0→1 over ONSET_MS from timeline start (§4).
   const onset = smoothstep(clamp01(e / RUNTIME_PLAYER_SPEECH_ONSET_MS));
 
-  // The SINGLE opening strength — the sole basis for all 6 slots (裁定2).
-  const s = sRaw * dip * onset * term * RUNTIME_PLAYER_SPEECH_OPEN_SCALE;
+  // The natural timeline opening strength (dip / terminal / scale applied, onset NOT yet).
+  const sNatural = sRaw * dip * term * RUNTIME_PLAYER_SPEECH_OPEN_SCALE;
+
+  // Group re-attack (§12項目2 / 裁定B): the onset blends `s` FROM the captured effective
+  // mouth-open (`onsetFromOpen`, 案B) up to the natural value — so a mouth already open at
+  // speech start lifts CONTINUOUSLY from its current openness instead of snapping. In the
+  // idle常況 `onsetFromOpen` is 0, and lerp(0, sNatural, onset) === sNatural·onset, i.e.
+  // ALGEBRAICALLY the previous「rise from 0」— so the deterministic golden is unchanged.
+  // The SINGLE opening strength — the sole basis for all 6 slots (裁定2), so the convex
+  // identity holds through the re-attack (Σvowel = s = mouth.open, structurally).
+  const onsetFrom = speech.onsetFromOpen ?? 0;
+  const s = lerp(onsetFrom, sNatural, onset);
 
   const values: Record<string, number> = {
     [RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT]: s,

@@ -75,12 +75,32 @@ export type PhysiologyConfig = {
    * Domain A/B behavior construction and the blink golden are unchanged.
    */
   readonly stagePresence?: PhysiologyStagePresenceConfig;
+  /**
+   * Speech articulation (C6 Domain E改 UI carrier; CONSUMED by the control-channel speech
+   * evaluator, NOT the heart). Carries the re-articulation dip FLOOR the Physiology page's
+   * `Articulation` slider maps to (§13). Like `stagePresence`, the physiology BEHAVIOR
+   * fan-out below ignores it entirely — the composition root reads `speech.articulationFloor`
+   * off this same config seam and hands it to the overlay store's speech evaluator. Optional
+   * & absent from the DEFAULT configs so the behavior construction and the blink/physiology
+   * golden are unchanged (additive, like stagePresence).
+   */
+  readonly speech?: PhysiologySpeechConfig;
 };
 
 /** Stage Presence config field (C3 Domain C carrier / Domain D driver). */
 export type PhysiologyStagePresenceConfig = {
   readonly enabled: boolean;
   readonly strength: number;
+};
+
+/**
+ * Speech articulation config field (C6 Domain E改 carrier / speech-evaluator consumer).
+ * `articulationFloor` is the re-articulation dip floor in [0, 1] the Articulation slider
+ * maps to: near 1 = barely dips, lower = crisper (§13). It rides the Physiology config seam
+ * but is read by the control-channel speech evaluator, never the physiology behavior fan-out.
+ */
+export type PhysiologySpeechConfig = {
+  readonly articulationFloor: number;
 };
 
 /** The universal-default physiology config. Blink = C2普遍既定値 (retirement gate).

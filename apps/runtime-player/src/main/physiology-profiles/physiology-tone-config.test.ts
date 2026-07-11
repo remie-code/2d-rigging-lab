@@ -7,7 +7,11 @@ import {
   DEFAULT_HEAD_BASELINE,
   DEFAULT_POSTURE_BASELINE
 } from "../physiology";
+import { RUNTIME_PLAYER_SPEECH_DIP_FLOOR } from "../control-channel/speech-timeline-state";
 import {
+  ARTICULATION_FLOOR_CRISP,
+  ARTICULATION_FLOOR_DEFAULT,
+  ARTICULATION_FLOOR_SOFT,
   physiologyOverridesToConfig,
   resolveEffectiveSectionTones,
   sectionHasOverride
@@ -65,6 +69,49 @@ describe("physiology tone → config mapping", () => {
     expect(fast.blink.meanBlinkIntervalMs).toBeLessThan(
       slow.blink.meanBlinkIntervalMs
     );
+  });
+
+  it("maps Articulation tone → the re-articulation dip floor (§13: weak default, range ends)", () => {
+    // Default (midpoint tone) is a WEAK floor (弱値, ちらつきにくい) — deliberately NOT the
+    // evaluator's universal 0.4; §13 ships a gentle floor and lets the user hunt crisper.
+    expect(physiologyOverridesToConfig({}).speech?.articulationFloor).toBeCloseTo(
+      ARTICULATION_FLOOR_DEFAULT,
+      9
+    );
+    // Left end = soft (barely dips), right end = crisp (deepest).
+    expect(
+      physiologyOverridesToConfig({ speech: { articulation: 0 } }).speech
+        ?.articulationFloor
+    ).toBeCloseTo(ARTICULATION_FLOOR_SOFT, 9);
+    expect(
+      physiologyOverridesToConfig({ speech: { articulation: 1 } }).speech
+        ?.articulationFloor
+    ).toBeCloseTo(ARTICULATION_FLOOR_CRISP, 9);
+
+    // 「現行値 floor 0.4 は範囲の中に含める(右端)」— the crisp end IS the evaluator's universal floor.
+    expect(ARTICULATION_FLOOR_CRISP).toBe(RUNTIME_PLAYER_SPEECH_DIP_FLOOR);
+    // Range is monotone soft > default(0.75相当) > crisp, and the weak default sits inside it.
+    expect(ARTICULATION_FLOOR_SOFT).toBeGreaterThan(ARTICULATION_FLOOR_DEFAULT);
+    expect(ARTICULATION_FLOOR_DEFAULT).toBeGreaterThan(ARTICULATION_FLOOR_CRISP);
+    expect(ARTICULATION_FLOOR_SOFT).toBeLessThan(1); // strictly < 1 ⇒ o×5 never freezes.
+    // Caption direction: Right = crisper = deeper dip = LOWER floor.
+    const right =
+      physiologyOverridesToConfig({ speech: { articulation: 1 } }).speech
+        ?.articulationFloor ?? 1;
+    const left =
+      physiologyOverridesToConfig({ speech: { articulation: 0 } }).speech
+        ?.articulationFloor ?? 0;
+    expect(right).toBeLessThan(left);
+  });
+
+  it("resolves the Speech section tone and its override flag like other numeric sections", () => {
+    expect(resolveEffectiveSectionTones("speech", {})).toEqual({ articulation: 0.5 });
+    expect(
+      resolveEffectiveSectionTones("speech", { speech: { articulation: 0.9 } })
+    ).toEqual({ articulation: 0.9 });
+    expect(sectionHasOverride("speech", {})).toBe(false);
+    expect(sectionHasOverride("speech", { speech: { articulation: 0.5 } })).toBe(false);
+    expect(sectionHasOverride("speech", { speech: { articulation: 0.9 } })).toBe(true);
   });
 
   it("clamps out-of-range tones into [0, 1]", () => {

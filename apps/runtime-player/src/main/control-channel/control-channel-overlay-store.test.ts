@@ -646,4 +646,75 @@ describe("RuntimePlayerControlChannelOverlayStore — speech timeline (C6 group)
     store.clearAll();
     expect(store.snapshot(70)).toStrictEqual({});
   });
+
+  it("group re-attacks from the current effective mouth-open when speech starts mid per-slot drive (§12項目2)", () => {
+    // 同時ケース: a per-slot curve holds mouth-open OPEN when speech arrives. The group must
+    // lift FROM that effective value (案B prevResolved feedback), NOT snap to 0 (the old
+    // delete専有). This is the forward version of the existing reverse re-attack.
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const openSlot = RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT;
+
+    // Drive mouth-open per-slot to a steady 0.5, threading prevResolved as the heart would
+    // so the store's effective-value feedback holds 0.5 at speech start.
+    store.setOverlay(openSlot, 0.5, 100000);
+    let prevResolved: Record<string, number> = {};
+    let live: Record<string, number> = {};
+    for (let now = 0; now <= 200; now += 16) {
+      live = store.snapshot(now, {}, prevResolved);
+      prevResolved = { ...live };
+    }
+    expect(live[openSlot] ?? 0).toBeCloseTo(0.5, 6); // set curve in sustain at 0.5
+
+    // Speech starts NOW. The per-slot mouth-open curve is dropped; the group takes over.
+    store.setSpeech(PHRASE, 200);
+
+    // At the seam the group's mouth-open == the captured 0.5 (continuous), NOT ~0.
+    const atSeam = store.snapshot(200, {}, prevResolved);
+    expect(atSeam[openSlot] ?? 0).toBeCloseTo(0.5, 6);
+    expect(atSeam[openSlot] ?? 0).toBeGreaterThan(0.4); // proves no snap-down to base 0.
+    expect(vowelSumOf(atSeam)).toBeCloseTo(atSeam[openSlot] ?? 0, 9); // identity at the seam.
+
+    // Continuity: mouth-open steps within a bound DERIVED from the onset blend range + dip
+    // (floor = the evaluator's default here — no provider). NO magic number.
+    const frameIntervalMs = 16;
+    const slope = RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE;
+    const maxS = Math.max(...PHRASE.map((m) => m.s));
+    const valueRange = RUNTIME_PLAYER_SPEECH_OPEN_SCALE * maxS;
+    const onsetRange = Math.max(valueRange, 0.5); // widest the onset lerp can swing.
+    const onsetSlopePerMs = slope / RUNTIME_PLAYER_SPEECH_ONSET_MS;
+    const dipSlopePerMs =
+      (slope * (1 - RUNTIME_PLAYER_SPEECH_DIP_FLOOR)) / RUNTIME_PLAYER_SPEECH_DIP_MS;
+    const bound = onsetRange * (onsetSlopePerMs + dipSlopePerMs) * frameIntervalMs;
+
+    let previousOpen = atSeam[openSlot] ?? 0;
+    for (let now = 216; now <= 200 + 280 + 200; now += frameIntervalMs) {
+      const open = store.snapshot(now)[openSlot] ?? 0;
+      expect(Math.abs(open - previousOpen)).toBeLessThanOrEqual(bound);
+      previousOpen = open;
+    }
+  });
+
+  it("reads the Articulation dip floor from the provider each snapshot (即時反映, §13)", () => {
+    // The provider is read fresh EACH snapshot, so moving the Articulation slider changes
+    // the dip depth on the spot. Same nowMs (same phase), only the floor differs → a deeper
+    // floor (crisp) leaves the boundary mouth LESS open than a soft floor (barely dips).
+    let floor = RUNTIME_PLAYER_SPEECH_DIP_FLOOR; // crisp / deep dip
+    const store = new RuntimePlayerControlChannelOverlayStore({
+      dipFloorProvider: () => floor
+    });
+    const openSlot = RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT;
+    const oRun: readonly SpeechMora[] = [
+      { timeMs: 0, vowel: "o", s: 0.6 },
+      { timeMs: 140, vowel: "o", s: 0.6 },
+      { timeMs: 280, vowel: "o", s: 0.6 }
+    ];
+    store.snapshot(0);
+    store.setSpeech(oRun, 0);
+
+    // At the boundary (140), past onset, the dip is at the floor.
+    const deep = store.snapshot(140)[openSlot] ?? 0;
+    floor = 0.95; // slider moved toward「barely dips」— read on the NEXT snapshot.
+    const shallow = store.snapshot(140)[openSlot] ?? 0;
+    expect(shallow).toBeGreaterThan(deep);
+  });
 });

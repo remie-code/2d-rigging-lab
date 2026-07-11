@@ -105,5 +105,6 @@ export {
   createPhysiologyBehaviorsFromConfig,
   type PhysiologyConfig,
   type PhysiologyConfigProvider,
-  type PhysiologyStagePresenceConfig
+  type PhysiologyStagePresenceConfig,
+  type PhysiologySpeechConfig
 } from "./physiology-config";

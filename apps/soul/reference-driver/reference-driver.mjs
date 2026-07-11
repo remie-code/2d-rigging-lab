@@ -28,6 +28,8 @@
  *     node apps/soul/reference-driver/reference-driver.mjs "ws://.../channel?token=..." --scenario=perceptual
  *   発話シナリオ（C6 intent.speech・fixture モーラ列「これじっさいのところどうなってるの」を一発送る）:
  *     node apps/soul/reference-driver/reference-driver.mjs "ws://.../channel?token=..." --scenario=speech
+ *   発話ループ（C6 Domain E改 §13・同フレーズを繰り返し送出。Articulation スライダーを掴みながら探す用）:
+ *     node apps/soul/reference-driver/reference-driver.mjs "ws://.../channel?token=..." --scenario=speech --loop
  *   タイムライン印字（WS 不要・URL 不要。ドライバ単体検証の土台）:
  *     node apps/soul/reference-driver/reference-driver.mjs --scenario=perceptual --print-timeline
  *
@@ -94,6 +96,9 @@ async function main() {
   const flags = argv.filter((arg) => arg.startsWith("--"));
   const positionals = argv.filter((arg) => !arg.startsWith("--"));
   const scenarioName = parseScenarioFlag(flags);
+  // --loop（C6 Domain E改 §13）: 発話フレーズを繰り返し送出し続ける調整用フラグ。既定 false。
+  // print-timeline や機械テストの spawn（--loop 無し）には一切影響しない。
+  const loop = flags.includes("--loop");
 
   // Dry-run: print the selected scenario's timeline (kind marker + scenario id + each
   // section's kind/slot/attackMs/sustainMs, in order) as one-line JSON and exit 0. No WS,
@@ -107,7 +112,7 @@ async function main() {
   const url = positionals[0];
   if (typeof url !== "string" || url.length === 0) {
     process.stderr.write(
-      "usage: node reference-driver.mjs <ws-url> [--scenario=compressed|perceptual|speech] [--print-timeline]\n" +
+      "usage: node reference-driver.mjs <ws-url> [--scenario=compressed|perceptual|speech] [--loop] [--print-timeline]\n" +
         '  e.g. node reference-driver.mjs "ws://127.0.0.1:17310/channel?token=..."\n'
     );
     process.exit(2);
@@ -120,7 +125,7 @@ async function main() {
     return;
   }
   if (scenarioName === "speech") {
-    await runSpeechScenario(url, contract);
+    await runSpeechScenario(url, contract, { loop });
     return;
   }
   await runCompressedScenario(url, contract);
@@ -561,12 +566,46 @@ async function runPerceptualScenario(url, contract) {
  * ため、語彙自己照合は N/A（kind 照合は connect() の hello 側で済む）。受理されたらシナリオ完遂
  * = exit 0、想定外拒否 = exit 1。
  */
-async function runSpeechScenario(url, contract) {
+async function runSpeechScenario(url, contract, options = {}) {
+  const loop = options.loop === true;
   const timeline = speechTimelineMoras();
+  const speechSpanMs = timeline[timeline.length - 1]?.timeMs ?? 0;
   const rttSamples = [];
   let acceptedCount = 0;
   let rejectedCount = 0;
   let unknownEventsIgnored = 0;
+
+  // --loop（C6 Domain E改 §13）: 一本の接続で同フレーズを繰り返し送出し続ける。Articulation
+  // スライダーを掴みながら「ちらつかず・凍らず」の位置をその場で探す用。プロセスを kill する
+  // まで回り続けるため report/exit(0) には到達しない（想定外拒否や接続断は fail=exit 1）。
+  if (loop) {
+    let iteration = 0;
+    try {
+      const connection = await connect(url, contract);
+      unknownEventsIgnored += connection.consumeUnknownEventCount();
+      // 一発話が終端 release で閉じ切る尺だけ空けてから次の一発話を送る（喋り続けに見せる）。
+      for (;;) {
+        iteration += 1;
+        const outcome = await connection.sendSpeech(timeline);
+        if (outcome.result !== "accepted") {
+          fail(
+            `speech intent rejected on loop iteration ${iteration}: ${
+              outcome.error ?? "unknown"
+            }`
+          );
+        }
+        process.stderr.write(
+          `reference-driver[speech --loop]: utterance ${iteration} sent ` +
+            `(${timeline.length} moras)「これじっさいのところどうなってるの」\n`
+        );
+        await delay(speechSpanMs + 600);
+        unknownEventsIgnored += connection.consumeUnknownEventCount();
+      }
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
+    return;
+  }
 
   try {
     const connection = await connect(url, contract);
@@ -582,7 +621,6 @@ async function runSpeechScenario(url, contract) {
     }
 
     // 発話が最後まで喋り終わる尺だけ観測してから切断（終端 release で口が閉じる）。
-    const speechSpanMs = timeline[timeline.length - 1]?.timeMs ?? 0;
     await delay(speechSpanMs + 600);
     unknownEventsIgnored += connection.consumeUnknownEventCount();
     await connection.close();

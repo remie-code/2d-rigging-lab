@@ -56,6 +56,7 @@ describe("PhysiologyPage", () => {
     expect(markup).toContain("Gaze");
     expect(markup).toContain("Head");
     expect(markup).toContain("Posture");
+    expect(markup).toContain("Speech");
     expect(markup).toContain("Stage Presence");
     // Quality-word slider labels.
     expect(markup).toContain("Frequency");
@@ -67,6 +68,7 @@ describe("PhysiologyPage", () => {
     expect(markup).toContain("Sway");
     expect(markup).toContain("Follow");
     expect(markup).toContain("Drift");
+    expect(markup).toContain("Articulation");
     expect(markup).toContain("Strength");
   });
 
@@ -88,6 +90,7 @@ describe("PhysiologyPage", () => {
       "How deeply the head follows big gaze jumps. Right = deeper.",
       "Slow sway of the body's center. Right = larger.",
       "How often the body re-seats. Right = more often. Takes minutes to observe.",
+      "How sharply the mouth re-forms between beats. Right = crisper.",
       "How far the stage position follows posture. Right = farther."
     ];
     for (const caption of captions) {
@@ -217,13 +220,14 @@ function createStatus(patch: Partial<PhysiologyStatus> = {}): PhysiologyStatus {
     createSection("gaze"),
     createSection("head"),
     createSection("posture"),
+    createSection("speech"),
     createStagePresenceSection()
   ];
 
   return {
     available: true,
     status: "ready",
-    statusLabel: "Physiology sections 0 / 5 tuned",
+    statusLabel: "Physiology sections 0 / 6 tuned",
     runtimeExport: {
       packageId: "pkg-physiology",
       packageRevision: 1,
@@ -251,7 +255,8 @@ function createSection(
     blink: { frequency: 0.5, calmness: 0.5, crispness: 0.5, quirk: 0.5 },
     gaze: { cameraFocus: 0.5, restlessness: 0.5, dwell: 0.5 },
     head: { sway: 0.5, follow: 0.5 },
-    posture: { drift: 0.5, restlessness: 0.5 }
+    posture: { drift: 0.5, restlessness: 0.5 },
+    speech: { articulation: 0.5 }
   };
 
   return {

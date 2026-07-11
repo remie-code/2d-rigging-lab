@@ -32,6 +32,7 @@ const PHYSIOLOGY_SECTION_IDS: readonly PhysiologySectionId[] = [
   "gaze",
   "head",
   "posture",
+  "speech",
   "stagePresence"
 ];
 

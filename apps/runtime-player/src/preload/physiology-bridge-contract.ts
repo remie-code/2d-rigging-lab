@@ -17,6 +17,7 @@ export type PhysiologySectionId =
   | "gaze"
   | "head"
   | "posture"
+  | "speech"
   | "stagePresence";
 
 export type PhysiologyBlinkToneField =
@@ -30,6 +31,7 @@ export type PhysiologyGazeToneField =
   | "dwell";
 export type PhysiologyHeadToneField = "sway" | "follow";
 export type PhysiologyPostureToneField = "drift" | "restlessness";
+export type PhysiologySpeechToneField = "articulation";
 export type PhysiologyStagePresenceToneField = "strength";
 
 /**
@@ -46,6 +48,8 @@ export type PhysiologyToneOverrides = {
   readonly posture?: Readonly<
     Partial<Record<PhysiologyPostureToneField, number>>
   >;
+  /** Speech articulation (C6 Domain E改): the single `articulation` tone [0, 1]. */
+  readonly speech?: Readonly<Partial<Record<PhysiologySpeechToneField, number>>>;
   readonly stagePresence?: {
     readonly enabled?: boolean;
     readonly strength?: number;

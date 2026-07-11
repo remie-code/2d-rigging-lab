@@ -48,6 +48,7 @@ import {
 import {
   isSpeechMouthGroupSlot,
   RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS,
+  RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
   sampleSpeechTimeline,
   type SpeechMora,
   type SpeechTimelineState
@@ -81,6 +82,15 @@ export type RuntimePlayerControlChannelActiveOverlay = {
 export type RuntimePlayerControlChannelOverlayStoreOptions = {
   /** Universal release time (裁定2). Injectable for tests; default 400ms. */
   readonly releaseMs?: number;
+  /**
+   * Re-articulation dip floor provider (C6 Domain E改, §13). Read fresh EACH snapshot so
+   * moving the Physiology `Articulation` slider changes the dip depth即時反映 even during a
+   * long (looping) utterance. Returns the Player-side profile floor, or `undefined` to fall
+   * back to the evaluator's universal default. Data-driven (the composition root wires it
+   * from the Physiology config seam); the store never queries a role. Absent → the speech
+   * evaluator uses its universal default floor, so every existing test is unchanged.
+   */
+  readonly dipFloorProvider?: () => number | undefined;
 };
 
 export class RuntimePlayerControlChannelOverlayStore {
@@ -88,6 +98,8 @@ export class RuntimePlayerControlChannelOverlayStore {
   /** The single live speech timeline (C6, 一発話=一タイムライン §7 裁定4), or null. */
   #speech: SpeechTimelineState | null = null;
   readonly #releaseMs: number;
+  /** Re-articulation dip floor provider (§13, read per snapshot), or null. */
+  readonly #dipFloorProvider: (() => number | undefined) | null;
   /** Last query time observed via {@link snapshot} — the set curve's start anchor. */
   #lastNowMs = 0;
   /** Last living base (pure activations) observed — the release TARGET (裁定2). */
@@ -98,6 +110,7 @@ export class RuntimePlayerControlChannelOverlayStore {
   constructor(options?: RuntimePlayerControlChannelOverlayStoreOptions) {
     this.#releaseMs =
       options?.releaseMs ?? RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS;
+    this.#dipFloorProvider = options?.dipFloorProvider ?? null;
   }
 
   /**
@@ -163,19 +176,29 @@ export class RuntimePlayerControlChannelOverlayStore {
    * slots as a unit — the convex identity Σvowel = s = mouth.open holds structurally
    * (speech-timeline-state.ts).
    *
-   * 後着置換 (裁定3): the new speech drive REPLACES any prior mouth drive. Per-slot
-   * curves on the 6 mouth slots are dropped so the group takes EXCLUSIVE ownership
-   * (no slot is ever driven by both the group and a per-slot curve at once — the single
-   * arbitration point). The group's onset ramps from the base (mouth base = 0, §2.8) so
-   * an idle mouth opens continuously (no snap); a rare concurrent per-slot mouth drive
-   * is superseded (裁量, see domain-a report). A prior speech timeline is likewise
-   * replaced (the later utterance wins).
+   * 後着置換 (裁定3) + group re-attack (§12項目2 / 裁定B): the new speech drive REPLACES any
+   * prior mouth drive. Per-slot curves on the 6 mouth slots are dropped so the group takes
+   * EXCLUSIVE ownership (no slot is ever driven by both the group and a per-slot curve at
+   * once — the single arbitration point). Rather than the group's onset always rising from
+   * 0 (which SNAPPED down when the mouth was already open — the delete専有 of Domain A), the
+   * group now立ち上がる FROM the current effective mouth-open (`onsetFromOpen`, captured from
+   * the 案B prevResolved feedback via {@link #effectiveStart}). So a concurrent per-slot
+   * mouth drive is superseded CONTINUOUSLY: the mouth-open magnitude carries over and the
+   * group re-forms the vowel shape from it. In the idle常況 the effective value is 0, so the
+   * onset rises from 0 exactly as before (the forward version of the existing reverse
+   * re-attack — {@link #yieldSpeechForSlot} — not a new machine). A prior speech timeline is
+   * likewise replaced (the later utterance wins).
    */
   setSpeech(moras: readonly SpeechMora[], startAtMs: number): void {
+    // Capture the current effective mouth-open (案B) BEFORE dropping the per-slot curves, so
+    // the group onset re-attacks from what the mouth is actually showing (no snap).
+    const onsetFromOpen = this.#effectiveStart(
+      RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT
+    );
     for (const slotId of RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS) {
       this.#curves.delete(slotId);
     }
-    this.#speech = { moras: [...moras], startAtMs };
+    this.#speech = { moras: [...moras], startAtMs, onsetFromOpen };
   }
 
   /**
@@ -240,7 +263,8 @@ export class RuntimePlayerControlChannelOverlayStore {
     if (this.#speech !== null) {
       const sample = sampleSpeechTimeline(this.#speech, nowMs, {
         releaseMs: this.#releaseMs,
-        baseFor: (slotId) => this.#livingBase(slotId)
+        baseFor: (slotId) => this.#livingBase(slotId),
+        ...this.#dipFloorOption()
       });
       if (sample.done) {
         this.#speech = null;
@@ -320,7 +344,8 @@ export class RuntimePlayerControlChannelOverlayStore {
     }
     const sample = sampleSpeechTimeline(speech, nowMs, {
       releaseMs: this.#releaseMs,
-      baseFor: (slotId) => this.#livingBase(slotId)
+      baseFor: (slotId) => this.#livingBase(slotId),
+      ...this.#dipFloorOption()
     });
     if (sample.done) {
       this.#speech = null;
@@ -331,6 +356,20 @@ export class RuntimePlayerControlChannelOverlayStore {
       forcedReleaseAtMs: nowMs,
       forcedReleaseFrom: sample.values
     };
+  }
+
+  /**
+   * The current re-articulation dip floor option for the speech evaluator (§13), read
+   * fresh from the provider so an Articulation slider move takes effect即時. Returns a
+   * conditional spread (`{ dipFloor }` only when a finite number is supplied) so an absent
+   * or non-finite provider falls back to the evaluator's universal default —
+   * exactOptionalPropertyTypes-safe.
+   */
+  #dipFloorOption(): { dipFloor?: number } {
+    const floor = this.#dipFloorProvider?.();
+    return typeof floor === "number" && Number.isFinite(floor)
+      ? { dipFloor: floor }
+      : {};
   }
 
   /** Case B (連続性 3.1): the effective value the slot is currently showing. */
