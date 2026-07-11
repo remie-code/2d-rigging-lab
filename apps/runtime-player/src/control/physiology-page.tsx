@@ -28,6 +28,9 @@ import type {
 type PhysiologySliderSpec = {
   readonly field: string;
   readonly label: string;
+  // Always-on one-line caption under the label (UX §3.1). Verbatim quality-word
+  // guidance; no ms / Hz / probability numbers (UX §3, 数字非露出の規律).
+  readonly caption: string;
 };
 
 type PhysiologySectionSpec = {
@@ -43,35 +46,81 @@ const physiologySectionSpecs: readonly PhysiologySectionSpec[] = [
     section: "blink",
     title: "Blink",
     sliders: [
-      { field: "frequency", label: "Frequency" },
-      { field: "calmness", label: "Calmness" },
-      { field: "crispness", label: "Crispness" },
-      { field: "quirk", label: "Quirk" }
+      {
+        field: "frequency",
+        label: "Frequency",
+        caption: "How often the blink comes. Right = more often."
+      },
+      {
+        field: "calmness",
+        label: "Calmness",
+        caption: "Evenness of the blink rhythm. Right = steadier."
+      },
+      {
+        field: "crispness",
+        label: "Crispness",
+        caption: "Speed of close and open. Right = snappier."
+      },
+      {
+        field: "quirk",
+        label: "Quirk",
+        caption: "Chance of a quick double blink. Right = more often."
+      }
     ]
   },
   {
     section: "gaze",
     title: "Gaze",
     sliders: [
-      { field: "cameraFocus", label: "Camera Focus" },
-      { field: "restlessness", label: "Restlessness" },
-      { field: "dwell", label: "Dwell" }
+      {
+        field: "cameraFocus",
+        label: "Camera Focus",
+        caption:
+          "How strongly the gaze returns to the camera. Right = more eye contact."
+      },
+      {
+        field: "restlessness",
+        label: "Restlessness",
+        caption: "How often and how far the eyes wander. Right = busier."
+      },
+      {
+        field: "dwell",
+        label: "Dwell",
+        caption: "How long the gaze rests in one place. Right = longer."
+      }
     ]
   },
   {
     section: "head",
     title: "Head",
     sliders: [
-      { field: "sway", label: "Sway" },
-      { field: "follow", label: "Follow" }
+      {
+        field: "sway",
+        label: "Sway",
+        caption: "Size of the idle head motion. Right = larger."
+      },
+      {
+        field: "follow",
+        label: "Follow",
+        caption: "How deeply the head follows big gaze jumps. Right = deeper."
+      }
     ]
   },
   {
     section: "posture",
     title: "Posture",
     sliders: [
-      { field: "drift", label: "Drift" },
-      { field: "restlessness", label: "Restlessness" }
+      {
+        field: "drift",
+        label: "Drift",
+        caption: "Slow sway of the body's center. Right = larger."
+      },
+      {
+        field: "restlessness",
+        label: "Restlessness",
+        caption:
+          "How often the body re-seats. Right = more often. Takes minutes to observe."
+      }
     ]
   }
 ];
@@ -288,7 +337,12 @@ function StagePresenceCard({
         <ToneSlider
           sectionTitle={STAGE_PRESENCE_TITLE}
           section="stagePresence"
-          slider={{ field: "strength", label: "Strength" }}
+          slider={{
+            field: "strength",
+            label: "Strength",
+            caption:
+              "How far the stage position follows posture. Right = farther."
+          }}
           tone={sectionStatus?.tones.strength ?? 0.3}
           onUpdateTone={onUpdateTone}
         />
@@ -313,6 +367,9 @@ function ToneSlider({
   return (
     <label className="grid gap-1 text-xs font-semibold text-neutral-200">
       <span>{slider.label}</span>
+      <span className="text-[11px] font-normal leading-snug text-neutral-400">
+        {slider.caption}
+      </span>
       <input
         type="range"
         aria-label={`Physiology ${sectionTitle} ${slider.label}`}

@@ -8,10 +8,11 @@ import {
 } from "./stage-presence-drive";
 
 /**
- * Stage Presence settings derivation (C3 Domain D). These pin that the Physiology
- * `stagePresence` config (既定 Off, normalized strength [0,1]) maps onto Stage
- * Motion settings WITHOUT touching the window-state settings, and that the strength
- * scale stays conservative (二重適用リスク手当て, §5-4 / research §4).
+ * Stage Presence settings derivation (C3 Domain D + 追撃 §12 知覚性回収). These pin
+ * that the Physiology `stagePresence` config (既定 Off, normalized strength [0,1])
+ * maps onto Stage Motion settings WITHOUT touching the window-state settings, and
+ * that the CONVEX (square `strength²`) gain map keeps the DEFAULT (0.3) 控えめ while
+ * letting the RIGHT END (1) reach a plainly perceptible displacement (§12).
  */
 
 describe("deriveStagePresenceStageMotionSettings", () => {
@@ -26,12 +27,12 @@ describe("deriveStagePresenceStageMotionSettings", () => {
     ).toBe(true);
   });
 
-  it("scales BOTH horizontal px and scale delta linearly from strength", () => {
+  it("scales BOTH horizontal px and scale delta by the convex square gain (strength²)", () => {
     const zero = deriveStagePresenceStageMotionSettings({
       enabled: true,
       strength: 0
     });
-    // strength 0 ⇒ no offset at all (target offset = input × 0 = 0 for any input).
+    // strength 0 ⇒ no offset at all (gain = 0² = 0 ⇒ 0 for any input).
     expect(zero.horizontal.strengthPx).toBe(0);
     expect(zero.scale.strength).toBe(0);
 
@@ -39,22 +40,24 @@ describe("deriveStagePresenceStageMotionSettings", () => {
       enabled: true,
       strength: 1
     });
+    // Right end (gain = 1² = 1) reaches the full maxima — plainly perceptible (§12).
     expect(full.horizontal.strengthPx).toBe(
       STAGE_PRESENCE_MAX_HORIZONTAL_STRENGTH_PX
     );
     expect(full.scale.strength).toBe(STAGE_PRESENCE_MAX_SCALE_STRENGTH);
 
-    // Default tone 0.3 (既定は控えめ): a small, subtle nudge.
+    // Default tone 0.3 (既定は控えめ): gain = 0.3² = 0.09, a small, subtle nudge
+    // (≈ the pre-追撃 18px / 0.0135 output — 控えめさは維持).
     const def = deriveStagePresenceStageMotionSettings({
       enabled: true,
       strength: 0.3
     });
     expect(def.horizontal.strengthPx).toBeCloseTo(
-      STAGE_PRESENCE_MAX_HORIZONTAL_STRENGTH_PX * 0.3,
+      STAGE_PRESENCE_MAX_HORIZONTAL_STRENGTH_PX * 0.09,
       10
     );
     expect(def.scale.strength).toBeCloseTo(
-      STAGE_PRESENCE_MAX_SCALE_STRENGTH * 0.3,
+      STAGE_PRESENCE_MAX_SCALE_STRENGTH * 0.09,
       10
     );
   });
@@ -94,19 +97,32 @@ describe("deriveStagePresenceStageMotionSettings", () => {
     expect(full.scale.limit).toBeGreaterThanOrEqual(full.scale.strength);
   });
 
-  it("stays conservative vs the camera-follow window-state defaults (二重適用手当て)", () => {
-    // Even at full strength the Stage Presence offset is well below the camera-
-    // follow default (80px / 0.06), because the SAME posture signal already deforms
-    // body.angle downstream — the Stage offset is a small nudge, not a second motion.
+  it("keeps the DEFAULT strength 0.3 conservative vs the camera-follow defaults (控えめ維持)", () => {
+    // §12 shifts the RIGHT END above the camera-follow default on purpose (知覚性回収),
+    // so the invariant that survives is the DEFAULT-tone 控えめさ: at strength 0.3 the
+    // convex gain (0.09) keeps the offset well below the camera-follow default
+    // (80px / 0.06), because the SAME posture signal already deforms body.angle
+    // downstream — the default Stage nudge is small, not a second big motion.
+    const def = deriveStagePresenceStageMotionSettings({
+      enabled: true,
+      strength: 0.3
+    });
+    expect(def.horizontal.strengthPx).toBeLessThan(
+      runtimePlayerDefaultStageMotionSettings.horizontal.strengthPx
+    );
+    expect(def.scale.strength).toBeLessThan(
+      runtimePlayerDefaultStageMotionSettings.scale.strength
+    );
+
+    // The full-strength end intentionally EXCEEDS the camera-follow default (§12
+    // 右端は明確に大きい) — this is the perceptibility the manual gate asked for, not
+    // a regression.
     const full = deriveStagePresenceStageMotionSettings({
       enabled: true,
       strength: 1
     });
-    expect(full.horizontal.strengthPx).toBeLessThan(
+    expect(full.horizontal.strengthPx).toBeGreaterThan(
       runtimePlayerDefaultStageMotionSettings.horizontal.strengthPx
-    );
-    expect(full.scale.strength).toBeLessThan(
-      runtimePlayerDefaultStageMotionSettings.scale.strength
     );
   });
 
@@ -122,12 +138,14 @@ describe("deriveStagePresenceStageMotionSettings", () => {
     ).toEqual({
       enabled: true,
       horizontal: {
-        strengthPx: STAGE_PRESENCE_MAX_HORIZONTAL_STRENGTH_PX * 0.3,
+        // Convex square gain: 0.3² = 0.09 of MAX (200 × 0.09 = 18px, 控えめ維持).
+        // Mirror the impl's `strength * strength` exactly (float-exact toEqual).
+        strengthPx: STAGE_PRESENCE_MAX_HORIZONTAL_STRENGTH_PX * (0.3 * 0.3),
         limitPx: STAGE_PRESENCE_MAX_HORIZONTAL_STRENGTH_PX,
         invert: false
       },
       scale: {
-        strength: STAGE_PRESENCE_MAX_SCALE_STRENGTH * 0.3,
+        strength: STAGE_PRESENCE_MAX_SCALE_STRENGTH * (0.3 * 0.3),
         limit: STAGE_PRESENCE_MAX_SCALE_STRENGTH,
         invert: false
       },

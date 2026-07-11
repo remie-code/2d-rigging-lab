@@ -48,6 +48,28 @@
 - **スライダーは全て質感語**。ms・Hz・確率などの工学数字は一切出さない(内部スキーマとの対応は設計討議§6が持つ知識であり、UIの知識ではない)。
 - UI語彙は英語(C1 §7.1と同一方針)。
 
+### 3.1 キャプション(ユーザー追加要望 2026-07-11、手動ゲートでの発見)
+
+各スライダーのラベル下に**常時表示の一行キャプション**(小さく淡色)を置く。infoアイコン+ホバー方式は不採用(発見コスト・狙うコスト・一個ずつしか読めない、の三重の負荷。常時表示なら一瞥で全部読める)。規律:
+
+- 質感語のまま説明する(数字非露出の規律維持)。**一行厳守**、「右(またはOn)で何がどうなるか」を必ず含める。
+- ライブプレビューが説明として機能しない遅い時間軸のパラメータ(Posture Restlessness等)には、観察時間軸の注記を含める。
+
+| スライダー | キャプション |
+|---|---|
+| Blink: Frequency | How often the blink comes. Right = more often. |
+| Blink: Calmness | Evenness of the blink rhythm. Right = steadier. |
+| Blink: Crispness | Speed of close and open. Right = snappier. |
+| Blink: Quirk | Chance of a quick double blink. Right = more often. |
+| Gaze: Camera Focus | How strongly the gaze returns to the camera. Right = more eye contact. |
+| Gaze: Restlessness | How often and how far the eyes wander. Right = busier. |
+| Gaze: Dwell | How long the gaze rests in one place. Right = longer. |
+| Head: Sway | Size of the idle head motion. Right = larger. |
+| Head: Follow | How deeply the head follows big gaze jumps. Right = deeper. |
+| Posture: Drift | Slow sway of the body's center. Right = larger. |
+| Posture: Restlessness | How often the body re-seats. Right = more often. Takes minutes to observe. |
+| Stage Presence: Strength | How far the stage position follows posture. Right = farther. |
+
 ## 4. 永続化(Dynamics Tune方式そのまま)
 
 - Runtime Export fingerprintごとに `<electron userData(スロット内)>` 配下へ**自動保存(debounce)**。Saveボタンなし。

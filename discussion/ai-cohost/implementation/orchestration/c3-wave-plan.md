@@ -4,7 +4,7 @@
 
 ## 1. Status
 
-- Status: **実装完了・機械ゲート green・3レーンレビュー全 PASS(2026-07-11)。手動ゲート(§7、ユーザー実施)待ち。**
+- Status: **実装完了・機械ゲートgreen・レビュー全PASS。手動ゲート(§7)は7項目中6項目合格(2026-07-11)、残2件の追撃(§12)実行中**: ①キャプション追加(ユーザー追加要望: 各スライダーに常時表示の一行説明。UX定義§3.1に文言確定済み)、②**Stage Presenceの知覚性不合格**(「変異幅が小さすぎてon/offで差を感じない」——strengthスライダーの実効レンジを、右端で明確に知覚できる幅まで拡大する。既定Off・既定値控えめは維持)。追撃合格でC3完全閉鎖。
   - Domain A→B→C→D→E を単一 Orch-Sylph が順次実行。各実装は別コンテキスト Gnome、レビューは別コンテキスト Review-Sylph(ネスト分離)。実装報告=[../waves/c3/](../waves/c3/)、レビュー=[../reviews/c3/](../reviews/c3/)。
   - **レビュー判定**: Domain A/B/D は spec/design/test 3レーンとも PASS。Domain C は lane2(design)が Strength スライダー機能不全の確定バグで一旦「要修正」→ Gnome の F1 修正(`physiology-state.ts` 一点、`assertNumericField`→`assertToneField` 緩和)で解消・再レビュー合格、lane1/lane3 は PASS。**全12レーン最終 PASS、blocking ゼロ。**
   - **Domain E 最終統合(2026-07-11)**: 全体テスト **729 passed / 2 failed**(731、失敗は既知 Wave21 browser-source baseline のみ・下記)、typecheck パス。§2 無変更確認を git 証拠つきで完了(blink golden 2本・resolver 等価 golden・`headless-slot-resolver`/`body-follow-state`/`semantic-slot-definitions`/window-state stageMotion.settings・`stage-motion-transform`/transport・Editor/package-format/Runtime Export schema/lockfile・自律ホスト既存 Stage Motion UI いずれも無変更)。全差分は `apps/runtime-player/` + `discussion/` に限局。Domain D レビュー Lane3 N1(deadZone/reaction 未固定)を回収する test-only スナップショット1本を `stage-presence-drive.test.ts` に追加。詳細=[../waves/c3/domain-e-final-integration.md](../waves/c3/domain-e-final-integration.md)。
@@ -157,3 +157,18 @@ Implementation Orchestration skill の全規則に従う(C1/C2と同一: ネス�
 - L0(Undine): 計画・裁定・最終判定。実装しない。
 - Orch-Sylph: 単一。Domain A→B→C→D→Eを順次。実装はGnome、レビューは3レーンReview-Sylphへ委譲。成果物は `../waves/c3/` / `../reviews/c3/`。
 - 設計に無い判断分岐は実装で埋めずescalate。子が未完のままwave gateを通過しない。
+
+## 12. 追撃wave(手動ゲート結果の反映、2026-07-11)
+
+手動ゲート7項目中6項目合格。残2件を単一Orch-Sylphの1ドメイン(F)で回収する。
+
+### Domain F: キャプション+Stage Presence知覚性 (`cohost-c3-followup-captions-presence`)
+
+1. **キャプション**: Physiologyページの全スライダーに常時表示の一行キャプション(小さく淡色)を追加。文言はUX定義§3.1の表を逐語で使う。infoアイコン/ツールチップは作らない。
+2. **Stage Presence知覚性**: strengthスライダーの実効レンジを拡大し、**右端で明確に知覚できる**画面変位が出るようにする(ユーザーゲート結果:「変異幅が小さすぎてon/offで差を感じない」)。既定Off・既定strength値の控えめさは維持(変えるのは上限側のゲイン写像)。`stage-presence-drive` のスナップショットテストを新レンジで更新し、既存 `stageMotion.settings`・トラッキング経路・純計算器は無変更のまま。
+
+テスト: ページrenderにキャプション表示(UX§3.1文言との一致)・数字非露出維持 / driveの新ゲイン写像(既定値の出力は従来同等の控えめ、右端は明確に大きい)・単調性 / 既存無変更確認。
+
+レビュー: 2レーン(①spec/UX突合 ②test adequacy)。小規模追撃のためレーンを絞る(perf-wave2の先例)。
+
+手動再ゲート(ユーザー): ①キャプションが読める・邪魔でない ②Stage Presence右端でon/off差が明確に見える(そのうえで好みの位置に置く)。

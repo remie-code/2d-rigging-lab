@@ -70,6 +70,31 @@ describe("PhysiologyPage", () => {
     expect(markup).toContain("Strength");
   });
 
+  it("renders the always-on one-line caption for every slider (UX §3.1 verbatim)", () => {
+    // React escapes the apostrophe (body's) to &#x27; in static markup; decode it so
+    // the assertion compares against the verbatim UX §3.1 text.
+    const markup = renderPhysiologyMarkup().replace(/&#x27;/g, "'");
+
+    // All 12 captions, verbatim from UX §3.1 — spec突合 blocking on any typo.
+    const captions = [
+      "How often the blink comes. Right = more often.",
+      "Evenness of the blink rhythm. Right = steadier.",
+      "Speed of close and open. Right = snappier.",
+      "Chance of a quick double blink. Right = more often.",
+      "How strongly the gaze returns to the camera. Right = more eye contact.",
+      "How often and how far the eyes wander. Right = busier.",
+      "How long the gaze rests in one place. Right = longer.",
+      "Size of the idle head motion. Right = larger.",
+      "How deeply the head follows big gaze jumps. Right = deeper.",
+      "Slow sway of the body's center. Right = larger.",
+      "How often the body re-seats. Right = more often. Takes minutes to observe.",
+      "How far the stage position follows posture. Right = farther."
+    ];
+    for (const caption of captions) {
+      expect(markup).toContain(caption);
+    }
+  });
+
   it("never exposes engineering numbers (ms / Hz / probability) — quality words only", () => {
     const markup = renderPhysiologyMarkup();
 
