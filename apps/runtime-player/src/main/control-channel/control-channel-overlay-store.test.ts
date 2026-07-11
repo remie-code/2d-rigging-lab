@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { RuntimePlayerControlChannelOverlayStore } from "./control-channel-overlay-store";
 import {
   RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS,
+  RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS,
   RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE
 } from "./slot-curve-state";
 
@@ -12,7 +13,8 @@ import {
  * (no WS / no timer): an intent列(受理時刻付き) + tick列(nowMs列)[+ baseValues列]
  * → 出力Record列. They pin the smoothstep curve shape, the phase boundaries
  * (attack→sustain→decay→release), the re-attack START (案B, prevResolved), the
- * release TARGET (生きた基底, 裁定2), and the set degenerate-curve外面互換.
+ * release TARGET (生きた基底, 裁定2), and the set degenerate curve's default ease-in
+ * (§7 裁定3 改定: attack≈100ms, absorbed out of sustain so drive-end=TTL is不変).
  */
 
 function smoothstep(x: number): number {
@@ -21,14 +23,71 @@ function smoothstep(x: number): number {
 }
 
 describe("RuntimePlayerControlChannelOverlayStore — set (degenerate curve)", () => {
-  it("holds the set value through its TTL (C4 外面互換: TTL中の値は同一)", () => {
+  it("eases in over the default attack then holds the value flat through its TTL", () => {
+    // §7 裁定3 改定 (2026-07-11): 意図的置換. C4/前実装 pinned「set=即時適用 (attack≈0),
+    // byte-identical to C4's static overlay」. C5 追撃 makes a set ease startValue→value
+    // over the default ~100ms smoothstep, THEN hold flat at value through sustain until
+    // TTL — 連続性原則をattackにも貫徹. These sample points are past the ease-in, in the
+    // sustain plateau, so they still read the held value (the ramp itself is pinned by
+    // the dedicated ease-in test below).
     const store = new RuntimePlayerControlChannelOverlayStore();
-    store.setOverlay("head-horizontal", 0.4, 1000);
+    store.setOverlay("head-horizontal", 0.4, 1000); // startAtMs = 0 (no prior snapshot)
 
-    // attack≈0 → the value is present immediately and held flat through sustain,
-    // byte-identical to C4's static overlay while un-expired.
     expect(store.snapshot(500)).toStrictEqual({ "head-horizontal": 0.4 });
     expect(store.snapshot(999)).toStrictEqual({ "head-horizontal": 0.4 });
+  });
+
+  it("eases in over the default ~100ms attack (smoothstep), NOT an instant step", () => {
+    // §7 裁定3 改定: the ramp itself. startValue = 0 (no prior effective), attack
+    // [0, DEFAULT_SET_ATTACK_MS): lerp(0, peak, smoothstep(e/attack)). t=0近傍 is far
+    // below peak (proof it is NOT the old instant jump to `value`).
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const peak = 0.4;
+    const attack = RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS;
+    store.setOverlay("head-horizontal", peak, 1000); // startAtMs = 0
+
+    expect(store.snapshot(0)["head-horizontal"]).toBeCloseTo(0, 10);
+    expect(store.snapshot(attack * 0.25)["head-horizontal"]).toBeCloseTo(
+      peak * smoothstep(0.25),
+      10
+    );
+    expect(store.snapshot(attack * 0.5)["head-horizontal"]).toBeCloseTo(peak * 0.5, 10);
+    expect(store.snapshot(attack * 0.75)["head-horizontal"]).toBeCloseTo(
+      peak * smoothstep(0.75),
+      10
+    );
+    // t=0近傍 (1ms in) is nowhere near the peak — the old attack≈0 would already be at peak.
+    expect(store.snapshot(1)["head-horizontal"] ?? 0).toBeLessThan(peak * 0.5);
+    // Reaches the peak exactly at the end of the ease-in, then holds it.
+    expect(store.snapshot(attack)["head-horizontal"]).toBeCloseTo(peak, 10);
+  });
+
+  it("preserves the TTL: drive-end stays at expiresAtMs (attack absorbed out of sustain)", () => {
+    // TTL不変 is the absolute condition of the §7 改定: the ease-in is absorbed out of
+    // sustain, so activeOverlays' remainingTtlMs (= driveEnd - nowMs = expiresAtMs -
+    // nowMs) is unchanged from C4, and the drive ends exactly at expiresAtMs.
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.setOverlay("head-horizontal", 0.4, 1000); // startAtMs 0, expiresAt 1000
+
+    // Just past the ease-in and deep in sustain, the countdown targets expiresAtMs.
+    expect(store.activeOverlays(100)[0]?.remainingTtlMs).toBe(900);
+    expect(store.activeOverlays(700)[0]?.remainingTtlMs).toBe(300);
+    // At expiresAtMs the drive has ended (only the release tail remains) → omitted.
+    expect(store.activeOverlays(1000)).toStrictEqual([]);
+  });
+
+  it("clamps the ease-in to a short TTL window so sustain never goes negative", () => {
+    // window (40ms) < default attack (100ms): the whole window becomes the ease-in
+    // (attack = window, sustain = 0, decay = 0). drive-end still lands on expiresAtMs.
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.setOverlay("head-horizontal", 0.4, 40); // startAtMs 0, window 40
+
+    expect(store.snapshot(0)["head-horizontal"]).toBeCloseTo(0, 10);
+    expect(store.snapshot(20)["head-horizontal"]).toBeCloseTo(0.4 * smoothstep(0.5), 10);
+    // At the window end the ease-in has reached peak and release begins from it (no snap).
+    expect(store.snapshot(40)["head-horizontal"]).toBeCloseTo(0.4, 10);
+    // drive-end = expiresAtMs (40): TTL不変 even in the clamped case.
+    expect(store.activeOverlays(0)[0]?.remainingTtlMs).toBe(40);
   });
 
   it("REPLACES C4 snap: at TTL expiry the set eases to the living base over release", () => {
@@ -204,6 +263,45 @@ describe("RuntimePlayerControlChannelOverlayStore — release to the living base
 });
 
 describe("RuntimePlayerControlChannelOverlayStore — continuity property (導出bound)", () => {
+  it("keeps every adjacent-tick step of the set ease-in within the DERIVED bound", () => {
+    // §7 裁定3 改定: the set is now an ease-in, so its continuity must be pinned too.
+    // Walk the whole set life ease-in→sustain→(expiry)→release at 60Hz and check every
+    // adjacent step stays within a bound DERIVED from the set curve's own parameters —
+    // the default attack, the default release, the peak, the frame interval, and the
+    // exposed max-slope constant. NO magic number (レビュー blocking観点).
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const peak = 0.8;
+    const expiresAtMs = 1000;
+    store.setOverlay("head-horizontal", peak, expiresAtMs); // startAtMs 0, default ease-in
+
+    const attackMs = RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS;
+    const frameIntervalMs = 16;
+    const releaseMs = RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS;
+    const base = 0; // constant living base → no base-movement term.
+
+    // Ease-in ramps |peak - startValue(0)| over attackMs; release blends |peak - base|
+    // over releaseMs. Each × smoothstep max slope × frame interval upper-bounds a tick.
+    const attackStep =
+      (Math.abs(peak - 0) / attackMs) *
+      RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE *
+      frameIntervalMs;
+    const releaseStep =
+      (Math.abs(peak - base) / releaseMs) *
+      RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE *
+      frameIntervalMs;
+    const bound = Math.max(attackStep, releaseStep);
+
+    let previous: number | undefined;
+    for (let now = 0; now <= expiresAtMs + releaseMs; now += frameIntervalMs) {
+      const value =
+        store.snapshot(now, { "head-horizontal": base })["head-horizontal"] ?? base;
+      if (previous !== undefined) {
+        expect(Math.abs(value - previous)).toBeLessThanOrEqual(bound);
+      }
+      previous = value;
+    }
+  });
+
   it("keeps every adjacent-tick step within the DERIVED bound (スナップ不在)", () => {
     const store = new RuntimePlayerControlChannelOverlayStore();
     const spec = { peak: 0.8, attackMs: 100, sustainMs: 200, decayMs: 100 };

@@ -1,7 +1,8 @@
 /**
  * Slot curve state machine (C5 Domain A, 裁定3). A single time-evolving descriptor
  * for one semantic slot's channel drive. Both `intent.set` (a degenerate curve:
- * attack≈0 / sustain=TTL / no decay / universal release) and `intent.envelope`
+ * default ease-in attack≈100ms / sustain=TTL−attack / no decay / universal release)
+ * and `intent.envelope`
  * (a full attack→sustain→decay curve) are folded into THIS one machine — the store
  * never holds set and envelope as two separate states (裁定3, external contract
  * stays 2 kinds).
@@ -23,6 +24,18 @@
  * base over this window. Chosen at 400ms so「魂を殺しても」表情がすっと解ける.
  */
 export const RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS = 400;
+
+/**
+ * Default set ease-in attack time (§7 裁定3 改定, 2026-07-11 人間ゲートのカクつき診断).
+ * A set is no longer an instant step to `value`: it eases startValue→value over this
+ * smoothstep window so that streaming set-drive (魂の TTL 方式) reads as「演じる」, not
+ * 「跳ねる」. The C4 外面互換で守るのは契約の形(kind・フィールド)であって動きの粗さ
+ * ではない(粗さこそ C5 の精緻化対象)。TTL(drive-end)は不変: the store ABSORBS this
+ * attack out of the set's sustain (see control-channel-overlay-store.ts#setOverlay),
+ * so `slotCurveDriveEndMs` still lands exactly on `expiresAtMs`. Non-exposed,
+ * non-parameterized (universal default, like release). Chosen at 100ms.
+ */
+export const RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS = 100;
 
 /**
  * The maximum slope factor of `smoothstep` (= max of its derivative 6x(1-x), at
@@ -84,8 +97,10 @@ function lerp(a: number, b: number, t: number): number {
  *  - sustain [.., +sustainMs):     peak                                — drives.
  *  - decay   [.., +decayMs):       peak → 0 (envelope rest), smoothstep — drives.
  *  - release [.., +releaseMs):     lerp(livingBase, releaseFrom, w), w:1→0 — returns.
- * A degenerate set has attackMs=0 (jumps to peak, C4 外面互換) and decayMs=0 (release
- * blends peak→livingBase directly, no snap). A well-formed envelope's decay lands at
+ * A degenerate set has a default ease-in attackMs≈100ms (startValue→peak smoothstep,
+ * §7 裁定3 改定 — 動きの粗さは C4 互換の対象ではない) and decayMs=0 (release blends
+ * peak→livingBase directly, no snap). Its attack is absorbed out of sustain so the
+ * drive-end stays on the TTL (`expiresAtMs`). A well-formed envelope's decay lands at
  * 0 and release eases 0→livingBase, so the very end tracks the moving base (no snap).
  */
 export function sampleSlotCurve(

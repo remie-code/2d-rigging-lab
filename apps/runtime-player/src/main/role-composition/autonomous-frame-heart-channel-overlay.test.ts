@@ -155,7 +155,11 @@ describe("Frame heart × Control Channel curve store (C5 Domain A)", () => {
 
     // A channel intent opens the LEFT eye (activation 0) until wall 1000.
     store.setOverlay("eye-blink-left", 0, 1000);
-    harness.setNow(32); // still in sustain → drives
+    // §7 裁定3 改定 (意図的置換): a set now eases in over the default ~100ms attack
+    // (startAtMs = the last snapshot's 16). We sample well PAST the ease-in so the curve
+    // has reached its peak and holds it in sustain — the test's intent (per-slot override
+    // while the curve DRIVES) is unchanged; only the sample instant moved out of the ramp.
+    harness.setNow(200); // deep in sustain → drives at peak
     harness.scheduler.fire();
     // Left eye now reflects the overlay (open → 1); right eye stays the generator
     // baseline (closed → 0). The override is per-slotId.
@@ -515,10 +519,12 @@ describe("Frame heart × Control Channel curve store (C5 Domain A)", () => {
     });
 
     // A channel curve drives body-x to 0.9 — a value the generator NEVER emits.
-    // startAtMs = the last snapshot's nowMs (16); attack≈0 (set curve), so it holds
-    // 0.9 through sustain.
+    // startAtMs = the last snapshot's nowMs (16). §7 裁定3 改定 (意図的置換): a set now
+    // eases in over the default ~100ms attack, so we sample well PAST the ease-in — the
+    // curve has reached 0.9 and holds it in sustain. The test's intent (Stage follows the
+    // 合成後 effective body value, not the pure generator) is unchanged.
     store.setOverlay(BODY_X_SLOT_ID, 0.9, 100000);
-    harness.setNow(32); // deep in sustain → the curve holds 0.9
+    harness.setNow(200); // deep in sustain → the curve holds 0.9
     harness.scheduler.fire();
 
     // Stage horizontal now follows the合成後 EFFECTIVE value (0.9, channel-driven), NOT
@@ -527,7 +533,7 @@ describe("Frame heart × Control Channel curve store (C5 Domain A)", () => {
     expect(harness.heart.getLatestStageMotionSignal()).toEqual({
       horizontal: 0.9,
       depth: -0.2,
-      timestampMs: 32
+      timestampMs: 200
     });
   });
 

@@ -2,8 +2,9 @@
  * Control Channel overlay store (C4 §4/§6 → C5 Domain A). A single time-evolving
  * SLOT CURVE STATE MACHINE (裁定3): each entry is a `SlotCurveState` that the store
  * evaluates at the query `nowMs`. `intent.set` and `intent.envelope` are folded into
- * the SAME machine — set is a degenerate curve (attack≈0 / sustain=TTL / no decay /
- * universal release), envelope is a full attack→sustain→decay curve. The external
+ * the SAME machine — set is a degenerate curve (default ease-in attack≈100ms /
+ * sustain=TTL−attack / no decay / universal release), envelope is a full
+ * attack→sustain→decay curve. The external
  * contract stays two kinds; the store holds one state per slot (never set-vs-envelope
  * as two states).
  *
@@ -26,6 +27,7 @@
 
 import {
   RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS,
+  RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS,
   sampleSlotCurve,
   slotCurveDriveEndMs,
   type SlotCurveState
@@ -77,19 +79,32 @@ export class RuntimePlayerControlChannelOverlayStore {
   }
 
   /**
-   * Record an accepted `intent.set` as a DEGENERATE curve (裁定3): attack≈0 (jumps
-   * to `value`, preserving C4's「TTL中の値は同一」外面互換), sustain up to the fixed
-   * `expiresAtMs`, no decay, universal release. External signature is unchanged so
-   * Domain B / the existing dispatch call it as before.
+   * Record an accepted `intent.set` as a DEGENERATE curve (裁定3, §7 改定): a default
+   * ease-in attack (`RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS`≈100ms) ramps the
+   * current effective value → `value` (連続性原則をattackにも貫徹, no instant step),
+   * then sustain holds `value` up to the fixed `expiresAtMs`, no decay, universal
+   * release. C4 で守るのは契約の形であって動きの粗さではない(§7 改定)。
+   *
+   * TTL(drive-end)不変が絶対条件: the attack is ABSORBED out of sustain, so
+   * `slotCurveDriveEndMs` (= startAtMs + attack + sustain + decay) still lands exactly
+   * on `expiresAtMs` — `activeOverlays`' remainingTtlMs and the expiry instant are
+   * unchanged, and release (400ms / 動く基底へのblend) is untouched. A short TTL window
+   * clamps the attack (`min(default, window)`) so sustain never goes negative. External
+   * signature is unchanged so Domain B / the existing dispatch call it as before.
    */
   setOverlay(slotId: string, value: number, expiresAtMs: number): void {
     const startAtMs = this.#lastNowMs;
+    const windowMs = Math.max(0, expiresAtMs - startAtMs);
+    const attackMs = Math.min(
+      RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_SET_ATTACK_MS,
+      windowMs
+    );
     this.#curves.set(slotId, {
       startAtMs,
       startValue: this.#effectiveStart(slotId),
       peak: value,
-      attackMs: 0,
-      sustainMs: Math.max(0, expiresAtMs - startAtMs),
+      attackMs,
+      sustainMs: windowMs - attackMs,
       decayMs: 0,
       releaseMs: this.#releaseMs
     });
