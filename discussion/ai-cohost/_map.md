@@ -33,7 +33,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 - 目標像・成功基準(「AIの間も含めてキャラの演出」)はユーザー合意済み(2026-07-10)。
 - 実現可能性は調査で確認済み: 先例(Neuro-sama等)が商業水準で成立。会話LLMはOpus 4.8以上をユーザー決定、費用試算は月16配信で約$55〜110。
-- **MVP境界の改定(案A)をAccepted(2026-07-10)**: 魂は別リポジトリ、本リポジトリは操縦チャネル+生理層生成器の解禁のみ、リポジトリ内LLM統合・知覚は引き続き禁止 → [concept/mvp-boundary-amendment.md](concept/mvp-boundary-amendment.md)。
+- **MVP境界の改定(案A)をAccepted(2026-07-10)、改定二号=特区憲章をAccepted(2026-07-11)**: 魂はリポジトリ内特区 `apps/<魂>` に住む(憲章6条: LLM・知覚は特区のみ/魂は契約のみimport/器は魂をimportしない=check:deps検証/決定論規律は特区非適用/秘密非コミット/特区のツールチェーンは自由)。特区外のLLM統合・知覚は引き続き禁止 → [concept/mvp-boundary-amendment.md](concept/mvp-boundary-amendment.md) §6。
 - **振る舞いモデル(存在の解剖学)をAccepted(2026-07-10)**: 三層(生理/情動/知性)+一知覚、梯子(質感/単語/文)、演出エンベロープのパッケージ帰属 → [concept/behavior-model.md](concept/behavior-model.md)。
 - **Runtime Player=モデルホスト、案(c)役割つき起動をAccepted(2026-07-10)**: 二役割(トラッキングホスト/自律ホスト)、起動UX(三つの扉)、生理自動/チャネル手動 → [architecture/runtime-player-model-host-roles.md](architecture/runtime-player-model-host-roles.md)。
 - 会話パイプライン(テキストパイプライン+二層設計「AIは全部聞くが全部では考えない」)はDraft。
@@ -52,7 +52,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 |---|---|
 | 成功基準「AIの間も演出」 | **Accepted(2026-07-10)** |
 | MVP境界の明示変更 | **Accepted(案A、2026-07-10)** |
-| 魂(オーケストレータ)の居場所(D1) | **解決: 別リポジトリ(案A、2026-07-10)** |
+| 魂(オーケストレータ)の居場所(D1) | **改定: リポジトリ内特区 `apps/<魂>`(特区憲章6条、2026-07-11)**([concept/mvp-boundary-amendment.md](concept/mvp-boundary-amendment.md) §6。当初=別リポジトリ 案A) |
 | アプリの形 | **解決: 案(c)役割つき起動(2026-07-10)** |
 | プラットフォーム(D4) | **解決: YouTube(2026-07-10)** |
 | 宛先判定の初手(D6) | **解決: キー操作から、実機ゲートを経て段階的自動化(2026-07-10)** |

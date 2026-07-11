@@ -74,7 +74,7 @@
 ## 次の行動
 
 1. 次の実装判断では [implementation/_map.md](implementation/_map.md)、[implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md)、[design/screen-design/_map.md](design/screen-design/_map.md)、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) をbasisにし、Editor実装はWave102で一旦完成として扱う（implementation/_map.md の Wave94-102 反映は未了である点に注意）。
-2. external HTTP / WebSocket / MCP API work と LLM provider integration の Future scope 指定は、[ai-cohost/concept/mvp-boundary-amendment.md](ai-cohost/concept/mvp-boundary-amendment.md)(Accepted 2026-07-10、案A)により一部改定された: runtime-player の loopback 操縦チャネルと生理層生成器は解禁。**リポジトリ内の LLM provider integration・知覚(画面キャプチャ/視覚モデル)は引き続き禁止**(魂は別リポジトリ)。それ以外の external API は引き続き Future scope。
+2. external HTTP / WebSocket / MCP API work と LLM provider integration の Future scope 指定は、[ai-cohost/concept/mvp-boundary-amendment.md](ai-cohost/concept/mvp-boundary-amendment.md)(案A=2026-07-10、**改定二号=特区憲章 2026-07-11**)により改定された: runtime-player の loopback 操縦チャネルと生理層生成器は解禁。**LLM provider integration・知覚(画面キャプチャ/視覚モデル)は特区 `apps/<魂>` 配下でのみ許可**(憲章6条、同文書§6)、特区外では引き続き禁止。それ以外の external API は引き続き Future scope。
 3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
 4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
 5. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。
