@@ -43,7 +43,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2・C3 は完全閉鎖(C1=2026-07-10、C2/C3=2026-07-11)**。C4は設計討議([architecture/c4-control-channel-v0.md](architecture/c4-control-channel-v0.md))とUX定義([implementation/screens/c4-channel-diagnostics.md](implementation/screens/c4-channel-diagnostics.md))までAccepted(2026-07-11。契約二層化=外殻additive extension+TTL統一機構、参照ドライバ=特区最初の住人、C4二相化改定)。次の一手は **C4のcontext-check → 棚卸し → wave計画**。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2・C3 は完全閉鎖(C1=2026-07-10、C2/C3=2026-07-11)**。C4は設計討議・UX定義・棚卸し・裁定・wave計画まで完了([implementation/orchestration/c4-wave-plan.md](implementation/orchestration/c4-wave-plan.md)、Ready to launch。特区=apps/soul、参照ドライバ=依存ゼロ.mjs、方向ルール検査新設)。次の一手は **C4のwave実行**。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
