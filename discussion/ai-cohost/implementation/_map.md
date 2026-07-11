@@ -24,4 +24,4 @@
 2. **C2「身体が呼吸する(まばたき)」= 完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS Browser Source確認・トラッキングとの二体非干渉確認)。
 3. **C3「視線と頭が生きる」= 完全閉鎖(2026-07-11)**: Domain A→B→C→D→E+追撃F(キャプション・Stage Presence知覚性)完了、レビュー全PASS、手動ゲート合格(30秒判定・ツマミ即時反映・プロファイル復元・トラッキング退行なし・OBS parity・キャプション・Stage Presence on/off差)。
 4. **C4「外から動かせる(操縦チャネルv0)」= 完全閉鎖(2026-07-11)**: 実装+レビュー全PASS+一目確認合格。特区 `apps/soul` 稼働(参照ドライバ+方向ルール検査)。持ち越し: Stage Presence×チャネル結合の裁定([waves/c4/c4-followup.md](waves/c4/c4-followup.md) ⚠)+v0繰延5件。
-5. **次の閉問題 = C5「合成が正しい」**。設計討議Accepted([../architecture/c5-composition-and-envelopes.md](../architecture/c5-composition-and-envelopes.md)、2026-07-11。裁定3件: Stage Presence=実効body信号追従/変調繰延/器側エンベロープ+派生2原則: 連続性・解放も曲線)。C5にUX定義は不要(新画面なし。Channelページのイベント表示は既存)。次は**context-check → 棚卸し → wave計画**。ゲート: 人間判定はC4参照ドライバの実駆動プロファイル。
+5. **次の閉問題 = C5「合成が正しい」**。設計討議(裁定3件+派生2原則+実装裁定4件=§7)・棚卸し・**wave計画Ready to launch**([orchestration/c5-wave-plan.md](orchestration/c5-wave-plan.md))まで完了(2026-07-11)。次はC5のwave実行。人間ゲート=参照ドライバ実駆動(魂殺しの観察が目玉)。

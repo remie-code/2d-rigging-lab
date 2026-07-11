@@ -15,8 +15,10 @@
 新しいkind(例: `intent.envelope`)をadditiveに追加する。payloadの骨格:
 
 ```json
-{ "slotId": "brow.updown", "peak": 0.8, "attackMs": 120, "sustainMs": 600, "decayMs": 400 }
+{ "slotId": "head-horizontal", "peak": 0.8, "attackMs": 120, "sustainMs": 600, "decayMs": 400 }
 ```
+
+(例のslotIdは実在語彙 `semantic-slot-definitions.ts` から。初稿の `brow.updown` は実在しない語彙だったためC5棚卸しの指摘で修正 2026-07-11)
 
 - 器は attack(現在値→peak)→ sustain(peak保持)→ decay(peak→解放)を60Hzの心臓tickで描く。カーブ形状は普遍既定(C3のsmoothstep流儀)で露出しない。
 - エンベロープの生存はattack+sustain+decayの合計で自己完結(TTLの特殊形とみなせる)。`intent.set`(粗い上書き+TTL)は従来どおり共存。
@@ -51,7 +53,16 @@
 
 音素タイムライン(C6)は「タイムスタンプ付きエンベロープ断片の列」として本機構の上に載る(凸ブレンド不変条件 Σvowel=s=mouth.open はC6の閉問題)。C5の曲線描画機構はC6の基盤であり、C6で作り直さない形に切る。
 
-## 7. スコープ外
+## 7. 実装裁定(C5棚卸し後、ユーザー裁定 2026-07-11)
+
+1. **「現在の実効値」の取得経路=案B**: 心臓が前tickの `resolvedActivations`(合成後の真の実効値)を保持して曲線機械に供給する。連続性原則の「現在の実効値」の定義そのもの。
+2. **releaseは動く基底を追う**: release中の実効値は「生きた基底(呼吸・瞬きが続く現在値)」へのblend係数(1→0)で収束。開始時基底の凍結は終端スナップを再生産するため不採用。既定release時間=400ms(普遍既定・非露出)。
+3. **setとenvelopeの内部統合**: `intent.set` を「attack≈0・sustain=TTL・release=既定」の退化エンベロープとして**単一のスロット曲線状態機械**に畳む。契約は2 kindのまま(外面不変)。setの失効も自動的に滑らかなreleaseを得る。
+4. **不正エンベロープ値の拒否は既存列挙に畳む**(形の不正=`invalidPayload`、値域=`slotValueOutOfRange`)。エラー語彙を増殖させない(魂側fixtureの安定)。
+
+命名規律(Undine裁量 2026-07-11): C4の「envelope」(メッセージ封筒)との同語衝突を避けるため、**器内部のモジュール/型名は曲線側をcurve系**(例: `slot-curve-state`)とし、「envelope」は封筒側に譲る。契約kind名 `intent.envelope` はAccepted済みのまま変更しない。連続性テストのboundはマジックナンバーではなく各インテントのパラメータから導出した理論最大傾きで性質テスト化。C4の即時スナップを固定している既存テストは意図的置換(引き継ぎ事項)。
+
+## 8. スコープ外
 
 - 変調payload(裁定2で繰延。情動語彙は魂/persona期)。
 - 音素タイムライン(C6)。Variant(D7、当面対象外)。
