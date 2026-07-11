@@ -13,4 +13,5 @@
 | [c4-planning-inventory.md](c4-planning-inventory.md) | 完了(2026-07-11)。Verdict needs_design → ユーザー裁定9件で解消 | C4のコード接地棚卸し(WSサーバ複製、オーバーレイ挿入点、第二ポート、診断bridge、特区の物理コスト=lockfile問題、拒否列挙土台、degraded対象)。**check:depsのDAG検証は存在しないという事実誤認を発見**(憲章§6訂正の契機) |
 | [c4-wave-plan.md](c4-wave-plan.md) | **完全閉鎖(2026-07-11)**: 実装+レビュー全PASS(blocking 2件はwave内充足)+一目確認合格。持ち越しのStage結合裁定はC5設計討議で解消済み | C4「外から動かせる」wave計画: 契約の家+チャネルサーバ(A)→オーバーレイprovider(B)→Channelページ+degraded解消(C)→特区+参照ドライバ+方向ルール検査(D)→最終統合(E)。RTT実測 p95≈1.5〜2ms |
 | [c5-planning-inventory.md](c5-planning-inventory.md) | 完了(2026-07-11)。Verdict needs_design → ユーザー裁定4件で解消(設計討議§7) | C5のコード接地棚卸し(オーバーレイstoreの曲線化=主コスト、実効値経路、release一般化、Stage差し替え、契約追加、fixture形。曲線数学=C3 blinkの写経、新サブシステム無し) |
-| [c5-wave-plan.md](c5-wave-plan.md) | Ready to launch | C5「合成が正しい」wave計画: スロット曲線状態機械(A)→契約+ドライバ拡張(B)→Stage Presence実効値化(C)→最終統合(D)。人間ゲート=参照ドライバ実駆動(魂殺しの観察が目玉) |
+| [c5-wave-plan.md](c5-wave-plan.md) | **完全閉鎖(2026-07-11)**: 実装+レビュー全合格+人間ゲート合格(第一回不合格→診断→追撃G=set ease-in+知覚シナリオ→再ゲート4点全クリア「滑らかに動く」) | C5「合成が正しい」wave計画: 曲線状態機械(A)→契約+ドライバ(B)→Stage実効値化(C)→統合(D)→追撃(G)。教訓: 人間ゲートの証人シナリオは知覚のために設計する(§12) |
+| [c5-choppiness-investigation.md](c5-choppiness-investigation.md) | 完了(2026-07-11) | 人間ゲート第一回不合格の診断: 曲線機械シロ(実波形計測)、原因=setの即ステップ(設計の自己矛盾)+証人シナリオのテスト用圧縮値 |

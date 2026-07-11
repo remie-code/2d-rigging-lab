@@ -4,7 +4,7 @@
 
 ## 1. Status
 
-- Status: Ready to launch。
+- Status: **完全閉鎖(2026-07-11)**。実装(Domain A〜D+追撃G)+レビュー全合格+**人間ゲート合格**: 第一回で不連続を検出→診断(曲線機械シロ・原因=setの即ステップ+証人シナリオの圧縮値)→追撃G(set既定ease-in 100ms+知覚シナリオ)→**再ゲートで「滑らかに動く」、立ち上がり・符号反転re-attack・魂殺し・dip再観察の4点全クリア(ユーザー実施)**。decay意味論(peak→0+release blend)はdip非問題により現状維持で確定(c5-followup項目1解消)。追撃Gの意図的置換スコープ拡張(heart-overlay 2テスト)はL0承認済み。持ち越し: c5-followup残項目(acceptedイベントのkind表示等、C6以降 or 実物の魂の日)。(初稿Status: Ready to launch。)
 - Planning gate: context-check(前提監査)→ inventory(実施済み → [c5-planning-inventory.md](c5-planning-inventory.md)。Verdict `needs_design` → ユーザー裁定4件で解消、設計討議§7に記録済み)。
 - Model Allocation: **L0 = fable / Orch-Sylph・Gnome・Review-Sylph = opus 明示必須**。
 - ユーザー裁定(2026-07-11、[../../architecture/c5-composition-and-envelopes.md](../../architecture/c5-composition-and-envelopes.md) §7):
