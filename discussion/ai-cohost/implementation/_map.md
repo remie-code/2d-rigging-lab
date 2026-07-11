@@ -20,5 +20,5 @@
 
 1. **C1 = 完全閉鎖(2026-07-10)**: パッケージ版手動ゲート全項目合格(ユーザー実施)+§14裁定済み。
 2. **C2「身体が呼吸する(まばたき)」= 完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS Browser Source確認・トラッキングとの二体非干渉確認)。
-3. **C3「視線と頭が生きる」= 実装完了・3レーンレビュー全PASS・機械ゲートgreen(2026-07-11)**: Domain A→B→C→D→E 完了。全体テスト 729 passed / 2 failed(既知 Wave21 browser-source baseline のみ)、typecheck パス、blink golden 2本・resolver 等価 golden・保護対象ソース無変更。**残るは §7 手動ゲート(ユーザー実施)**——起動手順は [waves/c3/domain-e-final-integration.md](waves/c3/domain-e-final-integration.md) §手動ゲートに記載。合格後に完全閉鎖。
-4. C4のUX定義(チャネル診断画面)はC4のwave直前に(自律ホストの Control degraded ページ解消は C4)。
+3. **C3「視線と頭が生きる」= 完全閉鎖(2026-07-11)**: Domain A→B→C→D→E+追撃F(キャプション・Stage Presence知覚性)完了、レビュー全PASS、手動ゲート合格(30秒判定・ツマミ即時反映・プロファイル復元・トラッキング退行なし・OBS parity・キャプション・Stage Presence on/off差)。
+4. **次の閉問題 = C4「外から動かせる」**(操縦チャネルv0)。進め方(§6)どおり議論から。C4は**UX定義文書(チャネル診断画面)が必須**([screens/](screens/) にjust-in-time)——自律ホストControlのdegradedページ解消(自律ホスト版Overview含む)もC4の領分。基盤: [../architecture/runtime-player-control-channel.md](../architecture/runtime-player-control-channel.md)(契約詳細=Draft)。

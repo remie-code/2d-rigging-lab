@@ -4,7 +4,8 @@
 
 ## 1. Status
 
-- Status: **実装完了・機械ゲートgreen・レビュー全PASS。手動ゲート(§7)は7項目中6項目合格(2026-07-11)、残2件の追撃(§12)実行中**: ①キャプション追加(ユーザー追加要望: 各スライダーに常時表示の一行説明。UX定義§3.1に文言確定済み)、②**Stage Presenceの知覚性不合格**(「変異幅が小さすぎてon/offで差を感じない」——strengthスライダーの実効レンジを、右端で明確に知覚できる幅まで拡大する。既定Off・既定値控えめは維持)。追撃合格でC3完全閉鎖。
+- Status: **完全閉鎖(2026-07-11)**。手動ゲート7項目中6項目合格→追撃(§12 Domain F: キャプション常時表示+Stage Presenceゲイン2乗カーブ化・上限200px)→**手動再ゲート2項目合格(ユーザー: 「完璧だ」。キャプション可読・Stage Presence右端でon/off差が明確)**。Domain F非blocking申し送り(scale側下限ガードのテスト1行強化)は任意として見送り(calibration値は再ゲートで確定済み、必要になれば後続で)。以下は経緯の記録:
+- (追撃前の記録) 実装完了・機械ゲートgreen・レビュー全PASS。手動ゲート(§7)は7項目中6項目合格(2026-07-11)、残2件の追撃(§12): ①キャプション追加(ユーザー追加要望)、②Stage Presenceの知覚性不合格(「変異幅が小さすぎてon/offで差を感じない」)。
   - Domain A→B→C→D→E を単一 Orch-Sylph が順次実行。各実装は別コンテキスト Gnome、レビューは別コンテキスト Review-Sylph(ネスト分離)。実装報告=[../waves/c3/](../waves/c3/)、レビュー=[../reviews/c3/](../reviews/c3/)。
   - **レビュー判定**: Domain A/B/D は spec/design/test 3レーンとも PASS。Domain C は lane2(design)が Strength スライダー機能不全の確定バグで一旦「要修正」→ Gnome の F1 修正(`physiology-state.ts` 一点、`assertNumericField`→`assertToneField` 緩和)で解消・再レビュー合格、lane1/lane3 は PASS。**全12レーン最終 PASS、blocking ゼロ。**
   - **Domain E 最終統合(2026-07-11)**: 全体テスト **729 passed / 2 failed**(731、失敗は既知 Wave21 browser-source baseline のみ・下記)、typecheck パス。§2 無変更確認を git 証拠つきで完了(blink golden 2本・resolver 等価 golden・`headless-slot-resolver`/`body-follow-state`/`semantic-slot-definitions`/window-state stageMotion.settings・`stage-motion-transform`/transport・Editor/package-format/Runtime Export schema/lockfile・自律ホスト既存 Stage Motion UI いずれも無変更)。全差分は `apps/runtime-player/` + `discussion/` に限局。Domain D レビュー Lane3 N1(deadZone/reaction 未固定)を回収する test-only スナップショット1本を `stage-presence-drive.test.ts` に追加。詳細=[../waves/c3/domain-e-final-integration.md](../waves/c3/domain-e-final-integration.md)。

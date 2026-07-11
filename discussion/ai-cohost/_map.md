@@ -18,7 +18,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
 | [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
-| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。**C1 完全閉鎖(2026-07-10)、C2 完全閉鎖(2026-07-11)、C3 実装完了・3レーンレビュー全PASS・機械ゲートgreen(2026-07-11、手動ゲート待ち)**、C4〜C7 未着手 |
+| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。**C1・C2・C3 完全閉鎖(C1=2026-07-10、C2/C3=2026-07-11)**、C4〜C7 未着手 |
 
 実測(レイテンシ・会話品質・費用)を始める段階で `experiments/` を、AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
@@ -39,11 +39,11 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 - 会話パイプライン(テキストパイプライン+二層設計「AIは全部聞くが全部では考えない」)はDraft。
 - **C1 完全閉鎖(2026-07-10)**: 二役割の合成骨格(スロット基盤 / 役割合成 / 身元表示)を実装、3レーンレビュー PASS、回帰ゼロ、**パッケージ版手動ゲート全項目合格(ユーザー実施。二体同居・profile非混在・片方kill耐性・引数なしスタブ含む)**、上位判断7件裁定済み。既知制限: dev引数なし起動([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status)。
 - **C2「身体が呼吸する(まばたき)」完全閉鎖(2026-07-11)**: 頭無しリゾルバの非破壊抽出(トラッキング経路も同一リゾルバ・等価性 golden)/ physiology 生成器骨格(Electron import ゼロ純関数・決定論 fixture)/ フレーム心臓(main 60Hz・autonomousHost composer 差し替え・実行時 role 分岐ゼロ)。機械ゲート green、3レーンレビュー全 PASS、**手動美的ゲート合格(ユーザー実施: 瞬きに違和感なし・OBS Browser Source 確認・トラッキングとの二体非干渉確認)**。普遍既定値の賭け(第一段の質感)は初戦勝利。
-- **C3「視線と頭が生きる」実装完了・3レーンレビュー全PASS・機械ゲートgreen(2026-07-11、手動ゲート待ち)**: 決定論ノイズ/バネ基盤+ツマミ即時反映 config seam+blink 載せ替え(golden 不変)/ gaze・head・posture 振る舞い3種+結合3(目先頭後・大サッカード瞬き同期・体は頭の親)/ Physiology ページ+質感語スライダー+プロファイル永続化(fingerprint 別・並列複製)/ Stage Presence(姿勢連動 Stage transform 供給、既定 Off)。全体テスト 729 passed / 2 failed(既知 Wave21 browser-source baseline のみ)、typecheck パス、実行時 role 分岐ゼロ・physiology 純度維持。**残るは §7 手動ゲート(ユーザー実施: 30秒眺めて機械ループに見えない・ツマミ即時反映・Stage Presence on 比較・プロファイル復元・トラッキング退行なし・OBS parity)**。C4 以降は未着手。
+- **C3「視線と頭が生きる」完全閉鎖(2026-07-11)**: 決定論ノイズ/バネ基盤+ツマミ即時反映 config seam+blink 載せ替え(golden 不変)/ gaze・head・posture 振る舞い3種+結合3(目先頭後・大サッカード瞬き同期・体は頭の親)/ Physiology ページ+質感語スライダー(常時表示キャプション付き)+プロファイル永続化 / Stage Presence(姿勢連動、既定 Off、2乗ゲイン)。**手動ゲート全項目合格(ユーザー実施。追撃F=キャプション+知覚性ゲイン拡大を経て「完璧だ」)**。これで**器の生理層(C2+C3)は完成**——魂ゼロで、瞬き・視線・頭・姿勢が生き、ツマミで質感を調整できる。C4 以降は未着手。
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2 は完全閉鎖(C1=2026-07-10、C2=2026-07-11)**。**C3 は実装完了・3レーンレビュー全PASS・機械ゲートgreen(2026-07-11)**([implementation/orchestration/c3-wave-plan.md](implementation/orchestration/c3-wave-plan.md))。次の一手は **C3 の §7 手動ゲート(ユーザー実施)** → 合格で完全閉鎖 → C4。手動ゲート起動手順は [implementation/waves/c3/domain-e-final-integration.md](implementation/waves/c3/domain-e-final-integration.md)。C4のUX定義はC4直前にjust-in-time。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1・C2・C3 は完全閉鎖(C1=2026-07-10、C2/C3=2026-07-11)**。次の一手は **C4「外から動かせる」(操縦チャネルv0)の議論**——C4はUX定義文書(チャネル診断画面。自律ホストControlのdegradedページ解消を含む)が必須 → context-check → 棚卸し → wave計画。基盤: [architecture/runtime-player-control-channel.md](architecture/runtime-player-control-channel.md)(契約詳細=Draft)。C4のテストスクリプトはチャネル契約のfixtureとして魂側開発の受け入れ基準に輸出される(閉問題分解§4)。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
