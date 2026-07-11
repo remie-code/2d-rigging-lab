@@ -3,9 +3,11 @@
  * Reference driver — 特区 apps/soul の最初の住人（C4 Domain D, 設計 §7）。
  *
  * LLM・知覚を持たない疑似魂。決定論的なシナリオ（注視 → 傾げ → 沈黙 → 再開 →
- * 意図的切断 → 再接続）を操縦チャネルへタイムテーブルで流す。役割は ①C4 の持続駆動
+ * エンベロープ相[表情ピーク・重ねがけ・body 持続駆動] → 意図的切断 → 再接続）を操縦
+ * チャネルへタイムテーブルで流す。intent.set（粗い上書き）と intent.envelope（器が
+ * 60Hz で描く曲線）の両 kind を additive に共存させる（C5 §2）。役割は ①持続駆動
  * 機械テストの駆動源 ②契約エルゴノミクス（外部から書く行為そのもの）の検証
- * ③C5 人間ゲートの証人 ④魂側開発への実行可能な手本。
+ * ③C5 人間ゲートの証人（表情ピーク・重ねがけ・魂殺し→release）④魂側開発への実行可能な手本。
  *
  * 依存ゼロ（憲章 §6.2 / 裁定 5）:
  *  - Node 22 のグローバル `WebSocket`（undici 由来のクライアント）だけを使う。npm 依存も
@@ -44,6 +46,13 @@ const phaseScale = readPositiveFloatEnv("SOUL_DRIVER_PHASE_SCALE", 1);
 const SILENCE_MS = Math.round(200 * phaseScale);
 const INTER_INTENT_MS = Math.round(30 * phaseScale);
 const RECONNECT_GAP_MS = Math.round(60 * phaseScale);
+// Envelope (C5) curve durations — compressed like the set phases. attack/sustain/
+// decay for the expression peaks; BODY_SUSTAIN is long so the body envelope is still
+// alive when the driver intentionally disconnects (mid-kill → release, 人間ゲート 目玉④).
+const ENV_ATTACK_MS = Math.round(60 * phaseScale);
+const ENV_SUSTAIN_MS = Math.round(120 * phaseScale);
+const ENV_DECAY_MS = Math.round(90 * phaseScale);
+const ENV_BODY_SUSTAIN_MS = Math.round(400 * phaseScale);
 
 /**
  * 組み込みの最小 slot 語彙（契約 JSON が読めない場合のフォールバック）。契約の正は
@@ -102,11 +111,47 @@ async function main() {
     { slotId: "eye-blink-left", value: 1, ttlMs: 200 }
   ];
 
-  // 送る slotId が契約語彙に収まっていることを自己照合（契約=正の尊重）。
+  // ── C5 エンベロープ相（additive: 旧 intent.set 経路と共存を実証） ─────────────
+  // 器が 60Hz で曲線を描く様式を流す。人間ゲート §7 の証人:
+  //  ② 表情ピーク: head-vertical が滑らかに立ち上がり・保持・減衰する。
+  //  ③ 重ねがけ:   同一 head-vertical へ連続エンベロープ（現在値からの re-attack、符号反転）。
+  //  ④ 魂殺し:     body-x を長い sustain で駆動したまま意図的切断 → release を観測させる。
+  // peak は契約の正規化域内（centered slot は負値も可）。
+  const envelopePhase = [
+    {
+      slotId: "head-vertical",
+      peak: 0.6,
+      attackMs: ENV_ATTACK_MS,
+      sustainMs: ENV_SUSTAIN_MS,
+      decayMs: ENV_DECAY_MS
+    },
+    {
+      // 重ねがけ: 同一スロットへ符号の異なるピークを連続送信（re-attack の連続性）。
+      slotId: "head-vertical",
+      peak: -0.3,
+      attackMs: ENV_ATTACK_MS,
+      sustainMs: ENV_SUSTAIN_MS,
+      decayMs: ENV_DECAY_MS
+    },
+    {
+      // body 持続駆動: 長い sustain。切断時にまだ生きている（mid-kill → release）。
+      slotId: "body-x",
+      peak: 0.5,
+      attackMs: ENV_ATTACK_MS,
+      sustainMs: ENV_BODY_SUSTAIN_MS,
+      decayMs: ENV_DECAY_MS
+    }
+  ];
+
+  // 送る slotId が契約語彙に収まっていることを自己照合（契約=正の尊重）。set/envelope 両相を含む。
   const scenarioSlotIds = new Set(
-    [...gazePhase, ...tiltPhase, ...resumePhase, ...reconnectPhase].map(
-      (intent) => intent.slotId
-    )
+    [
+      ...gazePhase,
+      ...tiltPhase,
+      ...resumePhase,
+      ...reconnectPhase,
+      ...envelopePhase
+    ].map((intent) => intent.slotId)
   );
   const vocabularyViolations = [...scenarioSlotIds].filter(
     (slotId) => !contract.slotIds.has(slotId)
@@ -121,6 +166,18 @@ async function main() {
     const outcome = await connection.sendIntent(intent);
     rttSamples.push(outcome.rttMs);
     events.push({ slotId: intent.slotId, result: outcome.result });
+    if (outcome.result === "accepted") {
+      acceptedCount += 1;
+    } else {
+      rejectedCount += 1;
+    }
+    return outcome;
+  };
+
+  const runEnvelope = async (connection, intent) => {
+    const outcome = await connection.sendEnvelope(intent);
+    rttSamples.push(outcome.rttMs);
+    events.push({ slotId: intent.slotId, result: outcome.result, kind: "envelope" });
     if (outcome.result === "accepted") {
       acceptedCount += 1;
     } else {
@@ -151,7 +208,13 @@ async function main() {
       await delay(INTER_INTENT_MS);
     }
 
-    // ── 意図的切断 ───────────────────────────────────────────────────
+    // ── エンベロープ相（表情ピーク → 重ねがけ → body 持続駆動） ──────────
+    for (const intent of envelopePhase) {
+      await runEnvelope(first, intent);
+      await delay(INTER_INTENT_MS);
+    }
+
+    // ── 意図的切断（body-x エンベロープが生存中に kill = 魂殺しの証人 目玉④） ──
     unknownEventsIgnored += first.consumeUnknownEventCount();
     await first.close();
     await delay(RECONNECT_GAP_MS);
@@ -221,7 +284,11 @@ function loadContract() {
     const helloExample = examples?.happyPath?.messages?.find(
       (message) => message?.message?.kind === "server.hello"
     );
-    const expectedKinds = helloExample?.message?.payload?.supportedKinds ?? ["intent.set"];
+    const expectedKinds =
+      helloExample?.message?.payload?.supportedKinds ?? [
+        "intent.set",
+        "intent.envelope"
+      ];
     if (slotIds.size === 0) {
       throw new Error("contract payload schema had no slotId enum");
     }
@@ -235,7 +302,7 @@ function loadContract() {
     return {
       source: "fallback",
       slotIds: new Set(FALLBACK_SLOT_IDS),
-      expectedKinds: ["intent.set"]
+      expectedKinds: ["intent.set", "intent.envelope"]
     };
   }
 }
@@ -333,6 +400,30 @@ async function connect(url, contract) {
         JSON.stringify({ v: 1, id, kind: "intent.set", payload })
       );
       return withTimeout(settled, REPLY_TIMEOUT_MS, `reply for ${intent.slotId}`);
+    },
+    sendEnvelope(intent) {
+      // C5 intent.envelope: 魂は意図（ピーク値 + attack/sustain/decay）を一発送り、
+      // 器が 60Hz で曲線を描く。RTT 計測は sendIntent と同じ replyTo 相関を流用。
+      const id = `req-${(idCounter += 1)}`;
+      const payload = {
+        slotId: intent.slotId,
+        peak: intent.peak,
+        attackMs: intent.attackMs,
+        sustainMs: intent.sustainMs,
+        decayMs: intent.decayMs
+      };
+      const t0 = performance.now();
+      const settled = new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject, t0 });
+      });
+      socket.send(
+        JSON.stringify({ v: 1, id, kind: "intent.envelope", payload })
+      );
+      return withTimeout(
+        settled,
+        REPLY_TIMEOUT_MS,
+        `envelope reply for ${intent.slotId}`
+      );
     },
     consumeUnknownEventCount() {
       const count = unknownEventCount;

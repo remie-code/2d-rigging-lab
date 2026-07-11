@@ -19,6 +19,7 @@ import {
 } from "./channel-protocol-contract";
 import envelopeSchema from "./channel-envelope-schema.json";
 import intentSetPayloadSchema from "./channel-intent-set-payload-schema.json";
+import intentEnvelopePayloadSchema from "./channel-intent-envelope-payload-schema.json";
 import exchangeExamples from "./channel-exchange-examples.json";
 
 describe("Control Channel contract JSON ↔ TS sync", () => {
@@ -43,13 +44,27 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
     );
   });
 
-  it("emits a server.hello that matches the schema and examples", () => {
+  it("keeps the intent.envelope payload schema's slotId enum synced with the slot vocabulary", () => {
+    // Additive C5 kind: envelope payloads ride the SAME slot vocabulary as
+    // intent.set, so the enum must stay pinned to the registry too.
+    expect(intentEnvelopePayloadSchema.properties.slotId.enum).toStrictEqual(
+      [...runtimePlayerMappingSlotIds]
+    );
+  });
+
+  it("keeps the intent.envelope payload schema's slotId enum byte-identical to intent.set (additive, same vocabulary)", () => {
+    expect(intentEnvelopePayloadSchema.properties.slotId.enum).toStrictEqual(
+      intentSetPayloadSchema.properties.slotId.enum
+    );
+  });
+
+  it("emits a server.hello that matches the schema and examples (announces both kinds, C5 additive)", () => {
     const hello = createControlChannelServerHello();
 
     expect(hello).toStrictEqual({
       v: 1,
       kind: "server.hello",
-      payload: { protocol: 1, supportedKinds: ["intent.set"] }
+      payload: { protocol: 1, supportedKinds: ["intent.set", "intent.envelope"] }
     });
     expect(exchangeExamples.happyPath.messages[0]?.message).toStrictEqual(hello);
   });
@@ -57,6 +72,9 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
   it("parses every worked example request envelope", () => {
     const requestExamples = [
       ...exchangeExamples.happyPath.messages
+        .filter((entry) => entry.direction === "clientToServer")
+        .map((entry) => entry.message),
+      ...exchangeExamples.envelopePath.messages
         .filter((entry) => entry.direction === "clientToServer")
         .map((entry) => entry.message),
       ...exchangeExamples.rejections.map((entry) => entry.request)
@@ -70,6 +88,23 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
       expect(parsed?.id).toBe(example.id);
       expect(parsed?.kind).toBe(example.kind);
     }
+  });
+
+  it("carries a worked intent.envelope exchange whose accepted reply matches the builder", () => {
+    const request = exchangeExamples.envelopePath.messages.find(
+      (entry) => entry.direction === "clientToServer"
+    );
+    expect(request?.message.kind).toBe("intent.envelope");
+
+    const accepted = exchangeExamples.envelopePath.messages.find(
+      (entry) =>
+        entry.direction === "serverToClient" &&
+        "result" in entry.message &&
+        entry.message.result === "accepted"
+    );
+    expect(accepted?.message).toStrictEqual(
+      createControlChannelAcceptedResponse("req-70")
+    );
   });
 
   it("matches the accepted-response builder against the happy path example", () => {
@@ -132,5 +167,14 @@ describe("Control Channel contract normalizedRanges ↔ TS classifier sync", () 
         semanticSlotNormalizedRange(sourceKind as SemanticSlotSourceKind)
       );
     }
+  });
+
+  it("keeps the intent.envelope schema's normalizedRanges byte-identical to intent.set (peak shares value's domain)", () => {
+    // The envelope `peak` is validated against the SAME normalized domain as the
+    // set `value`, so both schemas must carry the identical range table (additive,
+    // no drift) — this is what the soul reads to learn peak's domain.
+    expect(intentEnvelopePayloadSchema.normalizedRanges).toStrictEqual(
+      intentSetPayloadSchema.normalizedRanges
+    );
   });
 });

@@ -12,7 +12,9 @@ import type { RuntimePlayerMappingSlotId } from "../../../preload/model-mapping-
  *
  * The outer envelope is an ADDITIVE EXTENSION基礎 (C4 §2): new `kind`s are added
  * by later closed problems (C5 envelope intents, C6 phoneme timelines) without
- * changing the envelope. v0 owns exactly one kind: `intent.set`.
+ * changing the envelope. v0 owned exactly one kind (`intent.set`); C5 adds
+ * `intent.envelope` ADDITIVELY — the `intent.set` shape/validation/examples are
+ * byte-identical, only the announced kind set grows.
  */
 
 /** Wire protocol version. v0 speaks version 1 only. */
@@ -23,11 +25,13 @@ export type RuntimePlayerControlChannelProtocolVersion =
 
 /**
  * The request kinds this server understands (advertised in `server.hello`).
- * v0 = `intent.set` only. Growth is additive: older souls simply never send a
- * kind they were not told about (C4 §3.4/§3.5 寛容規則).
+ * v0 = `intent.set`; C5 adds `intent.envelope` additively. Growth is additive:
+ * older souls simply never send a kind they were not told about, and a soul that
+ * only ever sends `intent.set` keeps working unchanged (C4 §3.4/§3.5 寛容規則).
  */
 export const runtimePlayerControlChannelSupportedKinds = [
-  "intent.set"
+  "intent.set",
+  "intent.envelope"
 ] as const;
 
 export type RuntimePlayerControlChannelRequestKind =
@@ -116,4 +120,27 @@ export type RuntimePlayerControlChannelIntentSetPayload = {
   readonly slotId: RuntimePlayerMappingSlotId;
   readonly value: number;
   readonly ttlMs?: number;
+};
+
+/**
+ * C5 `intent.envelope` payload (C5 §2). `slotId` rides the same semantic-slot
+ * vocabulary; `peak` is the slot's normalized target value (out-of-range is
+ * refused with `slotValueOutOfRange`, never clamped — same rule as `intent.set`'s
+ * `value`, so centered slots keep their full -1..1 domain including negatives);
+ * `attackMs`/`sustainMs`/`decayMs` are the非負 curve durations the 器 draws at 60Hz.
+ * A malformed shape (non-finite / negative duration / zero-life) is refused with
+ * `invalidPayload` — NO new rejection code is added (裁定4). Release is the universal
+ * non-exposed default, so it is deliberately absent from the wire payload.
+ *
+ * NOTE — name collision (C5 命名規律): this "envelope" is the animation envelope
+ * (attack/sustain/decay), a DIFFERENT concept from the C4 message 封筒
+ * (channel-envelope-schema.json). This payload's schema is
+ * channel-intent-envelope-payload-schema.json; the two must not be conflated.
+ */
+export type RuntimePlayerControlChannelIntentEnvelopePayload = {
+  readonly slotId: RuntimePlayerMappingSlotId;
+  readonly peak: number;
+  readonly attackMs: number;
+  readonly sustainMs: number;
+  readonly decayMs: number;
 };

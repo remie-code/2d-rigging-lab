@@ -122,3 +122,19 @@ Implementation Orchestration skill の全規則に従う(C1〜C4と同一: ネ�
 - L0(Undine): 計画・裁定・最終判定。実装しない。
 - Orch-Sylph: 単一。Domain A→B→C→Dを順次。実装はGnome、レビューは3レーンReview-Sylphへ委譲。成果物は `../waves/c5/` / `../reviews/c5/`。
 - 設計に無い判断分岐は実装で埋めずescalate。子が未完のままwave gateを通過しない。
+
+## 12. 追撃wave(人間ゲート第一回の結果反映、2026-07-11)
+
+人間ゲート第一回: release=合格(「滑らかに動いているように見える」)、dip=気にならない(再観察)、**不合格=動きの不連続**。診断([c5-choppiness-investigation.md](c5-choppiness-investigation.md))で曲線機械はシロ(実波形計測で毎tick再評価・全位相連続を確認)、原因は①setの即ステップ(設計の自己矛盾)+②証人シナリオのテスト用圧縮値、と確定。
+
+### Domain G: setのease-in+知覚シナリオ (`cohost-c5-followup-ease-in-perceptual-scenario`)
+
+1. **setの既定attack≈100ms(ease-in)**(ユーザー裁定=設計討議§7裁定3改定): `slot-curve-state` のset退化エンベロープのattackを0→既定100msへ。TTL・release挙動は不変。「set=即時適用」を固定していた既存テストは意図的置換(置換理由を報告に記録)。連続性boundテストはattack 100msの導出boundで通ること。
+2. **参照ドライバに人間ゲート用の知覚シナリオを追加**: envelope主体・attack 200〜400ms・現実的な間合い(表情ピーク→重ねがけ→body持続→kill)。機械テスト用の圧縮シナリオは既存のまま残す(選択方法はCLI引数等、ドライバ内で完結)。持続駆動の機械テストは圧縮シナリオのまま(flaky回避)。
+3. ゲート手順の更新(人間ゲートは知覚シナリオで回す旨)。
+
+テスト: set ease-inの曲線fixture更新・連続性bound(導出)・C4契約fixture無変更(契約の形は不変)・知覚シナリオのタイムライン検証(ドライバ単体)・既存圧縮シナリオの持続駆動テスト無退行。
+
+レビュー: 2レーン(①spec/設計§7改定突合 ②test adequacy)。小規模追撃のためレーンを絞る(C3 Domain Fの先例)。
+
+手動再ゲート(ユーザー): 知覚シナリオで§7の6項目を再実施(特に: 立ち上がりが「ぬるっ」と見えるか・魂殺し・dip再観察)。

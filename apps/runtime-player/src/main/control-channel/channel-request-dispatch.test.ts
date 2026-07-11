@@ -153,4 +153,80 @@ describe("dispatchControlChannelRequest", () => {
       reply: { replyTo: "req-6", error: { code: "slotNotWritable" } }
     });
   });
+
+  it("accepts an intent.envelope and returns an envelope write (no overlay)", () => {
+    const dispatch = dispatchControlChannelRequest({
+      ...baseInput,
+      text: request("req-7", "intent.envelope", {
+        slotId: "head-horizontal",
+        peak: 0.8,
+        attackMs: 120,
+        sustainMs: 600,
+        decayMs: 400
+      })
+    });
+    expect(dispatch).toStrictEqual({
+      kind: "reply",
+      reply: { v: 1, replyTo: "req-7", result: "accepted" },
+      envelope: {
+        slotId: "head-horizontal",
+        spec: { peak: 0.8, attackMs: 120, sustainMs: 600, decayMs: 400 }
+      }
+    });
+    // The envelope write carries NO absolute expiry (server supplies startAtMs) and
+    // does NOT ride the overlay field.
+    expect(dispatch.kind === "reply" && dispatch.overlay).toBeUndefined();
+  });
+
+  it("surfaces envelope validation rejection codes (existing enumeration only) without a write", () => {
+    const zeroLife = dispatchControlChannelRequest({
+      ...baseInput,
+      text: request("req-8", "intent.envelope", {
+        slotId: "head-horizontal",
+        peak: 0.5,
+        attackMs: 0,
+        sustainMs: 0,
+        decayMs: 0
+      })
+    });
+    expect(zeroLife).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-8", error: { code: "invalidPayload" } }
+    });
+    expect(zeroLife.kind === "reply" && zeroLife.envelope).toBeUndefined();
+
+    const outOfRange = dispatchControlChannelRequest({
+      ...baseInput,
+      text: request("req-9", "intent.envelope", {
+        slotId: "head-horizontal",
+        peak: 5,
+        attackMs: 100,
+        sustainMs: 100,
+        decayMs: 100
+      })
+    });
+    expect(outOfRange).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-9", error: { code: "slotValueOutOfRange" } }
+    });
+    expect(outOfRange.kind === "reply" && outOfRange.envelope).toBeUndefined();
+  });
+
+  it("still rejects an envelope with channelClosed when not accepting (kind-agnostic gate)", () => {
+    const dispatch = dispatchControlChannelRequest({
+      ...baseInput,
+      accepting: false,
+      text: request("req-10", "intent.envelope", {
+        slotId: "head-horizontal",
+        peak: 0.5,
+        attackMs: 100,
+        sustainMs: 100,
+        decayMs: 100
+      })
+    });
+    expect(dispatch).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-10", error: { code: "channelClosed" } }
+    });
+  });
 });

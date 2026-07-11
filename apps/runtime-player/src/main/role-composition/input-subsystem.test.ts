@@ -415,7 +415,9 @@ describe("Runtime Player input subsystem composition", () => {
     store?.setOverlay("eye-blink-left", 0.3, 1000);
     expect(heartArg.getChannelOverlay(500)).toEqual({ "eye-blink-left": 0.3 });
     expect(heartArg.getChannelOverlay(999)).toEqual({ "eye-blink-left": 0.3 });
-    expect(heartArg.getChannelOverlay(1000)).toEqual({}); // expired at the boundary
+    // C5 §2.3: at the drive boundary the slot ENTERS release (still present, easing),
+    // and is gone only after the universal release window (1000 + 400).
+    expect(heartArg.getChannelOverlay(1400)).toEqual({});
   });
 
   it("Autonomous overlay store is idle at rest (empty snapshot ⇒ C2/C3 baseline)", () => {

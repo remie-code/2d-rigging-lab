@@ -24,11 +24,13 @@ import { createControlChannelWebSocketUrl } from "./channel-url";
  *
  * 特区 `apps/soul` の参照ドライバ（依存ゼロ `.mjs`）を `child_process.spawn` で外部プロセス
  * として起動し、Domain A の `RuntimePlayerControlChannelServer` へ WS で繋がせ、シナリオ
- * （注視 → 傾げ → 沈黙 → 再開 → 意図的切断 → 再接続）を流す。器側では Domain B の心臓
- * （オーバーレイ第二 provider を配線した frame heart）を実時計で回し、published frame を観測する。
+ * （注視 → 傾げ → 沈黙 → 再開 → エンベロープ相 → 意図的切断 → 再接続）を流す。器側では
+ * 心臓（オーバーレイ第二 provider を配線した frame heart）を実時計で回し、published frame を観測する。
  *
- * これが実証する「縦の貫通」: 外部プロセス → WS → token 認証 → 契約検証 → overlay → heart で
- * `head-horizontal`（fixture の face.angle.x 相当）が動く、を最初から最後まで通す。
+ * これが実証する「縦の貫通」: 外部プロセス → WS → token 認証 → 契約検証 → overlay/envelope →
+ * heart で `head-horizontal`（intent.set, face.angle.x 相当）と `body-x`/`head-vertical`
+ * （C5 intent.envelope の曲線）が動く、を最初から最後まで通す。additive 実証: 旧 set 経路と
+ * 新 envelope 経路が同一シナリオで共存する。
  *
  * flaky 対策: シナリオは実時間を数百 ms に圧縮（ドライバ側の位相定数）。port は 0（ephemeral）
  * で競合回避。閾値は緩い（RTT p95 < 100ms・フレーム前進 > 20）。
@@ -43,6 +45,12 @@ const TEST_TOKEN = "channel_token_sustained_drive_0123456789";
 // centered head-horizontal (-1..1). The witness slot: the generator baseline is 0,
 // so any non-zero published value on this parameter came THROUGH the channel overlay.
 const HEAD_HORIZONTAL_PARAM = "ParamAngleX";
+// C5 envelope witnesses. The generator emits nothing for these slots, so any non-zero
+// published value is unambiguous proof a channel ENVELOPE reached the frame. body-x is
+// driven with a long-sustain envelope that is still alive at the driver's intentional
+// disconnect (mid-kill → release), so it witnesses both the peak and the release ease.
+const BODY_X_PARAM = "ParamBodyX";
+const HEAD_VERTICAL_PARAM = "ParamAngleY";
 
 const runningServers: RuntimePlayerControlChannelServer[] = [];
 const runningHearts: AutonomousFrameHeart[] = [];
@@ -102,7 +110,10 @@ const SCENARIO_SLOTS: readonly RuntimePlayerMappingSlot[] = [
   centeredSlot("head-tilt", "ParamAngleZ"),
   centeredSlot("gaze-horizontal", "ParamEyeBallX"),
   centeredSlot("gaze-vertical", "ParamEyeBallY"),
-  weightSlot("eye-blink-left", "ParamEyeLOpen")
+  weightSlot("eye-blink-left", "ParamEyeLOpen"),
+  // C5 envelope-phase slots (must be writable, else slotNotWritable would dirty the drive).
+  centeredSlot("head-vertical", HEAD_VERTICAL_PARAM),
+  centeredSlot("body-x", BODY_X_PARAM)
 ];
 
 /**
@@ -210,9 +221,11 @@ describe("Reference driver sustained drive (C4 Domain D)", () => {
       // Drive the scenario from the external process.
       const result = await runReferenceDriver(url);
 
-      // Let the heart tick a few more times after the driver disconnects so the
-      // post-clearAll baseline is observed.
-      await delay(120);
+      // Let the heart tick after the driver disconnects so the post-release baseline
+      // is observed. C5 §2.3: disconnect now releaseAll()s (a smooth ease to the base
+      // over the universal release), so we must wait past that window (400ms) — not
+      // the C4 instant clearAll — before the体 has fully returned to呼吸.
+      await delay(600);
       heart.stop();
 
       // ── The driver completed its scenario cleanly. ────────────────────────
@@ -220,14 +233,17 @@ describe("Reference driver sustained drive (C4 Domain D)", () => {
       const report = parseDriverReport(result.stdout);
       expect(report.kind).toBe("reference-driver-report");
       expect(report.reconnected).toBe(true);
-      expect(report.intentCount).toBe(8);
-      expect(report.acceptedCount).toBe(8);
+      // C5 additive: the 8 intent.set intents (gaze2 + tilt2 + resume2 + reconnect2)
+      // plus the 3 intent.envelope intents (head-vertical peak, re-attack, body-x drive)
+      // = 11 total, all accepted (set path unchanged, envelope path added).
+      expect(report.intentCount).toBe(11);
+      expect(report.acceptedCount).toBe(11);
       expect(report.rejectedCount).toBe(0);
       // The driver read the real contract JSON (契約=正) rather than the fallback.
       expect(report.contractSource).toBe("contract-json");
 
-      // ── RTT p95 budget (裁定 7): p95 < 100ms on loopback. ─────────────────
-      expect(report.rttMs.count).toBe(8);
+      // ── RTT p95 budget (裁定 7): p95 < 100ms on loopback (envelope replies too). ──
+      expect(report.rttMs.count).toBe(11);
       expect(report.rttMs.p95).toBeLessThan(100);
       expect(report.gate.p95WithinBudget).toBe(true);
 
@@ -240,7 +256,7 @@ describe("Reference driver sustained drive (C4 Domain D)", () => {
         previousSequence = frame.sequence;
       }
 
-      // ── 縦の貫通: an intent moved head-horizontal on a published frame. ────
+      // ── 縦の貫通 (intent.set): an intent moved head-horizontal on a frame. ─
       // Scenario sends head-horizontal=0.5 (ttl 600) → centered maps to +15 on a
       // -30..30 target. Baseline would be 0, so a value ≥ 5 can only be the overlay.
       const movedFrames = frames.filter(
@@ -248,8 +264,34 @@ describe("Reference driver sustained drive (C4 Domain D)", () => {
       );
       expect(movedFrames.length).toBeGreaterThan(0);
 
-      // ── 切断→基底復帰: after the driver disconnected, the body fell back. ──
+      // ── 縦の貫通 (intent.envelope): the body-x envelope (peak 0.5 → +15) rose to
+      // its peak on many frames during its long sustain, and the head-vertical
+      // expression peak (0.6 → +18) reached the frame too — proof the ENVELOPE kind
+      // drew a curve through WS→validation→dispatch→setEnvelope→heart. ───────────
+      const bodyPeakFrames = frames.filter(
+        (frame) => (frame.parameterValues[BODY_X_PARAM] ?? 0) >= 5
+      );
+      expect(bodyPeakFrames.length).toBeGreaterThan(0);
+      const headVerticalDriven = frames.some(
+        (frame) => Math.abs(frame.parameterValues[HEAD_VERTICAL_PARAM] ?? 0) >= 5
+      );
+      expect(headVerticalDriven).toBe(true);
+
+      // ── 曲線の連続性 (envelope smoothness): the body-x envelope passed through
+      // intermediate values between the base (0) and its +15 peak — during the attack
+      // ramp AND the release ease after the mid-envelope kill — so the transition is a
+      // curve, not a snap (人間ゲート 目玉②/④ の機械証人). ───────────────────────
+      const bodyIntermediateFrames = frames.filter((frame) => {
+        const value = frame.parameterValues[BODY_X_PARAM] ?? 0;
+        return value > 0.1 && value < 14;
+      });
+      expect(bodyIntermediateFrames.length).toBeGreaterThan(0);
+
+      // ── 切断→基底復帰: after the driver disconnected (mid body-x envelope), the
+      // body eased back to呼吸 — both witnesses returned to the baseline. ─────────
       expect(frames.at(-1)?.parameterValues[HEAD_HORIZONTAL_PARAM] ?? 0).toBe(0);
+      expect(frames.at(-1)?.parameterValues[BODY_X_PARAM] ?? 0).toBe(0);
+      expect(frames.at(-1)?.parameterValues[HEAD_VERTICAL_PARAM] ?? 0).toBe(0);
     },
     30_000
   );

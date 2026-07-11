@@ -3,7 +3,10 @@ import {
   runtimePlayerControlChannelSupportedKinds,
   type RuntimePlayerControlChannelResponseEnvelope
 } from "./contract/channel-protocol-contract";
-import { validateControlChannelIntentSet } from "./channel-intent-validation";
+import {
+  validateControlChannelIntentEnvelope,
+  validateControlChannelIntentSet
+} from "./channel-intent-validation";
 import {
   createControlChannelAcceptedResponse,
   createControlChannelRejectedResponse,
@@ -28,12 +31,30 @@ export type ControlChannelOverlayWrite = {
   readonly expiresAtMs: number;
 };
 
+/**
+ * The envelope write for an accepted `intent.envelope` (C5 §2). The spec is the
+ * Domain A store's {@link RuntimePlayerControlChannelEnvelopeSpec}. Unlike the
+ * overlay write, there is NO absolute instant here: `startAtMs` = the acceptance
+ * time is supplied by the server (`setEnvelope(slotId, spec, nowMs())`), keeping
+ * this decision core timing-symmetric with the curve store's own clock ownership.
+ */
+export type ControlChannelEnvelopeWrite = {
+  readonly slotId: string;
+  readonly spec: {
+    readonly peak: number;
+    readonly attackMs: number;
+    readonly sustainMs: number;
+    readonly decayMs: number;
+  };
+};
+
 export type ControlChannelRequestDispatch =
   | { readonly kind: "ignore" }
   | {
       readonly kind: "reply";
       readonly reply: RuntimePlayerControlChannelResponseEnvelope;
       readonly overlay?: ControlChannelOverlayWrite;
+      readonly envelope?: ControlChannelEnvelopeWrite;
     };
 
 export type DispatchControlChannelRequestInput = {
@@ -82,8 +103,21 @@ export function dispatchControlChannelRequest(
     };
   }
 
+  // Branch on the (now two) supported kinds. intent.set → overlay write (C4 path,
+  // UNCHANGED); intent.envelope → envelope write into the Domain A curve machine.
+  if (envelope.kind === "intent.envelope") {
+    return dispatchIntentEnvelope(envelope.id, envelope.payload, input);
+  }
+  return dispatchIntentSet(envelope.id, envelope.payload, input);
+}
+
+function dispatchIntentSet(
+  id: string,
+  payload: unknown,
+  input: DispatchControlChannelRequestInput
+): ControlChannelRequestDispatch {
   const validation = validateControlChannelIntentSet({
-    payload: envelope.payload,
+    payload,
     getCurrentSlots: input.getCurrentSlots
   });
 
@@ -91,7 +125,7 @@ export function dispatchControlChannelRequest(
     return {
       kind: "reply",
       reply: createControlChannelRejectedResponse({
-        replyTo: envelope.id,
+        replyTo: id,
         code: validation.code,
         message: validation.message
       })
@@ -101,11 +135,47 @@ export function dispatchControlChannelRequest(
   const ttlMs = validation.ttlMs ?? input.defaultWindowMs;
   return {
     kind: "reply",
-    reply: createControlChannelAcceptedResponse(envelope.id),
+    reply: createControlChannelAcceptedResponse(id),
     overlay: {
       slotId: validation.slotId,
       value: validation.value,
       expiresAtMs: input.receivedAtMs + ttlMs
+    }
+  };
+}
+
+function dispatchIntentEnvelope(
+  id: string,
+  payload: unknown,
+  input: DispatchControlChannelRequestInput
+): ControlChannelRequestDispatch {
+  const validation = validateControlChannelIntentEnvelope({
+    payload,
+    getCurrentSlots: input.getCurrentSlots
+  });
+
+  if (!validation.ok) {
+    return {
+      kind: "reply",
+      reply: createControlChannelRejectedResponse({
+        replyTo: id,
+        code: validation.code,
+        message: validation.message
+      })
+    };
+  }
+
+  return {
+    kind: "reply",
+    reply: createControlChannelAcceptedResponse(id),
+    envelope: {
+      slotId: validation.slotId,
+      spec: {
+        peak: validation.peak,
+        attackMs: validation.attackMs,
+        sustainMs: validation.sustainMs,
+        decayMs: validation.decayMs
+      }
     }
   };
 }

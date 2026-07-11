@@ -54,10 +54,12 @@ export type AutonomousFrameHeartStartInput = {
 };
 
 /**
- * The latest posture signal for Stage Presence (C3 Domain D). body-x → horizontal,
- * body-z → depth (both centered -1..1), stamped with the sampling wall clock so the
- * Stage Motion smoothing stays frame-rate-independent. Each is null when the current
- * config carries no posture behavior (e.g. blink-only). Read by the subsystem's
+ * The latest posture signal for Stage Presence (C3 Domain D; C5 Domain C makes it
+ * track the合成後 EFFECTIVE body signal, so a Channel curve on body-x/body-z moves the
+ * Stage too — 体は一つ). body-x → horizontal, body-z → depth (both centered -1..1),
+ * stamped with the sampling wall clock so the Stage Motion smoothing stays
+ * frame-rate-independent. Each is null when the current config carries no posture
+ * behavior AND no channel drives that slot (e.g. blink-only). Read by the subsystem's
  * `getStageMotionDrive` seam; NEVER leaves the process as a raw signal (only the
  * sanitized composed Stage transform crosses the Browser Source boundary).
  */
@@ -77,9 +79,10 @@ export type AutonomousFrameHeart = {
   readonly stop: () => void;
   readonly isRunning: () => boolean;
   /**
-   * The most recent posture activation as a Stage Presence signal (C3 Domain D).
-   * Returns nulls while stopped / before the first tick. This is a pure read of the
-   * last sampled body-x/body-z — it never samples the generator or the clock itself.
+   * The most recent posture activation as a Stage Presence signal (C3 Domain D; C5
+   * Domain C: the合成後 EFFECTIVE body-x/body-z, channel curves included). Returns nulls
+   * while stopped / before the first tick. This is a pure read of the last resolved
+   * body-x/body-z — it never samples the generator or the clock itself.
    */
   readonly getLatestStageMotionSignal: () => AutonomousStageMotionSignal;
 };
@@ -124,9 +127,18 @@ export type CreateAutonomousFrameHeartInput = {
    * behaves byte-identically to C2/C3 (the pure sample flows straight to the
    * resolver). The overlay never touches the generator `sample()` output — the
    * fixture-pinned determinism boundary stays clean.
+   *
+   * C5 Domain A: the provider also receives the two feedback signals the curve
+   * store needs — `baseValues` (the PURE generator activations = the release TARGET
+   * 「生きた基底」, 裁定2) and `prevResolved` (the previous tick's post-merge
+   * resolvedActivations = case B's re-attack START source, 裁定1). A provider that
+   * ignores them (every C2/C3/C4 test wiring `(nowMs) => store.snapshot(nowMs)`)
+   * still type-checks and behaves as before.
    */
   readonly getChannelOverlay?: (
-    nowMs: number
+    nowMs: number,
+    baseValues: Record<string, number>,
+    prevResolved: Record<string, number>
   ) => Record<string, number> | null;
 };
 
@@ -171,10 +183,17 @@ export function createAutonomousFrameHeart(
   // Strictly monotonic across the heart's whole lifetime, never reset on
   // load→load, so the sequence downstream sees is always increasing.
   let sequence = 0;
-  // Latest posture signal for Stage Presence (C3 Domain D). Updated each tick from
-  // the sampled body-x/body-z; cleared to nulls on start/stop so a fresh body (or a
-  // stopped heart) never leaks a stale offset into the Stage transform.
+  // Latest posture signal for Stage Presence (C3 Domain D; input差し替え C5 Domain C).
+  // Updated each tick from the effective (resolved) body-x/body-z — the合成後 value
+  // AFTER the channel overlay merge, so a channel that drives body moves the stage too
+  // (裁定1「体は一つ」). Cleared to nulls on start/stop so a fresh body (or a stopped
+  // heart) never leaks a stale offset into the Stage transform.
   let latestStageMotionSignal: AutonomousStageMotionSignal = EMPTY_STAGE_MOTION_SIGNAL;
+  // 案B (裁定1): the previous tick's post-merge resolvedActivations (合成後の真の実効値).
+  // Retained as ONE record and fed back to the overlay curve store each tick so a new
+  // intent's re-attack starts from the current effective value (連続性原則 3.1). Reset
+  // on start/stop so a fresh body never re-attacks from a stale effective value.
+  let lastResolvedActivations: Record<string, number> = {};
 
   const tick = (): void => {
     if (heartbeat === null) {
@@ -198,15 +217,6 @@ export function createAutonomousFrameHeart(
     // logical time never goes negative before the generator.
     const logicalTimeMs = Math.max(0, wallNowMs - heartbeat.epochMs);
     const activations = heartbeat.generator.sample(logicalTimeMs);
-    // Snapshot the posture activation for Stage Presence (C3 Domain D) BEFORE
-    // resolving to parameter values. body-x/body-z are the SAME centered -1..1
-    // signal that drives body.angle downstream, so the Stage offset couples to the
-    // posture structurally. Absent (blink-only config) ⇒ null ⇒ no Stage offset.
-    latestStageMotionSignal = {
-      horizontal: readSignedActivation(activations[BODY_X_SLOT_ID]),
-      depth: readSignedActivation(activations[BODY_Z_SLOT_ID]),
-      timestampMs: wallNowMs
-    };
     // C4 Domain B: merge the coarse Control Channel overlay just BEFORE the
     // resolver (裁定1 / §6). The overlay is queried with the WALL clock
     // (`wallNowMs`, absolute) — NOT `logicalTimeMs` (epoch-relative, the
@@ -215,13 +225,33 @@ export function createAutonomousFrameHeart(
     // value overrides the generator activation for that slotId; on expiry /
     // disconnect the Record shrinks and the slot falls back to the生理 baseline
     // for free. The merge builds a NEW record so the pure `activations` sample
-    // output is never mutated (fixture境界の外, 純度不変). The Stage Presence
-    // snapshot above intentionally reads the PURE `activations` (C3 Domain D
-    // concern), so channel overlays do not perturb the Stage transform here.
+    // output is never mutated (fixture境界の外, 純度不変).
     // null (default provider) ⇒ the pure sample is passed straight through.
-    const overlay = getChannelOverlay(wallNowMs);
+    // C5 Domain A: feed the curve store the PURE `activations` (release TARGET, 生きた
+    // 基底, 裁定2) and the previous tick's `lastResolvedActivations` (case B re-attack
+    // START, 裁定1). The merge seam itself is unchanged — a live curve value overrides
+    // the generator activation for its slotId, and on full release the record shrinks
+    // and the slot falls back to the生理 baseline for free.
+    const overlay = getChannelOverlay(wallNowMs, activations, lastResolvedActivations);
     const resolvedActivations =
       overlay === null ? activations : { ...activations, ...overlay };
+    // Retain the合成後 effective values for the NEXT tick's re-attack START (案B).
+    lastResolvedActivations = resolvedActivations;
+    // Snapshot the posture activation for Stage Presence (C5 Domain C, 裁定1「体は一つ」).
+    // Reads the合成後 EFFECTIVE body signal (`resolvedActivations`) — NOT the pure
+    // generator value — so whoever moves the body follows the画面: the生理 generator
+    // OR a Control Channel curve on body-x/body-z (誰が体を動かしても画面はついてくる).
+    // When no channel drives these slots (overlay === null, or no curve on body-*),
+    // `resolvedActivations[BODY_*] === activations[BODY_*]`, so this is byte-identical
+    // to C3 (無退行). body-x → horizontal, body-z → depth (centered -1..1); absent
+    // (blink-only config) ⇒ null ⇒ no Stage offset. The strength convex-gain手当て
+    // (`deriveStagePresenceStageMotionSettings`) is input-source-independent, so this
+    // pure→effective swap does not reopen the二重適用 (§2.4).
+    latestStageMotionSignal = {
+      horizontal: readSignedActivation(resolvedActivations[BODY_X_SLOT_ID]),
+      depth: readSignedActivation(resolvedActivations[BODY_Z_SLOT_ID]),
+      timestampMs: wallNowMs
+    };
     const parameterValues = resolveSemanticSlotParameterValues({
       slots: heartbeat.slots,
       activations: resolvedActivations
@@ -251,6 +281,7 @@ export function createAutonomousFrameHeart(
     }
     heartbeat = null;
     latestStageMotionSignal = EMPTY_STAGE_MOTION_SIGNAL;
+    lastResolvedActivations = {};
   };
 
   const start = (input: AutonomousFrameHeartStartInput): void => {

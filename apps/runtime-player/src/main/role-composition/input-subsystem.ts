@@ -64,7 +64,7 @@ export type RuntimePlayerInputSubsystem = {
    * creates ONE store instance that is shared two ways —
    *  - the frame heart's `getChannelOverlay` provider READS `snapshot(nowMs)` each
    *    tick (wired here, Domain B), and
-   *  - the Channel WS server WRITES it (`setOverlay` on accept, `clearAll` on
+   *  - the Channel WS server WRITES it (`setOverlay` on accept, `releaseAll` on
    *    disconnect), wired by Domain C's composition root, which obtains the same
    *    instance through this getter.
    * The Tracking Host returns null (no channel subsystem in its composition), so
@@ -227,9 +227,9 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
   // `snapshot(nowMs)` each tick through the `getChannelOverlay` provider below,
   // and Domain C's composition root obtains the SAME instance via
   // `getControlChannelOverlayStore()` to hand to the Channel WS server (which
-  // WRITES setOverlay/clearAll). Starts empty, so until a channel accepts an
-  // intent `snapshot` is `{}` and the heart's merge is byte-identical to the pure
-  // C2/C3 activations.
+  // WRITES setOverlay on accept / releaseAll on disconnect). Starts empty, so until
+  // a channel accepts an intent `snapshot` is `{}` and the heart's merge is
+  // byte-identical to the pure C2/C3 activations.
   const controlChannelOverlayStore =
     new RuntimePlayerControlChannelOverlayStore();
   // Only the autonomous composer forwards the config provider to the heart. When
@@ -241,7 +241,8 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
     // 粗いオーバーレイ第二seam (Domain B): read the un-expired overlay values at the
     // WALL clock. The heart passes its own `wallNowMs` (absolute), matching the
     // absolute `expiresAtMs` the server stamps — never the generator's logical time.
-    getChannelOverlay: (nowMs) => controlChannelOverlayStore.snapshot(nowMs),
+    getChannelOverlay: (nowMs, baseValues, prevResolved) =>
+      controlChannelOverlayStore.snapshot(nowMs, baseValues, prevResolved),
     ...(deps.physiologyConfigProvider !== undefined
       ? { getPhysiologyConfig: deps.physiologyConfigProvider }
       : {})

@@ -15,6 +15,8 @@
 | [reviews/c3/](reviews/c3/) | C3 各ドメインの 3 レーンレビュー | Domain A/B/D は spec/design/test 3レーン PASS。Domain C は lane2 が Strength スライダーバグで一旦「要修正」→ F1修正で再レビュー合格。**全12レーン最終 PASS、blocking ゼロ(2026-07-11)** |
 | [waves/c4/](waves/c4/) | C4 各ドメインの実装レポート + follow-up | Domain A(契約の家・チャネルWSサーバ・拒否列挙6件・port/token採番)/ B(粗いオーバーレイprovider・心臓tick統合・TTL・切断→基底復帰)/ C(Channelページ・bridge・自律版Overview・degraded 6面・合成根配線)/ D(特区 apps/soul・依存ゼロ参照ドライバ・持続駆動テスト・方向ルール検査2ルール)/ E(最終統合・モノレポ検証・docs更新・fixture整合)完了(2026-07-11)。[c4-followup.md](waves/c4/c4-followup.md) に v0 繰延6件を記録 |
 | [reviews/c4/](reviews/c4/) | C4 各ドメインの 3 レーンレビュー | Domain A/B/C/D とも spec/design/test の 3 レーン PASS(blocking ゼロ。non-blocking は Domain E で回収 or follow-up 記録。2026-07-11) |
+| [waves/c5/](waves/c5/) | C5 各ドメインの実装レポート + follow-up | Domain A(スロット曲線状態機械・実効値フィードバック案B・release一般化400ms、loop2で連続性性質テスト網羅)/ B(契約 `intent.envelope` additive・dispatch・参照ドライバ拡張・持続駆動11相)/ C(Stage Presence 入力を合成後 `resolvedActivations` へ差し替え)/ D(最終統合・モノレポ検証・無変更確認・docs整合・人間ゲート手順)完了(2026-07-11)。[c5-followup.md](waves/c5/c5-followup.md) に持ち越し4件を記録。**実装完了・機械ゲート緑・人間ゲート待ち**(CLOSURE 判定は人間ゲート後に L0) |
+| [reviews/c5/](reviews/c5/) | C5 各ドメインの 3 レーンレビュー | Domain A(loop2 test-adequacy 追補込み)/ B / C とも spec/design/test の 3 レーン合格(blocking ゼロ。2026-07-11) |
 
 実装報告・レビューは着手時に `waves/` / `reviews/` を切って収める(runtime-player方式)。
 
@@ -24,4 +26,4 @@
 2. **C2「身体が呼吸する(まばたき)」= 完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS Browser Source確認・トラッキングとの二体非干渉確認)。
 3. **C3「視線と頭が生きる」= 完全閉鎖(2026-07-11)**: Domain A→B→C→D→E+追撃F(キャプション・Stage Presence知覚性)完了、レビュー全PASS、手動ゲート合格(30秒判定・ツマミ即時反映・プロファイル復元・トラッキング退行なし・OBS parity・キャプション・Stage Presence on/off差)。
 4. **C4「外から動かせる(操縦チャネルv0)」= 完全閉鎖(2026-07-11)**: 実装+レビュー全PASS+一目確認合格。特区 `apps/soul` 稼働(参照ドライバ+方向ルール検査)。持ち越し: Stage Presence×チャネル結合の裁定([waves/c4/c4-followup.md](waves/c4/c4-followup.md) ⚠)+v0繰延5件。
-5. **次の閉問題 = C5「合成が正しい」**。設計討議(裁定3件+派生2原則+実装裁定4件=§7)・棚卸し・**wave計画Ready to launch**([orchestration/c5-wave-plan.md](orchestration/c5-wave-plan.md))まで完了(2026-07-11)。次はC5のwave実行。人間ゲート=参照ドライバ実駆動(魂殺しの観察が目玉)。
+5. **C5「合成が正しい」= 実装完了・機械ゲート緑・人間ゲート待ち(2026-07-11)**: Domain A→B→C→D 完了、3レーンレビュー全合格、typecheck緑・runtime-player 855 pass/2 既知baseline fail(Wave21 browser-source)・boundary check緑。持ち越し4件は [waves/c5/c5-followup.md](waves/c5/c5-followup.md)。**次は人間ゲート**=参照ドライバ実駆動プロファイル(§7 の6項目。魂殺し→release の観察が目玉。手順は [waves/c5/domain-d-report.md](waves/c5/domain-d-report.md) と followup)。完全閉鎖(Status: Closed)判定は人間ゲート合格後に L0(Undine)。

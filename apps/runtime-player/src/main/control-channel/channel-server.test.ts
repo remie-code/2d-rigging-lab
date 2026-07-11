@@ -84,7 +84,10 @@ describe("RuntimePlayerControlChannelServer", () => {
       .toStrictEqual({
         v: 1,
         kind: "server.hello",
-        payload: { protocol: 1, supportedKinds: ["intent.set"] }
+        payload: {
+          protocol: 1,
+          supportedKinds: ["intent.set", "intent.envelope"]
+        }
       });
     await waitFor(() => server.getState().kind === "connected");
     expect(server.getState()).toMatchObject({
@@ -115,11 +118,55 @@ describe("RuntimePlayerControlChannelServer", () => {
     expect(messages.find((message) => message.replyTo === "req-42"))
       .toStrictEqual({ v: 1, replyTo: "req-42", result: "accepted" });
 
-    // Overlay written with expiry fixed at receivedAtMs + ttlMs.
+    // Overlay written with drive expiry fixed at receivedAtMs + ttlMs.
     expect(store.snapshot(FIXED_NOW_MS + 500)).toStrictEqual({
       "head-horizontal": 0.4
     });
-    expect(store.snapshot(FIXED_NOW_MS + 800)).toStrictEqual({});
+    // C5 §2.3 意図的置換: at expiry the slot ENTERS release (still present, easing to
+    // the base) rather than snapping to {}. It is gone only after the release window.
+    expect(store.snapshot(FIXED_NOW_MS + 800)).toStrictEqual({
+      "head-horizontal": 0.4
+    });
+    expect(store.snapshot(FIXED_NOW_MS + 800 + 400)).toStrictEqual({});
+
+    socket.close();
+  });
+
+  it("accepts an intent.envelope and writes a rising curve into the store", async () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const server = await startOpenServer({ store });
+    const socket = connect(server);
+    const messages = collectMessages(socket);
+
+    await waitForWebSocketOpen(socket);
+    socket.send(JSON.stringify({
+      v: 1,
+      id: "req-env",
+      kind: "intent.envelope",
+      payload: {
+        slotId: "head-horizontal",
+        peak: 0.6,
+        attackMs: 100,
+        sustainMs: 400,
+        decayMs: 200
+      }
+    }));
+
+    await waitFor(() =>
+      messages.some((message) => message.replyTo === "req-env")
+    );
+    expect(messages.find((message) => message.replyTo === "req-env"))
+      .toStrictEqual({ v: 1, replyTo: "req-env", result: "accepted" });
+
+    // setEnvelope wired with startAtMs = server nowMs (FIXED_NOW_MS). Mid-attack the
+    // slot is between the base (0) and peak (smooth rise, not a snap)…
+    const midAttack = store.snapshot(FIXED_NOW_MS + 50)["head-horizontal"] ?? 0;
+    expect(midAttack).toBeGreaterThan(0);
+    expect(midAttack).toBeLessThan(0.6);
+    // …and holds at peak through the sustain window.
+    expect(store.snapshot(FIXED_NOW_MS + 300)).toStrictEqual({
+      "head-horizontal": 0.6
+    });
 
     socket.close();
   });
@@ -193,8 +240,14 @@ describe("RuntimePlayerControlChannelServer", () => {
 
     socket.close();
     await waitFor(() => server.getState().kind === "open");
-    // Disconnect → 全失効.
-    expect(store.snapshot(FIXED_NOW_MS + 100)).toStrictEqual({});
+    // C5 §2.3 意図的置換: disconnect now releaseAll()s (server nowMs = FIXED_NOW_MS)
+    // rather than clearAll(), so the slot EASES to the base over the release window
+    // instead of snapping. Present-and-easing shortly after…
+    const easing = store.snapshot(FIXED_NOW_MS + 100)["head-horizontal"] ?? 0;
+    expect(easing).toBeGreaterThan(0);
+    expect(easing).toBeLessThan(0.4);
+    // …and back to the baseline (gone) after the full release window.
+    expect(store.snapshot(FIXED_NOW_MS + 400)).toStrictEqual({});
   });
 
   it("supports the full manual lifecycle: open → close → reopen", async () => {

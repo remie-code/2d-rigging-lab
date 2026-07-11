@@ -1,31 +1,54 @@
 /**
- * Control Channel overlay store skeleton (C4 §4/§6, Domain A). Records accepted
- * intents as `slotId → { value, expiresAtMs }`. The expiry instant is FIXED at
- * intent-acceptance time (`receivedAtMs + (ttlMs ?? defaultWindowMs)`) — the
- * server computes it and hands it in, so the store itself is time-source free
- * except for the `nowMs` it is queried with.
+ * Control Channel overlay store (C4 §4/§6 → C5 Domain A). A single time-evolving
+ * SLOT CURVE STATE MACHINE (裁定3): each entry is a `SlotCurveState` that the store
+ * evaluates at the query `nowMs`. `intent.set` and `intent.envelope` are folded into
+ * the SAME machine — set is a degenerate curve (attack≈0 / sustain=TTL / no decay /
+ * universal release), envelope is a full attack→sustain→decay curve. The external
+ * contract stays two kinds; the store holds one state per slot (never set-vs-envelope
+ * as two states).
  *
- * This is the fixture-boundary-OUTSIDE runtime state (裁定1): it holds
- * wall-clock TTLs from WS I/O and never touches the pure generator `sample()`.
- * Domain B wires `getChannelOverlay(nowMs) → snapshot(nowMs)` into the heart tick
- * and owns the TTL-expiry網羅 / Record-merge / disconnect→baseline integration
- * tests. Domain A keeps the store's behaviour to the basics: set / clearAll /
- * snapshot returns un-expired only.
+ * This is fixture-boundary-OUTSIDE runtime state (裁定1): it holds wall-clock times
+ * from WS I/O and never touches the pure generator `sample()`. The curve math is a
+ * 写経 of the C3 blink generator (see slot-curve-state.ts) — physiology/ is never
+ * imported (boundary規律).
+ *
+ * Two feedback signals flow in from the heart each tick via {@link snapshot}:
+ *  - `baseValues`  = the PURE generator activations. This is the release TARGET
+ *    (「生きた基底」livingBase, 毎tick動く, NEVER frozen — 裁定2). §4 の TARGET.
+ *  - `prevResolved` = the previous tick's post-merge resolvedActivations (案B, the
+ *    heart retains and supplies it, autonomous-frame-heart.ts). This is the re-attack
+ *    START source: a new intent's `startValue = prevResolved[slot]` so every
+ *    transition begins from the current effective value (連続性原則 3.1). §4 の START.
  *
  * There are at most 16 semantic slots, so the map is naturally bounded; a new
- * `setOverlay` for the same slotId overwrites the previous entry.
+ * intent for the same slotId overwrites the previous curve (re-attack, not stacking).
  */
 
-export type RuntimePlayerControlChannelOverlayEntry = {
-  readonly value: number;
-  readonly expiresAtMs: number;
+import {
+  RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS,
+  sampleSlotCurve,
+  slotCurveDriveEndMs,
+  type SlotCurveState
+} from "./slot-curve-state";
+
+/**
+ * An `intent.envelope` shape (Domain B wires `intent.envelope` payloads to this).
+ * Durations in ms; `peak` in the slot's normalized range. Release is NOT here — it
+ * is the universal non-exposed default (裁定2).
+ */
+export type RuntimePlayerControlChannelEnvelopeSpec = {
+  readonly peak: number;
+  readonly attackMs: number;
+  readonly sustainMs: number;
+  readonly decayMs: number;
 };
 
 /**
  * One live overlay for the Channel page's "Active overlays" diagnostic (C4 §1,
- * Domain C). Carries the remaining TTL (`expiresAtMs - nowMs`) so the renderer
- * can show "外から動かされている" with a countdown — the raw `expiresAtMs` (an
- * absolute wall clock) never crosses to the renderer, only the relative remainder.
+ * Domain C read model). `remainingTtlMs` is the countdown until the curve stops
+ * actively driving (end of drive = attack+sustain+decay, matching C4's TTL for a
+ * set) — the release tail is NOT counted as "driven". The raw absolute instants
+ * never cross to the renderer, only the relative remainder.
  */
 export type RuntimePlayerControlChannelActiveOverlay = {
   readonly slotId: string;
@@ -33,66 +56,173 @@ export type RuntimePlayerControlChannelActiveOverlay = {
   readonly remainingTtlMs: number;
 };
 
+export type RuntimePlayerControlChannelOverlayStoreOptions = {
+  /** Universal release time (裁定2). Injectable for tests; default 400ms. */
+  readonly releaseMs?: number;
+};
+
 export class RuntimePlayerControlChannelOverlayStore {
-  readonly #entries = new Map<
-    string,
-    RuntimePlayerControlChannelOverlayEntry
-  >();
+  readonly #curves = new Map<string, SlotCurveState>();
+  readonly #releaseMs: number;
+  /** Last query time observed via {@link snapshot} — the set curve's start anchor. */
+  #lastNowMs = 0;
+  /** Last living base (pure activations) observed — the release TARGET (裁定2). */
+  #lastBaseValues: Record<string, number> = {};
+  /** Last post-merge resolved effective values (案B) — the re-attack START source. */
+  #lastResolved: Record<string, number> = {};
+
+  constructor(options?: RuntimePlayerControlChannelOverlayStoreOptions) {
+    this.#releaseMs =
+      options?.releaseMs ?? RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS;
+  }
 
   /**
-   * Record (or overwrite) an accepted intent's overlay. `expiresAtMs` is the
-   * absolute wall-clock instant the overlay stops being live, computed once at
-   * acceptance time by the server.
+   * Record an accepted `intent.set` as a DEGENERATE curve (裁定3): attack≈0 (jumps
+   * to `value`, preserving C4's「TTL中の値は同一」外面互換), sustain up to the fixed
+   * `expiresAtMs`, no decay, universal release. External signature is unchanged so
+   * Domain B / the existing dispatch call it as before.
    */
   setOverlay(slotId: string, value: number, expiresAtMs: number): void {
-    this.#entries.set(slotId, { value, expiresAtMs });
-  }
-
-  /** Drop every overlay (client disconnect → 全失効, C4 §4). */
-  clearAll(): void {
-    this.#entries.clear();
+    const startAtMs = this.#lastNowMs;
+    this.#curves.set(slotId, {
+      startAtMs,
+      startValue: this.#effectiveStart(slotId),
+      peak: value,
+      attackMs: 0,
+      sustainMs: Math.max(0, expiresAtMs - startAtMs),
+      decayMs: 0,
+      releaseMs: this.#releaseMs
+    });
   }
 
   /**
-   * The un-expired overlay values at `nowMs` as a `slotId → value` Record, ready
-   * to Record-merge over the generator `activations` in the heart tick. An entry
-   * is live strictly before its expiry instant (`expiresAtMs > nowMs`); at
-   * exactly `expiresAtMs` it is expired.
+   * Record an accepted `intent.envelope` as a full curve (Domain B calls this).
+   * `startAtMs` is the acceptance instant. `startValue` = the current effective value
+   * (案B) so the attack re-attacks from what the slot is already showing (連続性 3.1).
    */
-  snapshot(nowMs: number): Record<string, number> {
-    const live: Record<string, number> = {};
+  setEnvelope(
+    slotId: string,
+    spec: RuntimePlayerControlChannelEnvelopeSpec,
+    startAtMs: number
+  ): void {
+    this.#curves.set(slotId, {
+      startAtMs,
+      startValue: this.#effectiveStart(slotId),
+      peak: spec.peak,
+      attackMs: Math.max(0, spec.attackMs),
+      sustainMs: Math.max(0, spec.sustainMs),
+      decayMs: Math.max(0, spec.decayMs),
+      releaseMs: this.#releaseMs
+    });
+  }
 
-    for (const [slotId, entry] of this.#entries) {
-      if (entry.expiresAtMs > nowMs) {
-        live[slotId] = entry.value;
+  /**
+   * Hard-drop every curve (immediate, no release). Used only where there is no
+   * living body to ease toward — model unload / runtime-export teardown
+   * (runtime-player-main.ts). Client disconnect uses {@link releaseAll} instead.
+   */
+  clearAll(): void {
+    this.#curves.clear();
+  }
+
+  /**
+   * Disconnect → every slot eases to the living base over the universal release
+   * (§2.3「魂の死=表情がすっと解けて呼吸だけが残る」). Each live curve is switched to
+   * a forced release from its CURRENT effective value; a curve already fully returned
+   * is dropped. No immediate snap (that was C4).
+   */
+  releaseAll(nowMs: number): void {
+    this.#lastNowMs = nowMs;
+    for (const [slotId, curve] of this.#curves) {
+      const sample = sampleSlotCurve(curve, nowMs, this.#livingBase(slotId));
+      if (sample.done) {
+        this.#curves.delete(slotId);
+        continue;
       }
+      this.#curves.set(slotId, {
+        ...curve,
+        forcedReleaseAtMs: nowMs,
+        forcedReleaseFromValue: sample.value
+      });
     }
+  }
 
+  /**
+   * The channel-driven values at `nowMs` as a `slotId → value` Record, ready to
+   * Record-merge over the generator `activations` in the heart tick. Evaluates every
+   * curve (attack/sustain/decay/release) at `nowMs`. Curves that have fully returned
+   * to the living base are pruned (the heart drives this with a monotonic wall clock,
+   * so pruning is the natural tick advance). Both feedback signals are cached here:
+   * `baseValues` (livingBase, release TARGET) and `prevResolved` (case B re-attack
+   * START source). Both default to `{}` so a caller that only passes `nowMs` still
+   * works (release then eases to 0 for want of a base).
+   */
+  snapshot(
+    nowMs: number,
+    baseValues: Record<string, number> = {},
+    prevResolved: Record<string, number> = {}
+  ): Record<string, number> {
+    this.#lastNowMs = nowMs;
+    this.#lastBaseValues = baseValues;
+    this.#lastResolved = prevResolved;
+
+    const live: Record<string, number> = {};
+    for (const [slotId, curve] of this.#curves) {
+      const sample = sampleSlotCurve(curve, nowMs, this.#livingBase(slotId));
+      if (sample.done) {
+        this.#curves.delete(slotId);
+        continue;
+      }
+      live[slotId] = sample.value;
+    }
     return live;
   }
 
   /**
-   * The un-expired overlays at `nowMs` as diagnostic rows (C4 §1 Active overlays,
-   * Domain C read model). Same liveness rule as {@link snapshot} (`expiresAtMs >
-   * nowMs`), but each row also exposes the RELATIVE remaining TTL so the Channel
-   * page can render a countdown without ever seeing the absolute expiry instant.
-   * A pure read — it never mutates or expires entries (Domain B owns expiry).
+   * The actively-driven overlays at `nowMs` as diagnostic rows (C4 §1 Active
+   * overlays, Domain C read model). A curve counts as "active" while it is still
+   * DRIVING (before its release begins); the release tail is omitted (the体 is
+   * easing back, not being driven). `remainingTtlMs` is the countdown to the end of
+   * drive — for a set this equals C4's `expiresAtMs - nowMs`. A pure read: it never
+   * mutates entries. Uses the last observed living base for any in-flight value.
    */
   activeOverlays(
     nowMs: number
   ): readonly RuntimePlayerControlChannelActiveOverlay[] {
     const live: RuntimePlayerControlChannelActiveOverlay[] = [];
 
-    for (const [slotId, entry] of this.#entries) {
-      if (entry.expiresAtMs > nowMs) {
-        live.push({
-          slotId,
-          value: entry.value,
-          remainingTtlMs: entry.expiresAtMs - nowMs
-        });
+    for (const [slotId, curve] of this.#curves) {
+      if (curve.forcedReleaseAtMs !== undefined) {
+        continue; // forced release → returning to base, not actively driven.
       }
+      const driveEndMs = slotCurveDriveEndMs(curve);
+      if (nowMs >= driveEndMs) {
+        continue; // in the release tail (or done) → not actively driven.
+      }
+      const sample = sampleSlotCurve(curve, nowMs, this.#livingBase(slotId));
+      live.push({
+        slotId,
+        value: sample.value,
+        remainingTtlMs: driveEndMs - nowMs
+      });
     }
 
     return live;
+  }
+
+  /** Case B (連続性 3.1): the effective value the slot is currently showing. */
+  #effectiveStart(slotId: string): number {
+    const resolved = this.#lastResolved[slotId];
+    if (typeof resolved === "number" && Number.isFinite(resolved)) {
+      return resolved;
+    }
+    return this.#livingBase(slotId);
+  }
+
+  /** The living base for `slotId` (release TARGET); rest = 0 when the generator
+   * emits nothing for it. */
+  #livingBase(slotId: string): number {
+    const base = this.#lastBaseValues[slotId];
+    return typeof base === "number" && Number.isFinite(base) ? base : 0;
   }
 }

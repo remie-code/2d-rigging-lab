@@ -80,6 +80,48 @@ describe("RuntimePlayerControlChannelServer onEvent", () => {
     // No secret rides an event.
     expect(JSON.stringify(events)).not.toContain(TEST_TOKEN);
   });
+
+  it("emits an accepted event for intent.envelope carrying peak as its diagnostic value", async () => {
+    const events: RuntimePlayerControlChannelServerEvent[] = [];
+    const server = new RuntimePlayerControlChannelServer({
+      overlayStore: new RuntimePlayerControlChannelOverlayStore(),
+      token: TEST_TOKEN,
+      port: 0,
+      getCurrentSlots: () => [writableSlot("head-horizontal")],
+      nowMs: () => 10_000
+    });
+    runningServers.push(server);
+    server.onEvent((event) => events.push(event));
+    await server.open();
+
+    const socket = connect(server);
+    await waitForWebSocketOpen(socket);
+    await waitFor(() => events.some((event) => event.kind === "connected"));
+
+    socket.send(JSON.stringify({
+      v: 1,
+      id: "req-env",
+      kind: "intent.envelope",
+      payload: {
+        slotId: "head-horizontal",
+        peak: 0.7,
+        attackMs: 100,
+        sustainMs: 400,
+        decayMs: 200
+      }
+    }));
+    await waitFor(() => events.some((event) => event.kind === "accepted"));
+
+    const accepted = events.find((event) => event.kind === "accepted");
+    // The accepted event surfaces peak as `value` (diagnostic), same shape as set.
+    expect(accepted).toStrictEqual({
+      kind: "accepted",
+      slotId: "head-horizontal",
+      value: 0.7
+    });
+
+    socket.close();
+  });
 });
 
 function writableSlot(

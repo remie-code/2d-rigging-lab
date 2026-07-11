@@ -36,9 +36,10 @@ import { ControlChannelWebSocketConnection } from "./channel-websocket-connectio
  *  - `close()` : stop listening, disconnect clients, clear overlays.
  *  - state machine: Closed / Open (listening, no client) / Connected (protocol版).
  *
- * On an accepted intent the server writes to the injected overlay store; on
- * client disconnect it clears ALL overlays (切断→全失効, C4 §4). Domain B reads
- * the store's snapshot into the heart tick; Domain C wires open/close + observes
+ * On an accepted intent the server writes to the injected overlay store; on client
+ * disconnect (or manual close) it releases ALL overlays to the living base over the
+ * universal release (切断→全スロット同時release, C5 §2.3 — no immediate snap). Domain B
+ * reads the store's snapshot into the heart tick; Domain C wires open/close + observes
  * `getState()` / `onStateChanged()`.
  */
 
@@ -192,7 +193,10 @@ export class RuntimePlayerControlChannelServer {
       connection.close();
     }
     this.#connections.clear();
-    this.#overlayStore.clearAll();
+    // C5 Domain A: ease every slot to the living base over the universal release
+    // instead of an immediate snap (§2.3). The heart keeps ticking through the close,
+    // so the体 solves smoothly back to呼吸.
+    this.#overlayStore.releaseAll(this.#nowMs());
 
     const server = this.#server;
     this.#server = null;
@@ -285,6 +289,7 @@ export class RuntimePlayerControlChannelServer {
     }
 
     if (dispatch.overlay !== undefined) {
+      // intent.set → degenerate curve write (C4 path, UNCHANGED).
       this.#overlayStore.setOverlay(
         dispatch.overlay.slotId,
         dispatch.overlay.value,
@@ -294,6 +299,20 @@ export class RuntimePlayerControlChannelServer {
         kind: "accepted",
         slotId: dispatch.overlay.slotId,
         value: dispatch.overlay.value
+      });
+    } else if (dispatch.envelope !== undefined) {
+      // intent.envelope → full curve write into the Domain A machine. startAtMs =
+      // the acceptance time (受理時刻); the store draws attack→sustain→decay from there.
+      // The accepted event surfaces peak as its diagnostic `value`.
+      this.#overlayStore.setEnvelope(
+        dispatch.envelope.slotId,
+        dispatch.envelope.spec,
+        this.#nowMs()
+      );
+      this.#emitEvent({
+        kind: "accepted",
+        slotId: dispatch.envelope.slotId,
+        value: dispatch.envelope.spec.peak
       });
     } else if (dispatch.reply.result === "rejected") {
       this.#emitEvent({
@@ -309,8 +328,9 @@ export class RuntimePlayerControlChannelServer {
     if (!this.#connections.delete(connection)) {
       return;
     }
-    // Disconnect → 全失効 (C4 §4): the体 falls back to the生理 baseline.
-    this.#overlayStore.clearAll();
+    // Disconnect → 全スロット同時release (C5 §2.3): the体 eases to the生理 baseline over
+    // the universal release instead of snapping — 魂を殺しても表情がすっと解けて呼吸が残る.
+    this.#overlayStore.releaseAll(this.#nowMs());
     this.#emitEvent({ kind: "disconnected" });
     this.#refreshConnectedState();
   }

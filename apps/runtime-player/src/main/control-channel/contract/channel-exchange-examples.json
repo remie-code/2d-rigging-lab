@@ -7,11 +7,14 @@
     "messages": [
       {
         "direction": "serverToClient",
-        "note": "Sent immediately on connect (C4 §3.4).",
+        "note": "Sent immediately on connect (C4 §3.4). C5 additively advertises intent.envelope alongside intent.set.",
         "message": {
           "v": 1,
           "kind": "server.hello",
-          "payload": { "protocol": 1, "supportedKinds": ["intent.set"] }
+          "payload": {
+            "protocol": 1,
+            "supportedKinds": ["intent.set", "intent.envelope"]
+          }
         }
       },
       {
@@ -41,6 +44,31 @@
       {
         "direction": "serverToClient",
         "message": { "v": 1, "replyTo": "req-43", "result": "accepted" }
+      }
+    ]
+  },
+  "envelopePath": {
+    "description": "C5 intent.envelope worked exchange (additive over intent.set). The soul sends one envelope intent (peak + attack/sustain/decay) and the 器 draws the curve at 60Hz; the reply is accepted, correlated by replyTo. The intent.set path above is unchanged.",
+    "messages": [
+      {
+        "direction": "clientToServer",
+        "note": "Rise head-horizontal to 0.8 over 120ms, hold 600ms, decay 400ms — the 器 draws the curve, the soul sends once.",
+        "message": {
+          "v": 1,
+          "id": "req-70",
+          "kind": "intent.envelope",
+          "payload": {
+            "slotId": "head-horizontal",
+            "peak": 0.8,
+            "attackMs": 120,
+            "sustainMs": 600,
+            "decayMs": 400
+          }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-70", "result": "accepted" }
       }
     ]
   },
