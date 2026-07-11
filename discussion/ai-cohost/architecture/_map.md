@@ -10,7 +10,8 @@
 | [runtime-player-model-host-roles.md](runtime-player-model-host-roles.md) | Runtime Player=モデルホストの責務再定義、案(c)役割つき起動、前提条件(状態/ポート/身元)、防波堤(役割は構成で表現)、起動UX(三つの扉、生理自動/チャネル手動) | Accepted(2026-07-10) |
 | [c2-blink-and-generator-skeleton.md](c2-blink-and-generator-skeleton.md) | C2設計: まばたきゴール、体験=無、生成器は意味スロットで喋る(もう一人の入力ソース)、失敗も沈黙、シード決定論、ツマミ語彙の先行解剖(内部スキーマ/質感語露出/baseline×modulation) | 設計方向=Accepted(2026-07-10)。実装=C2 wave完了・**完全閉鎖(2026-07-11、手動美的ゲート合格)**。§3.3 に実装事実 |
 | [c3-gaze-head-posture.md](c3-gaze-head-posture.md) | C3設計: 三現象の解剖(サッカード+固視/多時間軸ノイズ/姿勢ドリフト)、貫く文法(ホーム+層状ノイズ+離散イベント)、結合3つ、アンチパターン5つ、Stage Motion裁定(C3最終ドメイン・独立ツマミ・姿勢連動のみ・既定Off)、質感語→内部素子対応 | 設計方向=Accepted(2026-07-11)。実装=C3完全閉鎖(2026-07-11) |
-| [c4-control-channel-v0.md](c4-control-channel-v0.md) | C4設計: 契約二層化(外殻=additive extension/payloadは所有閉問題が追加)、外殻5点(接続作法/要求/応答+拒否列挙/hello capabilities/寛容規則)、TTL統一機構(切断→基底復帰がタダ)、v0 intent.set、粗いオーバーレイ、参照ドライバ(特区最初の住人)、fixture=純JSON | 設計方向=Accepted(2026-07-11) |
+| [c4-control-channel-v0.md](c4-control-channel-v0.md) | C4設計: 契約二層化(外殻=additive extension/payloadは所有閉問題が追加)、外殻5点(接続作法/要求/応答+拒否列挙/hello capabilities/寛容規則)、TTL統一機構(切断→基底復帰がタダ)、v0 intent.set、粗いオーバーレイ、参照ドライバ(特区最初の住人)、fixture=純JSON | 設計方向=Accepted(2026-07-11)。実装=C4完全閉鎖(2026-07-11) |
+| [c5-composition-and-envelopes.md](c5-composition-and-envelopes.md) | C5設計: スコープ裁定3件(Stage Presence=実効body信号に追従/変調は繰延/エンベロープは器側で描く)、intent.envelope、連続性原則(現在値からのre-attack)、解放も曲線で(失効・切断のスナップの一般解=「魂を殺しても」の見え方の完成)、C6前方互換 | 設計方向=Accepted(2026-07-11) |
 
 ## 未決事項(主要な設計分岐)
 

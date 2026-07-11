@@ -44,7 +44,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1〜C4 は完全閉鎖(C1=2026-07-10、C2/C3/C4=2026-07-11)**。次の一手は **C5「合成が正しい」の議論**——冒頭議題: ①Stage Presence×チャネル結合の裁定(本命仮説=合成後の実効body信号に追従。[implementation/waves/c4/c4-followup.md](implementation/waves/c4/c4-followup.md) ⚠) ②オーバーレイ優先規則とエンベロープ付きインテント ③変調payload(情動の状態語彙=未決が前提)。C5の人間ゲートは**C4参照ドライバの実駆動プロファイルで実施**(閉問題分解の改定済みゲート)。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1〜C4 は完全閉鎖(C1=2026-07-10、C2/C3/C4=2026-07-11)**。C5「合成が正しい」は設計討議までAccepted([architecture/c5-composition-and-envelopes.md](architecture/c5-composition-and-envelopes.md)、2026-07-11。Stage Presence=実効body信号追従(C4⚠解消)/変調は魂・persona期へ繰延/エンベロープは器側で描く+連続性原則+解放も曲線)。次の一手は **C5のcontext-check → 棚卸し → wave計画**。人間ゲートはC4参照ドライバの実駆動プロファイルで実施。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
