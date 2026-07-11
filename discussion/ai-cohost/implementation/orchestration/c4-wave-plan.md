@@ -4,7 +4,8 @@
 
 ## 1. Status
 
-- Status: **実装完了(Domain A〜E 実装+3レーンレビュー合格、機械ゲート緑)。C4 閉鎖判定待ち。**
+- Status: **完全閉鎖(2026-07-11)**。機械ゲート緑+人間の一目確認合格(ユーザー実施 2026-07-11「動かしてみたが多分大丈夫だと思う」——外部駆動・イベントログ・切断→基底復帰・空状態を確認)。**持ち越し裁定1件**: Stage Presence×チャネルの結合可否(C4は非結合で閉鎖。Undine推奨=C5設計討議の冒頭議題として「合成後の実効body信号に追従」を本命仮説に。[../waves/c4/c4-followup.md](../waves/c4/c4-followup.md) ⚠)。v0繰延5件も同followup。以下は実装完了時の記録:
+- (実装完了記録) 実装完了(Domain A〜E 実装+3レーンレビュー合格、機械ゲート緑)。
   - Domain A(契約の家+チャネルWSサーバ+拒否列挙6件+port/token採番): 完了・3レーン合格 → [../waves/c4/domain-a-report.md](../waves/c4/domain-a-report.md)。
   - Domain B(粗いオーバーレイprovider・心臓tick統合・TTL・切断→基底復帰・physiology純度不変): 完了・3レーン合格 → [../waves/c4/domain-b-report.md](../waves/c4/domain-b-report.md)。
   - Domain C(Channelページ+bridge+自律版Overview+degraded 6面解消+合成根のサーバ配線): 完了・3レーン合格 → [../waves/c4/domain-c-report.md](../waves/c4/domain-c-report.md)。
