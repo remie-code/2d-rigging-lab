@@ -15,3 +15,5 @@
 | [c5-planning-inventory.md](c5-planning-inventory.md) | 完了(2026-07-11)。Verdict needs_design → ユーザー裁定4件で解消(設計討議§7) | C5のコード接地棚卸し(オーバーレイstoreの曲線化=主コスト、実効値経路、release一般化、Stage差し替え、契約追加、fixture形。曲線数学=C3 blinkの写経、新サブシステム無し) |
 | [c5-wave-plan.md](c5-wave-plan.md) | **完全閉鎖(2026-07-11)**: 実装+レビュー全合格+人間ゲート合格(第一回不合格→診断→追撃G=set ease-in+知覚シナリオ→再ゲート4点全クリア「滑らかに動く」) | C5「合成が正しい」wave計画: 曲線状態機械(A)→契約+ドライバ(B)→Stage実効値化(C)→統合(D)→追撃(G)。教訓: 人間ゲートの証人シナリオは知覚のために設計する(§12) |
 | [c5-choppiness-investigation.md](c5-choppiness-investigation.md) | 完了(2026-07-11) | 人間ゲート第一回不合格の診断: 曲線機械シロ(実波形計測)、原因=setの即ステップ(設計の自己矛盾)+証人シナリオのテスト用圧縮値 |
+| [c6-planning-inventory.md](c6-planning-inventory.md) | 完了(2026-07-11)。Verdict needs_design → ユーザー裁定7件で解消(設計討議§7) | C6のコード接地棚卸し(C5前方互換は外周のみ真、新規=口グループ・タイムライン評価器、母音経路はC5開通済み、生理は口を産まない、初の可変長payload=上限観点) |
+| [c6-wave-plan.md](c6-wave-plan.md) | Ready to launch | C6「口が話せる」wave計画: 口グループ・タイムライン評価器(A)→契約intent.speech+ドライバ(B)→最終統合(C)。人間ゲート=実発話との並置比較(「これじっさいのところどうなってるの」) |

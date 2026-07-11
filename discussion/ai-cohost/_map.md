@@ -44,7 +44,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1〜C4 は完全閉鎖(C1=2026-07-10、C2/C3/C4=2026-07-11)**。**C5「合成が正しい」も完全閉鎖(2026-07-11)**: スロット曲線状態機械(set/envelope統合+ease-in)・実効値フィードバック・動く基底へのrelease・Stage実効値追従。人間ゲート合格(「滑らかに動く」)。C6「口が話せる」は設計討議までAccepted([architecture/c6-mouth-phoneme-timeline.md](architecture/c6-mouth-phoneme-timeline.md)、2026-07-11。モーラ契約・時間仮説・比較ゲート)。次の一手は **C6のcontext-check → 棚卸し → wave計画**。S系列(魂)はC7閉鎖後に別途分解(implementation/_map 次の行動7)。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1〜C4 は完全閉鎖(C1=2026-07-10、C2/C3/C4=2026-07-11)**。**C5「合成が正しい」も完全閉鎖(2026-07-11)**: スロット曲線状態機械(set/envelope統合+ease-in)・実効値フィードバック・動く基底へのrelease・Stage実効値追従。人間ゲート合格(「滑らかに動く」)。C6「口が話せる」は設計討議(モーラ契約・時間仮説・再調音ディップ)・棚卸し・裁定・wave計画まで完了([implementation/orchestration/c6-wave-plan.md](implementation/orchestration/c6-wave-plan.md)、Ready to launch)。次の一手は **C6のwave実行**。S系列(魂)はC7閉鎖後に別途分解(implementation/_map 次の行動7)。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
