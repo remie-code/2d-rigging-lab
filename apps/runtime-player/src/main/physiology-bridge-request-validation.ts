@@ -5,13 +5,30 @@ import type {
   PhysiologyToneUpdateRequest
 } from "../preload/physiology-bridge-contract";
 
-const PHYSIOLOGY_SECTION_IDS: ReadonlySet<string> = new Set<PhysiologySectionId>([
-  "blink",
-  "gaze",
-  "head",
-  "posture",
-  "stagePresence"
-]);
+/**
+ * Exhaustive presence map for the section-id whitelist (C6 Domain F hotfix). Keying a
+ * Record by the contract union `PhysiologySectionId` makes TypeScript REQUIRE every
+ * member — adding a new section to the union without listing it here is a COMPILE error.
+ * This closes the drift that hid the「speech」regression: the previous hand-written
+ * `new Set<PhysiologySectionId>([...])` constrained each element's TYPE but never
+ * enforced that ALL union members were present, so `speech` silently fell out of the
+ * whitelist while still compiling. The runtime whitelist is DERIVED from these keys, so
+ * there is exactly one place to keep in sync and the compiler enforces completeness.
+ */
+const PHYSIOLOGY_SECTION_ID_PRESENCE: Readonly<
+  Record<PhysiologySectionId, true>
+> = {
+  blink: true,
+  gaze: true,
+  head: true,
+  posture: true,
+  speech: true,
+  stagePresence: true
+};
+
+/** Section ids accepted by the bridge. Exported so the drift-guard test can reconcile it. */
+export const PHYSIOLOGY_SECTION_ID_WHITELIST: ReadonlySet<string> =
+  new Set<string>(Object.keys(PHYSIOLOGY_SECTION_ID_PRESENCE));
 
 export function readPhysiologyToneUpdateRequest(
   value: unknown
@@ -54,7 +71,7 @@ export function readPhysiologySectionResetRequest(
 }
 
 function readSection(value: unknown): PhysiologySectionId {
-  if (typeof value !== "string" || !PHYSIOLOGY_SECTION_IDS.has(value)) {
+  if (typeof value !== "string" || !PHYSIOLOGY_SECTION_ID_WHITELIST.has(value)) {
     throw new Error("Physiology section is not a known section.");
   }
 

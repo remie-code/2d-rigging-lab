@@ -12,7 +12,8 @@ import {
   PHYSIOLOGY_BLINK_TONE_FIELDS,
   PHYSIOLOGY_GAZE_TONE_FIELDS,
   PHYSIOLOGY_HEAD_TONE_FIELDS,
-  PHYSIOLOGY_POSTURE_TONE_FIELDS
+  PHYSIOLOGY_POSTURE_TONE_FIELDS,
+  PHYSIOLOGY_SPEECH_TONE_FIELDS
 } from "./physiology-tone-config";
 
 export type PhysiologyProfileParseResult =
@@ -130,6 +131,15 @@ function parseToneOverrides(
     "posture",
     warningMessages
   );
+  // Speech articulation (C6 Domain E改): a saved profile carries the `speech` family the
+  // same way as the other numeric sections. Omitting it here silently dropped a persisted
+  // Articulation tone on reload (C6 Domain F hotfix companion to the validation whitelist).
+  const speech = parseNumericFamily(
+    value.speech,
+    PHYSIOLOGY_SPEECH_TONE_FIELDS,
+    "speech",
+    warningMessages
+  );
   const stagePresence = parseStagePresence(
     value.stagePresence,
     warningMessages
@@ -140,6 +150,7 @@ function parseToneOverrides(
     ...(gaze === undefined ? {} : { gaze }),
     ...(head === undefined ? {} : { head }),
     ...(posture === undefined ? {} : { posture }),
+    ...(speech === undefined ? {} : { speech }),
     ...(stagePresence === undefined ? {} : { stagePresence })
   };
 }

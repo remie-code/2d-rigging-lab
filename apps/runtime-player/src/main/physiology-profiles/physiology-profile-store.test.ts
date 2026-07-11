@@ -45,8 +45,12 @@ describe("PhysiologyProfileStore", () => {
     const payload = createPayload();
     const identity = createPhysiologyRuntimeExportIdentity(payload);
     const store = new PhysiologyProfileStore({ userDataPath });
+    // `speech` is included so this round-trip guards the C6 Domain F parser hole: the
+    // parser used to omit the speech family, silently dropping a persisted Articulation
+    // tone on reload. It must survive save → load like every other numeric section.
     const profile = createProfileDocument(identity.fingerprint, {
       gaze: { cameraFocus: 0.8, dwell: 0.2 },
+      speech: { articulation: 0.85 },
       stagePresence: { enabled: true, strength: 0.6 }
     });
 
@@ -56,6 +60,7 @@ describe("PhysiologyProfileStore", () => {
     expect(loaded.state).toBe("loaded");
     expect(loaded.profile?.overrides).toEqual({
       gaze: { cameraFocus: 0.8, dwell: 0.2 },
+      speech: { articulation: 0.85 },
       stagePresence: { enabled: true, strength: 0.6 }
     });
   });

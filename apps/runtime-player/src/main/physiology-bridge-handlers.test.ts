@@ -23,6 +23,10 @@ import type { RuntimeExportLoadedPayload } from "../preload/runtime-export-bridg
 import { registerPhysiologyBridgeHandlers } from "./physiology-bridge-handlers";
 import { PhysiologyProfileStore } from "./physiology-profiles/physiology-profile-store";
 import { RuntimePlayerPhysiologyState } from "./physiology-profiles/physiology-state";
+import {
+  ARTICULATION_FLOOR_CRISP,
+  DEFAULT_TONE
+} from "./physiology-profiles/physiology-tone-config";
 import type { RuntimePlayerWindowSet } from "./window-management/runtime-player-windows";
 
 type IpcHandler = (event?: unknown, ...args: unknown[]) => unknown;
@@ -140,6 +144,63 @@ describe("registerPhysiologyBridgeHandlers", () => {
     expect(physiologyState.getPhysiologyConfig().stagePresence?.strength).toBe(
       0.7
     );
+  });
+
+  it("accepts the page's Speech Articulation update end-to-end (F Domain hotfix)", async () => {
+    // The reported bug: the Physiology Speech section fires updateTone with section
+    // "speech", but the bridge validation whitelist had dropped "speech" and rejected
+    // it as "Physiology section is not a known section." Drive the REAL state through the
+    // bridge with the page's exact request shape — it must NOT be a validation-error and
+    // the crispest Articulation floor must reach the config seam the speech evaluator reads.
+    const physiologyState = new RuntimePlayerPhysiologyState();
+    const registration = registerPhysiologyBridgeHandlers({
+      windows: createFakeWindows(),
+      physiologyState
+    });
+    await registration.setRuntimeExportPayload(createPayload());
+
+    const result = await invokeHandler<Promise<PhysiologyActionResult>>(
+      physiologyBridgeChannels.updateTone,
+      { section: "speech", field: "articulation", tone: 1 }
+    );
+
+    expect(result.result).toBe("ok");
+    const speech = result.status.sections.find(
+      (section) => section.section === "speech"
+    );
+    expect(speech?.hasOverride).toBe(true);
+    expect(speech?.tones.articulation).toBe(1);
+    expect(physiologyState.getPhysiologyConfig().speech?.articulationFloor).toBe(
+      ARTICULATION_FLOOR_CRISP
+    );
+  });
+
+  it("resets the Speech section end-to-end (F Domain hotfix)", async () => {
+    // Reset Speech was rejected by the same whitelist gap. After a real Articulation
+    // edit, the reset request must be accepted and clear the section back to default.
+    const physiologyState = new RuntimePlayerPhysiologyState();
+    const registration = registerPhysiologyBridgeHandlers({
+      windows: createFakeWindows(),
+      physiologyState
+    });
+    await registration.setRuntimeExportPayload(createPayload());
+
+    await invokeHandler<Promise<PhysiologyActionResult>>(
+      physiologyBridgeChannels.updateTone,
+      { section: "speech", field: "articulation", tone: 1 }
+    );
+
+    const resetResult = await invokeHandler<Promise<PhysiologyActionResult>>(
+      physiologyBridgeChannels.resetSection,
+      { section: "speech" }
+    );
+
+    expect(resetResult.result).toBe("ok");
+    const speech = resetResult.status.sections.find(
+      (section) => section.section === "speech"
+    );
+    expect(speech?.hasOverride).toBe(false);
+    expect(speech?.tones.articulation).toBe(DEFAULT_TONE);
   });
 
   it("coalesces multiple edits within the debounce window into a single save", async () => {
