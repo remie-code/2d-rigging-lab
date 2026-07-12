@@ -1,24 +1,26 @@
 # 設計方向: 会話パイプライン
 
-> Status: Draft(2026-07-10)。ユーザーと大枠議論済みだが個別のAccepted判断はまだない。
+> Status: **Accepted(2026-07-12、S前提討議②で最終化)**。初版Draft=2026-07-10。討議①の裁定(Max 20x+Agent SDK、[../soul/llm-access-path.md](../soul/llm-access-path.md))を織り込み、出力側を実装済み契約(C4〜C6)へ接地した。
 > 根拠となる調査事実: [../research/human-ai-cohost-precedents.md](../research/human-ai-cohost-precedents.md)、[../research/aituber-landscape-2026-07.md](../research/aituber-landscape-2026-07.md)、[../research/llm-cost-estimate.md](../research/llm-cost-estimate.md)。
 
-## 1. 全体像(Draft)
+## 1. 全体像(Accepted)
 
 ```
 [ユーザーの声] → ローカルASR(常時、転写バッファへ蓄積)
                     ├→ 反射層(ローカル): ポーズ検出→相槌音声ポン出し+口形注入
-                    └→ 発火判定(宛先判定/トリガ) → LLM(Opus 4.8, streaming)
+                    └→ 発火判定(宛先判定/トリガ) → LLM(Opus 4.8 via Agent SDK, streaming)
                                                      → 文単位分割 → TTS(逐次) → 音声再生
-                                                     → 感情タグ → 表情パラメータ注入
-                                                     → 音素タイムスタンプ → 口形パラメータ注入
+                                                     → 感情タグ → intent.set / intent.envelope(C5)
+                                                     → 音素タイムスタンプ → intent.speech モーラ列(C6)
 [視聴者コメント] → チャット取得層(差し替え可能に抽象化) → 同上のLLM経路
-[AI共演者モデル] ← runtime-player 操縦チャネル(別文書)
+[AI共演者モデル] ← runtime-player 操縦チャネル(C4、実装済み)
 ```
+
+出力側は初版時点では仮説だったが、現在は実装済み契約に接地している: 経路=操縦チャネル([c4-control-channel-v0.md](c4-control-channel-v0.md))、表情=スロット曲線(intent.set/envelope、[c5-composition-and-envelopes.md](c5-composition-and-envelopes.md))、口=モーラ列タイムライン(intent.speech、[c6-mouth-phoneme-timeline.md](c6-mouth-phoneme-timeline.md))。TTSのaudio_queryが返す音素タイムスタンプをモーラ列 `{timeMs, vowel, s}` へ写像する。
 
 基本原則: **「AIは全部聞くが、全部では考えない」**。ASRは常時回して転写を蓄積し、LLMは発話に値する瞬間だけ、蓄積した転写ごと起こされる(=起こされた時には直近の話を全部読んでいる)。
 
-## 2. 設計方向(Draft)
+## 2. 設計方向(Accepted)
 
 ### 2.1 テキストパイプライン採用(ASR→LLM→TTS)。speech-to-speech不採用
 
@@ -48,21 +50,28 @@ Voicemeeter等の仮想オーディオでバス分離し、**TTS出力をASR入�
 
 ### 2.6 安全弁
 
-コメント・発話は信頼できない入力として扱う。**TTSに渡る直前の最終テキスト検査**+NGワード+キルスイッチ(緊急ミュート)。プラットフォームのAI利用開示設定を行う。
+コメント・発話は信頼できない入力として扱う。**TTSに渡る直前の最終テキスト検査**+NGワード+キルスイッチ(緊急ミュート)。プラットフォームのAI利用開示設定に加え、**配信の概要欄へのAI開示記載を必須要件**とする(討議①裁定#3、Usage Policy遵守)。
 
-## 3. 候補スタック(Draft、実装着手時に再確認)
+### 2.7 知性のアクセス経路と文脈の器(討議②で追加、2026-07-12)
+
+- **主経路 = Max 20x + Claude Agent SDK**(討議①裁定 [../soul/llm-access-path.md](../soul/llm-access-path.md) §7)。**LLM呼び出しは魂の中の一箇所に集約**し、簡単に他経路(想定退避先=OpenAIサブスク)へ切り替えられる形を保つ。切替時に魂を作り直すことも許容(器との継ぎ目はチャネル契約のみ)。
+- **転写バッファが正、SDKセッションは使い捨てられるキャッシュ**: 会話の記憶の正本は魂が自前で持つ転写バッファ。原則「起こされた時には直近の話を全部読んでいる」は発火時の転写注入で実現し、セッションは肥大したら切って作り直せる。セッションに記憶を預けないことが切替容易性の実体でもある。
+- 会話用SDKセッションは**ツール無効+最小システムプロンプト**を要件とする(プリフィル量がTTFTの主因。フィラー先出し600ms初動を守る)。レイテンシと枠消費の実測はS系列 `experiments/` で行う。
+
+## 3. 候補スタック(Accepted。外部要素の鮮度はS1着手時に最終確認 — 討議②裁定 2026-07-12)
 
 | 要素 | 第一候補 | 理由 |
 |---|---|---|
-| 会話LLM | Opus 4.8(API) | 前提P1。Fable 5は常時思考で会話役に不利 |
+| 会話LLM | Opus 4.8(**Max 20x + Agent SDK**。討議①) | 前提P1。Fable 5は常時思考で会話役に不利。API従量は退避先シナリオ |
 | ASR | kotoba-whisper系+VAD(ローカル) | 無料・日本語特化・準リアルタイム |
-| TTS | AivisSpeech(ローカル) | 無料・高品質・**audio_queryの音素タイムスタンプで口形を決定論的に合成前構築できる** |
+| TTS | AivisSpeech(ローカル) | 無料・高品質・**audio_queryの音素タイムスタンプで口形を決定論的に合成前構築できる**(→ intent.speech モーラ列へ写像、§1) |
 | 感情駆動 | インラインタグ方式 | ストリーミングと相性が良く、声と表情を同一タグで同期 |
 | チャット取得 | YouTube(D4解決、ユーザーの既存配信環境) | 非公式ライブラリは壊れる前提で差し替え可能に抽象化+公式APIフォールバック |
 
-## 4. 未決事項
+## 4. 未決事項(S系列へ送るもの — 討議②で先送りを明示、2026-07-12)
 
-- 反射層の具体構成(VAD選定、相槌パターン設計、相槌の声=TTS事前生成)。
+- 反射層の具体構成(VAD選定、相槌パターン設計)— S系列の閉問題の中で扱う。
+- **相槌音声のTTS事前生成は persona の声の確定に依存**。順序制約として明示: ③persona(声)→ 反射層の相槌音声。S系列の分解時にこの順序を織り込むこと。
 - AI共演者の記憶・ペルソナ設計(persona/ を切る段階で扱う)。
 
-解決済み(経緯は [_map.md](_map.md) の分岐表): D1=別リポジトリ(案A) / D4=YouTube / D6=キー操作から / D7=当面対象外(いずれも2026-07-10)。
+解決済み(経緯は [_map.md](_map.md) の分岐表): D1=特区 `apps/soul`(改定二号=特区憲章、2026-07-11。当初は別リポジトリ案A) / D4=YouTube / D6=キー操作から / D7=当面対象外 / 知性のアクセス経路=Max 20x+Agent SDK(討議①、2026-07-12)。

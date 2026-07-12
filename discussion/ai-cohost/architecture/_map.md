@@ -4,7 +4,7 @@
 
 | Path | Content | Status |
 |---|---|---|
-| [conversation-pipeline-direction.md](conversation-pipeline-direction.md) | 会話パイプラインの設計方向: テキストパイプライン採用、二層設計(反射層+LLM)、宛先判定、割り込み、音声ルーティング、候補スタック | Draft |
+| [conversation-pipeline-direction.md](conversation-pipeline-direction.md) | 会話パイプラインの設計方向: テキストパイプライン採用、二層設計(反射層+LLM)、宛先判定、割り込み、音声ルーティング、候補スタック、知性のアクセスと文脈の器(§2.7: SDK・転写バッファが正・ツール無効+最小プロンプト) | **Accepted(2026-07-12、S前提討議②で最終化)**。①裁定織り込み+出力側をC4〜C6契約へ接地。先送りはS系列へ(§4。順序制約: persona声→相槌音声) |
 | [runtime-player-control-channel.md](runtime-player-control-channel.md) | runtime-playerへのAI操縦チャネル: 挿入点、セマンティック注入契約、表現力の三階建て(変調/エンベロープ付きインテント/Variant)、不変条件、トランスポート | 方向=Accepted(境界改定 案A)。契約詳細のC4分は [c4-control-channel-v0.md](c4-control-channel-v0.md) でAccepted(2026-07-11)。エンベロープ/変調payloadはC5以降で追加 |
 | [physiological-layer-and-envelope.md](physiological-layer-and-envelope.md) | 生理層生成器: 表現レパートリー、定義の所在(四層優先順位)、駆動と合成、Editor第一弾(エンベロープ宣言+アイドルプレビュー)、等価性検証 | 意味レベル=Accepted(2026-07-10)。**§2/§5/§6 に C2 実装事実を追記(physiology は apps/ 配置=裁定2 実装済み、packages 移設・Editor↔Player 等価性は第二段繰延。将来方針は不変)** |
 | [runtime-player-model-host-roles.md](runtime-player-model-host-roles.md) | Runtime Player=モデルホストの責務再定義、案(c)役割つき起動、前提条件(状態/ポート/身元)、防波堤(役割は構成で表現)、起動UX(三つの扉、生理自動/チャネル手動) | Accepted(2026-07-10) |
