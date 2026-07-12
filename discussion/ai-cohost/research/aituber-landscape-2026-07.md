@@ -32,6 +32,7 @@
 | Qwen3-TTS | 新顔 | 初期遅延97ms | Apache 2.0 | VoiceDesign対応 |
 
 - **2026年の本命はAivisSpeech**: VOICEVOX互換API(`audio_query`がモーラ毎の音素長を秒単位で返す=音声解析なしで正確な口形タイムラインを合成前に構築できる)、日本語特化高品質、自作音声モデル学習可。https://aivis-project.com/
+  - **⚠訂正(2026-07-12、S1棚卸しの実機検証)**: AivisSpeech Engine 1.1.0-dev の実機では `audio_query`/`mora_length` の**モーラ長・pitchが全零**で返る(APIの形はVOICEVOX互換だが長さの実値が入らない)。「音素長が秒単位で返る」は**このエンジンでは不成立**。代替の時間材料=合成WAVの実長(モーラ均等割り、S1裁定で採用)。モーラの**種類**(音素列)は正しく返るため「TTS選定がリップシンク方式を規定する」の骨子は生き残る。詳細: [../implementation/orchestration/s1-planning-inventory.md](../implementation/orchestration/s1-planning-inventory.md) §3
 - **にじボイスは2026-02-04にサービス終了済み**(日俳連の「声優に酷似」指摘を受けた撤退)。ボイスクローン系は声の出所に注意という運用教訓。https://algomatic.jp/news/notice_nijivoice_20251121
 - 分岐点: 「TTS選定がリップシンク方式を規定する」。VOICEVOX互換(AivisSpeech)なら音素タイムスタンプが無料で付いてくる。
 
