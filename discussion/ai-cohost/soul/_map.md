@@ -14,7 +14,7 @@
 |---|---|---|---|
 | ① | **知性のアクセス経路**: API従量 vs Claude Max 20x(Agent SDK) | [llm-access-path.md](llm-access-path.md) | **裁定済み・クローズ(2026-07-12)**。主経路=**案B(Max 20x+Agent SDK)**。切替容易性を要件化(魂の作り直し許容・退避先想定=OpenAIサブスク)。AI開示=配信概要欄記載必須。OpenAIデータ共有案=不採用。枠の実効量は`experiments/`で`/usage`実測。制度変更(クレジット制)は監視継続 |
 | ② | **会話パイプライン最終化** + ASR/TTS選定の再確認 | [../architecture/conversation-pipeline-direction.md](../architecture/conversation-pipeline-direction.md) | **裁定済み・クローズ(2026-07-12)**: Draft→Accepted昇格。①織り込み(SDK・転写バッファが正・ツール無効+最小プロンプト)+出力側をC4〜C6契約へ接地+先送り明示(反射層具体構成はS系列、**persona声→相槌音声の順序制約**)。選定鮮度は再調査不要・S1着手時に最終確認 |
-| ③ | **persona**(声・人格・AIの身体) | `persona/`(未作成) | コードと独立の**並行コンテンツトラック**。身体はリグ要件を添えて model-authoring 既存手順へ(器はモデルの作者を知らない) |
+| ③ | **persona**(声・人格・AIの身体) | `persona/`(未作成) | **S8完了後に着手(ユーザー決定 2026-07-12)**。身体はリグ要件を添えて model-authoring 既存手順へ(器はモデルの作者を知らない)。S9(相槌)がこれの声確定に依存 |
 
 ## 3. 関連材料(①用)
 
@@ -25,8 +25,8 @@
 
 ## 4. 次の行動
 
-1. **S系列の閉問題分解を起こす**(①②クローズ済み。S1=歩くスケルトン=一文の縦貫通)。`experiments/` を同時に切る(コストメーター=`/usage`実測+レイテンシ実測)。分解時の順序制約: persona声→反射層の相槌音声(②の先送り事項)。
-2. **③ persona は並行コンテンツトラック**としていつでも開始可(S1は既定声で成立するため③はS1をブロックしない)。
+1. **S系列分解はAccepted(2026-07-12)** → [../implementation/s-series-decomposition.md](../implementation/s-series-decomposition.md)(S1〜S9。視覚=S5「目が開く」を新設)。**次の一手 = S1「一文が縦に貫通する」の議論→context-check**。S1着手と同時に `experiments/` を切る。
+2. **③ persona はS8完了後に着手**(ユーザー決定 2026-07-12「ペルソナは最後でいい」)。S9(相槌)はpersonaの声確定後。
 
 ## 5. 未決事項
 
@@ -34,5 +34,5 @@
 |---|---|
 | ① アクセス経路(API従量 vs Max 20x/Agent SDK) | **裁定済み(2026-07-12): 主経路=Max 20x+Agent SDK**。残る検証は実測(枠・レイテンシ)=`experiments/`へ。クレジット制施行の監視は常設 |
 | ② パイプライン最終形・ASR/TTS選定 | **裁定済み(2026-07-12): Accepted昇格**。外部要素の鮮度のみS1着手時に最終確認 |
-| ③ persona の中身 | 未着手(並行トラック) |
+| ③ persona の中身 | 未着手(S8完了後に着手と決定 2026-07-12) |
 | 知覚の段階の具体化 / 情動層の状態語彙 | 未決([../concept/behavior-model.md](../concept/behavior-model.md) §8)。S系列分解時に扱う |

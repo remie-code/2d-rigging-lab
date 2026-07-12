@@ -4,7 +4,8 @@
 
 | Path | Content | Status |
 |---|---|---|
-| [closed-problem-decomposition.md](closed-problem-decomposition.md) | 「AI経由でモデルを動かす機能」の閉問題分解(C1〜C7)、分解原則、除外事項、UX精緻化対象、進め方(§6: 一問題ずつ議論→実装→ゲート→完全閉鎖の直列。実装中は人間の休憩) | 初期分解=Accepted、進め方=ユーザー決定(2026-07-10)。問題設定は変更され得る(留保付き) |
+| [closed-problem-decomposition.md](closed-problem-decomposition.md) | 「AI経由でモデルを動かす機能」の閉問題分解(C1〜C7)、分解原則、除外事項、UX精緻化対象、進め方(§6: 一問題ずつ議論→実装→ゲート→完全閉鎖の直列。実装中は人間の休憩) | 初期分解=Accepted、進め方=ユーザー決定(2026-07-10)。**C1〜C7全閉鎖(2026-07-12)=器の完成** |
+| [s-series-decomposition.md](s-series-decomposition.md) | 魂(apps/soul)の閉問題分解(S1〜S9): 歩くスケルトン→耳→呼べば応える→表情→**目が開く(視覚)**→会話継続→視聴者→配信リハ→相槌(persona後)。S5視覚の設計方針、除外事項、進め方はC系列規律を継承 | 初期分解=Accepted(2026-07-12)。切る基準=ユーザーのゲート認知負荷。**問題設定は視座の変化で変更され得る(留保付き)**。S1着手と同時に `experiments/` 開設 |
 | [screens/](screens/) | C1/C3/C4のUX定義(runtime-playerのscreens/流儀) | C1=Accepted(振る舞い・見せ方とも 2026-07-10)。§7.7 に C1 実装反映を追記。C3=[screens/c3-physiology-profile.md](screens/c3-physiology-profile.md) 作成済み(Accepted、Physiologyページ UX。C3 実装の source of truth)。C4=[screens/c4-channel-diagnostics.md](screens/c4-channel-diagnostics.md)(Accepted、Channelページ・自律Overview・degraded解消。C4 実装の source of truth。§3 に degraded data源の構成不変条件を追記) |
 | [orchestration/](orchestration/) | wave計画とplanning gate棚卸し | **C1完全閉鎖(2026-07-10)**: 手動ゲート全項目合格+§14裁定済み。既知制限=dev引数なし起動(wave計画Status)。**C2完全閉鎖(2026-07-11)**: 手動美的ゲート合格。**C3完全閉鎖(2026-07-11)**: Domain A→E+追撃F 完了、手動ゲート合格。**C4 実装完了・3レーンレビュー全PASS・機械ゲート緑(2026-07-11)**: Domain A→B→C→D→E 完了、手動確認待ち([orchestration/c4-wave-plan.md](orchestration/c4-wave-plan.md) Status に結果・既知baseline反映) |
 | [waves/c1/](waves/c1/) | C1 各ドメインの実装レポート | Domain A(スロット基盤)/ B(役割合成・身元表示)/ C(最終統合・検証・docs)完了(2026-07-10) |
@@ -29,4 +30,4 @@
 5. **C5「合成が正しい」= 完全閉鎖(2026-07-11)**: Domain A→B→C→D+追撃G(set既定ease-in 100ms+知覚シナリオ)完了、レビュー全合格、**人間ゲート合格**(再ゲートで「滑らかに動く」——立ち上がり・符号反転re-attack・魂殺し・dip再観察の4点全クリア)。decay意味論は現状維持で確定。教訓: 人間ゲートの証人シナリオは機械テストの圧縮シナリオと別に知覚のために設計する。
 6. **C6「口が話せる」= 完全閉鎖(2026-07-12)**: 本編+統合追撃(Articulationスライダー=四層のプロファイル補正層へ昇格)+ホットフィックス、比較ゲート合格(「完璧だ」)。教訓は[orchestration/c6-wave-plan.md](orchestration/c6-wave-plan.md) Status。
 7'. **C7「配信に乗る」= 完全閉鎖(2026-07-12)**: wave なし・実装ゼロの検証のみで閉鎖(C2〜C6でparityをblocking基準にし続けた投資の回収)。OBS二体並走ゲート合格(ユーザー側=フェイストラッキング、AI側=生理。C4〜C6駆動もOBS目視済み)。既知制限=二体同時起動の負荷(未計測・性能改善はスコープ外裁定)→ [orchestration/c7-closure-record.md](orchestration/c7-closure-record.md)。**これでC1〜C7全閉鎖=器の完成**。
-7. **次 = S系列(魂の実装)の分解**(ユーザー確認 2026-07-11): 魂の前提討議(①知性のアクセス経路=API従量 vs Max枠/Agent SDK ②会話パイプライン最終化+ASR/TTS選定再確認 ③persona/=声・人格・身体→model-authoring、コードと独立の並行トラック)→S系列の閉問題分解→S1=歩くスケルトン(一文の縦貫通)。S系列開始と同時に `experiments/` を切る(P3コストメーター+レイテンシ実測)。
+7. **前提討議①②クローズ+S系列分解Accepted(2026-07-12)**: ①主経路=Max 20x+Agent SDK([../soul/llm-access-path.md](../soul/llm-access-path.md)) ②会話パイプラインAccepted昇格。分解は [s-series-decomposition.md](s-series-decomposition.md)(S1〜S9、視覚=S5を新設、persona はS8後→S9相槌)。**次の一手 = S1「一文が縦に貫通する」の議論→context-check**。S1着手と同時に `experiments/` を切る(`/usage`+レイテンシ)。
