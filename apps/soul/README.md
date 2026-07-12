@@ -13,9 +13,19 @@
 5. **秘密（API キー等）はコミットしない**。特区の設定は環境変数 / ローカル設定で扱う。
 6. 特区内のツールチェーンは特区の自由。
 
-## 物理コストの回避（裁定 4）
+## 物理コストの回避（裁定 4 → 裁定 1 で更新）
 
-**このディレクトリには `package.json` を置かない。** `apps/*` は `pnpm-workspace.yaml` の workspace glob 内なので、`package.json` を置くと `pnpm-lock.yaml` の `importers:` が増え `pnpm install` が要る。それを避けるため、特区は依存ゼロの standalone として実装する（正式 workspace app 化は、実物の魂が依存を持つ日まで繰延）。
+**このディレクトリ（`apps/soul` **直下**）には `package.json` を置かない。** `apps/*` は
+`pnpm-workspace.yaml` の workspace glob 内なので、直下に `package.json` を置くと `pnpm-lock.yaml`
+の `importers:` が増え `pnpm install` が要る。この規律は維持する。
+
+**ただしサブディレクトリの独立パッケージは容認する（裁定 1・2026-07-12）。** workspace glob（`apps/*`）
+は 1 階層のみなので、`apps/soul/<サブディレクトリ>/package.json` は **workspace 対象外＝lockfile 不変**。
+魂本体が実依存（Agent SDK 等）を持つ日が来たため、`apps/soul/agent/` を独自 `package.json` +
+`package-lock.json` を持つ**独立 npm パッケージ**として置く。`pnpm-lock.yaml` は不変のまま、依存は
+そのサブパッケージ内で完結する。**install はユーザーの作業**（`cd apps/soul/agent && npm install`。
+エージェントは install しない）。既存チェック 3 種（check:soul-zone / check:deps / check:source）は
+いずれもこのサブパッケージに非該当（bare specifier 対象外・node_modules 走査除外）。
 
 ## 住人
 
@@ -34,3 +44,31 @@ node apps/soul/reference-driver/reference-driver.mjs "ws://127.0.0.1:17310/chann
 ```
 
 （`<url>` は自律ホストの Channel ページで `Open Channel` した後に表示される Endpoint URL。）
+
+### `agent/` — 魂の本体（S1 の住人・独立 npm パッケージ）
+
+LLM（Agent SDK / Opus）で会話し、TTS（AivisSpeech）で声を作り、操縦チャネルへ intent.speech を
+送って器の口を動かす**実物の魂**。参照ドライバと違い LLM・TTS を持つ。上記「物理コストの回避」の
+とおり、`apps/soul/agent/` は独自 `package.json` を持つ **独立 npm パッケージ**（workspace glob
+対象外＝`pnpm-lock.yaml` 不変）。ランタイム依存は `@anthropic-ai/claude-agent-sdk` のみ、本体は
+依存最小の `.mjs` + `node:test`。
+
+- **サブスク枠認証ガード**（`src/env-guard.mjs`）: 起動時に `ANTHROPIC_API_KEY` /
+  `ANTHROPIC_AUTH_TOKEN` / `CLAUDE_CODE_USE_*` が設定されていれば**起動拒否**（サブスク枠でなく
+  API 従量課金になる事故の防波堤）。魂は `/login` のサブスク OAuth 資格情報で動かす前提。
+- **常駐 LLM セッション**（`src/llm-session.mjs`）: `query()` を常駐ストリーミング入力モードで使い
+  1 プロセスを保持（毎回 `query()` の spawn コストを畳む）。`settingSources: []` / `tools: []` /
+  `model: claude-opus-4-8` / `maxTurns: 1` / `persistSession: false`。
+- **会話 CLI**（`src/cli.mjs`）: stdin の一文 → 応答 → 器の口 + スピーカー（`speak.mjs`）。
+- **計測**（`scripts/first-light.mjs` → `discussion/ai-cohost/experiments/`）: 枠消費（usage）+
+  レイテンシ（TTFT / E2E）を記録し続ける。
+
+install（ユーザーの作業）と起動:
+
+```
+cd apps/soul/agent && npm install    # 1 回だけ（lockfile は apps/soul/agent 内で完結）
+node apps/soul/agent/src/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
+```
+
+実器接続・実再生を伴う起動（CLI / `scripts/preflight-e2e.mjs`）は**人間ゲート**の領分
+（手順は `discussion/ai-cohost/implementation/waves/s1/human-gate-procedure.md`）。

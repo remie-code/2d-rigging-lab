@@ -59,4 +59,12 @@
 
 ## 6. Status
 
-(発進後に記録)
+**機械ゲート完了(2026-07-12, Orch-Sylph)。人間ゲート待ち(Undine→ユーザー依頼)。**
+
+- **Domain A 閉鎖**: 特区骨格 `apps/soul/agent/` + モーラ写像/WAVパーサ純関数 + fixture(実機 audio_query 接地)。レビュー 3 レーン PASS(blocking ゼロ)。→ [../waves/s1/domain-a.md](../waves/s1/domain-a.md) / [../reviews/s1/domain-a-review.md](../reviews/s1/domain-a-review.md)
+- **choke point 1 通過**: ユーザーが `apps/soul/agent` で `npm install` 実施(agent-sdk 0.3.207 実在・pnpm-lock.yaml 不変を裏取り)。
+- **Domain B 閉鎖**: TTS クライアント + 常駐再生 + チャネル送出(参照ドライバ写経)+ 同期(accepted→即再生・WAV 実時間軸)。機械検証はテストダブル(魂→器 import は特区違反のため)+ preflight-tts 実機 PASS。「配線の存在≠疎通」明記。レビュー 3 レーン PASS。undici×自作WSサーバ相性問題は既知環境事項として記録。**合成尺は決定論でない**(同テキスト同話者で 1.5468s/2.1389s/2.1156s/2.1272s を観測)を事実化。→ [../waves/s1/domain-b.md](../waves/s1/domain-b.md) / [../reviews/s1/domain-b-review.md](../reviews/s1/domain-b-review.md)
+- **Domain C 閉鎖**: llm-session(常駐ストリーミング入力・**maxTurns:1 と residency の両立を実測確定=S系列前提**)+ env-guard(3 種 throw・実演済み)+ CLI + **experiments/ 開設**([../../experiments/s1-first-light.md](../../experiments/s1-first-light.md))+ README 改定 + 人間ゲート手順書。**tools:[] で全ツール無効を実証**(init.tools=[]・disallowedTools 不要)・apiKeySource=none(サブスク OAuth)。SDK 実行は 4 ask(上限内)。レビュー 3 レーン PASS(.d.ts 全項目一致)。→ [../waves/s1/domain-c.md](../waves/s1/domain-c.md) / [../reviews/s1/domain-c-review.md](../reviews/s1/domain-c-review.md)
+- **機械ゲート(Orch 自身の再実行の生数字)**: soul `node --test` **84/84** / runtime-player **925/925** / packages **1492/1492** / check:soul-zone 緑(1274 files) / check:deps 緑 / check:source 新規赤ゼロ(既存 physiology barrel 1 件は S1 無関係・別タスク化) / **pnpm-lock.yaml・器コード・C4 契約 fixture・参照ドライバ diff 空**。
+- **follow-up**: [../waves/s1/s1-followup.md](../waves/s1/s1-followup.md)(10 項目。テストハング残存監視 §8 含む)。
+- **残: 人間ゲート(choke point 2)**: [../waves/s1/human-gate-procedure.md](../waves/s1/human-gate-procedure.md) に従い、AivisSpeech + 自律ホスト起動 + Channel URL 手渡し + CLI で一言 → 「声が答え、口が合っている」の一目一聴。CLOSURE 判定は Undine が引き取る。
