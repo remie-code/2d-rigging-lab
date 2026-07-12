@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createAudioPlayer, writeTempWav } from "./audio-player.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const ECHO_PLAYER = path.join(here, "test-support", "echo-player.mjs");
+const ECHO_PLAYER = path.join(here, "..", "test-support", "echo-player.mjs");
 
 /** 無音エコープロセスを注入した player を作る（PowerShell の代役）。 */
 function makeEchoPlayer(onOutput) {

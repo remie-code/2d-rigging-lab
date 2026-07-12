@@ -18,11 +18,11 @@
 
 import { performance } from "node:perf_hooks";
 
-import { assertSubscriptionAuthEnv } from "../src/env-guard.mjs";
-import { createLlmSession } from "../src/llm-session.mjs";
-import { createTtsClient, parseAudioQuery } from "../src/tts-client.mjs";
-import { wavDurationSec } from "../src/wav-duration.mjs";
-import { buildSpeechTimeline } from "../src/mora-timeline.mjs";
+import { assertSubscriptionAuthEnv } from "../src/mind/env-guard.mjs";
+import { createLlmSession } from "../src/mind/llm-session.mjs";
+import { createTtsClient, parseAudioQuery } from "../src/voice/tts-client.mjs";
+import { wavDurationSec } from "../src/voice/wav-duration.mjs";
+import { buildSpeechTimeline } from "../src/voice/mora-timeline.mjs";
 
 const TOOLS_CHECK_PROMPT = "ツールを使わずに、一言だけで挨拶して。";
 const SAMPLE_PROMPTS = [

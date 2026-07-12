@@ -3,8 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { connectChannel, redactToken } from "./channel-client.mjs";
-import { createChannelServerDouble } from "./test-support/ws-double.mjs";
-import { MinimalWebSocket } from "./test-support/ws-client.mjs";
+import { createChannelServerDouble } from "../test-support/ws-double.mjs";
+import { MinimalWebSocket } from "../test-support/ws-client.mjs";
 
 // 機械テストでは channel-client に最小 WS クライアントを注入し、ws-double サーバと実 TCP で
 // 疎通させて channel-client のロジックを検証する（本番は globalThis.WebSocket=undici・実器と

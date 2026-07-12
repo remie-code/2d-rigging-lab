@@ -55,7 +55,7 @@ import { createPcmFramer, int16ToFloat32 } from "./pcm-framing.mjs";
 import { createSileroVad } from "./silero-vad.mjs";
 import { createSpeechSegmenter } from "./speech-segmenter.mjs";
 import { createPcmRingBuffer } from "./pcm-ring-buffer.mjs";
-import { encodeWav } from "./wav-encode.mjs";
+import { encodeWav } from "../voice/wav-encode.mjs";
 import { createWhisperServer } from "./whisper-server.mjs";
 import { createWhisperInference, computeAudioCtx } from "./whisper-inference.mjs";
 import { createTranscriptBuffer } from "./transcript-buffer.mjs";

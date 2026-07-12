@@ -47,7 +47,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** agent パッケージルート（src/ の親）。vendor 既定パスの基準。 */
-const AGENT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const AGENT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** whisper-server 実行ファイルの既定（vendor 配置・非コミット）。 */
 export const DEFAULT_WHISPER_SERVER_PATH = path.join(

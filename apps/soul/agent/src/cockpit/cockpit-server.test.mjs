@@ -13,7 +13,7 @@ import {
   createInMemorySettingsStore,
   DEFAULT_COCKPIT_HOST
 } from "./cockpit-server.mjs";
-import { createTranscriptBuffer } from "./transcript-buffer.mjs";
+import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 
 // 魂コクピット・サーバの機械テスト（S2.5 Domain A）。pipeline / デバイス列挙 / spawn を全注入し、
 // 実マイク・実 ffmpeg・実 whisper・実 ONNX を一切使わずに HTTP/SSE/結線/クリーンシャットダウンを固定する。

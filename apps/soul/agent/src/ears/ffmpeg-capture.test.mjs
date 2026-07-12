@@ -11,7 +11,7 @@ import {
 } from "./ffmpeg-capture.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const FAKE_FFMPEG = path.join(here, "test-support", "fake-ffmpeg.mjs");
+const FAKE_FFMPEG = path.join(here, "..", "test-support", "fake-ffmpeg.mjs");
 
 function withTimeout(promise, ms, label) {
   let timer;

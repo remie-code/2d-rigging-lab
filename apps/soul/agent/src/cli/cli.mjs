@@ -23,11 +23,11 @@ import { createInterface } from "node:readline";
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
 
-import { assertSubscriptionAuthEnv } from "./env-guard.mjs";
-import { createLlmSession } from "./llm-session.mjs";
-import { connectChannel, redactToken } from "./channel-client.mjs";
-import { createAudioPlayer, writeTempWav } from "./audio-player.mjs";
-import { speak } from "./speak.mjs";
+import { assertSubscriptionAuthEnv } from "../mind/env-guard.mjs";
+import { createLlmSession } from "../mind/llm-session.mjs";
+import { connectChannel, redactToken } from "../channel/channel-client.mjs";
+import { createAudioPlayer, writeTempWav } from "../voice/audio-player.mjs";
+import { speak } from "../voice/speak.mjs";
 
 /**
  * 会話ループ本体（依存注入で配線検証可能）。stdin の各行を 1 発話として処理する。

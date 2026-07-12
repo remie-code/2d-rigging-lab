@@ -44,9 +44,9 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
-import { createEarPipeline } from "./ear-pipeline.mjs";
-import { resolveFfmpegPath } from "./ffmpeg-capture.mjs";
-import { normalizeDevice } from "./ears-cli.mjs";
+import { createEarPipeline } from "../ears/ear-pipeline.mjs";
+import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
+import { normalizeDevice } from "../cli/ears-cli.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
 export const DEFAULT_COCKPIT_HOST = "127.0.0.1";

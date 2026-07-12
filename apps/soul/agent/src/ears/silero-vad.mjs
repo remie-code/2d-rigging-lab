@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** 既定モデルパス（vendor/models/silero_vad.onnx・非コミット）。 */
-export const DEFAULT_SILERO_MODEL_PATH = path.resolve(here, "..", "vendor", "models", "silero_vad.onnx");
+export const DEFAULT_SILERO_MODEL_PATH = path.resolve(here, "..", "..", "vendor", "models", "silero_vad.onnx");
 
 /** Silero v5 の既定 I/O 名。 */
 export const SILERO_V5_INPUT_NAMES = Object.freeze({ input: "input", state: "state", sr: "sr" });

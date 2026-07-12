@@ -27,13 +27,13 @@
  * exit 0 = PASS、exit 1 = 疎通失敗 or 構造違反。
  */
 
-import { createWhisperServer } from "../src/whisper-server.mjs";
-import { createWhisperClient } from "../src/whisper-client.mjs";
-import { createTranscriptBuffer } from "../src/transcript-buffer.mjs";
-import { createTtsClient } from "../src/tts-client.mjs";
-import { encodeWav } from "../src/wav-encode.mjs";
-import { wavDurationSec } from "../src/wav-duration.mjs";
-import { sinePcm, silencePcm, concatInt16 } from "../src/fixtures-audio.mjs";
+import { createWhisperServer } from "../src/ears/whisper-server.mjs";
+import { createWhisperClient } from "../src/ears/whisper-client.mjs";
+import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
+import { createTtsClient } from "../src/voice/tts-client.mjs";
+import { encodeWav } from "../src/voice/wav-encode.mjs";
+import { wavDurationSec } from "../src/voice/wav-duration.mjs";
+import { sinePcm, silencePcm, concatInt16 } from "../src/ears/fixtures-audio.mjs";
 
 function parseArgs(argv) {
   const args = {

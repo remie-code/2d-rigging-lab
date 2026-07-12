@@ -15,9 +15,9 @@
  * exit 0 = 全 assert 合格、exit 1 = 疎通失敗 or 契約違反。
  */
 
-import { createTtsClient, parseAudioQuery } from "../src/tts-client.mjs";
-import { wavDurationSec } from "../src/wav-duration.mjs";
-import { buildSpeechTimeline, MAX_TIMELINE_ITEMS } from "../src/mora-timeline.mjs";
+import { createTtsClient, parseAudioQuery } from "../src/voice/tts-client.mjs";
+import { wavDurationSec } from "../src/voice/wav-duration.mjs";
+import { buildSpeechTimeline, MAX_TIMELINE_ITEMS } from "../src/voice/mora-timeline.mjs";
 
 function parseArgs(argv) {
   const args = { text: "こんにちは、テストです", baseUrl: undefined, speaker: undefined };

@@ -21,8 +21,8 @@ import { createInterface } from "node:readline";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-import { createEarPipeline, EAR_DEFAULTS } from "./ear-pipeline.mjs";
-import { resolveFfmpegPath } from "./ffmpeg-capture.mjs";
+import { createEarPipeline, EAR_DEFAULTS } from "../ears/ear-pipeline.mjs";
+import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 
 /**
  * dshow のデバイス指定は `audio=<名前>` 形式。人が `--device マイク名` とだけ書けるよう、

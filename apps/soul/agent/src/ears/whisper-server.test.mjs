@@ -18,7 +18,7 @@ import {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // 実 whisper-server の代役 = 合成バイトを吐いて居座る/即死するダミー子プロセス（Domain A の型を再利用）。
-const FAKE_CHILD = path.join(here, "test-support", "fake-ffmpeg.mjs");
+const FAKE_CHILD = path.join(here, "..", "test-support", "fake-ffmpeg.mjs");
 
 function withTimeout(promise, ms, label) {
   let timer;

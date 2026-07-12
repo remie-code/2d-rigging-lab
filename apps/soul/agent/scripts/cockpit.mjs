@@ -16,9 +16,9 @@
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 
-import { createCockpitServer, DEFAULT_COCKPIT_PORT } from "../src/cockpit-server.mjs";
-import { createFileSettingsStore } from "../src/cockpit-settings-store.mjs";
-import { cockpitHtmlPath } from "../src/cockpit-page.mjs";
+import { createCockpitServer, DEFAULT_COCKPIT_PORT } from "../src/cockpit/cockpit-server.mjs";
+import { createFileSettingsStore } from "../src/cockpit/cockpit-settings-store.mjs";
+import { cockpitHtmlPath } from "../src/cockpit/cockpit-page.mjs";
 
 /** @param {string[]} argv */
 export function parseCockpitArgs(argv) {

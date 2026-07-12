@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 import { encodeWav } from "./wav-encode.mjs";
 import { wavDurationSec } from "./wav-duration.mjs";
-import { sinePcm, silencePcm, concatInt16, int16ToBytesLE } from "./fixtures-audio.mjs";
+import { sinePcm, silencePcm, concatInt16, int16ToBytesLE } from "../ears/fixtures-audio.mjs";
 
 test("ラウンドトリップ: encodeWav → wavDurationSec で尺が一致（Int16Array・16kHz mono）", () => {
   // 16000 サンプル @16kHz mono s16 → ちょうど 1.0s。

@@ -53,13 +53,18 @@ LLM（Agent SDK / Opus）で会話し、TTS（AivisSpeech）で声を作り、�
 対象外＝`pnpm-lock.yaml` 不変）。ランタイム依存は `@anthropic-ai/claude-agent-sdk` のみ、本体は
 依存最小の `.mjs` + `node:test`。
 
-- **サブスク枠認証ガード**（`src/env-guard.mjs`）: 起動時に `ANTHROPIC_API_KEY` /
+`src/` は器官構造（S3 前に移動、2026-07-12）: `ears/`（聴覚: VAD・ASR・転写バッファ）/ `voice/`
+（発声: TTS・モーラ写像・再生）/ `mind/`（知性: LLM セッション・認証ガード）/ `channel/`（器との
+契約クライアント）/ `cockpit/`（操縦席）/ `cli/`（入口）/ `test-support/`（テスト補助）。テストは
+実装と同居（`.test.mjs`）。過去の wave 記録内の旧パスは歴史記録としてそのまま。
+
+- **サブスク枠認証ガード**（`src/mind/env-guard.mjs`）: 起動時に `ANTHROPIC_API_KEY` /
   `ANTHROPIC_AUTH_TOKEN` / `CLAUDE_CODE_USE_*` が設定されていれば**起動拒否**（サブスク枠でなく
   API 従量課金になる事故の防波堤）。魂は `/login` のサブスク OAuth 資格情報で動かす前提。
-- **常駐 LLM セッション**（`src/llm-session.mjs`）: `query()` を常駐ストリーミング入力モードで使い
+- **常駐 LLM セッション**（`src/mind/llm-session.mjs`）: `query()` を常駐ストリーミング入力モードで使い
   1 プロセスを保持（毎回 `query()` の spawn コストを畳む）。`settingSources: []` / `tools: []` /
   `model: claude-opus-4-8` / `maxTurns: 1` / `persistSession: false`。
-- **会話 CLI**（`src/cli.mjs`）: stdin の一文 → 応答 → 器の口 + スピーカー（`speak.mjs`）。
+- **会話 CLI**（`src/cli/cli.mjs`）: stdin の一文 → 応答 → 器の口 + スピーカー（`speak.mjs`）。
 - **計測**（`scripts/first-light.mjs` → `discussion/ai-cohost/experiments/`）: 枠消費（usage）+
   レイテンシ（TTFT / E2E）を記録し続ける。
 
@@ -67,7 +72,7 @@ install（ユーザーの作業）と起動:
 
 ```
 cd apps/soul/agent && npm install    # 1 回だけ（lockfile は apps/soul/agent 内で完結）
-node apps/soul/agent/src/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
+node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
 ```
 
 実器接続・実再生を伴う起動（CLI / `scripts/preflight-e2e.mjs`）は**人間ゲート**の領分
@@ -75,17 +80,17 @@ node apps/soul/agent/src/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
 
 #### S2: 耳（ローカル常時 ASR → 転写バッファ）
 
-マイク→ffmpeg（16kHz mono s16le）→ Silero VAD（onnxruntime-node・`src/silero-vad.mjs`）→
-発話セグメンタ（`src/speech-segmenter.mjs`）→ PCM リング切り出し→ whisper.cpp `whisper-server`
-（kotoba-whisper q5_0・CPU・localhost）→ **転写バッファ（正本・`src/transcript-buffer.mjs`）**。
-結線は `src/ear-pipeline.mjs`（常駐・クリーンシャットダウン・ASR 直列キュー・死活監視）。
+マイク→ffmpeg（16kHz mono s16le）→ Silero VAD（onnxruntime-node・`src/ears/silero-vad.mjs`）→
+発話セグメンタ（`src/ears/speech-segmenter.mjs`）→ PCM リング切り出し→ whisper.cpp `whisper-server`
+（kotoba-whisper q5_0・CPU・localhost）→ **転写バッファ（正本・`src/ears/transcript-buffer.mjs`）**。
+結線は `src/ears/ear-pipeline.mjs`（常駐・クリーンシャットダウン・ASR 直列キュー・死活監視）。
 
 - **バイナリ/モデルは非コミット**（`vendor/` は .gitignore 済み）: whisper 一式 +
   `ggml-kotoba-whisper-v2.0-q5_0.bin` + `silero_vad.onnx` をユーザーが配置する。
 - **レイテンシ既定**（実測根拠は `discussion/ai-cohost/experiments/s2-ears.md`）:
-  whisper-server 6 スレッド + **発話長比例の動的 `audio_ctx`**（`src/whisper-inference.mjs`）で
+  whisper-server 6 スレッド + **発話長比例の動的 `audio_ctx`**（`src/ears/whisper-inference.mjs`）で
   発話終了→転写 ≈1.5〜2s（全窓のままだと ≈6.6〜9.5s）。
-- **耳 CLI 診断**: `node apps/soul/agent/src/ears-cli.mjs --device "マイク名"`（`--list-devices` で
+- **耳 CLI 診断**: `node apps/soul/agent/src/cli/ears-cli.mjs --device "マイク名"`（`--list-devices` で
   デバイス列挙・`--help` 参照）。実マイク起動は人間ゲートの領分
   （手順は `discussion/ai-cohost/implementation/waves/s2/human-gate-procedure.md`）。
 - **preflight（マイク不要の実機疎通）**: `scripts/preflight-vad.mjs`（実 ONNX）/
@@ -102,14 +107,14 @@ node apps/soul/agent/src/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
 
 - **起動（1 コマンド）**: `npm run cockpit --prefix apps/soul/agent`（既定 `http://127.0.0.1:8181/`・
   `-- --port N` でポート変更）。起動時にアクセス URL を標準出力に表示。**Ctrl+C / EOF で clean 終了**。
-- **画面**（`src/cockpit.html`・単一ファイルの vanilla HTML/CSS/JS・**ビルドチェーン/CDN/npm 依存
+- **画面**（`src/cockpit/cockpit.html`・単一ファイルの vanilla HTML/CSS/JS・**ビルドチェーン/CDN/npm 依存
   ゼロ**・ブラウザ組み込みの `EventSource`（SSE）+ `fetch` のみ）: ヘッダ（耳の Listening/Stopped +
   whisper/ffmpeg 死活・down は赤 + 理由）/ Microphone ドロップダウン（`--list-devices` の廃止置換）+
   Start/Stop / Timeline（本文行 + (speaking) ライブ行・時刻/話者/本文/レイテンシ）/ footer（discarded・
   uptime）。正本はプロセス側で **タブを閉じても魂は死なない**（開き直せば `GET /api/state` で復元）。
-- **サーバ**（`src/cockpit-server.mjs`・Domain A）: HTTP 静的配信 + 制御 API（デバイス列挙 / 耳 start
+- **サーバ**（`src/cockpit/cockpit-server.mjs`・Domain A）: HTTP 静的配信 + 制御 API（デバイス列挙 / 耳 start
   /stop / 状態）+ SSE ライブチャネル。**127.0.0.1 限定**（非 loopback host は構築時に throw・認証なし）。
-- **デバイス選択の永続化**（`src/cockpit-settings-store.mjs`）: 選んだマイクを
+- **デバイス選択の永続化**（`src/cockpit/cockpit-settings-store.mjs`）: 選んだマイクを
   `cockpit-settings.local.json`（.gitignore 済み・**非コミット**）に記憶し次回の初期選択に使う。
   読み書き失敗は握って続行（起動を止めない）。
 - **preflight（マイク不要）**: `scripts/preflight-cockpit.mjs`——サーバを loopback に起動し

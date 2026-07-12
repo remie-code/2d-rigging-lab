@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 import { createEarPipeline, EAR_DEFAULTS } from "./ear-pipeline.mjs";
 import { sinePcm, silencePcm, concatInt16, int16ToBytesLE } from "./fixtures-audio.mjs";
-import { wavDurationSec } from "./wav-duration.mjs";
+import { wavDurationSec } from "../voice/wav-duration.mjs";
 
 // 耳パイプライン結線の機械テスト（S2 Domain C）。全部品を注入し、実マイク・実 ONNX・
 // 実 whisper-server・実ネットワークを一切使わずに縦貫通とライフサイクルを固定する。

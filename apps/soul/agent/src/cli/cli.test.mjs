@@ -6,19 +6,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { runConversation } from "./cli.mjs";
-import { speak } from "./speak.mjs";
-import { connectChannel } from "./channel-client.mjs";
-import { createAudioPlayer } from "./audio-player.mjs";
-import { createChannelServerDouble } from "./test-support/ws-double.mjs";
-import { MinimalWebSocket } from "./test-support/ws-client.mjs";
+import { speak } from "../voice/speak.mjs";
+import { connectChannel } from "../channel/channel-client.mjs";
+import { createAudioPlayer } from "../voice/audio-player.mjs";
+import { createChannelServerDouble } from "../test-support/ws-double.mjs";
+import { MinimalWebSocket } from "../test-support/ws-client.mjs";
 import {
   buildWavBytes,
   GOLDEN_KONNICHIWA_WAV_DURATION_SEC,
   AIVIS_BYTE_RATE
-} from "./fixtures.mjs";
+} from "../voice/fixtures.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const ECHO_PLAYER = path.join(here, "test-support", "echo-player.mjs");
+const ECHO_PLAYER = path.join(here, "..", "test-support", "echo-player.mjs");
 
 // llm-session を実 SDK ではなくダブルに差し替え、Channel（ws-double + MinimalWebSocket）と
 // プレイヤー（echo-player）を実配線して CLI の会話ループ（一文 → ask → speak → 口 + 声 → 計測）を

@@ -27,10 +27,10 @@ import {
   SILERO_V5_INPUT_NAMES,
   SILERO_V5_OUTPUT_NAME,
   SILERO_V5_STATE_OUTPUT_NAME
-} from "../src/silero-vad.mjs";
-import { sinePcm, silencePcm } from "../src/fixtures-audio.mjs";
-import { int16ToFloat32, decodeInt16LE } from "../src/pcm-framing.mjs";
-import { createTtsClient } from "../src/tts-client.mjs";
+} from "../src/ears/silero-vad.mjs";
+import { sinePcm, silencePcm } from "../src/ears/fixtures-audio.mjs";
+import { int16ToFloat32, decodeInt16LE } from "../src/ears/pcm-framing.mjs";
+import { createTtsClient } from "../src/voice/tts-client.mjs";
 
 const log = (msg) => process.stdout.write(`[preflight-vad] ${msg}\n`);
 

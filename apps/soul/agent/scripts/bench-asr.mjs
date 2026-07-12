@@ -18,12 +18,12 @@
  * exit 0 = 計測完了、exit 1 = 失敗。
  */
 
-import { createWhisperServer } from "../src/whisper-server.mjs";
-import { createTtsClient } from "../src/tts-client.mjs";
-import { encodeWav } from "../src/wav-encode.mjs";
-import { wavDurationSec } from "../src/wav-duration.mjs";
-import { sinePcm, silencePcm, concatInt16 } from "../src/fixtures-audio.mjs";
-import { parseInferenceResponse, normalizeTranscript } from "../src/whisper-client.mjs";
+import { createWhisperServer } from "../src/ears/whisper-server.mjs";
+import { createTtsClient } from "../src/voice/tts-client.mjs";
+import { encodeWav } from "../src/voice/wav-encode.mjs";
+import { wavDurationSec } from "../src/voice/wav-duration.mjs";
+import { sinePcm, silencePcm, concatInt16 } from "../src/ears/fixtures-audio.mjs";
+import { parseInferenceResponse, normalizeTranscript } from "../src/ears/whisper-client.mjs";
 
 const log = (msg) => process.stdout.write(`[bench-asr] ${msg}\n`);
 

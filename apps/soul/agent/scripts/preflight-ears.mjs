@@ -14,10 +14,10 @@
  * exit 0 = PASS（両発話が転写されバッファに積まれた）、exit 1 = 失敗。
  */
 
-import { createEarPipeline, EAR_DEFAULTS } from "../src/ear-pipeline.mjs";
-import { createTtsClient } from "../src/tts-client.mjs";
-import { decodeInt16LE } from "../src/pcm-framing.mjs";
-import { silencePcm, concatInt16 } from "../src/fixtures-audio.mjs";
+import { createEarPipeline, EAR_DEFAULTS } from "../src/ears/ear-pipeline.mjs";
+import { createTtsClient } from "../src/voice/tts-client.mjs";
+import { decodeInt16LE } from "../src/ears/pcm-framing.mjs";
+import { silencePcm, concatInt16 } from "../src/ears/fixtures-audio.mjs";
 
 const log = (msg) => process.stdout.write(`[preflight-ears] ${msg}\n`);
 

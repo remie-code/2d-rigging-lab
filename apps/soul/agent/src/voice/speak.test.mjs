@@ -3,9 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { speak } from "./speak.mjs";
-import { createChannelServerDouble } from "./test-support/ws-double.mjs";
-import { connectChannel } from "./channel-client.mjs";
-import { MinimalWebSocket } from "./test-support/ws-client.mjs";
+import { createChannelServerDouble } from "../test-support/ws-double.mjs";
+import { connectChannel } from "../channel/channel-client.mjs";
+import { MinimalWebSocket } from "../test-support/ws-client.mjs";
 import {
   buildWavBytes,
   GOLDEN_KONNICHIWA_WAV_DURATION_SEC,

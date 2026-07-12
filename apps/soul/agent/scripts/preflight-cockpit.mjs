@@ -19,9 +19,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 
-import { createCockpitServer } from "../src/cockpit-server.mjs";
-import { createFileSettingsStore } from "../src/cockpit-settings-store.mjs";
-import { cockpitHtmlPath } from "../src/cockpit-page.mjs";
+import { createCockpitServer } from "../src/cockpit/cockpit-server.mjs";
+import { createFileSettingsStore } from "../src/cockpit/cockpit-settings-store.mjs";
+import { cockpitHtmlPath } from "../src/cockpit/cockpit-page.mjs";
 
 const log = (msg) => process.stdout.write(`[preflight-cockpit] ${msg}\n`);
 

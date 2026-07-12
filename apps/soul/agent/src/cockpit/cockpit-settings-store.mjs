@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** 既定の保存先（`apps/soul/agent/cockpit-settings.local.json`・.gitignore 対象・コミットしない）。 */
-export const DEFAULT_SETTINGS_PATH = join(here, "..", "cockpit-settings.local.json");
+export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.local.json");
 
 /**
  * file-backed settings store を作る（失敗寛容・パス注入可能）。

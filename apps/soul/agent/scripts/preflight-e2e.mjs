@@ -21,12 +21,12 @@
  * exit 0 = シナリオ完遂 / 1 = 疎通・再生の失敗 / 2 = 引数不正。
  */
 
-import { createTtsClient, parseAudioQuery } from "../src/tts-client.mjs";
-import { wavDurationSec } from "../src/wav-duration.mjs";
-import { buildSpeechTimeline } from "../src/mora-timeline.mjs";
-import { connectChannel, redactToken } from "../src/channel-client.mjs";
-import { createAudioPlayer, writeTempWav } from "../src/audio-player.mjs";
-import { speak } from "../src/speak.mjs";
+import { createTtsClient, parseAudioQuery } from "../src/voice/tts-client.mjs";
+import { wavDurationSec } from "../src/voice/wav-duration.mjs";
+import { buildSpeechTimeline } from "../src/voice/mora-timeline.mjs";
+import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
+import { createAudioPlayer, writeTempWav } from "../src/voice/audio-player.mjs";
+import { speak } from "../src/voice/speak.mjs";
 
 function parseArgs(argv) {
   const flags = argv.filter((a) => a.startsWith("--"));
