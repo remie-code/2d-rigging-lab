@@ -232,7 +232,8 @@ describe("readBrowserSourceRuntimeExportResponse", () => {
         },
         updatedAtIso: null
       },
-      activeVariantSelection: createDisabledActiveVariantSelection()
+      activeVariantSelection: createDisabledActiveVariantSelection(),
+      effectiveDynamicsTuning: null
     });
   });
 });

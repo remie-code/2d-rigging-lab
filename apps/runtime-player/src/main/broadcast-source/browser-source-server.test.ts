@@ -151,6 +151,7 @@ describe("Runtime Player Browser Source server", () => {
       status: "not-loaded",
       runtimeExport: null,
       activeVariantSelection: createDisabledActiveVariantSelection(),
+      effectiveDynamicsTuning: null,
       stageDisplayState: {
         stageWindow: {
           bounds: null
@@ -191,6 +192,7 @@ describe("Runtime Player Browser Source server", () => {
         }
       },
       activeVariantSelection: createDisabledActiveVariantSelection(),
+      effectiveDynamicsTuning: null,
       stageDisplayState: {
         stageWindow: {
           bounds: null
