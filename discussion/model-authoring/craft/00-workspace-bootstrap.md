@@ -27,6 +27,15 @@
 
 - validate の結果を把握した / 全身レンダの意味を説明できる / 作業対象の drawableId と rest bbox を列挙できる / git log に baseline がある
 
+## 既知の罠（headless validate の error クラス）
+
+CLI の validatePackage は document-only 経路（runtimeSnapshot 不在）であり、リグが育つにつれ**構造的に消せない error クラス**が積み上がる（3周目=claude-chan 周回で裁定）:
+
+- `mesh.uvCoordinateOutOfBounds` / `mesh.orphanedVertex`: 生成器仕様（レシピ01 既知の罠を参照）
+- `*.runtimeEvidenceMissing`（rigControl / mask / dynamics / mesh / viewer の一族）: runtimeSnapshot が無い限り enabled な該当構造の**全数に無条件発行**される。op の正誤とは無関係
+
+validate を出口基準に使うときは「blocking 0 + error は既知クラスのみ + **件数が構造数（enabled rigControl 数・mask 数等）と一致**」と書く。既知クラス外の error が 1 件でも出たら停止が正。
+
 ## エスカレーション条件
 
 - validate に blocking がある / パッケージ構造が `open-model-package-v1` と違う / テクスチャ寸法解決が reject される（sidecar の `textureDimensionSources` に現れる）→ ユーザーへ
