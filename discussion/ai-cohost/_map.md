@@ -19,6 +19,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
 | [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
 | [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。**C1〜C7 全て完全閉鎖(C1=2026-07-10、C2〜C5=2026-07-11、C6/C7=2026-07-12)=器の完成** |
+| [soul/](soul/) | S系列(魂の実装)の前提討議3件(①知性のアクセス経路 ②会話パイプライン最終化 ③persona) | Created(2026-07-12)。**①討議開始(優先度最高)**: ユーザー選好=Max 20x活用、規約適合+レイテンシの事実調査中 |
 
 実測(レイテンシ・会話品質・費用)を始める段階で `experiments/` を、AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
@@ -47,7 +48,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 ## 5. Next Actions
 
-1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1〜C4 は完全閉鎖(C1=2026-07-10、C2/C3/C4=2026-07-11)**。**C5「合成が正しい」も完全閉鎖(2026-07-11)**: スロット曲線状態機械(set/envelope統合+ease-in)・実効値フィードバック・動く基底へのrelease・Stage実効値追従。人間ゲート合格(「滑らかに動く」)。**C6「口が話せる」も完全閉鎖(2026-07-12)**: 口グループ・タイムライン評価器(凸恒等の構造保証)・intent.speech・時間仮説+再調音ディップ(Articulationスライダーでプロファイル補正層へ昇格)、比較ゲート合格([implementation/orchestration/c6-wave-plan.md](implementation/orchestration/c6-wave-plan.md))。**C7「配信に乗る」も完全閉鎖(2026-07-12、waveなし検証のみ)**: OBS二体並走ゲート合格([implementation/orchestration/c7-closure-record.md](implementation/orchestration/c7-closure-record.md))。**C1〜C7全閉鎖=器の完成**。次の一手は **S系列(魂)の前提討議**(implementation/_map 次の行動7)。
+1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1〜C4 は完全閉鎖(C1=2026-07-10、C2/C3/C4=2026-07-11)**。**C5「合成が正しい」も完全閉鎖(2026-07-11)**: スロット曲線状態機械(set/envelope統合+ease-in)・実効値フィードバック・動く基底へのrelease・Stage実効値追従。人間ゲート合格(「滑らかに動く」)。**C6「口が話せる」も完全閉鎖(2026-07-12)**: 口グループ・タイムライン評価器(凸恒等の構造保証)・intent.speech・時間仮説+再調音ディップ(Articulationスライダーでプロファイル補正層へ昇格)、比較ゲート合格([implementation/orchestration/c6-wave-plan.md](implementation/orchestration/c6-wave-plan.md))。**C7「配信に乗る」も完全閉鎖(2026-07-12、waveなし検証のみ)**: OBS二体並走ゲート合格([implementation/orchestration/c7-closure-record.md](implementation/orchestration/c7-closure-record.md))。**C1〜C7全閉鎖=器の完成**。次の一手は **S系列(魂)の前提討議**——入口は [soul/_map.md](soul/_map.md)(①知性のアクセス経路=討議中が最優先)。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
 ## 6. Unresolved Questions
