@@ -1,0 +1,84 @@
+// @ts-check
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { createFileSettingsStore, DEFAULT_SETTINGS_PATH } from "./cockpit-settings-store.mjs";
+
+// file-backed settings store の機械テスト（S2.5 Domain B）。全て OS temp のパスを注入し、
+// 実設定ファイル（apps/soul/agent/cockpit-settings.local.json）に触れない（テスト非汚染）。
+
+function tmpDir() {
+  return mkdtempSync(join(tmpdir(), "cockpit-settings-test-"));
+}
+
+test("settings store: set→get roundtrip persists the raw device name", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getLastDevice(), null); // 未作成 = 記憶なし。
+    store.setLastDevice("PicoStreamingMicrophone");
+    assert.equal(store.getLastDevice(), "PicoStreamingMicrophone");
+    // 別インスタンスでも読める = 実ファイルに永続している。
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: setLastDevice(null) clears the remembered device", () => {
+  const dir = tmpDir();
+  try {
+    const store = createFileSettingsStore({ path: join(dir, "settings.json") });
+    store.setLastDevice("Mic A");
+    assert.equal(store.getLastDevice(), "Mic A");
+    store.setLastDevice(null);
+    assert.equal(store.getLastDevice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: missing / corrupt file → getLastDevice returns null (failure-tolerant)", () => {
+  const dir = tmpDir();
+  try {
+    // 未作成ファイル。
+    const missing = createFileSettingsStore({ path: join(dir, "nope.json") });
+    assert.equal(missing.getLastDevice(), null);
+    // 壊れた JSON。
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ this is not json ", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getLastDevice(), null);
+    // 想定外の shape（lastDevice が文字列でない）→ null。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ lastDevice: 123 }), "utf8");
+    const odd = createFileSettingsStore({ path: oddPath });
+    assert.equal(odd.getLastDevice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: unwritable path → setLastDevice swallows the error (does not throw)", () => {
+  const dir = tmpDir();
+  try {
+    // 親要素をファイルにする → mkdir/writeFile が必ず失敗する（ENOTDIR/EEXIST）。
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setLastDevice("Mic"));
+    // 書けていないので get も null（握って続行 = 起動を止めない）。
+    assert.equal(store.getLastDevice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: default path is the gitignored file inside apps/soul/agent", () => {
+  assert.match(DEFAULT_SETTINGS_PATH.replace(/\\/g, "/"), /apps\/soul\/agent\/cockpit-settings\.local\.json$/);
+});

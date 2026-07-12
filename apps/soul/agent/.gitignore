@@ -15,3 +15,8 @@ vendor/
 *.pcm
 *.raw
 recordings/
+
+# ── コクピットのデバイス選択の永続化（S2.5 Domain B・非コミット）──────────────
+# 操縦席で選んだマイクの記憶（cockpit-settings-store.mjs の既定保存先）。ローカル運用の設定で
+# あって成果物ではない（wave 計画 §2「マイク選択の記憶は魂ローカルの設定・gitignore 対象」）。
+cockpit-settings.local.json

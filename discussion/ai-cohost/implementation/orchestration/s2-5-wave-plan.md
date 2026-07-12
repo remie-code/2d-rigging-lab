@@ -46,4 +46,10 @@
 
 ## 6. Status
 
-(発進後に記録)
+- **機械ゲート完了・両ドメインPASS（2026-07-12, Orch-Sylph）。人間ゲート待ち。**
+- Domain A（cockpitサーバ+結線）: PASS。SSE採用（undici回避）。`cockpit-server.mjs`/`.test.mjs` 新規。3レーンレビュー全PASS → [../reviews/s2.5/domain-a-review.md](../reviews/s2.5/domain-a-review.md)。実装記録 [../waves/s2.5/domain-a.md](../waves/s2.5/domain-a.md)。
+- Domain B（ページ本体+永続化+起動+preflight+docs）: PASS。`cockpit.html`/`cockpit-page.mjs`/`cockpit-settings-store.mjs`/`scripts/cockpit.mjs`/`scripts/preflight-cockpit.mjs` 新規。3レーンレビュー全PASS → [../reviews/s2.5/domain-b-review.md](../reviews/s2.5/domain-b-review.md)。実装記録 [../waves/s2.5/domain-b.md](../waves/s2.5/domain-b.md)。
+- 機械ゲート（Orch独立実測）: 魂全テスト **226/226 緑**（S1/S2の196無退行 + A21 + B9）。`preflight-cockpit` PASS（exit0・ハングなし）。`check:soul-zone`/`check:deps` 緑。`check:source` は器 `runtime-player/physiology/index.ts` の pre-existing 違反のみ（S2.5無関係・新規違反ゼロ＝無退行）。lockfile差分ゼロ・新規npm依存ゼロ。127.0.0.1限定バインドをテスト固定。
+- 人間ゲート手順書: [../waves/s2.5/human-gate-procedure.md](../waves/s2.5/human-gate-procedure.md)。起動 `npm run cockpit --prefix apps/soul/agent` → `http://127.0.0.1:8181/`。
+- followup: [../waves/s2.5/s2-5-followup.md](../waves/s2.5/s2-5-followup.md)。
+- **Undineへエスカレーション**: (a) `check:source` の器側 pre-existing 違反は器コード変更禁止のため本wave非対応（wave締めのユーザー報告に扱いを乗せる）。(b) 履歴レイテンシ非対称（正本を汚さないv0非対称の許容可否）はUX裁定として申し送り。

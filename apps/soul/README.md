@@ -92,3 +92,28 @@ node apps/soul/agent/src/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
   `scripts/preflight-asr.mjs`（実 whisper）/ `scripts/preflight-ears.mjs`（縦貫通）/
   `scripts/bench-asr.mjs`（レイテンシ計測格子）。音声素材は TTS 合成 or 正弦波のみ
   （**実マイク・録音物は使わない**）。
+
+#### S2.5: 操縦席（魂のローカル Web コクピット）
+
+配信という利用シチュエーション（OBS + ゲーム + 器二体と並走）では「デバイス名を調べて打って起動」は
+成立しない。そこで魂が **127.0.0.1 に小さな HTTP を立て、ユーザーはブラウザで開く**（「エンジンが
+自分の顔を持つ」型）。器（runtime-player）には作らない（憲章「器は魂を知らない」）。UX 定義は
+`discussion/ai-cohost/implementation/screens/soul-cockpit.md`（Accepted）。
+
+- **起動（1 コマンド）**: `npm run cockpit --prefix apps/soul/agent`（既定 `http://127.0.0.1:8181/`・
+  `-- --port N` でポート変更）。起動時にアクセス URL を標準出力に表示。**Ctrl+C / EOF で clean 終了**。
+- **画面**（`src/cockpit.html`・単一ファイルの vanilla HTML/CSS/JS・**ビルドチェーン/CDN/npm 依存
+  ゼロ**・ブラウザ組み込みの `EventSource`（SSE）+ `fetch` のみ）: ヘッダ（耳の Listening/Stopped +
+  whisper/ffmpeg 死活・down は赤 + 理由）/ Microphone ドロップダウン（`--list-devices` の廃止置換）+
+  Start/Stop / Timeline（本文行 + (speaking) ライブ行・時刻/話者/本文/レイテンシ）/ footer（discarded・
+  uptime）。正本はプロセス側で **タブを閉じても魂は死なない**（開き直せば `GET /api/state` で復元）。
+- **サーバ**（`src/cockpit-server.mjs`・Domain A）: HTTP 静的配信 + 制御 API（デバイス列挙 / 耳 start
+  /stop / 状態）+ SSE ライブチャネル。**127.0.0.1 限定**（非 loopback host は構築時に throw・認証なし）。
+- **デバイス選択の永続化**（`src/cockpit-settings-store.mjs`）: 選んだマイクを
+  `cockpit-settings.local.json`（.gitignore 済み・**非コミット**）に記憶し次回の初期選択に使う。
+  読み書き失敗は握って続行（起動を止めない）。
+- **preflight（マイク不要）**: `scripts/preflight-cockpit.mjs`——サーバを loopback に起動し
+  `GET /`（HTML）/ `GET /api/state` / `GET /api/devices` が応答することを検証（耳の Start は押さない
+  = 実デバイス非依存）。
+- **実マイクを使う操縦は人間ゲートの領分**（手順は
+  `discussion/ai-cohost/implementation/waves/s2.5/human-gate-procedure.md`）。

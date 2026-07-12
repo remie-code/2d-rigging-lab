@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soul Cockpit</title>
+<style>
+  /* 単一ファイル・依存ゼロ（CDN/外部フォント/外部スクリプトを持ち込まない）。操縦席は診断面。 */
+  :root {
+    color-scheme: dark;
+    --bg: #14161a;
+    --panel: #1c1f26;
+    --border: #2c313b;
+    --fg: #e6e8ec;
+    --muted: #8b93a1;
+    --accent: #57c7a3;
+    --down: #ff5d5d;
+    --up: #57c7a3;
+    --speaking: #f0c14b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  h1 { font-size: 18px; margin: 0; letter-spacing: 0.02em; }
+  h2 { font-size: 13px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .ears { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.on { background: var(--up); box-shadow: 0 0 6px var(--up); }
+  .dot.off { background: var(--muted); }
+  .health { margin-top: 6px; color: var(--muted); display: flex; gap: 18px; }
+  .hstat { color: var(--muted); }
+  .hstat.up { color: var(--up); }
+  .hstat.down { color: var(--down); font-weight: bold; }
+  .hstat.unknown { color: var(--muted); }
+  section { padding: 14px 18px; }
+  .mic { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .mic label { color: var(--muted); }
+  select {
+    background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+    padding: 6px 8px; border-radius: 4px; min-width: 240px; font: inherit;
+  }
+  button {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+    padding: 6px 14px; border-radius: 4px; cursor: pointer; font: inherit;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  #btn-start { color: var(--up); }
+  #btn-stop { color: var(--down); }
+  .err { color: var(--down); flex-basis: 100%; }
+  .timeline-section { padding-bottom: 8px; }
+  #timeline {
+    height: 46vh; min-height: 220px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+    padding: 8px 10px;
+  }
+  .row { display: flex; gap: 10px; padding: 3px 2px; align-items: baseline; white-space: pre-wrap; }
+  .row .time { color: var(--muted); flex: 0 0 auto; }
+  .row .who { color: var(--accent); flex: 0 0 auto; min-width: 3.5em; }
+  .row.speaker-soul .who { color: #8fb7ff; } /* 拡張予約: AI 応答（S3）。v0 は you のみ発火。 */
+  .row .text { flex: 1 1 auto; }
+  .row .lat { color: var(--muted); flex: 0 0 auto; }
+  .row .marker { flex: 0 0 auto; } /* 拡張予約: 発火マーカーの入る余地（S3）。v0 は空。 */
+  .row.speaking .text { color: var(--speaking); font-style: italic; }
+  footer {
+    padding: 10px 18px; border-top: 1px solid var(--border);
+    color: var(--muted); display: flex; gap: 24px; background: var(--panel);
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>Soul Cockpit</h1>
+      <div class="ears">
+        <span id="ears-dot" class="dot off"></span>
+        <span id="ears-status">Stopped</span>
+      </div>
+    </div>
+    <div class="health">
+      <span>whisper: <span id="health-whisper" class="hstat unknown">unknown</span></span>
+      <span>ffmpeg: <span id="health-ffmpeg" class="hstat unknown">unknown</span></span>
+    </div>
+  </header>
+
+  <section class="mic">
+    <label for="device-select">Microphone</label>
+    <select id="device-select"></select>
+    <button id="btn-start">Start</button>
+    <button id="btn-stop">Stop</button>
+    <span id="devices-error" class="err"></span>
+  </section>
+
+  <section class="timeline-section">
+    <h2>Timeline</h2>
+    <div id="timeline" role="log" aria-live="polite"></div>
+  </section>
+
+  <footer>
+    <span>discarded: <span id="footer-discarded">0</span></span>
+    <span>uptime: <span id="footer-uptime">00:00:00</span></span>
+  </footer>
+
+  <script>
+  // 正本はプロセス側・UI は使い捨てのビュー（screens/soul-cockpit.md §1）。
+  // 消費するワイヤ契約は Domain A の domain-a.md §3（HTTP）・§4（SSE）のみ。
+  (function () {
+    "use strict";
+    var byId = function (id) { return document.getElementById(id); };
+    var timeline = byId("timeline");
+
+    // ── uptime（listening 中はローカルで 1s 刻み・state 到着で再同期）──
+    var uptimeBaseMs = 0;
+    var uptimeAnchor = Date.now();
+    var earsListening = false;
+
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    function fmtHms(ms) {
+      var s = Math.floor(ms / 1000);
+      return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor((s % 3600) / 60)) + ":" + pad(s % 60);
+    }
+    function fmtClock(epochMs) {
+      var d = new Date(epochMs);
+      return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+    }
+    function renderUptime() {
+      var ms = earsListening ? (uptimeBaseMs + (Date.now() - uptimeAnchor)) : 0;
+      byId("footer-uptime").textContent = fmtHms(ms);
+    }
+    setInterval(renderUptime, 1000);
+
+    // ── ヘッダ/フッタ = state スナップショット（GET /api/state / SSE state）──
+    function applyState(s) {
+      if (!s) return;
+      earsListening = s.ears === "listening";
+      byId("ears-status").textContent =
+        s.ears === "listening" ? "Listening" : (s.ears === "starting" ? "Starting" : "Stopped");
+      byId("ears-dot").className = "dot " + (earsListening ? "on" : "off");
+      if (s.health) {
+        applyHealth("health-whisper", s.health.whisper);
+        applyHealth("health-ffmpeg", s.health.ffmpeg);
+      }
+      byId("footer-discarded").textContent = s.discarded;
+      uptimeBaseMs = s.uptimeMs || 0;
+      uptimeAnchor = Date.now();
+      renderUptime();
+    }
+    function applyHealth(id, h) {
+      if (!h) return;
+      var el = byId(id);
+      el.textContent = h.status + (h.status === "down" && h.reason ? " — " + h.reason : "");
+      el.className = "hstat " + h.status; // down は CSS で赤 + 太字
+      el.title = h.reason || "";
+    }
+
+    // ── Timeline ──
+    var speakingRow = null;
+    function removeSpeakingRow() {
+      if (speakingRow && speakingRow.parentNode) speakingRow.parentNode.removeChild(speakingRow);
+      speakingRow = null;
+    }
+    function showSpeakingRow() {
+      if (speakingRow) return;
+      speakingRow = document.createElement("div");
+      speakingRow.className = "row speaking";
+      var t = document.createElement("span"); t.className = "time";
+      var who = document.createElement("span"); who.className = "who"; who.textContent = "you";
+      var text = document.createElement("span"); text.className = "text"; text.textContent = "······(speaking)";
+      speakingRow.appendChild(t); speakingRow.appendChild(who); speakingRow.appendChild(text);
+      timeline.appendChild(speakingRow);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+    // 話者ラベルは you / soul を扱える構造（拡張予約 §3）。v0 は you のみ。
+    function addTranscriptRow(d) {
+      removeSpeakingRow();
+      var speaker = d.speaker || "you";
+      var row = document.createElement("div");
+      row.className = "row speaker-" + speaker;
+      var t = document.createElement("span"); t.className = "time";
+      t.textContent = fmtClock(d.appendedAtMs || Date.now());
+      var who = document.createElement("span"); who.className = "who"; who.textContent = speaker;
+      var text = document.createElement("span"); text.className = "text"; text.textContent = d.text;
+      var marker = document.createElement("span"); marker.className = "marker"; // 発火マーカーの余地（S3）
+      row.appendChild(t); row.appendChild(who); row.appendChild(marker); row.appendChild(text);
+      // 転写レイテンシは live 行のみに載る（履歴エントリには契約上載らない・domain-a.md §3.3 注）。
+      if (d.latencyMs != null) {
+        var lat = document.createElement("span"); lat.className = "lat";
+        lat.textContent = "(" + (d.latencyMs / 1000).toFixed(1) + "s)";
+        row.appendChild(lat);
+      }
+      timeline.appendChild(row);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+    // タブ開き直し復元: GET /api/state の transcripts[]（レイテンシ無し = live 行のみ表示で正）。
+    function renderHistory(transcripts) {
+      timeline.innerHTML = "";
+      for (var i = 0; i < transcripts.length; i += 1) addTranscriptRow(transcripts[i]);
+    }
+
+    // ── Microphone: GET /api/devices → dropdown（lastDevice を初期選択）──
+    function selectDeviceIfPresent(name) {
+      var sel = byId("device-select");
+      for (var i = 0; i < sel.options.length; i += 1) {
+        if (sel.options[i].value === name) { sel.selectedIndex = i; return; }
+      }
+    }
+    function loadDevices() {
+      return fetch("/api/devices").then(function (r) { return r.json(); }).then(function (j) {
+        var sel = byId("device-select");
+        sel.innerHTML = "";
+        if (!j.devices || j.devices.length === 0) {
+          var opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = j.error ? "(device enumeration failed)" : "(no input devices)";
+          sel.appendChild(opt);
+        } else {
+          for (var i = 0; i < j.devices.length; i += 1) {
+            var o = document.createElement("option");
+            o.value = j.devices[i].name;
+            o.textContent = j.devices[i].name;
+            sel.appendChild(o);
+          }
+        }
+        if (j.lastDevice) selectDeviceIfPresent(j.lastDevice);
+        byId("devices-error").textContent = j.error ? ("devices: " + j.error) : "";
+      }).catch(function (e) {
+        byId("devices-error").textContent = "failed to load devices: " + e;
+      });
+    }
+
+    // ── 制御: POST /api/ears/start（選択デバイス）/ POST /api/ears/stop ──
+    function setBusy(b) { byId("btn-start").disabled = b; byId("btn-stop").disabled = b; }
+    byId("btn-start").addEventListener("click", function () {
+      var device = byId("device-select").value || null;
+      setBusy(true);
+      fetch("/api/ears/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ device: device })
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+      }).then(function (res) {
+        if (!res.ok) {
+          byId("devices-error").textContent = "start failed: " + (res.j.error || "error");
+          applyState(res.j.state);
+        } else {
+          byId("devices-error").textContent = "";
+          applyState(res.j);
+        }
+      }).catch(function (e) {
+        byId("devices-error").textContent = "start error: " + e;
+      }).then(function () { setBusy(false); });
+    });
+    byId("btn-stop").addEventListener("click", function () {
+      setBusy(true);
+      fetch("/api/ears/stop", { method: "POST" })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { applyState(j); })
+        .catch(function (e) { byId("devices-error").textContent = "stop error: " + e; })
+        .then(function () { setBusy(false); });
+    });
+
+    // ── 初期描画 + SSE 購読（GET /api/events）──
+    function subscribe() {
+      var es = new EventSource("/api/events");
+      es.addEventListener("state", function (ev) { applyState(JSON.parse(ev.data)); });
+      es.addEventListener("vad", function (ev) {
+        var d = JSON.parse(ev.data);
+        if (d.type === "speechStart") showSpeakingRow();
+        else if (d.type === "speechEnd" || d.type === "speechCancel") removeSpeakingRow();
+      });
+      es.addEventListener("transcript", function (ev) { addTranscriptRow(JSON.parse(ev.data)); });
+      es.addEventListener("discard", function (ev) {
+        byId("footer-discarded").textContent = JSON.parse(ev.data).discarded;
+      });
+      es.addEventListener("diagnostic", function () { /* 拡張予約: 補助情報の表示余地（S3+）。v0 は未表示。 */ });
+    }
+    function init() {
+      loadDevices().then(function () {
+        return fetch("/api/state").then(function (r) { return r.json(); }).then(function (s) {
+          renderHistory(s.transcripts || []); // 履歴復元（live は SSE transcript で以後追加）
+          applyState(s);
+        }).catch(function () { /* 状態取得失敗でもページは開く */ });
+      }).then(subscribe);
+    }
+    init();
+  })();
+  </script>
+</body>
+</html>
