@@ -1002,6 +1002,44 @@ describe("canvas render projection", () => {
     expect(projection.hasRenderableArtwork).toBe(true);
   });
 
+  it("propagates textureEntry contentInset and padded rasterDimensions to the renderable drawable (Wave 1.2 F)", () => {
+    // The render-scene adapter needs both the padded raster dimensions and the per-side content
+    // inset to remap content-space UV onto the raster's content sub-rect, so the projection must
+    // carry them onto the drawable (they were previously dropped downstream).
+    const PADDING = 4;
+    const CONTENT = 20;
+    const PADDED = CONTENT + PADDING * 2;
+    const session = createFixtureSession();
+    const frontEntry = session.graph.textureAtlas?.textures.find(
+      (entry) => entry.textureId === TEX_FRONT
+    );
+    if (frontEntry === undefined) {
+      throw new Error("Expected front texture entry.");
+    }
+    // Propagation onto the projection drawable happens in the map before the renderable filter, so
+    // only the textureEntry metadata needs to carry contentInset + padded dimensions here.
+    frontEntry.dimensions = { width: PADDED, height: PADDED, pixelFormat: "rgba8" };
+    frontEntry.contentInset = { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING };
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "drawable",
+      id: DRAW_FRONT
+    });
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+    expect(front?.contentInset).toEqual({
+      left: PADDING,
+      top: PADDING,
+      right: PADDING,
+      bottom: PADDING
+    });
+    expect(front?.rasterDimensions).toEqual({ width: PADDED, height: PADDED });
+
+    // Legacy entries without dimensions/contentInset leave the fields undefined (raster ≡ content).
+    const back = projection.drawables.find((drawable) => drawable.drawableId === DRAW_BACK);
+    expect(back?.contentInset).toBeUndefined();
+    expect(back?.rasterDimensions).toBeUndefined();
+  });
+
   it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
     const session = createFixtureSession();
     const projection = createCanvasRenderProjection(

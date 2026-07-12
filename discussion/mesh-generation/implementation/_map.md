@@ -15,6 +15,8 @@
 | Path | Content | Status |
 |---|---|---|
 | [orchestration/mesh-wave1-plan.md](orchestration/mesh-wave1-plan.md) | Mesh Wave 1 計画(A:中立部品抽出 / B:v7コア / C:世代切替UI / D:統合 の順次バッチ) | 実行完了 |
+| [orchestration/mesh-wave1.1-plan.md](orchestration/mesh-wave1.1-plan.md) | Mesh Wave 1.1 計画(Domain E: v7 境界仮想パディング + 密度再調整) | 実行完了([domain-e-report.md](waves/mesh-wave1.1/domain-e-report.md) / [domain-e-review.md](reviews/mesh-wave1.1/domain-e-review.md)) |
+| [orchestration/mesh-wave1.2-plan.md](orchestration/mesh-wave1.2-plan.md) | Mesh Wave 1.2 計画(Domain F: original 経路 contentInset UV remap = PSDインポート位置ズレ修正。原因調査は [reports/psd-import-fidelity/](../../reports/psd-import-fidelity/import-position-mismatch-investigation.md)) | Planned |
 | [waves/mesh-wave1/final-report.md](waves/mesh-wave1/final-report.md) | Mesh Wave 1 final report(全ドメイン要約・統合検証実数値・既知事項・ユーザー目視評価 gate 手順・評価後の Mesh Wave 2 方針) | 作成済み・ユーザー目視評価待ち |
 
 ## Mesh Wave 1 実装結果(全ドメイン pass)

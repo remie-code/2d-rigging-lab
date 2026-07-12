@@ -487,7 +487,18 @@ const remapDrawableToAtlasRuntime = (
     return drawable;
   }
 
-  const { sourceLayerId: _sourceLayerId, ...drawableWithoutSourceLayer } = drawable;
+  // Drop `contentInset` / `rasterDimensions` (Wave 1.2 F): the atlasRuntime path samples the atlas
+  // page, and `remapUvIntoPlacement` below already folds the per-layer content inset into the
+  // placement `uvRect` (single source of truth, `texture-atlas-packing.ts`). Leaving the per-layer
+  // inset on the drawable would make the shared render-scene adapter apply the content UV remap a
+  // second time, against the atlas-page dimensions, double-correcting the UVs. The `original` path
+  // keeps these fields (it returns `originalProjection` unchanged) so the adapter remaps once there.
+  const {
+    sourceLayerId: _sourceLayerId,
+    contentInset: _contentInset,
+    rasterDimensions: _rasterDimensions,
+    ...drawableWithoutSourceLayer
+  } = drawable;
 
   return {
     ...drawableWithoutSourceLayer,

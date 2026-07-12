@@ -65,6 +65,27 @@ export interface CanvasRenderableDrawable {
   readonly renderBytes?: Uint8Array;
   readonly renderWidth: number;
   readonly renderHeight: number;
+  /**
+   * Wave 1.2 F: the padded raster's per-side content inset (source pixels), carried so the
+   * render-scene adapter can remap content-space UV 0..1 onto the content sub-rect of the padded
+   * raster (see `boundary-transparent-margin-design.md` §5). Absent for legacy / non-PSD texture
+   * entries (raster ≡ content), in which case the adapter leaves UVs unchanged.
+   */
+  readonly contentInset?: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
+  /**
+   * Wave 1.2 F: the padded raster dimensions (= `textureEntry.dimensions`) that `contentInset` is
+   * expressed against. Paired with `contentInset` as the divisor of the UV remap. Absent for legacy
+   * entries without recorded padded dimensions.
+   */
+  readonly rasterDimensions?: {
+    readonly width: number;
+    readonly height: number;
+  };
   readonly maskSourceDrawableIds: readonly DrawableId[];
 }
 
@@ -229,7 +250,9 @@ export function createCanvasRenderProjection(
         drawable.evaluatedMesh.sourceMeshId === undefined
           ? undefined
           : meshesById.get(drawable.evaluatedMesh.sourceMeshId as MeshDto["meshId"]);
-      const rasterDimensions = textureEntriesById.get(drawable.textureRef.textureId)?.dimensions;
+      const textureEntry = textureEntriesById.get(drawable.textureRef.textureId);
+      const rasterDimensions = textureEntry?.dimensions;
+      const contentInset = textureEntry?.contentInset;
       const renderDimensions = resolveDrawableRenderDimensions({
         drawable,
         ...(baseMesh === undefined ? {} : { baseMesh }),
@@ -266,6 +289,24 @@ export function createCanvasRenderProjection(
         ...(binaryEntry === undefined ? {} : { renderBytes: binaryEntry.bytes }),
         renderWidth: renderDimensions.width,
         renderHeight: renderDimensions.height,
+        ...(contentInset === undefined
+          ? {}
+          : {
+              contentInset: {
+                left: contentInset.left,
+                top: contentInset.top,
+                right: contentInset.right,
+                bottom: contentInset.bottom
+              }
+            }),
+        ...(rasterDimensions === undefined
+          ? {}
+          : {
+              rasterDimensions: {
+                width: rasterDimensions.width,
+                height: rasterDimensions.height
+              }
+            }),
         maskSourceDrawableIds: drawable.maskSourceDrawableIds
       };
     })
@@ -371,10 +412,12 @@ function resolveDrawableRenderDimensions(input: {
   // `isRenderableDrawable` keeps the drawable in the render set. Legacy entries without
   // `dimensions` fall back to the content bounds chain (raster == content).
   //
-  // This only sizes the sampled texture; `original` display may show the content
-  // offset by the padding (content-space UV sampled against a padded raster under
-  // CLAMP_TO_EDGE). That offset is design §5.5-de-scoped — atlasRuntime is the canonical
-  // preview and remaps render dims to the atlas page, so it is unaffected.
+  // This only sizes the sampled texture; it performs no UV remap. The padding offset that
+  // this would otherwise show in `original` mode (content-space UV 0..1 sampled against a
+  // padded raster) is corrected downstream: the projection now carries `contentInset` +
+  // `rasterDimensions` to the render-scene adapter, which remaps content UV onto the raster's
+  // content sub-rect (Wave 1.2 F, `boundary-transparent-margin-design.md` §5), so `original`
+  // display shows the content aligned to `bounds`.
   if (input.rasterDimensions !== undefined) {
     return {
       width: Math.max(1, Math.round(input.rasterDimensions.width)),

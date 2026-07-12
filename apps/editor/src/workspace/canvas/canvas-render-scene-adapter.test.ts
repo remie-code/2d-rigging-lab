@@ -145,6 +145,238 @@ describe("canvas render scene adapter", () => {
       [0, 2, 3]
     ]);
   });
+
+  it("remaps content-space UV onto the padded raster content sub-rect for a triangle mesh (Wave 1.2 F)", () => {
+    const PADDED = 28;
+    const PADDING = 4;
+    const projection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        contentInset: { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING },
+        rasterDimensions: { width: PADDED, height: PADDED }
+        // evaluatedMesh defaults to a triangle with content UVs {0,0},{1,0},{0,1}
+      })
+    ]);
+
+    const scene = createRenderSceneFromCanvasProjection(projection);
+
+    // u' = (P + u·(PADDED − 2P)) / PADDED = (4 + u·20) / 28
+    const low = PADDING / PADDED; // 4/28
+    const high = (PADDED - PADDING) / PADDED; // 24/28
+    const uvs = scene.drawables[0]?.mesh.uvs ?? [];
+    expect(uvs[0]?.x).toBeCloseTo(low, 12);
+    expect(uvs[0]?.y).toBeCloseTo(low, 12);
+    expect(uvs[1]?.x).toBeCloseTo(high, 12);
+    expect(uvs[1]?.y).toBeCloseTo(low, 12);
+    expect(uvs[2]?.x).toBeCloseTo(low, 12);
+    expect(uvs[2]?.y).toBeCloseTo(high, 12);
+    // Vertices (stage geometry) are untouched by the UV remap.
+    expect(scene.drawables[0]?.mesh.vertices).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 10 }
+    ]);
+  });
+
+  it("remaps the bounds-quad UV onto the content sub-rect for empty meshes (Wave 1.2 F)", () => {
+    const PADDED = 28;
+    const PADDING = 4;
+    const projection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        bounds: { x: 12, y: 24, width: 32, height: 48 },
+        contentInset: { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING },
+        rasterDimensions: { width: PADDED, height: PADDED },
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_empty",
+          bounds: { x: 12, y: 24, width: 32, height: 48 },
+          vertices: [],
+          uvs: [],
+          triangles: []
+        }
+      })
+    ]);
+
+    const scene = createRenderSceneFromCanvasProjection(projection);
+
+    const low = PADDING / PADDED; // 4/28
+    const high = (PADDED - PADDING) / PADDED; // 24/28
+    const uvs = scene.drawables[0]?.mesh.uvs ?? [];
+    expect(uvs[0]?.x).toBeCloseTo(low, 12);
+    expect(uvs[0]?.y).toBeCloseTo(low, 12);
+    expect(uvs[1]?.x).toBeCloseTo(high, 12);
+    expect(uvs[1]?.y).toBeCloseTo(low, 12);
+    expect(uvs[2]?.x).toBeCloseTo(high, 12);
+    expect(uvs[2]?.y).toBeCloseTo(high, 12);
+    expect(uvs[3]?.x).toBeCloseTo(low, 12);
+    expect(uvs[3]?.y).toBeCloseTo(high, 12);
+    // Bounds quad geometry is unchanged.
+    expect(scene.drawables[0]?.mesh.vertices).toEqual([
+      { x: 12, y: 24 },
+      { x: 44, y: 24 },
+      { x: 44, y: 72 },
+      { x: 12, y: 72 }
+    ]);
+  });
+
+  it("applies each inset side independently under the atlas contentUvRect formula (Wave 1.2 F)", () => {
+    // Asymmetric inset + non-square raster: verifies the remap uses left/top/right/bottom per axis,
+    // matching texture-atlas-packing.ts createTextureAtlasPlacement's contentUvRect.
+    const inset = { left: 3, top: 5, right: 7, bottom: 9 };
+    const raster = { width: 40, height: 60 };
+    const projection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        contentInset: inset,
+        rasterDimensions: raster,
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_corners",
+          bounds: { x: 0, y: 0, width: 10, height: 10 },
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 10, y: 0 },
+            { x: 10, y: 10 }
+          ],
+          uvs: [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 1, y: 1 }
+          ],
+          triangles: [[0, 1, 2]]
+        }
+      })
+    ]);
+
+    const scene = createRenderSceneFromCanvasProjection(projection);
+
+    const contentW = raster.width - inset.left - inset.right; // 30
+    const contentH = raster.height - inset.top - inset.bottom; // 46
+    const remapX = (u: number): number => (inset.left + u * contentW) / raster.width;
+    const remapY = (v: number): number => (inset.top + v * contentH) / raster.height;
+    const uvs = scene.drawables[0]?.mesh.uvs ?? [];
+    expect(uvs[0]?.x).toBeCloseTo(remapX(0), 12); // 3/40
+    expect(uvs[0]?.y).toBeCloseTo(remapY(0), 12); // 5/60
+    expect(uvs[1]?.x).toBeCloseTo(remapX(1), 12); // 33/40
+    expect(uvs[1]?.y).toBeCloseTo(remapY(0), 12);
+    expect(uvs[2]?.x).toBeCloseTo(remapX(1), 12);
+    expect(uvs[2]?.y).toBeCloseTo(remapY(1), 12); // 51/60
+  });
+
+  it("leaves content UV unchanged when contentInset is absent or all-zero (Wave 1.2 F back-compat)", () => {
+    const absentProjection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        // no contentInset / rasterDimensions: legacy entry
+      })
+    ]);
+    const absentUvs =
+      createRenderSceneFromCanvasProjection(absentProjection).drawables[0]?.mesh.uvs ?? [];
+    expect(absentUvs).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 }
+    ]);
+
+    const zeroProjection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        contentInset: { left: 0, top: 0, right: 0, bottom: 0 },
+        rasterDimensions: { width: 20, height: 20 }
+      })
+    ]);
+    const zeroUvs =
+      createRenderSceneFromCanvasProjection(zeroProjection).drawables[0]?.mesh.uvs ?? [];
+    expect(zeroUvs).toEqual([
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 }
+    ]);
+  });
+
+  it("does not clamp content UV outside [0,1] — covering-margin overshoot maps linearly (Wave 1.2 F)", () => {
+    const PADDED = 28;
+    const PADDING = 4;
+    const projection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        contentInset: { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING },
+        rasterDimensions: { width: PADDED, height: PADDED },
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_overshoot",
+          bounds: { x: 0, y: 0, width: 10, height: 10 },
+          vertices: [
+            { x: -2, y: -2 },
+            { x: 12, y: -2 },
+            { x: 12, y: 12 }
+          ],
+          // Covering-margin overshoot: content UVs below 0 and above 1.
+          uvs: [
+            { x: -0.3, y: -0.3 },
+            { x: 1.3, y: -0.3 },
+            { x: 1.3, y: 1.3 }
+          ],
+          triangles: [[0, 1, 2]]
+        }
+      })
+    ]);
+
+    const scene = createRenderSceneFromCanvasProjection(projection);
+
+    const contentW = PADDED - PADDING * 2; // 20
+    const remap = (t: number): number => (PADDING + t * contentW) / PADDED;
+    const uvs = scene.drawables[0]?.mesh.uvs ?? [];
+    // u=-0.3 → (4 + (−0.3)·20)/28 = −2/28 ≈ −0.0714 — stays negative, NOT clamped to 0.
+    expect(uvs[0]?.x).toBeCloseTo(remap(-0.3), 12);
+    expect(uvs[0]?.x).toBeLessThan(0);
+    expect(uvs[0]?.y).toBeCloseTo(remap(-0.3), 12);
+    // u=1.3 → (4 + 1.3·20)/28 = 30/28 ≈ 1.0714 — stays above 1, NOT clamped.
+    expect(uvs[1]?.x).toBeCloseTo(remap(1.3), 12);
+    expect(uvs[1]?.x).toBeGreaterThan(1);
+    expect(uvs[2]?.y).toBeCloseTo(remap(1.3), 12);
+  });
+
+  it("keeps the remapped content edges aligned to the drawable bounds (Wave 1.2 F position semantics)", () => {
+    // Position semantics: the content occupies UV sub-rect [inset, PADDED−inset] of the padded
+    // raster. A bounds quad (content edges at UV 0 and 1 pre-remap) must sample exactly that
+    // sub-rect after remap, so the content fills `bounds` with no residual padding offset.
+    const PADDED = 34;
+    const PADDING = 7; // larger P, like the topwear/hair layers in the investigation
+    const CONTENT = PADDED - PADDING * 2; // 20
+    const bounds = { x: 100, y: 200, width: 20, height: 20 };
+    const projection = createProjection([
+      createDrawable(DRAW_TARGET, "tex_target", 0, {
+        bounds,
+        contentInset: { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING },
+        rasterDimensions: { width: PADDED, height: PADDED },
+        evaluatedMesh: {
+          source: "committed",
+          sourceMeshId: "mesh_empty_pos",
+          bounds,
+          vertices: [],
+          uvs: [],
+          triangles: []
+        }
+      })
+    ]);
+
+    const scene = createRenderSceneFromCanvasProjection(projection);
+    const uvs = scene.drawables[0]?.mesh.uvs ?? [];
+
+    // The four bounds-quad corners (pre-remap UV [{0,0},{1,0},{1,1},{0,1}]) must map onto the
+    // content sub-rect edges of the padded raster.
+    const contentLeftUv = PADDING / PADDED;
+    const contentRightUv = (PADDING + CONTENT) / PADDED;
+    expect(uvs[0]?.x).toBeCloseTo(contentLeftUv, 12);
+    expect(uvs[0]?.y).toBeCloseTo(contentLeftUv, 12);
+    expect(uvs[1]?.x).toBeCloseTo(contentRightUv, 12);
+    expect(uvs[1]?.y).toBeCloseTo(contentLeftUv, 12);
+    expect(uvs[2]?.x).toBeCloseTo(contentRightUv, 12);
+    expect(uvs[2]?.y).toBeCloseTo(contentRightUv, 12);
+    expect(uvs[3]?.x).toBeCloseTo(contentLeftUv, 12);
+    expect(uvs[3]?.y).toBeCloseTo(contentRightUv, 12);
+    // The remapped content span in raster pixels equals the drawable bounds size — the content
+    // exactly fills `bounds` with no residual padding offset (the H1 defect corrected).
+    const contentPixelSpan = (contentRightUv - contentLeftUv) * PADDED;
+    expect(contentPixelSpan).toBeCloseTo(bounds.width, 12);
+    expect(contentPixelSpan).toBeCloseTo(CONTENT, 12);
+  });
 });
 
 function createProjection(drawables: readonly CanvasRenderableDrawable[]): CanvasRenderProjection {
@@ -170,6 +402,8 @@ function createDrawable(
     readonly meshPreview?: boolean;
     readonly opacity?: number;
     readonly selected?: boolean;
+    readonly contentInset?: CanvasRenderableDrawable["contentInset"];
+    readonly rasterDimensions?: CanvasRenderableDrawable["rasterDimensions"];
   } = {}
 ): CanvasRenderableDrawable {
   return {
@@ -181,6 +415,10 @@ function createDrawable(
     binaryAssetId: `bin_${textureId}`,
     binaryAssetPath: `assets/${textureId}.rgba`,
     bounds: options.bounds ?? { x: 0, y: 0, width: 10, height: 10 },
+    ...(options.contentInset === undefined ? {} : { contentInset: options.contentInset }),
+    ...(options.rasterDimensions === undefined
+      ? {}
+      : { rasterDimensions: options.rasterDimensions }),
     evaluatedMesh: options.evaluatedMesh ?? {
       source: "committed",
       sourceMeshId: `mesh_${drawableId}`,
