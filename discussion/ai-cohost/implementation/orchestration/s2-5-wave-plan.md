@@ -1,6 +1,6 @@
 # S2.5 wave計画: 操縦席がある(魂のローカルWebコクピット)
 
-> Status: 計画確定(2026-07-12)。発進待ち。
+> Status: **完全閉鎖(2026-07-12)**。両ドメイン+追撃domain-f、レビュー全PASS、機械ゲート231/231緑、人間ゲート合格(「完璧だ」・長尺再ゲート込み)。
 > 根拠: [../s-series-decomposition.md](../s-series-decomposition.md) S2.5(追補) / [../screens/soul-cockpit.md](../screens/soul-cockpit.md)(**Accepted、実装のsource of truth**)。棚卸しなし(context-check判定=Plan directly: 部品は全部S2実装済み・外部未知ゼロ・新規依存ゼロ)。
 > 方式: 単一Orch-Sylph(opus)がDomain A→Bを順次実行。各ドメインはGnome実装+Review-Sylph 3レーン。S1/S2と同一の鉄の規律。
 
@@ -52,4 +52,6 @@
 - 機械ゲート（Orch独立実測）: 魂全テスト **226/226 緑**（S1/S2の196無退行 + A21 + B9）。`preflight-cockpit` PASS（exit0・ハングなし）。`check:soul-zone`/`check:deps` 緑。`check:source` は器 `runtime-player/physiology/index.ts` の pre-existing 違反のみ（S2.5無関係・新規違反ゼロ＝無退行）。lockfile差分ゼロ・新規npm依存ゼロ。127.0.0.1限定バインドをテスト固定。
 - 人間ゲート手順書: [../waves/s2.5/human-gate-procedure.md](../waves/s2.5/human-gate-procedure.md)。起動 `npm run cockpit --prefix apps/soul/agent` → `http://127.0.0.1:8181/`。
 - followup: [../waves/s2.5/s2-5-followup.md](../waves/s2.5/s2-5-followup.md)。
-- **Undineへエスカレーション**: (a) `check:source` の器側 pre-existing 違反は器コード変更禁止のため本wave非対応（wave締めのユーザー報告に扱いを乗せる）。(b) 履歴レイテンシ非対称（正本を汚さないv0非対称の許容可否）はUX裁定として申し送り。
+- **Undineへエスカレーション**: (a) `check:source` の器側 pre-existing 違反は器コード変更禁止のため本wave非対応（wave締めのユーザー報告に扱いを乗せる→器の別件チップとして周知済み）。(b) 履歴レイテンシ非対称（正本を汚さないv0非対称の許容可否）はUX裁定として申し送り→**Undine裁定でv0許容**(UX定義§2に注記)。
+- 2026-07-12: **追撃 domain-f(長尺転写消失対策)**: 人間ゲート中の観測(3.2秒超の発話が丸ごと消える/「,」ゴミ行)→診断→修正。`-nfa`(flash-attn OFF)をwhisper-server起動既定に(無害実証: 品質同等・+約200ms)+コクピットにdiscard/asrFailureの**ゴースト行**(無言の消失の廃止)+恒久診断記録([../waves/s2.5/long-utterance-diagnosis.md](../waves/s2.5/long-utterance-diagnosis.md))。**flash-attn犯人説は追撃プローブ(実Silero VADトリム・7回)で非再現=機構未確定と正直に記録**。231/231緑・レビュー合格([../reviews/s2.5/domain-f-review.md](../reviews/s2.5/domain-f-review.md))。教訓: 計測音源は本番経路と同形で作る。
+- 2026-07-12: **人間ゲート合格(ユーザー実施)→ S2.5 完全閉鎖**。判定「完璧だ」——CLIレスで操縦席から耳を運転、転写が積もり、**長めの発話でも違和感なし**(domain-f後の再ゲートで長尺消失は非再発)。再発時はfollowup台帳の集中wave(実マイク経路の再現+崩壊判定強化)を起こす条件を残置。
