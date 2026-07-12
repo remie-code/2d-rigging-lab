@@ -77,6 +77,7 @@
   .row .lat { color: var(--muted); flex: 0 0 auto; }
   .row .marker { flex: 0 0 auto; } /* 拡張予約: 発火マーカーの入る余地（S3）。v0 は空。 */
   .row.speaking .text { color: var(--speaking); font-style: italic; }
+  .row.ghost .text { color: var(--muted); font-style: italic; } /* 破棄/ASR失敗の無言の消失を可視化（淡色）。 */
   footer {
     padding: 10px 18px; border-top: 1px solid var(--border);
     color: var(--muted); display: flex; gap: 24px; background: var(--panel);
@@ -212,6 +213,22 @@
       for (var i = 0; i < transcripts.length; i += 1) addTranscriptRow(transcripts[i]);
     }
 
+    // ── ゴースト行（破棄/ASR失敗を「無言の消失」でなくタイムラインに残す）──
+    // discard（空転写破棄）/ diagnostic type=="asrFailure"（転写失敗）の span を淡色行で表示。
+    function addGhostRow(label) {
+      removeSpeakingRow();
+      var row = document.createElement("div");
+      row.className = "row ghost";
+      var t = document.createElement("span"); t.className = "time";
+      t.textContent = fmtClock(Date.now());
+      var who = document.createElement("span"); who.className = "who"; // 話者不明のため空。
+      var text = document.createElement("span"); text.className = "text"; text.textContent = label;
+      var marker = document.createElement("span"); marker.className = "marker";
+      row.appendChild(t); row.appendChild(who); row.appendChild(marker); row.appendChild(text);
+      timeline.appendChild(row);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+
     // ── Microphone: GET /api/devices → dropdown（lastDevice を初期選択）──
     function selectDeviceIfPresent(name) {
       var sel = byId("device-select");
@@ -286,9 +303,15 @@
       });
       es.addEventListener("transcript", function (ev) { addTranscriptRow(JSON.parse(ev.data)); });
       es.addEventListener("discard", function (ev) {
-        byId("footer-discarded").textContent = JSON.parse(ev.data).discarded;
+        var d = JSON.parse(ev.data);
+        byId("footer-discarded").textContent = d.discarded;
+        addGhostRow("(discarded)");
       });
-      es.addEventListener("diagnostic", function () { /* 拡張予約: 補助情報の表示余地（S3+）。v0 は未表示。 */ });
+      es.addEventListener("diagnostic", function (ev) {
+        var d = JSON.parse(ev.data);
+        if (d.type === "asrFailure") addGhostRow("(asr failed)");
+        // 他の診断型は拡張予約: 補助情報の表示余地（S3+）。v0 は未表示。
+      });
     }
     function init() {
       loadDevices().then(function () {

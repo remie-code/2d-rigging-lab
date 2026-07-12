@@ -81,7 +81,8 @@ export const EAR_DEFAULTS = Object.freeze({
  * @param {object} [options.segmenter] セグメンタ設定の上書き（threshold / minSpeechMs /
  *   minSilenceMs / speechPadMs / maxSpeechMs。既定は EAR_DEFAULTS の常駐値）。
  * @param {object} [options.whisper]  whisper-server 設定（serverPath / modelPath / port / host /
- *   language / threads（既定 6）/ extraArgs / readyTimeoutMs）。
+ *   language / threads（既定 6）/ flashAttn（既定 false = `-nfa`。長発話決定論的崩壊の実機診断済み・
+ *   whisper-server.mjs 参照）/ extraArgs / readyTimeoutMs）。
  * @param {object} [options.asr]      { queueMax=4, utteranceTimeoutMs=45000, timeoutMs=30000,
  *   dynamicAudioCtx=true, audioCtxOptions }。
  * @param {number} [options.ringMs=40000]  PCM リングバッファ保持長。

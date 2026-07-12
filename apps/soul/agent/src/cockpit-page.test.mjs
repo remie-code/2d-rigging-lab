@@ -81,3 +81,36 @@ test("cockpit page: history transcript rows carry no latency (live-only), by con
   // 実装は latencyMs が付いているときだけ (Ns) を描く条件分岐であること。
   assert.match(html, /latencyMs\s*!=\s*null/);
 });
+
+// ── ゴースト行（破棄/ASR失敗の無言の消失を可視化・S2.5 追撃 domain-f）─────────────
+
+test("cockpit page: discard SSE event adds a ghost row (in addition to footer counter update)", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  const m = html.match(/addEventListener\(["']discard["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "discard リスナーが見つかること");
+  const body = m[1];
+  // footer カウンタ更新は維持。
+  assert.match(body, /footer-discarded/);
+  // ゴースト行追加を維持（無言の消失にしない）。
+  assert.match(body, /addGhostRow\(/);
+});
+
+test("cockpit page: diagnostic asrFailure adds a ghost row; other diagnostic types do not", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "diagnostic リスナーが見つかること");
+  const body = m[1];
+  assert.match(body, /type\s*===\s*["']asrFailure["']/);
+  assert.match(body, /addGhostRow\(/);
+});
+
+test("cockpit page: ghost rows are visually distinct (muted class) from normal transcript rows", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // addGhostRow は通常行と違う "ghost" クラスを付ける関数として定義されていること。
+  assert.match(html, /function addGhostRow\(/);
+  const fn = html.match(/function addGhostRow\([\s\S]*?\n    \}/);
+  assert.ok(fn, "addGhostRow 本体が見つかること");
+  assert.match(fn[0], /className\s*=\s*["']row ghost["']/);
+  // CSS: ghost 行は既存の淡色トークン（--muted）を使う（transcript 行の既定色と区別できる）。
+  assert.match(html, /\.row\.ghost\s+\.text\s*\{[^}]*var\(--muted\)/);
+});

@@ -377,10 +377,14 @@ export function createCockpitServer(options = {}) {
       setHealth("ffmpeg", "down", `ffmpeg exited (code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`);
     }
     // 診断そのものも流す（B が任意で表示できる。健康以外は状態を変えない）。
+    // startMs/endMs はゴースト行の対象 span（asrFailure が持つ・S2.5 追撃 domain-f）。
+    // 元々 startMs/endMs を持たない診断型では null になるだけで契約破壊はない（追加フィールド）。
     broadcast("diagnostic", {
       type: d?.type ?? "unknown",
       message: d?.message ?? null,
-      reason: d?.reason ?? null
+      reason: d?.reason ?? null,
+      startMs: d?.startMs ?? null,
+      endMs: d?.endMs ?? null
     });
   }
 

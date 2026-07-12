@@ -18,6 +18,17 @@
  *  他サービス（AivisSpeech 10101・エディタ dev server 5173 系）と離れた 8178 を取り、
  *  options で上書き可能にする。
  *
+ * ── flash-attn は既定 OFF（`-nfa`）── 長発話の決定論的崩壊を実機診断（S2.5 追撃・
+ *    2026-07-12・discussion/ai-cohost/implementation/waves/s2.5/long-utterance-diagnosis.md）───
+ *  vendor whisper-server(v1.9.1) は flash-attn が既定 ON。動的 audio_ctx（whisper-inference.mjs
+ *  の computeAudioCtx・下限クランプ 256）との組み合わせで、audio_ctx が 256 を超える域
+ *  （≒ 発話 3.2 秒超）に達すると転写が**決定論的に崩壊**する（丸ごと空 or 「,」等のゴミ行 or
+ *  末尾反復）。既存チューニング（experiments/s2-ears.md §2.1）は生 TTS WAV を `/inference` へ
+ *  直投した格子で、本番の VAD トリム切り出し音声 + flash-attn=ON の崩壊域を踏んでいなかった。
+ *  `-nfa`（flash-attn OFF）で全ケース正常化・レイテンシ 2.0〜2.4s（目標圏内）を実機確認済み。
+ *  ゆえに `buildWhisperServerArgs`/`createWhisperServer` は既定で `-nfa` を出力に含める。
+ *  `flashAttn: true` を渡すと抑止できる（テスト・切り分け用の脱出口。本番既定では使わない）。
+ *
  * ── クリーンシャットダウン（S1 ハング教訓・s1-followup §8 / audio-player の型）────
  *  dispose() = kill → stdio パイプ destroy → child.unref()。冪等。
  *  「kill したが OS 未 reap の子／未 destroy のパイプが event loop を生かす」窓を塞ぐ。
@@ -89,6 +100,9 @@ export function resolveWhisperModelPath(optionPath, env = process.env) {
  * @param {number} [opts.port=DEFAULT_WHISPER_PORT]
  * @param {string} [opts.language=DEFAULT_WHISPER_LANGUAGE]  空文字なら -l を付けない。
  * @param {number} [opts.threads]  省略時は server 既定（4）に任せる。
+ * @param {boolean} [opts.flashAttn=false]  既定 false = `-nfa`（flash-attn OFF）を付ける。
+ *   true を渡すと `-nfa` を付けない（= vendor 既定の flash-attn ON に戻す抑止オプション。
+ *   長発話決定論的崩壊の実機診断済み・上記ヘッダ参照。本番既定では使わない）。
  * @param {string[]} [opts.extraArgs]  末尾に足す追加引数。
  * @returns {string[]}
  */
@@ -112,6 +126,12 @@ export function buildWhisperServerArgs(opts) {
     }
     args.push("-t", String(opts.threads));
   }
+  const flashAttn = opts.flashAttn ?? false;
+  if (!flashAttn) {
+    // 既定: flash-attn OFF。長発話（audio_ctx>256 ≒ 発話 3.2s 超）の決定論的崩壊を避ける
+    // （ヘッダ参照）。opts.flashAttn=true で抑止できる（vendor 既定の ON に戻す）。
+    args.push("-nfa");
+  }
   if (opts.extraArgs) {
     args.push(...opts.extraArgs);
   }
@@ -129,6 +149,7 @@ export function buildWhisperServerArgs(opts) {
  * @param {number} [options.port]
  * @param {string} [options.language]
  * @param {number} [options.threads]
+ * @param {boolean} [options.flashAttn=false]  既定 false = `-nfa` を付ける（buildWhisperServerArgs 参照）。
  * @param {string[]} [options.extraArgs]
  * @param {string[]} [options.args]  引数の丸ごと上書き（テスト注入・特殊経路）。
  * @param {number} [options.readyTimeoutMs=120000]  ヘルスチェックの全体タイムアウト（モデルロード込み）。
@@ -162,6 +183,7 @@ export function createWhisperServer(options = {}) {
       port,
       language: options.language,
       threads: options.threads,
+      flashAttn: options.flashAttn,
       extraArgs: options.extraArgs
     });
   const readyTimeoutMs = options.readyTimeoutMs ?? 120000;

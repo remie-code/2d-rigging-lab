@@ -92,3 +92,35 @@ transcript[1] 4.23..6.62s latency=1511ms audio_ctx=256 「今日はメッシュ�
 ## 5. 実マイク未計測の明示
 
 本記録の全数字は**固定 WAV（TTS 合成/正弦波）往復**によるもの。実マイク（dshow 取り込み・部屋の残響・環境雑音・VAD 閾値の実効性）経由の数字は**人間ゲート後に追記される**（手順: [../waves/s2/human-gate-procedure.md](../waves/s2/human-gate-procedure.md)）。
+
+## 6. 訂正注記（S2.5 追撃・2026-07-12・domain-f）
+
+**背景**: 人間ゲートで「約 3.2 秒超の発話の転写が丸ごと消える / 「,」等のゴミ行になる」が観測された。
+この観測を受けた診断過程で、**§2.1 のチューニング表は生 TTS WAV を `/inference` に直投した格子であり、
+本番の VAD トリム切り出し音声を対象にしていなかった**ことが判明した。また **§3.2 の preflight-ears 縦貫通は
+2 発話とも短く（0.64..2.97s / 4.23..6.62s 相当）`computeAudioCtx` が下限クランプ 256 に張り付いており、
+audio_ctx が 256 を超える域（≒ 発話 3.2 秒超）を一度も踏んでいなかった**。line 6 の「flash-attn 既定 ON」は
+**環境の既定値**の記述であり、**採用構成はこれを起動時 `-nfa` で OFF にする**（`whisper-server.mjs` の
+`buildWhisperServerArgs` が既定で `-nfa` を出力するよう修正済み・詳細は
+[../implementation/waves/s2.5/long-utterance-diagnosis.md](../implementation/waves/s2.5/long-utterance-diagnosis.md)）。
+
+**診断仮説として与えられた機構**（本 wave の委任時点の前提）: vendor whisper-server(v1.9.1) の
+flash-attn 既定 ON と動的 audio_ctx（下限クランプ 256）の組み合わせで、audio_ctx が 256 を超える域に
+達すると転写が決定論的に崩壊する（丸ごと空 / ゴミ行 / 末尾反復）。`-nfa` で全ケース正常化・
+レイテンシ 2.0〜2.4s を確認済み、とされていた。
+
+**domain-f の実機再検証で得られた追加事実（正直な記録）**: `apps/soul/agent/scripts/probe-long-utterance.mjs`
+（実 Silero VAD + 実 whisper-server の縦貫通・preflight-ears と同型）で、3.2 秒を確実に超える発話
+（複数の異なる文面・audio_ctx 実測値 256〜1099）を **flash-attn=ON（抑止オプションで意図的に戻した
+「旧挙動」）で計 7 回試行したが、崩壊（空/ゴミ/反復）は一度も再現できなかった**（全て正常転写・
+生ログは [long-utterance-diagnosis.md](../implementation/waves/s2.5/long-utterance-diagnosis.md) §3）。
+この差分について、scratchpad に残っていた診断過程の使い捨てプローブ（`probe-trim-matrix.mjs` 等）を
+確認したところ、**VAD トリムは振幅閾値による近似矩形トリム**（`|s|>500` の最初/最後 ±30ms）を使っており、
+domain-f の再検証で使った**実 Silero VAD（ニューラルネット）のトリムとは境界の作られ方が異なる**ことが
+分かった。境界ノイズ構造の違いが崩壊の再現条件だった可能性があるが、断定はできない（未解決点として
+追跡する。[s2-5-followup.md](../implementation/waves/s2.5/s2-5-followup.md) 参照）。
+
+**現時点の結論**: `-nfa`（flash-attn OFF）への変更自体は実測で無害（転写品質は同等・レイテンシ増は
+軽微 4523ms→4726ms 程度）であり、たとえ崩壊の原因特定が完全でなくとも安全側の変更として維持する。
+崩壊の正確な再現条件（VAD トリム境界の精密さ・実マイクの環境ノイズ・CPU 競合下のタイミング等）は
+未解明のまま残る。

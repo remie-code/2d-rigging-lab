@@ -56,6 +56,16 @@ test("buildWhisperServerArgs: port/threads/extraArgs/language を上書きでき
   assert.equal(args[args.length - 1], "--no-gpu");
 });
 
+test("buildWhisperServerArgs: 既定出力に -nfa が含まれる（flash-attn は既定 OFF）", () => {
+  const args = buildWhisperServerArgs({ modelPath: "m.bin" });
+  assert.ok(args.includes("-nfa"), `expected -nfa in ${JSON.stringify(args)}`);
+});
+
+test("buildWhisperServerArgs: flashAttn:true（抑止オプション）で -nfa が出ない", () => {
+  const args = buildWhisperServerArgs({ modelPath: "m.bin", flashAttn: true });
+  assert.ok(!args.includes("-nfa"), `expected no -nfa in ${JSON.stringify(args)}`);
+});
+
 test("buildWhisperServerArgs: language 空文字なら -l を付けない・不正値は throw", () => {
   const args = buildWhisperServerArgs({ modelPath: "m.bin", language: "" });
   assert.ok(!args.includes("-l"));
