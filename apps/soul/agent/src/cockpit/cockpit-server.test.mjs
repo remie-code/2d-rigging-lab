@@ -14,6 +14,7 @@ import {
   DEFAULT_COCKPIT_HOST
 } from "./cockpit-server.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
+import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
 
 // 魂コクピット・サーバの機械テスト（S2.5 Domain A）。pipeline / デバイス列挙 / spawn を全注入し、
 // 実マイク・実 ffmpeg・実 whisper・実 ONNX を一切使わずに HTTP/SSE/結線/クリーンシャットダウンを固定する。
@@ -557,4 +558,182 @@ test("cockpit close(): pipeline を dispose し・冪等・ハンドルを残さ
   // close 後のリクエストは 503（サーバは応答を返して終わる）。
   await assert.rejects(() => httpRequest(`${url}/api/state`));
   client.close();
+});
+
+// ── 発火結線（S3 Domain A・追加的）─────────────────────────────────────────
+
+/** factory に渡された hooks を握り、fire() の挙動を注入できる fake orchestrator。 */
+function makeFakeOrchestrator({ fireResult, drive } = {}) {
+  const record = { /** @type {any} */ hooks: null, fireCount: 0, disposed: false, state: "idle" };
+  const factory = (hooks) => {
+    record.hooks = hooks;
+    return {
+      async fire() {
+        record.fireCount += 1;
+        if (drive) drive(hooks, record);
+        return fireResult ?? { fired: true, replyText: "はい", injectedChars: 12, includedCount: 1 };
+      },
+      getState: () => record.state,
+      dispose: () => {
+        record.disposed = true;
+      }
+    };
+  };
+  return { factory, record };
+}
+
+test("cockpit POST /api/fire: orchestrator 未注入なら 503（S2.5 無退行）", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/fire`, {});
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /fire not available/);
+    assert.equal(server.fireState(), null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/fire: 受理は 202・fire() の結果 JSON を返す", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "ひるごはん食べよ", injectedChars: 20, includedCount: 2 }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/fire`, {});
+    assert.equal(r.status, 202);
+    assert.equal(r.json.fired, true);
+    assert.equal(r.json.replyText, "ひるごはん食べよ");
+    assert.equal(r.json.includedCount, 2);
+    assert.equal(r.json.state, "idle"); // getState() から補完される。
+    assert.equal(fake.record.fireCount, 1);
+    // getBuffer フックは pipeline?.transcriptBuffer（耳未起動なら null）。
+    assert.equal(fake.record.hooks.getBuffer(), null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/fire: busy は 200 で {fired:false, reason:'busy', state}", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: false, reason: "busy", state: "thinking" }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/fire`, {});
+    assert.equal(r.status, 200);
+    assert.equal(r.json.fired, false);
+    assert.equal(r.json.reason, "busy");
+    assert.equal(r.json.state, "thinking");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit: close() で orchestrator を dispose する", async () => {
+  const fake = makeFakeOrchestrator({});
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  await postJson(`${url}/api/fire`, {});
+  await server.close();
+  assert.equal(fake.record.disposed, true);
+});
+
+test("cockpit SSE: fire() の onState/onFire が soul/fire イベントで流れる", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "はい", injectedChars: 8, includedCount: 1 },
+    drive: (hooks) => {
+      hooks.onState("thinking");
+      hooks.onFire({ accepted: true, injectedChars: 8, includedCount: 1, atMs: 1000 });
+      hooks.onState("speaking");
+      hooks.onSoulTranscript({ seq: 1, startMs: 0, endMs: 0, text: "はい", speaker: "soul", appendedAtMs: 1000 });
+      hooks.onState("idle");
+    }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state"); // 接続確立。
+    await postJson(`${url}/api/fire`, {});
+
+    const thinking = await client.waitFor((e) => e.event === "soul" && e.data.state === "thinking");
+    assert.equal(thinking.data.state, "thinking");
+    const fire = await client.waitFor((e) => e.event === "fire" && e.data.accepted === true);
+    assert.equal(fire.data.includedCount, 1);
+    const speaking = await client.waitFor((e) => e.event === "soul" && e.data.state === "speaking");
+    assert.equal(speaking.data.state, "speaking");
+    // soul の発話行は既存 transcript イベント（speaker:"soul"）で再利用される。
+    const soulLine = await client.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
+    assert.equal(soulLine.data.text, "はい");
+    await client.waitFor((e) => e.event === "soul" && e.data.state === "idle");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit /api/fire: 実 orchestrator を結線し縦貫通（fake session/speak・実バッファ）", async () => {
+  const fake = makeFakePipeline();
+  let askedText = "";
+  let spokenText = "";
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    fireOrchestratorFactory: (hooks) =>
+      createFireOrchestrator({
+        ...hooks,
+        session: {
+          async ask(t) {
+            askedText = t;
+            return { replyText: "はーい、なあに？" };
+          }
+        },
+        speakImpl: async (text) => {
+          spokenText = text;
+          return { timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "x" };
+        },
+        channel: { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
+        player: { play() {} },
+        // fake buffer の nowImpl は () => 1000。窓を広く取り nowMs を合わせて窓内に収める。
+        nowImpl: () => 2000,
+        windowMs: 100000
+      })
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    // 会話ログに you 発話を 1 件積む（正本）。
+    fake.record.buffer.append({ startMs: 100, endMs: 900, text: "ねえ" });
+
+    const r = await postJson(`${url}/api/fire`, {});
+    assert.equal(r.status, 202);
+    assert.equal(r.json.fired, true);
+    assert.equal(r.json.replyText, "はーい、なあに？");
+
+    // 注入に直近 you 発話が話者ラベル付きで入る。
+    assert.match(askedText, /you: ねえ/);
+    // speak は応答テキストで呼ばれた。
+    assert.equal(spokenText, "はーい、なあに？");
+    // soul が会話ログへ追記される（正本・speaker:"soul"）。
+    const all = fake.record.buffer.all();
+    assert.equal(all[all.length - 1].speaker, "soul");
+    assert.equal(all[all.length - 1].text, "はーい、なあに？");
+
+    // SSE で soul 状態列と soul transcript が流れる。
+    await sse.waitFor((e) => e.event === "soul" && e.data.state === "thinking");
+    await sse.waitFor((e) => e.event === "fire" && e.data.accepted === true);
+    const soulLine = await sse.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
+    assert.equal(soulLine.data.text, "はーい、なあに？");
+    await sse.waitFor((e) => e.event === "soul" && e.data.state === "idle");
+
+    sse.close();
+  } finally {
+    await server.close();
+  }
 });

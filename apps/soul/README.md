@@ -122,3 +122,39 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   = 実デバイス非依存）。
 - **実マイクを使う操縦は人間ゲートの領分**（手順は
   `discussion/ai-cohost/implementation/waves/s2.5/human-gate-procedure.md`）。
+
+#### S3: 呼べば応える（発火 + 会話ログ注入）
+
+「AI は全部聞くが、全部では考えない」——耳は常時聞いて会話ログ（転写バッファ・話者 you/soul）に
+積み、**Fire の瞬間だけ**直近 X 分の会話ログを LLM に注入して一言を得、声 + 口で返す。
+発火経路は操縦席の **Fire ボタン** / `POST /api/fire` / 同梱 AHK スクリプト。
+
+- **発火オーケストレータ**（`src/mind/fire-orchestrator.mjs`・Domain A）: fire → 窓収集
+  （`src/mind/fire-injection.mjs`・直近 5 分・4000 字上限は新しい方優先）→ ask（最小仮面
+  `FIRE_SYSTEM_PROMPT`・claude-opus-4-8）→ speak（S1 経路）→ 会話ログへ speaker:"soul" 追記。
+  busy 状態機械（idle/thinking/speaking・busy 中の fire は無視）。
+- **fire 有効の操縦席起動**（`scripts/cockpit.mjs`・Domain B）: `--channel` を指定したときだけ
+  fire が結線される（未指定なら S2.5 と同一 = POST /api/fire は 503）:
+
+  ```
+  npm run cockpit --prefix apps/soul/agent -- --channel "ws://127.0.0.1:<port>/channel?token=<token>"
+  ```
+
+  追加オプション: `--tts-base-url <url>` / `--speaker <id>` / `--fire-window-min <分>`（注入窓・
+  既定 5）/ `--fire-max-chars <n>`（注入上限・既定 4000）。LLM セッションは起動時に常駐起動
+  （spawn 先払い）、**Channel は初回 Fire 時に接続**（失敗は操縦席に fire error として出て、次の
+  Fire で再試行 = 器を後から立ててもよい）。env ガード（サブスク枠）は起動経路でも明示的に通す。
+- **操縦席の発火 UI**（`src/cockpit/cockpit.html`）: Fire ボタン（soul の thinking/speaking 中は
+  disable + 状態表示）・発火マーカー行（受理の瞬間 + 注入量を Timeline に刻む）・soul 行（話者
+  `soul`・青系ラベル）・発火失敗はゴースト行（`(fire: empty reply)` / `(fire error: …)`）。
+- **グローバルホットキー（任意・AHK）**: `scripts/fire-hotkey.ahk`（AutoHotkey v2）。ゲーム中に
+  操縦席タブが非フォーカスでも既定 Ctrl+Alt+F で `http://127.0.0.1:8181/api/fire` へ POST する
+  （127.0.0.1 以外へは何も送らない・ポート/キーはファイル先頭で編集）。導入手順はファイル内
+  コメント参照。AHK が無くてもゲートは Fire ボタンで成立する。
+- **preflight（SDK 不要・マイク不要）**: `scripts/preflight-fire.mjs`——fake session/speak/channel/
+  player で実 orchestrator + 実 HTTP/SSE の縦貫通を検証。
+- **計測**: `scripts/measure-fire.mjs`——**実 SDK を最大 5 ask**（ハードガード付き）で fire→ask の
+  TTFT / usage / 注入文字数を計測（speak/channel/player は fake）。結果は
+  `discussion/ai-cohost/experiments/s3-summon.md`。サブスク枠を消費するので不用意に走らせない。
+- **全器官起動（人間ゲート）の手順**:
+  `discussion/ai-cohost/implementation/waves/s3/human-gate-procedure.md`。

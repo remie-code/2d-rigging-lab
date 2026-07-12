@@ -26,6 +26,18 @@
  *  - `onAppend(listener)` 追加購読（S3 の発火判定はこれを入口にできる）
  *  依存ゼロ・I/O ゼロの純ロジック（fixture テスト対象）。
  *
+ * ── 話者ラベル（S3 で会話ログへ昇格・追加的）【設計判断】──────────────────────
+ *  append の入力に任意の `speaker`（"you" | "soul"・**既定 "you"**）を足し、各エントリが speaker を
+ *  持つ。既定 "you" ゆえ S2 の呼び出し（speaker を渡さない耳の結線）は挙動不変——転写バッファは
+ *  単一話者の転写列のまま振る舞い、S3 が魂の発話（speaker:"soul"）を同じ列へ追記できるように
+ *  なるだけ。不正な speaker 値は throw（呼び出し側のバグを黙殺しない）。
+ *
+ *  soul エントリは VAD ストリーム時刻（startMs/endMs）を持たない（魂の発話は録音ストリーム上の
+ *  区間ではなく、Fire に応じて生成したテキストだから）。よって発火オーケストレータは
+ *  soul 追記時に `startMs:0, endMs:0` を渡す。窓の時間軸としては startMs ではなく壁時計
+ *  `appendedAtMs`（append 時刻・注入可）を使う——you と soul を同一の実時間軸で並べられる。
+ *  下流の注入整形（fire-injection.mjs）は appendedAtMs で窓を切る。
+ *
  * ── listener 例外契約（S2 Domain C で明文化・domain-b-review note 4 の線引き）────────
  *  **listener は throw しない契約**。listener の throw は同期のまま append の呼び出し元へ
  *  伝播し、後続の listener はスキップされる（バッファ自体は push 済みなので正本は壊れない）。
@@ -47,15 +59,22 @@ export function isBlankTranscript(text) {
 }
 
 /**
- * @typedef {Readonly<{ seq: number; startMs: number; endMs: number; text: string; appendedAtMs: number }>} TranscriptEntry
+ * @typedef {"you" | "soul"} Speaker
  */
+
+/**
+ * @typedef {Readonly<{ seq: number; startMs: number; endMs: number; text: string; speaker: Speaker; appendedAtMs: number }>} TranscriptEntry
+ */
+
+/** 許容する話者ラベル（既定 you = S2 挙動不変・soul = S3 の魂発話）。 */
+const VALID_SPEAKERS = new Set(["you", "soul"]);
 
 /**
  * 転写バッファを作る。
  * @param {object} [options]
  * @param {() => number} [options.nowImpl]  appendedAtMs の時計（テスト用注入）。既定 Date.now。
  * @returns {{
- *   append: (input: { startMs: number; endMs: number; text: string }) => { appended: boolean; entry: TranscriptEntry | null; reason: "appended" | "blank" };
+ *   append: (input: { startMs: number; endMs: number; text: string; speaker?: Speaker }) => { appended: boolean; entry: TranscriptEntry | null; reason: "appended" | "blank" };
  *   all: () => TranscriptEntry[];
  *   last: (n: number) => TranscriptEntry[];
  *   inRange: (range: { fromMs?: number; toMs?: number }) => TranscriptEntry[];
@@ -78,13 +97,13 @@ export function createTranscriptBuffer(options = {}) {
 
   /**
    * 入力を検証する（不正は throw = 呼び出し側のバグを黙殺しない）。
-   * @param {{ startMs: number; endMs: number; text: string }} input
+   * @param {{ startMs: number; endMs: number; text: string; speaker?: Speaker }} input
    */
   function validate(input) {
     if (input == null || typeof input !== "object") {
       throw new TypeError("transcriptBuffer.append: input must be an object { startMs, endMs, text }.");
     }
-    const { startMs, endMs, text } = input;
+    const { startMs, endMs, text, speaker } = input;
     if (typeof startMs !== "number" || !Number.isFinite(startMs)) {
       throw new TypeError(`transcriptBuffer.append: startMs must be a finite number; got ${startMs}.`);
     }
@@ -97,17 +116,24 @@ export function createTranscriptBuffer(options = {}) {
     if (typeof text !== "string") {
       throw new TypeError(`transcriptBuffer.append: text must be a string; got ${typeof text}.`);
     }
+    // speaker は任意（既定 "you"）。渡された場合のみ検証する（不正値は throw）。
+    if (speaker !== undefined && !VALID_SPEAKERS.has(speaker)) {
+      throw new RangeError(
+        `transcriptBuffer.append: speaker must be "you" or "soul"; got ${JSON.stringify(speaker)}.`
+      );
+    }
   }
 
   return {
     /**
      * 転写を積む。空転写（空白のみ）は積まずに捨て、onDiscard で観測可能にする。
-     * @param {{ startMs: number; endMs: number; text: string }} input
+     * @param {{ startMs: number; endMs: number; text: string; speaker?: Speaker }} input
      * @returns {{ appended: boolean; entry: TranscriptEntry | null; reason: "appended" | "blank" }}
      */
     append(input) {
       validate(input);
       const { startMs, endMs, text } = input;
+      const speaker = /** @type {Speaker} */ (input.speaker ?? "you");
       if (isBlankTranscript(text)) {
         discarded += 1;
         const info = Object.freeze({ startMs, endMs, text, reason: /** @type {const} */ ("blank") });
@@ -121,6 +147,7 @@ export function createTranscriptBuffer(options = {}) {
         startMs,
         endMs,
         text,
+        speaker,
         appendedAtMs: nowImpl()
       });
       entries.push(entry);

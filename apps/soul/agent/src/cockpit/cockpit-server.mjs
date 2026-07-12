@@ -254,12 +254,25 @@ export function createInMemorySettingsStore(initial = null) {
  * @param {(opts?: object) => Promise<{ devices: any[]; inputFormat: string; error: string | null }>} [options.enumerateDevicesImpl]
  *   デバイス列挙の差し替え（テスト注入。既定は enumerateDevices）。
  * @param {() => number} [options.nowImpl]  uptime 用時計（既定 Date.now）。
+ * @param {(hooks: {
+ *   getBuffer: () => any;
+ *   onState: (state: string) => void;
+ *   onFire: (info: object) => void;
+ *   onDiagnostic: (diag: object) => void;
+ *   onSoulTranscript: (entry: object) => void;
+ * }) => { fire: () => Promise<object>; getState: () => string; dispose: () => void }} [options.fireOrchestratorFactory]
+ *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire が 503）。
+ *   cockpit が握る getBuffer（=pipeline?.transcriptBuffer ?? null）と broadcast フックを渡し、返った
+ *   orchestrator の fire() を POST /api/fire で await する。onState/onFire/onDiagnostic/onSoulTranscript は
+ *   SSE（soul/fire/diagnostic/transcript）へ broadcast される。本番は Domain B がここで session/speak/
+ *   channel/player を結線した createFireOrchestrator を返す。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
  *   close: () => Promise<void>;
  *   isListening: () => boolean;
  *   earsStatus: () => string;
+ *   fireState: () => string | null;
  * }}
  */
 export function createCockpitServer(options = {}) {
@@ -305,7 +318,7 @@ export function createCockpitServer(options = {}) {
     endMs: entry.endMs,
     text: entry.text,
     appendedAtMs: entry.appendedAtMs,
-    speaker: "you" // v0 単一話者（buffer に speaker フィールドは無い）。
+    speaker: entry.speaker ?? "you" // S3 で会話ログへ昇格（you/soul）。既定は you（S2 挙動不変）。
   });
 
   function snapshot() {
@@ -584,6 +597,19 @@ export function createCockpitServer(options = {}) {
       }
       return;
     }
+    if (method === "POST" && pathname === "/api/fire") {
+      if (!fireOrchestrator) {
+        // 未注入（S2.5 単体で立てた等）: 発火は使えない。S2.5 テストはここを叩かない = 無退行。
+        sendJson(res, 503, { error: "fire not available" });
+        return;
+      }
+      // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
+      const result = await fireOrchestrator.fire();
+      // accepted（発火成功）は 202・busy/empty/ears-not-running/error は 200 に {fired:false,...}。
+      const status = /** @type {any} */ (result).fired ? 202 : 200;
+      sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
+      return;
+    }
 
     sendJson(res, 404, { error: `not found: ${method} ${pathname}` });
   }
@@ -632,6 +658,37 @@ export function createCockpitServer(options = {}) {
     }
   }
 
+  // ── 発火オーケストレータ（S3 Domain A・追加的結線）────────────────────────
+  //
+  //  未注入時は fireOrchestrator=null（POST /api/fire は 503・S2.5 は無退行）。注入時は cockpit が
+  //  getBuffer（正本 = pipeline?.transcriptBuffer）と broadcast フックを渡す。soul の発話行は耳の
+  //  onTranscript を通らないため、orchestrator の onSoulTranscript フックで受け、既存 transcript
+  //  イベント（speaker:"soul"）として broadcast する（domain-a.md ワイヤ契約 §）。
+
+  /** soul の追記を既存 transcript イベントとして push（耳の onTranscript 経路とは別口）。 */
+  function broadcastSoulTranscript(entry) {
+    const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
+    broadcast("transcript", {
+      ...toWireEntry(entry),
+      latencyMs: null,
+      audioCtx: null,
+      appended: stats.appended,
+      discarded: stats.discarded
+    });
+  }
+
+  /** @type {{ fire: () => Promise<object>; getState: () => string; dispose: () => void } | null} */
+  let fireOrchestrator = null;
+  if (typeof options.fireOrchestratorFactory === "function") {
+    fireOrchestrator = options.fireOrchestratorFactory({
+      getBuffer: () => (pipeline ? pipeline.transcriptBuffer : null),
+      onState: (state) => broadcast("soul", { state }),
+      onFire: (info) => broadcast("fire", info),
+      onDiagnostic: (diag) => handleDiagnostic(diag),
+      onSoulTranscript: (entry) => broadcastSoulTranscript(entry)
+    });
+  }
+
   // ── ライフサイクル ─────────────────────────────────────────────────
 
   return {
@@ -652,13 +709,22 @@ export function createCockpitServer(options = {}) {
     },
     isListening: () => server.listening,
     earsStatus: () => earsState,
+    /** 発火状態（idle/thinking/speaking）。orchestrator 未注入なら null。 */
+    fireState: () => (fireOrchestrator ? fireOrchestrator.getState() : null),
     /**
-     * 全畳み（冪等）: 全 SSE 応答を end → pipeline.dispose → http server close。
+     * 全畳み（冪等）: 全 SSE 応答を end → orchestrator.dispose → pipeline.dispose → http server close。
      * リークするタイマ/ハンドル/子プロセスを残さない。
      */
     async close() {
       if (closed) return;
       closed = true;
+      if (fireOrchestrator) {
+        try {
+          fireOrchestrator.dispose();
+        } catch {
+          // best-effort
+        }
+      }
       for (const res of sseClients) {
         try {
           res.end();

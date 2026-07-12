@@ -48,4 +48,10 @@
 
 ## 6. Status
 
-(発進後に記録)
+- **実装・レビュー完了（2026-07-12, Orch-Sylph）。人間ゲート待ち。**
+- Domain A（会話ログ + 発火オーケストレーション）: 実装 [../waves/s3/domain-a.md](../waves/s3/domain-a.md) / 統合レビュー **PASS（blocking ゼロ）** [../reviews/s3/domain-a-review.md](../reviews/s3/domain-a-review.md)（3 レーン spec/design/test 全 PASS）。
+- Domain B（操縦席拡張 + AHK + 計測 + docs）: 実装 [../waves/s3/domain-b.md](../waves/s3/domain-b.md) / 統合レビュー **PASS（blocking ゼロ）** [../reviews/s3/domain-b-review.md](../reviews/s3/domain-b-review.md)（3 レーン全 PASS・spec non-blocking の字面 4 箇所は wave 内即時回収済み）。
+- 機械ゲート（最終検証・Orch 独立実測）: `node --test` **269/269 緑**（231 → Domain A +26 → Domain B +12。決定的 = 複数回同数）・`preflight-fire` / `preflight-cockpit` **PASS/EXIT=0**・lockfile 3 種差分ゼロ・新規依存ゼロ・3 チェック無退行（soul-zone 緑 1320 / deps 緑 / source は器 pre-existing 1 件のみ）。
+- SDK 実消費: **5 ask（上限 5 の契約内・measure-fire.mjs・ハードガード付き）**。実測 TTFT ≈3.2〜3.9s / ask ≈6.0〜6.8s → [../../experiments/s3-summon.md](../../experiments/s3-summon.md)。
+- 人間ゲート手順書: [../waves/s3/human-gate-procedure.md](../waves/s3/human-gate-procedure.md)（全器官起動: AivisSpeech → 器 + Channel → 操縦席 `--channel` → マイク Start → 独り言 → Fire → 声 + 口）。音声開始 E2E と遅延 append 観測は s3-summon.md §3/§4 の記入欄へ。
+- 持ち越し台帳: [../waves/s3/s3-followup.md](../waves/s3/s3-followup.md)。

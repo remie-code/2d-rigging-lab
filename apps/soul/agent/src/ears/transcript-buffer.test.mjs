@@ -169,3 +169,39 @@ test("onAppend/onDiscard: 非関数 listener は throw", () => {
   assert.throws(() => buffer.onAppend(/** @type {any} */ (null)), TypeError);
   assert.throws(() => buffer.onDiscard(/** @type {any} */ ("x")), TypeError);
 });
+
+// ── 話者ラベル（S3 会話ログ昇格・追加的）─────────────────────────────────
+
+test("speaker: 未指定は既定 'you'（S2 挙動不変）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
+  const r = buffer.append({ startMs: 0, endMs: 500, text: "独り言" });
+  assert.equal(r.entry?.speaker, "you");
+  assert.equal(buffer.all()[0].speaker, "you");
+});
+
+test("speaker: 'soul' を指定すると soul エントリになる（startMs/endMs=0 の魂発話）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
+  const you = buffer.append({ startMs: 100, endMs: 900, text: "ねえ" });
+  const soul = buffer.append({ startMs: 0, endMs: 0, text: "はーい", speaker: "soul" });
+  assert.equal(you.entry?.speaker, "you");
+  assert.equal(soul.entry?.speaker, "soul");
+  assert.deepEqual(buffer.all().map((e) => [e.speaker, e.text]), [
+    ["you", "ねえ"],
+    ["soul", "はーい"]
+  ]);
+  // soul エントリも frozen（正本の不変性を維持）。
+  assert.ok(Object.isFrozen(soul.entry));
+});
+
+test("speaker: 不正値は throw（you/soul 以外を黙殺しない）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
+  assert.throws(
+    () => buffer.append({ startMs: 0, endMs: 0, text: "x", speaker: /** @type {any} */ ("bot") }),
+    RangeError
+  );
+  assert.throws(
+    () => buffer.append({ startMs: 0, endMs: 0, text: "x", speaker: /** @type {any} */ (1) }),
+    RangeError
+  );
+  assert.equal(buffer.size(), 0); // 失敗 append は何も残さない
+});

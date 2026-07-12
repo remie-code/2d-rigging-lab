@@ -40,12 +40,33 @@
 - **footer**: discarded(空転写の破棄数=VAD閾値の診断材料)、uptime。
 - 数字(レイテンシ等)の露出は**可**(操縦席は診断面。Physiologyページの質感語規律とは別領分——Channelページと同じ扱い)。UI語彙は英語(器と同方針)。
 
+### 2.1 S3で実体化した拡張(2026-07-12, Domain B)
+
+§3の予約のうち「AI応答のタイムライン合流+発火マーカー」「発火ボタン/発火キー状態表示」をS3で実体化した:
+
+- **Fireセクション**(Microphoneの下・Timelineの上): `[Fire]` ボタン + `soul: idle|thinking|speaking` の
+  状態表示。SSE `soul` イベント連動で thinking/speaking 中はボタンdisable+状態が発話色(アンバー)に
+  変わる(busy表示)。非受理(`fired:false`)の reason(busy / ears-not-running / empty-window / empty-reply / error)は
+  ボタン横に淡色で控えめに表示。`--channel` なしで起動した操縦席では 503 を受けて
+  「fire not available」と案内する(S2.5挙動のまま)。
+- **soul行**: SSE `transcript`(speaker:"soul")を既存の行描画がそのまま描く(話者ラベル `soul`・
+  who が青系 `#8fb7ff`)。履歴復元(`GET /api/state`)でも同様。
+- **発火マーカー行**: SSE `fire`(accepted:true)で Timeline に
+  `12:01:45  fire  *  fired (4 lines, 123 chars injected)` のマーカー行(アンバー)を刻む。直後の
+  soul行の.markerに印を付ける案は不採用——fire受理からsoul行到着まで思考時間の空白があり、
+  受理そのものを独立行にした方が時間差も読めるため。
+- **発火失敗のゴースト行**: empty-reply / error(SSE `diagnostic` の fireEmptyReply / fireError)は
+  S2.5のゴースト行の型で `(fire: empty reply)` / `(fire error: …)` を淡色表示(無言の消失にしない)。
+- **発火キー**: グローバルホットキーは同梱AHKスクリプト(`apps/soul/agent/scripts/fire-hotkey.ahk`)が
+  POST /api/fire を叩く(§1のElectron不採用の帰結どおりブラウザ外で解決)。導入は任意・ゲートは
+  ボタンで成立。
+
 ## 3. 将来の拡張予約(v0では作らない。枠だけ意識した設計に)
 
 | 拡張 | 入る問題 |
 |---|---|
-| AI応答のタイムライン合流(話者 `soul`)+発火マーカー | S3 |
-| 発火ボタン/発火キー状態表示 | S3(キー経路の設計討議とセット) |
+| AI応答のタイムライン合流(話者 `soul`)+発火マーカー | S3 — **S3で実体化済み**(§2.1) |
+| 発火ボタン/発火キー状態表示 | S3(キー経路の設計討議とセット) — **S3で実体化済み**(§2.1・キーはAHK同梱) |
 | barge-in(遮り)の可視化 | S6 |
 | 視聴者コメントの合流 | S7 |
 | キルスイッチ・NGワード状態・AI開示チェックリスト | S8 |

@@ -63,6 +63,13 @@
   #btn-start { color: var(--up); }
   #btn-stop { color: var(--down); }
   .err { color: var(--down); flex-basis: 100%; }
+  /* ── Fire（S3: 発火ボタン + soul の busy 表示）── */
+  .fire { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  #btn-fire { color: var(--speaking); font-weight: bold; letter-spacing: 0.04em; }
+  .soul-state { color: var(--muted); }
+  .soul-state.thinking { color: var(--speaking); }
+  .soul-state.speaking { color: var(--speaking); font-weight: bold; }
+  .fire-note { color: var(--muted); } /* 非受理 reason の控えめ表示（busy / ears-not-running / empty-window / empty-reply / error）。 */
   .timeline-section { padding-bottom: 8px; }
   #timeline {
     height: 46vh; min-height: 220px; overflow-y: auto;
@@ -72,12 +79,15 @@
   .row { display: flex; gap: 10px; padding: 3px 2px; align-items: baseline; white-space: pre-wrap; }
   .row .time { color: var(--muted); flex: 0 0 auto; }
   .row .who { color: var(--accent); flex: 0 0 auto; min-width: 3.5em; }
-  .row.speaker-soul .who { color: #8fb7ff; } /* 拡張予約: AI 応答（S3）。v0 は you のみ発火。 */
+  .row.speaker-soul .who { color: #8fb7ff; } /* AI 応答（S3 で実体化: SSE transcript speaker:"soul"）。 */
   .row .text { flex: 1 1 auto; }
   .row .lat { color: var(--muted); flex: 0 0 auto; }
   .row .marker { flex: 0 0 auto; } /* 拡張予約: 発火マーカーの入る余地（S3）。v0 は空。 */
   .row.speaking .text { color: var(--speaking); font-style: italic; }
   .row.ghost .text { color: var(--muted); font-style: italic; } /* 破棄/ASR失敗の無言の消失を可視化（淡色）。 */
+  /* 発火マーカー行（S3: 拡張予約の実体化）。Fire 受理の瞬間を Timeline に刻む。 */
+  .row.fire-marker { color: var(--speaking); }
+  .row.fire-marker .text { color: var(--speaking); }
   footer {
     padding: 10px 18px; border-top: 1px solid var(--border);
     color: var(--muted); display: flex; gap: 24px; background: var(--panel);
@@ -107,6 +117,13 @@
     <span id="devices-error" class="err"></span>
   </section>
 
+  <!-- S3: 発火（Fire）。実運用のゲーム中発火は AHK → POST /api/fire（scripts/fire-hotkey.ahk）。 -->
+  <section class="fire">
+    <button id="btn-fire">Fire</button>
+    <span>soul: <span id="soul-status" class="soul-state idle">idle</span></span>
+    <span id="fire-note" class="fire-note"></span>
+  </section>
+
   <section class="timeline-section">
     <h2>Timeline</h2>
     <div id="timeline" role="log" aria-live="polite"></div>
@@ -119,7 +136,8 @@
 
   <script>
   // 正本はプロセス側・UI は使い捨てのビュー（screens/soul-cockpit.md §1）。
-  // 消費するワイヤ契約は Domain A の domain-a.md §3（HTTP）・§4（SSE）のみ。
+  // 消費するワイヤ契約は Domain A のもののみ: S2.5（waves/s2.5/domain-a.md §3 HTTP・§4 SSE）
+  // + S3（waves/s3/domain-a.md §2: POST /api/fire・SSE soul/fire/diagnostic）。
   (function () {
     "use strict";
     var byId = function (id) { return document.getElementById(id); };
@@ -186,7 +204,7 @@
       timeline.appendChild(speakingRow);
       timeline.scrollTop = timeline.scrollHeight;
     }
-    // 話者ラベルは you / soul を扱える構造（拡張予約 §3）。v0 は you のみ。
+    // 話者ラベルは you / soul（S3 で soul 実体化: 魂の発話は SSE transcript speaker:"soul" で届く）。
     function addTranscriptRow(d) {
       removeSpeakingRow();
       var speaker = d.speaker || "you";
@@ -228,6 +246,53 @@
       timeline.appendChild(row);
       timeline.scrollTop = timeline.scrollHeight;
     }
+
+    // ── Fire（S3: 拡張予約の実体化）───────────────────────────────
+    // busy 表示は SSE `soul` イベント（idle/thinking/speaking）連動。thinking/speaking 中は
+    // Fire ボタンを disable（busy 中の Fire はサーバ側でも無視される・二重の防波堤）。
+    function applySoulState(state) {
+      var st = state === "thinking" || state === "speaking" ? state : "idle";
+      var el = byId("soul-status");
+      el.textContent = st;
+      el.className = "soul-state " + st;
+      byId("btn-fire").disabled = st !== "idle";
+    }
+    function setFireNote(text) {
+      byId("fire-note").textContent = text || "";
+    }
+    // 発火マーカー行: Fire 受理（SSE fire accepted:true）の瞬間を Timeline に刻む。
+    // 直後の soul 行の .marker に印を付ける案もあるが、fire → soul 行到着まで思考時間の
+    // 空白があるため、受理そのものを独立行で残す（時間差も読める）。
+    function addFireMarkerRow(d) {
+      var row = document.createElement("div");
+      row.className = "row fire-marker";
+      var t = document.createElement("span"); t.className = "time";
+      t.textContent = fmtClock(d.atMs || Date.now());
+      var who = document.createElement("span"); who.className = "who"; who.textContent = "fire";
+      var marker = document.createElement("span"); marker.className = "marker"; marker.textContent = "*";
+      var text = document.createElement("span"); text.className = "text";
+      text.textContent = "fired (" + (d.includedCount != null ? d.includedCount : "?") + " lines, " +
+        (d.injectedChars != null ? d.injectedChars : "?") + " chars injected)";
+      row.appendChild(t); row.appendChild(who); row.appendChild(marker); row.appendChild(text);
+      timeline.appendChild(row);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+    byId("btn-fire").addEventListener("click", function () {
+      byId("btn-fire").disabled = true; // 連打防止（復帰は応答 state / SSE soul）。
+      setFireNote("");
+      fetch("/api/fire", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+        .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
+        .then(function (res) {
+          // 503 = fire 未結線（--channel なしで起動）。fired:false は reason を控えめに表示。
+          if (res.status === 503) setFireNote("fire not available (start cockpit with --channel)");
+          else if (res.j && res.j.fired === false) setFireNote("not fired: " + (res.j.reason || "unknown"));
+          applySoulState(res.j && res.j.state ? res.j.state : "idle");
+        })
+        .catch(function (e) {
+          setFireNote("fire error: " + e);
+          applySoulState("idle");
+        });
+    });
 
     // ── Microphone: GET /api/devices → dropdown（lastDevice を初期選択）──
     function selectDeviceIfPresent(name) {
@@ -310,7 +375,19 @@
       es.addEventListener("diagnostic", function (ev) {
         var d = JSON.parse(ev.data);
         if (d.type === "asrFailure") addGhostRow("(asr failed)");
-        // 他の診断型は拡張予約: 補助情報の表示余地（S3+）。v0 は未表示。
+        // S3: 発火失敗系もゴースト行の型で「無言の消失」にしない（Domain A 引き継ぎ Q3 の裁量）。
+        else if (d.type === "fireEmptyReply") addGhostRow("(fire: empty reply)");
+        else if (d.type === "fireError") addGhostRow("(fire error: " + (d.message || "unknown") + ")");
+        // 他の診断型は拡張予約: 補助情報の表示余地（S4+）。未表示。
+      });
+      // S3: soul の busy 状態（idle/thinking/speaking）と発火通知。
+      es.addEventListener("soul", function (ev) {
+        applySoulState(JSON.parse(ev.data).state);
+      });
+      es.addEventListener("fire", function (ev) {
+        var d = JSON.parse(ev.data);
+        if (d.accepted === true) { setFireNote(""); addFireMarkerRow(d); }
+        else setFireNote("not fired: " + (d.reason || "unknown"));
       });
     }
     function init() {

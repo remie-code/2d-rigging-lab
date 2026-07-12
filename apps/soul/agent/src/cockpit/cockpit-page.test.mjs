@@ -114,3 +114,63 @@ test("cockpit page: ghost rows are visually distinct (muted class) from normal t
   // CSS: ghost 行は既存の淡色トークン（--muted）を使う（transcript 行の既定色と区別できる）。
   assert.match(html, /\.row\.ghost\s+\.text\s*\{[^}]*var\(--muted\)/);
 });
+
+// ── S3: Fire ボタン + soul busy 表示 + 発火マーカー + soul 行（拡張予約の実体化）───────────
+
+test("cockpit page: has a Fire button and soul status, and POSTs /api/fire", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /id="btn-fire"/);
+  assert.match(html, /id="soul-status"/);
+  assert.match(html, /id="fire-note"/);
+  // Fire ボタンは POST /api/fire を叩く（domain-a.md §2.1 のワイヤ契約を消費）。
+  assert.match(html, /fetch\(["']\/api\/fire["'],\s*\{\s*method:\s*["']POST["']/);
+});
+
+test("cockpit page: subscribes SSE soul events and disables Fire while thinking/speaking", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /addEventListener\(["']soul["']/);
+  // busy 連動: applySoulState が idle 以外で btn-fire を disable する。
+  assert.match(html, /function applySoulState\(/);
+  const fn = html.match(/function applySoulState\([\s\S]*?\n    \}/);
+  assert.ok(fn, "applySoulState 本体が見つかること");
+  assert.match(fn[0], /btn-fire["']\)\.disabled\s*=\s*st\s*!==\s*["']idle["']/);
+});
+
+test("cockpit page: subscribes SSE fire events — accepted adds a marker row, rejected shows a quiet reason", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  const m = html.match(/addEventListener\(["']fire["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "fire リスナーが見つかること");
+  const body = m[1];
+  assert.match(body, /accepted\s*===\s*true/);
+  assert.match(body, /addFireMarkerRow\(/);
+  assert.match(body, /setFireNote\(/); // 非受理 reason の控えめ表示。
+});
+
+test("cockpit page: fire marker rows carry injectedChars/includedCount and a distinct class + CSS", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /function addFireMarkerRow\(/);
+  const fn = html.match(/function addFireMarkerRow\([\s\S]*?\n    \}/);
+  assert.ok(fn, "addFireMarkerRow 本体が見つかること");
+  assert.match(fn[0], /className\s*=\s*["']row fire-marker["']/);
+  assert.match(fn[0], /includedCount/);
+  assert.match(fn[0], /injectedChars/);
+  // CSS: マーカー行は既存トークン（--speaking）で視覚的に区別される。
+  assert.match(html, /\.row\.fire-marker\s*\{[^}]*var\(--speaking\)/);
+});
+
+test("cockpit page: fire failure diagnostics (fireError/fireEmptyReply) reuse the ghost-row idiom", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "diagnostic リスナーが見つかること");
+  const body = m[1];
+  // Domain A 引き継ぎ Q3 の裁量: empty-reply/error は diagnostic 経由 → ゴースト行で一貫表示。
+  assert.match(body, /type\s*===\s*["']fireEmptyReply["']/);
+  assert.match(body, /type\s*===\s*["']fireError["']/);
+});
+
+test("cockpit page: soul transcript rows are drawable (speaker-soul class + speaker-driven row class)", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // 既存 addTranscriptRow が speaker を行クラスに反映する（soul 行は S2.5 からの受け口で描ける）。
+  assert.match(html, /className\s*=\s*["']row speaker-["']\s*\+\s*speaker/);
+  assert.match(html, /\.row\.speaker-soul\s+\.who/);
+});
