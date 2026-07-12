@@ -36,6 +36,8 @@ op スペック（apply-op.mjs に渡す形）:
 
 - 生成済みメッシュへの再 generateMesh は通る（wave103 実証）が、既存の keyform・デフォーマ結線がある部品では影響を考えてから
 - 眼球級の小部品で頂点 30 前後・三角形 40 前後が medium の相場（閉問題 01 実測: 53×52 の虹彩で 32 頂点/44 三角形）
+- **strict validate は生成メッシュ全数に `mesh.uvCoordinateOutOfBounds` error を必ず出す**（3周目=claude-chan 周回で発見・裁定）。生成器は輪郭に約2pxの covering margin を張り UV を [0,1] にクランプしない設計（Wave108/Option E）のため、越境は仕様。GUI の Standard プリセットでも同一。この error は validatePackage レポート専用で commit・export のどこも塞がず、レンダラは CLAMP_TO_EDGE で越境 UV を透明ガターへ落とす。**確認すべきは error の消去ではなくガターの実在**: `assets/textures/texture-atlas.json` の全テクスチャで `contentInset` ≥ 2px（マージン幅）を機械確認すれば安全は閉じる。`mesh.orphanedVertex`（三角形非参照頂点）も同様に生成器由来・非描画・実害なし。validate を出口基準に使う場合は「blocking 0 + error はこの既知2クラスのみ」と書く
+- レンダ画素のシルエットは境界の凸区間で実頂点境界より2〜3px 痩せる（マージン頂点が透明ガターへ減衰するため）。**シルエット実測の正はメッシュ境界**であり、レンダ画素を使わない
 
 ## エスカレーション条件
 
