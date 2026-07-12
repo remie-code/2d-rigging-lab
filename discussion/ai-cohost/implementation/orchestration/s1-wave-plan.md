@@ -1,6 +1,6 @@
 # S1 wave計画: 一文が縦に貫通する(魂の歩くスケルトン)
 
-> Status: 計画確定(2026-07-12)。発進待ち。
+> Status: **完全閉鎖(2026-07-12)**。機械ゲート全緑+人間ゲート合格(ユーザー「完璧だ、声が答え、口が合っている」)。
 > 根拠: [../s-series-decomposition.md](../s-series-decomposition.md) S1 / [s1-planning-inventory.md](s1-planning-inventory.md)(棚卸し+ユーザー裁定2件) / [../../architecture/conversation-pipeline-direction.md](../../architecture/conversation-pipeline-direction.md) §2.7 / [../../soul/llm-access-path.md](../../soul/llm-access-path.md)。
 > 方式: 単一Orch-Sylph(opus)がDomain A→B→Cを順次実行。各ドメインはGnome実装+Review-Sylph 3レーン(spec/design/test)。C系列の委任規律を全面継承(子の完了主張は契約成果物ファイルのReadで裏取り/実行していないコマンドの数字を書かない/外部公開ツール禁止/ツール結果可読性の自己確認/agentId即記録)。
 
@@ -67,4 +67,4 @@
 - **Domain C 閉鎖**: llm-session(常駐ストリーミング入力・**maxTurns:1 と residency の両立を実測確定=S系列前提**)+ env-guard(3 種 throw・実演済み)+ CLI + **experiments/ 開設**([../../experiments/s1-first-light.md](../../experiments/s1-first-light.md))+ README 改定 + 人間ゲート手順書。**tools:[] で全ツール無効を実証**(init.tools=[]・disallowedTools 不要)・apiKeySource=none(サブスク OAuth)。SDK 実行は 4 ask(上限内)。レビュー 3 レーン PASS(.d.ts 全項目一致)。→ [../waves/s1/domain-c.md](../waves/s1/domain-c.md) / [../reviews/s1/domain-c-review.md](../reviews/s1/domain-c-review.md)
 - **機械ゲート(Orch 自身の再実行の生数字)**: soul `node --test` **84/84** / runtime-player **925/925** / packages **1492/1492** / check:soul-zone 緑(1274 files) / check:deps 緑 / check:source 新規赤ゼロ(既存 physiology barrel 1 件は S1 無関係・別タスク化) / **pnpm-lock.yaml・器コード・C4 契約 fixture・参照ドライバ diff 空**。
 - **follow-up**: [../waves/s1/s1-followup.md](../waves/s1/s1-followup.md)(10 項目。テストハング残存監視 §8 含む)。
-- **残: 人間ゲート(choke point 2)**: [../waves/s1/human-gate-procedure.md](../waves/s1/human-gate-procedure.md) に従い、AivisSpeech + 自律ホスト起動 + Channel URL 手渡し + CLI で一言 → 「声が答え、口が合っている」の一目一聴。CLOSURE 判定は Undine が引き取る。
+- **人間ゲート合格(2026-07-12、ユーザー実施)**: [../waves/s1/human-gate-procedure.md](../waves/s1/human-gate-procedure.md) に従い実施、判定「**完璧だ、声が答え、口が合っている**」。同期調整(先頭オフセット)は不要だった=「WAV先頭無音0.1s≒器のattack」の相殺想定が初回で成立。**S1 完全閉鎖**。モーラ均等割り仮説(裁定2)は初戦勝利。

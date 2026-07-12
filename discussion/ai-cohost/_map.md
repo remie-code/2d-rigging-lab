@@ -18,7 +18,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
 | [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
-| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。閉問題分解C1〜C7まで。**C1〜C7 全て完全閉鎖(C1=2026-07-10、C2〜C5=2026-07-11、C6/C7=2026-07-12)=器の完成**。S1 Domain A/B/C 実装中 |
+| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。**C1〜C7全閉鎖=器の完成、S系列開始。S1「一文が縦に貫通する」完全閉鎖(2026-07-12、人間ゲート「完璧だ」)**。次=S2「耳が生える」 |
 | [soul/](soul/) | S系列(魂の実装)の前提討議3件(①知性のアクセス経路 ②会話パイプライン最終化 ③persona) | Created(2026-07-12)。**①②裁定済みクローズ(同日)**: 主経路=Max 20x+Agent SDK/パイプラインAccepted昇格。③personaはS8後 |
 | [experiments/](experiments/) | 魂の実測(枠消費・レイテンシ・会話品質)。S系列の常設計器 | **Created(2026-07-12、S1 Domain C)**。初回=[experiments/s1-first-light.md](experiments/s1-first-light.md)(tools:[]無効実証・apiKeySource=none・常駐初期化≈1.9s・warm ask~3.2s・synthesis~1s) |
 
