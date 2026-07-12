@@ -27,6 +27,10 @@
 
 - validate の結果を把握した / 全身レンダの意味を説明できる / 作業対象の drawableId と rest bbox を列挙できる / git log に baseline がある
 
+## 既知の罠（検証一般）
+
+- **rest 恒等の sha 比較は固定 stageViewport で行う**（3周目発見）: renderView の auto viewport は素材でなく**ワープ domain の union**に追従する——warp デフォーマを新設しただけで viewport が広がり、rest が画素恒等でも sha が変わる。恒等検証のレンダは初回に決めた固定 viewport を封筒に明記して使い回すこと
+
 ## 既知の罠（headless validate の error クラス）
 
 CLI の validatePackage は document-only 経路（runtimeSnapshot 不在）であり、リグが育つにつれ**構造的に消せない error クラス**が積み上がる（3周目=claude-chan 周回で裁定）:
