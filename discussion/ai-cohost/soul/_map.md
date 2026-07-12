@@ -12,7 +12,7 @@
 
 | # | 議題 | 成果物 | Status |
 |---|---|---|---|
-| ① | **知性のアクセス経路**: API従量 vs Claude Max 20x(Agent SDK) | [llm-access-path.md](llm-access-path.md)(作成予定) | **討議開始(2026-07-12)。優先度最高(ユーザー)**。ユーザー制約: あまり金をかけたくない——**Max 20xプラン活用が最も望ましい**。検証点: (a)常駐配信エージェントへのサブスク枠利用の規約適合 (b)会話レイテンシ。裁定は premises P3(費用試算)を書き換え得る。未決の初出: [../architecture/c4-control-channel-v0.md](../architecture/c4-control-channel-v0.md) §9 |
+| ① | **知性のアクセス経路**: API従量 vs Claude Max 20x(Agent SDK) | [llm-access-path.md](llm-access-path.md) | **事実調査完了・ユーザー裁定待ち(2026-07-12)**。要点: 現行規約はSDKサブスク利用を容認/クレジット制($200/月上限化)の施行延期中=制度変更リスク/枠の絶対量は非公表で実測必須/OpenAIデータ共有案は学習提供と引き換えの無償枠。裁定事項5件は同ファイル§6 |
 | ② | **会話パイプライン最終化** + ASR/TTS選定の再確認 | (未着手) | 既存Draft: [../architecture/conversation-pipeline-direction.md](../architecture/conversation-pipeline-direction.md)(テキストパイプライン+二層設計「AIは全部聞くが全部では考えない」)。選定材料は [../research/](../research/)(2026-07-10時点)——鮮度確認要 |
 | ③ | **persona**(声・人格・AIの身体) | `persona/`(未作成) | コードと独立の**並行コンテンツトラック**。身体はリグ要件を添えて model-authoring 既存手順へ(器はモデルの作者を知らない) |
 
@@ -25,7 +25,7 @@
 
 ## 4. 次の行動
 
-1. **①の事実調査**(Sylph): (a)Claude Max 20x+Agent SDKを常駐配信エージェントに使う規約適合性 (b)経路別レイテンシ材料 (c)上記OpenAI記事の内容 → 調査結果を接地に [llm-access-path.md](llm-access-path.md) で討議 → ユーザー裁定。
+1. **①のユーザー裁定**: [llm-access-path.md](llm-access-path.md) §6 の5件(主経路・制度変更ヘッジ・AI開示要件・OpenAI案の扱い・規約問い合わせ要否)→ 結果を同§7へ記録。
 2. ①裁定後、②(パイプライン最終化・選定再確認)へ。③は並行トラックとしていつでも開始可。
 3. 3件が閉じたら S系列の閉問題分解を起こす(S1=歩くスケルトン)。`experiments/` を同時に切る(P3コストメーター+レイテンシ実測)。
 
