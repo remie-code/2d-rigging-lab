@@ -1,0 +1,17 @@
+# 魂 zone（apps/soul/agent）ローカル .gitignore — S2 Domain A で新設。
+# 器の領分（リポジトリルート .gitignore）には触れない。この無視は魂 zone 内に閉じる。
+
+# ── whisper.cpp バイナリ一式 + ASR/VAD モデル（非コミット）────────────────────
+# ユーザーが wave 発進前に配置する外部成果物（whisper-server.exe 等 + kotoba q5_0 ≈538MB +
+# silero_vad.onnx ≈2.3MB）。巨大バイナリ・モデルをリポジトリに載せない（S2 計画 §2）。
+# パスは設定で上書き可能なので、vendor/ 配置は既定であって強制ではない。
+vendor/
+
+# ── マイク録音・一時音声データ（プライバシー: リポジトリ/成果物に残さない）──────
+# 実マイクの録音物や中間 PCM/WAV を魂 zone に一切コミットしない（S2 計画 §4・blocking 基準4）。
+# 機械テストは合成 PCM を in-memory で扱い、ディスクに書かない。preflight 等が書く一時 WAV は
+# OS の temp 配下（リポジトリ外）だが、万一 zone 内へ書いた場合の安全網としてここでも無視する。
+*.wav
+*.pcm
+*.raw
+recordings/

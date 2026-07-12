@@ -72,3 +72,23 @@ node apps/soul/agent/src/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
 
 実器接続・実再生を伴う起動（CLI / `scripts/preflight-e2e.mjs`）は**人間ゲート**の領分
 （手順は `discussion/ai-cohost/implementation/waves/s1/human-gate-procedure.md`）。
+
+#### S2: 耳（ローカル常時 ASR → 転写バッファ）
+
+マイク→ffmpeg（16kHz mono s16le）→ Silero VAD（onnxruntime-node・`src/silero-vad.mjs`）→
+発話セグメンタ（`src/speech-segmenter.mjs`）→ PCM リング切り出し→ whisper.cpp `whisper-server`
+（kotoba-whisper q5_0・CPU・localhost）→ **転写バッファ（正本・`src/transcript-buffer.mjs`）**。
+結線は `src/ear-pipeline.mjs`（常駐・クリーンシャットダウン・ASR 直列キュー・死活監視）。
+
+- **バイナリ/モデルは非コミット**（`vendor/` は .gitignore 済み）: whisper 一式 +
+  `ggml-kotoba-whisper-v2.0-q5_0.bin` + `silero_vad.onnx` をユーザーが配置する。
+- **レイテンシ既定**（実測根拠は `discussion/ai-cohost/experiments/s2-ears.md`）:
+  whisper-server 6 スレッド + **発話長比例の動的 `audio_ctx`**（`src/whisper-inference.mjs`）で
+  発話終了→転写 ≈1.5〜2s（全窓のままだと ≈6.6〜9.5s）。
+- **耳 CLI 診断**: `node apps/soul/agent/src/ears-cli.mjs --device "マイク名"`（`--list-devices` で
+  デバイス列挙・`--help` 参照）。実マイク起動は人間ゲートの領分
+  （手順は `discussion/ai-cohost/implementation/waves/s2/human-gate-procedure.md`）。
+- **preflight（マイク不要の実機疎通）**: `scripts/preflight-vad.mjs`（実 ONNX）/
+  `scripts/preflight-asr.mjs`（実 whisper）/ `scripts/preflight-ears.mjs`（縦貫通）/
+  `scripts/bench-asr.mjs`（レイテンシ計測格子）。音声素材は TTS 合成 or 正弦波のみ
+  （**実マイク・録音物は使わない**）。

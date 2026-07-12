@@ -43,6 +43,14 @@ ffmpeg(子プロセス、マイク→16kHz mono s16le PCM stdout)
 ### Domain C: 常時稼働の結線+CLI診断+計測+docs
 
 - 耳パイプライン常駐(ffmpeg→VAD→segmenter→ASR→buffer)の結線+CLI表示(積もる転写+VADイベントの可視化)+クリーンシャットダウン。
+- **設計注記(Domain Aレビュー note 1 の引き継ぎ)**: セグメンタの `speechEnd.endMs` は flush 時に speechPadMs 分だけストリーム実在範囲を超え得る。maxSpeech 分割セグメントは前後 2×pad 重なる(いずれも意図された純関数契約)。**PCMリングバッファからの範囲切り出しは [0, 実データ末尾] への clamp が必須**。
+- Domain A 続行残項目の回収(Undine裁定 2026-07-12): **preflight-vad の再現資材化**(I/O名照合自体はレビューの使い捨てプローブで達成済み・スクリプト未作成)+ **VADラッパ到達テストの追加**。
+- **設計注記(Domain Bレビュー notes 1/2/3/4 の引き継ぎ・Undine裁定 2026-07-12)**:
+  - whisper-server の監視は **2 経路必須**: spawn 失敗は `onExit` に乗らず `ready` の reject でのみ観測される。結線層は「ready の reject」と「ready 後の onExit」の両方で死を監視すること(note 2)。
+  - `onExit` 正経路(ready 後の非 dispose 死→onExit 発火)のテストを結線テストと同時に 1 本足す(note 3)。
+  - 転写バッファの **listener 例外契約の線引き**を決めて固定テストを置く: 現実装は listener の throw が append 呼び出し元へ伝播し残り listener がスキップされる(正本自体は壊れない)。「listener は throw しない契約」の明文化か結線層での try/catch かを決める(note 4)。
+  - whisper-client のタイムアウトは fetch 完了までしか覆わない(本文読み取りは対象外)。常駐結線では「1 発話の転写処理全体」への外側の見張りを検討(note 1)。
+- **有界レイテンシチューニング(Undine裁定 2026-07-12)**: warm 6.6〜9.5s は人間ゲート「数秒以内の追従」を落とすリスクが高く、ゲートに届く努力はS2スコープ内。試すのは 3 系統まで: (a) `--audio-ctx` の発話長比例の動的設定(30s固定窓短縮の正攻法・品質への影響も1〜2ケースで確認) (b) threads(4/8+必要なら中間値1点) (c) `-bo 1` 等の探索幅削減。各設定のレイテンシ・転写品質を experiments/s2-ears.md に記録し、**warm 2〜3s以下に届いたら打ち切り**。届かなければ最良設定+正直な記録で人間ゲートへ(ゲート判定はユーザーの領分)。threads 常駐既定は「計測上の最速」ではなく**「最速に近い最小スレッド数」**(配信中は器の二体とCPU共有)。
 - 計測→ `experiments/s2-ears.md`(発話終了→転写到着のレイテンシ、CPU負荷、外れ値頻度)。
 - docs(README・人間ゲート手順書)+followup記録。
 
@@ -62,4 +70,7 @@ ffmpeg(子プロセス、マイク→16kHz mono s16le PCM stdout)
 
 ## 6. Status
 
-(発進後に記録)
+- 2026-07-12: **Domain A 閉鎖**。Gnome実装([../waves/s2/domain-a.md](../waves/s2/domain-a.md))→Review-Sylph 3レーン **PASS-with-notes・blockingゼロ**([../reviews/s2/domain-a-review.md](../reviews/s2/domain-a-review.md))。129/129緑(S1 84無退行+新規45)・3チェック無退行・保護対象不変・vendor/録音物の非コミット化(魂ローカル .gitignore 新設)。
+- 2026-07-12: **choke point 1 解消**(ユーザー作業完了をUndineがL0裏取り: `npm install` 済み・`silero_vad.onnx` 2,327,524 byte 配置済み)。魂の package-lock.json +186行差分は install の自然な帰結として受理(§4-1 の保護対象ではない・Undine裁定)。レビューが Silero ONNX I/O 名(input/state/sr→output/stateN)を実モデル照合し一致確認。stopなしで Domain B へ続行(Undine指示)。
+- 2026-07-12: **Domain B 閉鎖**。Gnome実装([../waves/s2/domain-b.md](../waves/s2/domain-b.md))→Review-Sylph 3レーン **PASS-with-notes・blockingゼロ**([../reviews/s2/domain-b-review.md](../reviews/s2/domain-b-review.md))。160/160緑(baseline 129無退行+新規31)・3チェック無退行・保護対象不変・新規npm依存ゼロ・preflight-asr実機PASS(レビュー独立再実行含む・孤児プロセスなし)・日本語転写の実取得成功(kotoba実機)。レイテンシ実測 warm ≈6.6s@8T/≈9.5s@4T(音声長非依存の固定コスト)→上記の有界チューニングを Domain C へ。転写バッファの無限成長は長期記憶の別問題系列へ先送り(s2-followup.md に記録・Undine裁定)。
+- 2026-07-12: **Domain C 閉鎖 = 機械ゲート閉鎖(wave完了・残るは人間ゲートのみ)**。Gnome実装([../waves/s2/domain-c.md](../waves/s2/domain-c.md))→Review-Sylph 3レーン **PASS-with-notes・blockingゼロ**([../reviews/s2/domain-c-review.md](../reviews/s2/domain-c-review.md))。196/196緑(baseline 160無退行+新規36)・3チェック無退行・保護対象不変・設計注記6点全回収。**有界チューニング打ち切り基準到達**: 採用構成(threads 6+動的 audio_ctx `clamp(ceil(秒×50)+96,256,1500)`+maxSpeechMs 20000+minSilenceMs 400)で **warm 1.5〜1.8s ≤ 基準2〜3s**(未チューニング比≈4倍・品質全窓一致)。縦貫通実機 preflight-ears は Gnome/Orch/Review の3実行者独立PASS(latency 1465〜1536ms・孤児ゼロ)。silero-vad.mjs への許可超過2修正(v5 576入力文脈=公式OnnxWrapperと1:1一致・intraOpNumThreads:1=アイドル396%→1.2%/コア)は **Undine事後承認+レビュー独立検証で確定受理**。レビューnote 6(process直列契約のJSDoc)はwave内で即時回収(196/196緑を再確認)。preflight-asr の分担解釈(素の全窓経路=preflight-asr / 採用経路=preflight-ears+bench-asr N=8)を機械ゲート4の充足として確定(Orch裁量・Undine承認)。計測は [../../experiments/s2-ears.md](../../experiments/s2-ears.md)(実マイク数字は人間ゲート後追記)。残 non-blocking は [../waves/s2/s2-followup.md](../waves/s2/s2-followup.md) §4〜§5 に台帳化(watchdog非キャンセルは S3 設計注記として明示引き継ぎ)。人間ゲート手順: [../waves/s2/human-gate-procedure.md](../waves/s2/human-gate-procedure.md)。人間ゲートと CLOSURE 判定は Undine が引き取る。
