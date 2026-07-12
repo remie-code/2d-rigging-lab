@@ -39,9 +39,9 @@
 | [runtime-player/](runtime-player/) | Editor外のRuntime Player / Capture Host appの調査、UX、設計、未決事項 | iFacialMocap input adapter調査、初期画面UX、Electron固定後の技術スタック判断を記録 |
 | [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 前提合意4文書（可解性 / 運用方針 / 閉問題アプローチ / craft設計）と第一閉問題（01-eyeball-x）定義を記録済み |
 | [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | Wave 1/1.1 実装完了。往復2所見「v6/v7一長一短」により保留中(v6/v7併存・トグル残置) |
-| [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | 現状調査Recorded・方針Accepted(2026-07-07)。Perf Wave 1(計測基盤)進行中 |
+| [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | Editor側=Perf Wave 2完了・クローズ(2026-07-08)。Player側=player-surveyで一旦保留(同日)。**二体同時起動の体感負荷(2026-07-12、ai-cohost C7)で再開条件成立——要否はユーザー裁定待ち** |
 | [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | why合意・分解Accepted(2026-07-08)。第一手=WS1(shell)未着手。詳細は下層mapへ委譲 |
-| [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | 目標像・成功基準・境界改定(案A)・振る舞いモデル・モデルホスト役割つき起動・D4(YouTube)/D6(キー操作)/D7(当面対象外)までAccepted(2026-07-10)。実装は閉問題分解C1〜C7の直列: **C1・C2 完全閉鎖、C3 実装完了・レビュー全PASS・機械ゲートgreen(手動ゲート待ち、2026-07-11)**。詳細は [ai-cohost/_map.md](ai-cohost/_map.md) へ委譲 |
+| [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | 目標像・成功基準・境界改定(案A)・振る舞いモデル・モデルホスト役割つき起動・D4(YouTube)/D6(キー操作)/D7(当面対象外)までAccepted(2026-07-10)。実装は閉問題分解C1〜C7の直列: **C1〜C7 全て完全閉鎖(C7=2026-07-12)=器の完成**。次はS系列(魂)の前提討議。詳細は [ai-cohost/_map.md](ai-cohost/_map.md) へ委譲 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
@@ -83,7 +83,7 @@
 8. 描画パフォーマンス改善では [render-performance/_map.md](render-performance/_map.md) を入口にする。
 9. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
 10. editor の Electron 移行では [editor-electron-migration/_map.md](editor-electron-migration/_map.md) を入口にする。第一手は WS1(shell)実装→実機観測。
-11. AI共演配信構想では [ai-cohost/_map.md](ai-cohost/_map.md) を入口にする。概念・境界・アプリ形状・主要設計分岐(D1/D4/D6/D7)はAccepted済み。次の一手はpersona議論(persona/新設)か実装wave計画の起草。
+11. AI共演配信構想では [ai-cohost/_map.md](ai-cohost/_map.md) を入口にする。**器はC1〜C7全閉鎖で完成(2026-07-12)**。次の一手はS系列(魂)の前提討議(①知性のアクセス経路 ②会話パイプライン最終化+選定再確認 ③persona/=並行トラック)→S系列の閉問題分解。
 
 ## 未決事項
 

@@ -29,6 +29,7 @@ Live2D / Cubism 関連レポートは過去調査・リスク確認用の privat
 | [runtime-evaluation-semantics-reference/](runtime-evaluation-semantics-reference/) | Runtime評価セマンティクス設計に向けた過去参照調査 | Private research archive / runtime oracleではない |
 | [rights-risk-cleanup/](rights-risk-cleanup/) | 権利・商標・互換誤認リスク整理 | 参考。Demo and Proposal Hygieneへ接続 |
 | [editor-render-performance/](editor-render-performance/) | Editor/Viewer 描画パフォーマンスの現状調査(ホットパス・評価層・描画層・ボトルネック仮説の順位付け) | Recorded(2026-07-07)。改善方針の議論に接続する現行調査 |
+| [psd-import-fidelity/](psd-import-fidelity/) | PSDインポート時のパーツ位置・見た目の忠実度調査。インポート直後の位置ズレ(目・襟)の原因(H1: contentInset未適用) | Recorded(2026-07-12)。根本原因 H1 確定 |
 
 ## 次の行動
 

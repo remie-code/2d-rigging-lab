@@ -17,3 +17,4 @@
 | [c5-choppiness-investigation.md](c5-choppiness-investigation.md) | 完了(2026-07-11) | 人間ゲート第一回不合格の診断: 曲線機械シロ(実波形計測)、原因=setの即ステップ(設計の自己矛盾)+証人シナリオのテスト用圧縮値 |
 | [c6-planning-inventory.md](c6-planning-inventory.md) | 完了(2026-07-11)。Verdict needs_design → ユーザー裁定7件で解消(設計討議§7) | C6のコード接地棚卸し(C5前方互換は外周のみ真、新規=口グループ・タイムライン評価器、母音経路はC5開通済み、生理は口を産まない、初の可変長payload=上限観点) |
 | [c6-wave-plan.md](c6-wave-plan.md) | **完全閉鎖(2026-07-12)**: 本編A/B/C+統合追撃E改(re-attack+Articulationスライダー)+ホットフィックスF、比較ゲート合格(「完璧だ」) | C6「口が話せる」wave計画: 口グループ・タイムライン評価器→契約intent.speech→統合→追撃(§12〜§13補遺に三代不成立インシデントと統合の経緯)。教訓: 証人シナリオは知覚のために/配線の存在≠疎通 |
+| [c7-closure-record.md](c7-closure-record.md) | **完全閉鎖(2026-07-12)**: wave なし・実装ゼロの検証のみで閉鎖(唯一) | C7「配信に乗る」閉鎖記録: OBS二体並走ゲート合格(トラッキング+生理の本来姿・C4〜C6駆動もOBS目視済み)。既知制限=二体同時起動の負荷(未計測、render-performance/player-survey の未解決質問への初データ。性能改善はスコープ外裁定)。**C1〜C7全閉鎖=器の完成** |

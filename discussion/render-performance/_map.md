@@ -14,6 +14,7 @@
 | [design-inputs.md](design-inputs.md) | 設計材料調査(createCanvasEvaluatedRigControls 内部構造・消費者分析・5案スケッチ) | Recorded(2026-07-07)。**消費者は最大1個、描画は非参照**が要 |
 | [double-evaluation-diagnosis.md](double-evaluation-diagnosis.md) | 二重評価の根本原因診断(StrictMode 開発モード二重実行・完全冗長)+ユーザー確認追記 | Recorded(2026-07-07) |
 | [improvement-design.md](improvement-design.md) | 改善設計 第1弾(案A: 選択駆動遅延化 / 案D: 表示経路最適化 / 目標30fps / 案Cは保留) | **Implemented(Perf Wave 2, 2026-07-08)** |
+| [player-survey.md](player-survey.md) | (B) Runtime Player / runtime-core レンダリング性能 現状把握調査(live経路は最適化済み・残る非効率4件・改善候補#1〜#5) | Recorded(2026-07-08、Sylph調査)。**結論「改善不要(現状で十分)が有力」で一旦保留**: 決定性・snapshot互換に触る最適化は実測でボトルネック確定まで着手しない。再開点=#5(deep profiling live配線)→#1/#4 |
 
 ## 子ディレクトリ
 
@@ -36,10 +37,15 @@
 
 Perf Wave 2 の成果をユーザーが実モデルで確認し「**Editor の動作としては十分**」と受け入れ。**案C(レンダー外化)と60fps続行は不要としてクローズ**(必要が再燃したら improvement-design §4 から再開)。
 
+## Runtime Player 側 = 一旦保留(2026-07-08)、再開条件が満たされた(2026-07-12)
+
+- [player-survey.md](player-survey.md)(2026-07-08)の結論: live 経路は既に手厚く最適化済みで「改善不要(現状で十分)が有力」。残る非効率4件(toFixed・無駄なZod parse・頂点4重クローン・三角形インデックス毎フレーム再構築)は決定性・snapshot互換に直結するため、**実測でボトルネック確定まで着手しない=一旦保留**。同調査の未解決質問に「stage と Browser Source 同時起動時の負荷は未計測」を残置。
+- **2026-07-12 初の実データ**: ai-cohost C7 ゲート(OBS 二体並走=runtime-player 2インスタンス+Browser Source 2本)で、ユーザー観測「このPCのスペックで2個動かすのはちょっときつそう」。ハードウェア側要因の可能性が高いが未計測。性能改善は C7 スコープ外と裁定(記録: [../ai-cohost/implementation/orchestration/c7-closure-record.md](../ai-cohost/implementation/orchestration/c7-closure-record.md) §3)。
+- **再開するときの初手**(player-survey の推奨のまま): #5 `runtimeCoreProfiling: "deep"` の live 配線(計測のみ・副作用ほぼ無し)→ 実測で犯人を確定 → 低リスクの #1(無駄な getState() parse 除去)/#4(三角形インデックスキャッシュ)。再開の要否・時期はユーザー裁定待ち。
+
 ## 次の行動
 
-1. **Runtime Player 側の調査**(Sylph 委任済み): Player のホットパス・既存キャッシュの被覆・Editor と同型の非効率(毎フレーム全量頂点評価・toFixed・クローン)の有無・Editor 改善(案D系)の移植可能性 → [player-survey.md](player-survey.md) に記録予定
-2. 調査結果を見て Player 改善の要否・スコープをユーザーと判断(未決事項の解消)
+1. 再開が裁定されたら上記の初手(#5 計測配線)から。それまで本トピックは保留のまま。
 
 ## 確定済み(設計・実装)
 
@@ -52,4 +58,4 @@ Perf Wave 2 の成果をユーザーが実モデルで確認し「**Editor の�
 | 項目 | 状態 |
 |---|---|
 | 目標値(許容1フレーム時間・対象モデル規模) | 計測往復で実数を見てから合意 |
-| Runtime Player 側の改善スコープ | Editor 側の設計確定後に判断 |
+| Runtime Player 側の改善スコープ | **一旦保留(2026-07-08、player-survey)**。二体同時起動の体感負荷(2026-07-12)で再開条件は満たされた——再開の要否・時期はユーザー裁定待ち |
