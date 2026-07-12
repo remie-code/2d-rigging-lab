@@ -109,3 +109,94 @@ test("createLazyChannel: close() closes the cached connection; no-op when never 
   await lazy.close(); // 冪等。
   assert.equal(closed, 1);
 });
+
+// ── createLazyChannel: URL 後入力/変更（S3 追撃 domain-c）─────────────────────
+
+test("createLazyChannel: URL 未設定なら sendSpeech は明示エラー（spawn 前の発火を弾く）", { timeout: 5000 }, async () => {
+  let connects = 0;
+  const lazy = createLazyChannel(null, {
+    connectImpl: /** @type {any} */ (async () => {
+      connects += 1;
+      return { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 1 }), close: async () => {} };
+    })
+  });
+  assert.equal(lazy.getUrl(), null);
+  assert.equal(lazy.connectionStatus(), "unset");
+  await assert.rejects(() => lazy.sendSpeech([]), /channel URL is not set/);
+  assert.equal(connects, 0, "URL 未設定では接続を試みない（spawn しない）");
+});
+
+test("createLazyChannel: setUrl で後から URL を設定すると次の fire で接続する", { timeout: 5000 }, async () => {
+  let connects = 0;
+  /** @type {string[]} */
+  const connectedUrls = [];
+  const lazy = createLazyChannel(null, {
+    connectImpl: /** @type {any} */ (async (u) => {
+      connects += 1;
+      connectedUrls.push(u);
+      return { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 1 }), close: async () => {} };
+    })
+  });
+  lazy.setUrl("ws://127.0.0.1:1/channel?token=t");
+  assert.equal(lazy.getUrl(), "ws://127.0.0.1:1/channel?token=t");
+  assert.equal(lazy.connectionStatus(), "idle");
+  const r = await lazy.sendSpeech([]);
+  assert.equal(r.result, "accepted");
+  assert.equal(connects, 1);
+  assert.equal(lazy.connectionStatus(), "connected");
+  assert.deepEqual(connectedUrls, ["ws://127.0.0.1:1/channel?token=t"]);
+});
+
+test("createLazyChannel: URL 変更は既存接続キャッシュを破棄し・旧接続を畳み・新 URL で再接続する", { timeout: 5000 }, async () => {
+  let connects = 0;
+  let closed = 0;
+  /** @type {string[]} */
+  const connectedUrls = [];
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=old", {
+    connectImpl: /** @type {any} */ (async (u) => {
+      connects += 1;
+      connectedUrls.push(u);
+      return {
+        sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 1 }),
+        close: async () => {
+          closed += 1;
+        }
+      };
+    })
+  });
+  await lazy.sendSpeech([]); // old に接続。
+  assert.equal(connects, 1);
+
+  lazy.setUrl("ws://127.0.0.1:2/channel?token=new"); // 変更 → 旧キャッシュ破棄。
+  // 旧接続の close は非同期 best-effort。マイクロタスクを 1 巡させて確定させる。
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(closed, 1, "旧接続は畳まれる");
+
+  await lazy.sendSpeech([]); // new に再接続。
+  assert.equal(connects, 2);
+  assert.deepEqual(connectedUrls, ["ws://127.0.0.1:1/channel?token=old", "ws://127.0.0.1:2/channel?token=new"]);
+});
+
+test("createLazyChannel: 同一 URL の setUrl は接続を切らない（現状維持）", { timeout: 5000 }, async () => {
+  let connects = 0;
+  let closed = 0;
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {
+    connectImpl: /** @type {any} */ (async () => {
+      connects += 1;
+      return {
+        sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 1 }),
+        close: async () => {
+          closed += 1;
+        }
+      };
+    })
+  });
+  await lazy.sendSpeech([]);
+  assert.equal(connects, 1);
+  lazy.setUrl("ws://127.0.0.1:1/channel?token=t"); // 同一 → no-op。
+  await Promise.resolve();
+  assert.equal(closed, 0, "同一 URL では既存接続を切らない");
+  await lazy.sendSpeech([]);
+  assert.equal(connects, 1, "接続は再利用される");
+});

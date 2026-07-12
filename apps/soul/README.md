@@ -133,17 +133,25 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   （`src/mind/fire-injection.mjs`・直近 5 分・4000 字上限は新しい方優先）→ ask（最小仮面
   `FIRE_SYSTEM_PROMPT`・claude-opus-4-8）→ speak（S1 経路）→ 会話ログへ speaker:"soul" 追記。
   busy 状態機械（idle/thinking/speaking・busy 中の fire は無視）。
-- **fire 有効の操縦席起動**（`scripts/cockpit.mjs`・Domain B）: `--channel` を指定したときだけ
-  fire が結線される（未指定なら S2.5 と同一 = POST /api/fire は 503）:
+- **fire 有効の操縦席起動**（`scripts/cockpit.mjs`・Domain B）: Channel URL は **操縦席（ブラウザ）の
+  Channel 欄から入力**するのが標準（S3 追撃 domain-c・「CLI を触らせない」思想の徹底）。`--channel` は
+  **後方互換の初期値**として残る:
 
   ```
+  # 標準: --channel なしで起動し、ブラウザの Channel 欄に URL を入れて Fire を有効化（URL は記憶される）
+  npm run cockpit --prefix apps/soul/agent
+  # 後方互換: 初期 URL を CLI で渡す（起動時に LLM セッションを eager 生成・TTFT 先払い）
   npm run cockpit --prefix apps/soul/agent -- --channel "ws://127.0.0.1:<port>/channel?token=<token>"
   ```
 
   追加オプション: `--tts-base-url <url>` / `--speaker <id>` / `--fire-window-min <分>`（注入窓・
-  既定 5）/ `--fire-max-chars <n>`（注入上限・既定 4000）。LLM セッションは起動時に常駐起動
-  （spawn 先払い）、**Channel は初回 Fire 時に接続**（失敗は操縦席に fire error として出て、次の
-  Fire で再試行 = 器を後から立ててもよい）。env ガード（サブスク枠）は起動経路でも明示的に通す。
+  既定 5）/ `--fire-max-chars <n>`（注入上限・既定 4000）。Channel URL は `cockpit-settings.local.json`
+  （.gitignore 済・token を含むため**非コミット**）に `lastChannelUrl` として記憶し次回起動で復元する。
+  **S2.5 無退行**: URL も Fire も使わなければ LLM セッションの spawn（≈12s）は走らない（session/player は
+  「実際に fire される時」まで遅延生成・`--channel` 明示時のみ起動時 eager）。**Channel は初回 Fire 時に接続**
+  （失敗は操縦席に fire error として出て、次の Fire で再試行 = 器を後から立ててもよい。URL 変更時は
+  既存接続を破棄して次回 Fire で再接続）。UI/ログは `redactToken` を通し token を平文で出さない。
+  env ガード（サブスク枠）は session 初回生成時に明示的に通す。
 - **操縦席の発火 UI**（`src/cockpit/cockpit.html`）: Fire ボタン（soul の thinking/speaking 中は
   disable + 状態表示）・発火マーカー行（受理の瞬間 + 注入量を Timeline に刻む）・soul 行（話者
   `soul`・青系ラベル）・発火失敗はゴースト行（`(fire: empty reply)` / `(fire error: …)`）。

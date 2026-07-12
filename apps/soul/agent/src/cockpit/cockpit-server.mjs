@@ -222,17 +222,28 @@ export function enumerateDevices(options = {}) {
 }
 
 /**
- * 「最後に選んだデバイス」の in-memory settings store（既定・no-op 永続）。
+ * 「最後に選んだデバイス / Channel URL」の in-memory settings store（既定・no-op 永続）。
  * file-backed 実体は Domain B が供給する（テストがディスクに触れないための分離）。
- * @param {string | null} [initial]
- * @returns {{ getLastDevice: () => string | null; setLastDevice: (device: string | null) => void }}
+ * @param {string | null} [initialDevice]
+ * @param {string | null} [initialChannelUrl]  S3 追撃 domain-c: Channel URL の初期値（テスト用）。
+ * @returns {{
+ *   getLastDevice: () => string | null;
+ *   setLastDevice: (device: string | null) => void;
+ *   getLastChannelUrl: () => string | null;
+ *   setLastChannelUrl: (url: string | null) => void;
+ * }}
  */
-export function createInMemorySettingsStore(initial = null) {
-  let lastDevice = initial;
+export function createInMemorySettingsStore(initialDevice = null, initialChannelUrl = null) {
+  let lastDevice = initialDevice;
+  let lastChannelUrl = initialChannelUrl;
   return {
     getLastDevice: () => lastDevice,
     setLastDevice: (device) => {
       lastDevice = device;
+    },
+    getLastChannelUrl: () => lastChannelUrl,
+    setLastChannelUrl: (url) => {
+      lastChannelUrl = url;
     }
   };
 }
@@ -254,6 +265,14 @@ export function createInMemorySettingsStore(initial = null) {
  * @param {(opts?: object) => Promise<{ devices: any[]; inputFormat: string; error: string | null }>} [options.enumerateDevicesImpl]
  *   デバイス列挙の差し替え（テスト注入。既定は enumerateDevices）。
  * @param {() => number} [options.nowImpl]  uptime 用時計（既定 Date.now）。
+ * @param {(url: string | null) => void | Promise<void>} [options.onSetChannelUrl]
+ *   Channel URL 設定フック（S3 追撃 domain-c）。POST /api/channel が受けた URL を渡す。
+ *   **cockpit-server は channel の中身を知らない**（責務境界）: URL を lazyChannel / settings に載せ、
+ *   session/player の spawn 判断をするのは Domain B（scripts/cockpit.mjs）の役目。ここは POST を
+ *   フックに橋渡しし、state に channelStatus() を載せるだけ。未注入なら POST /api/channel は 503。
+ * @param {() => (object | null)} [options.channelStatus]
+ *   Channel の現況（redact 済み・{ configured, url, connection } 等）を返す。state snapshot に載せる。
+ *   **token を平文で含めないこと**（Domain B が redactToken を通した値を返す）。未注入なら channel:null。
  * @param {(hooks: {
  *   getBuffer: () => any;
  *   onState: (state: string) => void;
@@ -284,6 +303,8 @@ export function createCockpitServer(options = {}) {
   const pipelineFactory = options.pipelineFactory ?? createEarPipeline;
   const enumerateDevicesImpl = options.enumerateDevicesImpl ?? enumerateDevices;
   const nowImpl = options.nowImpl ?? Date.now;
+  const onSetChannelUrl = options.onSetChannelUrl;
+  const channelStatusImpl = options.channelStatus;
 
   /** @type {Set<import("node:http").ServerResponse>} */
   const sseClients = new Set();
@@ -333,7 +354,9 @@ export function createCockpitServer(options = {}) {
       appended: bufStats.appended,
       discarded: bufStats.discarded,
       uptimeMs: earsState === "listening" && startedAtMs != null ? Math.max(0, nowImpl() - startedAtMs) : 0,
-      transcripts: pipeline ? pipeline.transcriptBuffer.last(transcriptHistory).map(toWireEntry) : []
+      transcripts: pipeline ? pipeline.transcriptBuffer.last(transcriptHistory).map(toWireEntry) : [],
+      // S3 追撃 domain-c: Channel の現況（Domain B が redact 済みで返す・未注入なら null）。
+      channel: typeof channelStatusImpl === "function" ? (channelStatusImpl() ?? null) : null
     };
   }
 
@@ -445,6 +468,11 @@ export function createCockpitServer(options = {}) {
         });
       },
       onTranscript: (entry, meta) => {
+        // soul の発話行はここ（耳の onTranscript 経路）では放送しない。soul も you と同じ
+        // transcriptBuffer に append されるため onAppend→onTranscript を必ず通るが、soul の正経路は
+        // orchestrator の onSoulTranscript → broadcastSoulTranscript の 1 本。ここで除外しないと
+        // 同一エントリが二重に broadcast("transcript") される（S3 追撃 domain-c で接地した二重表示バグ）。
+        if (/** @type {any} */ (entry).speaker === "soul") return;
         const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
         broadcast("transcript", {
           ...toWireEntry(entry),
@@ -610,6 +638,22 @@ export function createCockpitServer(options = {}) {
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
       return;
     }
+    if (method === "POST" && pathname === "/api/channel") {
+      if (typeof onSetChannelUrl !== "function") {
+        // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
+        sendJson(res, 503, { error: "channel control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const raw = typeof body.url === "string" ? body.url.trim() : "";
+      const url = raw.length > 0 ? raw : null; // 空 = クリア（未設定へ）。
+      // URL 自体はここに保持/ログしない（token を含む）。フックへ橋渡しし、state は redact 済みの
+      // channelStatus() だけを載せる（責務境界: cockpit-server は channel の中身を知らない）。
+      await onSetChannelUrl(url);
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
 
     sendJson(res, 404, { error: `not found: ${method} ${pathname}` });
   }
@@ -661,9 +705,12 @@ export function createCockpitServer(options = {}) {
   // ── 発火オーケストレータ（S3 Domain A・追加的結線）────────────────────────
   //
   //  未注入時は fireOrchestrator=null（POST /api/fire は 503・S2.5 は無退行）。注入時は cockpit が
-  //  getBuffer（正本 = pipeline?.transcriptBuffer）と broadcast フックを渡す。soul の発話行は耳の
-  //  onTranscript を通らないため、orchestrator の onSoulTranscript フックで受け、既存 transcript
-  //  イベント（speaker:"soul"）として broadcast する（domain-a.md ワイヤ契約 §）。
+  //  getBuffer（正本 = pipeline?.transcriptBuffer）と broadcast フックを渡す。soul の発話行の正経路は
+  //  orchestrator の onSoulTranscript フックで受け、既存 transcript イベント（speaker:"soul"）として
+  //  broadcast する（domain-a.md ワイヤ契約 §）。
+  //  注意（S3 追撃 domain-c）: soul も同じ transcriptBuffer に append されるため耳の onTranscript
+  //  （startEars 内）も必ず通る。そちらは speaker:"soul" を除外して二重放送を断つ（onTranscript の
+  //  先頭ガード参照）。ここ（onSoulTranscript 経路）が soul の唯一の放送元。
 
   /** soul の追記を既存 transcript イベントとして push（耳の onTranscript 経路とは別口）。 */
   function broadcastSoulTranscript(entry) {

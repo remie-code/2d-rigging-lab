@@ -174,3 +174,35 @@ test("cockpit page: soul transcript rows are drawable (speaker-soul class + spea
   assert.match(html, /className\s*=\s*["']row speaker-["']\s*\+\s*speaker/);
   assert.match(html, /\.row\.speaker-soul\s+\.who/);
 });
+
+// ── S3 追撃 domain-c: Channel URL の操縦席入力 + 接続状態表示 ─────────────────
+
+test("cockpit page: has a Channel URL input, a Set button, and a status display", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /id="channel-url"/);
+  assert.match(html, /id="btn-channel-set"/);
+  assert.match(html, /id="channel-status"/);
+});
+
+test("cockpit page: Channel Set button POSTs /api/channel with the entered url", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /fetch\(["']\/api\/channel["'],\s*\{\s*method:\s*["']POST["']/);
+  // 送信 body は入力欄の値（url）。
+  assert.match(html, /channel-url["']\)\.value/);
+});
+
+test("cockpit page: applies channel status from state (connection-driven class)", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /function applyChannel\(/);
+  // applyState が channel を反映する（state.channel は redact 済み）。
+  assert.match(html, /applyChannel\(s\.channel\)/);
+  // 接続状態の色分けクラス（connected/error/connecting）が CSS にある。
+  assert.match(html, /\.channel-status\.connected/);
+  assert.match(html, /\.channel-status\.error/);
+});
+
+test("cockpit page: does not keep the raw channel URL (token) in the input after Set", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // Set 成功後に入力欄を空へ（token を DOM に残さない）。
+  assert.match(html, /channel-url["']\)\.value\s*=\s*["']["']/);
+});

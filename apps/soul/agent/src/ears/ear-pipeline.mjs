@@ -45,6 +45,11 @@
  *  最初に登録した自前 listener で行うため外部購読者（S3 等）の throw に巻き込まれず、外部の
  *  throw は診断イベント（listenerError）になって常駐は続く。正本は壊れない（push 済み）。
  *
+ *  注意（S3 追撃 domain-c で接地）: この onAppend は **話者無差別**（you も soul も同じ列に積まれる）。
+ *  S3 の soul 発話（speaker:"soul"）も同じ transcriptBuffer に append されるため onTranscript を
+ *  必ず通る。you のみを転写経路として扱いたい購読者（cockpit の SSE transcript 放送など）は、
+ *  受け側で speaker:"soul" を除外すること（soul の正経路は orchestrator の onSoulTranscript）。
+ *
  * ── クリーンシャットダウン ─────────────────────────────────────────
  *  dispose() 一発で ffmpeg・VAD セッション・whisper-server・キュー・タイマが全部畳まれる。
  *  見張りタイマは各発話処理の finally で必ず clear（unref しない規律は S2 §6.1 の教訓）。

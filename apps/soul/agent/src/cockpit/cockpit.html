@@ -50,10 +50,18 @@
   section { padding: 14px 18px; }
   .mic { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
   .mic label { color: var(--muted); }
-  select {
+  /* ── Channel（S3 追撃 domain-c: 器の Control Channel URL の操縦席入力）── */
+  .channel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .channel label { color: var(--muted); }
+  .channel-status { color: var(--muted); }
+  .channel-status.connected { color: var(--up); }
+  .channel-status.error { color: var(--down); }
+  .channel-status.connecting { color: var(--speaking); }
+  select, input[type="text"] {
     background: var(--bg); color: var(--fg); border: 1px solid var(--border);
     padding: 6px 8px; border-radius: 4px; min-width: 240px; font: inherit;
   }
+  input[type="text"] { min-width: 360px; flex: 1 1 360px; }
   button {
     background: var(--panel); color: var(--fg); border: 1px solid var(--border);
     padding: 6px 14px; border-radius: 4px; cursor: pointer; font: inherit;
@@ -117,6 +125,15 @@
     <span id="devices-error" class="err"></span>
   </section>
 
+  <!-- S3 追撃 domain-c: Channel URL の操縦席入力（CLI を触らず器の Control Channel を結ぶ）。 -->
+  <section class="channel">
+    <label for="channel-url">Channel</label>
+    <input id="channel-url" type="text" placeholder="ws://127.0.0.1:PORT/channel?token=..." autocomplete="off" spellcheck="false">
+    <button id="btn-channel-set">Set</button>
+    <span id="channel-status" class="channel-status">not configured</span>
+    <span id="channel-error" class="err"></span>
+  </section>
+
   <!-- S3: 発火（Fire）。実運用のゲーム中発火は AHK → POST /api/fire（scripts/fire-hotkey.ahk）。 -->
   <section class="fire">
     <button id="btn-fire">Fire</button>
@@ -178,6 +195,21 @@
       uptimeBaseMs = s.uptimeMs || 0;
       uptimeAnchor = Date.now();
       renderUptime();
+      applyChannel(s.channel);
+    }
+    // ── Channel 状態表示（S3 追撃 domain-c）: state.channel は redact 済み（token は伏せてある）──
+    function applyChannel(ch) {
+      var el = byId("channel-status");
+      if (!ch || !ch.configured) {
+        el.textContent = "not configured";
+        el.className = "channel-status";
+        return;
+      }
+      var conn = ch.connection || "idle";
+      el.textContent = (ch.url || "(configured)") + " — " + conn;
+      // 接続状態の色分け（connected=緑 / error=赤 / connecting=黄 / それ以外=muted）。
+      el.className = "channel-status " +
+        (conn === "connected" ? "connected" : (conn === "error" ? "error" : (conn === "connecting" ? "connecting" : "")));
     }
     function applyHealth(id, h) {
       if (!h) return;
@@ -347,6 +379,26 @@
       }).catch(function (e) {
         byId("devices-error").textContent = "start error: " + e;
       }).then(function () { setBusy(false); });
+    });
+    // ── Channel: POST /api/channel（URL を器の Control Channel として設定/変更）──
+    // 入力欄は生 URL を受ける（token 込み）。表示（channel-status）は redact 済みの state で更新する。
+    byId("btn-channel-set").addEventListener("click", function () {
+      var raw = byId("channel-url").value || "";
+      byId("channel-error").textContent = "";
+      fetch("/api/channel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: raw })
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+      }).then(function (res) {
+        if (res.status === 503) { byId("channel-error").textContent = "channel control not available"; return; }
+        if (!res.ok) { byId("channel-error").textContent = "set failed: " + (res.j && res.j.error || "error"); return; }
+        applyState(res.j); // snapshot（redact 済み channel を含む）で状態を更新。
+        byId("channel-url").value = ""; // 生 URL（token）を入力欄に残さない。
+      }).catch(function (e) {
+        byId("channel-error").textContent = "channel error: " + e;
+      });
     });
     byId("btn-stop").addEventListener("click", function () {
       setBusy(true);

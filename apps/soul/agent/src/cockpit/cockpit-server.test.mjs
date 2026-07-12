@@ -737,3 +737,160 @@ test("cockpit /api/fire: 実 orchestrator を結線し縦貫通（fake session/s
     await server.close();
   }
 });
+
+// ── soul 転写の二重放送回帰（S3 追撃 domain-c）─────────────────────────────
+//
+//  実 ear-pipeline は `buffer.onAppend((entry) => onTranscript(entry, meta))` を購読するため、
+//  発火オーケストレータが soul を **同じ** transcriptBuffer に append すると onTranscript（耳の正経路）
+//  経由でも SSE transcript(speaker:"soul") が飛ぶ。加えて orchestrator の onSoulTranscript フックが
+//  cockpit の broadcastSoulTranscript から transcript(speaker:"soul") を飛ばす＝**二重放送**。
+//  既存 makeFakePipeline は onAppend を購読しない（テストが手動で onTranscript を発火する設計）ため
+//  この二重を再現できず、既存の縦貫通テストも soul transcript を waitFor で 1 個取るだけで回数を
+//  固定していない。よって実 pipeline の onAppend→onTranscript 契約を**このテスト専用**に再現する
+//  pipeline double で回数を固定する（修正前は 2・修正後は 1）。
+
+/** 実 ear-pipeline の onAppend→onTranscript 契約を再現する pipeline double（このテスト専用）。 */
+function makeOnAppendPipeline() {
+  const record = { /** @type {any} */ options: null, /** @type {any} */ buffer: null, disposed: false };
+  const factory = (/** @type {any} */ options) => {
+    record.options = options;
+    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+    record.buffer = buffer;
+    // ear-pipeline.mjs:179-181 と同じ購読（you も soul も同じ列に積まれ、onAppend で onTranscript を通る）。
+    buffer.onAppend((entry) => {
+      options.onTranscript(entry, { latencyMs: NaN, audioCtx: null });
+    });
+    return {
+      transcriptBuffer: buffer,
+      async start() {},
+      async dispose() {
+        record.disposed = true;
+      },
+      isDisposed: () => record.disposed,
+      streamMs: () => 0,
+      stats: () => ({})
+    };
+  };
+  return { factory, record };
+}
+
+test("cockpit /api/fire: soul 転写は二重放送されない（実 pipeline の onAppend→onTranscript 契約下で 1 回）", async () => {
+  const fake = makeOnAppendPipeline();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    fireOrchestratorFactory: (hooks) =>
+      createFireOrchestrator({
+        ...hooks,
+        session: {
+          async ask() {
+            return { replyText: "はーい" };
+          }
+        },
+        speakImpl: async () => ({ timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "x" }),
+        channel: { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
+        player: { play() {} },
+        // fake buffer の nowImpl は () => 1000。窓を広く取り nowMs を合わせて窓内に収める。
+        nowImpl: () => 2000,
+        windowMs: 100000
+      })
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    // 会話ログに you 発話を 1 件積む（onAppend 経由で transcript(you) が 1 回飛ぶ・正常）。
+    fake.record.buffer.append({ startMs: 100, endMs: 900, text: "ねえ" });
+
+    const r = await postJson(`${url}/api/fire`, {});
+    assert.equal(r.status, 202);
+    assert.equal(r.json.fired, true);
+
+    // 決定論的収束点: soul 状態が idle に戻るまで待つ。finally の idle 遷移は
+    // buffer.append(soul) + onSoulTranscript の**後**に来るため、両 transcript 放送は既に発火済み。
+    await sse.waitFor((e) => e.event === "soul" && e.data.state === "idle");
+    // 2 個目が遅れて来ないことを積極確認する（有界の猶予）。
+    await new Promise((res) => setTimeout(res, 50));
+
+    const soulTranscripts = sse.events.filter((e) => e.event === "transcript" && e.data.speaker === "soul");
+    assert.equal(
+      soulTranscripts.length,
+      1,
+      `soul transcript は 1 回だけ放送されるべき（実測 ${soulTranscripts.length}）`
+    );
+    // you の転写は onAppend 経路で 1 回のまま（回帰でついで確認）。
+    const youTranscripts = sse.events.filter((e) => e.event === "transcript" && e.data.speaker === "you");
+    assert.equal(youTranscripts.length, 1);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+// ── Channel URL の操縦席入力（S3 追撃 domain-c）─────────────────────────────
+
+test("cockpit POST /api/channel: onSetChannelUrl 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/channel`, { url: "ws://127.0.0.1:1/channel?token=t" });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /channel control not available/);
+    // channelStatus 未注入なら state.channel は null。
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.channel, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/channel: URL をフックに橋渡しし・state に redact 済み channelStatus を載せる", async () => {
+  let received = /** @type {string | null | undefined} */ (undefined);
+  let configured = false;
+  const server = createCockpitServer({
+    onSetChannelUrl: (u) => {
+      received = u;
+      configured = u != null;
+    },
+    // Domain B 相当: token を伏せた status を返す（cockpit-server は生 URL を state に載せない）。
+    channelStatus: () =>
+      configured
+        ? { configured: true, url: "ws://127.0.0.1:1/channel?token=<redacted>", connection: "idle" }
+        : { configured: false, url: null, connection: "unset" }
+  });
+  try {
+    const url = await server.listen(0);
+    // 初期は未設定。
+    const s0 = await getJson(`${url}/api/state`);
+    assert.equal(s0.json.channel.configured, false);
+
+    const r = await postJson(`${url}/api/channel`, { url: "  ws://127.0.0.1:1/channel?token=secret  " });
+    assert.equal(r.status, 200);
+    // フックは trim 済みの生 URL を受ける。
+    assert.equal(received, "ws://127.0.0.1:1/channel?token=secret");
+    // 応答 snapshot は redact 済み（token=secret は含まれない）。
+    assert.equal(r.json.channel.configured, true);
+    assert.match(r.json.channel.url, /token=<redacted>/);
+    assert.doesNotMatch(JSON.stringify(r.json), /secret/);
+
+    // 空文字はクリア（null をフックへ）。
+    const rc = await postJson(`${url}/api/channel`, { url: "   " });
+    assert.equal(rc.status, 200);
+    assert.equal(received, null);
+    assert.equal(rc.json.channel.configured, false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("createInMemorySettingsStore: channel URL の get/set 口を持つ", () => {
+  const store = createInMemorySettingsStore("Mic", "ws://127.0.0.1:1/channel?token=t");
+  assert.equal(store.getLastDevice(), "Mic");
+  assert.equal(store.getLastChannelUrl(), "ws://127.0.0.1:1/channel?token=t");
+  store.setLastChannelUrl("ws://127.0.0.1:2/channel?token=u");
+  assert.equal(store.getLastChannelUrl(), "ws://127.0.0.1:2/channel?token=u");
+  store.setLastChannelUrl(null);
+  assert.equal(store.getLastChannelUrl(), null);
+  assert.equal(store.getLastDevice(), "Mic"); // device は独立。
+});

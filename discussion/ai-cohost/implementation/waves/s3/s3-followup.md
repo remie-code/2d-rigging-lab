@@ -59,3 +59,28 @@
    S3 では名前も触らない）、次に cockpit-page.test.mjs を触る wave でテスト名の更新を推奨。
    出典: [domain-b.md](domain-b.md) §4-1・[../../reviews/s3/domain-b-review-spec.md](../../reviews/s3/domain-b-review-spec.md) §8-2・
    [../../reviews/s3/domain-b-review-test.md](../../reviews/s3/domain-b-review-test.md) §5-2。
+
+## 3. S3 追撃 wave（domain-c・2026-07-12, Gnome）の持ち越し
+
+出典: [domain-c.md](domain-c.md)（soul 行二重表示の修正 + Channel URL の操縦席入力）。
+
+1. **音声出力デバイスのノブ（どのスピーカーに出すか）は S8 の音声ルーティング設計時に正式対応**。
+   現状、魂の声の再生先スピーカーは OS 既定デバイス固定（`src/voice/audio-player.mjs` の
+   PowerShell `SoundPlayer`）で、操縦席から出力先を選べない。配信では「AI の声を仮想オーディオ
+   ケーブル / 特定の出力に回す」要求が出るが、これは入力（マイク選択）と対の**出力ルーティング**
+   であり、S8（音声ルーティング / キルスイッチ等の運用面設計）でマイク選択と同格のノブとして
+   まとめて設計する。domain-c では入力側（マイク・Channel URL）の運用面 UI に留め、出力ノブは
+   足さない（YAGNI・器の口の同期と実スピーカー出力は別軸で、S8 の設計討議が要る）。
+
+2. **soul 転写の二重放送バグは fake pipeline では再現しなかった**（`makeFakePipeline` が
+   `buffer.onAppend` を購読しない設計のため）。domain-c で実 ear-pipeline の onAppend→onTranscript
+   契約を再現する専用 pipeline double を新規テストに用意し、回数を固定した（修正前 2・修正後 1）。
+   既存 `makeFakePipeline` は多数の既存テストが共有するため変更しなかった。将来 fake の onAppend
+   購読が要る別テストが増えたら、共有 double 化を検討（今は専用 double を局所に置くのが安全）。
+
+3. **Channel URL 入力時の Fire ボタン gating は UI に足さなかった**（既存 cockpit-page.test の
+   `applySoulState` の `btn-fire.disabled = st !== "idle"` がピン留めされており、既存テスト変更禁止の
+   規律に抵触するため）。URL 未設定で Fire しても sendSpeech 前に session.ask で弾き（spawn せず）
+   `(fire error: Channel URL is not set …)` のゴースト行で明示する（無言の失敗にしない）。UI で
+   ボタン自体を disable したくなったら、`applySoulState` の当該行を触る wave でテスト名/内容も
+   合わせて更新するのが素直。

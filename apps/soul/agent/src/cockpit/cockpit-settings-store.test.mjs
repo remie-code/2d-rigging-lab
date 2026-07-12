@@ -82,3 +82,60 @@ test("settings store: unwritable path → setLastDevice swallows the error (does
 test("settings store: default path is the gitignored file inside apps/soul/agent", () => {
   assert.match(DEFAULT_SETTINGS_PATH.replace(/\\/g, "/"), /apps\/soul\/agent\/cockpit-settings\.local\.json$/);
 });
+
+// ── Channel URL の永続化（S3 追撃 domain-c）─────────────────────────────
+
+test("settings store: channel URL set→get roundtrip persists across instances", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getLastChannelUrl(), null); // 未作成 = 記憶なし。
+    store.setLastChannelUrl("ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(store.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    // クリアも効く。
+    store.setLastChannelUrl(null);
+    assert.equal(createFileSettingsStore({ path }).getLastChannelUrl(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: device と channel URL は同居する（read-modify-write で片方が消えない）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setLastChannelUrl("ws://127.0.0.1:17310/channel?token=abc");
+    // 別インスタンスで両方読める（後の set が前の set を上書き消去していない）。
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    // device を変えても channel は残る。
+    store.setLastDevice("Other Mic");
+    const again = createFileSettingsStore({ path });
+    assert.equal(again.getLastDevice(), "Other Mic");
+    assert.equal(again.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getLastChannelUrl returns null (failure-tolerant)", () => {
+  const dir = tmpDir();
+  try {
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ not json", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getLastChannelUrl(), null);
+    // 非文字列 shape → null。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ lastChannelUrl: 123 }), "utf8");
+    assert.equal(createFileSettingsStore({ path: oddPath }).getLastChannelUrl(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -24,9 +24,14 @@
  *  （fireEmptyReply 診断）。空窓は ask を撃つ前に empty-window で返す（無駄撃ち回避）。
  *
  * ── soul 記録の broadcast 経路 ───────────────────────────────────────────────
- *  soul の発話行は pipeline の onTranscript を通らない（耳の転写経路ではないから）。よって soul を
- *  buffer.append した直後に onSoulTranscript(entry) フックで結線層（cockpit）へ通知し、cockpit が
- *  既存 transcript イベント（speaker:"soul"）として SSE broadcast する（domain-a.md ワイヤ契約 §）。
+ *  soul を buffer.append した直後に onSoulTranscript(entry) フックで結線層（cockpit）へ通知し、
+ *  cockpit が既存 transcript イベント（speaker:"soul"）として SSE broadcast する（domain-a.md
+ *  ワイヤ契約 §）。**これが soul の唯一の正経路**。
+ *
+ *  注意（S3 追撃 domain-c で接地）: soul も you と同じ transcriptBuffer に append されるため、
+ *  ear-pipeline の onAppend→onTranscript（耳の転写経路）を**必ず通る**。よって結線層（cockpit）の
+ *  onTranscript ハンドラ側で speaker:"soul" を除外しないと同一エントリが二重 broadcast される。
+ *  （かつての「soul は onTranscript を通らない」という記述は誤りだった。）
  */
 
 import { speak as defaultSpeak } from "../voice/speak.mjs";

@@ -49,6 +49,9 @@
   変わる(busy表示)。非受理(`fired:false`)の reason(busy / ears-not-running / empty-window / empty-reply / error)は
   ボタン横に淡色で控えめに表示。`--channel` なしで起動した操縦席では 503 を受けて
   「fire not available」と案内する(S2.5挙動のまま)。
+  ※ **domain-c で更新**: `scripts/cockpit.mjs` は fire を常時結線するようになったため、この 503 案内は
+  cockpit.mjs 起動経路では実際には出ない(URL 未設定での Fire は `(fire error: …)` のゴースト行になる)。
+  503 分岐自体は fireOrchestratorFactory 未注入のサーバ(テスト等)向けに残る。下記「Channel URL 入力欄」参照。
 - **soul行**: SSE `transcript`(speaker:"soul")を既存の行描画がそのまま描く(話者ラベル `soul`・
   who が青系 `#8fb7ff`)。履歴復元(`GET /api/state`)でも同様。
 - **発火マーカー行**: SSE `fire`(accepted:true)で Timeline に
@@ -60,6 +63,26 @@
 - **発火キー**: グローバルホットキーは同梱AHKスクリプト(`apps/soul/agent/scripts/fire-hotkey.ahk`)が
   POST /api/fire を叩く(§1のElectron不採用の帰結どおりブラウザ外で解決)。導入は任意・ゲートは
   ボタンで成立。
+
+**Channel URL 入力欄(S3追撃 domain-c で実体化、2026-07-12, Gnome)**: 器の Control Channel URL を
+**操縦席から入力**できるようにした(Microphoneと同格の運用面UI・「CLIを触らせない」思想の徹底)。
+
+- **場所**: Microphoneセクションの下(`[Channel] [ ws://127.0.0.1:PORT/channel?token=... ] [Set]  状態`)。
+  入力欄(生URL・token込み)+ `Set` ボタン + 接続状態表示。
+- **配線**: `Set` で `POST /api/channel {url}` → サーバは注入フック `onSetChannelUrl` に橋渡し
+  (`cockpit-server.mjs` は channel の中身を知らない=責務境界。`scripts/cockpit.mjs` が lazyChannel /
+  settings / session spawn を握る)。URLは`cockpit-settings.local.json`(.gitignore済・token含むため
+  非コミット)に `lastChannelUrl` として記憶し、次回起動で初期値に復元する。
+- **接続状態表示**: `state.channel`(`{configured, url(redact済), connection}`)を表示。connection は
+  `unset / idle / connecting / connected / error` を色分け(connected=緑 / error=赤 / connecting=アンバー)。
+  **URL・ログは必ず `redactToken` を通す**(token を平文で state/UI/ログに出さない)。`Set` 成功後は
+  入力欄を空にして生URL(token)をDOMに残さない。
+- **`--channel` は後方互換で残す**: CLI指定があれば初期値として lazyChannel + settings に載る
+  (指定時は起動時に LLM セッションを eager 生成・TTFT 先払い)。**未指定でも操縦席から URL を入れれば
+  Fire が有効化される**。
+- **S2.5 無退行**: URL も Fire も使わないユーザー(S2.5挙動)には LLM セッションの spawn(≈12s)を
+  強いない。session/player は「実際に fire される時(URL 設定後の初回 Fire)」まで遅延生成する
+  (`--channel` 明示時のみ eager)。URL未設定での Fire は spawn せず `(fire error: …)` のゴースト行で示す。
 
 ## 3. 将来の拡張予約(v0では作らない。枠だけ意識した設計に)
 
