@@ -676,6 +676,44 @@ test("cockpit SSE: fire() の onState/onFire が soul/fire イベントで流れ
   }
 });
 
+// ── 演出イベントの SSE 結線（S4 Domain B）─────────────────────────────────
+//
+//  orchestrator の onExpression フック（語ごとの {word, args?, applied, rejected}・domain-a.md §7）が
+//  SSE "expression" イベントとして broadcast されることを固定する（onFire→"fire" と同型）。
+
+test("cockpit SSE: fire() の onExpression が expression イベントで流れる（演出行の材料）", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "そうだね", injectedChars: 8, includedCount: 1, expressions: [{ word: "nod", applied: 1, rejected: 0 }] },
+    drive: (hooks) => {
+      hooks.onState("thinking");
+      hooks.onFire({ accepted: true, injectedChars: 8, includedCount: 1, atMs: 1000 });
+      hooks.onState("speaking");
+      hooks.onExpression({ word: "nod", applied: 1, rejected: 0 });
+      hooks.onExpression({ word: "smile", args: "x=.3", applied: 3, rejected: 1 });
+      hooks.onState("idle");
+    }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state"); // 接続確立。
+    await postJson(`${url}/api/fire`, {});
+
+    const nod = await client.waitFor((e) => e.event === "expression" && e.data.word === "nod");
+    assert.equal(nod.data.applied, 1);
+    assert.equal(nod.data.rejected, 0);
+    // args とスロット拒否ありも素通しで届く（部分適用は正常系・domain-a.md §6）。
+    const smile = await client.waitFor((e) => e.event === "expression" && e.data.word === "smile");
+    assert.equal(smile.data.args, "x=.3");
+    assert.equal(smile.data.applied, 3);
+    assert.equal(smile.data.rejected, 1);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
 test("cockpit /api/fire: 実 orchestrator を結線し縦貫通（fake session/speak・実バッファ）", async () => {
   const fake = makeFakePipeline();
   let askedText = "";
@@ -732,6 +770,57 @@ test("cockpit /api/fire: 実 orchestrator を結線し縦貫通（fake session/s
     assert.equal(soulLine.data.text, "はーい、なあに？");
     await sse.waitFor((e) => e.event === "soul" && e.data.state === "idle");
 
+    sse.close();
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit /api/fire: 実 orchestrator の演出タグが sendEnvelope→onExpression→SSE expression まで縦貫通", async () => {
+  const fake = makeFakePipeline();
+  /** @type {any[]} */
+  const envelopes = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    fireOrchestratorFactory: (hooks) =>
+      createFireOrchestrator({
+        ...hooks,
+        session: {
+          async ask() {
+            return { replyText: "そうだね<nod>" }; // 読み上げは "そうだね"・演出は nod。
+          }
+        },
+        speakImpl: async () => ({ timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "x" }),
+        channel: {
+          sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }),
+          sendEnvelope: async (payload) => {
+            envelopes.push(payload);
+            return { result: "accepted", error: null, rttMs: 0 };
+          }
+        },
+        player: { play() {} },
+        nowImpl: () => 2000,
+        windowMs: 100000
+      })
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fake.record.buffer.append({ startMs: 100, endMs: 900, text: "ねえ" });
+
+    const r = await postJson(`${url}/api/fire`, {});
+    assert.equal(r.status, 202);
+    assert.equal(r.json.fired, true);
+    assert.equal(r.json.replyText, "そうだね"); // タグは剥離済み（読み上げ・会話ログ）。
+
+    // 演出は sendEnvelope（nod = head-vertical 1 スロット）で送られ、SSE expression で届く。
+    const expr = await sse.waitFor((e) => e.event === "expression" && e.data.word === "nod");
+    assert.equal(expr.data.applied, 1);
+    assert.equal(expr.data.rejected, 0);
+    assert.equal(envelopes.length, 1);
+    assert.equal(envelopes[0].slotId, "head-vertical");
     sse.close();
   } finally {
     await server.close();

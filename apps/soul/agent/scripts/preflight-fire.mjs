@@ -5,10 +5,13 @@
  * fake session/speak/channel/player で組んだ**実**発火オーケストレータで結線し、loopback に起動して:
  *
  *   POST /api/ears/start（fake pipeline）→ 会話ログに you 発話を 1 件積む
- *   POST /api/fire      → 実 orchestrator が窓収集 → fake ask → fake speak → soul 記録
- *   SSE /api/events     → soul(thinking→speaking→idle) + soul transcript が流れる
+ *   POST /api/fire      → 実 orchestrator が窓収集 → fake ask（タグ込み応答）→ fake speak → soul 記録
+ *                         ＋ 演出タグ → parseExpressionTags → translateExpression → channel.sendEnvelope
+ *   SSE /api/events     → soul(thinking→speaking→idle) + soul transcript + expression が流れる
  *
  * を実 HTTP + 実 SSE で確認し、clean close（ハングなし）して終了コードで返す（preflight-cockpit の型）。
+ * S4「表情が乗る」: fake ask が `<smile>` タグ込みで返し、演出が sendEnvelope（fake・accepted）まで
+ * 縦貫通して SSE `expression` イベントに乗ることを fake で確認する（実チャネル/実 SDK は人間ゲート）。
  *
  * 使い方: node apps/soul/agent/scripts/preflight-fire.mjs
  *   exit 0 = PASS / exit 1 = 失敗。標準出力に RESULT: PASS / EXIT=0 を出す。
@@ -118,6 +121,8 @@ async function main() {
 
   let askedText = "";
   let spokenText = "";
+  /** @type {any[]} */
+  const sentEnvelopes = [];
   const server = createCockpitServer({
     pipelineFactory: /** @type {any} */ (fakePipelineFactory),
     fireOrchestratorFactory: (hooks) =>
@@ -126,14 +131,22 @@ async function main() {
         session: {
           async ask(t) {
             askedText = t;
-            return { replyText: "はーい、どうしたの？" };
+            // S4: タグ込み応答。読み上げ/会話ログは剥離後（"はーい、どうしたの？"）・演出は smile。
+            return { replyText: "はーい、どうしたの？<smile>" };
           }
         },
         speakImpl: async (text) => {
           spokenText = text;
           return { timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "fake" };
         },
-        channel: { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
+        channel: {
+          sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }),
+          // S4: 演出 envelope の fake（全スロット accepted）。sendEnvelope の存在で演出経路が縦貫通する。
+          sendEnvelope: async (payload) => {
+            sentEnvelopes.push(payload);
+            return { result: "accepted", error: null, rttMs: 0 };
+          }
+        },
         player: { play() {} }
       })
   });
@@ -186,7 +199,15 @@ async function main() {
     await sse.waitFor((e) => e.event === "soul" && e.data.state === "idle");
     log("SSE soul(thinking→speaking→idle) + soul transcript observed");
 
-    log(failed ? "RESULT: FAIL" : "RESULT: PASS (fire → ask → speak → soul recorded; SSE observed; no real SDK/TTS/mic)");
+    // S4: 演出タグ（smile）が sendEnvelope（fake accepted）まで送られ SSE expression に乗る。
+    const expr = await sse.waitFor((e) => e.event === "expression" && e.data.word === "smile");
+    if (expr.data.applied <= 0 || expr.data.rejected !== 0) fail(`expression smile not fully applied: ${JSON.stringify(expr.data)}`);
+    // smile は演出表で 4 スロット（mouth-smile + eye-blink-left/right + head-tilt）。
+    if (sentEnvelopes.length !== 4) fail(`expected 4 envelope slots for smile, got ${sentEnvelopes.length}`);
+    const slotIds = sentEnvelopes.map((p) => p.slotId).sort();
+    log(`SSE expression(smile) observed — envelope slots: ${JSON.stringify(slotIds)}`);
+
+    log(failed ? "RESULT: FAIL" : "RESULT: PASS (fire → ask → speak → soul recorded; 演出 envelope → SSE expression; no real SDK/TTS/mic)");
   } catch (error) {
     log(`FAILED: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     failed = true;

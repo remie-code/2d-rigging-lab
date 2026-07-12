@@ -44,6 +44,253 @@ test("FIRE_SYSTEM_PROMPT: 最小仮面が export される", () => {
   assert.match(FIRE_SYSTEM_PROMPT, /相方/);
 });
 
+test("FIRE_SYSTEM_PROMPT: S4 タグ 6 語の教示を含む", () => {
+  for (const tag of ["<smile>", "<troubled>", "<surprised>", "<nod>", "<look-away>", "<look-camera>"]) {
+    assert.ok(FIRE_SYSTEM_PROMPT.includes(tag), `教示に ${tag} が含まれる`);
+  }
+});
+
+// ── S4 表情演出の縦検証（fake channel/session/speak）─────────────────────────────
+
+/** envelope を記録する fake channel。slot 毎に accepted/rejected/throw を切り替えられる。 */
+function makeExprChannel(options = {}) {
+  const envelopes = [];
+  const rejectSlots = new Set(options.rejectSlots ?? []);
+  const throwSlots = new Set(options.throwSlots ?? []);
+  return {
+    envelopes,
+    channel: {
+      sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }),
+      sendEnvelope: async (/** @type {any} */ intent) => {
+        envelopes.push(intent);
+        if (throwSlots.has(intent.slotId)) throw new Error(`boom:${intent.slotId}`);
+        if (rejectSlots.has(intent.slotId)) {
+          return { result: "rejected", error: { code: "slotValueOutOfRange" }, rttMs: 0 };
+        }
+        return { result: "accepted", error: null, rttMs: 0 };
+      }
+    }
+  };
+}
+
+test("fire: タグ込み応答は speechText のみ speak+soul 記録・演出は envelope へ（タグは声に出さない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("それでいい？");
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel();
+  /** @type {any[]} */
+  const expressions = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "そうだね<nod>" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    onExpression: (e) => expressions.push(e)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  // speak は speechText（タグ抜き）で呼ばれる。
+  assert.equal(fakeSpeak.spoken.length, 1);
+  assert.equal(fakeSpeak.spoken[0].text, "そうだね");
+  assert.equal(result.replyText, "そうだね");
+  // soul 記録も speechText のみ（タグ込み記録のバグ修正）。
+  const all = buffer.all();
+  assert.equal(all[1].text, "そうだね");
+  assert.ok(!all[1].text.includes("<"));
+  // envelope は nod のスロット束（head-vertical）へ送られる。
+  assert.equal(expr.envelopes.length, 1);
+  assert.equal(expr.envelopes[0].slotId, "head-vertical");
+  // onExpression は語ごとに applied/rejected を通知。
+  assert.deepEqual(expressions, [{ word: "nod", applied: 1, rejected: 0 }]);
+  orch.dispose();
+});
+
+test("fire: 演出はスロット毎に envelope 送出（smile は 4 スロット）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const expr = makeExprChannel();
+  /** @type {any[]} */
+  const expressions = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "<smile>やあ" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    onExpression: (e) => expressions.push(e)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  assert.equal(result.replyText, "やあ");
+  // smile = mouth-smile + eye-blink-left + eye-blink-right + head-tilt = 4 スロット。
+  assert.equal(expr.envelopes.length, 4);
+  assert.deepEqual(
+    expr.envelopes.map((e) => e.slotId).sort(),
+    ["eye-blink-left", "eye-blink-right", "head-tilt", "mouth-smile"]
+  );
+  // 各 payload は器契約 5 フィールド。
+  for (const p of expr.envelopes) {
+    assert.deepEqual(Object.keys(p).sort(), ["attackMs", "decayMs", "peak", "slotId", "sustainMs"]);
+  }
+  assert.deepEqual(expressions, [{ word: "smile", applied: 4, rejected: 0 }]);
+  orch.dispose();
+});
+
+test("fire: envelope rejected は発話を止めない（診断へ握る・部分適用は正常系）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel({ rejectSlots: ["eye-blink-left"] });
+  /** @type {any[]} */
+  const diags = [];
+  /** @type {any[]} */
+  const expressions = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "<smile>ね" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    onDiagnostic: (d) => diags.push(d),
+    onExpression: (e) => expressions.push(e)
+  });
+
+  const result = await orch.fire();
+  // 発話は走る・soul 記録される（rejected でも止まらない）。
+  assert.equal(result.fired, true);
+  assert.equal(fakeSpeak.spoken.length, 1);
+  assert.equal(buffer.all()[1].text, "ね");
+  // 部分適用: 4 スロット中 1 rejected・3 applied。
+  assert.deepEqual(expressions, [{ word: "smile", applied: 3, rejected: 1 }]);
+  const rejDiag = diags.find((d) => d.type === "expressionRejected");
+  assert.ok(rejDiag);
+  assert.equal(rejDiag.slotId, "eye-blink-left");
+  orch.dispose();
+});
+
+test("fire: envelope 送出 throw も発話を止めない（診断へ握る）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel({ throwSlots: ["head-vertical"] });
+  /** @type {any[]} */
+  const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "うん<nod>" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    onDiagnostic: (d) => diags.push(d)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, true); // speak は走る。
+  assert.equal(fakeSpeak.spoken[0].text, "うん");
+  const errDiag = diags.find((d) => d.type === "expressionSendError");
+  assert.ok(errDiag);
+  assert.equal(errDiag.slotId, "head-vertical");
+  assert.match(errDiag.message, /boom/);
+  orch.dispose();
+});
+
+test("fire: タグのみ応答は発話せず演出のみ実行（expression-only・soul 追記なし）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel();
+  /** @type {any[]} */
+  const expressions = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "<look-away>" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    onExpression: (e) => expressions.push(e)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "expression-only");
+  assert.equal(result.expressed, true);
+  // 発話しない・soul 追記しない。
+  assert.equal(fakeSpeak.spoken.length, 0);
+  assert.equal(buffer.all().length, 1);
+  // 演出は実行される（look-away = gaze-horizontal + head-horizontal）。
+  assert.equal(expr.envelopes.length, 2);
+  assert.deepEqual(expressions, [{ word: "look-away", applied: 2, rejected: 0 }]);
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("fire: 未知タグは剥離 + expressionUnknownTag 診断・speechText は発話される", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel();
+  /** @type {any[]} */
+  const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "やあ<wink>げんき？" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    onDiagnostic: (d) => diags.push(d)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  assert.equal(fakeSpeak.spoken[0].text, "やあげんき？"); // 未知タグは声に出ない。
+  assert.equal(expr.envelopes.length, 0); // 未知タグは演出もしない。
+  assert.deepEqual(diags, [{ type: "expressionUnknownTag", tag: "wink" }]);
+  orch.dispose();
+});
+
+test("fire: 未知タグのみ応答は fireEmptyReply（発話も演出もしない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel();
+  /** @type {any[]} */
+  const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "<wink>" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    onDiagnostic: (d) => diags.push(d)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "empty-reply");
+  assert.equal(fakeSpeak.spoken.length, 0);
+  assert.equal(expr.envelopes.length, 0);
+  assert.equal(buffer.all().length, 1);
+  // 未知タグ診断 + fireEmptyReply 両方が出る。
+  assert.ok(diags.some((d) => d.type === "expressionUnknownTag" && d.tag === "wink"));
+  assert.ok(diags.some((d) => d.type === "fireEmptyReply"));
+  orch.dispose();
+});
+
+test("fire: 強さ係数で全 peak がスケールされて envelope へ乗る", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const expr = makeExprChannel();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "うん<nod>" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    expressionIntensity: 0.5
+  });
+
+  await orch.fire();
+  assert.equal(expr.envelopes.length, 1);
+  // nod.head-vertical=-0.35 → ×0.5 = -0.175。
+  assert.ok(Math.abs(expr.envelopes[0].peak - -0.175) < 1e-9);
+  orch.dispose();
+});
+
 test("fire: thinking→speaking→idle・soul 記録・注入に直近 you 発話が含まれる", { timeout: 5000 }, async () => {
   const buffer = bufferWithYou("ねえ、今日の予定は？");
   const fakeSpeak = makeFakeSpeak();

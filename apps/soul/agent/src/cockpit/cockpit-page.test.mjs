@@ -206,3 +206,42 @@ test("cockpit page: does not keep the raw channel URL (token) in the input after
   // Set 成功後に入力欄を空へ（token を DOM に残さない）。
   assert.match(html, /channel-url["']\)\.value\s*=\s*["']["']/);
 });
+
+// ── S4「表情が乗る」: 演出イベント行 + 未知タグのゴースト行 ───────────────────────
+
+test("cockpit page: subscribes SSE expression events and draws an expression row", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // 演出適用の通知（domain-a.md §7・{word, args?, applied, rejected}）を expression イベントで購読。
+  assert.match(html, /addEventListener\(["']expression["']/);
+  assert.match(html, /addExpressionRow\(/);
+});
+
+test("cockpit page: expression rows carry word + applied/rejected slot counts, distinct class + CSS", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /function addExpressionRow\(/);
+  const fn = html.match(/function addExpressionRow\([\s\S]*?\n    \}/);
+  assert.ok(fn, "addExpressionRow 本体が見つかること");
+  // 発火マーカーと同型の行（距離のある class）。
+  assert.match(fn[0], /className\s*=\s*["']row expression["']/);
+  // 語 + 適用/拒否スロット数を描く（applied/rejected を参照する）。
+  assert.match(fn[0], /d\.word/);
+  assert.match(fn[0], /d\.applied/);
+  assert.match(fn[0], /d\.rejected/);
+  // CSS: 演出行は既存トークン（--accent）で視覚的に区別される。
+  assert.match(html, /\.row\.expression\s*\{[^}]*var\(--accent\)/);
+});
+
+test("cockpit page: expressionUnknownTag diagnostic adds a ghost row (word left as a trace); other expression diagnostics do not", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "diagnostic リスナーが見つかること");
+  const body = m[1];
+  // 語彙外タグはゴースト行の型で痕跡を残す（声にも演出にも出ないが「無言の消失」にしない）。
+  assert.match(body, /type\s*===\s*["']expressionUnknownTag["']/);
+  assert.match(body, /addGhostRow\(/);
+  // 過剰表示を避ける裁定: broken/rejected/sendError は分岐を持たない（演出行の ✗N が伝える）。
+  // （説明コメントで語には触れるが、type === "…" の分岐＝表示はしないことを固定する。）
+  assert.doesNotMatch(body, /===\s*["']expressionBrokenTag["']/);
+  assert.doesNotMatch(body, /===\s*["']expressionRejected["']/);
+  assert.doesNotMatch(body, /===\s*["']expressionSendError["']/);
+});

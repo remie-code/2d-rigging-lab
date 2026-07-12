@@ -34,6 +34,8 @@ const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B39";
  * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onSpeech]
  *   intent.speech を受けたときの返答判断（既定 accepted）。rejected を返せば拒否も再現できる。
  *   `{ result: "drop" }` を返すと返信せず接続を落とす（応答前切断の再現＝pending reject テスト用）。
+ * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onEnvelope]
+ *   intent.envelope を受けたときの返答判断（既定 accepted・S4）。onSpeech と同じ判定インタフェース。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -54,6 +56,7 @@ export function createChannelServerDouble(options = {}) {
   const protocol = options.protocol ?? 1;
   const sendHello = options.sendHello ?? true;
   const onSpeech = options.onSpeech ?? (() => ({ result: "accepted" }));
+  const onEnvelope = options.onEnvelope ?? (() => ({ result: "accepted" }));
 
   /** @type {any[]} */
   const received = [];
@@ -143,8 +146,11 @@ export function createChannelServerDouble(options = {}) {
     if (!message || typeof message.id !== "string") {
       return;
     }
-    if (message.kind === "intent.speech") {
-      const verdict = onSpeech(message.payload, message);
+    if (message.kind === "intent.speech" || message.kind === "intent.envelope") {
+      const verdict =
+        message.kind === "intent.speech"
+          ? onSpeech(message.payload, message)
+          : onEnvelope(message.payload, message);
       if (verdict.result === "drop") {
         // 応答せず接続を落とす（channel-client の pending が closedError で reject される経路）。
         socket.destroy();
@@ -159,7 +165,7 @@ export function createChannelServerDouble(options = {}) {
               result: "rejected",
               error: verdict.error ?? {
                 code: "invalidPayload",
-                message: "intent.speech payload is malformed."
+                message: `${message.kind} payload is malformed.`
               }
             };
       socket.write(encodeTextFrame(JSON.stringify(reply)));

@@ -79,6 +79,73 @@ test("connectChannel: supportedKinds に intent.speech が無ければ throw", a
   }
 });
 
+test("connectChannel: 既定 requiredKinds に intent.envelope が無ければ throw（S4 fail-fast）", async () => {
+  // 器は C5 から envelope を広告するが、envelope 非対応の相手には接続時に大声で失敗する。
+  const server = createChannelServerDouble({
+    supportedKinds: ["intent.set", "intent.speech"]
+  });
+  const url = await server.listen();
+  try {
+    await assert.rejects(
+      () => connectChannel(url, { WebSocketImpl: WS, helloTimeoutMs: 2000 }),
+      /missing required supportedKinds.*intent\.envelope/s
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test("connectChannel: sendEnvelope 送出 → accepted（payload 形・replyTo 相関・S4）", async () => {
+  const server = createChannelServerDouble();
+  const url = await server.listen();
+  const channel = await connectChannel(url, { WebSocketImpl: WS });
+  try {
+    const intent = {
+      slotId: "head-horizontal",
+      peak: 0.8,
+      attackMs: 120,
+      sustainMs: 2500,
+      decayMs: 400
+    };
+    const outcome = await channel.sendEnvelope(intent);
+    assert.equal(outcome.result, "accepted");
+    assert.equal(outcome.error, null);
+    assert.ok(outcome.rttMs >= 0);
+    // サーバが受けた payload が契約形（kind/payload の 5 フィールド）である。
+    const envMsg = server.received.find((m) => m.kind === "intent.envelope");
+    assert.ok(envMsg, "server received intent.envelope");
+    assert.equal(envMsg.v, 1);
+    assert.match(envMsg.id, /^req-/);
+    assert.deepEqual(envMsg.payload, intent);
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel: sendEnvelope rejected は result/error を返し接続は維持（S4 部分適用の素）", async () => {
+  const server = createChannelServerDouble({
+    onEnvelope: () => ({
+      result: "rejected",
+      error: { code: "slotValueOutOfRange", message: "peak out of range" }
+    })
+  });
+  const url = await server.listen();
+  const channel = await connectChannel(url, { WebSocketImpl: WS });
+  try {
+    const intent = { slotId: "gaze-horizontal", peak: 2, attackMs: 100, sustainMs: 2000, decayMs: 300 };
+    const first = await channel.sendEnvelope(intent);
+    assert.equal(first.result, "rejected");
+    assert.equal(first.error.code, "slotValueOutOfRange");
+    // 接続は維持 → speech も続けて送れる（発話は演出の rejected で止まらない）。
+    const speech = await channel.sendSpeech(SPEECH_TIMELINE);
+    assert.equal(speech.result, "accepted");
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
 test("connectChannel: hello 不着はタイムアウト throw", async () => {
   const server = createChannelServerDouble({ sendHello: false });
   const url = await server.listen();

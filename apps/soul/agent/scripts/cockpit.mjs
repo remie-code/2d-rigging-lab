@@ -89,6 +89,7 @@ export function parseCockpitArgs(argv) {
  * @param {typeof connectChannel} [options.connectImpl]  接続実装（テスト注入・既定 connectChannel）。
  * @returns {{
  *   sendSpeech: (timeline: unknown) => Promise<any>;
+ *   sendEnvelope: (intent: unknown) => Promise<any>;
  *   setUrl: (next: string | null | undefined) => void;
  *   getUrl: () => string | null;
  *   connectionStatus: () => string;
@@ -98,7 +99,7 @@ export function parseCockpitArgs(argv) {
 export function createLazyChannel(url, options = {}) {
   const connectImpl = options.connectImpl ?? connectChannel;
   let currentUrl = typeof url === "string" && url.length > 0 ? url : null;
-  /** @type {Promise<{ sendSpeech: Function; close: () => Promise<void> }> | null} */
+  /** @type {Promise<{ sendSpeech: Function; sendEnvelope: Function; close: () => Promise<void> }> | null} */
   let channelPromise = null;
   /** @type {"unset" | "idle" | "connecting" | "connected" | "error"} */
   let connState = currentUrl == null ? "unset" : "idle";
@@ -130,6 +131,15 @@ export function createLazyChannel(url, options = {}) {
     async sendSpeech(timeline) {
       const channel = await ensure();
       return channel.sendSpeech(timeline);
+    },
+    /**
+     * intent.envelope を送る（S4 表情演出）。sendSpeech と同型に ensure()→接続へ委譲。
+     * orchestrator が channel.sendEnvelope をスロット毎に呼ぶ。
+     * @param {unknown} intent
+     */
+    async sendEnvelope(intent) {
+      const channel = await ensure();
+      return channel.sendEnvelope(intent);
     },
     /**
      * URL を後から設定/変更する。変更時は既存接続キャッシュを破棄（次回 fire で新 URL に再接続）。

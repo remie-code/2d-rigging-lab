@@ -166,3 +166,38 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   `discussion/ai-cohost/experiments/s3-summon.md`。サブスク枠を消費するので不用意に走らせない。
 - **全器官起動（人間ゲート）の手順**:
   `discussion/ai-cohost/implementation/waves/s3/human-gate-procedure.md`。
+
+#### S4: 表情が乗る（演出語彙 + インラインタグ）
+
+「AI は全部聞くが、全部では考えない」の**返事に、内容に応じた表情がついてくる**。LLM の応答に
+ごく短い**表情タグ**（半角山括弧の語）が混ざると、魂がそれを剥がして読み上げ文と分け、器の
+`intent.envelope`（ADS カーブ束）へ翻訳して**発話開始と同時に**目・視線・頭・体を動かす。
+
+- **タグ語彙 6 語**: `<smile>` / `<troubled>` / `<surprised>` / `<nod>` / `<look-away>` / `<look-camera>`。
+  最小仮面 `FIRE_SYSTEM_PROMPT` に「感情が動いたときだけ添える」教示を足しただけ（人格の作り込みは
+  persona の領分・引き続き貧しく）。**実 SDK 観測で 5/5 の応答にタグが乗った**（未知タグ 0・記録は
+  `discussion/ai-cohost/experiments/s4-expressions.md`）。
+- **パイプライン**（`src/mind/`・Domain A）: `expression-parser.mjs`（タグ剥離・純関数・`<` `>` が
+  読み上げ文に残らない性質テストで固定）→ `expression-table.mjs`（**6 語 → スロット演出束・唯一の
+  数値の在り処**）→ `expression-translator.mjs`（語 → envelope payload 列・**強さ係数**適用 + 域クランプ）
+  → `fire-orchestrator.mjs`（発話開始時に `channel.sendEnvelope` をスロット毎に送出・器拒否/送出失敗は
+  診断へ握って**発話を止めない**＝部分適用は正常系）。タグのみ応答は「発話せず演出のみ」。
+- **操縦席の可視化**（`src/cockpit/cockpit.html`）: 演出適用を**演出イベント行**（`expr` ラベル・
+  `語 ✓適用/✗拒否` スロット数）で Timeline に刻む。語彙外タグは**ゴースト行**（`(unknown tag: …)`・
+  淡色）で痕跡を残す（声にも演出にも出ないが「無言の消失」にしない）。
+- **調整の在り処**: 演出**強さ係数**（全 peak 一括スケール・既定 1.0）は
+  `createFireOrchestrator({ expressionIntensity })` のオプション。**操縦席には調整 UI を置かない**裁定
+  （運用面は CLI/設定限定）。符号（向き）と各語の数値を触りたいときは `expression-table.mjs` の該当行
+  だけを直す（数値はここ 1 箇所）。
+- **現素材の制約（正直な注記）**: `mouth-smile` は現素材で keyform 未設定＝**見えない**（標準語彙
+  としては書く）。**見える本命は目・視線・頭・体**。`nod` は v0 は ADS 単峰＝「下げて保持して戻す」
+  近似（多峰の頷きは将来）。head/gaze/body の符号（正がどちらの向きか）は**リグ依存で未確定**——
+  実機での見え方は人間ゲートで確定する。
+- **観測**（SDK 実消費・最大 5 ask）: `scripts/observe-expressions.mjs`——タグ教示入り
+  `FIRE_SYSTEM_PROMPT` で**タグの実出現率・出現位置・未知タグ率**を観測（発話・器・チャネルは使わず
+  ask の生応答だけ）。結果は `discussion/ai-cohost/experiments/s4-expressions.md`。
+- **preflight（SDK 不要・マイク不要）**: `scripts/preflight-fire.mjs` に演出縦貫通を追加——fake の
+  タグ込み応答が `sendEnvelope`（fake accepted）→ SSE `expression` まで通ることを実 HTTP/SSE で確認。
+- **全器官起動（人間ゲート）の手順**:
+  `discussion/ai-cohost/implementation/waves/s4/human-gate-procedure.md`（S3 の手順に「感情が動く話題を
+  振る → 返事に表情が乗るのを見る」を足したもの）。

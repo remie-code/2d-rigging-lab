@@ -68,6 +68,34 @@ test("createLazyChannel: connects on first sendSpeech and reuses the connection"
   assert.equal(sent.length, 2);
 });
 
+test("createLazyChannel: sendEnvelope も接続を張り委譲する・sendSpeech と接続を共有する（S4）", { timeout: 5000 }, async () => {
+  let connects = 0;
+  /** @type {unknown[]} */
+  const envelopes = [];
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {
+    connectImpl: /** @type {any} */ (async () => {
+      connects += 1;
+      return {
+        sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 1 }),
+        sendEnvelope: async (/** @type {unknown} */ intent) => {
+          envelopes.push(intent);
+          return { result: "accepted", error: null, rttMs: 1 };
+        },
+        close: async () => {}
+      };
+    })
+  });
+
+  assert.equal(connects, 0, "構築時点では接続しない（lazy）");
+  const intent = { slotId: "head-tilt", peak: 0.2, attackMs: 100, sustainMs: 2000, decayMs: 300 };
+  const r = await lazy.sendEnvelope(intent);
+  assert.equal(r.result, "accepted");
+  // 続く sendSpeech は同じ接続を再利用（speech と envelope は 1 本の接続を共有）。
+  await lazy.sendSpeech([]);
+  assert.equal(connects, 1, "envelope と speech は接続を共有する");
+  assert.deepEqual(envelopes, [intent]);
+});
+
 test("createLazyChannel: connect failure throws and is retried on the next call", { timeout: 5000 }, async () => {
   let connects = 0;
   const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {

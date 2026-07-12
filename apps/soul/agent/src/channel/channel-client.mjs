@@ -8,15 +8,23 @@
  * 会話は WS 越しのみ）。C6 で確立した作法をそのまま踏襲する:
  *
  *   1. open → `server.hello` を 4 秒待つ（不着は throw）。
- *   2. hello.payload.supportedKinds に `intent.speech` があるか照合（無ければ throw）。
- *   3. `{ v:1, id, kind:"intent.speech", payload:{ timeline } }` を送り、`replyTo` 相関で
+ *   2. hello.payload.supportedKinds に必須 kind（既定 `intent.speech` + `intent.envelope`）が
+ *      あるか照合（無ければ throw）。
+ *   3. `{ v:1, id, kind:"intent.speech"|"intent.envelope", payload }` を送り、`replyTo` 相関で
  *      accepted/rejected を受ける（4 秒タイムアウト）。
  *   4. server.hello / replyTo を持つ応答 / それ以外＝未知イベントは黙殺（寛容規則 §3.5）。
  *   5. url の token はログ・レポートで redact する。
  *
- * intent.set / intent.envelope は Domain B の役目ではないので写経しない（発話特化）。
+ * ── S4: intent.envelope の追加（表情演出の送出路）─────────────────────────────
+ *  sendEnvelope を参照ドライバ `reference-driver.mjs` の sendEnvelope から写経して足す
+ *  （payload `{ slotId, peak, attackMs, sustainMs, decayMs }`・replyTo 相関は sendSpeech と同型）。
+ *  併せて既定 requiredKinds に `intent.envelope` を加える（器は C5 から additively 広告済み＝
+ *  常に intent.set/envelope/speech の 3 種を出す）。これで envelope 非対応の相手には**接続時に
+ *  fail-fast**（表情が黙って無視される事故を封じる・裁定済みの意図変更／domain-a.md）。
+ *  intent.set は魂の発話/演出経路では使わないので写経しない。
+ *
  * 契約の正は `apps/runtime-player/src/main/control-channel/contract/channel-exchange-examples.json`
- * の speechPath / server.hello / rejections。
+ * の speechPath / envelopePath / server.hello / rejections。
  */
 
 import { performance } from "node:perf_hooks";
@@ -29,11 +37,13 @@ const REPLY_TIMEOUT_MS = 4000;
  * @param {string} url  `ws://127.0.0.1:<port>/channel?token=<token>`。
  * @param {object} [options]
  * @param {typeof WebSocket} [options.WebSocketImpl]  WebSocket の差し替え（既定 globalThis.WebSocket）。
- * @param {string[]} [options.requiredKinds]  hello に必須の supportedKinds（既定 ["intent.speech"]）。
+ * @param {string[]} [options.requiredKinds]  hello に必須の supportedKinds
+ *   （既定 ["intent.speech", "intent.envelope"]＝発話 + 表情演出。器は C5 から両方を広告済み）。
  * @param {number} [options.helloTimeoutMs]  hello 待ち（既定 4000）。
  * @param {number} [options.replyTimeoutMs]  応答待ち（既定 4000）。
  * @returns {Promise<{
  *   sendSpeech: (timeline: unknown) => Promise<{ result: string; error: unknown; rttMs: number }>;
+ *   sendEnvelope: (intent: { slotId: string; peak: number; attackMs: number; sustainMs: number; decayMs: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   close: () => Promise<void>;
  *   consumeUnknownEventCount: () => number;
  *   supportedKinds: string[];
@@ -44,7 +54,7 @@ export async function connectChannel(url, options = {}) {
   if (typeof WebSocketImpl !== "function") {
     throw new TypeError("no WebSocket implementation available (pass options.WebSocketImpl).");
   }
-  const requiredKinds = options.requiredKinds ?? ["intent.speech"];
+  const requiredKinds = options.requiredKinds ?? ["intent.speech", "intent.envelope"];
   const helloTimeoutMs = options.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
   const replyTimeoutMs = options.replyTimeoutMs ?? REPLY_TIMEOUT_MS;
 
@@ -135,6 +145,29 @@ export async function connectChannel(url, options = {}) {
       });
       socket.send(JSON.stringify({ v: 1, id, kind: "intent.speech", payload }));
       return withTimeout(settled, replyTimeoutMs, "speech reply");
+    },
+    /**
+     * intent.envelope を 1 本送り、replyTo 相関で accepted/rejected を受ける（S4 表情演出）。
+     * 写経元 reference-driver.sendEnvelope。payload は器契約
+     * `{ slotId, peak, attackMs, sustainMs, decayMs }`（ms・合計 > 0・peak は域内でクランプなし拒否）。
+     * @param {{ slotId: string; peak: number; attackMs: number; sustainMs: number; decayMs: number }} intent
+     * @returns {Promise<{ result: string; error: unknown; rttMs: number }>}
+     */
+    sendEnvelope(intent) {
+      const id = `req-${(idCounter += 1)}`;
+      const payload = {
+        slotId: intent.slotId,
+        peak: intent.peak,
+        attackMs: intent.attackMs,
+        sustainMs: intent.sustainMs,
+        decayMs: intent.decayMs
+      };
+      const t0 = performance.now();
+      const settled = new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject, t0 });
+      });
+      socket.send(JSON.stringify({ v: 1, id, kind: "intent.envelope", payload }));
+      return withTimeout(settled, replyTimeoutMs, `envelope reply for ${intent.slotId}`);
     },
     consumeUnknownEventCount() {
       const count = unknownEventCount;

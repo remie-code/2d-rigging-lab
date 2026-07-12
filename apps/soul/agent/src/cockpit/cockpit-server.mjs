@@ -279,12 +279,14 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   onFire: (info: object) => void;
  *   onDiagnostic: (diag: object) => void;
  *   onSoulTranscript: (entry: object) => void;
+ *   onExpression: (info: object) => void;
  * }) => { fire: () => Promise<object>; getState: () => string; dispose: () => void }} [options.fireOrchestratorFactory]
  *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire が 503）。
  *   cockpit が握る getBuffer（=pipeline?.transcriptBuffer ?? null）と broadcast フックを渡し、返った
- *   orchestrator の fire() を POST /api/fire で await する。onState/onFire/onDiagnostic/onSoulTranscript は
- *   SSE（soul/fire/diagnostic/transcript）へ broadcast される。本番は Domain B がここで session/speak/
- *   channel/player を結線した createFireOrchestrator を返す。
+ *   orchestrator の fire() を POST /api/fire で await する。onState/onFire/onDiagnostic/onSoulTranscript/
+ *   onExpression は SSE（soul/fire/diagnostic/transcript/expression）へ broadcast される。onExpression は
+ *   S4「表情が乗る」の演出適用通知（{word, args?, applied, rejected}・domain-a.md §7）。本番は Domain B が
+ *   ここで session/speak/channel/player を結線した createFireOrchestrator を返す。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -414,13 +416,15 @@ export function createCockpitServer(options = {}) {
     }
     // 診断そのものも流す（B が任意で表示できる。健康以外は状態を変えない）。
     // startMs/endMs はゴースト行の対象 span（asrFailure が持つ・S2.5 追撃 domain-f）。
-    // 元々 startMs/endMs を持たない診断型では null になるだけで契約破壊はない（追加フィールド）。
+    // tag は演出の未知タグ（expressionUnknownTag が持つ・S4）。ページがゴースト行に語を出す。
+    // 元々これらを持たない診断型では null になるだけで契約破壊はない（追加フィールド）。
     broadcast("diagnostic", {
       type: d?.type ?? "unknown",
       message: d?.message ?? null,
       reason: d?.reason ?? null,
       startMs: d?.startMs ?? null,
-      endMs: d?.endMs ?? null
+      endMs: d?.endMs ?? null,
+      tag: d?.tag ?? null
     });
   }
 
@@ -732,7 +736,12 @@ export function createCockpitServer(options = {}) {
       onState: (state) => broadcast("soul", { state }),
       onFire: (info) => broadcast("fire", info),
       onDiagnostic: (diag) => handleDiagnostic(diag),
-      onSoulTranscript: (entry) => broadcastSoulTranscript(entry)
+      onSoulTranscript: (entry) => broadcastSoulTranscript(entry),
+      // S4「表情が乗る」: 演出適用の語ごとの通知（{word, args?, applied, rejected}）を
+      // SSE "expression" として broadcast する（onFire→broadcast("fire") と同型）。ページは
+      // fire マーカーと同型の演出イベント行に描く。orchestrator の onExpression ワイヤ契約は
+      // waves/s4/domain-a.md §7。cockpit.mjs の factory は ...hooks を spread するため自動で届く。
+      onExpression: (info) => broadcast("expression", info)
     });
   }
 

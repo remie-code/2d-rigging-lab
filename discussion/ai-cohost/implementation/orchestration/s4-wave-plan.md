@@ -50,4 +50,11 @@
 
 ## 6. Status
 
-(発進後に記録)
+**完了・機械ゲート緑（2026-07-13, Orch-Sylph）。人間ゲート（美的）待ち。**
+
+- Domain A（パーサ+演出表+翻訳層+結線）→ Domain B（可視化+実SDK確認+計測+docs）を順次実行。各ドメイン Gnome 実装 → Review-Sylph 3 レーン（spec/design/test）。
+- 全 6 レビュー成果物 PASS（blocking ゼロ）: [../reviews/s4/](../reviews/s4/) domain-{a,b}-review-{spec,design,test}.md。
+- 機械ゲート生数字（Orch 独立再実行）: `node --test` 284（S4前）→ 331（+47）全緑・fail 0 / 3 チェック無退行（deps・soul-zone PASS、source は既存の器コード違反 1 件のみで S4 由来ゼロ）/ lockfile hash 不変（53b21b3b）/ 新規依存ゼロ / 器コード diff 空 / preflight-fire（+演出縦貫通）・preflight-cockpit とも EXIT=0。
+- 実 SDK 確認（上限 5 ask・実消費）: **タグ出現率 5/5・未知タグ 0/5・翻訳層 5/5 語 payload 化**（[../../experiments/s4-expressions.md](../../experiments/s4-expressions.md)）。タグ教示は効く。
+- 成果物: [../waves/s4/](../waves/s4/) domain-a.md・domain-b.md・human-gate-procedure.md・s4-followup.md。
+- 残（人間ゲート後）: 演出表の符号確定・nod 単峰の見え方・envelope accepted 率・強さ係数 CLI 配線（[../waves/s4/s4-followup.md](../waves/s4/s4-followup.md) 台帳）。
