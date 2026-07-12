@@ -1,6 +1,6 @@
 # S2.5 UX定義: 魂の操縦席(Soul Cockpit)
 
-> Status: Draft(2026-07-12、ユーザー合意待ち)。
+> Status: **Accepted(ユーザー合意 2026-07-12)**。S2.5実装のsource of truth。
 > 位置づけ: 閉問題S2.5「操縦席がある」([../s-series-decomposition.md](../s-series-decomposition.md) §2追補)のwave化前UX定義。
 > 動機(ユーザー指摘 2026-07-12): CLIは機能的には足りるが、配信という利用シチュエーション(OBS+ゲーム+器二体と並走)で「デバイス名を調べて打って起動」は成立しない。発話・AI応答の表示表現もCLIでは限界がある。
 
