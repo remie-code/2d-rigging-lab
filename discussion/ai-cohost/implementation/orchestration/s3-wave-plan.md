@@ -1,6 +1,6 @@
 # S3 wave計画: 呼べば応える(発火+会話ログ注入)
 
-> Status: 計画確定(2026-07-12)。発進待ち。
+> Status: **完全閉鎖(2026-07-12)**。全レーンPASS+追撃domain-c+人間ゲート合格(「全く問題なかった」——初の全器官同時稼働で文脈を踏まえた返事)。
 > 根拠: [../s-series-decomposition.md](../s-series-decomposition.md) S3 / 設計裁定4件(ユーザー 2026-07-12、§2) / [../screens/soul-cockpit.md](../screens/soul-cockpit.md) §3拡張予約 / [../../architecture/conversation-pipeline-direction.md](../../architecture/conversation-pipeline-direction.md) §2.2〜2.3・§2.7。棚卸しなし(Plan directly: 部品は全部S1/S2/S2.5実装済み・新規導入ゼロ)。
 > 方式: 単一Orch-Sylph(opus)がDomain A→Bを順次実行。Gnome実装+Review-Sylph 3レーン。鉄の規律は従来+**環境異常対策(子のツール結果が空/中断なら再試行3回で正直停止)**。
 
@@ -55,3 +55,5 @@
 - SDK 実消費: **5 ask（上限 5 の契約内・measure-fire.mjs・ハードガード付き）**。実測 TTFT ≈3.2〜3.9s / ask ≈6.0〜6.8s → [../../experiments/s3-summon.md](../../experiments/s3-summon.md)。
 - 人間ゲート手順書: [../waves/s3/human-gate-procedure.md](../waves/s3/human-gate-procedure.md)（全器官起動: AivisSpeech → 器 + Channel → 操縦席 `--channel` → マイク Start → 独り言 → Fire → 声 + 口）。音声開始 E2E と遅延 append 観測は s3-summon.md §3/§4 の記入欄へ。
 - 持ち越し台帳: [../waves/s3/s3-followup.md](../waves/s3/s3-followup.md)。
+- 2026-07-12: **追撃domain-c**(人間ゲート観測2件): soul行二重表示を修正(魂発話が正規放送+耳の話者無差別購読の**二経路**でSSE配信されていた。fake pipelineが経路Bを再現しない構成だったため機械検証をすり抜けた——修正は話者ガード1行+赤→緑の生証明つき回帰テスト)。Channel URLの操縦席入力(記憶・token秘匿・`--channel`後方互換)。284/284緑。S8宛の台帳化: 再生デバイス選択ノブ(音声ルーティング設計と同時に本対応・ユーザー裁定「応急処置は不要」)。
+- 2026-07-12: **人間ゲート合格(ユーザー実施)→ S3 完全閉鎖**。初回ゲートで心臓部(「直前の発言を踏まえたセリフ」)成立を確認、再ゲートで「**全く問題なかった**」——URL入力・soul行単一表示・全器官同時稼働(器+AivisSpeech+耳+知性+チャネル+操縦席)。途中の「fire error: fetch failed」はAivisSpeech未起動が原因(ゴースト行の観測性が診断を即決させた=追撃Fの投資回収)。**原則「AIは全部聞くが、全部では考えない」が初めて人間の目に見えた**。
