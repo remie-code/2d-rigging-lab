@@ -47,6 +47,7 @@ import { readFile } from "node:fs/promises";
 import { createEarPipeline } from "../ears/ear-pipeline.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
+import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
 export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
@@ -273,6 +274,17 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {() => (object | null)} [options.channelStatus]
  *   Channel の現況（redact 済み・{ configured, url, connection } 等）を返す。state snapshot に載せる。
  *   **token を平文で含めないこと**（Domain B が redactToken を通した値を返す）。未注入なら channel:null。
+ * @param {(title: string | null) => void | Promise<void>} [options.onSetVisionTarget]
+ *   視覚発火の対象ウインドウ設定フック（S5「目が開く」・POST /api/channel の写経）。POST /api/vision-target
+ *   が受けた title（trim 済み・空はクリア=null）を渡す。**cockpit-server は対象タイトルの永続化実体を
+ *   知らない**（責務境界: Channel URL と同型・実体は cockpit.mjs が settings へ橋渡しする）。未注入なら
+ *   POST /api/vision-target は 503。
+ * @param {() => (object | null)} [options.visionTargetStatus]
+ *   視覚発火の対象ウインドウの現況（`{ title: string | null }`）を返す。state snapshot に載せる。
+ *   未注入なら visionTarget:null。
+ * @param {(opts?: object) => Promise<{ windows: Array<{ pid: number; processName: string; title: string }> } | { error: { kind: string; message: string } }>} [options.listWindowsImpl]
+ *   ウインドウ列挙の差し替え（テスト注入。既定は Domain A の `listWindows`・**実 PowerShell を起動する**）。
+ *   GET /api/windows が呼ぶ。
  * @param {(hooks: {
  *   getBuffer: () => any;
  *   onState: (state: string) => void;
@@ -280,13 +292,18 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   onDiagnostic: (diag: object) => void;
  *   onSoulTranscript: (entry: object) => void;
  *   onExpression: (info: object) => void;
- * }) => { fire: () => Promise<object>; getState: () => string; dispose: () => void }} [options.fireOrchestratorFactory]
- *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire が 503）。
- *   cockpit が握る getBuffer（=pipeline?.transcriptBuffer ?? null）と broadcast フックを渡し、返った
- *   orchestrator の fire() を POST /api/fire で await する。onState/onFire/onDiagnostic/onSoulTranscript/
- *   onExpression は SSE（soul/fire/diagnostic/transcript/expression）へ broadcast される。onExpression は
- *   S4「表情が乗る」の演出適用通知（{word, args?, applied, rejected}・domain-a.md §7）。本番は Domain B が
- *   ここで session/speak/channel/player を結線した createFireOrchestrator を返す。
+ *   onVisionCaptured: (info: object) => void;
+ *   onUsage: (info: object) => void;
+ * }) => { fire: (fireOptions?: object) => Promise<object>; getState: () => string; dispose: () => void }} [options.fireOrchestratorFactory]
+ *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire・/api/vision-fire
+ *   が 503）。cockpit が握る getBuffer（=pipeline?.transcriptBuffer ?? null）と broadcast フックを渡し、
+ *   返った orchestrator の fire()/fire({vision:true}) を POST /api/fire・POST /api/vision-fire で await
+ *   する。onState/onFire/onDiagnostic/onSoulTranscript/onExpression は SSE（soul/fire/diagnostic/
+ *   transcript/expression）へ broadcast される。onExpression は S4「表情が乗る」の演出適用通知
+ *   （{word, args?, applied, rejected}・domain-a.md §7）。**S5**: onVisionCaptured/onUsage は SSE
+ *   （visionCaptured/usage）へ broadcast される（domain-c.md §）。fireVisionError は既存 onDiagnostic
+ *   経由（diagnostic イベントに kind フィールドが乗る）。本番は Domain B が session/speak/channel/player
+ *   を結線した createFireOrchestrator を返す。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -307,6 +324,9 @@ export function createCockpitServer(options = {}) {
   const nowImpl = options.nowImpl ?? Date.now;
   const onSetChannelUrl = options.onSetChannelUrl;
   const channelStatusImpl = options.channelStatus;
+  const onSetVisionTarget = options.onSetVisionTarget;
+  const visionTargetStatusImpl = options.visionTargetStatus;
+  const listWindowsImpl = options.listWindowsImpl ?? defaultListWindows;
 
   /** @type {Set<import("node:http").ServerResponse>} */
   const sseClients = new Set();
@@ -358,7 +378,9 @@ export function createCockpitServer(options = {}) {
       uptimeMs: earsState === "listening" && startedAtMs != null ? Math.max(0, nowImpl() - startedAtMs) : 0,
       transcripts: pipeline ? pipeline.transcriptBuffer.last(transcriptHistory).map(toWireEntry) : [],
       // S3 追撃 domain-c: Channel の現況（Domain B が redact 済みで返す・未注入なら null）。
-      channel: typeof channelStatusImpl === "function" ? (channelStatusImpl() ?? null) : null
+      channel: typeof channelStatusImpl === "function" ? (channelStatusImpl() ?? null) : null,
+      // S5「目が開く」: 視覚発火の対象ウインドウの現況（未注入なら null）。
+      visionTarget: typeof visionTargetStatusImpl === "function" ? (visionTargetStatusImpl() ?? null) : null
     };
   }
 
@@ -417,6 +439,7 @@ export function createCockpitServer(options = {}) {
     // 診断そのものも流す（B が任意で表示できる。健康以外は状態を変えない）。
     // startMs/endMs はゴースト行の対象 span（asrFailure が持つ・S2.5 追撃 domain-f）。
     // tag は演出の未知タグ（expressionUnknownTag が持つ・S4）。ページがゴースト行に語を出す。
+    // kind は視覚発火の失敗種別（fireVisionError が持つ・S5「目が開く」・domain-c.md §）。
     // 元々これらを持たない診断型では null になるだけで契約破壊はない（追加フィールド）。
     broadcast("diagnostic", {
       type: d?.type ?? "unknown",
@@ -424,7 +447,8 @@ export function createCockpitServer(options = {}) {
       reason: d?.reason ?? null,
       startMs: d?.startMs ?? null,
       endMs: d?.endMs ?? null,
-      tag: d?.tag ?? null
+      tag: d?.tag ?? null,
+      kind: d?.kind ?? null
     });
   }
 
@@ -642,6 +666,46 @@ export function createCockpitServer(options = {}) {
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
       return;
     }
+    if (method === "GET" && pathname === "/api/windows") {
+      // S5「目が開く」: 対象ウインドウ選択用の一覧取得（実 PowerShell を起動しうる・棚卸し §3-4）。
+      const result = await listWindowsImpl();
+      if (result && Array.isArray(/** @type {any} */ (result).windows)) {
+        sendJson(res, 200, { windows: /** @type {any} */ (result).windows, error: null });
+      } else {
+        const err = /** @type {any} */ (result) && /** @type {any} */ (result).error;
+        sendJson(res, 200, { windows: [], error: err ? err.message ?? String(err) : "unknown error" });
+      }
+      return;
+    }
+    if (method === "POST" && pathname === "/api/vision-target") {
+      if (typeof onSetVisionTarget !== "function") {
+        // 未注入（S2.5/S3/S4 単体で立てた等）: 視覚発火の対象設定は使えない。
+        sendJson(res, 503, { error: "vision target control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const raw = typeof body.title === "string" ? body.title.trim() : "";
+      const title = raw.length > 0 ? raw : null; // 空 = クリア（対象未設定へ）。
+      // タイトル自体はここに保持/ログしない。フックへ橋渡しし、state は visionTargetStatus() だけを載せる
+      // （責務境界: cockpit-server は永続化実体を知らない・Channel URL と同型）。
+      await onSetVisionTarget(title);
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && pathname === "/api/vision-fire") {
+      if (!fireOrchestrator) {
+        // 未注入（S2.5/S3/S4 単体で立てた等）: 発火は使えない。既存 /api/fire と同型の 503。
+        sendJson(res, 503, { error: "fire not available" });
+        return;
+      }
+      // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
+      const result = await fireOrchestrator.fire({ vision: true });
+      // accepted（発火成功）は 202・busy/no-target/capture-failed/empty/error は 200 に {fired:false,...}。
+      const status = /** @type {any} */ (result).fired ? 202 : 200;
+      sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
+      return;
+    }
     if (method === "POST" && pathname === "/api/channel") {
       if (typeof onSetChannelUrl !== "function") {
         // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
@@ -741,7 +805,12 @@ export function createCockpitServer(options = {}) {
       // SSE "expression" として broadcast する（onFire→broadcast("fire") と同型）。ページは
       // fire マーカーと同型の演出イベント行に描く。orchestrator の onExpression ワイヤ契約は
       // waves/s4/domain-a.md §7。cockpit.mjs の factory は ...hooks を spread するため自動で届く。
-      onExpression: (info) => broadcast("expression", info)
+      onExpression: (info) => broadcast("expression", info),
+      // S5「目が開く」: キャプチャ成功の「見た」事実（サムネ用 base64 込み）を SSE "visionCaptured" へ。
+      // ディスクには一切書かない（notify-and-forget・domain-b.md §4-1 / domain-c.md §）。
+      onVisionCaptured: (info) => broadcast("visionCaptured", info),
+      // askごとの usage（input_tokens 等・通常 Fire/視覚発火共通）を SSE "usage" へ（domain-b.md §4-2）。
+      onUsage: (info) => broadcast("usage", info)
     });
   }
 

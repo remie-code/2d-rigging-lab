@@ -139,3 +139,75 @@ test("settings store: corrupt JSON → getLastChannelUrl returns null (failure-t
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── 視覚発火の対象ウインドウ設定の永続化（S5「目が開く」）────────────────────
+
+test("settings store: vision target set→get roundtrip persists across instances", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getVisionTarget(), null); // 未作成 = 記憶なし。
+    store.setVisionTarget("Sample Game — Main Window");
+    assert.equal(store.getVisionTarget(), "Sample Game — Main Window");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getVisionTarget(), "Sample Game — Main Window");
+    // クリアも効く。
+    store.setVisionTarget(null);
+    assert.equal(createFileSettingsStore({ path }).getVisionTarget(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: device / channel URL / vision target は同居する（read-modify-write で他を消さない）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setLastChannelUrl("ws://127.0.0.1:17310/channel?token=abc");
+    store.setVisionTarget("Sample Game");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(reopened.getVisionTarget(), "Sample Game");
+    // vision target を変えても device / channel は残る。
+    store.setVisionTarget("Other Window");
+    const again = createFileSettingsStore({ path });
+    assert.equal(again.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(again.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(again.getVisionTarget(), "Other Window");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getVisionTarget returns null (failure-tolerant)", () => {
+  const dir = tmpDir();
+  try {
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ not json", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getVisionTarget(), null);
+    // 非文字列 shape → null。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ visionTarget: 123 }), "utf8");
+    assert.equal(createFileSettingsStore({ path: oddPath }).getVisionTarget(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: vision target 用の unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setVisionTarget("Some Window"));
+    assert.equal(store.getVisionTarget(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

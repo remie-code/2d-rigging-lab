@@ -25,8 +25,15 @@
  *  S1 は文分割不要＝応答全文で 1 回の TTS でよい（文分割は S4 以降）。
  *
  * ── API ─────────────────────────────────────────────────────────────
- *  createLlmSession(options) → { ask(text) => Promise<{ replyText, usage, ttftMs, elapsedMs }>,
+ *  createLlmSession(options) → { ask(content) => Promise<{ replyText, usage, ttftMs, elapsedMs }>,
  *    dispose(), getInit() }。ask は 1 発話（一文入力 → 応答全文）。dispose で常駐プロセスを畳む。
+ *
+ * ── S5: ask の受理型（string | ContentBlockParam[]）─────────────────────
+ *  ask(content) は従来の非空文字列に加え、**非空の content ブロック配列**も受理する（視覚発火・
+ *  s5-planning-inventory.md §2-2 の型）。配列要素は `{type:'text', text}` /
+ *  `{type:'image', source:{type:'base64', data, media_type}}` 等（SDK MessageParam.content と同型）。
+ *  文字列は従来どおり `content: <string>` で push、配列は `content: <配列>` で push する（push 形状の
+ *  分岐はここだけ）。usage の戻り値形状は変更なし（呼び出し側=fire-orchestrator が onUsage で通知）。
  */
 
 import { performance } from "node:perf_hooks";
@@ -147,7 +154,7 @@ function extractAssistantText(assistantMessage) {
  * @param {(init: any) => void} [options.onInit]  system/init メッセージ観測（tools[]/apiKeySource 記録用）。
  * @param {(warning: string) => void} [options.onWarning]  env ガードの warning（BASE_URL 非既定等）。
  * @returns {{
- *   ask: (text: string) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>;
+ *   ask: (content: string | Array<any>) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>;
  *   dispose: () => Promise<void>;
  *   getInit: () => any;
  * }}
@@ -196,13 +203,18 @@ export function createLlmSession(options = {}) {
 
   return {
     /**
-     * 一文を投げ、応答全文を得る。usage・TTFT・往復所要も返す。
-     * @param {string} text
+     * 一文（または content ブロック配列）を投げ、応答全文を得る。usage・TTFT・往復所要も返す。
+     * @param {string | Array<any>} content  非空文字列、または非空の content ブロック配列
+     *   （S5: 視覚発火が `[{type:'image',...}, {type:'text',...}]` を渡す）。
      * @returns {Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>}
      */
-    async ask(text) {
-      if (typeof text !== "string" || text.length === 0) {
-        throw new TypeError("ask(text): text must be a non-empty string.");
+    async ask(content) {
+      const isNonEmptyString = typeof content === "string" && content.length > 0;
+      const isNonEmptyBlocks = Array.isArray(content) && content.length > 0;
+      if (!isNonEmptyString && !isNonEmptyBlocks) {
+        throw new TypeError(
+          "ask(content): content must be a non-empty string or a non-empty content block array."
+        );
       }
       if (disposed) {
         throw new Error("llm-session already disposed.");
@@ -211,7 +223,7 @@ export function createLlmSession(options = {}) {
       const askStart = performance.now();
       input.push({
         type: "user",
-        message: { role: "user", content: text },
+        message: { role: "user", content },
         parent_tool_use_id: null
       });
 

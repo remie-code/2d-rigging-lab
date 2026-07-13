@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseCockpitArgs, createLazyChannel } from "./cockpit.mjs";
+import { parseCockpitArgs, createLazyChannel, createSessionProxy, createVisionTargetHooks } from "./cockpit.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
 // 実 SDK / 実 TTS / 実器 / 実マイクは使わない（fake connectImpl のみ）。
@@ -227,4 +227,116 @@ test("createLazyChannel: 同一 URL の setUrl は接続を切らない（現状
   assert.equal(closed, 0, "同一 URL では既存接続を切らない");
   await lazy.sendSpeech([]);
   assert.equal(connects, 1, "接続は再利用される");
+});
+
+// ── createSessionProxy（S5: ask の string | content配列 透過）─────────────────
+
+test("createSessionProxy: URL 未設定なら ask は明示エラー（ensureFireResources を呼ばない・spawn しない）", { timeout: 5000 }, async () => {
+  let ensureCalled = false;
+  const proxy = createSessionProxy({
+    getUrl: () => null,
+    ensureFireResources: () => {
+      ensureCalled = true;
+    },
+    getSession: () => {
+      throw new Error("getSession should not be called when URL is unset");
+    }
+  });
+  await assert.rejects(() => proxy.ask("hello"), /Channel URL is not set/);
+  assert.equal(ensureCalled, false);
+});
+
+test("createSessionProxy: 文字列入力を session.ask へそのまま透過する（無退行）", { timeout: 5000 }, async () => {
+  const calls = [];
+  let ensureCalled = false;
+  const fakeSession = {
+    async ask(input) {
+      calls.push(input);
+      return { replyText: "こたえ" };
+    }
+  };
+  const proxy = createSessionProxy({
+    getUrl: () => "ws://127.0.0.1:1/channel?token=t",
+    ensureFireResources: () => {
+      ensureCalled = true;
+    },
+    getSession: () => fakeSession
+  });
+  const out = await proxy.ask("こんにちは");
+  assert.equal(ensureCalled, true);
+  assert.deepEqual(calls, ["こんにちは"]);
+  assert.equal(out.replyText, "こたえ");
+});
+
+test("createSessionProxy: content ブロック配列入力を session.ask へそのまま透過する（視覚発火の口）", { timeout: 5000 }, async () => {
+  const calls = [];
+  const fakeSession = {
+    async ask(input) {
+      calls.push(input);
+      return { replyText: "みえた" };
+    }
+  };
+  const proxy = createSessionProxy({
+    getUrl: () => "ws://127.0.0.1:1/channel?token=t",
+    ensureFireResources: () => {},
+    getSession: () => fakeSession
+  });
+  const blocks = [
+    { type: "image", source: { type: "base64", data: "ZmFrZQ==", media_type: "image/jpeg" } },
+    { type: "text", text: "今の画面を見て反応してください。" }
+  ];
+  const out = await proxy.ask(blocks);
+  assert.equal(calls.length, 1);
+  assert.ok(Array.isArray(calls[0]));
+  assert.deepEqual(calls[0], blocks);
+  assert.equal(out.replyText, "みえた");
+});
+
+// ── createVisionTargetHooks（S5: 対象ウインドウ設定の settings ⇄ cockpit-server/orchestrator 橋渡し）───
+
+/** fake settings（cockpit-settings-store と同型の getVisionTarget/setVisionTarget を持つ最小 fake）。 */
+function makeFakeVisionSettings(initial = null) {
+  let current = initial;
+  return {
+    getVisionTarget: () => current,
+    setVisionTarget: (title) => {
+      current = title ?? null;
+    }
+  };
+}
+
+test("createVisionTargetHooks: getVisionTarget は settings.getVisionTarget をそのまま返す", { timeout: 5000 }, () => {
+  const settings = makeFakeVisionSettings("Sample Game");
+  const hooks = createVisionTargetHooks(settings);
+  assert.equal(hooks.getVisionTarget(), "Sample Game");
+});
+
+test("createVisionTargetHooks: onSetVisionTarget は settings.setVisionTarget へ橋渡しする", { timeout: 5000 }, () => {
+  const settings = makeFakeVisionSettings(null);
+  const hooks = createVisionTargetHooks(settings);
+  hooks.onSetVisionTarget("Another Window");
+  assert.equal(settings.getVisionTarget(), "Another Window");
+  assert.equal(hooks.getVisionTarget(), "Another Window");
+  // null/undefined はクリア。
+  hooks.onSetVisionTarget(null);
+  assert.equal(settings.getVisionTarget(), null);
+});
+
+test("createVisionTargetHooks: visionTargetStatus は現在の title を { title } で返す", { timeout: 5000 }, () => {
+  const settings = makeFakeVisionSettings(null);
+  const hooks = createVisionTargetHooks(settings);
+  assert.deepEqual(hooks.visionTargetStatus(), { title: null });
+  hooks.onSetVisionTarget("Sample Game");
+  assert.deepEqual(hooks.visionTargetStatus(), { title: "Sample Game" });
+});
+
+test("createVisionTargetHooks: settings.setVisionTarget が throw しても onSetVisionTarget は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getVisionTarget: () => null,
+    setVisionTarget: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createVisionTargetHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetVisionTarget("Sample Game"));
 });

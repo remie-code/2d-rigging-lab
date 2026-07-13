@@ -78,6 +78,12 @@
   .soul-state.thinking { color: var(--speaking); }
   .soul-state.speaking { color: var(--speaking); font-weight: bold; }
   .fire-note { color: var(--muted); } /* 非受理 reason の控えめ表示（busy / ears-not-running / empty-window / empty-reply / error）。 */
+  .usage-note { color: var(--muted); } /* S5: askごとの usage（累積検知の最小表示）。 */
+  /* ── Vision（S5「目が開く」: 対象ウインドウ設定 + 視覚発火ボタン）── */
+  .vision { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .vision label { color: var(--muted); }
+  .vision-target-status { color: var(--muted); }
+  #btn-vision-fire { color: #8fb7ff; font-weight: bold; letter-spacing: 0.04em; }
   .timeline-section { padding-bottom: 8px; }
   #timeline {
     height: 46vh; min-height: 220px; overflow-y: auto;
@@ -100,6 +106,11 @@
   .row.expression { color: var(--accent); }
   .row.expression .who { color: var(--accent); }
   .row.expression .text { color: var(--accent); }
+  /* 「見た」マーカー行（S5「目が開く」）。視覚発火のキャプチャ成功を縮小サムネ付きで刻む。 */
+  .row.vision-marker { color: #8fb7ff; }
+  .row.vision-marker .who { color: #8fb7ff; }
+  .row.vision-marker .text { color: #8fb7ff; }
+  .vision-thumb { max-height: 54px; max-width: 96px; border-radius: 3px; border: 1px solid var(--border); margin-left: 6px; vertical-align: middle; }
   footer {
     padding: 10px 18px; border-top: 1px solid var(--border);
     color: var(--muted); display: flex; gap: 24px; background: var(--panel);
@@ -138,11 +149,24 @@
     <span id="channel-error" class="err"></span>
   </section>
 
+  <!-- S5「目が開く」: 視覚発火の対象ウインドウ設定（一覧取得→選択→POST /api/vision-target で永続化）。 -->
+  <section class="vision">
+    <label for="vision-target-select">Vision target</label>
+    <select id="vision-target-select"></select>
+    <button id="btn-vision-refresh">Refresh windows</button>
+    <button id="btn-vision-target-set">Set target</button>
+    <span id="vision-target-status" class="vision-target-status">not configured</span>
+    <span id="vision-error" class="err"></span>
+  </section>
+
   <!-- S3: 発火（Fire）。実運用のゲーム中発火は AHK → POST /api/fire（scripts/fire-hotkey.ahk）。 -->
+  <!-- S5: 視覚発火（Fire Vision）は POST /api/vision-fire（AHK 第二ホットキー = Ctrl+Alt+G）。 -->
   <section class="fire">
     <button id="btn-fire">Fire</button>
+    <button id="btn-vision-fire">Fire (vision)</button>
     <span>soul: <span id="soul-status" class="soul-state idle">idle</span></span>
     <span id="fire-note" class="fire-note"></span>
+    <span id="usage-note" class="usage-note"></span>
   </section>
 
   <section class="timeline-section">
@@ -200,6 +224,12 @@
       uptimeAnchor = Date.now();
       renderUptime();
       applyChannel(s.channel);
+      applyVisionTarget(s.visionTarget);
+    }
+    // ── Vision target 現況表示（S5「目が開く」）: state.visionTarget = { title } | null ──
+    function applyVisionTarget(vt) {
+      var el = byId("vision-target-status");
+      el.textContent = vt && vt.title ? vt.title : "not configured";
     }
     // ── Channel 状態表示（S3 追撃 domain-c）: state.channel は redact 済み（token は伏せてある）──
     function applyChannel(ch) {
@@ -292,6 +322,7 @@
       el.textContent = st;
       el.className = "soul-state " + st;
       byId("btn-fire").disabled = st !== "idle";
+      byId("btn-vision-fire").disabled = st !== "idle"; // S5: 視覚発火も busy 中は disable（二重の防波堤）。
     }
     function setFireNote(text) {
       byId("fire-note").textContent = text || "";
@@ -334,6 +365,42 @@
       timeline.appendChild(row);
       timeline.scrollTop = timeline.scrollHeight;
     }
+
+    // ── 「見た」マーカー行（S5「目が開く」）───────────────────────────
+    // SSE "visionCaptured"（{title,width,height,jpegBase64,elapsedMs}・domain-b.md §4-1）を
+    // 縮小サムネ付きの 1 行で Timeline に刻む。サムネはブラウザの <img> にだけ渡し、どこにも保存しない。
+    function addVisionMarkerRow(d) {
+      var row = document.createElement("div");
+      row.className = "row vision-marker";
+      var t = document.createElement("span"); t.className = "time";
+      t.textContent = fmtClock(Date.now());
+      var who = document.createElement("span"); who.className = "who"; who.textContent = "vision";
+      var marker = document.createElement("span"); marker.className = "marker"; marker.textContent = "*";
+      var text = document.createElement("span"); text.className = "text";
+      text.textContent = "saw \"" + (d.title || "?") + "\" (" + d.width + "x" + d.height + ", " +
+        (d.elapsedMs != null ? d.elapsedMs : "?") + "ms)";
+      row.appendChild(t); row.appendChild(who); row.appendChild(marker); row.appendChild(text);
+      if (d.jpegBase64) {
+        var img = document.createElement("img");
+        img.className = "vision-thumb";
+        img.alt = "captured window thumbnail";
+        img.src = "data:image/jpeg;base64," + d.jpegBase64;
+        row.appendChild(img);
+      }
+      timeline.appendChild(row);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+
+    // ── usage 表示（S5: askごとの usage・累積の重さを早期検知できる最小表示）──
+    // ツマミは置かない（v0 裁定）: 直近askの input_tokens だけを控えめに出す。
+    function applyUsage(d) {
+      var el = byId("usage-note");
+      var usage = d && d.usage ? d.usage : {};
+      var it = usage.input_tokens != null ? usage.input_tokens : "?";
+      var ot = usage.output_tokens != null ? usage.output_tokens : "?";
+      el.textContent = "usage" + (d && d.vision ? "(vision)" : "") +
+        ": input=" + it + " output=" + ot;
+    }
     byId("btn-fire").addEventListener("click", function () {
       byId("btn-fire").disabled = true; // 連打防止（復帰は応答 state / SSE soul）。
       setFireNote("");
@@ -349,6 +416,67 @@
           setFireNote("fire error: " + e);
           applySoulState("idle");
         });
+    });
+
+    // ── 視覚発火（S5「目が開く」）: POST /api/vision-fire。Fire ボタンと同型のフロー ──
+    byId("btn-vision-fire").addEventListener("click", function () {
+      byId("btn-vision-fire").disabled = true; // 連打防止（復帰は応答 state / SSE soul）。
+      setFireNote("");
+      fetch("/api/vision-fire", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+        .then(function (r) { return r.json().then(function (j) { return { status: r.status, j: j }; }); })
+        .then(function (res) {
+          // 503 = fire 未結線（--channel なしで起動）。fired:false は reason を控えめに表示
+          // （vision-no-target / vision-capture-failed / busy / ears-not-running 等）。
+          if (res.status === 503) setFireNote("fire not available (start cockpit with --channel)");
+          else if (res.j && res.j.fired === false) setFireNote("not fired: " + (res.j.reason || "unknown"));
+          applySoulState(res.j && res.j.state ? res.j.state : "idle");
+        })
+        .catch(function (e) {
+          setFireNote("vision fire error: " + e);
+          applySoulState("idle");
+        });
+    });
+
+    // ── 対象ウインドウ設定（S5「目が開く」）: GET /api/windows → select → POST /api/vision-target ──
+    function loadWindows() {
+      return fetch("/api/windows").then(function (r) { return r.json(); }).then(function (j) {
+        var sel = byId("vision-target-select");
+        sel.innerHTML = "";
+        if (!j.windows || j.windows.length === 0) {
+          var opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = j.error ? "(window enumeration failed)" : "(no windows)";
+          sel.appendChild(opt);
+        } else {
+          for (var i = 0; i < j.windows.length; i += 1) {
+            var o = document.createElement("option");
+            o.value = j.windows[i].title;
+            o.textContent = j.windows[i].title + " (" + j.windows[i].processName + ")";
+            sel.appendChild(o);
+          }
+        }
+        byId("vision-error").textContent = j.error ? ("windows: " + j.error) : "";
+      }).catch(function (e) {
+        byId("vision-error").textContent = "failed to load windows: " + e;
+      });
+    }
+    byId("btn-vision-refresh").addEventListener("click", function () { loadWindows(); });
+    byId("btn-vision-target-set").addEventListener("click", function () {
+      var title = byId("vision-target-select").value || "";
+      byId("vision-error").textContent = "";
+      fetch("/api/vision-target", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: title })
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+      }).then(function (res) {
+        if (res.status === 503) { byId("vision-error").textContent = "vision target control not available"; return; }
+        if (!res.ok) { byId("vision-error").textContent = "set failed: " + (res.j && res.j.error || "error"); return; }
+        applyVisionTarget(res.j.visionTarget);
+      }).catch(function (e) {
+        byId("vision-error").textContent = "vision target error: " + e;
+      });
     });
 
     // ── Microphone: GET /api/devices → dropdown（lastDevice を初期選択）──
@@ -459,6 +587,9 @@
         else if (d.type === "fireError") addGhostRow("(fire error: " + (d.message || "unknown") + ")");
         // S4「表情が乗る」: 語彙外タグ（教示外の語）は声にも演出にも出ないが、痕跡をゴースト行に残す。
         else if (d.type === "expressionUnknownTag") addGhostRow("(unknown tag: " + (d.tag || "?") + ")");
+        // S5「目が開く」: 視覚発火の失敗（対象未設定/窓消失/最小化/キャプチャ失敗）を kind 付きで
+        // ゴースト行に残す（盲目のまま撃たず正直に中止した痕跡・domain-b.md §3-3）。
+        else if (d.type === "fireVisionError") addGhostRow("(vision fire: " + (d.kind || "?") + (d.message ? " — " + d.message : "") + ")");
         // 他の演出診断は非表示（過剰表示を避ける・S3 の抑制方針に倣う）:
         //  - expressionBrokenTag は壊れ括弧の除去痕（パース副産物・ノイズ）。
         //  - expressionRejected / expressionSendError は発話済み fire のスロット単位の器拒否/送出失敗で、
@@ -474,6 +605,10 @@
         if (d.accepted === true) { setFireNote(""); addFireMarkerRow(d); }
         else setFireNote("not fired: " + (d.reason || "unknown"));
       });
+      // S5「目が開く」: 「見た」事実（キャプチャ成功・サムネ込み）を Timeline の専用行に。
+      es.addEventListener("visionCaptured", function (ev) { addVisionMarkerRow(JSON.parse(ev.data)); });
+      // S5: askごとの usage（通常 Fire・視覚発火の両方・累積の重さの早期検知用の最小表示）。
+      es.addEventListener("usage", function (ev) { applyUsage(JSON.parse(ev.data)); });
     }
     function init() {
       loadDevices().then(function () {
@@ -481,7 +616,8 @@
           renderHistory(s.transcripts || []); // 履歴復元（live は SSE transcript で以後追加）
           applyState(s);
         }).catch(function () { /* 状態取得失敗でもページは開く */ });
-      }).then(subscribe);
+      }).then(function () { return loadWindows(); }) // S5: 対象ウインドウ選択肢の初期取得。
+        .then(subscribe);
     }
     init();
   })();

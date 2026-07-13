@@ -529,3 +529,333 @@ test("fire: dispose 後の fire は拒否", { timeout: 5000 }, async () => {
   assert.equal(result.fired, false);
   assert.equal(result.reason, "disposed");
 });
+
+// ── usage 計器（S5・通常 Fire でも発火する・wave 計画 §2 裁定 2）───────────────────
+
+test("fire: 通常 Fire でも usage が onUsage へ {usage, vision:false} で通知される", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  /** @type {any[]} */
+  const usages = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "うん", usage: { input_tokens: 42 } }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onUsage: (u) => usages.push(u)
+  });
+  await orch.fire();
+  assert.deepEqual(usages, [{ usage: { input_tokens: 42 }, vision: false }]);
+  orch.dispose();
+});
+
+test("fire: usage が null/undefined のときは onUsage を発火しない", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  /** @type {any[]} */
+  const usages = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "うん" }; } }, // usage 省略。
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onUsage: (u) => usages.push(u)
+  });
+  await orch.fire();
+  assert.equal(usages.length, 0);
+  orch.dispose();
+});
+
+// ── S5「目が開く」視覚発火（fire({ vision: true })）の縦検証 ────────────────────────
+// 通常 fire() の署名・挙動は上のテスト群で不変が担保済み（無退行）。ここでは第二発火種別のみを検証する。
+// capture/session/channel は全て fake（実 SDK・実 PowerShell は一切引かない）。
+
+/** captureImpl の fake（呼び出しタイトルを記録し、固定結果を返す）。 */
+function makeFakeCapture(result) {
+  /** @type {string[]} */
+  const calls = [];
+  return {
+    calls,
+    captureImpl: async (/** @type {string} */ title) => {
+      calls.push(title);
+      return result;
+    }
+  };
+}
+
+test("fire(vision): 成功時は [image(先行), text] を session.ask へ渡し・speak は speechText のみ・会話ログに画像を積まず・onVisionCaptured が base64 付きで発火する", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ねえ、これ見て");
+  const fakeSpeak = makeFakeSpeak();
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 800, height: 600, elapsedMs: 123 });
+  /** @type {any[]} */
+  const askCalls = [];
+  /** @type {any[]} */
+  const visionCaptures = [];
+  /** @type {any[]} */
+  const usages = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(input) {
+        askCalls.push(input);
+        return { replyText: "画面見えるよ<nod>", usage: { input_tokens: 900 } };
+      }
+    },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "テストゲーム",
+    onVisionCaptured: (info) => visionCaptures.push(info),
+    onUsage: (u) => usages.push(u)
+  });
+
+  const result = await orch.fire({ vision: true });
+  assert.equal(result.fired, true);
+  assert.equal(result.vision, true);
+  assert.equal(result.replyText, "画面見えるよ");
+
+  // captureImpl は解決されたタイトルで 1 回だけ呼ばれる。
+  assert.deepEqual(capture.calls, ["テストゲーム"]);
+
+  // session.ask には content 配列（画像が先頭・text が続く）が渡る。
+  assert.equal(askCalls.length, 1);
+  const contentBlocks = askCalls[0];
+  assert.ok(Array.isArray(contentBlocks));
+  assert.equal(contentBlocks.length, 2);
+  assert.equal(contentBlocks[0].type, "image");
+  assert.equal(contentBlocks[0].source.type, "base64");
+  assert.equal(contentBlocks[0].source.data, "ZmFrZQ==");
+  assert.equal(contentBlocks[0].source.media_type, "image/jpeg");
+  assert.equal(contentBlocks[1].type, "text");
+  assert.match(contentBlocks[1].text, /you: ねえ、これ見て/);
+  assert.match(contentBlocks[1].text, /今の画面を見て/);
+
+  // speak は speechText のみ（タグ抜き）。
+  assert.equal(fakeSpeak.spoken.length, 1);
+  assert.equal(fakeSpeak.spoken[0].text, "画面見えるよ");
+
+  // 会話ログ正本は speechText のみ・画像 base64 は一切積まれない（ディスク非保存の流儀を会話ログにも適用）。
+  const all = buffer.all();
+  assert.equal(all.length, 2);
+  assert.equal(all[1].text, "画面見えるよ");
+  assert.equal(all[1].speaker, "soul");
+  assert.ok(!JSON.stringify(all).includes("ZmFrZQ=="));
+
+  // 「見た」事実は onVisionCaptured にだけ base64 付きで通知される。
+  assert.equal(visionCaptures.length, 1);
+  assert.deepEqual(visionCaptures[0], {
+    title: "テストゲーム",
+    width: 800,
+    height: 600,
+    jpegBase64: "ZmFrZQ==",
+    elapsedMs: 123
+  });
+
+  // usage は {usage, vision:true} で通知される。
+  assert.deepEqual(usages, [{ usage: { input_tokens: 900 }, vision: true }]);
+
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+for (const kind of ["notFound", "minimized", "failed", "timeout"]) {
+  test(`fire(vision): キャプチャ失敗(${kind})は session.ask を呼ばず正直に中止する（成功を捏造しない）`, { timeout: 5000 }, async () => {
+    const buffer = bufferWithYou();
+    const fakeSpeak = makeFakeSpeak();
+    const capture = makeFakeCapture({ error: { kind, message: `boom:${kind}` } });
+    let askCalled = false;
+    /** @type {any[]} */
+    const diags = [];
+    const orch = createFireOrchestrator({
+      getBuffer: () => buffer,
+      session: {
+        async ask() {
+          askCalled = true;
+          return { replyText: "x" };
+        }
+      },
+      speakImpl: fakeSpeak.speakImpl,
+      channel: fakeChannel,
+      player: fakePlayer,
+      captureImpl: capture.captureImpl,
+      getVisionTarget: () => "テストゲーム",
+      onDiagnostic: (d) => diags.push(d)
+    });
+
+    const result = await orch.fire({ vision: true });
+    assert.equal(result.fired, false);
+    assert.equal(result.reason, "vision-capture-failed");
+    assert.equal(result.kind, kind);
+    // 盲目のまま撃たない: session.ask は呼ばれない・発話しない。
+    assert.equal(askCalled, false);
+    assert.equal(fakeSpeak.spoken.length, 0);
+    assert.equal(buffer.all().length, 1); // soul 追記なし。
+    const visionDiag = diags.find((d) => d.type === "fireVisionError");
+    assert.ok(visionDiag, "fireVisionError 診断が出る");
+    assert.equal(visionDiag.kind, kind);
+    assert.match(visionDiag.message, new RegExp(kind));
+    assert.equal(orch.getState(), "idle");
+    orch.dispose();
+  });
+}
+
+test("fire(vision): 対象未設定（getVisionTarget→null）は session.ask を呼ばず fireVisionError(no-target)・ゴースト", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  let askCalled = false;
+  /** @type {any[]} */
+  const diags = [];
+  /** @type {any[]} */
+  const fires = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask() {
+        askCalled = true;
+        return { replyText: "x" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => null,
+    onDiagnostic: (d) => diags.push(d),
+    onFire: (f) => fires.push(f)
+  });
+
+  const result = await orch.fire({ vision: true });
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "vision-no-target");
+  assert.equal(askCalled, false);
+  const visionDiag = diags.find((d) => d.type === "fireVisionError");
+  assert.ok(visionDiag);
+  assert.equal(visionDiag.kind, "no-target");
+  assert.ok(fires.some((f) => f.accepted === false && f.reason === "vision-no-target"));
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("fire(vision): getVisionTarget 未注入（既定）も対象未設定として正直に中止する", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  let askCalled = false;
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask() {
+        askCalled = true;
+        return { replyText: "x" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer
+    // getVisionTarget を注入しない。
+  });
+  const result = await orch.fire({ vision: true });
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "vision-no-target");
+  assert.equal(askCalled, false);
+  orch.dispose();
+});
+
+test("fire(vision): getVisionTarget が throw しても no-target として正直に中止する（盲目のまま撃たない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  let askCalled = false;
+  /** @type {any[]} */
+  const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask() {
+        askCalled = true;
+        return { replyText: "x" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => {
+      throw new Error("boom");
+    },
+    onDiagnostic: (d) => diags.push(d)
+  });
+  const result = await orch.fire({ vision: true });
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "vision-no-target");
+  assert.equal(askCalled, false);
+  assert.ok(diags.some((d) => d.type === "fireVisionError" && d.kind === "no-target"));
+  orch.dispose();
+});
+
+test("fire(vision): busy 中（通常 Fire の thinking 中）は無視される・キャプチャすら呼ばれない", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const gate = deferred();
+  let askCount = 0;
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 100, height: 100, elapsedMs: 1 });
+
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask() {
+        askCount += 1;
+        await gate.promise; // 通常 Fire を thinking に留める。
+        return { replyText: "はーい" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "テストゲーム"
+  });
+
+  const first = orch.fire(); // 通常 Fire・await しない（thinking で留まる）。
+  await Promise.resolve();
+  assert.equal(orch.getState(), "thinking");
+
+  const second = await orch.fire({ vision: true }); // busy で即返る。
+  assert.equal(second.fired, false);
+  assert.equal(second.reason, "busy");
+  assert.equal(capture.calls.length, 0); // キャプチャすら呼ばれない。
+
+  gate.resolve();
+  const firstResult = await first;
+  assert.equal(firstResult.fired, true);
+  assert.equal(askCount, 1);
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("fire(vision): 耳未起動（getBuffer=null）は通常 Fire 同様 ears-not-running", { timeout: 5000 }, async () => {
+  const orch = createFireOrchestrator({
+    getBuffer: () => null,
+    session: { async ask() { return { replyText: "x" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "テストゲーム"
+  });
+  const result = await orch.fire({ vision: true });
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "ears-not-running");
+  orch.dispose();
+});
+
+test("fire(vision): dispose 後の視覚発火は拒否", { timeout: 5000 }, async () => {
+  const orch = createFireOrchestrator({
+    getBuffer: () => bufferWithYou(),
+    session: { async ask() { return { replyText: "x" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "テストゲーム"
+  });
+  orch.dispose();
+  const result = await orch.fire({ vision: true });
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "disposed");
+});
+
+test("FIRE_SYSTEM_PROMPT: 画面が渡ることがある旨の最小追記を含む", () => {
+  assert.match(FIRE_SYSTEM_PROMPT, /画面/);
+});

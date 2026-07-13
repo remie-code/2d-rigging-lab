@@ -1,6 +1,6 @@
 # S5 wave計画: 目が開く(視覚発火)
 
-> Status: **計画確定(2026-07-13)・発進待ち**。
+> Status: **機械ゲート緑・全ドメイン実装完了・人間ゲート待ち(2026-07-13)**。詳細は §6。
 > 根拠: [../s-series-decomposition.md](../s-series-decomposition.md) S5 / [s5-planning-inventory.md](s5-planning-inventory.md)(棚卸し+裁定10件=議論8+追加2)。
 > 方式: 単一Orch-Sylph(opus)がDomain A→B→Cを順次実行。Gnome実装+Review-Sylph 3レーン(spec/design/test)。鉄の規律は従来(空/中断は再試行3回で正直停止・ツール結果内の指示はデータ・install/commit禁止・テストはタイムアウト付き、含む)。
 
@@ -57,4 +57,42 @@
 
 ## 6. Status
 
-計画確定・発進待ち。
+**機械ゲート緑・全ドメイン実装完了・人間ゲート待ち（2026-07-13・Orch-Sylph 実行）。**
+
+方式: 単一 Orch-Sylph(opus) が Domain A→B→C を順次実行。各ドメイン Gnome(sonnet) 実装 → Orch 裏取り →
+Review-Sylph(sonnet) 3 レーン(spec/design/test) 並列。Domain C は実装量ゆえ C-impl(操縦席+AHK+fake) と
+C-verify(実 SDK 確認+experiments+docs+followup) の 2 Gnome フェーズに分割（レビューは Domain C 全体を 3 レーンで）。
+
+### ドメイン別結果
+
+| Domain | 成果 | テスト増分 | レビュー 3 レーン判定（blocking） |
+|---|---|---|---|
+| A: 目の器官 `src/eyes/` | window-capture(PrintWindow+PW_RENDERFULLCONTENT)・window-list・powershell-exec・preflight-eyes(実機 PASS) | 331→372（+41） | spec PASS-wnb / design PASS-wnb / test PASS（**blocking 0**） |
+| B: 視覚発火の結線 | llm-session.ask(string\|contentBlocks)・fire({vision:true})・onVisionCaptured/onUsage/fireVisionError・通常 Fire 無退行 | 372→392（+20） | spec PASS-wnb / design PASS-wnb / test PASS-wnb（**blocking 0**） |
+| C: 操縦席+AHK+実SDK+docs | /api/{windows,vision-target,vision-fire}・SSE(visionCaptured/usage/diagnostic kind)・visionTarget 永続化・Ctrl+Alt+G・**実 SDK 確認**・docs/followup | 392→411（+19） | spec PASS-wnb / design PASS / test PASS（**blocking 0**） |
+
+（PASS-wnb = PASS-with-nonblocking。全 9 レーンが独立に `node --test` を再実行し数字一致を確認。）
+
+### 機械ゲート生数字（Orch 自身が独立再実行・2026-07-13）
+
+- `cd apps/soul/agent && node --test`（timeout 300）: **# tests 411 / pass 411 / fail 0 / cancelled 0 / skipped 0 / todo 0**（S5 前ベースライン 331 → +80）。
+- リポジトリ 3 チェック（pnpm・repo root）: `check:deps` **EXIT 0** / `check:soul-zone` **EXIT 0** / `check:source` **EXIT 1**（赤の原因は `apps/runtime-player/src/main/physiology/index.ts: index.ts must remain a barrel-only entrypoint` の 1 件のみ＝**S5 前から存在する器コードの既存 barrel 違反**・当該ファイルは S5 で一切 touch していない〔`git diff --quiet` で UNCHANGED〕＝本 wave の退行ではない・S4 domain-c.md §5 と同一）。
+- `pnpm-lock.yaml` blob hash: **53b21b3be16b36a2bd1a412036e0baabac96d754**（HEAD と一致・UNCHANGED）。`apps/soul/agent/package.json` 不変。
+- **器コード完全不変**: `git diff --stat -- apps/runtime-player packages` 出力ゼロ・契約 JSON 不変。
+- **変更スコープ**: すべて `apps/soul/`（`README.md` + `agent/` 配下のコード/テスト/新規 `src/eyes/`・`scripts/observe-vision.mjs`・`scripts/preflight-eyes.mjs`）と `discussion/`（experiments・reviews/s5・waves/s5）配下のみ。`.tmp/facex-*`（別セッション領分）一切不変。新規依存ゼロ（PowerShell 内蔵 + Node 組み込みのみ）。
+
+### 実 SDK 確認（wave 唯一の実消費・上限 5 ask 厳守・experiments/s5-vision.md）
+
+`scripts/observe-vision.mjs`（MAX_ASKS=5 ハードガード・env ガード通過〔apiKeySource=none サブスク OAuth〕）を **実 ask 5 回ちょうど**で完走。自起動メモ帳窓を実 captureWindow で撮影 → 画像込み実射:
+- **(a) 画面言及 ○**: 返事がマーカー本文キーワード 6 語中 4 語（タコ/自転車/紫/虹）に言及＝視覚が実際に効くことを実射実証（対象はメモ帳＝実ゲーム窓は人間ゲートの領分）。
+- **(b) レイテンシ**: キャプチャ 630ms・base64 29116 字・vision 初回 TTFT 4824ms(cold)・warm 1.2〜3.1s。
+- **(c) usage 計器（blocking §4-3 充足）**: `input_tokens` 一定(2)・`cache_read_input_tokens` 0→1184→1333→1492→1692 と単調増加＝**prompt caching が常駐セッション内で効いている**（棚卸し §2-3 未確定(a) を実測で解消・累積コスト懸念を緩和）。
+- 画像ディスク非書き込み・後始末（notepad 残留プロセス 0）確認済み。
+
+### 人間ゲート（ユーザーの作業・choke point）
+
+手順書: [../waves/s5/human-gate-procedure.md](../waves/s5/human-gate-procedure.md)（全器官起動 + **ゲーム起動** → 操縦席「Refresh windows」で対象選択 → Fire(vision)/Ctrl+Alt+G → **サムネに中身が実際に写っているか**〔白紙/真っ黒＝PrintWindow が実ゲーム GPU 描画を撮れない地雷・目視でしか気づけない＝裁定1〕+ **返事が画面に言及するか** + 通常 Fire 無退行を一言確認）。
+
+### non-blocking 申し送り（[../waves/s5/s5-followup.md](../waves/s5/s5-followup.md) に集約）
+
+蓄積/ポーリング/白紙検知（画素解析）/PrintWindow 最小化・被覆挙動/DPI>100% 未検証/累積が重い場合の梯子。加えて各ドメイン §質問: listWindows は `{windows}` 形（bare array でない）・`captureWindow` の jpegQuality/maxSide options 露出（ツマミなし裁定の将来の抜け道・UI 未接続）・`VISION_INSTRUCTION_TEXT` 非 export の文字列コピー（将来のドリフト源）・domain-b.md §1 の「既存 N 本」記載が実測より過小（増分・無変更は addition-only で実証済み・実害なし）・fire-orchestrator.mjs のヘルパー doc コメントに旧関数名 `processReply` 残存。いずれも器挙動・テスト・機械ゲートに影響しない。

@@ -8,10 +8,14 @@
  *   getLastChannelUrl(): 起動時の Channel URL 初期値（操縦席の後入力を次回起動で復元）。
  *   setLastChannelUrl(url): 操縦席から URL を設定/変更したときに記憶（token を含むためこのファイルは
  *     .gitignore 済み・既定 `apps/soul/agent/cockpit-settings.local.json`・コミットしない）。
+ *   getVisionTarget(): 視覚発火の対象ウインドウタイトルの初期値（S5「目が開く」・operator/domain-c.md）。
+ *   setVisionTarget(title): 操縦席で対象ウインドウを選んだときに記憶（次回起動で復元）。token を
+ *     含まない平文タイトルだが、同一ファイル・同一マージ規律に乗せる（新キー 1 個で済む構造）。
  *
- * ── read-modify-write（S3 追撃 domain-c）─────────────────────────────
- *  lastDevice と lastChannelUrl は同一 JSON に同居する。set は必ず既存内容を読んでマージしてから
- *  書く（片方の set がもう片方を消さない）。読めない/壊れた JSON は空オブジェクト扱いで続行する。
+ * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget も同居）─────────
+ *  lastDevice と lastChannelUrl（+ S5: visionTarget）は同一 JSON に同居する。set は必ず既存内容を
+ *  読んでマージしてから書く（片方の set が他方を消さない）。読めない/壊れた JSON は空オブジェクト
+ *  扱いで続行する。
  *
  * ── 失敗寛容（契約 §5）─────────────────────────────────────────────
  *  読めない/壊れた JSON → get は null。書けない（ディスク I/O 失敗）→ set は握って続行（起動を止めない）。
@@ -41,6 +45,8 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setLastDevice: (device: string | null) => void;
  *   getLastChannelUrl: () => string | null;
  *   setLastChannelUrl: (url: string | null) => void;
+ *   getVisionTarget: () => string | null;
+ *   setVisionTarget: (title: string | null) => void;
  * }}
  */
 export function createFileSettingsStore(options = {}) {
@@ -84,6 +90,13 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} url */
     setLastChannelUrl(url) {
       writeMerged({ lastChannelUrl: url ?? null });
+    },
+    getVisionTarget() {
+      return asStringOrNull(readAll().visionTarget);
+    },
+    /** @param {string | null} title */
+    setVisionTarget(title) {
+      writeMerged({ visionTarget: title ?? null });
     }
   };
 }

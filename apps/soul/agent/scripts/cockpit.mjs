@@ -182,6 +182,60 @@ export function createLazyChannel(url, options = {}) {
   };
 }
 
+/**
+ * session.ask への透過プロキシを作る（S3 の Channel URL 未設定チェック + 遅延生成は不変）。
+ * S5: `ask(input)` は文字列（通常 Fire）と content ブロック配列（視覚発火）の両方を素通しする
+ * （分岐しない＝透過。型ガードは llm-session 側が担う）。
+ * @param {object} options
+ * @param {() => string | null} options.getUrl  現在の Channel URL（lazyChannel.getUrl）。
+ * @param {() => void} options.ensureFireResources  session/player の遅延生成（冪等）。
+ * @param {() => { ask: (input: string | Array<any>) => Promise<any> } | null} options.getSession
+ * @returns {{ ask: (input: string | Array<any>) => Promise<any> }}
+ */
+export function createSessionProxy(options) {
+  const { getUrl, ensureFireResources, getSession } = options;
+  return {
+    /** @param {string | Array<any>} input */
+    async ask(input) {
+      if (getUrl() == null) {
+        throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
+      }
+      ensureFireResources();
+      return /** @type {any} */ (getSession()).ask(input);
+    }
+  };
+}
+
+/**
+ * settings の視覚発火対象ウインドウ（visionTarget）を、cockpit-server の口
+ * （onSetVisionTarget/visionTargetStatus）と fire-orchestrator の口（getVisionTarget）へ橋渡しする
+ * （S5「目が開く」・Domain C 前半）。Channel URL の onSetChannelUrl/channelStatus と同型の薄い配線層
+ * （テスト可能化のため main() から抽出・export）。
+ *
+ * @param {{ getVisionTarget: () => string | null; setVisionTarget: (title: string | null) => void }} settings
+ * @returns {{
+ *   getVisionTarget: () => string | null;
+ *   onSetVisionTarget: (title: string | null) => void;
+ *   visionTargetStatus: () => { title: string | null };
+ * }}
+ */
+export function createVisionTargetHooks(settings) {
+  return {
+    /** fire-orchestrator の getVisionTarget（対象タイトルの解決関数）。 */
+    getVisionTarget: () => settings.getVisionTarget(),
+    /** cockpit-server の onSetVisionTarget（POST /api/vision-target が呼ぶ）。 */
+    onSetVisionTarget: (title) => {
+      try {
+        settings.setVisionTarget(title ?? null); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetChannelUrl と同型の失敗寛容）。
+      }
+    },
+    /** cockpit-server の visionTargetStatus（state snapshot に載せる現況）。 */
+    visionTargetStatus: () => ({ title: settings.getVisionTarget() })
+  };
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --channel <ws-url>    器の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の**初期値**
@@ -205,6 +259,8 @@ async function main() {
 
   // ── S3 追撃 domain-c: fire は常時結線・session/player は遅延生成・Channel URL は後入力可 ──────
   const settings = createFileSettingsStore();
+  // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
+  const visionTargetHooks = createVisionTargetHooks(settings);
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -253,16 +309,12 @@ async function main() {
 
   // orchestrator に渡す session/player は proxy（実体は ensureFireResources で遅延生成）。
   // session.ask は URL 未設定なら spawn せず明示エラー（→ orchestrator が fireError 診断に落とす）。
-  const sessionProxy = {
-    /** @param {string} text */
-    async ask(text) {
-      if (lazyChannel.getUrl() == null) {
-        throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
-      }
-      ensureFireResources();
-      return /** @type {any} */ (session).ask(text);
-    }
-  };
+  // S5: ask(input) は string | content ブロック配列を透過する（createSessionProxy 参照）。
+  const sessionProxy = createSessionProxy({
+    getUrl: () => lazyChannel.getUrl(),
+    ensureFireResources,
+    getSession: () => session
+  });
   const playerProxy = {
     /** @param {...any} playArgs */
     play(...playArgs) {
@@ -278,6 +330,9 @@ async function main() {
       session: /** @type {any} */ (sessionProxy),
       channel: /** @type {any} */ (lazyChannel),
       player: /** @type {any} */ (playerProxy),
+      // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。captureImpl は既定（Domain A の
+      // captureWindow）のまま差し替えない。
+      getVisionTarget: visionTargetHooks.getVisionTarget,
       speakDeps: {
         ttsBaseUrl: args.ttsBaseUrl,
         speaker: args.speaker,
@@ -321,7 +376,11 @@ async function main() {
     settingsStore: settings,
     fireOrchestratorFactory,
     onSetChannelUrl,
-    channelStatus
+    channelStatus,
+    // S5「目が開く」: 対象ウインドウ設定の口（GET /api/windows は既定 listWindowsImpl=Domain A listWindows
+    // をそのまま使う・差し替え不要）。
+    onSetVisionTarget: visionTargetHooks.onSetVisionTarget,
+    visionTargetStatus: visionTargetHooks.visionTargetStatus
   });
 
   const url = await server.listen();

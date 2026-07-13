@@ -564,12 +564,22 @@ test("cockpit close(): pipeline を dispose し・冪等・ハンドルを残さ
 
 /** factory に渡された hooks を握り、fire() の挙動を注入できる fake orchestrator。 */
 function makeFakeOrchestrator({ fireResult, drive } = {}) {
-  const record = { /** @type {any} */ hooks: null, fireCount: 0, disposed: false, state: "idle" };
+  const record = {
+    /** @type {any} */ hooks: null,
+    fireCount: 0,
+    disposed: false,
+    state: "idle",
+    // S5: fire() へ渡された fireOptions を記録（{vision:true} 等）。既存呼び出し（fire()）は
+    // undefined のまま記録されるだけで、この記録追加自体は既存テストの挙動に影響しない。
+    /** @type {any} */ lastFireOptions: undefined
+  };
   const factory = (hooks) => {
     record.hooks = hooks;
     return {
-      async fire() {
+      /** @param {any} [fireOptions] */
+      async fire(fireOptions) {
         record.fireCount += 1;
+        record.lastFireOptions = fireOptions;
         if (drive) drive(hooks, record);
         return fireResult ?? { fired: true, replyText: "はい", injectedChars: 12, includedCount: 1 };
       },
@@ -913,6 +923,224 @@ test("cockpit /api/fire: soul 転写は二重放送されない（実 pipeline �
     assert.equal(youTranscripts.length, 1);
   } finally {
     sse.close();
+    await server.close();
+  }
+});
+
+// ── 視覚発火の口（S5「目が開く」・Domain C 前半）───────────────────────────────
+//
+//  GET /api/windows・POST /api/vision-target・POST /api/vision-fire は POST /api/channel・POST /api/fire
+//  の写経（domain-c.md §）。listWindowsImpl は必ず fake 注入する（既定は実 PowerShell 起動＝Domain A
+//  window-list.mjs の listWindows・このテストファイルでは一度も実行しない）。
+
+test("cockpit GET /api/windows: listWindowsImpl の成功結果（.windows）を返す", async () => {
+  const server = createCockpitServer({
+    listWindowsImpl: async () => ({
+      windows: [
+        { pid: 111, processName: "notepad", title: "Sample - メモ帳" },
+        { pid: 222, processName: "game", title: "Sample Game" }
+      ]
+    })
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await getJson(`${url}/api/windows`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.error, null);
+    assert.equal(r.json.windows.length, 2);
+    assert.equal(r.json.windows[1].title, "Sample Game");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit GET /api/windows: listWindowsImpl の失敗（.error）は windows:[] + error を返す（実起動しない）", async () => {
+  const server = createCockpitServer({
+    listWindowsImpl: async () => ({ error: { kind: "timeout", message: "window listing timed out after 3000ms" } })
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await getJson(`${url}/api/windows`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.windows, []);
+    assert.match(r.json.error, /timed out/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit GET /api/windows: 未注入時は既定実装（Domain A listWindows）が使われる（呼び出しの型のみ確認・実起動しない）", () => {
+  // 既定 listWindowsImpl は実 PowerShell を起動するため実行はしない。ここでは createCockpitServer が
+  // listWindowsImpl 未指定でも throw せず構築できる（既定値が代入される）ことだけを確認する。
+  const server = createCockpitServer({});
+  assert.equal(typeof server.listen, "function");
+});
+
+test("cockpit POST /api/vision-target: onSetVisionTarget 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/vision-target`, { title: "Sample Game" });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /vision target control not available/);
+    // visionTargetStatus 未注入なら state.visionTarget は null。
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.visionTarget, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/vision-target: title をフックへ橋渡しし・state に visionTargetStatus を載せる", async () => {
+  let received = /** @type {string | null | undefined} */ (undefined);
+  let current = /** @type {string | null} */ (null);
+  const server = createCockpitServer({
+    onSetVisionTarget: (title) => {
+      received = title;
+      current = title;
+    },
+    visionTargetStatus: () => ({ title: current })
+  });
+  try {
+    const url = await server.listen(0);
+    const s0 = await getJson(`${url}/api/state`);
+    assert.equal(s0.json.visionTarget.title, null);
+
+    const r = await postJson(`${url}/api/vision-target`, { title: "  Sample Game — Main Window  " });
+    assert.equal(r.status, 200);
+    // フックは trim 済みのタイトルを受ける。
+    assert.equal(received, "Sample Game — Main Window");
+    assert.equal(r.json.visionTarget.title, "Sample Game — Main Window");
+
+    // 空文字はクリア（null をフックへ）。
+    const rc = await postJson(`${url}/api/vision-target`, { title: "   " });
+    assert.equal(rc.status, 200);
+    assert.equal(received, null);
+    assert.equal(rc.json.visionTarget.title, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/vision-fire: orchestrator 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/vision-fire`, {});
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /fire not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/vision-fire: fire({ vision: true }) を呼び・受理は 202", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "画面見えたよ", injectedChars: 5, includedCount: 1, vision: true }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/vision-fire`, {});
+    assert.equal(r.status, 202);
+    assert.equal(r.json.fired, true);
+    assert.equal(r.json.replyText, "画面見えたよ");
+    // 通常 /api/fire ではなく vision:true で呼ばれたことを固定。
+    assert.deepEqual(fake.record.lastFireOptions, { vision: true });
+    assert.equal(fake.record.fireCount, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/vision-fire: 対象未設定は 200 で {fired:false, reason:'vision-no-target'}", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: false, reason: "vision-no-target" }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/vision-fire`, {});
+    assert.equal(r.status, 200);
+    assert.equal(r.json.fired, false);
+    assert.equal(r.json.reason, "vision-no-target");
+    assert.deepEqual(fake.record.lastFireOptions, { vision: true });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit SSE: fire({vision:true}) の onVisionCaptured が visionCaptured イベントで流れる（サムネ込み）", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "見えた", vision: true },
+    drive: (hooks) => {
+      hooks.onVisionCaptured({
+        title: "Sample Game",
+        width: 1024,
+        height: 576,
+        jpegBase64: "AAAA",
+        elapsedMs: 600
+      });
+    }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/vision-fire`, {});
+    const captured = await client.waitFor((e) => e.event === "visionCaptured");
+    assert.equal(captured.data.title, "Sample Game");
+    assert.equal(captured.data.width, 1024);
+    assert.equal(captured.data.height, 576);
+    assert.equal(captured.data.jpegBase64, "AAAA");
+    assert.equal(captured.data.elapsedMs, 600);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit SSE: onUsage が usage イベントで流れる（通常 Fire・視覚発火共通）", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "はい" },
+    drive: (hooks) => {
+      hooks.onUsage({ usage: { input_tokens: 284, output_tokens: 12 }, vision: false });
+    }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/fire`, {});
+    const usage = await client.waitFor((e) => e.event === "usage");
+    assert.equal(usage.data.usage.input_tokens, 284);
+    assert.equal(usage.data.vision, false);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit SSE: fireVisionError（onDiagnostic 経由）は diagnostic イベントに kind を載せる（ゴースト行の材料）", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: false, reason: "vision-capture-failed", kind: "minimized" },
+    drive: (hooks) => {
+      hooks.onDiagnostic({ type: "fireVisionError", kind: "minimized", message: "window is minimized" });
+    }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/vision-fire`, {});
+    const diag = await client.waitFor((e) => e.event === "diagnostic" && e.data.type === "fireVisionError");
+    assert.equal(diag.data.kind, "minimized");
+    assert.equal(diag.data.message, "window is minimized");
+  } finally {
+    client.close();
     await server.close();
   }
 });

@@ -201,3 +201,51 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
 - **全器官起動（人間ゲート）の手順**:
   `discussion/ai-cohost/implementation/waves/s4/human-gate-procedure.md`（S3 の手順に「感情が動く話題を
   振る → 返事に表情が乗るのを見る」を足したもの）。
+
+#### S5: 目が開く（視覚発火）
+
+「見たうえで発火」——通常 Fire（従来どおり・完全不変）とは**別の第二発火**として、操縦席で選んだ
+対象ウインドウを 1 枚キャプチャし、直近の会話と合わせて画像込みで LLM に注入する。v0 は**単発・
+その ask 限り**（画像を蓄積する機能は作らない・見比べは会話ログの言語痕跡で成立するという裁定）。
+
+- **目の器官**（`src/eyes/`・Domain A）: `captureWindow(title)` が PowerShell（`System.Drawing`・
+  .NET 内蔵・新規依存ゼロ）を 1 プロセス起動し、**PrintWindow(PW_RENDERFULLCONTENT)** で対象窓の
+  composited 描画を取得 → 長辺 1024 に縮小 → JPEG(quality 75) → base64 を stdout で受け取る
+  （**画像はディスクに一切書かない**）。`listWindows()` が起動中ウインドウ一覧（`{pid, processName,
+  title}`）を返す（操縦席の「対象ウインドウ選択」の一覧取得ボタン用途）。対象未発見/最小化/
+  キャプチャ失敗/タイムアウトは構造化エラー（`{error:{kind,message}}`）で正直に返す（成功を捏造
+  しない）。gdigrab（ffmpeg）は DirectComposition 系描画が真っ白になる地雷があるため不採用
+  （PrintWindow が唯一 composited 内容を撮れた経路・実測は
+  `discussion/ai-cohost/implementation/waves/s5/domain-a.md` §6）。
+- **視覚発火の結線**（`src/mind/fire-orchestrator.mjs`・Domain B）: `fire({ vision: true })` で起動
+  する第二発火種別。対象未設定/キャプチャ失敗は **`session.ask` を呼ばずに中止**（「見て」と言われて
+  盲目のまま答えるのは嘘になる、という裁定）。成功時は `[image(先行), text]` の content 配列を
+  組み（会話窓 + 視覚指示「今の画面を見て、直近の会話と合わせて自然に反応してください。」）、通常
+  Fire と完全共通のパーサ→speak→soul 記録→演出の経路へ渡す。画像は会話ログ（転写バッファ）へは
+  一切積まない（speechText のみ append・ディスク非保存の流儀を会話ログにも適用）。`llm-session.mjs`
+  の `ask(content)` は文字列に加え content ブロック配列（画像込み）も受理するよう拡張済み。
+- **計器**（usage・裁定 2「計測できるようにして、早期検知」）: `session.ask` の戻り値 `usage`
+  （`input_tokens`/`cache_read_input_tokens` 等）を通常 Fire・視覚発火の両方で `onUsage({usage,
+  vision})` として通知する。操縦席は直近 1 回分の usage を表示する（累積グラフは持たない v0 最小
+  実装）。
+- **操縦席**（`src/cockpit/cockpit.html`・Domain C）: 「Vision target」セクション（一覧取得ボタン→
+  `<select>`→対象設定・`cockpit-settings.local.json` に永続化＝Channel URL と同型）・「Fire
+  (vision)」ボタン（`POST /api/vision-fire`）・「見た」マーカー行（縮小サムネ `<img>` 表示・データは
+  SSE の `visionCaptured` イベントに載るだけでディスクには書かない）・失敗ゴースト行
+  （`fireVisionError` の kind 表示）・usage 表示。
+- **AHK 第二ホットキー**: `scripts/fire-hotkey.ahk` に `Ctrl+Alt+G`（`FireVision()`）を追加
+  （既存 `Ctrl+Alt+F` は不変）。
+- **ツマミなし**: 縮小長辺（1024）・JPEG 品質（75）は固定値（v0 は操縦席に調整 UI を置かない裁定・
+  S4 のゲイン CLI 撤去の教訓を踏襲）。
+- **実 SDK 観測**（最大 5 ask）: `scripts/observe-vision.mjs`——自分で起動したメモ帳窓（特徴的な
+  マーカー本文入り）を実キャプチャし、実 `createLlmSession` へ画像込みで実射。返事が画面内容に
+  言及するか・レイテンシ内訳・**画像を含む履歴が以後の ask でどう再送されるか（input_tokens 推移 +
+  cache 系フィールドの有無）**を観測した。結果は
+  `discussion/ai-cohost/experiments/s5-vision.md`（**prompt caching が効いており、履歴再送分は
+  cache-read として計上されることを実測で確認**）。
+- **実ゲーム窓は使っていない**: 上記いずれのスクリプトも対象は自分で起動したウインドウ（メモ帳）
+  のみ（鉄の規律「実キャプチャ対象は自分で起動した窓のみ」）。実ゲーム窓での composited 撮影の
+  成否・最小化/被覆時の実挙動・DPI>100% は未検証のまま
+  `discussion/ai-cohost/implementation/waves/s5/s5-followup.md` へ持ち越されている。
+- **全器官起動（人間ゲート・ゲーム起動込み）の手順**:
+  `discussion/ai-cohost/implementation/waves/s5/human-gate-procedure.md`。

@@ -183,6 +183,54 @@ test("llm-session: result 前に generator が終了したら ask は理由付�
   }
 });
 
+// ── S5: ask の content ブロック配列受理（視覚発火の口）─────────────────────────────
+
+test("llm-session: ask は文字列入力で従来どおり content:<string> で push する（無退行）", async () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  const session = createLlmSession({ skipEnvGuard: true, queryImpl: fakeQuery });
+  try {
+    await session.ask("こんにちは");
+    assert.equal(calls.userTexts.length, 1);
+    assert.equal(typeof calls.userTexts[0], "string");
+    assert.equal(calls.userTexts[0], "こんにちは");
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("llm-session: ask は content ブロック配列入力を content:<配列> のまま push する", async () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  const session = createLlmSession({ skipEnvGuard: true, queryImpl: fakeQuery });
+  const blocks = [
+    { type: "image", source: { type: "base64", data: "ZmFrZQ==", media_type: "image/jpeg" } },
+    { type: "text", text: "今の画面を見て反応してください。" }
+  ];
+  try {
+    const out = await session.ask(blocks);
+    assert.equal(calls.userTexts.length, 1);
+    assert.ok(Array.isArray(calls.userTexts[0]));
+    assert.deepEqual(calls.userTexts[0], blocks);
+    // ask 自体は通常どおり応答を返す（型分岐は push 形状だけ）。
+    assert.equal(typeof out.replyText, "string");
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("llm-session: ask は空文字列/空配列/非文字列非配列を TypeError で拒否する", async () => {
+  const { fakeQuery } = makeFakeQuery();
+  const session = createLlmSession({ skipEnvGuard: true, queryImpl: fakeQuery });
+  try {
+    await assert.rejects(() => session.ask(""), TypeError);
+    await assert.rejects(() => session.ask([]), TypeError);
+    await assert.rejects(() => session.ask(42), TypeError);
+    await assert.rejects(() => session.ask(null), TypeError);
+    await assert.rejects(() => session.ask(undefined), TypeError);
+  } finally {
+    await session.dispose();
+  }
+});
+
 test("llm-session: dispose 後の ask は throw・二重 dispose は無害", async () => {
   const { fakeQuery } = makeFakeQuery();
   const session = createLlmSession({ skipEnvGuard: true, queryImpl: fakeQuery });
