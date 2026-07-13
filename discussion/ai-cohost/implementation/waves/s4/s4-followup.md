@@ -73,6 +73,14 @@
    `expressionIntensity` にマップ。範囲ガード [0.1, 3.0]（域外/非有限は起動時エラー）・純関数
    `resolveExpressionGain` を切り出し export・テスト固定・gain=1.0 は挙動完全不変・推奨初期値 1.5。
    クランプは翻訳層で既実装＝CLI は範囲ガードのみ。全テスト 331→337 緑・器/lockfile 不変。
+   → **【CLI 面撤去・2026-07-13】** ユーザー UX 裁定「演出ゲインの CLI 起動時設定は UX として明らかに
+   おかしい。将来 GUI で扱う」を受け、`--expression-gain` の**ユーザー向け CLI 面のみ**を撤去した
+   （フラグ解釈・ヘルプ・起動ログ・関連テスト・README/human-gate 記述・CLI 契約範囲ガード純関数
+   `resolveExpressionGain`＝唯一の消費者が本フラグだったため）。**intensity 配管は温存**——翻訳層
+   `expression-translator.mjs` の intensity 機構・クランプ、orchestrator オプション `expressionIntensity`
+   （既定 1.0）は正しい内部部品として残置。**リアクションゲインの調整 UI は将来の GUI 課題**（置き場候補＝
+   操縦席ノブ or 器 Physiology ページ＝四層 Player 補正層。必要になった時に裁定）。詳細＝
+   [domain-c.md](domain-c.md) §8。
 
 ## 4. 本 wave で回収済み（Domain A §9 の申し送りのうち Domain B で閉じたもの）
 

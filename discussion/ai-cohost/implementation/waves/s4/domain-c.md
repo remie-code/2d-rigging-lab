@@ -114,3 +114,17 @@ Node 組み込みのみ）。
 2. **操縦席 UI には調整ノブを置かない裁定を維持**（[domain-b.md](domain-b.md) §2・s4-followup §3-2）。
    強さ調整は CLI/設定限定（Player 側の per-model / per-slot 質感補正は器の領分＝四層昇格の②以降）。
    本 Domain は魂側の一括ゲイン（①普遍既定値の全体スケール）のみで、その方針を踏襲した。
+
+## 8. §後日裁定（CLI 面撤去・2026-07-13）
+
+**本 Domain で追加した `--expression-gain` の CLI 面はユーザー UX 裁定（2026-07-13）により撤去した。**
+「演出ゲインの CLI 起動時設定は UX として明らかにおかしい。将来 GUI で扱う」との裁定を受け、`cockpit.mjs`
+のフラグ解釈・ヘルプ・起動ログ、`cockpit.test.mjs` の関連テスト、README/human-gate-procedure の該当記述、
+および CLI 契約の範囲ガード純関数 `resolveExpressionGain`（唯一の消費者が本フラグだったためデッドコード化）
+を除去した。**intensity 配管は温存**——翻訳層（`expression-translator.mjs`）の intensity 機構・クランプ、
+および orchestrator オプション `expressionIntensity`（既定 1.0）は正しい内部部品としてそのまま残す
+（撤去したのはユーザー向け CLI 面のみ）。
+
+**リアクションゲインの調整 UI は将来の GUI 課題**。置き場候補＝操縦席（コクピット）のノブ、または器の
+Physiology ページ（四層 Player 補正層＝§7-2 の per-model / per-slot 質感補正）。どちらに置くかは必要に
+なった時に裁定する。

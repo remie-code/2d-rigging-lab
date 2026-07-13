@@ -145,9 +145,7 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   ```
 
   追加オプション: `--tts-base-url <url>` / `--speaker <id>` / `--fire-window-min <分>`（注入窓・
-  既定 5）/ `--fire-max-chars <n>`（注入上限・既定 4000）/ `--expression-gain <倍率>`（演出の強さ・
-  全 peak 一括スケール・既定 1.0・許容 0.1〜3.0・域外/非数値は起動時エラー・S4 追撃 domain-c）。
-  Channel URL は `cockpit-settings.local.json`
+  既定 5）/ `--fire-max-chars <n>`（注入上限・既定 4000）。Channel URL は `cockpit-settings.local.json`
   （.gitignore 済・token を含むため**非コミット**）に `lastChannelUrl` として記憶し次回起動で復元する。
   **S2.5 無退行**: URL も Fire も使わなければ LLM セッションの spawn（≈12s）は走らない（session/player は
   「実際に fire される時」まで遅延生成・`--channel` 明示時のみ起動時 eager）。**Channel は初回 Fire 時に接続**

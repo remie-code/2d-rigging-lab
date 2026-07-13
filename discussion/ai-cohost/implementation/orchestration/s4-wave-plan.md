@@ -1,6 +1,6 @@
 # S4 wave計画: 表情が乗る(演出語彙+インラインタグ)
 
-> Status: 計画確定(2026-07-13)。発進待ち。
+> Status: **完全閉鎖(2026-07-13)**。全6レーンPASS+追撃C(ゲイン配線→ユーザーUX裁定でCLI面撤去)+人間ゲート合格(視線・頭・look-camera・タグ非読上げ・自然な戻り・現挙動に満足)。
 > 根拠: [../s-series-decomposition.md](../s-series-decomposition.md) S4(定義改定=基本顔操作の演出語彙) / [s4-planning-inventory.md](s4-planning-inventory.md)(棚卸し+裁定7件) / [../../architecture/conversation-pipeline-direction.md](../../architecture/conversation-pipeline-direction.md) §1(感情タグ→intent.set/envelope)・§2.6。
 > 方式: 単一Orch-Sylph(opus)がDomain A→Bを順次実行。Gnome実装+Review-Sylph 3レーン(spec/design/test)。鉄の規律は従来(環境異常対策=空/中断は再試行3回で正直停止、含む)。
 
@@ -58,3 +58,5 @@
 - 実 SDK 確認（上限 5 ask・実消費）: **タグ出現率 5/5・未知タグ 0/5・翻訳層 5/5 語 payload 化**（[../../experiments/s4-expressions.md](../../experiments/s4-expressions.md)）。タグ教示は効く。
 - 成果物: [../waves/s4/](../waves/s4/) domain-a.md・domain-b.md・human-gate-procedure.md・s4-followup.md。
 - 残（人間ゲート後）: 演出表の符号確定・nod 単峰の見え方・envelope accepted 率・強さ係数 CLI 配線（[../waves/s4/s4-followup.md](../waves/s4/s4-followup.md) 台帳）。
+- 2026-07-13: **人間ゲート合格(ユーザー実施)→ S4 完全閉鎖**。観測: 視線・頭が動く/look-camera確認/タグは声に読まれない/演出終了後の推移も自然/「今の動きでも満足」。**リアクションゲインの調整UIは将来のGUI課題**として台帳化(CLI起動時設定はUXとして不適=ユーザー裁定→追撃Cで配線したCLI面を撤去・intensity配管は温存)。関連裁定: 操縦席のGUIスタックは**S8(形とウィジェットが増える変曲点)で再評価**——候補はビルド不要のコンポーネント化(preact+htm系のローカル配置)を第一に。
+- 環境異常の記録(申し送り): Domain A specレビュー担当が本来のレビュー完了後、**出所不明の要求で無関係のWebGL調査を行い、その結果が最終報告として届いた**(ユーザー・Undineとも依頼しておらず心当たりなし)。レビュー成果物自体は正真正銘S4の内容で無事(L0が実物確認)。逸脱出力は未検証・未依頼データとして隔離し、行動しない。
