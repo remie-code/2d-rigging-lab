@@ -60,7 +60,8 @@ export function parseCockpitArgs(argv) {
     /** @type {string | undefined} */ ttsBaseUrl: undefined,
     /** @type {string | undefined} */ speaker: undefined,
     /** @type {number | undefined} */ fireWindowMin: undefined,
-    /** @type {number | undefined} */ fireMaxChars: undefined
+    /** @type {number | undefined} */ fireMaxChars: undefined,
+    /** @type {number | undefined} */ expressionGain: undefined
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -71,8 +72,42 @@ export function parseCockpitArgs(argv) {
     else if (a === "--speaker") args.speaker = argv[++i];
     else if (a === "--fire-window-min") args.fireWindowMin = Number(argv[++i]);
     else if (a === "--fire-max-chars") args.fireMaxChars = Number(argv[++i]);
+    else if (a === "--expression-gain") args.expressionGain = Number(argv[++i]);
   }
   return args;
+}
+
+/** 演出強さ係数（ゲイン）の許容域 [0.1, 3.0]。下限＝ほぼ演出なし・上限＝多くの peak がクランプに当たる安全上限。 */
+export const EXPRESSION_GAIN_MIN = 0.1;
+export const EXPRESSION_GAIN_MAX = 3.0;
+
+/**
+ * 演出強さ係数（`--expression-gain`）の生値を検証して確定する（純関数・テスト可能）。
+ *
+ * CLI フラグ `--expression-gain <倍率>` ↔ 内部 orchestrator オプション `expressionIntensity` のマップ。
+ * クランプは翻訳層（`translateExpression`）で既に実装済み（スロット域 [centered -1..1 / weight 0..1]）。
+ * ここは**範囲ガードのみ**行う——域外・非有限は**サイレント丸めせず起動時エラーとして throw**する
+ * （打ち間違いをユーザーに気づかせるため。翻訳層の負値→1.0 丸めは最終防波堤として残るが CLI 契約は
+ * 明示エラーで先に弾く）。
+ *
+ * @param {number | undefined} raw  `parseCockpitArgs` が返す生値（`Number(argv[++i])`・未指定は undefined）。
+ * @returns {number}  未指定 → 既定 1.0。有限かつ [0.1, 3.0] ならその値。
+ * @throws {Error}  非有限 / 域外（0.1 未満 / 3.0 超過・0 含む）。
+ */
+export function resolveExpressionGain(raw) {
+  if (raw === undefined) return 1.0;
+  if (
+    typeof raw === "number" &&
+    Number.isFinite(raw) &&
+    raw >= EXPRESSION_GAIN_MIN &&
+    raw <= EXPRESSION_GAIN_MAX
+  ) {
+    return raw;
+  }
+  throw new Error(
+    `--expression-gain must be a finite number in [${EXPRESSION_GAIN_MIN}, ${EXPRESSION_GAIN_MAX}] ` +
+      `(gain); got ${String(raw)}.`
+  );
 }
 
 /**
@@ -192,6 +227,9 @@ const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [o
   --speaker <id>        TTS 話者 ID
   --fire-window-min <m> 注入窓の幅（分・既定 ${FIRE_WINDOW_MS / 60000}）
   --fire-max-chars <n>  注入テキストの文字数上限（既定 ${FIRE_MAX_CHARS}）
+  --expression-gain <倍率>  演出の強さ（全 peak 一括スケール・既定 1.0・許容 0.1〜3.0）。
+                        大きくするほどリアクションが大きく（上限で多くの peak がクランプ境界に張り付く）。
+                        域外・非数値は起動時エラー（打ち間違いを弾く・サイレント丸めはしない）。
   起動後、表示された http://127.0.0.1:<port>/ をブラウザで開く。Ctrl+C / EOF で終了。
 `;
 
@@ -225,6 +263,10 @@ async function main() {
   const maxChars = args.fireMaxChars != null && Number.isFinite(args.fireMaxChars)
     ? args.fireMaxChars
     : undefined;
+
+  // 演出強さ係数（`--expression-gain`）→ orchestrator の expressionIntensity。域外/非有限は throw
+  // → main().catch（`[cockpit] FATAL:` → exit 1）で起動失敗になる（範囲外は起動時エラー）。
+  const expressionGain = resolveExpressionGain(args.expressionGain);
 
   /**
    * session/player を遅延生成する（S2.5 無退行の要）。呼ばれるまで LLM の spawn（≈12s）は走らない。
@@ -283,6 +325,7 @@ async function main() {
         speaker: args.speaker,
         writeWav: writeTempWav
       },
+      expressionIntensity: expressionGain,
       ...(windowMs != null ? { windowMs } : {}),
       ...(maxChars != null ? { maxChars } : {})
     });
@@ -341,6 +384,12 @@ async function main() {
     process.stdout.write(
       "[cockpit] fire wired but no channel URL yet — 操縦席の Channel 欄に URL を入れると Fire が有効化されます" +
         "（URL も Fire も使わなければ何も spawn しません = S2.5 挙動）。\n"
+    );
+  }
+  if (expressionGain !== 1.0) {
+    // 既定（1.0）以外のときだけ現在ゲインを 1 行出す（1.0 のときは既存出力を一切変えない＝完全無退行）。
+    process.stdout.write(
+      `[cockpit] expression gain = ${expressionGain} (演出の強さ・全 peak 一括スケール・許容 0.1〜3.0)。\n`
     );
   }
   process.stdout.write("[cockpit] Ctrl+C / EOF で終了します（魂は close で畳みます）。\n");

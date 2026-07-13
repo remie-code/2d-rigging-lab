@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseCockpitArgs, createLazyChannel } from "./cockpit.mjs";
+import { parseCockpitArgs, createLazyChannel, resolveExpressionGain } from "./cockpit.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
 // 実 SDK / 実 TTS / 実器 / 実マイクは使わない（fake connectImpl のみ）。
@@ -39,6 +39,38 @@ test("parseCockpitArgs: S3 fire flags are parsed (channel / tts / window / maxCh
   assert.equal(args.speaker, "888753760");
   assert.equal(args.fireWindowMin, 3);
   assert.equal(args.fireMaxChars, 2000);
+});
+
+// ── 演出強さ係数（`--expression-gain` / resolveExpressionGain・S4 追撃 domain-c）────
+
+test("parseCockpitArgs: --expression-gain は数値化される", { timeout: 5000 }, () => {
+  assert.equal(parseCockpitArgs(["--expression-gain", "1.5"]).expressionGain, 1.5);
+});
+
+test("parseCockpitArgs: --expression-gain 未指定は undefined（既定 1.0 は resolve で決まる）", { timeout: 5000 }, () => {
+  assert.equal(parseCockpitArgs([]).expressionGain, undefined);
+});
+
+test("resolveExpressionGain: undefined（未指定）→ 既定 1.0", { timeout: 5000 }, () => {
+  assert.equal(resolveExpressionGain(undefined), 1.0);
+});
+
+test("resolveExpressionGain: 境界と代表値（0.1 / 3.0 / 1.5）はそのまま返す", { timeout: 5000 }, () => {
+  assert.equal(resolveExpressionGain(0.1), 0.1);
+  assert.equal(resolveExpressionGain(3.0), 3.0);
+  assert.equal(resolveExpressionGain(1.5), 1.5);
+});
+
+test("resolveExpressionGain: 域外（0.05 未満 / 3.5 超過 / 0）は throw（サイレント丸めしない）", { timeout: 5000 }, () => {
+  assert.throws(() => resolveExpressionGain(0.05), /0\.1|3|gain/i);
+  assert.throws(() => resolveExpressionGain(3.5), /0\.1|3|gain/i);
+  assert.throws(() => resolveExpressionGain(0), /0\.1|3|gain/i);
+});
+
+test("resolveExpressionGain: 非有限（NaN / Infinity / 非数値）は throw", { timeout: 5000 }, () => {
+  assert.throws(() => resolveExpressionGain(NaN), /0\.1|3|gain/i);
+  assert.throws(() => resolveExpressionGain(Infinity), /0\.1|3|gain/i);
+  assert.throws(() => resolveExpressionGain(Number("abc")), /0\.1|3|gain/i); // Number("abc") === NaN
 });
 
 // ── createLazyChannel（初回 fire 時接続・成功キャッシュ・失敗は再試行）──────────

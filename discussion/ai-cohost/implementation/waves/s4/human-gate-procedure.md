@@ -29,6 +29,16 @@
    npm run cockpit --prefix apps/soul/agent -- --channel "ws://127.0.0.1:<port>/channel?token=<token>"
    ```
    `fire enabled` の行が出ることを確認（`--channel` 忘れは Fire 503）。
+
+   **リアクションをもっと大きくしたいとき（再ゲート・S4 追撃 domain-c）**: `--expression-gain <倍率>` を
+   付けて起動する。全 peak が一括でスケールし、リアクションが大きくなる（1.0=従来・上げるほど大きく・
+   上限 3.0）。**推奨初期値 1.5**——まず 1.5 で様子を見て、足りなければ上げる（2.0 以上は多くの peak が
+   クランプ境界に張り付き頭打ちになる）。域外・非数値は起動時エラー（打ち間違いを弾く）。
+   ```
+   npm run cockpit --prefix apps/soul/agent -- --channel "ws://127.0.0.1:<port>/channel?token=<token>" --expression-gain 1.5
+   ```
+   gain が 1.0 以外のとき起動ログに `expression gain = 1.5 …` の行が出る。リアクションの大きさを見て
+   数値を調整する（強さ調整は CLI のみ・操縦席 UI には調整ノブを置かない裁定）。
 4. **ブラウザで開き、マイクを選んで Start**（ヘッダが `Listening`・`whisper: up` / `ffmpeg: up`）。
 
 （S4 で新規に増える依存・追加コマンドは無い。器コード・契約・依存は完全不変。）

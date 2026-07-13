@@ -64,11 +64,15 @@
    成功・診断 0）を確認したが、実チャネル/実器への送出と accepted は人間ゲートの領分
    （[../../../experiments/s4-expressions.md](../../../experiments/s4-expressions.md) §4）。部分適用
    （一部スロット rejected）の実発生頻度は実器運用で観測されたら本台帳へ追記する。
-4. **強さ係数（expressionIntensity）の CLI フラグ配線は未実施**。orchestrator オプションとして口は
-   開いている（既定 1.0）が、`scripts/cockpit.mjs` への `--expression-intensity` 等の配線は S4 では
-   足さなかった（実機で「強すぎ/弱すぎ」が確認されてから・操縦席 UI には置かない裁定）。必要になったら
-   `parseCockpitArgs` に 1 フラグ足して `createFireOrchestrator({ expressionIntensity })` へ渡すだけ
-   （数行・fire-window-min 等の既存フラグと同型）。
+4. **強さ係数（expressionIntensity）の CLI フラグ配線は未実施** → **【CLOSED・S4 追撃 domain-c で配線済み】**。
+   orchestrator オプションとして口は開いている（既定 1.0）が、`scripts/cockpit.mjs` への配線は S4 本 wave
+   では足さなかった（実機で「強すぎ/弱すぎ」が確認されてから・操縦席 UI には置かない裁定）。
+   **人間ゲート良好 + ユーザー要望「もうちょっと大きくリアクションしたい／ゲインを調整したい」**を受けて
+   S4 追撃 domain-c で配線した（[domain-c.md](domain-c.md)）。フラグ名は本項の例示 `--expression-intensity`
+   ではなく **`--expression-gain`** を採用（ユーザーの語「ゲイン」に合わせた）↔ 内部オプション
+   `expressionIntensity` にマップ。範囲ガード [0.1, 3.0]（域外/非有限は起動時エラー）・純関数
+   `resolveExpressionGain` を切り出し export・テスト固定・gain=1.0 は挙動完全不変・推奨初期値 1.5。
+   クランプは翻訳層で既実装＝CLI は範囲ガードのみ。全テスト 331→337 緑・器/lockfile 不変。
 
 ## 4. 本 wave で回収済み（Domain A §9 の申し送りのうち Domain B で閉じたもの）
 
