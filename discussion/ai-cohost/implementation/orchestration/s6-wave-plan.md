@@ -1,6 +1,6 @@
 # S6 wave計画: 会話が続く(barge-in+自発発火)
 
-> Status: **計画確定(2026-07-13)・発進待ち**。
+> Status: **閉鎖(2026-07-13)**。本編4ドメイン+追撃E(自発発火に画像同乗)全レーンPASS・518/518緑・人間ゲート①②③⑤⑥合格(「4以外は完全に達成」)。**④沈黙発火の実機体感のみ持ち越し**(機械側は実SDK実射で動作確認済み・次の人間ゲート(S7)に相乗りして確認)。詳細は §6。
 > 根拠: [../s-series-decomposition.md](../s-series-decomposition.md) S6 / [s6-planning-inventory.md](s6-planning-inventory.md)(棚卸し+裁定11件)。
 > 方式: 単一Orch-Sylph(opus)がDomain A→B→C→Dを順次実行。Gnome実装+Review-Sylph 3レーン(spec/design/test)。鉄の規律は従来。
 
@@ -63,7 +63,9 @@
 
 ## 6. Status
 
-**S6 wave 実装完了・機械ゲート緑（2026-07-13）。人間ゲート待ち。** 単一 Orch-Sylph が Domain A→B→C→D を順次実行。各ドメイン Gnome 実装 + Review-Sylph 3 レーン（spec/design/test）。**全 4 ドメイン・全 12 レビューレーンで blocking 指摘ゼロ**。
+**S6 閉鎖（2026-07-13）**。人間ゲート判定(ユーザー実施): **①barge-in ②呼びかけ ③区切り応答 ⑤自発OFFトグル ⑥デバイス分離 = 「4以外は完全に達成」**。④沈黙発火の実機体感は試せる状況になく**持ち越し**(機械側は実SDK実射で動作確認済み・[s6-followup.md](../waves/s6/s6-followup.md)に申し送り・次の人間ゲートに相乗り)。追撃E(自発発火に画像同乗)は下記のとおり機械ゲート緑で合流済み——④確認と追撃Eの再ゲート一点確認は同一手順(§9-1)で次回実施。
+
+以下、実装完了時の記録。単一 Orch-Sylph が Domain A→B→C→D を順次実行。各ドメイン Gnome 実装 + Review-Sylph 3 レーン（spec/design/test）。**全 4 ドメイン・全 12 レビューレーンで blocking 指摘ゼロ**。
 
 ### 機械ゲート生数字（Orch-Sylph が全ドメイン完了後に独立再実行・2026-07-13）
 
