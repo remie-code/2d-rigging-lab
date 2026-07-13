@@ -13,16 +13,31 @@
  *  発火要求を出すだけで、実際の ask/発話は結線層の fire-orchestrator が担う（スケジューラは ask しない）。
  *  fake clock（nowImpl）+ 注入 setTimeout/clearTimeout + 注入 RNG で全分岐を決定論的にテストできる。
  *
- * ── 自発 3 種の判定規則（wave 計画 §3 Domain C・inventory §1 裁定 4）──────────────────
+ * ── 自発の判定規則（wave 計画 §3 Domain C・inventory §1 裁定 4 / S7 §3 Domain B・裁定 5）─────────
  *  1. **呼びかけ（call）**: 転写（you・**soul 除外**）が来たら名前の文字列照合（正規化 + 揺れ集合）。
  *     命中したら**確実に**発火要求（不応期・確率は掛けない = 呼ばれたら返す・裁定 4）。busy 中は出さない。
  *  2. **区切り応答（turn-end）**: speechEnd 後、turnEndSilenceMs の無音が続き（間に speechStart が来ない）、
  *     かつ**不応期**（直近発火からの経過 ≥ turnEndRefractoryMs）を過ぎ、かつ**確率**（注入 RNG）に当たったら
  *     発火要求。全部には返さない（裁定 4「実況の区切りでたまに拾う」）。
- *  3. **沈黙（silence）**: 最後の活動（you 発話 / 魂発火 / VAD）から silenceBaseMs + **ジッター**（注入 RNG）
- *     経過し、かつ**長い不応期**（≥ silenceRefractoryMs）を過ぎ、かつ**予算**（セッション内の沈黙発火回数
- *     上限）が残っていたら発火要求（silence は視覚発火相当 = 画面を見て一言）。頻度がうるさくならないよう
- *     予算 + 長不応期 + ジッターで希釈する（人間ゲート ④）。
+ *  3. **沈黙（silence）**: 最後の活動（you 発話 / 魂発火 / VAD / **viewer コメント**）から silenceBaseMs +
+ *     **ジッター**（注入 RNG）経過し、かつ**長い不応期**（≥ silenceRefractoryMs）を過ぎ、かつ**予算**
+ *     （セッション内の沈黙発火回数上限）が残っていたら発火要求（silence は視覚発火相当 = 画面を見て一言）。
+ *     頻度がうるさくならないよう予算 + 長不応期 + ジッターで希釈する（人間ゲート ④）。
+ *
+ *  ── S7「視聴者が混ざる」第 5・第 6 の語彙（handleChatMessage・inventory §1 裁定 5）────────────
+ *  4. **コメント応答（comment）**: YouTube Live コメントが到着したら、**不応期**（≥ commentRefractoryMs）+
+ *     **確率**（注入 RNG）+ **予算**（commentBudget）を満たしたときだけ発火要求（区切り応答の写経）。
+ *     全コメントには返さない（うるさくならない・費用も嵩まない希釈弁）。busy/OFF は沈黙。
+ *  5. **コメント内呼びかけ（comment-call）**: コメント本文に名前（**テキスト用揺れ集合**）が含まれたら
+ *     **確実に**発火要求（不応期・確率・予算を掛けない = 呼ばれたら返す・裁定 5。音声呼びかけと対称）。
+ *     テキストは ASR 揺れと無縁だが視聴者の表記揺れは別集合（NAME_VARIANTS_TEXT_V0）。busy/OFF は沈黙。
+ *
+ *  **viewer コメントの活動扱い（S7 裁定）**: コメントは「場が動いた」活動だが**魂の発話ではない**——
+ *  沈黙タイマは armSilence で再武装する（活発なチャットは「画面を見て一言」を先送りする）が、不応期の基点
+ *  `lastFireAtMs` は**実際に発火要求を出したときだけ**更新する（コメント到着そのものでは更新しない）。
+ *  ★ 二重発火の断ち（cockpit-server の接ぎ目）: viewer コメントは同じ転写バッファへ append されるため
+ *  handleTranscript も通るが、handleTranscript は viewer を**無視**（no-op）し、発火は handleChatMessage
+ *  だけが担う（you 経路の call 照合/armSilence を viewer で誤起動させない）。
  *
  *  数値は全部 v0 コード内定数（下記 export 定数・BARGE_IN_MIN_SPEECH_MS 型）。**ツマミは作らない**
  *  （ゲインの教訓・裁定 8）。人間ゲートの体感で定数を直す前提。
@@ -81,6 +96,49 @@ export const SILENCE_REFRACTORY_MS = 90_000;
  * 予算切れで沈黙タイマは回さない（イベントループに残さない）。うるさくならないための最終弁。
  */
 export const SILENCE_BUDGET_V0 = 6;
+
+/**
+ * コメント応答の不応期（v0 定数・S7）。直近発火からこの時間を過ぎていないと確率コメント応答（comment）は
+ * 出さない（コメント洪水でも立て続けに撃たない希釈）。**comment-call（呼びかけ）には掛けない**（裁定 5）。
+ * 区切り応答 TURN_END_REFRACTORY_MS の写経（同尺）。人間ゲートで直す。
+ */
+export const COMMENT_REFRACTORY_MS = 8000;
+
+/**
+ * コメント応答の発火確率（v0 定数・S7）。不応期・予算を満たしても、この確率に当たったときだけ発火要求を
+ * 出す（注入 RNG）。「全コメントには返さない」を機械的に実現する希釈弁（区切り応答 TURN_END_PROBABILITY
+ * の写経）。**comment-call には掛けない**（命中即発火・裁定 5）。
+ */
+export const COMMENT_PROBABILITY = 0.35;
+
+/**
+ * コメント応答のセッション予算（v0 定数・S7）。1 セッション（スケジューラ生存中）に確率コメント応答
+ * （comment）を出す回数の上限。予算切れで comment は出さない（費用・頻度の最終弁・沈黙予算の写経）。
+ * **comment-call（呼びかけ）は予算を消費しない**（呼ばれたら確実に返す・裁定 5）。配信 1 本ぶんの
+ * コメント量を見越して沈黙予算（6）より大きく取る（活発なチャットで即枯れない）。人間ゲートで直す。
+ */
+export const COMMENT_BUDGET_V0 = 30;
+
+/**
+ * コメント内呼びかけ照合の**テキスト用**揺れ集合 v0（データ定数・S7・inventory §1 裁定 5）。
+ * 音声用 NAME_VARIANTS_V0（コーディ系・ASR 揺れ対応）に加え、視聴者のテキスト表記揺れを別集合で持つ。
+ *
+ * **英字の畳み方**（normalizeForMatch は NFKC + かな→カナ + 濁点剥がしのみで、英字の**大小は畳まない**・
+ * 音声照合を変えないため normalizeForMatch は不変）。NFKC は全半角のみ吸収（`Ｃｏｄｙ`→`Cody`）するので、
+ * 大小の揺れは**集合側に小文字化等を織り込む**（`Cody`/`cody`/`CODY`）。日本語表記は音声集合と同形
+ * （`コーディ`/`コーディー`/`コーティ`/`コーティー`）+ ひらがな `こーでぃー`（正規化でカナに畳まれる）。
+ * `コーピー`（「コピー」誤爆）は音声同様に見送り。混在ケース（`CoDy` 等）は followup で拡張（データ定数）。
+ */
+export const NAME_VARIANTS_TEXT_V0 = Object.freeze([
+  "Cody",
+  "cody",
+  "CODY",
+  "コーディ",
+  "コーディー",
+  "コーティ",
+  "コーティー",
+  "こーでぃー"
+]);
 
 /**
  * 呼びかけ照合の揺れ集合 v0（データ定数・inventory §4-2 の実測 7 種のうち採用分）。
@@ -176,7 +234,7 @@ function clamp01(x) {
 }
 
 /**
- * @typedef {{ kind: "call" | "turn-end" | "silence" }} FireRequest
+ * @typedef {{ kind: "call" | "turn-end" | "silence" | "comment" | "comment-call" }} FireRequest
  */
 
 /**
@@ -198,13 +256,20 @@ function clamp01(x) {
  * @param {number} [options.silenceJitterMs=SILENCE_JITTER_MS]
  * @param {number} [options.silenceRefractoryMs=SILENCE_REFRACTORY_MS]
  * @param {number} [options.silenceBudget=SILENCE_BUDGET_V0]
- * @param {ReadonlyArray<string>} [options.nameVariants=NAME_VARIANTS_V0]  呼びかけ照合の揺れ集合。
+ * @param {ReadonlyArray<string>} [options.nameVariants=NAME_VARIANTS_V0]  音声呼びかけ照合の揺れ集合。
+ * @param {number} [options.commentRefractoryMs=COMMENT_REFRACTORY_MS]  S7 コメント応答の不応期。
+ * @param {number} [options.commentProbability=COMMENT_PROBABILITY]      S7 コメント応答の確率。
+ * @param {number} [options.commentBudget=COMMENT_BUDGET_V0]             S7 コメント応答のセッション予算。
+ * @param {ReadonlyArray<string>} [options.commentNameVariants=NAME_VARIANTS_TEXT_V0]  S7 コメント内呼びかけの
+ *   テキスト用揺れ集合。
  * @returns {{
  *   handleVadEvent: (event: { type: string }) => void;
  *   handleTranscript: (entry: { text?: string; speaker?: string }) => void;
+ *   handleChatMessage: (msg: { text?: string; displayName?: string }) => void;
  *   setEnabled: (enabled: boolean) => void;
  *   isEnabled: () => boolean;
  *   silenceBudgetRemaining: () => number;
+ *   commentBudgetRemaining: () => number;
  *   dispose: () => void;
  * }}
  */
@@ -229,6 +294,11 @@ export function createFireScheduler(options) {
   const silenceJitterMs = numberOr(options.silenceJitterMs, SILENCE_JITTER_MS);
   const silenceRefractoryMs = numberOr(options.silenceRefractoryMs, SILENCE_REFRACTORY_MS);
   const needles = buildNeedles(Array.isArray(options.nameVariants) ? options.nameVariants : NAME_VARIANTS_V0);
+  const commentRefractoryMs = numberOr(options.commentRefractoryMs, COMMENT_REFRACTORY_MS);
+  const commentProbability = numberOr(options.commentProbability, COMMENT_PROBABILITY);
+  const commentNeedles = buildNeedles(
+    Array.isArray(options.commentNameVariants) ? options.commentNameVariants : NAME_VARIANTS_TEXT_V0
+  );
 
   let enabled = options.enabled === true;
   let disposed = false;
@@ -236,6 +306,8 @@ export function createFireScheduler(options) {
   let lastFireAtMs = -Infinity;
   /** 残り沈黙予算（セッション内）。 */
   let silenceBudget = intOr(options.silenceBudget, SILENCE_BUDGET_V0);
+  /** 残りコメント応答予算（セッション内・S7・comment-call は消費しない）。 */
+  let commentBudget = intOr(options.commentBudget, COMMENT_BUDGET_V0);
 
   /** @type {ReturnType<typeof setTimeout> | null} */
   let turnEndTimer = null;
@@ -256,7 +328,7 @@ export function createFireScheduler(options) {
   };
 
   /** 発火要求を出す（onFireRequest の throw は握って常駐を殺さない）。 */
-  const emitFire = (/** @type {"call" | "turn-end" | "silence"} */ kind) => {
+  const emitFire = (/** @type {"call" | "turn-end" | "silence" | "comment" | "comment-call"} */ kind) => {
     try {
       onFireRequest({ kind });
     } catch {
@@ -335,6 +407,12 @@ export function createFireScheduler(options) {
       armSilence();
       return;
     }
+    if (entry.speaker === "viewer") {
+      // ★ S7 二重発火の断ち: viewer コメントは同じ転写バッファへ append されるため handleTranscript も
+      // 通るが、発火・活動反映は handleChatMessage が担う。ここで you 経路（call 照合/armSilence）を
+      // 誤起動させないよう完全な no-op で抜ける（cockpit-server の接ぎ目リスクの根を断つ）。
+      return;
+    }
     // you（既定）: 活動 → 沈黙タイマ再武装。
     armSilence();
     // 呼びかけ照合（命中即発火・不応期/確率は掛けない = 裁定 4）。OFF/busy 中は出さない。
@@ -344,6 +422,38 @@ export function createFireScheduler(options) {
       lastFireAtMs = now;
       emitFire("call");
     }
+  };
+
+  /**
+   * S7「視聴者が混ざる」: YouTube Live コメント 1 件を食わせる（handleTranscript 同型）。コメント内呼びかけ
+   * 照合（comment-call・確実）→ 確率コメント応答（comment・不応期 + 確率 + 予算）の順で判定する。
+   *
+   * **活動扱い（裁定）**: コメントは「場が動いた」活動なので沈黙タイマを再武装する（活発なチャットは
+   * 「画面を見て一言」を先送りする）が、魂の発話ではないので不応期の基点 lastFireAtMs は**発火要求を
+   * 出したときだけ**更新する（コメント到着そのものでは更新しない）。busy/OFF は沈黙。displayName は
+   * 照合には使わない（合流描画・下流用に受けるだけ）。
+   * @param {{ text?: string; displayName?: string }} msg
+   */
+  const handleChatMessage = (msg) => {
+    if (disposed || msg == null || typeof msg !== "object") return;
+    // 活動 → 沈黙タイマ再武装（armSilence は enabled/disposed/予算を自己ガード）。
+    armSilence();
+    if (!enabled || isBusy()) return;
+    if (typeof msg.text !== "string" || msg.text.length === 0) return;
+    const now = nowImpl();
+    // comment-call: コメント内呼びかけ照合が命中したら確実に発火（不応期/確率/予算は掛けない = 裁定 5）。
+    if (textMatchesName(msg.text, commentNeedles)) {
+      lastFireAtMs = now;
+      emitFire("comment-call");
+      return;
+    }
+    // comment: 予算 → 不応期 → 確率 の順で希釈（区切り応答の写経）。
+    if (commentBudget <= 0) return; // 予算切れ = これ以上の確率コメント応答はしない。
+    if (now - lastFireAtMs < commentRefractoryMs) return; // 不応期内。
+    if (clamp01(rng()) >= commentProbability) return; // 確率外れ。
+    commentBudget -= 1;
+    lastFireAtMs = now;
+    emitFire("comment");
   };
 
   /**
@@ -368,10 +478,13 @@ export function createFireScheduler(options) {
   return {
     handleVadEvent,
     handleTranscript,
+    handleChatMessage,
     setEnabled,
     isEnabled: () => enabled,
     /** 残り沈黙予算（診断・テスト用）。 */
     silenceBudgetRemaining: () => silenceBudget,
+    /** 残りコメント応答予算（診断・テスト用・S7）。 */
+    commentBudgetRemaining: () => commentBudget,
     /** 畳む（タイマを解除しイベントループに残さない・以後のイベントは無視）。 */
     dispose: () => {
       disposed = true;

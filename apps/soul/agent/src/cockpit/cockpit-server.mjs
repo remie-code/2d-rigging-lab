@@ -328,6 +328,20 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
  *   未注入でも POST /api/self-fire 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
  *   スキップ）。
+ * @param {(opts: { source: string }) => { start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string; onMessage: (fn: (msg: any) => void) => () => void; onStatus: (fn: (state: string) => void) => () => void; onDiagnostic: (fn: (info: any) => void) => () => void }} [options.chatClientFactory]
+ *   S7「視聴者が混ざる」チャット器官のファクトリ（本番は Domain C の `createLiveChatClient`・テストは
+ *   fake 器官 factory を注入して実ネットに出さない）。POST /api/chat/connect で `factory({ source })` を
+ *   生成し start()・onMessage→ingestChatMessage / onStatus→broadcastChatStatus /
+ *   onDiagnostic→broadcastChatDiagnostic を繋ぐ（ear-pipeline の POST 駆動遅延起動と同じ流儀）。
+ *   **cockpit-server は器官の中身（innertube 取得）を知らない**（責務境界: fireOrchestratorFactory と
+ *   同型・実体は cockpit.mjs が注入する）。未注入なら POST /api/chat/connect は 503。
+ * @param {(source: string | null) => void | Promise<void>} [options.onSetChatSource]
+ *   配信 source の永続化フック（S7・onSetChannelUrl の写経）。Connect 時に受けた source（trim 済み）を
+ *   渡す。**cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
+ *   未注入でも Connect 自体は成立する（永続化のみスキップ）。
+ * @param {() => ({ source: string | null } | null)} [options.chatSourceStatus]
+ *   記憶済みの配信 source（`{ source }`）を返す。state snapshot の `chat.source`（入力欄の既定復元用・
+ *   Connect 前/切断後も残る）に載せる。未注入なら chat.source:null。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -337,6 +351,9 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   fireState: () => string | null;
  *   setSelfFireEnabled: (enabled: boolean) => boolean;
  *   selfFireStatus: () => { enabled: boolean } | null;
+ *   ingestChatMessage: (msg: { text?: string; displayName?: string } | null) => void;
+ *   broadcastChatStatus: (status: string) => void;
+ *   broadcastChatDiagnostic: (info: any) => void;
  * }}
  */
 export function createCockpitServer(options = {}) {
@@ -357,6 +374,11 @@ export function createCockpitServer(options = {}) {
   const onSetAudioDevice = options.onSetAudioDevice;
   const audioDeviceStatusImpl = options.audioDeviceStatus;
   const onSetSelfFireEnabled = options.onSetSelfFireEnabled;
+  // S7「視聴者が混ざる」: チャット器官のファクトリ（cockpit.mjs が本番 createLiveChatClient を注入・
+  // テストは fake 器官 factory を注入して実ネットに出さない）。未注入なら POST /api/chat/connect は 503。
+  const chatClientFactory = options.chatClientFactory;
+  const onSetChatSource = options.onSetChatSource;
+  const chatSourceStatusImpl = options.chatSourceStatus;
   // S6「会話が続く」自発発火の初期 ON/OFF（既定 OFF）。Domain D が永続トグル（設定/UI）で制御する
   // までは、テスト or 明示指定でのみ ON にする（既定 OFF ＝ 操縦席にトグルが無い間は自発が暴発しない）。
   const selfFireInitialEnabled = options.selfFireInitialEnabled === true;
@@ -387,6 +409,14 @@ export function createCockpitServer(options = {}) {
   // 側で fake clock/注入 RNG により全分岐テスト済み（domain-c.md）。
   /** @type {ReturnType<typeof createFireScheduler> | null} */
   let fireScheduler = null;
+  // S7「視聴者が混ざる」チャット器官（cockpit-server 所有・POST 駆動遅延起動＝ear-pipeline の流儀）。
+  // POST /api/chat/connect で chatClientFactory から生成し start()・onMessage/onStatus/onDiagnostic を
+  // 取り込み経路（ingestChatMessage/broadcastChatStatus/broadcastChatDiagnostic）へ繋ぐ。POST
+  // /api/chat/disconnect と close() で stop()+破棄（タイマ/プロセスを残さない）。
+  /** @type {{ start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string } | null} */
+  let chatClient = null;
+  /** @type {Array<() => void>} チャット器官フックの購読解除（破棄時に全撤去）。 */
+  let chatUnsubs = [];
 
   const health = {
     /** @type {"up" | "down" | "unknown"} */ whisper: "unknown",
@@ -404,7 +434,10 @@ export function createCockpitServer(options = {}) {
     endMs: entry.endMs,
     text: entry.text,
     appendedAtMs: entry.appendedAtMs,
-    speaker: entry.speaker ?? "you" // S3 で会話ログへ昇格（you/soul）。既定は you（S2 挙動不変）。
+    speaker: entry.speaker ?? "you", // S3 で会話ログへ昇格（you/soul）。既定は you（S2 挙動不変）。
+    // S7「視聴者が混ざる」: viewer コメントの投稿者名（Domain C が `viewer(名前):` を描く材料）。
+    // you/soul では null（追加フィールド・既存の購読者は無視）。
+    displayName: entry.displayName ?? null
   });
 
   function snapshot() {
@@ -427,7 +460,14 @@ export function createCockpitServer(options = {}) {
       // S6「会話が続く」: 自発発火の現況（scheduler 未生成 = orchestrator 未注入なら null）。
       selfFire: fireScheduler ? { enabled: fireScheduler.isEnabled() } : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
-      audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null
+      audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null,
+      // S7「視聴者が混ざる」: チャット器官の現況。source は settings 由来（Connect 前でも入力欄の既定に
+      // 復元できる・切断後も残る）。connected/state は live client 由来（未接続なら false/null）。
+      chat: {
+        source: typeof chatSourceStatusImpl === "function" ? (chatSourceStatusImpl()?.source ?? null) : null,
+        connected: chatClient != null,
+        state: chatClient ? chatClient.getState() : null
+      }
     };
   }
 
@@ -554,14 +594,17 @@ export function createCockpitServer(options = {}) {
         if (fireScheduler) fireScheduler.handleVadEvent(e);
       },
       onTranscript: (entry, meta) => {
-        // S6 自発発火: 転写を発火スケジューラへ回す（you = 呼びかけ照合 + 活動 / soul = 不応期リセット）。
-        // **soul 除外の前**に回す（scheduler は soul 発話を不応期の基点に使うため you/soul 両方を要る）。
+        // S6 自発発火: 転写を発火スケジューラへ回す（you = 呼びかけ照合 + 活動 / soul = 不応期リセット /
+        // viewer = handleTranscript 内で no-op ★二重発火の断ち）。**soul 除外の前**に回す（scheduler は
+        // soul 発話を不応期の基点に使うため you/soul 両方を要る。viewer は scheduler 内で無視される）。
         if (fireScheduler) fireScheduler.handleTranscript(entry);
         // soul の発話行はここ（耳の onTranscript 経路）では放送しない。soul も you と同じ
         // transcriptBuffer に append されるため onAppend→onTranscript を必ず通るが、soul の正経路は
         // orchestrator の onSoulTranscript → broadcastSoulTranscript の 1 本。ここで除外しないと
         // 同一エントリが二重に broadcast("transcript") される（S3 追撃 domain-c で接地した二重表示バグ）。
-        if (/** @type {any} */ (entry).speaker === "soul") return;
+        // ★ S7: viewer コメントも同じ transcriptBuffer へ append されるため onTranscript を通るが、
+        // viewer 行の放送は取り込み経路（ingestChatMessage）が 1 本で担う。ここで除外しないと二重放送。
+        if (/** @type {any} */ (entry).speaker === "soul" || /** @type {any} */ (entry).speaker === "viewer") return;
         const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
         broadcast("transcript", {
           ...toWireEntry(entry),
@@ -831,6 +874,40 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/chat/connect") {
+      // S7「視聴者が混ざる」: 実チャット器官を Connect（POST 駆動遅延起動・ear-pipeline の流儀）。
+      if (typeof chatClientFactory !== "function") {
+        // 未注入（S2.5〜S6 単体で立てた等）: チャット合流は使えない（POST /api/fire と同型の 503）。
+        sendJson(res, 503, { error: "chat not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const raw = typeof body.source === "string" ? body.source.trim() : "";
+      if (raw.length === 0) {
+        // Connect には配信 source が要る（空はクリアではなくエラー・停止は disconnect で行う）。
+        sendJson(res, 400, { error: "chat source is required (stream URL / video ID / channel /live URL)." });
+        return;
+      }
+      try {
+        await connectChat(raw);
+      } catch (error) {
+        // 器官生成/start の想定外 throw（factory 自体の throw 等）。器官内エラーは Domain A が診断へ
+        // 落とすので通常ここには来ないが、防波堤として畳んで正直に返す（盲目の「接続済み」を残さない）。
+        foldChatClient();
+        sendJson(res, 500, { error: `chat connect failed: ${errMessage(error)}`, state: snapshot() });
+        return;
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && pathname === "/api/chat/disconnect") {
+      // 稼働中のチャット器官を停止して畳む（冪等・器官が無くても 200）。
+      foldChatClient();
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
 
     sendJson(res, 404, { error: `not found: ${method} ${pathname}` });
   }
@@ -947,6 +1024,9 @@ export function createCockpitServer(options = {}) {
   //  ボタンを押していない自発発火ゆえ盲目でも嘘にならない・劣化痕跡は fireVisionDegraded 診断のゴースト行）。
   //  silence は従来どおり fire({vision:true})（見えなければ中止＝1 ビットも変えない）。手動 Fire・手動視覚 Fire
   //  は scheduler 非経由ゆえ無関係。busy 無視・空窓等は既存状態機械（fire-orchestrator）に従う。
+  //  S7「視聴者が混ざる」: comment / comment-call も call/turn-end と同じ**視覚優先**へ振り分ける（silence 以外
+  //  ＝下の三項の else 枝で fire({vision:"preferred"}) になる）。kind は selfFire SSE にそのまま載る（Domain C の
+  //  自発発火マーカー材料）。ingestChatMessage（下の取り込み経路）が scheduler.handleChatMessage を回す入口。
   if (
     fireOrchestrator &&
     typeof (/** @type {any} */ (fireOrchestrator).fire) === "function" &&
@@ -962,8 +1042,9 @@ export function createCockpitServer(options = {}) {
         // 判明してから broadcast する（同期 throw も非同期 rejection もどちらも "fired:false" として扱う）。
         const kind = req && req.kind;
         try {
-          // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end は視覚優先
-          // （対象あれば画像付き・無/失敗なら画像なしの通常発火へ劣化）。手動 Fire は scheduler 非経由で無関係。
+          // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end および
+          // S7 の comment/comment-call は視覚優先（対象あれば画像付き・無/失敗なら画像なしの通常発火へ
+          // 劣化）。手動 Fire は scheduler 非経由で無関係。
           const firePromise =
             req && req.kind === "silence"
               ? /** @type {any} */ (fireOrchestrator).fire({ vision: true })
@@ -984,6 +1065,150 @@ export function createCockpitServer(options = {}) {
         }
       }
     });
+  }
+
+  // ── チャット器官（S7「視聴者が混ざる」）の取り込み経路（プラミング + attach 点）─────────────
+  //
+  //  Domain A のチャット器官（src/chat/・独立）は魂の他部位を知らない。合流はこの取り込み経路が
+  //  **器官の外から** hooks 経由で行う（逆方向 import を作らない）。Domain C が実チャット器官を生成し、
+  //  client.onMessage → server.ingestChatMessage / client.onStatus → server.broadcastChatStatus /
+  //  client.onDiagnostic → server.broadcastChatDiagnostic を繋ぐ（クライアント生成と Connect/停止
+  //  ライフサイクルは Domain C の領分）。ingestChatMessage は 1 コメントを:
+  //   (a) 転写バッファへ speaker:"viewer"+displayName で append（単一タイムライン・startMs/endMs=0）、
+  //   (b) SSE "transcript"（speaker:"viewer"+displayName）を 1 本放送（Domain C が `viewer(名前):` を描く）、
+  //   (c) fireScheduler.handleChatMessage（comment / comment-call 判定）を回す。
+  //
+  //  ★ 二重発火/二重放送の断ち: (a) の append は buffer.onAppend→耳の onTranscript を通るが、そこでは
+  //  viewer は handleTranscript（scheduler 内で no-op）+ 放送除外（viewer 分岐）で無害化済み。発火は
+  //  handleChatMessage だけ・放送はこの経路だけが担う。
+  //
+  //  バッファ生存の裁定（v0・§質問で escalate）: 転写バッファは耳パイプライン所有（遅延起動）。耳が
+  //  未起動ならバッファが無い。その場合は**合流先が無い**ので append/scheduler をスキップし、ゴースト行の
+  //  診断（chatBufferAbsent）だけ出す（バッファ無しで発火しても会話ログにコメントが載らず盲目発火に
+  //  なるため scheduler も回さない）。バッファ所有権の巻き上げ（耳非依存化）は S1〜S6 挙動・器不変を
+  //  脅かしうる構造変更ゆえ v0 では実装せず domain-b.md §質問で escalate する。
+
+  /**
+   * チャット器官の 1 コメントを取り込む（Domain C の onMessage フックから呼ぶ attach 点）。best-effort
+   * （throw は握って診断に落とす・器官の常駐を殺さない）。
+   * @param {{ text?: string; displayName?: string } | null} msg
+   */
+  function ingestChatMessage(msg) {
+    if (closed) return;
+    try {
+      const text = msg && typeof msg.text === "string" ? msg.text : "";
+      const displayName = msg && typeof msg.displayName === "string" ? msg.displayName : undefined;
+      if (text.trim().length === 0) return; // 空コメントは捨てる（バッファも捨てる・二度手間を避ける）。
+      const buffer = pipeline ? pipeline.transcriptBuffer : null;
+      if (!buffer) {
+        // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、append/scheduler はスキップ。
+        handleDiagnostic({
+          type: "chatBufferAbsent",
+          message: "ears not running; viewer comment cannot merge into transcript buffer (no fire).",
+          reason: displayName ?? null
+        });
+        return;
+      }
+      const result = buffer.append({ startMs: 0, endMs: 0, text, speaker: "viewer", displayName });
+      if (!result.appended || !result.entry) return; // blank discard 等。
+      // (b) viewer 行を放送（耳の onTranscript は viewer を除外＝ここが唯一の放送元）。
+      const stats = buffer.stats();
+      broadcast("transcript", {
+        ...toWireEntry(result.entry),
+        latencyMs: null,
+        audioCtx: null,
+        appended: stats.appended,
+        discarded: stats.discarded
+      });
+      // (c) 発火スケジューラへ（comment / comment-call 判定）。scheduler 未生成なら活動反映もスキップ。
+      if (fireScheduler) fireScheduler.handleChatMessage({ text, displayName });
+    } catch (error) {
+      handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
+    }
+  }
+
+  /**
+   * チャット器官の状態遷移を SSE "chatStatus" に載せる口（Domain C の onStatus フックから呼ぶ）。
+   * 状態表示（connecting/live/retrying/dead）は Domain C が描く。
+   * @param {string} status
+   */
+  function broadcastChatStatus(status) {
+    if (closed) return;
+    broadcast("chatStatus", { status: typeof status === "string" ? status : String(status) });
+  }
+
+  /**
+   * チャット器官の診断を SSE "chatDiagnostic" に載せる口（Domain C の onDiagnostic フックから呼ぶ）。
+   * 取得死/抽出失敗のゴースト行は Domain C が描く。診断オブジェクトはそのまま透過（token 等は器官側で
+   * 載せない前提・Domain A は URL/token を診断に含めない）。
+   * @param {any} info
+   */
+  function broadcastChatDiagnostic(info) {
+    if (closed) return;
+    broadcast("chatDiagnostic", {
+      kind: info?.kind ?? null,
+      message: info?.message ?? null,
+      atMs: info?.atMs ?? null,
+      delayMs: info?.delayMs ?? null,
+      attempt: info?.attempt ?? null
+    });
+  }
+
+  /**
+   * 稼働中のチャット器官を畳む（フック購読解除 + stop()・冪等）。器官は dead へ落ち、以後の自動
+   * 再接続タイマを残さない（Domain A の stop() 契約）。connect の作り直し・disconnect・close で使う。
+   */
+  function foldChatClient() {
+    for (const unsub of chatUnsubs) {
+      try {
+        unsub();
+      } catch {
+        // best-effort（購読解除の失敗で畳みを止めない）。
+      }
+    }
+    chatUnsubs = [];
+    if (chatClient) {
+      const c = chatClient;
+      chatClient = null;
+      try {
+        c.stop();
+      } catch {
+        // best-effort（既に dead でも冪等）。
+      }
+    }
+  }
+
+  /**
+   * チャット器官を生成して Connect する（POST /api/chat/connect の実体・ear-pipeline の遅延起動の流儀）。
+   * 既存器官があれば先に畳んでから**新しい source で作り直す**（ended で dead に落ちた器官の restart は
+   * 無い＝Connect 再操作で新器官を生成する・Domain A §7-2）。onMessage→ingestChatMessage /
+   * onStatus→broadcastChatStatus / onDiagnostic→broadcastChatDiagnostic を繋ぐ（器官の外から hooks
+   * 経由・逆方向 import を作らない）。start() は bootstrap + 初回 poll を await する（notLive/network は
+   * 内部で retrying をスケジュールして即 return するので、ここで無限に待たされない・Domain A）。
+   * @param {string} source  配信 URL / video ID / チャンネル `/live` URL。
+   * @returns {Promise<void>}
+   */
+  async function connectChat(source) {
+    foldChatClient(); // 作り直し: 既存器官を畳んでから新規生成（同一インスタンス restart は無い）。
+    const client = /** @type {any} */ (chatClientFactory)({ source });
+    chatClient = client;
+    // フックを取り込み経路へ結線（購読解除は畳み時に全撤去）。器官のフック throw は器官側が握る（Domain A）。
+    chatUnsubs.push(
+      client.onMessage((/** @type {any} */ msg) =>
+        ingestChatMessage({ text: msg && msg.text, displayName: msg && msg.displayName })
+      )
+    );
+    chatUnsubs.push(client.onStatus((/** @type {any} */ state) => broadcastChatStatus(state)));
+    chatUnsubs.push(client.onDiagnostic((/** @type {any} */ info) => broadcastChatDiagnostic(info)));
+    // 永続化（次回起動で入力欄に復元・失敗寛容）。source は YouTube 公開 URL/ID＝token を含まない。
+    if (typeof onSetChatSource === "function") {
+      try {
+        await onSetChatSource(source);
+      } catch {
+        // 永続化失敗は Connect を止めない（onSetChannelUrl と同型の失敗寛容）。
+      }
+    }
+    await client.start();
   }
 
   // ── ライフサイクル ─────────────────────────────────────────────────
@@ -1019,6 +1244,13 @@ export function createCockpitServer(options = {}) {
     },
     /** 自発発火の現況（enabled）。scheduler 未生成なら null。 */
     selfFireStatus: () => (fireScheduler ? { enabled: fireScheduler.isEnabled() } : null),
+    // ── S7「視聴者が混ざる」: チャット器官の取り込み経路（Domain C の attach 点）───────────────
+    /** チャット器官の 1 コメントを取り込む（append + SSE viewer 行放送 + scheduler.handleChatMessage）。 */
+    ingestChatMessage,
+    /** チャット器官の状態遷移を SSE "chatStatus" へ載せる口。 */
+    broadcastChatStatus,
+    /** チャット器官の診断を SSE "chatDiagnostic" へ載せる口。 */
+    broadcastChatDiagnostic,
     /**
      * 全畳み（冪等）: 全 SSE 応答を end → orchestrator.dispose → pipeline.dispose → http server close。
      * リークするタイマ/ハンドル/子プロセスを残さない。
@@ -1026,6 +1258,8 @@ export function createCockpitServer(options = {}) {
     async close() {
       if (closed) return;
       closed = true;
+      // S7: 稼働中のチャット器官も畳む（stop()+購読解除・タイマ/プロセスを残さない）。
+      foldChatClient();
       if (bargeInGate) {
         try {
           bargeInGate.dispose();

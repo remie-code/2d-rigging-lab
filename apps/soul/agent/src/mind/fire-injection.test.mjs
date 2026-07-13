@@ -8,8 +8,8 @@ import { formatFireInjection, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-inje
 // 古い方落とし・空窓・you/soul 混在を網羅的に固定する。純関数なので I/O・時計は全て引数。
 
 /** all() が返す形の最小エントリ（appendedAtMs と speaker と text だけ使う）。 */
-function entry(appendedAtMs, text, speaker = "you") {
-  return { seq: 0, startMs: 0, endMs: 0, text, speaker, appendedAtMs };
+function entry(appendedAtMs, text, speaker = "you", displayName = undefined) {
+  return { seq: 0, startMs: 0, endMs: 0, text, speaker, displayName, appendedAtMs };
 }
 
 test("定数: 既定窓 5 分・上限が妥当な安全弁", () => {
@@ -59,6 +59,30 @@ test("話者ラベル: you/soul 混在を seq 昇順で 'you:'/'soul:' 整形（
   const out = formatFireInjection(entries, { nowMs: 2000, windowMs: FIRE_WINDOW_MS });
   assert.equal(out.text, "you: 今日は寒いね\nsoul: そうだね、こたつ入ろう\nyou: みかんもある");
   assert.equal(out.includedCount, 3);
+});
+
+test("viewer: `viewer(名前): 本文` で描く（you/soul/viewer 混在を seq 昇順で整形・S7）", () => {
+  const entries = [
+    entry(1000, "配信始まったね", "you"),
+    entry(1001, "きたよー", "viewer", "ハナコ"),
+    entry(1002, "ようこそ", "soul"),
+    entry(1003, "楽しみ", "viewer", "Taro")
+  ];
+  const out = formatFireInjection(entries, { nowMs: 2000, windowMs: FIRE_WINDOW_MS });
+  assert.equal(
+    out.text,
+    "you: 配信始まったね\nviewer(ハナコ): きたよー\nsoul: ようこそ\nviewer(Taro): 楽しみ"
+  );
+  assert.equal(out.includedCount, 4);
+});
+
+test("viewer: displayName 欠落/空白は `viewer: 本文` へ劣化（名前括弧を付けない）", () => {
+  const entries = [
+    entry(1000, "名無しコメント", "viewer", undefined),
+    entry(1001, "空白名", "viewer", "   ")
+  ];
+  const out = formatFireInjection(entries, { nowMs: 2000, windowMs: FIRE_WINDOW_MS });
+  assert.equal(out.text, "viewer: 名無しコメント\nviewer: 空白名");
 });
 
 test("文字上限: 超過時は古い方から落とす（新しい方優先）", () => {

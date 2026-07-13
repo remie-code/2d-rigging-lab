@@ -290,3 +290,39 @@ MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 
   実マイク/実器が要るため未実施**として明記）。
 - **人間ゲート手順（音響設営込み）**:
   `discussion/ai-cohost/implementation/waves/s6/human-gate-procedure.md`。
+
+#### S7: 視聴者が混ざる（YouTube Live チャット合流）
+
+「視聴者のコメントが会話に混ざる」——YouTube Live チャットを**壊れる前提の独立器官**として常駐取得し、
+コメントを**転写バッファ正本の単一タイムライン**に `viewer(名前)` として合流させ、コメント到着を
+**第 5 の発火語彙**（不応期 + 確率 + 予算）として扱う。コメント内「こーでぃー/Cody」呼びかけは
+**確実に返す**（comment-call）。どのコメントに触れるかは LLM が選ぶ（機械信号は「来た」だけ）。
+
+- **チャット器官**（`src/chat/`・Domain A）: 非公式 innertube（`youtube.com/watch?v=<ID>` →
+  HTML 4 点抽出 → `get_live_chat` を continuation で回す）を**素の fetch のみ・新規依存ゼロ**で自前
+  実装。状態機械（connecting/live/retrying/dead）・自動再接続（バックオフ・上限なし）・エラー分類
+  （notLive=未開始は待ち続ける / ended=終了は終端 / extractFailed / network）・フック
+  （onMessage/onStatus/onDiagnostic）。**魂の他部位への import ゼロ**（死んでも魂に無影響）・ディスク
+  書き込みなし。取得経路は**ToS グレー**（非公式 API・ユーザー裁定で採用・開示済み）。公式 Data API
+  v3 キーへの差し替えは器官内で完結する梯子（followup）。
+- **合流 + 発火結線**（`src/ears/`・`src/mind/`・Domain B）: 転写バッファに `speaker:"viewer"` +
+  `displayName`（soul 同型 `startMs/endMs=0`・窓は appendedAtMs）。注入描画は `viewer(名前): 本文`。
+  発火スケジューラ `handleChatMessage`（**comment**=不応期 8s + 確率 35% + 予算 30 / **comment-call**=
+  呼びかけ命中で確実発火・予算/不応期を掛けない）。comment/comment-call はいずれも `fire({vision:
+  "preferred"})`（視覚対象があれば画像付き・無/失敗は通常発火へ静かに劣化）。**数値は v0 コード内定数**。
+- **操縦席**（`src/cockpit/cockpit.html` + `cockpit-server.mjs` + `scripts/cockpit.mjs`・Domain C）:
+  「Live chat」セクション（配信 URL/ID 入力 → **Connect chat** / **Disconnect**・`cockpit-settings.
+  local.json` に配信 source を永続化＝Channel URL と同型）・チャット状態表示（connecting/live/
+  retrying/dead の色分け）・**viewer 行**（`viewer(名前): 本文`・別色）・コメント発火マーカー
+  （selfFire に kind:comment/comment-call）・取得死ゴースト行（chatDiagnostic の notLive/ended/
+  extractFailed/network）。**チャット器官の生成/Connect/停止は cockpit-server 所有の POST 駆動遅延
+  起動**（`POST /api/chat/connect` で `createLiveChatClient({source})` を生成 start・
+  `onMessage→ingestChatMessage` 等で合流・`POST /api/chat/disconnect` と close で stop+破棄）。
+  factory 注入で機械テストは fake 器官のみ（実 YouTube/実ネットに出ない）。
+- **★ 耳を起動した状態で Connect する**（重要）: 合流先の転写バッファは耳パイプライン所有ゆえ、
+  **マイク（耳）未起動ではコメントが合流できず発火しない**（`chatBufferAbsent` ゴースト行）。cohost は
+  どのみち声も拾うので「マイクを Start してから Live chat を Connect」が素直な運用。
+- **実疎通（テスト配信でコメントを拾って返す）は人間ゲートの領分**（機械テストは全 fake・実 YouTube への
+  HTTP は 1 バイトも踏まない）。手順は
+  `discussion/ai-cohost/implementation/waves/s7/human-gate-procedure.md`・followup は
+  `discussion/ai-cohost/implementation/waves/s7/s7-followup.md`。

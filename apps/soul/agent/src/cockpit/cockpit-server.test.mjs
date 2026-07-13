@@ -1329,6 +1329,478 @@ test("cockpit self-fire: orchestrator 未注入なら scheduler 無し（selfFir
   }
 });
 
+// ── S7「視聴者が混ざる」チャット取り込み経路の結線（薄い・★二重発火/二重放送の断ち）────────────
+//
+//  核心（comment/comment-call 判定・不応期・確率・予算）は純ロジック側（fire-scheduler.mjs）で fake
+//  clock/注入 RNG により全分岐テスト済み。ここは cockpit-server の取り込み経路が正しく糸を張っているか
+//  ——ingestChatMessage → append(viewer) + SSE viewer 行放送 + scheduler.handleChatMessage → onFireRequest
+//  → fireOrchestrator.fire の縦串を、確実に返る comment-call で固定する（comment は確率依存ゆえ純ロジック側）。
+//  ★ viewer append が handleTranscript の you 経路（call 照合）を誤起動しないこと・viewer 行が二重放送
+//  されないことも固定する（接ぎ目リスク）。
+
+test("cockpit S7 chat: viewer コメント取り込みで append + viewer 行を 1 回だけ放送（自発 OFF・二重放送しない）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+    // selfFireInitialEnabled 未指定 = OFF（発火の確率非決定性を排して合流/放送だけを見る）。
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+
+    server.ingestChatMessage({ text: "こんばんは！", displayName: "ハナコ", kind: "text" });
+
+    // 合流: 転写バッファに viewer エントリ（displayName 付き・startMs/endMs=0）が 1 件。
+    const viewers = fakePipe.record.buffer.all().filter((/** @type {any} */ e) => e.speaker === "viewer");
+    assert.equal(viewers.length, 1);
+    assert.equal(viewers[0].displayName, "ハナコ");
+    assert.equal(viewers[0].startMs, 0);
+    assert.equal(viewers[0].endMs, 0);
+    assert.equal(viewers[0].text, "こんばんは！");
+
+    // 放送: viewer 行の transcript イベントが 1 回だけ（耳の onTranscript は viewer を除外＝二重放送しない）。
+    const b = await sse.waitFor((e) => e.event === "transcript" && e.data.speaker === "viewer");
+    assert.equal(b.data.displayName, "ハナコ");
+    await new Promise((r) => setTimeout(r, 50)); // 遅れて 2 個目が来ないことを積極確認。
+    assert.equal(sse.events.filter((e) => e.event === "transcript" && e.data.speaker === "viewer").length, 1);
+
+    // 自発 OFF ゆえ fire は呼ばれない。
+    assert.equal(fakeOrch.record.fireCount, 0);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat: comment-call は fire({vision:preferred}) を 1 回・kind が selfFire SSE に載る（★ 二重発火しない）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "はーい" } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+
+    // コメント本文に呼びかけ（音声 needle にもテキスト needle にも命中する「コーディ」）。
+    // ★ handleTranscript(viewer) が you 経路を誤起動すれば "call" も出て fireCount=2 になる。
+    server.ingestChatMessage({ text: "コーディこれ見て", displayName: "Taro", kind: "text" });
+
+    // 同期的に fire は 1 回だけ（comment-call のみ・call は出ない＝二重発火の断ち）。
+    assert.equal(fakeOrch.record.fireCount, 1);
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" }); // S7 も視覚優先。
+
+    // selfFire SSE に kind:"comment-call" が載る（call ではない）。
+    const evt = await sse.waitFor((e) => e.event === "selfFire");
+    assert.equal(evt.data.kind, "comment-call");
+    assert.equal(evt.data.fired, true);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(sse.events.filter((e) => e.event === "selfFire").length, 1);
+    assert.equal(sse.events.filter((e) => e.event === "selfFire" && e.data.kind === "call").length, 0);
+
+    // viewer 行も 1 回だけ放送（二重放送しない）。
+    assert.equal(sse.events.filter((e) => e.event === "transcript" && e.data.speaker === "viewer").length, 1);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat: 耳未起動（バッファ無し）は chatBufferAbsent 診断のみ・append/fire しない", async () => {
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true } });
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+    // pipelineFactory 未指定 + ears 未 start = pipeline null = 正本バッファ無し（合流先が無い）。
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    server.ingestChatMessage({ text: "コーディ見て", displayName: "A", kind: "text" });
+
+    // 診断（ゴースト行材料）だけ出る。合流先が無いので append/fire しない（盲目発火しない）。
+    const diag = await sse.waitFor((e) => e.event === "diagnostic" && e.data.type === "chatBufferAbsent");
+    assert.match(diag.data.message, /ears not running/);
+    assert.equal(fakeOrch.record.fireCount, 0);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(sse.events.filter((e) => e.event === "transcript" && e.data.speaker === "viewer").length, 0);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat: broadcastChatStatus / broadcastChatDiagnostic が SSE に載る（状態表示/ゴースト行材料）", async () => {
+  const server = createCockpitServer({});
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    server.broadcastChatStatus("live");
+    const st = await sse.waitFor((e) => e.event === "chatStatus");
+    assert.equal(st.data.status, "live");
+
+    server.broadcastChatDiagnostic({ kind: "notLive", message: "not live yet", atMs: 42, delayMs: 1000, attempt: 2 });
+    const cd = await sse.waitFor((e) => e.event === "chatDiagnostic");
+    assert.equal(cd.data.kind, "notLive");
+    assert.match(cd.data.message, /not live/);
+    assert.equal(cd.data.attempt, 2);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat: 空コメントは捨てる（append/broadcast/fire しない）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    server.ingestChatMessage({ text: "   \n ", displayName: "A", kind: "text" });
+    assert.equal(fakePipe.record.buffer.all().length, 0);
+    assert.equal(fakeOrch.record.fireCount, 0);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(sse.events.filter((e) => e.event === "transcript").length, 0);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+// ── S7 Domain C: チャット器官の Connect/停止ライフサイクル（cockpit-server 所有・POST 駆動・factory 注入）──
+//
+//  Domain B が敷いた取り込み経路（ingestChatMessage/broadcastChatStatus/broadcastChatDiagnostic）へ、
+//  実チャット器官（Domain A createLiveChatClient・ここでは fake 注入）の onMessage/onStatus/onDiagnostic を
+//  **cockpit-server が Connect 時に繋ぐ**縦串を固定する。実 YouTube/実ネット/実 SDK には一切出ない
+//  （fake 器官 factory のみ）。生成→start→フック結線→ingest（viewer 行 SSE）→chatStatus/chatDiagnostic
+//  SSE→停止（畳み）→close の全ライフサイクルを決定論で駆動する。
+
+/**
+ * fake チャット器官 factory（createLiveChatClient と同型の口・実ネットに出ない）。テストが
+ * emitMessage/emitStatus/emitDiagnostic で器官のフックを駆動できる。
+ */
+function makeFakeChatClientFactory() {
+  const record = { /** @type {any[]} */ clients: [] };
+  const factory = (/** @type {{ source: string }} */ opts) => {
+    const source = opts.source;
+    const msgL = new Set();
+    const stL = new Set();
+    const dgL = new Set();
+    let state = "idle";
+    let started = false;
+    let stopped = false;
+    const client = {
+      // 器官 API（Domain A createLiveChatClient の口）。
+      async start() {
+        started = true;
+        state = "connecting";
+      },
+      stop() {
+        stopped = true;
+        state = "dead";
+      },
+      getState: () => state,
+      getSource: () => source,
+      /** @param {(m:any)=>void} fn */ onMessage: (fn) => (msgL.add(fn), () => msgL.delete(fn)),
+      /** @param {(s:string)=>void} fn */ onStatus: (fn) => (stL.add(fn), () => stL.delete(fn)),
+      /** @param {(i:any)=>void} fn */ onDiagnostic: (fn) => (dgL.add(fn), () => dgL.delete(fn)),
+      async idle() {},
+      // テスト駆動ヘルパ（器官がフックを呼ぶのを模す）。
+      isStarted: () => started,
+      isStopped: () => stopped,
+      /** @param {any} m */ emitMessage: (m) => msgL.forEach((f) => /** @type {any} */ (f)(m)),
+      /** @param {string} s */ emitStatus: (s) => {
+        state = s;
+        stL.forEach((f) => /** @type {any} */ (f)(s));
+      },
+      /** @param {any} i */ emitDiagnostic: (i) => dgL.forEach((f) => /** @type {any} */ (f)(i)),
+      listenerCounts: () => ({ msg: msgL.size, st: stL.size, dg: dgL.size })
+    };
+    record.clients.push(client);
+    return client;
+  };
+  return { factory, record, get last() { return record.clients[record.clients.length - 1]; } };
+}
+
+test("cockpit S7 chat Connect: factory から器官生成・start・onMessage→viewer 行・onStatus→chatStatus・onDiagnostic→chatDiagnostic を結線", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true } });
+  const fakeChat = makeFakeChatClientFactory();
+  /** @type {string[]} */ const persisted = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    chatClientFactory: /** @type {any} */ (fakeChat.factory),
+    onSetChatSource: (s) => persisted.push(/** @type {any} */ (s)),
+    selfFireInitialEnabled: true
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" }); // ★ 耳を起動した状態で Connect（合流先バッファ）。
+
+    const r = await postJson(`${url}/api/chat/connect`, { source: "https://youtube.com/watch?v=abc" });
+    assert.equal(r.status, 200);
+    // factory は {source} で 1 回呼ばれ・start 済み・フック 3 種を結線している。
+    assert.equal(fakeChat.record.clients.length, 1);
+    const client = fakeChat.last;
+    assert.equal(client.getSource(), "https://youtube.com/watch?v=abc");
+    assert.equal(client.isStarted(), true);
+    assert.deepEqual(client.listenerCounts(), { msg: 1, st: 1, dg: 1 });
+    // source は永続化フックへ橋渡し（次回起動で入力欄に復元）。
+    assert.deepEqual(persisted, ["https://youtube.com/watch?v=abc"]);
+    // snapshot.chat が connected を反映。
+    assert.equal(r.json.chat.connected, true);
+
+    // onMessage → ingestChatMessage → viewer 行 SSE（displayName 付き）。器官の外から hooks 経由で合流。
+    client.emitMessage({ text: "こんばんは", displayName: "ハナコ" });
+    const vrow = await sse.waitFor((e) => e.event === "transcript" && e.data.speaker === "viewer");
+    assert.equal(vrow.data.displayName, "ハナコ");
+    assert.equal(vrow.data.text, "こんばんは");
+
+    // onStatus → chatStatus SSE（状態表示材料）。
+    client.emitStatus("live");
+    const st = await sse.waitFor((e) => e.event === "chatStatus");
+    assert.equal(st.data.status, "live");
+    // getState が live を返す＝snapshot.chat.state も live。
+    const s2 = await getJson(`${url}/api/state`);
+    assert.equal(s2.json.chat.state, "live");
+
+    // onDiagnostic → chatDiagnostic SSE（ゴースト行材料）。
+    client.emitDiagnostic({ kind: "notLive", message: "waiting", atMs: 1, delayMs: 1000, attempt: 1 });
+    const cd = await sse.waitFor((e) => e.event === "chatDiagnostic");
+    assert.equal(cd.data.kind, "notLive");
+    assert.equal(cd.data.attempt, 1);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat Connect: 結線した onMessage 経由の呼びかけコメントで fire({vision:preferred}) が 1 回（縦串）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true } });
+  const fakeChat = makeFakeChatClientFactory();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    chatClientFactory: /** @type {any} */ (fakeChat.factory),
+    selfFireInitialEnabled: true
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    await postJson(`${url}/api/chat/connect`, { source: "vid123" });
+    // 器官が呼びかけコメントを配信 → onMessage → ingest → scheduler.handleChatMessage → comment-call 確実発火。
+    fakeChat.last.emitMessage({ text: "コーディこれ見て", displayName: "Taro" });
+    assert.equal(fakeOrch.record.fireCount, 1);
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" });
+    const evt = await sse.waitFor((e) => e.event === "selfFire");
+    assert.equal(evt.data.kind, "comment-call");
+    assert.equal(evt.data.fired, true);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat Disconnect: stop() + フック購読解除で畳み・以後のコメントは合流しない", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeChat = makeFakeChatClientFactory();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    chatClientFactory: /** @type {any} */ (fakeChat.factory)
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    await postJson(`${url}/api/chat/connect`, { source: "vid" });
+    const client = fakeChat.last;
+
+    const r = await postJson(`${url}/api/chat/disconnect`, {});
+    assert.equal(r.status, 200);
+    assert.equal(client.isStopped(), true); // 器官は stop（dead）。
+    assert.deepEqual(client.listenerCounts(), { msg: 0, st: 0, dg: 0 }); // フック全撤去。
+    assert.equal(r.json.chat.connected, false);
+
+    // 畳んだ後に器官がメッセージを出しても合流しない（購読解除済み＝取り込み経路に届かない）。
+    client.emitMessage({ text: "遅れコメント", displayName: "X" });
+    await new Promise((res) => setTimeout(res, 30));
+    assert.equal(fakePipe.record.buffer.all().filter((/** @type {any} */ e) => e.speaker === "viewer").length, 0);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat Connect 再操作: 既存器官を畳んで新 source で作り直す（同一インスタンス restart なし）", async () => {
+  const fakeChat = makeFakeChatClientFactory();
+  const server = createCockpitServer({ chatClientFactory: /** @type {any} */ (fakeChat.factory) });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/chat/connect`, { source: "streamA" });
+    const first = fakeChat.last;
+    assert.equal(first.getSource(), "streamA");
+
+    // 再 Connect（別配信）: ended で dead に落ちた器官の restart は無い＝新器官を作る。
+    await postJson(`${url}/api/chat/connect`, { source: "streamB" });
+    assert.equal(fakeChat.record.clients.length, 2);
+    assert.equal(first.isStopped(), true); // 旧器官は畳まれた。
+    const second = fakeChat.last;
+    assert.equal(second.getSource(), "streamB");
+    assert.equal(second.isStopped(), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat close(): 稼働中のチャット器官も畳む（stop・タイマ/プロセスを残さない）", async () => {
+  const fakeChat = makeFakeChatClientFactory();
+  const server = createCockpitServer({ chatClientFactory: /** @type {any} */ (fakeChat.factory) });
+  const url = await server.listen(0);
+  await postJson(`${url}/api/chat/connect`, { source: "vid" });
+  const client = fakeChat.last;
+  assert.equal(client.isStopped(), false);
+  await server.close();
+  assert.equal(client.isStopped(), true); // close で畳まれた。
+});
+
+test("cockpit S7 chat Connect: factory 未注入なら 503（chat not available・器官を作らない）", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/chat/connect`, { source: "vid" });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /chat not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat Connect: 空 source は 400（factory を呼ばない・停止は disconnect の領分）", async () => {
+  const fakeChat = makeFakeChatClientFactory();
+  const server = createCockpitServer({ chatClientFactory: /** @type {any} */ (fakeChat.factory) });
+  try {
+    const url = await server.listen(0);
+    const r1 = await postJson(`${url}/api/chat/connect`, { source: "   " });
+    assert.equal(r1.status, 400);
+    const r2 = await postJson(`${url}/api/chat/connect`, {}); // body なし。
+    assert.equal(r2.status, 400);
+    assert.equal(fakeChat.record.clients.length, 0); // 器官を作っていない。
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit S7 chat: state snapshot の chat.source は chatSourceStatus 由来（Connect 前でも記憶を復元）", async () => {
+  const server = createCockpitServer({
+    chatSourceStatus: () => ({ source: "remembered-vid" })
+  });
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.chat.source, "remembered-vid"); // 入力欄の既定に復元できる。
+    assert.equal(s.json.chat.connected, false); // まだ Connect していない。
+    assert.equal(s.json.chat.state, null);
+  } finally {
+    await server.close();
+  }
+});
+
+/**
+ * throw する fake チャット器官 factory（生成時 throw / start() reject の 2 モード）。Connect の防波堤
+ * （foldChatClient + 500）が盲目の 200 を返さない・器官を畳んでリークを残さないことを固定する。実ネット不出。
+ * @param {"factory-throw"|"start-reject"} mode
+ */
+function makeThrowingChatClientFactory(mode) {
+  const record = { /** @type {any[]} */ clients: [] };
+  const factory = (/** @type {{ source: string }} */ opts) => {
+    if (mode === "factory-throw") throw new Error("factory boom"); // 器官を作る前に投げる。
+    const msgL = new Set();
+    const stL = new Set();
+    const dgL = new Set();
+    let stopped = false;
+    let state = "idle";
+    const client = {
+      async start() {
+        throw new Error("start boom"); // 生成後・start で投げる（フックは既に結線済み）。
+      },
+      stop() {
+        stopped = true;
+        state = "dead";
+      },
+      getState: () => state,
+      getSource: () => opts.source,
+      /** @param {(m:any)=>void} fn */ onMessage: (fn) => (msgL.add(fn), () => msgL.delete(fn)),
+      /** @param {(s:string)=>void} fn */ onStatus: (fn) => (stL.add(fn), () => stL.delete(fn)),
+      /** @param {(i:any)=>void} fn */ onDiagnostic: (fn) => (dgL.add(fn), () => dgL.delete(fn)),
+      isStopped: () => stopped,
+      listenerCounts: () => ({ msg: msgL.size, st: stL.size, dg: dgL.size })
+    };
+    record.clients.push(client);
+    return client;
+  };
+  return { factory, record, get last() { return record.clients[record.clients.length - 1]; } };
+}
+
+test("cockpit S7 chat Connect: 生成/start の想定外 throw は foldChatClient で畳んで 500（盲目の 200 を返さない・リーク無し）", async () => {
+  // ① start() reject: 器官は生成されフックも結線されるが start が投げる → 畳んで 500。
+  //    作った器官は stop（dead）+ フック全撤去（タイマ/購読を残さない）・snapshot は connected=false。
+  const rejecting = makeThrowingChatClientFactory("start-reject");
+  const server = createCockpitServer({ chatClientFactory: /** @type {any} */ (rejecting.factory) });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/chat/connect`, { source: "vid" });
+    assert.equal(r.status, 500);
+    assert.match(r.json.error, /chat connect failed/);
+    assert.equal(rejecting.record.clients.length, 1); // 器官は 1 個生成された。
+    assert.equal(rejecting.last.isStopped(), true); // foldChatClient で stop（dead）。
+    assert.deepEqual(rejecting.last.listenerCounts(), { msg: 0, st: 0, dg: 0 }); // フック全撤去（リーク無し）。
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.chat.connected, false); // 盲目の「接続済み」を残さない。
+    assert.equal(s.json.chat.state, null);
+  } finally {
+    await server.close();
+  }
+
+  // ② factory 自体の throw: 器官が生成される前に投げる → 畳んで 500（器官ゼロ・connected=false）。
+  const throwing = makeThrowingChatClientFactory("factory-throw");
+  const server2 = createCockpitServer({ chatClientFactory: /** @type {any} */ (throwing.factory) });
+  try {
+    const url2 = await server2.listen(0);
+    const r2 = await postJson(`${url2}/api/chat/connect`, { source: "vid" });
+    assert.equal(r2.status, 500);
+    assert.match(r2.json.error, /chat connect failed/);
+    assert.equal(throwing.record.clients.length, 0); // 器官は作られていない。
+    const s2 = await getJson(`${url2}/api/state`);
+    assert.equal(s2.json.chat.connected, false);
+  } finally {
+    await server2.close();
+  }
+});
+
 // ── S6 Domain D: 操縦席の口（自発 ON/OFF トグル + 出力デバイス選択 + タイムラインマーカー）───────────
 //
 //  GET /api/audio-devices・POST /api/audio-device・POST /api/self-fire は GET /api/windows・

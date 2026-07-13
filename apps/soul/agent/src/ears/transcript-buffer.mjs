@@ -26,11 +26,19 @@
  *  - `onAppend(listener)` 追加購読（S3 の発火判定はこれを入口にできる）
  *  依存ゼロ・I/O ゼロの純ロジック（fixture テスト対象）。
  *
- * ── 話者ラベル（S3 で会話ログへ昇格・追加的）【設計判断】──────────────────────
- *  append の入力に任意の `speaker`（"you" | "soul"・**既定 "you"**）を足し、各エントリが speaker を
- *  持つ。既定 "you" ゆえ S2 の呼び出し（speaker を渡さない耳の結線）は挙動不変——転写バッファは
+ * ── 話者ラベル（S3 で会話ログへ昇格・S7 で視聴者が混ざる・追加的）【設計判断】──────────────
+ *  append の入力に任意の `speaker`（"you" | "soul" | "viewer"・**既定 "you"**）を足し、各エントリが
+ *  speaker を持つ。既定 "you" ゆえ S2 の呼び出し（speaker を渡さない耳の結線）は挙動不変——転写バッファは
  *  単一話者の転写列のまま振る舞い、S3 が魂の発話（speaker:"soul"）を同じ列へ追記できるように
  *  なるだけ。不正な speaker 値は throw（呼び出し側のバグを黙殺しない）。
+ *
+ *  **S7「視聴者が混ざる」**: YouTube Live のコメントを `speaker:"viewer"` として同じ列へ合流する
+ *  （単一タイムライン・inventory §1 裁定 3「箱を分けない」）。viewer エントリは投稿者名を持つため、
+ *  append の入力に任意の `displayName`（string）を足す。**viewer のときだけ意味を持ち**、you/soul では
+ *  undefined（省略）——既存の you/soul 呼び出しは displayName を渡さないため挙動・エントリ形は不変。
+ *  viewer コメントも soul と同型で startMs/endMs=0（録音ストリーム区間を持たない）・窓は appendedAtMs。
+ *  下流の注入整形（fire-injection.mjs）は viewer 行を `viewer(名前): 本文` として描く。合流は Domain A の
+ *  チャット器官の**外から** hooks 経由（cockpit-server の取り込み経路）——器官からの逆流路は無い。
  *
  *  soul エントリは VAD ストリーム時刻（startMs/endMs）を持たない（魂の発話は録音ストリーム上の
  *  区間ではなく、Fire に応じて生成したテキストだから）。よって発火オーケストレータは
@@ -59,22 +67,22 @@ export function isBlankTranscript(text) {
 }
 
 /**
- * @typedef {"you" | "soul"} Speaker
+ * @typedef {"you" | "soul" | "viewer"} Speaker
  */
 
 /**
- * @typedef {Readonly<{ seq: number; startMs: number; endMs: number; text: string; speaker: Speaker; appendedAtMs: number }>} TranscriptEntry
+ * @typedef {Readonly<{ seq: number; startMs: number; endMs: number; text: string; speaker: Speaker; displayName: string | undefined; appendedAtMs: number }>} TranscriptEntry
  */
 
-/** 許容する話者ラベル（既定 you = S2 挙動不変・soul = S3 の魂発話）。 */
-const VALID_SPEAKERS = new Set(["you", "soul"]);
+/** 許容する話者ラベル（既定 you = S2 挙動不変・soul = S3 の魂発話・viewer = S7 の視聴者コメント）。 */
+const VALID_SPEAKERS = new Set(["you", "soul", "viewer"]);
 
 /**
  * 転写バッファを作る。
  * @param {object} [options]
  * @param {() => number} [options.nowImpl]  appendedAtMs の時計（テスト用注入）。既定 Date.now。
  * @returns {{
- *   append: (input: { startMs: number; endMs: number; text: string; speaker?: Speaker }) => { appended: boolean; entry: TranscriptEntry | null; reason: "appended" | "blank" };
+ *   append: (input: { startMs: number; endMs: number; text: string; speaker?: Speaker; displayName?: string }) => { appended: boolean; entry: TranscriptEntry | null; reason: "appended" | "blank" };
  *   all: () => TranscriptEntry[];
  *   last: (n: number) => TranscriptEntry[];
  *   inRange: (range: { fromMs?: number; toMs?: number }) => TranscriptEntry[];
@@ -97,13 +105,13 @@ export function createTranscriptBuffer(options = {}) {
 
   /**
    * 入力を検証する（不正は throw = 呼び出し側のバグを黙殺しない）。
-   * @param {{ startMs: number; endMs: number; text: string; speaker?: Speaker }} input
+   * @param {{ startMs: number; endMs: number; text: string; speaker?: Speaker; displayName?: string }} input
    */
   function validate(input) {
     if (input == null || typeof input !== "object") {
       throw new TypeError("transcriptBuffer.append: input must be an object { startMs, endMs, text }.");
     }
-    const { startMs, endMs, text, speaker } = input;
+    const { startMs, endMs, text, speaker, displayName } = input;
     if (typeof startMs !== "number" || !Number.isFinite(startMs)) {
       throw new TypeError(`transcriptBuffer.append: startMs must be a finite number; got ${startMs}.`);
     }
@@ -119,7 +127,13 @@ export function createTranscriptBuffer(options = {}) {
     // speaker は任意（既定 "you"）。渡された場合のみ検証する（不正値は throw）。
     if (speaker !== undefined && !VALID_SPEAKERS.has(speaker)) {
       throw new RangeError(
-        `transcriptBuffer.append: speaker must be "you" or "soul"; got ${JSON.stringify(speaker)}.`
+        `transcriptBuffer.append: speaker must be "you", "soul" or "viewer"; got ${JSON.stringify(speaker)}.`
+      );
+    }
+    // displayName は任意（viewer のときだけ意味を持つ）。渡された場合のみ軽く型検証する。
+    if (displayName !== undefined && typeof displayName !== "string") {
+      throw new TypeError(
+        `transcriptBuffer.append: displayName must be a string when present; got ${typeof displayName}.`
       );
     }
   }
@@ -127,13 +141,15 @@ export function createTranscriptBuffer(options = {}) {
   return {
     /**
      * 転写を積む。空転写（空白のみ）は積まずに捨て、onDiscard で観測可能にする。
-     * @param {{ startMs: number; endMs: number; text: string; speaker?: Speaker }} input
+     * @param {{ startMs: number; endMs: number; text: string; speaker?: Speaker; displayName?: string }} input
      * @returns {{ appended: boolean; entry: TranscriptEntry | null; reason: "appended" | "blank" }}
      */
     append(input) {
       validate(input);
       const { startMs, endMs, text } = input;
       const speaker = /** @type {Speaker} */ (input.speaker ?? "you");
+      // displayName は viewer のときだけ意味を持つ（you/soul では undefined = 省略・従来と同形）。
+      const displayName = input.displayName;
       if (isBlankTranscript(text)) {
         discarded += 1;
         const info = Object.freeze({ startMs, endMs, text, reason: /** @type {const} */ ("blank") });
@@ -148,6 +164,7 @@ export function createTranscriptBuffer(options = {}) {
         endMs,
         text,
         speaker,
+        displayName,
         appendedAtMs: nowImpl()
       });
       entries.push(entry);

@@ -193,7 +193,7 @@ test("speaker: 'soul' を指定すると soul エントリになる（startMs/en
   assert.ok(Object.isFrozen(soul.entry));
 });
 
-test("speaker: 不正値は throw（you/soul 以外を黙殺しない）", () => {
+test("speaker: 不正値は throw（you/soul/viewer 以外を黙殺しない）", () => {
   const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
   assert.throws(
     () => buffer.append({ startMs: 0, endMs: 0, text: "x", speaker: /** @type {any} */ ("bot") }),
@@ -202,6 +202,42 @@ test("speaker: 不正値は throw（you/soul 以外を黙殺しない）", () =>
   assert.throws(
     () => buffer.append({ startMs: 0, endMs: 0, text: "x", speaker: /** @type {any} */ (1) }),
     RangeError
+  );
+  assert.equal(buffer.size(), 0); // 失敗 append は何も残さない
+});
+
+// ── viewer コメント合流（S7「視聴者が混ざる」・追加的）─────────────────────────
+
+test("speaker: 'viewer' + displayName で視聴者コメントが合流する（soul 同型 startMs/endMs=0）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 5000 });
+  const you = buffer.append({ startMs: 100, endMs: 900, text: "ねえ" });
+  const viewer = buffer.append({ startMs: 0, endMs: 0, text: "こんばんは", speaker: "viewer", displayName: "ハナコ" });
+  assert.equal(you.entry?.speaker, "you");
+  assert.equal(you.entry?.displayName, undefined); // you は displayName を持たない（従来と同形）。
+  assert.equal(viewer.entry?.speaker, "viewer");
+  assert.equal(viewer.entry?.displayName, "ハナコ");
+  assert.equal(viewer.entry?.startMs, 0);
+  assert.equal(viewer.entry?.endMs, 0);
+  assert.ok(Object.isFrozen(viewer.entry)); // viewer エントリも frozen（正本の不変性）。
+  assert.deepEqual(buffer.all().map((e) => [e.speaker, e.text, e.displayName]), [
+    ["you", "ねえ", undefined],
+    ["viewer", "こんばんは", "ハナコ"]
+  ]);
+});
+
+test("displayName: viewer 以外でも省略時は undefined（従来と同形・S1〜S6 挙動不変）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
+  const you = buffer.append({ startMs: 0, endMs: 500, text: "独り言" });
+  const soul = buffer.append({ startMs: 0, endMs: 0, text: "はーい", speaker: "soul" });
+  assert.equal(you.entry?.displayName, undefined);
+  assert.equal(soul.entry?.displayName, undefined);
+});
+
+test("displayName: 非文字列は throw（軽い型検証・呼び出し側のバグを黙殺しない）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
+  assert.throws(
+    () => buffer.append({ startMs: 0, endMs: 0, text: "x", speaker: "viewer", displayName: /** @type {any} */ (42) }),
+    TypeError
   );
   assert.equal(buffer.size(), 0); // 失敗 append は何も残さない
 });

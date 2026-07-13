@@ -8,7 +8,8 @@ import {
   createSessionProxy,
   createVisionTargetHooks,
   createAudioDeviceHooks,
-  createSelfFireHooks
+  createSelfFireHooks,
+  createChatSourceHooks
 } from "./cockpit.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
@@ -446,4 +447,46 @@ test("createSelfFireHooks: settings.setSelfFireEnabled が throw しても onSet
   };
   const hooks = createSelfFireHooks(settings);
   assert.doesNotThrow(() => hooks.onSetSelfFireEnabled(true));
+});
+
+// ── createChatSourceHooks（S7「視聴者が混ざる」: 配信 source の settings ⇄ cockpit-server 橋渡し）───
+
+/** fake settings（cockpit-settings-store と同型の getChatSource/setChatSource を持つ最小 fake）。 */
+function makeFakeChatSourceSettings(initial = null) {
+  let current = initial;
+  return {
+    getChatSource: () => current,
+    setChatSource: (source) => {
+      current = source ?? null;
+    }
+  };
+}
+
+test("createChatSourceHooks: onSetChatSource は settings.setChatSource へ橋渡しする", { timeout: 5000 }, () => {
+  const settings = makeFakeChatSourceSettings(null);
+  const hooks = createChatSourceHooks(settings);
+  hooks.onSetChatSource("https://youtube.com/watch?v=xyz");
+  assert.equal(settings.getChatSource(), "https://youtube.com/watch?v=xyz");
+  // null/undefined はクリア。
+  hooks.onSetChatSource(null);
+  assert.equal(settings.getChatSource(), null);
+});
+
+test("createChatSourceHooks: chatSourceStatus は現在の source を { source } で返す", { timeout: 5000 }, () => {
+  const settings = makeFakeChatSourceSettings(null);
+  const hooks = createChatSourceHooks(settings);
+  assert.deepEqual(hooks.chatSourceStatus(), { source: null });
+  hooks.onSetChatSource("dQw4w9WgXcQ");
+  assert.deepEqual(hooks.chatSourceStatus(), { source: "dQw4w9WgXcQ" });
+});
+
+test("createChatSourceHooks: settings.setChatSource が throw しても onSetChatSource は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getChatSource: () => null,
+    setChatSource: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createChatSourceHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetChatSource("https://youtube.com/watch?v=xyz"));
 });

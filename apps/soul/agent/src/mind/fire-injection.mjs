@@ -30,12 +30,31 @@ export const FIRE_WINDOW_MS = 5 * 60 * 1000;
 export const FIRE_MAX_CHARS = 4000;
 
 /**
- * 話者ラベルを返す（未知話者は "you" に寄せる・防御的）。
+ * 話者ラベルを返す（未知話者は "you" に寄せる・防御的）。soul→"soul"・viewer→"viewer"・その他→"you"。
  * @param {unknown} speaker
- * @returns {"you" | "soul"}
+ * @returns {"you" | "soul" | "viewer"}
  */
 function labelOf(speaker) {
-  return speaker === "soul" ? "soul" : "you";
+  if (speaker === "soul") return "soul";
+  if (speaker === "viewer") return "viewer";
+  return "you";
+}
+
+/**
+ * 会話ログの 1 エントリを話者ラベル付きの 1 行へ整形する。
+ *  you  → `you: 本文`
+ *  soul → `soul: 本文`
+ *  viewer → `viewer(名前): 本文`（displayName 欠落/空なら `viewer: 本文` に劣化・S7 視聴者コメント）
+ * @param {{ text: string; speaker?: string; displayName?: string }} e
+ * @returns {string}
+ */
+function formatLine(e) {
+  const label = labelOf(e.speaker);
+  if (label === "viewer") {
+    const name = typeof e.displayName === "string" ? e.displayName.trim() : "";
+    return name.length > 0 ? `viewer(${name}): ${e.text}` : `viewer: ${e.text}`;
+  }
+  return `${label}: ${e.text}`;
 }
 
 /**
@@ -53,8 +72,8 @@ function joinedLength(lines) {
 /**
  * 会話ログを Fire 注入テキストへ整形する（純関数）。
  *
- * @param {ReadonlyArray<{ text: string; speaker?: string; appendedAtMs: number }>} entries
- *   転写バッファの all() が返す形（seq 昇順 = 時系列）。
+ * @param {ReadonlyArray<{ text: string; speaker?: string; displayName?: string; appendedAtMs: number }>} entries
+ *   転写バッファの all() が返す形（seq 昇順 = 時系列）。viewer エントリは displayName を持ちうる。
  * @param {object} options
  * @param {number} options.nowMs  現在の壁時計（窓の起点・注入必須）。
  * @param {number} [options.windowMs=FIRE_WINDOW_MS]  窓幅（ミリ秒）。
@@ -83,8 +102,8 @@ export function formatFireInjection(entries, options = /** @type {any} */ ({})) 
   const inWindow = list.filter((e) => e != null && e.appendedAtMs >= threshold);
   const droppedByWindow = list.length - inWindow.length;
 
-  // (b) 話者ラベル付き整形（seq 昇順のまま）。
-  const lines = inWindow.map((e) => `${labelOf(e.speaker)}: ${e.text}`);
+  // (b) 話者ラベル付き整形（seq 昇順のまま）。viewer は `viewer(名前):` で描く。
+  const lines = inWindow.map(formatLine);
 
   // (c) 文字数上限: 超過なら古い方（先頭）から落とす。最新 1 行は常に残す。
   const kept = lines.slice();

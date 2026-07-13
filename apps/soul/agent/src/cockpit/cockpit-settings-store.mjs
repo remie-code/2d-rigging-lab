@@ -18,11 +18,17 @@
  *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる（bool の
  *     有無を区別するため asStringOrNull は使わない）。
  *   setSelfFireEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
+ *   getChatSource(): 視聴者チャット合流の配信 URL/ID の初期値（S7「視聴者が混ざる」・waves/s7/domain-c.md）。
+ *     操縦席で Connect chat した配信 source を次回起動で復元し、入力欄の既定にする。YouTube の
+ *     公開 URL/ID（token を含まない平文）だが、同一ファイル・同一マージ規律に乗せる（vision target と
+ *     同型の新キー 1 個）。
+ *   setChatSource(source): 操縦席で Connect chat したときに記憶（次回起動で復元）。
  *
- * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled も同居）───
- *  lastDevice と lastChannelUrl（+ S5: visionTarget・S6: audioDevice/selfFireEnabled）は同一 JSON に
- *  同居する。set は必ず既存内容を読んでマージしてから書く（片方の set が他方を消さない）。読めない/
- *  壊れた JSON は空オブジェクト扱いで続行する。
+ * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
+ *    S7 で chatSource も同居）───
+ *  lastDevice と lastChannelUrl（+ S5: visionTarget・S6: audioDevice/selfFireEnabled・S7: chatSource）は
+ *  同一 JSON に同居する。set は必ず既存内容を読んでマージしてから書く（片方の set が他方を消さない）。
+ *  読めない/壊れた JSON は空オブジェクト扱いで続行する。
  *
  * ── 失敗寛容（契約 §5）─────────────────────────────────────────────
  *  読めない/壊れた JSON → get は null。書けない（ディスク I/O 失敗）→ set は握って続行（起動を止めない）。
@@ -58,6 +64,8 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setAudioDevice: (name: string | null) => void;
  *   getSelfFireEnabled: () => boolean | null;
  *   setSelfFireEnabled: (enabled: boolean) => void;
+ *   getChatSource: () => string | null;
+ *   setChatSource: (source: string | null) => void;
  * }}
  */
 export function createFileSettingsStore(options = {}) {
@@ -123,6 +131,13 @@ export function createFileSettingsStore(options = {}) {
     /** @param {boolean} enabled */
     setSelfFireEnabled(enabled) {
       writeMerged({ selfFireEnabled: enabled === true });
+    },
+    getChatSource() {
+      return asStringOrNull(readAll().chatSource);
+    },
+    /** @param {string | null} source */
+    setChatSource(source) {
+      writeMerged({ chatSource: source ?? null });
     }
   };
 }

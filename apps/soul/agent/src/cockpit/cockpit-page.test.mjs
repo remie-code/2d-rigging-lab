@@ -245,3 +245,138 @@ test("cockpit page: expressionUnknownTag diagnostic adds a ghost row (word left 
   assert.doesNotMatch(body, /===\s*["']expressionRejected["']/);
   assert.doesNotMatch(body, /===\s*["']expressionSendError["']/);
 });
+
+// ── S7「視聴者が混ざる」: Live chat の Connect/Disconnect UI + viewer 行 + 状態表示 + 取得死ゴースト ─────
+
+test("cockpit page: has a Live chat source input, Connect/Disconnect buttons, and a status display", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /id="chat-source"/);
+  assert.match(html, /id="btn-chat-connect"/);
+  assert.match(html, /id="btn-chat-disconnect"/);
+  assert.match(html, /id="chat-status"/);
+});
+
+test("cockpit page: Connect chat POSTs /api/chat/connect with the entered source; Disconnect POSTs /api/chat/disconnect", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /fetch\(["']\/api\/chat\/connect["'],\s*\{\s*method:\s*["']POST["']/);
+  assert.match(html, /chat-source["']\)\.value/); // 送信 body は入力欄の値（source）。
+  assert.match(html, /fetch\(["']\/api\/chat\/disconnect["'],\s*\{\s*method:\s*["']POST["']/);
+});
+
+test("cockpit page: applies chat status from state (connection-driven class) and restores remembered source", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /function applyChat\(/);
+  assert.match(html, /applyChat\(s\.chat\)/);
+  // 状態別クラス（live/connecting/retrying/dead）が CSS にある。
+  assert.match(html, /\.chat-status\.live/);
+  assert.match(html, /\.chat-status\.retrying/);
+  assert.match(html, /\.chat-status\.dead/);
+});
+
+test("cockpit page: viewer transcript rows render viewer(displayName) label and have a distinct class + CSS", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // addTranscriptRow は viewer のとき displayName を viewer(名前) で描く（注入描画と対称）。
+  assert.match(html, /speaker\s*===\s*["']viewer["']\s*&&\s*d\.displayName/);
+  assert.match(html, /viewer\(/);
+  // CSS: viewer 行は you/soul と区別できる別トークンを持つ。
+  assert.match(html, /\.row\.speaker-viewer\s+\.who/);
+});
+
+test("cockpit page: subscribes SSE chatStatus and updates the status display", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /addEventListener\(["']chatStatus["']/);
+  const m = html.match(/addEventListener\(["']chatStatus["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "chatStatus リスナーが見つかること");
+  // 状態表示 + Disconnect 制御は applyChat と同じ単一経路（renderChatStatus）を通す（二重管理を避ける）。
+  assert.match(m[1], /renderChatStatus\(/);
+});
+
+// ── S7 追修正: Disconnect の有効/無効は chat state 値で一貫決定（dead→無効・snapshot 再送で誤再有効化しない）─────
+// design レビュー検出の契約 FAIL（applyChat が connected 真偽で無条件に Disconnect を再有効化）を閉じる。
+// applyChat と SSE chatStatus が同じ renderChatStatus 経路を通ることを、実ロジックを HTML から切り出して駆動して固定する。
+
+test("cockpit page: Disconnect enable/disable is chat-state-driven (dead disables even when connected) — applyChat drives renderChatStatus", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  const renderSrc = html.match(/function renderChatStatus\([\s\S]*?\n    \}/);
+  const applySrc = html.match(/function applyChat\([\s\S]*?\n    \}/);
+  assert.ok(renderSrc, "renderChatStatus 本体が見つかること");
+  assert.ok(applySrc, "applyChat 本体が見つかること");
+  // HTML の実ロジックをそのまま切り出して駆動する（DOM ライブラリ非依存・fake byId で要素を代替）。
+  const build = new Function(
+    "byId",
+    `"use strict"; var chatSourceEdited = false; ${renderSrc[0]} ${applySrc[0]} return applyChat;`
+  );
+  /** @param {any} chat */
+  function drive(chat) {
+    const els = {
+      "chat-source": { value: "" },
+      "chat-status": { textContent: "", className: "" },
+      "btn-chat-disconnect": { disabled: null }
+    };
+    const applyChat = build((/** @type {string} */ id) => els[/** @type {"chat-source"|"chat-status"|"btn-chat-disconnect"} */ (id)]);
+    applyChat(chat);
+    return els;
+  }
+  // dead は connected=true でも Disconnect を無効化する（契約 FAIL の修正・snapshot 再送で誤再有効化しない）。
+  assert.equal(drive({ connected: true, state: "dead", source: null })["btn-chat-disconnect"].disabled, true);
+  // 稼働状態（connecting/live/retrying）は Disconnect 有効 + 状態別クラス。
+  for (const st of ["connecting", "live", "retrying"]) {
+    const els = drive({ connected: true, state: st, source: null });
+    assert.equal(els["btn-chat-disconnect"].disabled, false, `${st} は Disconnect 有効`);
+    assert.equal(els["chat-status"].className, "chat-status " + st);
+  }
+  // 未接続（connected=false）も Disconnect 無効・"not connected" 表示。
+  const off = drive({ connected: false, source: null });
+  assert.equal(off["btn-chat-disconnect"].disabled, true);
+  assert.equal(off["chat-status"].textContent, "not connected");
+});
+
+test("cockpit page: applyChat and chatStatus SSE share one disconnect-decision path (state-driven, no connected-truthiness enable)", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // 単一経路 renderChatStatus が Disconnect の有効/無効を state 値で決める（connected 真偽ではない）。
+  const rfn = html.match(/function renderChatStatus\([\s\S]*?\n    \}/);
+  assert.ok(rfn, "renderChatStatus 本体が見つかること");
+  assert.match(rfn[0], /btn-chat-disconnect["']\)\.disabled\s*=/);
+  assert.match(rfn[0], /state\s*===\s*["']connecting["']/);
+  assert.match(rfn[0], /state\s*===\s*["']live["']/);
+  assert.match(rfn[0], /state\s*===\s*["']retrying["']/);
+  // applyChat は renderChatStatus に委譲する（disabled を直接 false にしない＝二重管理の食い違いを断つ）。
+  const afn = html.match(/function applyChat\([\s\S]*?\n    \}/);
+  assert.ok(afn, "applyChat 本体が見つかること");
+  assert.match(afn[0], /renderChatStatus\(/);
+  assert.doesNotMatch(afn[0], /disabled\s*=\s*false/);
+  // SSE chatStatus ハンドラも同じ単一経路を通す（dead の扱いが二経路で食い違わない）。
+  const sse = html.match(/addEventListener\(["']chatStatus["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(sse, "chatStatus リスナーが見つかること");
+  assert.match(sse[1], /renderChatStatus\(/);
+});
+
+test("cockpit page: subscribes SSE chatDiagnostic and draws ghost rows for fetch-death kinds", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  assert.match(html, /addEventListener\(["']chatDiagnostic["']/);
+  const m = html.match(/addEventListener\(["']chatDiagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "chatDiagnostic リスナーが見つかること");
+  const body = m[1];
+  // 取得死の分類（notLive/ended/extractFailed/network）をゴースト行で可視化する。
+  assert.match(body, /notLive/);
+  assert.match(body, /ended/);
+  assert.match(body, /extractFailed/);
+  assert.match(body, /network/);
+  assert.match(body, /addGhostRow\(/);
+});
+
+test("cockpit page: chatBufferAbsent diagnostic (ears not running) adds a ghost row", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
+  assert.ok(m, "diagnostic リスナーが見つかること");
+  // 耳未起動でコメントが合流できなかった事実を「無言の消失」にせずゴースト行に残す。
+  assert.match(m[1], /type\s*===\s*["']chatBufferAbsent["']/);
+});
+
+test("cockpit page: self-fire marker row is kind-agnostic (comment/comment-call flow through with kind label)", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // addSelfFireMarkerRow は kind をそのまま描く（comment/comment-call も call/turn-end/silence と同型に載る）。
+  const fn = html.match(/function addSelfFireMarkerRow\([\s\S]*?\n    \}/);
+  assert.ok(fn, "addSelfFireMarkerRow 本体が見つかること");
+  assert.match(fn[0], /d\.kind/);
+});

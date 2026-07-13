@@ -353,3 +353,70 @@ test("settings store: self-fire enabled 用の unwritable path は set を握っ
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化 ─────────────────────
+
+test("settings store: chat source は set→get roundtrip で永続化する（別インスタンスでも読める）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getChatSource(), null); // 未作成 = 記憶なし。
+    store.setChatSource("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    assert.equal(store.getChatSource(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getChatSource(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: setChatSource(null) は記憶をクリアする", () => {
+  const dir = tmpDir();
+  try {
+    const store = createFileSettingsStore({ path: join(dir, "settings.json") });
+    store.setChatSource("dQw4w9WgXcQ");
+    assert.equal(store.getChatSource(), "dQw4w9WgXcQ");
+    store.setChatSource(null);
+    assert.equal(store.getChatSource(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: chat source は他のキー（device/channel/vision/audio/self-fire）と同居する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setLastChannelUrl("ws://127.0.0.1:17310/channel?token=abc");
+    store.setVisionTarget("Sample Game");
+    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
+    store.setSelfFireEnabled(true);
+    store.setChatSource("https://youtube.com/watch?v=xyz");
+    const reopened = createFileSettingsStore({ path });
+    // どの set も他方を消していない（read-modify-write マージ）。
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(reopened.getVisionTarget(), "Sample Game");
+    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    assert.equal(reopened.getSelfFireEnabled(), true);
+    assert.equal(reopened.getChatSource(), "https://youtube.com/watch?v=xyz");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: chat source 用の unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setChatSource("dQw4w9WgXcQ"));
+    assert.equal(store.getChatSource(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

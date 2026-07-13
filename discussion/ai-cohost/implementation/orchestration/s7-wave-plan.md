@@ -52,4 +52,22 @@
 
 ## 6. Status
 
-計画確定・発進待ち。
+**機械ゲート全緑・人間ゲート待ち(2026-07-14)。** Domain A→B→C を順次実行(単一 Orch-Sylph・Gnome 実装 + Review-Sylph 3 レーン)。
+
+### 機械ゲート生数字(Orch-Sylph が独立再実行・タイムアウト付き)
+- `cd apps/soul/agent && node --test`: **tests 609 / pass 609 / fail 0 / cancelled 0 / skipped 0 / todo 0**(S6 後ブランチ進行のベースライン 518 → Domain A +45=563 → Domain B +20=583 → Domain C +26=609)。
+- 3 チェック(repo ルート): `check-dependencies` **passed(EXIT=0)** / `check-soul-zone-boundary` **passed(EXIT=0・1347 files・器↔魂 越境 import なし)** / `check-source-organization` **EXIT=1 だが唯一の違反は器側 `apps/runtime-player/src/main/physiology/index.ts`(barrel-only・ブランチ既存ベースライン)** ＝ soul/agent スコープ違反ゼロ・無退行。
+- 器不変: `git diff --stat -- apps/runtime-player packages` / `-- *channel-*-contract*` / `-- pnpm-lock.yaml apps/soul/agent/package.json` すべて**出力ゼロ**(器コード・契約 JSON・lockfile・package.json 完全不変＝新規依存ゼロ)。変更範囲は `apps/soul/**`(器官 `src/chat/` 新設 + `src/{ears,mind,cockpit}` + scripts + README)と `discussion/` のみ。`.tmp/facex-*` 不接触。
+- SDK 実消費ゼロ・機械テストは実 YouTube/実チャット器官/実ネット/実 SDK/実マイクに一切出ていない(全 fake・fake fetch・fake 器官 factory)。
+
+### レビュー判定(Review-Sylph 3 レーン・各ドメイン)
+- **Domain A(チャット器官 `src/chat/`)**: spec PASS-with-nonblocking / design PASS / test PASS。追修正 1 巡: `internalError` catch-all が診断のみで自動再接続せず沈黙凍結する穴(design/test 独立検出)を「終端でなければ retrying へ落として再接続」に修正 + 実経路テスト固定。契約成果物 [../waves/s7/domain-a.md](../waves/s7/domain-a.md)。
+- **Domain B(合流+発火結線)**: spec PASS-with-nonblocking / design PASS / test PASS。★viewer コメントの二重発火(handleTranscript の you 経路誤起動)/二重放送を 2 箇所(scheduler viewer no-op + onTranscript 放送 viewer 除外)で断ち・テスト固定。契約成果物 [../waves/s7/domain-b.md](../waves/s7/domain-b.md)。
+- **Domain C(操縦席+docs)**: spec PASS / design PASS / test PASS。追修正 1 巡: `applyChat` が ended→dead 後に Disconnect ボタンを誤再有効化する契約齟齬(design 検出)を `renderChatStatus` 単一経路化で解消 + connect throw→500 エラー経路テスト追加。契約成果物 [../waves/s7/domain-c.md](../waves/s7/domain-c.md)。
+
+### 人間ゲート手順書 / followup
+- 人間ゲート手順書: [../waves/s7/human-gate-procedure.md](../waves/s7/human-gate-procedure.md)(テスト配信の立て方=限定公開可・**★マイク(耳)を Start した状態で Connect**=耳未起動ではコメント合流も発火もしない裁定・コメント投稿→拾って返す確認・呼びかけ確実応答 comment-call・**相乗り 2 件**=S6④沈黙発火の頻度体感 + S6 追撃 E 再ゲートの自発発火が画面に触れる・ToS グレー開示)。
+- followup 台帳: [../waves/s7/s7-followup.md](../waves/s7/s7-followup.md)。
+
+### 未解決(ユーザー/Undine 裁定待ち)
+- **【escalate】バッファ所有権と「耳なしチャット」**(Domain B §9-1・Domain C §7-1): 転写バッファは耳パイプライン所有ゆえ、耳未起動ではコメントを合流できず発火しない(v0 は `chatBufferAbsent` 診断のみ)。人間ゲートは「耳 Start 状態で Connect」で成立するが、耳を切ったままチャットだけ動かす運用を許すならバッファ所有権の巻き上げ(S1〜S6 の耳ライフサイクル・器不変を脅かしうる構造変更)が要る＝v0 未実装。要否は裁定待ち。

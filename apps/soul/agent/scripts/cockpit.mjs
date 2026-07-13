@@ -50,6 +50,7 @@ import { createFireOrchestrator, FIRE_SYSTEM_PROMPT } from "../src/mind/fire-orc
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
 import { createAudioPlayer, writeTempWav } from "../src/voice/audio-player.mjs";
+import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 
 /** @param {string[]} argv */
 export function parseCockpitArgs(argv) {
@@ -308,6 +309,34 @@ export function createSelfFireHooks(settings, defaultEnabled = false) {
   };
 }
 
+/**
+ * settings の視聴者チャット配信 source（chatSource）を、cockpit-server の口（onSetChatSource/
+ * chatSourceStatus）へ橋渡しする（S7「視聴者が混ざる」・Domain C。Channel URL/visionTarget と同型の
+ * 薄い配線層）。実チャット器官の生成/Connect/停止ライフサイクルは cockpit-server が所有する
+ * （POST /api/chat/connect 駆動・ear-pipeline の流儀）——ここは「Connect した配信 URL を次回起動で
+ * 復元するための永続化」だけを担う（token を含まない YouTube 公開 URL/ID）。
+ *
+ * @param {{ getChatSource: () => string | null; setChatSource: (source: string | null) => void }} settings
+ * @returns {{
+ *   onSetChatSource: (source: string | null) => void;
+ *   chatSourceStatus: () => { source: string | null };
+ * }}
+ */
+export function createChatSourceHooks(settings) {
+  return {
+    /** cockpit-server の onSetChatSource（POST /api/chat/connect が呼ぶ）。 */
+    onSetChatSource: (source) => {
+      try {
+        settings.setChatSource(source ?? null); // 次回起動で入力欄に復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は Connect を止めない（onSetVisionTarget と同型の失敗寛容）。
+      }
+    },
+    /** cockpit-server の chatSourceStatus（state snapshot の chat.source に載る記憶済み source）。 */
+    chatSourceStatus: () => ({ source: settings.getChatSource() })
+  };
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --channel <ws-url>    器の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の**初期値**
@@ -337,6 +366,9 @@ async function main() {
   const audioDeviceHooks = createAudioDeviceHooks(settings);
   // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（既定 OFF・§createSelfFireHooks）。
   const selfFireHooks = createSelfFireHooks(settings, false);
+  // S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化（Channel URL と同型の薄い橋渡し・
+  // §createChatSourceHooks）。実チャット器官の Connect/停止は cockpit-server 所有（POST 駆動）。
+  const chatSourceHooks = createChatSourceHooks(settings);
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -503,7 +535,13 @@ async function main() {
     audioDeviceStatus: audioDeviceHooks.audioDeviceStatus,
     // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（起動時は settings から復元・既定 OFF）。
     selfFireInitialEnabled: selfFireHooks.resolveInitialEnabled(),
-    onSetSelfFireEnabled: selfFireHooks.onSetSelfFireEnabled
+    onSetSelfFireEnabled: selfFireHooks.onSetSelfFireEnabled,
+    // S7「視聴者が混ざる」: 実チャット器官のファクトリを注入（本番 createLiveChatClient）。生成/Connect/
+    // 停止のライフサイクルは cockpit-server が所有し、POST /api/chat/connect で `factory({ source })` を
+    // 生成 start()・onMessage/onStatus/onDiagnostic を取り込み経路へ繋ぐ。配信 source は settings に記憶。
+    chatClientFactory: createLiveChatClient,
+    onSetChatSource: chatSourceHooks.onSetChatSource,
+    chatSourceStatus: chatSourceHooks.chatSourceStatus
   });
 
   const url = await server.listen();
