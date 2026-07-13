@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 import { createFireOrchestrator, FIRE_SYSTEM_PROMPT } from "./fire-orchestrator.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
+import { createBargeInGate, BARGE_IN_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
 
 // 発火オーケストレータの縦貫通テスト（S3 Domain A）。実 SDK・実 TTS・実器は一切使わない
 // （人間ゲートの領分）。fake session（ask がカナ応答）・fake speakImpl（テキスト記録）・
@@ -858,4 +859,364 @@ test("fire(vision): dispose 後の視覚発火は拒否", { timeout: 5000 }, asy
 
 test("FIRE_SYSTEM_PROMPT: 画面が渡ることがある旨の最小追記を含む", () => {
   assert.match(FIRE_SYSTEM_PROMPT, /画面/);
+});
+
+// ── S6「会話が続く」barge-in（interrupt・再生実区間追跡・切断点・soul 追記タイミング）───────────
+// 全 fake（player.stop / channel.sendSet / 注入 timer / 注入 nowImpl 相当の atMs）で縦検証する。
+// 実マイク・実器・実 SDK は一切引かない。soul 追記タイミングの変更（速speak 直後 → 完了/中断時）を固定する。
+
+/** 「こんにちは」5 母音の等間隔タイムライン（pre 100ms・100ms 間隔）。切断点算出の材料。 */
+const BARGE_TIMELINE = [
+  { timeMs: 100, vowel: "o", s: 0.6 },
+  { timeMs: 200, vowel: "o", s: 0.6 },
+  { timeMs: 300, vowel: "i", s: 0.5 },
+  { timeMs: 400, vowel: "i", s: 0.5 },
+  { timeMs: 500, vowel: "a", s: 0.85 }
+];
+
+/** timeline・wavDurationSec・playbackStartedAtMs を返す fake speak（barge-in 材料込み）。 */
+function makeBargeSpeak({ timeline = BARGE_TIMELINE, wavDurationSec = 2, playbackStartedAtMs = 1000 } = {}) {
+  const spoken = [];
+  return {
+    spoken,
+    speakImpl: async (text, deps) => {
+      spoken.push({ text, deps });
+      return { timeline, rttMs: 0, wavDurationSec, wavPath: "C:/tmp/fake.wav", playbackStartedAtMs };
+    }
+  };
+}
+
+/** sendSpeech/sendSet を記録する fake channel。setResult で口閉じの accepted/rejected/throw を切替。 */
+function makeBargeChannel({ setResult } = {}) {
+  const sets = [];
+  return {
+    sets,
+    channel: {
+      sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }),
+      sendSet: async (/** @type {any} */ intent) => {
+        sets.push(intent);
+        if (typeof setResult === "function") return setResult(intent);
+        return setResult ?? { result: "accepted", error: null, rttMs: 0 };
+      }
+    }
+  };
+}
+
+/** play/stop 回数を記録する fake player。 */
+function makeStopPlayer() {
+  const calls = { play: 0, stop: 0 };
+  return { calls, player: { play() { calls.play += 1; }, stop() { calls.stop += 1; } } };
+}
+
+/** 手動 fake タイマ（barge-in.test.mjs と同型・決定論）。 */
+function makeFakeTimers() {
+  let now = 0;
+  let seq = 0;
+  /** @type {Map<number, { fn: () => void; at: number }>} */
+  const timers = new Map();
+  const setTimeoutImpl = /** @type {any} */ ((fn, ms) => {
+    const id = (seq += 1);
+    timers.set(id, { fn, at: now + ms });
+    return id;
+  });
+  const clearTimeoutImpl = /** @type {any} */ ((id) => {
+    timers.delete(id);
+  });
+  const advance = (ms) => {
+    const target = now + ms;
+    for (;;) {
+      /** @type {{ id: number; at: number; fn: () => void } | null} */
+      let next = null;
+      for (const [id, t] of timers) {
+        if (t.at <= target && (next === null || t.at < next.at || (t.at === next.at && id < next.id))) {
+          next = { id, at: t.at, fn: t.fn };
+        }
+      }
+      if (next === null) break;
+      timers.delete(next.id);
+      now = next.at;
+      next.fn();
+    }
+    now = target;
+  };
+  return { setTimeoutImpl, clearTimeoutImpl, advance, pending: () => timers.size };
+}
+
+/** マイクロタスクを十分に流す（fire の内部 await を進めて speaking/再生追跡へ到達させる）。 */
+async function flushMicrotasks(n = 40) {
+  for (let i = 0; i < n; i += 1) await Promise.resolve();
+}
+
+test("interrupt: 再生中の barge-in で声を止め・口を閉じ・接頭辞+注記を soul に 1 回追記・bargeIn 診断", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ねえ、聞いてる？");
+  const speak = makeBargeSpeak({ wavDurationSec: 2, playbackStartedAtMs: 1000 });
+  const ch = makeBargeChannel();
+  const pl = makeStopPlayer();
+  const timers = makeFakeTimers();
+  /** @type {any[]} */ const diags = [];
+  /** @type {any[]} */ const souls = [];
+  /** @type {string[]} */ const states = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: ch.channel,
+    player: pl.player,
+    onState: (s) => states.push(s),
+    onDiagnostic: (d) => diags.push(d),
+    onSoulTranscript: (e) => souls.push(e),
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+
+  const p = orch.fire();
+  await flushMicrotasks();
+  // 再生実区間の間 speaking を保つ（従来は speak 直後 idle だった）。
+  assert.equal(orch.getState(), "speaking");
+  // まだ soul は積まれていない（追記は完了/中断時・タイミング変更）。
+  assert.equal(buffer.all().length, 1);
+
+  // 再生開始から 350ms（=3 母音オンセット通過）で barge-in。
+  const info = await orch.interrupt(1350);
+  assert.equal(info.interrupted, true);
+  assert.equal(info.charsSpoken, 3);
+  assert.equal(info.prefix, "こんに");
+
+  const result = await p;
+  assert.equal(result.fired, true);
+  assert.equal(result.interrupted, true);
+  assert.equal(result.replyText, "こんに");
+
+  // ① 声を止めた。
+  assert.equal(pl.calls.stop, 1);
+  // ② 口を閉じた（mouth-open value=0・短 ttl）。
+  assert.equal(ch.sets.length, 1);
+  assert.deepEqual(ch.sets[0], { slotId: "mouth-open", value: 0, ttlMs: MOUTH_CLOSE_TTL_MS });
+  // ③④ soul は「接頭辞 + 中断注記」の 1 エントリ（append-only・上書きなし）。
+  const all = buffer.all();
+  assert.equal(all.length, 2);
+  assert.equal(all[1].speaker, "soul");
+  assert.equal(all[1].text, "こんに" + BARGE_IN_NOTE);
+  assert.equal(souls.length, 1);
+  // ⑤ bargeIn 診断（切断点・声に出た文字数）。
+  const bi = diags.find((d) => d.type === "bargeIn");
+  assert.ok(bi, "bargeIn 診断が出る");
+  assert.equal(bi.elapsedMs, 350);
+  assert.equal(bi.charsSpoken, 3);
+  assert.equal(bi.totalChars, 5);
+  // 状態は speaking を経て idle。
+  assert.equal(orch.getState(), "idle");
+  assert.deepEqual(states, ["thinking", "speaking", "idle"]);
+
+  // 二度目の interrupt は no-op（冪等）。
+  const info2 = await orch.interrupt(1400);
+  assert.equal(info2.interrupted, false);
+  assert.equal(buffer.all().length, 2); // 追記は増えない。
+  orch.dispose();
+});
+
+test("interrupt なし: 自然完了で全文を soul 追記（完了時タイミング・中断注記なし・stop/口閉じなし）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const speak = makeBargeSpeak({ wavDurationSec: 2, playbackStartedAtMs: 1000 });
+  const ch = makeBargeChannel();
+  const pl = makeStopPlayer();
+  const timers = makeFakeTimers();
+  /** @type {any[]} */ const souls = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: ch.channel,
+    player: pl.player,
+    onSoulTranscript: (e) => souls.push(e),
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+
+  const p = orch.fire();
+  await flushMicrotasks();
+  assert.equal(orch.getState(), "speaking");
+  // 完了前は soul 未追記（タイミング変更の要）。
+  assert.equal(buffer.all().length, 1);
+
+  // 再生尺 2000ms 経過 → 自然完了。
+  timers.advance(2000);
+  const result = await p;
+  assert.equal(result.fired, true);
+  assert.equal(result.interrupted, undefined);
+  assert.equal(result.replyText, "こんにちは");
+
+  const all = buffer.all();
+  assert.equal(all.length, 2);
+  assert.equal(all[1].text, "こんにちは"); // 全文・注記なし。
+  assert.equal(souls.length, 1);
+  assert.equal(pl.calls.stop, 0); // 止めていない。
+  assert.equal(ch.sets.length, 0); // 口閉じもしていない。
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("interrupt: 発話中でなければ no-op（idle 時・声を止めない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const pl = makeStopPlayer();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "x" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: pl.player
+  });
+  const info = await orch.interrupt(1000);
+  assert.equal(info.interrupted, false);
+  assert.equal(info.reason, "not-speaking");
+  assert.equal(pl.calls.stop, 0);
+  orch.dispose();
+});
+
+test("interrupt: 口閉じ rejected でも中断は続く（診断に握る・接頭辞は soul へ追記）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const speak = makeBargeSpeak({ wavDurationSec: 2, playbackStartedAtMs: 1000 });
+  const ch = makeBargeChannel({
+    setResult: () => ({ result: "rejected", error: { code: "slotValueOutOfRange" }, rttMs: 0 })
+  });
+  const pl = makeStopPlayer();
+  const timers = makeFakeTimers();
+  /** @type {any[]} */ const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: ch.channel,
+    player: pl.player,
+    onDiagnostic: (d) => diags.push(d),
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  const p = orch.fire();
+  await flushMicrotasks();
+  const info = await orch.interrupt(1250); // elapsed 250 → 2 母音 → "こん"
+  assert.equal(info.interrupted, true);
+  assert.equal(info.prefix, "こん");
+  await p;
+  // 声は止めた・soul は接頭辞+注記が積まれた（rejected でも中断は完了する）。
+  assert.equal(pl.calls.stop, 1);
+  assert.equal(buffer.all()[1].text, "こん" + BARGE_IN_NOTE);
+  // 口閉じ rejected 診断が出る。
+  assert.ok(diags.some((d) => d.type === "bargeInMouthCloseRejected" && d.slotId === "mouth-open"));
+  orch.dispose();
+});
+
+test("interrupt/dispose: 再生中に dispose すると await を安全に解放（soul 追記せず disposed で畳む）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const speak = makeBargeSpeak({ wavDurationSec: 5, playbackStartedAtMs: 1000 });
+  const timers = makeFakeTimers();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: makeBargeChannel().channel,
+    player: makeStopPlayer().player,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  const p = orch.fire();
+  await flushMicrotasks();
+  assert.equal(orch.getState(), "speaking");
+  orch.dispose();
+  const result = await p;
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "disposed");
+  assert.equal(buffer.all().length, 1); // soul 追記なし。
+  // dispose 後の interrupt も安全（no-op）。
+  const info = await orch.interrupt(2000);
+  assert.equal(info.interrupted, false);
+});
+
+test("結線: createBargeInGate 確定 → orchestrator.interrupt（VAD 縦検証・全 fake）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const speak = makeBargeSpeak({ wavDurationSec: 3, playbackStartedAtMs: 1000 });
+  const ch = makeBargeChannel();
+  const pl = makeStopPlayer();
+  const orchTimers = makeFakeTimers();
+  const gateTimers = makeFakeTimers();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: ch.channel,
+    player: pl.player,
+    setTimeoutImpl: orchTimers.setTimeoutImpl,
+    clearTimeoutImpl: orchTimers.clearTimeoutImpl
+  });
+  // 結線層と同じ形: VAD イベント → 機械弁 → 確定 → interrupt。
+  const gate = createBargeInGate({
+    onConfirm: () => { void orch.interrupt(1300); }, // 中断時刻 1300 → elapsed 300 → 2 母音 → "こん"
+    minSpeechMs: 200,
+    setTimeoutImpl: gateTimers.setTimeoutImpl,
+    clearTimeoutImpl: gateTimers.clearTimeoutImpl
+  });
+
+  const p = orch.fire();
+  await flushMicrotasks();
+  assert.equal(orch.getState(), "speaking");
+
+  // ユーザーが喋り出す → 機械弁通過（cancel 来ない）→ 確定 → interrupt。
+  gate.handle({ type: "speechStart", tMs: 1200 });
+  gateTimers.advance(200);
+  await flushMicrotasks();
+
+  const result = await p;
+  assert.equal(result.interrupted, true);
+  assert.equal(result.replyText, "こん");
+  assert.equal(pl.calls.stop, 1);
+  assert.equal(ch.sets.length, 1);
+  gate.dispose();
+  orch.dispose();
+});
+
+test("結線: 窓内 speechCancel は interrupt を呼ばず自然完了する（瞬間スパイクでは声を止めない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const speak = makeBargeSpeak({ wavDurationSec: 3, playbackStartedAtMs: 1000 });
+  const ch = makeBargeChannel();
+  const pl = makeStopPlayer();
+  const orchTimers = makeFakeTimers();
+  const gateTimers = makeFakeTimers();
+  let interruptCount = 0;
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: ch.channel,
+    player: pl.player,
+    setTimeoutImpl: orchTimers.setTimeoutImpl,
+    clearTimeoutImpl: orchTimers.clearTimeoutImpl
+  });
+  const gate = createBargeInGate({
+    onConfirm: () => { interruptCount += 1; void orch.interrupt(1300); },
+    minSpeechMs: 200,
+    setTimeoutImpl: gateTimers.setTimeoutImpl,
+    clearTimeoutImpl: gateTimers.clearTimeoutImpl
+  });
+
+  const p = orch.fire();
+  await flushMicrotasks();
+  assert.equal(orch.getState(), "speaking");
+
+  // 瞬間スパイク: speechStart → 窓内で speechCancel → 確定しない。
+  gate.handle({ type: "speechStart", tMs: 1100 });
+  gateTimers.advance(150);
+  gate.handle({ type: "speechCancel", tMs: 1250 });
+  gateTimers.advance(200);
+  await flushMicrotasks();
+  assert.equal(interruptCount, 0);
+  assert.equal(pl.calls.stop, 0); // 声は止まっていない。
+
+  // 自然完了で全文が積まれる。
+  orchTimers.advance(3000);
+  const result = await p;
+  assert.equal(result.fired, true);
+  assert.equal(result.interrupted, undefined);
+  assert.equal(buffer.all()[1].text, "こんにちは");
+  gate.dispose();
+  orch.dispose();
 });

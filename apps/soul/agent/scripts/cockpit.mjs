@@ -90,6 +90,7 @@ export function parseCockpitArgs(argv) {
  * @returns {{
  *   sendSpeech: (timeline: unknown) => Promise<any>;
  *   sendEnvelope: (intent: unknown) => Promise<any>;
+ *   sendSet: (intent: unknown) => Promise<any>;
  *   setUrl: (next: string | null | undefined) => void;
  *   getUrl: () => string | null;
  *   connectionStatus: () => string;
@@ -140,6 +141,15 @@ export function createLazyChannel(url, options = {}) {
     async sendEnvelope(intent) {
       const channel = await ensure();
       return channel.sendEnvelope(intent);
+    },
+    /**
+     * intent.set を送る（S6 barge-in の口閉じ）。sendSpeech/sendEnvelope と同型に ensure()→接続へ委譲。
+     * orchestrator の interrupt() が mouth-open へ value=0 を着弾させるために呼ぶ。
+     * @param {unknown} intent
+     */
+    async sendSet(intent) {
+      const channel = await ensure();
+      return channel.sendSet(intent);
     },
     /**
      * URL を後から設定/変更する。変更時は既存接続キャッシュを破棄（次回 fire で新 URL に再接続）。
@@ -236,6 +246,68 @@ export function createVisionTargetHooks(settings) {
   };
 }
 
+/**
+ * settings の出力デバイス（audioDevice）を、cockpit-server の口（onSetAudioDevice/audioDeviceStatus）へ
+ * 橋渡しする（S6「会話が続く」・Domain D。visionTarget と同型の薄い配線層）。
+ *
+ * **常駐プレイヤーの再起動はここでは行わない**（settings の getter/setter に閉じた層のまま）。
+ * main() が返り値の `onSetAudioDevice` をラップして常駐プレイヤーの再生成トリガに使う（§createAudioPlayer 呼び出し側）。
+ *
+ * @param {{ getAudioDevice: () => string | null; setAudioDevice: (name: string | null) => void }} settings
+ * @returns {{
+ *   getAudioDevice: () => string | null;
+ *   onSetAudioDevice: (name: string | null) => void;
+ *   audioDeviceStatus: () => { name: string | null };
+ * }}
+ */
+export function createAudioDeviceHooks(settings) {
+  return {
+    /** 起動時 / プレイヤー再生成時に読む出力デバイス名（未記憶なら null=既定デバイス）。 */
+    getAudioDevice: () => settings.getAudioDevice(),
+    /** cockpit-server の onSetAudioDevice（POST /api/audio-device が呼ぶ）。 */
+    onSetAudioDevice: (name) => {
+      try {
+        settings.setAudioDevice(name ?? null); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetVisionTarget と同型の失敗寛容）。
+      }
+    },
+    /** cockpit-server の audioDeviceStatus（state snapshot に載せる現況）。 */
+    audioDeviceStatus: () => ({ name: settings.getAudioDevice() })
+  };
+}
+
+/**
+ * settings の自発発火 ON/OFF トグル（selfFireEnabled）を、cockpit-server の口
+ * （onSetSelfFireEnabled）へ橋渡しする（S6「会話が続く」・Domain D。visionTarget と同型の薄い配線層）。
+ * 起動時の初期値解決（`resolveInitialEnabled`）は既定値（false）へのフォールバックを担う——bool の
+ * 「未記憶」（null）と「明示 false」を区別する settings 契約を、呼び出し側が意識せずに使えるようにする。
+ *
+ * @param {{ getSelfFireEnabled: () => boolean | null; setSelfFireEnabled: (enabled: boolean) => void }} settings
+ * @param {boolean} [defaultEnabled=false]  未記憶時のフォールバック（v0 は既定 OFF・wave 計画 §1 の順序どおり）。
+ * @returns {{
+ *   resolveInitialEnabled: () => boolean;
+ *   onSetSelfFireEnabled: (enabled: boolean) => void;
+ * }}
+ */
+export function createSelfFireHooks(settings, defaultEnabled = false) {
+  return {
+    /** 起動時の初期 ON/OFF（未記憶なら defaultEnabled）。 */
+    resolveInitialEnabled: () => {
+      const remembered = settings.getSelfFireEnabled();
+      return typeof remembered === "boolean" ? remembered : defaultEnabled;
+    },
+    /** cockpit-server の onSetSelfFireEnabled（POST /api/self-fire が呼ぶ）。 */
+    onSetSelfFireEnabled: (enabled) => {
+      try {
+        settings.setSelfFireEnabled(enabled === true); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetVisionTarget と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --channel <ws-url>    器の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の**初期値**
@@ -261,6 +333,10 @@ async function main() {
   const settings = createFileSettingsStore();
   // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
   const visionTargetHooks = createVisionTargetHooks(settings);
+  // S6「会話が続く」: 魂の声の出力デバイス設定（vision target と同型の薄い橋渡し・§createAudioDeviceHooks）。
+  const audioDeviceHooks = createAudioDeviceHooks(settings);
+  // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（既定 OFF・§createSelfFireHooks）。
+  const selfFireHooks = createSelfFireHooks(settings, false);
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -285,6 +361,10 @@ async function main() {
   /**
    * session/player を遅延生成する（S2.5 無退行の要）。呼ばれるまで LLM の spawn（≈12s）は走らない。
    * 冪等（既に生成済みなら何もしない）。env ガードは session 初回生成時に一度だけ通す。
+   *
+   * S6「会話が続く」: player は起動時（またはデバイス変更後の再生成時）に settings の出力デバイス名を
+   * env 経由で渡す（Domain A `createAudioPlayer({ deviceName })`）。未記憶なら deviceName 未指定 =
+   * 既定デバイス（S1〜S5 無退行）。
    */
   const ensureFireResources = () => {
     if (session == null) {
@@ -303,7 +383,8 @@ async function main() {
       });
     }
     if (player == null) {
-      player = createAudioPlayer();
+      const deviceName = audioDeviceHooks.getAudioDevice() ?? undefined;
+      player = createAudioPlayer(deviceName ? { deviceName } : {});
     }
   };
 
@@ -320,7 +401,42 @@ async function main() {
     play(...playArgs) {
       ensureFireResources();
       return /** @type {any} */ (player).play(...playArgs);
+    },
+    /** barge-in の声止め（S6）。play が走った後にしか呼ばれない = player は生成済み。best-effort。 */
+    stop() {
+      if (player != null && typeof (/** @type {any} */ (player).stop) === "function") {
+        return /** @type {any} */ (player).stop();
+      }
     }
+  };
+
+  /**
+   * 操縦席（POST /api/audio-device）から出力デバイスを設定/変更する（S6「会話が続く」）。
+   *
+   * ── デバイス変更の適用方式【その場再起動】（設計判断・domain-a.md §7-3 の申し送りへの回答）────
+   *  常駐プレイヤーは起動時に env `SOUL_AUDIO_DEVICE_NAME` でデバイス名を受ける（Domain A）ため、
+   *  デバイス変更を反映するには常駐プロセスの再起動が要る。「次回起動から適用」（設定だけ書き換えて
+   *  次回 `cockpit.mjs` 起動まで待つ）と「その場で再起動」（既存 player を dispose して player=null に
+   *  戻し、次回 ensureFireResources() で新デバイス名の player を再生成する）の 2 択のうち、**その場再起動**
+   *  を採る: 配信中に「マイクが声を拾う」と気づいてからデバイスを切り替える運用（wave-plan §5 choke
+   *  point・音響設営）を考えると、次回起動待ちは現実的でない。**再生中の発話は追跡できない**（barge-in
+   *  の interrupt を経由しない dispose のため、再生実区間の後始末は player.dispose() が担う・進行中の
+   *  fire があれば次の speak から新デバイスに切り替わる）。
+   * @param {string | null} name
+   */
+  const onSetAudioDevice = async (name) => {
+    audioDeviceHooks.onSetAudioDevice(name); // 次回起動でも復元（file-backed・失敗寛容）。
+    if (player != null) {
+      try {
+        player.dispose();
+      } catch {
+        // best-effort（再生成の妨げにしない）。
+      }
+      player = null; // 次回 fire 時に ensureFireResources() が新デバイス名で再生成する。
+    }
+    process.stdout.write(
+      name ? `[cockpit] audio device set: ${name}\n` : "[cockpit] audio device cleared (default)\n"
+    );
   };
 
   /** fireOrchestratorFactory は常に注入する（Channel URL 未設定でも fire は「使えないが結線済み」）。 */
@@ -380,7 +496,14 @@ async function main() {
     // S5「目が開く」: 対象ウインドウ設定の口（GET /api/windows は既定 listWindowsImpl=Domain A listWindows
     // をそのまま使う・差し替え不要）。
     onSetVisionTarget: visionTargetHooks.onSetVisionTarget,
-    visionTargetStatus: visionTargetHooks.visionTargetStatus
+    visionTargetStatus: visionTargetHooks.visionTargetStatus,
+    // S6「会話が続く」: 出力デバイス設定の口（GET /api/audio-devices は既定 listAudioDevicesImpl=
+    // Domain A listAudioDevices をそのまま使う・差し替え不要）。
+    onSetAudioDevice,
+    audioDeviceStatus: audioDeviceHooks.audioDeviceStatus,
+    // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（起動時は settings から復元・既定 OFF）。
+    selfFireInitialEnabled: selfFireHooks.resolveInitialEnabled(),
+    onSetSelfFireEnabled: selfFireHooks.onSetSelfFireEnabled
   });
 
   const url = await server.listen();

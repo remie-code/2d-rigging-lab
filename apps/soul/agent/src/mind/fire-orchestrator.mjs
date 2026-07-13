@@ -26,10 +26,25 @@
  *  session（createLlmSession の返り）・speak・channel・player・転写バッファは**受け取るだけ**。
  *  ここで作らず・変えない（S1/S2 の器官はそのまま結線する）。所有権は呼び出し側（本番結線 = Domain B）。
  *
- * ── busy 状態機械（wave 計画 §2 裁定 5）───────────────────────────────────────
- *  idle →(fire)→ thinking →(応答)→ speaking →(発話完了)→ idle。**state≠idle の間の fire は無視**
- *  （重ね発火・割り込みは S4/S6 の領分）。state 遷移ごとに onState(state) を通知（操縦席の busy 表示）。
- *  finally で必ず idle へ戻す（ask/speak が throw してもサーバを殺さない・状態を詰まらせない）。
+ * ── busy 状態機械（wave 計画 §2 裁定 5・S6 で意味が変わる）─────────────────────────
+ *  idle →(fire)→ thinking →(応答)→ speaking →(発話完了 or barge-in 中断)→ idle。**state≠idle の
+ *  間の fire は無視**（重ね発火は S4/S6 の領分）。state 遷移ごとに onState(state) を通知。
+ *  finally で必ず idle へ戻す（ask/speak が throw してもサーバを殺さない）。
+ *
+ *  **S6 で speaking 状態が実再生区間を覆うように変わった**（inventory §3-3 の回収）: 従来は
+ *  speakImpl（play() 送出は非ブロッキング）が resolve した瞬間に soul を append して即 idle へ
+ *  向かっていた＝実際の音声再生中はもう idle だった。S6 では speak() の戻り（timeline・
+ *  wavDurationSec・playbackStartedAtMs）で **再生実区間を追跡**し、その間 speaking 状態を保つ。
+ *  soul 追記は **発話完了時（全文）または barge-in 中断時（声に出た接頭辞 + 中断注記）** の 1 回だけ
+ *  行う（append-only 維持・裁定済みの意図変更）。この window に interrupt() が効く。
+ *
+ * ── S6「会話が続く」barge-in（Domain B）─────────────────────────────────────────
+ *  外部（cockpit-server の onVadEvent → barge-in gate）が `interrupt()` を呼ぶと、再生中の魂発話を
+ *  中断する: ① player.stop()（声を止める）② channel へ mouth-open intent.set(value=0・短 ttl) を
+ *  送出（口を閉じる = speech タイムライン強制 release・inventory §2）③ モーラタイムライン × 再生経過で
+ *  切断点算出（barge-in.computeSpokenPrefix・過大評価しない）④ soul 行に「接頭辞 + 中断注記」を追記
+ *  ⑤ onDiagnostic({type:"bargeIn",...})。stop 失敗・set rejected/throw は診断に握って落とさない
+ *  （envelope 経路の作法に倣う）。interrupt() は speaking 中でなければ no-op（冪等・dispose 後も安全）。
  *
  * ── 失敗の握り ──────────────────────────────────────────────────────────────
  *  ask/speak の throw は onDiagnostic({type:"fireError", message}) に落とし、{fired:false, reason:"error"}
@@ -69,6 +84,12 @@ import { formatFireInjection, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-inje
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { translateExpression } from "./expression-translator.mjs";
 import { captureWindow as defaultCaptureWindow } from "../eyes/window-capture.mjs";
+import {
+  computeSpokenPrefix,
+  BARGE_IN_NOTE,
+  MOUTH_CLOSE_SLOT_ID,
+  MOUTH_CLOSE_TTL_MS
+} from "./barge-in.mjs";
 
 /** 視覚発火の最小指示文（wave 計画 §2 裁定・人格の作り込みはしない＝persona の領分）。 */
 const VISION_INSTRUCTION_TEXT = "今の画面を見て、直近の会話と合わせて自然に反応してください。";
@@ -122,7 +143,9 @@ export const FIRE_SYSTEM_PROMPT =
  *   視覚発火のキャプチャ成功通知（「見た」事実・サムネ用 base64 はここにだけ載る。会話ログには積まない）。
  * @param {(info: { usage: any; vision: boolean }) => void} [options.onUsage]
  *   ask ごとの usage 通知（通常 Fire・視覚発火の両方・usage が null/undefined のときは発火しない）。
- * @returns {{ fire: (fireOptions?: { vision?: boolean }) => Promise<object>; getState: () => FireState; dispose: () => void }}
+ * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  再生完了タイマの注入（決定論テスト用）。
+ * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  再生完了タイマの解除（注入）。
+ * @returns {{ fire: (fireOptions?: { vision?: boolean }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; getState: () => FireState; dispose: () => void }}
  */
 export function createFireOrchestrator(options) {
   if (options == null || typeof options !== "object") {
@@ -147,12 +170,33 @@ export function createFireOrchestrator(options) {
   const getVisionTarget = options.getVisionTarget;
   const expressionIntensity =
     typeof options.expressionIntensity === "number" ? options.expressionIntensity : 1.0;
+  const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
+  const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
   const { onState, onFire, onDiagnostic, onSoulTranscript, onExpression, onVisionCaptured, onUsage } =
     options;
 
   /** @type {FireState} */
   let state = "idle";
   let disposed = false;
+
+  /**
+   * 再生実区間の追跡（S6）。speak() 後〜発話完了/中断まで有効。null = 現在発話中でない。
+   * @type {null | {
+   *   buffer: { append: Function };
+   *   speechText: string;
+   *   timeline: Array<any>;
+   *   playbackStartedAtMs: number;
+   *   interrupted: boolean;
+   *   appended: boolean;
+   *   timer: ReturnType<typeof setTimeout> | null;
+   *   resolve: (outcome: { interrupted: boolean; disposed?: boolean; elapsedMs?: number; charsSpoken?: number; prefix?: string }) => void;
+   * }}
+   */
+  let currentPlayback = null;
+
+  /** エラー→メッセージ（診断用）。 */
+  const errMessage = (/** @type {unknown} */ err) =>
+    err instanceof Error ? err.message : String(err);
 
   /** listener 呼び出しはサーバを殺さない（throw を握る）。 */
   const emit = (/** @type {Function|undefined} */ fn, /** @type {unknown} */ arg) => {
@@ -270,9 +314,73 @@ export function createFireOrchestrator(options) {
     }
 
     // 発話あり → 口 + 声（speechText のみ）。speak の throw は呼び出し元の catch（fireError）へ。
-    await speakImpl(speechText, { channel, player, ...speakDeps });
+    const spoken = await speakImpl(speechText, { channel, player, ...speakDeps });
 
-    // soul 記録（**speechText のみ**・startMs/endMs=0）。broadcast は onSoulTranscript 経由。
+    // S6: 再生実区間を追跡し、その間 speaking を保つ。soul 追記は完了時 or 中断時の 1 回だけ。
+    // speak() の戻り（timeline・wavDurationSec・playbackStartedAtMs）で切断点算出材料と完了尺を得る。
+    const timeline = spoken && Array.isArray(spoken.timeline) ? spoken.timeline : [];
+    const wavDurationSec =
+      spoken && typeof spoken.wavDurationSec === "number" && Number.isFinite(spoken.wavDurationSec)
+        ? spoken.wavDurationSec
+        : 0;
+    const playbackStartedAtMs =
+      spoken && typeof spoken.playbackStartedAtMs === "number" && Number.isFinite(spoken.playbackStartedAtMs)
+        ? spoken.playbackStartedAtMs
+        : nowImpl();
+    const durationMs = Math.max(0, wavDurationSec * 1000);
+
+    // 再生中は speaking のまま。natural 完了タイマ or interrupt() のどちらかで resolve する。
+    const completion = await new Promise((resolve) => {
+      const pb = {
+        buffer,
+        speechText,
+        timeline,
+        playbackStartedAtMs,
+        interrupted: false,
+        appended: false,
+        resolve,
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        timer: null
+      };
+      pb.timer = setTimeoutImpl(() => {
+        // 自然完了（この window に interrupt が来なかった）。
+        if (currentPlayback === pb && !pb.interrupted) {
+          resolve({ interrupted: false });
+        }
+      }, durationMs);
+      currentPlayback = pb;
+    });
+
+    // window を閉じる（タイマ解除・現在発話をクリア）。interrupt() 経由なら timer は既に解除済み。
+    const pb = currentPlayback;
+    currentPlayback = null;
+    if (pb && pb.timer != null) {
+      clearTimeoutImpl(/** @type {any} */ (pb.timer));
+      pb.timer = null;
+    }
+
+    // dispose 中断: soul 追記せず畳む（詰まりを残さない）。
+    if (completion.disposed) {
+      await expressionPromise;
+      return { fired: false, reason: "disposed", ...extra };
+    }
+
+    if (completion.interrupted) {
+      // barge-in 中断: soul 追記（接頭辞 + 中断注記）と bargeIn 診断は interrupt() が済ませている。
+      // ここでは二重 append しない（append-only 維持・1 発話 = soul 1 エントリ）。
+      const expressions = await expressionPromise;
+      return {
+        fired: true,
+        interrupted: true,
+        replyText: completion.prefix ?? "",
+        charsSpoken: completion.charsSpoken ?? 0,
+        elapsedMs: completion.elapsedMs ?? 0,
+        expressions,
+        ...extra
+      };
+    }
+
+    // 自然完了 → 全文を soul 記録（**speechText のみ**・startMs/endMs=0）。broadcast は onSoulTranscript 経由。
     // S5: 視覚発火でも画像は一切積まない（会話ログの正本は speechText のみ・ディスク非保存の流儀）。
     const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
     if (appended && appended.appended && appended.entry) {
@@ -281,6 +389,98 @@ export function createFireOrchestrator(options) {
 
     const expressions = await expressionPromise;
     return { fired: true, replyText: speechText, expressions, ...extra };
+  };
+
+  /**
+   * barge-in 中断（S6・外部の VAD 結線が確定時に呼ぶ）。speaking 中の魂発話を止め、器の口を閉じ、
+   * 切断点を正直に算出して「接頭辞 + 中断注記」を soul へ 1 回追記し、bargeIn 診断を出す。
+   * speaking 中でなければ no-op（冪等・dispose 後も安全）。stop/set の失敗は診断に握って落とさない。
+   * @param {number} [atMs]  中断時刻（既定 nowImpl()）。切断点は atMs − playbackStartedAtMs で算出。
+   * @returns {Promise<{ interrupted: boolean; reason?: string; elapsedMs?: number; charsSpoken?: number; prefix?: string }>}
+   */
+  const interrupt = async (atMs) => {
+    const pb = currentPlayback;
+    if (!pb || pb.interrupted) {
+      // 発話中でない・既に中断済み → 何もしない（冪等）。
+      return { interrupted: false, reason: pb ? "already-interrupted" : "not-speaking" };
+    }
+    pb.interrupted = true;
+    // 自然完了タイマを止める（この後 resolve するので二重 resolve しない）。
+    if (pb.timer != null) {
+      clearTimeoutImpl(/** @type {any} */ (pb.timer));
+      pb.timer = null;
+    }
+
+    // ① 声を止める（player.stop）。失敗は診断に握る（落とさない）。
+    try {
+      if (player && typeof player.stop === "function") {
+        player.stop();
+      }
+    } catch (err) {
+      emit(onDiagnostic, { type: "bargeInStopError", message: errMessage(err) });
+    }
+
+    // ② 器の口を閉じる（mouth-open へ intent.set value=0・短 ttl = speech タイムライン強制 release）。
+    //    rejected/throw/未対応はすべて診断に握る（口が閉じ切らなくても中断処理は続ける）。
+    try {
+      if (channel && typeof channel.sendSet === "function") {
+        const outcome = await channel.sendSet({
+          slotId: MOUTH_CLOSE_SLOT_ID,
+          value: 0,
+          ttlMs: MOUTH_CLOSE_TTL_MS
+        });
+        if (!(outcome && outcome.result === "accepted")) {
+          emit(onDiagnostic, {
+            type: "bargeInMouthCloseRejected",
+            slotId: MOUTH_CLOSE_SLOT_ID,
+            error: outcome && outcome.error != null ? outcome.error : null
+          });
+        }
+      } else {
+        emit(onDiagnostic, {
+          type: "bargeInMouthCloseError",
+          slotId: MOUTH_CLOSE_SLOT_ID,
+          message: "channel has no sendSet"
+        });
+      }
+    } catch (err) {
+      emit(onDiagnostic, {
+        type: "bargeInMouthCloseError",
+        slotId: MOUTH_CLOSE_SLOT_ID,
+        message: errMessage(err)
+      });
+    }
+
+    // ③ 切断点算出（モーラタイムライン × 再生経過・過大評価しない純関数）。
+    const interruptAtMs = typeof atMs === "number" && Number.isFinite(atMs) ? atMs : nowImpl();
+    const elapsedMs = interruptAtMs - pb.playbackStartedAtMs;
+    const cut = computeSpokenPrefix({
+      speechText: pb.speechText,
+      timeline: pb.timeline,
+      elapsedMs
+    });
+
+    // ④ soul 追記（接頭辞 + 中断注記・1 回・上書きせず append）。broadcast は onSoulTranscript 経由。
+    const soulText = cut.prefix + BARGE_IN_NOTE;
+    const appended = pb.buffer.append({ startMs: 0, endMs: 0, text: soulText, speaker: "soul" });
+    pb.appended = true;
+    if (appended && appended.appended && appended.entry) {
+      emit(onSoulTranscript, appended.entry);
+    }
+
+    // ⑤ 診断（barge-in 発生・切断点・声に出た文字数）。
+    emit(onDiagnostic, {
+      type: "bargeIn",
+      elapsedMs,
+      charsSpoken: cut.charsSpoken,
+      totalChars: pb.speechText.length,
+      prefix: cut.prefix
+    });
+
+    const info = { interrupted: true, elapsedMs, charsSpoken: cut.charsSpoken, prefix: cut.prefix };
+    // processAskedReply の await を解放（この後 finally が idle へ戻す）。
+    pb.resolve(info);
+    return info;
   };
 
   /**
@@ -410,6 +610,9 @@ export function createFireOrchestrator(options) {
       }
     },
 
+    /** barge-in 中断（S6・外部の VAD 結線が呼ぶ）。詳細は interrupt の JSDoc。 */
+    interrupt,
+
     /** 現在の状態（idle/thinking/speaking）。 */
     getState() {
       return state;
@@ -418,6 +621,16 @@ export function createFireOrchestrator(options) {
     /** 畳む（以後の fire を拒否）。session/channel/player は所有しない = ここでは畳まない。 */
     dispose() {
       disposed = true;
+      // 発話再生中に畳まれたら、await 中の processAskedReply を安全に解放する（詰まりを残さない）。
+      const pb = currentPlayback;
+      if (pb && !pb.interrupted) {
+        pb.interrupted = true;
+        if (pb.timer != null) {
+          clearTimeoutImpl(/** @type {any} */ (pb.timer));
+          pb.timer = null;
+        }
+        pb.resolve({ interrupted: false, disposed: true });
+      }
     }
   };
 }

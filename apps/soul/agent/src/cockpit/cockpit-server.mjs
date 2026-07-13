@@ -48,6 +48,9 @@ import { createEarPipeline } from "../ears/ear-pipeline.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
+import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-player.mjs";
+import { createBargeInGate } from "../mind/barge-in.mjs";
+import { createFireScheduler } from "../mind/fire-scheduler.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
 export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
@@ -285,6 +288,17 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {(opts?: object) => Promise<{ windows: Array<{ pid: number; processName: string; title: string }> } | { error: { kind: string; message: string } }>} [options.listWindowsImpl]
  *   ウインドウ列挙の差し替え（テスト注入。既定は Domain A の `listWindows`・**実 PowerShell を起動する**）。
  *   GET /api/windows が呼ぶ。
+ * @param {(opts?: object) => Promise<{ devices: Array<{ id: string; name: string }> } | { error: { kind: string; message: string } }>} [options.listAudioDevicesImpl]
+ *   出力オーディオデバイス列挙の差し替え（テスト注入。既定は Domain A の `listAudioDevices`・**実
+ *   PowerShell を起動する**）。GET /api/audio-devices が呼ぶ（S6「会話が続く」・魂の声の出力先選択）。
+ * @param {(name: string | null) => void | Promise<void>} [options.onSetAudioDevice]
+ *   出力デバイス設定フック（S6・POST /api/vision-target の写経）。POST /api/audio-device が受けた
+ *   name（trim 済み・空はクリア=null）を渡す。**cockpit-server は永続化・常駐プレイヤーの再起動実体を
+ *   知らない**（責務境界: vision target と同型・実体は cockpit.mjs が settings/player へ橋渡しする）。
+ *   未注入なら POST /api/audio-device は 503。
+ * @param {() => (object | null)} [options.audioDeviceStatus]
+ *   出力デバイスの現況（`{ name: string | null }`）を返す。state snapshot に載せる。未注入なら
+ *   audioDevice:null。
  * @param {(hooks: {
  *   getBuffer: () => any;
  *   onState: (state: string) => void;
@@ -304,6 +318,16 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   （visionCaptured/usage）へ broadcast される（domain-c.md §）。fireVisionError は既存 onDiagnostic
  *   経由（diagnostic イベントに kind フィールドが乗る）。本番は Domain B が session/speak/channel/player
  *   を結線した createFireOrchestrator を返す。
+ * @param {boolean} [options.selfFireInitialEnabled=false]
+ *   S6「会話が続く」自発発火（呼びかけ/区切り/沈黙）の初期 ON/OFF。既定 OFF。orchestrator 注入時のみ
+ *   スケジューラを生成し、onVadEvent/onTranscript を回す。永続トグル（UI/設定）は Domain D が
+ *   `setSelfFireEnabled` を継ぎ目に配線する。scheduler は純ロジック（fire-scheduler.mjs・LLM 非依存）。
+ *   起動時の初期値は呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（Domain D §）。
+ * @param {(enabled: boolean) => void | Promise<void>} [options.onSetSelfFireEnabled]
+ *   自発発火トグルの永続化フック（S6・POST /api/self-fire が呼ぶ・vision target と同型）。
+ *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
+ *   未注入でも POST /api/self-fire 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
+ *   スキップ）。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -311,6 +335,8 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   isListening: () => boolean;
  *   earsStatus: () => string;
  *   fireState: () => string | null;
+ *   setSelfFireEnabled: (enabled: boolean) => boolean;
+ *   selfFireStatus: () => { enabled: boolean } | null;
  * }}
  */
 export function createCockpitServer(options = {}) {
@@ -327,6 +353,13 @@ export function createCockpitServer(options = {}) {
   const onSetVisionTarget = options.onSetVisionTarget;
   const visionTargetStatusImpl = options.visionTargetStatus;
   const listWindowsImpl = options.listWindowsImpl ?? defaultListWindows;
+  const listAudioDevicesImpl = options.listAudioDevicesImpl ?? defaultListAudioDevices;
+  const onSetAudioDevice = options.onSetAudioDevice;
+  const audioDeviceStatusImpl = options.audioDeviceStatus;
+  const onSetSelfFireEnabled = options.onSetSelfFireEnabled;
+  // S6「会話が続く」自発発火の初期 ON/OFF（既定 OFF）。Domain D が永続トグル（設定/UI）で制御する
+  // までは、テスト or 明示指定でのみ ON にする（既定 OFF ＝ 操縦席にトグルが無い間は自発が暴発しない）。
+  const selfFireInitialEnabled = options.selfFireInitialEnabled === true;
 
   /** @type {Set<import("node:http").ServerResponse>} */
   const sseClients = new Set();
@@ -344,6 +377,16 @@ export function createCockpitServer(options = {}) {
   let transitioning = false;
   let closed = false;
   let boundPort = 0;
+  // S6「会話が続く」barge-in の機械弁（VAD → 確定 → orchestrator.interrupt）。fireOrchestrator が
+  // interrupt を持つときだけ生成する（下の orchestrator 結線で代入・onVadEvent が handle を回す）。
+  /** @type {ReturnType<typeof createBargeInGate> | null} */
+  let bargeInGate = null;
+  // S6「会話が続く」自発発火スケジューラ（VAD/転写 → 自発 3 種判定 → onFireRequest → fire）。
+  // fireOrchestrator が fire/getState を持つときだけ生成する（下の orchestrator 結線で代入・
+  // onVadEvent と onTranscript が handleVadEvent/handleTranscript を回す）。純ロジックは fire-scheduler
+  // 側で fake clock/注入 RNG により全分岐テスト済み（domain-c.md）。
+  /** @type {ReturnType<typeof createFireScheduler> | null} */
+  let fireScheduler = null;
 
   const health = {
     /** @type {"up" | "down" | "unknown"} */ whisper: "unknown",
@@ -380,7 +423,11 @@ export function createCockpitServer(options = {}) {
       // S3 追撃 domain-c: Channel の現況（Domain B が redact 済みで返す・未注入なら null）。
       channel: typeof channelStatusImpl === "function" ? (channelStatusImpl() ?? null) : null,
       // S5「目が開く」: 視覚発火の対象ウインドウの現況（未注入なら null）。
-      visionTarget: typeof visionTargetStatusImpl === "function" ? (visionTargetStatusImpl() ?? null) : null
+      visionTarget: typeof visionTargetStatusImpl === "function" ? (visionTargetStatusImpl() ?? null) : null,
+      // S6「会話が続く」: 自発発火の現況（scheduler 未生成 = orchestrator 未注入なら null）。
+      selfFire: fireScheduler ? { enabled: fireScheduler.isEnabled() } : null,
+      // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
+      audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null
     };
   }
 
@@ -440,6 +487,8 @@ export function createCockpitServer(options = {}) {
     // startMs/endMs はゴースト行の対象 span（asrFailure が持つ・S2.5 追撃 domain-f）。
     // tag は演出の未知タグ（expressionUnknownTag が持つ・S4）。ページがゴースト行に語を出す。
     // kind は視覚発火の失敗種別（fireVisionError が持つ・S5「目が開く」・domain-c.md §）。
+    // elapsedMs/charsSpoken/totalChars/prefix は barge-in の切断点情報（type:"bargeIn" が持つ・
+    // S6「会話が続く」・domain-d.md §）。ページが barge-in マーカー行に切断点を出す。
     // 元々これらを持たない診断型では null になるだけで契約破壊はない（追加フィールド）。
     broadcast("diagnostic", {
       type: d?.type ?? "unknown",
@@ -448,7 +497,11 @@ export function createCockpitServer(options = {}) {
       startMs: d?.startMs ?? null,
       endMs: d?.endMs ?? null,
       tag: d?.tag ?? null,
-      kind: d?.kind ?? null
+      kind: d?.kind ?? null,
+      elapsedMs: d?.elapsedMs ?? null,
+      charsSpoken: d?.charsSpoken ?? null,
+      totalChars: d?.totalChars ?? null,
+      prefix: d?.prefix ?? null
     });
   }
 
@@ -494,8 +547,16 @@ export function createCockpitServer(options = {}) {
           durationMs: e.durationMs ?? null,
           reason: e.reason ?? null
         });
+        // S6 barge-in: SSE 放送と**並んで**機械弁へ回す（結線は薄く・核心は純部品側）。
+        // speechStart→Nms 内に speechCancel が来なければ確定→orchestrator.interrupt で声を止める。
+        if (bargeInGate) bargeInGate.handle(e);
+        // S6 自発発火: VAD を発火スケジューラへも回す（区切り応答の無音待ち・沈黙の活動リセット）。
+        if (fireScheduler) fireScheduler.handleVadEvent(e);
       },
       onTranscript: (entry, meta) => {
+        // S6 自発発火: 転写を発火スケジューラへ回す（you = 呼びかけ照合 + 活動 / soul = 不応期リセット）。
+        // **soul 除外の前**に回す（scheduler は soul 発話を不応期の基点に使うため you/soul 両方を要る）。
+        if (fireScheduler) fireScheduler.handleTranscript(entry);
         // soul の発話行はここ（耳の onTranscript 経路）では放送しない。soul も you と同じ
         // transcriptBuffer に append されるため onAppend→onTranscript を必ず通るが、soul の正経路は
         // orchestrator の onSoulTranscript → broadcastSoulTranscript の 1 本。ここで除外しないと
@@ -706,6 +767,54 @@ export function createCockpitServer(options = {}) {
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
       return;
     }
+    if (method === "GET" && pathname === "/api/audio-devices") {
+      // S6「会話が続く」: 出力デバイス選択用の一覧取得（実 PowerShell を起動しうる・GET /api/windows の写経）。
+      const result = await listAudioDevicesImpl();
+      if (result && Array.isArray(/** @type {any} */ (result).devices)) {
+        sendJson(res, 200, { devices: /** @type {any} */ (result).devices, error: null });
+      } else {
+        const err = /** @type {any} */ (result) && /** @type {any} */ (result).error;
+        sendJson(res, 200, { devices: [], error: err ? err.message ?? String(err) : "unknown error" });
+      }
+      return;
+    }
+    if (method === "POST" && pathname === "/api/audio-device") {
+      if (typeof onSetAudioDevice !== "function") {
+        // 未注入（S2.5〜S5 単体で立てた等）: 出力デバイス設定は使えない。
+        sendJson(res, 503, { error: "audio device control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const raw = typeof body.name === "string" ? body.name.trim() : "";
+      const name = raw.length > 0 ? raw : null; // 空 = クリア（既定デバイスへ）。
+      // デバイス名自体はここに保持/ログしない。フックへ橋渡しし、state は audioDeviceStatus() だけを
+      // 載せる（責務境界: cockpit-server は永続化・常駐プレイヤーの再起動実体を知らない）。
+      await onSetAudioDevice(name);
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && pathname === "/api/self-fire") {
+      // S6「会話が続く」: 自発発火 ON/OFF の永続トグル継ぎ目（Domain C が用意した setSelfFireEnabled を
+      // HTTP から叩く）。scheduler 未生成（orchestrator 未注入）なら 503（手動 Fire は無関係・生きたまま）。
+      if (!fireScheduler) {
+        sendJson(res, 503, { error: "self-fire control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const enabled = body.enabled === true;
+      fireScheduler.setEnabled(enabled);
+      if (typeof onSetSelfFireEnabled === "function") {
+        try {
+          await onSetSelfFireEnabled(fireScheduler.isEnabled());
+        } catch {
+          // 永続化失敗は操作を止めない（onSetVisionTarget と同型の失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/channel") {
       if (typeof onSetChannelUrl !== "function") {
         // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
@@ -792,7 +901,7 @@ export function createCockpitServer(options = {}) {
     });
   }
 
-  /** @type {{ fire: () => Promise<object>; getState: () => string; dispose: () => void } | null} */
+  /** @type {{ fire: () => Promise<object>; interrupt?: (atMs?: number) => Promise<object>; getState: () => string; dispose: () => void } | null} */
   let fireOrchestrator = null;
   if (typeof options.fireOrchestratorFactory === "function") {
     fireOrchestrator = options.fireOrchestratorFactory({
@@ -811,6 +920,63 @@ export function createCockpitServer(options = {}) {
       onVisionCaptured: (info) => broadcast("visionCaptured", info),
       // askごとの usage（input_tokens 等・通常 Fire/視覚発火共通）を SSE "usage" へ（domain-b.md §4-2）。
       onUsage: (info) => broadcast("usage", info)
+    });
+  }
+
+  // S6「会話が続く」barge-in の結線（additive・薄い）: orchestrator が interrupt を持つときだけ機械弁を
+  // 生成する。onVadEvent（startEars 内）が gate.handle を回し、確定で orchestrator.interrupt を呼ぶ。
+  // 核心ロジック（機械弁・切断点・interrupt）は純部品/orchestrator 側で fake テスト済み（domain-b.md）。
+  if (fireOrchestrator && typeof (/** @type {any} */ (fireOrchestrator).interrupt) === "function") {
+    bargeInGate = createBargeInGate({
+      onConfirm: () => {
+        try {
+          // 中断は best-effort（発話中でなければ no-op・throw は握る）。fire 経路をブロックしない。
+          void /** @type {any} */ (fireOrchestrator).interrupt();
+        } catch {
+          // best-effort（barge-in の失敗で常駐を殺さない）。
+        }
+      }
+    });
+  }
+
+  // S6「会話が続く」自発発火スケジューラの結線（additive・薄い）: orchestrator が fire/getState を持つときだけ
+  // 生成する。onVadEvent/onTranscript（startEars 内）が handleVadEvent/handleTranscript を回し、判定に応じて
+  // onFireRequest で kind 付き発火要求が来る → call/turn-end は通常 Fire・silence は視覚発火（fire({vision:true})）。
+  // busy 無視・空窓/対象未設定等は既存状態機械（fire-orchestrator）に従う（スケジューラは要求を出すだけ）。
+  if (
+    fireOrchestrator &&
+    typeof (/** @type {any} */ (fireOrchestrator).fire) === "function" &&
+    typeof (/** @type {any} */ (fireOrchestrator).getState) === "function"
+  ) {
+    fireScheduler = createFireScheduler({
+      enabled: selfFireInitialEnabled,
+      isBusy: () => /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      onFireRequest: (req) => {
+        // S6 Domain D: 発火要求の kind（call/turn-end/silence）を SSE "selfFire" で結線層外へ通知する
+        // （操縦席のタイムラインが自発発火マーカー行/スケジューラ診断のゴースト行を描く材料・domain-d.md §）。
+        // fire() 自体は best-effort（throw は握る・自発発火の失敗で常駐を殺さない）。結果（fired/reason）が
+        // 判明してから broadcast する（同期 throw も非同期 rejection もどちらも "fired:false" として扱う）。
+        const kind = req && req.kind;
+        try {
+          const firePromise =
+            req && req.kind === "silence"
+              ? /** @type {any} */ (fireOrchestrator).fire({ vision: true })
+              : /** @type {any} */ (fireOrchestrator).fire();
+          Promise.resolve(firePromise)
+            .then((result) => {
+              broadcast("selfFire", {
+                kind,
+                fired: !!(result && /** @type {any} */ (result).fired),
+                reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null
+              });
+            })
+            .catch((error) => {
+              broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
+            });
+        } catch (error) {
+          broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
+        }
+      }
     });
   }
 
@@ -837,12 +1003,39 @@ export function createCockpitServer(options = {}) {
     /** 発火状態（idle/thinking/speaking）。orchestrator 未注入なら null。 */
     fireState: () => (fireOrchestrator ? fireOrchestrator.getState() : null),
     /**
+     * 自発発火の ON/OFF を切り替える（S6・Domain D の永続トグルが呼ぶ継ぎ目）。scheduler 未生成
+     * （orchestrator 未注入）なら no-op。返り値は反映後の enabled（scheduler 無しは false）。
+     * @param {boolean} enabled
+     */
+    setSelfFireEnabled(enabled) {
+      if (fireScheduler) fireScheduler.setEnabled(enabled === true);
+      return fireScheduler ? fireScheduler.isEnabled() : false;
+    },
+    /** 自発発火の現況（enabled）。scheduler 未生成なら null。 */
+    selfFireStatus: () => (fireScheduler ? { enabled: fireScheduler.isEnabled() } : null),
+    /**
      * 全畳み（冪等）: 全 SSE 応答を end → orchestrator.dispose → pipeline.dispose → http server close。
      * リークするタイマ/ハンドル/子プロセスを残さない。
      */
     async close() {
       if (closed) return;
       closed = true;
+      if (bargeInGate) {
+        try {
+          bargeInGate.dispose();
+        } catch {
+          // best-effort
+        }
+        bargeInGate = null;
+      }
+      if (fireScheduler) {
+        try {
+          fireScheduler.dispose();
+        } catch {
+          // best-effort
+        }
+        fireScheduler = null;
+      }
       if (fireOrchestrator) {
         try {
           fireOrchestrator.dispose();

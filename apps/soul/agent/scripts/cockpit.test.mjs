@@ -2,7 +2,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseCockpitArgs, createLazyChannel, createSessionProxy, createVisionTargetHooks } from "./cockpit.mjs";
+import {
+  parseCockpitArgs,
+  createLazyChannel,
+  createSessionProxy,
+  createVisionTargetHooks,
+  createAudioDeviceHooks,
+  createSelfFireHooks
+} from "./cockpit.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
 // 実 SDK / 実 TTS / 実器 / 実マイクは使わない（fake connectImpl のみ）。
@@ -339,4 +346,104 @@ test("createVisionTargetHooks: settings.setVisionTarget が throw しても onSe
   };
   const hooks = createVisionTargetHooks(settings);
   assert.doesNotThrow(() => hooks.onSetVisionTarget("Sample Game"));
+});
+
+// ── createAudioDeviceHooks（S6「会話が続く」: 出力デバイス設定の settings ⇄ cockpit-server 橋渡し）───
+
+/** fake settings（cockpit-settings-store と同型の getAudioDevice/setAudioDevice を持つ最小 fake）。 */
+function makeFakeAudioDeviceSettings(initial = null) {
+  let current = initial;
+  return {
+    getAudioDevice: () => current,
+    setAudioDevice: (name) => {
+      current = name ?? null;
+    }
+  };
+}
+
+test("createAudioDeviceHooks: getAudioDevice は settings.getAudioDevice をそのまま返す", { timeout: 5000 }, () => {
+  const settings = makeFakeAudioDeviceSettings("ヘッドホン (2- Shure MV7+)");
+  const hooks = createAudioDeviceHooks(settings);
+  assert.equal(hooks.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+});
+
+test("createAudioDeviceHooks: onSetAudioDevice は settings.setAudioDevice へ橋渡しする", { timeout: 5000 }, () => {
+  const settings = makeFakeAudioDeviceSettings(null);
+  const hooks = createAudioDeviceHooks(settings);
+  hooks.onSetAudioDevice("スピーカー (Realtek(R) Audio)");
+  assert.equal(settings.getAudioDevice(), "スピーカー (Realtek(R) Audio)");
+  assert.equal(hooks.getAudioDevice(), "スピーカー (Realtek(R) Audio)");
+  // null/undefined はクリア。
+  hooks.onSetAudioDevice(null);
+  assert.equal(settings.getAudioDevice(), null);
+});
+
+test("createAudioDeviceHooks: audioDeviceStatus は現在の name を { name } で返す", { timeout: 5000 }, () => {
+  const settings = makeFakeAudioDeviceSettings(null);
+  const hooks = createAudioDeviceHooks(settings);
+  assert.deepEqual(hooks.audioDeviceStatus(), { name: null });
+  hooks.onSetAudioDevice("ヘッドホン (2- Shure MV7+)");
+  assert.deepEqual(hooks.audioDeviceStatus(), { name: "ヘッドホン (2- Shure MV7+)" });
+});
+
+test("createAudioDeviceHooks: settings.setAudioDevice が throw しても onSetAudioDevice は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getAudioDevice: () => null,
+    setAudioDevice: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createAudioDeviceHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetAudioDevice("Some Device"));
+});
+
+// ── createSelfFireHooks（S6「会話が続く」: 自発発火 ON/OFF トグルの settings 橋渡し）───────────
+
+/** fake settings（cockpit-settings-store と同型の getSelfFireEnabled/setSelfFireEnabled を持つ最小 fake）。 */
+function makeFakeSelfFireSettings(initial = null) {
+  let current = initial;
+  return {
+    getSelfFireEnabled: () => current,
+    setSelfFireEnabled: (enabled) => {
+      current = enabled === true;
+    }
+  };
+}
+
+test("createSelfFireHooks: 未記憶（null）なら defaultEnabled にフォールバックする（既定 false）", { timeout: 5000 }, () => {
+  const settings = makeFakeSelfFireSettings(null);
+  const hooks = createSelfFireHooks(settings);
+  assert.equal(hooks.resolveInitialEnabled(), false);
+});
+
+test("createSelfFireHooks: defaultEnabled を明示指定できる", { timeout: 5000 }, () => {
+  const settings = makeFakeSelfFireSettings(null);
+  const hooks = createSelfFireHooks(settings, true);
+  assert.equal(hooks.resolveInitialEnabled(), true);
+});
+
+test("createSelfFireHooks: 記憶済みの bool（true/false）は defaultEnabled より優先される", { timeout: 5000 }, () => {
+  const settingsTrue = makeFakeSelfFireSettings(true);
+  assert.equal(createSelfFireHooks(settingsTrue, false).resolveInitialEnabled(), true);
+  const settingsFalse = makeFakeSelfFireSettings(false);
+  assert.equal(createSelfFireHooks(settingsFalse, true).resolveInitialEnabled(), false);
+});
+
+test("createSelfFireHooks: onSetSelfFireEnabled は settings.setSelfFireEnabled へ橋渡しし・次回 resolveInitialEnabled に反映する", { timeout: 5000 }, () => {
+  const settings = makeFakeSelfFireSettings(null);
+  const hooks = createSelfFireHooks(settings, false);
+  hooks.onSetSelfFireEnabled(true);
+  assert.equal(settings.getSelfFireEnabled(), true);
+  assert.equal(hooks.resolveInitialEnabled(), true);
+});
+
+test("createSelfFireHooks: settings.setSelfFireEnabled が throw しても onSetSelfFireEnabled は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getSelfFireEnabled: () => null,
+    setSelfFireEnabled: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createSelfFireHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetSelfFireEnabled(true));
 });

@@ -146,6 +146,63 @@ test("connectChannel: sendEnvelope rejected は result/error を返し接続は�
   }
 });
 
+test("connectChannel: sendSet 送出 → accepted（payload 形 slotId/value/ttlMs・replyTo 相関・S6 barge-in の口閉じ）", async () => {
+  const server = createChannelServerDouble();
+  const url = await server.listen();
+  const channel = await connectChannel(url, { WebSocketImpl: WS });
+  try {
+    const intent = { slotId: "mouth-open", value: 0, ttlMs: 400 };
+    const outcome = await channel.sendSet(intent);
+    assert.equal(outcome.result, "accepted");
+    assert.equal(outcome.error, null);
+    assert.ok(outcome.rttMs >= 0);
+    // サーバが受けた payload が契約形（kind=intent.set・payload の 3 フィールド）である。
+    const setMsg = server.received.find((m) => m.kind === "intent.set");
+    assert.ok(setMsg, "server received intent.set");
+    assert.equal(setMsg.v, 1);
+    assert.match(setMsg.id, /^req-/);
+    assert.deepEqual(setMsg.payload, { slotId: "mouth-open", value: 0, ttlMs: 400 });
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel: sendSet は ttlMs 省略時 payload に載せない（省略 = 器既定窓）", async () => {
+  const server = createChannelServerDouble();
+  const url = await server.listen();
+  const channel = await connectChannel(url, { WebSocketImpl: WS });
+  try {
+    await channel.sendSet({ slotId: "mouth-open", value: 0 });
+    const setMsg = server.received.find((m) => m.kind === "intent.set");
+    assert.ok(setMsg);
+    assert.deepEqual(setMsg.payload, { slotId: "mouth-open", value: 0 });
+    assert.equal("ttlMs" in setMsg.payload, false);
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel: sendSet rejected は result/error を返し接続は維持（口閉じは best-effort）", async () => {
+  const server = createChannelServerDouble({
+    onSet: () => ({ result: "rejected", error: { code: "slotValueOutOfRange", message: "value out of range" } })
+  });
+  const url = await server.listen();
+  const channel = await connectChannel(url, { WebSocketImpl: WS });
+  try {
+    const outcome = await channel.sendSet({ slotId: "mouth-open", value: 5 });
+    assert.equal(outcome.result, "rejected");
+    assert.equal(outcome.error.code, "slotValueOutOfRange");
+    // 接続は維持 → 続けて speech も送れる（口閉じの rejected で会話は止まらない）。
+    const speech = await channel.sendSpeech(SPEECH_TIMELINE);
+    assert.equal(speech.result, "accepted");
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
 test("connectChannel: hello 不着はタイムアウト throw", async () => {
   const server = createChannelServerDouble({ sendHello: false });
   const url = await server.listen();

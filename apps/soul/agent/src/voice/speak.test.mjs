@@ -109,6 +109,44 @@ test("speak: TTS→timeline→送出→accepted→即 play の順序で完走", 
   assert.deepEqual(channel.lastTimeline, result.timeline);
 });
 
+test("speak: playbackStartedAtMs を注入 clock から返す（既存フィールドは不変・S6 追加）", async () => {
+  const order = [];
+  const channel = {
+    async sendSpeech(timeline) {
+      order.push("sendSpeech");
+      channel.lastTimeline = timeline;
+      return { result: "accepted", error: null, rttMs: 3.5 };
+    }
+  };
+  let playCalledAt = null;
+  // nowImpl は play 直後に 1 度だけ呼ばれる想定。決定論の固定値を返す。
+  const nowImpl = () => 987654;
+  const player = {
+    play() {
+      order.push("play");
+      playCalledAt = "played";
+    }
+  };
+  const result = await speak("こんにちは、テストです", {
+    channel,
+    player,
+    tts: fakeTts(order),
+    writeWav: () => "C:/tmp/fake.wav",
+    nowImpl
+  });
+  // 追加フィールド。
+  assert.equal(result.playbackStartedAtMs, 987654);
+  // 既存フィールドは不変（後方互換）。
+  assert.equal(result.wavPath, "C:/tmp/fake.wav");
+  assert.equal(result.rttMs, 3.5);
+  // wavDurationSec は WAV 実長の実測（golden 定数 1.5468 に丸め誤差の範囲で近い）。
+  assert.ok(Math.abs(result.wavDurationSec - GOLDEN_KONNICHIWA_WAV_DURATION_SEC) < 0.001);
+  assert.equal(result.timeline.length, 9);
+  assert.equal(playCalledAt, "played");
+  // play は playbackStartedAtMs 記録の前に呼ばれている（t=0 = 声が鳴り始めた瞬間）。
+  assert.equal(order[order.length - 1], "play");
+});
+
 test("speak: rejected は throw・play は呼ばれない・接続は閉じない", async () => {
   const order = [];
   let playCalled = false;

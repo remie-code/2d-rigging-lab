@@ -84,6 +84,12 @@
   .vision label { color: var(--muted); }
   .vision-target-status { color: var(--muted); }
   #btn-vision-fire { color: #8fb7ff; font-weight: bold; letter-spacing: 0.04em; }
+  /* ── Conversation（S6「会話が続く」: 自発 ON/OFF トグル + 出力デバイス選択）── */
+  .conversation { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .conversation label { color: var(--muted); }
+  .self-fire-status { color: var(--muted); }
+  .self-fire-status.on { color: var(--up); }
+  .audio-device-status { color: var(--muted); }
   .timeline-section { padding-bottom: 8px; }
   #timeline {
     height: 46vh; min-height: 220px; overflow-y: auto;
@@ -111,6 +117,14 @@
   .row.vision-marker .who { color: #8fb7ff; }
   .row.vision-marker .text { color: #8fb7ff; }
   .vision-thumb { max-height: 54px; max-width: 96px; border-radius: 3px; border: 1px solid var(--border); margin-left: 6px; vertical-align: middle; }
+  /* barge-in 中断マーカー行（S6「会話が続く」）。相手の発話に遮られて声が止まった瞬間を刻む。 */
+  .row.barge-in-marker { color: var(--down); }
+  .row.barge-in-marker .who { color: var(--down); }
+  .row.barge-in-marker .text { color: var(--down); }
+  /* 自発発火マーカー行（S6「会話が続く」）。呼びかけ/区切り/沈黙の自発発火を kind 付きで刻む。 */
+  .row.self-fire-marker { color: var(--accent); }
+  .row.self-fire-marker .who { color: var(--accent); }
+  .row.self-fire-marker .text { color: var(--accent); }
   footer {
     padding: 10px 18px; border-top: 1px solid var(--border);
     color: var(--muted); display: flex; gap: 24px; background: var(--panel);
@@ -157,6 +171,20 @@
     <button id="btn-vision-target-set">Set target</button>
     <span id="vision-target-status" class="vision-target-status">not configured</span>
     <span id="vision-error" class="err"></span>
+  </section>
+
+  <!-- S6「会話が続く」: 自発 ON/OFF トグル（呼びかけ/区切り/沈黙。手動 Fire は影響を受けない）+
+       出力デバイス選択（一覧取得→選択→POST /api/audio-device で永続化。適用は常駐プレイヤーのその場再起動）。 -->
+  <section class="conversation">
+    <label for="self-fire-toggle">Self-fire</label>
+    <input type="checkbox" id="self-fire-toggle">
+    <span id="self-fire-status" class="self-fire-status">off</span>
+    <label for="audio-device-select">Voice output</label>
+    <select id="audio-device-select"></select>
+    <button id="btn-audio-refresh">Refresh devices</button>
+    <button id="btn-audio-device-set">Set device</button>
+    <span id="audio-device-status" class="audio-device-status">default</span>
+    <span id="conversation-error" class="err"></span>
   </section>
 
   <!-- S3: 発火（Fire）。実運用のゲーム中発火は AHK → POST /api/fire（scripts/fire-hotkey.ahk）。 -->
@@ -225,11 +253,38 @@
       renderUptime();
       applyChannel(s.channel);
       applyVisionTarget(s.visionTarget);
+      applySelfFire(s.selfFire);
+      applyAudioDevice(s.audioDevice);
     }
     // ── Vision target 現況表示（S5「目が開く」）: state.visionTarget = { title } | null ──
     function applyVisionTarget(vt) {
       var el = byId("vision-target-status");
       el.textContent = vt && vt.title ? vt.title : "not configured";
+    }
+    // ── Self-fire トグル現況表示（S6「会話が続く」）: state.selfFire = { enabled } | null ──
+    // null（scheduler 未生成 = orchestrator 未注入）は「使えない」ことをトグル disable で表す。
+    var selfFireSyncing = false;
+    function applySelfFire(sf) {
+      var toggle = byId("self-fire-toggle");
+      var status = byId("self-fire-status");
+      if (!sf) {
+        toggle.disabled = true;
+        toggle.checked = false;
+        status.textContent = "not available";
+        status.className = "self-fire-status";
+        return;
+      }
+      toggle.disabled = false;
+      selfFireSyncing = true;
+      toggle.checked = !!sf.enabled;
+      selfFireSyncing = false;
+      status.textContent = sf.enabled ? "on" : "off";
+      status.className = "self-fire-status " + (sf.enabled ? "on" : "");
+    }
+    // ── 出力デバイス現況表示（S6「会話が続く」）: state.audioDevice = { name } | null ──
+    function applyAudioDevice(ad) {
+      var el = byId("audio-device-status");
+      el.textContent = ad && ad.name ? ad.name : "default";
     }
     // ── Channel 状態表示（S3 追撃 domain-c）: state.channel は redact 済み（token は伏せてある）──
     function applyChannel(ch) {
@@ -391,6 +446,42 @@
       timeline.scrollTop = timeline.scrollHeight;
     }
 
+    // ── barge-in 中断マーカー行（S6「会話が続く」）───────────────────────────
+    // diagnostic type=="bargeIn"（{elapsedMs,charsSpoken,totalChars,prefix}）を専用行に描く。
+    // 相手の発話に遮られて声が止まった「事実」を、破棄/ASR失敗のゴースト行とは別枠の目立つ行で刻む。
+    function addBargeInMarkerRow(d) {
+      var row = document.createElement("div");
+      row.className = "row barge-in-marker";
+      var t = document.createElement("span"); t.className = "time";
+      t.textContent = fmtClock(Date.now());
+      var who = document.createElement("span"); who.className = "who"; who.textContent = "barge-in";
+      var marker = document.createElement("span"); marker.className = "marker"; marker.textContent = "!!";
+      var text = document.createElement("span"); text.className = "text";
+      var chars = (d.charsSpoken != null ? d.charsSpoken : "?") + "/" + (d.totalChars != null ? d.totalChars : "?");
+      text.textContent = "interrupted (" + chars + " chars spoken, " + (d.elapsedMs != null ? d.elapsedMs : "?") + "ms)";
+      row.appendChild(t); row.appendChild(who); row.appendChild(marker); row.appendChild(text);
+      timeline.appendChild(row);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+
+    // ── 自発発火マーカー行（S6「会話が続く」）─────────────────────────────────
+    // SSE "selfFire"（{kind,fired,reason}・kind: call/turn-end/silence）を描く。fired:true は
+    // kind 付きの専用マーカー行（実際に撃った自発発火）、fired:false はスケジューラ診断のゴースト行
+    // （発火要求は出たが busy/no-target 等で実際には発火しなかった事実）として区別する。
+    function addSelfFireMarkerRow(d) {
+      var row = document.createElement("div");
+      row.className = "row self-fire-marker";
+      var t = document.createElement("span"); t.className = "time";
+      t.textContent = fmtClock(Date.now());
+      var who = document.createElement("span"); who.className = "who"; who.textContent = "self";
+      var marker = document.createElement("span"); marker.className = "marker"; marker.textContent = "~";
+      var text = document.createElement("span"); text.className = "text";
+      text.textContent = "self-fire (" + (d.kind || "?") + ")";
+      row.appendChild(t); row.appendChild(who); row.appendChild(marker); row.appendChild(text);
+      timeline.appendChild(row);
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+
     // ── usage 表示（S5: askごとの usage・累積の重さを早期検知できる最小表示）──
     // ツマミは置かない（v0 裁定）: 直近askの input_tokens だけを控えめに出す。
     function applyUsage(d) {
@@ -476,6 +567,70 @@
         applyVisionTarget(res.j.visionTarget);
       }).catch(function (e) {
         byId("vision-error").textContent = "vision target error: " + e;
+      });
+    });
+
+    // ── Self-fire トグル（S6「会話が続く」）: POST /api/self-fire { enabled } ──
+    // 手動 Fire ボタンとは独立（自発 OFF でも Fire ボタンは常に有効・トグルは呼びかけ/区切り/沈黙のみ制御）。
+    byId("self-fire-toggle").addEventListener("change", function () {
+      if (selfFireSyncing) return; // applySelfFire からの反映中は POST しない（無限ループ防止）。
+      var enabled = byId("self-fire-toggle").checked;
+      byId("conversation-error").textContent = "";
+      fetch("/api/self-fire", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: enabled })
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+      }).then(function (res) {
+        if (res.status === 503) { byId("conversation-error").textContent = "self-fire control not available"; return; }
+        if (!res.ok) { byId("conversation-error").textContent = "set failed: " + (res.j && res.j.error || "error"); return; }
+        applySelfFire(res.j.selfFire);
+      }).catch(function (e) {
+        byId("conversation-error").textContent = "self-fire error: " + e;
+      });
+    });
+
+    // ── 出力デバイス設定（S6「会話が続く」）: GET /api/audio-devices → select → POST /api/audio-device ──
+    // 適用は常駐プレイヤーのその場再起動（次に声を出すときから新デバイス。scripts/cockpit.mjs 参照）。
+    function loadAudioDevices() {
+      return fetch("/api/audio-devices").then(function (r) { return r.json(); }).then(function (j) {
+        var sel = byId("audio-device-select");
+        sel.innerHTML = "";
+        if (!j.devices || j.devices.length === 0) {
+          var opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = j.error ? "(device enumeration failed)" : "(no output devices)";
+          sel.appendChild(opt);
+        } else {
+          for (var i = 0; i < j.devices.length; i += 1) {
+            var o = document.createElement("option");
+            o.value = j.devices[i].name;
+            o.textContent = j.devices[i].name;
+            sel.appendChild(o);
+          }
+        }
+        byId("conversation-error").textContent = j.error ? ("devices: " + j.error) : "";
+      }).catch(function (e) {
+        byId("conversation-error").textContent = "failed to load audio devices: " + e;
+      });
+    }
+    byId("btn-audio-refresh").addEventListener("click", function () { loadAudioDevices(); });
+    byId("btn-audio-device-set").addEventListener("click", function () {
+      var name = byId("audio-device-select").value || "";
+      byId("conversation-error").textContent = "";
+      fetch("/api/audio-device", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: name })
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+      }).then(function (res) {
+        if (res.status === 503) { byId("conversation-error").textContent = "audio device control not available"; return; }
+        if (!res.ok) { byId("conversation-error").textContent = "set failed: " + (res.j && res.j.error || "error"); return; }
+        applyAudioDevice(res.j.audioDevice);
+      }).catch(function (e) {
+        byId("conversation-error").textContent = "audio device error: " + e;
       });
     });
 
@@ -590,6 +745,12 @@
         // S5「目が開く」: 視覚発火の失敗（対象未設定/窓消失/最小化/キャプチャ失敗）を kind 付きで
         // ゴースト行に残す（盲目のまま撃たず正直に中止した痕跡・domain-b.md §3-3）。
         else if (d.type === "fireVisionError") addGhostRow("(vision fire: " + (d.kind || "?") + (d.message ? " — " + d.message : "") + ")");
+        // S6「会話が続く」: barge-in 中断（相手の発話に遮られて声が止まった）は専用マーカー行に。
+        else if (d.type === "bargeIn") addBargeInMarkerRow(d);
+        // S6: barge-in の付随的失敗（声止め/口閉じの失敗）はゴースト行に残す（中断処理自体は続行済み）。
+        else if (d.type === "bargeInStopError") addGhostRow("(barge-in: player.stop failed — " + (d.message || "?") + ")");
+        else if (d.type === "bargeInMouthCloseRejected") addGhostRow("(barge-in: mouth-close rejected)");
+        else if (d.type === "bargeInMouthCloseError") addGhostRow("(barge-in: mouth-close failed — " + (d.message || "?") + ")");
         // 他の演出診断は非表示（過剰表示を避ける・S3 の抑制方針に倣う）:
         //  - expressionBrokenTag は壊れ括弧の除去痕（パース副産物・ノイズ）。
         //  - expressionRejected / expressionSendError は発話済み fire のスロット単位の器拒否/送出失敗で、
@@ -609,6 +770,13 @@
       es.addEventListener("visionCaptured", function (ev) { addVisionMarkerRow(JSON.parse(ev.data)); });
       // S5: askごとの usage（通常 Fire・視覚発火の両方・累積の重さの早期検知用の最小表示）。
       es.addEventListener("usage", function (ev) { applyUsage(JSON.parse(ev.data)); });
+      // S6「会話が続く」: 自発発火の要求（kind: call/turn-end/silence）。fired:true は自発発火マーカー行、
+      // fired:false はスケジューラ診断のゴースト行（要求は出たが busy/no-target 等で発火しなかった）。
+      es.addEventListener("selfFire", function (ev) {
+        var d = JSON.parse(ev.data);
+        if (d.fired) addSelfFireMarkerRow(d);
+        else addGhostRow("(self-fire: " + (d.kind || "?") + " not fired — " + (d.reason || "?") + ")");
+      });
     }
     function init() {
       loadDevices().then(function () {
@@ -617,6 +785,7 @@
           applyState(s);
         }).catch(function () { /* 状態取得失敗でもページは開く */ });
       }).then(function () { return loadWindows(); }) // S5: 対象ウインドウ選択肢の初期取得。
+        .then(function () { return loadAudioDevices(); }) // S6: 出力デバイス選択肢の初期取得。
         .then(subscribe);
     }
     init();

@@ -211,3 +211,145 @@ test("settings store: vision target 用の unwritable path は set を握って�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── 出力デバイス設定の永続化（S6「会話が続く」・魂の声の出力先）─────────────────
+
+test("settings store: audio device set→get roundtrip persists across instances", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getAudioDevice(), null); // 未作成 = 記憶なし。
+    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
+    assert.equal(store.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    // クリアも効く。
+    store.setAudioDevice(null);
+    assert.equal(createFileSettingsStore({ path }).getAudioDevice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: device / channel URL / vision target / audio device は同居する（他を消さない）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setLastChannelUrl("ws://127.0.0.1:17310/channel?token=abc");
+    store.setVisionTarget("Sample Game");
+    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(reopened.getVisionTarget(), "Sample Game");
+    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    // audio device を変えても他は残る。
+    store.setAudioDevice("スピーカー (Realtek(R) Audio)");
+    const again = createFileSettingsStore({ path });
+    assert.equal(again.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(again.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(again.getVisionTarget(), "Sample Game");
+    assert.equal(again.getAudioDevice(), "スピーカー (Realtek(R) Audio)");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getAudioDevice returns null (failure-tolerant)", () => {
+  const dir = tmpDir();
+  try {
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ not json", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getAudioDevice(), null);
+    // 非文字列 shape → null。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ audioDevice: 123 }), "utf8");
+    assert.equal(createFileSettingsStore({ path: oddPath }).getAudioDevice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: audio device 用の unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setAudioDevice("Some Device"));
+    assert.equal(store.getAudioDevice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── 自発発火 ON/OFF トグルの永続化（S6「会話が続く」）───────────────────────
+
+test("settings store: self-fire enabled set→get roundtrip persists across instances (bool)", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getSelfFireEnabled(), null); // 未作成 = 記憶なし（bool の有無を区別）。
+    store.setSelfFireEnabled(true);
+    assert.equal(store.getSelfFireEnabled(), true);
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getSelfFireEnabled(), true);
+    store.setSelfFireEnabled(false);
+    assert.equal(createFileSettingsStore({ path }).getSelfFireEnabled(), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: self-fire enabled は他のキー（device/channel/vision/audio）と同居する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setVisionTarget("Sample Game");
+    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
+    store.setSelfFireEnabled(true);
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getVisionTarget(), "Sample Game");
+    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    assert.equal(reopened.getSelfFireEnabled(), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt / 非 bool JSON → getSelfFireEnabled returns null (failure-tolerant)", () => {
+  const dir = tmpDir();
+  try {
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ not json", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getSelfFireEnabled(), null);
+    // 非 bool shape → null（"true" 文字列や数値は bool ではない）。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ selfFireEnabled: "true" }), "utf8");
+    assert.equal(createFileSettingsStore({ path: oddPath }).getSelfFireEnabled(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: self-fire enabled 用の unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setSelfFireEnabled(true));
+    assert.equal(store.getSelfFireEnabled(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

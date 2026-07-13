@@ -41,13 +41,21 @@ import { writeTempWav } from "./audio-player.mjs";
  * @param {number|string} [deps.speaker]  tts 省略時の話者 ID。
  * @param {undefined | { vowelMap?: Record<string, number> }} [deps.sConfig]  母音別 s の差し替え。
  * @param {(bytes: Uint8Array) => string} [deps.writeWav]  WAV → temp パス（テスト差し替え用）。既定 writeTempWav。
+ * @param {() => number} [deps.nowImpl]  再生開始時刻の時計（既定 Date.now）。テストで決定論固定するための注入点。
  * @returns {Promise<{
  *   timeline: Array<{ timeMs: number; vowel: string; s: number }>;
  *   wavDurationSec: number;
  *   wavPath: string;
  *   rttMs: number;
+ *   playbackStartedAtMs: number;
  * }>}
  * @throws {Error} rejected（接続は維持）/ timeline 過大 / TTS・合成の失敗。
+ *
+ * ── 戻り値 `playbackStartedAtMs`（S6 Domain A で追加）─────────────────────────
+ *  player.play(wavPath) を呼んだ（= 声が鳴り始めた t=0）瞬間の時刻。barge-in で「相手が話し始めた時刻 −
+ *  再生開始時刻 = 再生経過ms」を出し、モーラタイムラインと突き合わせて「実際に声に出た文字まで」を
+ *  算出する材料（inventory §3-3。従来は wavDurationSec を返しても再生開始時刻を捨てていた）。呼び出し側
+ *  （Domain B/C）が使わなくても既存フィールドは不変なので後方互換。
  */
 export async function speak(text, deps) {
   if (typeof text !== "string" || text.length === 0) {
@@ -67,6 +75,7 @@ export async function speak(text, deps) {
     deps.tts ??
     createTtsClient({ baseUrl: deps.ttsBaseUrl, speaker: deps.speaker });
   const writeWav = deps.writeWav ?? writeTempWav;
+  const nowImpl = deps.nowImpl ?? Date.now;
 
   // 1. audio_query → moras 平坦化 + pre/post 無音秒。
   const query = await tts.audioQuery(text);
@@ -104,6 +113,14 @@ export async function speak(text, deps) {
     throw new Error(`intent.speech rejected: ${detail}`);
   }
   player.play(wavPath);
+  // 声が鳴り始めた t=0（accepted 直後に play を送出した瞬間）。barge-in の切断点算出材料。
+  const playbackStartedAtMs = nowImpl();
 
-  return { timeline, wavDurationSec: wavSec, wavPath, rttMs: outcome.rttMs };
+  return {
+    timeline,
+    wavDurationSec: wavSec,
+    wavPath,
+    rttMs: outcome.rttMs,
+    playbackStartedAtMs
+  };
 }

@@ -11,11 +11,18 @@
  *   getVisionTarget(): 視覚発火の対象ウインドウタイトルの初期値（S5「目が開く」・operator/domain-c.md）。
  *   setVisionTarget(title): 操縦席で対象ウインドウを選んだときに記憶（次回起動で復元）。token を
  *     含まない平文タイトルだが、同一ファイル・同一マージ規律に乗せる（新キー 1 個で済む構造）。
+ *   getAudioDevice(): 魂の声の出力デバイス名の初期値（S6「会話が続く」・operator/domain-d.md）。
+ *   setAudioDevice(name): 操縦席で出力デバイスを選んだときに記憶（次回起動で復元）。token を含まない
+ *     平文デバイス名だが、同一ファイル・同一マージ規律に乗せる（vision target と同型の新キー 1 個）。
+ *   getSelfFireEnabled(): 自発発火（呼びかけ/区切り/沈黙）ON/OFF の初期値（S6・operator/domain-d.md）。
+ *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる（bool の
+ *     有無を区別するため asStringOrNull は使わない）。
+ *   setSelfFireEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
  *
- * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget も同居）─────────
- *  lastDevice と lastChannelUrl（+ S5: visionTarget）は同一 JSON に同居する。set は必ず既存内容を
- *  読んでマージしてから書く（片方の set が他方を消さない）。読めない/壊れた JSON は空オブジェクト
- *  扱いで続行する。
+ * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled も同居）───
+ *  lastDevice と lastChannelUrl（+ S5: visionTarget・S6: audioDevice/selfFireEnabled）は同一 JSON に
+ *  同居する。set は必ず既存内容を読んでマージしてから書く（片方の set が他方を消さない）。読めない/
+ *  壊れた JSON は空オブジェクト扱いで続行する。
  *
  * ── 失敗寛容（契約 §5）─────────────────────────────────────────────
  *  読めない/壊れた JSON → get は null。書けない（ディスク I/O 失敗）→ set は握って続行（起動を止めない）。
@@ -47,6 +54,10 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setLastChannelUrl: (url: string | null) => void;
  *   getVisionTarget: () => string | null;
  *   setVisionTarget: (title: string | null) => void;
+ *   getAudioDevice: () => string | null;
+ *   setAudioDevice: (name: string | null) => void;
+ *   getSelfFireEnabled: () => boolean | null;
+ *   setSelfFireEnabled: (enabled: boolean) => void;
  * }}
  */
 export function createFileSettingsStore(options = {}) {
@@ -97,6 +108,21 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} title */
     setVisionTarget(title) {
       writeMerged({ visionTarget: title ?? null });
+    },
+    getAudioDevice() {
+      return asStringOrNull(readAll().audioDevice);
+    },
+    /** @param {string | null} name */
+    setAudioDevice(name) {
+      writeMerged({ audioDevice: name ?? null });
+    },
+    getSelfFireEnabled() {
+      const v = readAll().selfFireEnabled;
+      return typeof v === "boolean" ? v : null;
+    },
+    /** @param {boolean} enabled */
+    setSelfFireEnabled(enabled) {
+      writeMerged({ selfFireEnabled: enabled === true });
     }
   };
 }

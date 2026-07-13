@@ -249,3 +249,44 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   `discussion/ai-cohost/implementation/waves/s5/s5-followup.md` へ持ち越されている。
 - **全器官起動（人間ゲート・ゲーム起動込み）の手順**:
   `discussion/ai-cohost/implementation/waves/s5/human-gate-procedure.md`。
+
+#### S6: 会話が続く（barge-in + 自発発火）
+
+「相手が話し始めたら声が止まり、しばらくすると勝手にも喋る」——**声の器官刷新（WinRT
+MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 機械弁による中断+切断点の正直記録）**・
+**発火スケジューラ（呼びかけ/区切り/沈黙の自発 3 種・LLM 非依存の機械判定）**・**操縦席の配線
+（自発 ON/OFF トグル+出力デバイス選択+タイムラインマーカー）**の 4 ドメインから成る。
+
+- **声の器官刷新**（`src/voice/audio-player.mjs`・Domain A）: 常駐 `System.Media.SoundPlayer`
+  （PlaySync・ブロッキング）を **WinRT `Windows.Media.Playback.MediaPlayer`**（非同期・
+  PowerShell 5.1 内蔵・新規依存ゼロ）へ刷新。`play(wavPath)`/`stop()`（barge-in の声止め）/
+  `isPlaying()`/出力デバイス指定（`deviceName` → env `SOUL_AUDIO_DEVICE_NAME`）/
+  `listAudioDevices()`（列挙）を追加。`speak()` は `playbackStartedAtMs` を追加で返す（切断点算出
+  材料）。既定デバイス再生は S1 と無退行。
+- **barge-in**（`src/mind/barge-in.mjs`・Domain B）: 耳の `speechStart` から最小持続時間
+  （既定 200ms・`speechCancel` が来なければ確定）の機械弁で、再生中の魂発話を中断する。中断時:
+  ① `player.stop()` ② `channel.sendSet({slotId:"mouth-open", value:0, ttlMs:400})`（器の既存意味論
+  で口を強制 release・契約拡張なし）③ モーラタイムライン×再生経過で「実際に声に出た文字」を
+  正直に算出（過大評価しない設計）④ 会話ログへ「接頭辞 + "…（遮られた）"」を 1 回 append
+  （append-only 維持）。**S6 で soul 追記のタイミングが「speak 直後」→「発話完了 or 中断時」へ
+  変更**（barge-in が効く窓を実際の再生区間に一致させるための意図的な意味論変更）。
+- **発火スケジューラ**（`src/mind/fire-scheduler.mjs`・Domain C）: 「いつ喋るか」を LLM に一切
+  問わず機械信号だけで決める純ロジック（import 文ゼロ = LLM/SDK への到達経路が構造的に存在しない）。
+  ① **呼びかけ**（名前「こーでぃー」の文字列照合・不応期/確率なしで確実発火）② **区切り応答**
+  （発話終了後 2 秒無音 + 不応期 8 秒 + 確率 35%）③ **沈黙**（45〜75 秒 + 長い不応期 90 秒 + セッション
+  予算 6 回・視覚発火相当=画面を見て一言）。数値は全部 v0 コード内定数（ツマミは作らない・人間ゲート
+  の体感で直す前提）。
+- **操縦席の配線**（`src/cockpit/cockpit.html`・Domain D）: 「Self-fire」トグル（`POST
+  /api/self-fire`・手動 Fire は影響を受けない・`cockpit-settings.local.json` に永続化）・「Voice
+  output」出力デバイス選択（`GET /api/audio-devices` → `<select>` → `POST /api/audio-device` で
+  永続化。**適用は常駐プレイヤーのその場再起動**——次に声を出すときから新デバイスに切り替わる）・
+  barge-in 中断マーカー行（切断点情報付き）・自発発火マーカー行（kind: call/turn-end/silence 表示）・
+  スケジューラ診断のゴースト行（発火要求は出たが busy 等で実際には発火しなかった事実）。
+- **実 SDK 観測**（5 ask・上限ちょうど使い切り）: `scripts/observe-conversation.mjs`——
+  fire-orchestrator/fire-scheduler を実物のまま組み合わせ（player/channel/speak は fake・実
+  TTS/実器/実マイクは不使用）、barge-in 中断+続きの発火・呼びかけ/区切り/沈黙の自発 3 種すべてを
+  実 SDK ask で駆動した。結果は `discussion/ai-cohost/experiments/s6-conversation.md`（切断点の
+  正直な算出・沈黙=視覚発火での画面言及・usage 推移を実測で確認。**barge-in の体感レイテンシは
+  実マイク/実器が要るため未実施**として明記）。
+- **人間ゲート手順（音響設営込み）**:
+  `discussion/ai-cohost/implementation/waves/s6/human-gate-procedure.md`。

@@ -21,7 +21,14 @@
  *  併せて既定 requiredKinds に `intent.envelope` を加える（器は C5 から additively 広告済み＝
  *  常に intent.set/envelope/speech の 3 種を出す）。これで envelope 非対応の相手には**接続時に
  *  fail-fast**（表情が黙って無視される事故を封じる・裁定済みの意図変更／domain-a.md）。
- *  intent.set は魂の発話/演出経路では使わないので写経しない。
+ *
+ * ── S6: intent.set の追加（barge-in の口閉じ送出路）───────────────────────────
+ *  sendSet を参照ドライバ `reference-driver.mjs` の sendIntent から写経して足す（payload
+ *  `{ slotId, value, ttlMs? }`・replyTo 相関は sendSpeech/sendEnvelope と同型）。barge-in で
+ *  mouth-open へ value=0 を着弾させ speech タイムラインを強制 release（口を閉じる）ために使う
+ *  （inventory §2・器コード/契約 JSON は不変＝器は C5 から intent.set を広告済み・送出路を魂側に
+ *  足すだけ）。**既定 requiredKinds は変えない**（intent.set 非広告の相手でも接続は張れる＝口閉じは
+ *  best-effort・S1〜S5 の接続契約に無影響）。
  *
  * 契約の正は `apps/runtime-player/src/main/control-channel/contract/channel-exchange-examples.json`
  * の speechPath / envelopePath / server.hello / rejections。
@@ -44,6 +51,7 @@ const REPLY_TIMEOUT_MS = 4000;
  * @returns {Promise<{
  *   sendSpeech: (timeline: unknown) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   sendEnvelope: (intent: { slotId: string; peak: number; attackMs: number; sustainMs: number; decayMs: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
+ *   sendSet: (intent: { slotId: string; value: number; ttlMs?: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   close: () => Promise<void>;
  *   consumeUnknownEventCount: () => number;
  *   supportedKinds: string[];
@@ -168,6 +176,28 @@ export async function connectChannel(url, options = {}) {
       });
       socket.send(JSON.stringify({ v: 1, id, kind: "intent.envelope", payload }));
       return withTimeout(settled, replyTimeoutMs, `envelope reply for ${intent.slotId}`);
+    },
+    /**
+     * intent.set を 1 本送り、replyTo 相関で accepted/rejected を受ける（S6 barge-in の口閉じ）。
+     * 写経元 reference-driver.sendIntent。payload は器契約
+     * `{ slotId, value, ttlMs? }`（value は mouth 系 0..1・域外は slotValueOutOfRange 拒否でクランプなし・
+     * ttlMs は exclusiveMinimum:0 で省略時は器既定窓）。ttlMs は指定時のみ payload に載せる。
+     * @param {{ slotId: string; value: number; ttlMs?: number }} intent
+     * @returns {Promise<{ result: string; error: unknown; rttMs: number }>}
+     */
+    sendSet(intent) {
+      const id = `req-${(idCounter += 1)}`;
+      /** @type {{ slotId: string; value: number; ttlMs?: number }} */
+      const payload = { slotId: intent.slotId, value: intent.value };
+      if (intent.ttlMs !== undefined) {
+        payload.ttlMs = intent.ttlMs;
+      }
+      const t0 = performance.now();
+      const settled = new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject, t0 });
+      });
+      socket.send(JSON.stringify({ v: 1, id, kind: "intent.set", payload }));
+      return withTimeout(settled, replyTimeoutMs, `set reply for ${intent.slotId}`);
     },
     consumeUnknownEventCount() {
       const count = unknownEventCount;

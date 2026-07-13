@@ -1211,3 +1211,349 @@ test("createInMemorySettingsStore: channel URL の get/set 口を持つ", () => 
   assert.equal(store.getLastChannelUrl(), null);
   assert.equal(store.getLastDevice(), "Mic"); // device は独立。
 });
+
+// ── S6「会話が続く」自発発火スケジューラの結線（薄い・呼びかけ経路の縦串）────────────────
+//
+//  核心（自発 3 種の判定・不応期・確率・ジッター・予算・OFF トグル）は純ロジック側（fire-scheduler.mjs）で
+//  fake clock/注入 RNG により全分岐テスト済み。ここは cockpit-server の結線が正しく糸を張っているか——
+//  転写 onAppend → scheduler.handleTranscript → onFireRequest → fireOrchestrator.fire の**縦串**を、
+//  タイマ不要で即時に判定する「呼びかけ（call）」で固定する（turn-end/silence はタイマ依存ゆえ純ロジック側）。
+
+test("cockpit self-fire: 呼びかけ命中の you 転写が fireOrchestrator.fire() を呼ぶ（自発 ON・onAppend 経路）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "はーい" } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+
+    // 名前を含まない you 発話 → 呼びかけ非該当 → fire は呼ばれない。
+    fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "こんにちは" });
+    assert.equal(fakeOrch.record.fireCount, 0);
+
+    // 呼びかけ命中の you 発話 → fire() が 1 回（call = 通常 Fire・vision オプション無し）。
+    fakePipe.record.buffer.append({ startMs: 1000, endMs: 2000, text: "コーディこれ見て" });
+    assert.equal(fakeOrch.record.fireCount, 1);
+    assert.equal(fakeOrch.record.lastFireOptions, undefined); // call は通常 Fire（fire() 引数なし）。
+
+    // soul 発話が名前を含んでも自己応答しない（scheduler は soul を除外）。
+    fakeOrch.record.hooks.onSoulTranscript({ seq: 2, startMs: 0, endMs: 0, text: "コーディだよ", speaker: "soul", appendedAtMs: 1000 });
+    // ↑ onSoulTranscript は放送経路。転写バッファへの soul append（onAppend 経由）でも呼びかけ照合しないことを確認:
+    fakePipe.record.buffer.append({ startMs: 3000, endMs: 3500, text: "コーディだよ", speaker: "soul" });
+    assert.equal(fakeOrch.record.fireCount, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit self-fire: 自発 OFF（既定）では呼びかけ命中でも fire を呼ばない", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "はーい" } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+    // selfFireInitialEnabled 未指定 = 既定 OFF。
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディこれ見て" });
+    assert.equal(fakeOrch.record.fireCount, 0);
+
+    // setSelfFireEnabled(true) で ON にすると以後は呼びかけで fire する（Domain D のトグル継ぎ目）。
+    assert.equal(server.setSelfFireEnabled(true), true);
+    fakePipe.record.buffer.append({ startMs: 1000, endMs: 2000, text: "ねえコーディー" });
+    assert.equal(fakeOrch.record.fireCount, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit self-fire: busy 中（state≠idle）は呼びかけでも fire 要求を出さない", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fakeOrch.record.state = "speaking"; // busy。
+    fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディ" });
+    assert.equal(fakeOrch.record.fireCount, 0);
+    fakeOrch.record.state = "idle"; // busy 解除で通る。
+    fakePipe.record.buffer.append({ startMs: 1000, endMs: 2000, text: "コーディ" });
+    assert.equal(fakeOrch.record.fireCount, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit self-fire: state snapshot の selfFire.enabled と setSelfFireEnabled/selfFireStatus", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+  });
+  try {
+    const url = await server.listen(0);
+    const s1 = await getJson(`${url}/api/state`);
+    assert.deepEqual(s1.json.selfFire, { enabled: true });
+    assert.deepEqual(server.selfFireStatus(), { enabled: true });
+
+    assert.equal(server.setSelfFireEnabled(false), false);
+    const s2 = await getJson(`${url}/api/state`);
+    assert.deepEqual(s2.json.selfFire, { enabled: false });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit self-fire: orchestrator 未注入なら scheduler 無し（selfFire:null・setSelfFireEnabled は no-op）", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.selfFire, null);
+    assert.equal(server.selfFireStatus(), null);
+    assert.equal(server.setSelfFireEnabled(true), false); // scheduler 無し = no-op。
+  } finally {
+    await server.close();
+  }
+});
+
+// ── S6 Domain D: 操縦席の口（自発 ON/OFF トグル + 出力デバイス選択 + タイムラインマーカー）───────────
+//
+//  GET /api/audio-devices・POST /api/audio-device・POST /api/self-fire は GET /api/windows・
+//  POST /api/vision-target の写経（domain-d.md §）。listAudioDevicesImpl は必ず fake 注入する
+//  （既定は実 PowerShell 起動＝Domain A audio-player.mjs の listAudioDevices・このテストファイルでは
+//  一度も実行しない）。
+
+test("cockpit GET /api/audio-devices: listAudioDevicesImpl の成功結果（.devices）を返す", async () => {
+  const server = createCockpitServer({
+    listAudioDevicesImpl: async () => ({
+      devices: [
+        { id: "{a}", name: "BenQ EX2510S (NVIDIA High Definition Audio)" },
+        { id: "{b}", name: "ヘッドホン (2- Shure MV7+)" }
+      ]
+    })
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await getJson(`${url}/api/audio-devices`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.error, null);
+    assert.equal(r.json.devices.length, 2);
+    assert.equal(r.json.devices[1].name, "ヘッドホン (2- Shure MV7+)");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit GET /api/audio-devices: listAudioDevicesImpl の失敗（.error）は devices:[] + error を返す（実起動しない）", async () => {
+  const server = createCockpitServer({
+    listAudioDevicesImpl: async () => ({ error: { kind: "timeout", message: "device listing timed out after 8000ms" } })
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await getJson(`${url}/api/audio-devices`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.devices, []);
+    assert.match(r.json.error, /timed out/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit GET /api/audio-devices: 未注入時は既定実装（Domain A listAudioDevices）が使われる（呼び出しの型のみ確認・実起動しない）", () => {
+  // 既定 listAudioDevicesImpl は実 PowerShell を起動するため実行はしない。ここでは createCockpitServer が
+  // listAudioDevicesImpl 未指定でも throw せず構築できる（既定値が代入される）ことだけを確認する。
+  const server = createCockpitServer({});
+  assert.equal(typeof server.listen, "function");
+});
+
+test("cockpit POST /api/audio-device: onSetAudioDevice 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/audio-device`, { name: "Some Device" });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /audio device control not available/);
+    // audioDeviceStatus 未注入なら state.audioDevice は null。
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.audioDevice, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/audio-device: name をフックへ橋渡しし・state に audioDeviceStatus を載せる", async () => {
+  let received = /** @type {string | null | undefined} */ (undefined);
+  let current = /** @type {string | null} */ (null);
+  const server = createCockpitServer({
+    onSetAudioDevice: (name) => {
+      received = name;
+      current = name;
+    },
+    audioDeviceStatus: () => ({ name: current })
+  });
+  try {
+    const url = await server.listen(0);
+    const s0 = await getJson(`${url}/api/state`);
+    assert.equal(s0.json.audioDevice.name, null);
+
+    const r = await postJson(`${url}/api/audio-device`, { name: "  ヘッドホン (2- Shure MV7+)  " });
+    assert.equal(r.status, 200);
+    // フックは trim 済みの名前を受ける。
+    assert.equal(received, "ヘッドホン (2- Shure MV7+)");
+    assert.equal(r.json.audioDevice.name, "ヘッドホン (2- Shure MV7+)");
+
+    // 空文字はクリア（null をフックへ = 既定デバイスへ）。
+    const rc = await postJson(`${url}/api/audio-device`, { name: "   " });
+    assert.equal(rc.status, 200);
+    assert.equal(received, null);
+    assert.equal(rc.json.audioDevice.name, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/self-fire: scheduler 未生成（orchestrator 未注入）なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/self-fire`, { enabled: true });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /self-fire control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/self-fire: enabled を切り替え・state.selfFire に反映する", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+    // selfFireInitialEnabled 未指定 = 既定 OFF。
+  });
+  try {
+    const url = await server.listen(0);
+    const s0 = await getJson(`${url}/api/state`);
+    assert.deepEqual(s0.json.selfFire, { enabled: false });
+
+    const r = await postJson(`${url}/api/self-fire`, { enabled: true });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.selfFire, { enabled: true });
+    assert.deepEqual(server.selfFireStatus(), { enabled: true });
+
+    const r2 = await postJson(`${url}/api/self-fire`, { enabled: false });
+    assert.equal(r2.status, 200);
+    assert.deepEqual(r2.json.selfFire, { enabled: false });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/self-fire: onSetSelfFireEnabled 永続化フックへ橋渡しする（未注入でも 503 にならない）", async () => {
+  const persisted = [];
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    onSetSelfFireEnabled: (enabled) => {
+      persisted.push(enabled);
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/self-fire`, { enabled: true });
+    assert.deepEqual(persisted, [true]);
+    await postJson(`${url}/api/self-fire`, { enabled: false });
+    assert.deepEqual(persisted, [true, false]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit SSE: 自発発火の要求（fired:true）が selfFire イベントで流れる（kind 付き・タイムラインの自発発火マーカー材料）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "はーい" } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディこれ見て" });
+    const evt = await client.waitFor((e) => e.event === "selfFire");
+    assert.equal(evt.data.kind, "call");
+    assert.equal(evt.data.fired, true);
+    assert.equal(evt.data.reason, null);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit SSE: 自発発火の要求（fired:false）が selfFire イベントで流れる（スケジューラ診断のゴースト行材料）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: false, reason: "empty-window" } });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディこれ見て" });
+    const evt = await client.waitFor((e) => e.event === "selfFire");
+    assert.equal(evt.data.kind, "call");
+    assert.equal(evt.data.fired, false);
+    assert.equal(evt.data.reason, "empty-window");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit SSE: bargeIn 診断は elapsedMs/charsSpoken/totalChars/prefix を diagnostic イベントに載せる（barge-in マーカー行の材料）", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "こんにちは" },
+    drive: (hooks) => {
+      hooks.onDiagnostic({
+        type: "bargeIn",
+        elapsedMs: 350,
+        charsSpoken: 3,
+        totalChars: 10,
+        prefix: "こんに"
+      });
+    }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/fire`, {});
+    const diag = await client.waitFor((e) => e.event === "diagnostic" && e.data.type === "bargeIn");
+    assert.equal(diag.data.elapsedMs, 350);
+    assert.equal(diag.data.charsSpoken, 3);
+    assert.equal(diag.data.totalChars, 10);
+    assert.equal(diag.data.prefix, "こんに");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});

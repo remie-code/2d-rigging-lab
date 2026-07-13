@@ -63,4 +63,28 @@
 
 ## 6. Status
 
-計画確定・発進待ち。
+**S6 wave 実装完了・機械ゲート緑（2026-07-13）。人間ゲート待ち。** 単一 Orch-Sylph が Domain A→B→C→D を順次実行。各ドメイン Gnome 実装 + Review-Sylph 3 レーン（spec/design/test）。**全 4 ドメイン・全 12 レビューレーンで blocking 指摘ゼロ**。
+
+### 機械ゲート生数字（Orch-Sylph が全ドメイン完了後に独立再実行・2026-07-13）
+
+- **`cd apps/soul/agent && node --test`（タイムアウト 300s）**: `tests 507 / pass 507 / fail 0 / cancelled 0 / skipped 0 / todo 0`。S6 前ベースライン 411 → 507（**+96**）。内訳: Domain A +14（411→425）・Domain B +27（425→452）・Domain C +27（452→479）・Domain D +28（479→507）。
+- **3 チェック**: `check:deps` **passed** / `check:soul-zone` **passed**（1342 files・器↔魂 越境 import なし）/ `check:source` **exit 1 = 既知ベースライン赤 1 件のみ**（`apps/runtime-player/src/main/physiology/index.ts` の barrel-only 違反・S5 以前からの器側 pre-existing・本 wave で不変＝無退行）。
+- **器コード完全不変**: `git diff --stat -- apps/runtime-player packages 'apps/runtime-player/src/main/control-channel/contract' pnpm-lock.yaml apps/soul/agent/package.json` は**出力ゼロ**（器コード・契約 JSON・lockfile・soul package.json すべて不変）。`pnpm-lock.yaml` の sha256 はベースラインと完全一致（`d65a7643…b25fb`）。**新規依存ゼロ**（WinRT/PowerShell 内蔵 + Node 組み込みのみ）。
+- **変更範囲**: `apps/soul/**` と `discussion/**` のみ。範囲外の変更ゼロ。`.tmp/facex-*`（別セッション領分）不可侵。
+
+### 各ドメインの成果（契約成果物）
+
+- **Domain A**（[waves/s6/domain-a.md](../waves/s6/domain-a.md)）: 声の器官の WinRT MediaPlayer 化（`play`/`stop`/`isPlaying`/`listAudioDevices`/`deviceName` env 経由）・`speak()` が `playbackStartedAtMs` を返す。preflight-voice 実機 PASS（既定再生/STOP 途中停止/列挙 5 件・日本語名無劣化）。
+- **Domain B**（[waves/s6/domain-b.md](../waves/s6/domain-b.md)）: barge-in（`interrupt()`・切断点算出 `computeSpokenPrefix`＝過大評価しない保守設計・soul 追記タイミングを完了時/中断時へ変更・append-only 維持）。口停止は器契約内の `intent.set`（mouth-open, value=0）のみ使用（`sendSet` を soul 側 channel-client に追加・器/契約不変）。全 fake 縦検証。
+- **Domain C**（[waves/s6/domain-c.md](../waves/s6/domain-c.md)）: 発火スケジューラ（純ロジック・**import ゼロ＝「いつ喋るか」に LLM ask 経路が構造的に存在しない**）。自発 3 種（呼びかけ照合/区切り応答/沈黙）を機械信号 + fake clock/注入 RNG で全分岐決定論テスト。
+- **Domain D**（[waves/s6/domain-d.md](../waves/s6/domain-d.md)）: 操縦席（自発 ON/OFF トグル・出力デバイス選択 UI・barge-in/自発発火のタイムラインマーカー・永続化）+ 実 SDK 確認（**5 ask ちょうど**・env ガード通過・自発 3 種と barge-in 続きを実射・[experiments/s6-conversation.md](../../experiments/s6-conversation.md)）+ docs（[human-gate-procedure.md](../waves/s6/human-gate-procedure.md)・[s6-followup.md](../waves/s6/s6-followup.md)）。
+
+### 主要な non-blocking 申し送り（人間ゲート・followup）
+
+- **`fire()` が再生実区間を await する設計変更**（Domain B §8-1）: POST /api/fire の HTTP 応答が「発話完了 or barge-in 中断」まで返らなくなった（従来は play 送出直後に即 resolve）。機械テストは全 fake `wavDurationSec:0` で無退行。実配信 UX（早期 resolve へ倒すか）は人間ゲート/followup で裁定。
+- **observe-conversation.mjs の 5-ask ハードガードがリトライを数えない**（Domain D spec/design レビュー）: `askCount` は ask() 呼び出し回数を数え、内部リトライ（最大 3/ask）を数えないため、理論上は再実行時に 5 ask を超えうる。**今回の実測はリトライ 0 回で実消費 5 ask（usage 表で裏取り済み）**だが、将来の再実行に備えた修正を s6-followup へ推奨。
+- 定数の体感調整（不応期/確率/ジッター/X=2000/Y=45000/予算=6）・呼びかけ照合の既知誤爆「コーディネート」（構造的・受容）・実人声への照合集合拡張・silenceBudget のリセットなし（長回し）・口閉じの実機の見え方・barge-in 体感レイテンシ（実マイク要）は人間ゲート/followup の領分（[s6-followup.md](../waves/s6/s6-followup.md) に集約）。
+
+### 人間ゲート（choke point・ユーザーの作業）
+
+手順書: [waves/s6/human-gate-procedure.md](../waves/s6/human-gate-procedure.md)（音響設営＝魂の声の出力先をマイクが拾わんデバイス指定込み・§1 ①〜⑥の確認手順）。**実行はユーザー（未実施）**。
