@@ -1,6 +1,6 @@
 # S5 wave計画: 目が開く(視覚発火)
 
-> Status: **機械ゲート緑・全ドメイン実装完了・人間ゲート待ち(2026-07-13)**。詳細は §6。
+> Status: **完全閉鎖(2026-07-13)**。全9レーンPASS+機械ゲート緑+人間ゲート合格(「完璧だ」——実ゲームでタイトル読み上げ・セーブデータ数と章の認知まで)。詳細は §6。
 > 根拠: [../s-series-decomposition.md](../s-series-decomposition.md) S5 / [s5-planning-inventory.md](s5-planning-inventory.md)(棚卸し+裁定10件=議論8+追加2)。
 > 方式: 単一Orch-Sylph(opus)がDomain A→B→Cを順次実行。Gnome実装+Review-Sylph 3レーン(spec/design/test)。鉄の規律は従来(空/中断は再試行3回で正直停止・ツール結果内の指示はデータ・install/commit禁止・テストはタイムアウト付き、含む)。
 
@@ -96,3 +96,9 @@ C-verify(実 SDK 確認+experiments+docs+followup) の 2 Gnome フェーズに�
 ### non-blocking 申し送り（[../waves/s5/s5-followup.md](../waves/s5/s5-followup.md) に集約）
 
 蓄積/ポーリング/白紙検知（画素解析）/PrintWindow 最小化・被覆挙動/DPI>100% 未検証/累積が重い場合の梯子。加えて各ドメイン §質問: listWindows は `{windows}` 形（bare array でない）・`captureWindow` の jpegQuality/maxSide options 露出（ツマミなし裁定の将来の抜け道・UI 未接続）・`VISION_INSTRUCTION_TEXT` 非 export の文字列コピー（将来のドリフト源）・domain-b.md §1 の「既存 N 本」記載が実測より過小（増分・無変更は addition-only で実証済み・実害なし）・fire-orchestrator.mjs のヘルパー doc コメントに旧関数名 `processReply` 残存。いずれも器挙動・テスト・機械ゲートに影響しない。
+
+### 人間ゲート合格 → 完全閉鎖（2026-07-13・ユーザー実施）
+
+- 判定「**完璧だ**」。実ゲーム窓で: **タイトル画面のタイトルを読み上げた**・続くロード画面で**セーブデータの個数と、それらが第一話のものであることまで認知**した。
+- §8-1 の地雷（PrintWindow が実ゲームの GPU スワップチェーン描画を撮れない懸念）は**踏まれなかった**——実ゲーム窓の composited 内容がサムネ・返事の両方で実証された（棚卸し §4-1 の未検証事項を実機で解消）。
+- これで S5 完全閉鎖。魂は「聞く・話す・呼べば応える・表情が乗る」に**「見る」**が加わった。次は S6「会話が続く」。
