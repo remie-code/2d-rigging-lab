@@ -87,4 +87,16 @@
 
 ### 人間ゲート（choke point・ユーザーの作業）
 
-手順書: [waves/s6/human-gate-procedure.md](../waves/s6/human-gate-procedure.md)（音響設営＝魂の声の出力先をマイクが拾わんデバイス指定込み・§1 ①〜⑥の確認手順）。**実行はユーザー（未実施）**。
+手順書: [waves/s6/human-gate-procedure.md](../waves/s6/human-gate-procedure.md)（音響設営＝魂の声の出力先をマイクが拾わんデバイス指定込み・§1 ①〜⑥の確認手順）。**初回ゲート実施済み: ①②③⑤⑥合格・④（沈黙発火）は未確認＝追撃 Domain E 後の再ゲートで確認**（手順書 §9-1）。
+
+### 追撃 Domain E: 自発発火に画像同乗（人間ゲートフィードバック・ユーザー裁定 3 点・2026-07-13）
+
+初回人間ゲートのフィードバックにより追撃実施。**Gnome 実装 + Review-Sylph 3 レーン全 PASS（blocking ゼロ）**。契約成果物: [waves/s6/domain-e.md](../waves/s6/domain-e.md) / レビュー: `reviews/s6/domain-e-review-{spec,design,test}.md`。
+
+- **裁定①格上げ**: call/turn-end の自発発火を `fire({vision:"preferred"})`（第三モード新設）へ。視覚対象設定済みなら画像付き（S5 経路）・未設定なら画像なし通常発火（中止しない）。**silence（`fire({vision:true})`＝見えなければ中止）・手動 Fire・手動視覚 Fire は 1 ビット不変**（既存 ask 本体を `askWithVision`/`fireNormalCore` へ抽出して再利用＝構造的無退行。design レーンが diff の実物で純移動を確認）。
+- **裁定②盲目劣化**: preferred のキャプチャ失敗は中止せず画像なし通常発火へ静かに劣化 + `fireVisionDegraded {kind,message}` 診断（ゴースト行の痕跡・既存 diagnostic 相乗り）。
+- **裁定③**: トークン増は usage 計器で見張る前提で受容。劣化/未設定時は `vision:false` で正直に通知（見ていないのに true と言わない）＝画像付き/なしを計器で区別可能。
+- **docs 追記 2 件**: [s6-followup.md](../waves/s6/s6-followup.md) §12「口数（反応確率）の Cockpit 可変化」（ユーザー裁定の記録: 配信中に Cockpit から切替・CLI 不可・生スライダーでなくモード切替[控えめ/ふつう/おしゃべり]・会話メイン時はおしゃべり側/ゲーム集中時は現行程度・実装時期は今後の課題）/ [human-gate-procedure.md](../waves/s6/human-gate-procedure.md) §9-1 再ゲート手順（放置 45〜75 秒→沈黙発火が画面に言及＝④確認兼用 + 区切り/呼びかけの返事が画面に触れることがある）。
+- **機械ゲート（Orch-Sylph 独立再実行）**: `node --test` **518/518 pass**（507 → +11。fire-orchestrator.test.mjs 39→50・cockpit-server.test.mjs 60（call 格上げの 1 アサーションのみ意図的更新））・3 チェック無退行（deps/soul-zone pass・source は既知ベースライン赤 1 件のみ）・器/契約/lockfile/package.json 完全不変（lockfile sha256 ベースライン一致）・**SDK 実消費ゼロ**（全 fake）。
+- 申し送り（non-blocking）: 劣化フォールバックは受理 emit（vision:true）後に画像なしへ落ちる一瞬の齟齬あり（反応即時性を優先した設計判断・UI 体感は再ゲートで確認）/ preferred 発火中の barge-in 専用テストなし（共通経路ゆえ構造上無退行・test レーン申し送り）/ turn-end 結線は call と同一 else 分岐（static read で確認・timer 依存ゆえ結合テストは構造的制約）。
+- **再ゲート（ユーザーの作業・未実施）**: 手順書 §9-1 の一点確認（④沈黙発火の確認を兼ねる）。

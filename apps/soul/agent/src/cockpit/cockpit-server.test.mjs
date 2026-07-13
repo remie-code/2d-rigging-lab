@@ -1235,10 +1235,11 @@ test("cockpit self-fire: 呼びかけ命中の you 転写が fireOrchestrator.fi
     fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "こんにちは" });
     assert.equal(fakeOrch.record.fireCount, 0);
 
-    // 呼びかけ命中の you 発話 → fire() が 1 回（call = 通常 Fire・vision オプション無し）。
+    // 呼びかけ命中の you 発話 → fire が 1 回。S6 追撃（Domain E）: call は視覚優先（vision:"preferred"）へ
+    // 格上げ（対象あれば画像付き・無/失敗なら画像なしの通常発火へ劣化）。従来 fire() 引数なしから変更。
     fakePipe.record.buffer.append({ startMs: 1000, endMs: 2000, text: "コーディこれ見て" });
     assert.equal(fakeOrch.record.fireCount, 1);
-    assert.equal(fakeOrch.record.lastFireOptions, undefined); // call は通常 Fire（fire() 引数なし）。
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" }); // call は視覚優先（Domain E 裁定）。
 
     // soul 発話が名前を含んでも自己応答しない（scheduler は soul を除外）。
     fakeOrch.record.hooks.onSoulTranscript({ seq: 2, startMs: 0, endMs: 0, text: "コーディだよ", speaker: "soul", appendedAtMs: 1000 });

@@ -64,6 +64,22 @@
  *  「見た」事実は `onVisionCaptured({title,width,height,jpegBase64,elapsedMs})` で結線層へ通知する
  *  （サムネ用 base64 はこの通知にだけ載る）。
  *
+ * ── S6 追撃「自発発火に画像同乗」（Domain E・視覚優先モード）───────────────────────
+ *  `fire({ vision: "preferred" })` で起動する**第三のモード**（手動 `fire()`・手動視覚 `fire({vision:true})`
+ *  の署名・挙動・戻り値は 1 ビットも変えない＝無退行）。人間ゲート裁定: 自発発火のうち **call（呼びかけ）・
+ *  turn-end（区切り応答）** を、視覚対象が設定済みなら S5 視覚経路（実キャプチャ + 画像先行 content + ask）へ
+ *  **格上げ**する。ただし手動視覚 Fire・沈黙発火（silence = 従来どおり `fire({vision:true})`）の「見えなければ
+ *  中止」とは違い、preferred は**盲目でも嘘にならない**（誰もボタンを押していない）ので中止せず劣化する:
+ *   - 対象未設定（getVisionTarget → null/空）→ **画像なしの通常 Fire**（`vision-no-target` 中止ではない）。
+ *   - キャプチャ失敗（captureImpl → {error}）→ **画像なしの通常 Fire に静かに劣化**。痕跡は診断
+ *     `fireVisionDegraded {kind, message}`（ゴースト行の材料・cockpit の既存 diagnostic 経路が kind/message を運ぶ）
+ *     で必ず残す（`vision-capture-failed` 中止ではない）。
+ *   - 対象あり + キャプチャ成功 → 手動視覚 Fire と**完全共通**の視覚 ask（画像先行・onVisionCaptured 発火・
+ *     usage {vision:true}）。
+ *  **劣化/対象未設定の発火は実際には画像なし ask** ゆえ、onUsage・戻り値の vision フラグは **false**（正直・
+ *  見ていないのに見たと言わない）。onVisionCaptured も発火しない。結線層（cockpit-server）は call/turn-end を
+ *  preferred・silence を従来 `fire({vision:true})` に振り分ける（domain-e.md §）。
+ *
  * ── usage 計器（wave 計画 §2 裁定 2・blocking）───────────────────────────────
  *  session.ask の戻り値 usage を、通常 Fire・視覚発火の**両方**で `onUsage({ usage, vision })` として
  *  通知する（askごとの input_tokens 推移を結線層が追える形。usage が null/undefined のときは通知しない）。
@@ -145,7 +161,7 @@ export const FIRE_SYSTEM_PROMPT =
  *   ask ごとの usage 通知（通常 Fire・視覚発火の両方・usage が null/undefined のときは発火しない）。
  * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  再生完了タイマの注入（決定論テスト用）。
  * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  再生完了タイマの解除（注入）。
- * @returns {{ fire: (fireOptions?: { vision?: boolean }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; getState: () => FireState; dispose: () => void }}
+ * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred" }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; getState: () => FireState; dispose: () => void }}
  */
 export function createFireOrchestrator(options) {
   if (options == null || typeof options !== "object") {
@@ -484,7 +500,93 @@ export function createFireOrchestrator(options) {
   };
 
   /**
-   * 視覚発火（S5「目が開く」）。busy 判定・耳未起動判定は呼び出し元（fire()）で通常 Fire と共有済み。
+   * 視覚 ask の共通コア（キャプチャ成功後）: 「見た」通知 → 会話窓 + 視覚指示 + 画像先行 content → ask →
+   * processAskedReply（vision:true）。手動視覚 Fire（fireVision）と自発 preferred の成功時が共有する。
+   * **呼び出し元が thinking 遷移・accept emit・失敗の握り（fireError）・finally idle を持つ**（この関数は
+   * throw しうる。それを catch するのは呼び出し元の責務）。S5 の元インライン実装と完全に同一の外形。
+   * @param {{ all: Function; append: Function }} buffer
+   * @param {{ jpegBase64: string; width: number; height: number; elapsedMs: number }} captured
+   * @param {string} title
+   * @returns {Promise<object>}
+   */
+  const askWithVision = async (buffer, captured, title) => {
+    // 「見た」事実の通知（サムネ用 base64 はここにだけ載る・会話ログの正本には積まない）。
+    emit(onVisionCaptured, {
+      title,
+      width: captured.width,
+      height: captured.height,
+      jpegBase64: captured.jpegBase64,
+      elapsedMs: captured.elapsedMs
+    });
+
+    // 会話窓 + 視覚指示テキストと画像ブロックを content 配列（**画像先行**）にして注入。
+    const nowMs = nowImpl();
+    const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
+    const injectedText = injection.text;
+    const injectedChars = injection.charCount;
+    const includedCount = injection.includedCount;
+    const instructionText =
+      injectedText.length > 0 ? `${injectedText}\n${VISION_INSTRUCTION_TEXT}` : VISION_INSTRUCTION_TEXT;
+    const contentBlocks = [
+      { type: "image", source: { type: "base64", data: captured.jpegBase64, media_type: "image/jpeg" } },
+      { type: "text", text: instructionText }
+    ];
+
+    // 以降は従来経路と完全共通（パーサ→speak→soul記録→演出）。
+    const asked = await session.ask(contentBlocks);
+    return await processAskedReply(buffer, asked, true, { injectedChars, includedCount, vision: true });
+  };
+
+  /**
+   * 通常 Fire（画像なし）の ask コア。窓収集→空窓ガード→（新規受理なら）thinking + accept emit→ask→
+   * processAskedReply（vision:false）。手動 Fire（新規受理）と、preferred の対象未設定/劣化フォールバックが
+   * 共有する。`alreadyAccepted=false` は元インライン実装（fire() の通常経路）と完全に同一の外形。
+   * @param {{ all: Function; append: Function }} buffer
+   * @param {{ alreadyAccepted: boolean }} opts
+   *   false: 新規の通常 Fire（空窓は onFire{accepted:false,reason:"empty-window"} で正直に中止・受理で
+   *          thinking + onFire{accepted:true,...} を emit）。手動 Fire・preferred の対象未設定が使う。
+   *   true : 既に thinking かつ onFire{accepted:true,vision:true} 済みの**劣化フォールバック**（accept を
+   *          再 emit しない = 二重 accept を避ける・空窓でも onFire は出さず reason:"empty-window" を返すだけ）。
+   * @returns {Promise<object>}
+   */
+  const fireNormalCore = async (buffer, { alreadyAccepted }) => {
+    // 3. 直近窓を収集。空窓なら ask を無駄撃ちしない。
+    const nowMs = nowImpl();
+    const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
+    if (injection.includedCount === 0) {
+      if (!alreadyAccepted) {
+        emit(onFire, { accepted: false, reason: "empty-window" });
+      }
+      return { fired: false, reason: "empty-window" };
+    }
+    const injectedText = injection.text;
+    const injectedChars = injection.charCount;
+    const includedCount = injection.includedCount;
+
+    // 4. 受理 → thinking。ask を撃つ（劣化フォールバックは既に thinking + accept 済みなので再 emit しない）。
+    if (!alreadyAccepted) {
+      setState("thinking");
+      emit(onFire, { accepted: true, injectedChars, includedCount, atMs: nowMs });
+    }
+
+    try {
+      const asked = await session.ask(injectedText);
+      return await processAskedReply(buffer, asked, false, { injectedChars, includedCount });
+    } catch (error) {
+      // 失敗の握り: サーバを殺さず診断に落とす。
+      const message = error instanceof Error ? error.message : String(error);
+      emit(onDiagnostic, { type: "fireError", message });
+      return { fired: false, reason: "error", message };
+    } finally {
+      // どの経路でも idle へ戻す（詰まりを残さない）。冪等 setState ゆえ二重発火なし。
+      setState("idle");
+    }
+  };
+
+  /**
+   * 視覚発火（S5「目が開く」・手動視覚 Fire = fire({vision:true})・自発 silence が使う）。busy 判定・耳未起動
+   * 判定は呼び出し元（fire()）で通常 Fire と共有済み。**「見えなければ中止」を維持**（対象未設定・キャプチャ
+   * 失敗はいずれも session.ask を呼ばず中止＝盲目のまま撃たない）。
    * @param {{ all: Function; append: Function }} buffer
    * @returns {Promise<object>}
    */
@@ -518,32 +620,7 @@ export function createFireOrchestrator(options) {
         emit(onDiagnostic, { type: "fireVisionError", kind, message });
         return { fired: false, reason: "vision-capture-failed", kind };
       }
-
-      // 「見た」事実の通知（サムネ用 base64 はここにだけ載る・会話ログの正本には積まない）。
-      emit(onVisionCaptured, {
-        title,
-        width: captured.width,
-        height: captured.height,
-        jpegBase64: captured.jpegBase64,
-        elapsedMs: captured.elapsedMs
-      });
-
-      // 会話窓 + 視覚指示テキストと画像ブロックを content 配列（**画像先行**）にして注入。
-      const nowMs = nowImpl();
-      const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
-      const injectedText = injection.text;
-      const injectedChars = injection.charCount;
-      const includedCount = injection.includedCount;
-      const instructionText =
-        injectedText.length > 0 ? `${injectedText}\n${VISION_INSTRUCTION_TEXT}` : VISION_INSTRUCTION_TEXT;
-      const contentBlocks = [
-        { type: "image", source: { type: "base64", data: captured.jpegBase64, media_type: "image/jpeg" } },
-        { type: "text", text: instructionText }
-      ];
-
-      // 以降は従来経路と完全共通（パーサ→speak→soul記録→演出）。
-      const asked = await session.ask(contentBlocks);
-      return await processAskedReply(buffer, asked, true, { injectedChars, includedCount, vision: true });
+      return await askWithVision(buffer, captured, title);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       emit(onDiagnostic, { type: "fireError", message });
@@ -553,11 +630,58 @@ export function createFireOrchestrator(options) {
     }
   };
 
+  /**
+   * 視覚優先発火（S6 追撃・自発 call/turn-end 用 = fire({vision:"preferred"})）。fireVision との違いは
+   * **「見えなくても中止せず画像なしの通常 Fire へ劣化」**（裁定 1/2）: 対象未設定 → 通常 Fire・キャプチャ
+   * 失敗 → 通常 Fire + 劣化診断。誰もボタンを押していない自発発火ゆえ盲目でも嘘にならない。busy/耳未起動
+   * 判定は呼び出し元（fire()）で共有済み。
+   * @param {{ all: Function; append: Function }} buffer
+   * @returns {Promise<object>}
+   */
+  const firePreferred = async (buffer) => {
+    // 対象解決（状態遷移前）。未設定は通常 Fire へフォールバック（中止しない・vision-no-target とは違う）。
+    let title = null;
+    try {
+      title = typeof getVisionTarget === "function" ? await getVisionTarget() : null;
+    } catch {
+      title = null; // 解決関数の throw も「対象未設定」扱い（通常 Fire へ劣化）。
+    }
+    if (typeof title !== "string" || title.length === 0) {
+      // 対象未設定 → 画像なしの通常 Fire（新規受理経路・空窓ガードも通常どおり効く）。
+      return fireNormalCore(buffer, { alreadyAccepted: false });
+    }
+
+    // 対象あり → 視覚優先。thinking + accept(vision)。
+    setState("thinking");
+    emit(onFire, { accepted: true, vision: true, atMs: nowImpl() });
+
+    try {
+      const captured = await captureImpl(title);
+      if (captured && captured.error) {
+        // キャプチャ失敗 → 画像なしの通常 Fire へ静かに劣化（中止しない）。痕跡は診断で必ず残す（ゴースト行）。
+        const { kind, message } = captured.error;
+        emit(onDiagnostic, { type: "fireVisionDegraded", kind, message });
+        // 既に thinking + accept 済みなので再 emit しない。この後 fireNormalCore の finally が idle へ戻す。
+        return await fireNormalCore(buffer, { alreadyAccepted: true });
+      }
+      // 成功 → 手動視覚 Fire と完全共通の視覚 ask。
+      return await askWithVision(buffer, captured, title);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      emit(onDiagnostic, { type: "fireError", message });
+      return { fired: false, reason: "error", message };
+    } finally {
+      // fireNormalCore(alreadyAccepted:true) 経路では二重 idle になるが冪等ゆえ無害。
+      setState("idle");
+    }
+  };
+
   return {
     /**
      * Fire 1 発を処理する（Promise を返す・テストが await 可能）。
-     * @param {{ vision?: boolean }} [fireOptions]  省略/未指定時は従来どおり通常 Fire（完全不変）。
-     *   `{ vision: true }` で視覚発火（S5）。
+     * @param {{ vision?: boolean | "preferred" }} [fireOptions]  省略/未指定時は従来どおり通常 Fire（完全不変）。
+     *   `{ vision: true }` で視覚発火（S5・見えなければ中止）。`{ vision: "preferred" }` で視覚優先発火
+     *   （S6 追撃・自発 call/turn-end 用・対象あれば画像付き・無/失敗なら画像なしの通常 Fire へ劣化）。
      * @returns {Promise<object>}
      */
     async fire(fireOptions) {
@@ -576,38 +700,20 @@ export function createFireOrchestrator(options) {
         return { fired: false, reason: "ears-not-running" };
       }
 
-      // S5: 視覚発火は別フローへ（これより下の通常 Fire ロジックは元の実装と完全に不変）。
-      if (fireOptions != null && fireOptions.vision === true) {
+      // S5/S6: 視覚系は別フローへ振り分ける。通常 fire()（fireOptions 省略 = vision undefined）の挙動は
+      // 完全不変（無退行・fireNormalCore へ抽出しただけ）。
+      //  - vision:true      → 手動視覚 Fire・自発 silence（見えなければ中止）。
+      //  - vision:"preferred" → 自発 call/turn-end（対象あれば画像付き・無/失敗なら画像なし通常発火へ劣化）。
+      const visionMode = fireOptions != null ? fireOptions.vision : undefined;
+      if (visionMode === true) {
         return fireVision(buffer);
       }
-
-      // 3. 直近窓を収集。空窓なら ask を無駄撃ちしない。
-      const nowMs = nowImpl();
-      const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
-      if (injection.includedCount === 0) {
-        emit(onFire, { accepted: false, reason: "empty-window" });
-        return { fired: false, reason: "empty-window" };
+      if (visionMode === "preferred") {
+        return firePreferred(buffer);
       }
-      const injectedText = injection.text;
-      const injectedChars = injection.charCount;
-      const includedCount = injection.includedCount;
 
-      // 4. 受理 → thinking。ask を撃つ。
-      setState("thinking");
-      emit(onFire, { accepted: true, injectedChars, includedCount, atMs: nowMs });
-
-      try {
-        const asked = await session.ask(injectedText);
-        return await processAskedReply(buffer, asked, false, { injectedChars, includedCount });
-      } catch (error) {
-        // 失敗の握り: サーバを殺さず診断に落とす。
-        const message = error instanceof Error ? error.message : String(error);
-        emit(onDiagnostic, { type: "fireError", message });
-        return { fired: false, reason: "error", message };
-      } finally {
-        // どの経路でも idle へ戻す（詰まりを残さない）。冪等 setState ゆえ二重発火なし。
-        setState("idle");
-      }
+      // 3./4. 通常 Fire（画像なし）: 元インライン実装をコア関数へ抽出（挙動不変）。
+      return fireNormalCore(buffer, { alreadyAccepted: false });
     },
 
     /** barge-in 中断（S6・外部の VAD 結線が呼ぶ）。詳細は interrupt の JSDoc。 */

@@ -941,8 +941,12 @@ export function createCockpitServer(options = {}) {
 
   // S6「会話が続く」自発発火スケジューラの結線（additive・薄い）: orchestrator が fire/getState を持つときだけ
   // 生成する。onVadEvent/onTranscript（startEars 内）が handleVadEvent/handleTranscript を回し、判定に応じて
-  // onFireRequest で kind 付き発火要求が来る → call/turn-end は通常 Fire・silence は視覚発火（fire({vision:true})）。
-  // busy 無視・空窓/対象未設定等は既存状態機械（fire-orchestrator）に従う（スケジューラは要求を出すだけ）。
+  // onFireRequest で kind 付き発火要求が来る。
+  //  S6 追撃（Domain E・人間ゲート裁定）: call/turn-end を**視覚優先**（fire({vision:"preferred"})）へ格上げ
+  //  ——視覚対象が設定済みなら画像付き発火、無/キャプチャ失敗なら画像なしの通常発火へ静かに劣化する（誰も
+  //  ボタンを押していない自発発火ゆえ盲目でも嘘にならない・劣化痕跡は fireVisionDegraded 診断のゴースト行）。
+  //  silence は従来どおり fire({vision:true})（見えなければ中止＝1 ビットも変えない）。手動 Fire・手動視覚 Fire
+  //  は scheduler 非経由ゆえ無関係。busy 無視・空窓等は既存状態機械（fire-orchestrator）に従う。
   if (
     fireOrchestrator &&
     typeof (/** @type {any} */ (fireOrchestrator).fire) === "function" &&
@@ -958,10 +962,12 @@ export function createCockpitServer(options = {}) {
         // 判明してから broadcast する（同期 throw も非同期 rejection もどちらも "fired:false" として扱う）。
         const kind = req && req.kind;
         try {
+          // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end は視覚優先
+          // （対象あれば画像付き・無/失敗なら画像なしの通常発火へ劣化）。手動 Fire は scheduler 非経由で無関係。
           const firePromise =
             req && req.kind === "silence"
               ? /** @type {any} */ (fireOrchestrator).fire({ vision: true })
-              : /** @type {any} */ (fireOrchestrator).fire();
+              : /** @type {any} */ (fireOrchestrator).fire({ vision: "preferred" });
           Promise.resolve(firePromise)
             .then((result) => {
               broadcast("selfFire", {
