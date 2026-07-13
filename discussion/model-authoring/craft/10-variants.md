@@ -42,6 +42,8 @@ variant 系 operation 10種（createVariantGroup / createVariant / addVariantTar
 - 動かさない素材（下半身等）: **ルート直下のキー無し warp** 1基に一括（キーフォームを一切打たない。恒等性は keyformSets 数が増えないことで構造証明）
 - 追従だけさせたい素材（背負い物等）: **親 rig 直下のキー無し warp** を器に（変形なしで親の回転に乗る。±端で親の直接子と残差 0px を巻尺確認）
 - 差分素材をここで初めてメッシュ化する場合は §2 の順序則に従う（所属を組んでから）
+- **⚠ 非所属の実害は export で初めて出る**（3周目実証）: デフォーマ非所属の drawable は export の対象集合から**警告なしで脱落**する（unbound pool 除外。preflight の `excludedUnboundDrawableCount` に数字が出るだけで blocker にならない）。**CLI レンダ（document 経路）には写らないため、周回の全 gate を素通りする**——rest 可視の素材が出荷物から消える事故になる。処方: 工程5 の形式所属チェックに「**デフォーマ所属の閉包**」（全 drawable が高々1つの rig 配下に bound。非所属の許容は恒久非表示の参照素材のみ、と明示裁定）を必ず含める。3周目実測: footwear/legwear が非所属で発見、キー無しルート warp 1 op で解消（rest sha 完全一致 = 恒等の画素証明・validate 差分 rigControl.rEM +1 のみ）
+- 恒等の検証は二重で安い: **rest レンダ sha の基線一致**（画素）+ 本 rigControl を target とする keyformSets が 0（構造）
 
 ## 5. 運用
 
