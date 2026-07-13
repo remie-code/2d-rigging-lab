@@ -20,7 +20,7 @@
 
 現配信は `serveIndex`(cockpit-server.mjs:915-928)が `cockpit.html` を `GET /` に返すのみ。vendor .mjs用ルートがなく `GET /vendor/…` は404(:912フォールスルー)。
 
-**L0決定: `GET /vendor/*.mjs` 静的ルートを追加**(handleRequestの404手前・:912の前に1分岐)。serveIndex同型に readFile→`content-type: text/javascript`(module scriptはJS MIME必須)。**パストラバーサル防止**(`..`拒否・許可拡張子固定)込み。エントリは `cockpit.html` 内の inline `<script type="module">import … from "/vendor/…"</script>`(後述の既存テスト制約のため)。import mapは不要(standaloneゆえ)。
+**L0決定: 操縦席UIの `.mjs` ツリーを配る静的ルートを追加**(handleRequestの404手前・:912の前)。serveIndex同型に readFile→`content-type: text/javascript`(module scriptはJS MIME必須)。**パストラバーサル防止**(`..`拒否・許可拡張子固定・ルート配下限定)込み。うちらのコードを区画ごとの `.mjs` に分割する(§4-5)ため、配るのはvendorだけでなく `src/cockpit/ui/*.mjs`・`view-logic/*.mjs` も含む静的ツリー。エントリは `cockpit.html` 内の inline `<script type="module">import … from "./ui/app.mjs"</script>`(後述の既存テスト制約のため src属性は使わずimport文で読む)。import mapは不要(standaloneゆえ相対import1本で解決)。
 
 ### 1-3. 既存テストとの摩擦(要注意・Sylph A)
 
@@ -69,7 +69,7 @@ Fire(busy中disable・503/reason表示)/Fire視覚(同上)/自発ON/OFFトグル
 2. **配信= `GET /vendor/*.mjs` 静的ルート追加**(traversal防止)+エントリはinline module。
 3. **テスト= 純関数化+devDepゼロ**(linkedomは梯子)。
 4. **無退行の背骨= server test(ワイヤ契約16+13+6)**。UI描画は人間ゲート。
-5. **移行方式= ビュー(cockpit.html)の全面書き換え**。理由: 単一自己完結ファイルで段階移行の分割線が引きにくい/page testはどのみち書き換え/ワイヤ契約(server)は不変でオラクルになる=安全に全面書き換えできる。器コード・魂の他部位・契約・実行時依存は不変。
+5. **移行方式= ビューの全面書き換え+構造化分割**。cockpit.htmlのバニラJS(約676行)を捨て、うちらのコードを**IA区画ごとの `.mjs` に分割**(`ui/header.mjs`・`ui/feed.mjs`・`ui/control-bar.mjs`・`ui/settings-drawer.mjs`・`ui/app.mjs`エントリ+`view-logic/*.mjs`=preact非依存の表示ロジック純関数)。**standaloneバンドルされるのはサードパーティ(preact+htm)だけ**——うちらの部品は積層せず構造化管理する(ユーザー確認 2026-07-14: 「機能追加の認知負債として積み上がらないこと」)。**S2.5の単一自己完結HTML思想は操縦席については引退**(薄い皿のための制約・皿がコントロールルームになった今は役目を終えた)。引き継ぐのは思想でなく本当の制約=ビルドなし・ソース=実行物・新規npm依存ゼロ(分割.mjsの静的配信で全て満たす)。ワイヤ契約(server)は不変=安全に全面書き換えできる。器コード・魂の他部位・契約・実行時依存は不変。page testの自己完結強制系(`<script src>`全面禁止:72・CDN禁止69-76)は旧思想の産物として本改定で書き換え対象。
 
 ## 5. 未決(計画内の段取り・ユーザー承認を要する1点)
 
