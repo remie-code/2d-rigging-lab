@@ -107,11 +107,12 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
 
 - **起動（1 コマンド）**: `npm run cockpit --prefix apps/soul/agent`（既定 `http://127.0.0.1:8181/`・
   `-- --port N` でポート変更）。起動時にアクセス URL を標準出力に表示。**Ctrl+C / EOF で clean 終了**。
-- **画面**（`src/cockpit/cockpit.html`・単一ファイルの vanilla HTML/CSS/JS・**ビルドチェーン/CDN/npm 依存
-  ゼロ**・ブラウザ組み込みの `EventSource`（SSE）+ `fetch` のみ）: ヘッダ（耳の Listening/Stopped +
-  whisper/ffmpeg 死活・down は赤 + 理由）/ Microphone ドロップダウン（`--list-devices` の廃止置換）+
-  Start/Stop / Timeline（本文行 + (speaking) ライブ行・時刻/話者/本文/レイテンシ）/ footer（discarded・
-  uptime）。正本はプロセス側で **タブを閉じても魂は死なない**（開き直せば `GET /api/state` で復元）。
+- **画面**（※ 単一ファイル vanilla HTML/CSS/JS の構成は**操縦席UI改定（2026-07-14・下記「操縦席UI改定」節）
+  で三層 IA + preact+htm no-build 構成へ刷新**——以下は S2.5 当時の記録・機能は全て新 UI に保存されている）:
+  ヘッダ（耳の Listening/Stopped + whisper/ffmpeg 死活・down は赤 + 理由）/ Microphone ドロップダウン
+  （`--list-devices` の廃止置換）+ Start/Stop / Timeline（本文行 + (speaking) ライブ行・時刻/話者/本文/
+  レイテンシ）/ footer（discarded・uptime）。正本はプロセス側で **タブを閉じても魂は死なない**
+  （開き直せば `GET /api/state` で復元）。
 - **サーバ**（`src/cockpit/cockpit-server.mjs`・Domain A）: HTTP 静的配信 + 制御 API（デバイス列挙 / 耳 start
   /stop / 状態）+ SSE ライブチャネル。**127.0.0.1 限定**（非 loopback host は構築時に throw・認証なし）。
 - **デバイス選択の永続化**（`src/cockpit/cockpit-settings-store.mjs`）: 選んだマイクを
@@ -326,3 +327,35 @@ MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 
   HTTP は 1 バイトも踏まない）。手順は
   `discussion/ai-cohost/implementation/waves/s7/human-gate-procedure.md`・followup は
   `discussion/ai-cohost/implementation/waves/s7/s7-followup.md`。
+
+#### 操縦席UI改定: コントロールルーム化（観測/運転/設定の三層 IA・preact+htm no-build）
+
+S8 前の独立閉問題（能力 wave でなく**振る舞い保存のリファクタ + IA 再設計 + 外観刷新**・2026-07-14）。
+設定項目が画面の半分を占めていた旧レイアウトを、**観測（常時見たい・主役）/ 運転（配信中に触る・
+常駐バー: Fire・Fire+視覚・自発トグル・口数・KILL 枠）/ 設定（一度きり・⚙ で開く引き出し）**の三層
+IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screens/cockpit-redesign.md`
+（§7 視覚仕様 = モック承認済み・ダーク基調 + teal の話者色分け）。
+
+- **起動は不変**: `npm run cockpit --prefix apps/soul/agent` 一発（**ビルド段ゼロ・ソース = 実行物**）。
+- **構成**（`src/cockpit/`）: `cockpit.html` は最薄エントリ（`<div id="app">` + inline module が
+  `ui/app.mjs` の `mount()` を呼ぶだけ・`<script src>` 不使用）。UI 実体は IA 区画ごとの `ui/*.mjs`
+  （app/header/feed/rows/styles/control-bar/settings-drawer = preact コンポーネント層）+
+  `view-logic/*.mjs`（SSE→表示文字列・状態導出の **preact 非依存純関数**・node:test fixture が
+  保存オラクルの表示側固定点）。スタイルは `ui/styles.mjs`（COCKPIT_CSS）を mount 時に注入
+  （CSS カスタムプロパティ手書き・フレームワークなし）。
+- **vendor**: `src/cockpit/vendor/htm.preact.standalone.mjs`（preact+htm standalone バンドル・
+  1 ファイル・hooks 込み・bare import ゼロ）をコミットして持つ**凍結ファイル**（編集しない）。
+  ブラウザが読むだけで、**実行時 npm 依存ゼロ・devDep ゼロ・lockfile 不変**は維持（S2.5 の
+  「単一自己完結 HTML」思想は操縦席については引退——引き継ぐ本当の制約はビルドなし・ソース=実行物・
+  新規 npm 依存ゼロで、分割 .mjs の静的配信が全て満たす）。
+- **配信**: cockpit-server に UI アセット静的ルートを追加（`/vendor/*.mjs`・`/ui/*.mjs`・
+  `/view-logic/*.mjs` のみ・トラバーサル防止・`text/javascript`）。**既存 16 エンドポイント×13 SSE×
+  6 設定キーのワイヤ契約は不変**（無退行の背骨 = `cockpit-server.test.mjs` 74 本が全緑のまま）。
+- **機能は全て保存**（振る舞い保存 wave）: 行種 9 つ（転写 you/soul/viewer・speaking・ゴースト・
+  発火/演出/視覚/barge-in/自発マーカー）・usage/discarded/uptime・Fire/Fire+視覚（busy disable）・
+  自発トグル・Channel（token 秘匿）/YouTube/マイク/声の出力先/視界の全設定・タブ開き直し履歴復元。
+  改定で加わった導線: 観測フィードの自動スクロールは上へスクロールで停止 +「最新へ↓」・**初回
+  （設定空）だけ設定引き出しが自動展開・二回目以降は観測フィードへ直行**。口数モードは**場所のみ**
+  （選択しても挙動は変わらない・実配線は s6-followup §12 の将来課題）・KILL は **S8 予約の枠のみ**。
+- 人間ゲート手順: `discussion/ai-cohost/implementation/waves/cockpit-redesign/human-gate.md` /
+  followup 台帳: 同 `followup.md` / wave 記録: 同 `domain-{a,b,c,d}.md`。

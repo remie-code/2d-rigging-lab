@@ -7,6 +7,14 @@
 # パスは設定で上書き可能なので、vendor/ 配置は既定であって強制ではない。
 vendor/
 
+# ── 操縦席 UI の凍結 vendor（preact+htm standalone・コミットして持つ）─────────────
+# 上の `vendor/` は un-anchored ゆえ任意深さの vendor/ を無視し、操縦席 UI 改定で新設する
+# src/cockpit/vendor/（ブラウザ配信の凍結ソース・htm.preact.standalone.mjs ≈13KB・実行時 npm 依存
+# ゼロ）まで巻き込む。UI vendor は whisper の巨大バイナリとは性格が異なり**リポジトリにコミットして
+# 持つ**（wave 計画 §2/§3・ソース=実行物）。この 1 サブツリーだけ無視を解く（whisper vendor は無視のまま）。
+!src/cockpit/vendor/
+!src/cockpit/vendor/*.mjs
+
 # ── マイク録音・一時音声データ（プライバシー: リポジトリ/成果物に残さない）──────
 # 実マイクの録音物や中間 PCM/WAV を魂 zone に一切コミットしない（S2 計画 §4・blocking 基準4）。
 # 機械テストは合成 PCM を in-memory で扱い、ディスクに書かない。preflight 等が書く一時 WAV は

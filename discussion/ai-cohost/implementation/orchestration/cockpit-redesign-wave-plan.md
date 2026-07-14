@@ -64,4 +64,51 @@
 
 ## 6. Status
 
-計画確定・発進待ち。
+**機械ゲート全緑・全12レビューレーン PASS・人間ゲート待ち**（2026-07-14 実行完了・Orch-Sylph）。
+
+### 機械ゲート生数字（Orch-Sylph 自身の最終独立再実行・タイムアウト付き）
+
+`cd apps/soul/agent && node --test`（全テスト・タイムアウト 300s）:
+
+```
+# tests 679
+# suites 0
+# pass 679
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+```
+
+- **無退行の背骨 `cockpit-server.test.mjs` は 74/74 全緑**（ワイヤ契約 16 エンドポイント×13 SSE×6 設定キーが wave 全体を通じて不変＝一次証明）。
+- **旧 page test（HTML 文字列 regex・30 本）→ 新 page test（エントリ/死コードゼロ/自己完結/起動配線スモーク・4 本）**（Domain D で書き換え・機能同値の固定先は view-logic/ui テストへ移管・対応表を新 page test ヘッダに恒久記録）。
+- テスト内訳の推移: 実装前ベースライン 609 → A 646(+34: view-logic 28 + 静的ルート 6) → B 675(+29: health 5 + cockpit-ui 23 + static +1) → C 702(+27: control 8 + settings 11 + status +1 + cockpit-ui +7) → D 676(−30 旧page +4 新page) → W4 追修正 **679**(+3: feedAfterSseEvent の 3 ディスパッチ case 回帰保護)。
+- **器コード（`apps/runtime-player`・`packages`）不変**（`git diff --stat` 出力ゼロ）・**lockfile 不変**（`pnpm-lock.yaml` sha256 `d65a7643f186dab24915f4783bc28fbd5e0c6955cd10c1b00e78d011aebb25fb`・git diff 空）・**`apps/soul/agent/package.json` 不変**（新規 npm 依存ゼロ・devDep ゼロ）・**ビルド段ゼロ**（`npm run cockpit` 一発・ソース=実行物）。
+- **3 チェック無退行**: check-dependencies passed / check-soul-zone-boundary passed（1377 files）/ check-source-organization は器側既存赤 1 件のみ（`apps/runtime-player/src/main/physiology/index.ts` barrel-only・ブランチ既存ベースライン・soul/agent スコープは違反ゼロ）。
+- **変更スコープ**: `apps/soul/agent/src/cockpit/**`（cockpit-server.mjs は静的ルート 80 insertions のみ・cockpit.html 913→27 行・cockpit-page.test.mjs 書き換え・vendor/ui/view-logic 新設）+ `apps/soul/README.md`（操縦席節の追記・歴史記述は保存）+ `discussion/**`（本 wave 成果物）。`.tmp/facex-*` と `screens/cockpit-ia-redesign.md` は別セッション領分・不干渉。
+
+### vendor 取得記録（このwaveで唯一許可された外部ネットワークアクセス・Domain A）
+
+- 取得 URL: `https://unpkg.com/htm@3.1.1/preact/standalone.mjs`（htm 3.1.1 / preact 10.29.7）
+- 配置: `apps/soul/agent/src/cockpit/vendor/htm.preact.standalone.mjs`（凍結・無改変・冒頭出所コメントなし）
+- サイズ 13,194 bytes / **sha256 `72284e8e9079c87817145df1110f74e8a2aa040b2fc384922e18dfcb46fc1fd7`**（Orch 最終再計算で凍結確認・Domain A 記録と一致）
+- import スモーク: html/render/h/hooks 13 export を Node で確認（bare import ゼロ）。取得後の全機械テストは実ネット不出。
+
+### レビュー判定一覧（全 12 レーン・各ドメイン spec/design/test）
+
+| Domain | spec | design | test |
+|---|---|---|---|
+| A（土台: vendor+静的配信+view-logic） | PASS-with-nonblocking | PASS | PASS（1 巡目 blocking「トラバーサルテストがガード非到達」→ `..%2f`/`..%5C` raw socket 3 本追加+文書訂正で解消・実装不変） |
+| B（観測+ヘッダ） | PASS | PASS | PASS（旧ハンドラ×feedAfterSseEvent 53 入力 ALL MATCH） |
+| C（運転バー+設定引き出し） | PASS | PASS（snapshot 全適用の挙動差なし検証済み） | PASS（旧 IIFE 照合 113 入力・264 アサーション ALL MATCH） |
+| D（統合+docs+人間ゲート） | PASS | PASS（旧 913 行の全識別子 id37/関数32/CSS約85 残存ゼロ機械走査） | PASS（W4「feedAfterSseEvent 3 case 回帰保護穴」→ assert 3 本追加を mutation testing で実証・実装不変） |
+
+- 全ドメイン: 器コード・契約 JSON・lockfile・package.json 不変／新規 npm 依存ゼロ／server test 74/74 緑を維持。
+- non-blocking 据え置き（followup 台帳へ）: W1/W2/W3/W5（D testレーン 1 巡目）・各レーン観察分。
+
+### 人間ゲート（次段・ユーザーの作業）
+
+- 手順書: [../waves/cockpit-redesign/human-gate.md](../waves/cockpit-redesign/human-gate.md)（起動→モック§7見た目→保存チェックリスト§2 を 1 個ずつ→三層 IA/導線）。
+- followup 台帳: [../waves/cockpit-redesign/followup.md](../waves/cockpit-redesign/followup.md)（口数モード実配線=s6-followup §12・KILL=S8・linkedom 梯子・thinking フィード行の追撃候補・行保持無制限・lastDevice 自動展開判定外・W5 dynamic import 検出穴 ほか）。
+- 既知差分（L0 裁定）: soul の thinking 表示は運転バー側（旧 UI と同位置の意味論）でフィード行にはしない（モックの thinking 行との既知差分・気になれば追撃で soul SSE から行を足せる）。
+- ドメイン成果物: [../waves/cockpit-redesign/domain-a.md](../waves/cockpit-redesign/domain-a.md) / [domain-b.md](../waves/cockpit-redesign/domain-b.md) / [domain-c.md](../waves/cockpit-redesign/domain-c.md) / [domain-d.md](../waves/cockpit-redesign/domain-d.md)。レビュー: [../reviews/cockpit-redesign/](../reviews/cockpit-redesign/)（12 本）。

@@ -43,6 +43,8 @@
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createEarPipeline } from "../ears/ear-pipeline.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
@@ -61,6 +63,18 @@ export const DEFAULT_TRANSCRIPT_HISTORY = 200;
 
 /** loopback リテラルのみ許容（非 loopback は外部露出になるため拒否）。 */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+
+/**
+ * このモジュール（src/cockpit/cockpit-server.mjs）が置かれたディレクトリ = 操縦席 UI アセットの既定ルート。
+ * 操縦席 UI 改定（コントロールルーム化・preact+htm no-build）で、cockpit.html の inline module が読む
+ * `vendor/*.mjs`・`ui/*.mjs`・`view-logic/*.mjs` を配る静的ルートのルートに使う。
+ */
+const COCKPIT_DIR = path.dirname(fileURLToPath(import.meta.url));
+/**
+ * 静的配信を許可する UI アセットのサブツリー（この 3 つ配下の `.mjs` のみ配る）。cockpit-server.mjs 本体・
+ * テスト・settings-store 等（UI ルート直下の他 `.mjs`）は配らない（配信は UI アセットに限定する）。
+ */
+const UI_ASSET_SUBDIRS = new Set(["vendor", "ui", "view-logic"]);
 
 /**
  * host が loopback であることを保証する（非 loopback は throw）。
@@ -260,6 +274,9 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {string} [options.host=DEFAULT_COCKPIT_HOST]  loopback リテラルのみ許容。
  * @param {string} [options.indexHtml]      配信する HTML 文字列（最優先）。
  * @param {string} [options.indexHtmlPath]  配信する HTML のファイルパス（B が本体を渡す）。
+ * @param {string} [options.uiRootPath]     操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信
+ *   ルート。既定は本モジュールのディレクトリ（= 実 UI ツリー）。トラバーサル防止・許可拡張子 .mjs・
+ *   許可サブツリー限定でこの配下だけを配る（既存 16 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
  * @param {string} [options.inputFormat]    ffmpeg 入力フォーマット（既定 win32→dshow）。
  * @param {number} [options.transcriptHistory=DEFAULT_TRANSCRIPT_HISTORY]  状態に載せる直近転写件数。
  * @param {{ getLastDevice: () => any; setLastDevice: (d: any) => any }} [options.settingsStore]
@@ -382,6 +399,10 @@ export function createCockpitServer(options = {}) {
   // S6「会話が続く」自発発火の初期 ON/OFF（既定 OFF）。Domain D が永続トグル（設定/UI）で制御する
   // までは、テスト or 明示指定でのみ ON にする（既定 OFF ＝ 操縦席にトグルが無い間は自発が暴発しない）。
   const selfFireInitialEnabled = options.selfFireInitialEnabled === true;
+  // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
+  // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
+  // scripts/cockpit.mjs は無改変で動く）。
+  const uiRootPath = options.uiRootPath ?? COCKPIT_DIR;
 
   /** @type {Set<import("node:http").ServerResponse>} */
   const sseClients = new Set();
@@ -909,7 +930,66 @@ export function createCockpitServer(options = {}) {
       return;
     }
 
+    // 操縦席 UI アセットの静的配信（vendor/ui/view-logic の .mjs ツリー）。**追加ルートのみ**——
+    // 既存 16 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
+    // 落ちてくる GET は非 API・非 root だけ）。UI アセットサブツリー宛のみ握り、その他は既存 404 へ。
+    if (method === "GET" && (await tryServeUiAsset(res, pathname))) {
+      return;
+    }
+
     sendJson(res, 404, { error: `not found: ${method} ${pathname}` });
+  }
+
+  /**
+   * 操縦席 UI アセット（vendor/ui/view-logic 配下の `.mjs`）を配る静的ルート（serveIndex 同型の readFile→
+   * JS MIME）。**トラバーサル防止**: `..` を含んでも path.relative で UI ルート脱出を弾き、正規化後の第一区画が
+   * 許可サブツリー（vendor/ui/view-logic）に収まり、かつ拡張子が `.mjs` のものだけ 200 で返す。それ以外は 404。
+   *
+   * @param {import("node:http").ServerResponse} res
+   * @param {string} pathname  リクエストパス（先頭 "/"）。
+   * @returns {Promise<boolean>}  UI アセット宛として応答を握ったら true（握らなければ既存 404 へフォールスルー）。
+   */
+  async function tryServeUiAsset(res, pathname) {
+    let rel;
+    try {
+      rel = decodeURIComponent(pathname);
+    } catch {
+      return false; // 不正な %エンコードは UI アセットとして扱わない（既存 404 へ委譲）。
+    }
+    rel = rel.replace(/^\/+/, "");
+    const firstSeg = rel.split("/")[0];
+    // このハンドラが「握る」のは第一区画が UI アセットサブツリーのリクエストのみ。それ以外（/api/... 等）は
+    // false を返し、既存の 404 フォールスルーに委ねる（他ルートの 404 レスポンス形を 1 バイトも変えない）。
+    if (!UI_ASSET_SUBDIRS.has(firstSeg)) return false;
+
+    const notFound = () => sendJson(res, 404, { error: `not found: GET ${pathname}` });
+
+    // 解決して UI ルート脱出とサブツリー逸脱を弾く（`..` / URL エンコードのトラバーサル防止）。
+    const resolved = path.resolve(uiRootPath, rel);
+    const relFromRoot = path.relative(uiRootPath, resolved);
+    if (relFromRoot === "" || relFromRoot.startsWith("..") || path.isAbsolute(relFromRoot)) {
+      notFound(); // UI ルートの外に出た（脱出）。
+      return true;
+    }
+    // 正規化後の第一区画が許可サブツリー外なら拒否（例: /vendor/../cockpit-server.mjs → 第一区画が cockpit-server.mjs）。
+    if (!UI_ASSET_SUBDIRS.has(relFromRoot.split(path.sep)[0])) {
+      notFound();
+      return true;
+    }
+    if (!resolved.endsWith(".mjs")) {
+      notFound(); // 許可拡張子は .mjs のみ（module script は JS MIME 必須・他拡張子は配らない）。
+      return true;
+    }
+    let body;
+    try {
+      body = await readFile(resolved);
+    } catch {
+      notFound(); // 存在しない .mjs。
+      return true;
+    }
+    res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
+    res.end(body);
+    return true;
   }
 
   async function serveIndex(res) {

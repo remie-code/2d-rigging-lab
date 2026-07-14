@@ -7,9 +7,71 @@ import { readFileSync } from "node:fs";
 import { createCockpitServer } from "./cockpit-server.mjs";
 import { cockpitHtmlPath } from "./cockpit-page.mjs";
 
-// コクピット・ページの機械テスト（S2.5 Domain B）。**見た目はテストしない**（人間ゲート）。
-// 構造の存在（ヘッダ状態・device ドロップダウン・timeline・footer・Start/Stop の識別子）と、
-// 消費するワイヤ契約（SSE + 制御エンドポイント）が単一ファイルに含まれることだけを固定する。
+// コクピット・ページの機械テスト（操縦席UI改定 Domain D で全面書き換え）。**見た目はテストしない**（人間ゲート）。
+//
+// 旧テスト（30 本・HTML 文字列 regex）は「単一ファイル vanilla HTML/CSS/JS の IIFE」前提の旧思想の産物で、
+// preact+htm（no-build）化により cockpit.html が最薄エントリ（div#app + inline module）になった本改定で
+// 意味を失った（wave-plan §2/§3 Domain D・inventory §2-4 の裁定どおり書き換え）。ここで固定するのは:
+//  (1) GET / が新エントリ HTML を配ること（200 + text/html・div#app・inline module が ./ui/app.mjs の
+//      mount を import して呼ぶ）。
+//  (2) 自己完結の本旨 = **外部ネットワーク非依存**（旧 :69-76 の読み替え・wave-plan §2）: <script src> なし
+//      （エントリは inline module の import 文のみ＝ローカル vendor/ui への相対 import は適合・外部だけ禁止）・
+//      http(s) を指す src/href なし・外部 stylesheet/@import なし。
+//  (3) 起動配線スモーク: 実サーバで GET / → HTML が import する /ui/app.mjs → その先の
+//      /vendor/htm.preact.standalone.mjs が全て 200 + text/javascript = 「npm run cockpit 一発でブラウザが
+//      解決できるツリーが配られている」ことの機械近似（shutdown = server.close まで）。
+//
+// ── 機能同値の説明責任: 旧 30 本が固定していた表示ロジックの新しい固定先（対応表） ──
+// 旧テストの検証対象は view-logic 純関数 fixture（view-logic/*.test.mjs・Domain A/C）と ui 層テスト
+// （cockpit-ui.test.mjs・Domain B/C の rows fixture + vnode 走査 + CSS 検査）へ移管済み。1 本ずつ:
+//   旧 1  GET / の必須リージョン           → 本ファイル (1)（エントリ構造）+ ヘッダ/計器/行の実体は
+//                                            cockpit-ui.test（Header vnode・FeedRow vnode・rows fixture）
+//   旧 2  ワイヤ契約の消費（SSE+API）      → cockpit-ui.test「SSE_EVENT_NAMES 13 本 deepEqual」+
+//                                            ui/{control-bar,settings-drawer}.mjs の fetch 結線（対応行コメント）+
+//                                            server test（ワイヤ契約 16+13+6 の背骨）
+//   旧 3  自己完結（CDN 禁止）             → 本ファイル (2)（外部ネットワーク非依存へ読み替え）
+//   旧 4  履歴行に latency 無し            → view-logic/transcript.test（latencyLabel null）+
+//                                            cockpit-ui.test（feedFromHistory fixture・feedAfterSseEvent
+//                                            transcript ディスパッチ = W4 追加）
+//   旧 5  discard ゴースト行+カウンタ      → cockpit-ui.test（feedAfterSseEvent discard fixture）
+//   旧 6  asrFailure ゴースト行            → view-logic/ghost.test + cockpit-ui.test（diagnostic fixture）
+//   旧 7  ゴースト行の視覚区別（muted）    → cockpit-ui.test（COCKPIT_CSS ghost italic 検査 + rows fixture）
+//   旧 8  Fire ボタン+soul 表示+POST       → ui/control-bar.mjs fireWith + view-logic/control.test
+//                                            （soulStatusView）+ cockpit-ui.test（FireButtons vnode）
+//   旧 9  SSE soul で Fire disable         → view-logic/control.test（soulStatusView.fireDisabled）+
+//                                            cockpit-ui.test（FireButtons vnode: thinking で両 disable）
+//   旧 10 SSE fire 受理マーカー/非受理ノート → cockpit-ui.test（feedAfterSseEvent fire fixture）+
+//                                            view-logic/control.test（fireNoteFromSseFire）
+//   旧 11 発火マーカーの文字列+CSS         → view-logic/markers.test（fireMarkerText）+ rows fixture + CSS 検査
+//   旧 12 fire 失敗診断のゴースト行        → view-logic/ghost.test（fireEmptyReply/fireError）
+//   旧 13 soul 行の speaker クラス         → view-logic/transcript.test（speakerRowClass）+ rows fixture
+//   旧 14 Channel 入力+Set+状態表示        → ui/settings-drawer.mjs（結線）+ view-logic/status.test
+//                                            （channelStatusView）+ settings.test（channelPostErrorText）
+//   旧 15 Set が POST /api/channel         → ui/settings-drawer.mjs onChannelSet（対応行コメント）+ server test
+//   旧 16 channel 状態の色クラス           → view-logic/status.test（channelStatusView fixture）
+//   旧 17 Set 後の入力欄クリア（token 秘匿）→ ui/settings-drawer.mjs onChannelSet（:766 対応）+ 人間ゲート手順書
+//                                            （hooks 内の実挙動は機械では固定不能＝linkedom 梯子は台帳）
+//   旧 18 SSE expression → 演出行          → markers.test（expressionRowText）+ cockpit-ui.test
+//                                            （feedAfterSseEvent expression ディスパッチ = W4 追加。旧記載は
+//                                            feedAfterSseEvent 経由を主張していたが実測ではディスパッチ経路が
+//                                            未固定＝前のめりだった・W4 で実体化して訂正）
+//   旧 19 演出行の word/counts+CSS         → view-logic/markers.test + rows fixture + CSS 検査
+//   旧 20 expressionUnknownTag のみ表示    → view-logic/ghost.test（意図的非表示 3 型 null）+
+//                                            cockpit-ui.test（非表示型は行を作らない fixture）
+//   旧 21 Live chat 入力/ボタン/状態       → ui/settings-drawer.mjs（結線）+ status.test（chatStatusView）
+//   旧 22 Connect/Disconnect の POST       → ui/settings-drawer.mjs onChatConnect/onChatDisconnect + server test
+//   旧 23 chat 状態クラス+source 復元      → view-logic/status.test（chatStatusView/shouldRestoreChatSource）
+//   旧 24 viewer 行のラベル+クラス         → view-logic/transcript.test（viewer(taro)）+ rows fixture
+//   旧 25 SSE chatStatus → 状態表示        → view-logic/status.test（chatDisplayFromSseStatus）+
+//                                            cockpit-ui.test（chatStatus はタイムライン行を作らない）
+//   旧 26 dead で Disconnect 無効（駆動）  → view-logic/status.test（chatStatusView: dead →
+//                                            disconnectDisabled=true の fixture＝旧 new Function 駆動の後継）
+//   旧 27 Disconnect 判定の単一経路        → view-logic/status.test + ui/settings-drawer.mjs
+//                                            （chatView.disconnectDisabled の単一参照）
+//   旧 28 chatDiagnostic のゴースト行      → view-logic/ghost.test（chatDiagnosticGhostLabel: 表示 5 種/
+//                                            観測補助 4 種 null）+ cockpit-ui.test fixture
+//   旧 29 chatBufferAbsent のゴースト行    → view-logic/ghost.test（diagnosticGhostLabel）
+//   旧 30 自発マーカーの kind 非依存       → view-logic/markers.test（selfFireMarkerText）+ rows fixture
 
 /** @param {string} url */
 function get(url) {
@@ -26,7 +88,7 @@ function get(url) {
   });
 }
 
-test("cockpit page: GET / serves the real page HTML with every required region", async () => {
+test("cockpit page: GET / serves the control-room entry (div#app + inline module that mounts ui/app.mjs)", async () => {
   const server = createCockpitServer({ indexHtmlPath: cockpitHtmlPath });
   try {
     const url = await server.listen(0);
@@ -34,349 +96,66 @@ test("cockpit page: GET / serves the real page HTML with every required region",
     assert.equal(r.status, 200);
     assert.match(String(r.headers["content-type"]), /text\/html/);
     const html = r.body;
-    // ヘッダ: Ears 状態 + whisper/ffmpeg 死活。
-    assert.match(html, /id="ears-status"/);
-    assert.match(html, /id="health-whisper"/);
-    assert.match(html, /id="health-ffmpeg"/);
-    // Microphone: ドロップダウン + Start/Stop。
-    assert.match(html, /id="device-select"/);
-    assert.match(html, /id="btn-start"/);
-    assert.match(html, /id="btn-stop"/);
-    // Timeline。
-    assert.match(html, /id="timeline"/);
-    // footer: discarded + uptime。
-    assert.match(html, /id="footer-discarded"/);
-    assert.match(html, /id="footer-uptime"/);
+    // 新エントリの骨格: マウント先 div#app + inline module（type="module"）。
+    assert.match(html, /<div id="app"><\/div>/);
+    assert.match(html, /<script type="module">/);
+    // inline module は ui/app.mjs の mount を相対 import して呼ぶ（mount 契約 = domain-b.md §2・
+    // options 既定で globalThis 参照 = 引数は rootElement のみで足りる）。
+    assert.match(html, /import \{ mount \} from "\.\/ui\/app\.mjs"/);
+    assert.match(html, /mount\(document\.getElementById\("app"\)\)/);
   } finally {
     await server.close();
   }
 });
 
-test("cockpit page: consumes the Domain A wire contract (SSE + control API) via browser built-ins", () => {
+test("cockpit page: entry HTML is free of dead legacy UI (no old IIFE / old DOM ids / old style rules)", () => {
   const html = readFileSync(cockpitHtmlPath, "utf8");
-  // SSE 購読は EventSource(/api/events)、制御は fetch(/api/...)。
-  assert.match(html, /new EventSource\(["']\/api\/events["']\)/);
-  assert.match(html, /\/api\/devices/);
-  assert.match(html, /\/api\/state/);
-  assert.match(html, /\/api\/ears\/start/);
-  assert.match(html, /\/api\/ears\/stop/);
-  // 消費する SSE イベント種別（domain-a.md §4）を購読していること。
-  for (const evt of ["state", "vad", "transcript", "discard"]) {
-    assert.match(html, new RegExp(`addEventListener\\(["']${evt}["']`));
+  // 旧 UI の完全撤去（死コードゼロ・design レビュー §9-1: 新 UI が channel-url/chat-source の id を
+  // 自ら生成するため、旧 DOM が残ると document 内 id 重複 = 段階移行は不可）。代表識別子で固定する。
+  assert.doesNotMatch(html, /getElementById\("timeline"\)|byId\(/, "旧 IIFE（byId ヘルパ）が残っていない");
+  assert.doesNotMatch(html, /id="channel-url"|id="chat-source"|id="device-select"/, "旧 DOM（新 UI と id 衝突する入力群）が残っていない");
+  assert.doesNotMatch(html, /id="timeline"|id="btn-fire"|id="footer-uptime"/, "旧 DOM（timeline/fire/footer）が残っていない");
+  assert.doesNotMatch(html, /\.row\.ghost|\.channel-status\.connected/, "旧 <style>（styles.mjs と同名セレクタ群）が残っていない");
+  // スタイルの正本は ui/styles.mjs（mount 時注入）。HTML 側 <style> は FOUC 対策の最小限のみ
+  // （:root/body の下地だけ = 行数でなく「旧セレクタ群が無い」ことを上で固定済み）。
+  assert.match(html, /FOUC/, "HTML 側 <style> が最小限（FOUC 対策）である根拠コメント");
+});
+
+test("cockpit page: self-contained — no external network dependency (local vendor/ui imports are allowed)", () => {
+  const html = readFileSync(cockpitHtmlPath, "utf8");
+  // 自己完結の本旨 = 外部ネットワーク非依存（wave-plan §2 の読み替え）: ローカル配信の vendor/ui への
+  // 相対 import は適合・外部（CDN・外部フォント/スクリプト）だけを禁止する。
+  assert.doesNotMatch(html, /<script[^>]+src=/i); // エントリは inline module のみ（<script src> 不使用）
+  assert.doesNotMatch(html, /<link[^>]+rel=["']?stylesheet/i); // 外部 stylesheet なし
+  assert.doesNotMatch(html, /(src|href)=["']https?:/i); // http(s) を指す src/href なし
+  assert.doesNotMatch(html, /@import\s+url/i); // CSS @import なし
+  assert.doesNotMatch(html, /from\s+["']https?:/i); // import 文も外部 URL を指さない（相対のみ）
+});
+
+test("cockpit page: boot wiring smoke — GET / and the module tree it imports all resolve on one server", async () => {
+  // 「npm run cockpit 一発でブラウザが解決できるツリーが配られている」の機械近似:
+  // 実サーバを起動し、エントリ HTML → inline module が import する /ui/app.mjs → その先の
+  // /vendor/htm.preact.standalone.mjs（standalone = bare import ゼロの唯一の外部部品）が同一サーバから
+  // 200 + text/javascript で配られることを縦に確認する（ui/*.mjs 相互の import 閉包と全ファイルの配信は
+  // cockpit-ui.test の構造テストと cockpit-static-assets.test が固定済み・ここは代表縦経路のみ）。
+  const server = createCockpitServer({ indexHtmlPath: cockpitHtmlPath });
+  try {
+    const url = await server.listen(0);
+    const page = /** @type {any} */ (await get(`${url}/`));
+    assert.equal(page.status, 200);
+    // HTML が実際に import する specifier を抽出して辿る（ハードコードでなく現物駆動）。
+    const spec = page.body.match(/import \{ mount \} from "(\.\/ui\/app\.mjs)"/);
+    assert.ok(spec, "エントリの import specifier が見つかること");
+    const appJs = /** @type {any} */ (await get(`${url}/` + spec[1].replace(/^\.\//, "")));
+    assert.equal(appJs.status, 200, "/ui/app.mjs が配られる");
+    assert.match(String(appJs.headers["content-type"]), /text\/javascript/, "module script は JS MIME 必須");
+    // app.mjs → vendor の相対 import（../vendor/…）はブラウザ解決で /vendor/… になる。
+    assert.match(appJs.body, /from "\.\.\/vendor\/htm\.preact\.standalone\.mjs"/);
+    const vendor = /** @type {any} */ (await get(`${url}/vendor/htm.preact.standalone.mjs`));
+    assert.equal(vendor.status, 200, "/vendor/htm.preact.standalone.mjs が配られる");
+    assert.match(String(vendor.headers["content-type"]), /text\/javascript/);
+    assert.ok(vendor.body.length > 0, "vendor が空でない");
+  } finally {
+    await server.close(); // shutdown まで（起動→配信→close の一巡）。
   }
-});
-
-test("cockpit page: self-contained — no external scripts/styles/fonts (no CDN)", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // 外部リソース禁止（CDN・外部フォント/スクリプト・npm 依存ゼロ）。
-  assert.doesNotMatch(html, /<script[^>]+src=/i); // 外部 <script src>
-  assert.doesNotMatch(html, /<link[^>]+rel=["']?stylesheet/i); // 外部 stylesheet
-  assert.doesNotMatch(html, /(src|href)=["']https?:/i); // http(s) を指す src/href
-  assert.doesNotMatch(html, /@import\s+url/i); // CSS @import
-});
-
-test("cockpit page: history transcript rows carry no latency (live-only), by contract", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // レイテンシは live 行のみ（履歴エントリには載らない・domain-a.md §3.3 注）。
-  // 実装は latencyMs が付いているときだけ (Ns) を描く条件分岐であること。
-  assert.match(html, /latencyMs\s*!=\s*null/);
-});
-
-// ── ゴースト行（破棄/ASR失敗の無言の消失を可視化・S2.5 追撃 domain-f）─────────────
-
-test("cockpit page: discard SSE event adds a ghost row (in addition to footer counter update)", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  const m = html.match(/addEventListener\(["']discard["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "discard リスナーが見つかること");
-  const body = m[1];
-  // footer カウンタ更新は維持。
-  assert.match(body, /footer-discarded/);
-  // ゴースト行追加を維持（無言の消失にしない）。
-  assert.match(body, /addGhostRow\(/);
-});
-
-test("cockpit page: diagnostic asrFailure adds a ghost row; other diagnostic types do not", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "diagnostic リスナーが見つかること");
-  const body = m[1];
-  assert.match(body, /type\s*===\s*["']asrFailure["']/);
-  assert.match(body, /addGhostRow\(/);
-});
-
-test("cockpit page: ghost rows are visually distinct (muted class) from normal transcript rows", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // addGhostRow は通常行と違う "ghost" クラスを付ける関数として定義されていること。
-  assert.match(html, /function addGhostRow\(/);
-  const fn = html.match(/function addGhostRow\([\s\S]*?\n    \}/);
-  assert.ok(fn, "addGhostRow 本体が見つかること");
-  assert.match(fn[0], /className\s*=\s*["']row ghost["']/);
-  // CSS: ghost 行は既存の淡色トークン（--muted）を使う（transcript 行の既定色と区別できる）。
-  assert.match(html, /\.row\.ghost\s+\.text\s*\{[^}]*var\(--muted\)/);
-});
-
-// ── S3: Fire ボタン + soul busy 表示 + 発火マーカー + soul 行（拡張予約の実体化）───────────
-
-test("cockpit page: has a Fire button and soul status, and POSTs /api/fire", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /id="btn-fire"/);
-  assert.match(html, /id="soul-status"/);
-  assert.match(html, /id="fire-note"/);
-  // Fire ボタンは POST /api/fire を叩く（domain-a.md §2.1 のワイヤ契約を消費）。
-  assert.match(html, /fetch\(["']\/api\/fire["'],\s*\{\s*method:\s*["']POST["']/);
-});
-
-test("cockpit page: subscribes SSE soul events and disables Fire while thinking/speaking", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /addEventListener\(["']soul["']/);
-  // busy 連動: applySoulState が idle 以外で btn-fire を disable する。
-  assert.match(html, /function applySoulState\(/);
-  const fn = html.match(/function applySoulState\([\s\S]*?\n    \}/);
-  assert.ok(fn, "applySoulState 本体が見つかること");
-  assert.match(fn[0], /btn-fire["']\)\.disabled\s*=\s*st\s*!==\s*["']idle["']/);
-});
-
-test("cockpit page: subscribes SSE fire events — accepted adds a marker row, rejected shows a quiet reason", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  const m = html.match(/addEventListener\(["']fire["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "fire リスナーが見つかること");
-  const body = m[1];
-  assert.match(body, /accepted\s*===\s*true/);
-  assert.match(body, /addFireMarkerRow\(/);
-  assert.match(body, /setFireNote\(/); // 非受理 reason の控えめ表示。
-});
-
-test("cockpit page: fire marker rows carry injectedChars/includedCount and a distinct class + CSS", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /function addFireMarkerRow\(/);
-  const fn = html.match(/function addFireMarkerRow\([\s\S]*?\n    \}/);
-  assert.ok(fn, "addFireMarkerRow 本体が見つかること");
-  assert.match(fn[0], /className\s*=\s*["']row fire-marker["']/);
-  assert.match(fn[0], /includedCount/);
-  assert.match(fn[0], /injectedChars/);
-  // CSS: マーカー行は既存トークン（--speaking）で視覚的に区別される。
-  assert.match(html, /\.row\.fire-marker\s*\{[^}]*var\(--speaking\)/);
-});
-
-test("cockpit page: fire failure diagnostics (fireError/fireEmptyReply) reuse the ghost-row idiom", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "diagnostic リスナーが見つかること");
-  const body = m[1];
-  // Domain A 引き継ぎ Q3 の裁量: empty-reply/error は diagnostic 経由 → ゴースト行で一貫表示。
-  assert.match(body, /type\s*===\s*["']fireEmptyReply["']/);
-  assert.match(body, /type\s*===\s*["']fireError["']/);
-});
-
-test("cockpit page: soul transcript rows are drawable (speaker-soul class + speaker-driven row class)", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // 既存 addTranscriptRow が speaker を行クラスに反映する（soul 行は S2.5 からの受け口で描ける）。
-  assert.match(html, /className\s*=\s*["']row speaker-["']\s*\+\s*speaker/);
-  assert.match(html, /\.row\.speaker-soul\s+\.who/);
-});
-
-// ── S3 追撃 domain-c: Channel URL の操縦席入力 + 接続状態表示 ─────────────────
-
-test("cockpit page: has a Channel URL input, a Set button, and a status display", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /id="channel-url"/);
-  assert.match(html, /id="btn-channel-set"/);
-  assert.match(html, /id="channel-status"/);
-});
-
-test("cockpit page: Channel Set button POSTs /api/channel with the entered url", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /fetch\(["']\/api\/channel["'],\s*\{\s*method:\s*["']POST["']/);
-  // 送信 body は入力欄の値（url）。
-  assert.match(html, /channel-url["']\)\.value/);
-});
-
-test("cockpit page: applies channel status from state (connection-driven class)", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /function applyChannel\(/);
-  // applyState が channel を反映する（state.channel は redact 済み）。
-  assert.match(html, /applyChannel\(s\.channel\)/);
-  // 接続状態の色分けクラス（connected/error/connecting）が CSS にある。
-  assert.match(html, /\.channel-status\.connected/);
-  assert.match(html, /\.channel-status\.error/);
-});
-
-test("cockpit page: does not keep the raw channel URL (token) in the input after Set", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // Set 成功後に入力欄を空へ（token を DOM に残さない）。
-  assert.match(html, /channel-url["']\)\.value\s*=\s*["']["']/);
-});
-
-// ── S4「表情が乗る」: 演出イベント行 + 未知タグのゴースト行 ───────────────────────
-
-test("cockpit page: subscribes SSE expression events and draws an expression row", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // 演出適用の通知（domain-a.md §7・{word, args?, applied, rejected}）を expression イベントで購読。
-  assert.match(html, /addEventListener\(["']expression["']/);
-  assert.match(html, /addExpressionRow\(/);
-});
-
-test("cockpit page: expression rows carry word + applied/rejected slot counts, distinct class + CSS", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /function addExpressionRow\(/);
-  const fn = html.match(/function addExpressionRow\([\s\S]*?\n    \}/);
-  assert.ok(fn, "addExpressionRow 本体が見つかること");
-  // 発火マーカーと同型の行（距離のある class）。
-  assert.match(fn[0], /className\s*=\s*["']row expression["']/);
-  // 語 + 適用/拒否スロット数を描く（applied/rejected を参照する）。
-  assert.match(fn[0], /d\.word/);
-  assert.match(fn[0], /d\.applied/);
-  assert.match(fn[0], /d\.rejected/);
-  // CSS: 演出行は既存トークン（--accent）で視覚的に区別される。
-  assert.match(html, /\.row\.expression\s*\{[^}]*var\(--accent\)/);
-});
-
-test("cockpit page: expressionUnknownTag diagnostic adds a ghost row (word left as a trace); other expression diagnostics do not", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "diagnostic リスナーが見つかること");
-  const body = m[1];
-  // 語彙外タグはゴースト行の型で痕跡を残す（声にも演出にも出ないが「無言の消失」にしない）。
-  assert.match(body, /type\s*===\s*["']expressionUnknownTag["']/);
-  assert.match(body, /addGhostRow\(/);
-  // 過剰表示を避ける裁定: broken/rejected/sendError は分岐を持たない（演出行の ✗N が伝える）。
-  // （説明コメントで語には触れるが、type === "…" の分岐＝表示はしないことを固定する。）
-  assert.doesNotMatch(body, /===\s*["']expressionBrokenTag["']/);
-  assert.doesNotMatch(body, /===\s*["']expressionRejected["']/);
-  assert.doesNotMatch(body, /===\s*["']expressionSendError["']/);
-});
-
-// ── S7「視聴者が混ざる」: Live chat の Connect/Disconnect UI + viewer 行 + 状態表示 + 取得死ゴースト ─────
-
-test("cockpit page: has a Live chat source input, Connect/Disconnect buttons, and a status display", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /id="chat-source"/);
-  assert.match(html, /id="btn-chat-connect"/);
-  assert.match(html, /id="btn-chat-disconnect"/);
-  assert.match(html, /id="chat-status"/);
-});
-
-test("cockpit page: Connect chat POSTs /api/chat/connect with the entered source; Disconnect POSTs /api/chat/disconnect", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /fetch\(["']\/api\/chat\/connect["'],\s*\{\s*method:\s*["']POST["']/);
-  assert.match(html, /chat-source["']\)\.value/); // 送信 body は入力欄の値（source）。
-  assert.match(html, /fetch\(["']\/api\/chat\/disconnect["'],\s*\{\s*method:\s*["']POST["']/);
-});
-
-test("cockpit page: applies chat status from state (connection-driven class) and restores remembered source", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /function applyChat\(/);
-  assert.match(html, /applyChat\(s\.chat\)/);
-  // 状態別クラス（live/connecting/retrying/dead）が CSS にある。
-  assert.match(html, /\.chat-status\.live/);
-  assert.match(html, /\.chat-status\.retrying/);
-  assert.match(html, /\.chat-status\.dead/);
-});
-
-test("cockpit page: viewer transcript rows render viewer(displayName) label and have a distinct class + CSS", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // addTranscriptRow は viewer のとき displayName を viewer(名前) で描く（注入描画と対称）。
-  assert.match(html, /speaker\s*===\s*["']viewer["']\s*&&\s*d\.displayName/);
-  assert.match(html, /viewer\(/);
-  // CSS: viewer 行は you/soul と区別できる別トークンを持つ。
-  assert.match(html, /\.row\.speaker-viewer\s+\.who/);
-});
-
-test("cockpit page: subscribes SSE chatStatus and updates the status display", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /addEventListener\(["']chatStatus["']/);
-  const m = html.match(/addEventListener\(["']chatStatus["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "chatStatus リスナーが見つかること");
-  // 状態表示 + Disconnect 制御は applyChat と同じ単一経路（renderChatStatus）を通す（二重管理を避ける）。
-  assert.match(m[1], /renderChatStatus\(/);
-});
-
-// ── S7 追修正: Disconnect の有効/無効は chat state 値で一貫決定（dead→無効・snapshot 再送で誤再有効化しない）─────
-// design レビュー検出の契約 FAIL（applyChat が connected 真偽で無条件に Disconnect を再有効化）を閉じる。
-// applyChat と SSE chatStatus が同じ renderChatStatus 経路を通ることを、実ロジックを HTML から切り出して駆動して固定する。
-
-test("cockpit page: Disconnect enable/disable is chat-state-driven (dead disables even when connected) — applyChat drives renderChatStatus", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  const renderSrc = html.match(/function renderChatStatus\([\s\S]*?\n    \}/);
-  const applySrc = html.match(/function applyChat\([\s\S]*?\n    \}/);
-  assert.ok(renderSrc, "renderChatStatus 本体が見つかること");
-  assert.ok(applySrc, "applyChat 本体が見つかること");
-  // HTML の実ロジックをそのまま切り出して駆動する（DOM ライブラリ非依存・fake byId で要素を代替）。
-  const build = new Function(
-    "byId",
-    `"use strict"; var chatSourceEdited = false; ${renderSrc[0]} ${applySrc[0]} return applyChat;`
-  );
-  /** @param {any} chat */
-  function drive(chat) {
-    const els = {
-      "chat-source": { value: "" },
-      "chat-status": { textContent: "", className: "" },
-      "btn-chat-disconnect": { disabled: null }
-    };
-    const applyChat = build((/** @type {string} */ id) => els[/** @type {"chat-source"|"chat-status"|"btn-chat-disconnect"} */ (id)]);
-    applyChat(chat);
-    return els;
-  }
-  // dead は connected=true でも Disconnect を無効化する（契約 FAIL の修正・snapshot 再送で誤再有効化しない）。
-  assert.equal(drive({ connected: true, state: "dead", source: null })["btn-chat-disconnect"].disabled, true);
-  // 稼働状態（connecting/live/retrying）は Disconnect 有効 + 状態別クラス。
-  for (const st of ["connecting", "live", "retrying"]) {
-    const els = drive({ connected: true, state: st, source: null });
-    assert.equal(els["btn-chat-disconnect"].disabled, false, `${st} は Disconnect 有効`);
-    assert.equal(els["chat-status"].className, "chat-status " + st);
-  }
-  // 未接続（connected=false）も Disconnect 無効・"not connected" 表示。
-  const off = drive({ connected: false, source: null });
-  assert.equal(off["btn-chat-disconnect"].disabled, true);
-  assert.equal(off["chat-status"].textContent, "not connected");
-});
-
-test("cockpit page: applyChat and chatStatus SSE share one disconnect-decision path (state-driven, no connected-truthiness enable)", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // 単一経路 renderChatStatus が Disconnect の有効/無効を state 値で決める（connected 真偽ではない）。
-  const rfn = html.match(/function renderChatStatus\([\s\S]*?\n    \}/);
-  assert.ok(rfn, "renderChatStatus 本体が見つかること");
-  assert.match(rfn[0], /btn-chat-disconnect["']\)\.disabled\s*=/);
-  assert.match(rfn[0], /state\s*===\s*["']connecting["']/);
-  assert.match(rfn[0], /state\s*===\s*["']live["']/);
-  assert.match(rfn[0], /state\s*===\s*["']retrying["']/);
-  // applyChat は renderChatStatus に委譲する（disabled を直接 false にしない＝二重管理の食い違いを断つ）。
-  const afn = html.match(/function applyChat\([\s\S]*?\n    \}/);
-  assert.ok(afn, "applyChat 本体が見つかること");
-  assert.match(afn[0], /renderChatStatus\(/);
-  assert.doesNotMatch(afn[0], /disabled\s*=\s*false/);
-  // SSE chatStatus ハンドラも同じ単一経路を通す（dead の扱いが二経路で食い違わない）。
-  const sse = html.match(/addEventListener\(["']chatStatus["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(sse, "chatStatus リスナーが見つかること");
-  assert.match(sse[1], /renderChatStatus\(/);
-});
-
-test("cockpit page: subscribes SSE chatDiagnostic and draws ghost rows for fetch-death kinds", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  assert.match(html, /addEventListener\(["']chatDiagnostic["']/);
-  const m = html.match(/addEventListener\(["']chatDiagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "chatDiagnostic リスナーが見つかること");
-  const body = m[1];
-  // 取得死の分類（notLive/ended/extractFailed/network）をゴースト行で可視化する。
-  assert.match(body, /notLive/);
-  assert.match(body, /ended/);
-  assert.match(body, /extractFailed/);
-  assert.match(body, /network/);
-  assert.match(body, /addGhostRow\(/);
-});
-
-test("cockpit page: chatBufferAbsent diagnostic (ears not running) adds a ghost row", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  const m = html.match(/addEventListener\(["']diagnostic["'],\s*function\s*\(ev\)\s*\{([\s\S]*?)\}\);/);
-  assert.ok(m, "diagnostic リスナーが見つかること");
-  // 耳未起動でコメントが合流できなかった事実を「無言の消失」にせずゴースト行に残す。
-  assert.match(m[1], /type\s*===\s*["']chatBufferAbsent["']/);
-});
-
-test("cockpit page: self-fire marker row is kind-agnostic (comment/comment-call flow through with kind label)", () => {
-  const html = readFileSync(cockpitHtmlPath, "utf8");
-  // addSelfFireMarkerRow は kind をそのまま描く（comment/comment-call も call/turn-end/silence と同型に載る）。
-  const fn = html.match(/function addSelfFireMarkerRow\([\s\S]*?\n    \}/);
-  assert.ok(fn, "addSelfFireMarkerRow 本体が見つかること");
-  assert.match(fn[0], /d\.kind/);
 });
