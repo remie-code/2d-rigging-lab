@@ -302,6 +302,44 @@ describe("runtime export assembly and preflight", () => {
     await expectBlocker(invalidPlacement, "runtimeExport.invalidPlacementData");
   });
 
+  it("accepts non-zero-inset placements whose uvRect is the content sub-rect", async () => {
+    // Wave109 reconcile: since Wave108 the placement uvRect is the content
+    // sub-rect (raster inset by the source texture's contentInset), not the whole
+    // raster. Packing already writes the inset uvRect; before Wave109 the preflight
+    // validator still required uvRect == contentRect and falsely blocked every
+    // non-zero-inset placement. Here the body texture carries a real contentInset,
+    // so packing writes an inset uvRect and preflight must accept it.
+    const session = await createInsetRuntimeExportFixtureSession();
+
+    const result = await assembleRuntimeExport(session, { createdAt: CREATED_AT });
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") {
+      expect(result.preflight.blockers.map((blocker) => blocker.code)).toEqual([]);
+    }
+  });
+
+  it("still blocks a placement whose uvRect ignores the source contentInset (old contract)", async () => {
+    // Validation force: the reconcile must not weaken the check. A placement that
+    // reverts to the pre-Wave108 value (the whole content rect normalized, i.e.
+    // inset ignored) must still be rejected.
+    const session = await createInsetRuntimeExportFixtureSession();
+    const page = session.graph.textureAtlas!.layoutSummary!.pages[0]!;
+    const bodyPlacement = page.placements.find((placement) => placement.drawableId === DRAW_BODY)!;
+    bodyPlacement.uvRect = {
+      topLeft: {
+        x: bodyPlacement.contentRectPixels.x / page.width,
+        y: bodyPlacement.contentRectPixels.y / page.height
+      },
+      bottomRight: {
+        x: (bodyPlacement.contentRectPixels.x + bodyPlacement.contentRectPixels.width) / page.width,
+        y: (bodyPlacement.contentRectPixels.y + bodyPlacement.contentRectPixels.height) / page.height
+      }
+    };
+
+    await expectBlocker(session, "runtimeExport.invalidPlacementData");
+  });
+
   it("materializes mesh UVs in atlas page coordinates", async () => {
     const session = await createAppliedRuntimeExportFixtureSession();
 
@@ -475,6 +513,32 @@ const createAppliedRuntimeExportFixtureSession = async (): Promise<AuthoringSess
     edgeExtrusionPixels: 1
   });
 
+  const result = await applyTextureAtlasPreview(session, { preview });
+  if (result.status !== "applied") {
+    throw new Error(`Expected applied atlas: ${result.warnings.map((warning) => warning.code).join(",")}`);
+  }
+
+  return session;
+};
+
+const createInsetRuntimeExportFixtureSession = async (): Promise<AuthoringSession> => {
+  const session = await createRuntimeExportFixtureSession();
+  // Plant a non-zero contentInset on the body source texture so packing writes an
+  // inset content-sub-rect uvRect (2px raster, inset {left:1,bottom:1} → 1px content).
+  // The atlas bake bytes/dimensions are unchanged, so digest/byteLength stay valid and
+  // the atlas source signature (which does not include contentInset) stays fresh.
+  const bodyTexture = session.graph.textureAtlas!.textures.find(
+    (texture) => texture.textureId === TEX_BODY
+  )!;
+  bodyTexture.contentInset = { left: 1, top: 0, right: 0, bottom: 1 };
+
+  const preview = createTextureAtlasPreview(session, {
+    pageWidth: 8,
+    pageHeight: 4,
+    paddingPixels: 1,
+    edgeExtrusionEnabled: true,
+    edgeExtrusionPixels: 1
+  });
   const result = await applyTextureAtlasPreview(session, { preview });
   if (result.status !== "applied") {
     throw new Error(`Expected applied atlas: ${result.warnings.map((warning) => warning.code).join(",")}`);

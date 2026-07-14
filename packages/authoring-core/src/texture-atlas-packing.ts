@@ -12,6 +12,7 @@ import {
 } from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringSession } from "./authoring-session.js";
+import { deriveContentSubRectUv } from "./texture-atlas-content-rect.js";
 import { createTextureAtlasSourceSignature } from "./texture-atlas-source-signature.js";
 import {
   selectTextureAtlasTargets,
@@ -513,15 +514,6 @@ const mergeAdjacentSkylineNodes = (
   return merged;
 };
 
-// No baked transparent covering-margin border (legacy `bounds ≡ raster` tiles):
-// the content sub-rect equals the whole raster placement.
-const ZERO_CONTENT_INSET: {
-  readonly left: number;
-  readonly top: number;
-  readonly right: number;
-  readonly bottom: number;
-} = { left: 0, top: 0, right: 0, bottom: 0 };
-
 const createTextureAtlasPlacement = (input: {
   readonly target: TextureAtlasPackableTarget;
   readonly atlasTextureId: TextureId;
@@ -549,14 +541,14 @@ const createTextureAtlasPlacement = (input: {
   // (boundary-transparent-margin-design.md §4 cross-bleed avoidance). Folding the inset
   // into `uvRect` keeps it the single source of truth for both the editor atlasRuntime
   // remap (remapUvIntoPlacement) and export (mapSourceUvToAtlasUv), with no double
-  // correction.
-  const inset = input.target.contentInset ?? ZERO_CONTENT_INSET;
-  const contentUvRect: TextureAtlasRectPixelsDto = {
-    x: contentRect.x + inset.left,
-    y: contentRect.y + inset.top,
-    width: contentRect.width - inset.left - inset.right,
-    height: contentRect.height - inset.top - inset.bottom
-  };
+  // correction. The derivation is shared with the Runtime Export preflight validator via
+  // `deriveContentSubRectUv` so packing and validation cannot drift apart again.
+  const uvRect = deriveContentSubRectUv({
+    contentRect,
+    contentInset: input.target.contentInset,
+    pageWidth: input.settings.pageWidth,
+    pageHeight: input.settings.pageHeight
+  });
 
   return {
     placementId: `atlas_place_${input.target.drawable.drawableId}`,
@@ -577,16 +569,7 @@ const createTextureAtlasPlacement = (input: {
     },
     contentRectPixels: contentRect,
     paddedRectPixels: input.paddedRect,
-    uvRect: {
-      topLeft: {
-        x: contentUvRect.x / input.settings.pageWidth,
-        y: contentUvRect.y / input.settings.pageHeight
-      },
-      bottomRight: {
-        x: (contentUvRect.x + contentUvRect.width) / input.settings.pageWidth,
-        y: (contentUvRect.y + contentUvRect.height) / input.settings.pageHeight
-      }
-    },
+    uvRect,
     hiddenAtApply: input.target.currentlyHidden,
     hiddenReasons: [...input.target.hiddenReasons]
   };

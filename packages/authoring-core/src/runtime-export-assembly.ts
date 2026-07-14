@@ -28,6 +28,8 @@ import {
   createRuntimeExportArtifacts,
   type RuntimeExportAtlasContext
 } from "./runtime-export-materialization.js";
+import { getTextureAtlasEntryById } from "./texture-asset-selectors.js";
+import { deriveContentSubRectUv } from "./texture-atlas-content-rect.js";
 import {
   createTextureAtlasSourceSignature,
   sameTextureAtlasSourceSignature
@@ -565,7 +567,7 @@ const validateRuntimeExportPlacements = (input: {
       blockers.push(createInvalidPlacementBlocker(placement, "uv rect is outside normalized atlas coordinates"));
     }
 
-    if (!doesUvRectMatchContentRect(placement, input.page)) {
+    if (!doesUvRectMatchContentRect(placement, input.page, input.session)) {
       blockers.push(createInvalidPlacementBlocker(placement, "uv rect does not match content rect"));
     }
   }
@@ -783,20 +785,29 @@ const isUvRectValid = (uvRect: TextureAtlasPlacementDto["uvRect"]): boolean =>
   uvRect.topLeft.x < uvRect.bottomRight.x &&
   uvRect.topLeft.y < uvRect.bottomRight.y;
 
+// Since Wave108 the placement `uvRect` is the **content sub-rect** — the raster
+// `contentRectPixels` inset by the source texture's `contentInset` — not the whole
+// raster (boundary-transparent-margin-design.md §3.1/§4). The expected value is
+// derived through `deriveContentSubRectUv`, the SAME helper the packing writer uses,
+// so packing and this preflight validator cannot drift apart again (the re-drift that
+// left this validator on the old `uvRect == contentRect` contract, falsely blocking
+// every non-zero-inset placement, until Wave109). `contentInset` is not on the
+// placement schema; it is resolved from the committed source texture entry
+// (`placement.originalTextureId` → texture atlas entry). A missing entry is validated
+// as a zero inset — the entry's absence is the responsibility of the other blocker
+// families, not this UV-shape check.
 const doesUvRectMatchContentRect = (
   placement: TextureAtlasPlacementDto,
-  page: TextureAtlasPageDto
+  page: TextureAtlasPageDto,
+  session: AuthoringSession
 ): boolean => {
-  const expected = {
-    topLeft: {
-      x: placement.contentRectPixels.x / page.width,
-      y: placement.contentRectPixels.y / page.height
-    },
-    bottomRight: {
-      x: (placement.contentRectPixels.x + placement.contentRectPixels.width) / page.width,
-      y: (placement.contentRectPixels.y + placement.contentRectPixels.height) / page.height
-    }
-  };
+  const textureEntry = getTextureAtlasEntryById(session.graph, placement.originalTextureId);
+  const expected = deriveContentSubRectUv({
+    contentRect: placement.contentRectPixels,
+    contentInset: textureEntry?.contentInset,
+    pageWidth: page.width,
+    pageHeight: page.height
+  });
 
   return nearlyEqual(placement.uvRect.topLeft.x, expected.topLeft.x) &&
     nearlyEqual(placement.uvRect.topLeft.y, expected.topLeft.y) &&

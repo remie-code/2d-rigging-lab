@@ -33,6 +33,12 @@ interface PackingTargetFixture {
   readonly token: string;
   readonly width: number;
   readonly height: number;
+  readonly contentInset?: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
 }
 
 describe("texture atlas skyline packing", () => {
@@ -156,6 +162,36 @@ describe("texture atlas skyline packing", () => {
       uvRect: {
         topLeft: { x: 2 / 8, y: 2 / 8 },
         bottomRight: { x: 6 / 8, y: 4 / 8 }
+      }
+    });
+  });
+
+  it("insets the uv rect by the source contentInset (content sub-rect contract)", () => {
+    // Wave108/Wave109: a texture whose padded raster carries a transparent
+    // covering-margin border reports a per-side `contentInset`; the placement
+    // `uvRect` must be the content sub-rect (raster placement inset by
+    // contentInset), not the whole raster. See boundary-transparent-margin-design
+    // §3.1/§4. This is the same derivation the Runtime Export preflight validates.
+    const session = createPackingSession([
+      { token: "inset", width: 4, height: 4, contentInset: { left: 1, top: 0, right: 1, bottom: 2 } }
+    ]);
+    const preview = createTextureAtlasPreview(session, {
+      pageWidth: 12,
+      pageHeight: 12,
+      paddingPixels: 2
+    });
+
+    expect(preview.status).toBe("ready");
+    if (preview.status !== "ready") {
+      return;
+    }
+    const placement = preview.layoutSummary.pages[0]?.placements[0];
+    // contentRect (2,2,4,4) inset by {left:1,top:0,right:1,bottom:2} → (3,2,2,2).
+    expect(placement).toMatchObject({
+      contentRectPixels: { x: 2, y: 2, width: 4, height: 4 },
+      uvRect: {
+        topLeft: { x: 3 / 12, y: 2 / 12 },
+        bottomRight: { x: 5 / 12, y: 4 / 12 }
       }
     });
   });
@@ -398,6 +434,9 @@ function createTextureEntry(target: PackingTargetFixture) {
       height,
       pixelFormat: "rgba8" as const
     },
+    ...(target.contentInset === undefined
+      ? {}
+      : { contentInset: target.contentInset }),
     provenanceId: PROV_FIXTURE,
     binaryAssetRef: createTextureBinaryAssetReference(target.token, bytes)
   };
