@@ -11,7 +11,8 @@
  * （チャット器官は独立・plan §3 Domain A）。
  *
  * ── 取得経路（inventory §2-2）─────────────────────────────────────────
- *  1. GET watch ページ（`youtube.com/watch?v=<ID>` / `/channel/<ID>/live`）。
+ *  1. GET watch ページ（`youtube.com/watch?v=<ID>` / `youtube.com/live/<ID>` /
+ *     `/channel/<ID>/live` / `/@handle/live`）。
  *  2. HTML から 4 点抽出: INNERTUBE_API_KEY・clientVersion・初期 continuation・videoID。
  *  3. POST `youtubei/v1/live_chat/get_live_chat?key=<API_KEY>` に { context, continuation }。
  *  4. レスポンスの continuationContents から「次の continuation + timeoutMs」と actions を取り出しループ。
@@ -42,7 +43,8 @@ export const DEFAULT_POLL_INTERVAL_MS = 3000;
 // ── source 正規化 ───────────────────────────────────────────────────────
 
 /**
- * watch URL / video ID / チャンネル `/live` URL を受理し、fetch する URL と既知 videoId を返す。
+ * watch URL / video ID / `/live/<ID>` / チャンネル `/live` / `/@handle/live` URL を受理し、
+ * fetch する URL と既知 videoId を返す。
  * @param {string} source
  * @returns {
  *   { kind: "watch" | "channel"; url: string; videoId: string | null } |
@@ -87,17 +89,32 @@ export function normalizeSource(source) {
     return { kind: "watch", url: `${YOUTUBE_ORIGIN}/watch?v=${v}`, videoId: v };
   }
 
+  // /live/<ID> （末尾 11 文字が動画 ID = /watch?v=<id> と等価。クエリは pathname に含まれないため
+  // ?feature=share 等が付いていても自然に無視される）。
+  const liveMatch = /^\/live\/([A-Za-z0-9_-]{11})\/?$/.exec(parsed.pathname);
+  if (liveMatch) {
+    return { kind: "watch", url: `${YOUTUBE_ORIGIN}/watch?v=${liveMatch[1]}`, videoId: liveMatch[1] };
+  }
+
   // /channel/<ID>/live （canonical を watch ページ側で追う。videoId は未知）
   const channelMatch = /^\/channel\/([A-Za-z0-9_-]+)\/live\/?$/.exec(parsed.pathname);
   if (channelMatch) {
     return { kind: "channel", url: `${YOUTUBE_ORIGIN}/channel/${channelMatch[1]}/live`, videoId: null };
   }
 
-  // /live/<ID> や /watch なしの短縮は v0 未対応（extractFailed で正直に返す）。
+  // /@handle/live （ハンドル型ライブ URL。/channel/<id>/live と同一の解決経路——videoId は未知のまま
+  // HTML の currentVideoEndpoint.watchEndpoint.videoId に委ねる。handle の文字クラスは厳密検証せず
+  // YouTube 側に委ねる = v0 方針。空ハンドル /@/live は非空セグメント要件で弾かれる）。
+  const handleLiveMatch = /^\/@([^/]+)\/live\/?$/.exec(parsed.pathname);
+  if (handleLiveMatch) {
+    return { kind: "channel", url: `${YOUTUBE_ORIGIN}/@${handleLiveMatch[1]}/live`, videoId: null };
+  }
+
+  // /watch なしのその他の短縮は v0 未対応（extractFailed で正直に返す）。
   return {
     error: {
       kind: "extractFailed",
-      message: `unsupported youtube URL shape (want /watch?v=, youtu.be/<id>, /channel/<id>/live): ${s}`
+      message: `unsupported youtube URL shape (want /watch?v=, youtu.be/<id>, /live/<id>, /@handle/live, /channel/<id>/live): ${s}`
     }
   };
 }

@@ -63,6 +63,54 @@ test("normalizeSource: 不正入力は extractFailed で返す（throw しない
   assert.equal(/** @type {any} */ (normalizeSource("https://www.youtube.com/feed/subscriptions")).error.kind, "extractFailed");
 });
 
+test("normalizeSource: /live/<id> を watch URL に展開（クエリ付きも可）", () => {
+  const r = /** @type {any} */ (normalizeSource("https://www.youtube.com/live/3ORTpMtnIXg"));
+  assert.deepEqual(r, {
+    kind: "watch",
+    url: "https://www.youtube.com/watch?v=3ORTpMtnIXg",
+    videoId: "3ORTpMtnIXg"
+  });
+
+  const withQuery = /** @type {any} */ (
+    normalizeSource("https://www.youtube.com/live/3ORTpMtnIXg?feature=share")
+  );
+  assert.equal(withQuery.kind, "watch");
+  assert.equal(withQuery.videoId, "3ORTpMtnIXg");
+  assert.equal(withQuery.url, "https://www.youtube.com/watch?v=3ORTpMtnIXg");
+});
+
+test("normalizeSource: /live/ の ID 欠落・非 11 文字は extractFailed", () => {
+  assert.equal(
+    /** @type {any} */ (normalizeSource("https://www.youtube.com/live/")).error.kind,
+    "extractFailed"
+  );
+  assert.equal(
+    /** @type {any} */ (normalizeSource("https://www.youtube.com/live/tooShort")).error.kind,
+    "extractFailed"
+  );
+});
+
+test("normalizeSource: /@handle/live を channel 経路として受理（クエリ付きも可）", () => {
+  const r = /** @type {any} */ (normalizeSource("https://www.youtube.com/@handle/live"));
+  assert.equal(r.kind, "channel");
+  assert.equal(r.videoId, null);
+  assert.equal(r.url, "https://www.youtube.com/@handle/live");
+
+  const withQuery = /** @type {any} */ (
+    normalizeSource("https://www.youtube.com/@handle/live?si=xxx")
+  );
+  assert.equal(withQuery.kind, "channel");
+  assert.equal(withQuery.videoId, null);
+  assert.equal(withQuery.url, "https://www.youtube.com/@handle/live");
+});
+
+test("normalizeSource: /@/live（空 handle）は extractFailed", () => {
+  assert.equal(
+    /** @type {any} */ (normalizeSource("https://www.youtube.com/@/live")).error.kind,
+    "extractFailed"
+  );
+});
+
 // ── extractInitialData（バランス走査）───────────────────────────────────
 
 test("extractInitialData: ネストと '}' を含む文字列を跨いで JSON を切り出す", () => {
