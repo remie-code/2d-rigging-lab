@@ -420,3 +420,83 @@ test("settings store: chat source 用の unwritable path は set を握って続
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── 口数モードの永続化（wave 計画「口数配線」§2 裁定 A・getVisionTarget/setVisionTarget の写経）───────
+
+test("settings store: verbosity mode は set→get roundtrip で永続化する（別インスタンスでも読める）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getVerbosityMode(), null); // 未作成 = 記憶なし。
+    store.setVerbosityMode("chatty");
+    assert.equal(store.getVerbosityMode(), "chatty");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getVerbosityMode(), "chatty");
+    // クリアも効く。
+    store.setVerbosityMode(null);
+    assert.equal(createFileSettingsStore({ path }).getVerbosityMode(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: verbosity mode は他のキー（device/channel/vision/audio/self-fire/chat）と同居する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setLastChannelUrl("ws://127.0.0.1:17310/channel?token=abc");
+    store.setVisionTarget("Sample Game");
+    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
+    store.setSelfFireEnabled(true);
+    store.setChatSource("https://youtube.com/watch?v=xyz");
+    store.setVerbosityMode("quiet");
+    const reopened = createFileSettingsStore({ path });
+    // どの set も他方を消していない（read-modify-write マージ）。
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(reopened.getVisionTarget(), "Sample Game");
+    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    assert.equal(reopened.getSelfFireEnabled(), true);
+    assert.equal(reopened.getChatSource(), "https://youtube.com/watch?v=xyz");
+    assert.equal(reopened.getVerbosityMode(), "quiet");
+    // verbosity mode を変えても他は残る。
+    store.setVerbosityMode("chatty");
+    const again = createFileSettingsStore({ path });
+    assert.equal(again.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(again.getVerbosityMode(), "chatty");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getVerbosityMode returns null (failure-tolerant)", () => {
+  const dir = tmpDir();
+  try {
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ not json", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getVerbosityMode(), null);
+    // 非文字列 shape → null。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ verbosityMode: 123 }), "utf8");
+    assert.equal(createFileSettingsStore({ path: oddPath }).getVerbosityMode(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: verbosity mode 用の unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setVerbosityMode("chatty"));
+    assert.equal(store.getVerbosityMode(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

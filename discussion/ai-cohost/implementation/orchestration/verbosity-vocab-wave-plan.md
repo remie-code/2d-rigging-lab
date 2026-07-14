@@ -49,4 +49,28 @@
 
 ## 6. Status
 
-計画確定・発進待ち。
+**実装完了・機械ゲート緑・全レビュー PASS（2026-07-14）。人間ゲート待ち。** 実行: 単一 Orch-Sylph が Domain A→B 順次・各ドメイン Gnome(sonnet)実装 + Review-Sylph(sonnet) 3レーン(spec/design/test)。
+
+### 機械ゲート生数字（Orch が独立再実行・タイムアウト付き）
+
+- `cd apps/soul/agent && node --test`: **724/724/0**（ベースライン 679 → Domain A 後 706〔+27〕→ Domain B 後 724〔+18〕。合計 +45）。
+  - Domain A 追加内訳(+27): fire-scheduler +9 / cockpit-server +5 / cockpit(scripts) +6 / settings-store +4 / control(view-logic) +2 / cockpit-ui +1。
+  - Domain B 追加内訳(+18): whisper-inference +5 / ear-pipeline +1〔本数 10→11〕/ bench-name-prompt(新規) +12。
+- 3チェック（repo ルート）: check-dependencies **EXIT=0 passed** / check-soul-zone-boundary **EXIT=0（1379 files・器↔魂 越境ゼロ）** / check-source-organization は**唯一の違反 `apps/runtime-player/src/main/physiology/index.ts`（器側 barrel-only・ブランチ既存ベースライン=本 wave 不変）**のみ＝無退行。
+- `git diff --stat`: **器コード(apps/runtime-player・packages)・契約 JSON・pnpm-lock.yaml・apps/soul/agent/package.json・cockpit.html 完全不変**（全体 diff の空集合で包括確認）。**新規依存ゼロ**。SDK/実マイク/実ネット/実 whisper-server/実 TTS 消費ゼロ。
+
+### ドメイン判定
+
+- **Domain A（口数モード実配線）: pass**。fire-scheduler の const→let 化 + VERBOSITY_BUNDLES(9値×3モード・normal=既存 export const 参照) + setVerbosity/getVerbosity、POST /api/verbosity、createVerbosityHooks、getVerbosityMode/setVerbosityMode、運転バーの controlled 化。呼びかけ(call/comment-call)・barge-in・turn 検出が口数非依存であることをテストで固定（blocking §4-2 充足）。3レーン全 PASS。
+- **Domain B（コーディ語彙登録）: pass**。whisper-inference.mjs に DEFAULT_WHISPER_PROMPT 定数 + options.prompt 受け口 + transcribe への form.append("prompt") 常時注入。ear-pipeline.mjs 無改変で既定 prompt が本番経路に自動注入。正本不変(prompt は request form のみ・戻り値はサーバ応答由来)をテストで固定（blocking §4-3 充足）。スイープ計測スクリプト scripts/bench-name-prompt.mjs は**書くだけ・未実走**（direct-execution ガード + fs 書き込みなし）。3レーン全 PASS。
+
+### 成果物
+
+- 完了報告: waves/verbosity-vocab/domain-{a,b}.md。レビュー: reviews/verbosity-vocab/domain-{a,b}-review-{spec,design,test}.md（計6本）。
+
+### 非blocking申し送り（人間ゲート/将来 followup）
+
+- **口数の armSilence 体感遅延**: モード切替直後の 1 回目の沈黙発火は新モードの silenceBase+jitter を最初から待つ（quiet≈90s〜/normal≈45s〜/chatty≈25s〜）。人間ゲート案内に「切替直後の 1 回目はやや時間がかかることがある」旨を添えると誤解が減る（design レーン Q1）。turn-end 確率(区切り応答)はイベント駆動ゆえ即座に体感が変わる。
+- **コメント反応は untested**: comment 系(確率/予算/不応期)は口数束に含めて実装済みだが体感確認は S7 YouTube 実ゲート保留（wave 計画既定方針どおり）。
+- **コーディのスイープ計測は未実走**: `node apps/soul/agent/scripts/bench-name-prompt.mjs [--runs N] [--port N] [--synthetic]`（前提: whisper-server + AivisSpeech 起動）。記録先 `discussion/ai-cohost/experiments/name-prompt.md` §4（現状空欄）。実走前に AivisSpeech の audioQuery フィールド名(speedScale/pitchScale/intonationScale)の実在確認が要る（未検証・Gnome §質問3）。実走コストは TTS 42回・inference 84回相当（--runs 既定 1）。
+- **軽微**: (1) fire-scheduler と cockpit-server の口数モード妥当性検証の重複（v0 3モード固定で実害なし）。(2) bench-name-prompt の NAME_MATCH_VARIANTS_V0 と fire-scheduler の NAME_VARIANTS_V0 の値二重管理（独立性優先の裁量）。(3) domain-b.md §4 表の ear-pipeline 本数セル誤記(11→12)は Orch が 10→11 に訂正済み。

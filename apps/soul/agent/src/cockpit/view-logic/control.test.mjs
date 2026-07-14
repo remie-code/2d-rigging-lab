@@ -9,7 +9,9 @@ import {
   fireRequestErrorNote,
   selfFireToggleView,
   selfFirePostErrorText,
-  selfFireRequestErrorText
+  selfFireRequestErrorText,
+  verbosityPostErrorText,
+  verbosityRequestErrorText
 } from "./control.mjs";
 
 test("soulStatusView: thinking/speaking は busy（Fire disable）・他は idle（applySoulState :434-441）", () => {
@@ -98,4 +100,17 @@ test("selfFirePostErrorText: 503/!ok の文言・成功は null（POST /api/self
 
 test("selfFireRequestErrorText: catch 文言（:649-650）", () => {
   assert.equal(selfFireRequestErrorText(new Error("net")), "self-fire error: Error: net");
+});
+
+// ── 口数モード（wave 計画「口数配線」§2 裁定 A・selfFirePostErrorText/selfFireRequestErrorText の写経）───
+
+test("verbosityPostErrorText: 503/!ok の文言・成功は null（POST /api/verbosity）", () => {
+  assert.equal(verbosityPostErrorText({ status: 503, ok: false, j: null }), "verbosity control not available");
+  assert.equal(verbosityPostErrorText({ status: 400, ok: false, j: { error: "invalid verbosity mode" } }), "set failed: invalid verbosity mode");
+  assert.equal(verbosityPostErrorText({ status: 500, ok: false, j: {} }), "set failed: error");
+  assert.equal(verbosityPostErrorText({ status: 200, ok: true, j: { verbosity: "chatty" } }), null);
+});
+
+test("verbosityRequestErrorText: catch 文言", () => {
+  assert.equal(verbosityRequestErrorText(new Error("net")), "verbosity error: Error: net");
 });

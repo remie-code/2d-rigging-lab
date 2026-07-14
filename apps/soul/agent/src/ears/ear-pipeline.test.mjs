@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createEarPipeline, EAR_DEFAULTS } from "./ear-pipeline.mjs";
 import { sinePcm, silencePcm, concatInt16, int16ToBytesLE } from "./fixtures-audio.mjs";
 import { wavDurationSec } from "../voice/wav-duration.mjs";
+import { DEFAULT_WHISPER_PROMPT } from "./whisper-inference.mjs";
 
 // 耳パイプライン結線の機械テスト（S2 Domain C）。全部品を注入し、実マイク・実 ONNX・
 // 実 whisper-server・実ネットワークを一切使わずに縦貫通とライフサイクルを固定する。
@@ -147,6 +148,77 @@ test("ear-pipeline: 縦貫通（合成 PCM → speechStart/End → 切り出し 
     assert.equal(h.pipeline.stats().asrDone, 1);
   } finally {
     await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline: transcribeImpl 未指定時は本番経路の whisper-inference が既定 prompt を常時注入する（wave-plan §2 裁定B）", async () => {
+  // options.transcribeImpl を省略する = ear-pipeline.mjs:387-392 の
+  // `createWhisperInference({ baseUrl: server.baseUrl, timeoutMs })`（options.prompt 省略）を実際に
+  // 通す。ear-pipeline.mjs 自体は無改変（B-2 の設計裁定）——「既定 prompt が本番経路に自動で乗る」
+  // ことを globalThis.fetch の一時差し替えのみで固定する（実 whisper-server/実ネット不使用）。
+  const originalFetch = globalThis.fetch;
+  /** @type {any[]} */
+  const fetchCalls = [];
+  globalThis.fetch = /** @type {any} */ (
+    async (url, init) => {
+      fetchCalls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "こんにちは" }) };
+    }
+  );
+
+  /** @type {any} */
+  const record = { captureOptions: null, transcripts: [] };
+  const captureFactory = /** @type {any} */ (
+    (opts) => {
+      record.captureOptions = opts;
+      return { dispose() {} };
+    }
+  );
+  const vadFactory = /** @type {any} */ (
+    () => ({
+      async init() {},
+      async process(frame) {
+        let sum = 0;
+        for (let i = 0; i < frame.length; i += 1) sum += frame[i] * frame[i];
+        const rms = Math.sqrt(sum / frame.length);
+        return rms > 0.1 ? 0.9 : 0.05;
+      },
+      reset() {},
+      async dispose() {}
+    })
+  );
+  const serverFactory = /** @type {any} */ (
+    () => ({ ready: Promise.resolve(), baseUrl: "http://127.0.0.1:0", dispose() {} })
+  );
+
+  const pipeline = createEarPipeline({
+    segmenter: { minSpeechMs: 100, minSilenceMs: 64, speechPadMs: 0 },
+    captureFactory,
+    vadFactory,
+    serverFactory,
+    // transcribeImpl を渡さない = 本番経路（options.transcribeImpl == null 分岐）を通す。
+    onTranscript: (entry) => record.transcripts.push(entry)
+  });
+
+  try {
+    await pipeline.start();
+    const feed = (int16) => record.captureOptions.onPcm(int16ToBytesLE(int16));
+    feed(
+      concatInt16(
+        silencePcm({ durationMs: 96 }),
+        sinePcm({ freq: 440, durationMs: 300 }),
+        silencePcm({ durationMs: 160 })
+      )
+    );
+    await until(() => fetchCalls.length > 0, 3000, "本番経路の /inference fetch 呼び出し");
+    await until(() => record.transcripts.length > 0, 3000, "transcript appended");
+
+    const form = fetchCalls[0].init.body;
+    assert.ok(form instanceof FormData);
+    assert.equal(form.get("prompt"), DEFAULT_WHISPER_PROMPT);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await pipeline.dispose();
   }
 });
 

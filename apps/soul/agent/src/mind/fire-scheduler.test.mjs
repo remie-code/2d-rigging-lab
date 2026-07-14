@@ -18,7 +18,8 @@ import {
   SILENCE_BUDGET_V0,
   COMMENT_REFRACTORY_MS,
   COMMENT_PROBABILITY,
-  COMMENT_BUDGET_V0
+  COMMENT_BUDGET_V0,
+  VERBOSITY_BUNDLES
 } from "./fire-scheduler.mjs";
 
 // 発火スケジューラ（自発 3 種）の決定論テスト。実 clock・実 timer・実 RNG・実 LLM は一切使わず全注入。
@@ -637,6 +638,211 @@ test("LLM 非依存: fire-scheduler は import ゼロ = LLM/SDK/session への�
   // 念のため ask 呼び出し・session/SDK 参照がソースに無いことも固定。
   assert.equal(/\.ask\s*\(/.test(src), false, "must not call .ask(");
   assert.equal(/createLlmSession|llm-session|claude-agent-sdk|session\.ask/.test(src), false);
+});
+
+// ── 口数モード（wave 計画「口数配線+コーディ語彙登録」§2 裁定 A・inventory §A-2）───────────────
+
+test("無退行: normal 束は既存 export 定数と完全同値・mode 未指定生成の既定は normal", () => {
+  // normal 束は既存 export const への参照ゆえ、この等価は「値の二重管理をしていない」ことの担保
+  // （mode 未指定 = 現行値 = ふつう挙動・S6/S7 無退行）。
+  assert.equal(VERBOSITY_BUNDLES.normal.turnEndProbability, TURN_END_PROBABILITY);
+  assert.equal(VERBOSITY_BUNDLES.normal.turnEndRefractoryMs, TURN_END_REFRACTORY_MS);
+  assert.equal(VERBOSITY_BUNDLES.normal.silenceBaseMs, SILENCE_BASE_MS);
+  assert.equal(VERBOSITY_BUNDLES.normal.silenceJitterMs, SILENCE_JITTER_MS);
+  assert.equal(VERBOSITY_BUNDLES.normal.silenceRefractoryMs, SILENCE_REFRACTORY_MS);
+  assert.equal(VERBOSITY_BUNDLES.normal.silenceBudget, SILENCE_BUDGET_V0);
+  assert.equal(VERBOSITY_BUNDLES.normal.commentProbability, COMMENT_PROBABILITY);
+  assert.equal(VERBOSITY_BUNDLES.normal.commentRefractoryMs, COMMENT_REFRACTORY_MS);
+  assert.equal(VERBOSITY_BUNDLES.normal.commentBudget, COMMENT_BUDGET_V0);
+
+  const clock = makeFakeClock();
+  const sch = createFireScheduler({
+    onFireRequest: () => {},
+    nowImpl: clock.now,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl
+  });
+  assert.equal(sch.getVerbosity(), "normal");
+  sch.dispose();
+});
+
+test("createFireScheduler: options.verbosity に未知値/非文字列を渡すと normal にフォールバックする", () => {
+  for (const bad of ["bogus", 123, null, undefined, ""]) {
+    const clock = makeFakeClock();
+    const sch = createFireScheduler({
+      onFireRequest: () => {},
+      verbosity: /** @type {any} */ (bad),
+      nowImpl: clock.now,
+      setTimeoutImpl: clock.setTimeoutImpl,
+      clearTimeoutImpl: clock.clearTimeoutImpl
+    });
+    assert.equal(sch.getVerbosity(), "normal", `verbosity=${String(bad)} は normal にフォールバック`);
+    sch.dispose();
+  }
+});
+
+test("setVerbosity: モード束の turn-end 確率が実際の発火判定に反映される（境界 rng=0.5・chatty のみ命中）", () => {
+  const rng05 = () => 0.5;
+  /** @type {Record<string, number>} */
+  const results = {};
+  for (const mode of ["quiet", "normal", "chatty"]) {
+    const clock = makeFakeClock();
+    /** @type {any[]} */
+    const reqs = [];
+    const sch = createFireScheduler({
+      onFireRequest: (r) => reqs.push(r),
+      enabled: true,
+      verbosity: mode,
+      nowImpl: clock.now,
+      rng: rng05,
+      setTimeoutImpl: clock.setTimeoutImpl,
+      clearTimeoutImpl: clock.clearTimeoutImpl,
+      silenceBaseMs: 10_000_000 // 沈黙は遠くへ（turn-end 分岐だけを見る）。
+    });
+    sch.handleVadEvent({ type: "speechEnd" });
+    clock.advance(TURN_END_SILENCE_MS);
+    results[mode] = reqs.length;
+    sch.dispose();
+  }
+  assert.equal(results.quiet, 0, "quiet(確率 0.15) は rng=0.5 で確率外れ");
+  assert.equal(results.normal, 0, "normal(確率 0.35) は rng=0.5 で確率外れ");
+  assert.equal(results.chatty, 1, "chatty(確率 0.70) は rng=0.5 で確率命中");
+});
+
+test("setVerbosity: 実行時切替で束が即座に切り替わる（normal→chatty で turn-end 確率が変わる）", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true, // mode 未指定 = normal。
+    nowImpl: clock.now,
+    rng: () => 0.5,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    silenceBaseMs: 10_000_000
+  });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS);
+  assert.equal(reqs.length, 0, "normal(0.35) は rng=0.5 で確率外れ");
+  sch.setVerbosity("chatty");
+  sch.handleVadEvent({ type: "speechEnd" }); // まだ発火していないので不応期は影響しない（lastFireAtMs=-Infinity）。
+  clock.advance(TURN_END_SILENCE_MS);
+  assert.equal(reqs.length, 1, "切替後 chatty(0.70) は rng=0.5 で確率命中");
+  assert.equal(sch.getVerbosity(), "chatty");
+  sch.dispose();
+});
+
+test("setVerbosity: 予算を新モードの満額へリセットする（消費後の残予算ではなく満額）", () => {
+  const clock = makeFakeClock();
+  const sch = createFireScheduler({
+    onFireRequest: () => {},
+    enabled: true, // mode 未指定 = normal（予算 6）。
+    nowImpl: clock.now,
+    rng: rngHit, // ジッター 0 で予測可能。
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    silenceRefractoryMs: 0 // 連続発火を許す（予算消費だけを見る）。
+  });
+  assert.equal(sch.silenceBudgetRemaining(), SILENCE_BUDGET_V0);
+  clock.advance(SILENCE_BASE_MS); // 1 回消費。
+  assert.equal(sch.silenceBudgetRemaining(), SILENCE_BUDGET_V0 - 1);
+  sch.setVerbosity("chatty");
+  assert.equal(
+    sch.silenceBudgetRemaining(),
+    VERBOSITY_BUNDLES.chatty.silenceBudget,
+    "残予算の足し引きではなく新モードの満額へリセット"
+  );
+  assert.equal(sch.commentBudgetRemaining(), VERBOSITY_BUNDLES.chatty.commentBudget);
+  sch.dispose();
+});
+
+test("getVerbosity: 既定 normal・setVerbosity で変わる・未知 mode は no-op（現モード・束とも維持）", () => {
+  const clock = makeFakeClock();
+  const sch = createFireScheduler({
+    onFireRequest: () => {},
+    enabled: true,
+    nowImpl: clock.now,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl
+  });
+  assert.equal(sch.getVerbosity(), "normal");
+  sch.setVerbosity("chatty");
+  assert.equal(sch.getVerbosity(), "chatty");
+  assert.equal(sch.silenceBudgetRemaining(), VERBOSITY_BUNDLES.chatty.silenceBudget);
+  sch.setVerbosity("bogus"); // 未知 mode。
+  assert.equal(sch.getVerbosity(), "chatty", "未知 mode は no-op（現モード維持）");
+  assert.equal(sch.silenceBudgetRemaining(), VERBOSITY_BUNDLES.chatty.silenceBudget, "未知 mode は束も変えない");
+  sch.setVerbosity(/** @type {any} */ (null));
+  assert.equal(sch.getVerbosity(), "chatty", "非文字列 mode も no-op");
+  sch.dispose();
+});
+
+test("blocking: comment-call は口数（quiet）の影響を受けない（予算 0・不応期無視で確実に発火）", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    verbosity: "quiet",
+    nowImpl: clock.now,
+    rng: rngMiss, // 確率が外れる値でも comment-call は影響を受けない。
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    commentBudget: 0 // quiet 束の予算（15）を明示上書きして 0 に（予算切れでも comment-call は出る）。
+  });
+  sch.handleChatMessage({ text: "Cody これ見て", displayName: "A" });
+  sch.handleChatMessage({ text: "ねえこーでぃー", displayName: "B" }); // 不応期無視で連続。
+  assert.equal(reqs.length, 2);
+  assert.ok(reqs.every((r) => r.kind === "comment-call"));
+  assert.equal(sch.commentBudgetRemaining(), 0, "comment-call は予算を消費しない（0 のまま）");
+  assert.equal(sch.getVerbosity(), "quiet");
+  sch.dispose();
+});
+
+test("blocking: 呼びかけ（call）は口数（quiet）の影響を受けない（確率外れ値でも確実に発火）", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    verbosity: "quiet",
+    nowImpl: clock.now,
+    rng: rngMiss,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl
+  });
+  sch.handleTranscript(you("コーディこれ見て"));
+  sch.handleTranscript(you("コーディーもう一回")); // 不応期無視で連続。
+  assert.equal(reqs.length, 2);
+  assert.ok(reqs.every((r) => r.kind === "call"));
+  sch.dispose();
+});
+
+test("blocking: turn 検出（turnEndSilenceMs）は口数モードに関わらず TURN_END_SILENCE_MS で不変", () => {
+  for (const mode of ["quiet", "normal", "chatty"]) {
+    const clock = makeFakeClock();
+    /** @type {any[]} */
+    const reqs = [];
+    const sch = createFireScheduler({
+      onFireRequest: (r) => reqs.push(r),
+      enabled: true,
+      verbosity: mode,
+      nowImpl: clock.now,
+      rng: rngHit, // 確率は必ず命中させ、無音待ちの長さだけを見る。
+      setTimeoutImpl: clock.setTimeoutImpl,
+      clearTimeoutImpl: clock.clearTimeoutImpl,
+      silenceBaseMs: 10_000_000
+    });
+    sch.handleVadEvent({ type: "speechEnd" });
+    clock.advance(TURN_END_SILENCE_MS - 1);
+    assert.equal(reqs.length, 0, `${mode}: X 未満はまだ出ない`);
+    clock.advance(1);
+    assert.equal(reqs.length, 1, `${mode}: TURN_END_SILENCE_MS 到達で出る（turn 検出はモード不変）`);
+    sch.dispose();
+  }
 });
 
 test("dispose: 以後のイベントは無視・タイマは残さない（ハングしない）", () => {

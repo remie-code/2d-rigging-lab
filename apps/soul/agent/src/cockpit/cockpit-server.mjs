@@ -345,6 +345,16 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
  *   未注入でも POST /api/self-fire 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
  *   スキップ）。
+ * @param {string} [options.verbosityInitialMode="normal"]
+ *   口数モード（quiet/normal/chatty）の初期値（wave 計画「口数配線」§2 裁定 A）。既定 "normal"。
+ *   orchestrator 注入時のみ生成される fireScheduler の createFireScheduler({ verbosity }) へ渡す
+ *   （selfFireInitialEnabled と同型・scheduler が無ければ意味を持たない）。起動時の初期値は呼び出し側
+ *   （cockpit.mjs）が settings から読んでここへ渡す。
+ * @param {(mode: string) => void | Promise<void>} [options.onSetVerbosity]
+ *   口数モードの永続化フック（POST /api/verbosity が呼ぶ・onSetSelfFireEnabled と同型）。
+ *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
+ *   未注入でも POST /api/verbosity 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
+ *   スキップ）。
  * @param {(opts: { source: string }) => { start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string; onMessage: (fn: (msg: any) => void) => () => void; onStatus: (fn: (state: string) => void) => () => void; onDiagnostic: (fn: (info: any) => void) => () => void }} [options.chatClientFactory]
  *   S7「視聴者が混ざる」チャット器官のファクトリ（本番は Domain C の `createLiveChatClient`・テストは
  *   fake 器官 factory を注入して実ネットに出さない）。POST /api/chat/connect で `factory({ source })` を
@@ -399,6 +409,10 @@ export function createCockpitServer(options = {}) {
   // S6「会話が続く」自発発火の初期 ON/OFF（既定 OFF）。Domain D が永続トグル（設定/UI）で制御する
   // までは、テスト or 明示指定でのみ ON にする（既定 OFF ＝ 操縦席にトグルが無い間は自発が暴発しない）。
   const selfFireInitialEnabled = options.selfFireInitialEnabled === true;
+  // 口数モード（wave 計画「口数配線」§2 裁定 A）: 初期値（既定 "normal"）と永続化フック
+  // （未注入なら POST /api/verbosity 自体は 503 にならない・onSetSelfFireEnabled と同型の失敗寛容）。
+  const verbosityInitialMode = typeof options.verbosityInitialMode === "string" ? options.verbosityInitialMode : "normal";
+  const onSetVerbosity = typeof options.onSetVerbosity === "function" ? options.onSetVerbosity : null;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -480,6 +494,8 @@ export function createCockpitServer(options = {}) {
       visionTarget: typeof visionTargetStatusImpl === "function" ? (visionTargetStatusImpl() ?? null) : null,
       // S6「会話が続く」: 自発発火の現況（scheduler 未生成 = orchestrator 未注入なら null）。
       selfFire: fireScheduler ? { enabled: fireScheduler.isEnabled() } : null,
+      // 口数モードの現況（scheduler 未生成 = orchestrator 未注入なら null・selfFire と同型）。
+      verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
       audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null,
       // S7「視聴者が混ざる」: チャット器官の現況。source は settings 由来（Connect 前でも入力欄の既定に
@@ -879,6 +895,33 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/verbosity") {
+      // 口数モードの切替継ぎ目（wave 計画「口数配線」§2 裁定 A・POST /api/self-fire の写経）。
+      // scheduler 未生成（orchestrator 未注入）なら 503（自発発火制御と同型・生きたまま）。
+      if (!fireScheduler) {
+        sendJson(res, 503, { error: "verbosity control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const mode = body.mode;
+      // self-fire は boolean 強制だが、verbosity は妥当な mode（quiet/normal/chatty）を要求する
+      // （無効入力を早期に弾く・防御的）。
+      if (typeof mode !== "string" || (mode !== "quiet" && mode !== "normal" && mode !== "chatty")) {
+        sendJson(res, 400, { error: "invalid verbosity mode" });
+        return;
+      }
+      fireScheduler.setVerbosity(mode);
+      if (onSetVerbosity) {
+        try {
+          await onSetVerbosity(fireScheduler.getVerbosity());
+        } catch {
+          // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/channel") {
       if (typeof onSetChannelUrl !== "function") {
         // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
@@ -1114,6 +1157,7 @@ export function createCockpitServer(options = {}) {
   ) {
     fireScheduler = createFireScheduler({
       enabled: selfFireInitialEnabled,
+      verbosity: verbosityInitialMode,
       isBusy: () => /** @type {any} */ (fireOrchestrator).getState() !== "idle",
       onFireRequest: (req) => {
         // S6 Domain D: 発火要求の kind（call/turn-end/silence）を SSE "selfFire" で結線層外へ通知する

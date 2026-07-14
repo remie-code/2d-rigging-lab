@@ -37,7 +37,7 @@ import {
   feedAfterSseEvent
 } from "./ui/rows.mjs";
 import { COCKPIT_CSS, injectStyles } from "./ui/styles.mjs";
-import { ControlBar, FireButtons, SelfFirePill, KillSwitch, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
+import { ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
 import { SettingsDrawer, SettingsSelect, DrawerStatus } from "./ui/settings-drawer.mjs";
 import { soulStatusView, selfFireToggleView } from "./view-logic/control.mjs";
 import { chatStatusView, channelStatusView } from "./view-logic/status.mjs";
@@ -338,12 +338,13 @@ test("isStuckToBottom: 末尾近傍のみ true（閾値 STICK_THRESHOLD_PX）", 
 
 test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・applyState :279-283 の入力）", () => {
   assert.deepEqual(settingsFromSnapshot(null), {
-    channel: null, visionTarget: null, selfFire: null, audioDevice: null, chat: null
+    channel: null, visionTarget: null, selfFire: null, verbosity: null, audioDevice: null, chat: null
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
     visionTarget: { title: "FooGame" },
     selfFire: { enabled: true },
+    verbosity: "chatty",
     audioDevice: { name: "MV7+" },
     chat: { source: "abc", connected: true, state: "live" }
   };
@@ -453,10 +454,10 @@ function collectElements(node, out = []) {
 }
 
 test("Domain C import スモーク: control-bar/settings-drawer が Node で import でき、主要 export が揃う", () => {
-  for (const fn of [ControlBar, FireButtons, SelfFirePill, KillSwitch, SettingsDrawer, SettingsSelect, DrawerStatus]) {
+  for (const fn of [ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, SettingsDrawer, SettingsSelect, DrawerStatus]) {
     assert.equal(typeof fn, "function");
   }
-  // 口数モードは場所のみ（実配線は s6-followup §12 の将来課題・値は固定の 3 択）。
+  // 口数モードの選択肢（値は固定の 3 択・wave 計画「口数配線」§2 裁定 A で実配線済み）。
   assert.deepEqual(VERBOSITY_OPTIONS, [
     { value: "quiet", label: "控えめ" },
     { value: "normal", label: "ふつう" },
@@ -499,6 +500,34 @@ test("SelfFirePill vnode: null は disable + not available・enabled は checked
   assert.equal(input.props.checked, true);
   assert.equal(typeof input.props.onChange, "function");
   assert.ok(collectText(vnode).join("").includes("on"));
+});
+
+test("VerbositySelect vnode: verbosity prop が select の value に反映される（controlled・SelfFirePill と同型）", () => {
+  // controlled: value は prop 由来（wave 計画「口数配線」§2 裁定 A）。
+  let vnode = VerbositySelect({ verbosity: "chatty", onChange: () => {} });
+  let select = collectElements(vnode).find((n) => n.type === "select");
+  assert.equal(select.props.value, "chatty");
+  assert.equal(typeof select.props.onChange, "function");
+  // 未設定/null（scheduler 未生成）は "normal" 表示に畳む（server 側の未知値フォールバックと対称）。
+  vnode = VerbositySelect({ verbosity: null, onChange: () => {} });
+  select = collectElements(vnode).find((n) => n.type === "select");
+  assert.equal(select.props.value, "normal");
+  vnode = VerbositySelect({ onChange: () => {} });
+  select = collectElements(vnode).find((n) => n.type === "select");
+  assert.equal(select.props.value, "normal");
+  // onChange は呼び出し側のハンドラをそのまま素通しする（ここでは fetch は起きない・POST 配線は
+  // ControlBar 側・onToggleSelfFire の写経）。
+  let called = null;
+  vnode = VerbositySelect({ verbosity: "quiet", onChange: (ev) => (called = ev) });
+  select = collectElements(vnode).find((n) => n.type === "select");
+  select.props.onChange({ target: { value: "chatty" } });
+  assert.deepEqual(called, { target: { value: "chatty" } });
+  // 3 択（VERBOSITY_OPTIONS）が option として描かれる。
+  const opts = collectElements(vnode).filter((n) => n.type === "option");
+  assert.deepEqual(opts.map((o) => o.props.value), ["quiet", "normal", "chatty"]);
+  const text = collectText(vnode).join("");
+  assert.ok(text.includes("口数"), "ラベル");
+  assert.ok(text.includes("控えめ") && text.includes("ふつう") && text.includes("おしゃべり"), "3 択の表示文言");
 });
 
 test("KillSwitch vnode: 枠のみ・disabled（S8 予約・no-op）", () => {

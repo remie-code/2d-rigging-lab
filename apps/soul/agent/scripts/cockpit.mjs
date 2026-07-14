@@ -310,6 +310,40 @@ export function createSelfFireHooks(settings, defaultEnabled = false) {
 }
 
 /**
+ * settings の口数モード（verbosityMode）を、cockpit-server の口（resolveInitialVerbosity/
+ * onSetVerbosity）へ橋渡しする（wave 計画「口数配線」§2 裁定 A・createSelfFireHooks と同型の薄い
+ * 配線層）。settings に記憶が無い、または既知3モード（quiet/normal/chatty）以外の値が入っていた
+ * 場合は defaultMode（既定 "normal"）にフォールバックする（防御的・fire-scheduler.mjs 側の
+ * setVerbosity/初期 mode 解決と同じ「未知値は normal」の規律）。
+ *
+ * @param {{ getVerbosityMode: () => string | null; setVerbosityMode: (mode: string | null) => void }} settings
+ * @param {string} [defaultMode="normal"]  未記憶/未知値のフォールバック。
+ * @returns {{
+ *   resolveInitialVerbosity: () => string;
+ *   onSetVerbosity: (mode: string) => void;
+ * }}
+ */
+export function createVerbosityHooks(settings, defaultMode = "normal") {
+  return {
+    /** 起動時の初期口数モード（未記憶/未知値は defaultMode）。 */
+    resolveInitialVerbosity: () => {
+      const remembered = settings.getVerbosityMode();
+      return remembered === "quiet" || remembered === "normal" || remembered === "chatty"
+        ? remembered
+        : defaultMode;
+    },
+    /** cockpit-server の onSetVerbosity（POST /api/verbosity が呼ぶ）。 */
+    onSetVerbosity: (mode) => {
+      try {
+        settings.setVerbosityMode(mode); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
+/**
  * settings の視聴者チャット配信 source（chatSource）を、cockpit-server の口（onSetChatSource/
  * chatSourceStatus）へ橋渡しする（S7「視聴者が混ざる」・Domain C。Channel URL/visionTarget と同型の
  * 薄い配線層）。実チャット器官の生成/Connect/停止ライフサイクルは cockpit-server が所有する
@@ -366,6 +400,8 @@ async function main() {
   const audioDeviceHooks = createAudioDeviceHooks(settings);
   // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（既定 OFF・§createSelfFireHooks）。
   const selfFireHooks = createSelfFireHooks(settings, false);
+  // 口数モード（quiet/normal/chatty・既定 "normal"・§createVerbosityHooks）。
+  const verbosityHooks = createVerbosityHooks(settings);
   // S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化（Channel URL と同型の薄い橋渡し・
   // §createChatSourceHooks）。実チャット器官の Connect/停止は cockpit-server 所有（POST 駆動）。
   const chatSourceHooks = createChatSourceHooks(settings);
@@ -536,6 +572,9 @@ async function main() {
     // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（起動時は settings から復元・既定 OFF）。
     selfFireInitialEnabled: selfFireHooks.resolveInitialEnabled(),
     onSetSelfFireEnabled: selfFireHooks.onSetSelfFireEnabled,
+    // 口数モード（quiet/normal/chatty・起動時は settings から復元・既定 "normal"）。
+    verbosityInitialMode: verbosityHooks.resolveInitialVerbosity(),
+    onSetVerbosity: verbosityHooks.onSetVerbosity,
     // S7「視聴者が混ざる」: 実チャット器官のファクトリを注入（本番 createLiveChatClient）。生成/Connect/
     // 停止のライフサイクルは cockpit-server が所有し、POST /api/chat/connect で `factory({ source })` を
     // 生成 start()・onMessage/onStatus/onDiagnostic を取り込み経路へ繋ぐ。配信 source は settings に記憶。

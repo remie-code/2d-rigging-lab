@@ -77,6 +77,7 @@ export function settingsFromSnapshot(s) {
     channel: (s && s.channel) ?? null,
     visionTarget: (s && s.visionTarget) ?? null,
     selfFire: (s && s.selfFire) ?? null,
+    verbosity: (s && s.verbosity) ?? null,
     audioDevice: (s && s.audioDevice) ?? null,
     chat: (s && s.chat) ?? null
   };
@@ -241,6 +242,7 @@ export function App(props) {
         fireNote=${fireNote}
         setFireNote=${setFireNote}
         selfFire=${settings.selfFire}
+        verbosity=${settings.verbosity}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}
       />

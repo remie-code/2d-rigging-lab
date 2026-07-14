@@ -1324,6 +1324,8 @@ test("cockpit self-fire: orchestrator 未注入なら scheduler 無し（selfFir
     assert.equal(s.json.selfFire, null);
     assert.equal(server.selfFireStatus(), null);
     assert.equal(server.setSelfFireEnabled(true), false); // scheduler 無し = no-op。
+    // 口数モードも scheduler 無しなら null（selfFire と同型）。
+    assert.equal(s.json.verbosity, null);
   } finally {
     await server.close();
   }
@@ -1948,6 +1950,100 @@ test("cockpit POST /api/self-fire: onSetSelfFireEnabled 永続化フックへ橋
     assert.deepEqual(persisted, [true]);
     await postJson(`${url}/api/self-fire`, { enabled: false });
     assert.deepEqual(persisted, [true, false]);
+  } finally {
+    await server.close();
+  }
+});
+
+// ── POST /api/verbosity（wave 計画「口数配線」§2 裁定 A・POST /api/self-fire の写経）───────────
+
+test("cockpit POST /api/verbosity: scheduler 未生成（orchestrator 未注入）なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/verbosity`, { mode: "chatty" });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /verbosity control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/verbosity: 妥当な mode を切り替え・state.verbosity に反映する", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+    // verbosityInitialMode 未指定 = 既定 "normal"。
+  });
+  try {
+    const url = await server.listen(0);
+    const s0 = await getJson(`${url}/api/state`);
+    assert.equal(s0.json.verbosity, "normal");
+
+    const r = await postJson(`${url}/api/verbosity`, { mode: "chatty" });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.verbosity, "chatty");
+
+    const r2 = await postJson(`${url}/api/verbosity`, { mode: "quiet" });
+    assert.equal(r2.status, 200);
+    assert.equal(r2.json.verbosity, "quiet");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/verbosity: 無効 mode（未知値/非文字列/欠落）は 400・state は変わらない", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+  });
+  try {
+    const url = await server.listen(0);
+    for (const bad of [{ mode: "bogus" }, { mode: 123 }, {}]) {
+      const r = await postJson(`${url}/api/verbosity`, bad);
+      assert.equal(r.status, 400, `mode=${JSON.stringify(bad)} は 400`);
+      assert.match(r.json.error, /invalid verbosity mode/);
+    }
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.verbosity, "normal", "無効入力後も state は変わらない");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/verbosity: 起動時 verbosityInitialMode が scheduler に反映される", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    verbosityInitialMode: "chatty"
+  });
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.verbosity, "chatty");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/verbosity: onSetVerbosity 永続化フックへ橋渡しする（未注入でも 503 にならない）", async () => {
+  const persisted = [];
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    onSetVerbosity: (mode) => {
+      persisted.push(mode);
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/verbosity`, { mode: "chatty" });
+    assert.deepEqual(persisted, ["chatty"]);
+    await postJson(`${url}/api/verbosity`, { mode: "quiet" });
+    assert.deepEqual(persisted, ["chatty", "quiet"]);
+    // 無効 mode は onSetVerbosity を呼ばない（切替自体が起きていない）。
+    await postJson(`${url}/api/verbosity`, { mode: "bogus" });
+    assert.deepEqual(persisted, ["chatty", "quiet"]);
   } finally {
     await server.close();
   }

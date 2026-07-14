@@ -23,6 +23,10 @@
  *     公開 URL/ID（token を含まない平文）だが、同一ファイル・同一マージ規律に乗せる（vision target と
  *     同型の新キー 1 個）。
  *   setChatSource(source): 操縦席で Connect chat したときに記憶（次回起動で復元）。
+ *   getVerbosityMode(): 口数モード（quiet/normal/chatty）の初期値（wave 計画「口数配線」§2 裁定 A）。
+ *     未記憶/未知値のフォールバックは呼び出し側（cockpit.mjs の createVerbosityHooks）に委ねる
+ *     （vision target と同型の文字列キー・asStringOrNull）。
+ *   setVerbosityMode(mode): 操縦席で口数モードを切替えたときに記憶（次回起動で復元）。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -66,6 +70,8 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setSelfFireEnabled: (enabled: boolean) => void;
  *   getChatSource: () => string | null;
  *   setChatSource: (source: string | null) => void;
+ *   getVerbosityMode: () => string | null;
+ *   setVerbosityMode: (mode: string | null) => void;
  * }}
  */
 export function createFileSettingsStore(options = {}) {
@@ -138,6 +144,13 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} source */
     setChatSource(source) {
       writeMerged({ chatSource: source ?? null });
+    },
+    getVerbosityMode() {
+      return asStringOrNull(readAll().verbosityMode);
+    },
+    /** @param {string | null} mode */
+    setVerbosityMode(mode) {
+      writeMerged({ verbosityMode: mode ?? null });
     }
   };
 }

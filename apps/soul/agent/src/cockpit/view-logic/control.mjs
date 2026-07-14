@@ -22,6 +22,10 @@
  *                                "not available"・それ以外は checked/on/off 導出）
  *  - selfFirePostErrorText    → :645-648 POST /api/self-fire 応答（503 / set failed・成功は null）
  *  - selfFireRequestErrorText → :649-650 fetch catch（"self-fire error: e"）
+ *  - verbosityPostErrorText    → POST /api/verbosity 応答（503 / invalid mode / set failed・成功は null・
+ *                                 selfFirePostErrorText の写経・wave 計画「口数配線」§2 裁定 A）
+ *  - verbosityRequestErrorText → POST /api/verbosity の fetch catch（"verbosity error: e"・
+ *                                 selfFireRequestErrorText の写経）
  */
 
 /**
@@ -111,4 +115,25 @@ export function selfFirePostErrorText(res) {
  */
 export function selfFireRequestErrorText(e) {
   return "self-fire error: " + e;
+}
+
+/**
+ * POST /api/verbosity 応答 → エラー文言（selfFirePostErrorText の写経・wave 計画「口数配線」§2 裁定 A）。
+ * 成功（200）は **null = エラーなし**（呼び出し側は snapshot 応答を適用する）。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function verbosityPostErrorText(res) {
+  if (res.status === 503) return "verbosity control not available";
+  if (!res.ok) return "set failed: " + ((res.j && res.j.error) || "error");
+  return null;
+}
+
+/**
+ * POST /api/verbosity の fetch 失敗 → エラー文言（selfFireRequestErrorText の写経）。
+ * @param {unknown} e
+ * @returns {string}
+ */
+export function verbosityRequestErrorText(e) {
+  return "verbosity error: " + e;
 }

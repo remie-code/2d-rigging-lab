@@ -45,6 +45,16 @@ MediaPlayer が要るため未検証のまま**。
   「名前入り音声の正答率」と「名前なし音声への幻聴混入率」を両面実測 ③数字で採否。
   成立すれば受け側照合との挟み撃ちで呼びかけ精度が両側から締まる。
 
+  **→ 実施記録（2026-07-14・wave「口数配線+コーディ語彙登録」Domain B）**: ①②③の段取りに沿って実装
+  完了。`whisper-inference.mjs` の `DEFAULT_WHISPER_PROMPT`（v0「こーでぃー、コーディ。」）をリクエスト
+  毎に form 注入する配線が入り、ear-pipeline 経由の全発話に既定で乗る（`options.prompt` 省略時・
+  ear-pipeline.mjs 自体は無改変）。②の実測（合成音ハーネスでの正答率/幻聴混入率スイープ）用に
+  `scripts/bench-name-prompt.mjs`（新規）を用意したが**実走はしていない**——実 whisper-server 起動を
+  要するため人間ゲート/計測の領分（詳細は
+  [../verbosity-vocab/domain-b.md](../verbosity-vocab/domain-b.md)）。③の数字での採否判定は記録先
+  [../../../experiments/name-prompt.md](../../../experiments/name-prompt.md)（テンプレートのみ・実測値は
+  空欄）で人間ゲート後に行う。
+
 ## 3. 自発発火の定数チューニング（人間ゲート待ち・v0 コード内定数のまま）
 
 wave-plan 裁定8「ツマミは作らない・人間ゲートの体感で直す」の対象。以下はすべて

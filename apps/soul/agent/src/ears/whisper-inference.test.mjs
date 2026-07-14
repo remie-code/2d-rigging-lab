@@ -6,6 +6,7 @@ import {
   computeAudioCtx,
   createWhisperInference,
   DEFAULT_AUDIO_CTX_OPTIONS,
+  DEFAULT_WHISPER_PROMPT,
   WHISPER_FULL_AUDIO_CTX
 } from "./whisper-inference.mjs";
 
@@ -89,4 +90,85 @@ test("whisper-inference: 非 200 は本文込み throw・タイムアウトは�
   );
   const hanging = createWhisperInference({ fetchImpl: hangingBodyFetch, timeoutMs: 30 });
   await assert.rejects(() => hanging.transcribe(new Uint8Array(2)), /timed out after 30ms/);
+});
+
+// wave-plan §2 裁定B / inventory §B-1・B-2: コーディ語彙登録（Whisper initial prompt）。
+// prompt はリクエスト毎の form field のみに乗る——転写バッファ/セグメンタ/VAD を一切通らない
+// （正本の形は不変・戻り値はサーバ応答のテキストのみ由来）ことをここで固定する。
+
+test("whisper-inference: options.prompt 省略時は DEFAULT_WHISPER_PROMPT が常時注入される", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fetchImpl = /** @type {any} */ (
+    async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "こんにちは" }) };
+    }
+  );
+  const inference = createWhisperInference({ fetchImpl });
+  await inference.transcribe(Uint8Array.from([1, 2, 3]));
+  assert.equal(calls[0].init.body.get("prompt"), DEFAULT_WHISPER_PROMPT);
+});
+
+test("whisper-inference: options.prompt にカスタム文字列を渡すとそれが form に乗る", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fetchImpl = /** @type {any} */ (
+    async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "こんにちは" }) };
+    }
+  );
+  const inference = createWhisperInference({ fetchImpl, prompt: "カスタム刷り込み文" });
+  await inference.transcribe(Uint8Array.from([1, 2, 3]));
+  assert.equal(calls[0].init.body.get("prompt"), "カスタム刷り込み文");
+});
+
+test("whisper-inference: options.prompt に空文字を明示指定すると prompt field は不送出", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fetchImpl = /** @type {any} */ (
+    async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "こんにちは" }) };
+    }
+  );
+  const inference = createWhisperInference({ fetchImpl, prompt: "" });
+  await inference.transcribe(Uint8Array.from([1, 2, 3]));
+  assert.equal(calls[0].init.body.get("prompt"), null);
+});
+
+test("whisper-inference: prompt 注入は転写正本を汚さない（返り値はサーバ応答のテキストのみ由来）", async () => {
+  // fake サーバ応答のテキストに DEFAULT_WHISPER_PROMPT の断片を意図的に含めない・
+  // prompt そのものとは無関係な文字列を返すことで「返り値 = サーバ応答由来のみ」を固定する。
+  const fetchImpl = /** @type {any} */ (
+    async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ text: " 今日の天気は晴れです\n" })
+    })
+  );
+  const inference = createWhisperInference({ fetchImpl }); // prompt 省略 = 既定注入
+  const result = await inference.transcribe(Uint8Array.from([9, 9]));
+  assert.equal(result.rawText, " 今日の天気は晴れです\n");
+  assert.equal(result.text, "今日の天気は晴れです");
+  // prompt 文字列（「コーディ」等）が転写結果に紛れ込んでいないことを確認（正本不変の直接証拠）。
+  assert.ok(!result.text.includes("コーディ"));
+  assert.ok(!result.rawText.includes("コーディ"));
+});
+
+test("whisper-inference: audio_ctx 省略時の既存挙動は prompt 追加後も無退行（prompt に非干渉）", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fetchImpl = /** @type {any} */ (
+    async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "こんにちは" }) };
+    }
+  );
+  const inference = createWhisperInference({ fetchImpl });
+  await inference.transcribe(Uint8Array.from([1, 2, 3])); // audioCtx 省略
+  assert.equal(calls[0].init.body.get("audio_ctx"), null); // 既存アサート（:57-58 相当）維持
+  assert.equal(calls[0].init.body.get("prompt"), DEFAULT_WHISPER_PROMPT); // prompt は常時注入
 });

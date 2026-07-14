@@ -238,6 +238,67 @@ function clamp01(x) {
  */
 
 /**
+ * ── 口数モード（v0・wave 計画「口数配線+コーディ語彙登録」§2 裁定 A・inventory §A-2 の表）─────────
+ *  運転バーの口数プルダウン（控えめ/ふつう/おしゃべり）が実行時に差し替える定数束。触るのは
+ *  turn-end 確率/不応期・silence 基礎/ジッター/不応期/予算・comment 確率/不応期/予算の **9 値だけ**。
+ *  **turn 検出（TURN_END_SILENCE_MS）・name variants（呼びかけ/comment-call の揺れ集合）・
+ *  barge-in は不変**（この束が触らない = 口数の影響を受けない構造）。
+ *
+ *  normal 束は既存 export const（TURN_END_PROBABILITY 等）を**参照**する（リテラルを重複させない）。
+ *  これにより normal は「現行値の単一の源」であり続け、mode 未指定時の既定挙動（S6/S7 無退行）が
+ *  値の二重管理によるズレを起こしえない。quiet/chatty は新規リテラル（人間ゲート未実施・untested
+ *  扱い・inventory §A-2 の非発火率の裏取り参照。人間ゲートの体感で直す前提）。
+ */
+export const VERBOSITY_BUNDLES = Object.freeze({
+  /** 控えめ（quiet）。 */
+  quiet: Object.freeze({
+    turnEndProbability: 0.15,
+    turnEndRefractoryMs: 15_000,
+    silenceBaseMs: 90_000,
+    silenceJitterMs: 30_000,
+    silenceRefractoryMs: 120_000,
+    silenceBudget: 3,
+    commentProbability: 0.15,
+    commentRefractoryMs: 15_000,
+    commentBudget: 15
+  }),
+  /** ふつう（normal・現行値）。既存 export 定数への参照 = 値の単一の源。 */
+  normal: Object.freeze({
+    turnEndProbability: TURN_END_PROBABILITY,
+    turnEndRefractoryMs: TURN_END_REFRACTORY_MS,
+    silenceBaseMs: SILENCE_BASE_MS,
+    silenceJitterMs: SILENCE_JITTER_MS,
+    silenceRefractoryMs: SILENCE_REFRACTORY_MS,
+    silenceBudget: SILENCE_BUDGET_V0,
+    commentProbability: COMMENT_PROBABILITY,
+    commentRefractoryMs: COMMENT_REFRACTORY_MS,
+    commentBudget: COMMENT_BUDGET_V0
+  }),
+  /** おしゃべり（chatty）。 */
+  chatty: Object.freeze({
+    turnEndProbability: 0.70,
+    turnEndRefractoryMs: 4_000,
+    silenceBaseMs: 25_000,
+    silenceJitterMs: 20_000,
+    silenceRefractoryMs: 60_000,
+    silenceBudget: 12,
+    commentProbability: 0.70,
+    commentRefractoryMs: 4_000,
+    commentBudget: 60
+  })
+});
+
+/**
+ * 口数モード文字列が既知3モード（quiet/normal/chatty）のいずれかか。未知値は setVerbosity の
+ * no-op 判定・初期 mode 解決の「既定 normal へのフォールバック」判定に使う（防御的）。
+ * @param {unknown} mode
+ * @returns {mode is "quiet" | "normal" | "chatty"}
+ */
+function isValidVerbosityMode(mode) {
+  return mode === "quiet" || mode === "normal" || mode === "chatty";
+}
+
+/**
  * 発火スケジューラを作る。VAD イベントと転写 append を食わせると、自発 3 種の判定に応じて onFireRequest で
  * 発火要求を通知する。時刻・タイマ・RNG は全て注入可能（決定論テスト）。**LLM には一切触れない。**
  *
@@ -255,19 +316,27 @@ function clamp01(x) {
  * @param {number} [options.silenceBaseMs=SILENCE_BASE_MS]
  * @param {number} [options.silenceJitterMs=SILENCE_JITTER_MS]
  * @param {number} [options.silenceRefractoryMs=SILENCE_REFRACTORY_MS]
- * @param {number} [options.silenceBudget=SILENCE_BUDGET_V0]
+ * @param {number} [options.silenceBudget]  既定は初期 mode（options.verbosity）の束の値。
  * @param {ReadonlyArray<string>} [options.nameVariants=NAME_VARIANTS_V0]  音声呼びかけ照合の揺れ集合。
- * @param {number} [options.commentRefractoryMs=COMMENT_REFRACTORY_MS]  S7 コメント応答の不応期。
- * @param {number} [options.commentProbability=COMMENT_PROBABILITY]      S7 コメント応答の確率。
- * @param {number} [options.commentBudget=COMMENT_BUDGET_V0]             S7 コメント応答のセッション予算。
+ * @param {number} [options.commentRefractoryMs]  S7 コメント応答の不応期。既定は初期 mode の束の値。
+ * @param {number} [options.commentProbability]   S7 コメント応答の確率。既定は初期 mode の束の値。
+ * @param {number} [options.commentBudget]        S7 コメント応答のセッション予算。既定は初期 mode の束の値。
  * @param {ReadonlyArray<string>} [options.commentNameVariants=NAME_VARIANTS_TEXT_V0]  S7 コメント内呼びかけの
  *   テキスト用揺れ集合。
+ * @param {"quiet" | "normal" | "chatty"} [options.verbosity="normal"]  口数モードの初期値
+ *   （運転バーのプルダウン・wave 計画「口数配線」§2 裁定 A）。未知値は "normal" にフォールバック
+ *   （防御的）。turnEndProbability/turnEndRefractoryMs/silenceBaseMs/silenceJitterMs/
+ *   silenceRefractoryMs/silenceBudget/commentRefractoryMs/commentProbability/commentBudget の
+ *   既定値を VERBOSITY_BUNDLES[mode] から解決する（上記オプションを明示指定すればそちらが優先
+ *   される = 既存テストの明示 options は従来どおり効く・無退行の鍵）。
  * @returns {{
  *   handleVadEvent: (event: { type: string }) => void;
  *   handleTranscript: (entry: { text?: string; speaker?: string }) => void;
  *   handleChatMessage: (msg: { text?: string; displayName?: string }) => void;
  *   setEnabled: (enabled: boolean) => void;
  *   isEnabled: () => boolean;
+ *   setVerbosity: (mode: string) => void;
+ *   getVerbosity: () => "quiet" | "normal" | "chatty";
  *   silenceBudgetRemaining: () => number;
  *   commentBudgetRemaining: () => number;
  *   dispose: () => void;
@@ -287,15 +356,28 @@ export function createFireScheduler(options) {
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
 
+  // turn 検出（TURN_END_SILENCE_MS）は口数モード不変（wave 計画「口数配線」§2 裁定 A）。
   const turnEndSilenceMs = numberOr(options.turnEndSilenceMs, TURN_END_SILENCE_MS);
-  const turnEndProbability = numberOr(options.turnEndProbability, TURN_END_PROBABILITY);
-  const turnEndRefractoryMs = numberOr(options.turnEndRefractoryMs, TURN_END_REFRACTORY_MS);
-  const silenceBaseMs = numberOr(options.silenceBaseMs, SILENCE_BASE_MS);
-  const silenceJitterMs = numberOr(options.silenceJitterMs, SILENCE_JITTER_MS);
-  const silenceRefractoryMs = numberOr(options.silenceRefractoryMs, SILENCE_REFRACTORY_MS);
+
+  // 口数モード（wave 計画「口数配線」§2 裁定 A・inventory §A-2）: 初期 mode を options.verbosity から
+  // 解決する（既定 "normal"・未知値も "normal" にフォールバック = 防御的）。9 個の tunable let の初期値は
+  // `numberOr(options.x, BUNDLE[initialMode].x)` の形にする — normal 束は既存 export const への参照
+  // ゆえ、mode 未指定時のフォールバックは現行値と完全同値。かつ options.x を明示指定すればそちらが
+  // 優先される（numberOr/intOr は明示値を最優先）ため、既存テストが渡す明示 options は従来どおり効く
+  // （無退行の鍵）。
+  const initialMode = isValidVerbosityMode(options.verbosity) ? options.verbosity : "normal";
+  const initialBundle = VERBOSITY_BUNDLES[initialMode];
+  /** 現在の口数モード（getVerbosity が返す・setVerbosity が更新）。 */
+  let currentVerbosity = initialMode;
+
+  let turnEndProbability = numberOr(options.turnEndProbability, initialBundle.turnEndProbability);
+  let turnEndRefractoryMs = numberOr(options.turnEndRefractoryMs, initialBundle.turnEndRefractoryMs);
+  let silenceBaseMs = numberOr(options.silenceBaseMs, initialBundle.silenceBaseMs);
+  let silenceJitterMs = numberOr(options.silenceJitterMs, initialBundle.silenceJitterMs);
+  let silenceRefractoryMs = numberOr(options.silenceRefractoryMs, initialBundle.silenceRefractoryMs);
   const needles = buildNeedles(Array.isArray(options.nameVariants) ? options.nameVariants : NAME_VARIANTS_V0);
-  const commentRefractoryMs = numberOr(options.commentRefractoryMs, COMMENT_REFRACTORY_MS);
-  const commentProbability = numberOr(options.commentProbability, COMMENT_PROBABILITY);
+  let commentRefractoryMs = numberOr(options.commentRefractoryMs, initialBundle.commentRefractoryMs);
+  let commentProbability = numberOr(options.commentProbability, initialBundle.commentProbability);
   const commentNeedles = buildNeedles(
     Array.isArray(options.commentNameVariants) ? options.commentNameVariants : NAME_VARIANTS_TEXT_V0
   );
@@ -305,9 +387,9 @@ export function createFireScheduler(options) {
   /** 直近発火の時刻（不応期の基点）。初期は -Infinity = 最初の不応期は必ず通過。 */
   let lastFireAtMs = -Infinity;
   /** 残り沈黙予算（セッション内）。 */
-  let silenceBudget = intOr(options.silenceBudget, SILENCE_BUDGET_V0);
+  let silenceBudget = intOr(options.silenceBudget, initialBundle.silenceBudget);
   /** 残りコメント応答予算（セッション内・S7・comment-call は消費しない）。 */
-  let commentBudget = intOr(options.commentBudget, COMMENT_BUDGET_V0);
+  let commentBudget = intOr(options.commentBudget, initialBundle.commentBudget);
 
   /** @type {ReturnType<typeof setTimeout> | null} */
   let turnEndTimer = null;
@@ -472,6 +554,37 @@ export function createFireScheduler(options) {
     }
   };
 
+  /**
+   * 口数モードの切替（wave 計画「口数配線」§2 裁定 A・inventory §A-2）。既知 mode（quiet/normal/
+   * chatty）なら 7 個の tunable let（turn-end 確率/不応期・silence 基礎/ジッター/不応期・comment
+   * 確率/不応期）を VERBOSITY_BUNDLES[mode] へ再代入し、silenceBudget/commentBudget を新モードの
+   * **満額へリセット**する（= モード切替 = そのモードの間で仕切り直す・inventory §A-2 の意味論）。
+   * 未知 mode は **no-op**（currentVerbosity も束も変えず return・防御的）。
+   *
+   * turn 検出（turnEndSilenceMs）・name variants（needles/commentNeedles）は触らない（口数モード不変）。
+   *
+   * 再代入後 enabled なら armSilence() する（setEnabled の流儀の写経）: 新しい silence 基礎/ジッター/
+   * 予算を即座に反映するため（mode 切替はそのモードの間で仕切り直す、という意味論を沈黙タイマにも
+   * 適用する）。turn-end/comment はイベント駆動（次の speechEnd / 次のコメント到着）で自然に新値を
+   * 拾う（armSilence 相当の「即時再武装するタイマ」を turn-end/comment は持たない）。
+   * @param {string} mode
+   */
+  const setVerbosity = (mode) => {
+    if (!isValidVerbosityMode(mode)) return; // 未知 mode は防御的 no-op。
+    const bundle = VERBOSITY_BUNDLES[mode];
+    turnEndProbability = bundle.turnEndProbability;
+    turnEndRefractoryMs = bundle.turnEndRefractoryMs;
+    silenceBaseMs = bundle.silenceBaseMs;
+    silenceJitterMs = bundle.silenceJitterMs;
+    silenceRefractoryMs = bundle.silenceRefractoryMs;
+    commentRefractoryMs = bundle.commentRefractoryMs;
+    commentProbability = bundle.commentProbability;
+    silenceBudget = bundle.silenceBudget; // 残予算を新モードの満額へリセット。
+    commentBudget = bundle.commentBudget;
+    currentVerbosity = mode;
+    if (enabled) armSilence(); // 新しい silence 基礎/ジッター/予算を即座に反映。
+  };
+
   // 有効化状態で構築されたら沈黙カウントを開始する（活動が無くてもいずれ「画面を見て一言」に至る）。
   if (enabled) armSilence();
 
@@ -481,6 +594,9 @@ export function createFireScheduler(options) {
     handleChatMessage,
     setEnabled,
     isEnabled: () => enabled,
+    setVerbosity,
+    /** 現在の口数モード（quiet/normal/chatty・既定 "normal"）。 */
+    getVerbosity: () => currentVerbosity,
     /** 残り沈黙予算（診断・テスト用）。 */
     silenceBudgetRemaining: () => silenceBudget,
     /** 残りコメント応答予算（診断・テスト用・S7）。 */

@@ -38,6 +38,17 @@ export const DEFAULT_AUDIO_CTX_OPTIONS = Object.freeze({
 });
 
 /**
+ * 耳の器官の刷り込み prompt（v0・コード内定数・wave-plan §2 裁定B）。
+ *
+ * Whisper の `prompt`（initial prompt）は**デコード前の語彙バイアス**——サンプリング開始点の
+ * 文脈として使われるだけで、転写バッファ/セグメンタ/VAD の一切を通らない（それらは音声側の
+ * パイプラインで prompt を知らない）。つまり prompt を注入しても**転写正本の形は不変**
+ * （返り値 `{text, rawText}` は常にサーバ応答由来）。AI 相方の名前「コーディ」をここで刷り込み、
+ * 転写での固有名詞認識を上げる（inventory §B-1・出自 s6-followup.md §2）。
+ */
+export const DEFAULT_WHISPER_PROMPT = "こーでぃー、コーディ。";
+
+/**
  * 発話長 → audio_ctx を計算する純関数。
  * @param {number} durationMs  発話の長さ（ms）。
  * @param {Partial<typeof DEFAULT_AUDIO_CTX_OPTIONS>} [options]
@@ -60,6 +71,8 @@ export function computeAudioCtx(durationMs, options = {}) {
  * @param {string} [options.inferencePath="/inference"]
  * @param {number} [options.timeoutMs=30000]
  * @param {number} [options.temperature=0]
+ * @param {string} [options.prompt=DEFAULT_WHISPER_PROMPT]  Whisper initial prompt（語彙バイアス）。
+ *   省略時は既定の刷り込み文が常時注入される。`""`（空文字）を明示指定すると無効化（テスト用の逃げ道）。
  * @param {typeof fetch} [options.fetchImpl]
  * @param {typeof setTimeout} [options.setTimeoutImpl]
  * @param {typeof clearTimeout} [options.clearTimeoutImpl]
@@ -73,6 +86,7 @@ export function createWhisperInference(options = {}) {
   const inferencePath = options.inferencePath ?? "/inference";
   const timeoutMs = options.timeoutMs ?? 30000;
   const temperature = options.temperature ?? 0;
+  const prompt = typeof options.prompt === "string" ? options.prompt : DEFAULT_WHISPER_PROMPT;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
@@ -99,6 +113,12 @@ export function createWhisperInference(options = {}) {
     form.append("response_format", "json");
     if (audioCtx != null) {
       form.append("audio_ctx", String(audioCtx));
+    }
+    if (prompt) {
+      // リクエスト毎の常時注入（whisper.cpp v1.9.1 server は /inference の `prompt` マルチパート
+      // form field を毎回受理・inventory §B-1）。デコード前の語彙バイアスのみで、転写バッファ/
+      // セグメンタ/VAD は一切通らない（正本の形は不変・戻り値はサーバ応答のテキストのみ由来）。
+      form.append("prompt", prompt);
     }
 
     const controller = new AbortController();

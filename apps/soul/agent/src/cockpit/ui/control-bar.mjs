@@ -29,8 +29,11 @@
  * 復帰は応答/失敗時）。busy 保護の本体は従来どおりサーバ側（orchestrator の状態機械 :787）で、
  * これは UI 側の二重 POST を避ける補助。
  *
- * 口数モード: **プルダウンの場所のみ**（控えめ/ふつう/おしゃべり・選択はローカル state に保持する
- * だけでどこにも送らない = no-op）。実配線は s6-followup §12 の将来課題（本 wave では配線しない）。
+ * 口数モード: **実配線済み**（wave 計画「口数配線」§2 裁定 A・s6-followup §12 の実施）。プルダウン
+ * （控えめ/ふつう/おしゃべり）は snapshot の `verbosity`（fireScheduler.getVerbosity() 由来）で
+ * **controlled**（自発トグル pill と同型・ローカル state の綻び回避）。onChange は POST /api/verbosity
+ * （onToggleSelfFire の写経）→成功時 applySnapshot。コメント応答の頻度変化は S7 YouTube 実ゲート保留の
+ * ため配線済みだが体感対象外（untested・wave 計画 §1）。
  * KILL: **枠のみ・disabled・S8 予約**（§7: 赤枠・場所だけ予約 = no-op）。
  *
  * トップレベル副作用ゼロ（export function/const のみ）。
@@ -43,10 +46,12 @@ import {
   fireRequestErrorNote,
   selfFireToggleView,
   selfFirePostErrorText,
-  selfFireRequestErrorText
+  selfFireRequestErrorText,
+  verbosityPostErrorText,
+  verbosityRequestErrorText
 } from "../view-logic/control.mjs";
 
-/** 口数モードの選択肢（場所のみ・値は固定表示・実配線は s6-followup §12 の将来課題）。 */
+/** 口数モードの選択肢（wave 計画「口数配線」§2 裁定 A・実配線済み）。 */
 export const VERBOSITY_OPTIONS = [
   { value: "quiet", label: "控えめ" },
   { value: "normal", label: "ふつう" },
@@ -89,6 +94,29 @@ export function SelfFirePill({ view, onChange }) {
 }
 
 /**
+ * 口数モードのプルダウン（hooks 非使用・vnode 走査テスト対象・SelfFirePill と同型の controlled
+ * 部品）。value は snapshot 由来の verbosity（未設定/scheduler 未生成 = null は "normal" 表示に畳む・
+ * server 側 setVerbosity の「未知値は normal」フォールバックと対称）。onChange は呼び出し側
+ * （ControlBar）の POST ハンドラを素通しする。
+ * @param {{ verbosity?: string | null; onChange: (ev: any) => void }} props
+ */
+export function VerbositySelect({ verbosity, onChange }) {
+  return html`
+    <label class="verbosity">
+      <span class="pill-label">口数</span>
+      <select
+        class="verbosity-select"
+        value=${verbosity ?? "normal"}
+        onChange=${onChange}
+        title="控えめ/ふつう/おしゃべりで自発発火の頻度が変わる（コメント応答の変化は YouTube 合流時に体感）"
+      >
+        ${VERBOSITY_OPTIONS.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}
+      </select>
+    </label>
+  `;
+}
+
+/**
  * KILL スイッチ（枠のみ・disabled・S8 予約 = no-op。§7: 赤枠・場所だけ予約）。hooks 非使用。
  */
 export function KillSwitch() {
@@ -98,15 +126,14 @@ export function KillSwitch() {
 /**
  * 運転バー本体。
  * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
- *           selfFire?: { enabled?: boolean } | null; applySnapshot: (s: any) => void; fetchImpl?: any }} props
+ *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null;
+ *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
  */
-export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, applySnapshot, fetchImpl }) {
+export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, applySnapshot, fetchImpl }) {
   // Fire 連打防止のローカル busy（:556 :574 の即時 disable 相当・応答/失敗で復帰）。
   const [localBusy, setLocalBusy] = useState(false);
-  // 自発トグルのエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
+  // 自発トグル/口数のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
   const [controlError, setControlError] = useState("");
-  // 口数モード（場所のみ・選択はローカル保持・どこにも送らない = no-op・s6-followup §12）。
-  const [verbosity, setVerbosity] = useState("normal");
 
   const soulView = soulStatusView(soul);
   const sfView = selfFireToggleView(selfFire);
@@ -160,6 +187,31 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, app
       .catch((/** @type {unknown} */ e) => setControlError(selfFireRequestErrorText(e))); // :649-650
   };
 
+  /**
+   * 口数モードの変更（onToggleSelfFire の写経・wave 計画「口数配線」§2 裁定 A）。
+   * @param {any} ev
+   */
+  const onChangeVerbosity = (ev) => {
+    const mode = ev && ev.target ? ev.target.value : "normal";
+    const doFetch = fetchImpl || globalThis.fetch;
+    setControlError("");
+    doFetch("/api/verbosity", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = verbosityPostErrorText(res);
+        if (err != null) {
+          setControlError(err);
+          return;
+        }
+        applySnapshot(res.j); // 200 応答は snapshot 全体（selfFire 経路と同源）。
+      })
+      .catch((/** @type {unknown} */ e) => setControlError(verbosityRequestErrorText(e)));
+  };
+
   return html`
     <div class="control-bar">
       <div class="control-bar-left">
@@ -175,17 +227,7 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, app
       <div class="control-bar-right">
         <span class="control-error err">${controlError}</span>
         <${SelfFirePill} view=${sfView} onChange=${onToggleSelfFire} />
-        <label class="verbosity">
-          <span class="pill-label">口数</span>
-          <select
-            class="verbosity-select"
-            value=${verbosity}
-            onChange=${(/** @type {any} */ ev) => setVerbosity(ev && ev.target ? ev.target.value : "normal")}
-            title="実配線は将来課題（s6-followup §12）・選択しても挙動は変わらない"
-          >
-            ${VERBOSITY_OPTIONS.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}
-          </select>
-        </label>
+        <${VerbositySelect} verbosity=${verbosity} onChange=${onChangeVerbosity} />
         <${KillSwitch} />
       </div>
     </div>

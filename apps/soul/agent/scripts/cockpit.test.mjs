@@ -9,6 +9,7 @@ import {
   createVisionTargetHooks,
   createAudioDeviceHooks,
   createSelfFireHooks,
+  createVerbosityHooks,
   createChatSourceHooks
 } from "./cockpit.mjs";
 
@@ -447,6 +448,63 @@ test("createSelfFireHooks: settings.setSelfFireEnabled が throw しても onSet
   };
   const hooks = createSelfFireHooks(settings);
   assert.doesNotThrow(() => hooks.onSetSelfFireEnabled(true));
+});
+
+// ── createVerbosityHooks（wave 計画「口数配線」§2 裁定 A: 口数モードの settings 橋渡し）───────────
+
+/** fake settings（cockpit-settings-store と同型の getVerbosityMode/setVerbosityMode を持つ最小 fake）。 */
+function makeFakeVerbositySettings(initial = null) {
+  let current = initial;
+  return {
+    getVerbosityMode: () => current,
+    setVerbosityMode: (mode) => {
+      current = mode;
+    }
+  };
+}
+
+test("createVerbosityHooks: 未記憶（null）なら既定 \"normal\" にフォールバックする", { timeout: 5000 }, () => {
+  const settings = makeFakeVerbositySettings(null);
+  const hooks = createVerbosityHooks(settings);
+  assert.equal(hooks.resolveInitialVerbosity(), "normal");
+});
+
+test("createVerbosityHooks: defaultMode を明示指定できる", { timeout: 5000 }, () => {
+  const settings = makeFakeVerbositySettings(null);
+  const hooks = createVerbosityHooks(settings, "chatty");
+  assert.equal(hooks.resolveInitialVerbosity(), "chatty");
+});
+
+test("createVerbosityHooks: 記憶済みの既知3モードは defaultMode より優先される", { timeout: 5000 }, () => {
+  const settingsQuiet = makeFakeVerbositySettings("quiet");
+  assert.equal(createVerbosityHooks(settingsQuiet, "normal").resolveInitialVerbosity(), "quiet");
+  const settingsChatty = makeFakeVerbositySettings("chatty");
+  assert.equal(createVerbosityHooks(settingsChatty, "normal").resolveInitialVerbosity(), "chatty");
+});
+
+test("createVerbosityHooks: 記憶済みの未知値は defaultMode にフォールバックする（防御的）", { timeout: 5000 }, () => {
+  const settings = makeFakeVerbositySettings("bogus");
+  const hooks = createVerbosityHooks(settings, "normal");
+  assert.equal(hooks.resolveInitialVerbosity(), "normal");
+});
+
+test("createVerbosityHooks: onSetVerbosity は settings.setVerbosityMode へ橋渡しし・次回 resolveInitialVerbosity に反映する", { timeout: 5000 }, () => {
+  const settings = makeFakeVerbositySettings(null);
+  const hooks = createVerbosityHooks(settings, "normal");
+  hooks.onSetVerbosity("chatty");
+  assert.equal(settings.getVerbosityMode(), "chatty");
+  assert.equal(hooks.resolveInitialVerbosity(), "chatty");
+});
+
+test("createVerbosityHooks: settings.setVerbosityMode が throw しても onSetVerbosity は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getVerbosityMode: () => null,
+    setVerbosityMode: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createVerbosityHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetVerbosity("chatty"));
 });
 
 // ── createChatSourceHooks（S7「視聴者が混ざる」: 配信 source の settings ⇄ cockpit-server 橋渡し）───
