@@ -1,6 +1,6 @@
 # 操縦席UI改定 wave計画: コントロールルーム化(preact+htm)
 
-> Status: **計画確定(2026-07-14)・発進待ち**。
+> Status: **閉鎖(2026-07-14)**。機械ゲート全緑(679/679・背骨74/74)+全12レビューレーンPASS+W4追修正(mutation実証)+人間ゲート合格。ユーザーが新UIを実起動して観測(フィード・自発/fire/vision/expr行が新意匠で描画)。ゲート中の2件は両方誤報(Channel未開/口数未配線=仕様)。fire行の`?`はユーザー発見だが調査で**リファクタ回帰でないと確定**(旧Utも同一の`?`フォールバック・S5視覚発火のemit順序由来=followup §0)。※保存チェックリスト全項目の網羅歩行はユーザー未完(momentumを尊重し閉鎖・以後の発見はfollowup扱い)。詳細は §6。
 > 根拠: UX正 [../screens/cockpit-redesign.md](../screens/cockpit-redesign.md)(三層IA+視覚仕様§7・モック承認済み) / 棚卸し [cockpit-redesign-inventory.md](cockpit-redesign-inventory.md)(preact+htm standalone・保存オラクル・L0決定)。
 > 位置づけ: S8前の独立閉問題(能力waveでなく**振る舞い保存のリファクタ+IA再設計+外観刷新**)。器コード・魂の他部位・契約・実行時依存・lockfileは不変。
 > 方式: 単一Orch-Sylph(opus)がDomain A→B→C→Dを順次実行。Gnome実装+Review-Sylph 3レーン(spec/design/test)。鉄の規律は従来。

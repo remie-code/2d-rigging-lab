@@ -18,7 +18,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
 | [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
-| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。**C1〜C7全閉鎖=器の完成、S系列開始。S1・S2 完全閉鎖(2026-07-12、いずれも人間ゲート「完璧だ」)**——魂は喋れて(S1)聞けて(S2)、操縦席を持ち(S2.5)、**呼べば応え(S3)、表情が乗り(S4)、目が開き(S5)、**会話が続く(S6、2026-07-13閉鎖・barge-in+自発発火=こーでぃーが自分のタイミングで喋る相方に。④沈黙発火の体感のみ次ゲート相乗り)**。次=S7「視聴者が混ざる」 |
+| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。**C1〜C7全閉鎖=器の完成、S系列開始。S1・S2 完全閉鎖(2026-07-12、いずれも人間ゲート「完璧だ」)**——魂は喋れて(S1)聞けて(S2)、操縦席を持ち(S2.5)、**呼べば応え(S3)、表情が乗り(S4)、目が開き(S5)、**会話が続き(S6・barge-in+自発発火)、視聴者が混ざり(S7・実装完了/YouTube実ゲート後日)、**操縦席がコントロールルーム化(preact+htm・2026-07-14完全閉鎖・913→27行・三層IA)**。次=「口数実配線+コーディ語彙登録」の小2件→S8「配信に耐える」 |
 | [soul/](soul/) | S系列(魂の実装)の前提討議3件(①知性のアクセス経路 ②会話パイプライン最終化 ③persona) | Created(2026-07-12)。**①②裁定済みクローズ(同日)**: 主経路=Max 20x+Agent SDK/パイプラインAccepted昇格。③personaはS8後 |
 | [experiments/](experiments/) | 魂の実測(枠消費・レイテンシ・会話品質)。S系列の常設計器 | **Created(2026-07-12、S1 Domain C)**。初回=[experiments/s1-first-light.md](experiments/s1-first-light.md)(tools:[]無効実証・apiKeySource=none・常駐初期化≈1.9s・warm ask~3.2s・synthesis~1s) |
 
