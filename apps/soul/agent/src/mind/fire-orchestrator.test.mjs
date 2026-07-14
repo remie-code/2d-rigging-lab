@@ -51,6 +51,10 @@ test("FIRE_SYSTEM_PROMPT: S4 タグ 6 語の教示を含む", () => {
   }
 });
 
+test("FIRE_SYSTEM_PROMPT: 自己名（コーディ）を含む（呼びかけ検出 NAME_VARIANTS_V0 と一致させる）", () => {
+  assert.ok(FIRE_SYSTEM_PROMPT.includes("コーディ"), "自己名「コーディ」が含まれる");
+});
+
 // ── S4 表情演出の縦検証（fake channel/session/speak）─────────────────────────────
 
 /** envelope を記録する fake channel。slot 毎に accepted/rejected/throw を切り替えられる。 */
