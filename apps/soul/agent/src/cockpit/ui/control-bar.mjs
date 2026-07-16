@@ -34,7 +34,11 @@
  * **controlled**（自発トグル pill と同型・ローカル state の綻び回避）。onChange は POST /api/verbosity
  * （onToggleSelfFire の写経）→成功時 applySnapshot。コメント応答の頻度変化は S7 YouTube 実ゲート保留の
  * ため配線済みだが体感対象外（untested・wave 計画 §1）。
- * KILL: **枠のみ・disabled・S8 予約**（§7: 赤枠・場所だけ予約 = no-op）。
+ * KILL: **S8 で実装済み**（§7 赤枠の意匠を踏襲）。snapshot の `killed` で **controlled**（自発トグル/
+ * 口数と同型）。通常時は「■ KILL」ボタン（押すと POST /api/kill {killed:true}）。キル中はバー全体に
+ * `killing` class が付き視覚的に「殺し中」と分かる + 一クリック復帰ボタン（POST /api/kill
+ * {killed:false}）。明示 boolean 指定であり**トグルではない**（onToggleSelfFire の写経・
+ * killSwitchView/killPostErrorText/killRequestErrorText は view-logic/control.mjs）。
  *
  * トップレベル副作用ゼロ（export function/const のみ）。
  */
@@ -48,7 +52,10 @@ import {
   selfFirePostErrorText,
   selfFireRequestErrorText,
   verbosityPostErrorText,
-  verbosityRequestErrorText
+  verbosityRequestErrorText,
+  killSwitchView,
+  killPostErrorText,
+  killRequestErrorText
 } from "../view-logic/control.mjs";
 
 /** 口数モードの選択肢（wave 計画「口数配線」§2 裁定 A・実配線済み）。 */
@@ -117,26 +124,36 @@ export function VerbositySelect({ verbosity, onChange }) {
 }
 
 /**
- * KILL スイッチ（枠のみ・disabled・S8 予約 = no-op。§7: 赤枠・場所だけ予約）。hooks 非使用。
+ * KILL スイッチ（S8 実装済み・hooks 非使用・vnode 走査テスト対象）。view は killSwitchView 導出済み。
+ * 通常時は「■ KILL」ボタン・キル中は「殺し中」status + 復帰ラベルのボタン（同じボタン 1 個・
+ * ラベル/class が view で切り替わるだけ・onClick は呼び出し側が明示 boolean を送る）。
+ * @param {{ view: { killed: boolean; label: string; className: string; statusText: string; statusClassName: string };
+ *           onClick: () => void }} props
  */
-export function KillSwitch() {
-  return html`<button class="kill-switch" type="button" disabled title="S8 で実装（場所のみ予約）">■ KILL</button>`;
+export function KillSwitch({ view, onClick }) {
+  return html`
+    <span class="kill-switch-wrap">
+      <button class=${view.className} type="button" onClick=${onClick}>${view.label}</button>
+      ${view.killed ? html`<span class=${view.statusClassName}>${view.statusText}</span>` : ""}
+    </span>
+  `;
 }
 
 /**
  * 運転バー本体。
  * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
- *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null;
+ *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null; killed?: boolean | null;
  *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
  */
-export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, applySnapshot, fetchImpl }) {
+export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, killed, applySnapshot, fetchImpl }) {
   // Fire 連打防止のローカル busy（:556 :574 の即時 disable 相当・応答/失敗で復帰）。
   const [localBusy, setLocalBusy] = useState(false);
-  // 自発トグル/口数のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
+  // 自発トグル/口数/KILL のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
   const [controlError, setControlError] = useState("");
 
   const soulView = soulStatusView(soul);
   const sfView = selfFireToggleView(selfFire);
+  const killView = killSwitchView(killed);
 
   /**
    * Fire / Fire+視覚の共通フロー（:555-570 / :573-589 と同順: 即時 disable → note クリア → POST →
@@ -212,8 +229,35 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
       .catch((/** @type {unknown} */ e) => setControlError(verbosityRequestErrorText(e)));
   };
 
+  /**
+   * KILL / 復帰（onToggleSelfFire の写経・S8）。**明示 boolean を送る**（トグルではない）: 現在
+   * killView.killed の逆を送る（false→{killed:true}=KILL・true→{killed:false}=revive）。UI 側で
+   * 逆算しているだけでサーバは反転せず受けた boolean をそのまま正本に設定する（cockpit-server.mjs
+   * POST /api/kill）。
+   */
+  const onClickKill = () => {
+    const doFetch = fetchImpl || globalThis.fetch;
+    const nextKilled = !killView.killed;
+    setControlError("");
+    doFetch("/api/kill", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ killed: nextKilled })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = killPostErrorText(res);
+        if (err != null) {
+          setControlError(err);
+          return;
+        }
+        applySnapshot(res.j); // 200 応答は snapshot 全体（selfFire/verbosity 経路と同源）。
+      })
+      .catch((/** @type {unknown} */ e) => setControlError(killRequestErrorText(e)));
+  };
+
   return html`
-    <div class="control-bar">
+    <div class=${"control-bar" + (killView.killed ? " killing" : "")}>
       <div class="control-bar-left">
         <${FireButtons}
           soulView=${soulView}
@@ -228,7 +272,7 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
         <span class="control-error err">${controlError}</span>
         <${SelfFirePill} view=${sfView} onChange=${onToggleSelfFire} />
         <${VerbositySelect} verbosity=${verbosity} onChange=${onChangeVerbosity} />
-        <${KillSwitch} />
+        <${KillSwitch} view=${killView} onClick=${onClickKill} />
       </div>
     </div>
   `;

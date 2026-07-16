@@ -11,7 +11,10 @@ import {
   selfFirePostErrorText,
   selfFireRequestErrorText,
   verbosityPostErrorText,
-  verbosityRequestErrorText
+  verbosityRequestErrorText,
+  killSwitchView,
+  killPostErrorText,
+  killRequestErrorText
 } from "./control.mjs";
 
 test("soulStatusView: thinking/speaking は busy（Fire disable）・他は idle（applySoulState :434-441）", () => {
@@ -113,4 +116,41 @@ test("verbosityPostErrorText: 503/!ok の文言・成功は null（POST /api/ver
 
 test("verbosityRequestErrorText: catch 文言", () => {
   assert.equal(verbosityRequestErrorText(new Error("net")), "verbosity error: Error: net");
+});
+
+// ── S8「キルスイッチ」: KILL ボタン / 復帰ボタンの表示導出（selfFireToggleView の写経）─────────
+
+test("killSwitchView: killed=false は「■ KILL」ボタン・status 非表示", () => {
+  assert.deepEqual(killSwitchView(false), {
+    killed: false,
+    label: "■ KILL",
+    className: "kill-switch",
+    statusText: "",
+    statusClassName: "kill-status"
+  });
+  // 未指定/null は false 扱い（サーバ既定 false と対称）。
+  assert.deepEqual(killSwitchView(undefined), killSwitchView(false));
+  assert.deepEqual(killSwitchView(null), killSwitchView(false));
+});
+
+test("killSwitchView: killed=true は復帰ボタン・「殺し中」status + killed class", () => {
+  assert.deepEqual(killSwitchView(true), {
+    killed: true,
+    label: "◆ 復帰",
+    className: "kill-switch killed",
+    statusText: "殺し中",
+    statusClassName: "kill-status killed"
+  });
+});
+
+test("killPostErrorText: 503/!ok の文言・成功は null（POST /api/kill）", () => {
+  assert.equal(killPostErrorText({ status: 503, ok: false, j: null }), "kill control not available");
+  assert.equal(killPostErrorText({ status: 500, ok: false, j: { error: "boom" } }), "set failed: boom");
+  assert.equal(killPostErrorText({ status: 500, ok: false, j: {} }), "set failed: error");
+  assert.equal(killPostErrorText({ status: 400, ok: false, j: { error: "killed must be a boolean" } }), "set failed: killed must be a boolean");
+  assert.equal(killPostErrorText({ status: 200, ok: true, j: { killed: true } }), null);
+});
+
+test("killRequestErrorText: catch 文言", () => {
+  assert.equal(killRequestErrorText(new Error("net")), "kill error: Error: net");
 });

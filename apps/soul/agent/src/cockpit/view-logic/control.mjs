@@ -26,6 +26,13 @@
  *                                 selfFirePostErrorText の写経・wave 計画「口数配線」§2 裁定 A）
  *  - verbosityRequestErrorText → POST /api/verbosity の fetch catch（"verbosity error: e"・
  *                                 selfFireRequestErrorText の写経）
+ *  - killSwitchView            → S8「キルスイッチ」: snapshot の `killed` から KILL ボタン / 復帰ボタンの
+ *                                 表示構造体を導出（selfFireToggleView の様式踏襲）。通常時は「■ KILL」・
+ *                                 キル中は「殺し中」+ 復帰ラベル。
+ *  - killPostErrorText         → POST /api/kill 応答のエラー文言（503 / set failed・成功は null・
+ *                                 selfFirePostErrorText の写経）
+ *  - killRequestErrorText      → POST /api/kill の fetch catch（"kill error: e"・
+ *                                 selfFireRequestErrorText の写経）
  */
 
 /**
@@ -136,4 +143,47 @@ export function verbosityPostErrorText(res) {
  */
 export function verbosityRequestErrorText(e) {
   return "verbosity error: " + e;
+}
+
+// ── S8「キルスイッチ」: KILL ボタン / 復帰ボタンの表示導出（selfFireToggleView の様式踏襲）───────
+
+/**
+ * KILL スイッチの表示導出（S8）。killed=false（通常時）は「■ KILL」ボタン（押すと POST /api/kill
+ * {killed:true}）。killed=true（キル中）はバー全体が「殺し中」と分かる表示 + 一クリック復帰ボタン
+ * （押すと POST /api/kill {killed:false}）。selfFireToggleView と異なり「not available」の disable
+ * 概念は持たない（orchestrator 未注入かどうかは snapshot からは分からず、押下時の 503 応答で正直に
+ * 表す＝killPostErrorText の責務）。
+ * @param {boolean | null | undefined} killed  state snapshot の killed（既定 false 扱い）。
+ * @returns {{ killed: boolean; label: string; className: string; statusText: string; statusClassName: string }}
+ */
+export function killSwitchView(killed) {
+  const on = killed === true;
+  return {
+    killed: on,
+    label: on ? "◆ 復帰" : "■ KILL",
+    className: "kill-switch" + (on ? " killed" : ""),
+    statusText: on ? "殺し中" : "",
+    statusClassName: "kill-status" + (on ? " killed" : "")
+  };
+}
+
+/**
+ * POST /api/kill 応答 → エラー文言（selfFirePostErrorText の写経）。成功（200）は **null = エラーなし**
+ * （呼び出し側は snapshot 応答を適用する）。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function killPostErrorText(res) {
+  if (res.status === 503) return "kill control not available";
+  if (!res.ok) return "set failed: " + ((res.j && res.j.error) || "error");
+  return null;
+}
+
+/**
+ * POST /api/kill の fetch 失敗 → エラー文言（selfFireRequestErrorText の写経）。
+ * @param {unknown} e
+ * @returns {string}
+ */
+export function killRequestErrorText(e) {
+  return "kill error: " + e;
 }

@@ -276,7 +276,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {string} [options.indexHtmlPath]  配信する HTML のファイルパス（B が本体を渡す）。
  * @param {string} [options.uiRootPath]     操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信
  *   ルート。既定は本モジュールのディレクトリ（= 実 UI ツリー）。トラバーサル防止・許可拡張子 .mjs・
- *   許可サブツリー限定でこの配下だけを配る（既存 16 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
+ *   許可サブツリー限定でこの配下だけを配る（既存 17 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
  * @param {string} [options.inputFormat]    ffmpeg 入力フォーマット（既定 win32→dshow）。
  * @param {number} [options.transcriptHistory=DEFAULT_TRANSCRIPT_HISTORY]  状態に載せる直近転写件数。
  * @param {{ getLastDevice: () => any; setLastDevice: (d: any) => any }} [options.settingsStore]
@@ -325,7 +325,9 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   onExpression: (info: object) => void;
  *   onVisionCaptured: (info: object) => void;
  *   onUsage: (info: object) => void;
- * }) => { fire: (fireOptions?: object) => Promise<object>; getState: () => string; dispose: () => void }} [options.fireOrchestratorFactory]
+ *   initialKilled: boolean;
+ * }) => { fire: (fireOptions?: object) => Promise<object>; getState: () => string; dispose: () => void;
+ *   kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean }} [options.fireOrchestratorFactory]
  *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire・/api/vision-fire
  *   が 503）。cockpit が握る getBuffer（=pipeline?.transcriptBuffer ?? null）と broadcast フックを渡し、
  *   返った orchestrator の fire()/fire({vision:true}) を POST /api/fire・POST /api/vision-fire で await
@@ -333,8 +335,10 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   transcript/expression）へ broadcast される。onExpression は S4「表情が乗る」の演出適用通知
  *   （{word, args?, applied, rejected}・domain-a.md §7）。**S5**: onVisionCaptured/onUsage は SSE
  *   （visionCaptured/usage）へ broadcast される（domain-c.md §）。fireVisionError は既存 onDiagnostic
- *   経由（diagnostic イベントに kind フィールドが乗る）。本番は Domain B が session/speak/channel/player
- *   を結線した createFireOrchestrator を返す。
+ *   経由（diagnostic イベントに kind フィールドが乗る）。**S8**: initialKilled はサーバのキル状態正本
+ *   （born-killed・下の `killed` 変数）を生成時に渡す。orchestrator が kill/revive/getKilled を持てば
+ *   POST /api/kill がそれらを呼ぶ（未対応でも 503 にはならない・fireOrchestrator 自体の有無だけがゲート）。
+ *   本番は Domain B が session/speak/channel/player を結線した createFireOrchestrator を返す。
  * @param {boolean} [options.selfFireInitialEnabled=false]
  *   S6「会話が続く」自発発火（呼びかけ/区切り/沈黙）の初期 ON/OFF。既定 OFF。orchestrator 注入時のみ
  *   スケジューラを生成し、onVadEvent/onTranscript を回す。永続トグル（UI/設定）は Domain D が
@@ -433,6 +437,9 @@ export function createCockpitServer(options = {}) {
   let startedAtMs = null;
   let transitioning = false;
   let closed = false;
+  // S8「キルスイッチ」: キル状態の正本（サーバ側に一つ）。POST /api/kill が設定・snapshot() に露出・
+  // fireOrchestrator 生成時（initialKilled）+ 遷移時（kill()/revive()）の両方へ伝播する（domain-b.md §）。
+  let killed = false;
   let boundPort = 0;
   // S6「会話が続く」barge-in の機械弁（VAD → 確定 → orchestrator.interrupt）。fireOrchestrator が
   // interrupt を持つときだけ生成する（下の orchestrator 結線で代入・onVadEvent が handle を回す）。
@@ -496,6 +503,8 @@ export function createCockpitServer(options = {}) {
       selfFire: fireScheduler ? { enabled: fireScheduler.isEnabled() } : null,
       // 口数モードの現況（scheduler 未生成 = orchestrator 未注入なら null・selfFire と同型）。
       verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
+      // S8「キルスイッチ」: キル状態の正本（サーバ側 boolean をそのまま載せる・既定 false・additive）。
+      killed: killed,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
       audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null,
       // S7「視聴者が混ざる」: チャット器官の現況。source は settings 由来（Connect 前でも入力欄の既定に
@@ -922,6 +931,37 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/kill") {
+      // S8「キルスイッチ」: 全発火 OFF + 声の即切断（POST /api/fire の :798 と同型のゲート・orchestrator が
+      // 要る）。キル状態の正本はサーバ側（この関数を囲む `killed` 変数）にあり、ここが唯一の書き手。
+      if (!fireOrchestrator) {
+        sendJson(res, 503, { error: "kill control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      // トグル禁止・明示 boolean のみ受理する（誤 POST での意図しない反転を避ける・verbosity の mode
+      // 検証 :909-912 と同型の早期防御）。
+      if (typeof body.killed !== "boolean") {
+        sendJson(res, 400, { error: "killed must be a boolean" });
+        return;
+      }
+      killed = body.killed; // 正本更新。
+      // orchestrator へ遷移時伝播（best-effort・onSetSelfFireEnabled :887-893 と同型の失敗寛容）。
+      // POST /api/kill は fire() の Promise には一切依存しない（kill 中の再生を barge-in と見分けられない
+      // ため・レスポンス正本は snapshot + kill() 自身の戻り値のみ・domain-a.md 申し送り）。
+      try {
+        if (killed) {
+          await fireOrchestrator.kill();
+        } else {
+          fireOrchestrator.revive();
+        }
+      } catch {
+        // best-effort（失敗しても操作は止めない・killed フラグはサーバ側で既に反映済み）。
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/channel") {
       if (typeof onSetChannelUrl !== "function") {
         // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
@@ -974,7 +1014,7 @@ export function createCockpitServer(options = {}) {
     }
 
     // 操縦席 UI アセットの静的配信（vendor/ui/view-logic の .mjs ツリー）。**追加ルートのみ**——
-    // 既存 16 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
+    // 既存 17 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
     // 落ちてくる GET は非 API・非 root だけ）。UI アセットサブツリー宛のみ握り、その他は既存 404 へ。
     if (method === "GET" && (await tryServeUiAsset(res, pathname))) {
       return;
@@ -1119,7 +1159,11 @@ export function createCockpitServer(options = {}) {
       // ディスクには一切書かない（notify-and-forget・domain-b.md §4-1 / domain-c.md §）。
       onVisionCaptured: (info) => broadcast("visionCaptured", info),
       // askごとの usage（input_tokens 等・通常 Fire/視覚発火共通）を SSE "usage" へ（domain-b.md §4-2）。
-      onUsage: (info) => broadcast("usage", info)
+      onUsage: (info) => broadcast("usage", info),
+      // S8「キルスイッチ」born-killed: orchestrator 生成時にサーバの現況キル状態を渡す。killed 変数は
+      // 上（:435 付近）で宣言済みゆえここより前に存在する。「キル中に生まれる orchestrator はキル済みで
+      // 生まれる」不変の下地（cockpit.mjs の factory は ...hooks を spread するため自動で届く）。
+      initialKilled: killed
     });
   }
 

@@ -4,12 +4,18 @@ import assert from "node:assert/strict";
 
 import { createFireOrchestrator, FIRE_SYSTEM_PROMPT } from "./fire-orchestrator.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
-import { createBargeInGate, BARGE_IN_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
+import { createBargeInGate, BARGE_IN_NOTE, KILL_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
+import { NG_WORDS, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 
 // 発火オーケストレータの縦貫通テスト（S3 Domain A）。実 SDK・実 TTS・実器は一切使わない
 // （人間ゲートの領分）。fake session（ask がカナ応答）・fake speakImpl（テキスト記録）・
 // fake channel/player・実 transcript-buffer で fire の縦串（窓収集→ask→speak→soul 記録）を固定する。
 // 全テストにタイムアウトを付けハングさせない。
+//
+// 注意（S8 Domain C・NG 最終検査節）: 下記「NG 最終検査」節のテストは検問所の照合を直接検証する
+// ため、`NG_WORDS`（実際の NG 実語・差別語級）をそのまま fake ask の応答文に埋め込む。これは
+// health/照合の検証に不可欠であり（プレースホルダやダミー語では機能を検証できない）、
+// `src/mind/ng-words.test.mjs` 冒頭の注意と同じ理由による。
 
 /** 呼ばれたテキストを記録する fake speakImpl（実 TTS/実再生なし）。 */
 function makeFakeSpeak() {
@@ -1483,5 +1489,429 @@ test("結線: 窓内 speechCancel は interrupt を呼ばず自然完了する�
   assert.equal(result.interrupted, undefined);
   assert.equal(buffer.all()[1].text, "こんにちは");
   gate.dispose();
+  orch.dispose();
+});
+
+// ── S8「キルスイッチ」（キル = 声の即切断 + 全発火 OFF + 耳/転写生存 + 一クリック復帰）───────────
+// 全 fake（player.stop / channel.sendSet / 注入 timer / deferred ask）で縦検証する。実 LLM・実 TTS・
+// 実マイクは一切引かない。プロセス不殺・in-memory のみ（dispose とは別物 = kill 後も orchestrator は
+// 生きていて revive で復帰できる）。
+
+test("kill: idle 中キルは fire() を reason:'killed' で弾く（speakImpl 不呼び出し・onFire 通知）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */ const fires = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "はい" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onFire: (f) => fires.push(f)
+  });
+
+  const killResult = await orch.kill();
+  assert.equal(killResult.killed, true);
+  assert.equal(killResult.severed, false); // idle 中は severance 不要。
+
+  const result = await orch.fire();
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "killed");
+  assert.equal(fakeSpeak.spoken.length, 0);
+  assert.ok(fires.some((f) => f.accepted === false && f.reason === "killed"));
+  orch.dispose();
+});
+
+test("kill: 再生中キルは声を止め・口を閉じ・soul へ prefix+KILL_NOTE を 1 回追記・kill 診断", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ねえ、聞いてる？");
+  const speak = makeBargeSpeak({ wavDurationSec: 2, playbackStartedAtMs: 1000 });
+  const ch = makeBargeChannel();
+  const pl = makeStopPlayer();
+  const timers = makeFakeTimers();
+  /** @type {any[]} */ const diags = [];
+  /** @type {any[]} */ const souls = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: ch.channel,
+    player: pl.player,
+    onDiagnostic: (d) => diags.push(d),
+    onSoulTranscript: (e) => souls.push(e),
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+
+  const p = orch.fire();
+  await flushMicrotasks();
+  assert.equal(orch.getState(), "speaking");
+  assert.equal(buffer.all().length, 1); // 完了/中断前は soul 未追記。
+
+  // 再生開始から 350ms（=3 母音オンセット通過）でキル。
+  const killResult = await orch.kill(1350);
+  assert.equal(killResult.killed, true);
+  assert.equal(killResult.severed, true);
+  assert.equal(killResult.charsSpoken, 3);
+  assert.equal(killResult.prefix, "こんに");
+
+  const result = await p;
+  assert.equal(result.fired, true);
+  assert.equal(result.interrupted, true);
+  assert.equal(result.replyText, "こんに");
+
+  // ① 声を止めた。② 口を閉じた（mouth-open value=0・短 ttl）。
+  assert.equal(pl.calls.stop, 1);
+  assert.equal(ch.sets.length, 1);
+  assert.deepEqual(ch.sets[0], { slotId: "mouth-open", value: 0, ttlMs: MOUTH_CLOSE_TTL_MS });
+  // soul は「接頭辞 + KILL_NOTE」の 1 エントリ（BARGE_IN_NOTE ではない）。
+  const all = buffer.all();
+  assert.equal(all.length, 2);
+  assert.equal(all[1].speaker, "soul");
+  assert.equal(all[1].text, "こんに" + KILL_NOTE);
+  assert.equal(souls.length, 1);
+  // kill 診断（bargeIn ではなく kill・切断点・声に出た文字数）。
+  const killDiag = diags.find((d) => d.type === "kill");
+  assert.ok(killDiag, "kill 診断が出る");
+  assert.equal(killDiag.elapsedMs, 350);
+  assert.equal(killDiag.charsSpoken, 3);
+  assert.equal(killDiag.totalChars, 5);
+  assert.ok(!diags.some((d) => d.type === "bargeIn")); // bargeIn 診断は出ない。
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("kill: ask 待ち中（in-flight）にキルすると speak せず soul 追記せず killDiscarded のみ（本文は載せない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const gate = deferred();
+  /** @type {any[]} */ const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask() {
+        await gate.promise;
+        return { replyText: "こっそり返ってきた応答テキスト" };
+      }
+    },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onDiagnostic: (d) => diags.push(d)
+  });
+
+  const p = orch.fire(); // await しない（thinking で ask 待ち）。
+  await Promise.resolve();
+  assert.equal(orch.getState(), "thinking");
+
+  const killResult = await orch.kill();
+  assert.equal(killResult.killed, true);
+  assert.equal(killResult.severed, false); // まだ speak していない（currentPlayback null）。
+
+  gate.resolve(); // ask を解放 → processAskedReply が in-flight キル検査に当たる。
+  const result = await p;
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "killed-inflight");
+
+  // 破棄: speak せず・soul 追記せず。
+  assert.equal(fakeSpeak.spoken.length, 0);
+  assert.equal(buffer.all().length, 1);
+  // killDiscarded 診断のみ（type だけ・応答本文はどこにも載らない）。
+  const discardDiag = diags.find((d) => d.type === "killDiscarded");
+  assert.ok(discardDiag, "killDiscarded 診断が出る");
+  assert.deepEqual(Object.keys(discardDiag), ["type"]);
+  assert.ok(!JSON.stringify(diags).includes("こっそり")); // 応答本文の秘匿。
+  assert.ok(!JSON.stringify(result).includes("こっそり"));
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("revive: 再生中キル後に revive すると次の fire() が普通に動く（残留なし）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ねえ、聞いてる？");
+  const speak = makeBargeSpeak({ wavDurationSec: 2, playbackStartedAtMs: 1000 });
+  const ch = makeBargeChannel();
+  const pl = makeStopPlayer();
+  const timers = makeFakeTimers();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    speakImpl: speak.speakImpl,
+    channel: ch.channel,
+    player: pl.player,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+
+  const p = orch.fire();
+  await flushMicrotasks();
+  await orch.kill(1350);
+  const killedFireResult = await p; // kill 由来の中断が完走するのを待つ。
+  assert.equal(killedFireResult.fired, true);
+  assert.equal(killedFireResult.interrupted, true);
+  assert.equal(orch.getState(), "idle"); // busy 固着なし。
+
+  // キル中は弾かれる。
+  const stillKilled = await orch.fire();
+  assert.equal(stillKilled.reason, "killed");
+
+  orch.revive();
+  assert.equal(orch.getKilled(), false);
+
+  // revive 後は普通に発火する（fired:true・speak 呼ばれる・soul 追記される・interrupted 汚染なし）。
+  const second = orch.fire();
+  await flushMicrotasks();
+  assert.equal(orch.getState(), "speaking"); // busy 固着していない証拠（thinking→speaking に進めた）。
+  timers.advance(2000); // 自然完了。
+  const result = await second;
+  assert.equal(result.fired, true);
+  assert.equal(result.interrupted, undefined); // interrupted 汚染なし。
+  assert.equal(speak.spoken.length, 2); // 1 回目（キルで中断）+ 2 回目（自然完了）。
+  const all = buffer.all();
+  assert.equal(all.length, 3); // you + kill 中断分の soul + 自然完了分の soul。
+  assert.equal(all[2].text, "こんにちは");
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("revive: idle キル後に revive すると次の fire() が普通に動く（残留なし）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "はい" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer
+  });
+
+  await orch.kill();
+  const killedResult = await orch.fire();
+  assert.equal(killedResult.reason, "killed");
+
+  orch.revive();
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  assert.equal(fakeSpeak.spoken.length, 1);
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test('kill: manual fire()・fire({vision:true})・fire({vision:"preferred"}) の全経路がキルで弾かれる', { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const capture = makeFakeCapture({ jpegBase64: "x", width: 1, height: 1, elapsedMs: 1 });
+  let askCalled = false;
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask() {
+        askCalled = true;
+        return { replyText: "x" };
+      }
+    },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "テストゲーム"
+  });
+
+  await orch.kill();
+
+  const r1 = await orch.fire();
+  assert.equal(r1.reason, "killed");
+  const r2 = await orch.fire({ vision: true });
+  assert.equal(r2.reason, "killed");
+  const r3 = await orch.fire({ vision: "preferred" });
+  assert.equal(r3.reason, "killed");
+
+  assert.equal(askCalled, false);
+  assert.equal(capture.calls.length, 0);
+  assert.equal(fakeSpeak.spoken.length, 0);
+  orch.dispose();
+});
+
+test("kill: born-killed（initialKilled:true）は生成直後の fire() から reason:'killed'", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "x" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    initialKilled: true
+  });
+
+  assert.equal(orch.getKilled(), true);
+  const result = await orch.fire();
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "killed");
+  assert.equal(fakeSpeak.spoken.length, 0);
+  orch.dispose();
+});
+
+test("kill: 耳系（transcript-buffer）に無影響——kill 後もバッファへ you 転写を append できる", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "x" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer
+  });
+
+  await orch.kill();
+  // kill が buffer を壊さない: you 転写を追記できる（耳は生きている）。
+  const appended = buffer.append({ startMs: 900, endMs: 1200, text: "まだ聞いてるよ" });
+  assert.ok(appended.appended);
+  const all = buffer.all();
+  assert.equal(all.length, 2);
+  assert.equal(all[1].text, "まだ聞いてるよ");
+  assert.equal(all[1].speaker, "you");
+  orch.dispose();
+});
+
+test("kill/revive: 冪等・no-op（二度 kill しても安全・speaking でない kill は severance no-op・非 killed の revive は no-op）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const pl = makeStopPlayer();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "x" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: pl.player
+  });
+
+  // 非 killed 時の revive は no-op。
+  orch.revive();
+  assert.equal(orch.getKilled(), false);
+
+  // speaking でない時の kill は severance no-op（player.stop 呼ばれない）。
+  const k1 = await orch.kill();
+  assert.equal(k1.severed, false);
+  assert.equal(pl.calls.stop, 0);
+
+  // 二度 kill しても安全（冪等）。
+  const k2 = await orch.kill();
+  assert.equal(k2.killed, true);
+  assert.equal(k2.severed, false);
+  assert.equal(pl.calls.stop, 0);
+
+  orch.revive();
+  orch.dispose();
+});
+
+// ── S8「NG 最終検査」（Domain C・キル検査と同じ検問所）─────────────────────────────
+
+test("ngBlocked: NG 語を含む応答は丸ごと没——speakImpl 不呼び出し・soul へ NG_BLOCKED_NOTE のみ 1 件・ngBlocked 診断・戻り値 reason:'ng-blocked'（応答本文/命中語は一切漏れない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */ const diags = [];
+  /** @type {any[]} */ const souls = [];
+  const ngWord = NG_WORDS[0];
+  const replyText = `そうだね、${ngWord}って言葉はひどいよね`;
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onDiagnostic: (d) => diags.push(d),
+    onSoulTranscript: (e) => souls.push(e)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "ng-blocked");
+
+  // speak せず。
+  assert.equal(fakeSpeak.spoken.length, 0);
+
+  // soul は NG_BLOCKED_NOTE のみの 1 エントリ（you 発話に続く 2 件目）。
+  const all = buffer.all();
+  assert.equal(all.length, 2);
+  assert.equal(all[1].speaker, "soul");
+  assert.equal(all[1].text, NG_BLOCKED_NOTE);
+  assert.equal(souls.length, 1);
+  assert.equal(souls[0].text, NG_BLOCKED_NOTE);
+
+  // ngBlocked 診断は type のみ（命中語・本文を運ばない）。
+  const ngDiag = diags.find((d) => d.type === "ngBlocked");
+  assert.ok(ngDiag, "ngBlocked 診断が出る");
+  assert.deepEqual(Object.keys(ngDiag), ["type"]);
+
+  // 秘匿の直接検証: 診断・戻り値・soul 追記のどこにも応答本文/命中した NG 語が現れない。
+  assert.ok(!JSON.stringify(diags).includes(ngWord), "診断に NG 語が含まれてはならない");
+  assert.ok(!JSON.stringify(diags).includes(replyText), "診断に応答本文が含まれてはならない");
+  assert.ok(!JSON.stringify(result).includes(ngWord), "戻り値に NG 語が含まれてはならない");
+  assert.ok(!JSON.stringify(result).includes(replyText), "戻り値に応答本文が含まれてはならない");
+  assert.ok(!JSON.stringify(all).includes(ngWord), "soul 追記に NG 語が含まれてはならない");
+  assert.ok(!JSON.stringify(all).includes(replyText), "soul 追記に応答本文が含まれてはならない");
+
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("ngBlocked: NG 語を含まない普通の応答は従来どおり speak され soul へ speechText が追記される（無退行）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */ const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "今日はいい天気だね" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onDiagnostic: (d) => diags.push(d)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  assert.equal(result.replyText, "今日はいい天気だね");
+
+  assert.equal(fakeSpeak.spoken.length, 1);
+  assert.equal(fakeSpeak.spoken[0].text, "今日はいい天気だね");
+
+  const all = buffer.all();
+  assert.equal(all.length, 2);
+  assert.equal(all[1].speaker, "soul");
+  assert.equal(all[1].text, "今日はいい天気だね");
+
+  assert.ok(!diags.some((d) => d.type === "ngBlocked"), "非命中では ngBlocked 診断は出ない");
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("ngBlocked: 視覚発火 fire({vision:true}) 経路でも NG 検査が効く（processAskedReply 共通経路の確認）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ねえ、これ見て");
+  const fakeSpeak = makeFakeSpeak();
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 800, height: 600, elapsedMs: 10 });
+  /** @type {any[]} */ const diags = [];
+  const ngWord = NG_WORDS[1];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: `画面には${ngWord}が写ってる` }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "テストゲーム",
+    onDiagnostic: (d) => diags.push(d)
+  });
+
+  const result = await orch.fire({ vision: true });
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "ng-blocked");
+  assert.equal(fakeSpeak.spoken.length, 0);
+
+  const all = buffer.all();
+  assert.equal(all.length, 2); // you 発話 + NG_BLOCKED_NOTE のみ（画像本文もヒット語も無し）。
+  assert.equal(all[1].text, NG_BLOCKED_NOTE);
+
+  const ngDiag = diags.find((d) => d.type === "ngBlocked");
+  assert.ok(ngDiag, "視覚発火経路でも ngBlocked 診断が出る");
+  assert.ok(!JSON.stringify(diags).includes(ngWord));
+
+  assert.equal(orch.getState(), "idle");
   orch.dispose();
 });

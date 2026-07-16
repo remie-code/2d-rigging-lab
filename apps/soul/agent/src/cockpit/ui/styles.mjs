@@ -267,12 +267,23 @@ body {
   padding: 5px 26px 5px 10px;
   font: inherit;
 }
-/* KILL（§7: 赤枠・S8 まで場所のみ = disabled・中身は S8 で入る）。 */
+/* KILL（§7: 赤枠・S8 実装済み）。killed 中はボタン自体を反転表示 + バー全体（.control-bar.killing）に
+   赤いアクセントを付けて視覚的に「殺し中」と分かるようにする（人間ゲート要求）。 */
 .control-bar .kill-switch {
   color: var(--down);
   border-color: var(--down);
   font-weight: 600;
   letter-spacing: 0.06em;
+}
+.control-bar .kill-switch.killed {
+  background: var(--down);
+  color: var(--panel);
+}
+.kill-switch-wrap { display: flex; align-items: center; gap: 8px; }
+.kill-status { font-size: 12px; color: var(--down); font-weight: 600; }
+.control-bar.killing {
+  border-color: var(--down);
+  box-shadow: 0 0 0 1px var(--down) inset;
 }
 
 /* ── 設定引き出し（Domain C・§7: 区画見出し・ラベル幅揃え・chevron select・色ドット・

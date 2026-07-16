@@ -79,7 +79,11 @@ export function settingsFromSnapshot(s) {
     selfFire: (s && s.selfFire) ?? null,
     verbosity: (s && s.verbosity) ?? null,
     audioDevice: (s && s.audioDevice) ?? null,
-    chat: (s && s.chat) ?? null
+    chat: (s && s.chat) ?? null,
+    // S8「キルスイッチ」: サーバの killed 正本はサーバ側で常に boolean（既定 false）なので、他の設定系
+    // 現況（null = orchestrator 未注入で「使えない」）とは異なり既定 false に畳む（selfFire/verbosity 等の
+    // null 許容パターンとは意図的に非対称）。
+    killed: (s && typeof s.killed === "boolean") ? s.killed : false
   };
 }
 
@@ -243,6 +247,7 @@ export function App(props) {
         setFireNote=${setFireNote}
         selfFire=${settings.selfFire}
         verbosity=${settings.verbosity}
+        killed=${settings.killed}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}
       />

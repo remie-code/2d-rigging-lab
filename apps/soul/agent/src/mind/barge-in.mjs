@@ -37,6 +37,14 @@ export const BARGE_IN_MIN_SPEECH_MS = 200;
 export const BARGE_IN_NOTE = "…（遮られた）";
 
 /**
+ * キル注記（soul 行の接頭辞末尾に付ける「ここで強制停止された」印・S8 キルスイッチ）。BARGE_IN_NOTE と
+ * 同じ全角括弧様式（対称）。キル状態で再生中の魂発話を即切断する severSpeaking 共有ヘルパが、interrupt
+ * （bargeIn）との差分として note を切り替える先。転写バッファは append-only ゆえ、こちらも
+ * 「接頭辞 + この注記」の 1 エントリを追記して「強制停止された事実」を会話の記憶に残す。
+ */
+export const KILL_NOTE = "…（強制停止）";
+
+/**
  * 口を閉じる intent.set の宛先スロット（inventory §2）。mouth-open へ value=0 を着弾させると
  * speech タイムライン全体が現在値から releaseMs（器既定 400ms）かけて基底（閉口）へ強制 release される。
  * 契約に停止専用 kind は無いが、この既存意味論で「口を閉じる」を器コード不変のまま実現できる。

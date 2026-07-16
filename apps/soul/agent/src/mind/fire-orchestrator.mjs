@@ -84,6 +84,28 @@
  *  session.ask の戻り値 usage を、通常 Fire・視覚発火の**両方**で `onUsage({ usage, vision })` として
  *  通知する（askごとの input_tokens 推移を結線層が追える形。usage が null/undefined のときは通知しない）。
  *
+ * ── S8「キルスイッチ」（Domain A・全発火 OFF + 声の即切断）───────────────────────
+ *  `kill()`/`revive()`/`initialKilled` は**全発火経路を閉じる**（manual `fire()`・視覚 `fire({vision:true})`・
+ *  自発 `fire({vision:"preferred"})` はすべて唯一の合流点 `fire()` を通るため、ここ一箇所のガードで足りる）。
+ *  キル中の再生は interrupt() 相当の即切断（player.stop 同期呼び・口閉じ・切断点算出・soul へ
+ *  `prefix + KILL_NOTE` 追記・onDiagnostic({type:"kill"})）で止める。再生中の切断ロジックは interrupt() と
+ *  共有ヘルパ `severSpeaking()` に抽出し（DRY・診断 type を `bargeIn`/`kill` でパラメータ化するだけ）、
+ *  bargeIn の外形・診断・soul 二重 append 回避は 1 ビットも変えない（無退行）。killed 中に返ってきた
+ *  in-flight 応答（ask 撃った後にキルされたケース）は speak せず・soul 追記せず・診断 `killDiscarded`
+ *  （応答本文は載せない = 秘匿）のみ残して畳む。プロセス不殺・in-memory のみ・ears 系には一切触れない
+ *  （耳の不干渉）。revive() はフラグを倒すだけ（残留状態を作らない）。
+ *
+ * ── S8「NG 最終検査」（Domain C・配信の安全弁の二段目）────────────────────────────
+ *  `processAskedReply` 内、in-flight キル検査の直後・speechText 確定後〜speakImpl 呼び出し前に
+ *  検問所を置く（キル検査と同じ場所に並べる）。`containsNgWord(speechText)`（`./ng-words.mjs`・
+ *  最小 starter list を NFKC 正規化 + 部分一致で照合する素朴形）が命中したら、その発話は
+ *  **丸ごと没**にする: speakImpl を呼ばない・speechText 本文をどこにも書かない（soul 本文・
+ *  onDiagnostic・戻り値・ログのいずれにも命中語も本文も載せない = 秘匿）。正本へは固定の事実
+ *  文字列 `NG_BLOCKED_NOTE`（本文なし・`./ng-words.mjs`）だけを append し、`onDiagnostic({type:
+ *  "ngBlocked"})`（type のみ）を通知して `{fired:false, reason:"ng-blocked"}` を返す。
+ *  `containsNgWord("")` は false ゆえ、発話なし（expression-only・空応答）はこの検査を素通りする
+ *  （NG 検査は「声になるもの」だけを向く）。非命中は挙動完全不変（無退行）。
+ *
  * ── soul 記録の broadcast 経路 ───────────────────────────────────────────────
  *  soul を buffer.append した直後に onSoulTranscript(entry) フックで結線層（cockpit）へ通知し、
  *  cockpit が既存 transcript イベント（speaker:"soul"）として SSE broadcast する（domain-a.md
@@ -103,9 +125,11 @@ import { captureWindow as defaultCaptureWindow } from "../eyes/window-capture.mj
 import {
   computeSpokenPrefix,
   BARGE_IN_NOTE,
+  KILL_NOTE,
   MOUTH_CLOSE_SLOT_ID,
   MOUTH_CLOSE_TTL_MS
 } from "./barge-in.mjs";
+import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 
 /** 視覚発火の最小指示文（wave 計画 §2 裁定・人格の作り込みはしない＝persona の領分）。 */
 const VISION_INSTRUCTION_TEXT = "今の画面を見て、直近の会話と合わせて自然に反応してください。";
@@ -165,7 +189,10 @@ export const FIRE_SYSTEM_PROMPT =
  *   ask ごとの usage 通知（通常 Fire・視覚発火の両方・usage が null/undefined のときは発火しない）。
  * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  再生完了タイマの注入（決定論テスト用）。
  * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  再生完了タイマの解除（注入）。
- * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred" }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; getState: () => FireState; dispose: () => void }}
+ * @param {boolean} [options.initialKilled=false]  キル状態の初期値（S8）。キル状態の正本はサーバ側
+ *   （Domain B）にあるため、orchestrator 生成時にサーバの現況を渡し「キル中に生まれる orchestrator は
+ *   キル済みで生まれる」不変を成立させる（born-killed）。
+ * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred" }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; kill: (atMs?: number) => Promise<object>; revive: () => void; getKilled: () => boolean; getState: () => FireState; dispose: () => void }}
  */
 export function createFireOrchestrator(options) {
   if (options == null || typeof options !== "object") {
@@ -198,6 +225,8 @@ export function createFireOrchestrator(options) {
   /** @type {FireState} */
   let state = "idle";
   let disposed = false;
+  /** キル状態（S8）。true の間は全発火経路を閉じる（fire() 冒頭ガード・唯一の合流点）。 */
+  let killed = options.initialKilled === true;
 
   /**
    * 再生実区間の追跡（S6）。speak() 後〜発話完了/中断まで有効。null = 現在発話中でない。
@@ -314,6 +343,26 @@ export function createFireOrchestrator(options) {
       emit(onDiagnostic, { ...d, type: `expression${capitalize(d.type)}` });
     }
 
+    // S8: in-flight キル検査（ask を撃った後にキルされたケース）。speak せず・soul 追記せず・演出も
+    // 適用せず畳む。診断は破棄した「事実」のみ（type だけ）——speechText 本文はどこにも載せない（秘匿）。
+    if (killed) {
+      emit(onDiagnostic, { type: "killDiscarded" });
+      return { fired: false, reason: "killed-inflight", ...extra };
+    }
+
+    // S8: NG 最終検査（Domain C・キル検査と同じ検問所）。命中したら丸ごと没にする——speak せず・
+    // speechText 本文はどこにも載せない（soul 本文・診断・戻り値・ログのいずれにも秘匿）。正本へは
+    // 固定の事実文字列 NG_BLOCKED_NOTE（本文なし）だけを append する。containsNgWord("") は false
+    // ゆえ空の speechText（この後の hasSpeech 判定より前）はここを素通りする。
+    if (containsNgWord(speechText)) {
+      const appended = buffer.append({ startMs: 0, endMs: 0, text: NG_BLOCKED_NOTE, speaker: "soul" });
+      if (appended && appended.appended && appended.entry) {
+        emit(onSoulTranscript, appended.entry);
+      }
+      emit(onDiagnostic, { type: "ngBlocked" });
+      return { fired: false, reason: "ng-blocked", ...extra };
+    }
+
     const hasSpeech = speechText.length > 0;
     const hasEvents = events.length > 0;
 
@@ -412,18 +461,20 @@ export function createFireOrchestrator(options) {
   };
 
   /**
-   * barge-in 中断（S6・外部の VAD 結線が確定時に呼ぶ）。speaking 中の魂発話を止め、器の口を閉じ、
-   * 切断点を正直に算出して「接頭辞 + 中断注記」を soul へ 1 回追記し、bargeIn 診断を出す。
-   * speaking 中でなければ no-op（冪等・dispose 後も安全）。stop/set の失敗は診断に握って落とさない。
-   * @param {number} [atMs]  中断時刻（既定 nowImpl()）。切断点は atMs − playbackStartedAtMs で算出。
-   * @returns {Promise<{ interrupted: boolean; reason?: string; elapsedMs?: number; charsSpoken?: number; prefix?: string }>}
+   * 再生中の魂発話を強制切断する共有ヘルパ（S6 interrupt / S8 kill 共通・DRY）。pb.interrupted=true →
+   * 自然完了タイマ解除 → ① player.stop()（**同期呼び・await の前**＝即効性）→ ② 器の口を閉じる
+   * （mouth-open intent.set value=0・短 ttl）→ ③ 切断点算出（computeSpokenPrefix）→ ④ soul へ
+   * 「接頭辞 + note」を 1 回追記 → ⑤ onDiagnostic({type: diagnosticType, ...}) → pb.resolve()（await 中の
+   * processAskedReply を解放）。stop/set の失敗は診断に握って落とさない。呼び出し元（interrupt/kill）が
+   * pb（currentPlayback の null/interrupted チェック済み）を渡す。診断 type は `${diagnosticType}...` で
+   * bargeIn/kill を区別する（bargeIn 呼び出しは既存の type 名と 1 ビットも変わらない＝無退行）。
+   * @param {object} pb  currentPlayback（呼び出し元チェック済み・null でない・interrupted でない）。
+   * @param {string} note  soul 追記の末尾注記（BARGE_IN_NOTE または KILL_NOTE）。
+   * @param {string} diagnosticType  onDiagnostic の最終 type（"bargeIn" または "kill"）。
+   * @param {number} [atMs]  切断時刻（既定 nowImpl()）。切断点は atMs − playbackStartedAtMs で算出。
+   * @returns {Promise<{ interrupted: true; elapsedMs: number; charsSpoken: number; prefix: string }>}
    */
-  const interrupt = async (atMs) => {
-    const pb = currentPlayback;
-    if (!pb || pb.interrupted) {
-      // 発話中でない・既に中断済み → 何もしない（冪等）。
-      return { interrupted: false, reason: pb ? "already-interrupted" : "not-speaking" };
-    }
+  const severSpeaking = async (pb, note, diagnosticType, atMs) => {
     pb.interrupted = true;
     // 自然完了タイマを止める（この後 resolve するので二重 resolve しない）。
     if (pb.timer != null) {
@@ -431,13 +482,13 @@ export function createFireOrchestrator(options) {
       pb.timer = null;
     }
 
-    // ① 声を止める（player.stop）。失敗は診断に握る（落とさない）。
+    // ① 声を止める（player.stop・同期呼び）。失敗は診断に握る（落とさない）。
     try {
       if (player && typeof player.stop === "function") {
         player.stop();
       }
     } catch (err) {
-      emit(onDiagnostic, { type: "bargeInStopError", message: errMessage(err) });
+      emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
     }
 
     // ② 器の口を閉じる（mouth-open へ intent.set value=0・短 ttl = speech タイムライン強制 release）。
@@ -451,56 +502,103 @@ export function createFireOrchestrator(options) {
         });
         if (!(outcome && outcome.result === "accepted")) {
           emit(onDiagnostic, {
-            type: "bargeInMouthCloseRejected",
+            type: `${diagnosticType}MouthCloseRejected`,
             slotId: MOUTH_CLOSE_SLOT_ID,
             error: outcome && outcome.error != null ? outcome.error : null
           });
         }
       } else {
         emit(onDiagnostic, {
-          type: "bargeInMouthCloseError",
+          type: `${diagnosticType}MouthCloseError`,
           slotId: MOUTH_CLOSE_SLOT_ID,
           message: "channel has no sendSet"
         });
       }
     } catch (err) {
       emit(onDiagnostic, {
-        type: "bargeInMouthCloseError",
+        type: `${diagnosticType}MouthCloseError`,
         slotId: MOUTH_CLOSE_SLOT_ID,
         message: errMessage(err)
       });
     }
 
     // ③ 切断点算出（モーラタイムライン × 再生経過・過大評価しない純関数）。
-    const interruptAtMs = typeof atMs === "number" && Number.isFinite(atMs) ? atMs : nowImpl();
-    const elapsedMs = interruptAtMs - pb.playbackStartedAtMs;
+    const severAtMs = typeof atMs === "number" && Number.isFinite(atMs) ? atMs : nowImpl();
+    const elapsedMs = severAtMs - pb.playbackStartedAtMs;
     const cut = computeSpokenPrefix({
       speechText: pb.speechText,
       timeline: pb.timeline,
       elapsedMs
     });
 
-    // ④ soul 追記（接頭辞 + 中断注記・1 回・上書きせず append）。broadcast は onSoulTranscript 経由。
-    const soulText = cut.prefix + BARGE_IN_NOTE;
+    // ④ soul 追記（接頭辞 + note・1 回・上書きせず append）。broadcast は onSoulTranscript 経由。
+    const soulText = cut.prefix + note;
     const appended = pb.buffer.append({ startMs: 0, endMs: 0, text: soulText, speaker: "soul" });
     pb.appended = true;
     if (appended && appended.appended && appended.entry) {
       emit(onSoulTranscript, appended.entry);
     }
 
-    // ⑤ 診断（barge-in 発生・切断点・声に出た文字数）。
+    // ⑤ 診断（切断発生・切断点・声に出た文字数）。
     emit(onDiagnostic, {
-      type: "bargeIn",
+      type: diagnosticType,
       elapsedMs,
       charsSpoken: cut.charsSpoken,
       totalChars: pb.speechText.length,
       prefix: cut.prefix
     });
 
-    const info = { interrupted: true, elapsedMs, charsSpoken: cut.charsSpoken, prefix: cut.prefix };
+    const info = { interrupted: /** @type {true} */ (true), elapsedMs, charsSpoken: cut.charsSpoken, prefix: cut.prefix };
     // processAskedReply の await を解放（この後 finally が idle へ戻す）。
     pb.resolve(info);
     return info;
+  };
+
+  /**
+   * barge-in 中断（S6・外部の VAD 結線が確定時に呼ぶ）。speaking 中の魂発話を止め、器の口を閉じ、
+   * 切断点を正直に算出して「接頭辞 + 中断注記」を soul へ 1 回追記し、bargeIn 診断を出す。
+   * speaking 中でなければ no-op（冪等・dispose 後も安全）。stop/set の失敗は診断に握って落とさない。
+   * @param {number} [atMs]  中断時刻（既定 nowImpl()）。切断点は atMs − playbackStartedAtMs で算出。
+   * @returns {Promise<{ interrupted: boolean; reason?: string; elapsedMs?: number; charsSpoken?: number; prefix?: string }>}
+   */
+  const interrupt = async (atMs) => {
+    const pb = currentPlayback;
+    if (!pb || pb.interrupted) {
+      // 発話中でない・既に中断済み → 何もしない（冪等）。
+      return { interrupted: false, reason: pb ? "already-interrupted" : "not-speaking" };
+    }
+    return severSpeaking(pb, BARGE_IN_NOTE, "bargeIn", atMs);
+  };
+
+  /**
+   * キル（S8・全発火 OFF + 声の即切断）。`killed=true` を立てる（以後の fire() は全経路で拒否される・
+   * fire() 冒頭ガードが唯一の合流点で弾く）。再生中（currentPlayback があり未 interrupted）なら
+   * interrupt() 相当の即切断を severSpeaking 経由で行う（player.stop 同期呼び・口閉じ・切断点算出・
+   * soul へ prefix + KILL_NOTE 追記・onDiagnostic({type:"kill"})）。idle/thinking 中（再生していない）
+   * の kill は severance が no-op（currentPlayback null）で killed フラグだけ立てる。二度呼んでも安全
+   * （冪等）。ears 系（transcript-buffer 等）には一切触れない（耳の不干渉）。
+   * @param {number} [atMs]  切断時刻（既定 nowImpl()）。再生中でなければ無視される。
+   * @returns {Promise<{ killed: true; severed: boolean; elapsedMs?: number; charsSpoken?: number; prefix?: string }>}
+   */
+  const kill = async (atMs) => {
+    killed = true;
+    const pb = currentPlayback;
+    if (!pb || pb.interrupted) {
+      // 再生中でない・既に中断/キル済み → severance は no-op（killed フラグだけ立てる）。
+      return { killed: true, severed: false };
+    }
+    const info = await severSpeaking(pb, KILL_NOTE, "kill", atMs);
+    return { killed: true, severed: true, elapsedMs: info.elapsedMs, charsSpoken: info.charsSpoken, prefix: info.prefix };
+  };
+
+  /**
+   * キル解除（S8）。`killed=false` に戻すだけ（残留状態を作らない）。kill の切断は severSpeaking →
+   * pb.resolve という既存 interrupt と同じ経路を通って finally で idle へ戻るため、revive はフラグを
+   * 倒すだけで次の fire() が普通に動く。killed でないときの revive も安全（冪等・no-op）。
+   * @returns {void}
+   */
+  const revive = () => {
+    killed = false;
   };
 
   /**
@@ -692,6 +790,11 @@ export function createFireOrchestrator(options) {
       if (disposed) {
         return { fired: false, reason: "disposed", state };
       }
+      // S8: キル中は全発火経路を閉じる（manual・視覚・自発 preferred すべてがこの合流点を通る）。
+      if (killed) {
+        emit(onFire, { accepted: false, reason: "killed" });
+        return { fired: false, reason: "killed", state };
+      }
       // 1. busy 中の Fire は無視（重ね発火は S4/S6 の領分・視覚発火も同一判定を共有）。
       if (state !== "idle") {
         emit(onFire, { accepted: false, reason: "busy" });
@@ -722,6 +825,17 @@ export function createFireOrchestrator(options) {
 
     /** barge-in 中断（S6・外部の VAD 結線が呼ぶ）。詳細は interrupt の JSDoc。 */
     interrupt,
+
+    /** キル（S8・全発火 OFF + 声の即切断）。詳細は kill の JSDoc。 */
+    kill,
+
+    /** キル解除（S8）。詳細は revive の JSDoc。 */
+    revive,
+
+    /** 現在のキル状態（テスト・結線層向け）。 */
+    getKilled() {
+      return killed;
+    },
 
     /** 現在の状態（idle/thinking/speaking）。 */
     getState() {

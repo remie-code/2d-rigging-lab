@@ -359,3 +359,30 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
   （選択しても挙動は変わらない・実配線は s6-followup §12 の将来課題）・KILL は **S8 予約の枠のみ**。
 - 人間ゲート手順: `discussion/ai-cohost/implementation/waves/cockpit-redesign/human-gate.md` /
   followup 台帳: 同 `followup.md` / wave 記録: 同 `domain-{a,b,c,d}.md`。
+
+#### S8: 配信に耐える（安全弁）
+
+「事故った時に止められるか」——S 系列最後の必須問題。実体は 3 つの安全弁: **キルスイッチ**（声の
+即切断 + 全発火 OFF）・**NG 最終検査**（既知の最悪語を声にする前に落とす）・**AI 開示**（視聴者への
+開示文言）。
+
+- **キルスイッチ**（`src/mind/fire-orchestrator.mjs`・Domain A / `src/cockpit/*`・
+  `scripts/fire-hotkey.ahk`・Domain B）: `kill()`/`revive()` が `fire()` 冒頭の唯一の合流点で
+  manual・視覚・自発 preferred の全発火経路を閉じる。再生中のキルは `interrupt()`（barge-in）と
+  同じ切断ヘルパ（`severSpeaking()`）を共有し、**player.stop 即時（同期呼び）+ 口を閉じる +
+  soul へ「接頭辞 + 強制停止注記」を 1 回追記**して声を止める。ホットキー **`Ctrl+Alt+K`
+  （`^!k`）は kill 専用**（revive は送らない・誤操作で配信中に解除しない安全弁）。復帰は**操縦席の
+  KILL ボタン（一クリック）**のみ。耳/転写バッファは無影響（in-memory のみ・プロセス不殺）。
+- **NG 最終検査**（`src/mind/ng-words.mjs`・Domain C）: TTS 直前（speechText 確定後〜speak 呼び出し
+  前・キル検査と同じ検問所）で **最小リスト（差別語級の最悪語のみ・3〜5 語）**を NFKC 正規化 +
+  部分一致の素朴形で照合する。命中したら発話は**丸ごと没**——speak せず、命中語・応答本文は soul
+  本文・診断・戻り値・ログのどこにも残さない（秘匿）。正本へは固定の事実文字列「（発話を没にした:
+  NG検査）」だけを 1 件追記する。**このリストはユーザーが人間ゲートで最終確認/編集する starter
+  （v0）**——語数・語彙を触りたいときは `NG_WORDS`（`src/mind/ng-words.mjs`）のこの 1 箇所だけを
+  触る。URL/電話番号の読み上げ抑止・軽度の悪態・語形変化対応は v0 外。
+- **AI 開示**: 概要欄への開示文言 + 配信前チェックリストは**コードを持たない wave 外の作業**として
+  L0 が別途起草する（`discussion/ai-cohost/operations/pre-stream-checklist.md`・ユーザーが概要欄へ
+  貼る運用）。
+- **人間ゲート（縮小裁定）**: ①発話中にキル → 声が即切れ・以後の発火が全て弾かれる → 一クリック
+  復帰 → 次の発火が普通に動く ②弁が通常の発話を一切邪魔しない、の 2 点。手順・申し送りは
+  `discussion/ai-cohost/implementation/waves/s8/s8-followup.md`。

@@ -39,7 +39,7 @@ import {
 import { COCKPIT_CSS, injectStyles } from "./ui/styles.mjs";
 import { ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
 import { SettingsDrawer, SettingsSelect, DrawerStatus } from "./ui/settings-drawer.mjs";
-import { soulStatusView, selfFireToggleView } from "./view-logic/control.mjs";
+import { soulStatusView, selfFireToggleView, killSwitchView } from "./view-logic/control.mjs";
 import { chatStatusView, channelStatusView } from "./view-logic/status.mjs";
 
 // ── (1) Node インポートスモーク（import 文自体が成功している時点で副作用ゼロの構造証明）──
@@ -338,7 +338,8 @@ test("isStuckToBottom: 末尾近傍のみ true（閾値 STICK_THRESHOLD_PX）", 
 
 test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・applyState :279-283 の入力）", () => {
   assert.deepEqual(settingsFromSnapshot(null), {
-    channel: null, visionTarget: null, selfFire: null, verbosity: null, audioDevice: null, chat: null
+    channel: null, visionTarget: null, selfFire: null, verbosity: null, audioDevice: null, chat: null,
+    killed: false // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
@@ -346,7 +347,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     selfFire: { enabled: true },
     verbosity: "chatty",
     audioDevice: { name: "MV7+" },
-    chat: { source: "abc", connected: true, state: "live" }
+    chat: { source: "abc", connected: true, state: "live" },
+    killed: true
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
 });
@@ -530,11 +532,31 @@ test("VerbositySelect vnode: verbosity prop が select の value に反映され
   assert.ok(text.includes("控えめ") && text.includes("ふつう") && text.includes("おしゃべり"), "3 択の表示文言");
 });
 
-test("KillSwitch vnode: 枠のみ・disabled（S8 予約・no-op）", () => {
-  const vnode = KillSwitch({});
+test("KillSwitch vnode: killed=false は「■ KILL」ボタン・status 非表示（S8 実装済み）", () => {
+  const vnode = KillSwitch({ view: killSwitchView(false), onClick: () => {} });
   const button = collectElements(vnode).find((n) => n.type === "button");
-  assert.equal(button.props.disabled, true, "S8 まで no-op（disabled）");
-  assert.ok(collectText(vnode).join("").includes("KILL"));
+  assert.equal(button.props.disabled, undefined, "disabled ではない（S8 実装済み）");
+  assert.equal(typeof button.props.onClick, "function");
+  const text = collectText(vnode).join("");
+  assert.ok(text.includes("KILL"));
+  assert.ok(!text.includes("殺し中"), "通常時は殺し中 status を描かない");
+});
+
+test("KillSwitch vnode: killed=true は復帰ボタン + 「殺し中」status（バー全体の視覚化は control-bar の killing class）", () => {
+  const vnode = KillSwitch({ view: killSwitchView(true), onClick: () => {} });
+  const button = collectElements(vnode).find((n) => n.type === "button");
+  assert.equal(button.props.class, "kill-switch killed");
+  const text = collectText(vnode).join("");
+  assert.ok(text.includes("復帰"));
+  assert.ok(text.includes("殺し中"));
+});
+
+test("KillSwitch vnode: onClick は呼び出し側のハンドラをそのまま素通しする", () => {
+  let called = false;
+  const vnode = KillSwitch({ view: killSwitchView(false), onClick: () => (called = true) });
+  const button = collectElements(vnode).find((n) => n.type === "button");
+  button.props.onClick();
+  assert.equal(called, true);
 });
 
 test("SettingsSelect vnode: view-logic の option 列（{value,label}）を機械的に描く", () => {
@@ -566,6 +588,9 @@ test("DrawerStatus vnode: 状態構造体（chatStatusView/channelStatusView）�
 test("COCKPIT_CSS: 運転バー/設定引き出しの意匠トークン（§7: KILL 赤枠・畳み・chevron・pill）", () => {
   assert.ok(COCKPIT_CSS.includes(".control-bar {"), "運転バー（常駐）");
   assert.match(COCKPIT_CSS, /\.control-bar \.kill-switch \{[^}]*border-color: var\(--down\)/, "KILL は赤枠（§7）");
+  // S8: killed 中はバー全体が視覚的に「殺し中」と分かる（人間ゲート要求）。
+  assert.ok(COCKPIT_CSS.includes(".control-bar .kill-switch.killed"), "killed 中はボタン自体も反転表示");
+  assert.ok(COCKPIT_CSS.includes(".control-bar.killing"), "killed 中はバー全体に視覚化 class");
   assert.match(COCKPIT_CSS, /\.settings-drawer \{ display: none; \}/, "引き出しは普段畳む");
   assert.ok(COCKPIT_CSS.includes(".settings-drawer.open"), "⚙ で開く");
   assert.match(COCKPIT_CSS, /\.drawer-select,\s*\.verbosity-select \{[^}]*appearance: none/, "select は chevron 付き（§7）");

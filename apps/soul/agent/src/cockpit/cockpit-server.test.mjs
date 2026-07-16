@@ -571,10 +571,19 @@ function makeFakeOrchestrator({ fireResult, drive } = {}) {
     state: "idle",
     // S5: fire() へ渡された fireOptions を記録（{vision:true} 等）。既存呼び出し（fire()）は
     // undefined のまま記録されるだけで、この記録追加自体は既存テストの挙動に影響しない。
-    /** @type {any} */ lastFireOptions: undefined
+    /** @type {any} */ lastFireOptions: undefined,
+    // S8「キルスイッチ」: kill()/revive() の呼び出し記録 + born-killed（factory 呼び出し時の
+    // hooks.initialKilled）を捕捉する（既存テストには一切影響しない追加のみ）。
+    killed: false,
+    killCount: 0,
+    reviveCount: 0,
+    /** @type {number | undefined} */ lastKillAtMs: undefined,
+    /** @type {boolean | undefined} */ initialKilledSeen: undefined
   };
   const factory = (hooks) => {
     record.hooks = hooks;
+    record.initialKilledSeen = hooks && hooks.initialKilled;
+    record.killed = hooks && hooks.initialKilled === true;
     return {
       /** @param {any} [fireOptions] */
       async fire(fireOptions) {
@@ -584,6 +593,18 @@ function makeFakeOrchestrator({ fireResult, drive } = {}) {
         return fireResult ?? { fired: true, replyText: "はい", injectedChars: 12, includedCount: 1 };
       },
       getState: () => record.state,
+      /** @param {number} [atMs] */
+      async kill(atMs) {
+        record.killCount += 1;
+        record.killed = true;
+        record.lastKillAtMs = atMs;
+        return { killed: true, severed: false };
+      },
+      revive() {
+        record.reviveCount += 1;
+        record.killed = false;
+      },
+      getKilled: () => record.killed,
       dispose: () => {
         record.disposed = true;
       }
@@ -2044,6 +2065,120 @@ test("cockpit POST /api/verbosity: onSetVerbosity 永続化フックへ橋渡し
     // 無効 mode は onSetVerbosity を呼ばない（切替自体が起きていない）。
     await postJson(`${url}/api/verbosity`, { mode: "bogus" });
     assert.deepEqual(persisted, ["chatty", "quiet"]);
+  } finally {
+    await server.close();
+  }
+});
+
+// ── POST /api/kill（S8「キルスイッチ」・POST /api/self-fire / /api/verbosity の写経）───────────
+//
+//  キル状態の正本はサーバ側に一つ（cockpit-server.mjs の `killed` 変数）。orchestrator へは生成時
+//  （initialKilled・born-killed）と遷移時（kill()/revive()）の両方で伝播する。POST /api/kill は
+//  fire() の Promise には一切依存しない（レスポンス正本は snapshot + kill() 自身の戻り値のみ）。
+
+test("cockpit POST /api/kill: orchestrator 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/kill`, { killed: true });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /kill control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit GET /api/state: snapshot に killed キーが載る（初期 false・orchestrator 未注入でも既定 false）", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.killed, false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/kill: {killed:true} → 200・snapshot.killed:true・orchestrator.kill() が呼ばれる・SSE state が流れる", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const r = await postJson(`${url}/api/kill`, { killed: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.killed, true);
+    assert.equal(fakeOrch.record.killCount, 1);
+    assert.equal(fakeOrch.record.killed, true);
+    // broadcastState() が SSE "state" に killed:true を乗せて流れる。
+    const evt = await client.waitFor((e) => e.event === "state" && e.data.killed === true);
+    assert.equal(evt.data.killed, true);
+    // GET /api/state も反映済み。
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.killed, true);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/kill: {killed:false} → 200・snapshot.killed:false・orchestrator.revive() が呼ばれる", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory) });
+  try {
+    const url = await server.listen(0);
+    // まず kill してから revive する。
+    await postJson(`${url}/api/kill`, { killed: true });
+    assert.equal(fakeOrch.record.killCount, 1);
+    const r = await postJson(`${url}/api/kill`, { killed: false });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.killed, false);
+    assert.equal(fakeOrch.record.reviveCount, 1);
+    assert.equal(fakeOrch.record.killed, false);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.killed, false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/kill: 非 boolean（文字列）は 400・state は変わらない", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory) });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/kill`, { killed: "yes" });
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /killed must be a boolean/);
+    assert.equal(fakeOrch.record.killCount, 0);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.killed, false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/kill: body 欠落（killed が undefined）は 400", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory) });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/kill`, {});
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /killed must be a boolean/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit S8 born-killed: fireOrchestratorFactory の hooks に initialKilled（サーバ現況）が渡る", async () => {
+  // サーバ起動直後は killed 初期 false ゆえ、生成時に渡る initialKilled も false（born-killed 配線の存在確認）。
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory) });
+  try {
+    await server.listen(0);
+    assert.equal(fakeOrch.record.initialKilledSeen, false);
   } finally {
     await server.close();
   }
