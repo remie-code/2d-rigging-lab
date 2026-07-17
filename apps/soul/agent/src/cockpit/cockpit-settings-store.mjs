@@ -27,6 +27,10 @@
  *     未記憶/未知値のフォールバックは呼び出し側（cockpit.mjs の createVerbosityHooks）に委ねる
  *     （vision target と同型の文字列キー・asStringOrNull）。
  *   setVerbosityMode(mode): 操縦席で口数モードを切替えたときに記憶（次回起動で復元）。
+ *   getBrainChoice(): 頭脳の選択（claude/codex）の初期値（多頭化 Domain B・brain-swap-wave-plan.md §3）。
+ *     未記憶/未知値のフォールバックは呼び出し側（cockpit.mjs の createBrainHooks）に委ねる
+ *     （verbosityMode と同型の文字列キー・asStringOrNull）。
+ *   setBrainChoice(choice): 操縦席で頭脳を切替えたときに記憶（次回起動で復元）。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -72,6 +76,8 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setChatSource: (source: string | null) => void;
  *   getVerbosityMode: () => string | null;
  *   setVerbosityMode: (mode: string | null) => void;
+ *   getBrainChoice: () => string | null;
+ *   setBrainChoice: (choice: string | null) => void;
  * }}
  */
 export function createFileSettingsStore(options = {}) {
@@ -151,6 +157,13 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} mode */
     setVerbosityMode(mode) {
       writeMerged({ verbosityMode: mode ?? null });
+    },
+    getBrainChoice() {
+      return asStringOrNull(readAll().brainChoice);
+    },
+    /** @param {string | null} choice */
+    setBrainChoice(choice) {
+      writeMerged({ brainChoice: choice ?? null });
     }
   };
 }

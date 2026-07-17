@@ -500,3 +500,86 @@ test("settings store: verbosity mode 用の unwritable path は set を握って
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ── brainChoice（多頭化 Domain B: 頭脳選択の settings 橋渡し・verbosityMode の写経）──────────────
+
+test("settings store: brain choice は set→get roundtrip で永続化する（別インスタンスでも読める）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getBrainChoice(), null); // 未作成 = 記憶なし。
+    store.setBrainChoice("codex");
+    assert.equal(store.getBrainChoice(), "codex");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getBrainChoice(), "codex");
+    // クリアも効く。
+    store.setBrainChoice(null);
+    assert.equal(createFileSettingsStore({ path }).getBrainChoice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: brain choice は他のキー（device/channel/vision/audio/self-fire/chat/verbosity）と同居する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setLastChannelUrl("ws://127.0.0.1:17310/channel?token=abc");
+    store.setVisionTarget("Sample Game");
+    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
+    store.setSelfFireEnabled(true);
+    store.setChatSource("https://youtube.com/watch?v=xyz");
+    store.setVerbosityMode("quiet");
+    store.setBrainChoice("codex");
+    const reopened = createFileSettingsStore({ path });
+    // どの set も他方を消していない（read-modify-write マージ）。
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getLastChannelUrl(), "ws://127.0.0.1:17310/channel?token=abc");
+    assert.equal(reopened.getVisionTarget(), "Sample Game");
+    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    assert.equal(reopened.getSelfFireEnabled(), true);
+    assert.equal(reopened.getChatSource(), "https://youtube.com/watch?v=xyz");
+    assert.equal(reopened.getVerbosityMode(), "quiet");
+    assert.equal(reopened.getBrainChoice(), "codex");
+    // brain choice を変えても他は残る。
+    store.setBrainChoice("claude");
+    const again = createFileSettingsStore({ path });
+    assert.equal(again.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(again.getVerbosityMode(), "quiet");
+    assert.equal(again.getBrainChoice(), "claude");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getBrainChoice returns null (failure-tolerant・不正型は寛容に扱う)", () => {
+  const dir = tmpDir();
+  try {
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ not json", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getBrainChoice(), null);
+    // 非文字列 shape → null。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ brainChoice: 123 }), "utf8");
+    assert.equal(createFileSettingsStore({ path: oddPath }).getBrainChoice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: brain choice 用の unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setBrainChoice("codex"));
+    assert.equal(store.getBrainChoice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

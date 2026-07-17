@@ -2184,6 +2184,225 @@ test("cockpit S8 born-killed: fireOrchestratorFactory の hooks に initialKille
   }
 });
 
+// ── POST /api/brain（多頭化 Domain B・POST /api/verbosity / /api/kill の写経）─────────────────
+//
+//  頭脳の切替継ぎ目。永続化 + 現 session の dispose→null（次発火から新頭）は cockpit.mjs の onSetBrain が
+//  担う（責務境界: cockpit-server は brain の中身を知らない）。snapshot の brain は brainStatus() 経由で
+//  頭札 + 資格情報の存在確認（credentialHealth）を載せる。onSetBrain 未注入なら 503（未注入ゲート）。
+
+/** cockpit.mjs の onSetBrain/brainStatus 配線と同型の最小 fake（現在の頭を保持し切替を記録する）。 */
+function makeFakeBrainWiring(initial = "claude") {
+  let currentBrain = initial;
+  const record = { calls: /** @type {string[]} */ ([]) };
+  return {
+    record,
+    onSetBrain: async (/** @type {string} */ choice) => {
+      record.calls.push(choice);
+      currentBrain = choice;
+    },
+    // 資格情報は存在確認のみ（テストは boolean 固定・中身は読まない=実 auth.json に触れない）。
+    brainStatus: () => ({ brain: currentBrain, credentialHealth: true })
+  };
+}
+
+test("cockpit POST /api/brain: onSetBrain 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/brain`, { brain: "codex" });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /brain control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit GET /api/state: snapshot に brain が載る（既定 brain・credentialHealth boolean）", async () => {
+  const wiring = makeFakeBrainWiring("claude");
+  const server = createCockpitServer({ brainStatus: /** @type {any} */ (wiring.brainStatus) });
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.deepEqual(s.json.brain, { brain: "claude", credentialHealth: true });
+    assert.equal(typeof s.json.brain.credentialHealth, "boolean");
+    // brainStatus 未注入なら null（未注入ゲートの対称・別サーバで確認）。
+    const bare = createCockpitServer({});
+    const bareUrl = await bare.listen(0);
+    const bs = await getJson(`${bareUrl}/api/state`);
+    assert.equal(bs.json.brain, null);
+    await bare.close();
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/brain: {brain:\"codex\"} → 200・snapshot.brain.brain===\"codex\"・onSetBrain が呼ばれる・SSE state が流れる", async () => {
+  const wiring = makeFakeBrainWiring("claude");
+  const server = createCockpitServer({
+    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const r = await postJson(`${url}/api/brain`, { brain: "codex" });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.brain.brain, "codex");
+    assert.deepEqual(wiring.record.calls, ["codex"]);
+    // broadcastState() が SSE "state" に brain.brain:"codex" を乗せて流れる。
+    const evt = await client.waitFor((e) => e.event === "state" && e.data.brain && e.data.brain.brain === "codex");
+    assert.equal(evt.data.brain.brain, "codex");
+    // GET /api/state も反映済み。
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.brain.brain, "codex");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/brain: {brain:\"claude\"} → 200（Claude へ戻す）", async () => {
+  const wiring = makeFakeBrainWiring("codex");
+  const server = createCockpitServer({
+    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/brain`, { brain: "claude" });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.brain.brain, "claude");
+    assert.deepEqual(wiring.record.calls, ["claude"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/brain: 不正値（gpt）は 400・onSetBrain を呼ばず state 不変", async () => {
+  const wiring = makeFakeBrainWiring("claude");
+  const server = createCockpitServer({
+    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/brain`, { brain: "gpt" });
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /invalid brain/);
+    assert.deepEqual(wiring.record.calls, []); // 切替は起きていない。
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.brain.brain, "claude"); // 現況は不変。
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/brain: body 欠落（brain が undefined）は 400", async () => {
+  const wiring = makeFakeBrainWiring("claude");
+  const server = createCockpitServer({
+    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/brain`, {});
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /invalid brain/);
+    assert.deepEqual(wiring.record.calls, []);
+  } finally {
+    await server.close();
+  }
+});
+
+// ── 多頭化 Domain C: 観測層（soul 行の latencyMs 実値化 + brain 札・usage の brain 札）──────────
+//
+//  broadcastSoulTranscript / onUsage の additive フィールド化を固定する（blocking #6 additive・
+//  ワイヤ契約の既存フィールドは無変更）。latencyMs 実値の生成元（fire-orchestrator の
+//  asked.elapsedMs 伝播）は fire-orchestrator.test.mjs 側で別途固定済み——ここは
+//  「hooks.onSoulTranscript(entry) に entry.latencyMs が乗っていれば、そのまま SSE transcript の
+//  latencyMs として流れる」という cockpit-server 側の配線だけを検証する。
+
+test("cockpit SSE: onSoulTranscript の entry.latencyMs が transcript(speaker:soul) の latencyMs として実値で流れる（従来の null 固定から実値化）", async () => {
+  const wiring = makeFakeBrainWiring("claude");
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "はい" },
+    drive: (hooks) => {
+      hooks.onSoulTranscript({ seq: 1, startMs: 0, endMs: 0, text: "はい", speaker: "soul", appendedAtMs: 1000, latencyMs: 2345 });
+    }
+  });
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fake.factory),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/fire`, {});
+    const soulLine = await client.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
+    assert.equal(soulLine.data.latencyMs, 2345);
+    // brain 札も additive で乗る（brainStatus() の現況・既定 claude）。
+    assert.equal(soulLine.data.brain, "claude");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit SSE: onSoulTranscript の entry に latencyMs が無ければ従来どおり null（後方互換・既存呼び出し形は壊れない）", async () => {
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "はい" },
+    drive: (hooks) => {
+      // 既存呼び出し形（latencyMs フィールド無し・S3〜S8 の既存テストと同型）。
+      hooks.onSoulTranscript({ seq: 1, startMs: 0, endMs: 0, text: "はい", speaker: "soul", appendedAtMs: 1000 });
+    }
+  });
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/fire`, {});
+    const soulLine = await client.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
+    assert.equal(soulLine.data.latencyMs, null);
+    // brainStatus 未注入なら brain:null（audioDevice/channel と同型の未注入ゲート）。
+    assert.equal(soulLine.data.brain, null);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit SSE: onUsage に brain 札が additive で乗る（既存 usage フィールドは無変更）", async () => {
+  const wiring = makeFakeBrainWiring("codex");
+  const fake = makeFakeOrchestrator({
+    fireResult: { fired: true, replyText: "はい" },
+    drive: (hooks) => {
+      hooks.onUsage({ usage: { input_tokens: 284, output_tokens: 12 }, vision: false });
+    }
+  });
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fake.factory),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/fire`, {});
+    const usage = await client.waitFor((e) => e.event === "usage");
+    // 既存フィールドは無変更。
+    assert.equal(usage.data.usage.input_tokens, 284);
+    assert.equal(usage.data.vision, false);
+    // brain 札が additive で乗る。
+    assert.equal(usage.data.brain, "codex");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
 test("cockpit SSE: 自発発火の要求（fired:true）が selfFire イベントで流れる（kind 付き・タイムラインの自発発火マーカー材料）", async () => {
   const fakePipe = makeOnAppendPipeline();
   const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "はーい" } });

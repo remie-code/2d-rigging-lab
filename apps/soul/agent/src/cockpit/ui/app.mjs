@@ -83,7 +83,10 @@ export function settingsFromSnapshot(s) {
     // S8「キルスイッチ」: サーバの killed 正本はサーバ側で常に boolean（既定 false）なので、他の設定系
     // 現況（null = orchestrator 未注入で「使えない」）とは異なり既定 false に畳む（selfFire/verbosity 等の
     // null 許容パターンとは意図的に非対称）。
-    killed: (s && typeof s.killed === "boolean") ? s.killed : false
+    killed: (s && typeof s.killed === "boolean") ? s.killed : false,
+    // 多頭化 Domain C: 頭脳の現況（{brain, credentialHealth}）。audioDevice/channel と同型の null 許容
+    // （brainStatus 未注入なら null）。
+    brain: (s && s.brain) ?? null
   };
 }
 

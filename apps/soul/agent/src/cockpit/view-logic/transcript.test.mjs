@@ -37,3 +37,16 @@ test("latencyLabel: live 行のみ (Ns)・履歴行(null/undefined)は非表示�
   assert.equal(latencyLabel(1234), "(1.2s)"); // toFixed(1) 丸め。
   assert.equal(latencyLabel(20_000), "(20.0s)");
 });
+
+test("latencyLabel: brain 札（多頭化 Domain C・additive 第 2 引数）", () => {
+  // brain 指定ありは "(Ns · brain)"。
+  assert.equal(latencyLabel(1500, "claude"), "(1.5s · claude)");
+  assert.equal(latencyLabel(4000, "codex"), "(4.0s · codex)");
+  // brain 未指定/null/空文字は従来どおり (Ns) のみ（後方互換・you/viewer 行や brain 未注入時の soul 行）。
+  assert.equal(latencyLabel(1500, undefined), "(1.5s)");
+  assert.equal(latencyLabel(1500, null), "(1.5s)");
+  assert.equal(latencyLabel(1500, ""), "(1.5s)");
+  // latencyMs が無ければ brain があっても null（発話していない soul 行では札も出さない）。
+  assert.equal(latencyLabel(null, "claude"), null);
+  assert.equal(latencyLabel(undefined, "codex"), null);
+});

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 import {
   assertSubscriptionAuthEnv,
+  assertSubscriptionAuthEnvOpenAI,
   DEFAULT_ANTHROPIC_BASE_URL
 } from "./env-guard.mjs";
 
@@ -82,4 +83,64 @@ test("env-guard: BASE_URL 非既定値は throw せず warning を返す", () =>
 test("env-guard: env がオブジェクトでなければ TypeError", () => {
   assert.throws(() => assertSubscriptionAuthEnv(null), TypeError);
   assert.throws(() => assertSubscriptionAuthEnv("env"), TypeError);
+});
+
+// ── OpenAI 版 sibling（Domain A・Codex 頭）─────────────────────────────────
+
+test("env-guard(OpenAI): ガード対象が未設定なら pass（warnings 空）", () => {
+  const { warnings } = assertSubscriptionAuthEnvOpenAI({ PATH: "/usr/bin", HOME: "/home/x" });
+  assert.deepEqual(warnings, []);
+});
+
+test("env-guard(OpenAI): OPENAI_API_KEY 設定で起動拒否 throw（変数名を含む）", () => {
+  assert.throws(
+    () => assertSubscriptionAuthEnvOpenAI({ OPENAI_API_KEY: "sk-xxx" }),
+    /OPENAI_API_KEY/
+  );
+});
+
+test("env-guard(OpenAI): CODEX_API_KEY 設定で起動拒否 throw", () => {
+  assert.throws(
+    () => assertSubscriptionAuthEnvOpenAI({ CODEX_API_KEY: "tok" }),
+    /CODEX_API_KEY/
+  );
+});
+
+test("env-guard(OpenAI): 両方設定は全て理由に列挙される", () => {
+  assert.throws(
+    () =>
+      assertSubscriptionAuthEnvOpenAI({
+        OPENAI_API_KEY: "k",
+        CODEX_API_KEY: "t"
+      }),
+    (err) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /OPENAI_API_KEY/);
+      assert.match(err.message, /CODEX_API_KEY/);
+      return true;
+    }
+  );
+});
+
+test("env-guard(OpenAI): OPENAI_BASE_URL 非空は throw せず warning を返す", () => {
+  const { warnings } = assertSubscriptionAuthEnvOpenAI({
+    OPENAI_BASE_URL: "https://proxy.internal:8080"
+  });
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /OPENAI_BASE_URL/);
+  assert.match(warnings[0], /proxy\.internal/);
+});
+
+test("env-guard(OpenAI): 空文字は未設定と同義（throw しない）", () => {
+  const { warnings } = assertSubscriptionAuthEnvOpenAI({
+    OPENAI_API_KEY: "",
+    CODEX_API_KEY: "",
+    OPENAI_BASE_URL: ""
+  });
+  assert.deepEqual(warnings, []);
+});
+
+test("env-guard(OpenAI): env がオブジェクトでなければ TypeError", () => {
+  assert.throws(() => assertSubscriptionAuthEnvOpenAI(null), TypeError);
+  assert.throws(() => assertSubscriptionAuthEnvOpenAI("env"), TypeError);
 });

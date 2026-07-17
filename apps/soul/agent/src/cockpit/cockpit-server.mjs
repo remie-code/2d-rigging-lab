@@ -276,7 +276,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {string} [options.indexHtmlPath]  配信する HTML のファイルパス（B が本体を渡す）。
  * @param {string} [options.uiRootPath]     操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信
  *   ルート。既定は本モジュールのディレクトリ（= 実 UI ツリー）。トラバーサル防止・許可拡張子 .mjs・
- *   許可サブツリー限定でこの配下だけを配る（既存 17 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
+ *   許可サブツリー限定でこの配下だけを配る（既存 19 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
  * @param {string} [options.inputFormat]    ffmpeg 入力フォーマット（既定 win32→dshow）。
  * @param {number} [options.transcriptHistory=DEFAULT_TRANSCRIPT_HISTORY]  状態に載せる直近転写件数。
  * @param {{ getLastDevice: () => any; setLastDevice: (d: any) => any }} [options.settingsStore]
@@ -359,6 +359,16 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
  *   未注入でも POST /api/verbosity 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
  *   スキップ）。
+ * @param {(choice: string) => void | Promise<void>} [options.onSetBrain]
+ *   頭脳切替フック（多頭化 Domain B・POST /api/brain が呼ぶ・onSetVerbosity と同型）。choice は検証済みの
+ *   "claude" | "codex"。**cockpit-server は永続化・頭のホットスワップ実体を知らない**（責務境界: 実体は
+ *   cockpit.mjs が settings 永続 + 現 session の dispose→null で担う）。未注入なら POST /api/brain は 503
+ *   （onSetChannelUrl/onSetAudioDevice と同型の未注入ゲート）。
+ * @param {() => (object | null)} [options.brainStatus]
+ *   頭脳の現況（`{ brain: string, credentialHealth: boolean }`）を返す。state snapshot に載せる
+ *   （audioDevice/channel と同型）。credentialHealth は資格情報ファイルの**存在確認のみ**（中身は読まない）。
+ *   brain の状態正本は cockpit.mjs 側にあり、起動時の現況もこの status が運ぶ（サーバは brain 状態を
+ *   二重管理せず・別途 initial 値は持たない）。未注入なら snapshot の brain:null。
  * @param {(opts: { source: string }) => { start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string; onMessage: (fn: (msg: any) => void) => () => void; onStatus: (fn: (state: string) => void) => () => void; onDiagnostic: (fn: (info: any) => void) => () => void }} [options.chatClientFactory]
  *   S7「視聴者が混ざる」チャット器官のファクトリ（本番は Domain C の `createLiveChatClient`・テストは
  *   fake 器官 factory を注入して実ネットに出さない）。POST /api/chat/connect で `factory({ source })` を
@@ -417,6 +427,11 @@ export function createCockpitServer(options = {}) {
   // （未注入なら POST /api/verbosity 自体は 503 にならない・onSetSelfFireEnabled と同型の失敗寛容）。
   const verbosityInitialMode = typeof options.verbosityInitialMode === "string" ? options.verbosityInitialMode : "normal";
   const onSetVerbosity = typeof options.onSetVerbosity === "function" ? options.onSetVerbosity : null;
+  // 多頭化 Domain B: 頭脳切替フック（未注入なら POST /api/brain は 503・onSetChannelUrl と同型のゲート）と
+  // 現況（snapshot の brain に載せる・未注入なら null）。brain の状態正本は cockpit.mjs の currentBrain で、
+  // 起動時の現況も brainStatus() が運ぶ（サーバは brain 状態を二重管理しない＝別途 initial 値は受けない）。
+  const onSetBrain = options.onSetBrain;
+  const brainStatusImpl = options.brainStatus;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -505,6 +520,8 @@ export function createCockpitServer(options = {}) {
       verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
       // S8「キルスイッチ」: キル状態の正本（サーバ側 boolean をそのまま載せる・既定 false・additive）。
       killed: killed,
+      // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
+      brain: typeof brainStatusImpl === "function" ? (brainStatusImpl() ?? null) : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
       audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null,
       // S7「視聴者が混ざる」: チャット器官の現況。source は settings 由来（Connect 前でも入力欄の既定に
@@ -962,6 +979,31 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/brain") {
+      // 多頭化 Domain B: 頭脳の切替継ぎ目（POST /api/verbosity / /api/kill の写経）。永続化 + 現 session の
+      // dispose→null（次発火から新頭）は cockpit.mjs の onSetBrain が担う（責務境界: cockpit-server は
+      // brain の中身を知らない）。未注入（S2.5 単体等）なら 503（onSetChannelUrl と同型の未注入ゲート）。
+      if (typeof onSetBrain !== "function") {
+        sendJson(res, 503, { error: "brain control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 2 値は
+      // ここに直書きする（brains.mjs を import すると「cockpit-server は brain の中身を知らない」責務境界を
+      // 破る・verbosity が quiet/normal/chatty を直書きするのと同じ規律）。
+      if (body.brain !== "claude" && body.brain !== "codex") {
+        sendJson(res, 400, { error: "invalid brain" });
+        return;
+      }
+      try {
+        await onSetBrain(body.brain);
+      } catch {
+        // best-effort（永続化 / dispose 失敗で操作を止めない・onSetVerbosity と同型の失敗寛容）。
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/channel") {
       if (typeof onSetChannelUrl !== "function") {
         // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
@@ -1014,7 +1056,7 @@ export function createCockpitServer(options = {}) {
     }
 
     // 操縦席 UI アセットの静的配信（vendor/ui/view-logic の .mjs ツリー）。**追加ルートのみ**——
-    // 既存 17 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
+    // 既存 19 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
     // 落ちてくる GET は非 API・非 root だけ）。UI アセットサブツリー宛のみ握り、その他は既存 404 へ。
     if (method === "GET" && (await tryServeUiAsset(res, pathname))) {
       return;
@@ -1129,15 +1171,31 @@ export function createCockpitServer(options = {}) {
   //  （startEars 内）も必ず通る。そちらは speaker:"soul" を除外して二重放送を断つ（onTranscript の
   //  先頭ガード参照）。ここ（onSoulTranscript 経路）が soul の唯一の放送元。
 
-  /** soul の追記を既存 transcript イベントとして push（耳の onTranscript 経路とは別口）。 */
+  /**
+   * soul の追記を既存 transcript イベントとして push（耳の onTranscript 経路とは別口）。
+   *
+   * 多頭化 Domain C（wave-plan §3・blocking #6 additive）: 2 点を additive で乗せる。
+   *  - latencyMs: fire-orchestrator の processAskedReply（自然完了パス）が entry に乗せてきた実測値
+   *    （asked.elapsedMs）をそのまま使う。NG ブロック/barge-in 中断等の entry には乗らないため null
+   *    のまま＝従来どおり（後方互換）。
+   *  - brain: Domain B が注入した brainStatus()（cockpit.mjs の currentBrain）から**今の**頭を読む。
+   *    在庫（既知の近似・followup 記録済み）: 配信中に頭を切り替えた直後の in-flight 応答は「切替前の
+   *    頭が生成した」が、この実装は broadcast 時点の brainStatus() を読むため、稀に札がズレうる
+   *    （配信前選択が本線・切替は運用外という v0 裁定の下で許容）。
+   */
   function broadcastSoulTranscript(entry) {
     const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
+    const latencyMs = entry && typeof (/** @type {any} */ (entry).latencyMs) === "number"
+      ? /** @type {any} */ (entry).latencyMs
+      : null;
+    const brain = typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null;
     broadcast("transcript", {
       ...toWireEntry(entry),
-      latencyMs: null,
+      latencyMs,
       audioCtx: null,
       appended: stats.appended,
-      discarded: stats.discarded
+      discarded: stats.discarded,
+      brain
     });
   }
 
@@ -1159,7 +1217,9 @@ export function createCockpitServer(options = {}) {
       // ディスクには一切書かない（notify-and-forget・domain-b.md §4-1 / domain-c.md §）。
       onVisionCaptured: (info) => broadcast("visionCaptured", info),
       // askごとの usage（input_tokens 等・通常 Fire/視覚発火共通）を SSE "usage" へ（domain-b.md §4-2）。
-      onUsage: (info) => broadcast("usage", info),
+      // 多頭化 Domain C: brain 札を additive で乗せる（broadcastSoulTranscript と同じ brainStatusImpl()
+      // 読み取り・in-flight 切替時の近似は同節の注記のとおり）。
+      onUsage: (info) => broadcast("usage", { ...info, brain: typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null }),
       // S8「キルスイッチ」born-killed: orchestrator 生成時にサーバの現況キル状態を渡す。killed 変数は
       // 上（:435 付近）で宣言済みゆえここより前に存在する。「キル中に生まれる orchestrator はキル済みで
       // 生まれる」不変の下地（cockpit.mjs の factory は ...hooks を spread するため自動で届く）。

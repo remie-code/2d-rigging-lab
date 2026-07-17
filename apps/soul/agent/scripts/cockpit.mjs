@@ -40,12 +40,14 @@
 
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
+import { existsSync } from "node:fs";
 
 import { createCockpitServer, DEFAULT_COCKPIT_PORT } from "../src/cockpit/cockpit-server.mjs";
 import { createFileSettingsStore } from "../src/cockpit/cockpit-settings-store.mjs";
 import { cockpitHtmlPath } from "../src/cockpit/cockpit-page.mjs";
 import { assertSubscriptionAuthEnv } from "../src/mind/env-guard.mjs";
 import { createLlmSession } from "../src/mind/llm-session.mjs";
+import { BRAINS } from "../src/mind/brains.mjs";
 import { createFireOrchestrator, FIRE_SYSTEM_PROMPT } from "../src/mind/fire-orchestrator.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
@@ -344,6 +346,42 @@ export function createVerbosityHooks(settings, defaultMode = "normal") {
 }
 
 /**
+ * settings の頭脳選択（brainChoice）を、cockpit.mjs の起動フック（resolveInitialBrain）と切替継ぎ目
+ * （onSetBrain の永続化部分）へ橋渡しする（多頭化 Domain B・brain-swap-wave-plan.md §3・
+ * createVerbosityHooks と同型の薄い配線層）。settings に記憶が無い、または既知2頭（claude/codex）
+ * 以外の値が入っていた場合は defaultChoice（既定 "claude"）にフォールバックする（防御的・verbosity の
+ * 「未知値は normal」と同じ規律・Claude 既定で無退行）。
+ *
+ * ここは「永続化」だけを担う純関数の配線層。実際の頭のホットスワップ（現 session の dispose→null）は
+ * main() の effectful な onSetBrain がこの永続化を呼んだ上で担う（createAudioDeviceHooks と main() の
+ * onSetAudioDevice の関係と同型）。
+ *
+ * @param {{ getBrainChoice: () => string | null; setBrainChoice: (choice: string | null) => void }} settings
+ * @param {string} [defaultChoice="claude"]  未記憶/未知値のフォールバック（v0 既定は Claude 頭・無退行）。
+ * @returns {{
+ *   resolveInitialBrain: () => string;
+ *   onSetBrain: (choice: string) => void;
+ * }}
+ */
+export function createBrainHooks(settings, defaultChoice = "claude") {
+  return {
+    /** 起動時の初期頭脳（未記憶/未知値は defaultChoice）。 */
+    resolveInitialBrain: () => {
+      const remembered = settings.getBrainChoice();
+      return remembered === "claude" || remembered === "codex" ? remembered : defaultChoice;
+    },
+    /** 頭脳選択の永続化（main() の effectful onSetBrain が dispose→null の前にこれを呼ぶ）。 */
+    onSetBrain: (choice) => {
+      try {
+        settings.setBrainChoice(choice); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
+/**
  * settings の視聴者チャット配信 source（chatSource）を、cockpit-server の口（onSetChatSource/
  * chatSourceStatus）へ橋渡しする（S7「視聴者が混ざる」・Domain C。Channel URL/visionTarget と同型の
  * 薄い配線層）。実チャット器官の生成/Connect/停止ライフサイクルは cockpit-server が所有する
@@ -402,6 +440,9 @@ async function main() {
   const selfFireHooks = createSelfFireHooks(settings, false);
   // 口数モード（quiet/normal/chatty・既定 "normal"・§createVerbosityHooks）。
   const verbosityHooks = createVerbosityHooks(settings);
+  // 多頭化 Domain B: 頭脳選択（claude/codex・既定 "claude"・§createBrainHooks）。永続化の薄い橋渡し
+  // （ホットスワップの effectful 部分は下の onSetBrain が担う）。
+  const brainHooks = createBrainHooks(settings);
   // S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化（Channel URL と同型の薄い橋渡し・
   // §createChatSourceHooks）。実チャット器官の Connect/停止は cockpit-server 所有（POST 駆動）。
   const chatSourceHooks = createChatSourceHooks(settings);
@@ -410,6 +451,11 @@ async function main() {
   let session = null;
   /** @type {ReturnType<typeof createAudioPlayer> | null} */
   let player = null;
+  // 多頭化 Domain B: 現在の頭（claude/codex）。session let と同格の main() スコープ let。ensureFireResources
+  // がこの値で頭を分岐し、onSetBrain が切替時に更新する（切替は現 session を dispose→null にし、次の
+  // ensureFireResources が新頭を生成する＝inventory §2-1 のホットスワップ経路）。KILL 状態は orchestrator
+  // 側にあり切替を跨いで生存する（頭非依存・触らない）。
+  let currentBrain = brainHooks.resolveInitialBrain();
 
   // 初期 Channel URL: --channel（後方互換）> settings の lastChannelUrl（前回起動の記憶）> 未設定。
   const initialUrl = args.channel ?? settings.getLastChannelUrl() ?? null;
@@ -436,12 +482,25 @@ async function main() {
    */
   const ensureFireResources = () => {
     if (session == null) {
-      // 起動経路でも env ガードを明示的に通す（llm-session 内でも呼ばれるが二重の防波堤・cli.mjs の型）。
-      const { warnings } = assertSubscriptionAuthEnv(process.env);
-      for (const warning of warnings) {
-        process.stderr.write(`[cockpit] WARN: ${warning}\n`);
+      // 多頭化 Domain B: 頭の生成は registry 経由（brains.mjs の BRAINS）。未知値は防御的に Claude へ。
+      const brainDef = BRAINS[currentBrain] ?? BRAINS.claude;
+      // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
+      //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
+      //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
+      //  `(o) => createLlmSession(o)` の薄いラッパゆえ、下の create({...}) は従来の createLlmSession({...})
+      //  と同じ引数・同じ呼び出しになりバイト等価。
+      //  Codex 経路では codex-session が内部で OpenAI 版ガード（assertSubscriptionAuthEnvOpenAI）を
+      //  onWarning 経由で走らせるため、ここで Anthropic ガードは呼ばない（別 provider へ Anthropic ガードを
+      //  当てると誤った拒否/検査になる）。
+      if (currentBrain === "claude") {
+        const { warnings } = assertSubscriptionAuthEnv(process.env);
+        for (const warning of warnings) {
+          process.stderr.write(`[cockpit] WARN: ${warning}\n`);
+        }
       }
-      session = createLlmSession({
+      // onInit は createCodexSession では余剰プロパティとして単に無視される（JS の余剰プロパティ・
+      // Domain A 確認済み）。createLlmSession は従来どおり onInit/onWarning を使う。
+      session = brainDef.create({
         systemPrompt: FIRE_SYSTEM_PROMPT,
         onWarning: (w) => process.stderr.write(`[cockpit] WARN: ${w}\n`),
         onInit: (init) =>
@@ -505,6 +564,41 @@ async function main() {
     process.stdout.write(
       name ? `[cockpit] audio device set: ${name}\n` : "[cockpit] audio device cleared (default)\n"
     );
+  };
+
+  /**
+   * 操縦席（POST /api/brain）から頭脳を設定/変更する（多頭化 Domain B・onSetAudioDevice の型）。
+   *
+   * ── 頭のホットスワップ【切替=dispose→null→次発火から新頭】(brain-swap.md §9 (a'))───────────
+   *  brainHooks.onSetBrain(choice) で選択を永続化 → currentBrain を更新 → 現 session があれば dispose
+   *  して null に戻す。次回 ensureFireResources() が新 currentBrain で新頭を生成する（inventory §2-1 の
+   *  最小ホットスワップ経路: session は書き手 ensureFireResources のみ・読み手 sessionProxy.ask のみ）。
+   *  dispose は best-effort（Claude/Codex とも知性契約で dispose():Promise<void>・await 可）。進行中の
+   *  発火（in-flight ask）は既存の dispose 意味論に委ねる。KILL 状態は orchestrator 側にあり切替を跨いで
+   *  生存する（頭非依存・ここでは触らない）。
+   * @param {string} choice
+   */
+  const onSetBrain = async (choice) => {
+    brainHooks.onSetBrain(choice); // 次回起動でも復元（file-backed・失敗寛容）。
+    currentBrain = choice;
+    if (session != null) {
+      try {
+        await session.dispose();
+      } catch {
+        // best-effort（再生成の妨げにしない・切替は続行する）。
+      }
+      session = null; // 次回 fire 時に ensureFireResources() が新頭で再生成する。
+    }
+    process.stdout.write(`[cockpit] brain set: ${choice}\n`);
+  };
+
+  /**
+   * state snapshot に載せる頭脳の現況（audioDeviceStatus と同型）。資格情報は **existsSync の存在確認のみ**
+   * （blocking #4）——auth.json / .credentials.json の中身は絶対に読まない・ログ/SSE にも出さない。
+   */
+  const brainStatus = () => {
+    const def = BRAINS[currentBrain] ?? BRAINS.claude;
+    return { brain: currentBrain, credentialHealth: existsSync(def.credentialPath) };
   };
 
   /** fireOrchestratorFactory は常に注入する（Channel URL 未設定でも fire は「使えないが結線済み」）。 */
@@ -575,6 +669,12 @@ async function main() {
     // 口数モード（quiet/normal/chatty・起動時は settings から復元・既定 "normal"）。
     verbosityInitialMode: verbosityHooks.resolveInitialVerbosity(),
     onSetVerbosity: verbosityHooks.onSetVerbosity,
+    // 多頭化 Domain B: 頭脳選択（claude/codex）。POST /api/brain で onSetBrain（永続化 + 現 session の
+    // dispose→null によるホットスワップ）を呼び、snapshot に brainStatus()（頭札 + 資格情報の存在確認）を
+    // 載せる。brain の状態正本は cockpit.mjs 側の currentBrain で、起動時の現況は brainStatus() が
+    // そのまま運ぶ（audioDevice/channel/visionTarget と同型＝別途 initial は持たせない）。
+    onSetBrain,
+    brainStatus,
     // S7「視聴者が混ざる」: 実チャット器官のファクトリを注入（本番 createLiveChatClient）。生成/Connect/
     // 停止のライフサイクルは cockpit-server が所有し、POST /api/chat/connect で `factory({ source })` を
     // 生成 start()・onMessage/onStatus/onDiagnostic を取り込み経路へ繋ぐ。配信 source は settings に記憶。

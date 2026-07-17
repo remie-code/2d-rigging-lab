@@ -75,7 +75,9 @@ export function feedWithTranscript(feed, d, nowMs) {
     rowClass: speakerRowClass(d),
     whoText: speakerLabel(d),
     text: d && d.text,
-    latText: latencyLabel(d && d.latencyMs)
+    // 多頭化 Domain C: brain 札を additive で latencyLabel へ渡す（d.brain 未搭載の you/viewer 行や
+    // brain 未注入時の soul 行は undefined のまま＝従来どおり (Ns) のみ）。
+    latText: latencyLabel(d && d.latencyMs, d && d.brain)
   });
 }
 

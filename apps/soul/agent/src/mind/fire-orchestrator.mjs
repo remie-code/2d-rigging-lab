@@ -182,6 +182,9 @@ export const FIRE_SYSTEM_PROMPT =
  * @param {(info: object) => void} [options.onFire]  Fire 受理/棄却の通知。
  * @param {(diag: object) => void} [options.onDiagnostic]  失敗診断（fireError / fireEmptyReply / fireVisionError）。
  * @param {(entry: object) => void} [options.onSoulTranscript]  soul 追記の通知（結線層が transcript として broadcast）。
+ *   自然完了時（processAskedReply の通常完了パス）は entry に `latencyMs`（asked.elapsedMs 実測・
+ *   非数値なら null）を additive で乗せる（多頭化 Domain C・観測層の応答レイテンシ実値化）。
+ *   NG ブロック時/barge-in 中断時の soul 追記は既存どおり latencyMs を持たない entry（結線層側で null 扱い）。
  * @param {(info: object) => void} [options.onExpression]  演出適用の通知（語ごとに {word, args?, applied, rejected}）。
  * @param {(info: { title: string; width: number; height: number; jpegBase64: string; elapsedMs: number }) => void} [options.onVisionCaptured]
  *   視覚発火のキャプチャ成功通知（「見た」事実・サムネ用 base64 はここにだけ載る。会話ログには積まない）。
@@ -453,7 +456,12 @@ export function createFireOrchestrator(options) {
     // S5: 視覚発火でも画像は一切積まない（会話ログの正本は speechText のみ・ディスク非保存の流儀）。
     const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
     if (appended && appended.appended && appended.entry) {
-      emit(onSoulTranscript, appended.entry);
+      // 多頭化 Domain C: 応答レイテンシの実値化（wave-plan §3 Domain C・blocking #7 は不変=検問所
+      // ロジック自体は 1 行も触っていない・ここは自然完了パスのみへの additive な通知配線）。
+      // asked.elapsedMs（知性契約 MindSessionAskResult・brains.mjs）を entry のコピーへ乗せて通知する
+      // （transcriptBuffer 正本の Object.freeze entry は直接変更しない・スプレッドで新規オブジェクト化）。
+      const latencyMs = asked && typeof asked.elapsedMs === "number" ? asked.elapsedMs : null;
+      emit(onSoulTranscript, { ...appended.entry, latencyMs });
     }
 
     const expressions = await expressionPromise;

@@ -25,6 +25,13 @@
  *  `assertSubscriptionAuthEnv(env)` は env を引数に取る純関数（既定 process.env）。副作用は「違反時の
  *  throw」と「戻り値 { warnings }」のみ。fixture（env オブジェクト）で単体検証できる。起動経路
  *  （llm-session / CLI）はこれを必ず呼び、warnings を stderr に出す。
+ *
+ * ── OpenAI 版 sibling（Domain A・brain-swap-wave-plan.md §3）─────────────────
+ *  Codex 頭（codex-session.mjs）も同型のガードを要る。`OPENAI_API_KEY` / `CODEX_API_KEY` が設定されて
+ *  いると Codex SDK は ChatGPT サブスク OAuth ではなく API キー課金に切り替わりうる（brain-swap.md
+ *  §6/§7: `forced_login_method="chatgpt"` を config で固定した上でも、APIキー環境変数の存在自体が
+ *  事故の芽）。`assertSubscriptionAuthEnvOpenAI(env)` は上の Anthropic 版と対称の意匠（完全一致の
+ *  ガード対象・空文字は未設定・BASE_URL は throw でなく warn）で、**Anthropic 版は 1 バイトも変えない**。
  */
 
 /** 設定されていたら起動を拒否する完全一致の環境変数名。 */
@@ -100,6 +107,56 @@ export function assertSubscriptionAuthEnv(env = process.env) {
       `ANTHROPIC_BASE_URL が非既定値 (${String(base)}) に設定されています。既定 ` +
         `(${DEFAULT_ANTHROPIC_BASE_URL}) 以外はプロキシ/別ゲートウェイ経由となり、サブスク枠外の課金や ` +
         "送信先の変更を招く恐れがあります。意図した設定か確認してください（起動は継続します）。"
+    );
+  }
+
+  return { warnings };
+}
+
+/** OpenAI 側で設定されていたら起動を拒否する完全一致の環境変数名（Codex 頭・API 課金化けガード）。 */
+const OPENAI_API_BILLING_ENV_VARS = ["OPENAI_API_KEY", "CODEX_API_KEY"];
+
+/**
+ * Codex 頭がサブスク枠（ChatGPT OAuth）で起動してよい環境かを検査する。API 課金へ切り替わりうる
+ * 環境変数が設定されていれば理由付きで throw（起動拒否）。`OPENAI_BASE_URL` は throw せず warnings に
+ * 積む（Anthropic 版の ANTHROPIC_BASE_URL と対称の扱い・非空なら送信先の付け替えの可能性として警告）。
+ *
+ * @param {Record<string, string | undefined>} [env]  検査対象の環境（既定 process.env）。
+ * @returns {{ warnings: string[] }}  非致命的な注意（BASE_URL 非空等）。呼び出し側が stderr に出す。
+ * @throws {Error} ガード対象（OPENAI_API_KEY / CODEX_API_KEY）が設定されている。
+ * @throws {TypeError} env がオブジェクトでない。
+ */
+export function assertSubscriptionAuthEnvOpenAI(env = process.env) {
+  if (env == null || typeof env !== "object") {
+    throw new TypeError(
+      "assertSubscriptionAuthEnvOpenAI(env): env must be an object (e.g. process.env)."
+    );
+  }
+
+  /** @type {string[]} */
+  const offenders = [];
+  for (const name of OPENAI_API_BILLING_ENV_VARS) {
+    if (isSet(env[name])) {
+      offenders.push(name);
+    }
+  }
+
+  if (offenders.length > 0) {
+    throw new Error(
+      "魂の起動を拒否しました（サブスク枠認証ガード・OpenAI/Codex）。" +
+        `API 課金・別認証に切り替わる環境変数が設定されています: ${offenders.join(", ")}。` +
+        "Codex 頭は codex login のサブスク OAuth 資格情報で動かす前提です（設定されていると API " +
+        "キー課金に切り替わる恐れがあります。brain-swap.md §6/§7）。これらを unset してから起動してください。"
+    );
+  }
+
+  /** @type {string[]} */
+  const warnings = [];
+  const base = env.OPENAI_BASE_URL;
+  if (isSet(base)) {
+    warnings.push(
+      `OPENAI_BASE_URL が設定されています (${String(base)})。プロキシ/別ゲートウェイ経由となり、` +
+        "サブスク枠外の課金や送信先の変更を招く恐れがあります。意図した設定か確認してください（起動は継続します）。"
     );
   }
 

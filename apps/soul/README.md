@@ -386,3 +386,48 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
 - **人間ゲート（縮小裁定）**: ①発話中にキル → 声が即切れ・以後の発火が全て弾かれる → 一クリック
   復帰 → 次の発火が普通に動く ②弁が通常の発話を一切邪魔しない、の 2 点。手順・申し送りは
   `discussion/ai-cohost/implementation/waves/s8/s8-followup.md`。
+
+#### 多頭化: 頭脳の差し替え（Claude / Codex Terra）
+
+「差し替わるのは魂やなく**頭脳**だけ」——耳・声・発火・転写・演出・操縦席・安全弁（キル/NG 検問所）
+は頭に依存しない魂の資産のまま不変で、LLM だけを差し替えられる。議論正本は
+`discussion/ai-cohost/soul/brain-swap.md`。
+
+- **頭の選び方**: 配信前に操縦席（⚙ 設定引き出し）の「頭脳」区画で選ぶ（`Claude (Opus 4.8)` /
+  `Codex (GPT-5.6 Terra)` のフラット 2 択・`POST /api/brain`）。**配信前選択が本線**——「魂を起動し、
+  LLM を選び、動作確認をして、配信を開始する」の正のフローどおり、配信中の差し替えは運用外。
+- **頭の表**（`src/mind/brains.mjs`）: `BRAINS` registry が唯一の宣言箇所（id・表示札・create・
+  資格情報ファイルパス）。Claude 頭（`src/mind/llm-session.mjs`）は多頭化で無変更のままこの 1 項目に
+  なる。
+- **Codex 頭**（`src/mind/codex-session.mjs`）: `@openai/codex-sdk` 経由でスレッド継続（暗黙記憶 +
+  キャッシュ平坦レイテンシ）。**配信中は記憶を持つ**（Claude 頭と同型の「暗黙記憶 + 直近窓」の二重
+  構造・二頭のメンタルモデルは対称）が、**配信後（dispose 時）にディスク上の rollout ファイル
+  （`~/.codex/sessions/...`）を自分の thread_id 分だけ掃除する**（記憶は配信中・秘匿は配信後、の
+  時間軸分離。ユーザー自身の rollout には一切触れない・完全一致のみ・起動時 sweep でクラッシュ残骸も
+  掃除）。
+- **資格情報**: 操縦席は資格情報そのものを扱わない。「ログイン確認済み / 未検出（`codex login`
+  してや）」の**存在確認のみ**（`~/.claude/.credentials.json` / `~/.codex/auth.json` の中身は
+  読まない・ログ/SSE にも出さない）。
+- **観測**: 操縦席の soul 行・usage 表示に、どの頭が応答したか（brain 札）+ 応答レイテンシ
+  （`latencyMs` 実測・自然完了時のみ）が additive に乗る。
+
+##### 第三の頭を足すとき（provider 追加手引き）
+
+1. `src/mind/` に頭固有のアダプタ（例: `xxx-session.mjs`）を作り、知性契約
+   `{ ask(content) → {replyText, usage, ttftMs|null, elapsedMs}, dispose() }`（`src/mind/brains.mjs`
+   の JSDoc typedef が正）に準拠させる。
+2. `src/mind/brains.mjs` の `BRAINS` registry へ 1 項目足す（`{id, label, create, credentialPath}`）。
+3. サブスク枠認証ガードが要るなら `src/mind/env-guard.mjs` に provider 別の sibling 関数を足す
+   （`assertSubscriptionAuthEnvOpenAI` と同型）。
+4. 操縦席側（`src/cockpit/ui/settings-drawer.mjs` の「頭脳」区画の select・
+   `src/cockpit/view-logic/health.mjs` の `BRAIN_LABELS`・`src/cockpit/cockpit-server.mjs` の
+   `POST /api/brain` 妥当性検証）に頭 id を追記する。cockpit 層は責務境界により `brains.mjs` を
+   import しない（id・表示札を各層が直書きする規律・verbosity の quiet/normal/chatty と同じ）ため、
+   `BRAINS` registry が唯一の正で、cockpit 層はそれと**同じ値**を保つ責任を負う。
+5. **ローカルファイルしか読めない頭（画像を `local_image` でしか受けない等）を足す場合**、Codex
+   アダプタ（`codex-session.mjs`）の base64→一時ファイル橋渡しは共有ヘルパへ昇格できる
+   （`discussion/ai-cohost/soul/brain-swap.md` §5 参照）。
+
+議論正本・詳細設計は `discussion/ai-cohost/soul/brain-swap.md`。wave 記録は
+`discussion/ai-cohost/implementation/waves/brain-swap/`。followup 台帳は同ディレクトリの
+`brain-swap-followup.md`。

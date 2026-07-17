@@ -10,6 +10,7 @@ import {
   createAudioDeviceHooks,
   createSelfFireHooks,
   createVerbosityHooks,
+  createBrainHooks,
   createChatSourceHooks
 } from "./cockpit.mjs";
 
@@ -505,6 +506,148 @@ test("createVerbosityHooks: settings.setVerbosityMode が throw しても onSetV
   };
   const hooks = createVerbosityHooks(settings);
   assert.doesNotThrow(() => hooks.onSetVerbosity("chatty"));
+});
+
+// ── createBrainHooks（多頭化 Domain B: 頭脳選択の settings 橋渡し・createVerbosityHooks の写経）─────
+
+/** fake settings（cockpit-settings-store と同型の getBrainChoice/setBrainChoice を持つ最小 fake）。 */
+function makeFakeBrainSettings(initial = null) {
+  let current = initial;
+  return {
+    getBrainChoice: () => current,
+    setBrainChoice: (choice) => {
+      current = choice;
+    }
+  };
+}
+
+test("createBrainHooks: 未記憶（null）なら既定 \"claude\" にフォールバックする（無退行）", { timeout: 5000 }, () => {
+  const settings = makeFakeBrainSettings(null);
+  const hooks = createBrainHooks(settings);
+  assert.equal(hooks.resolveInitialBrain(), "claude");
+});
+
+test("createBrainHooks: defaultChoice を明示指定できる", { timeout: 5000 }, () => {
+  const settings = makeFakeBrainSettings(null);
+  const hooks = createBrainHooks(settings, "codex");
+  assert.equal(hooks.resolveInitialBrain(), "codex");
+});
+
+test("createBrainHooks: 記憶済みの既知2頭（claude/codex）は defaultChoice より優先される", { timeout: 5000 }, () => {
+  const settingsClaude = makeFakeBrainSettings("claude");
+  assert.equal(createBrainHooks(settingsClaude, "codex").resolveInitialBrain(), "claude");
+  const settingsCodex = makeFakeBrainSettings("codex");
+  assert.equal(createBrainHooks(settingsCodex, "claude").resolveInitialBrain(), "codex");
+});
+
+test("createBrainHooks: 記憶済みの未知値は defaultChoice にフォールバックする（防御的）", { timeout: 5000 }, () => {
+  const settings = makeFakeBrainSettings("gpt");
+  const hooks = createBrainHooks(settings, "claude");
+  assert.equal(hooks.resolveInitialBrain(), "claude");
+});
+
+test("createBrainHooks: onSetBrain は settings.setBrainChoice へ橋渡しし・次回 resolveInitialBrain に反映する", { timeout: 5000 }, () => {
+  const settings = makeFakeBrainSettings(null);
+  const hooks = createBrainHooks(settings, "claude");
+  hooks.onSetBrain("codex");
+  assert.equal(settings.getBrainChoice(), "codex");
+  assert.equal(hooks.resolveInitialBrain(), "codex");
+});
+
+test("createBrainHooks: settings.setBrainChoice が throw しても onSetBrain は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getBrainChoice: () => null,
+    setBrainChoice: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createBrainHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetBrain("codex"));
+});
+
+// ── 頭の切替 × in-flight（不変条件の固定・brain-swap.md §9 (a')）──────────────────────────────
+//
+//  main() の session/currentBrain/ensureFireResources/onSetBrain 配線と同型の最小ハーネスで、実 read-path
+//  コード（createSessionProxy = cockpit.mjs の実体）を通して「切替は現 session を dispose→null にし、次の
+//  ask は新頭で生成される」不変条件を固定する。実 SDK/実頭は使わず頭ごとの fake session を生成する
+//  （実消費ゼロ）。in-flight（pending の ask）は既存の dispose 意味論に委ね、切替をブロックしないことも示す。
+
+test("brain 切替×in-flight: 切替は現 session を dispose→null にし、次の ask は新頭で生成される", { timeout: 5000 }, async () => {
+  /** @type {any} */ let session = null;
+  let currentBrain = "claude";
+  /** @type {string[]} */ const created = []; // ensureFireResources が生成した頭の記録。
+  /** @type {string[]} */ const disposed = []; // dispose された頭の記録。
+  /** @type {((v:any)=>void) | null} */ let pendingResolve = null;
+
+  // 頭ごとの fake session（claude の ask は pending のまま＝in-flight を模す）。
+  const makeFakeHead = (/** @type {string} */ brain) => {
+    /** @type {any} */
+    const head = {
+      brain,
+      disposed: false,
+      ask: (/** @type {string} */ input) => {
+        if (brain === "claude") {
+          return new Promise((resolve) => {
+            pendingResolve = resolve;
+          });
+        }
+        return Promise.resolve({ replyText: `${brain}:${input}`, usage: {}, ttftMs: null, elapsedMs: 1 });
+      },
+      dispose: async () => {
+        head.disposed = true;
+        disposed.push(brain);
+      }
+    };
+    return head;
+  };
+
+  // main() の ensureFireResources 頭分岐（registry 経由の生成）と同型。
+  const ensureFireResources = () => {
+    if (session == null) {
+      session = makeFakeHead(currentBrain);
+      created.push(currentBrain);
+    }
+  };
+  // main() の effectful onSetBrain（永続化は割愛・dispose→null のホットスワップ部分だけを再現）と同型。
+  const onSetBrain = async (/** @type {string} */ choice) => {
+    currentBrain = choice;
+    if (session != null) {
+      try {
+        await session.dispose();
+      } catch {
+        // best-effort
+      }
+      session = null;
+    }
+  };
+
+  // 実 read-path（cockpit.mjs の createSessionProxy そのもの）を通す。URL は設定済み（ask を弾かない）。
+  const proxy = createSessionProxy({
+    getUrl: () => "ws://127.0.0.1:1/channel?token=x",
+    ensureFireResources,
+    getSession: () => session
+  });
+
+  // 1 発目（claude）: ask は pending のまま（in-flight）。
+  const inflight = proxy.ask("hello");
+  assert.deepEqual(created, ["claude"]);
+  const claudeHead = session;
+
+  // in-flight 中に codex へ切替: 現 session（claude）が dispose→null される（切替はブロックされない）。
+  await onSetBrain("codex");
+  assert.equal(claudeHead.disposed, true);
+  assert.deepEqual(disposed, ["claude"]);
+  assert.equal(session, null);
+
+  // 次の ask は新頭（codex）で生成される。
+  const next = await proxy.ask("hi");
+  assert.deepEqual(created, ["claude", "codex"]);
+  assert.equal(next.replyText, "codex:hi");
+
+  // in-flight だった claude の ask は既存の dispose 意味論に委ねる（ここでは強制解決して leak を防ぐ）。
+  assert.equal(typeof pendingResolve, "function");
+  /** @type {(v:any)=>void} */ (pendingResolve)({ replyText: "late", usage: {}, ttftMs: null, elapsedMs: 1 });
+  await inflight;
 });
 
 // ── createChatSourceHooks（S7「視聴者が混ざる」: 配信 source の settings ⇄ cockpit-server 橋渡し）───

@@ -10,6 +10,10 @@
  *  - 各区画のエラー欄: devices-error（:168）→ マイク行 / channel-error（:177）→ Channel 行 /
  *    chat-error（:188）→ chat 行 / vision-error（:198）→ 視界行 / conversation-error（:212）は
  *    IA 再配置で分割 —— 音声出力系はここ（声の出力先行）・自発トグル系は運転バー（control-bar.mjs）。
+ *  - 頭脳（多頭化 Domain C・brain-swap-wave-plan.md §3）: 「声の出力先」行の写経で新区画を追加。
+ *    select（claude/codex の 2 択・BRAIN_LABELS＝ BRAINS[*].label 相当を view-logic に直書き）+
+ *    Set ボタン（POST /api/brain）+ drawer-note に現在の頭ラベル + 資格情報の健康表示
+ *    （brainCredentialHealthLabel・boolean の文言化のみ・中身は扱わない）。
  *
  * 表示文字列・状態導出はすべて view-logic 経由（settings.mjs / status.mjs / health.mjs・L0 裁定）。
  * 挙動の保存点:
@@ -51,10 +55,20 @@ import {
   chatConnectErrorText,
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
-  requestErrorText
+  requestErrorText,
+  brainPostErrorText
 } from "../view-logic/settings.mjs";
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
-import { voiceOutputLabel } from "../view-logic/health.mjs";
+import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
+
+/**
+ * 頭脳 select の選択肢（多頭化 Domain C）。BRAIN_LABELS（view-logic/health.mjs）から機械的に組み立てる
+ * ——唯一の宣言（id→表示ラベル）は health.mjs 側に集約し、ここでは複製しない。cockpit-server.mjs が
+ * 「頭 id 2 値を直書きする」責務境界規律と同型（settings-drawer.mjs は src/mind/brains.mjs を import
+ * しない）。
+ * @type {Array<{ value: string; label: string }>}
+ */
+const BRAIN_OPTIONS = Object.keys(BRAIN_LABELS).map((id) => ({ value: id, label: BRAIN_LABELS[id] }));
 
 /**
  * chevron 付き select（hooks 非使用・vnode 走査テスト対象）。option 列は view-logic の
@@ -109,6 +123,9 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
   const [audioOptions, setAudioOptions] = useState(/** @type {Array<{value:string;label:string}>} */ ([]));
   const [audioSelected, setAudioSelected] = useState("");
   const [audioError, setAudioError] = useState(""); // conversation-error :212 の音声出力系。
+  // ── 頭脳（多頭化 Domain C・声の出力先行の写経）──
+  const [brainSelected, setBrainSelected] = useState("claude");
+  const [brainError, setBrainError] = useState("");
 
   const doFetch = (/** @type {string} */ path, /** @type {any} */ init) =>
     (fetchImpl || globalThis.fetch)(path, init);
@@ -173,6 +190,15 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
+
+  // 頭脳 select の現況同期（多頭化 Domain C）: snapshot.brain.brain（起動時の現況 / POST /api/brain 後の
+  // 反映）が既知 2 値なら select 表示へ反映する。マイク/視界/出力先と違い一覧取得 API を持たない固定
+  // 2 択のため、select の初期値・以後の現況表示はこの effect が担う（未知値/欠落は変更しない）。
+  const brainCurrent = settings && settings.brain ? settings.brain.brain : null;
+  useEffect(() => {
+    if (brainCurrent === "claude" || brainCurrent === "codex") setBrainSelected(brainCurrent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brainCurrent]);
 
   // ── ハンドラ（すべて「POST → view-logic で文言 → snapshot 適用」の同型フロー）──
 
@@ -307,6 +333,27 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
       .catch((/** @type {unknown} */ e) => setAudioError(requestErrorText("audioDevice", e))); // :692-693
   };
 
+  /** 頭脳の Set（多頭化 Domain C・onAudioSet の写経）。POST /api/brain → 成功で snapshot 反映。 */
+  const onBrainSet = () => {
+    const brain = brainSelected || "claude";
+    setBrainError("");
+    doFetch("/api/brain", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ brain })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = brainPostErrorText(res);
+        if (err != null) {
+          setBrainError(err);
+          return;
+        }
+        applySnapshot(res.j); // snapshot（brain: {brain, credentialHealth}）で状態を更新。
+      })
+      .catch((/** @type {unknown} */ e) => setBrainError(requestErrorText("brain", e)));
+  };
+
   const channelView = channelStatusView(settings && settings.channel);
   const chatView = chatStatusView(chatDisplay);
 
@@ -418,6 +465,25 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
         <div class="drawer-note">
           <span class="vision-target-status">${visionTargetLabel(settings && settings.visionTarget)}</span>
           <span class="err">${visionError}</span>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <h3>頭脳</h3>
+        <div class="drawer-row">
+          <label for="brain-select">頭脳</label>
+          <${SettingsSelect}
+            id="brain-select"
+            className="drawer-select brain-select"
+            options=${BRAIN_OPTIONS}
+            value=${brainSelected}
+            onChange=${(/** @type {any} */ ev) => setBrainSelected(ev && ev.target ? ev.target.value : "")}
+          />
+          <button class="btn-brain-set" type="button" onClick=${onBrainSet}>Set</button>
+        </div>
+        <div class="drawer-note">
+          <span class="brain-status">${brainLabel(settings && settings.brain)}</span>
+          <span class="brain-credential-status">${brainCredentialHealthLabel(settings && settings.brain)}</span>
+          <span class="err">${brainError}</span>
         </div>
       </div>
     </section>

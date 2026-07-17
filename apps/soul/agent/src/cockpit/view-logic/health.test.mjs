@@ -2,7 +2,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { earsStatusView, healthStatusView, mergeHealth, voiceOutputLabel } from "./health.mjs";
+import {
+  earsStatusView,
+  healthStatusView,
+  mergeHealth,
+  voiceOutputLabel,
+  BRAIN_LABELS,
+  brainLabel,
+  brainCredentialHealthLabel
+} from "./health.mjs";
 
 test("earsStatusView: listening/starting/stopped の文言 + ランプクラス（cockpit.html:267-270 同値）", () => {
   assert.deepEqual(earsStatusView("listening"), {
@@ -87,4 +95,31 @@ test("voiceOutputLabel: name があれば name・なければ default（applyAud
   assert.equal(voiceOutputLabel({ name: "" }), "default"); // 空文字も falsy = default（原実装同値）。
   assert.equal(voiceOutputLabel(null), "default");
   assert.equal(voiceOutputLabel(undefined), "default");
+});
+
+// ── 多頭化 Domain C: 設定引き出し「頭脳」区画の表示導出（brain-swap-wave-plan.md §3）──────────
+
+test("BRAIN_LABELS: claude/codex の 2 項目（BRAINS[*].label 相当・brains.mjs の宣言と一致）", () => {
+  assert.deepEqual(Object.keys(BRAIN_LABELS), ["claude", "codex"]);
+  assert.equal(BRAIN_LABELS.claude, "Claude (Opus 4.8)");
+  assert.equal(BRAIN_LABELS.codex, "Codex (GPT-5.6 Terra)");
+});
+
+test("brainLabel: 既知 id は表示ラベル・未知 id/未指定は unknown", () => {
+  assert.equal(brainLabel({ brain: "claude" }), "Claude (Opus 4.8)");
+  assert.equal(brainLabel({ brain: "codex" }), "Codex (GPT-5.6 Terra)");
+  assert.equal(brainLabel({ brain: "gpt" }), "unknown"); // 未知 id。
+  assert.equal(brainLabel({ brain: null }), "unknown");
+  assert.equal(brainLabel(null), "unknown");
+  assert.equal(brainLabel(undefined), "unknown");
+});
+
+test("brainCredentialHealthLabel: 健康/未検出/未指定の3分岐（credentialHealth は boolean の文言化のみ）", () => {
+  assert.equal(brainCredentialHealthLabel({ credentialHealth: true }), "ログイン確認済み");
+  assert.equal(brainCredentialHealthLabel({ credentialHealth: false }), "未検出（codex login してや）");
+  // 未指定（brainStatus 未注入・credentialHealth 欠落）は unknown。
+  assert.equal(brainCredentialHealthLabel(null), "unknown");
+  assert.equal(brainCredentialHealthLabel(undefined), "unknown");
+  assert.equal(brainCredentialHealthLabel({}), "unknown");
+  assert.equal(brainCredentialHealthLabel({ credentialHealth: /** @type {any} */ ("true") }), "unknown"); // 非 boolean は unknown。
 });

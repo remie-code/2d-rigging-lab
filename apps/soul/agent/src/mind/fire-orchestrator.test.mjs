@@ -1915,3 +1915,81 @@ test("ngBlocked: 視覚発火 fire({vision:true}) 経路でも NG 検査が効�
   assert.equal(orch.getState(), "idle");
   orch.dispose();
 });
+
+// ── 多頭化 Domain C「soul 行の応答レイテンシ実値化」(brain-swap-wave-plan.md §3・blocking #7 は
+//    検問所ロジック不変=以下のテストは NG/KILL の判定条件を一切変更しない・onSoulTranscript の
+//    通知内容のみを検証する) ────────────────────────────────────────────────
+
+test("onSoulTranscript: 自然完了時、asked.elapsedMs が entry.latencyMs として additive に乗る", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("今何時？");
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */ const souls = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "3時だよ", elapsedMs: 1234 }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onSoulTranscript: (e) => souls.push(e)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  assert.equal(souls.length, 1);
+  assert.equal(souls[0].latencyMs, 1234);
+  // entry の既存フィールドは無変更（additive・buffer 正本と同値）。
+  assert.equal(souls[0].speaker, "soul");
+  assert.equal(souls[0].text, "3時だよ");
+  // buffer 正本（transcriptBuffer.all()）は素の entry のまま（onSoulTranscript 通知はコピー拡張のみ）。
+  const all = buffer.all();
+  assert.equal(all[1].text, "3時だよ");
+  assert.equal(Object.prototype.hasOwnProperty.call(all[1], "latencyMs"), false);
+
+  orch.dispose();
+});
+
+test("onSoulTranscript: asked.elapsedMs が非数値/欠落なら entry.latencyMs は null（後方互換）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("元気？");
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */ const souls = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    // elapsedMs を返さない fake session（既存テストの多くと同型）。
+    session: { async ask() { return { replyText: "元気だよ" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onSoulTranscript: (e) => souls.push(e)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  assert.equal(souls.length, 1);
+  assert.equal(souls[0].latencyMs, null);
+
+  orch.dispose();
+});
+
+test("onSoulTranscript: NG ブロック時の entry には latencyMs フィールドが乗らない（検問所ロジックは無変更・観測配線は自然完了パスのみ additive）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */ const souls = [];
+  const ngWord = NG_WORDS[0];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: `そうだね、${ngWord}って言葉はひどいよね`, elapsedMs: 999 }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onSoulTranscript: (e) => souls.push(e)
+  });
+
+  const result = await orch.fire();
+  assert.equal(result.reason, "ng-blocked");
+  assert.equal(souls.length, 1);
+  // NG ブロック経路の entry は buffer.append の素の戻りのまま（latencyMs を付与する変更は
+  // 自然完了パスのみに限定＝検問所（containsNgWord 判定）そのものは 1 行も変更していない）。
+  assert.equal(Object.prototype.hasOwnProperty.call(souls[0], "latencyMs"), false);
+
+  orch.dispose();
+});

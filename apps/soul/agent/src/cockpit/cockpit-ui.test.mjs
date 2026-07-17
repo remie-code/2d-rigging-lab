@@ -41,6 +41,7 @@ import { ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, VER
 import { SettingsDrawer, SettingsSelect, DrawerStatus } from "./ui/settings-drawer.mjs";
 import { soulStatusView, selfFireToggleView, killSwitchView } from "./view-logic/control.mjs";
 import { chatStatusView, channelStatusView } from "./view-logic/status.mjs";
+import { BRAIN_LABELS } from "./view-logic/health.mjs";
 
 // ── (1) Node インポートスモーク（import 文自体が成功している時点で副作用ゼロの構造証明）──
 
@@ -114,6 +115,17 @@ test("transcript: 話者ラベル・行クラス・latency が現 HTML 同値（
   // appendedAtMs 欠落は nowMs へフォールバック。
   feed = feedWithTranscript(emptyFeed(), { text: "x" }, T1);
   assert.equal(feed.rows[0].timeText, "14:03:40");
+});
+
+test("transcript: brain 札（多頭化 Domain C・d.brain が additive に latText へ織り込まれる）", () => {
+  // soul 行 + brain 札あり → "(Ns · brain)"。
+  let feed = feedWithTranscript(emptyFeed(), {
+    speaker: "soul", text: "はい", latencyMs: 2345, brain: "claude", appendedAtMs: T0
+  }, T1);
+  assert.equal(feed.rows[0].latText, "(2.3s · claude)");
+  // brain 未搭載（you/viewer 行や brain 未注入時の soul 行）は従来どおり (Ns) のみ。
+  feed = feedWithTranscript(emptyFeed(), { speaker: "soul", text: "はい", latencyMs: 2345, appendedAtMs: T0 }, T1);
+  assert.equal(feed.rows[0].latText, "(2.3s)");
 });
 
 test("speaking 行の規律: transcript/ghost は除去してから積む・マーカー行は除去しない", () => {
@@ -339,7 +351,8 @@ test("isStuckToBottom: 末尾近傍のみ true（閾値 STICK_THRESHOLD_PX）", 
 test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・applyState :279-283 の入力）", () => {
   assert.deepEqual(settingsFromSnapshot(null), {
     channel: null, visionTarget: null, selfFire: null, verbosity: null, audioDevice: null, chat: null,
-    killed: false // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
+    killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
+    brain: null // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
@@ -348,7 +361,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     verbosity: "chatty",
     audioDevice: { name: "MV7+" },
     chat: { source: "abc", connected: true, state: "live" },
-    killed: true
+    killed: true,
+    brain: { brain: "codex", credentialHealth: true }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
 });
@@ -570,6 +584,16 @@ test("SettingsSelect vnode: view-logic の option 列（{value,label}）を機�
   const opts = collectElements(vnode).filter((n) => n.type === "option");
   assert.deepEqual(opts.map((o) => o.props.value), ["MV7+", "FooGame"]);
   assert.equal(collectText(vnode).join(""), "MV7+FooGame (foo.exe)");
+});
+
+test("SettingsSelect vnode: 頭脳区画の選択肢（BRAIN_LABELS 由来・多頭化 Domain C・settings-drawer.mjs の BRAIN_OPTIONS と同型）", () => {
+  const options = Object.keys(BRAIN_LABELS).map((id) => ({ value: id, label: BRAIN_LABELS[id] }));
+  const vnode = SettingsSelect({ options, value: "codex", onChange: () => {} });
+  const select = collectElements(vnode).find((n) => n.type === "select");
+  assert.equal(select.props.value, "codex");
+  const opts = collectElements(vnode).filter((n) => n.type === "option");
+  assert.deepEqual(opts.map((o) => o.props.value), ["claude", "codex"]);
+  assert.equal(collectText(vnode).join(""), "Claude (Opus 4.8)Codex (GPT-5.6 Terra)");
 });
 
 test("DrawerStatus vnode: 状態構造体（chatStatusView/channelStatusView）を色ドット付き class で描く", () => {

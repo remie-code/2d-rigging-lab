@@ -18,6 +18,14 @@
  *                       の「欠落側は前の表示を保持する」状態遷移を preact の state 更新に写した純関数
  *  - voiceOutputLabel → :342-345 `applyAudioDevice(ad)`（ヘッダの「声の出力先」表示に使う文言導出。
  *                        設定引き出し側の結線は Domain C——文言導出だけここで共有する）
+ *
+ * 多頭化 Domain C（brain-swap-wave-plan.md §3）追加抽出: 設定引き出し「頭脳」区画の表示導出。
+ *  - BRAIN_LABELS / brainLabel → 頭 id → 表示ラベル（`BRAINS[*].label` 相当を UI 層で直書き。
+ *    cockpit-server.mjs が「頭 id 2 値を直書きする」のと同じ責務境界規律——settings-drawer.mjs は
+ *    src/mind/brains.mjs を import しない。「二人目の客が来た時」に選択肢を増やす場所はここ 1 箇所）。
+ *  - brainCredentialHealthLabel → `cockpit.mjs` の `brainStatus()` が返す `credentialHealth`
+ *    （資格情報ファイルの**存在確認 boolean のみ**・中身は扱わない・blocking #4）を文言化する。
+ *    操縦席は資格情報そのものを扱わない（brain-swap.md §2 UX 裁定）。
  */
 
 /**
@@ -75,4 +83,37 @@ export function mergeHealth(prev, next) {
  */
 export function voiceOutputLabel(ad) {
   return ad && ad.name ? ad.name : "default";
+}
+
+/**
+ * 頭 id → 表示ラベル（`src/mind/brains.mjs` の `BRAINS[*].label` 相当を UI 層で直書き・多頭化
+ * Domain C）。第三の頭を足すときはここへ 1 項目足す（README の provider 追加手引き参照）。
+ * @type {Readonly<Record<string, string>>}
+ */
+export const BRAIN_LABELS = Object.freeze({
+  claude: "Claude (Opus 4.8)",
+  codex: "Codex (GPT-5.6 Terra)"
+});
+
+/**
+ * 現在の頭の表示ラベル（`{brain}` 形・snapshot.brain / brainStatus() の現況）。未知 id・未指定は
+ * "unknown"（cockpit-server 未注入で snapshot.brain が null のとき等）。
+ * @param {{ brain?: string | null } | null | undefined} brainStatus
+ * @returns {string}
+ */
+export function brainLabel(brainStatus) {
+  const id = brainStatus && brainStatus.brain;
+  return (id && BRAIN_LABELS[id]) || "unknown";
+}
+
+/**
+ * 頭脳の資格情報健康表示（設定引き出し「頭脳」区画・多頭化 Domain C）。`credentialHealth` は
+ * cockpit.mjs の `brainStatus()` が返す boolean（資格情報ファイルの**存在確認のみ**・中身は読まない・
+ * blocking #4）。健康/未検出/未指定の 3 分岐。
+ * @param {{ credentialHealth?: boolean | null } | null | undefined} brainStatus
+ * @returns {string}
+ */
+export function brainCredentialHealthLabel(brainStatus) {
+  if (!brainStatus || typeof brainStatus.credentialHealth !== "boolean") return "unknown";
+  return brainStatus.credentialHealth ? "ログイン確認済み" : "未検出（codex login してや）";
 }

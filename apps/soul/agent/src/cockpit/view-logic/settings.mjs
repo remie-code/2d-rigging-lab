@@ -25,6 +25,10 @@
  *  - CHAT_EMPTY_SOURCE_ERROR  → :779 空 source で Connect を押した時の文言
  *  - earsStartFailureText     → :740-742 POST /api/ears/start 応答の失敗文言（409/500 とも !ok）
  *  - requestErrorText         → 各 fetch catch の文言（:611 :629 :675 :693 :724 :748 :768 :794 :802 :809）
+ *
+ * 多頭化 Domain C（brain-swap-wave-plan.md §3）追加抽出:
+ *  - brainPostErrorText → POST /api/brain 応答の失敗文言（audioDevicePostErrorText の写経・
+ *    503=未注入・!ok="set failed: error"・成功は null）。
  */
 
 /**
@@ -145,6 +149,15 @@ export function channelPostErrorText(res) {
 }
 
 /**
+ * POST /api/brain 応答 → エラー文言（多頭化 Domain C・audioDevicePostErrorText の写経）。成功は null。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function brainPostErrorText(res) {
+  return settingPostErrorText(res, "brain control not available");
+}
+
+/**
  * POST /api/chat/connect 応答 → エラー文言（:787-791）。
  * 503 = chat 未結線・400 = invalid source・その他 !ok = connect failed。成功は null。
  * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
@@ -182,7 +195,8 @@ const REQUEST_ERROR_PREFIX = {
   audioDevice: "audio device error", //              :693
   channel: "channel error", //                       :768
   chatConnect: "chat connect error", //              :794
-  chatDisconnect: "chat disconnect error" //         :802
+  chatDisconnect: "chat disconnect error", //        :802
+  brain: "brain error" //   多頭化 Domain C（POST /api/brain・audioDevice の写経）
 };
 
 /**

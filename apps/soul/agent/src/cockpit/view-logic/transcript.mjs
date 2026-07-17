@@ -12,6 +12,10 @@
  *  - speakerRowClass→ :390 `row.className = "row speaker-" + speaker;`
  *  - latencyLabel   → :401-404 `if (d.latencyMs != null) lat.textContent = "(" + (d.latencyMs / 1000).toFixed(1) + "s)";`
  *                     （履歴行には latencyMs が載らない＝ live 行のみ (Ns) が付く・domain-a.md §3.3 注）
+ *
+ * 多頭化 Domain C（brain-swap-wave-plan.md §3）追加抽出: latencyLabel に brain 札を additive な第 2
+ * 引数で足す（soul 行がどの頭の応答かを一目で示す・blocking #6 additive・brain 未指定は従来どおり
+ * (Ns) のみ＝後方互換）。
  */
 
 /**
@@ -48,10 +52,17 @@ export function speakerRowClass(entry) {
 /**
  * レイテンシ表示（live 行のみ・履歴行は null＝表示しない）。`latencyMs != null` の意味論を踏襲
  * （null と undefined の両方で非表示）。
+ *
+ * 多頭化 Domain C: 第 2 引数 `brain` を additive に受ける（発話ごとの頭札・brain-swap.md §2）。
+ * `latencyMs` が null/undefined なら brain の有無に関わらず null（レイテンシが無ければ札も出さない
+ * ＝発話していない soul 行 (NG ブロック等) では表示しない）。brain 未指定/null は従来どおり `(Ns)` のみ
+ * （後方互換・you/viewer 行や brain 未注入時の soul 行はこの分岐を通る）。
  * @param {number | null | undefined} latencyMs
+ * @param {string | null | undefined} [brain]
  * @returns {string | null}
  */
-export function latencyLabel(latencyMs) {
+export function latencyLabel(latencyMs, brain) {
   if (latencyMs == null) return null;
-  return "(" + (latencyMs / 1000).toFixed(1) + "s)";
+  const secs = (latencyMs / 1000).toFixed(1) + "s";
+  return brain ? "(" + secs + " · " + brain + ")" : "(" + secs + ")";
 }
