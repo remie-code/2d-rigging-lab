@@ -18,7 +18,11 @@
  *     命中したら**確実に**発火要求（不応期・確率は掛けない = 呼ばれたら返す・裁定 4）。busy 中は出さない。
  *  2. **区切り応答（turn-end）**: speechEnd 後、turnEndSilenceMs の無音が続き（間に speechStart が来ない）、
  *     かつ**不応期**（直近発火からの経過 ≥ turnEndRefractoryMs）を過ぎ、かつ**確率**（注入 RNG）に当たったら
- *     発火要求。全部には返さない（裁定 4「実況の区切りでたまに拾う」）。
+ *     ——即発火せず**armed（構え）**状態に入る（追撃修正・TURN_END_ARM_TIMEOUT_MS 定数コメント参照）。
+ *     armed 中にその発話の転写（speaker "you"）が handleTranscript に届いたら、その時点で発火要求を出す
+ *     （呼びかけ call に命中した場合は call が勝ち、pending turn-end は破棄 = 二重発火させない）。
+ *     turnEndArmTimeoutMs 内に転写が届かなければタイムアウトで静かに armed を解除する（発火しない）。
+ *     全部には返さない（裁定 4「実況の区切りでたまに拾う」）。
  *  3. **沈黙（silence）**: 最後の活動（you 発話 / 魂発火 / VAD / **viewer コメント**）から silenceBaseMs +
  *     **ジッター**（注入 RNG）経過し、かつ**長い不応期**（≥ silenceRefractoryMs）を過ぎ、かつ**予算**
  *     （セッション内の沈黙発火回数上限）が残っていたら発火要求（silence は視覚発火相当 = 画面を見て一言）。
@@ -72,6 +76,33 @@ export const TURN_END_PROBABILITY = 0.35;
  * （立て続けの相槌でうるさくならないように）。call/turn-end/silence・魂発話すべてが基点を更新する。
  */
 export const TURN_END_REFRACTORY_MS = 8000;
+
+/**
+ * 区切り応答の arm タイムアウト（v0 定数・追撃修正・実配信で観測されたバグの是正・L0 裁定で 5000ms へ
+ * 引き上げ）。
+ *
+ * **バグ**: 旧実装は speechEnd 後 turnEndSilenceMs の無音 + 不応期 + 確率判定を通過したら**即** emitFire
+ * していた。しかし whisper の文字起こしは転写バッファ（正本）へ 1.5〜2s 遅れて届く（実測・
+ * experiments/s2-ears.md）ため、発火時の注入に「引き金になった発話そのもの」がまだ載っておらず、
+ * 直近の一言を知らんまま返事する事故が実配信で確認された（例: 発火 12:27:57 → 当該発話の正本着地
+ * 12:28:00）。
+ *
+ * **修正**: VAD 判定（不応期・確率・enabled）を通過しても即発火せず armed（構え）状態に入り、その発話の
+ * 転写（speaker "you"）が handleTranscript に届いた瞬間に発火する。この定数は armed から転写到着までの
+ * 最大待ち時間——超えたら**静かに取り下げる**（発火しない）。
+ *
+ * **5000ms への引き上げ根拠（L0 裁定）**: 動機になった実配信の実例（上記 12:27:57 → 12:28:00）は発火から
+ * 当該転写の正本着地まで**約 3 秒**かかっており、旧値 2000ms ではその実例自体を取りこぼす（直そうとした
+ * バグの当の観測例が救えないのでは修正の体を成さない）。加えて、長い発話ほど whisper の処理時間も伸びる
+ * 傾向があるため、一番助けたいケース（長めの発話の後の区切り応答）ほど短いタイムアウトに殺されるという
+ * 逆向きの力学がある。この窓は「armed 状態で転写到着を待つ上限」であり、**通常の応答遅延には一切
+ * 影響しない**——発火そのものは常に転写到着の瞬間に起きるため、窓を広げても「待たされる」時間が増える
+ * わけではない。窓を広げる代償は「whisper が遅い時に区切り応答も遅れて出る（最悪 armed のまま 5 秒）」
+ * だけであり、これは「言われたことを踏まえた正しい返事が遅れて来る」ことを意味する = ユーザー裁定
+ * （待って正しい返事 > 即座のトンチンカン）にそのまま整合する。トンチンカンな即答より無反応の方がまし、
+ * が安全側の判断（引き上げ後も維持）。人間ゲートの体感で直す前提。
+ */
+export const TURN_END_ARM_TIMEOUT_MS = 5000;
 
 /**
  * 沈黙発火の基礎無音長（v0 定数）。最後の活動からこの時間 + ジッター経過で沈黙発火の候補にする。
@@ -313,6 +344,8 @@ function isValidVerbosityMode(mode) {
  * @param {number} [options.turnEndSilenceMs=TURN_END_SILENCE_MS]
  * @param {number} [options.turnEndProbability=TURN_END_PROBABILITY]
  * @param {number} [options.turnEndRefractoryMs=TURN_END_REFRACTORY_MS]
+ * @param {number} [options.turnEndArmTimeoutMs=TURN_END_ARM_TIMEOUT_MS]  armed（構え）から転写到着までの
+ *   最大待ち時間。turn 検出・name variants 同様に口数モード不変（追撃修正・定数コメント参照）。
  * @param {number} [options.silenceBaseMs=SILENCE_BASE_MS]
  * @param {number} [options.silenceJitterMs=SILENCE_JITTER_MS]
  * @param {number} [options.silenceRefractoryMs=SILENCE_REFRACTORY_MS]
@@ -358,6 +391,8 @@ export function createFireScheduler(options) {
 
   // turn 検出（TURN_END_SILENCE_MS）は口数モード不変（wave 計画「口数配線」§2 裁定 A）。
   const turnEndSilenceMs = numberOr(options.turnEndSilenceMs, TURN_END_SILENCE_MS);
+  // armed→転写到着の最大待ち（TURN_END_ARM_TIMEOUT_MS）も turn 検出同様に口数モード不変（追撃修正）。
+  const turnEndArmTimeoutMs = numberOr(options.turnEndArmTimeoutMs, TURN_END_ARM_TIMEOUT_MS);
 
   // 口数モード（wave 計画「口数配線」§2 裁定 A・inventory §A-2）: 初期 mode を options.verbosity から
   // 解決する（既定 "normal"・未知値も "normal" にフォールバック = 防御的）。9 個の tunable let の初期値は
@@ -395,6 +430,10 @@ export function createFireScheduler(options) {
   let turnEndTimer = null;
   /** @type {ReturnType<typeof setTimeout> | null} */
   let silenceTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let turnEndArmTimer = null;
+  /** pending turn-end の armed（構え）状態。VAD 終端の判定通過後、転写到着を待つ（追撃修正）。 */
+  let turnEndArmed = false;
 
   const clearTurnEnd = () => {
     if (turnEndTimer != null) {
@@ -407,6 +446,30 @@ export function createFireScheduler(options) {
       clearTimeoutImpl(/** @type {any} */ (silenceTimer));
       silenceTimer = null;
     }
+  };
+  const clearTurnEndArmTimer = () => {
+    if (turnEndArmTimer != null) {
+      clearTimeoutImpl(/** @type {any} */ (turnEndArmTimer));
+      turnEndArmTimer = null;
+    }
+  };
+  /** armed（構え）へ入る（onTurnEndTimer からのみ呼ばれる）。転写到着 / タイムアウトで解除されるまで
+   *  turnEndArmed = true が続く。 */
+  const armTurnEnd = () => {
+    turnEndArmed = true;
+    clearTurnEndArmTimer();
+    turnEndArmTimer = setTimeoutImpl(onTurnEndArmTimeout, turnEndArmTimeoutMs);
+  };
+  /** pending turn-end を解除する（発火せず・タイマも畳む）。転写到着 / タイムアウト / OFF / 口数切替 /
+   *  soul 発話 / dispose のいずれからも呼ばれる（多重呼び出しは自己ガードで安全）。 */
+  const disarmTurnEnd = () => {
+    turnEndArmed = false;
+    clearTurnEndArmTimer();
+  };
+  /** armed のタイムアウト（転写が届かなかった） = 静かに解除する（発火しない）。 */
+  const onTurnEndArmTimeout = () => {
+    turnEndArmTimer = null;
+    turnEndArmed = false;
   };
 
   /** 発火要求を出す（onFireRequest の throw は握って常駐を殺さない）。 */
@@ -449,8 +512,9 @@ export function createFireScheduler(options) {
     if (isBusy()) return; // busy 中は要求を出さない。
     if (now - lastFireAtMs < turnEndRefractoryMs) return; // 不応期内。
     if (clamp01(rng()) >= turnEndProbability) return; // 確率外れ。
-    lastFireAtMs = now;
-    emitFire("turn-end");
+    // 判定通過 → 即 emitFire せず armed（構え）へ。その発話の転写（handleTranscript の you）到着で
+    // 発火する（lastFireAtMs は emitFire 実行時に更新する = まだ発火していないので基点は動かさない）。
+    armTurnEnd();
   }
 
   /**
@@ -461,13 +525,17 @@ export function createFireScheduler(options) {
     if (disposed || event == null || typeof event.type !== "string") return;
     if (event.type === "speechStart") {
       // 新しい発話オンセット = まだ喋っている → 区切り応答タイマを取り消す。活動 → 沈黙タイマ再武装。
+      // armed 中（前の発話の転写待ち）はここでは触らない = 据え置き（まだ届いていない転写を待ち続ける）。
       clearTurnEnd();
       armSilence();
     } else if (event.type === "speechEnd") {
       // 一区切り → 活動として沈黙タイマ再武装 + 区切り応答タイマを張る（無音待ち）。
       armSilence();
       clearTurnEnd();
-      if (enabled) {
+      // armed 中に新たな speechEnd が来た場合は据え置く（裁量・二重 arm や確率の二重消費を避ける）:
+      // 既に armed（前の発話の転写待ち）なら新しい VAD タイマーは起動しない。armed 解除（転写到着 /
+      // タイムアウト）後の次の speechEnd から新たに測り直す。
+      if (enabled && !turnEndArmed) {
         turnEndTimer = setTimeoutImpl(onTurnEndTimer, turnEndSilenceMs);
       }
     }
@@ -476,8 +544,14 @@ export function createFireScheduler(options) {
   };
 
   /**
-   * 転写 append（you = 呼びかけ照合 + 活動 / soul = 発火実績 = 不応期リセット + 活動）を 1 個食わせる。
-   * **話者無差別に届く**（transcript-buffer は you も soul も同じ列）ので speaker で分岐する。
+   * 転写 append（you = 呼びかけ照合 + pending turn-end ゲート発火 + 活動 / soul = 発火実績 = 不応期リセット +
+   * 活動）を 1 個食わせる。**話者無差別に届く**（transcript-buffer は you も soul も同じ列）ので speaker で
+   * 分岐する。
+   *
+   * **pending turn-end のゲート発火（追撃修正）**: armed（構え）中に you の転写が届いたら、まず呼びかけ
+   * （call）照合を行い、命中すれば call が勝つ（emitFire("call") のみ・pending turn-end は破棄 = 二重発火
+   * させない）。call に負けなければ、この転写到着そのものが turn-end の発火トリガーになる（引き金になった
+   * 発話が転写バッファに載った状態で発火する）。
    * @param {{ text?: string; speaker?: string }} entry
    */
   const handleTranscript = (entry) => {
@@ -485,8 +559,10 @@ export function createFireScheduler(options) {
     const now = nowImpl();
     if (entry.speaker === "soul") {
       // 魂が実際に喋った（手動 Fire を含む任意の発火の結果）= 不応期の基点 + 活動。
+      // pending turn-end はもう古い（別の発火が既に起きた後に発火するのはおかしい）ので解除する。
       lastFireAtMs = now;
       armSilence();
+      disarmTurnEnd();
       return;
     }
     if (entry.speaker === "viewer") {
@@ -498,11 +574,24 @@ export function createFireScheduler(options) {
     // you（既定）: 活動 → 沈黙タイマ再武装。
     armSilence();
     // 呼びかけ照合（命中即発火・不応期/確率は掛けない = 裁定 4）。OFF/busy 中は出さない。
-    if (!enabled || isBusy()) return;
-    if (typeof entry.text !== "string" || entry.text.length === 0) return;
-    if (textMatchesName(entry.text, needles)) {
-      lastFireAtMs = now;
-      emitFire("call");
+    let calledOut = false;
+    if (enabled && !isBusy() && typeof entry.text === "string" && entry.text.length > 0) {
+      if (textMatchesName(entry.text, needles)) {
+        lastFireAtMs = now;
+        emitFire("call");
+        calledOut = true;
+      }
+    }
+    // pending turn-end（armed 中）のゲート発火。同じ転写が call に命中していたら call が勝ち、ここでは
+    // 発火しない（disarm のみ）。call に負けなければ、この転写到着が発火のトリガー（本追撃修正の核心）。
+    // busy 再チェック: armed 成立（VAD タイマー時点）から転写到着までの間に busy になった場合は、
+    // call 判定と同様に静かに諦める（fire-orchestrator 側の busy 無視でも二重に保護される）。
+    if (turnEndArmed) {
+      disarmTurnEnd();
+      if (!calledOut && enabled && !isBusy()) {
+        lastFireAtMs = now;
+        emitFire("turn-end");
+      }
     }
   };
 
@@ -540,6 +629,7 @@ export function createFireScheduler(options) {
 
   /**
    * 自発発火の ON/OFF。OFF で 3 種とも黙りタイマも畳む（手動 Fire は非経由 = 影響なし）。ON で沈黙カウント開始。
+   * pending turn-end（armed 中）も OFF で解除する（追撃修正・解除が自然 = 再 ON しても復活しない）。
    * @param {boolean} next
    */
   const setEnabled = (next) => {
@@ -549,6 +639,7 @@ export function createFireScheduler(options) {
     if (!enabled) {
       clearTurnEnd();
       clearSilence();
+      disarmTurnEnd();
     } else {
       armSilence(); // 有効化で沈黙カウント開始（活動が無くてもいずれ「画面を見て一言」に至る）。
     }
@@ -567,6 +658,9 @@ export function createFireScheduler(options) {
    * 予算を即座に反映するため（mode 切替はそのモードの間で仕切り直す、という意味論を沈黙タイマにも
    * 適用する）。turn-end/comment はイベント駆動（次の speechEnd / 次のコメント到着）で自然に新値を
    * 拾う（armSilence 相当の「即時再武装するタイマ」を turn-end/comment は持たない）。
+   *
+   * pending turn-end（armed 中）も切替で解除する（追撃修正・setEnabled(false) の写経・解除が自然 =
+   * 「そのモードの間で仕切り直す」に pending も含める）。
    * @param {string} mode
    */
   const setVerbosity = (mode) => {
@@ -582,6 +676,7 @@ export function createFireScheduler(options) {
     silenceBudget = bundle.silenceBudget; // 残予算を新モードの満額へリセット。
     commentBudget = bundle.commentBudget;
     currentVerbosity = mode;
+    disarmTurnEnd(); // pending turn-end も仕切り直し（解除）。
     if (enabled) armSilence(); // 新しい silence 基礎/ジッター/予算を即座に反映。
   };
 
@@ -606,6 +701,7 @@ export function createFireScheduler(options) {
       disposed = true;
       clearTurnEnd();
       clearSilence();
+      disarmTurnEnd();
     }
   };
 }

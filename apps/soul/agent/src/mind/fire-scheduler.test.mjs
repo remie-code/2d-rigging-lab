@@ -12,6 +12,7 @@ import {
   TURN_END_SILENCE_MS,
   TURN_END_PROBABILITY,
   TURN_END_REFRACTORY_MS,
+  TURN_END_ARM_TIMEOUT_MS,
   SILENCE_BASE_MS,
   SILENCE_JITTER_MS,
   SILENCE_REFRACTORY_MS,
@@ -79,6 +80,7 @@ test("scheduler: v0 定数が export される（不応期・確率・ジッタ�
   assert.ok(TURN_END_SILENCE_MS > 0);
   assert.ok(TURN_END_PROBABILITY > 0 && TURN_END_PROBABILITY < 1);
   assert.ok(TURN_END_REFRACTORY_MS > 0);
+  assert.ok(TURN_END_ARM_TIMEOUT_MS > 0, "arm タイムアウト（追撃修正）も正の数として export される");
   assert.ok(SILENCE_BASE_MS > 0);
   assert.ok(SILENCE_JITTER_MS >= 0);
   assert.ok(SILENCE_REFRACTORY_MS > 0);
@@ -189,7 +191,7 @@ test("call: 自発 OFF 中・busy 中は呼びかけでも発火要求を出さ�
 // ── 区切り応答（turn-end・speechEnd 後 X 無音 + 不応期 + 確率）──────────────────────
 
 /** turn-end 判定用のスケジューラを組む（確率は rng で制御）。 */
-function makeTurnEndScheduler(clock, { rng, isBusy } = {}) {
+function makeTurnEndScheduler(clock, { rng, isBusy, turnEndArmTimeoutMs } = {}) {
   /** @type {any[]} */
   const reqs = [];
   const sch = createFireScheduler({
@@ -200,29 +202,80 @@ function makeTurnEndScheduler(clock, { rng, isBusy } = {}) {
     rng: rng ?? rngHit,
     setTimeoutImpl: clock.setTimeoutImpl,
     clearTimeoutImpl: clock.clearTimeoutImpl,
+    turnEndArmTimeoutMs,
     // 沈黙は遠くに追いやり turn-end 分岐だけを見る。
     silenceBaseMs: 10_000_000
   });
   return { sch, reqs };
 }
 
-test("turn-end: speechEnd 後 X 秒の無音 + 確率当たりで区切り応答（X 未満では出ない）", () => {
+test("turn-end: speechEnd 後 X 秒の無音 + 確率当たりで armed に入る（即座には発火しない）", () => {
   const clock = makeFakeClock();
   const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit });
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(TURN_END_SILENCE_MS - 1);
-  assert.equal(reqs.length, 0); // X 未満 → まだ出ない。
-  clock.advance(1); // X 到達。
+  assert.equal(reqs.length, 0); // X 未満 → まだ armed にすら入らない。
+  clock.advance(1); // X 到達 → armed。
+  assert.equal(reqs.length, 0, "armed 直後はまだ発火しない（追撃修正・転写到着まで待つ）");
+  sch.dispose();
+});
+
+test("turn-end: armed 後、その発話の転写（you）が届いた瞬間に発火する（追撃修正の核心）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // armed。
+  assert.equal(reqs.length, 0);
+  sch.handleTranscript(you("さっきの話なんだけど")); // 引き金になった発話の転写到着。
   assert.equal(reqs.length, 1);
   assert.equal(reqs[0].kind, "turn-end");
   sch.dispose();
 });
 
-test("turn-end: 確率外れ（注入 RNG）は出ない", () => {
+test("turn-end: armed 後、転写がタイムアウト内に届かなければ静かに解除する（発火しない）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // armed。
+  clock.advance(TURN_END_ARM_TIMEOUT_MS - 1);
+  assert.equal(reqs.length, 0, "タイムアウト未満はまだ armed のまま（発火もしない）");
+  clock.advance(1); // タイムアウト到達 → 静かに解除。
+  assert.equal(reqs.length, 0, "タイムアウトで解除・発火しない");
+  // 解除後に転写が届いても、もう armed ではないので発火しない（遅れて着地した正本を拾わない）。
+  sch.handleTranscript(you("遅れて届いた発話"));
+  assert.equal(reqs.length, 0);
+  sch.dispose();
+});
+
+test("turn-end: armed 中に転写が呼びかけ（call）に命中したら call が勝ち、pending turn-end は破棄される（二重発火しない）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // armed。
+  sch.handleTranscript(you("コーディこれ見て")); // 同じ転写が呼びかけにも命中。
+  assert.equal(reqs.length, 1, "call のみが出る（turn-end は破棄）");
+  assert.equal(reqs[0].kind, "call");
+  sch.dispose();
+});
+
+test("turn-end: armed 中に setEnabled(false) で pending は解除される（再 ON でも復活しない）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // armed。
+  sch.setEnabled(false);
+  sch.setEnabled(true);
+  sch.handleTranscript(you("さっきの話"));
+  assert.equal(reqs.length, 0, "OFF で armed は解除され、再 ON でも復活しない");
+  sch.dispose();
+});
+
+test("turn-end: 確率外れ（注入 RNG）は armed にすら入らない", () => {
   const clock = makeFakeClock();
   const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngMiss });
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(TURN_END_SILENCE_MS);
+  sch.handleTranscript(you("さっきの話"));
   assert.equal(reqs.length, 0);
   sch.dispose();
 });
@@ -235,37 +288,86 @@ test("turn-end: 無音待ち中の speechStart は区切り応答を取り消す
   sch.handleVadEvent({ type: "speechStart" }); // 続けて喋り出した → 取り消し。
   clock.advance(1000);
   assert.equal(reqs.length, 0);
-  // 次の speechEnd から測り直して発火する（対照）。
+  // 次の speechEnd から測り直して armed → 転写到着で発火する（対照）。
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(TURN_END_SILENCE_MS);
+  assert.equal(reqs.length, 0, "armed 直後はまだ発火しない");
+  sch.handleTranscript(you("続きの発話"));
   assert.equal(reqs.length, 1);
   sch.dispose();
 });
 
-test("turn-end: 不応期内は出ない（直近発火からの経過が足りない）／不応期経過後は出る", () => {
+test("turn-end: armed 中に新たな speechEnd が来ても据え置く（二重 arm しない）", () => {
+  const clock = makeFakeClock();
+  // arm タイムアウトを長めに取り、「新たな VAD タイマーが起動していない」ことを
+  // TURN_END_SILENCE_MS 経過後も生きた armed で確認できるようにする。
+  const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit, turnEndArmTimeoutMs: 60_000 });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // armed（1 回目の発話の転写待ち）。
+  // armed 中にさらに speechStart→speechEnd が来ても、新しい VAD タイマーは起動しない（据え置き）。
+  sch.handleVadEvent({ type: "speechStart" });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // もし二重に arm していればここで新たな armed が生まれてしまう。
+  assert.equal(reqs.length, 0, "据え置きなので新たな armed は生まれない");
+  // 最初の armed はまだ生きている（arm タイムアウトを長く取ったので健在）→ 転写到着で 1 回だけ発火する。
+  sch.handleTranscript(you("ようやく届いた転写"));
+  assert.equal(reqs.length, 1, "据え置かれた armed が転写到着で 1 回だけ発火する");
+  sch.dispose();
+});
+
+test("turn-end: 不応期内は armed にすら入らない／不応期経過後は armed→転写到着で出る", () => {
   const clock = makeFakeClock();
   const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit });
   // 直近発火を now=0 に置く（soul 発話が不応期の基点を更新する）。
   sch.handleTranscript(soul("さっき喋った"));
-  // すぐ speechEnd → X 経過（now=TURN_END_SILENCE_MS < 不応期）→ 出ない。
+  // すぐ speechEnd → X 経過（now=TURN_END_SILENCE_MS < 不応期）→ armed にすら入らない。
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(TURN_END_SILENCE_MS);
+  sch.handleTranscript(you("不応期内の発話"));
   assert.equal(reqs.length, 0, "不応期内は出ない");
-  // 不応期を跨いでから再度 speechEnd → 出る。
+  // 不応期を跨いでから再度 speechEnd → armed → 転写到着で出る。
   clock.advance(TURN_END_REFRACTORY_MS);
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(TURN_END_SILENCE_MS);
-  assert.equal(reqs.length, 1, "不応期経過後は出る");
+  assert.equal(reqs.length, 0, "armed 直後はまだ発火しない");
+  sch.handleTranscript(you("不応期後の発話"));
+  assert.equal(reqs.length, 1, "不応期経過後・転写到着で出る");
   sch.dispose();
 });
 
-test("turn-end: busy 中は区切り応答を出さない", () => {
+test("turn-end: busy 中は armed にすら入らない", () => {
   const clock = makeFakeClock();
   let busy = true;
   const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit, isBusy: () => busy });
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(TURN_END_SILENCE_MS);
+  sch.handleTranscript(you("busy 中の発話"));
   assert.equal(reqs.length, 0);
+  sch.dispose();
+});
+
+test("turn-end: armed 成立後、転写到着までに busy になったら静かに諦める（発火しない）", () => {
+  const clock = makeFakeClock();
+  let busy = false;
+  const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit, isBusy: () => busy });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // armed 成立時点では busy=false。
+  busy = true; // armed 成立後、転写到着までの間に busy になる。
+  sch.handleTranscript(you("busy 中に届いた転写"));
+  assert.equal(reqs.length, 0, "転写到着時点で busy なら turn-end は出さない");
+  sch.dispose();
+});
+
+test("turn-end: armed 中に soul（魂）が実際に喋ったら pending は解除される（別の発火の後に発火しない）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeTurnEndScheduler(clock, { rng: rngHit });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // armed。
+  sch.handleTranscript(soul("（何らかの経路で先に喋った）"));
+  assert.equal(reqs.length, 0, "soul 発話は turn-end を出さない（不応期リセットのみ）");
+  // armed は soul 発話で解除されているので、遅れて you の転写が届いても発火しない。
+  sch.handleTranscript(you("遅れて届いた発話"));
+  assert.equal(reqs.length, 0, "soul 発話後は pending turn-end が残っていない");
   sch.dispose();
 });
 
@@ -700,13 +802,14 @@ test("setVerbosity: モード束の turn-end 確率が実際の発火判定に�
       silenceBaseMs: 10_000_000 // 沈黙は遠くへ（turn-end 分岐だけを見る）。
     });
     sch.handleVadEvent({ type: "speechEnd" });
-    clock.advance(TURN_END_SILENCE_MS);
+    clock.advance(TURN_END_SILENCE_MS); // 確率通過なら armed（まだ発火しない）。
+    sch.handleTranscript(you("さっきの話")); // armed なら転写到着で発火する。
     results[mode] = reqs.length;
     sch.dispose();
   }
-  assert.equal(results.quiet, 0, "quiet(確率 0.15) は rng=0.5 で確率外れ");
-  assert.equal(results.normal, 0, "normal(確率 0.35) は rng=0.5 で確率外れ");
-  assert.equal(results.chatty, 1, "chatty(確率 0.70) は rng=0.5 で確率命中");
+  assert.equal(results.quiet, 0, "quiet(確率 0.15) は rng=0.5 で確率外れ（armed にすら入らない）");
+  assert.equal(results.normal, 0, "normal(確率 0.35) は rng=0.5 で確率外れ（armed にすら入らない）");
+  assert.equal(results.chatty, 1, "chatty(確率 0.70) は rng=0.5 で確率命中・転写到着で発火");
 });
 
 test("setVerbosity: 実行時切替で束が即座に切り替わる（normal→chatty で turn-end 確率が変わる）", () => {
@@ -724,11 +827,14 @@ test("setVerbosity: 実行時切替で束が即座に切り替わる（normal→
   });
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(TURN_END_SILENCE_MS);
-  assert.equal(reqs.length, 0, "normal(0.35) は rng=0.5 で確率外れ");
+  sch.handleTranscript(you("さっきの話"));
+  assert.equal(reqs.length, 0, "normal(0.35) は rng=0.5 で確率外れ（armed にすら入らない）");
   sch.setVerbosity("chatty");
   sch.handleVadEvent({ type: "speechEnd" }); // まだ発火していないので不応期は影響しない（lastFireAtMs=-Infinity）。
-  clock.advance(TURN_END_SILENCE_MS);
-  assert.equal(reqs.length, 1, "切替後 chatty(0.70) は rng=0.5 で確率命中");
+  clock.advance(TURN_END_SILENCE_MS); // 確率命中で armed。
+  assert.equal(reqs.length, 0, "armed 直後はまだ発火しない");
+  sch.handleTranscript(you("また別の話"));
+  assert.equal(reqs.length, 1, "切替後 chatty(0.70) は rng=0.5 で確率命中・転写到着で発火");
   assert.equal(sch.getVerbosity(), "chatty");
   sch.dispose();
 });
@@ -838,9 +944,11 @@ test("blocking: turn 検出（turnEndSilenceMs）は口数モードに関わら�
     });
     sch.handleVadEvent({ type: "speechEnd" });
     clock.advance(TURN_END_SILENCE_MS - 1);
-    assert.equal(reqs.length, 0, `${mode}: X 未満はまだ出ない`);
+    assert.equal(reqs.length, 0, `${mode}: X 未満はまだ出ない（armed にも入らない）`);
     clock.advance(1);
-    assert.equal(reqs.length, 1, `${mode}: TURN_END_SILENCE_MS 到達で出る（turn 検出はモード不変）`);
+    assert.equal(reqs.length, 0, `${mode}: TURN_END_SILENCE_MS 到達で armed（まだ発火しない）`);
+    sch.handleTranscript(you("さっきの話")); // armed → 転写到着で発火（turn 検出の長さ自体はモード不変）。
+    assert.equal(reqs.length, 1, `${mode}: TURN_END_SILENCE_MS 到達 + 転写到着で出る（turn 検出はモード不変）`);
     sch.dispose();
   }
 });
