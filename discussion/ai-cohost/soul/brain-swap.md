@@ -50,6 +50,8 @@
 
 現行アーキ(転写が正・セッションは使い捨てキャッシュ)は、**セッションの定期リサイクル**(一定発話数/時間で dispose→再生成。連続性は正本からの再注入で保たれる)という対策を最初から許している。Terra 移行と独立に Claude 経路の改善候補として台帳に残す(着手はユーザー裁定)。
 
+**候補 B: SDK のコンテキスト圧縮(2026-07-17 ユーザー発案・型定義で機構の実在を確認済み)**。claude-agent-sdk@導入版の sdk.d.ts に `autoCompactEnabled` / `autoCompactWindow` / `autoCompactThreshold`・`PreCompact`/`PostCompact` フック(`compact_summary` 取得可)・`compacting` 状態・部分圧縮メタデータが実在(sdk.d.ts:2121,2193,2864,3048,6156,6364 付近)。**リサイクルの上位互換候補**(全忘却でなく要約が残る=記憶の代償が軽い)。設計注意: 「発言完了ごと」は不可(圧縮=全履歴の LLM 要約で重い+`compacting` 中の発火が死ぬ)→ 現実形は「低め閾値の自動」か「沈黙中を狙った手動発火(手動トリガの口の有無は要確認)」。検証すべき未知: 圧縮 1 回の所要時間(≈100k で何秒か)・ブロッキング挙動・閾値の単位・maxTurns:1/tools:[] 構成との相互作用。**Claude 経路専用レバー**(Terra(b) は毎発火使い捨てゆえ無関係)。候補 A(リサイクル)との比較実験は「長回し対策」問題として多頭化の後に。
+
 ## 6. 次の段取り
 
 1. **ユーザー install**: `apps/soul/agent` で `npm install @openai/codex-sdk`(魂は独立 npm・root lockfile 不変)。
