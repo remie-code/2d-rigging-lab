@@ -22,7 +22,8 @@
  * 多頭化 Domain C（brain-swap-wave-plan.md §3）追加抽出: 設定引き出し「頭脳」区画の表示導出。
  *  - BRAIN_LABELS / brainLabel → 頭 id → 表示ラベル（`BRAINS[*].label` 相当を UI 層で直書き。
  *    cockpit-server.mjs が「頭 id 2 値を直書きする」のと同じ責務境界規律——settings-drawer.mjs は
- *    src/mind/brains.mjs を import しない。「二人目の客が来た時」に選択肢を増やす場所はここ 1 箇所）。
+ *    src/mind/brains.mjs を import しない。「二人目の客が来た時」に選択肢を増やす場所はここ 1 箇所。
+ *    2026-07-17 追撃で実際に三人目・四人目（Codex GPT-5.5 / GPT-5.6 Sol）がここへ 2 項目追加された）。
  *  - brainCredentialHealthLabel → `cockpit.mjs` の `brainStatus()` が返す `credentialHealth`
  *    （資格情報ファイルの**存在確認 boolean のみ**・中身は扱わない・blocking #4）を文言化する。
  *    操縦席は資格情報そのものを扱わない（brain-swap.md §2 UX 裁定）。
@@ -87,12 +88,14 @@ export function voiceOutputLabel(ad) {
 
 /**
  * 頭 id → 表示ラベル（`src/mind/brains.mjs` の `BRAINS[*].label` 相当を UI 層で直書き・多頭化
- * Domain C）。第三の頭を足すときはここへ 1 項目足す（README の provider 追加手引き参照）。
+ * Domain C）。次の頭を足すときはここへ 1 項目足す（README の provider 追加手引き参照）。
  * @type {Readonly<Record<string, string>>}
  */
 export const BRAIN_LABELS = Object.freeze({
   claude: "Claude (Opus 4.8)",
-  codex: "Codex (GPT-5.6 Terra)"
+  codex: "Codex (GPT-5.6 Terra)",
+  "codex-55": "Codex (GPT-5.5)",
+  "codex-56-sol": "Codex (GPT-5.6 Sol)"
 });
 
 /**

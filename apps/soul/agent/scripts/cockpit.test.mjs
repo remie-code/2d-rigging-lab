@@ -540,6 +540,13 @@ test("createBrainHooks: 記憶済みの既知2頭（claude/codex）は defaultCh
   assert.equal(createBrainHooks(settingsCodex, "claude").resolveInitialBrain(), "codex");
 });
 
+test("createBrainHooks: registry 駆動（2026-07-17 追撃）— 追加2頭（codex-55/codex-56-sol）も BRAIN_IDS 経由で優先される", { timeout: 5000 }, () => {
+  const settings55 = makeFakeBrainSettings("codex-55");
+  assert.equal(createBrainHooks(settings55, "claude").resolveInitialBrain(), "codex-55");
+  const settingsSol = makeFakeBrainSettings("codex-56-sol");
+  assert.equal(createBrainHooks(settingsSol, "claude").resolveInitialBrain(), "codex-56-sol");
+});
+
 test("createBrainHooks: 記憶済みの未知値は defaultChoice にフォールバックする（防御的）", { timeout: 5000 }, () => {
   const settings = makeFakeBrainSettings("gpt");
   const hooks = createBrainHooks(settings, "claude");

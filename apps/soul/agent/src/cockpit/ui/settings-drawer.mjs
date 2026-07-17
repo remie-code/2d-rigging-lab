@@ -192,11 +192,14 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
   }, [settings]);
 
   // 頭脳 select の現況同期（多頭化 Domain C）: snapshot.brain.brain（起動時の現況 / POST /api/brain 後の
-  // 反映）が既知 2 値なら select 表示へ反映する。マイク/視界/出力先と違い一覧取得 API を持たない固定
-  // 2 択のため、select の初期値・以後の現況表示はこの effect が担う（未知値/欠落は変更しない）。
+  // 反映）が既知 4 値（2026-07-17 追撃で claude/codex の 2 値から Codex 側 2 頭を追加）なら select 表示へ
+  // 反映する。マイク/視界/出力先と違い一覧取得 API を持たない固定選択肢のため、select の初期値・以後の
+  // 現況表示はこの effect が担う（未知値/欠落は変更しない）。既知値の集合は BRAIN_OPTIONS（health.mjs の
+  // BRAIN_LABELS 由来）と同じ語彙——ここも「頭 id を直書きする」責務境界規律に合わせ、BRAIN_OPTIONS の
+  // value 集合をそのまま使う（複製の decay を避ける）。
   const brainCurrent = settings && settings.brain ? settings.brain.brain : null;
   useEffect(() => {
-    if (brainCurrent === "claude" || brainCurrent === "codex") setBrainSelected(brainCurrent);
+    if (BRAIN_OPTIONS.some((o) => o.value === brainCurrent)) setBrainSelected(/** @type {string} */ (brainCurrent));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brainCurrent]);
 

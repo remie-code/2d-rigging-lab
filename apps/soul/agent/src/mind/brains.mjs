@@ -25,7 +25,7 @@
  *
  * ── 頭の表のエントリ形 ─────────────────────────────────────────────────
  * @typedef {object} BrainEntry
- * @property {string} id  registry のキーと同じ一意識別子（"claude" | "codex"）。
+ * @property {string} id  registry のキーと同じ一意識別子（"claude" | "codex" | "codex-55" | "codex-56-sol"）。
  * @property {string} label  操縦席の表示札（設定層「頭脳」区画の select 表記）。
  * @property {(options?: object) => MindSession} create  頭セッションを起動する（Domain B が options に
  *   systemPrompt 等を渡す）。**ここでは呼ばない**（health test は実 create を呼ばない＝実 SDK 消費ゼロ）。
@@ -38,8 +38,9 @@ import { createLlmSession } from "./llm-session.mjs";
 import { createCodexSession } from "./codex-session.mjs";
 
 /**
- * 頭の表（フラット 2 項目・v0 裁定=brain-swap.md §2）。**この Object.freeze が唯一の宣言の在り処**
- * （expression-table.mjs 式）。llm-session.mjs（Claude 頭）は無変更でこの 1 項目になる。
+ * 頭の表（フラット registry・v0 裁定=brain-swap.md §2・2026-07-17 追撃で claude/codex の 2 項目から
+ * Codex 側 2 頭を追加して 4 項目へ）。**この Object.freeze が唯一の宣言の在り処**
+ * （expression-table.mjs 式）。llm-session.mjs（Claude 頭）は無変更のまま。
  *
  * @type {Readonly<Record<string, Readonly<BrainEntry>>>}
  */
@@ -54,6 +55,30 @@ export const BRAINS = Object.freeze({
     id: "codex",
     label: "Codex (GPT-5.6 Terra)",
     create: (options) => createCodexSession(options),
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
+  }),
+  // ── 追撃(2026-07-17・S8後の人間ゲート観測「Terra は自然だが深みがない」を受けた比較追加)────────
+  //  registry はフラットな行追加で増設を受ける設計(brain-swap.md §2 裁定)どおり、Codex 側の別モデルを
+  //  2 行追加するだけ。codex-session.mjs 本体は無変更(model/effort は createCodexSession の options 経由で
+  //  受ける既存設計のまま)。モデル ID 裏取り: 公式 https://developers.openai.com/api/docs/models/gpt-5.5
+  //  および https://developers.openai.com/api/docs/models/gpt-5.6-sol で確認(2026-07-17)。誤 ID なら
+  //  startThread の初回 run が 400 で即可視(Terra 導入時の実測どおりの安全な失敗形・brain-swap-terra.md)。
+  "codex-55": Object.freeze({
+    id: "codex-55",
+    label: "Codex (GPT-5.5)",
+    // 公式ページで「Reasoning.effort supports: none, low, medium (default), high and xhigh」と確認済み
+    // （minimal は列挙になし＝Terra と同じ非対応パターンと推定）。effort=none は Terra 実測（brain-swap-terra.md
+    // §7）と対称の既定。
+    create: (options) => createCodexSession({ ...options, model: "gpt-5.5", effort: "none" }),
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
+  }),
+  "codex-56-sol": Object.freeze({
+    id: "codex-56-sol",
+    label: "Codex (GPT-5.6 Sol)",
+    // モデル ID は公式ページで確認済み。reasoning effort の対応値一覧は公式ページに明記が無く**確認できな
+    // かった**——同じ GPT-5.6 系の Terra が none 対応・minimal 非対応（400 実測）だった前例から類推して
+    // effort=none を既定に採用。誤りなら初回 run の 400 で即可視。
+    create: (options) => createCodexSession({ ...options, model: "gpt-5.6-sol", effort: "none" }),
     credentialPath: path.join(os.homedir(), ".codex", "auth.json")
   })
 });

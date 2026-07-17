@@ -988,10 +988,16 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
-      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 2 値は
+      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 4 値は
       // ここに直書きする（brains.mjs を import すると「cockpit-server は brain の中身を知らない」責務境界を
-      // 破る・verbosity が quiet/normal/chatty を直書きするのと同じ規律）。
-      if (body.brain !== "claude" && body.brain !== "codex") {
+      // 破る・verbosity が quiet/normal/chatty を直書きするのと同じ規律。2026-07-17 追撃で Codex 側 2 頭
+      // （GPT-5.5 / GPT-5.6 Sol）がここへ追加された）。
+      if (
+        body.brain !== "claude" &&
+        body.brain !== "codex" &&
+        body.brain !== "codex-55" &&
+        body.brain !== "codex-56-sol"
+      ) {
         sendJson(res, 400, { error: "invalid brain" });
         return;
       }

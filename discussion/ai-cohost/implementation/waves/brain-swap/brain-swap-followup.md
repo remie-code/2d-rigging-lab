@@ -80,3 +80,83 @@
 5. **エンドポイント数コメントの実測ズレ**: Domain B レビュー指摘（変更前 18・変更後 19 のはずが
    コメントは 18 のまま）は本 Domain C で**修正済み**（`cockpit-server.mjs:279,:1059` を「18」→「19」に
    訂正・実測根拠は domain-c.md §6 参照）。
+
+## D（追撃・2026-07-17: Codex 頭 2 種増設 = GPT-5.5 / GPT-5.6 Sol）
+
+> 契機: 人間ゲート第一報（brain-swap.md §10）でユーザーが Terra を「自然だが深みがない」と観測し、
+> Codex 側の他モデルも比較したいという要望。registry がフラット行追加で増設を受ける設計（brain-swap.md
+> §2 裁定）どおり、Gnome へ直派遣の小追撃として実施。
+
+### D-1. モデル ID の裏取り（WebSearch/WebFetch・2026-07-17）
+
+- **GPT-5.5 → `gpt-5.5`**: 公式 [developers.openai.com/api/docs/models/gpt-5.5](https://developers.openai.com/api/docs/models/gpt-5.5)
+  で確認。「Model ID: `gpt-5.5`」と明記。reasoning effort は同ページに
+  **「Reasoning.effort supports: none, low, medium (default), high and xhigh」**と明記——`none` 対応が
+  公式に確認できた（`minimal` は列挙に無い＝Terra と同じ非対応パターンと推定）。
+- **GPT-5.6 Sol → `gpt-5.6-sol`**: 公式 [developers.openai.com/api/docs/models/gpt-5.6-sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+  で確認。「Model ID: `gpt-5.6-sol`」と明記（"Frontier model for complex professional work"・
+  1,050,000 context）。**reasoning effort の対応値一覧はこのページに明記が無く確認できなかった**
+  （「Reasoning token support」「Reasoning: Highest」としか書かれていない。同様に
+  [developers.openai.com/api/docs/models/gpt-5.6-terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
+  にも Terra の対応値一覧は無く、Terra の「minimal 非対応・none 対応」は brain-swap-terra.md の**実測**
+  であってドキュメント記載ではなかったことも今回の調査で判明）。
+- 補助裏取り: [developers.openai.com/codex/models](https://developers.openai.com/codex/models)
+  （→ 実体は `learn.chatgpt.com/docs/models` へ 308 redirect）で GPT-5.6 ファミリー
+  （Sol=flagship / Terra=balanced / Luna=fast）と GPT-5.5（"previous-generation frontier model"・
+  非廃止・Codex cloud/API 含む全経路で利用可能）の位置付けを確認。
+- **採用 effort**: 両モデルとも `none`。GPT-5.5 は公式確認済み。GPT-5.6 Sol は確認できなかったため
+  **Terra 実測 + GPT-5.5 公式確認から類推した推定**——誤りなら `startThread` の初回 run が 400 で
+  即可視という Terra 導入時と同じ安全な失敗形になる（`src/mind/brains.mjs` コメントに明記）。
+
+### D-2. 変更内容
+
+- `apps/soul/agent/src/mind/brains.mjs`: `BRAINS` に `codex-55`（label "Codex (GPT-5.5)"）・
+  `codex-56-sol`（label "Codex (GPT-5.6 Sol)"）の 2 行を追加（フラット行追加・claude/codex の既存 2 頭は
+  無変更）。`create` はどちらも `createCodexSession({...options, model, effort:"none"})` の薄いラッパ。
+  **`codex-session.mjs` 本体は無変更**（model/effort を options 経由で受ける既存設計のままで足りた）。
+- `apps/soul/agent/src/cockpit/view-logic/health.mjs`: `BRAIN_LABELS` に 2 項目追加（UI 層の「頭 id を
+  直書きする責務境界規律」どおり・brains.mjs を import しない）。
+- `apps/soul/agent/src/cockpit/cockpit-server.mjs`: `POST /api/brain` の受理値検証を 2 値→4 値に拡張
+  （同じ責務境界規律のまま直書きを増やした・registry への import は追加していない）。
+- `apps/soul/agent/src/cockpit/ui/settings-drawer.mjs`: 頭脳 select の現況同期 effect の決め打ち判定
+  （`=== "claude" || === "codex"`）を `BRAIN_OPTIONS`（`BRAIN_LABELS` 由来・既存の複製）の value 集合を
+  使う形に変更——直書きの複製をこの 1 箇所減らした（brains.mjs への import は増やしていない＝規律は不変）。
+  `BRAIN_OPTIONS` 自体は無変更で自動的に 4 択になる。
+- `apps/soul/agent/scripts/cockpit.mjs`: `createBrainHooks` の `resolveInitialBrain` 内の決め打ち判定
+  （`=== "claude" || === "codex"`）を `BRAIN_IDS.includes(...)` に変更——**このファイルは既に
+  `BRAINS`/`BRAIN_IDS` を import 済みの層**（`ensureFireResources`/`brainStatus` が既に registry 駆動）
+  なので、UI 層/server 層向けの「brains.mjs を import しない責務境界規律」の対象外と判断し、ここは
+  registry 駆動化した。今後 5 頭目以降を足してもこの関数は無変更で追随する。
+- テスト: `brains.test.mjs`（4 項目化 + model/effort 配線 fake テスト 2 本）・`health.test.mjs`
+  （`BRAIN_LABELS` 4 項目）・`cockpit.test.mjs`（registry 駆動テスト追加）・`cockpit-server.test.mjs`
+  （4 頭目までの POST /api/brain 正常系）・`cockpit-ui.test.mjs`（select vnode の 4 択期待値更新）。
+
+### D-3. 設計判断（質問として明記・Orch-Sylph/Undine への確認事項）
+
+追撃タスクの要件 3 は「ハードコード列挙があれば registry 駆動に直す」だったが、実際に調べると
+`cockpit-server.mjs`・`settings-drawer.mjs`・`health.mjs` の決め打ちは**意図的な設計**で、各ファイルの
+コメントに明記された「頭 id を直書きする責務境界規律」（"cockpit-server は brain の中身を知らない"・
+"settings-drawer.mjs は src/mind/brains.mjs を import しない"・"二人目の客が来た時に増やす場所はここ
+1 箇所"）に基づく。この規律は Domain B/C の wave 計画時点でユーザー承認済みの設計（brain-swap-wave-plan.md
+blocking 基準ではないが、cockpit-server.mjs のコメントは明示的に「brains.mjs を import すると責務境界を
+破る」と書いている）。
+
+**採った判断**: この既存の責務境界規律を尊重し、`cockpit-server.mjs`/`settings-drawer.mjs`/`health.mjs`
+は決め打ちリストを 4 値へ拡張するに留め、brains.mjs への import は追加しなかった。一方
+`cockpit.mjs`（scripts 層）は既に registry を import 済みの層だったため、そこだけ registry 駆動
+（`BRAIN_IDS.includes`）へ直した。これにより「4 頭が選べる」という結果要件は満たしつつ、既存の
+意図的な設計（責務境界規律）は破っていないはず。
+
+**質問**: この判断（責務境界規律を尊重＝決め打ちリスト拡張／cockpit.mjs のみ registry 駆動化）でよいか。
+もし「二人目の客が来た時にここを増やす」という規律自体を今回機に解消し、UI 層/server 層も
+`BRAIN_IDS`/`BRAIN_LABELS` を直接 import する設計へ変更したいという意図であれば、それは
+Domain B/C の設計変更（責務境界規律そのものの撤回）に相当し、本追撃のスコープ外の判断が要ると考え、
+今回は着手していない。
+
+### D-4. node --test 実測
+
+- 変更前ベースライン: **827/827**。
+- 変更後: **835/835**（+8 = brains.test.mjs +6・cockpit.test.mjs +1・cockpit-server.test.mjs +1。
+  health.test.mjs/cockpit-ui.test.mjs は既存テストの中身更新のみでテスト数不変）。
+- 実 LLM/実ネット消費ゼロ（fake sdkImpl 注入・スクラッチ homeDir。モデル ID 裏取りの WebFetch/WebSearch
+  は調査であり実消費に該当しない）。install なし・commit なし・依存不変（package.json/lock 無変更）。

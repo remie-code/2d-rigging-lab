@@ -47,7 +47,7 @@ import { createFileSettingsStore } from "../src/cockpit/cockpit-settings-store.m
 import { cockpitHtmlPath } from "../src/cockpit/cockpit-page.mjs";
 import { assertSubscriptionAuthEnv } from "../src/mind/env-guard.mjs";
 import { createLlmSession } from "../src/mind/llm-session.mjs";
-import { BRAINS } from "../src/mind/brains.mjs";
+import { BRAINS, BRAIN_IDS } from "../src/mind/brains.mjs";
 import { createFireOrchestrator, FIRE_SYSTEM_PROMPT } from "../src/mind/fire-orchestrator.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
@@ -348,9 +348,15 @@ export function createVerbosityHooks(settings, defaultMode = "normal") {
 /**
  * settings の頭脳選択（brainChoice）を、cockpit.mjs の起動フック（resolveInitialBrain）と切替継ぎ目
  * （onSetBrain の永続化部分）へ橋渡しする（多頭化 Domain B・brain-swap-wave-plan.md §3・
- * createVerbosityHooks と同型の薄い配線層）。settings に記憶が無い、または既知2頭（claude/codex）
- * 以外の値が入っていた場合は defaultChoice（既定 "claude"）にフォールバックする（防御的・verbosity の
- * 「未知値は normal」と同じ規律・Claude 既定で無退行）。
+ * createVerbosityHooks と同型の薄い配線層）。settings に記憶が無い、または registry（BRAIN_IDS・
+ * brains.mjs）に存在しない値が入っていた場合は defaultChoice（既定 "claude"）にフォールバックする
+ * （防御的・verbosity の「未知値は normal」と同じ規律・Claude 既定で無退行）。
+ *
+ * ── registry 駆動（2026-07-17 追撃）──────────────────────────────────────────
+ *  cockpit.mjs は既に `BRAINS`/`BRAIN_IDS`（brains.mjs）を import 済みの層なので、cockpit-server.mjs や
+ *  settings-drawer.mjs が採る「頭 id を直書きする責務境界規律」（brains.mjs を import しない層向けの
+ *  規律）はここには適用されない。よってここは `BRAIN_IDS.includes(...)` で動的に検証し、頭が増減しても
+ *  この関数自体は変更不要にする。
  *
  * ここは「永続化」だけを担う純関数の配線層。実際の頭のホットスワップ（現 session の dispose→null）は
  * main() の effectful な onSetBrain がこの永続化を呼んだ上で担う（createAudioDeviceHooks と main() の
@@ -368,7 +374,7 @@ export function createBrainHooks(settings, defaultChoice = "claude") {
     /** 起動時の初期頭脳（未記憶/未知値は defaultChoice）。 */
     resolveInitialBrain: () => {
       const remembered = settings.getBrainChoice();
-      return remembered === "claude" || remembered === "codex" ? remembered : defaultChoice;
+      return remembered != null && BRAIN_IDS.includes(remembered) ? remembered : defaultChoice;
     },
     /** 頭脳選択の永続化（main() の effectful onSetBrain が dispose→null の前にこれを呼ぶ）。 */
     onSetBrain: (choice) => {

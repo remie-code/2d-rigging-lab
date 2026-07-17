@@ -99,15 +99,19 @@ test("voiceOutputLabel: name があれば name・なければ default（applyAud
 
 // ── 多頭化 Domain C: 設定引き出し「頭脳」区画の表示導出（brain-swap-wave-plan.md §3）──────────
 
-test("BRAIN_LABELS: claude/codex の 2 項目（BRAINS[*].label 相当・brains.mjs の宣言と一致）", () => {
-  assert.deepEqual(Object.keys(BRAIN_LABELS), ["claude", "codex"]);
+test("BRAIN_LABELS: claude/codex/codex-55/codex-56-sol の 4 項目（BRAINS[*].label 相当・brains.mjs の宣言と一致・2026-07-17 追撃）", () => {
+  assert.deepEqual(Object.keys(BRAIN_LABELS), ["claude", "codex", "codex-55", "codex-56-sol"]);
   assert.equal(BRAIN_LABELS.claude, "Claude (Opus 4.8)");
   assert.equal(BRAIN_LABELS.codex, "Codex (GPT-5.6 Terra)");
+  assert.equal(BRAIN_LABELS["codex-55"], "Codex (GPT-5.5)");
+  assert.equal(BRAIN_LABELS["codex-56-sol"], "Codex (GPT-5.6 Sol)");
 });
 
 test("brainLabel: 既知 id は表示ラベル・未知 id/未指定は unknown", () => {
   assert.equal(brainLabel({ brain: "claude" }), "Claude (Opus 4.8)");
   assert.equal(brainLabel({ brain: "codex" }), "Codex (GPT-5.6 Terra)");
+  assert.equal(brainLabel({ brain: "codex-55" }), "Codex (GPT-5.5)");
+  assert.equal(brainLabel({ brain: "codex-56-sol" }), "Codex (GPT-5.6 Sol)");
   assert.equal(brainLabel({ brain: "gpt" }), "unknown"); // 未知 id。
   assert.equal(brainLabel({ brain: null }), "unknown");
   assert.equal(brainLabel(null), "unknown");

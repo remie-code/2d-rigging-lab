@@ -586,14 +586,17 @@ test("SettingsSelect vnode: view-logic の option 列（{value,label}）を機�
   assert.equal(collectText(vnode).join(""), "MV7+FooGame (foo.exe)");
 });
 
-test("SettingsSelect vnode: 頭脳区画の選択肢（BRAIN_LABELS 由来・多頭化 Domain C・settings-drawer.mjs の BRAIN_OPTIONS と同型）", () => {
+test("SettingsSelect vnode: 頭脳区画の選択肢（BRAIN_LABELS 由来・多頭化 Domain C・settings-drawer.mjs の BRAIN_OPTIONS と同型・2026-07-17 追撃で4項目）", () => {
   const options = Object.keys(BRAIN_LABELS).map((id) => ({ value: id, label: BRAIN_LABELS[id] }));
   const vnode = SettingsSelect({ options, value: "codex", onChange: () => {} });
   const select = collectElements(vnode).find((n) => n.type === "select");
   assert.equal(select.props.value, "codex");
   const opts = collectElements(vnode).filter((n) => n.type === "option");
-  assert.deepEqual(opts.map((o) => o.props.value), ["claude", "codex"]);
-  assert.equal(collectText(vnode).join(""), "Claude (Opus 4.8)Codex (GPT-5.6 Terra)");
+  assert.deepEqual(opts.map((o) => o.props.value), ["claude", "codex", "codex-55", "codex-56-sol"]);
+  assert.equal(
+    collectText(vnode).join(""),
+    "Claude (Opus 4.8)Codex (GPT-5.6 Terra)Codex (GPT-5.5)Codex (GPT-5.6 Sol)"
+  );
 });
 
 test("DrawerStatus vnode: 状態構造体（chatStatusView/channelStatusView）を色ドット付き class で描く", () => {

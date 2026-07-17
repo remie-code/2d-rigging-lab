@@ -2279,6 +2279,26 @@ test("cockpit POST /api/brain: {brain:\"claude\"} → 200（Claude へ戻す）"
   }
 });
 
+test("cockpit POST /api/brain: {brain:\"codex-55\"}/{brain:\"codex-56-sol\"} → 200（2026-07-17 追撃・4頭目まで受理）", async () => {
+  const wiring = makeFakeBrainWiring("claude");
+  const server = createCockpitServer({
+    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  try {
+    const url = await server.listen(0);
+    const r55 = await postJson(`${url}/api/brain`, { brain: "codex-55" });
+    assert.equal(r55.status, 200);
+    assert.equal(r55.json.brain.brain, "codex-55");
+    const rSol = await postJson(`${url}/api/brain`, { brain: "codex-56-sol" });
+    assert.equal(rSol.status, 200);
+    assert.equal(rSol.json.brain.brain, "codex-56-sol");
+    assert.deepEqual(wiring.record.calls, ["codex-55", "codex-56-sol"]);
+  } finally {
+    await server.close();
+  }
+});
+
 test("cockpit POST /api/brain: 不正値（gpt）は 400・onSetBrain を呼ばず state 不変", async () => {
   const wiring = makeFakeBrainWiring("claude");
   const server = createCockpitServer({
