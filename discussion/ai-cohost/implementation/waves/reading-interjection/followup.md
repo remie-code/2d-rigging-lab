@@ -5,7 +5,10 @@
 > 出典: Domain A レビュー（spec/design/test 3 レーン）で挙がり、Orch-Sylph が「本 wave では対応しない・
 > followup 送り」と判定した 3 件 + Domain B 実装時に確認した記録用 1 件。
 
-## 1. 疑義: VAD minSpeechMs 独立性（非 blocking・pre-existing）
+## 1. [解決済み] VAD minSpeechMs 独立性の疑義 → L0 裁定改訂で speechCancel を両段の取消弁化
+
+> 解決日: 2026-07-18（Gnome・微修正タスク）。L0 裁定改訂によりコード反映済み。以下は元の疑義記録
+> （経緯保存のため残す）+ 解決内容。
 
 VAD セグメンタの `minSpeechMs` 既定 250ms（`apps/soul/agent/src/ears/speech-segmenter.mjs:36`）と
 barge-in の `minSpeechMs` 既定 200ms（`apps/soul/agent/src/mind/barge-in.mjs:204` 付近の
@@ -22,11 +25,16 @@ barge-in の `minSpeechMs` 既定 200ms（`apps/soul/agent/src/mind/barge-in.mjs
   前から存在する定数で、VAD 側の `minSpeechMs=250` との不整合は本 wave が持ち込んだものではなく既存の
   定数独立性に起因する。ただし猶予段（第二段）の新設で「取消弁が来ないと 2 秒後に切断される」という
   帰結が新たに顕在化しうるため、記録する。
-- **人間ゲートでの確認材料**: §1②（かぶって 2 秒以内に発話をやめれば続行）の実射で「極短い発声
-  （0.2〜0.25 秒）で切れないか」を確認する。
-- **将来対応候補**（未実施・v0 では手を付けない）: (a) 両 `minSpeechMs` を同値に揃える、(b) 猶予段でも
-  `speechCancel` を取消弁として扱う（ただし現行設計裁定は「speechCancel は第一段のみに効く」——防御的に
-  第二段では無視する選択をしている。barge-in.mjs のコメント参照）。どちらも本 wave のスコープ外。
+
+**解決内容（L0 裁定改訂）**: speechCancel は VAD にとって「あれは発話ではなかった」という取消宣言であり、
+第一段・猶予段のどちらにいてもその意味は変わらない——当初裁定「speechCancel は第一段のみに効く」は
+狭すぎた、との改訂裁定に基づき、`createBargeInGate` の `handle()` を「猶予段（第二段）中の speechCancel
+も見合い成立と同じ扱い（onConfirm を呼ばない = 切らない）で猶予を取り消す」よう拡張した
+（`apps/soul/agent/src/mind/barge-in.mjs` の speechCancel 分岐・モジュールヘッダの二段構え説明も改訂）。
+第一段の既存挙動・speechEnd の挙動・setEnabled/dispose は不変。200〜250ms 帯の極短発声で猶予段中に
+speechCancel が来ても onConfirm は呼ばれなくなった（`barge-in.test.mjs` に固定テストを追加・
+「極短発声(200〜250ms帯)が第一段通過直後に speechCancel で終わっても猶予取消」）。
+両 `minSpeechMs` を同値に揃える対応（旧記録の (a) 案）は不要となったため見送り。
 
 ## 2. nit: 合いの手の再武装コメントが「base=refractory×2」に依存した書き方(non-blocking)
 

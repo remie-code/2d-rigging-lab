@@ -293,7 +293,7 @@ test("bargeInGate: 猶予超過(speechEnd 未着のまま満了)で切断する"
   gate.dispose();
 });
 
-test("bargeInGate: 猶予段中に speechCancel が来ても無関係（speechCancel は第一段のみに効く）", () => {
+test("bargeInGate: 猶予段中の speechCancel は猶予を取り消す（両段の取消弁・followup #1 裁定改訂）", () => {
   const timers = makeFakeTimers();
   /** @type {any[]} */
   const confirms = [];
@@ -305,11 +305,35 @@ test("bargeInGate: 猶予段中に speechCancel が来ても無関係（speechCa
     clearTimeoutImpl: timers.clearTimeoutImpl
   });
   gate.handle({ type: "speechStart", tMs: 0 });
-  timers.advance(200); // 猶予段へ。
-  gate.handle({ type: "speechCancel", tMs: 200 }); // 猶予段中は無関係。
-  assert.equal(gate.isPending(), true, "猶予段中の speechCancel は無視される");
-  timers.advance(2000);
-  assert.equal(confirms.length, 1, "猶予段中の speechCancel では取り消されず、満了どおり確定する");
+  timers.advance(200); // 第一段通過 → 猶予段へ。
+  gate.handle({ type: "speechCancel", tMs: 200 }); // 猶予段中の speechCancel = 見合い成立と同じ扱い。
+  assert.equal(gate.isPending(), false, "猶予段中の speechCancel で猶予は取り消される");
+  timers.advance(2000); // 元の猶予期限を跨いでも発火しない。
+  assert.equal(confirms.length, 0, "見合い成立 = onConfirm は呼ばれない(切らない)");
+  gate.dispose();
+});
+
+test("bargeInGate: 極短発声(200〜250ms帯)が第一段通過直後に speechCancel で終わっても猶予取消(followup #1 の穴の再現)", () => {
+  // VAD の minSpeechMs=250ms と barge-in 第一段の minSpeechMs=200ms は独立した別定数のため、
+  // 200〜250ms 帯の発声は barge-in 第一段は通過するが VAD は speechCancel を出す(speechEnd ではない)。
+  // 猶予段中の speechCancel が両段の取消弁になったことで、この帯域でも切られない。
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 0 });
+  timers.advance(200); // 第一段(200ms)通過 → 猶予段へ。
+  timers.advance(20); // 220ms 時点(VAD の minSpeechMs=250ms 未満で speechCancel が出る想定)。
+  gate.handle({ type: "speechCancel", tMs: 220 });
+  assert.equal(gate.isPending(), false, "猶予段中の speechCancel で猶予は取り消される");
+  timers.advance(5000); // 元の猶予期限(2000ms)を大きく跨いでも発火しない。
+  assert.equal(confirms.length, 0, "onConfirm は呼ばれない(こーでぃーは切られない)");
   gate.dispose();
 });
 

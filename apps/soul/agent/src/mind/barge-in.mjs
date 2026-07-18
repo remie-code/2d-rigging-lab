@@ -165,11 +165,15 @@ export function computeSpokenPrefix(input) {
  *  ない・切らない。短い相槌（<graceMs）が無害になる副次効能）。猶予が満了して発話が継続中（speechEnd
  *  未着）なら onConfirm（= barge-in 確定・切断）を呼ぶ。
  *
- * speechCancel は**第一段のみ**に効き（猶予段中は無関係）、speechEnd は**第二段のみ**に効く（第一段中に
- * 来ても無視——VAD 契約上 minSpeechMs 未満で終わる発話は speechCancel が先に来るはずで、防御的に無視す
- * る）。猶予段中に新たな speechStart が来た場合は無視する（裁量・成果物に根拠明記——猶予段は既に「話し
- * 始めた」ことが確定した状態であり、次の一巡は speechEnd による見合い成立後の新オンセットからのみ始ま
- * る）。
+ * speechCancel は**両段の取消弁**として効く（followup #1・L0 裁定改訂）。第一段中は従来どおり瞬間スパイ
+ * ク棄却（譲らない）、猶予段（第二段）中も見合い成立と同じ扱い（onConfirm を呼ばない・切らない）で猶予
+ * を取り消す——speechCancel は VAD にとって「あれは発話ではなかった」という取消宣言であり、どちらの段
+ * にいてもその意味は変わらないため（当初裁定「第一段のみ」は VAD の minSpeechMs=250ms と barge-in 第一
+ * 段の minSpeechMs=200ms が独立した別定数であることに起因する 200〜250ms 帯の穴を見落としており、狭す
+ * ぎた）。speechEnd は**第二段のみ**に効く（第一段中に来ても無視——VAD 契約上 minSpeechMs 未満で終わる
+ * 発話は speechCancel が先に来るはずで、防御的に無視する）。猶予段中に新たな speechStart が来た場合は
+ * 無視する（裁量・成果物に根拠明記——猶予段は既に「話し始めた」ことが確定した状態であり、次の一巡は
+ * speechEnd/speechCancel による見合い成立後の新オンセットからのみ始まる）。
  *
  * onConfirm のコールバック契約は不変（渡すのは確定した speechStart イベント・意味は「barge-in 確定 = 切
  * 断」）。変わるのは発火タイミング（第一段 minSpeechMs → 第一段+第二段 graceMs の合成・発話継続時）と
@@ -248,8 +252,9 @@ export function createBargeInGate(options) {
 
   return {
     /**
-     * VAD イベントを 1 個食わせる。speechStart → 第一段待機開始、speechCancel → 第一段取消、
-     * speechEnd → 第二段（猶予中）なら取消（見合い成立）、他は無視。OFF 中・dispose 後は全イベント無視。
+     * VAD イベントを 1 個食わせる。speechStart → 第一段待機開始、speechCancel → 第一段中なら第一段取消・
+     * 猶予段中なら猶予取消（両段の取消弁・followup #1 裁定改訂）、speechEnd → 第二段（猶予中）なら取消
+     * （見合い成立）、他は無視。OFF 中・dispose 後は全イベント無視。
      * @param {VadEvent} event
      */
     handle(event) {
@@ -269,9 +274,14 @@ export function createBargeInGate(options) {
           startGrace();
         }, minSpeechMs);
       } else if (event.type === "speechCancel") {
-        // 第一段のみに効く（瞬間スパイク棄却 = 譲らない）。猶予段（第二段）中は無関係。
+        // 両段の取消弁（followup #1・L0 裁定改訂）。第一段中は従来どおり瞬間スパイク棄却（譲らない）。
+        // 猶予段（第二段）中も見合い成立と同じ扱い（onConfirm を呼ばない = 切らない）で取り消す——
+        // speechCancel は VAD の「あれは発話ではなかった」宣言であり、どちらの段でも意味は変わらない。
         if (valveTimer != null) {
           clearValve();
+          pendingEvent = null;
+        } else if (graceTimer != null) {
+          clearGrace();
           pendingEvent = null;
         }
       } else if (event.type === "speechEnd") {
