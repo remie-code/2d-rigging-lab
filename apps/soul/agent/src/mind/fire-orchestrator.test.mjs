@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 import { createFireOrchestrator, FIRE_SYSTEM_PROMPT } from "./fire-orchestrator.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
-import { createBargeInGate, BARGE_IN_NOTE, KILL_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
+import { createBargeInGate, BARGE_IN_GRACE_MS, BARGE_IN_NOTE, KILL_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
 import { NG_WORDS, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 
 // 発火オーケストレータの縦貫通テスト（S3 Domain A）。実 SDK・実 TTS・実器は一切使わない
@@ -1431,9 +1431,13 @@ test("結線: createBargeInGate 確定 → orchestrator.interrupt（VAD 縦検�
   await flushMicrotasks();
   assert.equal(orch.getState(), "speaking");
 
-  // ユーザーが喋り出す → 機械弁通過（cancel 来ない）→ 確定 → interrupt。
+  // ユーザーが喋り出す → 二段構え: 第一段（200ms ノイズ弁）通過（cancel 来ない）→ 第二段（猶予）へ →
+  // 猶予満了まで speechEnd が来ない（喋り続けている）→ 確定 → interrupt。二段化（barge-in.mjs）に
+  // 追随して advance を 200ms（第一段）+ BARGE_IN_GRACE_MS（第二段の猶予満了）に分けた。interrupt(1300)
+  // の中断時刻は advance 量と独立なので replyText === "こん" の assert は不変（elapsed 300 → 2 母音）。
   gate.handle({ type: "speechStart", tMs: 1200 });
-  gateTimers.advance(200);
+  gateTimers.advance(200); // 第一段（ノイズ弁）通過 → 即座に第二段（猶予）へ。
+  gateTimers.advance(BARGE_IN_GRACE_MS); // 第二段の猶予満了（speechEnd 未着＝喋り続け）→ onConfirm→interrupt。
   await flushMicrotasks();
 
   const result = await p;

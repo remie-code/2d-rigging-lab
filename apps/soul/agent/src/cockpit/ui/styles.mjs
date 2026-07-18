@@ -257,6 +257,19 @@ body {
 .self-fire-toggle { accent-color: var(--teal); }
 .self-fire-status { color: var(--muted); font-size: 12px; }
 .self-fire-status.on { color: var(--up); }
+/* barge-in トグル pill（「朗読と合いの手」・self-fire pill の写経・既定 ON は server 側 born-disabled）。 */
+.barge-in-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+}
+.barge-in-toggle { accent-color: var(--teal); }
+.barge-in-status { color: var(--muted); font-size: 12px; }
+.barge-in-status.on { color: var(--up); }
 /* 口数モード（プルダウンの場所のみ・実配線は s6-followup §12 の将来課題）。 */
 .verbosity { display: flex; align-items: center; gap: 8px; }
 .verbosity-select {

@@ -312,6 +312,39 @@ export function createSelfFireHooks(settings, defaultEnabled = false) {
 }
 
 /**
+ * settings の barge-in ON/OFF トグル（bargeInEnabled）を、cockpit-server の口
+ * （onSetBargeInEnabled）へ橋渡しする（「朗読と合いの手」裁定 1・createSelfFireHooks と同型の
+ * 薄い配線層）。**既定は defaultEnabled=true**（selfFire の既定 false とは意図的に非対称・裁定 1
+ * 「既定 ON」）。起動時の初期値解決（`resolveInitialEnabled`）は既定値へのフォールバックを担う——
+ * bool の「未記憶」（null）と「明示 false」を区別する settings 契約を、呼び出し側が意識せずに
+ * 使えるようにする（createSelfFireHooks と同じ規律）。
+ *
+ * @param {{ getBargeInEnabled: () => boolean | null; setBargeInEnabled: (enabled: boolean) => void }} settings
+ * @param {boolean} [defaultEnabled=true]  未記憶時のフォールバック（既定 ON・「朗読と合いの手」裁定 1）。
+ * @returns {{
+ *   resolveInitialEnabled: () => boolean;
+ *   onSetBargeInEnabled: (enabled: boolean) => void;
+ * }}
+ */
+export function createBargeInHooks(settings, defaultEnabled = true) {
+  return {
+    /** 起動時の初期 ON/OFF（未記憶なら defaultEnabled）。 */
+    resolveInitialEnabled: () => {
+      const remembered = settings.getBargeInEnabled();
+      return typeof remembered === "boolean" ? remembered : defaultEnabled;
+    },
+    /** cockpit-server の onSetBargeInEnabled（POST /api/barge-in が呼ぶ）。 */
+    onSetBargeInEnabled: (enabled) => {
+      try {
+        settings.setBargeInEnabled(enabled === true); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
+/**
  * settings の口数モード（verbosityMode）を、cockpit-server の口（resolveInitialVerbosity/
  * onSetVerbosity）へ橋渡しする（wave 計画「口数配線」§2 裁定 A・createSelfFireHooks と同型の薄い
  * 配線層）。settings に記憶が無い、または既知3モード（quiet/normal/chatty）以外の値が入っていた
@@ -444,6 +477,8 @@ async function main() {
   const audioDeviceHooks = createAudioDeviceHooks(settings);
   // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（既定 OFF・§createSelfFireHooks）。
   const selfFireHooks = createSelfFireHooks(settings, false);
+  // 「朗読と合いの手」: barge-in ON/OFF の永続トグル（既定 ON・裁定 1・§createBargeInHooks）。
+  const bargeInHooks = createBargeInHooks(settings, true);
   // 口数モード（quiet/normal/chatty・既定 "normal"・§createVerbosityHooks）。
   const verbosityHooks = createVerbosityHooks(settings);
   // 多頭化 Domain B: 頭脳選択（claude/codex・既定 "claude"・§createBrainHooks）。永続化の薄い橋渡し
@@ -672,6 +707,10 @@ async function main() {
     // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（起動時は settings から復元・既定 OFF）。
     selfFireInitialEnabled: selfFireHooks.resolveInitialEnabled(),
     onSetSelfFireEnabled: selfFireHooks.onSetSelfFireEnabled,
+    // 「朗読と合いの手」: barge-in ON/OFF の永続トグル（起動時は settings から復元・既定 ON・裁定 1）。
+    // resolveInitialEnabled() を bargeInGate 構築時の enabled へ直接渡す（born-disabled の伝播経路）。
+    bargeInInitialEnabled: bargeInHooks.resolveInitialEnabled(),
+    onSetBargeInEnabled: bargeInHooks.onSetBargeInEnabled,
     // 口数モード（quiet/normal/chatty・起動時は settings から復元・既定 "normal"）。
     verbosityInitialMode: verbosityHooks.resolveInitialVerbosity(),
     onSetVerbosity: verbosityHooks.onSetVerbosity,

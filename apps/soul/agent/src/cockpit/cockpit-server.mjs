@@ -276,7 +276,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {string} [options.indexHtmlPath]  配信する HTML のファイルパス（B が本体を渡す）。
  * @param {string} [options.uiRootPath]     操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信
  *   ルート。既定は本モジュールのディレクトリ（= 実 UI ツリー）。トラバーサル防止・許可拡張子 .mjs・
- *   許可サブツリー限定でこの配下だけを配る（既存 19 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
+ *   許可サブツリー限定でこの配下だけを配る（既存 20 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
  * @param {string} [options.inputFormat]    ffmpeg 入力フォーマット（既定 win32→dshow）。
  * @param {number} [options.transcriptHistory=DEFAULT_TRANSCRIPT_HISTORY]  状態に載せる直近転写件数。
  * @param {{ getLastDevice: () => any; setLastDevice: (d: any) => any }} [options.settingsStore]
@@ -349,6 +349,22 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
  *   未注入でも POST /api/self-fire 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
  *   スキップ）。
+ * @param {typeof createFireScheduler} [options.fireSchedulerFactory]
+ *   fireScheduler のファクトリ（テスト注入用・既定 createFireScheduler・fireOrchestratorFactory と
+ *   同型の差し替えパターン）。本番は指定しない（挙動不変）。テストは fake scheduler を注入し、
+ *   onFireRequest コールバックへ直接 kind を渡してタイマー駆動の語彙（interjection 等）の vision
+ *   振り分けを即時に検証できる。
+ * @param {boolean} [options.bargeInInitialEnabled=true]
+ *   「朗読と合いの手」barge-in トグルの初期 ON/OFF（裁定 1「既定 ON」・selfFireInitialEnabled とは
+ *   **既定が逆**）。orchestrator が interrupt を持つときのみ機械弁（createBargeInGate）を生成し、
+ *   生成時にこの値を渡す（born-disabled: 永続 OFF 値が起動直後から gate へ効く・構築後の setEnabled
+ *   後追いはしない＝割り込み窓を作らない）。起動時の初期値は呼び出し側（cockpit.mjs）が settings から
+ *   読んでここへ渡す（selfFireInitialEnabled と同型）。
+ * @param {(enabled: boolean) => void | Promise<void>} [options.onSetBargeInEnabled]
+ *   barge-in トグルの永続化フック（POST /api/barge-in が呼ぶ・onSetSelfFireEnabled と同型）。
+ *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
+ *   未注入でも POST /api/barge-in 自体は 503 にならない（gate があれば切替は効く。永続化のみ
+ *   スキップ）。
  * @param {string} [options.verbosityInitialMode="normal"]
  *   口数モード（quiet/normal/chatty）の初期値（wave 計画「口数配線」§2 裁定 A）。既定 "normal"。
  *   orchestrator 注入時のみ生成される fireScheduler の createFireScheduler({ verbosity }) へ渡す
@@ -392,6 +408,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   fireState: () => string | null;
  *   setSelfFireEnabled: (enabled: boolean) => boolean;
  *   selfFireStatus: () => { enabled: boolean } | null;
+ *   bargeInStatus: () => { enabled: boolean } | null;
  *   ingestChatMessage: (msg: { text?: string; displayName?: string } | null) => void;
  *   broadcastChatStatus: (status: string) => void;
  *   broadcastChatDiagnostic: (info: any) => void;
@@ -423,6 +440,12 @@ export function createCockpitServer(options = {}) {
   // S6「会話が続く」自発発火の初期 ON/OFF（既定 OFF）。Domain D が永続トグル（設定/UI）で制御する
   // までは、テスト or 明示指定でのみ ON にする（既定 OFF ＝ 操縦席にトグルが無い間は自発が暴発しない）。
   const selfFireInitialEnabled = options.selfFireInitialEnabled === true;
+  // 「朗読と合いの手」barge-in の初期 ON/OFF（**既定 ON**・裁定 1）。selfFireInitialEnabled とは
+  // 意図的に非対称（`!== false` = 明示 false のときだけ OFF・未指定/true は ON）。born-disabled
+  // （起動時に永続 OFF 値が gate 構築時の enabled へ届く）はこの値を createBargeInGate({ enabled }) へ
+  // そのまま渡すことで担保する（構築後の setEnabled 後追いはしない＝起動直後の割り込み窓を作らない）。
+  const bargeInInitialEnabled = options.bargeInInitialEnabled !== false;
+  const onSetBargeInEnabled = options.onSetBargeInEnabled;
   // 口数モード（wave 計画「口数配線」§2 裁定 A）: 初期値（既定 "normal"）と永続化フック
   // （未注入なら POST /api/verbosity 自体は 503 にならない・onSetSelfFireEnabled と同型の失敗寛容）。
   const verbosityInitialMode = typeof options.verbosityInitialMode === "string" ? options.verbosityInitialMode : "normal";
@@ -516,6 +539,9 @@ export function createCockpitServer(options = {}) {
       visionTarget: typeof visionTargetStatusImpl === "function" ? (visionTargetStatusImpl() ?? null) : null,
       // S6「会話が続く」: 自発発火の現況（scheduler 未生成 = orchestrator 未注入なら null）。
       selfFire: fireScheduler ? { enabled: fireScheduler.isEnabled() } : null,
+      // 「朗読と合いの手」: barge-in トグルの現況（gate 未生成 = orchestrator.interrupt 未対応なら null・
+      // selfFire と同型）。
+      bargeIn: bargeInGate ? { enabled: bargeInGate.isEnabled() } : null,
       // 口数モードの現況（scheduler 未生成 = orchestrator 未注入なら null・selfFire と同型）。
       verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
       // S8「キルスイッチ」: キル状態の正本（サーバ側 boolean をそのまま載せる・既定 false・additive）。
@@ -921,6 +947,27 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/barge-in") {
+      // 「朗読と合いの手」: barge-in ON/OFF の永続トグル継ぎ目（POST /api/self-fire の写経）。
+      // gate 未生成（orchestrator.interrupt 未対応）なら 503（既存 barge-in 結線は無関係・生きたまま）。
+      if (!bargeInGate) {
+        sendJson(res, 503, { error: "barge-in control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const enabled = body.enabled === true;
+      bargeInGate.setEnabled(enabled);
+      if (typeof onSetBargeInEnabled === "function") {
+        try {
+          await onSetBargeInEnabled(bargeInGate.isEnabled());
+        } catch {
+          // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/verbosity") {
       // 口数モードの切替継ぎ目（wave 計画「口数配線」§2 裁定 A・POST /api/self-fire の写経）。
       // scheduler 未生成（orchestrator 未注入）なら 503（自発発火制御と同型・生きたまま）。
@@ -1062,7 +1109,7 @@ export function createCockpitServer(options = {}) {
     }
 
     // 操縦席 UI アセットの静的配信（vendor/ui/view-logic の .mjs ツリー）。**追加ルートのみ**——
-    // 既存 19 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
+    // 既存 20 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
     // 落ちてくる GET は非 API・非 root だけ）。UI アセットサブツリー宛のみ握り、その他は既存 404 へ。
     if (method === "GET" && (await tryServeUiAsset(res, pathname))) {
       return;
@@ -1238,6 +1285,9 @@ export function createCockpitServer(options = {}) {
   // 核心ロジック（機械弁・切断点・interrupt）は純部品/orchestrator 側で fake テスト済み（domain-b.md）。
   if (fireOrchestrator && typeof (/** @type {any} */ (fireOrchestrator).interrupt) === "function") {
     bargeInGate = createBargeInGate({
+      // born-disabled（「朗読と合いの手」裁定 1・L0 設計裁定 1）: 起動時の永続 OFF 値をここで直接渡す。
+      // 構築後に setEnabled で後追いしない＝起動直後の VAD イベントが割り込み窓を作らない。
+      enabled: bargeInInitialEnabled,
       onConfirm: () => {
         try {
           // 中断は best-effort（発話中でなければ no-op・throw は握る）。fire 経路をブロックしない。
@@ -1260,12 +1310,22 @@ export function createCockpitServer(options = {}) {
   //  S7「視聴者が混ざる」: comment / comment-call も call/turn-end と同じ**視覚優先**へ振り分ける（silence 以外
   //  ＝下の三項の else 枝で fire({vision:"preferred"}) になる）。kind は selfFire SSE にそのまま載る（Domain C の
   //  自発発火マーカー材料）。ingestChatMessage（下の取り込み経路）が scheduler.handleChatMessage を回す入口。
+  //  「朗読と合いの手」: 第 7 の語彙 interjection（合いの手）も silence ではない＝下の三項の else 枝に
+  //  自動的に入り fire({vision:"preferred"}) になる（コード分岐は無改修・scheduler が kind を出すだけ）。
+  //  kind:"interjection" も同じ selfFire SSE にそのまま素通しで載る（server/UI 無改修・inventory §3）。
   if (
     fireOrchestrator &&
     typeof (/** @type {any} */ (fireOrchestrator).fire) === "function" &&
     typeof (/** @type {any} */ (fireOrchestrator).getState) === "function"
   ) {
-    fireScheduler = createFireScheduler({
+    // fireSchedulerFactory はテスト注入用（既定 createFireScheduler・fireOrchestratorFactory/
+    // pipelineFactory と同型の差し替えパターン）。本番（scripts/cockpit.mjs）は指定しない＝常に
+    // createFireScheduler が使われ挙動は不変。テストはこれで fake scheduler を注入し、cockpit-server の
+    // onFireRequest コールバック（このすぐ下）へ直接 kind を「食わせて」vision 振り分けを検証できる
+    // （interjection はタイマー駆動のみで即時発火経路が無いため・server 側ロジックの直接テストに必要）。
+    const fireSchedulerFactory =
+      typeof options.fireSchedulerFactory === "function" ? options.fireSchedulerFactory : createFireScheduler;
+    fireScheduler = fireSchedulerFactory({
       enabled: selfFireInitialEnabled,
       verbosity: verbosityInitialMode,
       isBusy: () => /** @type {any} */ (fireOrchestrator).getState() !== "idle",
@@ -1478,6 +1538,8 @@ export function createCockpitServer(options = {}) {
     },
     /** 自発発火の現況（enabled）。scheduler 未生成なら null。 */
     selfFireStatus: () => (fireScheduler ? { enabled: fireScheduler.isEnabled() } : null),
+    /** barge-in トグルの現況（enabled）。gate 未生成なら null（selfFireStatus と同型）。 */
+    bargeInStatus: () => (bargeInGate ? { enabled: bargeInGate.isEnabled() } : null),
     // ── S7「視聴者が混ざる」: チャット器官の取り込み経路（Domain C の attach 点）───────────────
     /** チャット器官の 1 コメントを取り込む（append + SSE viewer 行放送 + scheduler.handleChatMessage）。 */
     ingestChatMessage,

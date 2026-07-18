@@ -354,6 +354,76 @@ test("settings store: self-fire enabled 用の unwritable path は set を握っ
   }
 });
 
+// ── barge-in ON/OFF トグルの永続化（「朗読と合いの手」・selfFireEnabled の写経・既定 ON は
+//    呼び出し側 cockpit.mjs の createBargeInHooks が担う。store 自体は selfFireEnabled と同型）───
+
+test("settings store: barge-in enabled set→get roundtrip persists across instances (bool)", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getBargeInEnabled(), null); // 未作成 = 記憶なし（bool の有無を区別）。
+    store.setBargeInEnabled(true);
+    assert.equal(store.getBargeInEnabled(), true);
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getBargeInEnabled(), true);
+    store.setBargeInEnabled(false);
+    assert.equal(createFileSettingsStore({ path }).getBargeInEnabled(), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: barge-in enabled は他のキー（device/channel/vision/audio/self-fire）と同居する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    store.setLastDevice("PicoStreamingMicrophone");
+    store.setVisionTarget("Sample Game");
+    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
+    store.setSelfFireEnabled(true);
+    store.setBargeInEnabled(false);
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
+    assert.equal(reopened.getVisionTarget(), "Sample Game");
+    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
+    assert.equal(reopened.getSelfFireEnabled(), true);
+    assert.equal(reopened.getBargeInEnabled(), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt / 非 bool JSON → getBargeInEnabled returns null (failure-tolerant)", () => {
+  const dir = tmpDir();
+  try {
+    const badPath = join(dir, "bad.json");
+    writeFileSync(badPath, "{ not json", "utf8");
+    const bad = createFileSettingsStore({ path: badPath });
+    assert.equal(bad.getBargeInEnabled(), null);
+    // 非 bool shape → null（"true" 文字列や数値は bool ではない）。
+    const oddPath = join(dir, "odd.json");
+    writeFileSync(oddPath, JSON.stringify({ bargeInEnabled: "true" }), "utf8");
+    assert.equal(createFileSettingsStore({ path: oddPath }).getBargeInEnabled(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: barge-in enabled 用の unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.doesNotThrow(() => store.setBargeInEnabled(true));
+    assert.equal(store.getBargeInEnabled(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ── S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化 ─────────────────────
 
 test("settings store: chat source は set→get roundtrip で永続化する（別インスタンスでも読める）", () => {

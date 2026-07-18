@@ -33,6 +33,12 @@
  *                                 selfFirePostErrorText の写経）
  *  - killRequestErrorText      → POST /api/kill の fetch catch（"kill error: e"・
  *                                 selfFireRequestErrorText の写経）
+ *  - bargeInToggleView         → 「朗読と合いの手」: barge-in トグルの状態導出（selfFireToggleView の
+ *                                 写経・null = gate 未生成 → disable + "not available"）
+ *  - bargeInPostErrorText      → POST /api/barge-in 応答のエラー文言（503 / set failed・成功は null・
+ *                                 selfFirePostErrorText の写経）
+ *  - bargeInRequestErrorText   → POST /api/barge-in の fetch catch（"barge-in error: e"・
+ *                                 selfFireRequestErrorText の写経）
  */
 
 /**
@@ -186,4 +192,48 @@ export function killPostErrorText(res) {
  */
 export function killRequestErrorText(e) {
   return "kill error: " + e;
+}
+
+// ── 「朗読と合いの手」: barge-in トグルの表示導出（selfFireToggleView の様式踏襲）───────────────
+
+/**
+ * barge-in トグルの状態導出（selfFireToggleView の写経）。
+ * bi が null / undefined（gate 未生成 = orchestrator.interrupt 未対応）は「使えない」ことを
+ * disable + "not available" で表す。className の末尾スペース（off 時 "barge-in-status "）は
+ * selfFireToggleView の様式を踏襲。
+ * @param {{ enabled?: boolean } | null | undefined} bi  state snapshot の bargeIn。
+ * @returns {{ disabled: boolean; checked: boolean; statusText: string; statusClassName: string }}
+ */
+export function bargeInToggleView(bi) {
+  if (!bi) {
+    return { disabled: true, checked: false, statusText: "not available", statusClassName: "barge-in-status" };
+  }
+  const on = !!bi.enabled;
+  return {
+    disabled: false,
+    checked: on,
+    statusText: on ? "on" : "off",
+    statusClassName: "barge-in-status " + (on ? "on" : "")
+  };
+}
+
+/**
+ * POST /api/barge-in 応答 → エラー文言（selfFirePostErrorText の写経）。成功（200）は **null =
+ * エラーなし**（呼び出し側は snapshot 応答を適用する）。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function bargeInPostErrorText(res) {
+  if (res.status === 503) return "barge-in control not available";
+  if (!res.ok) return "set failed: " + ((res.j && res.j.error) || "error");
+  return null;
+}
+
+/**
+ * POST /api/barge-in の fetch 失敗 → エラー文言（selfFireRequestErrorText の写経）。
+ * @param {unknown} e
+ * @returns {string}
+ */
+export function bargeInRequestErrorText(e) {
+  return "barge-in error: " + e;
 }

@@ -15,6 +15,7 @@ import {
 } from "./cockpit-server.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
+import { BARGE_IN_MIN_SPEECH_MS, BARGE_IN_GRACE_MS } from "../mind/barge-in.mjs";
 
 // 魂コクピット・サーバの機械テスト（S2.5 Domain A）。pipeline / デバイス列挙 / spawn を全注入し、
 // 実マイク・実 ffmpeg・実 whisper・実 ONNX を一切使わずに HTTP/SSE/結線/クリーンシャットダウンを固定する。
@@ -578,7 +579,10 @@ function makeFakeOrchestrator({ fireResult, drive } = {}) {
     killCount: 0,
     reviveCount: 0,
     /** @type {number | undefined} */ lastKillAtMs: undefined,
-    /** @type {boolean | undefined} */ initialKilledSeen: undefined
+    /** @type {boolean | undefined} */ initialKilledSeen: undefined,
+    // 「朗読と合いの手」: interrupt() の呼び出し記録（barge-in born-disabled 検証に使う・
+    // 既存テストには一切影響しない追加のみ・未呼び出しなら 0 のまま）。
+    interruptCount: 0
   };
   const factory = (hooks) => {
     record.hooks = hooks;
@@ -605,6 +609,11 @@ function makeFakeOrchestrator({ fireResult, drive } = {}) {
         record.killed = false;
       },
       getKilled: () => record.killed,
+      /** barge-in 確定時に orchestrator が呼ぶ中断（S6 の既存契約・born-disabled 検証用に記録するだけ）。 */
+      async interrupt() {
+        record.interruptCount += 1;
+        return { interrupted: true };
+      },
       dispose: () => {
         record.disposed = true;
       }
@@ -2495,6 +2504,231 @@ test("cockpit SSE: bargeIn 診断は elapsedMs/charsSpoken/totalChars/prefix を
     assert.equal(diag.data.charsSpoken, 3);
     assert.equal(diag.data.totalChars, 10);
     assert.equal(diag.data.prefix, "こんに");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+// ── POST /api/barge-in（「朗読と合いの手」裁定 1・POST /api/self-fire の写経・**既定 ON**）────────
+//
+//  self-fire とは既定が逆（既定 OFF vs 既定 ON）。gate は fireOrchestrator.interrupt が関数の
+//  ときだけ生成される（makeFakeOrchestrator は S6 から interrupt を持つ・既存呼び出しには無害）。
+
+test("cockpit POST /api/barge-in: gate 未生成（orchestrator 未注入）なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/barge-in`, { enabled: false });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /barge-in control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/barge-in: enabled を切り替え・state.bargeIn に反映する（既定 ON なので初期 true）", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+    // bargeInInitialEnabled 未指定 = 既定 ON（selfFire の既定 OFF とは非対称・裁定 1）。
+  });
+  try {
+    const url = await server.listen(0);
+    const s0 = await getJson(`${url}/api/state`);
+    assert.deepEqual(s0.json.bargeIn, { enabled: true });
+
+    const r = await postJson(`${url}/api/barge-in`, { enabled: false });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.bargeIn, { enabled: false });
+    assert.deepEqual(server.bargeInStatus(), { enabled: false });
+
+    const r2 = await postJson(`${url}/api/barge-in`, { enabled: true });
+    assert.equal(r2.status, 200);
+    assert.deepEqual(r2.json.bargeIn, { enabled: true });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/barge-in: 非 boolean（文字列/数値/欠落）は enabled:false 強制（body.enabled===true 判定・トグルにならない）", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+  });
+  try {
+    const url = await server.listen(0);
+    // 既定 ON から出発し、非 boolean 値を送ると false 側へ倒れる（=== true の厳密比較・self-fire と同型）。
+    for (const bad of [{ enabled: "true" }, { enabled: 1 }, {}]) {
+      const r = await postJson(`${url}/api/barge-in`, bad);
+      assert.equal(r.status, 200);
+      assert.deepEqual(r.json.bargeIn, { enabled: false }, `enabled=${JSON.stringify(bad)} は false 強制`);
+      // 次のテストのため ON に戻す。
+      await postJson(`${url}/api/barge-in`, { enabled: true });
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/barge-in: onSetBargeInEnabled 永続化フックへ橋渡しする（未注入でも 503 にならない）", async () => {
+  const persisted = [];
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    onSetBargeInEnabled: (enabled) => {
+      persisted.push(enabled);
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/barge-in`, { enabled: false });
+    assert.deepEqual(persisted, [false]);
+    await postJson(`${url}/api/barge-in`, { enabled: true });
+    assert.deepEqual(persisted, [false, true]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/barge-in: broadcastState が飛ぶ（SSE state に bargeIn 反映）", async () => {
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const r = await postJson(`${url}/api/barge-in`, { enabled: false });
+    assert.equal(r.status, 200);
+    const evt = await client.waitFor((e) => e.event === "state" && e.data.bargeIn && e.data.bargeIn.enabled === false);
+    assert.deepEqual(evt.data.bargeIn, { enabled: false });
+    const s = await getJson(`${url}/api/state`);
+    assert.deepEqual(s.json.bargeIn, { enabled: false });
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+// ── born-disabled 伝播（blocking・wave 計画 §4 基準 2）─────────────────────────────────────
+//
+//  起動時の永続 OFF 値が gate 構築時の enabled へ直接届き、construct 後の setEnabled 後追いをしない
+//  ことを固定する。VAD イベント（speechStart のみ・speechEnd を送らない）で第一段+第二段をフルに
+//  待ち、interrupt が born-disabled では一切呼ばれず、既定（未指定）では呼ばれることを対比する。
+
+test("cockpit barge-in born-disabled: bargeInInitialEnabled:false で構築すると gate は born-disabled（VAD を送っても interrupt 不呼び出し）", async () => {
+  const fake = makeFakePipeline();
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    bargeInInitialEnabled: false
+  });
+  try {
+    const url = await server.listen(0);
+    // born-disabled の直接証拠（同期・タイマー不要）。
+    assert.deepEqual(server.bargeInStatus(), { enabled: false });
+    const s0 = await getJson(`${url}/api/state`);
+    assert.deepEqual(s0.json.bargeIn, { enabled: false });
+
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fake.record.options.onVadEvent({ type: "speechStart", tMs: 1000 });
+    // 第一段+第二段のフル猶予（200+2000ms）を待っても、disabled なので弁自体が起動せず interrupt は 0。
+    await new Promise((r) => setTimeout(r, BARGE_IN_MIN_SPEECH_MS + BARGE_IN_GRACE_MS + 200));
+    assert.equal(fakeOrch.record.interruptCount, 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit barge-in born-disabled: bargeInInitialEnabled 未指定は既定 ON（VAD フル猶予後に interrupt が呼ばれる）", { timeout: 10000 }, async () => {
+  const fake = makeFakePipeline();
+  const fakeOrch = makeFakeOrchestrator({});
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory)
+    // bargeInInitialEnabled 未指定 = 既定 ON（裁定 1）。
+  });
+  try {
+    const url = await server.listen(0);
+    assert.deepEqual(server.bargeInStatus(), { enabled: true });
+
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fake.record.options.onVadEvent({ type: "speechStart", tMs: 1000 });
+    // 第一段（200ms）通過直後はまだ確定しない（第二段へ移行しただけ）。
+    await new Promise((r) => setTimeout(r, BARGE_IN_MIN_SPEECH_MS + 100));
+    assert.equal(fakeOrch.record.interruptCount, 0);
+    // 第二段（猶予 2000ms）が満了し、speechEnd 未着（発話継続）なので確定 → interrupt が呼ばれる。
+    await new Promise((r) => setTimeout(r, BARGE_IN_GRACE_MS + 200));
+    assert.equal(fakeOrch.record.interruptCount, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+// ── onFireRequest interjection（server の vision 振り分けロジックの直接検証）────────────────────
+//
+//  interjection はタイマー駆動のみで即時発火経路が無いため、fireSchedulerFactory（テスト注入・
+//  fireOrchestratorFactory と同型）で fake scheduler を注入し、cockpit-server 内の onFireRequest
+//  コールバックを直接捕捉して「kind:"interjection" を食わせる」。
+
+/** onFireRequest コールバックを捕捉するだけの fake fireScheduler（他ハンドラは no-op）。 */
+function makeFakeFireSchedulerCapture() {
+  /** @type {any} */
+  const record = { onFireRequest: null };
+  const factory = (/** @type {any} */ opts) => {
+    record.onFireRequest = opts.onFireRequest;
+    return {
+      handleVadEvent() {},
+      handleTranscript() {},
+      handleChatMessage() {},
+      setEnabled() {},
+      isEnabled: () => true,
+      setVerbosity() {},
+      getVerbosity: () => "normal",
+      silenceBudgetRemaining: () => 0,
+      commentBudgetRemaining: () => 0,
+      dispose() {}
+    };
+  };
+  return { factory, record };
+}
+
+test("cockpit onFireRequest: kind:\"interjection\" は silence でない→ fire({vision:\"preferred\"}) が呼ばれる", async () => {
+  const cap = makeFakeFireSchedulerCapture();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "そうだね" } });
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    fireSchedulerFactory: /** @type {any} */ (cap.factory)
+  });
+  try {
+    await server.listen(0);
+    assert.equal(typeof cap.record.onFireRequest, "function");
+    cap.record.onFireRequest({ kind: "interjection" });
+    // fire() は非同期に呼ばれる（onFireRequest 内で Promise.resolve().then(...) するため一 tick 待つ）。
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(fakeOrch.record.fireCount, 1);
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit onFireRequest: kind:\"interjection\" は selfFire SSE に素通しで載る（server/UI 無改修の担保）", async () => {
+  const cap = makeFakeFireSchedulerCapture();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "そうだね" } });
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    fireSchedulerFactory: /** @type {any} */ (cap.factory)
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    cap.record.onFireRequest({ kind: "interjection" });
+    const evt = await client.waitFor((e) => e.event === "selfFire" && e.data.kind === "interjection");
+    assert.equal(evt.data.kind, "interjection");
+    assert.equal(evt.data.fired, true);
   } finally {
     client.close();
     await server.close();

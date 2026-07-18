@@ -55,7 +55,10 @@ import {
   verbosityRequestErrorText,
   killSwitchView,
   killPostErrorText,
-  killRequestErrorText
+  killRequestErrorText,
+  bargeInToggleView,
+  bargeInPostErrorText,
+  bargeInRequestErrorText
 } from "../view-logic/control.mjs";
 
 /** 口数モードの選択肢（wave 計画「口数配線」§2 裁定 A・実配線済み）。 */
@@ -91,6 +94,29 @@ export function SelfFirePill({ view, onChange }) {
       <input
         type="checkbox"
         class="self-fire-toggle"
+        disabled=${view.disabled}
+        checked=${view.checked}
+        onChange=${onChange}
+      />
+      <span class=${view.statusClassName}>${view.statusText}</span>
+    </label>
+  `;
+}
+
+/**
+ * barge-in トグル pill（「朗読と合いの手」・SelfFirePill の写経・hooks 非使用・vnode 走査テスト対象）。
+ * view は bargeInToggleView 導出済み。既定 ON（裁定 1）は server 側 born-disabled の話であり、
+ * この部品自体は selfFire pill と同型の controlled component（checked = state 由来・onChange = POST のみ）。
+ * @param {{ view: { disabled: boolean; checked: boolean; statusText: string; statusClassName: string };
+ *           onChange: (ev: any) => void }} props
+ */
+export function BargeInPill({ view, onChange }) {
+  return html`
+    <label class="barge-in-pill">
+      <span class="pill-label">かぶり</span>
+      <input
+        type="checkbox"
+        class="barge-in-toggle"
         disabled=${view.disabled}
         checked=${view.checked}
         onChange=${onChange}
@@ -143,17 +169,19 @@ export function KillSwitch({ view, onClick }) {
  * 運転バー本体。
  * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
  *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null; killed?: boolean | null;
+ *           bargeIn?: { enabled?: boolean } | null;
  *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
  */
-export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, killed, applySnapshot, fetchImpl }) {
+export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, killed, bargeIn, applySnapshot, fetchImpl }) {
   // Fire 連打防止のローカル busy（:556 :574 の即時 disable 相当・応答/失敗で復帰）。
   const [localBusy, setLocalBusy] = useState(false);
-  // 自発トグル/口数/KILL のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
+  // 自発トグル/口数/KILL/barge-in のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
   const [controlError, setControlError] = useState("");
 
   const soulView = soulStatusView(soul);
   const sfView = selfFireToggleView(selfFire);
   const killView = killSwitchView(killed);
+  const biView = bargeInToggleView(bargeIn);
 
   /**
    * Fire / Fire+視覚の共通フロー（:555-570 / :573-589 と同順: 即時 disable → note クリア → POST →
@@ -202,6 +230,32 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
         applySnapshot(res.j); // 200 応答は snapshot 全体（原実装 applySelfFire(res.j.selfFire) と同源 :648）。
       })
       .catch((/** @type {unknown} */ e) => setControlError(selfFireRequestErrorText(e))); // :649-650
+  };
+
+  /**
+   * barge-in トグル（onToggleSelfFire の写経・「朗読と合いの手」）。controlled のため change は
+   * ユーザー操作でのみ発火する（selfFire pill と同型の一方向データフロー）。
+   * @param {any} ev
+   */
+  const onToggleBargeIn = (ev) => {
+    const enabled = !!(ev && ev.target && ev.target.checked);
+    const doFetch = fetchImpl || globalThis.fetch;
+    setControlError("");
+    doFetch("/api/barge-in", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = bargeInPostErrorText(res);
+        if (err != null) {
+          setControlError(err);
+          return;
+        }
+        applySnapshot(res.j); // 200 応答は snapshot 全体（selfFire 経路と同源）。
+      })
+      .catch((/** @type {unknown} */ e) => setControlError(bargeInRequestErrorText(e)));
   };
 
   /**
@@ -271,6 +325,7 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
       <div class="control-bar-right">
         <span class="control-error err">${controlError}</span>
         <${SelfFirePill} view=${sfView} onChange=${onToggleSelfFire} />
+        <${BargeInPill} view=${biView} onChange=${onToggleBargeIn} />
         <${VerbositySelect} verbosity=${verbosity} onChange=${onChangeVerbosity} />
         <${KillSwitch} view=${killView} onClick=${onClickKill} />
       </div>

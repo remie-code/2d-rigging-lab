@@ -18,6 +18,10 @@
  *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる（bool の
  *     有無を区別するため asStringOrNull は使わない）。
  *   setSelfFireEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
+ *   getBargeInEnabled(): 「朗読と合いの手」barge-in トグルの初期値（既定 ON・裁定 1）。
+ *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる
+ *     （getSelfFireEnabled と同型・bool の有無を区別）。
+ *   setBargeInEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
  *   getChatSource(): 視聴者チャット合流の配信 URL/ID の初期値（S7「視聴者が混ざる」・waves/s7/domain-c.md）。
  *     操縦席で Connect chat した配信 source を次回起動で復元し、入力欄の既定にする。YouTube の
  *     公開 URL/ID（token を含まない平文）だが、同一ファイル・同一マージ規律に乗せる（vision target と
@@ -72,6 +76,8 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setAudioDevice: (name: string | null) => void;
  *   getSelfFireEnabled: () => boolean | null;
  *   setSelfFireEnabled: (enabled: boolean) => void;
+ *   getBargeInEnabled: () => boolean | null;
+ *   setBargeInEnabled: (enabled: boolean) => void;
  *   getChatSource: () => string | null;
  *   setChatSource: (source: string | null) => void;
  *   getVerbosityMode: () => string | null;
@@ -143,6 +149,14 @@ export function createFileSettingsStore(options = {}) {
     /** @param {boolean} enabled */
     setSelfFireEnabled(enabled) {
       writeMerged({ selfFireEnabled: enabled === true });
+    },
+    getBargeInEnabled() {
+      const v = readAll().bargeInEnabled;
+      return typeof v === "boolean" ? v : null;
+    },
+    /** @param {boolean} enabled */
+    setBargeInEnabled(enabled) {
+      writeMerged({ bargeInEnabled: enabled === true });
     },
     getChatSource() {
       return asStringOrNull(readAll().chatSource);

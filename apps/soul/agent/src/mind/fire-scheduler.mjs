@@ -43,6 +43,16 @@
  *  handleTranscript も通るが、handleTranscript は viewer を**無視**（no-op）し、発火は handleChatMessage
  *  だけが担う（you 経路の call 照合/armSilence を viewer で誤起動させない）。
  *
+ *  ── 「朗読と合いの手」第 7 の語彙（handleVadEvent の run 追跡・inventory §2 裁定 3〜7・9） ─────────
+ *  6. **合いの手（interjection）**: 連続発話 run（speechStart で開始・**間隙 < turnEndSilenceMs=2s** なら
+ *     継続・2s 以上で run 終了 = 区切り応答へ管轄を引き継ぐ・裁定 4）が interjectionBaseMs + **ジッター**
+ *     続いたら、**不応期**（≥ interjectionRefractoryMs・発火する瞬間の最低間隔チェックのみ・裁定 6）と
+ *     busy を満たしたときだけ発火要求（**予算なし・確率なし**・裁定 7/3・沈黙の写経だが希釈弁が薄い）。
+ *     不応期/busy で弾かれても run 自体の累積は殺さず、次の一巡（base+jitter）で再判定する（「ある段階から
+ *     全く発火しなくなる」状態を作らない）。自分の発火で累積リセット（次はまた一から測る・裁定 9）。
+ *     2s 境界は間隙タイマーの満了 = run 終了だけを引き起こし emitFire しない——合いの手の emitFire は
+ *     run 中の base+jitter タイマー（最短 chatty 30s）からのみ起き、2s 境界と構造的に排他になる。
+ *
  *  数値は全部 v0 コード内定数（下記 export 定数・BARGE_IN_MIN_SPEECH_MS 型）。**ツマミは作らない**
  *  （ゲインの教訓・裁定 8）。人間ゲートの体感で定数を直す前提。
  *
@@ -149,6 +159,26 @@ export const COMMENT_PROBABILITY = 0.35;
  * コメント量を見越して沈黙予算（6）より大きく取る（活発なチャットで即枯れない）。人間ゲートで直す。
  */
 export const COMMENT_BUDGET_V0 = 30;
+
+/**
+ * 合いの手（interjection）の基礎無音長ではなく**基礎累積長**（v0 定数・「朗読と合いの手」裁定 3/5・第 7
+ * の語彙）。連続発話 run（間隙 < turnEndSilenceMs=2s で継続）がこの時間 + ジッター続いたら合いの手の
+ * 候補にする（沈黙の写経だが「無音」ではなく「発話が途切れず続いている」を測る点が対称）。
+ */
+export const INTERJECTION_BASE_MS = 60_000;
+
+/**
+ * 合いの手のジッター幅（v0 定数）。base に [0, この値) の乱数（注入 RNG）を足して発火間隔を揺らす
+ * （沈黙のジッターの写経・規則的な自発発火の不自然さを避ける）。
+ */
+export const INTERJECTION_JITTER_MS = 30_000;
+
+/**
+ * 合いの手の不応期（v0 定数・裁定 6）。**発火する瞬間の最低間隔チェックのみ**——累積を止めたり遅らせたり
+ * しない（沈黙・区切りの不応期とは意味が異なる保険弁）。通常の朗読では base > refractory ゆえ姿を見せず、
+ * 直前に別の発火（呼びかけ・コメント等）が割り込んだ時だけ効く。
+ */
+export const INTERJECTION_REFRACTORY_MS = 30_000;
 
 /**
  * コメント内呼びかけ照合の**テキスト用**揺れ集合 v0（データ定数・S7・inventory §1 裁定 5）。
@@ -265,7 +295,7 @@ function clamp01(x) {
 }
 
 /**
- * @typedef {{ kind: "call" | "turn-end" | "silence" | "comment" | "comment-call" }} FireRequest
+ * @typedef {{ kind: "call" | "turn-end" | "silence" | "comment" | "comment-call" | "interjection" }} FireRequest
  */
 
 /**
@@ -279,6 +309,11 @@ function clamp01(x) {
  *  これにより normal は「現行値の単一の源」であり続け、mode 未指定時の既定挙動（S6/S7 無退行）が
  *  値の二重管理によるズレを起こしえない。quiet/chatty は新規リテラル（人間ゲート未実施・untested
  *  扱い・inventory §A-2 の非発火率の裏取り参照。人間ゲートの体感で直す前提）。
+ *
+ *  **9→12 値（「朗読と合いの手」裁定 5）**: interjectionBaseMs/interjectionJitterMs/interjectionRefractoryMs
+ *  の 3 値を各モードへ追加。normal は既存 export 定数（INTERJECTION_BASE_MS 等）への参照（値の単一の源の
+ *  流儀を維持）。quiet/chatty は新規リテラル（chatty=速い/quiet=遅いの相対関係は turn-end・silence と
+ *  対称）。turn 検出・name variants・barge-in はこの束が触らない対象のまま不変。
  */
 export const VERBOSITY_BUNDLES = Object.freeze({
   /** 控えめ（quiet）。 */
@@ -291,7 +326,10 @@ export const VERBOSITY_BUNDLES = Object.freeze({
     silenceBudget: 3,
     commentProbability: 0.15,
     commentRefractoryMs: 15_000,
-    commentBudget: 15
+    commentBudget: 15,
+    interjectionBaseMs: 120_000,
+    interjectionJitterMs: 60_000,
+    interjectionRefractoryMs: 60_000
   }),
   /** ふつう（normal・現行値）。既存 export 定数への参照 = 値の単一の源。 */
   normal: Object.freeze({
@@ -303,7 +341,10 @@ export const VERBOSITY_BUNDLES = Object.freeze({
     silenceBudget: SILENCE_BUDGET_V0,
     commentProbability: COMMENT_PROBABILITY,
     commentRefractoryMs: COMMENT_REFRACTORY_MS,
-    commentBudget: COMMENT_BUDGET_V0
+    commentBudget: COMMENT_BUDGET_V0,
+    interjectionBaseMs: INTERJECTION_BASE_MS,
+    interjectionJitterMs: INTERJECTION_JITTER_MS,
+    interjectionRefractoryMs: INTERJECTION_REFRACTORY_MS
   }),
   /** おしゃべり（chatty）。 */
   chatty: Object.freeze({
@@ -315,7 +356,10 @@ export const VERBOSITY_BUNDLES = Object.freeze({
     silenceBudget: 12,
     commentProbability: 0.70,
     commentRefractoryMs: 4_000,
-    commentBudget: 60
+    commentBudget: 60,
+    interjectionBaseMs: 30_000,
+    interjectionJitterMs: 15_000,
+    interjectionRefractoryMs: 15_000
   })
 });
 
@@ -356,11 +400,16 @@ function isValidVerbosityMode(mode) {
  * @param {number} [options.commentBudget]        S7 コメント応答のセッション予算。既定は初期 mode の束の値。
  * @param {ReadonlyArray<string>} [options.commentNameVariants=NAME_VARIANTS_TEXT_V0]  S7 コメント内呼びかけの
  *   テキスト用揺れ集合。
+ * @param {number} [options.interjectionBaseMs]  合いの手の基礎累積長。既定は初期 mode の束の値。
+ * @param {number} [options.interjectionJitterMs]  合いの手のジッター幅。既定は初期 mode の束の値。
+ * @param {number} [options.interjectionRefractoryMs]  合いの手の不応期（発火瞬間の門番のみ）。既定は
+ *   初期 mode の束の値。
  * @param {"quiet" | "normal" | "chatty"} [options.verbosity="normal"]  口数モードの初期値
  *   （運転バーのプルダウン・wave 計画「口数配線」§2 裁定 A）。未知値は "normal" にフォールバック
  *   （防御的）。turnEndProbability/turnEndRefractoryMs/silenceBaseMs/silenceJitterMs/
- *   silenceRefractoryMs/silenceBudget/commentRefractoryMs/commentProbability/commentBudget の
- *   既定値を VERBOSITY_BUNDLES[mode] から解決する（上記オプションを明示指定すればそちらが優先
+ *   silenceRefractoryMs/silenceBudget/commentRefractoryMs/commentProbability/commentBudget/
+ *   interjectionBaseMs/interjectionJitterMs/interjectionRefractoryMs の既定値を
+ *   VERBOSITY_BUNDLES[mode] から解決する（上記オプションを明示指定すればそちらが優先
  *   される = 既存テストの明示 options は従来どおり効く・無退行の鍵）。
  * @returns {{
  *   handleVadEvent: (event: { type: string }) => void;
@@ -394,12 +443,12 @@ export function createFireScheduler(options) {
   // armed→転写到着の最大待ち（TURN_END_ARM_TIMEOUT_MS）も turn 検出同様に口数モード不変（追撃修正）。
   const turnEndArmTimeoutMs = numberOr(options.turnEndArmTimeoutMs, TURN_END_ARM_TIMEOUT_MS);
 
-  // 口数モード（wave 計画「口数配線」§2 裁定 A・inventory §A-2）: 初期 mode を options.verbosity から
-  // 解決する（既定 "normal"・未知値も "normal" にフォールバック = 防御的）。9 個の tunable let の初期値は
-  // `numberOr(options.x, BUNDLE[initialMode].x)` の形にする — normal 束は既存 export const への参照
-  // ゆえ、mode 未指定時のフォールバックは現行値と完全同値。かつ options.x を明示指定すればそちらが
-  // 優先される（numberOr/intOr は明示値を最優先）ため、既存テストが渡す明示 options は従来どおり効く
-  // （無退行の鍵）。
+  // 口数モード（wave 計画「口数配線」§2 裁定 A・inventory §A-2・「朗読と合いの手」裁定 5 で 9→12 値へ
+  // 拡張）: 初期 mode を options.verbosity から解決する（既定 "normal"・未知値も "normal" にフォールバック
+  // = 防御的）。12 個の tunable let の初期値は `numberOr(options.x, BUNDLE[initialMode].x)` の形にする —
+  // normal 束は既存 export const への参照ゆえ、mode 未指定時のフォールバックは現行値と完全同値。かつ
+  // options.x を明示指定すればそちらが優先される（numberOr/intOr は明示値を最優先）ため、既存テストが
+  // 渡す明示 options は従来どおり効く（無退行の鍵）。
   const initialMode = isValidVerbosityMode(options.verbosity) ? options.verbosity : "normal";
   const initialBundle = VERBOSITY_BUNDLES[initialMode];
   /** 現在の口数モード（getVerbosity が返す・setVerbosity が更新）。 */
@@ -416,6 +465,9 @@ export function createFireScheduler(options) {
   const commentNeedles = buildNeedles(
     Array.isArray(options.commentNameVariants) ? options.commentNameVariants : NAME_VARIANTS_TEXT_V0
   );
+  let interjectionBaseMs = numberOr(options.interjectionBaseMs, initialBundle.interjectionBaseMs);
+  let interjectionJitterMs = numberOr(options.interjectionJitterMs, initialBundle.interjectionJitterMs);
+  let interjectionRefractoryMs = numberOr(options.interjectionRefractoryMs, initialBundle.interjectionRefractoryMs);
 
   let enabled = options.enabled === true;
   let disposed = false;
@@ -472,8 +524,91 @@ export function createFireScheduler(options) {
     turnEndArmed = false;
   };
 
+  // ── 合いの手（interjection）の連続 run 追跡（「朗読と合いの手」裁定 3〜7・9）───────────────
+  /** 連続発話 run が進行中か（speechStart で開始・間隙タイマー満了 = 2s 無音で終了）。 */
+  let interjectionRunActive = false;
+  /** @type {ReturnType<typeof setTimeout> | null} run 中の合いの手タイマー（base+jitter で武装）。 */
+  let interjectionTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | null} run 終了検出用の間隙タイマー（turnEndSilenceMs 共用）。 */
+  let interjectionGapTimer = null;
+
+  const clearInterjectionTimer = () => {
+    if (interjectionTimer != null) {
+      clearTimeoutImpl(/** @type {any} */ (interjectionTimer));
+      interjectionTimer = null;
+    }
+  };
+  const clearInterjectionGapTimer = () => {
+    if (interjectionGapTimer != null) {
+      clearTimeoutImpl(/** @type {any} */ (interjectionGapTimer));
+      interjectionGapTimer = null;
+    }
+  };
+  /** run を終了する（間隙タイマー満了 / OFF / 口数切替 / dispose から呼ばれる）。合いの手タイマーも畳み、
+   *  累積をリセットする（次に speechStart が来たら新しい run として一から測り直す）。emitFire はしない
+   *  （2 秒境界の排他・blocking 基準 3 の担保 — run 終了はここでしか emitFire しない経路が無い）。 */
+  const endInterjectionRun = () => {
+    interjectionRunActive = false;
+    clearInterjectionTimer();
+    clearInterjectionGapTimer();
+  };
+  /** 合いの手タイマの(再)武装。run 開始時 / 発火直後 / 不応期・busy で弾かれた時のいずれからも呼ばれる
+   *  （base + ジッターで武装）。**再武装形の裁量根拠**: v0 の全モードで base = refractory × 2（chatty
+   *  30s/15s・normal 60s/30s・quiet 120s/60s）なので、弾かれてフル再武装しても次の満了時点では
+   *  base ≥ refractory×1 が必ず経過しており不応期条件は次の一巡で確実に晴れる（silence の armSilence
+   *  写経と同じ理屈）。busy はタイミング予測不能なので busy が続く限り複数周期を空振りしうるが、
+   *  それは「busy 中は喋れない」の自然な帰結であり「ある段階から全く発火しなくなる」こととは異なる
+   *  （run が生きている限り毎周期必ず再判定される = 機会は保たれ続ける）。 */
+  const armInterjection = () => {
+    clearInterjectionTimer();
+    if (disposed || !enabled || !interjectionRunActive) return;
+    const jitter = Math.floor(clamp01(rng()) * interjectionJitterMs);
+    interjectionTimer = setTimeoutImpl(onInterjectionTimer, interjectionBaseMs + jitter);
+  };
+  function onInterjectionTimer() {
+    interjectionTimer = null;
+    if (disposed || !enabled || !interjectionRunActive) return;
+    const now = nowImpl();
+    // busy 中・不応期内 → 出さずに再武装（run の累積は殺さない・次周期で再判定）。
+    if (isBusy() || now - lastFireAtMs < interjectionRefractoryMs) {
+      armInterjection();
+      return;
+    }
+    lastFireAtMs = now;
+    emitFire("interjection");
+    armInterjection(); // 発火直後に次の一巡を再武装（累積リセット = 新たな base+jitter から）。
+  }
+  /** speechStart 到着時の run 処理: 間隙タイマーが動いていれば取消（run 継続・合いの手タイマーは
+   *  張り替えない = そのまま走り続ける）。動いていなければ run 未開始の場合のみ新規開始する。 */
+  const onSpeechStartForInterjection = () => {
+    if (disposed || !enabled) return;
+    if (interjectionGapTimer != null) {
+      clearInterjectionGapTimer(); // run 継続。
+      return;
+    }
+    if (!interjectionRunActive) {
+      interjectionRunActive = true;
+      armInterjection();
+    }
+  };
+  /** speechEnd 到着時の run 処理: run 進行中なら間隙タイマー（turnEndSilenceMs 共用）を起動する。
+   *  満了すれば run 終了（emitFire しない・2 秒境界の排他）。run 未開始・OFF 中は何もしない。 */
+  const armInterjectionGapIfRunning = () => {
+    if (disposed || !enabled || !interjectionRunActive) return;
+    clearInterjectionGapTimer();
+    interjectionGapTimer = setTimeoutImpl(onInterjectionGapTimer, turnEndSilenceMs);
+  };
+  function onInterjectionGapTimer() {
+    interjectionGapTimer = null;
+    // 2 秒無音 = run 終了（合いの手タイマー取消・累積リセット）。ここでは emitFire しない
+    // （turn-end はこの同じ 2 秒境界で armed へ入るだけ・両語彙が同時発火しない構造上の担保）。
+    endInterjectionRun();
+  }
+
   /** 発火要求を出す（onFireRequest の throw は握って常駐を殺さない）。 */
-  const emitFire = (/** @type {"call" | "turn-end" | "silence" | "comment" | "comment-call"} */ kind) => {
+  const emitFire = (
+    /** @type {"call" | "turn-end" | "silence" | "comment" | "comment-call" | "interjection"} */ kind
+  ) => {
     try {
       onFireRequest({ kind });
     } catch {
@@ -528,6 +663,8 @@ export function createFireScheduler(options) {
       // armed 中（前の発話の転写待ち）はここでは触らない = 据え置き（まだ届いていない転写を待ち続ける）。
       clearTurnEnd();
       armSilence();
+      // 合いの手 run: 間隙タイマーが動いていれば取消（run 継続）、動いていなければ未開始の場合のみ開始。
+      onSpeechStartForInterjection();
     } else if (event.type === "speechEnd") {
       // 一区切り → 活動として沈黙タイマ再武装 + 区切り応答タイマを張る（無音待ち）。
       armSilence();
@@ -538,6 +675,8 @@ export function createFireScheduler(options) {
       if (enabled && !turnEndArmed) {
         turnEndTimer = setTimeoutImpl(onTurnEndTimer, turnEndSilenceMs);
       }
+      // 合いの手 run: 進行中なら間隙タイマー（turnEndSilenceMs 共用）を起動する（満了で run 終了）。
+      armInterjectionGapIfRunning();
     }
     // speechCancel はスパイク棄却の retraction（barge-in gate の領分）。スケジューラは触らない
     // （speechStart で張り替えた区切りタイマは既に取り消し済み。1 スパイクで区切り応答を落とすのは免罪符・裁定 2）。
@@ -630,6 +769,8 @@ export function createFireScheduler(options) {
   /**
    * 自発発火の ON/OFF。OFF で 3 種とも黙りタイマも畳む（手動 Fire は非経由 = 影響なし）。ON で沈黙カウント開始。
    * pending turn-end（armed 中）も OFF で解除する（追撃修正・解除が自然 = 再 ON しても復活しない）。
+   * 合いの手 run も OFF で仕切り直す（畳む・「朗読と合いの手」裁定・endInterjectionRun の写経先）。
+   * ON への復帰では合いの手 run は開始しない（speechStart 待ち = 朗読が始まっていないなら run は未開始）。
    * @param {boolean} next
    */
   const setEnabled = (next) => {
@@ -640,17 +781,19 @@ export function createFireScheduler(options) {
       clearTurnEnd();
       clearSilence();
       disarmTurnEnd();
+      endInterjectionRun();
     } else {
       armSilence(); // 有効化で沈黙カウント開始（活動が無くてもいずれ「画面を見て一言」に至る）。
     }
   };
 
   /**
-   * 口数モードの切替（wave 計画「口数配線」§2 裁定 A・inventory §A-2）。既知 mode（quiet/normal/
-   * chatty）なら 7 個の tunable let（turn-end 確率/不応期・silence 基礎/ジッター/不応期・comment
-   * 確率/不応期）を VERBOSITY_BUNDLES[mode] へ再代入し、silenceBudget/commentBudget を新モードの
-   * **満額へリセット**する（= モード切替 = そのモードの間で仕切り直す・inventory §A-2 の意味論）。
-   * 未知 mode は **no-op**（currentVerbosity も束も変えず return・防御的）。
+   * 口数モードの切替（wave 計画「口数配線」§2 裁定 A・inventory §A-2・「朗読と合いの手」裁定 5 で
+   * interjection 3 値を追加）。既知 mode（quiet/normal/chatty）なら 10 個の tunable let（turn-end
+   * 確率/不応期・silence 基礎/ジッター/不応期・comment 確率/不応期・interjection 基礎/ジッター/不応期）
+   * を VERBOSITY_BUNDLES[mode] へ再代入し、silenceBudget/commentBudget を新モードの**満額へリセット**
+   * する（= モード切替 = そのモードの間で仕切り直す・inventory §A-2 の意味論）。未知 mode は **no-op**
+   * （currentVerbosity も束も変えず return・防御的）。
    *
    * turn 検出（turnEndSilenceMs）・name variants（needles/commentNeedles）は触らない（口数モード不変）。
    *
@@ -660,7 +803,8 @@ export function createFireScheduler(options) {
    * 拾う（armSilence 相当の「即時再武装するタイマ」を turn-end/comment は持たない）。
    *
    * pending turn-end（armed 中）も切替で解除する（追撃修正・setEnabled(false) の写経・解除が自然 =
-   * 「そのモードの間で仕切り直す」に pending も含める）。
+   * 「そのモードの間で仕切り直す」に pending も含める）。合いの手 run も同様に畳む（endInterjectionRun）
+   * ——新モードの値で次の speechStart から測り直す（run 再開の即時反映は仕様上不要・speechStart 駆動）。
    * @param {string} mode
    */
   const setVerbosity = (mode) => {
@@ -675,8 +819,12 @@ export function createFireScheduler(options) {
     commentProbability = bundle.commentProbability;
     silenceBudget = bundle.silenceBudget; // 残予算を新モードの満額へリセット。
     commentBudget = bundle.commentBudget;
+    interjectionBaseMs = bundle.interjectionBaseMs;
+    interjectionJitterMs = bundle.interjectionJitterMs;
+    interjectionRefractoryMs = bundle.interjectionRefractoryMs;
     currentVerbosity = mode;
     disarmTurnEnd(); // pending turn-end も仕切り直し（解除）。
+    endInterjectionRun(); // 合いの手 run も仕切り直し（畳む・新モードの値は次の speechStart から反映）。
     if (enabled) armSilence(); // 新しい silence 基礎/ジッター/予算を即座に反映。
   };
 
@@ -702,6 +850,7 @@ export function createFireScheduler(options) {
       clearTurnEnd();
       clearSilence();
       disarmTurnEnd();
+      endInterjectionRun();
     }
   };
 }

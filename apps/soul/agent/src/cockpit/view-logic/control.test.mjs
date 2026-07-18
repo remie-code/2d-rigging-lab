@@ -14,7 +14,10 @@ import {
   verbosityRequestErrorText,
   killSwitchView,
   killPostErrorText,
-  killRequestErrorText
+  killRequestErrorText,
+  bargeInToggleView,
+  bargeInPostErrorText,
+  bargeInRequestErrorText
 } from "./control.mjs";
 
 test("soulStatusView: thinking/speaking は busy（Fire disable）・他は idle（applySoulState :434-441）", () => {
@@ -153,4 +156,49 @@ test("killPostErrorText: 503/!ok の文言・成功は null（POST /api/kill）"
 
 test("killRequestErrorText: catch 文言", () => {
   assert.equal(killRequestErrorText(new Error("net")), "kill error: Error: net");
+});
+
+// ── 「朗読と合いの手」: barge-in トグルの表示導出（selfFireToggleView の写経）───────────────────
+
+test("bargeInToggleView: null は disable + not available（selfFireToggleView の写経）", () => {
+  const expected = {
+    disabled: true,
+    checked: false,
+    statusText: "not available",
+    statusClassName: "barge-in-status"
+  };
+  assert.deepEqual(bargeInToggleView(null), expected);
+  assert.deepEqual(bargeInToggleView(undefined), expected);
+});
+
+test("bargeInToggleView: enabled の on/off 導出（off は末尾スペース class = selfFireToggleView 踏襲）", () => {
+  assert.deepEqual(bargeInToggleView({ enabled: true }), {
+    disabled: false,
+    checked: true,
+    statusText: "on",
+    statusClassName: "barge-in-status on"
+  });
+  assert.deepEqual(bargeInToggleView({ enabled: false }), {
+    disabled: false,
+    checked: false,
+    statusText: "off",
+    statusClassName: "barge-in-status "
+  });
+  assert.deepEqual(bargeInToggleView({}), {
+    disabled: false,
+    checked: false,
+    statusText: "off",
+    statusClassName: "barge-in-status "
+  });
+});
+
+test("bargeInPostErrorText: 503/!ok の文言・成功は null（POST /api/barge-in）", () => {
+  assert.equal(bargeInPostErrorText({ status: 503, ok: false, j: null }), "barge-in control not available");
+  assert.equal(bargeInPostErrorText({ status: 500, ok: false, j: { error: "boom" } }), "set failed: boom");
+  assert.equal(bargeInPostErrorText({ status: 500, ok: false, j: {} }), "set failed: error");
+  assert.equal(bargeInPostErrorText({ status: 200, ok: true, j: { bargeIn: { enabled: false } } }), null);
+});
+
+test("bargeInRequestErrorText: catch 文言", () => {
+  assert.equal(bargeInRequestErrorText(new Error("net")), "barge-in error: Error: net");
 });

@@ -6,6 +6,7 @@ import {
   computeSpokenPrefix,
   createBargeInGate,
   BARGE_IN_MIN_SPEECH_MS,
+  BARGE_IN_GRACE_MS,
   BARGE_IN_NOTE,
   MOUTH_CLOSE_SLOT_ID,
   MOUTH_CLOSE_TTL_MS
@@ -50,9 +51,11 @@ function makeFakeTimers() {
 
 // ── 定数 ─────────────────────────────────────────────────────────────
 
-test("barge-in: 定数が export される（機械弁窓・中断注記・口閉じスロット）", () => {
+test("barge-in: 定数が export される（機械弁窓・猶予窓・中断注記・口閉じスロット）", () => {
   assert.equal(typeof BARGE_IN_MIN_SPEECH_MS, "number");
   assert.ok(BARGE_IN_MIN_SPEECH_MS > 0);
+  assert.equal(typeof BARGE_IN_GRACE_MS, "number");
+  assert.ok(BARGE_IN_GRACE_MS > 0);
   assert.equal(typeof BARGE_IN_NOTE, "string");
   assert.ok(BARGE_IN_NOTE.length > 0);
   assert.equal(MOUTH_CLOSE_SLOT_ID, "mouth-open");
@@ -157,13 +160,14 @@ test("computeSpokenPrefix: 不正入力は throw（呼び出し側のバグを�
 
 // ── createBargeInGate（機械弁・確定/取消/境界）─────────────────────────────
 
-test("bargeInGate: speechStart 後 minSpeechMs 経過で確定（speechCancel が来なければ）", () => {
+test("bargeInGate: 第一段(minSpeechMs)通過後、第二段(graceMs)も発話継続で満了すると確定（二段の合成）", () => {
   const timers = makeFakeTimers();
   /** @type {any[]} */
   const confirms = [];
   const gate = createBargeInGate({
     onConfirm: (e) => confirms.push(e),
     minSpeechMs: 200,
+    graceMs: 2000,
     setTimeoutImpl: timers.setTimeoutImpl,
     clearTimeoutImpl: timers.clearTimeoutImpl
   });
@@ -171,8 +175,13 @@ test("bargeInGate: speechStart 後 minSpeechMs 経過で確定（speechCancel �
   gate.handle({ type: "speechStart", tMs: 1000 });
   assert.equal(gate.isPending(), true);
   timers.advance(199);
-  assert.equal(confirms.length, 0); // まだ確定しない。
-  timers.advance(1); // 200ms 到達。
+  assert.equal(confirms.length, 0); // 第一段もまだ通過しない。
+  timers.advance(1); // 200ms 到達 = 第一段通過 → 即座に第二段(猶予)へ。
+  assert.equal(confirms.length, 0, "第一段通過直後はまだ確定しない(猶予段へ)");
+  assert.equal(gate.isPending(), true, "猶予段も pending 扱い");
+  timers.advance(1999);
+  assert.equal(confirms.length, 0);
+  timers.advance(1); // 猶予(2000ms)満了・speechEnd 未着 = 確定。
   assert.equal(confirms.length, 1);
   assert.equal(confirms[0].tMs, 1000); // speechStart イベントが渡る。
   assert.equal(gate.isPending(), false);
@@ -199,39 +208,150 @@ test("bargeInGate: 窓内に speechCancel が来たら確定しない（瞬間�
   gate.dispose();
 });
 
-test("bargeInGate: speechEnd は機械弁に無関係（確定判断を変えない）", () => {
+test("bargeInGate: 猶予中の speechEnd は確定を取り消す（見合い成立=切られない・新意味論）", () => {
   const timers = makeFakeTimers();
   /** @type {any[]} */
   const confirms = [];
   const gate = createBargeInGate({
     onConfirm: (e) => confirms.push(e),
     minSpeechMs: 200,
+    graceMs: 2000,
     setTimeoutImpl: timers.setTimeoutImpl,
     clearTimeoutImpl: timers.clearTimeoutImpl
   });
   gate.handle({ type: "speechStart", tMs: 1000 });
-  gate.handle({ type: "speechEnd", tMs: 1100, startMs: 970, endMs: 1130, durationMs: 160, reason: "silence" });
-  timers.advance(200);
-  assert.equal(confirms.length, 1); // speechEnd は取消でない → 確定はそのまま起きる。
+  timers.advance(200); // 第一段通過 → 猶予段(2000ms)へ。
+  assert.equal(gate.isPending(), true);
+  gate.handle({ type: "speechEnd", tMs: 1200, startMs: 970, endMs: 1230, durationMs: 260, reason: "silence" });
+  assert.equal(gate.isPending(), false, "猶予中の speechEnd で猶予は取り消される");
+  timers.advance(2000); // 猶予の元期限を跨いでも発火しない。
+  assert.equal(confirms.length, 0, "見合い成立 = onConfirm は呼ばれない(切らない)");
   gate.dispose();
 });
 
-test("bargeInGate: 連続 speechStart は待機を張り替える（新オンセット優先・二重確定しない）", () => {
+test("bargeInGate: 第一段中の speechEnd は無視する（第一段の挙動不変・speechCancel のみが第一段に効く）", () => {
   const timers = makeFakeTimers();
   /** @type {any[]} */
   const confirms = [];
   const gate = createBargeInGate({
     onConfirm: (e) => confirms.push(e),
     minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 1000 });
+  // 第一段(200ms 窓)進行中に speechEnd が来ても無視する(第二段のみに効く仕様)。
+  gate.handle({ type: "speechEnd", tMs: 1050, startMs: 970, endMs: 1080, durationMs: 110, reason: "silence" });
+  timers.advance(200); // 第一段通過(speechCancel が来なかった) → 猶予段へ。
+  assert.equal(confirms.length, 0);
+  assert.equal(gate.isPending(), true, "猶予段(2000ms)が進行中");
+  timers.advance(2000); // 猶予も speechEnd なしで満了 → 確定。
+  assert.equal(confirms.length, 1, "第一段中の speechEnd は無視されたので猶予は取り消されていない");
+  gate.dispose();
+});
+
+test("bargeInGate: 短い相槌(<graceMs)は無害（猶予の早いタイミングで来た speechEnd でも切られない）", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 0 });
+  timers.advance(200); // 第一段通過 → 猶予段へ。
+  timers.advance(50); // 猶予開始からわずか 50ms(短い相槌の想定)。
+  gate.handle({ type: "speechEnd", tMs: 250 });
+  assert.equal(gate.isPending(), false, "短い相槌でも猶予中の speechEnd は確定を取り消す");
+  timers.advance(5000); // 十分に時間を進めても発火しない。
+  assert.equal(confirms.length, 0);
+  gate.dispose();
+});
+
+test("bargeInGate: 猶予超過(speechEnd 未着のまま満了)で切断する", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 5000 });
+  timers.advance(200); // 第一段通過 → 猶予段へ。
+  timers.advance(1999);
+  assert.equal(confirms.length, 0, "猶予未満はまだ確定しない");
+  timers.advance(1); // 猶予(2000ms)満了・発話継続中(speechEnd 未着) = 切断。
+  assert.equal(confirms.length, 1);
+  assert.equal(confirms[0].tMs, 5000);
+  gate.dispose();
+});
+
+test("bargeInGate: 猶予段中に speechCancel が来ても無関係（speechCancel は第一段のみに効く）", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 0 });
+  timers.advance(200); // 猶予段へ。
+  gate.handle({ type: "speechCancel", tMs: 200 }); // 猶予段中は無関係。
+  assert.equal(gate.isPending(), true, "猶予段中の speechCancel は無視される");
+  timers.advance(2000);
+  assert.equal(confirms.length, 1, "猶予段中の speechCancel では取り消されず、満了どおり確定する");
+  gate.dispose();
+});
+
+test("bargeInGate: 猶予段中の新たな speechStart は無視する（次の一巡は見合い成立後のみ・裁量）", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 0 });
+  timers.advance(200); // 猶予段へ(pendingEvent は tMs:0 の speechStart)。
+  gate.handle({ type: "speechStart", tMs: 250 }); // 猶予段中の新オンセットは無視。
+  timers.advance(2000); // 満了 → 確定(元の tMs:0 のイベントで確定する)。
+  assert.equal(confirms.length, 1);
+  assert.equal(confirms[0].tMs, 0, "猶予段中に無視された新オンセットで張り替わらない");
+  gate.dispose();
+});
+
+test("bargeInGate: 連続 speechStart は待機を張り替える（新オンセット優先・二重確定しない・二段タイミングへ追随）", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
     setTimeoutImpl: timers.setTimeoutImpl,
     clearTimeoutImpl: timers.clearTimeoutImpl
   });
   gate.handle({ type: "speechStart", tMs: 1000 });
   timers.advance(100);
-  gate.handle({ type: "speechStart", tMs: 1100 }); // 張り替え。
+  gate.handle({ type: "speechStart", tMs: 1100 }); // 張り替え(第一段のみ・猶予段はまだ始まっていない)。
   timers.advance(100); // 最初の窓の元期限（200）だが張り替え済みで発火しない。
   assert.equal(confirms.length, 0);
-  timers.advance(100); // 2 本目の 200ms（tMs=1100 の窓）到達。
+  timers.advance(100); // 2 本目の 200ms（tMs=1100 の窓）到達 → 第一段通過 → 猶予段へ。
+  assert.equal(confirms.length, 0, "第一段通過直後はまだ確定しない(猶予段へ)");
+  timers.advance(2000); // 猶予満了・speechEnd なし → 確定。
   assert.equal(confirms.length, 1);
   assert.equal(confirms[0].tMs, 1100);
   gate.dispose();
@@ -256,7 +376,7 @@ test("bargeInGate: dispose 後は待機タイマを畳み以後のイベント�
   assert.equal(gate.isPending(), false);
 });
 
-test("bargeInGate: 既定 minSpeechMs（未指定）は BARGE_IN_MIN_SPEECH_MS", () => {
+test("bargeInGate: 既定 minSpeechMs/graceMs（未指定）は BARGE_IN_MIN_SPEECH_MS/BARGE_IN_GRACE_MS", () => {
   const timers = makeFakeTimers();
   /** @type {any[]} */
   const confirms = [];
@@ -268,7 +388,132 @@ test("bargeInGate: 既定 minSpeechMs（未指定）は BARGE_IN_MIN_SPEECH_MS",
   gate.handle({ type: "speechStart", tMs: 0 });
   timers.advance(BARGE_IN_MIN_SPEECH_MS - 1);
   assert.equal(confirms.length, 0);
-  timers.advance(1);
+  timers.advance(1); // 第一段通過 → 猶予段(既定 BARGE_IN_GRACE_MS)へ。
+  assert.equal(confirms.length, 0, "第一段通過直後はまだ確定しない");
+  timers.advance(BARGE_IN_GRACE_MS - 1);
+  assert.equal(confirms.length, 0);
+  timers.advance(1); // 猶予満了。
   assert.equal(confirms.length, 1);
+  gate.dispose();
+});
+
+// ── setEnabled/isEnabled（トグル・L0 設計裁定 1）─────────────────────────────
+
+test("bargeInGate: 既定 enabled=true（未指定）・setEnabled/isEnabled で切替できる", () => {
+  const timers = makeFakeTimers();
+  const gate = createBargeInGate({
+    onConfirm: () => {},
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  assert.equal(gate.isEnabled(), true, "既定は ON(裁定 1)");
+  gate.setEnabled(false);
+  assert.equal(gate.isEnabled(), false);
+  gate.setEnabled(true);
+  assert.equal(gate.isEnabled(), true);
+  gate.dispose();
+});
+
+test("bargeInGate: options.enabled=false で初期 OFF にできる", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    enabled: false,
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  assert.equal(gate.isEnabled(), false);
+  gate.handle({ type: "speechStart", tMs: 0 }); // OFF 中は無視。
+  assert.equal(gate.isPending(), false);
+  timers.advance(2200);
+  assert.equal(confirms.length, 0);
+  gate.dispose();
+});
+
+test("OFF トグル: setEnabled(false) 後は speechStart→十分な経過でも onConfirm ゼロ（割り込みゼロ）", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.setEnabled(false);
+  gate.handle({ type: "speechStart", tMs: 0 });
+  assert.equal(gate.isPending(), false, "OFF 中は待機すら開始しない");
+  timers.advance(10_000); // 第一段+猶予を大きく超えて経過。
+  assert.equal(confirms.length, 0);
+  gate.dispose();
+});
+
+test("OFF トグル: 猶予段の進行中に OFF にすると畳まれる（onConfirm に至る経路がゼロになる）", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 0 });
+  timers.advance(200); // 猶予段(進行中)へ。
+  assert.equal(gate.isPending(), true);
+  gate.setEnabled(false); // 猶予段の途中で OFF。
+  assert.equal(gate.isPending(), false, "OFF で進行中の猶予も畳まれる");
+  timers.advance(2000); // 元の猶予期限を跨いでも発火しない。
+  assert.equal(confirms.length, 0);
+  gate.dispose();
+});
+
+test("OFF トグル: 第一段(ノイズ弁)の進行中に OFF にすると畳まれる", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.handle({ type: "speechStart", tMs: 0 });
+  timers.advance(100); // 第一段の途中。
+  gate.setEnabled(false);
+  assert.equal(gate.isPending(), false);
+  timers.advance(10_000);
+  assert.equal(confirms.length, 0);
+  gate.dispose();
+});
+
+test("OFF→ON 復帰: OFF から ON に戻すと以後の新規 speechStart は通常どおり機能する", () => {
+  const timers = makeFakeTimers();
+  /** @type {any[]} */
+  const confirms = [];
+  const gate = createBargeInGate({
+    onConfirm: (e) => confirms.push(e),
+    minSpeechMs: 200,
+    graceMs: 2000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl
+  });
+  gate.setEnabled(false);
+  gate.handle({ type: "speechStart", tMs: 0 }); // OFF 中は無視。
+  timers.advance(3000);
+  assert.equal(confirms.length, 0);
+  gate.setEnabled(true); // ON へ復帰。
+  gate.handle({ type: "speechStart", tMs: 3000 }); // 新規発話は通常どおり二段を通る。
+  timers.advance(200);
+  timers.advance(2000);
+  assert.equal(confirms.length, 1, "ON 復帰後の新規 speechStart は通常どおり確定する");
+  assert.equal(confirms[0].tMs, 3000);
   gate.dispose();
 });

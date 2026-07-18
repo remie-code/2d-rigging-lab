@@ -78,6 +78,9 @@ export function settingsFromSnapshot(s) {
     visionTarget: (s && s.visionTarget) ?? null,
     selfFire: (s && s.selfFire) ?? null,
     verbosity: (s && s.verbosity) ?? null,
+    // 「朗読と合いの手」: barge-in トグルの現況（gate 未生成 = orchestrator.interrupt 未対応なら null・
+    // selfFire と同型）。
+    bargeIn: (s && s.bargeIn) ?? null,
     audioDevice: (s && s.audioDevice) ?? null,
     chat: (s && s.chat) ?? null,
     // S8「キルスイッチ」: サーバの killed 正本はサーバ側で常に boolean（既定 false）なので、他の設定系
@@ -251,6 +254,7 @@ export function App(props) {
         selfFire=${settings.selfFire}
         verbosity=${settings.verbosity}
         killed=${settings.killed}
+        bargeIn=${settings.bargeIn}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}
       />

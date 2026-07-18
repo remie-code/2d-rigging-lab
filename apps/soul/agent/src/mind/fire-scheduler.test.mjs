@@ -20,6 +20,9 @@ import {
   COMMENT_REFRACTORY_MS,
   COMMENT_PROBABILITY,
   COMMENT_BUDGET_V0,
+  INTERJECTION_BASE_MS,
+  INTERJECTION_JITTER_MS,
+  INTERJECTION_REFRACTORY_MS,
   VERBOSITY_BUNDLES
 } from "./fire-scheduler.mjs";
 
@@ -973,4 +976,247 @@ test("dispose: 以後のイベントは無視・タイマは残さない（ハ�
   sch.handleVadEvent({ type: "speechEnd" });
   clock.advance(SILENCE_BASE_MS * 5);
   assert.equal(reqs.length, 0);
+});
+
+// ── 合いの手（interjection・第 7 の語彙・「朗読と合いの手」裁定 3〜7・9）───────────────────────
+
+test("interjection: v0 定数(base/jitter/refractory)が export される・VERBOSITY_BUNDLES は 12 値(3 モード × interjection 3 値)", () => {
+  assert.ok(INTERJECTION_BASE_MS > 0);
+  assert.ok(INTERJECTION_JITTER_MS >= 0);
+  assert.ok(INTERJECTION_REFRACTORY_MS > 0);
+  for (const mode of ["quiet", "normal", "chatty"]) {
+    const b = VERBOSITY_BUNDLES[mode];
+    assert.equal(typeof b.interjectionBaseMs, "number");
+    assert.ok(b.interjectionBaseMs > 0, `${mode}.interjectionBaseMs > 0`);
+    assert.equal(typeof b.interjectionJitterMs, "number");
+    assert.ok(b.interjectionJitterMs >= 0, `${mode}.interjectionJitterMs >= 0`);
+    assert.equal(typeof b.interjectionRefractoryMs, "number");
+    assert.ok(b.interjectionRefractoryMs > 0, `${mode}.interjectionRefractoryMs > 0`);
+  }
+  // normal は既存 export 定数への参照(値の単一の源・無退行の鍵)。
+  assert.equal(VERBOSITY_BUNDLES.normal.interjectionBaseMs, INTERJECTION_BASE_MS);
+  assert.equal(VERBOSITY_BUNDLES.normal.interjectionJitterMs, INTERJECTION_JITTER_MS);
+  assert.equal(VERBOSITY_BUNDLES.normal.interjectionRefractoryMs, INTERJECTION_REFRACTORY_MS);
+});
+
+/** interjection 判定用のスケジューラを組む（silence/turn-end は遠くに追いやり interjection 分岐だけを見る）。 */
+function makeInterjectionScheduler(clock, opts = {}) {
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    isBusy: opts.isBusy,
+    nowImpl: clock.now,
+    rng: opts.rng ?? rngHit, // ジッター 0(rngHit)で予測可能に。
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    silenceBaseMs: 10_000_000, // 沈黙は遠くへ。
+    interjectionBaseMs: opts.interjectionBaseMs ?? 3000,
+    interjectionJitterMs: opts.interjectionJitterMs ?? 0,
+    interjectionRefractoryMs: opts.interjectionRefractoryMs ?? 500,
+    ...opts.overrides
+  });
+  return { sch, reqs };
+}
+
+test("interjection: 間隙 < turnEndSilenceMs の speechStart は run を継続する（合いの手タイマーは張り替えない）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeInterjectionScheduler(clock, {
+    interjectionBaseMs: 5000,
+    interjectionRefractoryMs: 1000
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // t=0: run 開始・合いの手タイマー武装(満了予定 t=5000)。
+  clock.advance(1000); // t=1000。
+  sch.handleVadEvent({ type: "speechEnd" }); // 間隙タイマー開始(満了予定 t=3000)。
+  clock.advance(1000); // t=2000(間隙 1000ms < turnEndSilenceMs=2000ms)。
+  sch.handleVadEvent({ type: "speechStart" }); // run 継続(間隙タイマー取消・合いの手タイマーは張り替えない)。
+  clock.advance(3000); // t=5000 → 元の合いの手タイマー(t=5000)がまだ生きていれば発火する。
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 1, "run 継続で合いの手タイマーが生き残る");
+  sch.dispose();
+});
+
+test("interjection: 間隙が turnEndSilenceMs(2s) に達したら run が終了する（合いの手タイマー取消・累積リセット）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeInterjectionScheduler(clock, {
+    interjectionBaseMs: 5000,
+    interjectionRefractoryMs: 1000
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // t=0: run 開始・合いの手タイマー(満了予定 t=5000)。
+  clock.advance(1000); // t=1000。
+  sch.handleVadEvent({ type: "speechEnd" }); // 間隙タイマー開始(満了予定 t=3000)。
+  clock.advance(TURN_END_SILENCE_MS); // t=3000: 間隙タイマー満了 → run 終了(合いの手タイマー取消)。
+  assert.equal(reqs.length, 0, "run 終了時点では発火しない(排他)");
+  clock.advance(10_000); // 元の合いの手タイマー(t=5000)が生きていれば発火するはずだが、畳まれている。
+  assert.equal(
+    reqs.filter((r) => r.kind === "interjection").length,
+    0,
+    "run 終了で累積リセット・再開しなければ発火しない"
+  );
+  sch.dispose();
+});
+
+test("interjection: run 中に base+jitter 満了で発火・lastFireAtMs 更新・次の一巡が再武装され再発火しうる（累積→発火→リセット→再累積）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeInterjectionScheduler(clock, {
+    interjectionBaseMs: 3000,
+    interjectionRefractoryMs: 500
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // run 開始(以降 speechEnd を送らず run を継続させる)。
+  clock.advance(2999);
+  assert.equal(reqs.length, 0);
+  clock.advance(1); // t=3000 → 1 回目発火。
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].kind, "interjection");
+  clock.advance(2999);
+  assert.equal(reqs.length, 1, "次周期未満はまだ出ない");
+  clock.advance(1); // t=6000 → 2 回目発火(累積リセット後の再武装)。
+  assert.equal(reqs.length, 2);
+  sch.dispose();
+});
+
+test("interjection: 不応期に弾かれても累積は殺されず再武装し、不応期明けに再判定で発火する（全く発火しなくなる状態を作らない）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeInterjectionScheduler(clock, {
+    interjectionBaseMs: 3000,
+    interjectionRefractoryMs: 2000
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // t=0: run 開始。
+  clock.advance(2500);
+  sch.handleTranscript(soul("何かの経路の発火実績")); // lastFireAtMs = 2500(不応期の基点)。
+  clock.advance(500); // t=3000: 合いの手タイマー満了 → 不応期内(3000-2500=500<2000) → 弾かれ再武装(次周期 t=6000)。
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 0, "不応期内は emit しない");
+  clock.advance(2999);
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 0);
+  clock.advance(1); // t=6000: 6000-2500=3500>=2000 → 不応期クリア → 発火。
+  assert.equal(
+    reqs.filter((r) => r.kind === "interjection").length,
+    1,
+    "再武装後、不応期明けに再判定して発火する(全く発火しなくなる状態を作らない)"
+  );
+  sch.dispose();
+});
+
+test("interjection: busy に弾かれても累積は殺されず再武装し、busy が明けたら発火する", () => {
+  const clock = makeFakeClock();
+  let busy = false;
+  const { sch, reqs } = makeInterjectionScheduler(clock, {
+    isBusy: () => busy,
+    interjectionBaseMs: 3000,
+    interjectionRefractoryMs: 0
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // run 開始。
+  busy = true;
+  clock.advance(3000); // t=3000: busy → 弾かれ・再武装(次周期 t=6000)。
+  assert.equal(reqs.length, 0);
+  busy = false;
+  clock.advance(2999);
+  assert.equal(reqs.length, 0);
+  clock.advance(1); // t=6000。
+  assert.equal(reqs.length, 1, "busy が明けたら再武装後の周期で発火する");
+  sch.dispose();
+});
+
+test("interjection: setVerbosity は run を仕切り直し(畳む)、以後の run は新モードの値で武装する", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    verbosity: "normal",
+    nowImpl: clock.now,
+    rng: rngHit, // ジッター 0。
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    silenceBaseMs: 10_000_000
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // run 開始(normal: base=INTERJECTION_BASE_MS=60_000)。
+  sch.setVerbosity("chatty"); // run 仕切り直し(畳む)。
+  clock.advance(VERBOSITY_BUNDLES.normal.interjectionBaseMs); // 旧 run は畳まれているので発火しない。
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 0, "setVerbosity で run は畳まれる");
+  sch.handleVadEvent({ type: "speechStart" }); // 新モード(chatty)で run 再開。
+  // setVerbosity は silence の基礎/不応期も chatty へ切り替えるため、そのままだと silence が
+  // interjection の満了直前(chatty: silenceBase=25000 < interjectionBase=30000)に発火して
+  // lastFireAtMs を更新し、interjection の不応期(chatty=15000)に誤って抵触しうる(差 5000<15000)。
+  // soul 発話で不応期の基点をこの時点(silence 無関係)へ揃え、検証を decisive に保つ
+  // (このテストの主眼は「新モードの base+jitter で武装される」ことであり、不応期の相互作用は
+  // 別テスト「不応期に弾かれても…」で既に固定済み)。
+  sch.handleTranscript(soul("基点をここに揃える"));
+  clock.advance(VERBOSITY_BUNDLES.chatty.interjectionBaseMs - 1);
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 0);
+  clock.advance(1);
+  assert.equal(
+    reqs.filter((r) => r.kind === "interjection").length,
+    1,
+    "新モード(chatty)の base+jitter(jitter=0) で発火する"
+  );
+  sch.dispose();
+});
+
+test("★ 2 秒境界の排他: 間隙 2s で turn-end は armed に入るが interjection は emit しない（両語彙同時発火なし）", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    nowImpl: clock.now,
+    rng: rngHit, // turn-end 確率も命中させる。
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    interjectionBaseMs: 30_000, // 2s 境界よりずっと長い → interjection タイマーはこの境界で満了しない。
+    interjectionJitterMs: 0,
+    silenceBaseMs: 10_000_000
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // run 開始(合いの手タイマー満了予定 t=30000)。
+  sch.handleVadEvent({ type: "speechEnd" }); // 間隙タイマー(2000ms) + turnEndTimer(2000ms) 両方起動。
+  clock.advance(TURN_END_SILENCE_MS); // t=2000: 両方満了。
+  assert.equal(
+    reqs.length,
+    0,
+    "2s 境界では turn-end も interjection も emit しない(turn-end は armed へ・interjection は run 終了のみ)"
+  );
+  // turn-end は armed に入っているので、転写到着で turn-end が発火する(interjection ではない)。
+  sch.handleTranscript(you("さっきの話"));
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].kind, "turn-end", "この境界で発火するのは turn-end のみ(interjection は run 終了しただけ)");
+  // run は 2s 境界で終了済みなので、旧合いの手タイマー(t=30000)は既に畳まれている。
+  clock.advance(30_000);
+  assert.equal(
+    reqs.filter((r) => r.kind === "interjection").length,
+    0,
+    "run は 2s 境界で終了済みなので interjection タイマーは既に畳まれている"
+  );
+  sch.dispose();
+});
+
+test("interjection: setEnabled(false) で run は畳まれ、割り込みも起きない。ON 復帰では run は未開始のまま(speechStart 待ち)", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeInterjectionScheduler(clock, {
+    interjectionBaseMs: 3000,
+    interjectionRefractoryMs: 0
+  });
+  sch.handleVadEvent({ type: "speechStart" }); // run 開始。
+  sch.setEnabled(false); // OFF → run は畳まれる。
+  clock.advance(3000);
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 0, "OFF で run は畳まれ発火しない");
+  sch.setEnabled(true); // ON 復帰。
+  clock.advance(3000); // speechStart が来ていないので run は未開始のまま。
+  assert.equal(
+    reqs.filter((r) => r.kind === "interjection").length,
+    0,
+    "ON 復帰だけでは run は開始しない(speechStart 待ち)"
+  );
+  sch.handleVadEvent({ type: "speechStart" }); // 新規発話で run 開始。
+  clock.advance(2999);
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 0);
+  clock.advance(1);
+  assert.equal(reqs.filter((r) => r.kind === "interjection").length, 1, "ON 復帰後の新規 speechStart で run が開始し発火する");
+  sch.dispose();
+});
+
+test("interjection: LLM 非依存の担保に抵触しない(fire-scheduler は import ゼロのまま・回帰確認)", () => {
+  const src = readFileSync(new URL("./fire-scheduler.mjs", import.meta.url), "utf8");
+  assert.equal(/^\s*import\s.+from\s/m.test(src), false, "interjection 追加後も fire-scheduler は import ゼロ");
 });

@@ -37,9 +37,9 @@ import {
   feedAfterSseEvent
 } from "./ui/rows.mjs";
 import { COCKPIT_CSS, injectStyles } from "./ui/styles.mjs";
-import { ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
+import { ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, BargeInPill, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
 import { SettingsDrawer, SettingsSelect, DrawerStatus } from "./ui/settings-drawer.mjs";
-import { soulStatusView, selfFireToggleView, killSwitchView } from "./view-logic/control.mjs";
+import { soulStatusView, selfFireToggleView, killSwitchView, bargeInToggleView } from "./view-logic/control.mjs";
 import { chatStatusView, channelStatusView } from "./view-logic/status.mjs";
 import { BRAIN_LABELS } from "./view-logic/health.mjs";
 
@@ -351,6 +351,7 @@ test("isStuckToBottom: 末尾近傍のみ true（閾値 STICK_THRESHOLD_PX）", 
 test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・applyState :279-283 の入力）", () => {
   assert.deepEqual(settingsFromSnapshot(null), {
     channel: null, visionTarget: null, selfFire: null, verbosity: null, audioDevice: null, chat: null,
+    bargeIn: null, // 「朗読と合いの手」: gate 未生成なら null（selfFire と同型）。
     killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
     brain: null // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
   });
@@ -361,6 +362,7 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     verbosity: "chatty",
     audioDevice: { name: "MV7+" },
     chat: { source: "abc", connected: true, state: "live" },
+    bargeIn: { enabled: false },
     killed: true,
     brain: { brain: "codex", credentialHealth: true }
   };
@@ -470,7 +472,7 @@ function collectElements(node, out = []) {
 }
 
 test("Domain C import スモーク: control-bar/settings-drawer が Node で import でき、主要 export が揃う", () => {
-  for (const fn of [ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, SettingsDrawer, SettingsSelect, DrawerStatus]) {
+  for (const fn of [ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, BargeInPill, SettingsDrawer, SettingsSelect, DrawerStatus]) {
     assert.equal(typeof fn, "function");
   }
   // 口数モードの選択肢（値は固定の 3 択・wave 計画「口数配線」§2 裁定 A で実配線済み）。
@@ -511,6 +513,22 @@ test("SelfFirePill vnode: null は disable + not available・enabled は checked
   assert.ok(collectText(vnode).join("").includes("not available"));
   // enabled: controlled（checked は view 由来・programmatic 反映で change が発火しない構造）。
   vnode = SelfFirePill({ view: selfFireToggleView({ enabled: true }), onChange: () => {} });
+  input = collectElements(vnode).find((n) => n.type === "input");
+  assert.equal(input.props.disabled, false);
+  assert.equal(input.props.checked, true);
+  assert.equal(typeof input.props.onChange, "function");
+  assert.ok(collectText(vnode).join("").includes("on"));
+});
+
+test("BargeInPill vnode: null は disable + not available・enabled は checked + on（controlled・SelfFirePill と同型）", () => {
+  // null（gate 未生成）= not available（bargeInToggleView）。
+  let vnode = BargeInPill({ view: bargeInToggleView(null), onChange: () => {} });
+  let input = collectElements(vnode).find((n) => n.type === "input");
+  assert.equal(input.props.disabled, true);
+  assert.equal(input.props.checked, false);
+  assert.ok(collectText(vnode).join("").includes("not available"));
+  // enabled: controlled（checked は view 由来）。
+  vnode = BargeInPill({ view: bargeInToggleView({ enabled: true }), onChange: () => {} });
   input = collectElements(vnode).find((n) => n.type === "input");
   assert.equal(input.props.disabled, false);
   assert.equal(input.props.checked, true);
@@ -622,6 +640,7 @@ test("COCKPIT_CSS: 運転バー/設定引き出しの意匠トークン（§7: K
   assert.ok(COCKPIT_CSS.includes(".settings-drawer.open"), "⚙ で開く");
   assert.match(COCKPIT_CSS, /\.drawer-select,\s*\.verbosity-select \{[^}]*appearance: none/, "select は chevron 付き（§7）");
   assert.ok(COCKPIT_CSS.includes(".self-fire-pill"), "自発トグルは pill（§7）");
+  assert.ok(COCKPIT_CSS.includes(".barge-in-pill"), "barge-in トグルも pill（「朗読と合いの手」・self-fire pill 写経）");
   assert.match(COCKPIT_CSS, /\.drawer-status::before \{[^}]*border-radius: 50%/, "状態は色ドット + 文言（§7）");
   assert.match(COCKPIT_CSS, /\.err \{ color: var\(--down\); \}/, "エラー欄（旧 .err の意味論継承）");
 });

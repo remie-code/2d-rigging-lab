@@ -9,6 +9,7 @@ import {
   createVisionTargetHooks,
   createAudioDeviceHooks,
   createSelfFireHooks,
+  createBargeInHooks,
   createVerbosityHooks,
   createBrainHooks,
   createChatSourceHooks
@@ -449,6 +450,58 @@ test("createSelfFireHooks: settings.setSelfFireEnabled が throw しても onSet
   };
   const hooks = createSelfFireHooks(settings);
   assert.doesNotThrow(() => hooks.onSetSelfFireEnabled(true));
+});
+
+// ── createBargeInHooks（「朗読と合いの手」: barge-in ON/OFF トグルの settings 橋渡し・
+//    createSelfFireHooks の写経・**既定 ON**は非対称）────────────────────────────────
+
+/** fake settings（cockpit-settings-store と同型の getBargeInEnabled/setBargeInEnabled を持つ最小 fake）。 */
+function makeFakeBargeInSettings(initial = null) {
+  let current = initial;
+  return {
+    getBargeInEnabled: () => current,
+    setBargeInEnabled: (enabled) => {
+      current = enabled === true;
+    }
+  };
+}
+
+test("createBargeInHooks: 未記憶（null）なら defaultEnabled にフォールバックする（既定 true・selfFire とは非対称）", { timeout: 5000 }, () => {
+  const settings = makeFakeBargeInSettings(null);
+  const hooks = createBargeInHooks(settings);
+  assert.equal(hooks.resolveInitialEnabled(), true);
+});
+
+test("createBargeInHooks: defaultEnabled を明示指定できる", { timeout: 5000 }, () => {
+  const settings = makeFakeBargeInSettings(null);
+  const hooks = createBargeInHooks(settings, false);
+  assert.equal(hooks.resolveInitialEnabled(), false);
+});
+
+test("createBargeInHooks: 記憶済みの bool（true/false）は defaultEnabled より優先される", { timeout: 5000 }, () => {
+  const settingsTrue = makeFakeBargeInSettings(true);
+  assert.equal(createBargeInHooks(settingsTrue, false).resolveInitialEnabled(), true);
+  const settingsFalse = makeFakeBargeInSettings(false);
+  assert.equal(createBargeInHooks(settingsFalse, true).resolveInitialEnabled(), false);
+});
+
+test("createBargeInHooks: onSetBargeInEnabled は settings.setBargeInEnabled へ橋渡しし・次回 resolveInitialEnabled に反映する", { timeout: 5000 }, () => {
+  const settings = makeFakeBargeInSettings(null);
+  const hooks = createBargeInHooks(settings, true);
+  hooks.onSetBargeInEnabled(false);
+  assert.equal(settings.getBargeInEnabled(), false);
+  assert.equal(hooks.resolveInitialEnabled(), false);
+});
+
+test("createBargeInHooks: settings.setBargeInEnabled が throw しても onSetBargeInEnabled は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getBargeInEnabled: () => null,
+    setBargeInEnabled: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createBargeInHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetBargeInEnabled(true));
 });
 
 // ── createVerbosityHooks（wave 計画「口数配線」§2 裁定 A: 口数モードの settings 橋渡し）───────────

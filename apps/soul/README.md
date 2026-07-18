@@ -270,12 +270,16 @@ MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 
   で口を強制 release・契約拡張なし）③ モーラタイムライン×再生経過で「実際に声に出た文字」を
   正直に算出（過大評価しない設計）④ 会話ログへ「接頭辞 + "…（遮られた）"」を 1 回 append
   （append-only 維持）。**S6 で soul 追記のタイミングが「speak 直後」→「発話完了 or 中断時」へ
-  変更**（barge-in が効く窓を実際の再生区間に一致させるための意図的な意味論変更）。
+  変更**（barge-in が効く窓を実際の再生区間に一致させるための意図的な意味論変更）。「朗読と合いの手」
+  wave で**運転バーの ON/OFF トグル（既定 ON・`POST /api/barge-in`・永続化）**と**切断猶予 2000ms**
+  （200ms の弁を通過しても即切断せず、その後 2 秒だけ「見合う」——猶予中に発話が終われば切らず続行。
+  副次効能として短い相槌（<2 秒）でも切れなくなる）を追加。詳細は下記「朗読と合いの手」節。
 - **発火スケジューラ**（`src/mind/fire-scheduler.mjs`・Domain C）: 「いつ喋るか」を LLM に一切
   問わず機械信号だけで決める純ロジック（import 文ゼロ = LLM/SDK への到達経路が構造的に存在しない）。
   ① **呼びかけ**（名前「こーでぃー」の文字列照合・不応期/確率なしで確実発火）② **区切り応答**
   （発話終了後 2 秒無音 + 不応期 8 秒 + 確率 35%）③ **沈黙**（45〜75 秒 + 長い不応期 90 秒 + セッション
-  予算 6 回・視覚発火相当=画面を見て一言）。数値は全部 v0 コード内定数（ツマミは作らない・人間ゲート
+  予算 6 回・視覚発火相当=画面を見て一言）④ **合いの手**（`interjection`・「朗読と合いの手」wave で
+  追加。詳細は下記節）。数値は全部 v0 コード内定数（ツマミは作らない・人間ゲート
   の体感で直す前提）。
 - **操縦席の配線**（`src/cockpit/cockpit.html`・Domain D）: 「Self-fire」トグル（`POST
   /api/self-fire`・手動 Fire は影響を受けない・`cockpit-settings.local.json` に永続化）・「Voice
@@ -431,3 +435,33 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
 議論正本・詳細設計は `discussion/ai-cohost/soul/brain-swap.md`。wave 記録は
 `discussion/ai-cohost/implementation/waves/brain-swap/`。followup 台帳は同ディレクトリの
 `brain-swap-followup.md`。
+
+#### 朗読と合いの手（barge-in トグル + 第 7 の発火語彙）
+
+実配信フィードバック（アークナイツ朗読セッション）発の閉問題。「barge-in が朗読では邪魔（気づかず
+喋り続けるとこーでぃーの発話が止まる）」「連続朗読は既存 6 語彙のどれの守備範囲にも入らない空白地帯
+（区切りは完全無音待ち・沈黙は活動リセットで永遠に来ない）」の 2 点を解消する。
+
+- **barge-in トグル**（`src/mind/barge-in.mjs`・運転バー）: 既定 **ON**（selfFire トグルの既定 OFF とは
+  非対称）。OFF にすると割り込み判定自体を止め、進行中の弁/猶予も畳む（かぶりを完全に許容する）。
+  `POST /api/barge-in`（`{enabled:bool}`・`cockpit-settings.local.json` に永続化）。**born-disabled**:
+  起動時に永続 OFF が記憶されていれば、gate は生成された瞬間から OFF（構築後の後追い setEnabled は
+  行わない = 起動直後に割り込み窓が開く隙を作らない）。
+- **切断猶予 2000ms**（`BARGE_IN_GRACE_MS`）: 既存 200ms のノイズ弁（`speechCancel` 待ち）を通過しても
+  即座に切断せず、続けて 2000ms「見合う」。猶予中に発話が終われば（`speechEnd`）切らずに続行する。
+  超えてなお発話が続いていれば確定（切断）。副次効能として、短い相槌（2 秒未満）はこの猶予に吸収され
+  無害になる。
+- **合いの手（interjection・第 7 の発火語彙）**（`src/mind/fire-scheduler.mjs`）: 「沈黙の対」——場が
+  流れ続けている（連続発話 run が続いている）ときに軽く一言。連続発話 run は `speechStart` で開始し、
+  間隙が `turnEndSilenceMs`（2 秒）未満なら継続、2 秒以上で終了して区切り応答の管轄へ引き継ぐ（2 秒
+  境界を共有し、両語彙が同時発火しない構造）。run が基礎 30/60/120 秒（おしゃべり/ふつう/控えめ）+
+  ジッター 15/30/60 秒続いたら候補になり、不応期 15/30/60 秒（**発火する瞬間の最低間隔チェックのみ**
+  ——累積は止めない）を満たせば発火。**予算なし・確率なし**（頻度が低いので上限の害の方が大きいという
+  裁定）。vision は他語彙と同じ preferred（対象があれば画像付き・失敗は静かに劣化）。kind は既存
+  `selfFire` SSE にそのまま素通し（server/UI は無改修）。
+- **人間ゲート観点**: ①トグル OFF で朗読→かぶってもこーでぃーが最後まで言い切る ②ON で猶予→かぶって
+  2 秒以内に発話をやめれば続行・続ければ切断（見合いの体感） ③おしゃべりで朗読→30〜45 秒ごとに合いの手
+  が入る ④通常会話の無退行（呼びかけ/区切り/沈黙/コメントが従来どおり）。
+- 議論正本: `discussion/ai-cohost/implementation/orchestration/reading-interjection-wave-plan.md` /
+  `reading-interjection-inventory.md`。wave 記録・followup 台帳は
+  `discussion/ai-cohost/implementation/waves/reading-interjection/`。

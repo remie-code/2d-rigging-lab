@@ -30,6 +30,14 @@
 export const BARGE_IN_MIN_SPEECH_MS = 200;
 
 /**
+ * 切断猶予（v0 コード内定数・「朗読と合いの手」裁定 2・L0 設計裁定 2）。第一段（BARGE_IN_MIN_SPEECH_MS の
+ * ノイズ弁）を通過した後、即 onConfirm（切断）せずこの時間だけ「見合う」。猶予中に speechEnd が届けば
+ * こーでぃーは切られず続行し（短い相槌が無害になる副次効能）、猶予が満了して発話が継続中（speechEnd 未着）
+ * なら onConfirm（切断）する。人間ゲートの体感で直す前提（ツマミは作らない・裁定 8 の写経）。
+ */
+export const BARGE_IN_GRACE_MS = 2000;
+
+/**
  * 中断注記（soul 行の接頭辞末尾に付ける「ここで遮られた」印）。転写バッファは append-only ゆえ
  * 上書きではなく **接頭辞 + この注記** の 1 エントリを追記して「遮られた事実」を会話の記憶に残す。
  * 次の発火の注入で「soul: こんに…（遮られた）」と読め、遮られた事実を踏まえた会話が続く。
@@ -146,16 +154,47 @@ export function computeSpokenPrefix(input) {
  */
 
 /**
- * barge-in の機械弁を作る。speechStart 受信で待機タイマを張り、minSpeechMs 経過までに speechCancel が
- * 来なければ onConfirm を発火する（= barge-in 確定）。speechCancel が来たら待機を取り消す（瞬間スパイク
- * では声を止めない）。時計を持たず timer 制御のみ（注入 setTimeout/clearTimeout で決定論テスト）。
+ * barge-in の機械弁を作る（二段構え・「朗読と合いの手」裁定 1/2・L0 設計裁定 1/2）。
+ *
+ * ── 二段構え ────────────────────────────────────────────────────────
+ *  **第一段（既存・不変）**: speechStart 受信で待機タイマ（minSpeechMs）を張る。窓内に speechCancel が
+ *  来たら取消（瞬間スパイクでは声を止めない）。この弁の存在意義・挙動は従来どおり不変——第一段を通過
+ *  しても**即 onConfirm はしない**（第二段へ引き継ぐ）。
+ *  **第二段（新設・猶予段）**: 第一段通過（窓内に speechCancel が来なかった）で即座に猶予タイマ
+ *  （graceMs）を起動する。猶予中に speechEnd が届いたら猶予を取り消す（= 見合い成立・onConfirm を呼ば
+ *  ない・切らない。短い相槌（<graceMs）が無害になる副次効能）。猶予が満了して発話が継続中（speechEnd
+ *  未着）なら onConfirm（= barge-in 確定・切断）を呼ぶ。
+ *
+ * speechCancel は**第一段のみ**に効き（猶予段中は無関係）、speechEnd は**第二段のみ**に効く（第一段中に
+ * 来ても無視——VAD 契約上 minSpeechMs 未満で終わる発話は speechCancel が先に来るはずで、防御的に無視す
+ * る）。猶予段中に新たな speechStart が来た場合は無視する（裁量・成果物に根拠明記——猶予段は既に「話し
+ * 始めた」ことが確定した状態であり、次の一巡は speechEnd による見合い成立後の新オンセットからのみ始ま
+ * る）。
+ *
+ * onConfirm のコールバック契約は不変（渡すのは確定した speechStart イベント・意味は「barge-in 確定 = 切
+ * 断」）。変わるのは発火タイミング（第一段 minSpeechMs → 第一段+第二段 graceMs の合成・発話継続時）と
+ * speechEnd の役割（無視 → 猶予段の取消弁）のみ。
+ *
+ * ── トグル（setEnabled/isEnabled・L0 設計裁定 1） ────────────────────────────
+ *  gate 自身が enabled 状態を持つ（selfFire が fireScheduler 自身に setEnabled を持つのと対称）。既定
+ *  enabled=true（裁定 1「既定 ON」・fire-scheduler の自発 OFF 既定とは非対称でよい）。OFF 遷移時は進行
+ *  中の第一段・第二段タイマを両方畳む（OFF で onConfirm に至る経路を完全にゼロにする）。OFF 中に来る
+ *  VAD イベントは全て無視する。
  *
  * @param {object} options
  * @param {(event: VadEvent) => void} options.onConfirm  barge-in 確定時に呼ぶ（結線層が orchestrator.interrupt を呼ぶ）。
- * @param {number} [options.minSpeechMs=BARGE_IN_MIN_SPEECH_MS]  機械弁の待機時間。
+ * @param {number} [options.minSpeechMs=BARGE_IN_MIN_SPEECH_MS]  第一段（ノイズ弁）の待機時間。
+ * @param {number} [options.graceMs=BARGE_IN_GRACE_MS]  第二段（猶予）の待機時間。
+ * @param {boolean} [options.enabled=true]  初期 ON/OFF（既定 ON・裁定 1）。
  * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  テスト注入。
  * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  テスト注入。
- * @returns {{ handle: (event: VadEvent) => void; isPending: () => boolean; dispose: () => void }}
+ * @returns {{
+ *   handle: (event: VadEvent) => void;
+ *   isPending: () => boolean;
+ *   setEnabled: (enabled: boolean) => void;
+ *   isEnabled: () => boolean;
+ *   dispose: () => void;
+ * }}
  */
 export function createBargeInGate(options) {
   if (options == null || typeof options !== "object" || typeof options.onConfirm !== "function") {
@@ -163,53 +202,110 @@ export function createBargeInGate(options) {
   }
   const onConfirm = options.onConfirm;
   const minSpeechMs = isFiniteNumber(options.minSpeechMs) ? options.minSpeechMs : BARGE_IN_MIN_SPEECH_MS;
+  const graceMs = isFiniteNumber(options.graceMs) ? options.graceMs : BARGE_IN_GRACE_MS;
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
 
-  /** @type {ReturnType<typeof setTimeout> | null} */
-  let pending = null;
-  /** @type {VadEvent | null} 待機中の speechStart（confirm へ渡す）。 */
+  /** @type {ReturnType<typeof setTimeout> | null} 第一段（ノイズ弁）のタイマ。 */
+  let valveTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | null} 第二段（猶予）のタイマ。 */
+  let graceTimer = null;
+  /** @type {VadEvent | null} 確定候補の speechStart（onConfirm へ渡す）。 */
   let pendingEvent = null;
+  /** enabled の既定は true（裁定 1「既定 ON」・fire-scheduler の自発 OFF 既定とは非対称）。 */
+  let enabled = options.enabled !== false;
   let disposed = false;
 
-  const clearPending = () => {
-    if (pending != null) {
-      clearTimeoutImpl(/** @type {any} */ (pending));
-      pending = null;
+  const clearValve = () => {
+    if (valveTimer != null) {
+      clearTimeoutImpl(/** @type {any} */ (valveTimer));
+      valveTimer = null;
     }
+  };
+  const clearGrace = () => {
+    if (graceTimer != null) {
+      clearTimeoutImpl(/** @type {any} */ (graceTimer));
+      graceTimer = null;
+    }
+  };
+  /** 両段のタイマと確定候補を畳む（OFF 遷移・dispose から呼ばれる）。 */
+  const clearAll = () => {
+    clearValve();
+    clearGrace();
     pendingEvent = null;
+  };
+
+  /** 第一段通過 → 第二段（猶予）へ入る。猶予満了かつ発話継続（speechEnd 未着）で onConfirm。 */
+  const startGrace = () => {
+    graceTimer = setTimeoutImpl(() => {
+      graceTimer = null;
+      const confirmed = pendingEvent;
+      pendingEvent = null;
+      // graceMs の間 speechEnd が来なかった（見合い不成立） = 確定（切断）。
+      onConfirm(/** @type {VadEvent} */ (confirmed));
+    }, graceMs);
   };
 
   return {
     /**
-     * VAD イベントを 1 個食わせる。speechStart → 待機開始、speechCancel → 待機取消、他は無視。
+     * VAD イベントを 1 個食わせる。speechStart → 第一段待機開始、speechCancel → 第一段取消、
+     * speechEnd → 第二段（猶予中）なら取消（見合い成立）、他は無視。OFF 中・dispose 後は全イベント無視。
      * @param {VadEvent} event
      */
     handle(event) {
-      if (disposed || event == null || typeof event.type !== "string") return;
+      if (disposed || !enabled || event == null || typeof event.type !== "string") return;
       if (event.type === "speechStart") {
-        // 直前の待機が残っていれば張り替える（新しい発話オンセットを優先）。
-        clearPending();
+        if (graceTimer != null) {
+          // 猶予段（第二段）進行中の新オンセットは無視する（裁量）。猶予段は既に「話し始めた」ことが
+          // 確定した状態であり、次の一巡は speechEnd による見合い成立後の新オンセットからのみ始まる。
+          return;
+        }
+        // 第一段: 直前の待機が残っていれば張り替える（新しい発話オンセットを優先・既存挙動不変）。
+        clearValve();
         pendingEvent = event;
-        pending = setTimeoutImpl(() => {
-          pending = null;
-          const confirmed = pendingEvent;
-          pendingEvent = null;
-          // minSpeechMs の間 speechCancel が来なかった = 確定。
-          onConfirm(confirmed ?? event);
+        valveTimer = setTimeoutImpl(() => {
+          valveTimer = null;
+          // minSpeechMs の間 speechCancel が来なかった = 第一段通過 → 即 onConfirm せず第二段（猶予）へ。
+          startGrace();
         }, minSpeechMs);
       } else if (event.type === "speechCancel") {
-        // 瞬間スパイク棄却 = 譲らない（待機を取り消す）。
-        clearPending();
+        // 第一段のみに効く（瞬間スパイク棄却 = 譲らない）。猶予段（第二段）中は無関係。
+        if (valveTimer != null) {
+          clearValve();
+          pendingEvent = null;
+        }
+      } else if (event.type === "speechEnd") {
+        // 第二段（猶予）のみに効く（見合い成立 = 切らない）。第一段中は無視（VAD 契約上 speechCancel が
+        // 先に来るはずで、防御的に無視する・第一段の挙動は不変）。
+        if (graceTimer != null) {
+          clearGrace();
+          pendingEvent = null;
+        }
       }
-      // speechEnd は機械弁に無関係（確定済みの発話・タイマは既に発火済み）。
     },
+    /** 第一段・第二段いずれかが進行中なら true。 */
     isPending() {
-      return pending != null;
+      return valveTimer != null || graceTimer != null;
+    },
+    /**
+     * ON/OFF の切替。OFF 遷移時は進行中の第一段・第二段タイマを両方畳む（OFF で onConfirm に至る経路を
+     * 完全にゼロにする）。ON への復帰では新規イベント待ち（既存の待機は復元しない）。
+     * @param {boolean} next
+     */
+    setEnabled(next) {
+      const value = next === true;
+      if (value === enabled) return;
+      enabled = value;
+      if (!enabled) {
+        clearAll();
+      }
+    },
+    isEnabled() {
+      return enabled;
     },
     dispose() {
       disposed = true;
-      clearPending();
+      clearAll();
     }
   };
 }
