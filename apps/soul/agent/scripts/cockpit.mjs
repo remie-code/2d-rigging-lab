@@ -53,6 +53,36 @@ import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
 import { createAudioPlayer, writeTempWav } from "../src/voice/audio-player.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
+import {
+  generateDigest,
+  saveDigest,
+  loadRecentDigests,
+  composeSystemPrompt,
+  DEFAULT_MEMORIES_DIR,
+  DEFAULT_DIGEST_COUNT
+} from "../src/mind/memory.mjs";
+
+/**
+ * 配信間記憶: 定期チェックポイントの間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
+ */
+export const MEMORY_CHECKPOINT_INTERVAL_MS = 20 * 60 * 1000;
+
+/**
+ * 配信間記憶: 起動時に注入する記憶テキストの合計文字数上限（loadRecentDigests の maxChars）。
+ * DIGEST_GENERATION_INSTRUCTION の分量目安（≤1500 字/件・memory.mjs）× DEFAULT_DIGEST_COUNT（3 件）
+ * = 4500。Domain A は既定 Infinity（無制限）のまま出荷したため、Domain B（呼び出し側）が具体値を
+ * 決め打つ（申し送り 1）。仮面 + 記憶 + 当日の Fire 注入窓（FIRE_MAX_CHARS=4000・fire-injection.mjs）を
+ * 合わせても常識的なプロンプト長に収まる値として、ダイジェスト自身の目安の総和をそのまま採用した。
+ */
+export const MEMORY_INJECT_MAX_CHARS = 4500;
+
+/**
+ * 配信間記憶: shutdown 最終生成（SIGINT）の best-effort タイムアウト（blocking #3・shutdown が
+ * 固まらない）。inventory §1 の実測「短命 ask ≈5s（初期化 1.9s + ask 3.2s・s1-first-light）」の
+ * 3 倍のマージンを取る——digest 生成は通常 Fire よりも遥かに大きい入力（配信全体の転写）を渡すため
+ * ask 自体がより長くかかりうる一方、Ctrl+C からの体感待ち時間を無限に伸ばすわけにはいかない。
+ */
+export const SHUTDOWN_MEMORY_TIMEOUT_MS = 15000;
 
 /** @param {string[]} argv */
 export function parseCockpitArgs(argv) {
@@ -345,6 +375,113 @@ export function createBargeInHooks(settings, defaultEnabled = true) {
 }
 
 /**
+ * settings の記憶 ON/OFF トグル（memoryEnabled）を、cockpit-server の口（onSetMemoryEnabled）へ
+ * 橋渡しする（配信間記憶・stream-memory-wave-plan.md §3 Domain B・createBargeInHooks の完全写経）。
+ * **既定は defaultEnabled=true**（stream-memory.md 裁定 1「起動時に自動搭載・OFF が例外」・
+ * createBargeInHooks と同じ既定 ON の非対称）。起動時の初期値解決（`resolveInitialEnabled`）は
+ * 既定値へのフォールバックを担う——bool の「未記憶」（null）と「明示 false」を区別する settings 契約を、
+ * 呼び出し側が意識せずに使えるようにする（createBargeInHooks/createSelfFireHooks と同じ規律）。
+ *
+ * ここは「永続化」だけを担う純関数の配線層。OFF 切替時の memoryText クリア・現 session の
+ * dispose→null によるホットスワップは main() の effectful な onSetMemoryEnabled が担う
+ * （createBrainHooks と onSetBrain の関係と同型）。
+ *
+ * @param {{ getMemoryEnabled: () => boolean | null; setMemoryEnabled: (enabled: boolean) => void }} settings
+ * @param {boolean} [defaultEnabled=true]  未記憶時のフォールバック（既定 ON・stream-memory.md 裁定 1）。
+ * @returns {{
+ *   resolveInitialEnabled: () => boolean;
+ *   onSetMemoryEnabled: (enabled: boolean) => void;
+ * }}
+ */
+export function createMemoryHooks(settings, defaultEnabled = true) {
+  return {
+    /** 起動時の初期 ON/OFF（未記憶なら defaultEnabled）。 */
+    resolveInitialEnabled: () => {
+      const remembered = settings.getMemoryEnabled();
+      return typeof remembered === "boolean" ? remembered : defaultEnabled;
+    },
+    /** cockpit-server の onSetMemoryEnabled（POST /api/memory が呼ぶ）。 */
+    onSetMemoryEnabled: (enabled) => {
+      try {
+        settings.setMemoryEnabled(enabled === true); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetBargeInEnabled と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
+/**
+ * 配信間記憶: チェックポイントを空回りさせない判定（inventory §2-4「転写が前回生成から変化しとらん時は
+ * スキップ」）。転写件数（=seq・transcriptBuffer.all().length）が前回記録時から不変ならスキップする
+ * （true=スキップ）。純関数（I/O ゼロ）——20 分ごとに同じ会話を LLM へ焼き直してトークンを燃やさない
+ * 防波堤。手動「今日を記録」/ shutdown 最終版はこの判定を経由しない（明示操作・最終版は必ず試みる）。
+ * @param {number} currentSeq  現在の転写件数。
+ * @param {number} lastRecordedSeq  直近に記録が成立した時点の転写件数。
+ * @returns {boolean}
+ */
+export function shouldSkipMemoryCheckpoint(currentSeq, lastRecordedSeq) {
+  return currentSeq === lastRecordedSeq;
+}
+
+/**
+ * 配信間記憶: 一つの記録動作を作る（裁定4「一つの操作・三つの引き金」の共通実体・チェックポイント/
+ * 手動「今日を記録」/ shutdown 最終版のいずれもこれを呼ぶ）。main() から依存を注入する薄いファクトリ
+ * （createSessionProxy と同型のパターン）——fake 注入で実 LLM/実 FS を消費せずに「OFF は即 return
+ * （blocking #4）・空転写は保存しない・generateDigest/saveDigest の throw を握って続行する
+ * （Domain A 申し送り 2・記録失敗で呼び出し元を巻き込まない）」を検証できる。
+ *
+ * @param {object} deps
+ * @param {() => boolean} deps.isEnabled  記憶 ON/OFF の現在値（main() の memoryEnabled）。
+ * @param {() => ReadonlyArray<any>} deps.getLiveEntries  entriesOverride 省略時に使うライブ転写取得
+ *   （cockpit-server の getTranscript）。
+ * @param {() => { create: Function }} deps.getBrainDef  現在の頭（brains registry の 1 エントリ）。
+ * @param {typeof generateDigest} deps.generateDigestImpl  差し替え口（本番は generateDigest そのもの）。
+ * @param {typeof saveDigest} deps.saveDigestImpl  差し替え口（本番は saveDigest そのもの）。
+ * @param {string} deps.dir  保存先（本番は DEFAULT_MEMORIES_DIR）。
+ * @param {() => number} deps.getStartedAtMs  このプロセスのファイル名の元（同一セッション=同一ファイル上書き）。
+ * @param {(info: { atMs: number; entriesLength: number }) => void} [deps.onSaved]
+ *   保存成功後に呼ばれる（main() 側がここで lastRecordAtMs/lastRecordedSeq を更新する）。
+ * @param {(error: unknown) => void} [deps.onError]  generateDigest/saveDigest の throw を受け取る。
+ * @returns {(entriesOverride?: ReadonlyArray<any>) => Promise<void>}
+ */
+export function createMemoryRecorder(deps) {
+  return async function recordMemory(entriesOverride) {
+    if (!deps.isEnabled()) return; // OFF: 生成しない（blocking #4 OFF の完全性）。
+    const entries = entriesOverride ?? deps.getLiveEntries();
+    try {
+      const digest = await deps.generateDigestImpl({ brainDef: deps.getBrainDef(), entries });
+      if (digest == null) return; // 空転写（generateDigest 自身が create を呼ばずに null を返す）。
+      deps.saveDigestImpl(digest, { dir: deps.dir, startedAtMs: deps.getStartedAtMs() });
+      if (typeof deps.onSaved === "function") {
+        deps.onSaved({ atMs: Date.now(), entriesLength: entries.length });
+      }
+    } catch (error) {
+      // generateDigest/saveDigest は throw する契約（Domain A 申し送り 2）— ここで握って続行する
+      // （チェックポイント/手動/shutdown のどの呼び出し元も記録失敗で巻き込まれない）。
+      if (typeof deps.onError === "function") deps.onError(error);
+    }
+  };
+}
+
+/**
+ * 配信間記憶: shutdown 最終生成の best-effort + timeout（blocking #3・shutdown が固まらない）。
+ * promise が timeoutMs 以内に解決/棄却しなければ待たずに進む。promise 自体の例外は握って捨てる
+ * （呼び出し元へ伝播させない・best-effort の意味そのもの）。setTimeoutImpl はテスト注入用
+ * （既定は setTimeout・fire-scheduler.mjs/barge-in.mjs のタイマ注入規律を踏襲）。
+ * @param {Promise<any>} promise
+ * @param {number} timeoutMs
+ * @param {typeof setTimeout} [setTimeoutImpl]
+ * @returns {Promise<void>}
+ */
+export function raceMemoryRecordWithTimeout(promise, timeoutMs, setTimeoutImpl = setTimeout) {
+  return Promise.race([
+    Promise.resolve(promise).catch(() => {}),
+    new Promise((resolve) => setTimeoutImpl(resolve, timeoutMs))
+  ]).then(() => undefined);
+}
+
+/**
  * settings の口数モード（verbosityMode）を、cockpit-server の口（resolveInitialVerbosity/
  * onSetVerbosity）へ橋渡しする（wave 計画「口数配線」§2 裁定 A・createSelfFireHooks と同型の薄い
  * 配線層）。settings に記憶が無い、または既知3モード（quiet/normal/chatty）以外の値が入っていた
@@ -479,6 +616,8 @@ async function main() {
   const selfFireHooks = createSelfFireHooks(settings, false);
   // 「朗読と合いの手」: barge-in ON/OFF の永続トグル（既定 ON・裁定 1・§createBargeInHooks）。
   const bargeInHooks = createBargeInHooks(settings, true);
+  // 配信間記憶: 記憶 ON/OFF の永続トグル（既定 ON・stream-memory.md 裁定 1・§createMemoryHooks）。
+  const memoryHooks = createMemoryHooks(settings, true);
   // 口数モード（quiet/normal/chatty・既定 "normal"・§createVerbosityHooks）。
   const verbosityHooks = createVerbosityHooks(settings);
   // 多頭化 Domain B: 頭脳選択（claude/codex・既定 "claude"・§createBrainHooks）。永続化の薄い橋渡し
@@ -492,11 +631,40 @@ async function main() {
   let session = null;
   /** @type {ReturnType<typeof createAudioPlayer> | null} */
   let player = null;
+  // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。recordMemory が
+  // ライブ転写取得（server.getTranscript）に使うための前方参照（let・sessionProxy が session を forward
+  // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
+  /** @type {ReturnType<typeof createCockpitServer> | undefined} */
+  let server;
   // 多頭化 Domain B: 現在の頭（claude/codex）。session let と同格の main() スコープ let。ensureFireResources
   // がこの値で頭を分岐し、onSetBrain が切替時に更新する（切替は現 session を dispose→null にし、次の
   // ensureFireResources が新頭を生成する＝inventory §2-1 のホットスワップ経路）。KILL 状態は orchestrator
   // 側にあり切替を跨いで生存する（頭非依存・触らない）。
   let currentBrain = brainHooks.resolveInitialBrain();
+
+  // 配信間記憶: 記憶 ON/OFF の現在値（起動時は settings から復元・既定 ON）。
+  let memoryEnabled = memoryHooks.resolveInitialEnabled();
+  // このプロセスの記憶ファイル名の元（裁定 4「同一セッションは同一ファイル上書き」・saveDigest 契約）。
+  const memoryStartedAtMs = Date.now();
+  // 起動時に直近 DEFAULT_DIGEST_COUNT 件のダイジェストを読み、仮面へ合成する材料にする
+  // （OFF なら読まない = blocking #4 注入の完全停止）。maxChars は MEMORY_INJECT_MAX_CHARS
+  // （申し送り 1・Domain A は既定 Infinity のまま出荷したため呼び出し側で具体値を決め打つ）。
+  let memoryText = "";
+  let memoryCount = 0;
+  if (memoryEnabled) {
+    const loadedMemory = loadRecentDigests({
+      dir: DEFAULT_MEMORIES_DIR,
+      n: DEFAULT_DIGEST_COUNT,
+      maxChars: MEMORY_INJECT_MAX_CHARS
+    });
+    memoryText = loadedMemory.text;
+    memoryCount = loadedMemory.count;
+  }
+  // 最新の記録時刻（state snapshot の memory.lastRecordAtMs）。このプロセス内で記録が成立するまでは
+  // null（前回起動の記録時刻を跨いで持ち越さない設計判断・裁量判断は完了報告に記載）。
+  let lastRecordAtMs = /** @type {number | null} */ (null);
+  // チェックポイントの「転写が前回記録から不変ならスキップ」判定用（shouldSkipMemoryCheckpoint）。
+  let lastRecordedSeq = 0;
 
   // 初期 Channel URL: --channel（後方互換）> settings の lastChannelUrl（前回起動の記憶）> 未設定。
   const initialUrl = args.channel ?? settings.getLastChannelUrl() ?? null;
@@ -542,7 +710,9 @@ async function main() {
       // onInit は createCodexSession では余剰プロパティとして単に無視される（JS の余剰プロパティ・
       // Domain A 確認済み）。createLlmSession は従来どおり onInit/onWarning を使う。
       session = brainDef.create({
-        systemPrompt: FIRE_SYSTEM_PROMPT,
+        // 配信間記憶: 仮面 + 記憶テキストを合成する（composeSystemPrompt・stream-memory.md 裁定 6
+        // 「注入点は一箇所」・OFF or 記憶ゼロ件は素の仮面のまま=blocking #4 注入側）。
+        systemPrompt: composeSystemPrompt(FIRE_SYSTEM_PROMPT, memoryEnabled ? memoryText : ""),
         onWarning: (w) => process.stderr.write(`[cockpit] WARN: ${w}\n`),
         onInit: (init) =>
           process.stderr.write(
@@ -642,6 +812,80 @@ async function main() {
     return { brain: currentBrain, credentialHealth: existsSync(def.credentialPath) };
   };
 
+  // ── 配信間記憶: 一つの記録動作(裁定4「一つの操作・三つの引き金」) ──────────────────────────
+  //  entries は server.getTranscript()(cockpit-server が additive に足す転写スナップショット getter)。
+  //  server は下方の createCockpitServer(...) で代入される前方参照(sessionProxy の getSession と同型)。
+  const recordMemory = createMemoryRecorder({
+    isEnabled: () => memoryEnabled,
+    getLiveEntries: () => (server ? server.getTranscript() : []),
+    getBrainDef: () => BRAINS[currentBrain] ?? BRAINS.claude,
+    generateDigestImpl: generateDigest,
+    saveDigestImpl: saveDigest,
+    dir: DEFAULT_MEMORIES_DIR,
+    getStartedAtMs: () => memoryStartedAtMs,
+    onSaved: ({ atMs, entriesLength }) => {
+      lastRecordAtMs = atMs;
+      lastRecordedSeq = entriesLength;
+    },
+    onError: (error) => {
+      process.stderr.write(
+        `[cockpit] WARN: memory record failed: ${error instanceof Error ? error.message : String(error)}\n`
+      );
+    }
+  });
+
+  // 引き金①: 定期チェックポイント(20 分毎・転写が前回記録から不変ならスキップ=inventory §2-4)。
+  // unref() でプロセス生存に寄与させない(ears-cli 等の既存タイマ規律・常駐タイマーの前例なしゆえ新設)。
+  const memoryCheckpointTimer = setInterval(() => {
+    if (!memoryEnabled) return; // OFF: チェックポイント自体も止める(blocking #4)。
+    const entries = server ? server.getTranscript() : [];
+    if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return; // 空回しでトークンを燃やさない。
+    recordMemory(entries).catch(() => {});
+  }, MEMORY_CHECKPOINT_INTERVAL_MS);
+  memoryCheckpointTimer.unref();
+
+  /**
+   * 操縦席(POST /api/memory)から記憶 ON/OFF を設定/切替する(onSetBrain の型)。
+   *
+   * OFF = 注入も生成もチェックポイントも全停止(blocking #4「OFF の完全性」): OFF にすると memoryText を
+   * 空にし(念のための二重防御・注入自体は composeSystemPrompt 側でも空文字列は素の仮面を返す)、
+   * チェックポイントタイマーは isEnabled()/memoryEnabled のガードで空回りする。ON に切り替わったら
+   * memoryText/memoryCount を loadRecentDigests で(再)取得する(起動時と同じ経路・申し送り 4「count は
+   * 実際に搭載した件数」)。切替は現 session を dispose→null にし、次発火から新 systemPrompt が効く
+   * (brain 切替のホットスワップと同型・inventory §2-5)。
+   * @param {boolean} enabled
+   */
+  const onSetMemoryEnabled = async (enabled) => {
+    memoryHooks.onSetMemoryEnabled(enabled); // 次回起動でも復元(file-backed・失敗寛容)。
+    memoryEnabled = enabled === true;
+    if (memoryEnabled) {
+      const loadedMemory = loadRecentDigests({
+        dir: DEFAULT_MEMORIES_DIR,
+        n: DEFAULT_DIGEST_COUNT,
+        maxChars: MEMORY_INJECT_MAX_CHARS
+      });
+      memoryText = loadedMemory.text;
+      memoryCount = loadedMemory.count;
+    } else {
+      memoryText = ""; // OFF: 注入テキストを空にする(念のため・composeSystemPrompt 側でも二重防御)。
+    }
+    if (session != null) {
+      try {
+        await session.dispose();
+      } catch {
+        // best-effort(再生成の妨げにしない・切替は続行する)。
+      }
+      session = null; // 次回 fire 時に ensureFireResources() が新 systemPrompt で再生成する。
+    }
+    process.stdout.write(`[cockpit] memory ${memoryEnabled ? "enabled" : "disabled"}\n`);
+  };
+
+  /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(recordMemory の薄いラッパ)。 */
+  const onMemoryRecord = () => recordMemory();
+
+  /** state snapshot に載せる記憶の現況(brainStatus と同型)。 */
+  const memoryStatus = () => ({ enabled: memoryEnabled, count: memoryCount, lastRecordAtMs });
+
   /** fireOrchestratorFactory は常に注入する（Channel URL 未設定でも fire は「使えないが結線済み」）。 */
   const fireOrchestratorFactory = (/** @type {any} */ hooks) =>
     createFireOrchestrator({
@@ -689,7 +933,7 @@ async function main() {
     ensureFireResources();
   }
 
-  const server = createCockpitServer({
+  server = createCockpitServer({
     port: args.port ?? DEFAULT_COCKPIT_PORT,
     indexHtmlPath: cockpitHtmlPath,
     settingsStore: settings,
@@ -725,7 +969,11 @@ async function main() {
     // 生成 start()・onMessage/onStatus/onDiagnostic を取り込み経路へ繋ぐ。配信 source は settings に記憶。
     chatClientFactory: createLiveChatClient,
     onSetChatSource: chatSourceHooks.onSetChatSource,
-    chatSourceStatus: chatSourceHooks.chatSourceStatus
+    chatSourceStatus: chatSourceHooks.chatSourceStatus,
+    // 配信間記憶: 記憶 ON/OFF の永続トグル + 手動「今日を記録」+ 現況(additive・POST +2・snapshot +1)。
+    onSetMemoryEnabled,
+    onMemoryRecord,
+    memoryStatus
   });
 
   const url = await server.listen();
@@ -754,8 +1002,18 @@ async function main() {
     if (closing) return;
     closing = true;
     process.stdout.write("\n[cockpit] closing…\n");
+    // 配信間記憶: 引き金③(SIGINT 最終版)。★重要な配管事実: 転写バッファは pipeline 所有(cockpit-server
+    // 内)で、server.close() は pipeline を dispose して null に戻す(cockpit-server.mjs の close 契約)。
+    // よって転写のスナップショットは close() より前に確保する(close 後には転写が取れない)。
+    const finalMemoryEntries = memoryEnabled ? server.getTranscript() : [];
     try {
       await server.close(); // orchestrator.dispose を含む（cockpit-server の close 契約）。
+      // 配信間記憶: 最終生成は close() 直後・常駐 dispose の前(inventory §2-3・L0 設計判断 3)。
+      // best-effort + timeout(blocking #3・shutdown が固まらない): 失敗/timeout のどちらでも下の
+      // session/player/lazyChannel dispose は必ず走る(race 自体は例外を投げない=普通に処理が進む)。
+      if (memoryEnabled) {
+        await raceMemoryRecordWithTimeout(recordMemory(finalMemoryEntries), SHUTDOWN_MEMORY_TIMEOUT_MS);
+      }
       // S3: fire 結線の常駐リソースも確実に畳む（リーク禁止・cli.mjs の dispose 順の型）。
       if (session) {
         try {

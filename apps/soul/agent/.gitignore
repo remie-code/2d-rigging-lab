@@ -33,3 +33,9 @@ cockpit-settings.local.json
 # 自分が作った thread_id の sidecar 台帳（codex-session.mjs）。~/.codex/sessions の rollout を
 # 完全一致だけで掃除するための記録であり、cockpit-settings.local.json と同格の魂ローカル設定。
 codex-rollouts.local.json
+
+# ── 配信間記憶のダイジェスト（配信間記憶 Domain A・非コミット）────────────────
+# 1 配信 1 ファイルの人間可読 Markdown（memory.mjs saveDigest の既定保存先）。視聴者名は書かせない
+# 生成指示だが、記憶の主権はファイルシステム側にある運用面のローカル資産であり成果物ではない
+# （stream-memory.md 裁定 5）。
+memories/

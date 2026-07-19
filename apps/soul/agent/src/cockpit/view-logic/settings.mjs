@@ -29,7 +29,20 @@
  * 多頭化 Domain C（brain-swap-wave-plan.md §3）追加抽出:
  *  - brainPostErrorText → POST /api/brain 応答の失敗文言（audioDevicePostErrorText の写経・
  *    503=未注入・!ok="set failed: error"・成功は null）。
+ *
+ * 配信間記憶（stream-memory-wave-plan.md §3 Domain B・記憶区画が settings-drawer に置かれるため
+ * ここへ追加抽出）:
+ *  - memoryToggleView       → 記憶 ON/OFF トグルの状態導出（control.mjs の bargeInToggleView の写経・
+ *    memory が null = memoryStatus 未注入で「使えない」を disable + "not available" で表す）。
+ *  - memoryPostErrorText    → POST /api/memory 応答の失敗文言（audioDevicePostErrorText の写経）。
+ *  - memoryRecordPostErrorText → POST /api/memory-record 応答の失敗文言（同型・503=未注入。手動記録
+ *    自体の失敗はサーバ側で握って 200 を返す契約=このヘルパーは 503/その他 !ok のみを文言化する）。
+ *  - memoryStatusLabel      → 「記憶 N 件を搭載（最新: HH:MM:SS）」の表示文言（count/lastRecordAtMs
+ *    から導出・lastRecordAtMs はローカル時刻表示へ変換=Domain A 申し送り 3・format-time.mjs の
+ *    formatClock を再利用）。
  */
+
+import { formatClock } from "./format-time.mjs";
 
 /**
  * 視覚発火の対象ウインドウの現況表示（applyVisionTarget :317-322）。
@@ -157,6 +170,65 @@ export function brainPostErrorText(res) {
   return settingPostErrorText(res, "brain control not available");
 }
 
+// ── 配信間記憶: 記憶 ON/OFF トグル + 「今日を記録」の表示導出（settings-drawer「記憶」区画）─────
+
+/**
+ * 記憶 ON/OFF トグルの状態導出（control.mjs の bargeInToggleView の写経）。
+ * memory が null / undefined（memoryStatus 未注入 = Domain B 未配線）は「使えない」ことを
+ * disable + "not available" で表す。className の末尾スペース（off 時 "memory-status "）は
+ * bargeInToggleView/selfFireToggleView の様式を踏襲。
+ * @param {{ enabled?: boolean } | null | undefined} memory  state snapshot の memory。
+ * @returns {{ disabled: boolean; checked: boolean; statusText: string; statusClassName: string }}
+ */
+export function memoryToggleView(memory) {
+  if (!memory) {
+    return { disabled: true, checked: false, statusText: "not available", statusClassName: "memory-status" };
+  }
+  const on = !!memory.enabled;
+  return {
+    disabled: false,
+    checked: on,
+    statusText: on ? "on" : "off",
+    statusClassName: "memory-status " + (on ? "on" : "")
+  };
+}
+
+/**
+ * POST /api/memory 応答 → エラー文言（audioDevicePostErrorText の写経）。成功は null。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function memoryPostErrorText(res) {
+  return settingPostErrorText(res, "memory control not available");
+}
+
+/**
+ * POST /api/memory-record 応答 → エラー文言（memoryPostErrorText の写経）。成功は null。
+ * サーバ側は記録失敗（generateDigest/saveDigest の throw 含む）を握って 200 を返す契約
+ * （failure-tolerant）なので、ここが非 null を返すのは 503（未注入）等の配線レベルの失敗のみ。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function memoryRecordPostErrorText(res) {
+  return settingPostErrorText(res, "memory record control not available");
+}
+
+/**
+ * 記憶の状態表示文言（「記憶 N 件を搭載（最新: HH:MM:SS）」）。count は起動時/ON 切替時に
+ * loadRecentDigests で実際に搭載した件数（Domain A 申し送り 4）。lastRecordAtMs はこのプロセス内で
+ * 記録が一度も成立していなければ null（内部の壁時計 ms をそのままローカル時刻表示へ変換するのは
+ * Domain B の責務・Domain A 申し送り 3・format-time.mjs の formatClock を再利用）。
+ * memory が null / undefined（未注入）は "not available"（memoryToggleView と同じ既定文言）。
+ * @param {{ enabled?: boolean; count?: number; lastRecordAtMs?: number | null } | null | undefined} memory
+ * @returns {string}
+ */
+export function memoryStatusLabel(memory) {
+  if (!memory) return "not available";
+  const count = typeof memory.count === "number" ? memory.count : 0;
+  const last = typeof memory.lastRecordAtMs === "number" ? formatClock(memory.lastRecordAtMs) : "まだ記録なし";
+  return `記憶 ${count} 件を搭載（最新: ${last}）`;
+}
+
 /**
  * POST /api/chat/connect 応答 → エラー文言（:787-791）。
  * 503 = chat 未結線・400 = invalid source・その他 !ok = connect failed。成功は null。
@@ -196,7 +268,9 @@ const REQUEST_ERROR_PREFIX = {
   channel: "channel error", //                       :768
   chatConnect: "chat connect error", //              :794
   chatDisconnect: "chat disconnect error", //        :802
-  brain: "brain error" //   多頭化 Domain C（POST /api/brain・audioDevice の写経）
+  brain: "brain error", //  多頭化 Domain C（POST /api/brain・audioDevice の写経）
+  memory: "memory error", //          配信間記憶（POST /api/memory・audioDevice の写経）
+  memoryRecord: "memory record error" // 配信間記憶（POST /api/memory-record・同型）
 };
 
 /**

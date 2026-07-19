@@ -14,6 +14,10 @@
  *    select（claude/codex の 2 択・BRAIN_LABELS＝ BRAINS[*].label 相当を view-logic に直書き）+
  *    Set ボタン（POST /api/brain）+ drawer-note に現在の頭ラベル + 資格情報の健康表示
  *    （brainCredentialHealthLabel・boolean の文言化のみ・中身は扱わない）。
+ *  - 記憶（配信間記憶・stream-memory-wave-plan.md §3 Domain B）: 頭脳区画の写経で新区画を追加。
+ *    ON/OFF トグル（memoryToggleView・POST /api/memory・controlled component=selfFire/bargeIn pill と
+ *    同型の一方向データフロー）+「今日を記録」ボタン（POST /api/memory-record）+ drawer-note に
+ *    「記憶 N 件を搭載（最新: ...）」（memoryStatusLabel）。
  *
  * 表示文字列・状態導出はすべて view-logic 経由（settings.mjs / status.mjs / health.mjs・L0 裁定）。
  * 挙動の保存点:
@@ -56,7 +60,11 @@ import {
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
   requestErrorText,
-  brainPostErrorText
+  brainPostErrorText,
+  memoryToggleView,
+  memoryPostErrorText,
+  memoryRecordPostErrorText,
+  memoryStatusLabel
 } from "../view-logic/settings.mjs";
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
@@ -126,6 +134,9 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
   // ── 頭脳（多頭化 Domain C・声の出力先行の写経）──
   const [brainSelected, setBrainSelected] = useState("claude");
   const [brainError, setBrainError] = useState("");
+  // ── 記憶（配信間記憶・頭脳区画の写経）──
+  const [memoryError, setMemoryError] = useState("");
+  const [recordBusy, setRecordBusy] = useState(false); // 「今日を記録」の連打防止（Fire ボタンの localBusy と同型）。
 
   const doFetch = (/** @type {string} */ path, /** @type {any} */ init) =>
     (fetchImpl || globalThis.fetch)(path, init);
@@ -357,8 +368,51 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
       .catch((/** @type {unknown} */ e) => setBrainError(requestErrorText("brain", e)));
   };
 
+  /**
+   * 記憶 ON/OFF トグル（selfFire/bargeIn pill と同型の controlled component・onToggleSelfFire の写経）。
+   * change はユーザー操作でのみ発火する（programmatic な checked 反映は change を発火しない）。
+   */
+  const onToggleMemory = (/** @type {any} */ ev) => {
+    const enabled = !!(ev && ev.target && ev.target.checked);
+    setMemoryError("");
+    doFetch("/api/memory", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = memoryPostErrorText(res);
+        if (err != null) {
+          setMemoryError(err);
+          return;
+        }
+        applySnapshot(res.j); // 200 応答は snapshot 全体（selfFire/bargeIn 経路と同源）。
+      })
+      .catch((/** @type {unknown} */ e) => setMemoryError(requestErrorText("memory", e)));
+  };
+
+  /** 「今日を記録」（onAudioSet の写経・手動記録・POST /api/memory-record）。 */
+  const onMemoryRecord = () => {
+    setMemoryError("");
+    setRecordBusy(true);
+    doFetch("/api/memory-record", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = memoryRecordPostErrorText(res);
+        if (err != null) {
+          setMemoryError(err);
+          return;
+        }
+        applySnapshot(res.j); // 200 応答は snapshot 全体（記録失敗はサーバ側で握って 200・failure-tolerant）。
+      })
+      .catch((/** @type {unknown} */ e) => setMemoryError(requestErrorText("memoryRecord", e)))
+      .then(() => setRecordBusy(false));
+  };
+
   const channelView = channelStatusView(settings && settings.channel);
   const chatView = chatStatusView(chatDisplay);
+  const memoryView = memoryToggleView(settings && settings.memory);
 
   return html`
     <section class=${"settings-drawer" + (open ? " open" : "")} aria-label="settings drawer">
@@ -487,6 +541,28 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
           <span class="brain-status">${brainLabel(settings && settings.brain)}</span>
           <span class="brain-credential-status">${brainCredentialHealthLabel(settings && settings.brain)}</span>
           <span class="err">${brainError}</span>
+        </div>
+      </div>
+      <div class="drawer-section">
+        <h3>記憶</h3>
+        <div class="drawer-row">
+          <label for="memory-toggle">記憶</label>
+          <input
+            id="memory-toggle"
+            type="checkbox"
+            class="memory-toggle"
+            disabled=${memoryView.disabled}
+            checked=${memoryView.checked}
+            onChange=${onToggleMemory}
+          />
+          <span class=${memoryView.statusClassName}>${memoryView.statusText}</span>
+          <button class="btn-memory-record" type="button" disabled=${recordBusy} onClick=${onMemoryRecord}>
+            今日を記録
+          </button>
+        </div>
+        <div class="drawer-note">
+          <span class="memory-status-label">${memoryStatusLabel(settings && settings.memory)}</span>
+          <span class="err">${memoryError}</span>
         </div>
       </div>
     </section>

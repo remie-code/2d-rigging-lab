@@ -465,3 +465,37 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
 - 議論正本: `discussion/ai-cohost/implementation/orchestration/reading-interjection-wave-plan.md` /
   `reading-interjection-inventory.md`。wave 記録・followup 台帳は
   `discussion/ai-cohost/implementation/waves/reading-interjection/`。
+
+#### 配信間記憶（セッションダイジェストと自動搭載）
+
+「これ、さっきのやつだよね」の配信間バージョン——「昨日のアークナイツの続きやな」が言える相方。
+**相方は記憶を選ばへん。覚えとるのが自然な状態で、忘れさせるのが例外操作**（起動時に直近 3 件の
+ダイジェストを自動搭載・選択の儀式なし）。議論正本は `discussion/ai-cohost/soul/stream-memory.md`。
+
+- **何を覚えるか**（`src/mind/memory.mjs`）: 配信で起きた出来事（ゲーム・進行・ハイライト）・交わした
+  話題やジョーク・言い回し（callback の種）・配信者について分かったこと、を日本語の短いダイジェスト
+  （目安 1500 字程度）として使い捨てセッションに書かせる（`create → ask 一発 → dispose`・常駐の履歴は
+  一切汚さない）。**視聴者の名前・個人を特定できる情報は保存しない**（整形段階で displayName を
+  完全に落とす第一防御 + 生成指示で明記する第二防御の二重構え）。
+- **三つの引き金・一つの操作**(`scripts/cockpit.mjs`): ①**定期チェックポイント**（20 分ごと・自動・
+  転写が前回記録から増えていなければスキップ=空回しでトークンを燃やさない）②**手動「今日を記録」
+  ボタン**（操縦席「記憶」区画・`POST /api/memory-record`）③**Ctrl+C（SIGINT）の最終版**
+  （`server.close()` の直後・常駐 dispose の前に best-effort + timeout(15s) で試みる——失敗/timeout
+  しても後始末は必ず最後まで走る=終了が固まらない）。**同一配信セッションは同一ファイルへ上書き**
+  （起動時刻から導いたファイル名）ので、①〜③のどれで記録しても最新の 1 本に収束する。
+- **OFF スイッチ**（操縦席「記憶」区画のトグル・既定 **ON**・`POST /api/memory`・
+  `cockpit-settings.local.json` に永続化）: OFF にすると**注入も生成もチェックポイントも全部止まる**
+  （「記憶なしで起動」の直感どおり・止水栓）。切替は頭脳切替と同じ「現セッションを dispose→null にし、
+  次の発火から新しい仮面（記憶あり/なし）が効く」ホットスワップ。
+  ON に戻すと直近ダイジェストを読み直して再搭載する。
+- **記憶の主権はファイルシステム**: `apps/soul/agent/memories/*.md`（1 配信 1 ファイル・
+  `.gitignore` 済み・コミットしない）に人間可読 Markdown で書く。読める・直せる・消せる——
+  気に入らない記憶はエディタで開いて直接編集するか、ファイルごと消せばよい（UI に「記憶の編集」
+  機能は無い・ファイルシステムが正）。
+- **起動時の自動搭載**: 記憶 ON なら起動時に直近 3 件のダイジェストを読み、仮面（システムプロンプト）
+  へ合成してからセッションを作る（`composeSystemPrompt`・Claude/Codex どちらの頭でも同じ注入点）。
+  操縦席の「記憶」区画に「記憶 N 件を搭載（最新: HH:MM:SS）」で現況が出る。
+- 議論正本: `discussion/ai-cohost/soul/stream-memory.md`。wave 計画・棚卸しは
+  `discussion/ai-cohost/implementation/orchestration/stream-memory-wave-plan.md` /
+  `stream-memory-inventory.md`。wave 記録・followup 台帳は
+  `discussion/ai-cohost/implementation/waves/stream-memory/`。

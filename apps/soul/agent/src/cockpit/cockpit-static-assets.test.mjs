@@ -11,8 +11,9 @@ import { createCockpitServer } from "./cockpit-server.mjs";
 
 // 操縦席 UI アセット静的配信ルートの機械テスト（操縦席 UI 改定 Domain A・A-2）。実 HTTP で駆動する
 // （既存 page/server test の http.request 流儀 + トラバーサルは raw socket で送信バイトを固定）。
-// **追加ルートのみ**——ワイヤ契約 16 エンドポイント×13 SSE は不変（それは cockpit-server.test.mjs が
-// 背骨として固定する）。ここは新ルートの契約:
+// **追加ルートのみ**——ワイヤ契約 22 エンドポイント×13 SSE は不変（配信間記憶 Domain B で 20→22 へ
+// 更新・旧「16」表記は過去数波のエンドポイント追加に本コメントが追随していなかった棚卸し漏れの是正）。
+// それは cockpit-server.test.mjs が背骨として固定する。ここは新ルートの契約:
 //  (a) 実在する .mjs（vendor / view-logic）は 200 + text/javascript + 実バイト、
 //  (b) トラバーサルは**防御層ごとに** 404（実測・レビュー追修正で経路を厳密化）:
 //      層0: 生 `..`・`%2e%2e` は WHATWG URL パーサ（handleRequest の new URL）が pathname 段階で

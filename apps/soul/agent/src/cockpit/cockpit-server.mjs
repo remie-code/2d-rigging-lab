@@ -276,7 +276,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {string} [options.indexHtmlPath]  配信する HTML のファイルパス（B が本体を渡す）。
  * @param {string} [options.uiRootPath]     操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信
  *   ルート。既定は本モジュールのディレクトリ（= 実 UI ツリー）。トラバーサル防止・許可拡張子 .mjs・
- *   許可サブツリー限定でこの配下だけを配る（既存 20 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
+ *   許可サブツリー限定でこの配下だけを配る（既存 22 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
  * @param {string} [options.inputFormat]    ffmpeg 入力フォーマット（既定 win32→dshow）。
  * @param {number} [options.transcriptHistory=DEFAULT_TRANSCRIPT_HISTORY]  状態に載せる直近転写件数。
  * @param {{ getLastDevice: () => any; setLastDevice: (d: any) => any }} [options.settingsStore]
@@ -399,6 +399,20 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {() => ({ source: string | null } | null)} [options.chatSourceStatus]
  *   記憶済みの配信 source（`{ source }`）を返す。state snapshot の `chat.source`（入力欄の既定復元用・
  *   Connect 前/切断後も残る）に載せる。未注入なら chat.source:null。
+ * @param {(enabled: boolean) => void | Promise<void>} [options.onSetMemoryEnabled]
+ *   配信間記憶 ON/OFF の永続化フック（POST /api/memory が呼ぶ・onSetBargeInEnabled と同型）。
+ *   **cockpit-server は記憶の実体（注入テキスト・生成・保存）を知らない**（責務境界: 実体は
+ *   cockpit.mjs が settings 永続 + memoryText 差し替え + 現 session の dispose→null で担う）。
+ *   未注入なら POST /api/memory は 503。
+ * @param {() => (Promise<void> | void)} [options.onMemoryRecord]
+ *   手動「今日を記録」フック（POST /api/memory-record が呼ぶ）。**cockpit-server は記憶の生成/保存を
+ *   知らない**（実体は cockpit.mjs の recordMemory・ライブ転写取得含め呼び出し側の責務）。フックの
+ *   throw は 500 にせず握って続行する（記録失敗で操作を止めない・failure-tolerant）。未注入なら
+ *   POST /api/memory-record は 503。
+ * @param {() => (object | null)} [options.memoryStatus]
+ *   記憶の現況（`{ enabled: boolean, count: number, lastRecordAtMs: number | null }`）を返す。
+ *   state snapshot の `memory` に載せる（brainStatus/audioDeviceStatus と同型）。未注入なら
+ *   snapshot の memory:null。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -412,6 +426,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   ingestChatMessage: (msg: { text?: string; displayName?: string } | null) => void;
  *   broadcastChatStatus: (status: string) => void;
  *   broadcastChatDiagnostic: (info: any) => void;
+ *   getTranscript: () => Array<any>;
  * }}
  */
 export function createCockpitServer(options = {}) {
@@ -455,6 +470,11 @@ export function createCockpitServer(options = {}) {
   // 起動時の現況も brainStatus() が運ぶ（サーバは brain 状態を二重管理しない＝別途 initial 値は受けない）。
   const onSetBrain = options.onSetBrain;
   const brainStatusImpl = options.brainStatus;
+  // 配信間記憶: ON/OFF の永続化フック + 手動「今日を記録」フック + 現況(未注入ならそれぞれ 503/null・
+  // onSetBrain/brainStatus と同型)。
+  const onSetMemoryEnabled = options.onSetMemoryEnabled;
+  const onMemoryRecord = options.onMemoryRecord;
+  const memoryStatusImpl = options.memoryStatus;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -548,6 +568,8 @@ export function createCockpitServer(options = {}) {
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
       brain: typeof brainStatusImpl === "function" ? (brainStatusImpl() ?? null) : null,
+      // 配信間記憶: 記憶の現況（{enabled, count, lastRecordAtMs}・未注入なら null・brain と同型）。
+      memory: typeof memoryStatusImpl === "function" ? (memoryStatusImpl() ?? null) : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
       audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null,
       // S7「視聴者が混ざる」: チャット器官の現況。source は settings 由来（Connect 前でも入力欄の既定に
@@ -1107,9 +1129,43 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/memory") {
+      // 配信間記憶: 記憶 ON/OFF の永続トグル継ぎ目（POST /api/self-fire・POST /api/barge-in の写経）。
+      // 未注入（Domain B 未配線・単体起動等）なら 503（onSetBrain と同型の未注入ゲート）。
+      if (typeof onSetMemoryEnabled !== "function") {
+        sendJson(res, 503, { error: "memory control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const enabled = body.enabled === true;
+      try {
+        await onSetMemoryEnabled(enabled);
+      } catch {
+        // 永続化/ホットスワップ失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && pathname === "/api/memory-record") {
+      // 配信間記憶: 手動「今日を記録」継ぎ目。onMemoryRecord 未注入なら 503。
+      if (typeof onMemoryRecord !== "function") {
+        sendJson(res, 503, { error: "memory record control not available" });
+        return;
+      }
+      try {
+        await onMemoryRecord();
+      } catch {
+        // 記録失敗（generateDigest/saveDigest の throw 含む）は 500 にせず握って続行する
+        // （手動記録が失敗しても操縦席の他の操作を止めない・failure-tolerant）。
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
 
     // 操縦席 UI アセットの静的配信（vendor/ui/view-logic の .mjs ツリー）。**追加ルートのみ**——
-    // 既存 20 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
+    // 既存 22 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
     // 落ちてくる GET は非 API・非 root だけ）。UI アセットサブツリー宛のみ握り、その他は既存 404 へ。
     if (method === "GET" && (await tryServeUiAsset(res, pathname))) {
       return;
@@ -1540,6 +1596,14 @@ export function createCockpitServer(options = {}) {
     selfFireStatus: () => (fireScheduler ? { enabled: fireScheduler.isEnabled() } : null),
     /** barge-in トグルの現況（enabled）。gate 未生成なら null（selfFireStatus と同型）。 */
     bargeInStatus: () => (bargeInGate ? { enabled: bargeInGate.isEnabled() } : null),
+    /**
+     * 配信間記憶: 転写の全量スナップショット（cockpit.mjs のチェックポイント/手動記録/shutdown 最終版が
+     * ライブ転写を読む口・additive な内部 JS API=HTTP/SSE のワイヤ契約ではない）。pipeline 未生成
+     * （耳が一度も start していない）なら空配列。transcriptBuffer.all() は防御的コピーを返す
+     * （ears/transcript-buffer.mjs）ので呼び出し側が書き換えても正本は壊れない。
+     * @returns {Array<any>}
+     */
+    getTranscript: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
     // ── S7「視聴者が混ざる」: チャット器官の取り込み経路（Domain C の attach 点）───────────────
     /** チャット器官の 1 コメントを取り込む（append + SSE viewer 行放送 + scheduler.handleChatMessage）。 */
     ingestChatMessage,

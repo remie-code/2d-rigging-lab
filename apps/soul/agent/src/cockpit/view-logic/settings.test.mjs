@@ -16,7 +16,11 @@ import {
   earsStartFailureText,
   requestErrorText,
   shouldAutoOpenSettings,
-  brainPostErrorText
+  brainPostErrorText,
+  memoryToggleView,
+  memoryPostErrorText,
+  memoryRecordPostErrorText,
+  memoryStatusLabel
 } from "./settings.mjs";
 
 test("visionTargetLabel: title 無しは not configured（applyVisionTarget :317-322）", () => {
@@ -188,4 +192,72 @@ test("shouldAutoOpenSettings: どれか 1 つでも記憶済み/稼働中なら 
   // snapshot 欠落（取得失敗系）は開かない = 誤展開防止。
   assert.equal(shouldAutoOpenSettings(null), false);
   assert.equal(shouldAutoOpenSettings(undefined), false);
+});
+
+// ── 配信間記憶: 記憶 ON/OFF トグル + 「今日を記録」の表示導出（settings-drawer「記憶」区画） ─────
+
+test("memoryToggleView: memory が null/undefined は disable + not available（bargeInToggleView の写経）", () => {
+  assert.deepEqual(memoryToggleView(null), {
+    disabled: true,
+    checked: false,
+    statusText: "not available",
+    statusClassName: "memory-status"
+  });
+  assert.deepEqual(memoryToggleView(undefined), {
+    disabled: true,
+    checked: false,
+    statusText: "not available",
+    statusClassName: "memory-status"
+  });
+});
+
+test("memoryToggleView: enabled true/false で checked/statusText/statusClassName が導出される", () => {
+  assert.deepEqual(memoryToggleView({ enabled: true }), {
+    disabled: false,
+    checked: true,
+    statusText: "on",
+    statusClassName: "memory-status on"
+  });
+  assert.deepEqual(memoryToggleView({ enabled: false }), {
+    disabled: false,
+    checked: false,
+    statusText: "off",
+    statusClassName: "memory-status "
+  });
+});
+
+test("memoryPostErrorText / memoryRecordPostErrorText: 503 は各未注入文言・!ok は set failed・成功は null", () => {
+  assert.equal(memoryPostErrorText({ status: 503, ok: false, j: null }), "memory control not available");
+  assert.equal(
+    memoryRecordPostErrorText({ status: 503, ok: false, j: null }),
+    "memory record control not available"
+  );
+  for (const fn of [memoryPostErrorText, memoryRecordPostErrorText]) {
+    assert.equal(fn({ status: 500, ok: false, j: { error: "boom" } }), "set failed: boom");
+    assert.equal(fn({ status: 500, ok: false, j: {} }), "set failed: error"); // error 欠落。
+    assert.equal(fn({ status: 200, ok: true, j: {} }), null); // 成功はエラーなし。
+  }
+});
+
+test("requestErrorText: memory / memoryRecord の prefix", () => {
+  const e = new Error("net");
+  assert.equal(requestErrorText("memory", e), "memory error: Error: net");
+  assert.equal(requestErrorText("memoryRecord", e), "memory record error: Error: net");
+});
+
+test("memoryStatusLabel: memory が null/undefined は not available", () => {
+  assert.equal(memoryStatusLabel(null), "not available");
+  assert.equal(memoryStatusLabel(undefined), "not available");
+});
+
+test("memoryStatusLabel: count/lastRecordAtMs から「記憶 N 件を搭載（最新: ...）」を組み立てる", () => {
+  assert.equal(
+    memoryStatusLabel({ enabled: true, count: 3, lastRecordAtMs: null }),
+    "記憶 3 件を搭載（最新: まだ記録なし）"
+  );
+  // lastRecordAtMs はローカル時刻 HH:MM:SS へ変換される（format-time.mjs の formatClock を再利用）。
+  const epochMs = new Date(2026, 6, 19, 21, 5, 9).getTime(); // 2026-07-19 21:05:09（ローカル）。
+  assert.equal(memoryStatusLabel({ enabled: true, count: 2, lastRecordAtMs: epochMs }), "記憶 2 件を搭載（最新: 21:05:09）");
+  // count 欠落は 0 扱い。
+  assert.equal(memoryStatusLabel({ enabled: false, lastRecordAtMs: null }), "記憶 0 件を搭載（最新: まだ記録なし）");
 });

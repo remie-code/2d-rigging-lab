@@ -2666,6 +2666,232 @@ test("cockpit barge-in born-disabled: bargeInInitialEnabled 未指定は既定 O
   }
 });
 
+// ── POST /api/memory・POST /api/memory-record（配信間記憶・POST /api/self-fire / /api/barge-in の写経）──
+//
+//  memory は fireOrchestrator/scheduler/gate の有無ではなく onSetMemoryEnabled/onMemoryRecord の
+//  注入有無だけがゲート（onSetBrain/onSetChannelUrl と同型・POST /api/brain の写経）。cockpit.mjs 側の
+//  記憶生成・保存・ライブ転写取得は一切ここに関与しない（責務境界・fake フックのみで実 LLM/実 FS 消費ゼロ）。
+
+test("cockpit POST /api/memory: onSetMemoryEnabled 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/memory`, { enabled: false });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /memory control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory: enabled を切り替え・state.memory.enabled に反映する", async () => {
+  // memoryStatus はサーバ側で状態を持たない（onSetBrain/brainStatus と同型・正本は呼び出し側）ため、
+  // テストは fake の外側で正本を持つ最小 fake を組む。
+  let memoryEnabledState = true;
+  const server = createCockpitServer({
+    onSetMemoryEnabled: () => {},
+    memoryStatus: () => ({ enabled: memoryEnabledState, count: 2, lastRecordAtMs: null })
+  });
+  try {
+    const url = await server.listen(0);
+    const s0 = await getJson(`${url}/api/state`);
+    assert.deepEqual(s0.json.memory, { enabled: true, count: 2, lastRecordAtMs: null });
+
+    const r = await postJson(`${url}/api/memory`, { enabled: false });
+    assert.equal(r.status, 200);
+    // onSetMemoryEnabled は no-op(状態を持たない)ので memoryStatus は不変のまま返る
+    // (正本は呼び出し側=cockpit.mjs にあることの直接証拠)。
+    assert.deepEqual(r.json.memory, { enabled: true, count: 2, lastRecordAtMs: null });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory: 非 boolean（文字列/数値/欠落）は enabled:false 強制（body.enabled===true 判定）", async () => {
+  /** @type {any[]} */
+  const received = [];
+  const server = createCockpitServer({
+    onSetMemoryEnabled: (enabled) => received.push(enabled)
+  });
+  try {
+    const url = await server.listen(0);
+    for (const bad of [{ enabled: "true" }, { enabled: 1 }, {}]) {
+      await postJson(`${url}/api/memory`, bad);
+    }
+    assert.deepEqual(received, [false, false, false]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory: onSetMemoryEnabled 永続化フックへ橋渡しする（未注入でも 503 にならない）", async () => {
+  const persisted = [];
+  const server = createCockpitServer({
+    onSetMemoryEnabled: (enabled) => {
+      persisted.push(enabled);
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/memory`, { enabled: false });
+    assert.deepEqual(persisted, [false]);
+    await postJson(`${url}/api/memory`, { enabled: true });
+    assert.deepEqual(persisted, [false, true]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory: onSetMemoryEnabled が throw しても 200 を返す（失敗寛容・操作を止めない）", async () => {
+  const server = createCockpitServer({
+    onSetMemoryEnabled: async () => {
+      throw new Error("disk full");
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/memory`, { enabled: true });
+    assert.equal(r.status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory: broadcastState が飛ぶ（SSE state に memory 反映）", async () => {
+  let enabled = true;
+  const server = createCockpitServer({
+    onSetMemoryEnabled: (next) => {
+      enabled = next;
+    },
+    memoryStatus: () => ({ enabled, count: 1, lastRecordAtMs: 12345 })
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const r = await postJson(`${url}/api/memory`, { enabled: false });
+    assert.equal(r.status, 200);
+    const evt = await client.waitFor((e) => e.event === "state" && e.data.memory && e.data.memory.enabled === false);
+    assert.deepEqual(evt.data.memory, { enabled: false, count: 1, lastRecordAtMs: 12345 });
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory-record: onMemoryRecord 未注入なら 503", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/memory-record`, {});
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /memory record control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory-record: onMemoryRecord を呼び・broadcastState + snapshot 反映", async () => {
+  let calls = 0;
+  const server = createCockpitServer({
+    onMemoryRecord: async () => {
+      calls += 1;
+    },
+    memoryStatus: () => ({ enabled: true, count: 3, lastRecordAtMs: calls > 0 ? 999 : null })
+  });
+  try {
+    const url = await server.listen(0);
+    const s0 = await getJson(`${url}/api/state`);
+    assert.equal(s0.json.memory.lastRecordAtMs, null);
+
+    const r = await postJson(`${url}/api/memory-record`, {});
+    assert.equal(r.status, 200);
+    assert.equal(calls, 1);
+    assert.deepEqual(r.json.memory, { enabled: true, count: 3, lastRecordAtMs: 999 });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory-record: onMemoryRecord が throw しても 200 を返す（記録失敗で 500 にしない・失敗寛容）", async () => {
+  const server = createCockpitServer({
+    onMemoryRecord: async () => {
+      throw new Error("generateDigest failed");
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/memory-record`, {});
+    assert.equal(r.status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/memory-record: broadcastState が飛ぶ（SSE state event 発行・記録の有無に関わらず現況を再配信）", async () => {
+  const server = createCockpitServer({
+    onMemoryRecord: async () => {},
+    memoryStatus: () => ({ enabled: true, count: 0, lastRecordAtMs: null })
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const before = client.events.filter((e) => e.event === "state").length;
+    await postJson(`${url}/api/memory-record`, {});
+    await client.waitFor((e) => e.event === "state" && client.events.filter((x) => x.event === "state").length > before);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit snapshot.memory: memoryStatus 未注入なら null（onSetMemoryEnabled/onMemoryRecord も未注入なら 503 双方）", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.memory, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit snapshot.memory: memoryStatus 注入時は { enabled, count, lastRecordAtMs } がそのまま載る", async () => {
+  const server = createCockpitServer({
+    memoryStatus: () => ({ enabled: false, count: 3, lastRecordAtMs: 1721234567890 })
+  });
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.deepEqual(s.json.memory, { enabled: false, count: 3, lastRecordAtMs: 1721234567890 });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit getTranscript: pipeline 未生成なら空配列・耳 start 後は transcriptBuffer.all() をそのまま返す（additive・内部 API）", async () => {
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (fake.factory) });
+  try {
+    const url = await server.listen(0);
+    // 耳が一度も start していない = pipeline 未生成 → 空配列。
+    assert.deepEqual(server.getTranscript(), []);
+
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fake.record.buffer.append({ startMs: 0, endMs: 100, text: "こんにちは" });
+    const entries = server.getTranscript();
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].text, "こんにちは");
+
+    // 防御的コピー: 呼び出し側が返り値を書き換えても正本のバッファは影響を受けない。
+    entries.push({ fake: true });
+    assert.equal(server.getTranscript().length, 1);
+  } finally {
+    await server.close();
+  }
+});
+
 // ── onFireRequest interjection（server の vision 振り分けロジックの直接検証）────────────────────
 //
 //  interjection はタイマー駆動のみで即時発火経路が無いため、fireSchedulerFactory（テスト注入・

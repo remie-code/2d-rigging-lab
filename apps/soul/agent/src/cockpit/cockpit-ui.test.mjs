@@ -353,7 +353,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     channel: null, visionTarget: null, selfFire: null, verbosity: null, audioDevice: null, chat: null,
     bargeIn: null, // 「朗読と合いの手」: gate 未生成なら null（selfFire と同型）。
     killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
-    brain: null // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
+    brain: null, // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
+    memory: null // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
@@ -364,7 +365,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     chat: { source: "abc", connected: true, state: "live" },
     bargeIn: { enabled: false },
     killed: true,
-    brain: { brain: "codex", credentialHealth: true }
+    brain: { brain: "codex", credentialHealth: true },
+    memory: { enabled: true, count: 3, lastRecordAtMs: 1721234567890 }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
 });

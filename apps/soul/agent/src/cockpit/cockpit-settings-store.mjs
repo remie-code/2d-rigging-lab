@@ -35,6 +35,10 @@
  *     未記憶/未知値のフォールバックは呼び出し側（cockpit.mjs の createBrainHooks）に委ねる
  *     （verbosityMode と同型の文字列キー・asStringOrNull）。
  *   setBrainChoice(choice): 操縦席で頭脳を切替えたときに記憶（次回起動で復元）。
+ *   getMemoryEnabled(): 配信間記憶 ON/OFF の初期値（既定 ON・stream-memory.md 裁定 1）。
+ *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる（bool の
+ *     有無を区別するため asStringOrNull は使わない・getBargeInEnabled と同型）。
+ *   setMemoryEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -84,6 +88,8 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setVerbosityMode: (mode: string | null) => void;
  *   getBrainChoice: () => string | null;
  *   setBrainChoice: (choice: string | null) => void;
+ *   getMemoryEnabled: () => boolean | null;
+ *   setMemoryEnabled: (enabled: boolean) => void;
  * }}
  */
 export function createFileSettingsStore(options = {}) {
@@ -178,6 +184,14 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} choice */
     setBrainChoice(choice) {
       writeMerged({ brainChoice: choice ?? null });
+    },
+    getMemoryEnabled() {
+      const v = readAll().memoryEnabled;
+      return typeof v === "boolean" ? v : null;
+    },
+    /** @param {boolean} enabled */
+    setMemoryEnabled(enabled) {
+      writeMerged({ memoryEnabled: enabled === true });
     }
   };
 }

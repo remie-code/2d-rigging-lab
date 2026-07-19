@@ -89,7 +89,10 @@ export function settingsFromSnapshot(s) {
     killed: (s && typeof s.killed === "boolean") ? s.killed : false,
     // 多頭化 Domain C: 頭脳の現況（{brain, credentialHealth}）。audioDevice/channel と同型の null 許容
     // （brainStatus 未注入なら null）。
-    brain: (s && s.brain) ?? null
+    brain: (s && s.brain) ?? null,
+    // 配信間記憶: 記憶の現況（{enabled, count, lastRecordAtMs}）。brain と同型の null 許容
+    // （memoryStatus 未注入なら null）。
+    memory: (s && s.memory) ?? null
   };
 }
 

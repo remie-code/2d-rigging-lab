@@ -12,7 +12,14 @@ import {
   createBargeInHooks,
   createVerbosityHooks,
   createBrainHooks,
-  createChatSourceHooks
+  createChatSourceHooks,
+  createMemoryHooks,
+  shouldSkipMemoryCheckpoint,
+  createMemoryRecorder,
+  raceMemoryRecordWithTimeout,
+  MEMORY_CHECKPOINT_INTERVAL_MS,
+  MEMORY_INJECT_MAX_CHARS,
+  SHUTDOWN_MEMORY_TIMEOUT_MS
 } from "./cockpit.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
@@ -502,6 +509,326 @@ test("createBargeInHooks: settings.setBargeInEnabled が throw しても onSetBa
   };
   const hooks = createBargeInHooks(settings);
   assert.doesNotThrow(() => hooks.onSetBargeInEnabled(true));
+});
+
+// ── createMemoryHooks（配信間記憶: 記憶 ON/OFF トグルの settings 橋渡し・
+//    createBargeInHooks の完全写経・**既定 ON**は createBargeInHooks と同じ非対称）─────────────
+
+/** fake settings（cockpit-settings-store と同型の getMemoryEnabled/setMemoryEnabled を持つ最小 fake）。 */
+function makeFakeMemorySettings(initial = null) {
+  let current = initial;
+  return {
+    getMemoryEnabled: () => current,
+    setMemoryEnabled: (enabled) => {
+      current = enabled === true;
+    }
+  };
+}
+
+test("createMemoryHooks: 未記憶（null）なら defaultEnabled にフォールバックする（既定 true・裁定 1）", { timeout: 5000 }, () => {
+  const settings = makeFakeMemorySettings(null);
+  const hooks = createMemoryHooks(settings);
+  assert.equal(hooks.resolveInitialEnabled(), true);
+});
+
+test("createMemoryHooks: defaultEnabled を明示指定できる", { timeout: 5000 }, () => {
+  const settings = makeFakeMemorySettings(null);
+  const hooks = createMemoryHooks(settings, false);
+  assert.equal(hooks.resolveInitialEnabled(), false);
+});
+
+test("createMemoryHooks: 記憶済みの bool（true/false）は defaultEnabled より優先される", { timeout: 5000 }, () => {
+  const settingsTrue = makeFakeMemorySettings(true);
+  assert.equal(createMemoryHooks(settingsTrue, false).resolveInitialEnabled(), true);
+  const settingsFalse = makeFakeMemorySettings(false);
+  assert.equal(createMemoryHooks(settingsFalse, true).resolveInitialEnabled(), false);
+});
+
+test("createMemoryHooks: onSetMemoryEnabled は settings.setMemoryEnabled へ橋渡しし・次回 resolveInitialEnabled に反映する", { timeout: 5000 }, () => {
+  const settings = makeFakeMemorySettings(null);
+  const hooks = createMemoryHooks(settings, true);
+  hooks.onSetMemoryEnabled(false);
+  assert.equal(settings.getMemoryEnabled(), false);
+  assert.equal(hooks.resolveInitialEnabled(), false);
+});
+
+test("createMemoryHooks: settings.setMemoryEnabled が throw しても onSetMemoryEnabled は握って続行する", { timeout: 5000 }, () => {
+  const settings = {
+    getMemoryEnabled: () => null,
+    setMemoryEnabled: () => {
+      throw new Error("disk full");
+    }
+  };
+  const hooks = createMemoryHooks(settings);
+  assert.doesNotThrow(() => hooks.onSetMemoryEnabled(true));
+});
+
+// ── shouldSkipMemoryCheckpoint（inventory §2-4「転写が前回記録から不変ならスキップ」の純判定）───
+
+test("shouldSkipMemoryCheckpoint: 現在の件数が前回記録時と同じならスキップ(true)", { timeout: 5000 }, () => {
+  assert.equal(shouldSkipMemoryCheckpoint(12, 12), true);
+  assert.equal(shouldSkipMemoryCheckpoint(0, 0), true);
+});
+
+test("shouldSkipMemoryCheckpoint: 現在の件数が前回記録時と異なればスキップしない(false)", { timeout: 5000 }, () => {
+  assert.equal(shouldSkipMemoryCheckpoint(13, 12), false);
+  assert.equal(shouldSkipMemoryCheckpoint(0, 5), false);
+});
+
+// ── createMemoryRecorder（配信間記憶: 一つの記録動作・チェックポイント/手動/shutdown 最終版が共有）───
+//
+//  実 generateDigest/saveDigest（memory.mjs）は使わず fake 注入する（実 LLM/実 FS 消費ゼロ）。
+//  main() の recordMemory はこのファクトリの戻り値そのものであり、ここで固定した不変条件が
+//  main() の実際の呼び出し（checkpoint/手動/shutdown）にもそのまま効く。
+
+test("createMemoryRecorder: OFF（isEnabled=false）なら generateDigest/saveDigest を一切呼ばない（blocking #4）", { timeout: 5000 }, async () => {
+  let generateCalls = 0;
+  let saveCalls = 0;
+  const recordMemory = createMemoryRecorder({
+    isEnabled: () => false,
+    getLiveEntries: () => [{ text: "hello", speaker: "you" }],
+    getBrainDef: () => ({ create: () => ({}) }),
+    generateDigestImpl: async () => {
+      generateCalls += 1;
+      return "digest";
+    },
+    saveDigestImpl: () => {
+      saveCalls += 1;
+      return "/tmp/x.md";
+    },
+    dir: "/tmp/memories",
+    getStartedAtMs: () => 1000
+  });
+  await recordMemory();
+  assert.equal(generateCalls, 0);
+  assert.equal(saveCalls, 0);
+});
+
+test("createMemoryRecorder: 空転写（generateDigest が null を返す）なら saveDigest を呼ばない・onSaved も呼ばない", { timeout: 5000 }, async () => {
+  let saveCalls = 0;
+  let savedCalls = 0;
+  const recordMemory = createMemoryRecorder({
+    isEnabled: () => true,
+    getLiveEntries: () => [],
+    getBrainDef: () => ({ create: () => ({}) }),
+    generateDigestImpl: async () => null,
+    saveDigestImpl: () => {
+      saveCalls += 1;
+      return "/tmp/x.md";
+    },
+    dir: "/tmp/memories",
+    getStartedAtMs: () => 1000,
+    onSaved: () => {
+      savedCalls += 1;
+    }
+  });
+  await recordMemory();
+  assert.equal(saveCalls, 0);
+  assert.equal(savedCalls, 0);
+});
+
+test("createMemoryRecorder: 成功経路は generateDigest→saveDigest(dir/startedAtMs 付き)→onSaved(atMs/entriesLength) の順で呼ぶ", { timeout: 5000 }, async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const entries = [{ text: "a" }, { text: "b" }, { text: "c" }];
+  const recordMemory = createMemoryRecorder({
+    isEnabled: () => true,
+    getLiveEntries: () => entries,
+    getBrainDef: () => ({ id: "fake-brain", create: () => ({}) }),
+    generateDigestImpl: async (opts) => {
+      calls.push({ kind: "generate", brainDef: opts.brainDef, entries: opts.entries });
+      return "今日の出来事のダイジェスト";
+    },
+    saveDigestImpl: (digest, opts) => {
+      calls.push({ kind: "save", digest, dir: opts.dir, startedAtMs: opts.startedAtMs });
+      return "/tmp/memories/2026-07-19T00-00-00.md";
+    },
+    dir: "/tmp/memories",
+    getStartedAtMs: () => 1784000000000,
+    onSaved: (info) => calls.push({ kind: "saved", ...info })
+  });
+  await recordMemory();
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].kind, "generate");
+  assert.deepEqual(calls[0].entries, entries);
+  assert.equal(calls[0].brainDef.id, "fake-brain");
+  assert.equal(calls[1].kind, "save");
+  assert.equal(calls[1].digest, "今日の出来事のダイジェスト");
+  assert.equal(calls[1].dir, "/tmp/memories");
+  assert.equal(calls[1].startedAtMs, 1784000000000);
+  assert.equal(calls[2].kind, "saved");
+  assert.equal(calls[2].entriesLength, 3);
+  assert.equal(typeof calls[2].atMs, "number");
+});
+
+test("createMemoryRecorder: entriesOverride 指定時はライブ転写（getLiveEntries）を呼ばず override をそのまま使う", { timeout: 5000 }, async () => {
+  let liveCalls = 0;
+  /** @type {any[]} */
+  let seenEntries = null;
+  const override = [{ text: "final entry" }];
+  const recordMemory = createMemoryRecorder({
+    isEnabled: () => true,
+    getLiveEntries: () => {
+      liveCalls += 1;
+      return [{ text: "should not be used" }];
+    },
+    getBrainDef: () => ({ create: () => ({}) }),
+    generateDigestImpl: async (opts) => {
+      seenEntries = opts.entries;
+      return "digest";
+    },
+    saveDigestImpl: () => "/tmp/x.md",
+    dir: "/tmp/memories",
+    getStartedAtMs: () => 1000
+  });
+  await recordMemory(override);
+  assert.equal(liveCalls, 0);
+  assert.deepEqual(seenEntries, override);
+});
+
+test("createMemoryRecorder: generateDigest が throw しても握って続行する（onError に渡る・呼び出し元は投げられない）", { timeout: 5000 }, async () => {
+  /** @type {unknown[]} */
+  const errors = [];
+  const recordMemory = createMemoryRecorder({
+    isEnabled: () => true,
+    getLiveEntries: () => [{ text: "hi" }],
+    getBrainDef: () => ({ create: () => ({}) }),
+    generateDigestImpl: async () => {
+      throw new Error("LLM を起動できませんでした");
+    },
+    saveDigestImpl: () => {
+      throw new Error("should not be called");
+    },
+    dir: "/tmp/memories",
+    getStartedAtMs: () => 1000,
+    onError: (error) => errors.push(error)
+  });
+  await assert.doesNotReject(() => recordMemory());
+  assert.equal(errors.length, 1);
+  assert.match(/** @type {Error} */ (errors[0]).message, /LLM を起動できませんでした/);
+});
+
+test("createMemoryRecorder: saveDigest が throw しても握って続行する（Domain A 申し送り 2・onSaved は呼ばれない）", { timeout: 5000 }, async () => {
+  /** @type {unknown[]} */
+  const errors = [];
+  let savedCalls = 0;
+  const recordMemory = createMemoryRecorder({
+    isEnabled: () => true,
+    getLiveEntries: () => [{ text: "hi" }],
+    getBrainDef: () => ({ create: () => ({}) }),
+    generateDigestImpl: async () => "digest",
+    saveDigestImpl: () => {
+      throw new Error("ENOSPC: disk full");
+    },
+    dir: "/tmp/memories",
+    getStartedAtMs: () => 1000,
+    onSaved: () => {
+      savedCalls += 1;
+    },
+    onError: (error) => errors.push(error)
+  });
+  await assert.doesNotReject(() => recordMemory());
+  assert.equal(savedCalls, 0);
+  assert.equal(errors.length, 1);
+  assert.match(/** @type {Error} */ (errors[0]).message, /ENOSPC/);
+});
+
+// ── raceMemoryRecordWithTimeout（配信間記憶: shutdown 最終生成の best-effort + timeout・blocking #3）──
+
+test("raceMemoryRecordWithTimeout: promise が先に解決すれば timeout を待たず即座に返る", { timeout: 5000 }, async () => {
+  const start = Date.now();
+  await raceMemoryRecordWithTimeout(Promise.resolve("done"), 5000);
+  assert.ok(Date.now() - start < 1000, "解決済み promise で 5000ms の timeout を待ってはいけない");
+});
+
+test("raceMemoryRecordWithTimeout: promise が解決しなくても timeoutMs で必ず返る（shutdown が固まらない・blocking #3）", { timeout: 5000 }, async () => {
+  const neverResolves = new Promise(() => {});
+  const start = Date.now();
+  await raceMemoryRecordWithTimeout(neverResolves, 30);
+  assert.ok(Date.now() - start < 1000, "timeoutMs 経過後は待たずに返らねばならない");
+});
+
+test("raceMemoryRecordWithTimeout: promise が reject しても握って捨てる（呼び出し元に伝播しない）", { timeout: 5000 }, async () => {
+  const rejecting = Promise.reject(new Error("record failed"));
+  await assert.doesNotReject(() => raceMemoryRecordWithTimeout(rejecting, 5000));
+});
+
+test("raceMemoryRecordWithTimeout: setTimeoutImpl を注入できる（fire-scheduler/barge-in と同型のタイマ注入規律）", { timeout: 5000 }, async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fakeSetTimeout = (/** @type {any} */ cb, /** @type {any} */ ms) => {
+    calls.push(ms);
+    cb(); // 即時発火（実タイマを使わない決定論テスト）。
+    return 0;
+  };
+  const neverResolves = new Promise(() => {});
+  await raceMemoryRecordWithTimeout(neverResolves, 12345, /** @type {any} */ (fakeSetTimeout));
+  assert.deepEqual(calls, [12345]);
+});
+
+// ── 決め打った定数の値の固定（回帰ガード・具体値の根拠は domain-b.md 参照）───────────────────
+
+test("配信間記憶の決め打ち定数: MEMORY_CHECKPOINT_INTERVAL_MS=20分・MEMORY_INJECT_MAX_CHARS=4500・SHUTDOWN_MEMORY_TIMEOUT_MS=15秒", { timeout: 5000 }, () => {
+  assert.equal(MEMORY_CHECKPOINT_INTERVAL_MS, 20 * 60 * 1000);
+  assert.equal(MEMORY_INJECT_MAX_CHARS, 4500);
+  assert.equal(SHUTDOWN_MEMORY_TIMEOUT_MS, 15000);
+});
+
+// ── shutdown 型ハーネス（配信間記憶・★重要な配管事実 + blocking #3）─────────────────────────
+//
+//  main() の shutdown 相当を、実 server/session/player を使わない最小ハーネスで再現する（brain 切替
+//  ×in-flight テストと同じ流儀）。固定する不変条件: (a) 転写スナップショットは server.close() より
+//  前に確保する（close 後は pipeline が dispose されて転写が取れない・★重要な配管事実）、
+//  (b) 記憶生成がハング/失敗しても、best-effort + timeout（raceMemoryRecordWithTimeout）に束縛され、
+//  後続の常駐リソース dispose（session/player/lazyChannel）は必ず走る（blocking #3）。
+
+test("shutdown 型ハーネス: 転写は close() より前に確保し、記憶生成がハングしても後続 dispose は必ず走る", { timeout: 5000 }, async () => {
+  /** @type {string[]} */
+  const events = [];
+  let pipelineAlive = true;
+  const fakeServer = {
+    getTranscript: () => {
+      if (!pipelineAlive) throw new Error("pipeline already disposed — post-close 転写取得は許されない");
+      return ["a", "b", "c"];
+    },
+    close: async () => {
+      pipelineAlive = false;
+      events.push("server.close");
+    }
+  };
+  const fakeSession = { dispose: async () => events.push("session.dispose") };
+  const fakePlayer = { dispose: () => events.push("player.dispose") };
+  const fakeLazyChannel = { close: async () => events.push("lazyChannel.close") };
+  const hangingRecordMemory = () => new Promise(() => {}); // 絶対に解決しない（記憶生成のハングを模す）。
+
+  // main() の shutdown 相当（★配管事実どおり finalEntries は close() より前に確保）。
+  const finalEntries = fakeServer.getTranscript();
+  events.push(`finalEntries:${finalEntries.length}`);
+  await fakeServer.close();
+  await raceMemoryRecordWithTimeout(hangingRecordMemory(), 20);
+  await fakeSession.dispose();
+  fakePlayer.dispose();
+  await fakeLazyChannel.close();
+
+  assert.deepEqual(events, [
+    "finalEntries:3",
+    "server.close",
+    "session.dispose",
+    "player.dispose",
+    "lazyChannel.close"
+  ]);
+});
+
+test("shutdown 型ハーネス: 記憶生成が reject しても後続 dispose は必ず走る", { timeout: 5000 }, async () => {
+  /** @type {string[]} */
+  const events = [];
+  const fakeSession = { dispose: async () => events.push("session.dispose") };
+  const failingRecordMemory = () => Promise.reject(new Error("digest generation failed"));
+
+  await raceMemoryRecordWithTimeout(failingRecordMemory(), 5000);
+  await fakeSession.dispose();
+
+  assert.deepEqual(events, ["session.dispose"]);
 });
 
 // ── createVerbosityHooks（wave 計画「口数配線」§2 裁定 A: 口数モードの settings 橋渡し）───────────
