@@ -10,13 +10,14 @@
 
 | Path | Content | Status |
 |---|---|---|
-| [poster-design.md](poster-design.md) | 出展前提・読者像・伝えるべきことの核・印刷形態(A2×6)・6枚の割り当て・素材リスト・未決事項 | In discussion(骨子合意・版面未着手) |
+| [poster-design.md](poster-design.md) | 出展前提・読者像・伝えるべきことの核・印刷形態(A2×6)・6枚の**枠組み**・素材リスト・全体の裁定 | In discussion(**枠のみ合意**・各シートの中身は未合意) |
+| [sheet-plan.md](sheet-plan.md) | **シート別の内容合意の進捗地図**。各シートを「一言→要素→捨てるもの」の順に合わせる。議論順・横断論点の状態 | 管理用(2026-07-25 開始・**一言が合意できたシートはゼロ**) |
 | [source-facts.md](source-facts.md) | ポスターに書く一行の裏付け(file:line 付きリポジトリ事実)+**書けない線**(誇張防止リスト) | Recorded(2026-07-25) |
 
 ## 現在地(短く)
 
 - 応募済み・**採択待ち**。パネル 180×90cm のポスター展示。
-- 構成は **A2×6枚(2列×3行)** に決定。6枚の割り当ては骨子合意まで到達([poster-design.md](poster-design.md) §5)。
+- 構成は **A2×6枚(2列×3行)** に決定。**合意できているのは枠(見出しと位置)まで**——各シートで何を語るかは未合意([sheet-plan.md](sheet-plan.md) が進捗の正)。
 - **版面(HTML/CSS)の実制作は未着手**。先走って作った大判1枚版 `poster.html` は構成が旧案のため破棄済み。
 - 調査は完了(Sylph 二体を Editor/Player 側と model-authoring 側へ派遣)。**「AI は Editor を触っていない・AI の経路は authoring-host」という重要な訂正**を含む([source-facts.md](source-facts.md) §1)。
 
