@@ -12,6 +12,7 @@
 |---|---|---|
 | [poster-design.md](poster-design.md) | **確定した裁定**(出展前提・読者像・伝えるべきことの核・印刷形態・6枚の枠組み・素材リスト) | 枠のみ合意 |
 | [sheet-plan.md](sheet-plan.md) | **未合意のものの管理**(シート別の「一言→要素→捨てるもの」の進捗・議論順・横断論点) | 一言が合意できたシートはゼロ |
+| [judgment-and-layers.md](judgment-and-layers.md) | **判定の階層構造の言語化**(④の芯)。人間の判定はどう壊れるか/「違う」と言える形/層0〜3と物差し/開いた射影/人間にしかできない三つ | 言語化完了(2026-07-25)。**射程は EXPO を超える**——昇格の可否は未決 |
 | [source-facts.md](source-facts.md) | ポスターに書く一行の裏付け(file:line 付き)+**書けない線**(誇張防止) | Recorded |
 
 **役割分担**: 確定=poster-design / 未決=sheet-plan / 事実=source-facts。同じ情報を二箇所に置かない。
