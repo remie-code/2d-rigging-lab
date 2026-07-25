@@ -42,6 +42,7 @@
 | [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | Editor側=Perf Wave 2完了・クローズ(2026-07-08)。Player側=player-surveyで一旦保留(同日)。**二体同時起動の体感負荷(2026-07-12、ai-cohost C7)で再開条件成立——要否はユーザー裁定待ち** |
 | [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | why合意・分解Accepted(2026-07-08)。第一手=WS1(shell)未着手。詳細は下層mapへ委譲 |
 | [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | 目標像・成功基準・境界改定(案A)・振る舞いモデル・モデルホスト役割つき起動・D4(YouTube)/D6(キー操作)/D7(当面対象外)までAccepted(2026-07-10)。実装は閉問題分解C1〜C7の直列: **C1〜C7 全て完全閉鎖(C7=2026-07-12)=器の完成**。次はS系列(魂)の前提討議。詳細は [ai-cohost/_map.md](ai-cohost/_map.md) へ委譲 |
+| [expo/](expo/_map.md) | 外部イベントへの出展物(ポスター等)の設計と出典事実 | 生成AI EXPO(パネル180×90cm・応募済み/採択待ち)。構成=A2×6枚の骨子合意、版面未着手。詳細は [expo/_map.md](expo/_map.md) へ委譲 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
 
 ## 現在の状態サマリ
