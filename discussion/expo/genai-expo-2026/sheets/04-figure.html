@@ -1,0 +1,208 @@
+<meta charset="utf-8">
+<title>④ 図の試作 — 一つの画面が決まるまで</title>
+<style>
+  /* ── ④ の「図」だけの試作(2026-07-25)──────────────────────────
+     上下(導入・読み方・締め)は未定義。ここでは図の中身と読めるかだけを見る。
+     幅は A2 の本文幅(420mm − 左右余白 50mm = 320mm)に合わせてある。 */
+  @page { size: 420mm 594mm; margin: 0; }
+
+  :root {
+    --u: 3.2mm;            /* 本文幅 320mm の 1/100 */
+    --paper: #faf7f2;
+    --ink: #16181d;
+    --human: #c04a18;      /* 人間 */
+    --ai: #4a5568;         /* AI */
+    --rule: #ddd7cc;
+    --sub: #6f6a62;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); color: var(--ink); }
+  body {
+    width: 420mm; padding: calc(var(--u) * 6) 50mm;
+    font-family: "Noto Sans JP", "Yu Gothic", "Hiragino Sans", sans-serif;
+    font-feature-settings: "palt" 1; line-height: 1.6;
+  }
+
+  .scaffold {
+    font-size: calc(var(--u) * 1.5); color: #b9b2a6; letter-spacing: 0.08em;
+    border: 0.4mm dashed var(--rule); padding: calc(var(--u) * 1.6);
+    text-align: center; margin-bottom: calc(var(--u) * 3);
+  }
+
+  /* 場面設定 */
+  .scene {
+    font-size: calc(var(--u) * 2.1); line-height: 1.75;
+    padding: calc(var(--u) * 2) calc(var(--u) * 2.4);
+    background: #f1ece3; border-left: 1.2mm solid var(--ink);
+    margin-bottom: calc(var(--u) * 3.2);
+  }
+  .scene b { font-weight: 800; }
+
+  /* ── 手順の行 ────────────────────────────────────────────── */
+  .row { display: grid; grid-template-columns: calc(var(--u) * 11) 1fr; column-gap: calc(var(--u) * 2.4); }
+  .who {
+    font-size: calc(var(--u) * 1.9); font-weight: 800; letter-spacing: 0.06em;
+    padding-top: calc(var(--u) * 0.5); text-align: right;
+  }
+  .who.h { color: var(--human); }
+  .who.a { color: var(--ai); }
+  .body { padding-bottom: calc(var(--u) * 2.6); border-left: 0.4mm solid var(--rule); padding-left: calc(var(--u) * 2.4); position: relative; }
+  .row:last-child .body { padding-bottom: 0; }
+  .body::before {
+    content: ""; position: absolute; left: calc(var(--u) * -0.7); top: calc(var(--u) * 0.9);
+    width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); border-radius: 50%;
+    background: var(--paper); border: 0.7mm solid var(--rule);
+  }
+  .row.h .body::before { border-color: var(--human); background: var(--human); }
+  .row.a .body::before { border-color: var(--ai); }
+
+  .say { font-size: calc(var(--u) * 2.15); line-height: 1.6; font-weight: 700; }
+  .say .quote { color: var(--human); }
+  .note { font-size: calc(var(--u) * 1.6); color: var(--sub); margin-top: calc(var(--u) * 0.5); font-weight: 400; }
+  .note b { font-weight: 700; color: var(--ink); }
+
+  /* 一行の後ろで動く塊 */
+  .chain {
+    list-style: none; margin-top: calc(var(--u) * 1.2);
+    border-left: 0.8mm solid var(--ai); padding-left: calc(var(--u) * 1.8);
+  }
+  .chain li {
+    font-size: calc(var(--u) * 1.72); line-height: 1.45; color: #3d4657;
+    padding: calc(var(--u) * 0.42) 0;
+  }
+  .chain li b { font-weight: 800; color: var(--ai); }
+
+  /* 成果物(実物) */
+  .artifact { margin-top: calc(var(--u) * 1.4); border: 0.4mm solid var(--rule); background: #fff; }
+  .artifact pre {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: calc(var(--u) * 1.12); line-height: 1.35; color: #2b3a52;
+    padding: calc(var(--u) * 1.6); overflow: hidden; white-space: pre;
+  }
+  .artifact .cap {
+    font-size: calc(var(--u) * 1.4); color: var(--sub);
+    padding: calc(var(--u) * 0.9) calc(var(--u) * 1.6); border-top: 0.4mm solid var(--rule);
+  }
+  .artifact img { display: block; width: 100%; height: auto; }
+
+  /* 締めの一行(図の中の) */
+  .punch {
+    margin-top: calc(var(--u) * 3.2); padding-top: calc(var(--u) * 2.4);
+    border-top: 0.6mm solid var(--ink);
+    font-size: calc(var(--u) * 2.6); font-weight: 900; line-height: 1.5;
+  }
+  .punch em { font-style: normal; color: var(--human); }
+  .scale {
+    margin-top: calc(var(--u) * 1.4); font-size: calc(var(--u) * 1.85);
+    color: var(--sub); line-height: 1.6;
+  }
+  .scale b { font-weight: 800; color: var(--ink); }
+</style>
+
+<p class="scaffold">▲ この上に何を置くかは未定義（見出し・導入）</p>
+
+<p class="scene">
+  <b>2Dモデリングのエディタを、これから作る。</b><br>
+  最初に決めたのは、<b>起動して最初に見える画面</b>だった。
+</p>
+
+<div class="row h">
+  <div class="who h">人間</div>
+  <div class="body">
+    <p class="say">「このエディタを開いたとき、<span class="quote">ユーザーが目にするべき画面とは何だろうか？</span>」</p>
+    <p class="note">最初の一声。まだ何も作らせていない。</p>
+  </div>
+</div>
+
+<div class="row h">
+  <div class="who h">人間</div>
+  <div class="body">
+    <p class="say">良し悪しの物差しを渡す</p>
+    <p class="note">「多様な機能をシーンに応じて使い分ける道具になる。どこに何があるか分からない、という体験は望ましくない」</p>
+  </div>
+</div>
+
+<div class="row a">
+  <div class="who a">AI</div>
+  <div class="body">
+    <p class="say">画面の案を出す</p>
+    <div class="artifact">
+<pre>+---------------------------------------------------------------+
+| App Bar: workspace identity / save state / menu / undo / redo |
++----------+----------------+------------------+---------------+
+| Toolbox  | Structure/Parts| Canvas / Preview | Inspector     |
+|          |                |                  |               |
+| Import   | Parts tree     | Empty state or   | Project /     |
+| Mesh     | PSD group-     | model preview    | selection     |
+| Rig      | derived part   |                  | details       |
+| Dynamics | containers     |                  | Part /        |
+| Params   | drawables /    |                  | Drawable /    |
+| Variant  | hidden rows    |                  | Source detail |
+| Atlas    |                |                  | Contextual    |
+| Validate |                |                  | controls      |
+| Automate |                |                  |               |
++----------+----------------+------------------+---------------+
+| Parameter Bar: active parameter / slider / key markers        |
++---------------------------------------------------------------+
+| Diagnostics Strip: blocking/warning summary only              |
++---------------------------------------------------------------+</pre>
+      <p class="cap">実物。この時点ではまだ絵と説明文だけで、動くものは何も無い。</p>
+    </div>
+  </div>
+</div>
+
+<div class="row h">
+  <div class="who h">人間</div>
+  <div class="body">
+    <p class="say"><span class="quote">「Toolbox は文字じゃなく、アイコンボタンの方がいい。左右のスペースを取りすぎるべきではない」</span></p>
+    <p class="note">実際に出た指摘。これがこの段でのほぼ唯一のもの。</p>
+  </div>
+</div>
+
+<div class="row a">
+  <div class="who a">AI</div>
+  <div class="body">
+    <p class="say">直す。指摘が出なくなるまで繰り返す</p>
+  </div>
+</div>
+
+<div class="row h">
+  <div class="who h">人間</div>
+  <div class="body">
+    <p class="say"><span class="quote">「じゃあ、作っていいよ」</span></p>
+    <p class="note">この段で人間が出した言葉は、これだけ。</p>
+  </div>
+</div>
+
+<div class="row a">
+  <div class="who a">AI</div>
+  <div class="body">
+    <p class="say">作って、触れる形にして渡す</p>
+    <p class="note">決められた手順書に従って、ほぼ自動で回る。手順の要点は、<b>AIの限界を設計に織り込むこと</b>。</p>
+    <ul class="chain">
+      <li>AIが一度に扱える量を超えると、仕事は雑になる。だから<b>その量に収まる大きさに割り、重い作業は使い捨ての担当へ逃がす</b></li>
+      <li>ただし、<b>全体を見ている担当だけは汚さない</b>。そこにあるのは、<b>人間が何を望んだかの記憶</b>だから</li>
+    </ul>
+    <p class="note">見直しは、作った担当とは別の担当がやる。見直す方が軽いぶん、粗が見える。<br>——この間、人間は待っているだけ。</p>
+  </div>
+</div>
+
+<div class="row h">
+  <div class="who h">人間</div>
+  <div class="body">
+    <p class="say">触る</p>
+    <div class="artifact">
+      <img src="../assets/editor.png" alt="完成したエディタの画面">
+      <p class="cap">実物。この対話の時点では、中央のキャンバスも階層も右の詳細も、まだ空の枠だった。<b>先に決まったのは枠だけで、中身は後から一つずつ埋まった。</b></p>
+    </div>
+  </div>
+</div>
+
+<p class="punch">
+  レイアウトは、<em>最初の絵からほとんど変わっていない。</em>
+</p>
+<p class="scale">
+  ——ここまでで一巡。この一巡を、およそ<b>50回</b>重ねてエディタは出来た。
+</p>
+
+<p class="scaffold" style="margin-top: calc(var(--u) * 3)">▼ この下に何を置くかは未定義（人間の側に残った三つ・締め）</p>
