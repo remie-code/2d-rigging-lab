@@ -45,7 +45,43 @@ variant 系 operation 10種（createVariantGroup / createVariant / addVariantTar
 - **⚠ 非所属の実害は export で初めて出る**（3周目実証）: デフォーマ非所属の drawable は export の対象集合から**警告なしで脱落**する（unbound pool 除外。preflight の `excludedUnboundDrawableCount` に数字が出るだけで blocker にならない）。**CLI レンダ（document 経路）には写らないため、周回の全 gate を素通りする**——rest 可視の素材が出荷物から消える事故になる。処方: 工程5 の形式所属チェックに「**デフォーマ所属の閉包**」（全 drawable が高々1つの rig 配下に bound。非所属の許容は恒久非表示の参照素材のみ、と明示裁定）を必ず含める。3周目実測: footwear/legwear が非所属で発見、キー無しルート warp 1 op で解消（rest sha 完全一致 = 恒等の画素証明・validate 差分 rigControl.rEM +1 のみ）
 - 恒等の検証は二重で安い: **rest レンダ sha の基線一致**（画素）+ 本 rigControl を target とする keyformSets が 0（構造）
 
-## 5. 運用
+## 5. 衣装差分の BodyX は専用場へ作り直す
+
+Variant は可視性だけを切り替える。**通常衣装の BodyX control に差分 topwear を追加するだけでは、衣装固有の物理境界は表現できない。** よって衣装差分を組む工程では、Variant 所属と別に BodyX の所有を再設計する。
+
+原則:
+
+- **1つの物理的に連続した外套形状 = 1つの衣装専用 BodyX control**。同じ `BodyZ` 親を共有しても、通常衣装と BodyX control は共有しない
+- 数値をゼロから手打ちしない。通常衣装の committed 場を空間再標本化し、上体の承認済み運動を保存する
+- 衣装固有に作り直すのは domain と固定境界。通常衣装が腰でハード停止し、差分衣装がその線を連続して跨ぐなら、同じ開始位置から滑らかなフェード帯へ置換する
+- 襟・背面・肩装甲などは名前で分類せず、分離レンダまたは drawable 棚卸しで実所属を確定する。topwear と同一 drawable なら大型付属部も専用場に含まれる
+- 袖等の独立部品は、素材範囲・既存場の domain・物理接続が同型だと実測できた場合だけ共有可
+
+操作順:
+
+```text
+1. 衣装ごとの drawable 所属と mesh bbox を棚卸し
+2. 通常衣装と差分衣装の固定型を判定（ハード / フェード帯 / ソフト）
+3. 共通 BodyZ 親の下に衣装専用 BodyX warp を作成
+4. committed BodyX 場を双一次 + 最近縁クランプで再標本化
+5. 固定型が異なる帯だけを置換し、該当 drawable を専用場へ移動
+6. BodyX の min / default / max キーを作成
+```
+
+詳細な場の式・恒等検算・C1 フェードは [06-face-angle-x.md](06-face-angle-x.md) の「場の空間再標本化」「服の固定の2型」「衣装差分への転置」を正とする。
+
+検証:
+
+1. Variant ごとの rest sha が適用前と完全一致
+2. 通常衣装の BodyX 場と重なる上体格子点で変位が厳密一致
+3. フェード開始後の変位が単調に減り、終端行で全点 0
+4. BodyX ±端レンダで腰に折れ・局所停止・不連続消失がない
+5. 専用場から該当衣装以外の drawable が漏れず、各 drawable の rig 所有者が1つ
+6. export 後の Runtime 実機でも同じ衣装・同じ BodyX 動作を確認
+
+3周目追試（2026-07-17）では、通常衣装のスカート境界用ハード場をロング外套2種へ共有したことで腰の途中に不連続停止が発生。衣装専用場へ再標本化し、同じ開始行から C1 フェード帯へ置換した結果、rest 6画像は候補と sha 完全一致、export 成功、ユーザー gate は「圧倒的に動作が自然」で通過した。
+
+## 6. 運用
 
 - 触らないグループ・キーは op を発行しない（最強の無傷保証）
 - dry-run の `outcome=error, diagnostics=0` は host 入口の payload 形式エラーであって operation reject ではない——過去 commands/ の実例照合が最速の復旧路
