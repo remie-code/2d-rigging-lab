@@ -102,8 +102,12 @@
     background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center;
     font-size: calc(var(--u) * 2.6); font-weight: 900;
   }
-  .summary h2 { font-size: calc(var(--u) * 2.15); font-weight: 900; line-height: 1.4; }
-  .summary p { font-size: calc(var(--u) * 1.6); color: #46505f; margin-top: calc(var(--u) * 0.45); letter-spacing: 0.04em; }
+  /* 見出しは削除(規律: 書き手が意味を確定させに行く一行を置かない)。
+     残った工程の並びだけを、まとめ箱の本体として立てる。 */
+  .summary .flowline {
+    font-size: calc(var(--u) * 2.2); font-weight: 800; color: var(--navy);
+    line-height: 1.4; letter-spacing: 0.04em;
+  }
   .foot {
     margin-top: calc(var(--u) * 0.9); text-align: center;
     font-size: calc(var(--u) * 1.35); color: var(--sub); letter-spacing: 0.03em;
@@ -182,8 +186,7 @@
 <div class="summary">
   <div class="mark">◎</div>
   <div>
-    <h2>作り方を読み、操作し、確認しながら、AIは工程を自分で進める。</h2>
-    <p>レシピを読む　→　操作する　→　確認する　→　判断する　→　次の工程へ</p>
+    <p class="flowline">レシピを読む　→　操作する　→　確認する　→　判断する　→　次の工程へ</p>
   </div>
 </div>
 
