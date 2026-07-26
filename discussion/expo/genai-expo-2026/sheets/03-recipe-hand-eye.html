@@ -1,0 +1,190 @@
+<meta charset="utf-8">
+<title>03 AIに、作り方と操作方法と確認方法を渡した。</title>
+<style>
+  /* ── A2 縦(420 × 594mm)。04 と同じ版面規格・同じ配色。
+     図版は実 PNG、文字はすべてテキスト(印刷でベクター)。 */
+  @page { size: 420mm 594mm; margin: 0; }
+
+  :root {
+    --u: 4.2mm;
+    --bg: #eef1f5;
+    --card: #ffffff;
+    --navy: #05285b;        /* 6 枚共通(生成画像から実測) */
+    --navy-d: #072c62;
+    --ink: #1a1d21;
+    --sub: #5b6472;
+    --line: #d3d9e2;
+    --tint: #e7edf5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); }
+  body {
+    width: 420mm; height: 594mm; overflow: hidden;
+    padding: calc(var(--u) * 2.2) calc(var(--u) * 2.4);   /* 6 枚共通 */
+    font-family: "Noto Sans JP", "Yu Gothic", "Hiragino Sans", sans-serif;
+    font-feature-settings: "palt" 1; line-height: 1.5;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── ヘッダ ─────────────────────────────────────────────── */
+  .head { display: flex; align-items: center; gap: calc(var(--u) * 1.8); }   /* 6 枚共通 */
+  /* ── パネル番号と小見出しは 6 枚共通の寸法 ─────────────────── */
+  .no {
+    background: var(--navy-d); color: #fff; font-weight: 900;
+    font-size: calc(var(--u) * 3.4); line-height: 1; letter-spacing: -0.02em;
+    padding: calc(var(--u) * 0.85) calc(var(--u) * 1.5); border-radius: 1.6mm;
+  }
+  .eyebrow { font-size: calc(var(--u) * 1.8); color: #46505f; letter-spacing: 0.05em; }
+  h1 {
+    font-size: calc(var(--u) * 4.6); font-weight: 900; letter-spacing: -0.035em;
+    line-height: 1.15; margin-top: calc(var(--u) * 0.7); white-space: nowrap;
+    color: var(--navy);   /* 6 枚共通 */
+  }
+  .sub { font-size: calc(var(--u) * 1.85); color: #2f3742; margin-top: calc(var(--u) * 0.5); }
+
+  /* ── 節 ─────────────────────────────────────────────────── */
+  /* 縦の余りは 3 つの節が分け合って吸う(①②⑤⑥ と同じ配り方) */
+  .sec {
+    margin-top: calc(var(--u) * 1.35);
+    border: 0.5mm solid #c6d0dd; border-radius: 1.8mm; background: var(--tint);
+    padding: calc(var(--u) * 1.25) calc(var(--u) * 1.4) calc(var(--u) * 1.35);
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  }
+  .sec-head { display: flex; align-items: baseline; gap: calc(var(--u) * 1.6); margin-bottom: calc(var(--u) * 1); }
+  .sec-head .tag {
+    background: var(--navy); color: #fff; border-radius: 1mm; flex: none;
+    font-size: calc(var(--u) * 1.95); font-weight: 800;
+    padding: calc(var(--u) * 0.55) calc(var(--u) * 1.4);
+  }
+  .sec-head .lead { font-size: calc(var(--u) * 1.62); color: #3d4757; }
+
+  .cols {
+    display: grid; grid-template-columns: 1fr calc(var(--u) * 27); column-gap: calc(var(--u) * 1.6);
+    align-items: center; flex: 1 1 auto; min-height: 0;   /* 節が伸びても中身は縦中央 */
+  }
+  .shot { background: #fff; border: 0.4mm solid var(--line); border-radius: 1.2mm; padding: calc(var(--u) * 0.55); }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 0.6mm; }
+
+  /* 右の特徴リスト */
+  .side .side-h {
+    background: var(--navy); color: #fff; border-radius: 1mm; text-align: center;
+    font-size: calc(var(--u) * 1.6); font-weight: 800;
+    padding: calc(var(--u) * 0.5) 0; margin-bottom: calc(var(--u) * 0.85);
+  }
+  .side ul { list-style: none; }
+  .side li {
+    display: grid; grid-template-columns: calc(var(--u) * 2.5) 1fr; column-gap: calc(var(--u) * 0.9);
+    background: #fff; border: 0.4mm solid var(--line); border-radius: 1mm;
+    padding: calc(var(--u) * 0.62) calc(var(--u) * 0.85);
+    margin-bottom: calc(var(--u) * 0.55);
+    font-size: calc(var(--u) * 1.4); line-height: 1.42; align-items: start;
+  }
+  .side li .m { color: var(--navy); font-weight: 900; text-align: center; }
+  /* 括弧の補足は改行させない(行が増えると版面を超える) */
+  .side li small { color: var(--sub); font-size: calc(var(--u) * 1.25); }
+
+  .arrow {
+    width: 0; height: 0; margin: calc(var(--u) * 0.7) auto 0;
+    border-left: calc(var(--u) * 1.6) solid transparent;
+    border-right: calc(var(--u) * 1.6) solid transparent;
+    border-top: calc(var(--u) * 1.7) solid var(--navy);
+  }
+
+  /* ── まとめ ─────────────────────────────────────────────── */
+  .summary {
+    margin-top: auto; background: #e3e9f1; border-radius: 1.5mm;
+    padding: calc(var(--u) * 1.5) calc(var(--u) * 2.2);
+    display: grid; grid-template-columns: calc(var(--u) * 7) 1fr; column-gap: calc(var(--u) * 1.8);
+    align-items: center;
+  }
+  .summary .mark {
+    width: calc(var(--u) * 6); height: calc(var(--u) * 6); border-radius: 50%;
+    background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--u) * 2.6); font-weight: 900;
+  }
+  .summary h2 { font-size: calc(var(--u) * 2.15); font-weight: 900; line-height: 1.4; }
+  .summary p { font-size: calc(var(--u) * 1.6); color: #46505f; margin-top: calc(var(--u) * 0.45); letter-spacing: 0.04em; }
+  .foot {
+    margin-top: calc(var(--u) * 0.9); text-align: center;
+    font-size: calc(var(--u) * 1.35); color: var(--sub); letter-spacing: 0.03em;
+  }
+</style>
+
+<div class="head">
+  <div class="no">03</div>
+  <p class="eyebrow">生成AIなんでも展示会 Vol.6　出展パネル</p>
+</div>
+<h1>AIに、作り方と操作方法と確認方法を渡した。</h1>
+<p class="sub">モデリングの判断をレシピにし、AIが使う操作と、結果の確かめ方まで定義した。</p>
+
+<!-- ① 作り方 -->
+<div class="sec">
+  <div class="sec-head">
+    <span class="tag">① 作り方 — モデリングのレシピ</span>
+    <span class="lead">物理・数学・観察基準まで言葉にし、工程ごとに定義した。</span>
+  </div>
+  <div class="cols">
+    <div class="shot"><img src="../assets/03_recipe.png" alt="モデリングのレシピ。回転射影則からの導出と実測値が並ぶ技法カタログ"></div>
+    <div class="side">
+      <div class="side-h">レシピに書いてあること</div>
+      <ul>
+        <li><span class="m">✓</span><span>何を作るか<small>（目的）</small></span></li>
+        <li><span class="m">✓</span><span>何を操作するか<small>（機能）</small></span></li>
+        <li><span class="m">✓</span><span>何を見るか<small>（観察方法）</small></span></li>
+        <li><span class="m">✓</span><span>どう判断するか<small>（完了条件）</small></span></li>
+        <li><span class="m">✓</span><span>次に何をするか<small>（移行条件）</small></span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+<div class="arrow"></div>
+
+<!-- ② 操作 -->
+<div class="sec">
+  <div class="sec-head">
+    <span class="tag">② 操作 — 定義された手段で編集</span>
+    <span class="lead">AIは操作APIを使って、モデルデータを直接編集する。</span>
+  </div>
+  <div class="cols">
+    <div class="shot"><img src="../assets/03_operation.png" alt="操作をJSONで記述したファイルと、工程ごとの作業ディレクトリ"></div>
+    <div class="side">
+      <div class="side-h">操作手段の特徴</div>
+      <ul>
+        <li><span class="m">▸</span><span>定義済みの操作をJSONで実行</span></li>
+        <li><span class="m">▤</span><span>モデル構造を安全に編集</span></li>
+        <li><span class="m">◈</span><span>dry-run → 承認 → commit</span></li>
+        <li><span class="m">▤</span><span>作業ログ・検証記録がすべて残る</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+<div class="arrow"></div>
+
+<!-- ③ 確認 -->
+<div class="sec">
+  <div class="sec-head">
+    <span class="tag">③ 確認 — 描画して判断</span>
+    <span class="lead">指定した姿勢をPNGで描き、AIが複数姿勢を並べて評価する。</span>
+  </div>
+  <div class="cols">
+    <div class="shot"><img src="../assets/03_eye.png" alt="頭の傾きを-10度・0度・+10度で描画した確認画像"></div>
+    <div class="side">
+      <div class="side-h">確認手段の特徴</div>
+      <ul>
+        <li><span class="m">▣</span><span>指定した角度・値でPNGを自動生成</span></li>
+        <li><span class="m">▦</span><span>複数姿勢を一枚に並べて比較</span></li>
+        <li><span class="m">◉</span><span>形の崩れ・連続性をAIが評価</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="summary">
+  <div class="mark">◎</div>
+  <div>
+    <h2>作り方を読み、操作し、確認しながら、AIは工程を自分で進める。</h2>
+    <p>レシピを読む　→　操作する　→　確認する　→　判断する　→　次の工程へ</p>
+  </div>
+</div>
+
+<p class="foot">使用ツール: Private 2D Rigging Lab（自作エディタ） ／ AI: Codex（OpenAI）</p>

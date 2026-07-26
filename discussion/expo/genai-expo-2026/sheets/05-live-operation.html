@@ -1,0 +1,212 @@
+<meta charset="utf-8">
+<title>05 完成したモデルを自作AITuber実行系に接続し、実配信で運用した。</title>
+<style>
+  /* ── A2 縦(420 × 594mm)。06 と同じ版面規格・同じ配色。
+     構成(帯積み): 配信画面(全幅・主役) → 凡例 → [設定画面 | 流れ図] → 自作範囲 → 実績。
+     「配信中に連動したこと」のリストは流れ図の注記へ畳んだ(同じ情報の二重掲載を解消)。
+     写真は実 PNG、それ以外はすべてベクター。 */
+  @page { size: 420mm 594mm; margin: 0; }
+
+  :root {
+    --u: 4.2mm;
+    --paper: #fcfdfe;
+    --navy: #05285b;
+    --navy-d: #072c62;
+    --ink: #16233a;
+    --sub: #5b6472;
+    --line: #dfe3ea;
+    --red: #c0392b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); color: var(--ink); }
+  body {
+    width: 420mm; height: 594mm; overflow: hidden;
+    padding: calc(var(--u) * 2.2) calc(var(--u) * 2.4);   /* 6 枚共通 */
+    font-family: "Noto Sans JP", "Yu Gothic", "Hiragino Sans", sans-serif;
+    font-feature-settings: "palt" 1; line-height: 1.5;
+    display: flex; flex-direction: column;
+  }
+  svg { display: block; }
+
+  /* ── ヘッダ ─────────────────────────────────────────────── */
+  .head { display: flex; align-items: center; gap: calc(var(--u) * 1.8); }
+  /* ── パネル番号と小見出しは 6 枚共通の寸法 ─────────────────── */
+  .no {
+    background: var(--navy-d); color: #fff; font-weight: 900;
+    font-size: calc(var(--u) * 3.4); line-height: 1; letter-spacing: -0.02em;
+    padding: calc(var(--u) * 0.85) calc(var(--u) * 1.5); border-radius: 1.6mm;
+  }
+  .eyebrow { font-size: calc(var(--u) * 1.8); color: #46505f; letter-spacing: 0.05em; }
+  h1 {
+    font-size: calc(var(--u) * 4.3); font-weight: 900; letter-spacing: -0.035em;
+    line-height: 1.24; margin-top: calc(var(--u) * 0.7); text-align: center; color: var(--navy);
+  }
+  .sub {
+    font-size: calc(var(--u) * 1.9); color: #2c3648; margin-top: calc(var(--u) * 0.6);
+    text-align: center; line-height: 1.48;
+  }
+  .sub b { color: var(--navy); font-weight: 900; }
+
+  .chip {
+    display: inline-block; background: var(--navy); color: #fff; border-radius: 1.4mm 1.4mm 0 0;
+    font-size: calc(var(--u) * 1.68); font-weight: 800;
+    padding: calc(var(--u) * 0.55) calc(var(--u) * 1.2);
+  }
+  .panel { border: 0.5mm solid var(--line); border-radius: 0 1.4mm 1.4mm 1.4mm; background: #fff; padding: calc(var(--u) * 0.45); }
+  .panel img { display: block; width: 100%; height: auto; border-radius: 0.8mm; }
+
+  /* ── 凡例 ───────────────────────────────────────────────── */
+  .legend { display: flex; gap: calc(var(--u) * 0.7); margin-top: calc(var(--u) * 0.6); }
+  .legend div {
+    flex: 1; border: 0.4mm solid var(--line); border-radius: 1.1mm; background: #fff;
+    padding: calc(var(--u) * 0.45) calc(var(--u) * 0.6);
+    font-size: calc(var(--u) * 1.28); line-height: 1.35; text-align: center; color: #2c3648;
+  }
+  .legend b {
+    display: inline-block; color: #fff; border-radius: 0.8mm; font-weight: 800;
+    padding: 0 calc(var(--u) * 0.45); margin-right: calc(var(--u) * 0.4);
+  }
+  .legend .l b { background: #2f5fa8; }
+  .legend .r b { background: var(--red); }
+  .legend .c b { background: #4a5568; }
+  .note { margin-top: calc(var(--u) * 0.45); font-size: calc(var(--u) * 1.32); color: var(--red); font-weight: 700; }
+
+  /* ── 中段: 設定画面 | 流れ図 ────────────────────────────── */
+  /* 空いた縦は流れ図が吸う。左(設定画面)は上寄せのまま。 */
+  .mid {
+    display: grid; grid-template-columns: 1fr 1.42fr; column-gap: calc(var(--u) * 1.5);
+    margin-top: calc(var(--u) * 1.3); flex: 1 1 auto; min-height: 0; align-items: stretch;
+  }
+  .mid > .setcol { align-self: start; }
+  .mid > .flowcol { display: flex; flex-direction: column; min-height: 0; }
+  .flowbody { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; }
+  .midhead {
+    font-size: calc(var(--u) * 1.85); font-weight: 900; color: var(--navy);
+    display: flex; align-items: center; gap: calc(var(--u) * 0.65); margin-bottom: calc(var(--u) * 0.75);
+  }
+  .midhead::before { content: ""; width: calc(var(--u) * 0.5); height: calc(var(--u) * 1.8); background: var(--navy); border-radius: 0.4mm; }
+
+  .fb {
+    border: 0.5mm solid var(--line); border-radius: 1.2mm; background: #fff;
+    padding: calc(var(--u) * 0.62) calc(var(--u) * 0.7);
+  }
+  .f3 { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: calc(var(--u) * 0.7); }
+  .f3 .fb { text-align: center; }
+  .fb .t { font-size: calc(var(--u) * 1.4); font-weight: 900; line-height: 1.3; }
+  .fb .d { font-size: calc(var(--u) * 1.14); color: var(--sub); line-height: 1.36; margin-top: calc(var(--u) * 0.18); }
+  .fb .i { width: calc(var(--u) * 2.5); height: calc(var(--u) * 2.5); margin: 0 auto calc(var(--u) * 0.22); }
+  .fb.mic .t { color: #c0392b; } .fb.cmt .t { color: #6b4fa0; } .fb.gme .t { color: #2f7a4f; }
+  .fb.wide { display: grid; grid-template-columns: calc(var(--u) * 2.9) 1fr; column-gap: calc(var(--u) * 0.7); align-items: center; }
+  .fb.wide .i { margin: 0; }
+  .fb.out { border-color: #f0c98a; background: #fffaf0; }
+  .fb.out .t { color: #b8791f; }
+  .stackf { display: grid; row-gap: calc(var(--u) * 0.55); }
+  .down { display: flex; justify-content: space-around; padding: calc(var(--u) * 0.3) 0; }
+  .down span { color: #8d97a6; font-size: calc(var(--u) * 1.5); font-weight: 900; line-height: 1; }
+
+  /* ── 自作範囲 ───────────────────────────────────────────── */
+  .own { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: calc(var(--u) * 1.1); margin-top: calc(var(--u) * 1.2); }
+  .own .c {
+    border: 0.5mm solid var(--line); border-radius: 1.4mm; background: #fff;
+    padding: calc(var(--u) * 0.85) calc(var(--u) * 1);
+  }
+  .own .c .h { font-size: calc(var(--u) * 1.6); font-weight: 900; color: var(--navy); display: flex; align-items: center; gap: calc(var(--u) * 0.5); }
+  .own .c .h::before { content: "◎"; color: var(--navy); }
+  .own .c p { font-size: calc(var(--u) * 1.18); color: var(--sub); line-height: 1.4; margin-top: calc(var(--u) * 0.25); }
+  .ownlb { font-size: calc(var(--u) * 1.6); font-weight: 900; color: var(--navy); margin-top: calc(var(--u) * 1.2); }
+
+  /* ── 実績 ───────────────────────────────────────────────── */
+  .res {
+    margin-top: calc(var(--u) * 1.2); border: 0.6mm solid #e8b9b2; border-radius: 1.6mm;
+    background: #fdf5f4; padding: calc(var(--u) * 1.05) calc(var(--u) * 1.4);
+    display: grid; grid-template-columns: auto 1fr auto; column-gap: calc(var(--u) * 1.4); align-items: center;
+  }
+  .res .ttl { font-size: calc(var(--u) * 1.95); font-weight: 900; color: var(--red); display: flex; align-items: center; gap: calc(var(--u) * 0.6); white-space: nowrap; }
+  .res .ttl .pl { width: calc(var(--u) * 2.4); height: calc(var(--u) * 2.4); }
+  .res .txt { font-size: calc(var(--u) * 1.45); line-height: 1.5; color: #2c3648; }
+  .res .txt b { font-size: calc(var(--u) * 1.8); color: var(--red); font-weight: 900; }
+  .res .side {
+    border: 0.5mm solid #e8b9b2; border-radius: 1.2mm; background: #fff;
+    padding: calc(var(--u) * 0.62) calc(var(--u) * 0.9); font-size: calc(var(--u) * 1.35);
+    font-weight: 800; color: var(--navy); line-height: 1.4; text-align: center;
+  }
+</style>
+
+<div class="head">
+  <div class="no">05</div>
+  <p class="eyebrow">生成AIなんでも展示会 Vol.6　出展パネル</p>
+</div>
+<h1>完成したモデルを自作AITuber実行系に接続し、<br>実配信で運用した。</h1>
+
+<!-- 主役: 実際の配信画面 -->
+<div style="margin-top: calc(var(--u) * 1.5)"><span class="chip">実際の配信画面（ゲーム：アークナイツ）</span></div>
+<div class="panel"><img src="../assets/05_live-image.png" alt="実際の配信画面。左に自分用モデル、右にAI用モデル、中央にゲーム画面とコメント欄"></div>
+<div class="legend">
+  <div class="l"><b>左</b>自分用モデル（Sol製）</div>
+  <div class="r"><b>右</b>Claude Code用モデル（Fable製）</div>
+  <div class="c"><b>中央</b>ゲーム画面（アークナイツ）</div>
+</div>
+<p class="note">※ 人間用PlayerとAI用Playerを起動し分けて運用</p>
+
+<!-- 設定画面 | 流れ図 -->
+<div class="mid">
+  <div class="setcol">
+    <div><span class="chip">自作AITuber実行系の設定画面</span></div>
+    <div class="panel"><img src="../assets/05_soul-setting.png" alt="AITuber実行系の設定画面。YouTube接続・マイク・声の出力先・視界・頭脳の選択"></div>
+  </div>
+
+  <div class="flowcol">
+    <p class="midhead">システム構成（配信中の流れ）</p>
+    <div class="flowbody">
+    <div class="f3">
+      <div class="fb mic">
+        <div class="i"><svg viewBox="0 0 24 24" fill="none" stroke="#c0392b" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v4"/></svg></div>
+        <p class="t">マイク入力</p><p class="d">自分の声を取得</p>
+      </div>
+      <div class="fb cmt">
+        <div class="i"><svg viewBox="0 0 24 24" fill="none" stroke="#6b4fa0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-8 8H7l-4 3v-6a8 8 0 018-8h2a8 8 0 018 3z"/></svg></div>
+        <p class="t">YouTubeコメント</p><p class="d">視聴者のコメントを取得</p>
+      </div>
+      <div class="fb gme">
+        <div class="i"><svg viewBox="0 0 24 24" fill="none" stroke="#2f7a4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="4"/><path d="M7 10v4M5 12h4M16 11h.01M18.5 13.5h.01"/></svg></div>
+        <p class="t">ゲーム画面（視界入力）</p><p class="d">画面を見て状況を認識</p>
+      </div>
+    </div>
+    <div class="down"><span>↓</span><span>↓</span><span>↓</span></div>
+    <div class="stackf">
+      <div class="fb wide">
+        <div class="i"><svg viewBox="0 0 24 24" fill="none" stroke="#2f5fa8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a3 3 0 013 3v12a3 3 0 11-3-3H7a3 3 0 010-6 3 3 0 012-6z"/><path d="M15 3a3 3 0 00-3 3M15 3a3 3 0 013 3 3 3 0 010 6 3 3 0 01-3 6"/></svg></div>
+        <div><p class="t">LLM（Claude）</p><p class="d">コメントや状況に応じて返答を生成。設定に応じて自ら話題も出す</p></div>
+      </div>
+      <div class="down" style="justify-content:center"><span>↓</span></div>
+      <div class="fb wide">
+        <div class="i"><svg viewBox="0 0 24 24" fill="none" stroke="#2f5fa8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 8a5 5 0 010 8"/></svg></div>
+        <div><p class="t">音声合成・表情／口パク制御</p><p class="d">発話に合わせて口の形を同期。表情・視線・姿勢も状況に応じて変化</p></div>
+      </div>
+      <div class="down" style="justify-content:center"><span>↓</span></div>
+      <div class="fb wide out">
+        <div class="i"><svg viewBox="0 0 24 24" fill="none" stroke="#b8791f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <div><p class="t">自作Playerでモデルを表示</p><p class="d">人間用 / AI用を起動し分けて配信に出力</p></div>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- 自作範囲 -->
+<p class="ownlb">自作で実現したこと</p>
+<div class="own" style="margin-top: calc(var(--u) * 0.6)">
+  <div class="c"><p class="h">モデル制作・モデリング</p><p>素材からリグ・表情・口パク・物理まで</p></div>
+  <div class="c"><p class="h">AITuber実行系</p><p>マイク・コメント・視界・LLM・音声合成・制御を統合</p></div>
+  <div class="c"><p class="h">Player</p><p>モデル表示・口パク・表情・姿勢制御／人間用とAI用を起動し分け</p></div>
+</div>
+
+<!-- 実績 -->
+<div class="res">
+  <p class="ttl">
+    <span class="pl"><svg viewBox="0 0 24 24" fill="none" stroke="#c0392b" stroke-width="2" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4V8z" fill="#c0392b"/></svg></span>
+    実配信での運用実績
+  </p>
+  <p class="txt">この構成で実際にゲーム配信を行い、安定して <b>1時間40分</b> の配信を完走した。</p>
+  <p class="side">モデル制作から自作Playerでの表示、<br>AITuber実行系での配信運用まで通した。</p>
+</div>
