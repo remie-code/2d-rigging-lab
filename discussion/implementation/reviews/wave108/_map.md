@@ -2,6 +2,8 @@
 
 > Lightweight map for Wave108 `boundary-transparent-margin` (A1, Option E) Review-Sylph artifacts.
 
+> Historical review index: gate and residual wording is frozen at Wave108 closeout; later Wave109 evidence is indexed separately and does not reopen the Wave102 Editor mainline stop.
+
 ## Entries
 
 | Path | Domain / Lane | Verdict | Notes |
@@ -18,4 +20,4 @@
 - Final clean integration review recorded `pass`（zero blocking findings）。Wave108 review artifacts に pending なし。
 - gate = baseline 比較（Undine 裁定に準ずる）: apps/editor の 6 fail は pre-existing `diagnostics-jump-actions` 4（clean tree 再現確認済み）+ flaky `viewer-runtime-screen` 2（隔離で 27/27 pass）で、wave108 由来の新規 red はゼロ。
 - Injection: 各ドメイン報告・レビュー・本統合で遭遇なし（Domain F では起動時 payload 遭遇の記録あり — final report §セキュリティ参照）。
-- 実機 atlasRuntime 目視はユーザー gate（wave 外）。コミットは未実施（ユーザー判断待ち）。
+- Wave108 closeout の実機 atlasRuntime 目視はユーザー gate（wave 外）として記録され、同時点ではコミット未実施（ユーザー判断待ち）だった。その後 `70485f4`（Wave108）と `899cb2e`（Wave109 preflight reconcile）が Git に記録されているため、これは現在状態ではなく closeout 時点の履歴である。別の明示的受入記録を要求する場合は未解決として扱う。

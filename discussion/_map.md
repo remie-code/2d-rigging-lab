@@ -8,7 +8,7 @@
 
 `discussion/` は Private 2D Rigging Lab / Prototype のコンセプト、AC、シナリオ、設計判断、調査、検証結果を保持する外部記憶である。
 
-現在の正は、[concept/modified_concept.md](concept/modified_concept.md)、[acceptance-criteria/00_RootQuestion.md](acceptance-criteria/00_RootQuestion.md)、[acceptance-criteria/01_RootAcceptanceCriteria.md](acceptance-criteria/01_RootAcceptanceCriteria.md)、[acceptance-criteria/03_MVP_Acceptance_Criteria.md](acceptance-criteria/03_MVP_Acceptance_Criteria.md) である。
+要求・スコープの正は、[concept/modified_concept.md](concept/modified_concept.md)、[acceptance-criteria/00_RootQuestion.md](acceptance-criteria/00_RootQuestion.md)、[acceptance-criteria/01_RootAcceptanceCriteria.md](acceptance-criteria/01_RootAcceptanceCriteria.md)、[acceptance-criteria/03_MVP_Acceptance_Criteria.md](acceptance-criteria/03_MVP_Acceptance_Criteria.md) である。Runtime の schema / solver / cardinality の現行意味論は、accepted [dynamics-world-frame-chain.md](design/dynamics-world-frame-chain.md) と [Wave106](implementation/waves/wave106/_map.md) を参照する（AC/scenario の要求オラクルとは分離）。
 
 旧公開エコシステム前提は superseded であり、現在は次の4トラックを分離する。
 
@@ -29,21 +29,21 @@
 | Path | Role | Status |
 |------|------|--------|
 | [concept/](concept/) | コンセプト、スコープ、方針変更メモ | Private baselineとmemo対応完了状態を記録済み |
-| [acceptance-criteria/](acceptance-criteria/) | 受け入れ基準。後続作業のオラクル | Minimum Open Dynamics v1をCurrent MVPへ復帰済み |
-| [scenarios/](scenarios/) | ACを検証可能な具体シナリオへ精緻化するトピック | Dynamics group / deterministic preview / validation / demo-safe scenarioへ更新済み |
-| [design/](design/) | Private Prototype の設計論点、設計判断、未決事項、検証観点 | Private baseline設計判断、RuntimeState / RuntimeSequence evidence判断、Codex-friendly automation policyを反映済み。詳細なreview履歴は下層mapへ委譲 |
-| [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | Dynamics demo allowed/avoidを追加済み |
-| [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | feature proposal templateを追加済み |
-| [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。実装オーケストレーションは `implementation/` 配下へ移動 |
-| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave53 final integration report/review `pass` が最新 final implementation-proven baseline。Workspace Layout Migration v0 は bounded pass 記録済み |
-| [runtime-player/](runtime-player/) | Editor外のRuntime Player / Capture Host appの調査、UX、設計、未決事項 | iFacialMocap input adapter調査、初期画面UX、Electron固定後の技術スタック判断を記録 |
-| [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 前提合意4文書（可解性 / 運用方針 / 閉問題アプローチ / craft設計）と第一閉問題（01-eyeball-x）定義を記録済み |
-| [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | Wave 1/1.1 実装完了。往復2所見「v6/v7一長一短」により保留中(v6/v7併存・トグル残置) |
-| [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | Editor側=Perf Wave 2完了・クローズ(2026-07-08)。Player側=player-surveyで一旦保留(同日)。**二体同時起動の体感負荷(2026-07-12、ai-cohost C7)で再開条件成立——要否はユーザー裁定待ち** |
-| [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | why合意・分解Accepted(2026-07-08)。第一手=WS1(shell)未着手。詳細は下層mapへ委譲 |
-| [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | 目標像・成功基準・境界改定(案A)・振る舞いモデル・モデルホスト役割つき起動・D4(YouTube)/D6(キー操作)/D7(当面対象外)までAccepted(2026-07-10)。実装は閉問題分解C1〜C7の直列: **C1〜C7 全て完全閉鎖(C7=2026-07-12)=器の完成**。次はS系列(魂)の前提討議。詳細は [ai-cohost/_map.md](ai-cohost/_map.md) へ委譲 |
-| [expo/](expo/_map.md) | 外部イベントへの出展物(ポスター等)の設計と出典事実 | 生成AI EXPO(パネル180×90cm・応募済み/採択待ち)。構成=A2×6枚の骨子合意、版面未着手。詳細は [expo/_map.md](expo/_map.md) へ委譲 |
-| [reports/](reports/) | 技術調査・成立性調査レポート | Cubism関連はprivate research archive / implementation sourceではない |
+| [acceptance-criteria/](acceptance-criteria/) | 受け入れ基準。後続作業の要件・合否オラクル | Current oracle。dynamics-file-v3/profile-v2 の具体意味論は design/Wave106。Domain-09 の追跡表現は未決 |
+| [scenarios/](scenarios/) | ACを検証可能な具体シナリオへ精緻化するトピック | deterministic preview / validation / demo-safe を保持。旧 scalar 文言と現行 dynamics semantics の対応は未決 |
+| [design/](design/) | Private Prototype の設計論点、設計判断、未決事項、検証観点 | dynamics v3、WebGL2 + Canvas2D fallback、Skyline/Option E を反映。GPU/pixel、Canvas sunset、full Evidence は下層 gate |
+| [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | policy は current。rights-clean fixture、最終 disclaimer/UI、preflight は user/legal gate |
+| [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | template は current。最初の proposal target は未決 |
+| [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。現行規約は実装・review に適用 |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | **Wave102 を Editor mainline の計画停止点として維持**。W103–109 は specialized evidence として別索引。詳細は下層mapへ委譲 |
+| [runtime-player/](runtime-player/) | Editor外のRuntime Player / Capture Host appの調査、UX、設計、未決事項 | W1–20 source/review pass、W21 Domain A/B pass・C pending、W22/23 source/test pass。real-device/OBS/製品 gate は未完了 |
+| [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 装備と閉問題01–19・craft second cycle は完了。PNG再認証、strict-ref/sidecar portability、次scopeは user gate |
+| [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | v6D default + v7 comparison toggle。v6/v7品質 hold と Wave2/v6削除は未決。W108/109 render/data contract は完了 |
+| [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | Editor Perf Wave2 は accepted close。Player W13–19 diagnostics/fast-path/cadence は完了。C7 二体負荷は optional・未計測 |
+| [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | WS1–WS4 + electron-builder packaging は完了。PSD E2E、typecheck/unit、dead branch、metadata warning は残債 |
+| [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | C1–C7（器）完了、S1–S8 実装進行。S8 kill、brain-swap、stream-memory は human gate。D4 YouTube / D6 key-operation / D7 Variant-out-of-scope を保持。LLM/知覚は `apps/soul` 特区内のみ許可 |
+| [expo/](expo/_map.md) | 外部イベントへの出展物(ポスター等)の設計と出典事実 | 6面 HTML + 6面 A2 PDF は完成。採択・外部 acceptance は未検証、採択後 proof print と権利確認が必要 |
+| [reports/](reports/) | 技術調査・成立性調査レポート | Cubism/旧性能資料は private historical archive。現行 performance/runtime は専用 topic map が owner |
 
 ## 現在の状態サマリ
 
@@ -60,38 +60,44 @@
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | Codex-friendly automation | [design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) で、Editor/repoは提案・推論・自動分類を行わず、外部Codex/LLMが人間同等操作をdeterministic API経由で実行する方針をAccepted user decisionとして記録済み |
 | Development Convention | `development_convention/` にP0/P1規約16本とsource file organization規約を追加済み。旧 `implementation-orchestration-policy.md` と `/goal` companion文書は破棄済み |
-| Implementation baseline | **Editor実装は Wave102 をもって一旦完成（ユーザー決定、2026-07-02記録）**。wave plan は [implementation/orchestration/](implementation/orchestration/) に wave102-plan.md まで実在する。詳細なwave履歴は [implementation/_map.md](implementation/_map.md) と下層wave/review文書へ委譲。ただし implementation/_map.md の記録は Wave93 で止まっており、Wave94-102 の反映は未了（既知のドキュメント更新もれ） |
-| Current implementation work | Editor実装は Wave102 で一旦停止中。現在の主戦場は [model-authoring/](model-authoring/)（Fableによるモデル制作挑戦）の対話フェーズと Runtime Player。Wave53 時代の詳細記述は superseded（履歴は implementation/ 下層に残存） |
-| Implementation maps | 次Wave判断前は [implementation/current-capability-map.md](implementation/current-capability-map.md) と [implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md) を正として読む |
-| Runtime Player topic | Editor外の追加appとして [runtime-player/](runtime-player/) を作成。iFacialMocapをv0 tracking input adapter候補にする調査は [runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、初期画面UXは [runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、Electron固定後の技術スタックは [runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、Runtime Player Wave1計画は [runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) に記録 |
+| Implementation baseline | **Editor mainline は Wave102 をもって計画停止（ユーザー決定、2026-07-02記録）**。修復済みの [implementation/_map.md](implementation/_map.md) / [implementation/orchestration/_map.md](implementation/orchestration/_map.md) が W0–109 の索引を所有し、W103–109 は specialized evidence として別扱い。`current-capability-map.md` / `remaining-work-backlog.md` は dated snapshot |
+| Current implementation work | Editor mainline は Wave102 で停止中。主戦場は [model-authoring/](model-authoring/) と [runtime-player/](runtime-player/) の topic family。W103–109 は再承認なしに Editor mainline を再開しない bounded evidence |
+| Implementation maps | 次Wave判断は [implementation/_map.md](implementation/_map.md)、[implementation/orchestration/_map.md](implementation/orchestration/_map.md)、各 specialized map を basis とする。Wave54-era capability/backlog は単独の current oracle ではない |
+| Runtime Player topic | 現在の入口は [runtime-player/_map.md](runtime-player/_map.md) と [runtime-player/implementation/_map.md](runtime-player/implementation/_map.md)。W1–20 source/review pass、W21 Domain A/B pass・C pending、W22/23 source/test passを索引し、W11/W20/W21/W22/W23 の実機・製品 gate（iFacialMocap/OBS/ライフサイクル/母音）は未完了 |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
-| Model Authoring topic | 「Fableに2Dモデルを作らせる」挑戦を [model-authoring/](model-authoring/) として作成（2026-07-02）。可解性分析・運用方針（ヘッドレス専有 / Git巻き戻し / 判定の梯子）・閉問題アプローチを premises/ に合意記録済み。第一閉問題は [model-authoring/closed-problems/01-eyeball-x/problem-definition.md](model-authoring/closed-problems/01-eyeball-x/problem-definition.md) |
-| Mesh Generation topic | メッシュ自動生成の商用風改修を [mesh-generation/](mesh-generation/) として作成（2026-07-07）。Wave 1(v7実装)・Wave 1.1(境界非クランプ+密度)完了。目視評価 往復2 の所見「v6/v7一長一短」により**保留中**(v6/v7併存・トグル残置・Wave 2棚上げ)。経緯は [mesh-generation/evaluation-log.md](mesh-generation/evaluation-log.md) |
-| Render Performance topic | Editor/Viewer 描画パフォーマンス改善を [render-performance/](render-performance/) として作成（2026-07-07）。現状調査は [reports/editor-render-performance/](reports/editor-render-performance/)。方針合意済み(主戦場=Editor共有経路 / 決定性二層分離 / 計測→設計)。Perf Wave 1(計測基盤)から実行 |
-| Editor Electron Migration topic | apps/editor の Web→Electron 移行を [editor-electron-migration/](editor-electron-migration/) として作成（2026-07-08）。why合意・分解(3系統コード調査由来)をAccepted。第一手=WS1(shell)、本丸=WS2(persistence node:fs化)。FS Access は Electron Chromium で存続するため移行は非破壊・段階的。portable-JSON は消費者なし(本エディタのみ)のため廃止確定。**WS1〜WS4 完了 = editor Web→Electron 移行の全 work-stream 完了(2026-07-08)**。WS1 殻 / WS2 永続化 node:fs / WS3 Web退役 / WS4 E2E `_electron`。E2E ハーネスは `_electron` 実証、stale テストは `task_2d91b388`。次フェーズ=パッケージング(electron-builder + アイコン)。先在債務 `task_c8fc5155`(editor typecheck/test 赤)は独立処理 |
-
-| AI Cohost topic | ユーザー×自律AI(別モデル)の共演配信構想を [ai-cohost/](ai-cohost/) として作成(2026-07-10)。当初MVP全達成(LLM rigging含む、ユーザー宣言 2026-07-10)後の次期構想。同日中に以下をAccepted: 目標像・成功基準(「AIの間も演出」) / **MVP境界改定 案A**(魂=別リポジトリ、器は操縦チャネル+生理層生成器のみ解禁、リポジトリ内LLM・知覚は禁止継続) / 振る舞いモデル(三層+一知覚、梯子、演出エンベロープのパッケージ帰属) / Runtime Player=モデルホスト+案(c)役割つき起動。残る未決はD4/D6/D7・AIの身体の制作者。入口は [ai-cohost/_map.md](ai-cohost/_map.md) |
+| Model Authoring topic | 「Fableに2Dモデルを作らせる」挑戦を [model-authoring/](model-authoring/) として記録。装備・閉問題01–19・craft second cycle は完了。PNG bytes の再認証、strict-ref/sidecar portability、次の閉問題 scope、W107→W22/23 母音 gate は未決 |
+| Mesh Generation topic | メッシュ自動生成は [mesh-generation/](mesh-generation/) を参照。v6D default + v7 comparison toggle、往復2「一長一短」の品質 hold と v6削除/Wave2 user gate を保持。W108/109 は transparent-margin / `contentInset` / `uvRect` render/data contract の実装 evidence |
+| Render Performance topic | Editor Perf Wave2 は accepted close。Player W13–19 の diagnostics/fast-path/cadence は完了し、[reports/editor-render-performance/](reports/editor-render-performance/) は historical baseline。C7 二体同時起動は optional・未計測で、product deep profiler は再導入しない |
+| Editor Electron Migration topic | apps/editor の WS1–WS4 + electron-builder packaging は完了。残債は PSD E2E の workspace/native-picker precondition、独立 typecheck/unit、portable dead branch、packaging metadata warning。詳細は [editor-electron-migration/_map.md](editor-electron-migration/_map.md) |
+| AI Cohost topic | [ai-cohost/](ai-cohost/) は C1–C7（器）を完全閉鎖し、S1–S8 の実装・reading/interjection・4頭 registry・stream-memory を索引。S8 kill、brain-swap、stream-memory は human gate、persona/S9 voice は product decision。知性経路は Max 20x + Agent SDK、LLM/知覚は `apps/soul` 特区内のみ許可（特区外は禁止）。入口は [ai-cohost/_map.md](ai-cohost/_map.md) |
 
 ## 次の行動
 
-1. 次の実装判断では [implementation/_map.md](implementation/_map.md)、[implementation/remaining-work-backlog.md](implementation/remaining-work-backlog.md)、[design/screen-design/_map.md](design/screen-design/_map.md)、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) をbasisにし、Editor実装はWave102で一旦完成として扱う（implementation/_map.md の Wave94-102 反映は未了である点に注意）。
-2. external HTTP / WebSocket / MCP API work と LLM provider integration の Future scope 指定は、[ai-cohost/concept/mvp-boundary-amendment.md](ai-cohost/concept/mvp-boundary-amendment.md)(案A=2026-07-10、**改定二号=特区憲章 2026-07-11**)により改定された: runtime-player の loopback 操縦チャネルと生理層生成器は解禁。**LLM provider integration・知覚(画面キャプチャ/視覚モデル)は特区 `apps/<魂>` 配下でのみ許可**(憲章6条、同文書§6)、特区外では引き続き禁止。それ以外の external API は引き続き Future scope。
-3. 各implementation domainには [development_convention/source-file-organization-policy.md](development_convention/source-file-organization-policy.md) を渡し、巨大 `index.ts` / catch-all source file をReview-Sylphのblocking対象にする。
-4. Demo-safe preflightの自動検査項目とrights-clean fixtureを実装時に具体化する。
-5. Future Public Clean Subsetが必要になった場合は別途scope設計とrights/dependency reviewを行う。
-6. Fableによるモデル制作の検討では [model-authoring/_map.md](model-authoring/_map.md) を入口にする。
-7. メッシュ自動生成の商用風改修では [mesh-generation/_map.md](mesh-generation/_map.md) を入口にする(現在保留中)。
-8. 描画パフォーマンス改善では [render-performance/_map.md](render-performance/_map.md) を入口にする。
-9. Runtime Player検討では [runtime-player/_map.md](runtime-player/_map.md)、[runtime-player/architecture/technology-stack-decision.md](runtime-player/architecture/technology-stack-decision.md)、[runtime-player/architecture/runtime-player-development-policy.md](runtime-player/architecture/runtime-player-development-policy.md)、[runtime-player/research/ifacialmocap-input-adapter-research.md](runtime-player/research/ifacialmocap-input-adapter-research.md)、[runtime-player/screens/initial-runtime-player-screen.md](runtime-player/screens/initial-runtime-player-screen.md)、[runtime-player/implementation/orchestration/player-wave1-plan.md](runtime-player/implementation/orchestration/player-wave1-plan.md) を入口にする。
-10. editor の Electron 移行では [editor-electron-migration/_map.md](editor-electron-migration/_map.md) を入口にする。第一手は WS1(shell)実装→実機観測。
-11. AI共演配信構想では [ai-cohost/_map.md](ai-cohost/_map.md) を入口にする。**器はC1〜C7全閉鎖で完成(2026-07-12)**。次の一手はS系列(魂)の前提討議(①知性のアクセス経路 ②会話パイプライン最終化+選定再確認 ③persona/=並行トラック)→S系列の閉問題分解。
+1. 次の実装判断では [implementation/_map.md](implementation/_map.md)、[implementation/orchestration/_map.md](implementation/orchestration/_map.md)、各 specialized W103–109 map、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) を basis とし、Editor mainline は Wave102 停止として扱う。`current-capability-map.md` / `remaining-work-backlog.md` は dated snapshot。
+2. external HTTP / WebSocket / MCP API work と LLM provider integration の Future scope 指定は、[ai-cohost/concept/mvp-boundary-amendment.md](ai-cohost/concept/mvp-boundary-amendment.md)(**改定二号=特区憲章 2026-07-11**)に従う。runtime-player の loopback 操縦チャネルと生理層生成器は解禁、LLM provider integration・知覚は `apps/soul` 特区内のみ許可、特区外は禁止。それ以外の external API は Future scope。
+3. Dynamics v3/profile-v2 の Domain-09 AC/scenario traceability・cardinality 表現は user decision として [acceptance-criteria/](acceptance-criteria/) / [scenarios/](scenarios/) / [design/dynamics-world-frame-chain.md](design/dynamics-world-frame-chain.md) を照合する。
+4. Runtime Player は [runtime-player/_map.md](runtime-player/_map.md) と [runtime-player/implementation/_map.md](runtime-player/implementation/_map.md) を入口にし、W21 Domain C、W11/W20/W22/W23 の iFacialMocap/OBS/ライフサイクル/母音 gate を実機で確認する。
+5. Fable によるモデル制作は [model-authoring/_map.md](model-authoring/_map.md) を入口にし、PNG再認証、strict-ref/sidecar portability、次の閉問題 scope を user が選ぶ。
+6. Mesh/render は [mesh-generation/_map.md](mesh-generation/_map.md) と [render-performance/_map.md](render-performance/_map.md) を入口にする。v6D/v7 quality hold、v6削除/Wave2、W108/109 atlasRuntime/GPU/pixel/Canvas sunset gate は自動 pass にしない。C7 二体負荷は optional experiment。
+7. Electron は [editor-electron-migration/_map.md](editor-electron-migration/_map.md) を入口にし、PSD E2E precondition、独立 typecheck/unit、portable dead branch、metadata warning の残債を扱う。
+8. AI共演配信は [ai-cohost/_map.md](ai-cohost/_map.md) を入口にし、S8 kill、brain-swap、stream-memory の human gate と persona/S9 voice の product decision を先に扱う。`apps/soul` 例外境界を維持する。
+9. Demo/Expo/Proposal は [demo/_map.md](demo/_map.md)、[expo/_map.md](expo/_map.md)、[proposal/_map.md](proposal/_map.md) を入口にし、rights-clean fixture・disclaimer/preflight、Expo acceptance/proof print、最初の proposal target を確認する。
+10. Future Public Clean Subset は必要時に scope と rights/dependency review を別途設計する。Cubism archive の再開は permission / legal / scope review 後に限る。
 
 ## 未決事項
 
 | 項目 | 状態 |
 |------|------|
-| Streaming Demo Surface の専用ポリシー文書 | 作成済み。運用時にpreflight項目を更新 |
-| Live2D Feature Proposal のテンプレート | 作成済み。個別提案draftは未作成 |
-| Domain AC / scenario のmemo対応 | 完了 |
-| Future Public Clean Subset の具体範囲 | 現在MVP外。必要時に別途再設計 |
-| implementation/_map.md の Wave94-102 バックフィル | 未了。既知のドキュメント更新もれ。orchestration/ に plan は実在する |
+| Streaming Demo Surface の安全 gate | rights-clean fixture、最終 disclaimer/UI wording、automated preflight は未完了（[demo/_map.md](demo/_map.md)） |
+| Live2D Feature Proposal の target | template は作成済み。最初の draft / submission target は未決（[proposal/_map.md](proposal/_map.md)） |
+| Dynamics v3 traceability | Domain-09 AC/scenario に profile-v2 / dynamics-file-v3 の cardinality をどう追跡表示するか user decision |
+| Runtime Player 実機・製品 gate | W11 calibration/parity、W13–19 OBS/CEF/real-model confidence、W20 lifecycle、W21 Domain C、W22/23 real speech/vowel は未確認（[runtime-player/_map.md](runtime-player/_map.md)） |
+| Model-authoring gate | post-`45d2734` PNG byte 再認証、strict-ref/sidecar portability、次の閉問題 scope、W107→W22/23 母音確認は未決（[model-authoring/_map.md](model-authoring/_map.md)） |
+| Mesh / render gate | v6 retention・v6/v7 toggle lifetime・Wave2、W108 atlasRuntime formal acceptance、GPU/pixel parity、Canvas2D sunset、original inset recheck は未決 |
+| Optional C7 performance experiment | 二体同時起動の hardware/browser CPU/GPU/FPS capture は optional・未計測。product deep-profiler transport は再導入しない |
+| Electron residuals | PSD E2E precondition、独立 typecheck/unit、portable dead branch、packaging metadata warning の処理時期は未決（[editor-electron-migration/_map.md](editor-electron-migration/_map.md)） |
+| AI cohost human/product gate | S8 kill/restore/no-regression、brain-swap rollout/choice、stream-memory privacy/OFF/auto-load、persona/S9 voice は未完了（[ai-cohost/_map.md](ai-cohost/_map.md)） |
+| Expo acceptance / proof print | 6 HTML + 6 A2 PDF は repo 完成。外部 acceptance、採択後実寸 proof print、公開前 rights/legal は未確認（[expo/_map.md](expo/_map.md)） |
+| Cubism archive restart | private historical archive。再開は permission / legal / scope review 後に限る（[reports/_map.md](reports/_map.md)） |
+| Implementation index/history status | W0–50/W56–109 の child/review indexes と W22/23/W107 registrations は backfilled/current。W51–55 は意図的に purged / Git-history-only。残る6件の baseline orphan candidates は必要時のみ構造・歴史 hygiene として扱い、W109 の partial evidence と human gates は既存記録どおり保持 |
+| Future Public Clean Subset の具体範囲 | 現在MVP外。必要時に別途 scope / rights / dependency review |

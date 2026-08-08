@@ -2,6 +2,8 @@
 
 > Lightweight index for Wave101 implementation reports.
 
+> Historical index: the orchestration plan header remains a `Planned / ready for orchestration` snapshot, but the linked final report and review artifacts record the actual Wave101 closeout as `pass`.
+
 ## Domain Reports
 
 | Domain | Status | Report |

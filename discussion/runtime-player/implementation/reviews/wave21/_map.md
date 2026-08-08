@@ -20,9 +20,18 @@
 | [domain-b-design-development-rereview-fix1.md](domain-b-design-development-rereview-fix1.md) | Pass | Fix cycle 1 design/development rereview after removing visible raw group id and preserving compact Control UI design |
 | [domain-b-test-adequacy-rereview-fix1.md](domain-b-test-adequacy-rereview-fix1.md) | Pass | Fix cycle 1 test adequacy rereview after adding bridge wiring tests and reset-disabled coverage |
 
+## Final Review Lanes
+
+| Path | Verdict | Content |
+|---|---|---|
+| [wave21-final-design-development-regression-review.md](wave21-final-design-development-regression-review.md) | Pass | Final design/development regression review; source and forbidden-scope checks pass |
+| [wave21-final-spec-completion-review.md](wave21-final-spec-completion-review.md) | Pass | Final spec/completion review for Domain A/B scope; product gates remain deferred |
+| [wave21-final-test-docs-manual-check-review.md](wave21-final-test-docs-manual-check-review.md) | Pass | Final test/docs/manual-check review; manual Electron/OBS parity and artifact checks remain pending |
+
 ## Current State
 
 - Domain A review lanes all pass.
 - Test adequacy required two fix cycles and is now resolved.
 - Domain B review lanes all pass after one fix cycle.
-- Manual Native Stage / OBS Browser Source parity remains for final integration.
+- The three final review lanes above pass, but no `wave21-final-integration-report.md` exists; Wave21 remains **Domain A/B pass; Domain C pending**.
+- Manual Native Stage / OBS Browser Source parity, persistence, reset, different-export isolation, and artifact immutability remain Domain C human gates.

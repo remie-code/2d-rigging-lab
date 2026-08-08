@@ -1,6 +1,6 @@
 # editor-render-performance レポート マップ
 
-> Status: Recorded(2026-07-07) / 調査担当 Sylph（委任元 Undine）
+> Status: Recorded(2026-07-07) / 調査担当 Sylph（委任元 Undine）。**Pre-Perf Wave 2 の historical baseline**。現行の処方・受入・Runtime Player 状態は [../../render-performance/_map.md](../../render-performance/_map.md) を正とする。
 
 Editor / Editor内Viewer のパラメータ操作時レンダリング性能に関する現状把握調査の格納先。
 
@@ -29,3 +29,10 @@ Editor / Editor内Viewer のパラメータ操作時レンダリング性能に�
 
 - 診断（現状把握）は完了。処方は未確定（意図的）。
 - 未解決の質問4件を本体末尾に記載（症状主対象 / モデル規模実値 / 決定性制約優先度 / 実測の要否）。
+- この map の一行結論と file:line は 2026-07-07 時点の調査スナップショット。Perf Wave 2 後の current source（display 数値 snap 等）や Runtime Player Waves13–19 の実装状態を表すものではない。
+
+## 現行への導線
+
+- Editor Perf Wave 2 は実装・レビュー・ユーザー受け入れ済み（Editor の動作として十分）。
+- Runtime Player は Waves13–19 で fast-path / diagnostics / cadence を実装済み。C7 二体負荷は optional / unmeasured gate、product deep profiler は再公開しない。
+- 現行の測定値・受入境界・再開条件は [../../render-performance/_map.md](../../render-performance/_map.md) とその `measurements/`、implementation wave reports を参照する。

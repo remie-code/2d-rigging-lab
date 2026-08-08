@@ -16,7 +16,7 @@
 
 | Path | Role | Status |
 |------|------|--------|
-| [_map.md](_map.md) | この階層の入口地図 | Private baselineへ更新済み |
+| [_map.md](_map.md) | この階層の入口地図 | Historical evidence index（private research archive / current exclusion） |
 | [cmo3-format-report.md](cmo3-format-report.md) | `.cmo3` の仕様公開状況と、実装対象外にする根拠の過去調査 | Private research archive |
 | [moc3-format-report.md](moc3-format-report.md) | `.moc3` の仕様公開状況と、実装対象外にする根拠の過去調査 | Private research archive |
 | [format-feasibility-summary.md](format-feasibility-summary.md) | 旧SDK/Core local-use方針をsupersedeし、現在の不採用方針を記録 | Superseded policy note / current exclusion |
@@ -32,7 +32,16 @@
 | Cubism SDK/Core | 使わない |
 | 既存Cubismモデル | 入力、fixture、sample、comparison oracleにしない |
 
-## 未決事項
+## 現行正本への導線
+
+- 形式・SDK/Coreを採用しない境界: [module-boundaries.md](../../design/module-contracts/module-boundaries.md)
+- 権利・商標・互換誤認の境界: [rights-risk-cleanup map](../rights-risk-cleanup/_map.md)
+
+この階層の本文は、上記の現行正本を置き換えない歴史的証拠である。
+
+## 歴史的未決（現行作業ではない）
+
+以下は過去調査時点の保留事項であり、現在の実装・設計タスクとして再開しない。再開を提案する場合は、上記の権利・スコープ境界を確認した別トラックで扱う。
 
 | 項目 | 状態 |
 |------|------|

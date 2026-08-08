@@ -2,6 +2,8 @@
 
 > Lightweight map for Wave90 review artifacts.
 
+> Historical review index: the Current State and Next Actions sections describe Wave90 closeout scope; they are not a current workspace backlog.
+
 ## Files
 
 | Path | Role | Status |

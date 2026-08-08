@@ -2,6 +2,8 @@
 
 > Lightweight index for Wave101 review reports.
 
+> Historical review index: the orchestration plan's `Planned / ready for orchestration` header is superseded for execution status by the linked implementation/final-review evidence, all recorded as `pass`.
+
 ## Domain A Reviews
 
 | Review Lane | Verdict | Report |

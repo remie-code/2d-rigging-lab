@@ -14,10 +14,18 @@ Cubism SDK/Core は参考資料であり、Open 2D Character Rigging Stack の�
 
 | Path | Role | Status |
 |------|------|--------|
-| [_map.md](_map.md) | この調査トピックの入口地図 | 作成済み |
+| [_map.md](_map.md) | この調査トピックの入口地図 | Historical evidence index（現行runtime oracleではない） |
 | [cubism-core-framework-evaluation-flow.md](cubism-core-framework-evaluation-flow.md) | Cubism Core / Framework の model load、parameter操作、update、drawable state取得、drawまでの評価flow整理 | 作成済み |
 | [cubism-runtime-input-layers-motion-expression-physics-pose.md](cubism-runtime-input-layers-motion-expression-physics-pose.md) | motion / expression / physics / pose など parameterやpart状態へ影響するruntime入力層の整理 | 作成済み |
 | [open-stack-runtime-evaluation-semantics-implications.md](open-stack-runtime-evaluation-semantics-implications.md) | Open Stack MVP の runtime評価順序、snapshot、diagnostics、MVP外項目への設計推奨 | 作成済み |
+
+## 現行正本への導線
+
+- Shared Runtime の評価順序・snapshot・unsupported layers: [runtime-core-contract.md](../../design/module-contracts/runtime-core-contract.md)
+- Editor Preview / Viewer / Runtime の境界: [MVP vertical-slice architecture](../../design/mvp-authoring-runtime/00-mvp-vertical-slice-architecture.md)
+- Cubism 非互換・権利スコープ: [rights-risk-cleanup map](../rights-risk-cleanup/_map.md)
+
+この階層の Cubism 観測と Open Stack 推奨は、上記の accepted project-defined contract を置き換えない。
 
 ## 調査観点
 
@@ -29,17 +37,19 @@ Cubism SDK/Core は参考資料であり、Open 2D Character Rigging Stack の�
 | Open Stack変換 | Cubism依存を避けつつ、Open Model Package / Shared Runtime evaluation core にどう反映するか |
 | MVP採用 | GUI Editor必須MVPで必要な範囲と、motion / expression / physics / pose などのMVP外境界 |
 
-## 次の行動
+## 歴史的フォローアップ（現行作業ではない）
 
-1. Runtime評価セマンティクスの説明・議論フェーズで、MVPに採用する評価pipelineと snapshot 粒度をユーザーと確定する。
-2. 確定した判断を `discussion/design/` の設計判断文書へ反映する。
-3. `/goal` で設計作業を走らせる前に、設計完了条件と検証観点へ落とし込む。
+1. 過去調査での評価 pipeline / snapshot 論点は、上記の runtime contract へ反映済み。ここから新たな設計タスクを起こさない。
+2. 仕様変更を検討する場合は、現行 contract の変更提案として別途 review する。
+3. 当時の未検証項目を再開する場合は、Cubism 除外・権利・スコープ境界を先に確認する。
 
-## 未決事項
+## 歴史的未決（現行作業ではない）
+
+以下は過去調査の候補・判断待ちを保存した register である。現行仕様の未完了タスクとして解釈しない。
 
 | 項目 | 状態 |
 |------|------|
-| Open Stack MVPのruntime評価順序 | 調査済み。推奨pipelineあり。ユーザー判断待ち |
-| parameter範囲外値、missing parameter、invalid drawable の扱い | 調査済み。profile別 severity / clamp / fail 方針の設計判断待ち |
-| runtime snapshotに含める粒度 | 調査済み。summary / targeted / full の切替案あり。既定値は設計判断待ち |
-| motion / expression / physics / pose をMVP外に置く際のruntime診断 | 調査済み。unsupported sidecar diagnostics 案あり。schema slot 採否は設計判断待ち |
+| Open Stack MVPのruntime評価順序 | 過去調査時点の推奨 pipeline（現行作業ではない）。現行は [runtime-core-contract.md](../../design/module-contracts/runtime-core-contract.md) を正とする |
+| parameter範囲外値、missing parameter、invalid drawable の扱い | 過去調査時点の設計候補（現行作業ではない）。現行判断は runtime contract / validator contract を参照 |
+| runtime snapshotに含める粒度 | 過去調査時点の切替案（現行作業ではない）。現行 snapshot は runtime-core contract を正とする |
+| motion / expression / physics / pose をMVP外に置く際のruntime診断 | 過去調査時点の unsupported sidecar diagnostics 案（現行作業ではない）。現行スコープは accepted contract を参照 |

@@ -27,4 +27,4 @@
 
 - Browser-event and pixel/layout smoke were not run.
 - `git diff --check` has the normal limitation that untracked file content is not inspected.
-- Runtime-core full parity, grid2d parity, dynamics, export, mesh/deformer/keyform authoring, parameter grouping/favorites, and save/load schema changes remain out of scope.
+- Wave80-era out-of-scope snapshot: runtime-core full parity, grid2d parity, dynamics, export, mesh/deformer/keyform authoring, parameter grouping/favorites, and save/load schema changes were outside this wave. Later Wave84 added Viewer Dynamics playback and Wave92 added Runtime Export; do not read this line as current product scope.

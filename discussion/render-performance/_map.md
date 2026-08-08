@@ -14,7 +14,7 @@
 | [design-inputs.md](design-inputs.md) | 設計材料調査(createCanvasEvaluatedRigControls 内部構造・消費者分析・5案スケッチ) | Recorded(2026-07-07)。**消費者は最大1個、描画は非参照**が要 |
 | [double-evaluation-diagnosis.md](double-evaluation-diagnosis.md) | 二重評価の根本原因診断(StrictMode 開発モード二重実行・完全冗長)+ユーザー確認追記 | Recorded(2026-07-07) |
 | [improvement-design.md](improvement-design.md) | 改善設計 第1弾(案A: 選択駆動遅延化 / 案D: 表示経路最適化 / 目標30fps / 案Cは保留) | **Implemented(Perf Wave 2, 2026-07-08)** |
-| [player-survey.md](player-survey.md) | (B) Runtime Player / runtime-core レンダリング性能 現状把握調査(live経路は最適化済み・残る非効率4件・改善候補#1〜#5) | Recorded(2026-07-08、Sylph調査)。**結論「改善不要(現状で十分)が有力」で一旦保留**: 決定性・snapshot互換に触る最適化は実測でボトルネック確定まで着手しない。再開点=#5(deep profiling live配線)→#1/#4 |
+| [player-survey.md](player-survey.md) | (B) Runtime Player / runtime-core レンダリング性能 現状把握調査(live経路・残る候補#1〜#5) | Recorded(2026-07-08)。後続 Waves13–19 が fast-path / diagnostics / cadence を実装。旧「#5 deep profiling live 配線から再開」は superseded。 |
 
 ## 子ディレクトリ
 
@@ -37,25 +37,26 @@
 
 Perf Wave 2 の成果をユーザーが実モデルで確認し「**Editor の動作としては十分**」と受け入れ。**案C(レンダー外化)と60fps続行は不要としてクローズ**(必要が再燃したら improvement-design §4 から再開)。
 
-## Runtime Player 側 = 一旦保留(2026-07-08)、再開条件が満たされた(2026-07-12)
+## Runtime Player 側の現行状態（Waves13–19実装済み / 製品deep profilerなし）
 
-- [player-survey.md](player-survey.md)(2026-07-08)の結論: live 経路は既に手厚く最適化済みで「改善不要(現状で十分)が有力」。残る非効率4件(toFixed・無駄なZod parse・頂点4重クローン・三角形インデックス毎フレーム再構築)は決定性・snapshot互換に直結するため、**実測でボトルネック確定まで着手しない=一旦保留**。同調査の未解決質問に「stage と Browser Source 同時起動時の負荷は未計測」を残置。
-- **2026-07-12 初の実データ**: ai-cohost C7 ゲート(OBS 二体並走=runtime-player 2インスタンス+Browser Source 2本)で、ユーザー観測「このPCのスペックで2個動かすのはちょっときつそう」。ハードウェア側要因の可能性が高いが未計測。性能改善は C7 スコープ外と裁定(記録: [../ai-cohost/implementation/orchestration/c7-closure-record.md](../ai-cohost/implementation/orchestration/c7-closure-record.md) §3)。
-- **再開するときの初手**(player-survey の推奨のまま): #5 `runtimeCoreProfiling: "deep"` の live 配線(計測のみ・副作用ほぼ無し)→ 実測で犯人を確定 → 低リスクの #1(無駄な getState() parse 除去)/#4(三角形インデックスキャッシュ)。再開の要否・時期はユーザー裁定待ち。
+- Runtime Player Waves13–19 で frame pacing、evaluation cache、compiled evaluator、render-frame fast path、軽量 diagnostics、Browser Source cadence diagnostics を実装・検証済み。Wave18 は product Control/Stage/Browser Source への deep-profiling transport を撤去し、`runtimeCoreProfiling: "deep"` は developer/test 専用。
+- 後続 parent map の手動 OBS-vs-Chrome/Edge 比較は、Chrome/Edge の near-60fps applied/render cadence と OBS/CEF 側の低い cadence を記録している。これは手動観測であり、Runtime Player が 60fps を保証する benchmark ではない。
+- C7 の Browser Source 二体並走は「この PC では少し厳しい」というユーザー印象のみで、CPU/GPU/FPS capture は未計測。性能改善は C7 scope 外で、再開は別ユーザー裁定と hardware/browser target が必要（記録: [../ai-cohost/implementation/orchestration/c7-closure-record.md](../ai-cohost/implementation/orchestration/c7-closure-record.md) §3）。
 
 ## 次の行動
 
-1. 再開が裁定されたら上記の初手(#5 計測配線)から。それまで本トピックは保留のまま。
+1. 現行 product work は保留。必要なら C7 二体負荷の developer/test-only hardware capture を新規実験として承認し、候補 #1/#3/#4 は実測でボトルネック確定後にのみ検討する。
+2. Product bridge へ deep profiling を再公開しない。Wave106 は dynamics/schema semantics の置換であり、render-performance 改善の証拠ではない。
 
 ## 確定済み(設計・実装)
 
-- 目標: 30fps(33ms)で一旦締め(2026-07-07 ユーザー合意)
+- Historical target: 30fps(33ms)で一旦締め(2026-07-07 ユーザー合意)。Editor は実モデル確認で十分として close し、数値 gate は現行要求ではない。
 - 案A 契約変更承認 / Wave 2 は A+D 一括 / 案C(レンダー外化)は再計測後に判断
-- **Perf Wave 2 実装完了(2026-07-08)**: 案A(選択駆動遅延化)+ 案D+E(表示経路最適化)実装・レビュー合格・合成ベンチ検証済み。実装事実は improvement-design Status=Implemented に反映。60fps 続行可否と案C は実モデル計測003待ち(未決)
+- **Perf Wave 2 実装完了(2026-07-08)**: 案A(選択駆動遅延化)+ 案D+E(表示経路最適化)実装・レビュー合格・合成ベンチ検証済み。ユーザー実モデル確認は「Editor の動作として十分」で close。`real-model-003.md` は存在せず、30fps の数値再計測は回帰または明示要求がある場合のみ再開する。
 
 ## 未決事項
 
 | 項目 | 状態 |
 |---|---|
-| 目標値(許容1フレーム時間・対象モデル規模) | 計測往復で実数を見てから合意 |
-| Runtime Player 側の改善スコープ | **一旦保留(2026-07-08、player-survey)**。二体同時起動の体感負荷(2026-07-12)で再開条件は満たされた——再開の要否・時期はユーザー裁定待ち |
+| 目標値(許容1フレーム時間・対象モデル規模) | `real-model-003.md` が無く数値は未計測。Editor close を再開する回帰または明示要求がある場合のみ再合意 |
+| Runtime Player 側の改善スコープ | Waves13–19 の fast-path / diagnostics / cadence は実装済み。C7 二体同時起動の体感負荷は未計測の optional reopen。対象 hardware/browser、測定項目、deep profiling の developer/test-only 境界をユーザーが裁定する |

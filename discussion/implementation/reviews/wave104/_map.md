@@ -20,4 +20,4 @@
 ## Final Gate
 
 - Final clean integration review is recorded as `pass`; no Wave104 review artifacts remain pending.
-- The user visual gate (ref-render-gate PNG approval) is a model-authoring-side gate outside this wave's technical gate.
+- At Wave104 closeout, the user visual gate (ref-render-gate PNG approval) was a model-authoring-side gate outside this wave's technical gate. Later model-authoring evidence records a 2026-07-03 approval, but post-`45d2734` PNG bytes require separate re-confirmation.

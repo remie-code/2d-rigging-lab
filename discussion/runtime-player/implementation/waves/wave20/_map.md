@@ -19,6 +19,7 @@
 - Domain B fixed implementation-scope map/report/review artifacts directly under `discussion/runtime-player/implementation/**`.
 - Domain B post-docs closeout re-review lanes passed.
 - Stale Wave8 close-hide wording remains in non-implementation docs outside the current Domain B write scope and is recorded in the final report as follow-up.
+- Current implementation semantics are normal Control close → quit/process exit, while a direct Stage close leaves Control recoverable through `Focus Stage`; the packaged/dev Electron smoke below is still unverified.
 - No Runtime Export, Editor, package-format schema, dependency, lockfile, or packaging config changes were introduced by Wave20.
 
 ## Manual Follow-Up

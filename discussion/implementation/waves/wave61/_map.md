@@ -15,7 +15,7 @@
 |---|---|
 | [../../orchestration/wave61-plan.md](../../orchestration/wave61-plan.md) | Wave61 plan and pass criteria. |
 | [wave61-domain-d-final-integration-closeout-report.md](wave61-domain-d-final-integration-closeout-report.md) | Domain D docs-only closeout; verdict `pass`. |
-| [../../reviews/wave61/_map.md](../../reviews/wave61/_map.md) | Wave61 review lane map and current verdicts. |
+| [../../reviews/wave61/_map.md](../../reviews/wave61/_map.md) | Wave61 review lane map and recorded verdicts. |
 | [../../reviews/wave61/wave61-final-clean-integration-review.md](../../reviews/wave61/wave61-final-clean-integration-review.md) | Final clean integration review; verdict `pass`. |
 
 ## Domain Reports
@@ -44,4 +44,4 @@
 ## Next Actions
 
 1. Orch-Sylph should accept this Domain D closeout refresh and report Wave61 final `pass` to Undine.
-2. Use Wave61 as the current implementation-proven Editor GUI baseline for the next planning gate.
+2. Historical note: Wave61 was the implementation-proven Editor GUI baseline at its 2026-06-10 closeout. The accepted Editor mainline stopping baseline is Wave102; consult the root/implementation maps for current planning scope.

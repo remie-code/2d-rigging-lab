@@ -7,7 +7,7 @@
 | Path | Status | Content |
 |---|---|---|
 | [ifacialmocap-input-adapter-research.md](ifacialmocap-input-adapter-research.md) | Draft / initial research captured | iFacialMocapのUDP/TCP/VMC関連仕様、desktop host必要性、adapter設計含意 |
-| [broadcast-capture-paths.md](broadcast-capture-paths.md) | Direction updated through Wave10 source/tests; manual OBS product-confidence checks pending | OBS Browser Sourceをfixed primary broadcast pathとし、native Stage Windowはlocal preview/fallback、Spout2はBrowser Sourceのcritical failureまでdeferredとする方針。Wave10はduplicate native local preview live renderingをsuspendし、diagnostics samplingとresync de-duplicationを追加 |
+| [broadcast-capture-paths.md](broadcast-capture-paths.md) | Direction updated through Wave19; bounded cadence evidence recorded, product-confidence checks pending | OBS Browser Sourceをfixed primary broadcast pathとし、native Stage Windowはlocal preview/fallback、Spout2はBrowser Sourceのcritical failureまでdeferredとする方針。Wave10 suspension/resync境界とWave19 OBS/Chrome/Edge cadence observationを反映 |
 
 ## Current Research Basis
 
@@ -19,11 +19,15 @@
 - Browser Source client接続中はnative local preview live renderingだけをsuspendする。Browser Source rendering、input processing、mapping、body follow、dynamics、Runtime Export state、Stage transform syncはactiveのまま維持する。
 - Controlはlocal preview suspensionを表示し、live-frame statusとrepeated renderer diagnosticsをsampleしつつ、server/client/export/renderの重要transitionを即時に反映する。
 - Browser Source Runtime Export resyncは同一payload適用をde-duplicateし、replacement payload、reload、reconnectを維持する。
+- Waves11–18 add Stage Motion, Variant switching, frame pacing, evaluation cache, compiled/render-frame fast paths, and lightweight product diagnostics. Wave18 removes product deep-profile transport; internal deep profiling is developer/test-only.
+- Wave19 tracked captures compare OBS/CEF with Chrome/Edge and Native Stage. They are objective cadence evidence only; platform/URL provenance, alpha/WebGL2/model parity, subjective smoothness, and real iFacialMocap motion remain unverified product gates.
+- Wave21 Runtime Dynamics Tune is Domain A/B pass with Domain C parity/persistence/reset/isolation/artifact checks pending. Waves22/23 source/test/review pass but real vowel-rig speech behavior remains pending.
 - Spout2、obs-websocket、automatic OBS source creation、automatic OBS capture verificationは未実装でout of scope。
 
 ## Next Research
 
-1. post-Wave10 manual OBS Browser Source checklistでRuntime Player URL、alpha、WebGL2、live motion、body follow/dynamics、Stage transform sync、local preview suspension/resume、reload/resync、perceived performance、audio meterを実機確認する。
-2. Browser Source manual probeがcritical failureした場合だけ、Spout2 sender feasibilityを別wave候補として調査する。
-3. 現行iOS版iFacialMocapでの実設定画面とhandshake挙動を実機で確認する。
-4. UDP/TCPの安定性、遅延、長時間運用時の挙動を実験する。
+1. Real Runtime Export + OBS Browser SourceでURL、alpha、WebGL2、model/live motion、body follow/dynamics, Stage Motion/Variant parity、local preview suspension/resume、reload/resync、audio meterを実機確認する。Wave19 logs remain objective evidence, not acceptance.
+2. Real iFacialMocap + vowel-rigでWave22/23 gate（closed-vowel coupling, transition smoothness, “e” parasitism, “u” jitter, unsmoothed-step acceptability）を確認する。
+3. Packaged/dev Electron lifecycle smoke（Control close quit, direct Stage close recovery, Focus Stage reopen）とWave21 Dynamics Tune persistence/reset/isolation/artifact immutabilityを確認する。
+4. Browser Source manual probeがcritical failureした場合だけ、Spout2 sender feasibilityを別wave候補として調査する。
+5. 現行iOS版iFacialMocapでの実設定画面とhandshake挙動、UDP/TCPの安定性・遅延・長時間運用時の挙動を実機で確認する。

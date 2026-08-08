@@ -2,12 +2,23 @@
 
 > `ai-cohost/implementation/` の地図。実装フェーズの計画・実行成果物を保持する(runtime-player方式)。
 
+## 現在の到達と残るゲート
+
+> 番号付き履歴は各wave時点の記録。下記を現在statusとして読む。実装・機械ゲート・レビュー合格は、人間/製品ゲートの完了を意味しない。
+
+- **C1〜C7**: 全閉鎖。器の完成(C7はwaveなしのOBS二体並走検証)。
+- **S1〜S7**: 実装済み。S7は `/live/<id>` 実配信30分ノーブレイクでコメント読み上げ/視聴者名認識を確認し、実ゲート実質合格。
+- **S8**: kill/NG/開示を実装(764/764緑・9レーンPASS)。発話中kill→全発火拒否→復帰、通常発話無退行の人間ゲート未実施。
+- **多頭化**: 4頭(Claude Opus / GPT-5.6 Terra / GPT-5.5 / GPT-5.6 Sol)を実装。初回体感あり。速度/品質、Claude無退行、配信後rollout掃除の最終3点ゲート未記録。
+- **朗読と合いの手**: 887/887緑・6レーンPASS、1時間40分実配信で4点の人間ゲート合格。
+- **配信間記憶**: `memory.mjs`・自動搭載3件・checkpoint/手動/SIGINT・OFF止水栓を実装(957/957緑・6レーンPASS)。保存/次回搭載/OFF/手動記録の4点人間ゲート未記録。
+
 | Path | Content | Status |
 |---|---|---|
 | [closed-problem-decomposition.md](closed-problem-decomposition.md) | 「AI経由でモデルを動かす機能」の閉問題分解(C1〜C7)、分解原則、除外事項、UX精緻化対象、進め方(§6: 一問題ずつ議論→実装→ゲート→完全閉鎖の直列。実装中は人間の休憩) | 初期分解=Accepted、進め方=ユーザー決定(2026-07-10)。**C1〜C7全閉鎖(2026-07-12)=器の完成** |
 | [s-series-decomposition.md](s-series-decomposition.md) | 魂(apps/soul)の閉問題分解(S1〜S9): 歩くスケルトン→耳→呼べば応える→表情→**目が開く(視覚)**→会話継続→視聴者→配信リハ→相槌(persona後)。S5視覚の設計方針、除外事項、進め方はC系列規律を継承 | 初期分解=Accepted(2026-07-12)。切る基準=ユーザーのゲート認知負荷。**問題設定は視座の変化で変更され得る(留保付き)**。S1着手と同時に `experiments/` 開設 |
-| [screens/](screens/) | C1/C3/C4/S2.5のUX定義(runtime-playerのscreens/流儀) | C1=Accepted(振る舞い・見せ方とも 2026-07-10)。§7.7 に C1 実装反映を追記。C3=[screens/c3-physiology-profile.md](screens/c3-physiology-profile.md) 作成済み(Accepted、Physiologyページ UX。C3 実装の source of truth)。C4=[screens/c4-channel-diagnostics.md](screens/c4-channel-diagnostics.md)(Accepted、Channelページ・自律Overview・degraded解消。C4 実装の source of truth。§3 に degraded data源の構成不変条件を追記)。**S2.5=[screens/soul-cockpit.md](screens/soul-cockpit.md)(Draft 2026-07-12、魂のローカルWebコクピット。形の原則+v0画面+拡張予約)** |
-| [orchestration/](orchestration/) | wave計画とplanning gate棚卸し | **C1完全閉鎖(2026-07-10)**: 手動ゲート全項目合格+§14裁定済み。既知制限=dev引数なし起動(wave計画Status)。**C2完全閉鎖(2026-07-11)**: 手動美的ゲート合格。**C3完全閉鎖(2026-07-11)**: Domain A→E+追撃F 完了、手動ゲート合格。**C4 実装完了・3レーンレビュー全PASS・機械ゲート緑(2026-07-11)**: Domain A→B→C→D→E 完了、手動確認待ち([orchestration/c4-wave-plan.md](orchestration/c4-wave-plan.md) Status に結果・既知baseline反映) |
+| [screens/](screens/) | C1/C3/C4/S2.5と操縦席改定のUX定義(runtime-playerのscreens/流儀) | C1/C3/C4/S2.5はAccepted・実装反映。`screens/cockpit-redesign.md` はモック承認(2026-07-14)後の現在UI source。S8 kill、brain、memory の運転/設定面も実装済みで、残るのは各人間ゲート。 |
+| [orchestration/](orchestration/) | wave計画とplanning gate棚卸し | **C1〜C7全閉鎖**。S1〜S7実装済み(S7は30分実配信で実質合格)。S8安全弁、brain-swap、stream-memoryは機械実装/レビュー済みだが人間ゲート記録待ち。朗読と合いの手は1時間40分実配信で4点合格。詳細は [orchestration/_map.md](orchestration/_map.md)。 |
 | [waves/c1/](waves/c1/) | C1 各ドメインの実装レポート | Domain A(スロット基盤)/ B(役割合成・身元表示)/ C(最終統合・検証・docs)完了(2026-07-10) |
 | [reviews/c1/](reviews/c1/) | C1 各ドメインの 3 レーンレビュー | Domain A/B とも spec / design / test の 3 レーン PASS(blocking ゼロ。2026-07-10) |
 | [waves/c2/](waves/c2/) | C2 各ドメインの実装レポート | Domain A(頭無しリゾルバ抽出)/ B(生成器骨格・まばたき)/ C(フレーム心臓・役割合成)/ D(最終統合・検証・docs・手動ゲート手順)完了(2026-07-10) |

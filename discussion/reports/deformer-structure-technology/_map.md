@@ -14,10 +14,18 @@ Cubism公式資料は参考資料であり、Open 2D Character Rigging Stack の
 
 | Path | Role | Status |
 |------|------|--------|
-| [_map.md](_map.md) | この調査トピックの入口地図 | 作成済み |
+| [_map.md](_map.md) | この調査トピックの入口地図 | Historical evidence index（現行仕様・実装の正ではない） |
 | [cubism-observable-deformer-semantics.md](cubism-observable-deformer-semantics.md) | Cubism公式資料から観測できる warp / rotation deformer の概念、操作、検証機能の整理 | 作成済み |
 | [open-deformation-algorithm-candidates.md](open-deformation-algorithm-candidates.md) | Open Stackで実装可能な変形アルゴリズム候補の比較 | 作成済み |
 | [mvp-deformer-design-recommendation.md](mvp-deformer-design-recommendation.md) | MVPで採用すべきdeformer相当構造の推奨案と残リスク | 作成済み |
+
+## 現行正本への導線
+
+- MVP runtime-visible `rotation2d` / `warpLattice2d` 契約: [runtime-core-contract.md](../../design/module-contracts/runtime-core-contract.md)
+- 現行 module 境界と Cubism 非互換方針: [module-boundaries.md](../../design/module-contracts/module-boundaries.md)
+- 権利・スコープ確認: [rights-risk-cleanup map](../rights-risk-cleanup/_map.md)
+
+この階層の候補比較・Cubism観測は歴史的証拠であり、上記の project-defined contract を置き換えない。
 
 ## 調査観点
 
@@ -30,16 +38,18 @@ Cubism公式資料は参考資料であり、Open 2D Character Rigging Stack の
 | Validator適性 | 親子循環、空deformer、はみ出し、未接続parameter、存在しないtarget ID、NaN / bounds異常 |
 | MVP採用 | rotation相当とwarp相当の最小構成、補間方式、MVP外に置く高度機能 |
 
-## 次の行動
+## 歴史的フォローアップ（現行作業ではない）
 
-1. レポート間の食い違いを Undine が統合し、設計議論の論点として `discussion/design/` に反映する。
-2. MVP deformer の補間方式、bind space、評価順序を設計議論で決める。
+1. 過去レポート間の食い違いを統合した結果は、上記の runtime contract に反映済み。ここから新たな設計タスクを起こさない。
+2. 追加の補間方式・bind space・評価順序を検討する場合は、現行 contract の変更提案として別途 review する。
 
-## 未決事項
+## 歴史的未決（現行作業ではない）
+
+以下は候補調査時点の保留事項である。`rotation2d` / `warpLattice2d` の現行契約や MVP 外の Cubism 機能を、この表から再び未完了タスクへ戻さない。
 
 | 項目 | 状態 |
 |------|------|
-| MVP warp deformer の補間方式 | 調査済み。`bilinear-grid-v1` から始め、将来補間方式を追加可能にする方針で暫定合意 |
-| Cubismのベジェ分割数相当をMVPに含めるか | 要調査 |
-| rotation deformer を pivot付き2D affine transform と見なして十分か | 調査済み。MVPでは pivot付き2D transform / affine node で暫定合意 |
-| 3D回転補助や深度推定をMVP外に置いてよいか | 暫定MVP外、調査で確認 |
+| MVP warp deformer の補間方式 | 過去候補は `bilinear-grid-v1`。現行の project-defined `warpLattice2d` 契約は [runtime-core-contract.md](../../design/module-contracts/runtime-core-contract.md) を正とする |
+| Cubismのベジェ分割数相当をMVPに含めるか | 過去の検討項目（現行MVP外・現行作業ではない） |
+| rotation deformer を pivot付き2D affine transform と見なして十分か | 過去候補。現行の `rotation2d` 契約は [runtime-core-contract.md](../../design/module-contracts/runtime-core-contract.md) を正とする |
+| 3D回転補助や深度推定をMVP外に置いてよいか | 過去の暫定MVP外判断（現行作業ではない） |

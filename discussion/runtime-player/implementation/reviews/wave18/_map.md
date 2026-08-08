@@ -30,3 +30,9 @@
 - Wave18 final design/development verdict is `pass`; the reviewer ran focused Vitest, 15 files / 128 tests, and `pnpm.cmd typecheck`, both passing.
 - Wave18 final test/docs verdict is `pass` after one docs-fix re-review.
 - Domain C docs/report final integration is recorded in [../../waves/wave18/wave18-final-integration-report.md](../../waves/wave18/wave18-final-integration-report.md), and all final review lanes are complete with `pass`.
+
+## Evidence Boundary
+
+- Objective captures are tracked at [`tmp/report.log`](../../../../../tmp/report.log), [`tmp/native-stage.log`](../../../../../tmp/native-stage.log), and [`tmp/chrome-report.log`](../../../../../tmp/chrome-report.log) (Browser Source, Native Stage, and browser comparison cadence fields).
+- The captures are metrics-only and do not include platform/URL provenance or subjective visual confidence. Real Runtime Export + iFacialMocap + OBS/CEF alpha/WebGL2/model-parity checks remain human gates.
+- Wave18's product boundary remains lightweight diagnostics; deep runtime-core profiling is developer/test-only and is not exposed through product IPC, HTTP/WS, or Browser Source transport.

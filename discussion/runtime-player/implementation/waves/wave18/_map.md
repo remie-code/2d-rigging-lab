@@ -25,7 +25,7 @@
 - Domain C final integration docs/report alignment is recorded in [wave18-final-integration-report.md](wave18-final-integration-report.md) with final verdict `pass`.
 - Final Review-Sylph lanes are complete with `pass`: [../../reviews/wave18/wave18-final-spec-completion-review.md](../../reviews/wave18/wave18-final-spec-completion-review.md), [../../reviews/wave18/wave18-final-design-development-review.md](../../reviews/wave18/wave18-final-design-development-review.md), and [../../reviews/wave18/wave18-final-test-docs-review.md](../../reviews/wave18/wave18-final-test-docs-review.md).
 - Performance Diagnostics documentation now describes the Wave18 product surface as lightweight Live Health / FPS / connection / fast-path proof, not a product deep profiler.
-- Real OBS Browser Source smoothness remains a manual final integration check with the user's real Runtime Export and live input.
+- Tracked captures ([`tmp/report.log`](../../../../../tmp/report.log), [`tmp/native-stage.log`](../../../../../tmp/native-stage.log), [`tmp/chrome-report.log`](../../../../../tmp/chrome-report.log)) provide objective cadence/render evidence, but lack platform/URL provenance and do not prove subjective smoothness, alpha/WebGL2 parity, or real-model motion. Keep the remaining OBS/CEF visual-confidence and real iFacialMocap checks as human gates; no product deep-profiler transport is pending.
 
 ## Related Review Map
 

@@ -17,4 +17,5 @@
 
 - Domain A completed with final pass after two test-adequacy fix cycles.
 - Domain B completed with final pass after one fix cycle.
-- Final integration/manual Electron/OBS parity checks remain Domain C work.
+- Domain A/B final review lanes pass, but no `wave21-final-integration-report.md` exists; final Electron/OBS parity, persistence, reset, and artifact-isolation checks remain Domain C work.
+- The parent status is therefore **Domain A/B pass; Domain C pending**, not a completed Wave21 integration pass.

@@ -42,9 +42,16 @@
 5. 実装計画を作る場合は [technology-stack-decision.md](technology-stack-decision.md) と [runtime-player-development-policy.md](runtime-player-development-policy.md) をbasisにする。
 6. workspace packageをElectron main/preloadから使う場合は [workspace-package-bundling-decision.md](workspace-package-bundling-decision.md) を読む。
 
+## 4.1 Current Runtime Boundaries
+
+- Wave7/8/12でStage/Control window state、startup restore、Stage recovery、Variant controlsは実装済み。下記の旧open questionは履歴として扱い、現行ライフサイクルは [../implementation/waves/wave20/_map.md](../implementation/waves/wave20/_map.md) と [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md) を読む。
+- Runtime Export loader validation、Wave4のface/eyes/mouth mapping scopeも実装済み。追加拡張（advanced mapping、TCP、dedicated diagnostics）はfuture scopeである。
+- Browser Sourceはsanitized model-only transport、Native Stageはlocal preview/fallbackであり、raw tracking・calibration internals・private pathsをcross-windowへ渡さない。
+- Wave18以降、product Performance Diagnosticsはlightweight Live Health/FPS/connection/fast-path proofに限定する。runtime-core deep profilingはdeveloper/test-onlyで、Control/Stage IPC/Browser Source HTTP/WSへ再公開しない。
+
 ## 5. Open Questions
 
-- Stage Windowのposition / size / always-on-top / click-through をv0でどこまで扱うか。
+- (Historical / delivered) Stage Windowのposition / size / always-on-top / click-throughはWave7/8で扱い、現在はWindow Stateとstartup recoveryのmanual Electron gateだけが残る。
 - iFacialMocap handshake送信に必要なiPhone IP入力を必須にするか、passive listen中心にするか。
-- Runtime Exportのpackage contractをPlayer側でどこまで再検証するか。
-- Wave4でbrow mappingまで含めるか、face / eyes / mouthに絞るか。
+- Runtime Exportのpackage contract再検証の追加範囲（現行loader validationは実装済み）。
+- (Historical / delivered) Wave4のface / eyes / mouth scopeは実装済み。brow/advanced mappingは将来wave候補であり、現行passを未完了扱いしない。

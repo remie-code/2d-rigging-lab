@@ -8,9 +8,9 @@
 
 この階層は、`discussion/acceptance-criteria/02_DomainAcceptanceCriteria/` に対応するドメイン別シナリオを置く。
 
-現在のRoot/MVP baselineは Private 2D Rigging Lab / Prototype である。Domain scenarioは、Current / Optional / Future分類へ整理済みである。
+現在のRoot/MVP baselineは Private 2D Rigging Lab / Prototype である。Domain scenarioは、Current / Optional / Future分類へ整理済みである。Scenarioはproduct requirementの合否オラクルに従い、Dynamics の schema / solver / cardinality の具体的実装意味論は accepted [dynamics-file-v3 design](../../design/dynamics-world-frame-chain.md) と [Wave106](../../implementation/waves/wave106/_map.md) を参照する。
 
-Live2D / Cubism 関連資料は過去調査・リスク確認用であり、Private Prototype のオラクルではない。シナリオの正は [../../concept/modified_concept.md](../../concept/modified_concept.md)、[../../acceptance-criteria/00_RootQuestion.md](../../acceptance-criteria/00_RootQuestion.md)、[../../acceptance-criteria/01_RootAcceptanceCriteria.md](../../acceptance-criteria/01_RootAcceptanceCriteria.md)、[../../acceptance-criteria/03_MVP_Acceptance_Criteria.md](../../acceptance-criteria/03_MVP_Acceptance_Criteria.md) である。
+Live2D / Cubism 関連資料は過去調査・リスク確認用であり、Private Prototype のオラクルではない。シナリオの正は [../../concept/modified_concept.md](../../concept/modified_concept.md)、[../../acceptance-criteria/00_RootQuestion.md](../../acceptance-criteria/00_RootQuestion.md)、[../../acceptance-criteria/01_RootAcceptanceCriteria.md](../../acceptance-criteria/01_RootAcceptanceCriteria.md)、[../../acceptance-criteria/03_MVP_Acceptance_Criteria.md](../../acceptance-criteria/03_MVP_Acceptance_Criteria.md) である。Dynamicsの実装意味論は上記accepted design/Wave106を参照し、要求オラクルと混同しない。
 
 ## 直下のファイル
 
@@ -25,7 +25,7 @@ Live2D / Cubism 関連資料は過去調査・リスク確認用であり、Priv
 | [206_Part_Visibility_and_Composition_Semantics.md](206_Part_Visibility_and_Composition_Semantics.md) | パーツ、表示、構成状態のシナリオ | Private Prototypeへ更新済み |
 | [207_Facial_Motion_Modeling.md](207_Facial_Motion_Modeling.md) | 顔可動のシナリオ | manual authored parameter gridへ更新済み |
 | [208_Body_and_Secondary_Motion_Modeling.md](208_Body_and_Secondary_Motion_Modeling.md) | 身体・副次部位可動のシナリオ | manual seam + hairSway keyformへ更新済み |
-| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | 動的挙動のシナリオ | Current MVP for Minimum Open Dynamics v1 RuntimeState evidenceへ更新済み |
+| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | 動的挙動のシナリオ | Current MVP for Minimum Open Dynamics v1 RuntimeState evidenceの要求オラクルへ更新済み（具体的Dynamics semanticsはdesign/Wave106） |
 | [210_Animation_and_Timeline_Production.md](210_Animation_and_Timeline_Production.md) | アニメーション・タイムライン制作のシナリオ | Optional / current MVP外へ分類済み |
 | [211_Runtime_Export_and_Compatibility.md](211_Runtime_Export_and_Compatibility.md) | package save/runtime readinessのシナリオ | project-defined packageへ更新済み |
 | [212_Model_Verification.md](212_Model_Verification.md) | モデル検証のシナリオ | demo-safe分類を含め更新済み |
@@ -45,7 +45,7 @@ Live2D / Cubism 関連資料は過去調査・リスク確認用であり、Priv
 
 ## 次の行動
 
-1. Current scenarioを実装時のtest/contractへ落とす。
+1. Current scenarioの要求を実装済みtest/contractへ照合し、未達・再設計・人間ゲートを列挙する。
 2. Future scenarioを再開する場合は、別途ユーザー判断、scope再定義、rights/dependency reviewを行う。
 3. Demo/proposal運用時に、demo policyとproposal templateを更新する。
 
@@ -55,3 +55,4 @@ Live2D / Cubism 関連資料は過去調査・リスク確認用であり、Priv
 |------|------|
 | Cubism参照操作の扱い | Scenario内では非対応・private research archive文脈へ限定済み |
 | 公開・配布系scenario | Future / out of current MVP扱いで保持 |
+| Domain-09 のDynamics v3 semantics/cardinalityをscenario本文へ反映する時期・表現 | accepted design/Wave106の実装意味論を参照しつつ、要求文面の追跡方法はユーザー判断 |

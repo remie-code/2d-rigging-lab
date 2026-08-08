@@ -2,6 +2,8 @@
 
 > Lightweight map for Wave81 implementation reports and final closeout.
 
+> Historical evidence index: “Current” below means the Wave81 closeout snapshot, not current repository state.
+
 ## Status
 
 - Wave: Wave81 `dynamics-tool-v0-additive-pendulum-contract`.

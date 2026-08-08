@@ -1,5 +1,7 @@
 # Wave98 Implementation Map
 
+> Historical evidence index: “Current Wave98 target diff” is a Wave98 closeout observation, not a current Git-state claim.
+
 ## Domain Reports
 
 - Domain A: `wave98-domain-a-viewer-dynamics-performance-instrumentation-duplicate-eval-removal-report.md` - recommendation `pass`

@@ -25,15 +25,17 @@
   - [final spec / completion](../../reviews/wave19/wave19-final-spec-completion-review.md)
   - [final design / development](../../reviews/wave19/wave19-final-design-development-review.md)
   - [final test / docs](../../reviews/wave19/wave19-final-test-docs-review.md)
-- Native Stage and Browser Source normal rendering were not intentionally changed by Domain A, but manual real OBS / CEF Browser Source cadence confirmation remains pending.
+- Native Stage and Browser Source normal rendering were not intentionally changed by Domain A. A bounded OBS/Chrome/Edge cadence comparison is now recorded in tracked captures; it is objective evidence only and does not establish subjective smoothness or a universal 60 FPS guarantee.
+- Tracked objective captures: [`tmp/report.log`](../../../../../tmp/report.log) (Browser Source `liveFrameMessageFps=57.2`, applied/render/rAF `40.1`), [`tmp/chrome-report.log`](../../../../../tmp/chrome-report.log) (Browser Source `59.9` live / `56.7` applied-render / `83.7` rAF probe), and [`tmp/native-stage.log`](../../../../../tmp/native-stage.log) (Native Stage `60.1` live / `50.4` applied-render). The logs do not encode platform/URL provenance.
+- Remaining human gates are real Runtime Export + iFacialMocap behavior, OBS/CEF alpha/WebGL2/model visual parity and subjective smoothness, and packaged/dev Electron lifecycle; these are separate from the Wave19 implementation pass.
 - No Runtime Export, Editor, package-format schema, dependency, or lockfile changes were introduced by Wave19.
 
-## Manual Follow-Up
+## Manual Follow-Up (reproduction or residual product confidence)
 
 - Open Runtime Player with a real Runtime Export.
 - Connect iFacialMocap.
 - Connect OBS Browser Source.
 - Set OBS video FPS and Browser Source custom FPS to 60.
-- Run Browser Source Performance Diagnostics, then save the copied report to `tmp/report.log` if follow-up discussion is needed.
+- If a new capture is needed for follow-up discussion, run Browser Source Performance Diagnostics and save the copied report to `tmp/report.log`; the existing tracked logs above remain the current objective evidence.
 - Compare Browser Source rAF probe FPS (`browserRafProbeFps`), Browser Source rAF delta p50/p95/max when present, render duration p50/p95/max (`renderDurationMs`), `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `coalescedLiveFrameCount`, and sequence/counter gap evidence if present, including `liveFramesPerAppliedFrame` and `coalescedLiveFramesPerAppliedFrame`.
 - Interpret `browserRafProbeFps` near 30 with short render duration as likely OBS / CEF rAF half-rate; interpret `browserRafProbeFps` near 60 with apply/render near 30 as render/scheduler backlog or pending-render gating.

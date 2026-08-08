@@ -3,6 +3,8 @@
 > Lightweight map for Wave107 `vowel-lipsync-mapping` implementation artifacts.
 > 設計オラクル: `discussion/design/vowel-lipsync-mapping.md`（§2〜§4）/ 計画: `discussion/implementation/orchestration/wave107-plan.md`
 
+> Historical evidence index: statuses and the device gate below are as recorded at Wave107 closeout; later runtime-player waves own any current live-mapping interpretation.
+
 ## Domain Reports
 
 | Path | Domain | Status |
@@ -19,6 +21,8 @@
 | [../../reviews/wave107/domain-a-vowel-core.md](../../reviews/wave107/domain-a-vowel-core.md) | Domain A（推定器コア） | 合格（ループ1） |
 | [../../reviews/wave107/domain-b-vowel-calibration.md](../../reviews/wave107/domain-b-vowel-calibration.md) | Domain B（キャリブレーション） | 合格（ループ1） |
 | [../../reviews/wave107/final-clean-review.md](../../reviews/wave107/final-clean-review.md) | Domain A+B 合算（統合後クリーンレビュー） | **合格**（要修正なし） |
+
+Review index: [../../reviews/wave107/_map.md](../../reviews/wave107/_map.md) (created after the original wave closeout; it indexes only the three existing review artifacts above).
 
 ## Notes
 
@@ -41,5 +45,5 @@ wave107 の全変更を clean HEAD（`ee038e84`）で stash した baseline で�
 
 - Final clean review recorded `pass`（zero blocking findings, 要修正なし）。Wave107 is final complete / pass。
 - 母音起因の新規失敗ゼロ・既存挙動無傷。typecheck green（root + runtime-player）・母音関連10スイート62テスト green。
-- 実機ユーザー gate（player 起動→母音発話→ちらつき/ゲート→トグル→strength、任意で較正）は wave 外。手順は final integration report §5。
+- **Wave107 closeout gate (historical):** 実機ユーザー gate（player 起動→母音発話→ちらつき/ゲート→トグル→strength、任意で較正）は wave 外。手順は final integration report §5。監査時点では後続 runtime-player Wave22/23 と合わせた現行 live-mapping gate が未確認であり、この map は完了扱いへ更新しない。
 - 採取ツール `apps/runtime-player/tools/capture-vowel-frames.ts` + 実測データ `test_data/iFaceMocap/vowels/` は untracked のまま残存（設計 §5/§6 の一次データ源、コミット帰属はユーザーフロー裁量）。

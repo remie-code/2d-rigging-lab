@@ -41,18 +41,29 @@
 
 | [19-variant-ware/](19-variant-ware/) | 差分管理（Ware グループ singleSelect 3択 + 在庫の形式所属） | **通過（2026-07-06、本体+追補とも一発、player ライブ切替実機確認）**。獲得 = 順序則4段・レンダ3点セット・形式所属2型 → craft/10。**これにて1周目完了**。[results.md](19-variant-ware/results.md) |
 
-## 次の行動
+## 周回・蒸留の現在状態（repository facts）
 
-1. 2周目の準備: 周回指揮書（craft/_conductor.md）の空実行テストによる較正 → 2周目（craft 自己完結の検証走）
-2. 期限考慮: Fable 使用可能の当初期限 2026-07-07（weekly 制限は 2026-07-05 に一度発動・回復済み）——残り時間の配分はユーザーと相談
+- 01〜19 はすべて通過し、1周目は完了（2026-07-06）。
+- craft 2周目の4項目（房の層座標系、前髪3帯、目・眉の弦の項、眼球Y）は 2026-07-07 に統制走を完了。[craft/_map.md](../craft/_map.md) の実施事項と不変量が正典であり、旧準備項目を次の行動として再掲しない。
+- craft/09（母音い・う・え・お）と craft/10 の3周目追試も 2026-07-17 に完了。次の閉問題は既定の番号列ではなく、ユーザーが選ぶスコープで定義する。
 
 ## FaceY フェーズ蒸留（2026-07-04 完了）
 
 cp07〜09 の獲得をレシピ06（軸の転置 / 変位と縮尺の一致則 / 垂れ物の重力テンプレ）とレシピ07（Y の立体物）へ焼き込み済み。運用知見（L0 誤訳の記録・「はず」の assert 裁定・封じ込め運用穴）は各 results.md と較正ログ Round 9 に記録。
 
-## 未決事項
+## 現在の未解決事項（2026-08-08、分類）
 
-- **完走後の再走**（完成 craft での同モデル作り直し）をユーザーが表明（2026-07-04）。再走では**房の立体表現**に取り組む——craft には試走ポリシーと切り離し、正規の適用対象として焼き込むこと
-- 目・眉の遠側キーへの弦の項適用（04 の未適用提案）→ craft 完成後の通し確認で扱う（2026-07-03 ユーザー決定）
-- front_hair テクスチャ左端 x≈690 の迷いピクセル列（cp04 由来、暗背景でのみ視認）の掃除要否
-- 06 以降の問題列
+### Repository facts / technical follow-ups
+
+- `front_hair` テクスチャ左端 x≈690 の迷いピクセル列（cp04 由来、暗背景でのみ視認）の掃除要否は未決。これは既存 craft/閉問題の残余であり、新しい閉問題の開始を意味しない。
+- `validatePackage` / ref strict validation のエラー 97 件の内訳分類と、render-view sidecar の絶対パスをポータブルにする要否は未整理。装備（手・網膜・目・巻尺・健診）の欠落ではなく、現行出力の受入れ・持ち運び条件の論点である。
+
+### Human / device gates
+
+- **post-45d PNG の再認証**: 2026-07-03 の「Default 衣装 PNG 3枚」承認はその時点の Wave105 生成物に対する記録。commit `45d2734`（2026-07-26）で `experiments/ref-render-gate/*.png` の bytes が置換されたため、現在の PNG が同じ承認で覆われるかはユーザー確認待ち。[../experiments/ref-render-gate/README.md](../experiments/ref-render-gate/README.md)
+- **Wave107 → Wave22/23 母音リップシンク実機 gate**: Wave107 の nearest-reference/単一勝者は履歴上の実装結果で、現在の mouth-open/母音形状は Wave22/23 の `w → s` / 正規化5母音 blend。実機 iFacialMocap + 実モデルで、あ・い・う・え・おの遷移、閉口ゼロ、ちらつき/ジッタ、ON/OFF、strength を確認する。[Wave107 report](../../implementation/waves/wave107/wave107-final-integration-report.md) / [Wave22 report](../../runtime-player/implementation/waves/wave22/wave22-final-integration-report.md) / [Wave23 report](../../runtime-player/implementation/waves/wave23/wave23-final-integration-report.md)
+
+### User decisions
+
+- 次の閉問題のテーマ・番号・開始時期はユーザーが選ぶ。`closed problem 02`（目の開閉）を自動的な次の行動として予約しない。
+- strict-ref 97 件の分類方針、sidecar portability の受入れ条件、post-45d PNG の同一性、別対象への craft 再走をユーザーが決める。実装の存在や wave pass からは推論しない。

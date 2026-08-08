@@ -1,5 +1,7 @@
 # Wave84 Review Map
 
+> Historical review index: “Current phase” below refers to the Wave84 closeout, not a current project phase.
+
 ## Status
 
 - Wave: Wave84 `viewer-runtime-dynamics-playback-solver-consolidation`

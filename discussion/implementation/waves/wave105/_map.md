@@ -25,4 +25,4 @@
 ## Final Gate
 
 - Final clean integration review recorded `pass` (zero blocking findings). Wave105 is final complete / pass.
-- **The user visual gate (approving the regenerated ref-render-gate PNGs in the Default outfit) is outside the wave and is the next action.**
+- **At Wave105 closeout, approval of the regenerated ref-render-gate PNGs in the Default outfit was outside the wave's technical gate. Later model-authoring evidence records a 2026-07-03 approval, while the post-`45d2734` PNG bytes require separate re-confirmation; this historical map does not treat that gate as currently complete.**

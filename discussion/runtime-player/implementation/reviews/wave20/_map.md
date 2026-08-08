@@ -27,6 +27,7 @@
 - Domain B applied implementation-scope docs/map closeout under `discussion/runtime-player/implementation/**`.
 - Domain B post-docs closeout re-review lanes passed.
 - No additional Gnome source fix was needed during Domain B.
+- The implementation/review pass does not close the packaged/dev Electron smoke: Control close → process exit, direct Stage close recovery, `Focus Stage` reopen, and reopen regression remain human checks.
 
 ## Manual Review Focus
 

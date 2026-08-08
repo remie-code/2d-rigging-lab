@@ -26,10 +26,11 @@
 - No review lane reported blocking findings.
 - Domain B final integration/docs alignment and final reviews are complete with `pass`.
 - Domain B final integration applied this policy: `実装事実に合わせて関連ドキュメントを更新する。`
-- Manual real OBS / CEF Browser Source cadence capture remains pending.
+- Objective cadence evidence is tracked in [`tmp/report.log`](../../../../../tmp/report.log), [`tmp/native-stage.log`](../../../../../tmp/native-stage.log), and [`tmp/chrome-report.log`](../../../../../tmp/chrome-report.log); the bounded OBS/Chrome/Edge comparison is recorded, but logs lack platform/URL provenance and do not prove subjective smoothness or visual parity.
+- Real Runtime Export + iFacialMocap behavior, OBS/CEF alpha/WebGL2/model confidence, and packaged/dev Electron lifecycle remain separate human gates; no product deep-profiler transport is implied.
 
 ## Manual Review Focus
 
 - Confirm copied Browser Source reports include lightweight rAF cadence, render duration, scheduled frame duration, live/apply/render FPS, and coalescing interpretation fields without exposing raw tracking/debug/calibration data, Browser Source tokens, private paths, Runtime Export payloads, textures, or mesh data.
 - Confirm latest-wins coalescing remains intentional and no Runtime Export, Editor, package-format schema, dependency, or lockfile changes were introduced by Wave19.
-- For the remaining manual check, open Runtime Player with a real Runtime Export, connect iFacialMocap, connect OBS Browser Source, set OBS video FPS and Browser Source custom FPS to 60, run Browser Source Performance Diagnostics, save the copied report to `tmp/report.log`, and compare Browser Source rAF probe FPS, Browser Source rAF delta p50/p95/max, render duration p50/p95/max, `liveFrameMessageFps`, `appliedLiveFrameFps`, `renderFps`, `coalescedLiveFrameCount`, and sequence/counter gap evidence if present.
+- For a residual product-confidence check, open Runtime Player with a real Runtime Export, connect iFacialMocap and OBS Browser Source, then compare the same cadence fields against the tracked captures. Treat any new run as manual observation; do not infer universal 60 FPS acceptance or product deep profiling from these metrics.

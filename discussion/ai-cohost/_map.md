@@ -18,8 +18,8 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |
 | [architecture/](architecture/) | 設計方向・設計判断(会話パイプライン、操縦チャネル、生理層、モデルホスト) | Created |
-| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。**C1〜C7全閉鎖=器の完成、S系列開始。S1・S2 完全閉鎖(2026-07-12、いずれも人間ゲート「完璧だ」)**——魂は喋れて(S1)聞けて(S2)、操縦席を持ち(S2.5)、**呼べば応え(S3)、表情が乗り(S4)、目が開き(S5)、**会話が続き(S6・barge-in+自発発火)、視聴者が混ざり(S7・実装完了/YouTube実ゲート後日)、**操縦席がコントロールルーム化(preact+htm・913→27行・三層IA)**、**口数モード+コーディ語彙も配線済(2026-07-14全閉鎖・「おしゃべりは心地よい応答率」「コーディはっきり拾われる」)**。次=S8「配信に耐える」(S7 YouTube実ゲート等の積み残し回収圏内) |
-| [soul/](soul/) | S系列(魂の実装)の前提討議3件(①知性のアクセス経路 ②会話パイプライン最終化 ③persona) | Created(2026-07-12)。**①②裁定済みクローズ(同日)**: 主経路=Max 20x+Agent SDK/パイプラインAccepted昇格。③personaはS8後 |
+| [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。**C1〜C7全閉鎖=器の完成**。S1〜S7実装済み(S7は`/live/<id>`実配信30分ノーブレイクで実ゲート実質合格)、操縦席改定・口数/コーディ語彙も閉鎖。S8安全弁は実装/機械ゲート済みだがkill実射・通常発話無退行の人間ゲート待ち。多頭化・配信間記憶も実装済みだが各最終人間ゲートを残す。 |
+| [soul/](soul/) | S系列の前提討議・モデル/記憶判断・残るゲート | Created(2026-07-12)。①②は裁定済みクローズ(主経路=Max 20x+Agent SDK/パイプラインAccepted)。現行registryは4頭。brain-swap/stream-memoryの最終人間ゲートとpersona/S9声確定が残る。 |
 | [experiments/](experiments/) | 魂の実測(枠消費・レイテンシ・会話品質)。S系列の常設計器 | **Created(2026-07-12、S1 Domain C)**。初回=[experiments/s1-first-light.md](experiments/s1-first-light.md)(tools:[]無効実証・apiKeySource=none・常駐初期化≈1.9s・warm ask~3.2s・synthesis~1s) |
 
 AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
@@ -32,6 +32,11 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 - 設計の現在の方向と未決の分岐を確認する場合は [architecture/](architecture/) を読む。
 
 ## 4. Current State Summary
+
+> **Current routing (2026-08-08):** C1〜C7は全閉鎖。S1〜S7は実装済みで、S7は `/live/<id>` 実配信30分ノーブレイクにより実ゲート実質合格。S8安全弁は実装済み(764/764緑・9レーンPASS)だが kill 実射/通常発話無退行の人間ゲート待ち。朗読と合いの手は887/887緑・1時間40分実配信の4点合格。多頭化(4頭)と配信間記憶は実装・機械ゲート済みだが最終人間ゲート記録待ち。実装の存在をゲート完了と混同しない。
+
+- **知性/モデル**: 主経路の裁定は Max 20x + Agent SDK。現行 registry は Claude Opus / GPT-5.6 Terra / GPT-5.5 / GPT-5.6 Sol の4頭。初回体感は Opus > Sol ≒ 5.5 > Terra。多頭化の速度/品質・Claude無退行・rollout掃除の最終3点は未記録。
+- **配信間記憶**: `memory.mjs` と起動時直近3件の自動搭載、20分checkpoint/手動/SIGINT、OFF止水栓を実装(957/957緑・6レーンPASS)。保存/次回搭載/OFF/手動記録の4点実射は未記録。
 
 - 目標像・成功基準(「AIの間も含めてキャラの演出」)はユーザー合意済み(2026-07-10)。
 - 実現可能性は調査で確認済み: 先例(Neuro-sama等)が商業水準で成立。会話LLMはOpus 4.8以上をユーザー決定、費用試算は月16配信で約$55〜110。
@@ -49,6 +54,15 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 
 ## 5. Next Actions
 
+> **Current next actions:** child maps are updated first; the remaining work is evidence capture, not reopening C/S implementation.
+
+1. S8 kill human gate: 発話中即時停止・全発火拒否・一クリック復帰・通常発話無退行 ([implementation/orchestration/s8-wave-plan.md](implementation/orchestration/s8-wave-plan.md))。
+2. 多頭化最終3点: 4頭の速度/品質体感、Claude無退行、配信後rollout掃除 ([implementation/orchestration/brain-swap-wave-plan.md](implementation/orchestration/brain-swap-wave-plan.md))。
+3. 配信間記憶4点: 保存/秘匿、次回自動搭載、OFF、手動/定期更新 ([implementation/orchestration/stream-memory-wave-plan.md](implementation/orchestration/stream-memory-wave-plan.md))。
+4. persona/S9: 声・人格の確定時期をユーザーが決める。身体/リグは model-authoring 責務。
+
+> 下記の番号付き履歴は各wave時点の記録であり、上記の現在キューを置き換える。
+
 1. 実装は閉問題分解([implementation/closed-problem-decomposition.md](implementation/closed-problem-decomposition.md)、C1〜C7)に従う。進め方は一問題ずつ議論→実装→人間ゲート→完全閉鎖の直列(同§6)。**C1〜C4 は完全閉鎖(C1=2026-07-10、C2/C3/C4=2026-07-11)**。**C5「合成が正しい」も完全閉鎖(2026-07-11)**: スロット曲線状態機械(set/envelope統合+ease-in)・実効値フィードバック・動く基底へのrelease・Stage実効値追従。人間ゲート合格(「滑らかに動く」)。**C6「口が話せる」も完全閉鎖(2026-07-12)**: 口グループ・タイムライン評価器(凸恒等の構造保証)・intent.speech・時間仮説+再調音ディップ(Articulationスライダーでプロファイル補正層へ昇格)、比較ゲート合格([implementation/orchestration/c6-wave-plan.md](implementation/orchestration/c6-wave-plan.md))。**C7「配信に乗る」も完全閉鎖(2026-07-12、waveなし検証のみ)**: OBS二体並走ゲート合格([implementation/orchestration/c7-closure-record.md](implementation/orchestration/c7-closure-record.md))。**C1〜C7全閉鎖=器の完成**。魂の前提討議①②はクローズ、**S系列分解はAccepted(2026-07-12、[implementation/s-series-decomposition.md](implementation/s-series-decomposition.md)。S1〜S9・視覚=S5新設・留保付き)**。次の一手は **S1「一文が縦に貫通する」の議論→context-check**(着手と同時に `experiments/` 開設)。
 2. persona/(存在の人格)を切る段階で、AIの身体のリグ要件を提示しmodel-authoringの既存手順で制作する。**「誰が作るか」は本トピックの設計事項ではない**(器はモデルの作者を知らない。ユーザー確認 2026-07-10)。
 
@@ -65,6 +79,10 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 | Variant切替のAI制御面包含(D7) | **解決: 当面対象外(2026-07-10)** |
 | AIの身体(モデル)の制作者 | **本トピックの設計事項ではないと確認(2026-07-10)**。persona確定後にリグ要件を添えてmodel-authoring手順へ |
 | 知覚の段階の具体化 / 情動層の状態語彙 / 第二段のFable検証方法 | 未決([concept/behavior-model.md](concept/behavior-model.md) §8。情動語彙は変調payloadの前提でもある) |
-| **魂の知性のアクセス経路**(API従量 vs Max枠/Agent SDK) | 未決(魂の実装着手時に裁定)。Max枠なら費用前提P3が根底から変わるが、①常駐配信エージェントへのサブスク枠利用の規約適合 ②会話レイテンシ の検証が要る([architecture/c4-control-channel-v0.md](architecture/c4-control-channel-v0.md) §9) |
+| **魂の知性のアクセス経路**(API従量 vs Max枠/Agent SDK) | **裁定済み(2026-07-12): 主経路=Max 20x+Agent SDK**。実効枠/レイテンシは `experiments/` で監視し、制度変更・費用枠は再確認する([soul/llm-access-path.md](soul/llm-access-path.md) §6) |
+| S8 kill human gate | **未実施**。機械実装/764緑・9レーンPASS。即時停止・全発火拒否・復帰・通常発話無退行の実射を残す |
+| 多頭化の最終人間ゲート | **未記録**。4頭実装・初回体感あり。速度/品質・Claude無退行・配信後rollout掃除を確認する |
+| 配信間記憶の人間ゲート | **未記録**。957緑・6レーンPASS。保存/秘匿・次回搭載・OFF・手動/定期更新を確認する |
+| persona / S9 相槌の声 | **未着手**。自己名「コーディ」は実装済み。声・人格の確定時期をユーザーが決め、身体はmodel-authoringへ渡す |
 | 役割別userData分離・ポート割当の具体方式 | **解決: プロファイルスロット方式+スロットごと自動採番(2026-07-10)**([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status) |
 | **監視条件(常設)**: S2S級応答+カスタムキャラ声+外部アバター同期面の三点が揃った製品の出現でS2S再評価 | 監視中([research/gpt-live-impact-2026-07.md](research/gpt-live-impact-2026-07.md) §4。GPT-Live/Gemini Liveは三点未達で採用転換なし) |

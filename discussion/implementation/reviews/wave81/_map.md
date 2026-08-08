@@ -2,6 +2,8 @@
 
 > Lightweight map for Wave81 review reports.
 
+> Historical review index: “Current” below means the Wave81 closeout snapshot, not current repository state.
+
 ## Status
 
 - Current status: final complete / pass.

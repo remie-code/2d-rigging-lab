@@ -9,7 +9,7 @@
 | [runtime-player-wave11-domain-a-input-profile-near-far-calibration-report.md](runtime-player-wave11-domain-a-input-profile-near-far-calibration-report.md) | Pass | Explicit near/far Input Profile calibration, readiness split, missing-only recovery, depth normalization helper, and focused tests |
 | [runtime-player-wave11-domain-b-stage-motion-core-persistence-transport-report.md](runtime-player-wave11-domain-b-stage-motion-core-persistence-transport-report.md) | Pass | Main-owned Stage Motion math/runtime, Window State persistence, sanitized Browser Source composed transform, native preview override, and Wave10 suspension preservation |
 | [runtime-player-wave11-domain-c-stage-motion-ui-report.md](runtime-player-wave11-domain-c-stage-motion-ui-report.md) | Pass | Compact Stage page Stage Motion panel, live settings updates, auto-save status, missing near/far recovery route, and no mapping/editor controls |
-| [runtime-player-wave11-final-integration-report.md](runtime-player-wave11-final-integration-report.md) | Pass; pending clean review | Domain D documentation alignment, preserved A/B/C evidence, final integration check trace, manual verification checklist, and residual risks |
+| [runtime-player-wave11-final-integration-report.md](runtime-player-wave11-final-integration-report.md) | Pass (final clean review pass) | Domain D documentation alignment, preserved A/B/C evidence, final integration check trace, manual verification checklist, and residual risks; clean review is recorded in the linked review map |
 
 ## Implementation Facts
 

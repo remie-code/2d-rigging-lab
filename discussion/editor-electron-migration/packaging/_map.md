@@ -1,6 +1,6 @@
 # packaging(electron-builder + アプリアイコン)地図
 
-> WS1 で先送りした editor の配布パッケージング。下敷きは apps/runtime-player の electron-builder 構成。
+> editor の配布パッケージング。下敷きは apps/runtime-player の electron-builder 構成。
 
 ## 役割
 
@@ -23,7 +23,8 @@ editor(Electron アプリ)を Windows portable として配布可能にする。
 
 - ✅ 設定・icon 生成・dist:win 実走まで agent 環境で完走。electron:build 緑。
 - レビュー: Review-Sylph 判定は packaging-report.md 末尾に記載。
+- `dist:win` は `electron:build` 前段であり typecheck を含まない。既知の editor typecheck 赤と unit test 4件失敗(`task_c8fc5155`)は packaging と独立した残債で、配布ビルド完走とは別ゲートである。
 
 ## 未決事項
 
-- なし(先在の typecheck 赤 `task_c8fc5155` は packaging と独立)。
+- electron-builder の `description` / `author` 欠落警告（portable ビルドは完走、非ブロッキング）。補完要否は任意の後続判断。

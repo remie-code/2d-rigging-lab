@@ -21,4 +21,4 @@
 - Domain D clean review verdict is `pass`.
 - Domain E final integration report and final clean Review-Sylph integration review are `pass`: [../../waves/wave16/wave16-final-integration-report.md](../../waves/wave16/wave16-final-integration-report.md), [wave16-final-clean-integration-review.md](wave16-final-clean-integration-review.md).
 - Wave16 follow-up compiled evaluator proof diagnostics clean review verdict is `pass`: [wave16-followup-compiled-evaluator-proof-diagnostics-clean-review.md](wave16-followup-compiled-evaluator-proof-diagnostics-clean-review.md).
-- Remaining manual check is real Runtime Export + iFacialMocap + OBS Browser Source Performance Diagnostics deep capture saved to `tmp/report.log`.
+- Remaining human/product gate is a real Runtime Export + iFacialMocap + OBS Browser Source confidence check. The tracked captures ([`tmp/report.log`](../../../../../tmp/report.log), [`tmp/native-stage.log`](../../../../../tmp/native-stage.log), [`tmp/chrome-report.log`](../../../../../tmp/chrome-report.log)) are objective-only and lack platform/URL provenance; they do not reinstate a product deep-profiler requirement or close Electron/OBS visual parity.

@@ -15,4 +15,4 @@
 
 - Final clean integration review is recorded as `pass`; no Wave105 review artifacts remain pending.
 - Classifications 1-4 (cmo3 false positive / clean-HEAD prior fails / L0 operational-doc working-tree changes / wave104-origin uncommitted coexistence) applied per Undine; none treated as violations.
-- The user visual gate (regenerated ref-render-gate PNG approval, Default outfit) is a model-authoring-side gate outside this wave's technical gate.
+- At Wave105 closeout, the user visual gate (regenerated ref-render-gate PNG approval, Default outfit) was a model-authoring-side gate outside this wave's technical gate. Later model-authoring evidence records a 2026-07-03 approval, but post-`45d2734` PNG bytes require separate re-confirmation.

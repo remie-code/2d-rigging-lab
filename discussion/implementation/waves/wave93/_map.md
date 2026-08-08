@@ -2,6 +2,8 @@
 
 > Lightweight map for Wave93 Editor History Binary Asset De-dup + Memory Pressure Reduction implementation reports.
 
+> Historical evidence index: “Current worktree” notes the Wave93 closeout snapshot and must not be read as a current worktree inventory.
+
 ## Status
 
 Final complete / pass.
