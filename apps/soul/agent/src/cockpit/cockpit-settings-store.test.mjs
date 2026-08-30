@@ -83,6 +83,130 @@ test("settings store: default path is the gitignored file inside apps/soul/agent
   assert.match(DEFAULT_SETTINGS_PATH.replace(/\\/g, "/"), /apps\/soul\/agent\/cockpit-settings\.local\.json$/);
 });
 
+test("conversation instruction settings: four brain overrides round-trip with the versioned additive key", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    for (const id of ["claude", "codex", "codex-55", "codex-56-sol"]) {
+      assert.equal(store.getConversationInstruction(id), null);
+      assert.equal(store.setConversationInstruction(id, `custom:${id}`), true);
+      assert.equal(store.getConversationInstruction(id), `custom:${id}`);
+    }
+    const reopened = createFileSettingsStore({ path });
+    assert.deepEqual(reopened.getConversationInstructionOverrides(), {
+      claude: "custom:claude",
+      codex: "custom:codex",
+      "codex-55": "custom:codex-55",
+      "codex-56-sol": "custom:codex-56-sol"
+    });
+    assert.equal(reopened.getConversationInstructionProfile("codex-55").body, "custom:codex-55");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation instruction settings: direct-map and malformed/unknown values safely fall back", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(
+      path,
+      JSON.stringify({
+        conversationInstructions: {
+          codex: "legacy direct-map value",
+          unknown: "must be ignored",
+          claude: "   ",
+          "codex-55": 42
+        }
+      }),
+      "utf8"
+    );
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getConversationInstruction("codex"), "legacy direct-map value");
+    assert.equal(store.getConversationInstruction("claude"), null);
+    assert.deepEqual(store.getConversationInstructionOverrides(), { codex: "legacy direct-map value" });
+    assert.equal(store.getConversationInstruction("not-a-brain"), null);
+    assert.throws(() => store.setConversationInstruction("not-a-brain", "x"), /invalid/);
+    assert.throws(() => store.setConversationInstruction("codex", "   "), /non-empty/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation instruction settings: versioned overrides read back and corrupt shapes are ignored", () => {
+  const dir = tmpDir();
+  try {
+    const versionedPath = join(dir, "versioned.json");
+    writeFileSync(
+      versionedPath,
+      JSON.stringify({
+        conversationInstructions: {
+          version: 1,
+          overrides: {
+            claude: "versioned claude",
+            "codex-56-sol": "versioned sol",
+            unknown: "must be ignored",
+            codex: "   "
+          }
+        }
+      }),
+      "utf8"
+    );
+    const versioned = createFileSettingsStore({ path: versionedPath });
+    assert.deepEqual(versioned.getConversationInstructionOverrides(), {
+      claude: "versioned claude",
+      "codex-56-sol": "versioned sol"
+    });
+    assert.equal(versioned.getConversationInstruction("codex-56-sol"), "versioned sol");
+
+    for (const [index, value] of ["not-an-object", [], { version: 1, overrides: [] }, { version: 1, overrides: null }].entries()) {
+      const corruptPath = join(dir, `corrupt-${index}.json`);
+      writeFileSync(corruptPath, JSON.stringify({ conversationInstructions: value }), "utf8");
+      const corrupt = createFileSettingsStore({ path: corruptPath });
+      assert.deepEqual(corrupt.getConversationInstructionOverrides(), {});
+    }
+    const invalidJsonPath = join(dir, "corrupt-json.json");
+    writeFileSync(invalidJsonPath, "{ conversationInstructions: ", "utf8");
+    assert.deepEqual(createFileSettingsStore({ path: invalidJsonPath }).getConversationInstructionOverrides(), {});
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation instruction settings: reset removes only selected override", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    const ids = ["claude", "codex", "codex-55", "codex-56-sol"];
+    for (const id of ids) store.setConversationInstruction(id, `${id} custom`);
+    for (const [index, id] of ids.entries()) {
+      assert.equal(store.resetConversationInstruction(id), true);
+      assert.equal(store.getConversationInstruction(id), null);
+      for (const remaining of ids.slice(index + 1)) {
+        assert.equal(store.getConversationInstruction(remaining), `${remaining} custom`);
+      }
+    }
+    const reopened = createFileSettingsStore({ path });
+    assert.deepEqual(reopened.getConversationInstructionOverrides(), {});
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation instruction settings: failed durable write throws so callers do not advance revision", () => {
+  const dir = tmpDir();
+  try {
+    const fileAsParent = join(dir, "afile");
+    writeFileSync(fileAsParent, "x", "utf8");
+    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
+    assert.throws(() => store.setConversationInstruction("claude", "custom"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ── Channel URL の永続化（S3 追撃 domain-c）─────────────────────────────
 
 test("settings store: channel URL set→get roundtrip persists across instances", () => {

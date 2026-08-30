@@ -220,7 +220,8 @@ body {
 .control-bar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 /* 運転バー/引き出し共通のボタン意匠（現 cockpit.html:75-80 の意味論を新トークンで継承）。 */
 .control-bar button,
-.settings-drawer button {
+.settings-drawer button,
+.cockpit-settings-modal button {
   background: var(--panel-raised);
   color: var(--fg);
   border: 1px solid var(--border);
@@ -230,9 +231,11 @@ body {
   cursor: pointer;
 }
 .control-bar button:hover:not(:disabled),
-.settings-drawer button:hover:not(:disabled) { border-color: var(--teal); }
+.settings-drawer button:hover:not(:disabled),
+.cockpit-settings-modal button:hover:not(:disabled) { border-color: var(--teal); }
 .control-bar button:disabled,
-.settings-drawer button:disabled { opacity: 0.45; cursor: default; }
+.settings-drawer button:disabled,
+.cockpit-settings-modal button:disabled { opacity: 0.45; cursor: default; }
 /* Fire = 黄（現 cockpit.html:86 #btn-fire）・Fire+視覚 = 淡青（現 :96 #btn-vision-fire）を継承。 */
 .control-bar .btn-fire { color: var(--marker-fire); font-weight: 600; letter-spacing: 0.04em; }
 .control-bar .btn-vision-fire { color: var(--marker-vision); font-weight: 600; letter-spacing: 0.04em; }
@@ -335,7 +338,8 @@ body {
   font-size: 12px;
   flex-wrap: wrap;
 }
-.settings-drawer input[type="text"] {
+.settings-drawer input[type="text"],
+.cockpit-settings-modal input[type="text"] {
   flex: 1 1 280px;
   min-width: 240px;
   background: var(--bg);
@@ -382,13 +386,97 @@ body {
 .chat-status.retrying { color: var(--speaking); }
 .chat-status.dead { color: var(--down); }
 /* ボタンの意味色（現 cockpit.html:68-69 :81-82 を継承）。 */
-.settings-drawer .btn-chat-connect { color: var(--up); }
-.settings-drawer .btn-chat-disconnect { color: var(--down); }
-.settings-drawer .btn-start { color: var(--up); }
-.settings-drawer .btn-stop { color: var(--down); }
+.settings-drawer .btn-chat-connect, .cockpit-settings-modal .btn-chat-connect { color: var(--up); }
+.settings-drawer .btn-chat-disconnect, .cockpit-settings-modal .btn-chat-disconnect { color: var(--down); }
+.settings-drawer .btn-start, .cockpit-settings-modal .btn-start { color: var(--up); }
+.settings-drawer .btn-stop, .cockpit-settings-modal .btn-stop { color: var(--down); }
 .audio-device-status, .vision-target-status { color: var(--muted); }
 /* エラー欄（現 cockpit.html:83 .err の意味論を継承・各区画に配置）。 */
 .err { color: var(--down); }
+
+/* Cockpit Settings modal shell. Existing drawer control classes remain as
+   aliases so migrated controls retain their visual and endpoint behaviour. */
+.cockpit-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 5vh 4vw;
+  background: rgba(5, 8, 12, 0.72);
+}
+.cockpit-settings-backdrop[hidden] { display: none; }
+.cockpit-settings-modal {
+  width: min(980px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 70px rgba(0, 0, 0, 0.52);
+  padding: 16px 20px;
+}
+.cockpit-settings-modal[hidden] { display: none; }
+.cockpit-settings-head { margin-bottom: 12px; }
+.cockpit-settings-head h2 { color: var(--fg); text-transform: none; letter-spacing: 0; font-size: 17px; }
+.cockpit-settings-close { margin-left: auto; }
+.cockpit-settings-tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 8px; }
+.cockpit-settings-tab[aria-selected="true"] { color: var(--teal); border-color: var(--teal); }
+.cockpit-settings-tab:focus-visible, .cockpit-settings-close:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.cockpit-settings-dirty-warning { display: flex; align-items: center; gap: 8px; padding: 8px 0; color: var(--speaking); }
+.cockpit-settings-dirty-warning span { margin-right: auto; }
+.cockpit-settings-prompt-slot { border-top: 1px solid var(--border); margin-top: 8px; }
+.cockpit-settings-advanced { color: var(--muted); }
+/* Conversation-instruction editor (Domain C). Status always has text; the
+   class is an additional cue and is never the sole indication of state. */
+.conversation-instruction-editor { padding: 8px 0; }
+.conversation-instruction-editor-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.conversation-instruction-editor-head h3 { margin: 0; color: var(--teal); }
+.conversation-instruction-back { margin-right: auto; }
+.conversation-instruction-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.conversation-instruction-selection label { color: var(--muted); }
+.conversation-instruction-selection select {
+  min-width: 240px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 26px 6px 10px;
+  font: inherit;
+}
+.conversation-instruction-technical-label,
+.conversation-instruction-readonly-note,
+.conversation-instruction-revision { color: var(--muted); font-size: 12px; }
+.conversation-instruction-managed {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+.conversation-instruction-managed > div { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.conversation-instruction-managed dt { color: var(--muted); font-size: 11px; }
+.conversation-instruction-managed dd { margin: 4px 0 0; }
+.conversation-instruction-editor > label { display: block; color: var(--muted); margin-top: 12px; }
+.conversation-instruction-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+  box-sizing: border-box;
+  resize: vertical;
+  margin-top: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+  line-height: 1.5;
+}
+.conversation-instruction-status { margin-top: 8px; min-height: 1.4em; font-size: 12px; }
+.conversation-instruction-status.error { color: var(--down); }
+.conversation-instruction-status.saved,
+.conversation-instruction-status.default { color: var(--up); }
+.conversation-instruction-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 `;
 
 /**

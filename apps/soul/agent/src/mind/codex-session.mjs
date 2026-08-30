@@ -1,210 +1,119 @@
 // @ts-check
 /**
- * Codex SDK 統合 — 常駐 Thread による Codex 頭セッション（多頭化 Domain A）— apps/soul/agent。
+ * Codex App Server backed MindSession.
  *
- * `@openai/codex-sdk` の `Codex.startThread()` を使い、`llm-session.mjs`（Claude 頭）と対称の外形
- * （知性契約 = `{ask(content), dispose()}`・戻り値 `{replyText, usage, ttftMs, elapsedMs}`）で
- * Codex(GPT-5.6 Terra) を魂の頭として差し込む（brain-swap-wave-plan.md §3 Domain A）。
- *
- * ── 常駐性について（llm-session と違う点）─────────────────────────────────
- *  codex-sdk の `Thread.run()`/`runStreamed()` は**呼ぶたびに codex CLI を spawn する**（実測
- *  spawn ≈310ms warm・brain-swap-terra.md §4）。llm-session のような「1 プロセスを保持し続ける」
- *  常駐ではない。ここでの「常駐」は **Thread オブジェクト 1 個をセッション寿命の間保持し、2 発目
- *  以降は `resume <thread_id>` で会話を継続する**という意味（SDK のマルチターン=ディスクの
- *  rollout 読み直しに依存・brain-swap-terra.md §6）。
- *
- * ── env（サブスク枠固定）────────────────────────────────────────────────
- *  `assertSubscriptionAuthEnvOpenAI` で OPENAI_API_KEY/CODEX_API_KEY を事前拒否。SDK には
- *  env/apiKey/baseUrl を渡さない（未指定なら SDK は process.env をそのまま継承する＝CLI spawn を
- *  壊さない安全側）。`config:{forced_login_method:"chatgpt"}` を固定し API キー課金への化けを防ぐ
- *  （spike-codex-terra.mjs と同じ意匠）。
- *
- * ── サンドボックス（素チャット化）────────────────────────────────────────
- *  `sandboxMode:"read-only"` + `approvalPolicy:"never"` + `webSearchEnabled:false` でエージェント
- *  行動を封じる（brain-swap-terra.md §5 実測: 15/15 満点でツール/英語混入ゼロ）。`workingDirectory`
- *  はセッション寿命だけのスクラッチ dir（os.tmpdir 配下・リポジトリ外）で、dispose で削除する。
- *  sandbox=read-only + repo 外 cwd の二重防御でリポジトリに触れさせない。
- *
- * ── 画像橋渡し（アダプタ私事・昇格予約）──────────────────────────────────
- *  知性契約は base64 インメモリのまま（llm-session と同型）。Codex は `local_image`（ファイルパス）
- *  しか受け付けないため、base64 → `workingDirectory` 配下の一時ファイル書出 → `local_image` → run →
- *  **run の成否に関わらず finally で即削除**、をこのアダプタの内部だけで完結させる。
- *  **この base64→一時ファイル→local_image→即削除の橋渡しは Codex アダプタ内部の私事である。
- *  第二の「ローカルファイルしか読めない頭」が現れた時点で、この橋渡しは共有ヘルパへ昇格できる
- *  （discussion/ai-cohost/soul/brain-swap.md §5 参照・昇格予約はドキュメント 3 箇所義務の 1 つ）。**
- *
- * ── rollout 掃除（⚠ 最重要の安全事項）────────────────────────────────────
- *  Codex はスレッドの会話を `~/.codex/sessions/YYYY/MM/DD/rollout-<ISO時刻>-<thread_id>.jsonl`
- *  へ自動永続する（SDK 経由では無効化不可・brain-swap-terra.md §7）。視聴者データがディスクに残る
- *  ことを「配信中は記憶・配信後は掃除」で解決する（brain-swap.md §9 (a')）。掃除は**自分が作った
- *  thread_id の sidecar 台帳（gitignored・ledgerPath）に載っている id との完全一致だけ**を対象に
- *  し、bulk 削除・パターン削除・prefix 一致の経路は一切作らない。ファイル名は
- *  `rollout-<日付Tと時刻(コロンをハイフンに置換)>-<thread_id>.jsonl` の固定構造を正規表現で
- *  パースして thread_id 部分だけを抽出し、台帳の id と `===` 比較する（部分文字列一致では絶対に
- *  比較しない）。見つからなければ正直に諦めて台帳から外すだけ（エラーで起動を止めない）。
- *  ファイルの中身は一切開かない・読まない。
+ * One session owns one persistent stdio JSONL connection and one App Server
+ * thread. Ordinary asks append one turn each to that thread. Transport loss
+ * replaces the process; a safely-correlated turn failure abandons only its
+ * thread so the following ask can recover on the same connection with a fresh
+ * thread and the session prompt injected again.
  */
 
-import { performance } from "node:perf_hooks";
-import {
-  mkdtempSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  unlinkSync,
-  writeFileSync
-} from "node:fs";
+import { spawn as defaultSpawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
+import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
-import { Codex as DefaultCodexSdk } from "@openai/codex-sdk";
 import { assertSubscriptionAuthEnvOpenAI } from "./env-guard.mjs";
 import { DEFAULT_SYSTEM_PROMPT } from "./llm-session.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-/** sidecar 台帳の既定パス（`apps/soul/agent/codex-rollouts.local.json`・cockpit-settings.local.json と同格）。 */
+const require = createRequire(import.meta.url);
 const DEFAULT_LEDGER_PATH = path.join(__dirname, "..", "..", "codex-rollouts.local.json");
-
-/** 既定モデル（brain-swap.md §5-3 でユーザー確認済みの Terra 実在名）。 */
-export const DEFAULT_MODEL = "gpt-5.6-terra";
-
-/**
- * 既定の reasoning effort。Terra は `minimal` 非対応（400 実測・brain-swap-terra.md §1）。
- * `none` が最速かつ短文雑談では effort ダイヤルが速度を動かさない（同 §4）。
- * SDK の `ModelReasoningEffort` 型に `"none"` は無いが CLI は素通しする（同スパイク実証）。
- */
-export const DEFAULT_EFFORT = "none";
-
-/** rollout ファイル名の固定構造（brain-swap-inventory.md §2-5 実観測パス）。
- * キャプチャ group(1) が thread_id そのもの（時刻部分は固定桁数の日付+時刻で先に消費するため、
- * 部分一致ではなく構造パースで thread_id を正確に切り出せる）。 */
 const ROLLOUT_FILENAME_RE = /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.jsonl$/;
 
-/**
- * base64 画像の media_type から一時ファイル拡張子を導く。既定 jpg（fire-orchestrator が渡すのは
- * 現状 image/jpeg のみ・brain-swap.md §5 裁定どおり base64 のまま契約は変えない）。
- * @param {string | undefined} mediaType
- * @returns {string}
- */
+export const DEFAULT_MODEL = "gpt-5.6-terra";
+export const DEFAULT_EFFORT = "none";
+
+const TARGET_BY_PLATFORM = Object.freeze({
+  "linux:x64": ["@openai/codex-linux-x64", "x86_64-unknown-linux-musl", "codex"],
+  "linux:arm64": ["@openai/codex-linux-arm64", "aarch64-unknown-linux-musl", "codex"],
+  "darwin:x64": ["@openai/codex-darwin-x64", "x86_64-apple-darwin", "codex"],
+  "darwin:arm64": ["@openai/codex-darwin-arm64", "aarch64-apple-darwin", "codex"],
+  "win32:x64": ["@openai/codex-win32-x64", "x86_64-pc-windows-msvc", "codex.exe"],
+  "win32:arm64": ["@openai/codex-win32-arm64", "aarch64-pc-windows-msvc", "codex.exe"]
+});
+
+function resolveBundledCodexPath() {
+  const target = TARGET_BY_PLATFORM[`${process.platform}:${process.arch}`];
+  if (!target) throw new Error(`codex-session: unsupported platform ${process.platform}/${process.arch}.`);
+  const [packageName, triple, executable] = target;
+  let packageJsonPath;
+  try {
+    packageJsonPath = require.resolve(`${packageName}/package.json`);
+  } catch (error) {
+    throw new Error(`codex-session: bundled Codex executable is unavailable (${packageName}).`, { cause: error });
+  }
+  return path.join(path.dirname(packageJsonPath), "vendor", triple, "bin", executable);
+}
+
 function mediaTypeToExt(mediaType) {
   if (mediaType === "image/png") return "png";
   if (mediaType === "image/webp") return "webp";
   return "jpg";
 }
 
-/**
- * rollout ファイル名から thread_id を抽出する（完全一致比較のための構造パース。部分一致は絶対にしない）。
- * @param {string} fileName
- * @returns {string | null}
- */
 function extractThreadIdFromRolloutFilename(fileName) {
-  const m = ROLLOUT_FILENAME_RE.exec(fileName);
-  return m ? m[1] : null;
+  const match = ROLLOUT_FILENAME_RE.exec(fileName);
+  return match ? match[1] : null;
 }
 
-/**
- * `<homeDir>/.codex/sessions` を再帰探索し、ファイル名が threadId と完全一致する rollout を
- * 1 件だけ削除する。中身は一切開かない。見つからなくても・sessions ディレクトリが無くても
- * 例外を投げず false を返す（呼び出し側は「正直に諦めて台帳から外すだけ」の意味論）。
- * @param {string} homeDir
- * @param {string} threadId
- * @returns {boolean} 削除できたか。
- */
 function deleteRolloutForThreadId(homeDir, threadId) {
   const sessionsDir = path.join(homeDir, ".codex", "sessions");
   let deleted = false;
-
-  /** @param {string} dir */
   const walk = (dir) => {
     if (deleted) return;
-    /** @type {import("node:fs").Dirent[]} */
     let entries;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
-      return; // ディレクトリが無い/読めない → 諦める（正直な失敗）。
+      return;
     }
     for (const entry of entries) {
       if (deleted) return;
       const entryPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(entryPath);
-      } else {
-        const id = extractThreadIdFromRolloutFilename(entry.name);
-        if (id !== null && id === threadId) {
-          try {
-            unlinkSync(entryPath);
-            deleted = true;
-          } catch {
-            // 削除失敗も正直に諦める（起動/dispose を止めない）。
-          }
+      if (entry.isDirectory()) walk(entryPath);
+      else if (extractThreadIdFromRolloutFilename(entry.name) === threadId) {
+        try {
+          unlinkSync(entryPath);
+          deleted = true;
+        } catch {
+          // Best effort. Never widen cleanup beyond the exact owned id.
         }
       }
     }
   };
-
   walk(sessionsDir);
   return deleted;
 }
 
-/**
- * sidecar 台帳（gitignored JSON）を読む。壊れている/存在しなければ空配列（正直に諦める）。
- * @param {string} ledgerPath
- * @returns {string[]}
- */
 function readLedger(ledgerPath) {
   try {
-    const raw = readFileSync(ledgerPath, "utf8");
-    const data = JSON.parse(raw);
-    if (data && Array.isArray(data.threadIds)) {
-      return data.threadIds.filter((id) => typeof id === "string");
-    }
-    return [];
+    const parsed = JSON.parse(readFileSync(ledgerPath, "utf8"));
+    return Array.isArray(parsed?.threadIds) ? parsed.threadIds.filter((id) => typeof id === "string") : [];
   } catch {
     return [];
   }
 }
 
-/**
- * sidecar 台帳を書く（best-effort・失敗しても起動/dispose を止めない）。
- * @param {string} ledgerPath
- * @param {string[]} threadIds
- * @returns {void}
- */
 function writeLedger(ledgerPath, threadIds) {
   try {
     mkdirSync(path.dirname(ledgerPath), { recursive: true });
     writeFileSync(ledgerPath, JSON.stringify({ threadIds }, null, 2), "utf8");
   } catch {
-    // 台帳書き込み失敗は非致命（次回起動時 sweep が対象を拾えないだけ）。
+    // Cleanup bookkeeping is best effort and must not stop a session.
   }
 }
 
-/**
- * 起動時 sweep（クラッシュ復旧）: 台帳に載る thread_id だけを対象に rollout を削除し、
- * 処理した id は結果に関わらず台帳から外す（見つからなくても正直に諦めるだけ・エラーにしない）。
- * @param {string} homeDir
- * @param {string} ledgerPath
- * @returns {void}
- */
 function sweepLedger(homeDir, ledgerPath) {
-  const ids = readLedger(ledgerPath);
-  if (ids.length === 0) return;
-  for (const id of ids) {
-    deleteRolloutForThreadId(homeDir, id);
-  }
+  for (const id of readLedger(ledgerPath)) deleteRolloutForThreadId(homeDir, id);
   writeLedger(ledgerPath, []);
 }
 
-/**
- * 台帳へ 1 件の thread_id を追記する（既存分は保持）。
- * @param {string} ledgerPath
- * @param {string} threadId
- * @returns {void}
- */
 function appendLedger(ledgerPath, threadId) {
   const ids = readLedger(ledgerPath);
   if (!ids.includes(threadId)) {
@@ -213,249 +122,604 @@ function appendLedger(ledgerPath, threadId) {
   }
 }
 
-/**
- * 台帳から指定 id 群を除去する（他セッションが積んだ id は残す）。
- * @param {string} ledgerPath
- * @param {string[]} threadIdsToRemove
- * @returns {void}
- */
-function removeFromLedger(ledgerPath, threadIdsToRemove) {
+function removeFromLedger(ledgerPath, ownedThreadIds) {
   const ids = readLedger(ledgerPath);
-  const remaining = ids.filter((id) => !threadIdsToRemove.includes(id));
-  if (remaining.length !== ids.length) {
-    writeLedger(ledgerPath, remaining);
-  }
+  writeLedger(ledgerPath, ids.filter((id) => !ownedThreadIds.includes(id)));
 }
 
-/**
- * content（string | content ブロック配列）を Codex の `Input` へ変換する。turn 1 は systemPrompt を
- * 先頭に前置する（Codex には per-session systemPrompt 口が無いため・現行 Claude 契約もセッション
- * 生成時固定なので実質段差なし＝brain-swap.md §4）。画像ブロックは base64 → 一時ファイル書出。
- * @param {string | Array<any>} content
- * @param {boolean} isFirstTurn
- * @param {string} systemPrompt
- * @param {string} workingDirectory
- * @returns {{ input: import("@openai/codex-sdk").Input; tempFiles: string[] }}
- */
-function buildInput(content, isFirstTurn, systemPrompt, workingDirectory) {
-  /** @type {string[]} */
+/** Snapshot caller-owned input and create local-image files before the first await. */
+function snapshotInput(content, workingDirectory) {
   const tempFiles = [];
-
   if (typeof content === "string") {
-    const text = isFirstTurn ? `${systemPrompt}\n\n${content}` : content;
-    return { input: text, tempFiles };
+    if (content.length === 0) throw new TypeError("ask(content): content must be non-empty.");
+    return { input: [{ type: "text", text: content }], tempFiles };
   }
-
-  /** @type {Array<{type:"text",text:string}|{type:"local_image",path:string}>} */
-  const blocks = [];
-  if (isFirstTurn) {
-    blocks.push({ type: "text", text: systemPrompt });
+  if (!Array.isArray(content) || content.length === 0) {
+    throw new TypeError("ask(content): content must be a non-empty string or a non-empty content block array.");
   }
+  const input = [];
   for (const block of content) {
-    if (block && block.type === "text" && typeof block.text === "string") {
-      blocks.push({ type: "text", text: block.text });
-    } else if (
-      block &&
-      block.type === "image" &&
-      block.source &&
-      block.source.type === "base64" &&
-      typeof block.source.data === "string"
-    ) {
-      const ext = mediaTypeToExt(block.source.media_type);
-      const filePath = path.join(workingDirectory, `image-${randomUUID()}.${ext}`);
-      writeFileSync(filePath, Buffer.from(block.source.data, "base64"));
+    if (block?.type === "text" && typeof block.text === "string") {
+      input.push({ type: "text", text: `${block.text}` });
+    } else if (block?.type === "image" && block.source?.type === "base64" && typeof block.source.data === "string") {
+      const filePath = path.join(workingDirectory, `image-${randomUUID()}.${mediaTypeToExt(block.source.media_type)}`);
+      writeFileSync(filePath, Buffer.from(`${block.source.data}`, "base64"));
       tempFiles.push(filePath);
-      blocks.push({ type: "local_image", path: filePath });
+      input.push({ type: "localImage", path: filePath });
     }
-    // 未知のブロック型は無視（fire-orchestrator が渡すのは text/image のみ・S5 実物）。
   }
-  return { input: blocks, tempFiles };
+  if (input.length === 0) throw new TypeError("ask(content): no supported text or image content blocks.");
+  return { input, tempFiles };
 }
 
-/**
- * `thread.runStreamed()` を回してイベントを採取する。codex-sdk の `run()` は turn.failed を reject
- * するかが型定義上不明（brain-swap-inventory.md §2-4）なため、runStreamed でイベントを直接検査し
- * turn.failed/error を検出して throw する（空応答を黙って返さない）。
- * @param {import("@openai/codex-sdk").Thread} thread
- * @param {import("@openai/codex-sdk").Input} input
- * @returns {Promise<{ finalResponse: string; usage: any }>}
- */
-async function runTurn(thread, input) {
-  const { events } = await thread.runStreamed(input);
-  let finalResponse = "";
-  /** @type {any} */
-  let usage = null;
-  /** @type {string | null} */
-  let errorMsg = null;
+/** Preserve image-first order by merging the prompt into the first text item. */
+function withSystemPrompt(input, systemPrompt) {
+  const copied = input.map((item) => ({ ...item }));
+  const textIndex = copied.findIndex((item) => item.type === "text");
+  if (textIndex >= 0) copied[textIndex].text = `${systemPrompt}\n\n${copied[textIndex].text}`;
+  else copied.push({ type: "text", text: systemPrompt });
+  return copied;
+}
 
-  for await (const ev of events) {
-    switch (ev.type) {
-      case "item.completed": {
-        const item = /** @type {any} */ (ev).item;
-        if (item && item.type === "agent_message" && typeof item.text === "string") {
-          finalResponse = item.text;
-        }
-        break;
+function normalizeUsage(tokenUsage) {
+  const last = tokenUsage?.last;
+  if (!last || typeof last !== "object") return null;
+  return {
+    input_tokens: last.inputTokens ?? 0,
+    cached_input_tokens: last.cachedInputTokens ?? 0,
+    output_tokens: last.outputTokens ?? 0,
+    reasoning_output_tokens: last.reasoningOutputTokens ?? 0,
+    total_tokens: last.totalTokens ?? 0
+  };
+}
+
+function protocolError(message) {
+  return new Error(`codex-session: malformed App Server message — ${message}`);
+}
+
+function turnError(message) {
+  return new Error(`codex-session: turn failed — ${message}`);
+}
+
+class AppServerConnection {
+  constructor(options) {
+    this.spawnImpl = options.spawnImpl;
+    this.command = options.command;
+    this.args = options.args;
+    this.spawnOptions = options.spawnOptions;
+    this.rpcTimeoutMs = options.rpcTimeoutMs;
+    this.shutdownTimeoutMs = options.shutdownTimeoutMs;
+    this.onNotification = options.onNotification;
+    this.onFatal = options.onFatal;
+    this.onDiagnostic = options.onDiagnostic;
+    this.child = null;
+    this.nextRequestId = 1;
+    this.pending = new Map();
+    this.decoder = new StringDecoder("utf8");
+    this.buffer = "";
+    this.closed = false;
+    this.closing = false;
+    this.exited = false;
+    this.exitPromise = Promise.resolve();
+    this.closePromise = null;
+    this.initialized = false;
+    this.fatalError = null;
+  }
+
+  async start() {
+    if (!this.child) {
+      let child;
+      try {
+        child = this.spawnImpl(this.command, this.args, this.spawnOptions);
+      } catch (error) {
+        throw new Error("codex-session: failed to start App Server process.", { cause: error });
       }
-      case "turn.completed":
-        usage = /** @type {any} */ (ev).usage ?? null;
-        break;
-      case "turn.failed":
-        errorMsg = /** @type {any} */ (ev).error?.message ?? "turn.failed";
-        break;
-      case "error":
-        errorMsg = /** @type {any} */ (ev).message ?? "stream error";
-        break;
-      default:
-        break;
+      if (!child?.stdin || !child?.stdout || typeof child.stdin.write !== "function") {
+        throw new Error("codex-session: App Server process is missing piped stdio.");
+      }
+      this.child = child;
+      this.exitPromise = new Promise((resolve) => {
+        child.once("exit", (code, signal) => {
+          this.exited = true;
+          resolve();
+          if (!this.closing) this.fail(new Error(`codex-session: App Server process exited (${code ?? "null"}/${signal ?? "none"}).`));
+        });
+      });
+      child.once("error", (error) => {
+        if (!this.closing) this.fail(new Error("codex-session: App Server process error.", { cause: error }));
+      });
+      child.stdout.on("data", (chunk) => this.acceptChunk(chunk));
+      child.stdin.once?.("error", (error) => {
+        if (!this.closing) this.fail(new Error("codex-session: App Server stdin error.", { cause: error }));
+      });
+      child.stderr?.on?.("data", () => {
+        // Drain stderr to prevent child backpressure. Response/prompt content is never retained.
+      });
+      child.stdout.once("error", (error) => {
+        if (!this.closing) this.fail(new Error("codex-session: App Server stdout error.", { cause: error }));
+      });
+      child.stdout.once("end", () => {
+        const tail = this.decoder.end();
+        if (tail) this.buffer += tail;
+        if (!this.closing) {
+          this.fail(
+            this.buffer.trim().length > 0
+              ? protocolError("truncated JSONL at stdout end")
+              : new Error("codex-session: App Server stdout ended unexpectedly.")
+          );
+        }
+      });
+    }
+    if (this.initialized) return;
+    await this.request("initialize", {
+      clientInfo: { name: "ai-native-live2d-editor-soul", title: "AI Cohost Soul", version: "1" },
+      capabilities: { experimentalApi: false }
+    });
+    this.notify("initialized");
+    this.initialized = true;
+  }
+
+  acceptChunk(chunk) {
+    if (this.closed) return;
+    this.buffer += this.decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    while (true) {
+      const newline = this.buffer.indexOf("\n");
+      if (newline < 0) break;
+      const line = this.buffer.slice(0, newline).replace(/\r$/, "");
+      this.buffer = this.buffer.slice(newline + 1);
+      if (line.trim().length === 0) continue;
+      try {
+        this.acceptLine(line);
+      } catch (error) {
+        this.fail(error instanceof Error ? error : protocolError("unknown parse error"));
+        return;
+      }
     }
   }
 
-  if (errorMsg !== null) {
-    throw new Error(`codex-session: turn failed — ${errorMsg}`);
+  acceptLine(line) {
+    let message;
+    try {
+      message = JSON.parse(line);
+    } catch (error) {
+      throw protocolError(`invalid JSON (${error instanceof Error ? error.message : "parse error"})`);
+    }
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      this.diagnose("non-object JSONL record");
+      return;
+    }
+    if (Object.hasOwn(message, "id") && !Object.hasOwn(message, "method")) {
+      const pending = this.pending.get(message.id);
+      if (!pending) {
+        this.diagnose(`unknown response id ${String(message.id)}`);
+        return;
+      }
+      this.pending.delete(message.id);
+      clearTimeout(pending.timer);
+      if (message.error) {
+        const detail = typeof message.error.message === "string" ? message.error.message : "RPC error";
+        pending.reject(new Error(`codex-session: App Server RPC failed — ${detail}`));
+      } else if (Object.hasOwn(message, "result")) pending.resolve(message.result);
+      else pending.reject(protocolError("response has neither result nor error"));
+      return;
+    }
+    if (Object.hasOwn(message, "id") && typeof message.method === "string") {
+      this.write({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Client does not support server requests." } });
+      return;
+    }
+    if (typeof message.method !== "string" || Object.hasOwn(message, "id")) {
+      const pending = Object.hasOwn(message, "id") ? this.pending.get(message.id) : null;
+      if (pending) {
+        this.pending.delete(message.id);
+        clearTimeout(pending.timer);
+        pending.reject(protocolError("response has an invalid method field"));
+      } else {
+        this.diagnose("uncorrelated object without a usable method");
+      }
+      return;
+    }
+    this.onNotification(message);
   }
 
-  return { finalResponse, usage };
+  diagnose(detail) {
+    try { this.onDiagnostic?.(detail); } catch {}
+  }
+
+  request(method, params, timeoutMs = this.rpcTimeoutMs) {
+    if (this.closed || this.closing) return Promise.reject(new Error("codex-session: App Server connection is closed."));
+    const id = this.nextRequestId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`codex-session: App Server RPC timed out (${method}).`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      try {
+        this.write({ jsonrpc: "2.0", id, method, params });
+      } catch (error) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        this.fail(error instanceof Error ? error : new Error("codex-session: App Server write failed."));
+        reject(error);
+      }
+    });
+  }
+
+  notify(method, params) {
+    this.write({ jsonrpc: "2.0", method, ...(params === undefined ? {} : { params }) });
+  }
+
+  write(message) {
+    if (this.closed || !this.child?.stdin) throw new Error("codex-session: App Server connection is closed.");
+    try {
+      this.child.stdin.write(`${JSON.stringify(message)}\n`);
+    } catch (error) {
+      const failure = new Error("codex-session: App Server stdin write failed.", { cause: error });
+      this.fail(failure);
+      throw failure;
+    }
+  }
+
+  fail(error) {
+    if (this.closed || this.closing) return;
+    this.fatalError = error;
+    this.onFatal(error);
+  }
+
+  close(reason = new Error("codex-session: App Server connection closed.")) {
+    if (this.closePromise) return this.closePromise;
+    this.closePromise = this.closeNow(reason);
+    return this.closePromise;
+  }
+
+  async closeNow(reason) {
+    this.closing = true;
+    this.closed = true;
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(reason);
+    }
+    this.pending.clear();
+    if (!this.child || this.exited) return;
+    try { this.child.kill("SIGTERM"); } catch {}
+    await Promise.race([this.exitPromise, new Promise((resolve) => setTimeout(resolve, this.shutdownTimeoutMs))]);
+    if (!this.exited) {
+      try { this.child.kill("SIGKILL"); } catch {}
+      await Promise.race([this.exitPromise, new Promise((resolve) => setTimeout(resolve, this.shutdownTimeoutMs))]);
+      if (!this.exited) throw new Error("codex-session: App Server process could not be reaped.");
+    }
+  }
+}
+
+function turnIdFromNotification(message) {
+  if (typeof message.params?.turnId === "string") return message.params.turnId;
+  if (typeof message.params?.turn?.id === "string") return message.params.turn.id;
+  return null;
 }
 
 /**
- * Codex 頭セッションを起動する（知性契約 = llm-session.mjs と同型）。
  * @param {object} [options]
- * @param {string} [options.systemPrompt]  会話用 systemPrompt（turn 1 の先頭へ注入。既定は
- *   llm-session.mjs と同じ DEFAULT_SYSTEM_PROMPT＝二頭のメンタルモデルを対称に保つ）。
- * @param {string} [options.model]  モデル ID（既定 gpt-5.6-terra）。
- * @param {import("@openai/codex-sdk").ModelReasoningEffort | "none"} [options.effort]  既定 "none"。
- * @param {Record<string, string | undefined>} [options.env]  env ガード検査対象（既定 process.env）。
- * @param {boolean} [options.skipEnvGuard]  env ガードを飛ばす（テストで fake sdkImpl 注入時のみ）。
- * @param {(warning: string) => void} [options.onWarning]  env ガードの warning。
- * @param {typeof DefaultCodexSdk} [options.sdkImpl]  Codex コンストラクタの差し替え注入点（テスト用）。
- * @param {string} [options.homeDir]  rollout 掃除が探索する `~/.codex` の基点（既定 os.homedir()）。
- * @param {string} [options.ledgerPath]  thread_id sidecar 台帳のパス（既定 魂 zone ローカル）。
- * @returns {{
- *   ask: (content: string | Array<any>) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>;
- *   dispose: () => Promise<void>;
- *   threadIds: string[];
- * }}
+ * @param {string} [options.systemPrompt]
+ * @param {string} [options.model]
+ * @param {string} [options.effort]
+ * @param {Record<string, string | undefined>} [options.env]
+ * @param {boolean} [options.skipEnvGuard]
+ * @param {(warning: string) => void} [options.onWarning]
+ * @param {typeof defaultSpawn} [options.spawnImpl]
+ * @param {string} [options.codexPath]
+ * @param {string} [options.homeDir]
+ * @param {string} [options.ledgerPath]
+ * @param {number} [options.rpcTimeoutMs]
+ * @param {number} [options.disposeRpcTimeoutMs]
+ * @param {number} [options.shutdownTimeoutMs]
  */
 export function createCodexSession(options = {}) {
-  const {
-    systemPrompt = DEFAULT_SYSTEM_PROMPT,
-    model = DEFAULT_MODEL,
-    effort = DEFAULT_EFFORT,
-    env = process.env,
-    skipEnvGuard = false,
-    onWarning,
-    sdkImpl = DefaultCodexSdk,
-    homeDir = os.homedir(),
-    ledgerPath = DEFAULT_LEDGER_PATH
-  } = options;
+  const systemPrompt = `${options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT}`;
+  const model = `${options.model ?? DEFAULT_MODEL}`;
+  const effort = `${options.effort ?? DEFAULT_EFFORT}`;
+  const env = options.env ?? process.env;
+  const spawnImpl = options.spawnImpl ?? defaultSpawn;
+  const homeDir = options.homeDir ?? os.homedir();
+  const ledgerPath = options.ledgerPath ?? DEFAULT_LEDGER_PATH;
+  const rpcTimeoutMs = options.rpcTimeoutMs ?? 15_000;
+  const disposeRpcTimeoutMs = options.disposeRpcTimeoutMs ?? 300;
+  const shutdownTimeoutMs = options.shutdownTimeoutMs ?? 1_000;
+  const codexPath = options.codexPath ?? resolveBundledCodexPath();
 
-  if (!skipEnvGuard) {
+  if (!options.skipEnvGuard) {
     const { warnings } = assertSubscriptionAuthEnvOpenAI(env);
-    if (onWarning) {
-      for (const warning of warnings) {
-        onWarning(warning);
-      }
-    }
+    for (const warning of warnings) options.onWarning?.(warning);
   }
-
-  // 起動時 sweep（クラッシュ復旧）: 前回セッションが台帳に残した thread_id を掃除してから始める。
   sweepLedger(homeDir, ledgerPath);
-
-  // セッション寿命だけのスクラッチ dir（os.tmpdir 配下・リポジトリ外）。dispose で削除する。
-  const workingDirectory = mkdtempSync(path.join(os.tmpdir(), "codex-session-"));
-
-  const CodexCtor = sdkImpl;
-  const codex = new CodexCtor({
-    config: { forced_login_method: "chatgpt" }
-    // env / apiKey / baseUrl は渡さない（process.env 継承・サブスク OAuth のみ）。
-  });
-
-  const thread = codex.startThread({
-    model,
-    sandboxMode: "read-only",
-    approvalPolicy: "never",
-    webSearchEnabled: false,
-    workingDirectory,
-    skipGitRepoCheck: true,
-    modelReasoningEffort: /** @type {any} */ (effort)
-  });
-
-  /** @type {string[]} */
+  const workingDirectory = mkdtempSync(path.join(os.tmpdir(), "codex-app-server-session-"));
   const threadIds = [];
-  let turnCount = 0;
   let disposed = false;
+  let connection = null;
+  let connectionGeneration = 0;
+  let threadId = null;
+  let threadHasSuccessfulTurn = false;
+  let resetPromise = Promise.resolve();
+  let activeAsk = null;
+  let askInProgress = false;
+  const diagnose = (detail) => {
+    try { options.onWarning?.(`codex-session: ignored App Server message — ${detail}`); } catch {}
+  };
+
+  const invalidateConnection = (error, stale = connection) => {
+    if (!stale) return resetPromise;
+    if (connection === stale) {
+      connection = null;
+      threadId = null;
+      threadHasSuccessfulTurn = false;
+    }
+    const reapPromise = stale.close(error);
+    resetPromise = Promise.all([resetPromise, reapPromise]).then(() => undefined);
+    // Keep the barrier rejected for the calling ask/dispose/next ask, while
+    // registering an observer immediately so a delayed reap failure can never
+    // become an unhandled rejection between protocol callbacks and await sites.
+    resetPromise.catch(() => {});
+    return resetPromise;
+  };
+  const rejectActive = (error) => {
+    const active = activeAsk;
+    if (!active || active.settled) return;
+    active.settled = true;
+    active.onTextDelta = null;
+    active.reject(error);
+  };
+  const failTurn = (error) => {
+    const active = activeAsk;
+    if (active && threadId === active.threadId) {
+      threadId = null;
+      threadHasSuccessfulTurn = false;
+    }
+    rejectActive(error);
+  };
+
+  const dispatchNotification = (generation, message) => {
+    const active = activeAsk;
+    const method = message.method;
+    const turnScoped = method === "turn/started" || method === "turn/completed" || method === "item/started" ||
+      method === "item/completed" || method === "item/agentMessage/delta" ||
+      method === "thread/tokenUsage/updated" || method === "error";
+    if (!turnScoped) {
+      diagnose(`unsupported notification ${method}`);
+      return;
+    }
+    if (!active || active.settled || active.generation !== generation) {
+      diagnose(`stale notification ${method}`);
+      return;
+    }
+    if (active.turnId === null) {
+      active.queued.push(message);
+      return;
+    }
+    const notificationTurnId = turnIdFromNotification(message);
+    if (notificationTurnId !== active.turnId || message.params?.threadId !== active.threadId) {
+      const matchesThread = message.params?.threadId === active.threadId;
+      const matchesTurn = notificationTurnId === active.turnId;
+      if (matchesThread || matchesTurn) failTurn(protocolError(`${method} is missing required current thread/turn correlation`));
+      else diagnose(`unowned notification ${method}`);
+      return;
+    }
+    try {
+      if (method === "item/started") {
+        const item = message.params?.item;
+        if (item?.type !== "agentMessage") return;
+        if (typeof item.id !== "string") throw protocolError("agent item/started is missing item identity");
+        if (active.items.has(item.id)) throw protocolError("duplicate agent item start");
+        active.items.set(item.id, { deltaText: "", finalText: null, completed: false });
+        active.itemOrder.push(item.id);
+        return;
+      }
+      if (method === "item/agentMessage/delta") {
+        const { itemId, delta } = message.params ?? {};
+        if (typeof itemId !== "string" || typeof delta !== "string") throw protocolError("agent delta is missing itemId/delta");
+        const item = active.items.get(itemId);
+        if (!item || item.completed) throw protocolError("agent delta is outside its item lifetime");
+        item.deltaText += delta;
+        active.deltaText += delta;
+        if (active.ttftMs === null) active.ttftMs = performance.now() - active.startedAt;
+        active.onTextDelta?.(delta, { itemId, threadId: active.threadId, turnId: active.turnId, elapsedMs: performance.now() - active.startedAt });
+        return;
+      }
+      if (method === "item/completed") {
+        const item = message.params?.item;
+        if (item?.type !== "agentMessage") return;
+        if (typeof item.id !== "string") throw protocolError("agent item/completed is missing item identity");
+        if (typeof item.text !== "string") throw protocolError("agent item is missing final text");
+        const state = active.items.get(item.id);
+        if (!state || state.completed) throw protocolError("agent item completed outside its lifetime");
+        state.completed = true;
+        state.finalText = item.text;
+        if (state.deltaText !== item.text) throw turnError("agent delta accumulation does not match the completed item");
+        return;
+      }
+      if (method === "thread/tokenUsage/updated") {
+        active.usage = normalizeUsage(message.params?.tokenUsage);
+        return;
+      }
+      if (method === "error") {
+        const params = message.params;
+        if (!params?.error || typeof params.error.message !== "string" || typeof params.willRetry !== "boolean") {
+          throw protocolError("error notification has an invalid shape");
+        }
+        if (!params.willRetry) throw turnError(params.error.message);
+        return;
+      }
+      if (method === "turn/completed") {
+        const status = message.params?.turn?.status;
+        if (typeof status !== "string") throw protocolError("turn/completed is missing status");
+        if (status !== "completed") throw turnError(message.params?.turn?.error?.message ?? status);
+        if (active.itemOrder.length === 0) throw turnError("completed turn has no agent message");
+        const replyText = active.itemOrder.map((id) => active.items.get(id)).map((item) => {
+          if (!item?.completed || typeof item.finalText !== "string") throw turnError("completed turn has an incomplete agent item");
+          return item.finalText;
+        }).join("");
+        if (active.deltaText !== replyText) throw turnError("agent delta accumulation does not match final reply");
+        active.settled = true;
+        active.onTextDelta = null;
+        active.resolve({ replyText, usage: active.usage, ttftMs: active.ttftMs });
+      }
+    } catch (error) {
+      failTurn(error instanceof Error ? error : turnError("unknown notification failure"));
+    }
+  };
+
+  const ensureConnection = async () => {
+    await resetPromise;
+    if (disposed) throw new Error("codex-session already disposed.");
+    if (!connection) {
+      const generation = ++connectionGeneration;
+      const fresh = new AppServerConnection({
+        spawnImpl,
+        command: codexPath,
+        args: ["app-server", "--stdio", "-c", 'forced_login_method="chatgpt"', "-c", 'web_search="disabled"'],
+        spawnOptions: { cwd: workingDirectory, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
+        rpcTimeoutMs,
+        shutdownTimeoutMs,
+        onNotification: (message) => dispatchNotification(generation, message),
+        onDiagnostic: diagnose,
+        onFatal: (error) => {
+          invalidateConnection(error, fresh);
+          rejectActive(error);
+        }
+      });
+      connection = fresh;
+    }
+    const current = connection;
+    try {
+      await current.start();
+      return { connection: current, generation: connectionGeneration };
+    } catch (error) {
+      if (!current.child || current.fatalError) await invalidateConnection(error instanceof Error ? error : protocolError("connection start failed"), current);
+      throw error;
+    }
+  };
+
+  const ensureThread = async () => {
+    if (connection && threadId) return { connection, threadId, generation: connectionGeneration };
+    const ready = await ensureConnection();
+    try {
+      const result = await ready.connection.request("thread/start", {
+        model, cwd: workingDirectory, approvalPolicy: "never", sandbox: "read-only",
+        config: { forced_login_method: "chatgpt", web_search: "disabled" }
+      });
+      const id = result?.thread?.id;
+      if (typeof id !== "string" || id.length === 0) throw protocolError("thread/start response is missing thread.id");
+      threadId = id;
+      threadHasSuccessfulTurn = false;
+      if (!threadIds.includes(id)) {
+        threadIds.push(id);
+        appendLedger(ledgerPath, id);
+      }
+      return { connection: ready.connection, threadId: id, generation: ready.generation };
+    } catch (error) { throw error; }
+  };
 
   return {
+    /** Start and initialize the bundled App Server without creating a thread or turn. */
+    async initialize() {
+      await ensureConnection();
+    },
+
     /**
+     * Existing one-argument callers remain valid. Wave 2 can opt into the
+     * ordered append-only stream through the additive second argument.
      * @param {string | Array<any>} content
-     * @returns {Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>}
+     * @param {{onTextDelta?: (delta: string, meta: {itemId:string;threadId:string;turnId:string;elapsedMs:number}) => void}} [askOptions]
      */
-    async ask(content) {
-      const isNonEmptyString = typeof content === "string" && content.length > 0;
-      const isNonEmptyBlocks = Array.isArray(content) && content.length > 0;
-      if (!isNonEmptyString && !isNonEmptyBlocks) {
-        throw new TypeError(
-          "ask(content): content must be a non-empty string or a non-empty content block array."
-        );
-      }
-      if (disposed) {
-        throw new Error("codex-session already disposed.");
-      }
-
-      const isFirstTurn = turnCount === 0;
-      turnCount += 1;
-
-      const { input, tempFiles } = buildInput(content, isFirstTurn, systemPrompt, workingDirectory);
-
+    async ask(content, askOptions = {}) {
+      if (disposed) throw new Error("codex-session already disposed.");
+      if (askInProgress) throw new Error("codex-session: concurrent ask is not supported.");
+      askInProgress = true;
+      const onTextDelta = typeof askOptions?.onTextDelta === "function" ? askOptions.onTextDelta : null;
+      let snapshotted;
       try {
-        const askStart = performance.now();
-        let turn;
+        snapshotted = snapshotInput(content, workingDirectory);
+      } catch (error) {
+        askInProgress = false;
+        throw error;
+      }
+      const startedAt = performance.now();
+      try {
+        const ready = await ensureThread();
+        const input = threadHasSuccessfulTurn ? snapshotted.input.map((item) => ({ ...item })) : withSystemPrompt(snapshotted.input, systemPrompt);
+        let terminalResolve;
+        let terminalReject;
+        const terminal = new Promise((resolve, reject) => { terminalResolve = resolve; terminalReject = reject; });
+        const active = {
+          generation: ready.generation, threadId: ready.threadId, turnId: null, queued: [], items: new Map(), itemOrder: [],
+          deltaText: "", usage: null, ttftMs: null, startedAt, onTextDelta, settled: false,
+          resolve: terminalResolve, reject: terminalReject
+        };
+        activeAsk = active;
+        let startResult;
         try {
-          turn = await runTurn(thread, input);
-        } finally {
-          // turn.failed でも rollout ファイルは作られている可能性がある → 成否に関わらず記録する。
-          if (thread.id && !threadIds.includes(thread.id)) {
-            threadIds.push(thread.id);
-            appendLedger(ledgerPath, thread.id);
+          startResult = await ready.connection.request("turn/start", {
+            threadId: ready.threadId, input, model, effort, cwd: workingDirectory, approvalPolicy: "never",
+            sandboxPolicy: { type: "readOnly", networkAccess: false }
+          });
+        } catch (error) {
+          failTurn(error instanceof Error ? error : turnError("turn/start failed"));
+        }
+        if (!active.settled) {
+          const startedTurnId = startResult?.turn?.id;
+          if (typeof startedTurnId !== "string" || startedTurnId.length === 0) failTurn(protocolError("turn/start response is missing turn.id"));
+          else {
+            active.turnId = startedTurnId;
+            for (const message of active.queued.splice(0)) {
+              dispatchNotification(ready.generation, message);
+              if (active.settled) break;
+            }
           }
         }
-        const elapsedMs = performance.now() - askStart;
-        return {
-          replyText: turn.finalResponse,
-          usage: turn.usage,
-          ttftMs: null, // codex 経路はトークン delta が無い＝先頭トークン到達を観測できない（terra §0/§6）。
-          elapsedMs
-        };
+        const result = await terminal;
+        threadHasSuccessfulTurn = true;
+        return { ...result, elapsedMs: performance.now() - startedAt };
+      } catch (error) {
+        await resetPromise;
+        throw error;
       } finally {
-        for (const filePath of tempFiles) {
-          try {
-            unlinkSync(filePath);
-          } catch {
-            // ベストエフォート（既に無い等は無視）。
-          }
+        activeAsk = null;
+        askInProgress = false;
+        for (const filePath of snapshotted.tempFiles) {
+          try { unlinkSync(filePath); } catch {}
         }
       }
     },
 
-    /** 記録済みの thread_id（このセッションが作った分のみ）。台帳記録・観測用。 */
     threadIds,
 
-    /** 常駐プロセスは無い（run 毎 spawn）。dispose は rollout 掃除+スクラッチ削除+台帳整理。冪等。 */
     async dispose() {
-      if (disposed) {
-        return;
-      }
+      if (disposed) return;
       disposed = true;
-      for (const id of threadIds) {
-        deleteRolloutForThreadId(homeDir, id);
+      const live = connection;
+      const liveThreadId = threadId;
+      const active = activeAsk;
+      if (active) rejectActive(new Error("codex-session disposed during turn."));
+      if (live && active?.turnId) {
+        try { await live.request("turn/interrupt", { threadId: active.threadId, turnId: active.turnId }, disposeRpcTimeoutMs); } catch {}
       }
-      removeFromLedger(ledgerPath, threadIds);
+      if (live && liveThreadId) {
+        try { await live.request("thread/delete", { threadId: liveThreadId }, disposeRpcTimeoutMs); } catch {
+          // 0.144.5 may fail with the observed agent_jobs DB error. Do not mutate its DB.
+        }
+      }
+      connection = null;
+      threadId = null;
+      let disposeError = null;
       try {
-        rmSync(workingDirectory, { recursive: true, force: true });
-      } catch {
-        // ベストエフォート。
+        if (live) await live.close(new Error("codex-session disposed."));
+        await resetPromise;
+      } catch (error) {
+        disposeError = error;
+      } finally {
+        for (const id of threadIds) deleteRolloutForThreadId(homeDir, id);
+        removeFromLedger(ledgerPath, threadIds);
+        try { rmSync(workingDirectory, { recursive: true, force: true }); } catch {}
       }
+      if (disposeError) throw disposeError;
     }
   };
 }

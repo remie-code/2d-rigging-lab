@@ -23,6 +23,14 @@ import {
   runtimePlayerControlChannelTokenQueryKey
 } from "./channel-url";
 import { ControlChannelWebSocketConnection } from "./channel-websocket-connection";
+import type {
+  ControlChannelWebSocketCloseInfo,
+  ControlChannelWebSocketTransportEvent
+} from "./channel-websocket-connection";
+import {
+  noOpRuntimePlayerControlChannelDiagnosticSink,
+  type RuntimePlayerControlChannelDiagnosticSink
+} from "./fire-diagnostics";
 
 /**
  * The Control Channel WS server (C4 Domain A). Transport core is duplicated from
@@ -99,6 +107,10 @@ export type RuntimePlayerControlChannelServerOptions = {
   readonly getCurrentSlots?: () => readonly RuntimePlayerMappingSlot[] | null;
   readonly defaultWindowMs?: number;
   readonly nowMs?: () => number;
+  /** Passive local diagnostics only; absent in focused legacy tests. */
+  readonly diagnosticSink?: RuntimePlayerControlChannelDiagnosticSink;
+  /** Process-local monotonic clock; never compared with another process. */
+  readonly monotonicNowMs?: () => number;
 };
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -111,6 +123,8 @@ export class RuntimePlayerControlChannelServer {
     readonly RuntimePlayerMappingSlot[] | null;
   readonly #defaultWindowMs: number;
   readonly #nowMs: () => number;
+  readonly #diagnosticSink: RuntimePlayerControlChannelDiagnosticSink;
+  readonly #monotonicNowMs: () => number;
   readonly #connections = new Set<ControlChannelWebSocketConnection>();
   readonly #stateListeners = new Set<
     RuntimePlayerControlChannelServerStateListener
@@ -121,6 +135,7 @@ export class RuntimePlayerControlChannelServer {
   #server: ReturnType<typeof createServer> | null = null;
   #listeningPort: number | null = null;
   #state: RuntimePlayerControlChannelServerState = { kind: "closed" };
+  #connectionGeneration = 0;
 
   constructor(options: RuntimePlayerControlChannelServerOptions) {
     this.#token = options.token ?? createControlChannelToken();
@@ -130,6 +145,10 @@ export class RuntimePlayerControlChannelServer {
     this.#defaultWindowMs =
       options.defaultWindowMs ?? runtimePlayerControlChannelDefaultWindowMs;
     this.#nowMs = options.nowMs ?? (() => Date.now());
+    this.#diagnosticSink =
+      options.diagnosticSink ?? noOpRuntimePlayerControlChannelDiagnosticSink;
+    this.#monotonicNowMs = options.monotonicNowMs ?? (() => performance.now());
+    this.#diagnosticSink.record({ event: "server.created" });
   }
 
   get token(): string {
@@ -185,11 +204,16 @@ export class RuntimePlayerControlChannelServer {
     }
 
     this.#listeningPort = readListeningPort(server.address());
+    this.#diagnosticSink.record({
+      event: "server.opened",
+      port: this.#listeningPort
+    });
     this.#setState({ kind: "open", port: this.#listeningPort });
     return this.#state;
   }
 
   async close(): Promise<void> {
+    this.#diagnosticSink.record({ event: "server.intentional-close" });
     for (const connection of this.#connections) {
       connection.close();
     }
@@ -216,6 +240,7 @@ export class RuntimePlayerControlChannelServer {
     }
 
     this.#setState({ kind: "closed" });
+    this.#diagnosticSink.record({ event: "server.closed" });
   }
 
   #handleHttpRequest(_request: IncomingMessage, response: ServerResponse): void {
@@ -260,22 +285,46 @@ export class RuntimePlayerControlChannelServer {
       ""
     ].join("\r\n"));
 
+    const connectionGeneration = this.#connectionGeneration + 1;
+    this.#connectionGeneration = connectionGeneration;
+    const connectionId = `control-channel-${connectionGeneration}`;
+    const connectedAtMonotonicMs = this.#monotonicNowMs();
     const connection = new ControlChannelWebSocketConnection({
       socket,
       handlers: {
-        onTextMessage: (text) => this.#handleClientMessage(connection, text),
-        onClose: () => this.#handleClientClose(connection)
+        onTextMessage: (text) => this.#handleClientMessage(connection, text, {
+          connectionId,
+          connectionGeneration
+        }),
+        onClose: (info) => this.#handleClientClose(connection, info, {
+          connectionId,
+          connectionGeneration,
+          connectedAtMonotonicMs
+        }),
+        onTransportEvent: (event) => this.#recordTransportEvent(event, {
+          connectionId,
+          connectionGeneration
+        })
       }
     });
     this.#connections.add(connection);
     connection.send(createControlChannelServerHello());
+    this.#diagnosticSink.record({
+      event: "connection.connected",
+      connectionId,
+      connectionGeneration
+    });
     this.#emitEvent({ kind: "connected" });
     this.#refreshConnectedState();
   }
 
   #handleClientMessage(
     connection: ControlChannelWebSocketConnection,
-    text: string
+    text: string,
+    connectionInfo: {
+      readonly connectionId: string;
+      readonly connectionGeneration: number;
+    }
   ): void {
     const dispatch = dispatchControlChannelRequest({
       text,
@@ -286,6 +335,12 @@ export class RuntimePlayerControlChannelServer {
     });
 
     if (dispatch.kind === "ignore") {
+      this.#diagnosticSink.record({
+        event: "request.observed",
+        ...connectionInfo,
+        requestBytes: Buffer.byteLength(text),
+        result: "ignored"
+      });
       return;
     }
 
@@ -333,10 +388,40 @@ export class RuntimePlayerControlChannelServer {
       });
     }
 
+    this.#diagnosticSink.record({
+      event: "request.observed",
+      ...connectionInfo,
+      requestId: dispatch.reply.replyTo,
+      requestBytes: Buffer.byteLength(text),
+      result: dispatch.reply.result,
+      ...(dispatch.reply.result === "rejected"
+        ? { rejectionCode: dispatch.reply.error.code }
+        : {})
+    });
+
     connection.send(dispatch.reply);
   }
 
-  #handleClientClose(connection: ControlChannelWebSocketConnection): void {
+  #handleClientClose(
+    connection: ControlChannelWebSocketConnection,
+    closeInfo: ControlChannelWebSocketCloseInfo,
+    connectionInfo: {
+      readonly connectionId: string;
+      readonly connectionGeneration: number;
+      readonly connectedAtMonotonicMs: number;
+    }
+  ): void {
+    this.#diagnosticSink.record({
+      event: "connection.disconnected",
+      connectionId: connectionInfo.connectionId,
+      connectionGeneration: connectionInfo.connectionGeneration,
+      closeReason: closeInfo.reason,
+      terminalEvent: closeInfo.terminalEvent,
+      connectionDurationMs: Math.max(
+        0,
+        this.#monotonicNowMs() - connectionInfo.connectedAtMonotonicMs
+      )
+    });
     if (!this.#connections.delete(connection)) {
       return;
     }
@@ -345,6 +430,38 @@ export class RuntimePlayerControlChannelServer {
     this.#overlayStore.releaseAll(this.#nowMs());
     this.#emitEvent({ kind: "disconnected" });
     this.#refreshConnectedState();
+  }
+
+  #recordTransportEvent(
+    event: ControlChannelWebSocketTransportEvent,
+    connectionInfo: {
+      readonly connectionId: string;
+      readonly connectionGeneration: number;
+    }
+  ): void {
+    if (event.kind === "frame") {
+      this.#diagnosticSink.record({
+        event: "transport.frame",
+        ...connectionInfo,
+        frameOpcode: event.opcode,
+        frameFinal: event.final,
+        framePayloadBytes: event.payloadBytes
+      });
+      return;
+    }
+
+    this.#diagnosticSink.record({
+      event: "transport.close-requested",
+      ...connectionInfo,
+      closeReason: event.reason,
+      ...(event.framePayloadBytes === undefined
+        ? {}
+        : { framePayloadBytes: event.framePayloadBytes }),
+      ...(event.bufferedBytes === undefined
+        ? {}
+        : { bufferedBytes: event.bufferedBytes }),
+      ...(event.chunkBytes === undefined ? {} : { chunkBytes: event.chunkBytes })
+    });
   }
 
   #refreshConnectedState(): void {

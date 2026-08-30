@@ -38,6 +38,10 @@ import { performance } from "node:perf_hooks";
 
 const HELLO_TIMEOUT_MS = 4000;
 const REPLY_TIMEOUT_MS = 4000;
+// Runtime Player's current text-frame boundary. This observation-wave guard is
+// deliberately not a protocol redesign: retain/raise/remove it only after
+// serialized-envelope measurements have been reviewed.
+const SPEECH_ENVELOPE_UTF8_CAP = 4096;
 
 /**
  * 1 本の接続を張り、server.hello を照合し、intent.speech を送るハンドルを返す。
@@ -48,8 +52,11 @@ const REPLY_TIMEOUT_MS = 4000;
  *   （既定 ["intent.speech", "intent.envelope"]＝発話 + 表情演出。器は C5 から両方を広告済み）。
  * @param {number} [options.helloTimeoutMs]  hello 待ち（既定 4000）。
  * @param {number} [options.replyTimeoutMs]  応答待ち（既定 4000）。
+ * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace]
+ *   Passive local diagnostics hook. It receives no payload/body text.
+ * @param {number} [options.connectionGeneration] lazy connection generation for correlation.
  * @returns {Promise<{
- *   sendSpeech: (timeline: unknown) => Promise<{ result: string; error: unknown; rttMs: number }>;
+ *   sendSpeech: (timeline: unknown) => Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>;
  *   sendEnvelope: (intent: { slotId: string; peak: number; attackMs: number; sustainMs: number; decayMs: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   sendSet: (intent: { slotId: string; value: number; ttlMs?: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   close: () => Promise<void>;
@@ -65,8 +72,20 @@ export async function connectChannel(url, options = {}) {
   const requiredKinds = options.requiredKinds ?? ["intent.speech", "intent.envelope"];
   const helloTimeoutMs = options.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
   const replyTimeoutMs = options.replyTimeoutMs ?? REPLY_TIMEOUT_MS;
+  const onTrace = options.onTrace;
+  const connectionGeneration = options.connectionGeneration ?? 0;
+  const trace = (event, fields = {}) => {
+    if (typeof onTrace !== "function") return;
+    try {
+      onTrace(event, { connectionGeneration, ...fields });
+    } catch {
+      // Passive diagnostics must never alter Control Channel behavior.
+    }
+  };
 
   const socket = new WebSocketImpl(url);
+  const connectionStartedAt = performance.now();
+  trace("channel.connect.started");
   const pending = new Map(); // id -> { resolve, reject, t0 }
   let helloPayload = null;
   let helloResolve;
@@ -102,11 +121,25 @@ export async function connectChannel(url, options = {}) {
         return;
       }
       pending.delete(message.replyTo);
-      waiter.resolve({
+      const outcome = {
         result: message.result,
         error: message.error ?? null,
-        rttMs: performance.now() - waiter.t0
+        rttMs: performance.now() - waiter.t0,
+        ...(waiter.kind === "intent.speech"
+          ? { requestId: message.replyTo, serializedUtf8Bytes: waiter.serializedUtf8Bytes }
+          : {})
+      };
+      trace("channel.request.reply", {
+        requestId: message.replyTo,
+        kind: waiter.kind,
+        result: typeof message.result === "string" ? message.result : null,
+        errorCode:
+          outcome.error && typeof outcome.error === "object" && typeof outcome.error.code === "string"
+            ? outcome.error.code
+            : null,
+        rttMs: outcome.rttMs
       });
+      waiter.resolve(outcome);
       return;
     }
 
@@ -114,8 +147,9 @@ export async function connectChannel(url, options = {}) {
     unknownEventCount += 1;
   });
 
-  const closedError = new Error("Control Channel socket closed unexpectedly.");
+  const closedError = diagnosticError("Control Channel socket closed unexpectedly.", "channel_closed", "control_channel.close");
   socket.addEventListener("close", () => {
+    trace("channel.close");
     helloReject(closedError);
     for (const waiter of pending.values()) {
       waiter.reject(closedError);
@@ -123,11 +157,13 @@ export async function connectChannel(url, options = {}) {
     pending.clear();
   });
   socket.addEventListener("error", () => {
-    helloReject(new Error("Control Channel socket error."));
+    trace("channel.socket.error");
+    helloReject(diagnosticError("Control Channel socket error.", "channel_socket_error", "control_channel.socket"));
   });
 
-  await withTimeout(waitForOpen(socket), helloTimeoutMs, "socket open");
-  await withTimeout(helloPromise, helloTimeoutMs, "server.hello");
+  await withTimeout(waitForOpen(socket), helloTimeoutMs, "socket open", "channel_open_timeout", "control_channel.open_timeout");
+  trace("channel.opened");
+  await withTimeout(helloPromise, helloTimeoutMs, "server.hello", "server_hello_timeout", "control_channel.hello_timeout");
 
   // capabilities 照合: 契約の supportedKinds を hello が満たすか。
   const supported = new Set(helloPayload?.supportedKinds ?? []);
@@ -137,22 +173,78 @@ export async function connectChannel(url, options = {}) {
       `server.hello is missing required supportedKinds: ${missing.join(", ")}`
     );
   }
+  trace("channel.hello", { supportedKindCount: supported.size, durationMs: performance.now() - connectionStartedAt });
+
+  const sendRequest = (kind, payload, label, extra = {}) => {
+    const id = `req-${(idCounter += 1)}`;
+    const envelope = { v: 1, id, kind, payload };
+    const serialized = JSON.stringify(envelope);
+    const serializedUtf8Bytes = Buffer.byteLength(serialized, "utf8");
+    // Preflight the exact text that would be passed to socket.send().  Do this
+    // before registering a pending reply: oversize is local, never reaches the
+    // Runtime, and must not make this otherwise healthy connection unusable.
+    if (kind === "intent.speech" && serializedUtf8Bytes > SPEECH_ENVELOPE_UTF8_CAP) {
+      const failure = diagnosticError(
+        `intent.speech envelope is ${serializedUtf8Bytes} UTF-8 bytes; current observation cap is ${SPEECH_ENVELOPE_UTF8_CAP}.`,
+        "speech_envelope_oversize",
+        "control_channel.preflight"
+      );
+      trace("channel.request.preflight_rejected", {
+        requestId: id,
+        kind,
+        serializedUtf8Bytes,
+        configuredUtf8Cap: SPEECH_ENVELOPE_UTF8_CAP,
+        ...extra,
+        failureCode: failure.code
+      });
+      throw failure;
+    }
+    const t0 = performance.now();
+    const settled = new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject, t0, kind, serializedUtf8Bytes });
+    });
+    trace("channel.request.send", {
+      requestId: id,
+      kind,
+      serializedUtf8Bytes,
+      ...extra
+    });
+    try {
+      socket.send(serialized);
+    } catch (error) {
+      pending.delete(id);
+      const failure = withDiagnostic(error, "channel_send_failed", "control_channel.send");
+      trace("channel.request.send_failed", { requestId: id, kind, failureName: failure.name, failureCode: failure.code });
+      throw failure;
+    }
+    return withTimeout(settled, replyTimeoutMs, label, "reply_timeout", "control_channel.reply_timeout").catch((error) => {
+      // A close/timeout can mean Runtime accepted the request but its reply was
+      // lost. Do not leave it eligible for a late reply and, critically, do not
+      // retry here: the caller gets one explicit ambiguous failure instead.
+      pending.delete(id);
+      const failure = /** @type {any} */ (error);
+      trace("channel.request.failed", {
+        requestId: id,
+        kind,
+        failureName: failure instanceof Error ? failure.name : typeof failure,
+        failureCode: typeof failure?.code === "string" ? failure.code : null,
+        failureStage: typeof failure?.diagnosticStage === "string" ? failure.diagnosticStage : "control_channel.reply"
+      });
+      throw failure;
+    });
+  };
 
   return {
     /**
      * intent.speech を 1 本送り、replyTo 相関で accepted/rejected を受ける。
      * @param {unknown} timeline  buildSpeechTimeline の返り timeline（`{timeMs,vowel,s}[]`）。
-     * @returns {Promise<{ result: string; error: unknown; rttMs: number }>}
+     * @returns {Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>}
      */
-    sendSpeech(timeline) {
-      const id = `req-${(idCounter += 1)}`;
+    async sendSpeech(timeline) {
       const payload = { timeline };
-      const t0 = performance.now();
-      const settled = new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject, t0 });
+      return sendRequest("intent.speech", payload, "speech reply", {
+        timelineCount: Array.isArray(timeline) ? timeline.length : null
       });
-      socket.send(JSON.stringify({ v: 1, id, kind: "intent.speech", payload }));
-      return withTimeout(settled, replyTimeoutMs, "speech reply");
     },
     /**
      * intent.envelope を 1 本送り、replyTo 相関で accepted/rejected を受ける（S4 表情演出）。
@@ -162,7 +254,6 @@ export async function connectChannel(url, options = {}) {
      * @returns {Promise<{ result: string; error: unknown; rttMs: number }>}
      */
     sendEnvelope(intent) {
-      const id = `req-${(idCounter += 1)}`;
       const payload = {
         slotId: intent.slotId,
         peak: intent.peak,
@@ -170,12 +261,7 @@ export async function connectChannel(url, options = {}) {
         sustainMs: intent.sustainMs,
         decayMs: intent.decayMs
       };
-      const t0 = performance.now();
-      const settled = new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject, t0 });
-      });
-      socket.send(JSON.stringify({ v: 1, id, kind: "intent.envelope", payload }));
-      return withTimeout(settled, replyTimeoutMs, `envelope reply for ${intent.slotId}`);
+      return sendRequest("intent.envelope", payload, `envelope reply for ${intent.slotId}`, { slotId: payload.slotId });
     },
     /**
      * intent.set を 1 本送り、replyTo 相関で accepted/rejected を受ける（S6 barge-in の口閉じ）。
@@ -186,18 +272,12 @@ export async function connectChannel(url, options = {}) {
      * @returns {Promise<{ result: string; error: unknown; rttMs: number }>}
      */
     sendSet(intent) {
-      const id = `req-${(idCounter += 1)}`;
       /** @type {{ slotId: string; value: number; ttlMs?: number }} */
       const payload = { slotId: intent.slotId, value: intent.value };
       if (intent.ttlMs !== undefined) {
         payload.ttlMs = intent.ttlMs;
       }
-      const t0 = performance.now();
-      const settled = new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject, t0 });
-      });
-      socket.send(JSON.stringify({ v: 1, id, kind: "intent.set", payload }));
-      return withTimeout(settled, replyTimeoutMs, `set reply for ${intent.slotId}`);
+      return sendRequest("intent.set", payload, `set reply for ${intent.slotId}`, { slotId: payload.slotId });
     },
     consumeUnknownEventCount() {
       const count = unknownEventCount;
@@ -216,7 +296,7 @@ export async function connectChannel(url, options = {}) {
         socket.addEventListener("close", () => resolve(), { once: true });
       });
       socket.close();
-      await withTimeout(closed, replyTimeoutMs, "socket close");
+      await withTimeout(closed, replyTimeoutMs, "socket close", "channel_close_timeout", "control_channel.close_timeout");
     }
   };
 }
@@ -235,16 +315,36 @@ function waitForOpen(socket) {
   });
 }
 
-function withTimeout(promise, ms, label) {
+function withTimeout(promise, ms, label, code = "timeout", diagnosticStage = "control_channel.timeout") {
   let timer;
   const timeout = new Promise((_resolve, reject) => {
     timer = setTimeout(() => {
-      reject(new Error(`timed out after ${ms}ms waiting for ${label}`));
+      reject(diagnosticError(`timed out after ${ms}ms waiting for ${label}`, code, diagnosticStage));
     }, ms);
   });
   return Promise.race([promise, timeout]).finally(() => {
     clearTimeout(timer);
   });
+}
+
+/** @param {string} message @param {string} code @param {string} diagnosticStage */
+function diagnosticError(message, code, diagnosticStage) {
+  const error = new Error(message);
+  /** @type {any} */ (error).code = code;
+  /** @type {any} */ (error).diagnosticStage = diagnosticStage;
+  return error;
+}
+
+/** @param {unknown} error @param {string} code @param {string} diagnosticStage */
+function withDiagnostic(error, code, diagnosticStage) {
+  if (error instanceof Error) {
+    if (typeof /** @type {any} */ (error).code !== "string") /** @type {any} */ (error).code = code;
+    if (typeof /** @type {any} */ (error).diagnosticStage !== "string") {
+      /** @type {any} */ (error).diagnosticStage = diagnosticStage;
+    }
+    return /** @type {any} */ (error);
+  }
+  return diagnosticError(String(error), code, diagnosticStage);
 }
 
 /**

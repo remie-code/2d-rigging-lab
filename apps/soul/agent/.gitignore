@@ -39,3 +39,6 @@ codex-rollouts.local.json
 # 生成指示だが、記憶の主権はファイルシステム側にある運用面のローカル資産であり成果物ではない
 # （stream-memory.md 裁定 5）。
 memories/
+
+# ── Fire latency/failure diagnostics（自動・ローカル・bounded JSONL）────────────
+fire-diagnostics/

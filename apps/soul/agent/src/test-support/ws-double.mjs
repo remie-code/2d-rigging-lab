@@ -34,6 +34,7 @@ const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B39";
  * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onSpeech]
  *   intent.speech を受けたときの返答判断（既定 accepted）。rejected を返せば拒否も再現できる。
  *   `{ result: "drop" }` を返すと返信せず接続を落とす（応答前切断の再現＝pending reject テスト用）。
+ *   `{ result: "pending" }` は返信も切断もしない（reply timeout の再現）。
  * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onEnvelope]
  *   intent.envelope を受けたときの返答判断（既定 accepted・S4）。onSpeech と同じ判定インタフェース。
  * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onSet]
@@ -163,6 +164,9 @@ export function createChannelServerDouble(options = {}) {
       if (verdict.result === "drop") {
         // 応答せず接続を落とす（channel-client の pending が closedError で reject される経路）。
         socket.destroy();
+        return;
+      }
+      if (verdict.result === "pending") {
         return;
       }
       const reply =

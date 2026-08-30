@@ -73,6 +73,9 @@ export function computeAudioCtx(durationMs, options = {}) {
  * @param {number} [options.temperature=0]
  * @param {string} [options.prompt=DEFAULT_WHISPER_PROMPT]  Whisper initial prompt（語彙バイアス）。
  *   省略時は既定の刷り込み文が常時注入される。`""`（空文字）を明示指定すると無効化（テスト用の逃げ道）。
+ * @param {() => string} [options.promptProvider]  Whisper initial prompt をリクエスト時に解決する getter。
+ *   指定時は推論器の生成時に値を固定せず、各 `transcribe()` 呼び出しで 1 回だけ評価する。
+ *   非関数または非文字列の結果は `options.prompt`（未指定なら既定値）へフォールバックする。
  * @param {typeof fetch} [options.fetchImpl]
  * @param {typeof setTimeout} [options.setTimeoutImpl]
  * @param {typeof clearTimeout} [options.clearTimeoutImpl]
@@ -86,7 +89,10 @@ export function createWhisperInference(options = {}) {
   const inferencePath = options.inferencePath ?? "/inference";
   const timeoutMs = options.timeoutMs ?? 30000;
   const temperature = options.temperature ?? 0;
+  // `prompt` は従来どおり生成時に決める literal。provider があればリクエスト時に上書きするが、
+  // provider 未指定/非関数（または getter が非文字列を返す）では literal/既定へ戻る。
   const prompt = typeof options.prompt === "string" ? options.prompt : DEFAULT_WHISPER_PROMPT;
+  const promptProvider = typeof options.promptProvider === "function" ? options.promptProvider : null;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
@@ -107,6 +113,9 @@ export function createWhisperInference(options = {}) {
     if (audioCtx != null && (!Number.isInteger(audioCtx) || audioCtx <= 0)) {
       throw new RangeError(`transcribe: audioCtx must be a positive integer; got ${audioCtx}.`);
     }
+    // 現在の identity を含む動的 prompt は、器の生成時ではなく発話ごとに読む。
+    const resolvedPrompt = promptProvider ? promptProvider() : prompt;
+    const requestPrompt = typeof resolvedPrompt === "string" ? resolvedPrompt : prompt;
     const form = new FormData();
     form.append("file", new Blob([wavBytes], { type: "audio/wav" }), "speech.wav");
     form.append("temperature", String(temperature));
@@ -114,11 +123,11 @@ export function createWhisperInference(options = {}) {
     if (audioCtx != null) {
       form.append("audio_ctx", String(audioCtx));
     }
-    if (prompt) {
+    if (requestPrompt) {
       // リクエスト毎の常時注入（whisper.cpp v1.9.1 server は /inference の `prompt` マルチパート
       // form field を毎回受理・inventory §B-1）。デコード前の語彙バイアスのみで、転写バッファ/
       // セグメンタ/VAD は一切通らない（正本の形は不変・戻り値はサーバ応答のテキストのみ由来）。
-      form.append("prompt", prompt);
+      form.append("prompt", requestPrompt);
     }
 
     const controller = new AbortController();

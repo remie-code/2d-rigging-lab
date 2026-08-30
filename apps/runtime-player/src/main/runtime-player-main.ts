@@ -35,6 +35,7 @@ import {
 } from "./channel-bridge-handlers";
 import { RuntimePlayerControlChannelServer } from "./control-channel/channel-server";
 import { RuntimePlayerControlChannelConfigStore } from "./control-channel/channel-config-store";
+import { RuntimePlayerControlChannelDiagnosticLog } from "./control-channel/fire-diagnostics";
 import { runtimePlayerControlChannelDefaultPort } from "./control-channel/channel-slot-ports";
 import { createAutoMappingSlots } from "./live-mapping/runtime-export-auto-mapping";
 import type {
@@ -509,6 +510,12 @@ export function startRuntimePlayerMain(): void {
       readonly RuntimePlayerMappingSlot[] | null = null;
     let controlChannelServer: RuntimePlayerControlChannelServer | null = null;
     if (controlChannelOverlayStore !== null) {
+      // Fire diagnostics are automatic and local to this Runtime Player slot.
+      // Failure to initialize the best-effort trace is contained by the logger.
+      const controlChannelDiagnosticLog =
+        await RuntimePlayerControlChannelDiagnosticLog.create({
+          userDataPath: app.getPath("userData")
+        });
       const channelConfigStore = new RuntimePlayerControlChannelConfigStore({
         userDataPath: app.getPath("userData"),
         // autonomous-default → fixed 17310; a custom autonomous slot auto-assigns a
@@ -523,7 +530,8 @@ export function startRuntimePlayerMain(): void {
         overlayStore: controlChannelOverlayStore,
         token: channelConfig.token,
         port: channelConfig.preferredPort,
-        getCurrentSlots: () => currentControlChannelSlots
+        getCurrentSlots: () => currentControlChannelSlots,
+        diagnosticSink: controlChannelDiagnosticLog
       });
     }
     const controlChannelBridge = registerControlChannelBridgeHandlers({

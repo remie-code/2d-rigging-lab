@@ -11,6 +11,7 @@ import {
   type RuntimePlayerControlChannelServerEvent
 } from "./channel-server";
 import { RuntimePlayerControlChannelOverlayStore } from "./control-channel-overlay-store";
+import type { RuntimePlayerControlChannelDiagnosticEvent } from "./fire-diagnostics";
 
 /**
  * The `onEvent` seam (C4 Domain C's Recent Events source): the server surfaces
@@ -30,12 +31,15 @@ afterEach(async () => {
 describe("RuntimePlayerControlChannelServer onEvent", () => {
   it("emits connected / accepted / rejected / disconnected with public data only", async () => {
     const events: RuntimePlayerControlChannelServerEvent[] = [];
+    const diagnostics: RuntimePlayerControlChannelDiagnosticEvent[] = [];
     const server = new RuntimePlayerControlChannelServer({
       overlayStore: new RuntimePlayerControlChannelOverlayStore(),
       token: TEST_TOKEN,
       port: 0,
       getCurrentSlots: () => [writableSlot("head-horizontal")],
-      nowMs: () => 10_000
+      nowMs: () => 10_000,
+      monotonicNowMs: () => 500,
+      diagnosticSink: { record: (event) => diagnostics.push(event) }
     });
     runningServers.push(server);
     server.onEvent((event) => events.push(event));
@@ -79,6 +83,32 @@ describe("RuntimePlayerControlChannelServer onEvent", () => {
     });
     // No secret rides an event.
     expect(JSON.stringify(events)).not.toContain(TEST_TOKEN);
+    expect(diagnostics).toContainEqual({
+      event: "request.observed",
+      connectionId: "control-channel-1",
+      connectionGeneration: 1,
+      requestId: "req-ok",
+      requestBytes: expect.any(Number),
+      result: "accepted"
+    });
+    expect(diagnostics).toContainEqual({
+      event: "request.observed",
+      connectionId: "control-channel-1",
+      connectionGeneration: 1,
+      requestId: "req-bad",
+      requestBytes: expect.any(Number),
+      result: "rejected",
+      rejectionCode: "slotValueOutOfRange"
+    });
+    expect(diagnostics).toContainEqual({
+      event: "connection.disconnected",
+      connectionId: "control-channel-1",
+      connectionGeneration: 1,
+      closeReason: "peer-close",
+      terminalEvent: expect.any(String),
+      connectionDurationMs: 0
+    });
+    expect(JSON.stringify(diagnostics)).not.toContain(TEST_TOKEN);
   });
 
   it("emits an accepted event for intent.envelope carrying peak as its diagnostic value", async () => {

@@ -276,7 +276,8 @@ MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 
   副次効能として短い相槌（<2 秒）でも切れなくなる）を追加。詳細は下記「朗読と合いの手」節。
 - **発火スケジューラ**（`src/mind/fire-scheduler.mjs`・Domain C）: 「いつ喋るか」を LLM に一切
   問わず機械信号だけで決める純ロジック（import 文ゼロ = LLM/SDK への到達経路が構造的に存在しない）。
-  ① **呼びかけ**（名前「こーでぃー」の文字列照合・不応期/確率なしで確実発火）② **区切り応答**
+  ① **呼びかけ**（現在選択中の相方名を family-aware に文字列照合・不応期/確率なしで確実発火。既定は
+  「こーでぃー」、GPT 系は「チャッピー」）② **区切り応答**
   （発話終了後 2 秒無音 + 不応期 8 秒 + 確率 35%）③ **沈黙**（45〜75 秒 + 長い不応期 90 秒 + セッション
   予算 6 回・視覚発火相当=画面を見て一言）④ **合いの手**（`interjection`・「朗読と合いの手」wave で
   追加。詳細は下記節）。数値は全部 v0 コード内定数（ツマミは作らない・人間ゲート
@@ -300,8 +301,9 @@ MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 
 
 「視聴者のコメントが会話に混ざる」——YouTube Live チャットを**壊れる前提の独立器官**として常駐取得し、
 コメントを**転写バッファ正本の単一タイムライン**に `viewer(名前)` として合流させ、コメント到着を
-**第 5 の発火語彙**（不応期 + 確率 + 予算）として扱う。コメント内「こーでぃー/Cody」呼びかけは
-**確実に返す**（comment-call）。どのコメントに触れるかは LLM が選ぶ（機械信号は「来た」だけ）。
+**第 5 の発火語彙**（不応期 + 確率 + 予算）として扱う。コメント内の現在選択中の相方名（Claude/Cody
+系または GPT/Chappy 系）呼びかけは **確実に返す**（comment-call）。どのコメントに触れるかは LLM が
+選ぶ（機械信号は「来た」だけ）。
 
 - **チャット器官**（`src/chat/`・Domain A）: 非公式 innertube（`youtube.com/watch?v=<ID>` →
   HTML 4 点抽出 → `get_live_chat` を continuation で回す）を**素の fetch のみ・新規依存ゼロ**で自前
@@ -313,7 +315,7 @@ MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 
 - **合流 + 発火結線**（`src/ears/`・`src/mind/`・Domain B）: 転写バッファに `speaker:"viewer"` +
   `displayName`（soul 同型 `startMs/endMs=0`・窓は appendedAtMs）。注入描画は `viewer(名前): 本文`。
   発火スケジューラ `handleChatMessage`（**comment**=不応期 8s + 確率 35% + 予算 30 / **comment-call**=
-  呼びかけ命中で確実発火・予算/不応期を掛けない）。comment/comment-call はいずれも `fire({vision:
+  現在選択中の family-aware 呼びかけ命中で確実発火・予算/不応期を掛けない）。comment/comment-call はいずれも `fire({vision:
   "preferred"})`（視覚対象があれば画像付き・無/失敗は通常発火へ静かに劣化）。**数値は v0 コード内定数**。
 - **操縦席**（`src/cockpit/cockpit.html` + `cockpit-server.mjs` + `scripts/cockpit.mjs`・Domain C）:
   「Live chat」セクション（配信 URL/ID 入力 → **Connect chat** / **Disconnect**・`cockpit-settings.
@@ -398,7 +400,8 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
 `discussion/ai-cohost/soul/brain-swap.md`。
 
 - **頭の選び方**: 配信前に操縦席（⚙ 設定引き出し）の「頭脳」区画で選ぶ（`Claude (Opus 4.8)` /
-  `Codex (GPT-5.6 Terra)` のフラット 2 択・`POST /api/brain`）。**配信前選択が本線**——「魂を起動し、
+  `Codex (GPT-5.6 Terra)` / `Codex (GPT-5.5)` / `Codex (GPT-5.6 Sol)` の 4 頭・`POST /api/brain`）。
+  **配信前選択が本線**——「魂を起動し、
   LLM を選び、動作確認をして、配信を開始する」の正のフローどおり、配信中の差し替えは運用外。
 - **頭の表**（`src/mind/brains.mjs`）: `BRAINS` registry が唯一の宣言箇所（id・表示札・create・
   資格情報ファイルパス）。Claude 頭（`src/mind/llm-session.mjs`）は多頭化で無変更のままこの 1 項目に
@@ -414,6 +417,11 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
   読まない・ログ/SSE にも出さない）。
 - **観測**: 操縦席の soul 行・usage 表示に、どの頭が応答したか（brain 札）+ 応答レイテンシ
   （`latencyMs` 実測・自然完了時のみ）が additive に乗る。
+- **現在の相方名**: 選択中の頭に対応する表示名は、操縦席の state に含まれる現在値として表示する。
+  Claude 系は「こーでぃー (Cody)」、GPT 系は「チャッピー (Chappy)」。頭を切り替えても TTS の
+  出力先・話者やペルソナは変わらず、次の Fire から新しいセッションの自己紹介だけが切り替わる。
+  過去または進行中の transcript、SSE transcript、usage records、memory、persisted history 本文・設定は
+  identity attribution を追加せず、改名・再帰属・書き換えをしない。
 
 ##### 第三の頭を足すとき（provider 追加手引き）
 

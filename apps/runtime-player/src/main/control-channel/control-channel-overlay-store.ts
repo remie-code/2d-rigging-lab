@@ -188,6 +188,11 @@ export class RuntimePlayerControlChannelOverlayStore {
    * onset rises from 0 exactly as before (the forward version of the existing reverse
    * re-attack — {@link #yieldSpeechForSlot} — not a new machine). A prior speech timeline is
    * likewise replaced (the later utterance wins).
+   *
+   * This store intentionally has no AudioPlayer completion signal: an accepted
+   * Control Channel request is its sole ordering input. Soul must therefore send
+   * the next timeline only when its FIFO playback boundary has reached that job;
+   * duplicate/late audio callbacks never call this method on their own.
    */
   setSpeech(moras: readonly SpeechMora[], startAtMs: number): void {
     // Capture the current effective mouth-open (案B) BEFORE dropping the per-slot curves, so

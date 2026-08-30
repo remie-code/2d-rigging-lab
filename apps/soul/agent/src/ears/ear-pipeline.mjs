@@ -87,7 +87,8 @@ export const EAR_DEFAULTS = Object.freeze({
  *   minSilenceMs / speechPadMs / maxSpeechMs。既定は EAR_DEFAULTS の常駐値）。
  * @param {object} [options.whisper]  whisper-server 設定（serverPath / modelPath / port / host /
  *   language / threads（既定 6）/ flashAttn（既定 false = `-nfa`。長発話決定論的崩壊の実機診断済み・
- *   whisper-server.mjs 参照）/ extraArgs / readyTimeoutMs）。
+ *   whisper-server.mjs 参照）/ extraArgs / readyTimeoutMs）。`promptProvider` を関数で渡した場合は
+ *   Whisper の initial prompt を発話ごとに解決する（推論器生成時には値を固定しない）。
  * @param {object} [options.asr]      { queueMax=4, utteranceTimeoutMs=45000, timeoutMs=30000,
  *   dynamicAudioCtx=true, audioCtxOptions }。
  * @param {number} [options.ringMs=40000]  PCM リングバッファ保持長。
@@ -387,7 +388,9 @@ export function createEarPipeline(options = {}) {
       if (options.transcribeImpl == null) {
         transcribe = createWhisperInference({
           baseUrl: server.baseUrl,
-          timeoutMs: asrOptions.timeoutMs
+          timeoutMs: asrOptions.timeoutMs,
+          prompt: whisperOptions.prompt,
+          promptProvider: whisperOptions.promptProvider
         }).transcribe;
       }
 

@@ -3,6 +3,7 @@ import type { Socket } from "node:net";
 import {
   controlChannelWebSocketOpcodes,
   controlChannelMaxClientMessageBytes,
+  ControlChannelWebSocketDecodeError,
   decodeControlChannelWebSocketFrames,
   encodeControlChannelWebSocketCloseFrame,
   encodeControlChannelWebSocketPongFrame,
@@ -19,9 +20,44 @@ import {
 
 const MAX_BUFFERED_CLIENT_FRAME_BYTES = controlChannelMaxClientMessageBytes + 14;
 
+export type ControlChannelWebSocketCloseReason =
+  | "oversize"
+  | "incomplete-overflow"
+  | "decode-error"
+  | "non-final-frame"
+  | "peer-close"
+  | "intentional-server-close"
+  | "socket-end"
+  | "socket-error"
+  | "socket-close";
+
+export type ControlChannelWebSocketTransportEvent =
+  | {
+      readonly kind: "frame";
+      readonly opcode: number;
+      readonly final: boolean;
+      readonly payloadBytes: number;
+    }
+  | {
+      readonly kind: "close-requested";
+      readonly reason: Exclude<
+        ControlChannelWebSocketCloseReason,
+        "socket-end" | "socket-error" | "socket-close"
+      >;
+      readonly framePayloadBytes?: number;
+      readonly bufferedBytes?: number;
+      readonly chunkBytes?: number;
+    };
+
+export type ControlChannelWebSocketCloseInfo = {
+  readonly reason: ControlChannelWebSocketCloseReason;
+  readonly terminalEvent: "socket-end" | "socket-error" | "socket-close";
+};
+
 export type ControlChannelWebSocketConnectionHandlers = {
   readonly onTextMessage: (text: string) => void;
-  readonly onClose: () => void;
+  readonly onClose: (info: ControlChannelWebSocketCloseInfo) => void;
+  readonly onTransportEvent?: (event: ControlChannelWebSocketTransportEvent) => void;
 };
 
 export class ControlChannelWebSocketConnection {
@@ -30,6 +66,10 @@ export class ControlChannelWebSocketConnection {
   #buffer = Buffer.alloc(0);
   #closed = false;
   #closeNotified = false;
+  #closeReason: Exclude<
+    ControlChannelWebSocketCloseReason,
+    "socket-end" | "socket-error" | "socket-close"
+  > | null = null;
 
   constructor(input: {
     readonly socket: Socket;
@@ -39,9 +79,9 @@ export class ControlChannelWebSocketConnection {
     this.#handlers = input.handlers;
 
     this.#socket.on("data", (chunk) => this.#handleData(chunk));
-    this.#socket.on("close", () => this.#handleClosed());
-    this.#socket.on("end", () => this.#handleClosed());
-    this.#socket.on("error", () => this.#handleClosed());
+    this.#socket.on("close", () => this.#handleClosed("socket-close"));
+    this.#socket.on("end", () => this.#handleClosed("socket-end"));
+    this.#socket.on("error", () => this.#handleClosed("socket-error"));
   }
 
   send(message: unknown): void {
@@ -55,15 +95,7 @@ export class ControlChannelWebSocketConnection {
   }
 
   close(): void {
-    if (this.#closed) {
-      return;
-    }
-
-    this.#closed = true;
-
-    if (!this.#socket.destroyed) {
-      this.#socket.end(encodeControlChannelWebSocketCloseFrame());
-    }
+    this.#requestClose("intentional-server-close");
   }
 
   #handleData(chunk: Buffer): void {
@@ -73,7 +105,10 @@ export class ControlChannelWebSocketConnection {
 
     if (this.#buffer.byteLength + chunk.byteLength >
       MAX_BUFFERED_CLIENT_FRAME_BYTES) {
-      this.close();
+      this.#requestClose("incomplete-overflow", {
+        bufferedBytes: this.#buffer.byteLength,
+        chunkBytes: chunk.byteLength
+      });
       return;
     }
 
@@ -85,16 +120,33 @@ export class ControlChannelWebSocketConnection {
 
     try {
       decoded = decodeControlChannelWebSocketFrames(this.#buffer);
-    } catch {
-      this.close();
+    } catch (error) {
+      const decodeError = error instanceof ControlChannelWebSocketDecodeError
+        ? error
+        : null;
+      this.#requestClose(
+        decodeError?.kind === "oversize"
+          ? "oversize"
+          : "decode-error",
+        ...(decodeError?.payloadBytes === undefined
+          ? []
+          : [{ framePayloadBytes: decodeError.payloadBytes }])
+      );
       return;
     }
 
     this.#buffer = Buffer.from(decoded.remaining);
 
     for (const frame of decoded.frames) {
+      this.#handlers.onTransportEvent?.({
+        kind: "frame",
+        opcode: frame.opcode,
+        final: frame.final,
+        payloadBytes: frame.payload.byteLength
+      });
+
       if (!frame.final) {
-        this.close();
+        this.#requestClose("non-final-frame");
         return;
       }
 
@@ -109,19 +161,52 @@ export class ControlChannelWebSocketConnection {
       }
 
       if (frame.opcode === controlChannelWebSocketOpcodes.close) {
-        this.close();
+        this.#requestClose("peer-close");
         return;
       }
     }
   }
 
-  #handleClosed(): void {
+  #requestClose(
+    reason: Exclude<
+      ControlChannelWebSocketCloseReason,
+      "socket-end" | "socket-error" | "socket-close"
+    >,
+    metadata: {
+      readonly framePayloadBytes?: number;
+      readonly bufferedBytes?: number;
+      readonly chunkBytes?: number;
+    } = {}
+  ): void {
+    if (this.#closed) {
+      return;
+    }
+
+    this.#closed = true;
+    this.#closeReason = reason;
+    this.#handlers.onTransportEvent?.({
+      kind: "close-requested",
+      reason,
+      ...metadata
+    });
+
+    if (!this.#socket.destroyed) {
+      this.#socket.end(encodeControlChannelWebSocketCloseFrame());
+    }
+  }
+
+  #handleClosed(
+    terminalEvent: "socket-end" | "socket-error" | "socket-close"
+  ): void {
     if (this.#closeNotified) {
       return;
     }
 
     this.#closeNotified = true;
     this.#closed = true;
-    this.#handlers.onClose();
+    this.#handlers.onClose({
+      reason: this.#closeReason ?? terminalEvent,
+      terminalEvent
+    });
   }
 }

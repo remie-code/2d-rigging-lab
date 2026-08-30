@@ -222,6 +222,74 @@ test("ear-pipeline: transcribeImpl 未指定時は本番経路の whisper-infere
   }
 });
 
+test("ear-pipeline: whisper prompt provider は耳を再起動せず発話ごとに現在値を反映する", async () => {
+  const originalFetch = globalThis.fetch;
+  /** @type {any[]} */
+  const fetchCalls = [];
+  let activePrompt = "こーでぃー、コーディ。";
+  globalThis.fetch = /** @type {any} */ (
+    async (url, init) => {
+      fetchCalls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "応答" }) };
+    }
+  );
+
+  /** @type {any} */
+  const record = { captureOptions: null, transcripts: [] };
+  const captureFactory = /** @type {any} */ ((opts) => {
+    record.captureOptions = opts;
+    return { dispose() {} };
+  });
+  const vadFactory = /** @type {any} */ (
+    () => ({
+      async init() {},
+      async process(frame) {
+        let sum = 0;
+        for (let i = 0; i < frame.length; i += 1) sum += frame[i] * frame[i];
+        const rms = Math.sqrt(sum / frame.length);
+        return rms > 0.1 ? 0.9 : 0.05;
+      },
+      reset() {},
+      async dispose() {}
+    })
+  );
+  const serverFactory = /** @type {any} */ (() => ({ ready: Promise.resolve(), baseUrl: "http://127.0.0.1:0", dispose() {} }));
+  const pipeline = createEarPipeline({
+    segmenter: { minSpeechMs: 100, minSilenceMs: 64, speechPadMs: 0 },
+    whisper: { promptProvider: () => activePrompt },
+    captureFactory,
+    vadFactory,
+    serverFactory,
+    onTranscript: (entry) => record.transcripts.push(entry)
+  });
+
+  try {
+    await pipeline.start();
+    const feed = (int16) => record.captureOptions.onPcm(int16ToBytesLE(int16));
+    const utterance = () =>
+      feed(
+        concatInt16(
+          silencePcm({ durationMs: 96 }),
+          sinePcm({ freq: 440, durationMs: 300 }),
+          silencePcm({ durationMs: 160 })
+        )
+      );
+
+    utterance();
+    await until(() => record.transcripts.length === 1, 3000, "first dynamic transcript");
+    activePrompt = "ちゃっぴー、チャッピー。";
+    utterance();
+    await until(() => record.transcripts.length === 2, 3000, "second dynamic transcript");
+
+    assert.equal(fetchCalls.length, 2);
+    assert.equal(fetchCalls[0].init.body.get("prompt"), "こーでぃー、コーディ。");
+    assert.equal(fetchCalls[1].init.body.get("prompt"), "ちゃっぴー、チャッピー。");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await pipeline.dispose();
+  }
+});
+
 test("ear-pipeline: maxSpeech 分割（長発話は 2×pad 重なり付きで複数転写・clamp 経由で安全）", async () => {
   const h = makeHarness({
     pipelineOptions: {

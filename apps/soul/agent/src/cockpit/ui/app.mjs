@@ -24,10 +24,10 @@
  */
 
 import { html, render, useState, useEffect, useRef, useCallback } from "../vendor/htm.preact.standalone.mjs";
-import { Header } from "./header.mjs";
+import { Header, cockpitDocumentTitle } from "./header.mjs";
 import { Feed } from "./feed.mjs";
 import { ControlBar } from "./control-bar.mjs";
-import { SettingsDrawer } from "./settings-drawer.mjs";
+import { CockpitSettingsModal } from "./settings-drawer.mjs";
 import { injectStyles } from "./styles.mjs";
 import { emptyFeed, feedFromHistory, feedAfterSseEvent } from "./rows.mjs";
 import { formatHms, computeUptimeMs } from "../view-logic/format-time.mjs";
@@ -118,6 +118,7 @@ export function App(props) {
   const [chatDisplay, setChatDisplay] = useState(/** @type {string | null} */ (null)); // renderChatStatus 入力（:294-306）
   const [settings, setSettings] = useState(() => settingsFromSnapshot(null));
   const [settingsOpen, setSettingsOpen] = useState(false); // ⚙ 開閉 + 初回自動展開（導線 §4）
+  const settingsCloseRequestRef = useRef(/** @type {() => void} */ (() => setSettingsOpen(false)));
   // GET /api/state の取得完了フラグ（design レビュー申し送り 1: fetch 完了前の自動展開誤判定を防ぐ）。
   const [stateLoaded, setStateLoaded] = useState(false);
   const initialSnapshotRef = useRef(/** @type {any} */ (null)); // 自動展開判定用の初回 snapshot。
@@ -224,6 +225,16 @@ export function App(props) {
   // （applyStateRef は ref なので参照は常に最新・関数自体は不変 = 子の無駄な再 render を作らない）。
   const applySnapshot = useCallback((/** @type {any} */ s) => applyStateRef.current(s), []);
 
+  // The HTML starts with a neutral title. Once current server state arrives,
+  // reflect only the additive public identity view; malformed/missing data
+  // deliberately returns to the neutral title instead of retaining stale text.
+  const currentIdentity = settings && settings.brain ? settings.brain.identity : null;
+  useEffect(() => {
+    const doc = globalThis.document;
+    if (!doc || typeof doc !== "object") return;
+    doc.title = cockpitDocumentTitle(currentIdentity);
+  }, [currentIdentity]);
+
   const listening = earsStatusView(ears).listening;
   const uptimeText = formatHms(
     computeUptimeMs({ listening, baseMs: uptime.baseMs, anchorMs: uptime.anchorMs, nowMs: nowTick })
@@ -235,17 +246,26 @@ export function App(props) {
         ears=${ears}
         health=${health}
         audioDevice=${settings.audioDevice}
-        onToggleSettings=${() => setSettingsOpen((v) => !v)}
+        identity=${currentIdentity}
+        settingsOpen=${settingsOpen}
+        onToggleSettings=${() => {
+          if (settingsOpen) {
+            settingsCloseRequestRef.current();
+          } else {
+            setSettingsOpen(true);
+          }
+        }}
       />
       <${Feed} rows=${feed.rows} usageNote=${usageNote} discarded=${discarded} uptimeText=${uptimeText} />
       ${/* ── 設定引き出し（Domain C 実体・⚙ で開閉・普段は畳む = CSS .open）── */ ""}
-      <${SettingsDrawer}
+      <${CockpitSettingsModal}
         open=${settingsOpen}
         onClose=${() => setSettingsOpen(false)}
         settings=${settings}
         chatDisplay=${chatDisplay}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}
+        closeRequestRef=${settingsCloseRequestRef}
       />
       ${/* ── 運転バー（Domain C 実体・常駐）: soul/setSoul/fireNote/setFireNote の 4 点セット
            （Fire 応答 j は {fired, state, reason} 形で snapshot でない = applySnapshot に乗らない）。 */ ""}

@@ -10,6 +10,9 @@
 | [llm-cost-estimate.md](llm-cost-estimate.md) | 会話ループのLLM費用試算(料金は2026-07時点) | Recorded(2026-07-10) |
 | [gpt-live-impact-2026-07.md](gpt-live-impact-2026-07.md) | GPT-Live(OpenAI 2026-07-08発表)の調査とS2S不採用理由への影響判定(覆らない)、コモディティ化への戦略判断と監視条件 | Recorded+戦略判断Accepted(2026-07-10) |
 | [stage-motion-for-autonomous-idle.md](stage-motion-for-autonomous-idle.md) | リポジトリ事実: Stage Motionの3層構造(純計算器はhead-less)、自律ホストでの不活性状態、生理駆動の継ぎ目候補比較(候補c推奨)とリスク | Recorded(2026-07-11)。裁定は [../architecture/c3-gaze-head-posture.md](../architecture/c3-gaze-head-posture.md) §5 |
+| [codex-text-streaming-official-options-2026-08.md](codex-text-streaming-official-options-2026-08.md) | OpenAI公式資料: Codex SDK/App Server、Responses、Agents、Realtimeのtext delta・vision・会話継続・Sol・認証の比較 | Recorded(2026-08-30)。App Server実経路は [experiment](../experiments/codex-app-server-streaming-probe.md) で成立確認済み |
+| [app-server-transport-integration-inventory.md](app-server-transport-integration-inventory.md) | リポジトリ事実: Codex SDK→App Server transport差し替え境界、session/settings/vision/cleanup/effort-low/test影響 | Recorded(2026-08-30)。設計判断前inventory |
+| [streaming-speech-pipeline-inventory.md](streaming-speech-pipeline-inventory.md) | リポジトリ事実: Fire→TTS→timeline→audioの現行確定点、chunk queue seam、割り込み・部分成功・診断・test影響 | Recorded(2026-08-30)。partial-success意味論はuser decision待ち |
 
 ## 注意
 

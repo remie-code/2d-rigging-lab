@@ -53,6 +53,9 @@ import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
 import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-player.mjs";
 import { createBargeInGate } from "../mind/barge-in.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
+import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
+import { resolveBrainIdentity } from "../mind/brains.mjs";
+import { resolveModelIdentity } from "../mind/model-identity.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
 export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
@@ -385,6 +388,20 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   （audioDevice/channel と同型）。credentialHealth は資格情報ファイルの**存在確認のみ**（中身は読まない）。
  *   brain の状態正本は cockpit.mjs 側にあり、起動時の現況もこの status が運ぶ（サーバは brain 状態を
  *   二重管理せず・別途 initial 値は持たない）。未注入なら snapshot の brain:null。
+ * @param {() => (Readonly<import("../mind/model-identity.mjs").ModelIdentity> | null | undefined)} [options.currentBrainIdentity]
+ *   現在の registry identity を返す request/handling-time provider。起動スクリプトの currentBrain
+ *   closure を正本とし、Whisper/scheduler/public snapshot が同じ provider を読む。brainStatus が
+ *   未注入でも snapshot.brain.identity だけは provider から構成し、technical status が provider と
+ *   不一致でも identity は provider を権威とする。
+ * @param {{
+ *   getProfile: (brainId: string) => { body: string; hasOverride: boolean };
+ *   save: (brainId: string, instruction: string) => boolean | Promise<boolean>;
+ *   reset: (brainId: string) => boolean | Promise<boolean>;
+ *   getRevision: () => number;
+ * }} [options.conversationInstructionHooks]
+ *   Dedicated local API hooks for the effective per-brain conversation-instruction body. The hook owns
+ *   durable persistence and increments its revision only after a successful write; the server exposes the
+ *   body only through /api/conversation-instructions/:brainId.
  * @param {(opts: { source: string }) => { start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string; onMessage: (fn: (msg: any) => void) => () => void; onStatus: (fn: (state: string) => void) => () => void; onDiagnostic: (fn: (info: any) => void) => () => void }} [options.chatClientFactory]
  *   S7「視聴者が混ざる」チャット器官のファクトリ（本番は Domain C の `createLiveChatClient`・テストは
  *   fake 器官 factory を注入して実ネットに出さない）。POST /api/chat/connect で `factory({ source })` を
@@ -470,6 +487,9 @@ export function createCockpitServer(options = {}) {
   // 起動時の現況も brainStatus() が運ぶ（サーバは brain 状態を二重管理しない＝別途 initial 値は受けない）。
   const onSetBrain = options.onSetBrain;
   const brainStatusImpl = options.brainStatus;
+  const currentBrainIdentityImpl =
+    typeof options.currentBrainIdentity === "function" ? options.currentBrainIdentity : null;
+  const conversationInstructionHooks = options.conversationInstructionHooks ?? null;
   // 配信間記憶: ON/OFF の永続化フック + 手動「今日を記録」フック + 現況(未注入ならそれぞれ 503/null・
   // onSetBrain/brainStatus と同型)。
   const onSetMemoryEnabled = options.onSetMemoryEnabled;
@@ -542,6 +562,29 @@ export function createCockpitServer(options = {}) {
 
   function snapshot() {
     const bufStats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
+    const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
+    // currentBrainIdentity is the single current-identity source for every C
+    // consumer. Normalize its frozen contract through the canonical resolver;
+    // malformed/absent values retain the Cody fallback. When the technical
+    // brain status is unavailable, the additive public identity still remains
+    // available for the title/header. The status object never overrides it.
+    const providedIdentity = currentBrainIdentityImpl
+      ? resolveModelIdentity(currentBrainIdentityImpl()?.id)
+      : null;
+    const publicBrain =
+      rawBrain && typeof rawBrain === "object"
+        ? {
+            ...rawBrain,
+            identity: providedIdentity
+              ? { id: providedIdentity.id, displayName: providedIdentity.displayName }
+              : (() => {
+                  const identity = resolveBrainIdentity(/** @type {any} */ (rawBrain).brain);
+                  return { id: identity.id, displayName: identity.displayName };
+                })()
+          }
+        : providedIdentity
+          ? { identity: { id: providedIdentity.id, displayName: providedIdentity.displayName } }
+          : null;
     return {
       ears: earsState,
       device: currentDevice,
@@ -567,7 +610,7 @@ export function createCockpitServer(options = {}) {
       // S8「キルスイッチ」: キル状態の正本（サーバ側 boolean をそのまま載せる・既定 false・additive）。
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
-      brain: typeof brainStatusImpl === "function" ? (brainStatusImpl() ?? null) : null,
+      brain: publicBrain,
       // 配信間記憶: 記憶の現況（{enabled, count, lastRecordAtMs}・未注入なら null・brain と同型）。
       memory: typeof memoryStatusImpl === "function" ? (memoryStatusImpl() ?? null) : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
@@ -682,8 +725,21 @@ export function createCockpitServer(options = {}) {
     health.ffmpegReason = null;
 
     const baseOptions = options.pipelineOptions ?? {};
+    // Resolve the Whisper lexical-bias prompt at request time. The injected
+    // provider observes cockpit.mjs currentBrain, so switching heads does not
+    // require restarting the ear pipeline.
+    const whisperOptions = {
+      ...(/** @type {any} */ (baseOptions).whisper ?? {})
+    };
+    if (currentBrainIdentityImpl) {
+      whisperOptions.promptProvider = () => {
+        const identity = currentBrainIdentityImpl();
+        return identity && typeof identity.whisperPrompt === "string" ? identity.whisperPrompt : undefined;
+      };
+    }
     const p = pipelineFactory({
       ...baseOptions,
+      whisper: whisperOptions,
       capture: {
         ...(/** @type {any} */ (baseOptions).capture ?? {}),
         ...(device != null ? { device } : {}),
@@ -795,6 +851,28 @@ export function createCockpitServer(options = {}) {
     return snapshot();
   }
 
+  /**
+   * Return the effective instruction response for the dedicated local API.
+   * Instruction text intentionally has no other projection in the server.
+   * @param {string} brainId
+   */
+  function conversationInstructionResponse(brainId) {
+    if (!conversationInstructionHooks) throw new Error("conversation instruction control not available");
+    const profile = conversationInstructionHooks.getProfile(brainId);
+    if (!profile || typeof profile.body !== "string" || typeof profile.hasOverride !== "boolean") {
+      throw new Error("conversation instruction profile is invalid");
+    }
+    const revision = conversationInstructionHooks.getRevision();
+    if (!Number.isInteger(revision) || revision < 0) throw new Error("conversation instruction revision is invalid");
+    return {
+      ok: true,
+      brainId,
+      instruction: profile.body,
+      isOverride: profile.hasOverride,
+      revision
+    };
+  }
+
   // ── HTTP ルーティング ─────────────────────────────────────────────
 
   const server = createServer((req, res) => {
@@ -815,6 +893,67 @@ export function createCockpitServer(options = {}) {
     const method = req.method ?? "GET";
     const url = new URL(req.url ?? "/", `http://${host}`);
     const pathname = url.pathname;
+
+    const conversationRoute = pathname.match(/^\/api\/conversation-instructions\/([^/]+)$/);
+    if (conversationRoute && (method === "GET" || method === "PUT" || method === "DELETE")) {
+      if (!conversationInstructionHooks) {
+        sendJson(res, 503, { error: "conversation instruction control not available" });
+        return;
+      }
+      let brainId;
+      try {
+        brainId = decodeURIComponent(conversationRoute[1]);
+      } catch {
+        sendJson(res, 400, { error: "invalid conversation instruction brain id" });
+        return;
+      }
+      if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(brainId)) {
+        sendJson(res, 400, { error: "invalid conversation instruction brain id" });
+        return;
+      }
+      if (method === "GET") {
+        try {
+          sendJson(res, 200, conversationInstructionResponse(brainId));
+        } catch {
+          sendJson(res, 500, { error: "failed to read conversation instruction" });
+        }
+        return;
+      }
+      if (method === "PUT") {
+        const parsed = await readJsonBodyStrict(req);
+        if (!parsed.ok) {
+          sendJson(res, 400, { error: "malformed JSON body" });
+          return;
+        }
+        const instruction = parsed.value.instruction;
+        if (typeof instruction !== "string") {
+          sendJson(res, 400, { error: "instruction must be a string" });
+          return;
+        }
+        if (instruction.trim().length === 0) {
+          sendJson(res, 400, { error: "instruction must not be empty" });
+          return;
+        }
+        try {
+          const persisted = await conversationInstructionHooks.save(brainId, instruction);
+          if (persisted !== true) throw new Error("instruction persistence failed");
+          sendJson(res, 200, conversationInstructionResponse(brainId));
+        } catch {
+          // Do not expose the instruction or persistence path. The hook advances revision only after durable
+          // persistence, so a failed save cannot invalidate the existing session.
+          sendJson(res, 500, { error: "failed to persist conversation instruction" });
+        }
+        return;
+      }
+      try {
+        const persisted = await conversationInstructionHooks.reset(brainId);
+        if (persisted !== true) throw new Error("instruction persistence failed");
+        sendJson(res, 200, conversationInstructionResponse(brainId));
+      } catch {
+        sendJson(res, 500, { error: "failed to reset conversation instruction" });
+      }
+      return;
+    }
 
     if (method === "GET" && pathname === "/") {
       await serveIndex(res);
@@ -1058,9 +1197,10 @@ export function createCockpitServer(options = {}) {
       }
       const body = await readJsonBody(req);
       // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 4 値は
-      // ここに直書きする（brains.mjs を import すると「cockpit-server は brain の中身を知らない」責務境界を
-      // 破る・verbosity が quiet/normal/chatty を直書きするのと同じ規律。2026-07-17 追撃で Codex 側 2 頭
-      // （GPT-5.5 / GPT-5.6 Sol）がここへ追加された）。
+      // ここに直書きする（API の受理値/技術札は従来のワイヤ検証を保持する）。
+      // `resolveBrainIdentity` の import はこの検証表を置き換えるためではなく、下流の current public
+      // projection だけを canonical resolver から導出するための additive read-path である。2026-07-17
+      // 追撃で Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）がここへ追加された既存契約は変えない。
       if (
         body.brain !== "claude" &&
         body.brain !== "codex" &&
@@ -1385,6 +1525,21 @@ export function createCockpitServer(options = {}) {
       enabled: selfFireInitialEnabled,
       verbosity: verbosityInitialMode,
       isBusy: () => /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      // Name variants are handling-time providers. They share the current
+      // registry identity with Whisper/public state and therefore switch
+      // families without recreating the scheduler.
+      ...(currentBrainIdentityImpl
+        ? {
+            nameVariantsProvider: () => {
+              const identity = currentBrainIdentityImpl();
+              return identity?.voiceCallVariants;
+            },
+            commentNameVariantsProvider: () => {
+              const identity = currentBrainIdentityImpl();
+              return identity?.commentCallVariants;
+            }
+          }
+        : {}),
       onFireRequest: (req) => {
         // S6 Domain D: 発火要求の kind（call/turn-end/silence）を SSE "selfFire" で結線層外へ通知する
         // （操縦席のタイムラインが自発発火マーカー行/スケジューラ診断のゴースト行を描く材料・domain-d.md §）。
@@ -1730,6 +1885,52 @@ function readJsonBody(req) {
       }
     });
     req.on("error", () => resolve({}));
+  });
+}
+
+/**
+ * Read a JSON object while preserving malformed-body information for strict APIs.
+ * Existing routes intentionally use readJsonBody()'s permissive `{}` fallback; the conversation-instruction
+ * API uses this helper so malformed JSON is rejected without changing those endpoint contracts.
+ * @param {import("node:http").IncomingMessage} req
+ * @returns {Promise<{ ok: true; value: Record<string, any> } | { ok: false }>}
+ */
+function readJsonBodyStrict(req) {
+  return new Promise((resolve) => {
+    let data = "";
+    let settled = false;
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      resolve({ ok: false });
+    };
+    req.on("data", (chunk) => {
+      if (settled) return;
+      data += chunk;
+      if (data.length > 1_000_000) {
+        try {
+          req.destroy();
+        } catch {
+          // best-effort
+        }
+        fail();
+      }
+    });
+    req.on("end", () => {
+      if (settled) return;
+      try {
+        const parsed = JSON.parse(data);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          fail();
+          return;
+        }
+        settled = true;
+        resolve({ ok: true, value: parsed });
+      } catch {
+        fail();
+      }
+    });
+    req.on("error", fail);
   });
 }
 

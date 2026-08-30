@@ -13,6 +13,25 @@ export type ControlChannelDecodedWebSocketFrame = {
   readonly payload: Buffer;
 };
 
+export type ControlChannelWebSocketDecodeFailureKind =
+  | "oversize"
+  | "decode-error";
+
+export class ControlChannelWebSocketDecodeError extends Error {
+  readonly kind: ControlChannelWebSocketDecodeFailureKind;
+  readonly payloadBytes: number | undefined;
+
+  constructor(
+    kind: ControlChannelWebSocketDecodeFailureKind,
+    message: string,
+    payloadBytes?: number
+  ) {
+    super(message);
+    this.kind = kind;
+    this.payloadBytes = payloadBytes;
+  }
+}
+
 const OPCODE_TEXT = 0x1;
 const OPCODE_CLOSE = 0x8;
 const OPCODE_PING = 0x9;
@@ -76,18 +95,28 @@ export function decodeControlChannelWebSocketFrames(input: Buffer): {
       }
       const longLength = input.readBigUInt64BE(offset);
       if (longLength > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new Error("WebSocket payload is too large.");
+        throw new ControlChannelWebSocketDecodeError(
+          "decode-error",
+          "WebSocket payload is too large."
+        );
       }
       payloadLength = Number(longLength);
       offset += 8;
     }
 
     if (!masked) {
-      throw new Error("Control Channel WebSocket client frames must be masked.");
+      throw new ControlChannelWebSocketDecodeError(
+        "decode-error",
+        "Control Channel WebSocket client frames must be masked."
+      );
     }
 
     if (payloadLength > controlChannelMaxClientMessageBytes) {
-      throw new Error("Control Channel WebSocket client frame is too large.");
+      throw new ControlChannelWebSocketDecodeError(
+        "oversize",
+        "Control Channel WebSocket client frame is too large.",
+        payloadLength
+      );
     }
 
     if (input.byteLength - offset < 4 + payloadLength) {

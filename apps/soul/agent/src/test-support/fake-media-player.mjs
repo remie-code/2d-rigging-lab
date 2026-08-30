@@ -23,6 +23,7 @@ if (deviceName) {
 
 /** @type {string} */
 let currentPath = "";
+let currentPlaybackId = "";
 
 process.stdin.setEncoding("utf8");
 let buffer = "";
@@ -34,13 +35,29 @@ process.stdin.on("data", (chunk) => {
     buffer = buffer.slice(newlineIndex + 1);
     if (line.length === 0) continue;
     if (line === "STOP") {
-      process.stdout.write(`STOPPED\t${currentPath}\n`);
+      process.stdout.write(
+        currentPlaybackId
+          ? `STOPPED\t${currentPlaybackId}\t${currentPath}\n`
+          : `STOPPED\t${currentPath}\n`
+      );
       currentPath = "";
+      currentPlaybackId = "";
     } else if (line === "END") {
-      process.stdout.write(`ENDED\t${currentPath}\n`);
+      process.stdout.write(
+        currentPlaybackId
+          ? `ENDED\t${currentPlaybackId}\t${currentPath}\n`
+          : `ENDED\t${currentPath}\n`
+      );
       currentPath = "";
+      currentPlaybackId = "";
+    } else if (line.startsWith("PLAYID\t")) {
+      const parts = line.split("\t");
+      currentPlaybackId = parts[1] ?? "";
+      currentPath = parts.slice(2).join("\t").trim();
+      process.stdout.write(`STARTED\t${currentPlaybackId}\t${currentPath}\n`);
     } else if (line.startsWith("PLAY ")) {
       currentPath = line.slice(5).trim();
+      currentPlaybackId = "";
       process.stdout.write(`STARTED\t${currentPath}\n`);
     }
   }

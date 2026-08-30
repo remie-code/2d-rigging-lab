@@ -1,7 +1,8 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
@@ -10,6 +11,7 @@ import { Readable } from "node:stream";
 import {
   createAudioPlayer,
   writeTempWav,
+  writeOwnedTempWav,
   parseListDevicesStdout,
   listAudioDevices
 } from "./audio-player.mjs";
@@ -55,6 +57,47 @@ test("writeTempWav は WAV を temp に書き出しバイト一致・.wav 拡張
 
 test("writeTempWav は Uint8Array 以外で TypeError", () => {
   assert.throws(() => writeTempWav([1, 2, 3]), TypeError);
+});
+
+test("writeOwnedTempWav は owned WAV+directory を exact once cleanup し custom parent は削除しない", () => {
+  const owned = writeOwnedTempWav(new Uint8Array([1, 2, 3]));
+  assert.equal(existsSync(owned.wavPath), true);
+  assert.equal(existsSync(owned.ownedDirectory), true);
+  assert.equal(owned.cleanup(), true);
+  assert.equal(owned.cleanup(), false);
+  assert.equal(existsSync(owned.wavPath), false);
+  assert.equal(existsSync(owned.ownedDirectory), false);
+
+  const customDirectory = mkdtempSync(path.join(tmpdir(), "soul-agent-custom-"));
+  try {
+    const custom = writeOwnedTempWav(new Uint8Array([4, 5]), { dir: customDirectory });
+    assert.equal(custom.ownedDirectory, null);
+    custom.cleanup();
+    assert.equal(existsSync(custom.wavPath), false);
+    assert.equal(existsSync(customDirectory), true);
+  } finally {
+    rmSync(customDirectory, { recursive: true, force: true });
+  }
+});
+
+test("playbackId 指定は PLAYID と generation-qualified marker を使い legacy PLAY は不変", () => {
+  const commands = [];
+  const lines = [];
+  const fakeChild = makeFakeChild();
+  fakeChild.stdin.write = (command) => { commands.push(command); return true; };
+  const player = createAudioPlayer({ spawnImpl: () => fakeChild, onOutput: (line) => lines.push(line) });
+  try {
+    player.play("same.wav", "generation-2:job-1");
+    player.play("legacy.wav");
+    assert.deepEqual(commands, [
+      "PLAYID\tgeneration-2:job-1\tsame.wav\n",
+      "PLAY legacy.wav\n"
+    ]);
+    fakeChild.stdout.emit("data", "STARTED\tgeneration-2:job-1\tsame.wav\n");
+    assert.deepEqual(lines, ["STARTED\tgeneration-2:job-1\tsame.wav"]);
+  } finally {
+    player.dispose();
+  }
 });
 
 test("play は PLAY 行を送り STARTED を受け取る（往復・無音）", async () => {

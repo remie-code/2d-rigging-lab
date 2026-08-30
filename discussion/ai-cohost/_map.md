@@ -30,6 +30,7 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 - 決定済みの前提(LLM品質要件、費用前提、決定性境界)を確認する場合は [premises/](premises/) を読む。
 - 技術的な裏付け(先例、選定材料、統合点)を確認する場合は [research/](research/) を読む。
 - 設計の現在の方向と未決の分岐を確認する場合は [architecture/](architecture/) を読む。
+- 長発話時のControl Channel切断と、`fired`表示から音声再生開始までの遅延inventoryは [../reports/ai-cohost-fire-diagnostics/](../reports/ai-cohost-fire-diagnostics/) を読む。
 
 ## 4. Current State Summary
 

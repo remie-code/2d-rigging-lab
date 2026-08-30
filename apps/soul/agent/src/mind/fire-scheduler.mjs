@@ -395,11 +395,15 @@ function isValidVerbosityMode(mode) {
  * @param {number} [options.silenceRefractoryMs=SILENCE_REFRACTORY_MS]
  * @param {number} [options.silenceBudget]  既定は初期 mode（options.verbosity）の束の値。
  * @param {ReadonlyArray<string>} [options.nameVariants=NAME_VARIANTS_V0]  音声呼びかけ照合の揺れ集合。
+ * @param {() => ReadonlyArray<string>} [options.nameVariantsProvider]  音声呼びかけ照合の揺れ集合を
+ *   handling 時点で読む getter。指定時は scheduler 生成時に配列を固定しない。
  * @param {number} [options.commentRefractoryMs]  S7 コメント応答の不応期。既定は初期 mode の束の値。
  * @param {number} [options.commentProbability]   S7 コメント応答の確率。既定は初期 mode の束の値。
  * @param {number} [options.commentBudget]        S7 コメント応答のセッション予算。既定は初期 mode の束の値。
  * @param {ReadonlyArray<string>} [options.commentNameVariants=NAME_VARIANTS_TEXT_V0]  S7 コメント内呼びかけの
  *   テキスト用揺れ集合。
+ * @param {() => ReadonlyArray<string>} [options.commentNameVariantsProvider]  コメント内呼びかけ照合の
+ *   揺れ集合を handling 時点で読む getter。指定時は scheduler 生成時に配列を固定しない。
  * @param {number} [options.interjectionBaseMs]  合いの手の基礎累積長。既定は初期 mode の束の値。
  * @param {number} [options.interjectionJitterMs]  合いの手のジッター幅。既定は初期 mode の束の値。
  * @param {number} [options.interjectionRefractoryMs]  合いの手の不応期（発火瞬間の門番のみ）。既定は
@@ -459,12 +463,24 @@ export function createFireScheduler(options) {
   let silenceBaseMs = numberOr(options.silenceBaseMs, initialBundle.silenceBaseMs);
   let silenceJitterMs = numberOr(options.silenceJitterMs, initialBundle.silenceJitterMs);
   let silenceRefractoryMs = numberOr(options.silenceRefractoryMs, initialBundle.silenceRefractoryMs);
-  const needles = buildNeedles(Array.isArray(options.nameVariants) ? options.nameVariants : NAME_VARIANTS_V0);
+  const nameVariants = Array.isArray(options.nameVariants) ? options.nameVariants : NAME_VARIANTS_V0;
+  const nameVariantsProvider = typeof options.nameVariantsProvider === "function" ? options.nameVariantsProvider : null;
+  const staticNameNeedles = buildNeedles(nameVariants);
   let commentRefractoryMs = numberOr(options.commentRefractoryMs, initialBundle.commentRefractoryMs);
   let commentProbability = numberOr(options.commentProbability, initialBundle.commentProbability);
-  const commentNeedles = buildNeedles(
-    Array.isArray(options.commentNameVariants) ? options.commentNameVariants : NAME_VARIANTS_TEXT_V0
-  );
+  const commentNameVariants = Array.isArray(options.commentNameVariants)
+    ? options.commentNameVariants
+    : NAME_VARIANTS_TEXT_V0;
+  const commentNameVariantsProvider =
+    typeof options.commentNameVariantsProvider === "function" ? options.commentNameVariantsProvider : null;
+  const staticCommentNeedles = buildNeedles(commentNameVariants);
+
+  /** handling 時点の揺れ集合を読む。provider の未定義/不正値は既存 literal 集合へ戻る。 */
+  function readNameNeedles(provider, fallbackVariants, fallbackNeedles) {
+    if (!provider) return fallbackNeedles;
+    const variants = provider();
+    return Array.isArray(variants) ? buildNeedles(variants) : buildNeedles(fallbackVariants);
+  }
   let interjectionBaseMs = numberOr(options.interjectionBaseMs, initialBundle.interjectionBaseMs);
   let interjectionJitterMs = numberOr(options.interjectionJitterMs, initialBundle.interjectionJitterMs);
   let interjectionRefractoryMs = numberOr(options.interjectionRefractoryMs, initialBundle.interjectionRefractoryMs);
@@ -715,7 +731,7 @@ export function createFireScheduler(options) {
     // 呼びかけ照合（命中即発火・不応期/確率は掛けない = 裁定 4）。OFF/busy 中は出さない。
     let calledOut = false;
     if (enabled && !isBusy() && typeof entry.text === "string" && entry.text.length > 0) {
-      if (textMatchesName(entry.text, needles)) {
+      if (textMatchesName(entry.text, readNameNeedles(nameVariantsProvider, nameVariants, staticNameNeedles))) {
         lastFireAtMs = now;
         emitFire("call");
         calledOut = true;
@@ -752,7 +768,12 @@ export function createFireScheduler(options) {
     if (typeof msg.text !== "string" || msg.text.length === 0) return;
     const now = nowImpl();
     // comment-call: コメント内呼びかけ照合が命中したら確実に発火（不応期/確率/予算は掛けない = 裁定 5）。
-    if (textMatchesName(msg.text, commentNeedles)) {
+    if (
+      textMatchesName(
+        msg.text,
+        readNameNeedles(commentNameVariantsProvider, commentNameVariants, staticCommentNeedles)
+      )
+    ) {
       lastFireAtMs = now;
       emitFire("comment-call");
       return;

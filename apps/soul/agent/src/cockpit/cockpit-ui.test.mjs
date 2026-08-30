@@ -21,7 +21,7 @@ const COCKPIT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(COCKPIT_DIR, "ui");
 
 import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot } from "./ui/app.mjs";
-import { Header, HealthStat } from "./ui/header.mjs";
+import { Header, HealthStat, identityDisplayName, cockpitDocumentTitle, NEUTRAL_COCKPIT_TITLE } from "./ui/header.mjs";
 import { Feed, FeedRow, isStuckToBottom, STICK_THRESHOLD_PX } from "./ui/feed.mjs";
 import {
   emptyFeed,
@@ -38,10 +38,27 @@ import {
 } from "./ui/rows.mjs";
 import { COCKPIT_CSS, injectStyles } from "./ui/styles.mjs";
 import { ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, BargeInPill, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
-import { SettingsDrawer, SettingsSelect, DrawerStatus } from "./ui/settings-drawer.mjs";
+import {
+  SettingsDrawer,
+  CockpitSettingsModal,
+  SETTINGS_CATEGORIES,
+  settingsModalNextCategory,
+  settingsModalKeyboardCategoryAction,
+  settingsModalGuardedNavigation,
+  settingsModalEventRoute,
+  settingsModalCloseAction,
+  settingsModalFocusBoundary,
+  settingsModalFocusableNodes,
+  settingsModalFocusEntryTarget,
+  settingsModalFocusReturnTarget,
+  SettingsSelect,
+  DrawerStatus
+} from "./ui/settings-drawer.mjs";
+import { ConversationInstructionEditor } from "./ui/conversation-instruction-editor.mjs";
 import { soulStatusView, selfFireToggleView, killSwitchView, bargeInToggleView } from "./view-logic/control.mjs";
 import { chatStatusView, channelStatusView } from "./view-logic/status.mjs";
 import { BRAIN_LABELS } from "./view-logic/health.mjs";
+import { conversationBrainIdentity } from "./view-logic/conversation-instruction.mjs";
 
 // ── (1) Node インポートスモーク（import 文自体が成功している時点で副作用ゼロの構造証明）──
 
@@ -378,6 +395,12 @@ test("initialHealth: 初期表示 unknown（現 cockpit.html :158-159 の初期�
   });
 });
 
+test("cockpit.html: 静的初期 title は中立 Soul Cockpit（state 前に Cody/GPT を主張しない）", () => {
+  const html = readFileSync(path.join(COCKPIT_DIR, "cockpit.html"), "utf8");
+  assert.match(html, /<title>Soul Cockpit<\/title>/);
+  assert.doesNotMatch(html, /こーでぃー|チャッピー|Claude|GPT/);
+});
+
 // ── (8) hooks 非使用コンポーネントの vnode 走査スモーク（render 不要・公開形状 type/props のみ）──
 
 /** vnode ツリーからテキストを集める（関数コンポーネントは hooks 非使用前提で展開）。 */
@@ -422,11 +445,38 @@ test("FeedRow vnode スモーク: 各行種が view-logic 導出済み文字列�
   assert.equal(texts({ kind: "unknown-kind" }), ""); // 未知 kind は何も描かない。
 });
 
+test("Header identity: サーバー提供の Cody/Chappy displayName を描き、欠落/未知は中立表示", () => {
+  const props = {
+    ears: "listening",
+    health: { whisper: { status: "up", reason: null }, ffmpeg: { status: "up", reason: null } },
+    audioDevice: { name: "MV7+" },
+    onToggleSettings: () => {}
+  };
+  assert.equal(identityDisplayName({ id: "cody", displayName: "こーでぃー" }), "こーでぃー");
+  assert.equal(identityDisplayName({ id: "chappy", displayName: "チャッピー" }), "チャッピー");
+  assert.equal(identityDisplayName(null), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "gpt", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "chappy", displayName: "stale" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "cody", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: 1, displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "cody", displayName: 1 }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(collectText(Header({ ...props, identity: { id: "cody", displayName: "こーでぃー" } })).join("").includes("こーでぃー"), true);
+  assert.equal(collectText(Header({ ...props, identity: { id: "chappy", displayName: "チャッピー" } })).join("").includes("チャッピー"), true);
+  assert.equal(collectText(Header({ ...props, identity: undefined })).join("").includes(NEUTRAL_COCKPIT_TITLE), true);
+  assert.equal(cockpitDocumentTitle({ id: "cody", displayName: "こーでぃー" }), "こーでぃー — Soul Cockpit");
+  assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "チャッピー" }), "チャッピー — Soul Cockpit");
+  assert.equal(cockpitDocumentTitle({ id: "unknown", displayName: "GPT" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(cockpitDocumentTitle({ id: "cody", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
+});
+
 test("Header vnode スモーク: 名前・ランプ・死活・声の出力先・⚙ が乗る", () => {
   const vnode = Header({
     ears: "listening",
     health: { whisper: { status: "up", reason: null }, ffmpeg: { status: "down", reason: "gone" } },
     audioDevice: { name: "MV7+" },
+    identity: { id: "cody", displayName: "こーでぃー" },
     onToggleSettings: () => {}
   });
   const text = collectText(vnode).join("");
@@ -474,7 +524,7 @@ function collectElements(node, out = []) {
 }
 
 test("Domain C import スモーク: control-bar/settings-drawer が Node で import でき、主要 export が揃う", () => {
-  for (const fn of [ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, BargeInPill, SettingsDrawer, SettingsSelect, DrawerStatus]) {
+  for (const fn of [ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, BargeInPill, SettingsDrawer, CockpitSettingsModal, SettingsSelect, DrawerStatus]) {
     assert.equal(typeof fn, "function");
   }
   // 口数モードの選択肢（値は固定の 3 択・wave 計画「口数配線」§2 裁定 A で実配線済み）。
@@ -483,6 +533,172 @@ test("Domain C import スモーク: control-bar/settings-drawer が Node で imp
     { value: "normal", label: "ふつう" },
     { value: "chatty", label: "おしゃべり" }
   ]);
+});
+
+test("Cockpit Settings modal shell: one labelled dialog, four internal tabs, and bounded prompt slot", () => {
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["connections", "input-output", "brain-conversation", "memory"]);
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["接続", "入出力", "頭脳・会話", "記憶"]);
+  const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
+  assert.match(source, /role="dialog"\s+aria-modal="true"/);
+  assert.match(source, /role="tablist"/);
+  assert.match(source, /role="tab"/);
+  assert.equal((source.match(/role="tabpanel"/g) || []).length, 4, "one panel per category");
+  assert.match(source, /id="cockpit-settings-panel-connections"[\s\S]*?hidden=\$\{activeCategory !== "connections"\}/);
+  assert.match(source, /data-prompt-editor-slot/);
+  assert.doesNotMatch(source, /role="alertdialog"/);
+  assert.match(source, /ev\.key === "Escape"/);
+  assert.match(source, /ev\.target === ev\.currentTarget/);
+  assert.match(source, /previousFocusRef/);
+  assert.match(source, /\[hidden\]/);
+  assert.match(source, /ArrowLeft/);
+  assert.match(source, /closeRequestRef/);
+  assert.equal(settingsModalNextCategory("connections", "ArrowRight"), "input-output");
+  assert.equal(settingsModalNextCategory("connections", "ArrowLeft"), "memory");
+  assert.equal(settingsModalNextCategory("memory", "Home"), "connections");
+  assert.equal(settingsModalNextCategory("connections", "End"), "memory");
+  assert.equal(settingsModalCloseAction({ dirty: false }), "close");
+  assert.equal(settingsModalCloseAction({ dirty: true }), "prompt");
+  assert.equal(settingsModalFocusBoundary(0, 3, true), 2);
+  assert.equal(settingsModalFocusBoundary(2, 3, false), 0);
+  const visible = { closest: () => null, getAttribute: () => null };
+  const hidden = { closest: () => ({}), getAttribute: () => null };
+  assert.deepEqual(settingsModalFocusableNodes([visible, hidden]), [visible]);
+  assert.equal(settingsModalFocusEntryTarget([hidden, visible]), visible);
+  const trigger = { focusCalled: false, focus() { this.focusCalled = true; } };
+  assert.equal(settingsModalFocusReturnTarget(trigger, false), trigger);
+  assert.equal(settingsModalFocusReturnTarget(trigger, true), null);
+});
+
+test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navigation and focuses only after acceptance", () => {
+  const tabs = ["connections", "input-output", "brain-conversation", "memory"].map((id) => ({
+    id: "cockpit-settings-tab-" + id,
+    focusCount: 0,
+    focus() { this.focusCount += 1; }
+  }));
+  const navigations = [];
+  for (const [index, key, expected] of [
+    [0, "ArrowRight", "input-output"],
+    [1, "ArrowLeft", "connections"],
+    [1, "End", "memory"],
+    [3, "Home", "connections"]
+  ]) {
+    const result = settingsModalKeyboardCategoryAction({
+      tabs,
+      currentIndex: index,
+      key,
+      onNavigate: (nextId, after) => {
+        navigations.push({ nextId, after });
+      }
+    });
+    assert.equal(result, expected);
+    assert.equal(navigations.at(-1).nextId, expected);
+    assert.equal(tabs.every((tab) => tab.focusCount === 0), true, "guard seam owns focus timing");
+    navigations.at(-1).after();
+    const target = tabs.find((tab) => tab.id === "cockpit-settings-tab-" + expected);
+    assert.equal(target.focusCount, 1);
+    for (const tab of tabs) tab.focusCount = 0;
+  }
+
+  let prompted = null;
+  let proceeded = false;
+  const pending = () => { proceeded = true; };
+  assert.equal(settingsModalGuardedNavigation({
+    dirty: true,
+    action: pending,
+    onPrompt: (action) => { prompted = action; }
+  }), "prompt");
+  assert.equal(proceeded, false);
+  prompted();
+  assert.equal(proceeded, true);
+  let cleanProceed = false;
+  assert.equal(settingsModalGuardedNavigation({
+    dirty: false,
+    action: () => { cleanProceed = true; },
+    onPrompt: () => assert.fail("clean navigation must not prompt")
+  }), "proceed");
+  assert.equal(cleanProceed, true);
+});
+
+test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backdrop routes all prompt or proceed through one guard", () => {
+  const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
+  assert.match(source, /const requestEditorBack = .*runGuardedNavigation/);
+  assert.match(source, /const requestEditorBrain = .*runGuardedNavigation|runGuardedNavigation\(\(\) => setBrainSelected/);
+  assert.match(source, /if \(ev\.key === "Escape"\)[\s\S]*?requestClose\(\)/);
+  assert.match(source, /ev\.target === ev\.currentTarget\)[\s\S]*?requestClose\(\)/);
+  assert.match(source, /closeRequestRef\.current = requestClose/);
+  const eventTypes = ["back", "category-click", "category-keyboard", "brain", "close", "close"];
+  const outcomes = [];
+  for (const eventType of eventTypes) {
+    let pending = null;
+    let performed = false;
+    const action = () => { performed = true; };
+    outcomes.push(settingsModalEventRoute({
+      eventType,
+      dirty: true,
+      action,
+      onPrompt: (next) => { pending = next; }
+    }));
+    assert.equal(performed, false, `${eventType} must not silently discard a dirty draft`);
+    assert.equal(typeof pending, "function", `${eventType} must provide explicit discard continuation`);
+    pending();
+    assert.equal(performed, true);
+  }
+  assert.deepEqual(outcomes, ["prompt", "prompt", "prompt", "prompt", "prompt", "prompt"]);
+  assert.equal(settingsModalEventRoute({ eventType: "unknown", dirty: true, action: () => {}, onPrompt: () => {} }), null);
+});
+
+test("conversation identity seam: four editor brains consume only matching canonical active facts", () => {
+  assert.deepEqual(
+    ["claude", "codex", "codex-55", "codex-56-sol"].map((brainId) => conversationBrainIdentity({ brainId })),
+    [null, null, null, null]
+  );
+  for (const brainId of ["claude", "codex", "codex-55", "codex-56-sol"]) {
+    const canonical = { id: `canonical-${brainId}`, displayName: `Canonical ${brainId}` };
+    assert.deepEqual(conversationBrainIdentity({ brainId, activeBrainId: brainId, activeIdentity: canonical }), canonical);
+    assert.deepEqual(
+      conversationBrainIdentity({ brainId, activeBrainId: "claude", activeIdentity: canonical }),
+      brainId === "claude" ? canonical : null
+    );
+  }
+  const source = readFileSync(path.join(COCKPIT_DIR, "view-logic", "conversation-instruction.mjs"), "utf8");
+  assert.doesNotMatch(source, /CONVERSATION_BRAIN_IDENTITY_PROJECTIONS/);
+});
+
+test("conversation instruction editor vnode: four brain choices, editable body, readonly identity/memory, and no dialog nesting", () => {
+  const seen = { back: false, edit: false, save: false, reset: false, brain: false };
+  const vnode = ConversationInstructionEditor({
+    brainId: "codex",
+    brainLabel: "Codex (GPT-5.6 Terra)",
+    identity: { id: "chappy", displayName: "チャッピー" },
+    activeBrainId: "codex",
+    memory: { enabled: true, count: 2, lastRecordAtMs: null },
+    state: { draft: "custom", status: "saved", dirty: false, isOverride: true, revision: 1 },
+    onBack: () => { seen.back = true; },
+    onEdit: () => { seen.edit = true; },
+    onSave: () => { seen.save = true; },
+    onReset: () => { seen.reset = true; },
+    onBrainChange: () => { seen.brain = true; }
+  });
+  const elements = collectElements(vnode);
+  assert.equal(elements.some((node) => node.props && node.props.role === "dialog"), false);
+  const select = elements.find((node) => node.type === "select" && node.props.id === "conversation-instruction-brain");
+  assert.equal(select.props.value, "codex");
+  assert.deepEqual(elements.filter((node) => node.type === "option").map((node) => node.props.value), [
+    "claude", "codex", "codex-55", "codex-56-sol"
+  ]);
+  const textarea = elements.find((node) => node.type === "textarea");
+  assert.equal(textarea.props.value, "custom");
+  assert.equal(typeof textarea.props.onInput, "function");
+  const managed = elements.find((node) => node.props && node.props.class === "conversation-instruction-managed");
+  assert.ok(managed);
+  assert.match(collectText(vnode).join(""), /チャッピー/);
+  assert.match(collectText(vnode).join(""), /記憶 2 件を搭載/);
+  assert.match(collectText(vnode).join(""), /次のFireから反映/);
+  assert.match(collectText(vnode).join(""), /revision 1/);
+  assert.match(collectText(vnode).join(""), /読み取り専用/);
+  const source = readFileSync(path.join(UI_DIR, "conversation-instruction-editor.mjs"), "utf8");
+  assert.doesNotMatch(source, /memory.*text|memoryBody|transcript/i);
+  assert.deepEqual(seen, { back: false, edit: false, save: false, reset: false, brain: false });
 });
 
 test("FireButtons vnode: busy（soul 由来 / ローカル連打防止）で両ボタン disable・idle で有効", () => {

@@ -15,6 +15,7 @@ import {
 } from "./cockpit-server.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
+import { MODEL_IDENTITIES } from "../mind/model-identity.mjs";
 import { BARGE_IN_MIN_SPEECH_MS, BARGE_IN_GRACE_MS } from "../mind/barge-in.mjs";
 
 // 魂コクピット・サーバの機械テスト（S2.5 Domain A）。pipeline / デバイス列挙 / spawn を全注入し、
@@ -51,6 +52,14 @@ async function getJson(url) {
 }
 async function postJson(url, obj) {
   const r = await httpRequest(url, { method: "POST", body: obj != null ? JSON.stringify(obj) : "" });
+  return { status: r.status, json: r.body ? JSON.parse(r.body) : null };
+}
+async function putJson(url, obj) {
+  const r = await httpRequest(url, { method: "PUT", body: obj != null ? JSON.stringify(obj) : "" });
+  return { status: r.status, json: r.body ? JSON.parse(r.body) : null };
+}
+async function deleteJson(url) {
+  const r = await httpRequest(url, { method: "DELETE" });
   return { status: r.status, json: r.body ? JSON.parse(r.body) : null };
 }
 
@@ -184,6 +193,46 @@ function fakeSpawn(stderrText, { exitCode = 1, emitError = false } = {}) {
     stderr.on("end", () => child.emit("exit", exitCode, null));
     return child;
   };
+}
+
+/** Dedicated API fake: no file, provider, network, or runtime session is involved. */
+function makeFakeConversationInstructionHooks(initialOverrides = {}) {
+  const overrides = { ...initialOverrides };
+  let revision = 0;
+  let failSave = false;
+  let failReset = false;
+  const record = { saveRevisions: [], resetRevisions: [] };
+  const hooks = {
+    getProfile(brainId) {
+      const override = overrides[brainId] ?? null;
+      return { body: override ?? `default:${brainId}`, hasOverride: override != null };
+    },
+    save(brainId, instruction) {
+      record.saveRevisions.push(revision);
+      if (failSave) throw new Error("durable write failed");
+      overrides[brainId] = instruction;
+      revision += 1;
+      return true;
+    },
+    reset(brainId) {
+      record.resetRevisions.push(revision);
+      if (failReset) throw new Error("durable write failed");
+      delete overrides[brainId];
+      revision += 1;
+      return true;
+    },
+    getRevision() {
+      return revision;
+    },
+    record,
+    setFailSave(value) {
+      failSave = value;
+    },
+    setFailReset(value) {
+      failReset = value;
+    }
+  };
+  return hooks;
 }
 
 const DSHOW_NEW_FORMAT = [
@@ -446,6 +495,7 @@ test("cockpit GET /api/state: 転写バッファ履歴が transcripts に載る�
     assert.equal(state.json.transcripts.length, 2);
     assert.equal(state.json.transcripts[0].text, "こんにちは");
     assert.equal(state.json.transcripts[0].speaker, "you");
+    assert.equal(Object.prototype.hasOwnProperty.call(state.json.transcripts[0], "identity"), false);
     assert.equal(state.json.appended, 2);
   } finally {
     await server.close();
@@ -461,6 +511,248 @@ test("cockpit: 未知ルートは 404 JSON", async () => {
     assert.match(json.error, /not found/);
   } finally {
     await server.close();
+  }
+});
+
+// ── Dedicated conversation-instruction API (Domain A, fake-only) ───────────
+
+test("conversation instruction API: defaults, per-brain override, reset, and revision are effective-body responses", async () => {
+  const hooks = makeFakeConversationInstructionHooks();
+  const server = createCockpitServer({ conversationInstructionHooks: hooks });
+  try {
+    const url = await server.listen(0);
+    for (const brainId of ["claude", "codex", "codex-55", "codex-56-sol"]) {
+      const result = await getJson(`${url}/api/conversation-instructions/${brainId}`);
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.json, {
+        ok: true,
+        brainId,
+        instruction: `default:${brainId}`,
+        isOverride: false,
+        revision: 0
+      });
+    }
+
+    const saved = await putJson(`${url}/api/conversation-instructions/codex-55`, {
+      instruction: "custom codex-55 instruction"
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.json, {
+      ok: true,
+      brainId: "codex-55",
+      instruction: "custom codex-55 instruction",
+      isOverride: true,
+      revision: 1
+    });
+    const other = await getJson(`${url}/api/conversation-instructions/codex`);
+    assert.equal(other.json.instruction, "default:codex");
+    assert.equal(other.json.isOverride, false);
+
+    const reset = await deleteJson(`${url}/api/conversation-instructions/codex-55`);
+    assert.equal(reset.status, 200);
+    assert.deepEqual(reset.json, {
+      ok: true,
+      brainId: "codex-55",
+      instruction: "default:codex-55",
+      isOverride: false,
+      revision: 2
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test("conversation instruction API: unknown brain IDs and malformed/non-string/trim-empty requests are rejected", async () => {
+  const server = createCockpitServer({ conversationInstructionHooks: makeFakeConversationInstructionHooks() });
+  try {
+    const url = await server.listen(0);
+    for (const method of ["GET", "PUT", "DELETE"]) {
+      const r = await httpRequest(`${url}/api/conversation-instructions/no-such-brain`, {
+        method,
+        body: method === "PUT" ? JSON.stringify({ instruction: "x" }) : undefined
+      });
+      assert.equal(r.status, 400);
+      assert.match(JSON.parse(r.body).error, /invalid conversation instruction brain id/);
+    }
+
+    const malformed = await httpRequest(`${url}/api/conversation-instructions/claude`, {
+      method: "PUT",
+      body: "{not json"
+    });
+    assert.equal(malformed.status, 400);
+    assert.equal(JSON.parse(malformed.body).error, "malformed JSON body");
+
+    for (const value of [42, null, {}, ["not a string"]]) {
+      const r = await putJson(`${url}/api/conversation-instructions/claude`, { instruction: value });
+      assert.equal(r.status, 400);
+      assert.equal(r.json.error, "instruction must be a string");
+    }
+    for (const value of ["", "   ", "\n\t"]) {
+      const r = await putJson(`${url}/api/conversation-instructions/claude`, { instruction: value });
+      assert.equal(r.status, 400);
+      assert.equal(r.json.error, "instruction must not be empty");
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test("conversation instruction API: unavailable hooks return 503 and unsupported methods remain 404", async () => {
+  const bare = createCockpitServer({});
+  const withHooks = createCockpitServer({ conversationInstructionHooks: makeFakeConversationInstructionHooks() });
+  try {
+    const bareUrl = await bare.listen(0);
+    for (const method of ["GET", "PUT", "DELETE"]) {
+      const r = await httpRequest(`${bareUrl}/api/conversation-instructions/claude`, {
+        method,
+        body: method === "PUT" ? JSON.stringify({ instruction: "x" }) : undefined
+      });
+      assert.equal(r.status, 503);
+      assert.match(JSON.parse(r.body).error, /conversation instruction control not available/);
+    }
+    const url = await withHooks.listen(0);
+    for (const method of ["POST", "PATCH"]) {
+      const r = await httpRequest(`${url}/api/conversation-instructions/claude`, {
+        method,
+        body: method === "POST" ? JSON.stringify({ instruction: "x" }) : undefined
+      });
+      assert.equal(r.status, 404);
+      assert.match(JSON.parse(r.body).error, /not found/);
+    }
+    const malformedPath = await getJson(`${url}/api/conversation-instructions/%E0%A4%A`);
+    assert.equal(malformedPath.status, 400);
+    assert.match(malformedPath.json.error, /invalid conversation instruction brain id/);
+  } finally {
+    await bare.close();
+    await withHooks.close();
+  }
+});
+
+test("conversation instruction API: durable persistence failure does not advance revision or leak text", async () => {
+  const secret = "private instruction that must never enter errors or state";
+  const hooks = makeFakeConversationInstructionHooks();
+  hooks.setFailSave(true);
+  const server = createCockpitServer({ conversationInstructionHooks: hooks });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    const initial = await client.waitFor((event) => event.event === "state");
+    assert.equal(JSON.stringify(initial.data).includes(secret), false);
+    const failed = await putJson(`${url}/api/conversation-instructions/claude`, { instruction: secret });
+    assert.equal(failed.status, 500);
+    assert.equal(JSON.stringify(failed.json).includes(secret), false);
+    assert.deepEqual(hooks.record.saveRevisions, [0]);
+
+    const afterFailure = await getJson(`${url}/api/conversation-instructions/claude`);
+    assert.equal(afterFailure.status, 200);
+    assert.deepEqual(afterFailure.json, {
+      ok: true,
+      brainId: "claude",
+      instruction: "default:claude",
+      isOverride: false,
+      revision: 0
+    });
+    const state = await getJson(`${url}/api/state`);
+    assert.equal(JSON.stringify(state.json).includes(secret), false);
+    assert.equal(JSON.stringify(server.getTranscript()).includes(secret), false);
+    assert.equal(client.events.some((event) => JSON.stringify(event.data).includes(secret)), false);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("conversation instruction API: reset persistence failure preserves the override and revision", async () => {
+  const hooks = makeFakeConversationInstructionHooks({ claude: "existing override" });
+  // Seed revision independently from the API fake's initial map: the persisted override is effective at rev 0.
+  hooks.setFailReset(true);
+  const server = createCockpitServer({ conversationInstructionHooks: hooks });
+  try {
+    const url = await server.listen(0);
+    const failed = await deleteJson(`${url}/api/conversation-instructions/claude`);
+    assert.equal(failed.status, 500);
+    const afterFailure = await getJson(`${url}/api/conversation-instructions/claude`);
+    assert.deepEqual(afterFailure.json, {
+      ok: true,
+      brainId: "claude",
+      instruction: "existing override",
+      isOverride: true,
+      revision: 0
+    });
+    assert.deepEqual(hooks.record.resetRevisions, [0]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("conversation instruction privacy: successful secret save stays only in dedicated API responses across all fake observability surfaces", async () => {
+  const secret = "unique-successful-instruction-secret-20260820";
+  const hooks = makeFakeConversationInstructionHooks();
+  const pipeline = makeFakePipeline();
+  const orchestrator = makeFakeOrchestrator({});
+  let memoryRecords = 0;
+  const capturedWrites = [];
+  const originalStdoutWrite = process.stdout.write;
+  const originalStderrWrite = process.stderr.write;
+  const captureWrite = (chunk) => {
+    capturedWrites.push(String(chunk));
+    return true;
+  };
+  process.stdout.write = /** @type {any} */ (captureWrite);
+  process.stderr.write = /** @type {any} */ (captureWrite);
+  const server = createCockpitServer({
+    conversationInstructionHooks: hooks,
+    pipelineFactory: /** @type {any} */ (pipeline.factory),
+    fireOrchestratorFactory: /** @type {any} */ (orchestrator.factory),
+    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    brainStatus: () => ({ brain: "codex-55", credentialHealth: true }),
+    memoryStatus: () => ({ enabled: true, count: memoryRecords, lastRecordAtMs: memoryRecords > 0 ? 12345 : null }),
+    onMemoryRecord: async () => {
+      memoryRecords += 1;
+    },
+    onSetMemoryEnabled: async () => {}
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((event) => event.event === "state");
+    const put = await putJson(`${url}/api/conversation-instructions/codex-55`, { instruction: secret });
+    assert.equal(put.status, 200);
+    assert.equal(put.json.instruction, secret);
+    const get = await getJson(`${url}/api/conversation-instructions/codex-55`);
+    assert.equal(get.status, 200);
+    assert.equal(get.json.instruction, secret);
+    const dedicatedResponses = JSON.stringify([put.json, get.json]);
+    assert.equal(dedicatedResponses.includes(secret), true);
+
+    // Exercise state, identity, memory status/recording, transcript, usage, and diagnostic seams with ordinary
+    // fake payloads after the successful save. These payloads and all SSE events must remain secret-free.
+    const stateBefore = await getJson(`${url}/api/state`);
+    assert.deepEqual(stateBefore.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
+    assert.equal(JSON.stringify(stateBefore.json).includes(secret), false);
+    await postJson(`${url}/api/ears/start`, { device: "fake microphone" });
+    pipeline.record.options.onTranscript(
+      { seq: 0, startMs: 0, endMs: 1000, text: "ordinary transcript", appendedAtMs: 1000 },
+      { latencyMs: 12, audioCtx: 128 }
+    );
+    await client.waitFor((event) => event.event === "transcript" && event.data.text === "ordinary transcript");
+    orchestrator.record.hooks.onUsage({ usage: { input_tokens: 3, output_tokens: 1 }, vision: false });
+    await client.waitFor((event) => event.event === "usage" && event.data.usage.input_tokens === 3);
+    orchestrator.record.hooks.onDiagnostic({ type: "ordinaryDiagnostic", message: "ordinary diagnostic" });
+    await client.waitFor((event) => event.event === "diagnostic" && event.data.type === "ordinaryDiagnostic");
+    await postJson(`${url}/api/memory`, { enabled: true });
+    await postJson(`${url}/api/memory-record`, {});
+    const stateAfter = await getJson(`${url}/api/state`);
+    assert.equal(stateAfter.json.memory.count, 1);
+    assert.equal(JSON.stringify(stateAfter.json).includes(secret), false);
+    assert.equal(JSON.stringify(server.getTranscript()).includes(secret), false);
+    assert.equal(client.events.some((event) => JSON.stringify(event.data).includes(secret)), false);
+    assert.equal(capturedWrites.join("").includes(secret), false);
+  } finally {
+    client.close();
+    await server.close();
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
   }
 });
 
@@ -2196,8 +2488,9 @@ test("cockpit S8 born-killed: fireOrchestratorFactory の hooks に initialKille
 // ── POST /api/brain（多頭化 Domain B・POST /api/verbosity / /api/kill の写経）─────────────────
 //
 //  頭脳の切替継ぎ目。永続化 + 現 session の dispose→null（次発火から新頭）は cockpit.mjs の onSetBrain が
-//  担う（責務境界: cockpit-server は brain の中身を知らない）。snapshot の brain は brainStatus() 経由で
-//  頭札 + 資格情報の存在確認（credentialHealth）を載せる。onSetBrain 未注入なら 503（未注入ゲート）。
+//  担う（責務境界: cockpit-server は brain の lifecycle/credential 実体を知らない）。snapshot の brain は
+//  brainStatus() 経由で頭札 + 資格情報の存在確認（credentialHealth）を載せ、identity projection は canonical
+//  resolver から additive に導出する。onSetBrain 未注入なら 503（未注入ゲート）。
 
 /** cockpit.mjs の onSetBrain/brainStatus 配線と同型の最小 fake（現在の頭を保持し切替を記録する）。 */
 function makeFakeBrainWiring(initial = "claude") {
@@ -2232,8 +2525,17 @@ test("cockpit GET /api/state: snapshot に brain が載る（既定 brain・cred
   try {
     const url = await server.listen(0);
     const s = await getJson(`${url}/api/state`);
-    assert.deepEqual(s.json.brain, { brain: "claude", credentialHealth: true });
+    assert.deepEqual(s.json.brain, {
+      brain: "claude",
+      credentialHealth: true,
+      identity: { id: "cody", displayName: "こーでぃー" }
+    });
     assert.equal(typeof s.json.brain.credentialHealth, "boolean");
+    const unknown = createCockpitServer({ brainStatus: () => ({ brain: "not-registered", credentialHealth: false }) });
+    const unknownUrl = await unknown.listen(0);
+    const unknownState = await getJson(`${unknownUrl}/api/state`);
+    assert.deepEqual(unknownState.json.brain.identity, { id: "cody", displayName: "こーでぃー" });
+    await unknown.close();
     // brainStatus 未注入なら null（未注入ゲートの対称・別サーバで確認）。
     const bare = createCockpitServer({});
     const bareUrl = await bare.listen(0);
@@ -2258,6 +2560,7 @@ test("cockpit POST /api/brain: {brain:\"codex\"} → 200・snapshot.brain.brain=
     const r = await postJson(`${url}/api/brain`, { brain: "codex" });
     assert.equal(r.status, 200);
     assert.equal(r.json.brain.brain, "codex");
+    assert.deepEqual(r.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
     assert.deepEqual(wiring.record.calls, ["codex"]);
     // broadcastState() が SSE "state" に brain.brain:"codex" を乗せて流れる。
     const evt = await client.waitFor((e) => e.event === "state" && e.data.brain && e.data.brain.brain === "codex");
@@ -2282,6 +2585,7 @@ test("cockpit POST /api/brain: {brain:\"claude\"} → 200（Claude へ戻す）"
     const r = await postJson(`${url}/api/brain`, { brain: "claude" });
     assert.equal(r.status, 200);
     assert.equal(r.json.brain.brain, "claude");
+    assert.deepEqual(r.json.brain.identity, { id: "cody", displayName: "こーでぃー" });
     assert.deepEqual(wiring.record.calls, ["claude"]);
   } finally {
     await server.close();
@@ -2299,9 +2603,11 @@ test("cockpit POST /api/brain: {brain:\"codex-55\"}/{brain:\"codex-56-sol\"} →
     const r55 = await postJson(`${url}/api/brain`, { brain: "codex-55" });
     assert.equal(r55.status, 200);
     assert.equal(r55.json.brain.brain, "codex-55");
+    assert.deepEqual(r55.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
     const rSol = await postJson(`${url}/api/brain`, { brain: "codex-56-sol" });
     assert.equal(rSol.status, 200);
     assert.equal(rSol.json.brain.brain, "codex-56-sol");
+    assert.deepEqual(rSol.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
     assert.deepEqual(wiring.record.calls, ["codex-55", "codex-56-sol"]);
   } finally {
     await server.close();
@@ -2339,6 +2645,66 @@ test("cockpit POST /api/brain: body 欠落（brain が undefined）は 400", asy
     assert.equal(r.status, 400);
     assert.match(r.json.error, /invalid brain/);
     assert.deepEqual(wiring.record.calls, []);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit current identity providers: Whisper prompt/voice/comment seams switch without ear or scheduler recreation", async () => {
+  const fakePipe = makeFakePipeline();
+  const cap = makeFakeFireSchedulerCapture();
+  const fakeOrch = makeFakeOrchestrator({});
+  let currentIdentity = MODEL_IDENTITIES.cody;
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    fireSchedulerFactory: /** @type {any} */ (cap.factory),
+    selfFireInitialEnabled: true,
+    currentBrainIdentity: () => currentIdentity
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(start.status, 200);
+    assert.equal(typeof fakePipe.record.options.whisper.promptProvider, "function");
+    assert.deepEqual(cap.record.options.nameVariantsProvider(), MODEL_IDENTITIES.cody.voiceCallVariants);
+    assert.deepEqual(cap.record.options.commentNameVariantsProvider(), MODEL_IDENTITIES.cody.commentCallVariants);
+    assert.equal(fakePipe.record.options.whisper.promptProvider(), MODEL_IDENTITIES.cody.whisperPrompt);
+
+    // Mutating the current identity is enough; no pipeline/scheduler restart.
+    currentIdentity = MODEL_IDENTITIES.chappy;
+    assert.deepEqual(cap.record.options.nameVariantsProvider(), MODEL_IDENTITIES.chappy.voiceCallVariants);
+    assert.deepEqual(cap.record.options.commentNameVariantsProvider(), MODEL_IDENTITIES.chappy.commentCallVariants);
+    assert.equal(fakePipe.record.options.whisper.promptProvider(), MODEL_IDENTITIES.chappy.whisperPrompt);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit current identity provider is the public-state authority even without or against technical status", async () => {
+  let currentIdentity = MODEL_IDENTITIES.chappy;
+  let technicalStatus = null;
+  const server = createCockpitServer({
+    currentBrainIdentity: () => currentIdentity,
+    brainStatus: () => technicalStatus
+  });
+  try {
+    const url = await server.listen(0);
+    const providerOnly = await getJson(`${url}/api/state`);
+    assert.deepEqual(providerOnly.json.brain, {
+      identity: { id: "chappy", displayName: "チャッピー" }
+    });
+
+    // A deliberately mismatched technical status cannot relabel the current
+    // identity; all C consumers follow the currentBrainIdentity provider.
+    technicalStatus = { brain: "codex", credentialHealth: true };
+    currentIdentity = MODEL_IDENTITIES.cody;
+    const mismatched = await getJson(`${url}/api/state`);
+    assert.deepEqual(mismatched.json.brain, {
+      brain: "codex",
+      credentialHealth: true,
+      identity: { id: "cody", displayName: "こーでぃー" }
+    });
   } finally {
     await server.close();
   }
@@ -2901,8 +3267,9 @@ test("cockpit getTranscript: pipeline 未生成なら空配列・耳 start 後�
 /** onFireRequest コールバックを捕捉するだけの fake fireScheduler（他ハンドラは no-op）。 */
 function makeFakeFireSchedulerCapture() {
   /** @type {any} */
-  const record = { onFireRequest: null };
+  const record = { onFireRequest: null, options: null };
   const factory = (/** @type {any} */ opts) => {
+    record.options = opts;
     record.onFireRequest = opts.onFireRequest;
     return {
       handleVadEvent() {},

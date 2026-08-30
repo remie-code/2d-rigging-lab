@@ -4,8 +4,11 @@ import assert from "node:assert/strict";
 
 import {
   parseCockpitArgs,
+  buildBrainSessionSystemPrompt,
   createLazyChannel,
   createSessionProxy,
+  createInstructionRevisionController,
+  createConversationInstructionHooks,
   createVisionTargetHooks,
   createAudioDeviceHooks,
   createSelfFireHooks,
@@ -21,6 +24,8 @@ import {
   MEMORY_INJECT_MAX_CHARS,
   SHUTDOWN_MEMORY_TIMEOUT_MS
 } from "./cockpit.mjs";
+import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
+import { createFireOrchestrator, resolveConversationInstructionProfile } from "../src/mind/fire-orchestrator.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
 // 実 SDK / 実 TTS / 実器 / 実マイクは使わない（fake connectImpl のみ）。
@@ -79,8 +84,11 @@ test("createLazyChannel: connects on first sendSpeech and reuses the connection"
   });
 
   assert.equal(connects, 0, "構築時点では接続しない（lazy）");
+  assert.equal(lazy.acceptedConnectionGeneration(), 1, "accepted Fire reserves the next logical generation");
   const r1 = await lazy.sendSpeech([{ timeMs: 0, vowel: "a", s: 1 }]);
   assert.equal(r1.result, "accepted");
+  assert.equal(lazy.connectionGeneration(), 1);
+  assert.equal(lazy.acceptedConnectionGeneration(), 1, "cached connection keeps its accepted generation");
   await lazy.sendSpeech([]);
   assert.equal(connects, 1, "2 回目の sendSpeech は接続を再利用する");
   assert.equal(sent.length, 2);
@@ -247,6 +255,118 @@ test("createLazyChannel: 同一 URL の setUrl は接続を切らない（現状
   assert.equal(connects, 1, "接続は再利用される");
 });
 
+test("createLazyChannel: close-before-reply invalidates only the failed generation and next Fire reconnects once", async () => {
+  let connects = 0;
+  let closes = 0;
+  const sends = [];
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {
+    connectImpl: async () => {
+      const generation = ++connects;
+      return {
+        async sendSpeech() {
+          sends.push(generation);
+          if (generation === 1) {
+            const error = new Error("closed");
+            error.code = "channel_closed";
+            throw error;
+          }
+          return { result: "accepted", error: null, rttMs: 1 };
+        },
+        async close() { closes += 1; }
+      };
+    }
+  });
+  await assert.rejects(() => lazy.sendSpeech([]), (error) => error.code === "channel_closed");
+  assert.equal(lazy.acceptedConnectionGeneration(), 2, "terminal failure reserves only the next Fire generation");
+  assert.deepEqual(await lazy.sendSpeech([]), { result: "accepted", error: null, rttMs: 1 });
+  assert.equal(lazy.connectionGeneration(), 2);
+  assert.deepEqual(sends, [1, 2], "failed request is not retried; later request uses one fresh generation");
+  assert.equal(connects, 2);
+  await Promise.resolve();
+  assert.equal(closes, 1);
+  await lazy.close();
+});
+
+test("createLazyChannel: reply timeout is ambiguous, never retries current request, and next Fire reconnects", async () => {
+  let connects = 0;
+  const sends = [];
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {
+    connectImpl: async () => {
+      const generation = ++connects;
+      return {
+        async sendSpeech() {
+          sends.push(generation);
+          if (generation === 1) {
+            const error = new Error("timeout");
+            error.code = "reply_timeout";
+            throw error;
+          }
+          return { result: "accepted", error: null, rttMs: 1 };
+        },
+        async close() {}
+      };
+    }
+  });
+  await assert.rejects(() => lazy.sendSpeech([]), (error) => error.code === "reply_timeout");
+  await lazy.sendSpeech([]);
+  assert.deepEqual(sends, [1, 2]);
+  await lazy.close();
+});
+
+test("createLazyChannel: local 4096 preflight failure preserves the healthy cached connection", async () => {
+  let connects = 0;
+  let sends = 0;
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {
+    connectImpl: async () => {
+      connects += 1;
+      return {
+        async sendSpeech() {
+          sends += 1;
+          if (sends === 1) {
+            const error = new Error("oversize");
+            error.code = "speech_envelope_oversize";
+            throw error;
+          }
+          return { result: "accepted", error: null, rttMs: 1 };
+        },
+        async close() {}
+      };
+    }
+  });
+  await assert.rejects(() => lazy.sendSpeech([]), (error) => error.code === "speech_envelope_oversize");
+  await lazy.sendSpeech([]);
+  assert.equal(connects, 1);
+  assert.equal(sends, 2);
+  await lazy.close();
+});
+
+test("createLazyChannel: superseded in-flight connect failure cannot clear the newer exact cache", async () => {
+  let rejectOld;
+  let connects = 0;
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=old", {
+    connectImpl: async (url) => {
+      connects += 1;
+      if (url.includes("old")) {
+        await new Promise((_, reject) => { rejectOld = reject; });
+      }
+      return {
+        async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; },
+        async close() {}
+      };
+    }
+  });
+  const oldRequest = lazy.sendSpeech([]);
+  await Promise.resolve();
+  lazy.setUrl("ws://127.0.0.1:2/channel?token=new");
+  const newRequest = lazy.sendSpeech([]);
+  rejectOld(new Error("old connect failed late"));
+  await assert.rejects(() => oldRequest, /old connect failed late/);
+  assert.equal((await newRequest).result, "accepted");
+  assert.equal((await lazy.sendSpeech([])).result, "accepted");
+  assert.equal(connects, 2, "late old failure did not evict the newer cached generation");
+  await lazy.close();
+});
+
 // ── createSessionProxy（S5: ask の string | content配列 透過）─────────────────
 
 test("createSessionProxy: URL 未設定なら ask は明示エラー（ensureFireResources を呼ばない・spawn しない）", { timeout: 5000 }, async () => {
@@ -262,6 +382,26 @@ test("createSessionProxy: URL 未設定なら ask は明示エラー（ensureFir
   });
   await assert.rejects(() => proxy.ask("hello"), /Channel URL is not set/);
   assert.equal(ensureCalled, false);
+});
+
+test("createSessionProxy: desired Channel URL is applied at the next accepted Fire boundary before URL validation", { timeout: 5000 }, async () => {
+  let appliedUrl = null;
+  let created = 0;
+  const fakeSession = { ask: async () => ({ replyText: "ready" }) };
+  const proxy = createSessionProxy({
+    getUrl: () => appliedUrl,
+    ensureSessionCurrent: async () => {
+      appliedUrl = "ws://127.0.0.1:1/channel?token=next";
+    },
+    ensureFireResources: () => {
+      created += 1;
+    },
+    getSession: () => fakeSession
+  });
+
+  const out = await proxy.ask("next fire");
+  assert.equal(out.replyText, "ready");
+  assert.equal(created, 1);
 });
 
 test("createSessionProxy: 文字列入力を session.ask へそのまま透過する（無退行）", { timeout: 5000 }, async () => {
@@ -308,6 +448,71 @@ test("createSessionProxy: content ブロック配列入力を session.ask へそ
   assert.ok(Array.isArray(calls[0]));
   assert.deepEqual(calls[0], blocks);
   assert.equal(out.replyText, "みえた");
+});
+
+test("createSessionProxy: onTextDelta ask option を lazy App Server session へ同一参照で透過する", { timeout: 5000 }, async () => {
+  const calls = [];
+  const onTextDelta = () => {};
+  const askOptions = { onTextDelta };
+  const proxy = createSessionProxy({
+    getUrl: () => "ws://127.0.0.1:1/channel?token=t",
+    ensureFireResources: () => {},
+    getSession: () => ({
+      async ask(input, options) {
+        calls.push({ input, options });
+        return { replyText: "逐次応答。" };
+      }
+    })
+  });
+
+  await proxy.ask("こんにちは", askOptions);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].input, "こんにちは");
+  assert.equal(calls[0].options, askOptions);
+  assert.equal(calls[0].options.onTextDelta, onTextDelta);
+});
+
+test("C1 production seam: Fire → lazy session proxy → Codex delta → safe sentence enqueue を一 turn で貫通する", { timeout: 5000 }, async () => {
+  const buffer = createTranscriptBuffer();
+  buffer.append({ startMs: 0, endMs: 1, text: "返事して" });
+  const enqueued = [];
+  const spoken = [];
+  let askCount = 0;
+  const appServerLikeSession = {
+    async ask(_input, askOptions) {
+      askCount += 1;
+      askOptions.onTextDelta("最初。");
+      assert.deepEqual(enqueued.map((chunk) => chunk.text), ["最初。"]);
+      askOptions.onTextDelta("<nod>残り");
+      return { replyText: "最初。<nod>残り" };
+    }
+  };
+  const proxy = createSessionProxy({
+    getUrl: () => "ws://127.0.0.1:1/channel?token=t",
+    ensureFireResources: () => {},
+    getSession: () => appServerLikeSession
+  });
+  const orchestrator = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: proxy,
+    speakImpl: async (text) => {
+      spoken.push(text);
+      return { timeline: [], wavDurationSec: 0, playbackStartedAtMs: Date.now() };
+    },
+    channel: {},
+    player: { play() {} },
+    onProgressiveSentence: (chunk) => enqueued.push(chunk)
+  });
+
+  const result = await orchestrator.fire();
+  assert.equal(askCount, 1);
+  assert.deepEqual(enqueued, [
+    { text: "最初。", index: 0, final: false },
+    { text: "残り", index: 1, final: true }
+  ]);
+  assert.deepEqual(spoken, ["最初。残り"]);
+  assert.equal(result.fired, true);
+  orchestrator.dispose();
 });
 
 // ── createVisionTargetHooks（S5: 対象ウインドウ設定の settings ⇄ cockpit-server/orchestrator 橋渡し）───
@@ -952,28 +1157,60 @@ test("createBrainHooks: settings.setBrainChoice が throw しても onSetBrain �
   assert.doesNotThrow(() => hooks.onSetBrain("codex"));
 });
 
+test("buildBrainSessionSystemPrompt: all four brains resolve the canonical self-name", { timeout: 5000 }, () => {
+  const expected = new Map([
+    ["claude", "コーディ（Cody）"],
+    ["codex", "チャッピー（Chappy）"],
+    ["codex-55", "チャッピー（Chappy）"],
+    ["codex-56-sol", "チャッピー（Chappy）"]
+  ]);
+  for (const [brainId, selfName] of expected) {
+    const prompt = buildBrainSessionSystemPrompt(brainId);
+    assert.ok(prompt.startsWith(`あなたの名前は${selfName}です。`), brainId);
+    assert.match(prompt, /相方/);
+  }
+  // Persisted/defensive unknown values retain Claude/Cody fallback.
+  assert.ok(buildBrainSessionSystemPrompt("unknown").startsWith("あなたの名前はコーディ（Cody）です。"));
+});
+
+test("buildBrainSessionSystemPrompt: override follows identity and precedes optional memory", { timeout: 5000 }, () => {
+  const prompt = buildBrainSessionSystemPrompt("codex-56-sol", "memory section", {
+    "codex-56-sol": "custom conversation body"
+  });
+  assert.ok(prompt.indexOf("あなたの名前はチャッピー（Chappy）です。") >= 0);
+  assert.ok(prompt.indexOf("あなたの名前はチャッピー（Chappy）です。") < prompt.indexOf("custom conversation body"));
+  assert.ok(prompt.indexOf("custom conversation body") < prompt.indexOf("memory section"));
+});
+
 // ── 頭の切替 × in-flight（不変条件の固定・brain-swap.md §9 (a')）──────────────────────────────
 //
 //  main() の session/currentBrain/ensureFireResources/onSetBrain 配線と同型の最小ハーネスで、実 read-path
-//  コード（createSessionProxy = cockpit.mjs の実体）を通して「切替は現 session を dispose→null にし、次の
-//  ask は新頭で生成される」不変条件を固定する。実 SDK/実頭は使わず頭ごとの fake session を生成する
-//  （実消費ゼロ）。in-flight（pending の ask）は既存の dispose 意味論に委ね、切替をブロックしないことも示す。
+//  コード（createSessionProxy = cockpit.mjs の実体）を通して「切替は accepted Fire snapshot を乱さず、
+//  次の ask 境界で新頭へ置換される」不変条件を固定する。
 
-test("brain 切替×in-flight: 切替は現 session を dispose→null にし、次の ask は新頭で生成される", { timeout: 5000 }, async () => {
+test("brain 切替×in-flight: accepted session survives the setting write and is replaced at the next Fire", { timeout: 5000 }, async () => {
   /** @type {any} */ let session = null;
   let currentBrain = "claude";
+  let contextRevision = 0;
+  let sessionContextRevision = null;
   /** @type {string[]} */ const created = []; // ensureFireResources が生成した頭の記録。
   /** @type {string[]} */ const disposed = []; // dispose された頭の記録。
   /** @type {((v:any)=>void) | null} */ let pendingResolve = null;
+  let pendingClaude = true;
+  const ttsConfig = Object.freeze({ baseUrl: "http://127.0.0.1:10101", speaker: "fixed-speaker" });
+  /** @type {any} */ let player = null;
+  let playerCreations = 0;
 
   // 頭ごとの fake session（claude の ask は pending のまま＝in-flight を模す）。
   const makeFakeHead = (/** @type {string} */ brain) => {
     /** @type {any} */
     const head = {
       brain,
+      systemPrompt: buildBrainSessionSystemPrompt(brain),
       disposed: false,
       ask: (/** @type {string} */ input) => {
-        if (brain === "claude") {
+        if (brain === "claude" && pendingClaude) {
+          pendingClaude = false;
           return new Promise((resolve) => {
             pendingResolve = resolve;
           });
@@ -992,44 +1229,74 @@ test("brain 切替×in-flight: 切替は現 session を dispose→null にし、
   const ensureFireResources = () => {
     if (session == null) {
       session = makeFakeHead(currentBrain);
+      sessionContextRevision = contextRevision;
       created.push(currentBrain);
     }
+    if (player == null) {
+      playerCreations += 1;
+      player = { ttsConfig };
+    }
   };
-  // main() の effectful onSetBrain（永続化は割愛・dispose→null のホットスワップ部分だけを再現）と同型。
+  // main() の onSetBrain（永続化は割愛・desired revision の更新だけ）と同型。
   const onSetBrain = async (/** @type {string} */ choice) => {
     currentBrain = choice;
-    if (session != null) {
-      try {
-        await session.dispose();
-      } catch {
-        // best-effort
-      }
+    contextRevision += 1;
+  };
+  const ensureSessionCurrent = async () => {
+    if (session == null || sessionContextRevision === contextRevision) return;
+    const stale = session;
+    await stale.dispose();
+    if (session === stale) {
       session = null;
+      sessionContextRevision = null;
     }
   };
 
   // 実 read-path（cockpit.mjs の createSessionProxy そのもの）を通す。URL は設定済み（ask を弾かない）。
   const proxy = createSessionProxy({
     getUrl: () => "ws://127.0.0.1:1/channel?token=x",
+    ensureSessionCurrent,
     ensureFireResources,
     getSession: () => session
   });
 
   // 1 発目（claude）: ask は pending のまま（in-flight）。
   const inflight = proxy.ask("hello");
+  await Promise.resolve();
   assert.deepEqual(created, ["claude"]);
   const claudeHead = session;
+  assert.equal(claudeHead.systemPrompt, buildBrainSessionSystemPrompt("claude"));
+  const configuredPlayer = player;
+  assert.equal(playerCreations, 1);
 
-  // in-flight 中に codex へ切替: 現 session（claude）が dispose→null される（切替はブロックされない）。
+  // in-flight 中の setting write は accepted session/player を変更しない。
   await onSetBrain("codex");
+  assert.equal(claudeHead.disposed, false);
+  assert.deepEqual(disposed, []);
+  assert.equal(session, claudeHead);
+
+  // 次の ask 境界が旧 session を dispose して新頭（codex）を生成する。
+  const next = await proxy.ask("hi");
   assert.equal(claudeHead.disposed, true);
   assert.deepEqual(disposed, ["claude"]);
-  assert.equal(session, null);
-
-  // 次の ask は新頭（codex）で生成される。
-  const next = await proxy.ask("hi");
   assert.deepEqual(created, ["claude", "codex"]);
   assert.equal(next.replyText, "codex:hi");
+  assert.equal(session.systemPrompt, buildBrainSessionSystemPrompt("codex"));
+  assert.equal(player, configuredPlayer, "brain swap must not reconstruct the configured TTS player");
+  assert.equal(player.ttsConfig, ttsConfig, "brain swap must preserve TTS base URL/speaker config");
+  assert.equal(playerCreations, 1, "brain swap must not create a second TTS dependency");
+
+  // Reverse direction: GPT → Claude also waits for the next Fire/session.
+  const codexHead = session;
+  await onSetBrain("claude");
+  assert.equal(session, codexHead, "setting write does not dispose the accepted resource");
+  const reverse = await proxy.ask("back");
+  assert.deepEqual(disposed, ["claude", "codex"]);
+  assert.equal(reverse.replyText, "claude:back");
+  assert.equal(session.systemPrompt, buildBrainSessionSystemPrompt("claude"));
+  assert.deepEqual(created, ["claude", "codex", "claude"]);
+  assert.equal(player, configuredPlayer);
+  assert.equal(playerCreations, 1);
 
   // in-flight だった claude の ask は既存の dispose 意味論に委ねる（ここでは強制解決して leak を防ぐ）。
   assert.equal(typeof pendingResolve, "function");
@@ -1077,4 +1344,215 @@ test("createChatSourceHooks: settings.setChatSource が throw しても onSetCha
   };
   const hooks = createChatSourceHooks(settings);
   assert.doesNotThrow(() => hooks.onSetChatSource("https://youtube.com/watch?v=xyz"));
+});
+
+test("conversation instruction revision: production session seam reuses, replaces only on next accepted Fire, and preserves brain/memory/TTS", { timeout: 5000 }, async () => {
+  const currentBrain = "codex-55";
+  const memoryText = "memory section stays unchanged";
+  const overrides = { codex: "other brain must remain untouched" };
+  const settings = {
+    getConversationInstructionOverrides: () => ({ ...overrides }),
+    getConversationInstructionProfile: (brainId) => resolveConversationInstructionProfile(brainId, overrides),
+    setConversationInstruction: (brainId, instruction) => {
+      overrides[brainId] = instruction;
+      return true;
+    },
+    resetConversationInstruction: (brainId) => {
+      delete overrides[brainId];
+      return true;
+    }
+  };
+  const revision = createInstructionRevisionController();
+  const instructionHooks = createConversationInstructionHooks(settings, () => currentBrain, revision);
+  /** @type {any[]} */ const sessions = [];
+  /** @type {any} */ let session = null;
+  let sessionInstructionRevision = null;
+  let player = null;
+  let playerCreations = 0;
+  /** @type {Array<((value: any) => void) | null>} */ const pendingResolves = [];
+  const createdRevisions = [];
+  const deferredSession = (index) =>
+    new Promise((resolve) => {
+      pendingResolves[index] = resolve;
+    });
+  const makeSession = () => {
+    const index = sessions.length;
+    const systemPrompt = buildBrainSessionSystemPrompt(currentBrain, memoryText, overrides);
+    const head = {
+      index,
+      systemPrompt,
+      disposed: 0,
+      async ask(input) {
+        if (index < 2) {
+          return deferredSession(index);
+        }
+        return { replyText: `reply:${index}:${input.slice(0, 8)}`, usage: { input_tokens: index }, ttftMs: null, elapsedMs: 1 };
+      },
+      async dispose() {
+        head.disposed += 1;
+      }
+    };
+    sessions.push(head);
+    createdRevisions.push(revision.getRevision());
+    return head;
+  };
+  const ensureFireResources = () => {
+    if (session == null) {
+      session = makeSession();
+      sessionInstructionRevision = revision.getRevision();
+    }
+    if (player == null) {
+      player = { ttsConfig: { baseUrl: "fake://tts", speaker: "stable" } };
+      playerCreations += 1;
+    }
+  };
+  const ensureSessionCurrent = async () => {
+    if (session == null || sessionInstructionRevision === revision.getRevision()) return;
+    const stale = session;
+    await stale.dispose();
+    if (session === stale) {
+      session = null;
+      sessionInstructionRevision = null;
+    }
+  };
+  const proxy = createSessionProxy({
+    getUrl: () => "ws://127.0.0.1:1/channel?token=fake",
+    ensureFireResources,
+    ensureSessionCurrent,
+    getSession: () => session
+  });
+  const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+  buffer.append({ startMs: 0, endMs: 1000, text: "今どうなってる？" });
+  const spoken = [];
+  const usages = [];
+  const orchestrator = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: proxy,
+    speakImpl: async (text) => {
+      spoken.push(text);
+      return { timeline: [], wavDurationSec: 0, playbackStartedAtMs: 1000 };
+    },
+    channel: {},
+    player: { play() {} },
+    nowImpl: () => 1000,
+    onUsage: (info) => usages.push(info)
+  });
+
+  // First Fire creates the default session and remains pending. A save marks the revision stale but does not
+  // dispose/relabel the in-flight session; the second Fire is rejected by the real busy state machine.
+  const firstFire = orchestrator.fire();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sessions.length, 1);
+  const firstSession = sessions[0];
+  assert.equal(firstSession.systemPrompt.includes("other brain must remain untouched"), false);
+  assert.equal(firstSession.systemPrompt.includes(memoryText), true);
+  assert.equal(instructionHooks.save(currentBrain, "custom body while first answer is pending"), true);
+  assert.equal(firstSession.disposed, 0);
+  const busyWhileFirstPending = await orchestrator.fire();
+  assert.deepEqual(busyWhileFirstPending, { fired: false, reason: "busy", state: "thinking" });
+  assert.equal(sessions.length, 1);
+  pendingResolves[0]({ replyText: "first answer", usage: { input_tokens: 1 }, ttftMs: null, elapsedMs: 1 });
+  const firstResult = await firstFire;
+  assert.equal(firstResult.fired, true);
+  assert.equal(firstSession.disposed, 0, "save does not interrupt the in-flight answer");
+
+  // The following accepted Fire performs exactly one stale-session replacement and uses the selected brain's
+  // custom body. The second fake answer is kept pending so reset can be tested against another in-flight request.
+  const customFire = orchestrator.fire();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sessions.length, 2);
+  assert.equal(sessions[1].systemPrompt.includes("custom body while first answer is pending"), true);
+  assert.equal(sessions[1].systemPrompt.includes(memoryText), true);
+  assert.equal(sessions[1].systemPrompt.startsWith("あなたの名前はチャッピー（Chappy）です。"), true);
+  assert.equal(sessions[0].disposed, 1);
+  assert.equal(instructionHooks.reset(currentBrain), true);
+  assert.equal(sessions[1].disposed, 0, "reset while asking does not interrupt the in-flight answer");
+  const busyWhileSecondPending = await orchestrator.fire();
+  assert.equal(busyWhileSecondPending.reason, "busy");
+  pendingResolves[1]({ replyText: "second answer", usage: { input_tokens: 2 }, ttftMs: null, elapsedMs: 1 });
+  assert.equal((await customFire).fired, true);
+
+  // Reset was durable while the session was pending; the next accepted Fire replaces it once with the default
+  // body. A later idle save follows the same boundary, and an unchanged revision reuses the resulting session.
+  const defaultFire = await orchestrator.fire();
+  assert.equal(defaultFire.fired, true);
+  assert.equal(sessions.length, 3);
+  assert.equal(sessions[2].systemPrompt.includes("custom body while first answer is pending"), false);
+  assert.equal(sessions[2].systemPrompt.includes(memoryText), true);
+  assert.equal(sessions[1].disposed, 1);
+
+  assert.equal(instructionHooks.save(currentBrain, "custom body saved while idle"), true);
+  assert.equal(sessions[2].disposed, 0, "idle save leaves the current session in place");
+  const idleSaveFire = await orchestrator.fire();
+  assert.equal(idleSaveFire.fired, true);
+  assert.equal(sessions.length, 4);
+  assert.equal(sessions[3].systemPrompt.includes("custom body saved while idle"), true);
+  assert.equal(sessions[2].disposed, 1);
+
+  const reused = sessions[3];
+  const repeatedFire = await orchestrator.fire();
+  assert.equal(repeatedFire.fired, true);
+  assert.equal(sessions.length, 4, "unchanged revision reuses the same session");
+  assert.equal(session, reused);
+  assert.equal(reused.disposed, 0);
+
+  assert.equal(currentBrain, "codex-55");
+  assert.equal(memoryText, "memory section stays unchanged");
+  assert.equal(playerCreations, 1, "instruction revisions do not recreate the TTS player");
+  assert.equal(player.ttsConfig.speaker, "stable");
+  assert.equal(usages.length, 5);
+  assert.equal(spoken.length, 5);
+  orchestrator.dispose();
+});
+
+test("createSessionProxy: stale instruction session is disposed before the next Fire", { timeout: 5000 }, async () => {
+  const events = [];
+  const session = {
+    async ask(input) {
+      events.push(["ask", input]);
+      return { replyText: "ok" };
+    },
+    async dispose() {
+      events.push(["dispose"]);
+    }
+  };
+  let currentRevision = 1;
+  const proxy = createSessionProxy({
+    getUrl: () => "ws://127.0.0.1:1/channel?token=t",
+    ensureFireResources: () => events.push(["ensure"]),
+    ensureSessionCurrent: async () => {
+      if (currentRevision === 2) await session.dispose();
+    },
+    getSession: () => session
+  });
+  await proxy.ask("first");
+  currentRevision = 2;
+  await proxy.ask("second");
+  assert.deepEqual(events, [["ensure"], ["ask", "first"], ["dispose"], ["ensure"], ["ask", "second"]]);
+});
+
+test("instruction revision/hooks: revision advances only after a successful durable write", () => {
+  const revision = createInstructionRevisionController();
+  let value = null;
+  const settings = {
+    getConversationInstructionOverrides: () => (value == null ? {} : { claude: value }),
+    getConversationInstructionProfile: () => ({ body: value ?? "default", hasOverride: value != null }),
+    setConversationInstruction: (_id, next) => {
+      value = next;
+      return true;
+    },
+    resetConversationInstruction: () => {
+      value = null;
+      return true;
+    }
+  };
+  const hooks = createConversationInstructionHooks(settings, () => "claude", revision);
+  assert.equal(hooks.getRevision(), 0);
+  assert.equal(hooks.save("claude", "custom"), true);
+  assert.equal(hooks.getRevision(), 1);
+  assert.equal(hooks.reset("claude"), true);
+  assert.equal(hooks.getRevision(), 2);
+  settings.setConversationInstruction = () => false;
+  assert.equal(hooks.save("claude", "not persisted"), false);
+  assert.equal(hooks.getRevision(), 2);
 });

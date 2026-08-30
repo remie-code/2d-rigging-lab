@@ -138,6 +138,67 @@ test("whisper-inference: options.prompt に空文字を明示指定すると pro
   assert.equal(calls[0].init.body.get("prompt"), null);
 });
 
+test("whisper-inference: promptProvider は推論器を作り直さず各 transcribe 時点で再評価する", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  let activePrompt = "こーでぃー、コーディ。";
+  let providerCalls = 0;
+  const fetchImpl = /** @type {any} */ (
+    async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "サーバ応答" }) };
+    }
+  );
+  const inference = createWhisperInference({
+    fetchImpl,
+    promptProvider: () => {
+      providerCalls += 1;
+      return activePrompt;
+    }
+  });
+  const wav = Uint8Array.from([1, 2]);
+
+  await inference.transcribe(wav);
+  activePrompt = "ちゃっぴー、チャッピー。";
+  await inference.transcribe(wav);
+
+  assert.equal(providerCalls, 2);
+  assert.equal(calls[0].init.body.get("prompt"), "こーでぃー、コーディ。");
+  assert.equal(calls[1].init.body.get("prompt"), "ちゃっぴー、チャッピー。");
+});
+
+test("whisper-inference: promptProvider が未定義/非関数なら既定 Cody prompt に戻る", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fetchImpl = /** @type {any} */ (
+    async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "応答" }) };
+    }
+  );
+  const inference = createWhisperInference({ fetchImpl, promptProvider: /** @type {any} */ ("not a getter") });
+  await inference.transcribe(Uint8Array.from([1]));
+  assert.equal(calls[0].init.body.get("prompt"), DEFAULT_WHISPER_PROMPT);
+});
+
+test("whisper-inference: promptProvider の非文字列結果は literal options.prompt へフォールバックする", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const fetchImpl = /** @type {any} */ (
+    async (url, init) => {
+      calls.push({ url, init });
+      return { ok: true, status: 200, statusText: "OK", json: async () => ({ text: "応答" }) };
+    }
+  );
+  const inference = createWhisperInference({
+    fetchImpl,
+    prompt: "固定 prompt",
+    promptProvider: () => /** @type {any} */ (undefined)
+  });
+  await inference.transcribe(Uint8Array.from([1]));
+  assert.equal(calls[0].init.body.get("prompt"), "固定 prompt");
+});
+
 test("whisper-inference: prompt 注入は転写正本を汚さない（返り値はサーバ応答のテキストのみ由来）", async () => {
   // fake サーバ応答のテキストに DEFAULT_WHISPER_PROMPT の断片を意図的に含めない・
   // prompt そのものとは無関係な文字列を返すことで「返り値 = サーバ応答由来のみ」を固定する。

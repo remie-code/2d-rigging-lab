@@ -1,95 +1,140 @@
 // @ts-check
-/**
- * codex-session.test.mjs — fake sdkImpl 注入のみ。実ネット・実 Terra・実 codex CLI・実 ~/.codex を
- * 一切使わない（SDK 消費ゼロ）。rollout 掃除の性質テスト（blocking）は必ずスクラッチ homeDir を
- * 使い、本物の ~/.codex には絶対に触れない。
- */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
 import { createCodexSession } from "./codex-session.mjs";
 
-const SAMPLE_USAGE = Object.freeze({
-  input_tokens: 11584,
-  cached_input_tokens: 0,
-  output_tokens: 14,
-  reasoning_output_tokens: 0
-});
-
-/**
- * fake Codex SDK コンストラクタを作る。onRun(input, thread) は runStreamed のたびに呼ばれ、
- * ThreadEvent[]（または Promise<ThreadEvent[]>）を返す。
- * @param {{ threadId?: string; onRun: (input: any, thread: any) => Promise<any[]> | any[] }} opts
- */
-function makeFakeSdk({ threadId = "fake-thread-0001", onRun }) {
-  /** @type {any[]} */
-  const capturedInputs = [];
-  /** @type {any} */
-  let lastConstructedOptions = null;
-  /** @type {any} */
-  let lastThreadOptions = null;
-
-  class FakeThread {
-    constructor(threadOptions) {
-      lastThreadOptions = threadOptions;
-      this._id = null;
-    }
-    get id() {
-      return this._id;
-    }
-    async runStreamed(input) {
-      capturedInputs.push(input);
-      this._id = threadId; // 型定義どおり「初回 turn 開始後に populated」を模す。
-      const events = await onRun(input, this);
-      async function* gen() {
-        for (const ev of events) yield ev;
+class FakeChild extends EventEmitter {
+  constructor(onMessage) {
+    super();
+    this.stdout = new EventEmitter();
+    this.stderr = new EventEmitter();
+    this.messages = [];
+    this.sentMessages = [];
+    this.killSignals = [];
+    this.exited = false;
+    this.inputBuffer = "";
+    this.stdin = {
+      write: (chunk) => {
+        this.inputBuffer += `${chunk}`;
+        while (this.inputBuffer.includes("\n")) {
+          const newline = this.inputBuffer.indexOf("\n");
+          const line = this.inputBuffer.slice(0, newline);
+          this.inputBuffer = this.inputBuffer.slice(newline + 1);
+          if (!line) continue;
+          const message = JSON.parse(line);
+          this.messages.push(message);
+          onMessage(message, this.api());
+        }
+        return true;
       }
-      return { events: gen() };
-    }
+    };
   }
 
-  class FakeCodex {
-    constructor(options) {
-      lastConstructedOptions = options;
-    }
-    startThread(threadOptions) {
-      return new FakeThread(threadOptions);
-    }
+  api() {
+    return {
+      response: (request, result) => this.send({ id: request.id, result }),
+      rpcError: (request, message) => this.send({ id: request.id, error: { code: -32000, message } }),
+      notification: (method, params, fragments) => this.send({ method, params }, fragments),
+      message: (message, fragments) => this.send(message, fragments),
+      raw: (raw) => this.stdout.emit("data", Buffer.from(raw)),
+      exit: (code = 1, signal = null) => this.exit(code, signal)
+    };
   }
 
-  return {
-    FakeCodex,
-    capturedInputs,
-    getLastConstructedOptions: () => lastConstructedOptions,
-    getLastThreadOptions: () => lastThreadOptions
+  send(message, fragments = null) {
+    this.sentMessages.push(message);
+    const bytes = Buffer.from(`${JSON.stringify(message)}\n`);
+    if (!Array.isArray(fragments) || fragments.length === 0) {
+      this.stdout.emit("data", bytes);
+      return;
+    }
+    let offset = 0;
+    for (const length of fragments) {
+      if (offset >= bytes.length) break;
+      this.stdout.emit("data", bytes.subarray(offset, Math.min(bytes.length, offset + length)));
+      offset += length;
+    }
+    if (offset < bytes.length) this.stdout.emit("data", bytes.subarray(offset));
+  }
+
+  exit(code = 0, signal = null) {
+    if (this.exited) return;
+    this.exited = true;
+    queueMicrotask(() => this.emit("exit", code, signal));
+  }
+
+  kill(signal) {
+    this.killSignals.push(signal);
+    this.exit(null, signal);
+    return true;
+  }
+}
+
+function successfulTurn(api, request, replyText, { fragments = null, usage = null } = {}) {
+  const threadId = request.params.threadId;
+  const turnId = `turn-${request.id}`;
+  const itemId = `agent-${request.id}`;
+  api.response(request, { turn: { id: turnId, status: "inProgress", items: [] } });
+  api.notification("turn/started", { threadId, turn: { id: turnId, status: "inProgress", items: [] } });
+  api.notification("item/started", { threadId, turnId, startedAtMs: 1, item: { id: itemId, type: "agentMessage", text: "" } });
+  for (const delta of [...replyText]) {
+    api.notification("item/agentMessage/delta", { threadId, turnId, itemId, delta }, fragments);
+  }
+  if (usage) api.notification("thread/tokenUsage/updated", { threadId, turnId, tokenUsage: usage });
+  api.notification("item/completed", { threadId, turnId, completedAtMs: 2, item: { id: itemId, type: "agentMessage", text: replyText } });
+  api.notification("turn/completed", { threadId, turn: { id: turnId, status: "completed", items: [] } });
+}
+
+function makeSpawnHarness(specForProcess = () => ({})) {
+  const children = [];
+  const spawnCalls = [];
+  const turnRequests = [];
+  const threadRequests = [];
+  const spawnImpl = (command, args, options) => {
+    const processIndex = children.length;
+    const spec = specForProcess(processIndex);
+    const child = new FakeChild((message, api) => {
+      if (message.method === "initialize") {
+        if (spec.onInitialize) spec.onInitialize(message, api, child);
+        else api.response(message, { serverInfo: { name: "fake", version: "0.144.5" } });
+      } else if (message.method === "thread/start") {
+        threadRequests.push(message);
+        if (spec.onThread) spec.onThread(message, api, child);
+        else api.response(message, { thread: { id: spec.threadId ?? `thread-${threadRequests.length}` } });
+      } else if (message.method === "turn/start") {
+        turnRequests.push(message);
+        if (spec.onTurn) spec.onTurn(message, api, child);
+        else successfulTurn(api, message, spec.replyText ?? "はい。", spec.successOptions);
+      } else if (message.method === "turn/interrupt" || message.method === "thread/delete") {
+        if (spec.onCleanup) spec.onCleanup(message, api, child);
+        else api.response(message, {});
+      }
+    });
+    if (spec.neverExitOnKill) {
+      child.kill = (signal) => {
+        child.killSignals.push(signal);
+        return true;
+      };
+    } else if (Number.isFinite(spec.killDelayMs)) {
+      child.kill = (signal) => {
+        child.killSignals.push(signal);
+        setTimeout(() => child.exit(null, signal), spec.killDelayMs);
+        return true;
+      };
+    }
+    children.push(child);
+    spawnCalls.push({ command, args, options });
+    return child;
   };
+  return { spawnImpl, children, spawnCalls, turnRequests, threadRequests };
 }
 
-/** 成功イベント列（agent_message 完成一括 + turn.completed）。 */
-function successEvents(replyText, usage = SAMPLE_USAGE) {
-  return [
-    { type: "thread.started", thread_id: "fake-thread-0001" },
-    { type: "turn.started" },
-    { type: "item.completed", item: { id: "1", type: "agent_message", text: replyText } },
-    { type: "turn.completed", usage }
-  ];
-}
-
-/** turn.failed イベント列。 */
-function failedEvents(message) {
-  return [
-    { type: "thread.started", thread_id: "fake-thread-0001" },
-    { type: "turn.started" },
-    { type: "turn.failed", error: { message } }
-  ];
-}
-
-/** テスト専用のスクラッチ homeDir + ledgerPath を作り、finally で必ず削除する。 */
-async function withScratchHome(fn) {
-  const homeDir = mkdtempSync(path.join(os.tmpdir(), "codex-session-test-home-"));
+async function withScratch(fn) {
+  const homeDir = mkdtempSync(path.join(os.tmpdir(), "codex-app-server-test-"));
   const ledgerPath = path.join(homeDir, "codex-rollouts.local.json");
   try {
     await fn({ homeDir, ledgerPath });
@@ -98,424 +143,382 @@ async function withScratchHome(fn) {
   }
 }
 
-/** rollout ファイル名（実観測フォーマット・brain-swap-terra.md §3-4）。 */
-function rolloutFileName(threadId, isoLike = "2026-07-17T08-32-30") {
-  return `rollout-${isoLike}-${threadId}.jsonl`;
+function createTestSession(harness, scratch, extra = {}) {
+  return createCodexSession({
+    skipEnvGuard: true,
+    codexPath: "fake-codex",
+    spawnImpl: harness.spawnImpl,
+    homeDir: scratch.homeDir,
+    ledgerPath: scratch.ledgerPath,
+    rpcTimeoutMs: 200,
+    disposeRpcTimeoutMs: 20,
+    shutdownTimeoutMs: 20,
+    ...extra
+  });
 }
 
-/** homeDir/.codex/sessions/<y>/<m>/<d>/ 配下にダミー rollout を書く。 */
-function writeRolloutFile(homeDir, [y, m, d], fileName) {
-  const dir = path.join(homeDir, ".codex", "sessions", y, m, d);
-  mkdirSync(dir, { recursive: true });
-  const filePath = path.join(dir, fileName);
-  writeFileSync(filePath, '{"note":"dummy rollout — テストは中身を読まない"}\n', "utf8");
-  return filePath;
-}
+test("codex-session: initialize/initialized once, one persistent process/thread, ordered fragmented deltas and exact final", async () => {
+  await withScratch(async (scratch) => {
+    const usage = { last: { inputTokens: 10, cachedInputTokens: 2, outputTokens: 4, reasoningOutputTokens: 1, totalTokens: 14 }, total: {} };
+    const harness = makeSpawnHarness(() => ({ replyText: "一回目🙂。", successOptions: { fragments: [1, 2, 3, 1], usage } }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "SYSTEM" });
+    const deltas = [];
+    const first = await session.ask("質問1", { onTextDelta: (delta) => deltas.push(delta) });
+    const second = await session.ask("質問2");
 
-// ── ask(string): turn1 systemPrompt 前置 / turn2 以降そのまま ──────────────────
+    assert.equal(first.replyText, "一回目🙂。");
+    assert.equal(deltas.join(""), first.replyText);
+    assert.deepEqual(first.usage, { input_tokens: 10, cached_input_tokens: 2, output_tokens: 4, reasoning_output_tokens: 1, total_tokens: 14 });
+    assert.ok(first.ttftMs >= 0);
+    assert.ok(first.elapsedMs >= first.ttftMs);
+    assert.equal(second.replyText, "一回目🙂。");
+    assert.equal(harness.children.length, 1);
+    assert.equal(harness.threadRequests.length, 1);
+    assert.equal(harness.turnRequests.length, 2);
+    assert.equal(harness.turnRequests[0].params.threadId, harness.turnRequests[1].params.threadId);
+    assert.deepEqual(harness.turnRequests[0].params.input, [{ type: "text", text: "SYSTEM\n\n質問1" }]);
+    assert.deepEqual(harness.turnRequests[1].params.input, [{ type: "text", text: "質問2" }]);
+    assert.equal(harness.children[0].messages.filter((m) => m.method === "initialize").length, 1);
+    assert.equal(harness.children[0].messages.filter((m) => m.method === "initialized").length, 1);
+    assert.equal(harness.children[0].sentMessages.every((message) => !Object.hasOwn(message, "jsonrpc")), true);
+    assert.deepEqual(harness.turnRequests[0].params.sandboxPolicy, { type: "readOnly", networkAccess: false });
+    await session.dispose();
+    assert.ok(harness.children[0].killSignals.length >= 1);
+  });
+});
 
-test("codex-session: ask(string) は turn1 で systemPrompt を前置し、turn2 以降はそのまま渡す", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex, capturedInputs } = makeFakeSdk({
-      onRun: () => successEvents("応答1号")
-    });
-    const session = createCodexSession({
-      systemPrompt: "SYSTEM_PROMPT_X",
-      sdkImpl: FakeCodex,
-      skipEnvGuard: true,
-      homeDir,
-      ledgerPath
-    });
-
-    await session.ask("こんばんは");
-    await session.ask("2発目の一言");
-
-    assert.equal(capturedInputs[0], "SYSTEM_PROMPT_X\n\nこんばんは");
-    assert.equal(capturedInputs[1], "2発目の一言");
-
+test("codex-session: initialize-only accepts the observed 0.144.5 envelope and creates no thread or turn", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness();
+    const session = createTestSession(harness, scratch);
+    await session.initialize();
+    assert.equal(harness.children.length, 1);
+    assert.equal(harness.children[0].messages.filter((message) => message.method === "initialize").length, 1);
+    assert.equal(harness.threadRequests.length, 0);
+    assert.equal(harness.turnRequests.length, 0);
     await session.dispose();
   });
 });
 
-// ── content ブロック配列: text→text / image(base64)→local_image ───────────────
-
-test("codex-session: content ブロック配列は text→text・image(base64)→local_image に変換される（turn1 は systemPrompt 前置）", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex, capturedInputs } = makeFakeSdk({
-      onRun: () => successEvents("画像も見えてるよ")
-    });
-    const session = createCodexSession({
-      systemPrompt: "SYS",
-      sdkImpl: FakeCodex,
-      skipEnvGuard: true,
-      homeDir,
-      ledgerPath
-    });
-
-    const base64Data = Buffer.from("fake-jpeg-bytes").toString("base64");
-    await session.ask([
-      { type: "image", source: { type: "base64", data: base64Data, media_type: "image/jpeg" } },
-      { type: "text", text: "これは何？" }
-    ]);
-
-    const input = capturedInputs[0];
-    assert.ok(Array.isArray(input));
-    assert.deepEqual(input[0], { type: "text", text: "SYS" });
-    assert.equal(input[1].type, "local_image");
-    assert.equal(typeof input[1].path, "string");
-    assert.ok(input[1].path.endsWith(".jpg"));
-    assert.deepEqual(input[2], { type: "text", text: "これは何？" });
-
-    await session.dispose();
-  });
-});
-
-// ── 画像一時ファイル: run 中は存在し ask 後は消えている ─────────────────────────
-
-test("codex-session: 画像の一時ファイルは run 中に存在し、ask 完了後には削除されている", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    /** @type {string | null} */
-    let capturedPath = null;
-    let existedDuringRun = false;
-    const { FakeCodex } = makeFakeSdk({
-      onRun: (input) => {
-        const imgBlock = input.find((b) => b.type === "local_image");
-        capturedPath = imgBlock.path;
-        existedDuringRun = existsSync(capturedPath);
-        return successEvents("見た");
+test("codex-session: safely-correlated invalid initialize response fails only that request and retries on the same process", async () => {
+  await withScratch(async (scratch) => {
+    let initializeAttempts = 0;
+    const harness = makeSpawnHarness(() => ({
+      onInitialize(request, api) {
+        initializeAttempts += 1;
+        if (initializeAttempts === 1) api.message({ id: request.id, additive: "ignored" });
+        else api.response(request, { serverInfo: { name: "fake", version: "0.144.5" }, additive: true });
       }
-    });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-
-    const base64Data = Buffer.from("x").toString("base64");
-    await session.ask([{ type: "image", source: { type: "base64", data: base64Data, media_type: "image/jpeg" } }]);
-
-    assert.equal(existedDuringRun, true, "run 中は一時ファイルが存在するはず");
-    assert.ok(capturedPath);
-    assert.equal(existsSync(/** @type {string} */ (capturedPath)), false, "ask 後は一時ファイルが消えているはず");
-
+    }));
+    const session = createTestSession(harness, scratch);
+    await assert.rejects(() => session.initialize(), /neither result nor error/);
+    await session.initialize();
+    assert.equal(harness.children.length, 1);
+    assert.equal(initializeAttempts, 2);
     await session.dispose();
   });
 });
 
-test("codex-session: turn.failed でも画像の一時ファイルは finally で削除される", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    /** @type {string | null} */
-    let capturedPath = null;
-    const { FakeCodex } = makeFakeSdk({
-      onRun: (input) => {
-        const imgBlock = input.find((b) => b.type === "local_image");
-        capturedPath = imgBlock.path;
-        return failedEvents("模擬失敗（画像あり）");
+test("codex-session: untrusted and other-turn records cannot spoof or contaminate the active turn", async () => {
+  await withScratch(async (scratch) => {
+    const diagnostics = [];
+    const deltas = [];
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        const threadId = request.params.threadId;
+        const turnId = "trusted-turn";
+        api.response(request, { turn: { id: turnId, status: "inProgress", items: [] }, additive: "accepted" });
+        api.message(17);
+        api.message({ id: 999, result: { ignored: true } });
+        api.message({ jsonrpc: "1.0", method: "turn/completed", params: { threadId: "other-thread", turn: { id: "other-turn", status: "completed" } } });
+        api.notification("future/additive", { arbitrary: true });
+        api.notification("item/started", { threadId, turnId, item: { id: "safe-item", type: "agentMessage", text: "" } });
+        api.notification("item/agentMessage/delta", { threadId, turnId, itemId: "safe-item", delta: "safe" });
+        api.notification("item/completed", { threadId, turnId, item: { id: "safe-item", type: "agentMessage", text: "safe" } });
+        api.notification("turn/completed", { threadId, turn: { id: turnId, status: "completed", items: [] } });
       }
-    });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-
-    const base64Data = Buffer.from("x").toString("base64");
-    await assert.rejects(() =>
-      session.ask([{ type: "image", source: { type: "base64", data: base64Data, media_type: "image/jpeg" } }])
-    );
-
-    assert.ok(capturedPath);
-    assert.equal(existsSync(/** @type {string} */ (capturedPath)), false);
-
+    }));
+    const session = createTestSession(harness, scratch, { onWarning: (warning) => diagnostics.push(warning) });
+    const result = await session.ask("continue", { onTextDelta: (delta) => deltas.push(delta) });
+    assert.equal(result.replyText, "safe");
+    assert.deepEqual(deltas, ["safe"]);
+    assert.equal(harness.children.length, 1);
+    assert.ok(diagnostics.some((warning) => warning.includes("non-object")));
+    assert.ok(diagnostics.some((warning) => warning.includes("unknown response id 999")));
+    assert.ok(diagnostics.some((warning) => warning.includes("unowned notification turn/completed")));
+    assert.ok(diagnostics.some((warning) => warning.includes("unsupported notification future/additive")));
     await session.dispose();
   });
 });
 
-// ── usage 透過 / ttftMs:null / elapsedMs>0 ────────────────────────────────────
-
-test("codex-session: ask の戻り値は usage 透過・ttftMs:null・elapsedMs>0", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({
-      onRun: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 2)); // elapsedMs>0 を確実にする。
-        return successEvents("応答文", SAMPLE_USAGE);
+test("codex-session: vision remains image-first, localImage exists during turn, and caller mutation cannot alter accepted input", async () => {
+  await withScratch(async (scratch) => {
+    let capturedInput;
+    let imageExisted = false;
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        capturedInput = request.params.input;
+        imageExisted = existsSync(capturedInput[0].path);
+        successfulTurn(api, request, "見えたよ。");
       }
-    });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
+    }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "SYS" });
+    const blocks = [
+      { type: "image", source: { type: "base64", media_type: "image/png", data: Buffer.from("image-a").toString("base64") } },
+      { type: "text", text: "元の質問" }
+    ];
+    const pending = session.ask(blocks);
+    blocks[0].source.data = Buffer.from("mutated").toString("base64");
+    blocks[1].text = "変更後";
+    await pending;
 
-    const result = await session.ask("こんにちは");
-
-    assert.equal(result.replyText, "応答文");
-    assert.deepEqual(result.usage, SAMPLE_USAGE);
-    assert.equal(result.ttftMs, null);
-    assert.ok(result.elapsedMs > 0, `elapsedMs=${result.elapsedMs}`);
-
+    assert.equal(capturedInput[0].type, "localImage");
+    assert.equal(imageExisted, true);
+    assert.equal(capturedInput[1].text, "SYS\n\n元の質問");
+    assert.equal(existsSync(capturedInput[0].path), false);
     await session.dispose();
   });
 });
 
-// ── turn.failed → throw（空応答を黙って返さない） ─────────────────────────────
-
-test("codex-session: turn.failed イベントは ask() を throw させる", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ onRun: () => failedEvents("模擬失敗メッセージ") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-
-    await assert.rejects(() => session.ask("こんにちは"), /模擬失敗メッセージ/);
-
+test("codex-session: delta/final mismatch fails only its turn and the next ask uses a fresh thread with system prompt", async () => {
+  await withScratch(async (scratch) => {
+    let turnAttempt = 0;
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        turnAttempt += 1;
+        if (turnAttempt > 1) {
+          successfulTurn(api, request, "復旧。");
+          return;
+        }
+        const threadId = request.params.threadId;
+        const turnId = "bad-turn";
+        api.response(request, { turn: { id: turnId, status: "inProgress", items: [] } });
+        api.notification("item/started", { threadId, turnId, startedAtMs: 1, item: { id: "a", type: "agentMessage", text: "" } });
+        api.notification("item/agentMessage/delta", { threadId, turnId, itemId: "a", delta: "不一致" });
+        api.notification("item/completed", { threadId, turnId, completedAtMs: 2, item: { id: "a", type: "agentMessage", text: "別本文" } });
+      }
+    }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "PROMPT" });
+    await assert.rejects(() => session.ask("first"), /does not match/);
+    const recovered = await session.ask("second");
+    assert.equal(recovered.replyText, "復旧。");
+    assert.equal(harness.children.length, 1);
+    assert.equal(harness.threadRequests.length, 2);
+    assert.notEqual(harness.turnRequests[0].params.threadId, harness.turnRequests[1].params.threadId);
+    assert.equal(harness.turnRequests[1].params.input[0].text, "PROMPT\n\nsecond");
     await session.dispose();
   });
 });
 
-test("codex-session: error イベントも ask() を throw させる", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({
-      onRun: () => [
-        { type: "thread.started", thread_id: "fake-thread-0001" },
-        { type: "turn.started" },
-        { type: "error", message: "stream レベルの致命的エラー" }
-      ]
-    });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-
-    await assert.rejects(() => session.ask("こんにちは"), /stream レベルの致命的エラー/);
-
+test("codex-session: failed first turn does not consume first-turn system prompt and recovers on a fresh thread", async () => {
+  await withScratch(async (scratch) => {
+    let turnAttempt = 0;
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        turnAttempt += 1;
+        if (turnAttempt > 1) {
+          successfulTurn(api, request, "ok");
+          return;
+        }
+        const turnId = "failed-turn";
+        api.response(request, { turn: { id: turnId, status: "inProgress", items: [] } });
+        api.notification("turn/completed", { threadId: request.params.threadId, turn: { id: turnId, status: "failed", items: [], error: { message: "backend failed" } } });
+      }
+    }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "SYS" });
+    await assert.rejects(() => session.ask("one"), /backend failed/);
+    await session.ask("two");
+    assert.equal(harness.turnRequests[0].params.input[0].text, "SYS\n\none");
+    assert.equal(harness.turnRequests[1].params.input[0].text, "SYS\n\ntwo");
+    assert.equal(harness.children.length, 1);
+    assert.equal(harness.threadRequests.length, 2);
     await session.dispose();
   });
 });
 
-// ── env-guard 発火 ────────────────────────────────────────────────────────────
-
-test("codex-session: env-guard は OPENAI_API_KEY 設定時に起動を拒否する", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("到達しないはず") });
-    assert.throws(
-      () =>
-        createCodexSession({
-          env: { OPENAI_API_KEY: "sk-xxx" },
-          sdkImpl: FakeCodex,
-          homeDir,
-          ledgerPath
-        }),
-      /OPENAI_API_KEY/
-    );
-  });
-});
-
-test("codex-session: env-guard は CODEX_API_KEY 設定時にも起動を拒否する", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("到達しないはず") });
-    assert.throws(
-      () =>
-        createCodexSession({
-          env: { CODEX_API_KEY: "tok" },
-          sdkImpl: FakeCodex,
-          homeDir,
-          ledgerPath
-        }),
-      /CODEX_API_KEY/
-    );
-  });
-});
-
-test("codex-session: skipEnvGuard:true なら OPENAI_API_KEY 設定でも起動できる（テスト専用）", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    const session = createCodexSession({
-      env: { OPENAI_API_KEY: "sk-xxx" },
-      sdkImpl: FakeCodex,
-      skipEnvGuard: true,
-      homeDir,
-      ledgerPath
-    });
-    const result = await session.ask("hi");
-    assert.equal(result.replyText, "ok");
+test("codex-session: process exit rejects the in-flight ask and a later ask recovers with a fresh process", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness((index) => index === 0 ? {
+      onTurn(request, api) {
+        api.response(request, { turn: { id: "dying-turn", status: "inProgress", items: [] } });
+        api.exit(23);
+      }
+    } : { replyText: "alive" });
+    const session = createTestSession(harness, scratch);
+    await assert.rejects(() => session.ask("die"), /process exited/);
+    assert.equal((await session.ask("recover")).replyText, "alive");
+    assert.equal(harness.children.length, 2);
     await session.dispose();
   });
 });
 
-// ── dispose 冪等 ──────────────────────────────────────────────────────────────
-
-test("codex-session: dispose は冪等（2 回呼んでもエラーにならない）", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-    await session.ask("hi");
+test("codex-session: invalid JSONL and malformed relevant notification fail instead of committing success", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness((index) => ({
+      onTurn(request, api) {
+        api.response(request, { turn: { id: `turn-${index}`, status: "inProgress", items: [] } });
+        if (index === 0) api.raw("{broken-json\n");
+        else api.notification("item/agentMessage/delta", { threadId: request.params.threadId, turnId: `turn-${index}`, itemId: 42, delta: "x" });
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    await assert.rejects(() => session.ask("json"), /invalid JSON/);
+    await assert.rejects(() => session.ask("shape"), /missing itemId\/delta/);
+    assert.equal(harness.children.length, 2);
     await session.dispose();
-    await session.dispose(); // 2 回目も throw しない。
   });
 });
 
-test("codex-session: dispose 後の ask は throw する", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
+test("codex-session: fatal transport waits for delayed old-child exit before allowing recovery spawn", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness((index) => index === 0 ? {
+      killDelayMs: 40,
+      onTurn(request, api) {
+        api.response(request, { turn: { id: "delayed-exit-turn", status: "inProgress", items: [] } });
+        api.raw("{broken-json\n");
+      }
+    } : { replyText: "recovered" });
+    const session = createTestSession(harness, scratch, { shutdownTimeoutMs: 100 });
+    const first = session.ask("break transport");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(harness.children.length, 1, "old child が生存中は replacement を spawn しない");
+    assert.equal(harness.children[0].exited, false);
+    await assert.rejects(() => first, /invalid JSON/);
+    assert.equal(harness.children[0].exited, true, "fatal ask rejection beforeに old child reap が完了する");
+    assert.equal((await session.ask("recover")).replyText, "recovered");
+    assert.equal(harness.children.length, 2);
     await session.dispose();
-    await assert.rejects(() => session.ask("もう一言"), /disposed/);
   });
 });
 
-// ── ask 受理型（llm-session と同型の検証） ─────────────────────────────────────
+test("codex-session: unreapable fatal child blocks recovery and surfaces deterministically without unhandled rejection", async () => {
+  await withScratch(async (scratch) => {
+    const unhandled = [];
+    const onUnhandled = (reason) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const harness = makeSpawnHarness(() => ({
+        neverExitOnKill: true,
+        onTurn(request, api) {
+          api.response(request, { turn: { id: "never-exit-turn", status: "inProgress", items: [] } });
+          api.raw("{broken-json\n");
+        }
+      }));
+      const session = createTestSession(harness, scratch, { shutdownTimeoutMs: 10 });
+      await assert.rejects(() => session.ask("break transport"), /could not be reaped/);
+      await assert.rejects(() => session.ask("must not respawn"), /could not be reaped/);
+      assert.equal(harness.children.length, 1, "unreaped child がある限り replacement を spawn しない");
+      await assert.rejects(() => session.dispose(), /could not be reaped/);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(unhandled, []);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+});
 
-test("codex-session: ask('') / ask([]) は TypeError", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
+test("codex-session: dispose interrupts an active turn, rejects it, kills the child, and suppresses late deltas", async () => {
+  await withScratch(async (scratch) => {
+    let turnContext;
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        turnContext = { request, api };
+        api.response(request, { turn: { id: "long-turn", status: "inProgress", items: [] } });
+        api.notification("item/started", { threadId: request.params.threadId, turnId: "long-turn", startedAtMs: 1, item: { id: "a", type: "agentMessage", text: "" } });
+      }
+    }));
+    const deltas = [];
+    const session = createTestSession(harness, scratch);
+    const pending = session.ask("long", { onTextDelta: (delta) => deltas.push(delta) });
+    while (!turnContext) await new Promise((resolve) => setImmediate(resolve));
+    await session.dispose();
+    await assert.rejects(() => pending, /disposed/);
+    turnContext.api.notification("item/agentMessage/delta", { threadId: turnContext.request.params.threadId, turnId: "long-turn", itemId: "a", delta: "late" });
+    assert.deepEqual(deltas, []);
+    assert.equal(harness.children[0].messages.some((m) => m.method === "turn/interrupt"), true);
+    assert.ok(harness.children[0].killSignals.length >= 1);
+    await session.dispose();
+  });
+});
+
+test("codex-session: a new adapter/session creates a fresh thread and captures its own settings", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ replyText: "ok" }));
+    const first = createTestSession(harness, scratch, { systemPrompt: "SETTINGS-A" });
+    await first.ask("fire-a");
+    await first.dispose();
+    const second = createTestSession(harness, scratch, { systemPrompt: "SETTINGS-B" });
+    await second.ask("fire-b");
+    assert.equal(harness.children.length, 2);
+    assert.notEqual(harness.turnRequests[0].params.threadId, harness.turnRequests[1].params.threadId);
+    assert.equal(harness.turnRequests[0].params.input[0].text, "SETTINGS-A\n\nfire-a");
+    assert.equal(harness.turnRequests[1].params.input[0].text, "SETTINGS-B\n\nfire-b");
+    await second.dispose();
+  });
+});
+
+test("codex-session: observed thread/delete DB failure remains best-effort and still reaps the process", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({
+      replyText: "ok",
+      onCleanup(request, api) {
+        if (request.method === "thread/delete") api.rpcError(request, "no such table: agent_jobs");
+        else api.response(request, {});
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    await session.ask("x");
+    await session.dispose();
+    assert.equal(harness.children[0].messages.some((message) => message.method === "thread/delete"), true);
+    assert.ok(harness.children[0].killSignals.length >= 1);
+  });
+});
+
+test("codex-session: env guard rejects API-key billing variables", () => {
+  assert.throws(() => createCodexSession({ env: { OPENAI_API_KEY: "secret" }, codexPath: "fake" }), /OPENAI_API_KEY/);
+  assert.throws(() => createCodexSession({ env: { CODEX_API_KEY: "secret" }, codexPath: "fake" }), /CODEX_API_KEY/);
+});
+
+test("codex-session: invalid input/concurrent ask/disposed ask fail deterministically", async () => {
+  await withScratch(async (scratch) => {
+    let pendingTurn;
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        pendingTurn = { request, api };
+        api.response(request, { turn: { id: "pending", status: "inProgress", items: [] } });
+      }
+    }));
+    const session = createTestSession(harness, scratch);
     await assert.rejects(() => session.ask(""), TypeError);
     await assert.rejects(() => session.ask([]), TypeError);
+    const pending = session.ask("one");
+    while (!pendingTurn) await new Promise((resolve) => setImmediate(resolve));
+    await assert.rejects(() => session.ask("two"), /concurrent/);
     await session.dispose();
+    await assert.rejects(() => pending, /disposed/);
+    await assert.rejects(() => session.ask("after"), /disposed/);
   });
 });
 
-// ── threadIds 公開 ────────────────────────────────────────────────────────────
-
-test("codex-session: threadIds は初回 turn 後に thread.id を公開する", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex } = makeFakeSdk({ threadId: "observed-thread-777", onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-    assert.deepEqual(session.threadIds, []);
-    await session.ask("hi");
-    assert.deepEqual(session.threadIds, ["observed-thread-777"]);
+test("codex-session: exact-id ledger sweep and dispose cleanup never delete bystander rollouts", async () => {
+  await withScratch(async (scratch) => {
+    const sessionsDir = path.join(scratch.homeDir, ".codex", "sessions", "2026", "08", "30");
+    mkdirSync(sessionsDir, { recursive: true });
+    const mine = path.join(sessionsDir, "rollout-2026-08-30T01-02-03-owned.jsonl");
+    const bystander = path.join(sessionsDir, "rollout-2026-08-30T01-02-03-xxx-owned-yyy.jsonl");
+    writeFileSync(mine, "{}\n");
+    writeFileSync(bystander, "{}\n");
+    writeFileSync(scratch.ledgerPath, JSON.stringify({ threadIds: ["owned"] }));
+    const harness = makeSpawnHarness(() => ({ threadId: "new-owned", replyText: "ok" }));
+    const session = createTestSession(harness, scratch);
+    assert.equal(existsSync(mine), false);
+    assert.equal(existsSync(bystander), true);
+    await session.ask("x");
+    const ownCurrent = path.join(sessionsDir, "rollout-2026-08-30T01-02-03-new-owned.jsonl");
+    writeFileSync(ownCurrent, "{}\n");
     await session.dispose();
-  });
-});
-
-// ── ThreadOptions（sandbox/approval/webSearch/effort）配線の確認 ───────────────
-
-test("codex-session: startThread は read-only sandbox・approval never・webSearch disabled・既定 effort=none で呼ばれる", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const { FakeCodex, getLastThreadOptions } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-    await session.ask("hi");
-
-    const opts = getLastThreadOptions();
-    assert.equal(opts.sandboxMode, "read-only");
-    assert.equal(opts.approvalPolicy, "never");
-    assert.equal(opts.webSearchEnabled, false);
-    assert.equal(opts.modelReasoningEffort, "none");
-    assert.equal(opts.skipGitRepoCheck, true);
-    assert.equal(typeof opts.workingDirectory, "string");
-    assert.ok(existsSync(opts.workingDirectory), "workingDirectory はスクラッチ dir として実在する");
-
-    await session.dispose();
-    assert.equal(existsSync(opts.workingDirectory), false, "dispose でスクラッチ dir は削除される");
-  });
-});
-
-// ── rollout 掃除の性質テスト（⚠ blocking・最重要） ─────────────────────────────
-
-test("codex-session: 起動時 sweep は台帳の thread_id と完全一致するファイルだけを消し、台帳に無い他人の rollout は全て無傷", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    // 台帳に載らない「他人」の rollout を 12 本、日替わりで配置。
-    const otherPaths = [];
-    for (let i = 0; i < 12; i++) {
-      const id = `other-thread-${String(i).padStart(3, "0")}-${"a".repeat(8)}`;
-      const day = String(1 + (i % 27)).padStart(2, "0");
-      otherPaths.push(writeRolloutFile(homeDir, ["2026", "07", day], rolloutFileName(id)));
-    }
-    // 自分の rollout を 2 本配置し、台帳に記録する。
-    const myIds = ["my-thread-aaaa-1111", "my-thread-bbbb-2222"];
-    const myPaths = myIds.map((id) => writeRolloutFile(homeDir, ["2026", "07", "17"], rolloutFileName(id)));
-    mkdirSync(path.dirname(ledgerPath), { recursive: true });
-    writeFileSync(ledgerPath, JSON.stringify({ threadIds: myIds }, null, 2), "utf8");
-
-    // createCodexSession の生成が起動時 sweep を走らせる（fake SDK・実消費ゼロ）。
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-
-    for (const p of myPaths) {
-      assert.equal(existsSync(p), false, `自分の rollout は消えているはず: ${p}`);
-    }
-    for (const p of otherPaths) {
-      assert.equal(existsSync(p), true, `他人の rollout は無傷のはず: ${p}`);
-    }
-    const ledgerAfter = JSON.parse(readFileSync(ledgerPath, "utf8"));
-    assert.deepEqual(ledgerAfter.threadIds, []);
-
-    await session.dispose();
-  });
-});
-
-test("codex-session: dispose は自セッションが作った thread_id の rollout だけを消し、他人の rollout は無傷", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const otherPaths = [];
-    for (let i = 0; i < 10; i++) {
-      otherPaths.push(
-        writeRolloutFile(homeDir, ["2026", "07", "17"], rolloutFileName(`bystander-${String(i).padStart(3, "0")}`))
-      );
-    }
-
-    const { FakeCodex } = makeFakeSdk({ threadId: "session-thread-xyz-999", onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-    await session.ask("hi"); // thread.id 確定 → 台帳に記録される。
-
-    // 実 SDK ならここで rollout ファイルが自動生成されるが、fake は書かないのでテストが用意する。
-    const myPath = writeRolloutFile(homeDir, ["2026", "07", "17"], rolloutFileName("session-thread-xyz-999"));
-
-    const ledgerBefore = JSON.parse(readFileSync(ledgerPath, "utf8"));
-    assert.deepEqual(ledgerBefore.threadIds, ["session-thread-xyz-999"]);
-
-    await session.dispose();
-
-    assert.equal(existsSync(myPath), false, "自分の rollout は dispose で消えるはず");
-    for (const p of otherPaths) {
-      assert.equal(existsSync(p), true, `他人の rollout は無傷のはず: ${p}`);
-    }
-    const ledgerAfter = JSON.parse(readFileSync(ledgerPath, "utf8"));
-    assert.deepEqual(ledgerAfter.threadIds, []);
-  });
-});
-
-test("codex-session: 台帳の thread_id に対応する rollout が見つからなくても sweep はエラーにならず台帳から外すだけ", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    const otherPaths = [
-      writeRolloutFile(homeDir, ["2026", "07", "17"], rolloutFileName("bystander-alpha")),
-      writeRolloutFile(homeDir, ["2026", "07", "18"], rolloutFileName("bystander-beta"))
-    ];
-    mkdirSync(path.dirname(ledgerPath), { recursive: true });
-    writeFileSync(ledgerPath, JSON.stringify({ threadIds: ["ghost-thread-does-not-exist"] }), "utf8");
-
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    let session;
-    assert.doesNotThrow(() => {
-      session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-    });
-
-    const ledgerAfter = JSON.parse(readFileSync(ledgerPath, "utf8"));
-    assert.deepEqual(ledgerAfter.threadIds, []);
-    for (const p of otherPaths) {
-      assert.equal(existsSync(p), true);
-    }
-
-    await session.dispose();
-  });
-});
-
-test("codex-session: ~/.codex/sessions 自体が存在しない環境でも起動時 sweep はエラーにならない", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    // .codex/sessions ディレクトリを一切作らない。
-    mkdirSync(path.dirname(ledgerPath), { recursive: true });
-    writeFileSync(ledgerPath, JSON.stringify({ threadIds: ["ghost-1", "ghost-2"] }), "utf8");
-
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    let session;
-    assert.doesNotThrow(() => {
-      session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-    });
-
-    const ledgerAfter = JSON.parse(readFileSync(ledgerPath, "utf8"));
-    assert.deepEqual(ledgerAfter.threadIds, []);
-
-    await session.dispose();
-  });
-});
-
-test("codex-session: ファイル名の部分一致では消さない（末尾一致のみを id とみなす構造パース）", async () => {
-  await withScratchHome(async ({ homeDir, ledgerPath }) => {
-    // 台帳の id は "abc"。"abc" を部分文字列に含むが完全一致ではない thread_id のファイルを配置。
-    const decoyPath = writeRolloutFile(homeDir, ["2026", "07", "17"], rolloutFileName("xxx-abc-yyy"));
-    const exactPath = writeRolloutFile(homeDir, ["2026", "07", "17"], rolloutFileName("abc"));
-    mkdirSync(path.dirname(ledgerPath), { recursive: true });
-    writeFileSync(ledgerPath, JSON.stringify({ threadIds: ["abc"] }), "utf8");
-
-    const { FakeCodex } = makeFakeSdk({ onRun: () => successEvents("ok") });
-    const session = createCodexSession({ sdkImpl: FakeCodex, skipEnvGuard: true, homeDir, ledgerPath });
-
-    assert.equal(existsSync(decoyPath), true, "部分一致のファイルは消してはいけない");
-    assert.equal(existsSync(exactPath), false, "完全一致のファイルは消えるはず");
-
-    await session.dispose();
+    assert.equal(existsSync(ownCurrent), false);
+    assert.equal(existsSync(bystander), true);
+    assert.deepEqual(JSON.parse(readFileSync(scratch.ledgerPath, "utf8")).threadIds, []);
   });
 });

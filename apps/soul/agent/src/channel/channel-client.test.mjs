@@ -28,6 +28,14 @@ test("connectChannel: hello 照合 → intent.speech accepted（実 WS 配線）
     assert.equal(outcome.result, "accepted");
     assert.equal(outcome.error, null);
     assert.ok(outcome.rttMs >= 0);
+    assert.match(outcome.requestId, /^req-/);
+    assert.equal(
+      outcome.serializedUtf8Bytes,
+      Buffer.byteLength(
+        JSON.stringify({ v: 1, id: outcome.requestId, kind: "intent.speech", payload: { timeline: SPEECH_TIMELINE } }),
+        "utf8"
+      )
+    );
     // サーバが受けた payload が契約形（kind/payload.timeline）である。
     const speechMsg = server.received.find((m) => m.kind === "intent.speech");
     assert.ok(speechMsg, "server received intent.speech");
@@ -35,6 +43,73 @@ test("connectChannel: hello 照合 → intent.speech accepted（実 WS 配線）
     assert.match(speechMsg.id, /^req-/);
     assert.deepEqual(speechMsg.payload.timeline, SPEECH_TIMELINE);
     assert.equal(channel.supportedKinds.includes("intent.speech"), true);
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel diagnostics: speech の実 envelope UTF-8 bytes と request identity を記録する", async () => {
+  const server = createChannelServerDouble();
+  const url = await server.listen();
+  /** @type {Array<{ event: string; fields: any }>} */
+  const traces = [];
+  const channel = await connectChannel(url, {
+    WebSocketImpl: WS,
+    connectionGeneration: 7,
+    onTrace: (event, fields) => traces.push({ event, fields })
+  });
+  try {
+    await channel.sendSpeech(SPEECH_TIMELINE);
+    const sent = traces.find((entry) => entry.event === "channel.request.send" && entry.fields.kind === "intent.speech");
+    const replied = traces.find((entry) => entry.event === "channel.request.reply" && entry.fields.kind === "intent.speech");
+    assert.ok(sent);
+    assert.ok(replied);
+    assert.match(sent.fields.requestId, /^req-\d+$/);
+    assert.equal(sent.fields.connectionGeneration, 7);
+    assert.equal(sent.fields.timelineCount, SPEECH_TIMELINE.length);
+    assert.equal(
+      sent.fields.serializedUtf8Bytes,
+      Buffer.byteLength(JSON.stringify({ v: 1, id: sent.fields.requestId, kind: "intent.speech", payload: { timeline: SPEECH_TIMELINE } }), "utf8")
+    );
+    assert.equal(replied.fields.requestId, sent.fields.requestId);
+    const outcome = await channel.sendSpeech(SPEECH_TIMELINE);
+    assert.match(outcome.requestId, /^req-\d+$/);
+    assert.equal(typeof outcome.serializedUtf8Bytes, "number");
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel: 4096-byte preflight は local failure に留め、同じ healthy 接続で後続 small speech を送れる", async () => {
+  const server = createChannelServerDouble();
+  const url = await server.listen();
+  const traces = [];
+  const channel = await connectChannel(url, {
+    WebSocketImpl: WS,
+    onTrace: (event, fields) => traces.push({ event, fields })
+  });
+  try {
+    const oversizeTimeline = Array.from({ length: 120 }, (_v, i) => ({
+      timeMs: i * 10,
+      vowel: ["a", "i", "u", "e", "o"][i % 5],
+      s: 0.5
+    }));
+    await assert.rejects(() => channel.sendSpeech(oversizeTimeline), (error) => {
+      assert.equal(error.code, "speech_envelope_oversize");
+      assert.equal(error.diagnosticStage, "control_channel.preflight");
+      return true;
+    });
+    assert.equal(server.received.filter((message) => message.kind === "intent.speech").length, 0);
+    const rejected = traces.find((entry) => entry.event === "channel.request.preflight_rejected");
+    assert.ok(rejected);
+    assert.equal(rejected.fields.configuredUtf8Cap, 4096);
+    assert.ok(rejected.fields.serializedUtf8Bytes > rejected.fields.configuredUtf8Cap);
+
+    const outcome = await channel.sendSpeech(SPEECH_TIMELINE);
+    assert.equal(outcome.result, "accepted");
+    assert.equal(server.received.filter((message) => message.kind === "intent.speech").length, 1);
   } finally {
     await channel.close();
     await server.close();
@@ -216,13 +291,13 @@ test("connectChannel: hello 不着はタイムアウト throw", async () => {
   }
 });
 
-test("connectChannel: 複数モーラの大きな timeline も往復する（16bit length 経路）", async () => {
+test("connectChannel: cap 未満の複数モーラ timeline も往復する（16bit length 経路）", async () => {
   const server = createChannelServerDouble();
   const url = await server.listen();
   const channel = await connectChannel(url, { WebSocketImpl: WS });
   try {
-    // 200 モーラ → JSON は 126byte 超（フレームの 16bit length 経路を通る）。
-    const big = Array.from({ length: 200 }, (_v, i) => ({
+    // 100 モーラ → JSON は 126byte 超だが 4096 byte observation cap 未満。
+    const big = Array.from({ length: 100 }, (_v, i) => ({
       timeMs: i * 10,
       vowel: ["a", "i", "u", "e", "o"][i % 5],
       s: 0.5
@@ -230,7 +305,7 @@ test("connectChannel: 複数モーラの大きな timeline も往復する（16b
     const outcome = await channel.sendSpeech(big);
     assert.equal(outcome.result, "accepted");
     const speechMsg = server.received.find((m) => m.kind === "intent.speech");
-    assert.equal(speechMsg.payload.timeline.length, 200);
+    assert.equal(speechMsg.payload.timeline.length, 100);
   } finally {
     await channel.close();
     await server.close();
@@ -282,6 +357,50 @@ test("connectChannel: 応答前にサーバ切断すると pending は closedErr
   } finally {
     await channel.close();
     await server.close();
+  }
+});
+
+test("connectChannel diagnostics: close-before-reply と reply timeout は machine-readable に区別する", async () => {
+  const closeServer = createChannelServerDouble({ onSpeech: () => ({ result: "drop" }) });
+  const closeTraces = [];
+  const closeChannel = await connectChannel(await closeServer.listen(), {
+    WebSocketImpl: WS,
+    onTrace: (event, fields) => closeTraces.push({ event, fields })
+  });
+  try {
+    await assert.rejects(() => closeChannel.sendSpeech(SPEECH_TIMELINE), (error) => {
+      assert.equal(error.code, "channel_closed");
+      assert.equal(error.diagnosticStage, "control_channel.close");
+      return true;
+    });
+    assert.ok(closeTraces.some((entry) => entry.event === "channel.request.failed" && entry.fields.failureCode === "channel_closed"));
+  } finally {
+    await closeChannel.close();
+    await closeServer.close();
+  }
+
+  const timeoutServer = createChannelServerDouble({ onSpeech: () => ({ result: "pending" }) });
+  const timeoutTraces = [];
+  const timeoutChannel = await connectChannel(await timeoutServer.listen(), {
+    WebSocketImpl: WS,
+    replyTimeoutMs: 20,
+    onTrace: (event, fields) => timeoutTraces.push({ event, fields })
+  });
+  try {
+    await assert.rejects(() => timeoutChannel.sendSpeech(SPEECH_TIMELINE), (error) => {
+      assert.equal(error.code, "reply_timeout");
+      assert.equal(error.diagnosticStage, "control_channel.reply_timeout");
+      return true;
+    });
+    assert.equal(
+      timeoutServer.received.filter((message) => message.kind === "intent.speech").length,
+      1,
+      "an ambiguous accepted/reply-lost request is never blindly retried"
+    );
+    assert.ok(timeoutTraces.some((entry) => entry.event === "channel.request.failed" && entry.fields.failureCode === "reply_timeout"));
+  } finally {
+    await timeoutChannel.close();
+    await timeoutServer.close();
   }
 });
 

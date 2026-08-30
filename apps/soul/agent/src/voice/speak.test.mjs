@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { speak } from "./speak.mjs";
+import { activatePreparedSpeech, prepareSpeech, speak } from "./speak.mjs";
 import { createChannelServerDouble } from "../test-support/ws-double.mjs";
 import { connectChannel } from "../channel/channel-client.mjs";
 import { MinimalWebSocket } from "../test-support/ws-client.mjs";
@@ -109,6 +109,42 @@ test("speak: TTS→timeline→送出→accepted→即 play の順序で完走", 
   assert.deepEqual(channel.lastTimeline, result.timeline);
 });
 
+test("prepareSpeech/activatePreparedSpeech: TTS preparation は channel/play より先行でき、active job だけが accepted 後に再生する", async () => {
+  const order = [];
+  const artifact = await prepareSpeech("こんにちは、テストです", {
+    tts: fakeTts(order),
+    writeWav: () => "C:/tmp/split.wav"
+  });
+  assert.deepEqual(order, ["audioQuery", "synthesis"]);
+  assert.equal(artifact.wavPath, "C:/tmp/split.wav");
+  assert.equal(artifact.rawMoraCount, 11);
+  assert.equal(artifact.timeline.length, 9);
+
+  const activated = await activatePreparedSpeech(artifact, {
+    channel: {
+      async sendSpeech() {
+        order.push("sendSpeech");
+        return {
+          result: "accepted",
+          error: null,
+          rttMs: 2,
+          requestId: "req-split",
+          serializedUtf8Bytes: 321
+        };
+      }
+    },
+    player: { play: (wavPath) => order.push(`play:${wavPath}`) },
+    nowImpl: () => 123
+  });
+  assert.deepEqual(order, ["audioQuery", "synthesis", "sendSpeech", "play:C:/tmp/split.wav"]);
+  assert.deepEqual(activated, {
+    rttMs: 2,
+    playbackStartedAtMs: 123,
+    requestId: "req-split",
+    serializedUtf8Bytes: 321
+  });
+});
+
 test("speak: playbackStartedAtMs を注入 clock から返す（既存フィールドは不変・S6 追加）", async () => {
   const order = [];
   const channel = {
@@ -145,6 +181,31 @@ test("speak: playbackStartedAtMs を注入 clock から返す（既存フィー�
   assert.equal(playCalledAt, "played");
   // play は playbackStartedAtMs 記録の前に呼ばれている（t=0 = 声が鳴り始めた瞬間）。
   assert.equal(order[order.length - 1], "play");
+});
+
+test("speak diagnostics: TTS/timeline/playback は本文や WAV 本体なしの counts だけを出す", async () => {
+  const traces = [];
+  await speak("本文をログに残さない", {
+    channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
+    player: { play() {} },
+    tts: fakeTts([]),
+    writeWav: () => "C:/tmp/fake.wav",
+    onTrace: (event, fields) => traces.push({ event, fields })
+  });
+  assert.deepEqual(traces.map((entry) => entry.event), [
+    "tts.audio_query.started",
+    "tts.audio_query.request_completed",
+    "tts.audio_query.completed",
+    "tts.synthesis.started",
+    "tts.synthesis.request_completed",
+    "tts.synthesis.completed",
+    "speech.timeline.started",
+    "speech.timeline.build_completed",
+    "speech.timeline.built",
+    "player.play.enqueued"
+  ]);
+  assert.equal(traces.find((entry) => entry.event === "speech.timeline.built").fields.timelineCount, 9);
+  assert.ok(traces.every((entry) => !JSON.stringify(entry).includes("本文をログに残さない")));
 });
 
 test("speak: rejected は throw・play は呼ばれない・接続は閉じない", async () => {

@@ -10,6 +10,10 @@
 - **S1〜S7**: 実装済み。S7は `/live/<id>` 実配信30分ノーブレイクでコメント読み上げ/視聴者名認識を確認し、実ゲート実質合格。
 - **S8**: kill/NG/開示を実装(764/764緑・9レーンPASS)。発話中kill→全発火拒否→復帰、通常発話無退行の人間ゲート未実施。
 - **多頭化**: 4頭(Claude Opus / GPT-5.6 Terra / GPT-5.5 / GPT-5.6 Sol)を実装。初回体感あり。速度/品質、Claude無退行、配信後rollout掃除の最終3点ゲート未記録。
+- **モデル系列identity追撃**: [plan](orchestration/model-identity-wave-plan.md) に基づく機械実装・12 review lanes・機械gateは **PASS (2026-08-09)**。人間gateは **PENDING**。証拠: [final mechanical](reviews/model-identity/final-mechanical.md)、[human gate](waves/model-identity/human-gate.md)、[final closeout](waves/model-identity/final-closeout.md)。Claude系列=`コーディ`、GPT系列=`チャッピー`を次のFireから適用する。
+- **Cockpit設定modal / 会話指示追撃**: [plan](orchestration/cockpit-settings-modal-wave-plan.md) に基づく Domain A/B/C 実装・9 review lanes・機械gateは **PASS (2026-08-20)**。人間gateは **PENDING**。証拠: [wave artifacts](waves/cockpit-settings-modal/)、[reviews](reviews/cockpit-settings-modal/)、[final mechanical](reviews/cockpit-settings-modal/final-mechanical.md)、[human gate](waves/cockpit-settings-modal/human-gate.md)。Settings Drawerを単一modalに置換し、modal内の頭脳・会話でbrainごとの会話指示本文を編集する。Fire/self-fire/barge-in/verbosity/KILLは外部運転面を維持する。
+- **Passive Fire Diagnostics D1**: [plan](orchestration/fire-diagnostics-wave-plan.md) に基づく Soul/Runtime 実装と独立統合review loop 3は **機械 PASS (2026-08-30)**、人間gateは **PENDING**。証拠: [final review](reviews/fire-diagnostics/final-review.md)、[final closeout](waves/fire-diagnostics/final-closeout.md)、[human gate](waves/fire-diagnostics/human-gate.md)。通常操作を変えず自動ログを残す。4096上限・再接続・遅延改善はD1対象外。
+- **Codex逐次発話**: [plan](orchestration/codex-progressive-speech-wave-plan.md) を **ACTIVE (2026-08-30)**。Wave 1A App Server transport と Wave 1B sentence/speech delivery を並列起動し、その後にpartial-successを含むFire統合を行う。4096上限は観測中のみ現行値を保ち、chunk実測後に再判断する。
 - **朗読と合いの手**: 887/887緑・6レーンPASS、1時間40分実配信で4点の人間ゲート合格。
 - **配信間記憶**: `memory.mjs`・自動搭載3件・checkpoint/手動/SIGINT・OFF止水栓を実装(957/957緑・6レーンPASS)。保存/次回搭載/OFF/手動記録の4点人間ゲート未記録。
 
@@ -18,7 +22,7 @@
 | [closed-problem-decomposition.md](closed-problem-decomposition.md) | 「AI経由でモデルを動かす機能」の閉問題分解(C1〜C7)、分解原則、除外事項、UX精緻化対象、進め方(§6: 一問題ずつ議論→実装→ゲート→完全閉鎖の直列。実装中は人間の休憩) | 初期分解=Accepted、進め方=ユーザー決定(2026-07-10)。**C1〜C7全閉鎖(2026-07-12)=器の完成** |
 | [s-series-decomposition.md](s-series-decomposition.md) | 魂(apps/soul)の閉問題分解(S1〜S9): 歩くスケルトン→耳→呼べば応える→表情→**目が開く(視覚)**→会話継続→視聴者→配信リハ→相槌(persona後)。S5視覚の設計方針、除外事項、進め方はC系列規律を継承 | 初期分解=Accepted(2026-07-12)。切る基準=ユーザーのゲート認知負荷。**問題設定は視座の変化で変更され得る(留保付き)**。S1着手と同時に `experiments/` 開設 |
 | [screens/](screens/) | C1/C3/C4/S2.5と操縦席改定のUX定義(runtime-playerのscreens/流儀) | C1/C3/C4/S2.5はAccepted・実装反映。`screens/cockpit-redesign.md` はモック承認(2026-07-14)後の現在UI source。S8 kill、brain、memory の運転/設定面も実装済みで、残るのは各人間ゲート。 |
-| [orchestration/](orchestration/) | wave計画とplanning gate棚卸し | **C1〜C7全閉鎖**。S1〜S7実装済み(S7は30分実配信で実質合格)。S8安全弁、brain-swap、stream-memoryは機械実装/レビュー済みだが人間ゲート記録待ち。朗読と合いの手は1時間40分実配信で4点合格。詳細は [orchestration/_map.md](orchestration/_map.md)。 |
+| [orchestration/](orchestration/) | wave計画とplanning gate棚卸し | **C1〜C7全閉鎖**。S1〜S7実装済み(S7は30分実配信で実質合格)。S8安全弁、brain-swap、stream-memoryは機械実装/レビュー済みだが人間ゲート記録待ち。朗読と合いの手は1時間40分実配信で4点合格。model-identity追撃waveは機械実装・レビュー PASS、人間ゲート PENDING。Cockpit設定modal / 会話指示追撃waveは機械 PASS、人間ゲート PENDING。詳細は [orchestration/_map.md](orchestration/_map.md)。 |
 | [waves/c1/](waves/c1/) | C1 各ドメインの実装レポート | Domain A(スロット基盤)/ B(役割合成・身元表示)/ C(最終統合・検証・docs)完了(2026-07-10) |
 | [reviews/c1/](reviews/c1/) | C1 各ドメインの 3 レーンレビュー | Domain A/B とも spec / design / test の 3 レーン PASS(blocking ゼロ。2026-07-10) |
 | [waves/c2/](waves/c2/) | C2 各ドメインの実装レポート | Domain A(頭無しリゾルバ抽出)/ B(生成器骨格・まばたき)/ C(フレーム心臓・役割合成)/ D(最終統合・検証・docs・手動ゲート手順)完了(2026-07-10) |
@@ -29,10 +33,18 @@
 | [reviews/c4/](reviews/c4/) | C4 各ドメインの 3 レーンレビュー | Domain A/B/C/D とも spec/design/test の 3 レーン PASS(blocking ゼロ。non-blocking は Domain E で回収 or follow-up 記録。2026-07-11) |
 | [waves/c5/](waves/c5/) | C5 各ドメインの実装レポート + follow-up | Domain A(スロット曲線状態機械・実効値フィードバック案B・release一般化400ms、loop2で連続性性質テスト網羅)/ B(契約 `intent.envelope` additive・dispatch・参照ドライバ拡張・持続駆動11相)/ C(Stage Presence 入力を合成後 `resolvedActivations` へ差し替え)/ D(最終統合・モノレポ検証・無変更確認・docs整合・人間ゲート手順)完了(2026-07-11)。[c5-followup.md](waves/c5/c5-followup.md) に持ち越し4件を記録。**実装完了・機械ゲート緑・人間ゲート待ち**(CLOSURE 判定は人間ゲート後に L0) |
 | [reviews/c5/](reviews/c5/) | C5 各ドメインの 3 レーンレビュー | Domain A(loop2 test-adequacy 追補込み)/ B / C とも spec/design/test の 3 レーン合格(blocking ゼロ。2026-07-11) |
+| [waves/cockpit-settings-modal/](waves/cockpit-settings-modal/) | Cockpit設定modal / 会話指示追撃の Domain A/B/C 完了報告 | 3/3完了。機械gate PASS、人間gate PENDING。詳細は各wave報告へ委譲。 |
+| [reviews/cockpit-settings-modal/](reviews/cockpit-settings-modal/) | 同waveの spec/design/testレビューと最終機械レビュー | 9/9 review lanes PASS、[final mechanical](reviews/cockpit-settings-modal/final-mechanical.md) PASS。人間gate PENDING。詳細は子マップ相当の成果物へ委譲。 |
+| [orchestration/fire-diagnostics-wave-plan.md](orchestration/fire-diagnostics-wave-plan.md) | Passive Fire Diagnostics D1のAccepted User Gate、二domain所有権、単一統合review、機械/user gate | Mechanical PASS / User Gate PENDING (2026-08-30)。[closeout](waves/fire-diagnostics/final-closeout.md) / [human gate](waves/fire-diagnostics/human-gate.md) |
+| [orchestration/codex-progressive-speech-wave-plan.md](orchestration/codex-progressive-speech-wave-plan.md) | Codex App Server逐次delta、文単位TTS queue、部分成功、実測後4096判断の3-wave計画 | ACTIVE — Wave 1A / 1B launched (2026-08-30) |
 
 実装報告・レビューは着手時に `waves/` / `reviews/` を切って収める(runtime-player方式)。
 
 ## 次の行動
+
+0. **Cockpit設定modal / 会話指示追撃wave = 機械 PASS / 人間ゲート PENDING (2026-08-20)**: [plan](orchestration/cockpit-settings-modal-wave-plan.md) に従う Domain A/B/C 実装・9 review lanes・[final mechanical](reviews/cockpit-settings-modal/final-mechanical.md) は完了。人間ゲートは [human-gate](waves/cockpit-settings-modal/human-gate.md) で別立てに維持し、ユーザーの実機確認を待つ。既存設定は即時反映、promptだけは保存して次のFireから反映する。
+
+1. **model-identity追撃wave = 機械 PASS / 人間ゲート PENDING (2026-08-09)**: [plan](orchestration/model-identity-wave-plan.md) の Domain A → (B ∥ D) → C は実装・12 review lanes・機械gateまで完了。証拠: [final mechanical](reviews/model-identity/final-mechanical.md)、[human gate](waves/model-identity/human-gate.md)、[final closeout](waves/model-identity/final-closeout.md)。ユーザーによる人間ゲート実行と記録が残る。
 
 1. **C1 = 完全閉鎖(2026-07-10)**: パッケージ版手動ゲート全項目合格(ユーザー実施)+§14裁定済み。
 2. **C2「身体が呼吸する(まばたき)」= 完全閉鎖(2026-07-11)**: 実装+3レーンレビュー全PASS+手動美的ゲート合格(瞬きに違和感なし・OBS Browser Source確認・トラッキングとの二体非干渉確認)。

@@ -524,6 +524,39 @@ describe("RuntimePlayerControlChannelOverlayStore — speech timeline (C6 group)
     expect(store.snapshot(280 + 140 + 400 + 50)).toStrictEqual({});
   });
 
+  it("replaces a timeline only when the next accepted speech write arrives; snapshots do not replay an older timeline", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const first: readonly SpeechMora[] = [
+      { timeMs: 0, vowel: "a", s: 0.6 },
+      { timeMs: 140, vowel: "i", s: 0.8 }
+    ];
+    const second: readonly SpeechMora[] = [
+      { timeMs: 0, vowel: "u", s: 0.7 },
+      { timeMs: 140, vowel: "e", s: 0.5 }
+    ];
+    store.snapshot(0);
+    store.setSpeech(first, 0);
+
+    // The Runtime has no AudioPlayer terminal signal. Until Soul's FIFO boundary
+    // sends the next accepted request, successive heart snapshots keep this first
+    // timeline; an old/duplicate audio callback cannot cause a replacement here.
+    const beforeReplacement = store.snapshot(100);
+    const stillFirst = store.snapshot(120, {}, beforeReplacement);
+    expect(stillFirst[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a] ?? 0).toBeGreaterThan(0);
+    expect(stillFirst[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.u] ?? 0).toBe(0);
+
+    // This explicit later accepted write is the sole replacement seam. It is the
+    // Wave-2 queue→channel adapter's responsibility to call it in WAV playback order.
+    store.setSpeech(second, 140);
+    const replaced = store.snapshot(140, {}, stillFirst);
+    expect(replaced[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.u] ?? 0).toBeGreaterThan(0);
+    expect(replaced[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.a] ?? 0).toBe(0);
+    expect(vowelSumOf(replaced)).toBeCloseTo(
+      replaced[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0,
+      9
+    );
+  });
+
   it("setSpeech drops any per-slot curve on the 6 mouth slots (group takes over, no competition)", () => {
     const store = new RuntimePlayerControlChannelOverlayStore();
     // A per-slot envelope is driving a vowel slot BEFORE speech.

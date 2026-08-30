@@ -15,7 +15,7 @@
  * @typedef {object} MindSessionAskResult
  * @property {string} replyText  応答全文（読み上げ・会話ログの正本）。
  * @property {any} usage  頭ごとの usage 形（Claude: {input_tokens,output_tokens,...} / Codex も同名フィールドを持つ）。
- * @property {number | null} ttftMs  最初のトークン到達までの ms（ストリーミング非対応の頭は null）。
+ * @property {number | null} ttftMs  最初のトークン到達までの ms（観測不能な頭は null）。
  * @property {number} elapsedMs  ask 開始から応答確定までの実測 ms。
  *
  * @typedef {object} MindSession
@@ -30,12 +30,14 @@
  * @property {(options?: object) => MindSession} create  頭セッションを起動する（Domain B が options に
  *   systemPrompt 等を渡す）。**ここでは呼ばない**（health test は実 create を呼ばない＝実 SDK 消費ゼロ）。
  * @property {string} credentialPath  資格情報ファイルの絶対パス（健康表示の存在確認用・中身は読まない）。
+ * @property {Readonly<import("./model-identity.mjs").ModelIdentity>} identity  魂名の frozen identity contract。
  */
 
 import os from "node:os";
 import path from "node:path";
 import { createLlmSession } from "./llm-session.mjs";
 import { createCodexSession } from "./codex-session.mjs";
+import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
 
 /**
  * 頭の表（フラット registry・v0 裁定=brain-swap.md §2・2026-07-17 追撃で claude/codex の 2 項目から
@@ -49,13 +51,15 @@ export const BRAINS = Object.freeze({
     id: "claude",
     label: "Claude (Opus 4.8)",
     create: (options) => createLlmSession(options),
-    credentialPath: path.join(os.homedir(), ".claude", ".credentials.json")
+    credentialPath: path.join(os.homedir(), ".claude", ".credentials.json"),
+    identity: MODEL_IDENTITIES.cody
   }),
   codex: Object.freeze({
     id: "codex",
     label: "Codex (GPT-5.6 Terra)",
     create: (options) => createCodexSession(options),
-    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
+    identity: MODEL_IDENTITIES.chappy
   }),
   // ── 追撃(2026-07-17・S8後の人間ゲート観測「Terra は自然だが深みがない」を受けた比較追加)────────
   //  registry はフラットな行追加で増設を受ける設計(brain-swap.md §2 裁定)どおり、Codex 側の別モデルを
@@ -70,16 +74,17 @@ export const BRAINS = Object.freeze({
     // （minimal は列挙になし＝Terra と同じ非対応パターンと推定）。effort=none は Terra 実測（brain-swap-terra.md
     // §7）と対称の既定。
     create: (options) => createCodexSession({ ...options, model: "gpt-5.5", effort: "none" }),
-    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
+    identity: MODEL_IDENTITIES.chappy
   }),
   "codex-56-sol": Object.freeze({
     id: "codex-56-sol",
     label: "Codex (GPT-5.6 Sol)",
-    // モデル ID は公式ページで確認済み。reasoning effort の対応値一覧は公式ページに明記が無く**確認できな
-    // かった**——同じ GPT-5.6 系の Terra が none 対応・minimal 非対応（400 実測）だった前例から類推して
-    // effort=none を既定に採用。誤りなら初回 run の 400 で即可視。
-    create: (options) => createCodexSession({ ...options, model: "gpt-5.6-sol", effort: "none" }),
-    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
+    // App Server 0.144.5 の model/list 実測で Sol は low..ultra を列挙し none を列挙しなかった。
+    // progressive speech の accepted decision に従い、Sol は effort=low へ共通 adapter 経由で配線する。
+    create: (options) => createCodexSession({ ...options, model: "gpt-5.6-sol", effort: "low" }),
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
+    identity: MODEL_IDENTITIES.chappy
   })
 });
 
@@ -88,3 +93,15 @@ export const BRAINS = Object.freeze({
  * @type {ReadonlyArray<string>}
  */
 export const BRAIN_IDS = Object.freeze(Object.keys(BRAINS));
+
+/**
+ * Resolve the identity attached to a persisted brain selection. Unknown or
+ * absent values retain the existing Claude/Cody fallback.
+ *
+ * @param {unknown} brainId
+ * @returns {Readonly<import("./model-identity.mjs").ModelIdentity>}
+ */
+export function resolveBrainIdentity(brainId) {
+  const entry = typeof brainId === "string" ? BRAINS[brainId] : undefined;
+  return entry?.identity ?? DEFAULT_MODEL_IDENTITY;
+}

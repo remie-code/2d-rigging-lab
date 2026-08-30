@@ -118,6 +118,7 @@
  */
 
 import { speak as defaultSpeak } from "../voice/speak.mjs";
+import { createProgressiveSpeechDelivery } from "../voice/progressive-speech-delivery.mjs";
 import { formatFireInjection, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { translateExpression } from "./expression-translator.mjs";
@@ -130,9 +131,23 @@ import {
   MOUTH_CLOSE_TTL_MS
 } from "./barge-in.mjs";
 import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
+import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
+import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
+import { performance } from "node:perf_hooks";
 
 /** 視覚発火の最小指示文（wave 計画 §2 裁定・人格の作り込みはしない＝persona の領分）。 */
 const VISION_INSTRUCTION_TEXT = "今の画面を見て、直近の会話と合わせて自然に反応してください。";
+
+/** C3 visible canonical marker. It deliberately carries no diagnostic cause. */
+export const PROGRESSIVE_INTERRUPTION_NOTE = "（応答は途中で中断されました）";
+
+/**
+ * One-shot internal continuity correction for the first ask after a partial
+ * progressive delivery. The visible transcript already contains the exact
+ * heard prefix, so this instruction never repeats private model output.
+ */
+export const PROGRESSIVE_CONTINUITY_INSTRUCTION =
+  "[内部の会話継続情報: 直前のアシスタント応答は途中で中断され、表示された発話済み部分だけが相手に届いています。内部スレッドに残る未配信部分は相手が聞いていないものとして扱い、必要がない限り発話済み部分を繰り返さないでください。]";
 
 /**
  * 最小仮面（v0）の発火用システムプロンプト（wave 計画 §2 裁定 4）。
@@ -141,17 +156,99 @@ const VISION_INSTRUCTION_TEXT = "今の画面を見て、直近の会話と合�
  *
  * S4: 表情タグ 6 語の教示を最小限だけ足す（人格の作り込みはしない＝persona の領分・引き続き貧しく）。
  *
- * 自己名の一言を追加（耳側の呼びかけ検出 NAME_VARIANTS_V0「コーディ」と一致させ、呼ばれても自分の名前だと
- * 認識できるようにする最小の事実のみ・人格描写やキャラ付けは足さない＝persona の領分）。
+ * 自己名の一言を追加（既定は耳側の呼びかけ検出 NAME_VARIANTS_V0「コーディ」と一致させ、呼ばれても自分の
+ * 名前だと認識できるようにする最小の事実のみ）。Domain C の builder はこの一行だけを現在の frozen
+ * model-family identity に差し替え、人格描写やキャラ付けは足さない＝persona の領分。
  */
-export const FIRE_SYSTEM_PROMPT =
-  "あなたの名前はコーディ（Cody）です。" +
+const FIRE_SYSTEM_PROMPT_BODY =
   "あなたは配信の相方です。直前の会話を踏まえ、短く自然な日本語で一言だけ返してください。" +
   "箇条書き・記号・長い説明はしないでください。" +
   "感情が動いたときだけ、返事にごく短い表情タグを添えてよいです（無理に付けなくてよい）。" +
   "使えるタグは <smile> <troubled> <surprised> <nod> <look-away> <look-camera> の 6 つだけです。" +
   "例: 「そうだね<nod>」「えっ<surprised>ほんとに？」。タグは半角の山括弧で書き、読み上げ文には含めません。" +
   "画面（画像）が渡されることがあります。その場合は画面を見て、自然に反応してください。";
+
+/**
+ * Build the self-name line for a newly-created Fire session.
+ *
+ * The identity object comes from the frozen model registry. Invalid or absent
+ * values deliberately use the existing Cody default, keeping the exported
+ * FIRE_SYSTEM_PROMPT byte-compatible for Claude callers.
+ *
+ * @param {unknown} [identity]
+ * @returns {string}
+ */
+/**
+ * The editable conversation-instruction body starts from this exact legacy
+ * body. Keep the export separate from the generated identity line so Cockpit
+ * can persist one override per technical brain without touching identity,
+ * memory, transcript, or provider settings.
+ */
+export const DEFAULT_CONVERSATION_INSTRUCTION_BODY = FIRE_SYSTEM_PROMPT_BODY;
+/** Backwards-friendly shorter alias for consumers of the profile resolver. */
+export const DEFAULT_CONVERSATION_INSTRUCTION = DEFAULT_CONVERSATION_INSTRUCTION_BODY;
+
+/** The only technical brain ids that may carry a conversation override. */
+export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
+  "claude",
+  "codex",
+  "codex-55",
+  "codex-56-sol"
+]);
+
+/** @param {unknown} value */
+function normalizeConversationInstruction(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+/**
+ * Resolve the effective editable body for one technical brain.
+ *
+ * Unknown ids and malformed/empty overrides deliberately retain the Claude
+ * default. The returned object is a fresh frozen value so callers cannot
+ * mutate the canonical profile or accidentally share a draft with storage.
+ *
+ * @param {unknown} brainId
+ * @param {unknown} [overrides]
+ * @returns {{ brainId: string; defaultBody: string; override: string | null; body: string; hasOverride: boolean }}
+ */
+export function resolveConversationInstructionProfile(brainId, overrides = undefined) {
+  const knownBrain = CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(brainId);
+  const id = knownBrain ? brainId : "claude";
+  const record = overrides && typeof overrides === "object" ? /** @type {any} */ (overrides) : null;
+  // An unknown technical id falls back to the byte-compatible default profile;
+  // it must not accidentally inherit a saved override belonging to Claude.
+  const override = knownBrain ? normalizeConversationInstruction(record ? record[id] : null) : null;
+  return Object.freeze({
+    brainId: id,
+    defaultBody: DEFAULT_CONVERSATION_INSTRUCTION_BODY,
+    override,
+    body: override ?? DEFAULT_CONVERSATION_INSTRUCTION_BODY,
+    hasOverride: override != null
+  });
+}
+
+/**
+ * Build a Fire system prompt with the generated identity line followed by an
+ * effective conversation body. The one-argument form remains byte-compatible
+ * with the existing Cody default prompt.
+ *
+ * @param {unknown} [identity]
+ * @param {unknown} [conversationInstruction]
+ * @returns {string}
+ */
+export function buildFireSystemPrompt(identity = DEFAULT_MODEL_IDENTITY, conversationInstruction = undefined) {
+  const resolved =
+    identity && typeof identity === "object" &&
+    (/** @type {any} */ (identity).id === "cody" || /** @type {any} */ (identity).id === "chappy")
+      ? MODEL_IDENTITIES[/** @type {"cody" | "chappy"} */ (/** @type {any} */ (identity).id)]
+      : DEFAULT_MODEL_IDENTITY;
+  const body = normalizeConversationInstruction(conversationInstruction) ?? DEFAULT_CONVERSATION_INSTRUCTION_BODY;
+  return `あなたの名前は${resolved.canonicalName}（${resolved.latinName}）です。${body}`;
+}
+
+/** Cody-compatible default prompt retained for existing imports and tests. */
+export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
 
 /**
  * @typedef {"idle" | "thinking" | "speaking"} FireState
@@ -171,6 +268,8 @@ export const FIRE_SYSTEM_PROMPT =
  * @param {number} [options.expressionIntensity=1.0]  演出強さ係数（全 peak 一括スケール・表の外で適用）。
  * @param {{ play: Function }} [options.player]  speak へ渡す常駐プレイヤー。
  * @param {object} [options.speakDeps]  speak へ渡す追加 deps（tts/writeWav/sConfig 等）。
+ * @param {() => object | Promise<object>} [options.acquireFireResources]
+ *   accepted 公開前に exact session/channel/player/TTS snapshot を取得する production seam。
  * @param {number} [options.windowMs=FIRE_WINDOW_MS]  注入窓幅。
  * @param {number} [options.maxChars=FIRE_MAX_CHARS]  注入文字数上限。
  * @param {() => number} [options.nowImpl=Date.now]  窓の起点となる壁時計（注入可）。
@@ -190,6 +289,12 @@ export const FIRE_SYSTEM_PROMPT =
  *   視覚発火のキャプチャ成功通知（「見た」事実・サムネ用 base64 はここにだけ載る。会話ログには積まない）。
  * @param {(info: { usage: any; vision: boolean }) => void} [options.onUsage]
  *   ask ごとの usage 通知（通常 Fire・視覚発火の両方・usage が null/undefined のときは発火しない）。
+ * @param {(chunk: { text: string; index: number; final: boolean }) => void} [options.onProgressiveSentence]
+ *   Codex delta から確定した safe sentence の同期 enqueue seam。C1 では playback を所有せず、
+ *   production default（未注入）は既存の最終一括 speak を維持する。
+ * @param {boolean} [options.progressivePlayback=false] production Cockpit enables the Wave 2 queue adapter.
+ * @param {typeof createProgressiveSpeechDelivery} [options.progressiveDeliveryFactory]
+ * @param {(outcome: object) => void} [options.onProgressiveTerminal] C3 projection seam.
  * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  再生完了タイマの注入（決定論テスト用）。
  * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  再生完了タイマの解除（注入）。
  * @param {boolean} [options.initialKilled=false]  キル状態の初期値（S8）。キル状態の正本はサーバ側
@@ -213,6 +318,7 @@ export function createFireOrchestrator(options) {
   const channel = options.channel;
   const player = options.player;
   const speakDeps = options.speakDeps ?? {};
+  const acquireFireResources = options.acquireFireResources;
   const windowMs = options.windowMs ?? FIRE_WINDOW_MS;
   const maxChars = options.maxChars ?? FIRE_MAX_CHARS;
   const nowImpl = options.nowImpl ?? Date.now;
@@ -222,11 +328,27 @@ export function createFireOrchestrator(options) {
     typeof options.expressionIntensity === "number" ? options.expressionIntensity : 1.0;
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
-  const { onState, onFire, onDiagnostic, onSoulTranscript, onExpression, onVisionCaptured, onUsage } =
-    options;
+  const {
+    onState,
+    onFire,
+    onDiagnostic,
+    onSoulTranscript,
+    onExpression,
+    onVisionCaptured,
+    onUsage,
+    onTrace,
+    onProgressiveSentence,
+    onProgressiveTerminal
+  } = options;
+  const progressivePlayback = options.progressivePlayback === true;
+  const progressiveDeliveryFactory = options.progressiveDeliveryFactory ?? createProgressiveSpeechDelivery;
 
   /** @type {FireState} */
   let state = "idle";
+  // Resource acquisition and vision-target resolution happen before `thinking`.
+  // Claim synchronously so two callers cannot both become an accepted Fire in
+  // that pre-publication window (and cannot race a one-shot C3 correction).
+  let fireClaimed = false;
   let disposed = false;
   /** キル状態（S8）。true の間は全発火経路を閉じる（fire() 冒頭ガード・唯一の合流点）。 */
   let killed = options.initialKilled === true;
@@ -245,6 +367,33 @@ export function createFireOrchestrator(options) {
    * }}
    */
   let currentPlayback = null;
+  /** @type {ReturnType<typeof createProgressiveSpeechDelivery> | null} */
+  let currentProgressiveDelivery = null;
+  let currentProgressiveBoundary = null;
+  let currentFireResources = null;
+  let nextProgressiveGeneration = 0;
+  const reportedProgressiveGenerations = new Set();
+  /** Exact generation -> accepted Fire transcript owner. */
+  const progressiveProjectionOwners = new Map();
+  /** Latest unconsumed partial; single-flight Fire makes one pending slot sufficient. */
+  let pendingProgressiveCorrection = null;
+
+  const acquireResources = async () => {
+    const supplied =
+      typeof acquireFireResources === "function" ? await acquireFireResources() : {};
+    const resources = {
+      session: supplied?.session ?? session,
+      channel: supplied?.channel ?? channel,
+      player: supplied?.player ?? player,
+      speakDeps: Object.freeze({ ...speakDeps, ...(supplied?.speakDeps ?? {}) }),
+      configuration: Object.freeze({ ...(supplied?.configuration ?? {}) }),
+      metadata: Object.freeze({ ...(supplied?.metadata ?? {}) })
+    };
+    if (!resources.session || typeof resources.session.ask !== "function") {
+      throw new Error("accepted Fire snapshot has no session.ask().");
+    }
+    return Object.freeze(resources);
+  };
 
   /** エラー→メッセージ（診断用）。 */
   const errMessage = (/** @type {unknown} */ err) =>
@@ -257,6 +406,210 @@ export function createFireOrchestrator(options) {
       fn(arg);
     } catch {
       // best-effort（通知先の失敗で発火経路を壊さない）。
+    }
+  };
+
+  /** Release Runtime mouth timeline after either legacy or progressive stop. */
+  const releaseMouth = async (diagnosticType, resources = currentFireResources) => {
+    const ownedChannel = resources?.channel ?? channel;
+    try {
+      if (ownedChannel && typeof ownedChannel.sendSet === "function") {
+        const outcome = await ownedChannel.sendSet({
+          slotId: MOUTH_CLOSE_SLOT_ID,
+          value: 0,
+          ttlMs: MOUTH_CLOSE_TTL_MS
+        });
+        if (!(outcome && outcome.result === "accepted")) {
+          emit(onDiagnostic, {
+            type: `${diagnosticType}MouthCloseRejected`,
+            slotId: MOUTH_CLOSE_SLOT_ID,
+            error: outcome && outcome.error != null ? outcome.error : null
+          });
+        }
+      } else {
+        emit(onDiagnostic, {
+          type: `${diagnosticType}MouthCloseError`,
+          slotId: MOUTH_CLOSE_SLOT_ID,
+          message: "channel has no sendSet"
+        });
+      }
+    } catch (err) {
+      emit(onDiagnostic, {
+        type: `${diagnosticType}MouthCloseError`,
+        slotId: MOUTH_CLOSE_SLOT_ID,
+        message: errMessage(err)
+      });
+    }
+  };
+
+  /** Fire-local passive trace; values supplied below are deliberately content-free. */
+  const trace = (/** @type {string} */ event, /** @type {Record<string, unknown>} */ fields = {}) => {
+    emit(onTrace, { event, ...fields });
+  };
+
+  const emitProgressiveTerminalOnce = (outcome) => {
+    if (!outcome || reportedProgressiveGenerations.has(outcome.generationId)) return;
+    reportedProgressiveGenerations.add(outcome.generationId);
+    const owner = progressiveProjectionOwners.get(outcome.generationId);
+    progressiveProjectionOwners.delete(outcome.generationId);
+    if (
+      owner &&
+      outcome.status !== "completed" &&
+      outcome.completedSentenceCount > 0 &&
+      typeof outcome.playedText === "string" &&
+      outcome.playedText.length > 0
+    ) {
+      const text = `${outcome.playedText}\n${PROGRESSIVE_INTERRUPTION_NOTE}`;
+      const appended = owner.buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul" });
+      if (appended && appended.appended && appended.entry) {
+        emit(onSoulTranscript, appended.entry);
+        // Commit only after the canonical visible projection exists. The next
+        // actual ask consumes this once; pre-ask capture/resource failures do not.
+        pendingProgressiveCorrection = Object.freeze({ sourceGenerationId: outcome.generationId });
+        trace("progressive.partial.projected", {
+          generationId: outcome.generationId,
+          playedChars: outcome.playedText.length,
+          completedSentenceCount: outcome.completedSentenceCount,
+          terminalCause: outcome.terminalCause
+        });
+      }
+    }
+    emit(onProgressiveTerminal, outcome);
+  };
+
+  const consumeProgressiveCorrection = (content) => {
+    const correction = pendingProgressiveCorrection;
+    if (correction == null) return content;
+    pendingProgressiveCorrection = null;
+    trace("progressive.continuity.consumed", {
+      sourceGenerationId: correction.sourceGenerationId
+    });
+    if (typeof content === "string") {
+      return `${PROGRESSIVE_CONTINUITY_INSTRUCTION}\n\n${content}`;
+    }
+    if (Array.isArray(content)) {
+      let applied = false;
+      return content.map((block) => {
+        if (applied || block?.type !== "text" || typeof block.text !== "string") return block;
+        applied = true;
+        return { ...block, text: `${PROGRESSIVE_CONTINUITY_INSTRUCTION}\n\n${block.text}` };
+      });
+    }
+    return content;
+  };
+
+  /**
+   * One accepted Fire owns one incremental boundary. App Server delta text enters
+   * this pure Wave 1B buffer exactly once. Safe completed sentences are exposed
+   * immediately through a synchronous enqueue seam; playback ownership remains
+   * intentionally outside C1.
+   */
+  const createProgressiveBoundary = (delivery = null) => {
+    const incremental = createIncrementalSentenceTagBuffer();
+    let sawDelta = false;
+    let flushed = false;
+    let stopped = false;
+    let blocked = false;
+    let sentenceCount = 0;
+    let safeChars = 0;
+
+    /** @param {{ sentences: string[] }} output @param {boolean} final */
+    const enqueue = (output, final) => {
+      for (const text of output.sentences) {
+        if (stopped) break;
+        // The sentence was assembled by the pure buffer, so this catches an NG
+        // word even when the source word was fragmented across transport deltas.
+        if (containsNgWord(text)) {
+          stopped = true;
+          blocked = true;
+          delivery?.abort("ng-blocked");
+          trace("progressive.boundary.blocked", { sentenceCount, safeChars });
+          break;
+        }
+        const index = sentenceCount;
+        sentenceCount += 1;
+        safeChars += text.length;
+        if (index === 0) trace("progressive.first_safe_sentence", { speechChars: text.length, final });
+        trace("progressive.sentence.enqueued", { index, speechChars: text.length, final });
+        delivery?.enqueue({ text, index, final });
+        if (typeof onProgressiveSentence === "function") {
+          onProgressiveSentence({ text, index, final });
+        }
+      }
+    };
+
+    return {
+      /** @param {string} delta */
+      append(delta) {
+        if (!sawDelta) trace("llm.first_delta", { deltaChars: delta.length });
+        sawDelta = true;
+        trace("llm.delta.received", { deltaChars: delta.length });
+        enqueue(incremental.append(delta), false);
+      },
+      flush() {
+        if (flushed) return;
+        flushed = true;
+        enqueue(incremental.flush(), true);
+        trace("progressive.boundary.flushed", { sentenceCount, safeChars, blocked });
+      },
+      stop() {
+        stopped = true;
+      },
+      snapshot() {
+        return { sawDelta, flushed, stopped, blocked, sentenceCount, safeChars };
+      }
+    };
+  };
+
+  /**
+   * Shared normal/vision ask seam. Passing options is additive for Claude (its
+   * one-argument implementation ignores them) and reaches App Server through
+   * Cockpit's transparent session proxy for the three Codex brains.
+   * @param {string | Array<any>} content
+   */
+  const askIncrementally = async (content, resources, buffer) => {
+    // Production snapshots identify Claude explicitly. Its full-result session
+    // keeps the legacy one-shot path; the three Codex brains own delta delivery.
+    const progressiveEligible = resources.configuration?.brain !== "claude";
+    const delivery = progressivePlayback && progressiveEligible
+      ? progressiveDeliveryFactory({
+          generationId: `fire-${++nextProgressiveGeneration}`,
+          channel: resources.channel,
+          player: resources.player,
+          speakDeps: resources.speakDeps,
+          onTrace: (event, fields) => trace(event, fields),
+          onPlaybackStarted: () => setState("speaking"),
+          setTimeoutImpl,
+          clearTimeoutImpl
+        })
+      : null;
+    currentProgressiveDelivery = delivery;
+    if (delivery) {
+      progressiveProjectionOwners.set(delivery.snapshot().generationId, { buffer });
+    }
+    if (delivery && typeof delivery.whenSettled === "function") {
+      void delivery.whenSettled().then(emitProgressiveTerminalOnce);
+    }
+    const boundary = createProgressiveBoundary(delivery);
+    currentProgressiveBoundary = boundary;
+    try {
+      const askContent = consumeProgressiveCorrection(content);
+      const asked = await resources.session.ask(askContent, { onTextDelta: (delta) => boundary.append(delta) });
+      // A successful terminal result owns exactly one final remainder flush.
+      boundary.flush();
+      const progressive = boundary.snapshot();
+      const deliveryOutcome = delivery ? await delivery.finishLlm() : null;
+      return { asked, progressive, deliveryOutcome };
+    } catch (error) {
+      if (delivery) {
+        delivery.abort("llm-failed");
+        const deliveryOutcome = await delivery.finishLlm();
+        if (error instanceof Error) /** @type {any} */ (error).progressiveDelivery = deliveryOutcome;
+      }
+      throw error;
+    } finally {
+      if (currentProgressiveBoundary === boundary) currentProgressiveBoundary = null;
+      if (currentProgressiveDelivery === delivery) currentProgressiveDelivery = null;
     }
   };
 
@@ -275,7 +628,8 @@ export function createFireOrchestrator(options) {
    * @param {Array<{ word: string; args?: string; position: number }>} events
    * @returns {Promise<Array<{ word: string; args?: string; applied: number; rejected: number }>>}
    */
-  const applyExpressions = async (events) => {
+  const applyExpressions = async (events, resources) => {
+    const ownedChannel = resources?.channel ?? channel;
     /** @type {Array<{ word: string; args?: string; applied: number; rejected: number }>} */
     const summaries = [];
     for (const ev of events) {
@@ -288,16 +642,20 @@ export function createFireOrchestrator(options) {
       let rejected = 0;
       const send = async (/** @type {any} */ payload) => {
         try {
-          if (!channel || typeof channel.sendEnvelope !== "function") {
+          trace("expression.request.started", { kind: "intent.envelope", slotId: payload.slotId });
+          if (!ownedChannel || typeof ownedChannel.sendEnvelope !== "function") {
             rejected += 1;
+            trace("expression.request.failed", { kind: "intent.envelope", slotId: payload.slotId, failure: "unsupported" });
             emit(onDiagnostic, { type: "expressionSendError", slotId: payload.slotId, message: "channel has no sendEnvelope" });
             return;
           }
-          const outcome = await channel.sendEnvelope(payload);
+          const outcome = await ownedChannel.sendEnvelope(payload);
           if (outcome && outcome.result === "accepted") {
             applied += 1;
+            trace("expression.request.completed", { kind: "intent.envelope", slotId: payload.slotId, result: "accepted" });
           } else {
             rejected += 1;
+            trace("expression.request.completed", { kind: "intent.envelope", slotId: payload.slotId, result: "rejected" });
             emit(onDiagnostic, {
               type: "expressionRejected",
               slotId: payload.slotId,
@@ -306,6 +664,11 @@ export function createFireOrchestrator(options) {
           }
         } catch (err) {
           rejected += 1;
+          trace("expression.request.failed", {
+            kind: "intent.envelope",
+            slotId: payload.slotId,
+            failureName: err instanceof Error ? err.name : typeof err
+          });
           const message = err instanceof Error ? err.message : String(err);
           emit(onDiagnostic, { type: "expressionSendError", slotId: payload.slotId, message });
         }
@@ -328,9 +691,10 @@ export function createFireOrchestrator(options) {
    * @param {any} asked  session.ask の戻り値。
    * @param {boolean} vision  onUsage に載せる区別フラグ。
    * @param {object} extra  戻り値へマージする付随情報（injectedChars/includedCount・視覚発火は vision:true も）。
+   * @param {any} [progressiveDelivery] C2 settled queue outcome; null keeps legacy one-shot delivery.
    * @returns {Promise<object>}
    */
-  const processAskedReply = async (buffer, asked, vision, extra) => {
+  const processAskedReply = async (buffer, asked, vision, extra, progressiveDelivery = null, resources = currentFireResources) => {
     // usage 計器（wave 計画 §2 裁定 2・blocking）: 通常 Fire・視覚発火の両方で通知する。
     if (asked && asked.usage != null) {
       emit(onUsage, { usage: asked.usage, vision });
@@ -341,11 +705,15 @@ export function createFireOrchestrator(options) {
     const parsed = parseExpressionTags(replyText);
     const speechText = parsed.speechText;
     const events = parsed.events;
+    trace("llm.response.parsed", {
+      modelOutputChars: replyText.length,
+      speechChars: speechText.length,
+      expressionCount: events.length
+    });
     // 未知タグ・壊れタグ診断は expression 接頭辞で onDiagnostic へ（声にも演出にも出さない）。
     for (const d of parsed.diagnostics) {
       emit(onDiagnostic, { ...d, type: `expression${capitalize(d.type)}` });
     }
-
     // S8: in-flight キル検査（ask を撃った後にキルされたケース）。speak せず・soul 追記せず・演出も
     // 適用せず畳む。診断は破棄した「事実」のみ（type だけ）——speechText 本文はどこにも載せない（秘匿）。
     if (killed) {
@@ -358,6 +726,15 @@ export function createFireOrchestrator(options) {
     // 固定の事実文字列 NG_BLOCKED_NOTE（本文なし）だけを append する。containsNgWord("") は false
     // ゆえ空の speechText（この後の hasSpeech 判定より前）はここを素通りする。
     if (containsNgWord(speechText)) {
+      if (progressiveDelivery && progressiveDelivery.completedSentenceCount > 0) {
+        emit(onDiagnostic, { type: "ngBlocked" });
+        return {
+          fired: false,
+          reason: "ng-blocked",
+          progressive: progressivePublicState(progressiveDelivery),
+          ...extra
+        };
+      }
       const appended = buffer.append({ startMs: 0, endMs: 0, text: NG_BLOCKED_NOTE, speaker: "soul" });
       if (appended && appended.appended && appended.entry) {
         emit(onSoulTranscript, appended.entry);
@@ -369,15 +746,72 @@ export function createFireOrchestrator(options) {
     const hasSpeech = speechText.length > 0;
     const hasEvents = events.length > 0;
 
+    // C3 zero-spoken failures retain the established Fire error projection so
+    // Cockpit's existing fireError ghost remains visible. Keep this deliberately
+    // narrow: intentional cancelled controls (kill/barge/dispose) and NG have
+    // their accepted cause-specific branches and must not be remapped here.
+    if (
+      progressiveDelivery &&
+      progressiveDelivery.status === "failed" &&
+      progressiveDelivery.completedSentenceCount === 0 &&
+      progressiveDelivery.terminalCause !== "ng-blocked"
+    ) {
+      throw withDiagnostic(
+        new Error(`progressive speech delivery failed (${progressiveDelivery.terminalCause ?? "unknown"}).`),
+        "progressive_delivery_failed",
+        "progressive.delivery"
+      );
+    }
+
+    if (progressiveDelivery && progressiveDelivery.status !== "completed") {
+      return {
+        fired: false,
+        reason: progressiveDelivery.status === "cancelled" ? progressiveDelivery.terminalCause : "progressive-delivery-failed",
+        progressive: progressivePublicState(progressiveDelivery),
+        ...extra
+      };
+    }
+    const hasProgressiveAudio = progressiveDelivery && progressiveDelivery.enqueuedSentenceCount > 0;
+    if (hasProgressiveAudio && progressiveDelivery.playedText !== speechText) {
+      throw withDiagnostic(
+        new Error(
+          `progressive delivery/final speech mismatch (${progressiveDelivery.playedText.length} != ${speechText.length}).`
+        ),
+        "progressive_speech_mismatch",
+        "progressive.delivery.verify"
+      );
+    }
+
     // 発話も演出も無い（空応答 / 未知タグのみ）→ 既存 fireEmptyReply 経路。
     if (!hasSpeech && !hasEvents) {
       emit(onDiagnostic, { type: "fireEmptyReply" });
       return { fired: false, reason: "empty-reply" };
     }
 
+    if (hasProgressiveAudio) {
+      const expressions = hasEvents ? await applyExpressions(events, resources) : [];
+      if (!hasSpeech) {
+        return { fired: false, reason: "expression-only", expressed: true, expressions, ...extra };
+      }
+      // Every queued sentence has reached matching ENDED. Commit the final
+      // tag-free answer once; sentence audio was already delivered by C2.
+      const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
+      if (appended && appended.appended && appended.entry) {
+        const latencyMs = asked && typeof asked.elapsedMs === "number" ? asked.elapsedMs : null;
+        emit(onSoulTranscript, { ...appended.entry, latencyMs });
+      }
+      return {
+        fired: true,
+        replyText: speechText,
+        expressions,
+        progressive: progressivePublicState(progressiveDelivery),
+        ...extra
+      };
+    }
+
     // speaking → 演出（発話開始と同時に一括送出・speak と独立に走る・throw しない）。
     setState("speaking");
-    const expressionPromise = hasEvents ? applyExpressions(events) : Promise.resolve([]);
+    const expressionPromise = hasEvents ? applyExpressions(events, resources) : Promise.resolve([]);
 
     // 発話なし・演出のみ（タグのみ応答）→ speak せず soul 追記せず envelope だけ実行。
     if (!hasSpeech) {
@@ -386,7 +820,12 @@ export function createFireOrchestrator(options) {
     }
 
     // 発話あり → 口 + 声（speechText のみ）。speak の throw は呼び出し元の catch（fireError）へ。
-    const spoken = await speakImpl(speechText, { channel, player, ...speakDeps });
+    const spoken = await speakImpl(speechText, {
+      ...resources.speakDeps,
+      channel: resources.channel,
+      player: resources.player,
+      onTrace: (event, fields) => trace(event, fields)
+    });
 
     // S6: 再生実区間を追跡し、その間 speaking を保つ。soul 追記は完了時 or 中断時の 1 回だけ。
     // speak() の戻り（timeline・wavDurationSec・playbackStartedAtMs）で切断点算出材料と完了尺を得る。
@@ -483,6 +922,7 @@ export function createFireOrchestrator(options) {
    * @returns {Promise<{ interrupted: true; elapsedMs: number; charsSpoken: number; prefix: string }>}
    */
   const severSpeaking = async (pb, note, diagnosticType, atMs) => {
+    const resources = currentFireResources;
     pb.interrupted = true;
     // 自然完了タイマを止める（この後 resolve するので二重 resolve しない）。
     if (pb.timer != null) {
@@ -492,8 +932,8 @@ export function createFireOrchestrator(options) {
 
     // ① 声を止める（player.stop・同期呼び）。失敗は診断に握る（落とさない）。
     try {
-      if (player && typeof player.stop === "function") {
-        player.stop();
+      if (resources?.player && typeof resources.player.stop === "function") {
+        resources.player.stop();
       }
     } catch (err) {
       emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
@@ -501,34 +941,7 @@ export function createFireOrchestrator(options) {
 
     // ② 器の口を閉じる（mouth-open へ intent.set value=0・短 ttl = speech タイムライン強制 release）。
     //    rejected/throw/未対応はすべて診断に握る（口が閉じ切らなくても中断処理は続ける）。
-    try {
-      if (channel && typeof channel.sendSet === "function") {
-        const outcome = await channel.sendSet({
-          slotId: MOUTH_CLOSE_SLOT_ID,
-          value: 0,
-          ttlMs: MOUTH_CLOSE_TTL_MS
-        });
-        if (!(outcome && outcome.result === "accepted")) {
-          emit(onDiagnostic, {
-            type: `${diagnosticType}MouthCloseRejected`,
-            slotId: MOUTH_CLOSE_SLOT_ID,
-            error: outcome && outcome.error != null ? outcome.error : null
-          });
-        }
-      } else {
-        emit(onDiagnostic, {
-          type: `${diagnosticType}MouthCloseError`,
-          slotId: MOUTH_CLOSE_SLOT_ID,
-          message: "channel has no sendSet"
-        });
-      }
-    } catch (err) {
-      emit(onDiagnostic, {
-        type: `${diagnosticType}MouthCloseError`,
-        slotId: MOUTH_CLOSE_SLOT_ID,
-        message: errMessage(err)
-      });
-    }
+    await releaseMouth(diagnosticType, resources);
 
     // ③ 切断点算出（モーラタイムライン × 再生経過・過大評価しない純関数）。
     const severAtMs = typeof atMs === "number" && Number.isFinite(atMs) ? atMs : nowImpl();
@@ -570,6 +983,25 @@ export function createFireOrchestrator(options) {
    * @returns {Promise<{ interrupted: boolean; reason?: string; elapsedMs?: number; charsSpoken?: number; prefix?: string }>}
    */
   const interrupt = async (atMs) => {
+    const progressive = currentProgressiveDelivery;
+    if (progressive) {
+      const before = progressive.snapshot();
+      if (before.hasAudiblyStarted !== true) {
+        return { interrupted: false, reason: "not-speaking" };
+      }
+      const interrupted = progressive.bargeIn();
+      if (!interrupted) return { interrupted: false, reason: "already-interrupted" };
+      currentProgressiveBoundary?.stop();
+      if (before.activePlaybackId != null) await releaseMouth("bargeIn");
+      const after = progressive.snapshot();
+      emit(onDiagnostic, {
+        type: "bargeIn",
+        charsSpoken: after.playedText.length,
+        totalChars: after.playedText.length,
+        prefix: after.playedText
+      });
+      return { interrupted: true, charsSpoken: after.playedText.length, prefix: after.playedText };
+    }
     const pb = currentPlayback;
     if (!pb || pb.interrupted) {
       // 発話中でない・既に中断済み → 何もしない（冪等）。
@@ -590,6 +1022,21 @@ export function createFireOrchestrator(options) {
    */
   const kill = async (atMs) => {
     killed = true;
+    const progressive = currentProgressiveDelivery;
+    if (progressive) {
+      const before = progressive.snapshot();
+      const changed = progressive.kill();
+      if (changed) currentProgressiveBoundary?.stop();
+      if (changed && before.activePlaybackId != null) await releaseMouth("kill");
+      const after = progressive.snapshot();
+      emit(onDiagnostic, { type: "kill", charsSpoken: after.playedText.length, prefix: after.playedText });
+      return {
+        killed: true,
+        severed: changed && before.activePlaybackId != null,
+        charsSpoken: after.playedText.length,
+        prefix: after.playedText
+      };
+    }
     const pb = currentPlayback;
     if (!pb || pb.interrupted) {
       // 再生中でない・既に中断/キル済み → severance は no-op（killed フラグだけ立てる）。
@@ -619,7 +1066,7 @@ export function createFireOrchestrator(options) {
    * @param {string} title
    * @returns {Promise<object>}
    */
-  const askWithVision = async (buffer, captured, title) => {
+  const askWithVision = async (buffer, captured, title, resources) => {
     // 「見た」事実の通知（サムネ用 base64 はここにだけ載る・会話ログの正本には積まない）。
     emit(onVisionCaptured, {
       title,
@@ -643,8 +1090,35 @@ export function createFireOrchestrator(options) {
     ];
 
     // 以降は従来経路と完全共通（パーサ→speak→soul記録→演出）。
-    const asked = await session.ask(contentBlocks);
-    return await processAskedReply(buffer, asked, true, { injectedChars, includedCount, vision: true });
+    const askStartedAt = performance.now();
+    trace("llm.ask.started", { vision: true, injectedChars, includedCount });
+    let asked;
+    let progressive;
+    let deliveryOutcome;
+    try {
+      ({ asked, progressive, deliveryOutcome } = await askIncrementally(contentBlocks, resources, buffer));
+    } catch (error) {
+      throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
+    }
+    trace("llm.ask.completed", {
+      vision: true,
+      modelOutputChars: typeof asked?.replyText === "string" ? asked.replyText.length : 0,
+      elapsedMs: typeof asked?.elapsedMs === "number" ? asked.elapsedMs : null,
+      durationMs: performance.now() - askStartedAt,
+      streamed: progressive.sawDelta,
+      progressiveSentenceCount: progressive.sentenceCount,
+      progressiveBlocked: progressive.blocked
+    });
+    const result = await processAskedReply(
+      buffer,
+      asked,
+      true,
+      { injectedChars, includedCount, vision: true },
+      progressive.sawDelta ? deliveryOutcome : null,
+      resources
+    );
+    trace("fire.completed", { fired: result.fired === true, reason: result.reason ?? null });
+    return result;
   };
 
   /**
@@ -652,14 +1126,14 @@ export function createFireOrchestrator(options) {
    * processAskedReply（vision:false）。手動 Fire（新規受理）と、preferred の対象未設定/劣化フォールバックが
    * 共有する。`alreadyAccepted=false` は元インライン実装（fire() の通常経路）と完全に同一の外形。
    * @param {{ all: Function; append: Function }} buffer
-   * @param {{ alreadyAccepted: boolean }} opts
+   * @param {{ alreadyAccepted: boolean; resources?: object }} opts
    *   false: 新規の通常 Fire（空窓は onFire{accepted:false,reason:"empty-window"} で正直に中止・受理で
    *          thinking + onFire{accepted:true,...} を emit）。手動 Fire・preferred の対象未設定が使う。
    *   true : 既に thinking かつ onFire{accepted:true,vision:true} 済みの**劣化フォールバック**（accept を
    *          再 emit しない = 二重 accept を避ける・空窓でも onFire は出さず reason:"empty-window" を返すだけ）。
    * @returns {Promise<object>}
    */
-  const fireNormalCore = async (buffer, { alreadyAccepted }) => {
+  const fireNormalCore = async (buffer, { alreadyAccepted, resources: acceptedResources }) => {
     // 3. 直近窓を収集。空窓なら ask を無駄撃ちしない。
     const nowMs = nowImpl();
     const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
@@ -673,21 +1147,67 @@ export function createFireOrchestrator(options) {
     const injectedChars = injection.charCount;
     const includedCount = injection.includedCount;
 
-    // 4. 受理 → thinking。ask を撃つ（劣化フォールバックは既に thinking + accept 済みなので再 emit しない）。
+    let resources = acceptedResources;
+    if (!alreadyAccepted) {
+      try {
+        resources = await acquireResources();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        emit(onDiagnostic, { type: "fireError", message });
+        return { fired: false, reason: "error", message };
+      }
+      currentFireResources = resources;
+    }
+
+    // 4. Snapshot acquired → thinking → accepted publication.
     if (!alreadyAccepted) {
       setState("thinking");
       emit(onFire, { accepted: true, injectedChars, includedCount, atMs: nowMs });
+      trace("fire.accepted.context", { injectedChars, includedCount, vision: false, ...resources.metadata });
     }
 
     try {
-      const asked = await session.ask(injectedText);
-      return await processAskedReply(buffer, asked, false, { injectedChars, includedCount });
+      const askStartedAt = performance.now();
+      trace("llm.ask.started", { vision: false, injectedChars, includedCount });
+      let asked;
+      let progressive;
+      let deliveryOutcome;
+      try {
+        ({ asked, progressive, deliveryOutcome } = await askIncrementally(injectedText, resources, buffer));
+      } catch (error) {
+        throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
+      }
+      trace("llm.ask.completed", {
+        vision: false,
+        modelOutputChars: typeof asked?.replyText === "string" ? asked.replyText.length : 0,
+        elapsedMs: typeof asked?.elapsedMs === "number" ? asked.elapsedMs : null,
+        durationMs: performance.now() - askStartedAt,
+        streamed: progressive.sawDelta,
+        progressiveSentenceCount: progressive.sentenceCount,
+        progressiveBlocked: progressive.blocked
+      });
+      const result = await processAskedReply(
+        buffer,
+        asked,
+        false,
+        { injectedChars, includedCount },
+        progressive.sawDelta ? deliveryOutcome : null,
+        resources
+      );
+      trace("fire.completed", { fired: result.fired === true, reason: result.reason ?? null });
+      return result;
     } catch (error) {
       // 失敗の握り: サーバを殺さず診断に落とす。
       const message = error instanceof Error ? error.message : String(error);
       emit(onDiagnostic, { type: "fireError", message });
+      trace("fire.failed", {
+        stage: typeof error?.diagnosticStage === "string" ? error.diagnosticStage : "fire.processing.unknown",
+        failureName: error instanceof Error ? error.name : typeof error,
+        failureCode: typeof error?.code === "string" ? error.code : "fire_processing_unknown"
+      });
       return { fired: false, reason: "error", message };
     } finally {
+      if (currentFireResources === resources) currentFireResources = null;
       // どの経路でも idle へ戻す（詰まりを残さない）。冪等 setState ゆえ二重発火なし。
       setState("idle");
     }
@@ -718,24 +1238,40 @@ export function createFireOrchestrator(options) {
       return { fired: false, reason: "vision-no-target" };
     }
 
-    // 受理 → thinking。
-    setState("thinking");
-    emit(onFire, { accepted: true, vision: true, atMs: nowImpl() });
-
+    let resources = null;
     try {
+      resources = await acquireResources();
+      currentFireResources = resources;
+      setState("thinking");
+      emit(onFire, { accepted: true, vision: true, atMs: nowImpl() });
+      trace("fire.accepted.context", { vision: true, ...resources.metadata });
       // キャプチャ。失敗（{error}）なら session.ask を呼ばずに正直に中止する（成功を捏造しない）。
+      trace("vision.capture.started");
       const captured = await captureImpl(title);
       if (captured && captured.error) {
+        trace("vision.capture.failed", { kind: captured.error.kind ?? null });
         const { kind, message } = captured.error;
         emit(onDiagnostic, { type: "fireVisionError", kind, message });
+        trace("fire.completed", { fired: false, reason: "vision-capture-failed" });
         return { fired: false, reason: "vision-capture-failed", kind };
       }
-      return await askWithVision(buffer, captured, title);
+      trace("vision.capture.completed", {
+        width: typeof captured?.width === "number" ? captured.width : null,
+        height: typeof captured?.height === "number" ? captured.height : null,
+        elapsedMs: typeof captured?.elapsedMs === "number" ? captured.elapsedMs : null
+      });
+      return await askWithVision(buffer, captured, title, resources);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       emit(onDiagnostic, { type: "fireError", message });
+      trace("fire.failed", {
+        stage: typeof error?.diagnosticStage === "string" ? error.diagnosticStage : "fire.processing.unknown",
+        failureName: error instanceof Error ? error.name : typeof error,
+        failureCode: typeof error?.code === "string" ? error.code : "fire_processing_unknown"
+      });
       return { fired: false, reason: "error", message };
     } finally {
+      if (currentFireResources === resources) currentFireResources = null;
       setState("idle");
     }
   };
@@ -761,26 +1297,42 @@ export function createFireOrchestrator(options) {
       return fireNormalCore(buffer, { alreadyAccepted: false });
     }
 
-    // 対象あり → 視覚優先。thinking + accept(vision)。
-    setState("thinking");
-    emit(onFire, { accepted: true, vision: true, atMs: nowImpl() });
-
+    let resources = null;
     try {
+      resources = await acquireResources();
+      currentFireResources = resources;
+      setState("thinking");
+      emit(onFire, { accepted: true, vision: true, atMs: nowImpl() });
+      trace("fire.accepted.context", { vision: true, preferred: true, ...resources.metadata });
+      trace("vision.capture.started", { preferred: true });
       const captured = await captureImpl(title);
       if (captured && captured.error) {
         // キャプチャ失敗 → 画像なしの通常 Fire へ静かに劣化（中止しない）。痕跡は診断で必ず残す（ゴースト行）。
         const { kind, message } = captured.error;
+        trace("vision.capture.failed", { kind: kind ?? null, preferred: true });
         emit(onDiagnostic, { type: "fireVisionDegraded", kind, message });
         // 既に thinking + accept 済みなので再 emit しない。この後 fireNormalCore の finally が idle へ戻す。
-        return await fireNormalCore(buffer, { alreadyAccepted: true });
+        return await fireNormalCore(buffer, { alreadyAccepted: true, resources });
       }
       // 成功 → 手動視覚 Fire と完全共通の視覚 ask。
-      return await askWithVision(buffer, captured, title);
+      trace("vision.capture.completed", {
+        width: typeof captured?.width === "number" ? captured.width : null,
+        height: typeof captured?.height === "number" ? captured.height : null,
+        elapsedMs: typeof captured?.elapsedMs === "number" ? captured.elapsedMs : null,
+        preferred: true
+      });
+      return await askWithVision(buffer, captured, title, resources);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       emit(onDiagnostic, { type: "fireError", message });
+      trace("fire.failed", {
+        stage: typeof error?.diagnosticStage === "string" ? error.diagnosticStage : "fire.processing.unknown",
+        failureName: error instanceof Error ? error.name : typeof error,
+        failureCode: typeof error?.code === "string" ? error.code : "fire_processing_unknown"
+      });
       return { fired: false, reason: "error", message };
     } finally {
+      if (currentFireResources === resources) currentFireResources = null;
       // fireNormalCore(alreadyAccepted:true) 経路では二重 idle になるが冪等ゆえ無害。
       setState("idle");
     }
@@ -804,7 +1356,7 @@ export function createFireOrchestrator(options) {
         return { fired: false, reason: "killed", state };
       }
       // 1. busy 中の Fire は無視（重ね発火は S4/S6 の領分・視覚発火も同一判定を共有）。
-      if (state !== "idle") {
+      if (state !== "idle" || fireClaimed) {
         emit(onFire, { accepted: false, reason: "busy" });
         return { fired: false, reason: "busy", state };
       }
@@ -815,20 +1367,25 @@ export function createFireOrchestrator(options) {
         return { fired: false, reason: "ears-not-running" };
       }
 
-      // S5/S6: 視覚系は別フローへ振り分ける。通常 fire()（fireOptions 省略 = vision undefined）の挙動は
-      // 完全不変（無退行・fireNormalCore へ抽出しただけ）。
-      //  - vision:true      → 手動視覚 Fire・自発 silence（見えなければ中止）。
-      //  - vision:"preferred" → 自発 call/turn-end（対象あれば画像付き・無/失敗なら画像なし通常発火へ劣化）。
-      const visionMode = fireOptions != null ? fireOptions.vision : undefined;
-      if (visionMode === true) {
-        return fireVision(buffer);
-      }
-      if (visionMode === "preferred") {
-        return firePreferred(buffer);
-      }
+      fireClaimed = true;
+      try {
+        // S5/S6: 視覚系は別フローへ振り分ける。通常 fire()（fireOptions 省略 = vision undefined）の挙動は
+        // 完全不変（無退行・fireNormalCore へ抽出しただけ）。
+        //  - vision:true      → 手動視覚 Fire・自発 silence（見えなければ中止）。
+        //  - vision:"preferred" → 自発 call/turn-end（対象あれば画像付き・無/失敗なら画像なし通常発火へ劣化）。
+        const visionMode = fireOptions != null ? fireOptions.vision : undefined;
+        if (visionMode === true) {
+          return await fireVision(buffer);
+        }
+        if (visionMode === "preferred") {
+          return await firePreferred(buffer);
+        }
 
-      // 3./4. 通常 Fire（画像なし）: 元インライン実装をコア関数へ抽出（挙動不変）。
-      return fireNormalCore(buffer, { alreadyAccepted: false });
+        // 3./4. 通常 Fire（画像なし）: 元インライン実装をコア関数へ抽出（挙動不変）。
+        return await fireNormalCore(buffer, { alreadyAccepted: false });
+      } finally {
+        fireClaimed = false;
+      }
     },
 
     /** barge-in 中断（S6・外部の VAD 結線が呼ぶ）。詳細は interrupt の JSDoc。 */
@@ -853,6 +1410,7 @@ export function createFireOrchestrator(options) {
     /** 畳む（以後の fire を拒否）。session/channel/player は所有しない = ここでは畳まない。 */
     dispose() {
       disposed = true;
+      if (currentProgressiveDelivery?.dispose()) currentProgressiveBoundary?.stop();
       // 発話再生中に畳まれたら、await 中の processAskedReply を安全に解放する（詰まりを残さない）。
       const pb = currentPlayback;
       if (pb && !pb.interrupted) {
@@ -875,4 +1433,31 @@ export function createFireOrchestrator(options) {
 function capitalize(s) {
   if (typeof s !== "string" || s.length === 0) return "";
   return s[0].toUpperCase() + s.slice(1);
+}
+
+/** Keep public Fire results content-free while C3 receives the full internal outcome hook. */
+function progressivePublicState(outcome) {
+  return {
+    generationId: outcome.generationId,
+    status: outcome.status,
+    terminalCause: outcome.terminalCause,
+    enqueuedSentenceCount: outcome.enqueuedSentenceCount,
+    completedSentenceCount: outcome.completedSentenceCount,
+    playedChars: typeof outcome.playedText === "string" ? outcome.playedText.length : 0
+  };
+}
+
+/** @param {unknown} error @param {string} code @param {string} diagnosticStage */
+function withDiagnostic(error, code, diagnosticStage) {
+  if (error instanceof Error) {
+    if (typeof /** @type {any} */ (error).code !== "string") /** @type {any} */ (error).code = code;
+    if (typeof /** @type {any} */ (error).diagnosticStage !== "string") {
+      /** @type {any} */ (error).diagnosticStage = diagnosticStage;
+    }
+    return /** @type {any} */ (error);
+  }
+  const failure = new Error(String(error));
+  /** @type {any} */ (failure).code = code;
+  /** @type {any} */ (failure).diagnosticStage = diagnosticStage;
+  return failure;
 }

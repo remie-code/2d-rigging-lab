@@ -59,11 +59,18 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  CONVERSATION_INSTRUCTION_BRAIN_IDS,
+  resolveConversationInstructionProfile
+} from "../mind/fire-orchestrator.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** 既定の保存先（`apps/soul/agent/cockpit-settings.local.json`・.gitignore 対象・コミットしない）。 */
 export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.local.json");
+
+/** Additive, version-tolerant key for per-technical-brain instruction overrides. */
+export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions";
 
 /**
  * file-backed settings store を作る（失敗寛容・パス注入可能・read-modify-write）。
@@ -90,6 +97,11 @@ export const DEFAULT_SETTINGS_PATH = join(here, "..", "..", "cockpit-settings.lo
  *   setBrainChoice: (choice: string | null) => void;
  *   getMemoryEnabled: () => boolean | null;
  *   setMemoryEnabled: (enabled: boolean) => void;
+ *   getConversationInstructionOverrides: () => Record<string, string>;
+ *   getConversationInstruction: (brainId: string) => string | null;
+ *   getConversationInstructionProfile: (brainId: string) => object;
+ *   setConversationInstruction: (brainId: string, instruction: string) => boolean;
+ *   resetConversationInstruction: (brainId: string) => boolean;
  * }}
  */
 export function createFileSettingsStore(options = {}) {
@@ -116,8 +128,59 @@ export function createFileSettingsStore(options = {}) {
     }
   }
 
+  /**
+   * Strict variant used by instruction persistence. Existing settings setters
+   * intentionally remain failure-tolerant; instruction revisions must only
+   * advance after this write has completed successfully.
+   * @param {Record<string, any>} patch
+   * @returns {boolean}
+   */
+  function writeMergedStrict(patch) {
+    const merged = { ...readAll(), ...patch };
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+    return true;
+  }
+
   /** @param {any} value */
   const asStringOrNull = (value) => (typeof value === "string" && value.length > 0 ? value : null);
+
+  /**
+   * Read both the current `{ version, overrides }` shape and the historical
+   * direct-map shape. Unknown ids, empty strings, and malformed values are
+   * ignored so an old/corrupt settings file cannot erase the default prompt.
+   * @returns {Record<string, string>}
+   */
+  function readConversationInstructionOverrides() {
+    const raw = readAll()[CONVERSATION_INSTRUCTIONS_SETTINGS_KEY];
+    if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const candidate =
+      raw.overrides && typeof raw.overrides === "object" && !Array.isArray(raw.overrides)
+        ? raw.overrides
+        : raw;
+    /** @type {Record<string, string>} */
+    const result = {};
+    for (const id of CONVERSATION_INSTRUCTION_BRAIN_IDS) {
+      const value = candidate[id];
+      if (typeof value === "string" && value.trim().length > 0) {
+        result[id] = value;
+      }
+    }
+    return result;
+  }
+
+  /** @param {Record<string, string>} overrides */
+  function writeConversationInstructionOverrides(overrides) {
+    /** @type {Record<string, string>} */
+    const normalized = {};
+    for (const id of CONVERSATION_INSTRUCTION_BRAIN_IDS) {
+      const value = overrides[id];
+      if (typeof value === "string" && value.trim().length > 0) normalized[id] = value;
+    }
+    return writeMergedStrict({
+      [CONVERSATION_INSTRUCTIONS_SETTINGS_KEY]: { version: 1, overrides: normalized }
+    });
+  }
 
   return {
     getLastDevice() {
@@ -192,6 +255,39 @@ export function createFileSettingsStore(options = {}) {
     /** @param {boolean} enabled */
     setMemoryEnabled(enabled) {
       writeMerged({ memoryEnabled: enabled === true });
+    },
+    getConversationInstructionOverrides() {
+      return { ...readConversationInstructionOverrides() };
+    },
+    /** @param {string} brainId */
+    getConversationInstruction(brainId) {
+      if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(brainId)) return null;
+      return readConversationInstructionOverrides()[brainId] ?? null;
+    },
+    /** @param {string} brainId */
+    getConversationInstructionProfile(brainId) {
+      return resolveConversationInstructionProfile(brainId, readConversationInstructionOverrides());
+    },
+    /** @param {string} brainId @param {string} instruction */
+    setConversationInstruction(brainId, instruction) {
+      if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(brainId)) {
+        throw new TypeError("invalid conversation instruction brain id");
+      }
+      if (typeof instruction !== "string" || instruction.trim().length === 0) {
+        throw new TypeError("conversation instruction must be a non-empty string");
+      }
+      const overrides = readConversationInstructionOverrides();
+      overrides[brainId] = instruction;
+      return writeConversationInstructionOverrides(overrides);
+    },
+    /** @param {string} brainId */
+    resetConversationInstruction(brainId) {
+      if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(brainId)) {
+        throw new TypeError("invalid conversation instruction brain id");
+      }
+      const overrides = readConversationInstructionOverrides();
+      delete overrides[brainId];
+      return writeConversationInstructionOverrides(overrides);
     }
   };
 }

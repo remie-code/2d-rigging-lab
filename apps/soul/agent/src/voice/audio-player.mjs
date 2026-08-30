@@ -20,12 +20,14 @@
  * ── 行プロトコル（PLAY/STOP + 状態応答行）──────────────────────────────────────
  *  Node → PS（stdin, 1 行 1 コマンド）:
  *    "PLAY <wavPath>"  非同期再生開始（Source 差し替え + Play()）。前の声は置換される。
+ *    "PLAYID\t<playbackId>\t<wavPath>"  generation-qualified 再生開始（Wave 2 additive）。
  *    "STOP"            再生中の声を途中停止（Pause + Source=null）。barge-in 用。
  *  PS → Node（stdout, 1 行 1 応答・タブ区切り <marker>\t<arg>）:
  *    "STARTED\t<path>" 再生開始を受理した（isPlaying = true）。
  *    "ENDED\t<path>"   自然完了を検出した（Position が NaturalDuration に到達）。
  *    "STOPPED\t<path>" STOP で途中停止した。
  *    "ERROR\t<message>" Source 設定/再生の失敗（常駐は継続）。
+ *  PLAYID の応答は marker と path の間に同じ playbackId を返す。legacy PLAY の byte protocol は不変。
  *  出力デバイス指定は env `SOUL_AUDIO_DEVICE_NAME`（起動時に PS が列挙して名前一致の DeviceInformation を
  *  AudioDevice にセット・未指定/不一致なら既定デバイス）。
  *
@@ -36,7 +38,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, rmdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -86,6 +88,7 @@ $charBuf = New-Object char[] 4096
 $lineBuf = ''
 $readTask = $null
 $currentPath = $null
+$currentPlaybackId = $null
 $playing = $false
 $sawPlaying = $false
 function Handle-Line($line) {
@@ -94,15 +97,27 @@ function Handle-Line($line) {
   if ($line -eq 'STOP') {
     try { $script:player.Pause() } catch {}
     try { $script:player.Source = $null } catch {}
-    Write-Output ('STOPPED' + [char]9 + $script:currentPath)
-    $script:playing = $false; $script:sawPlaying = $false; $script:currentPath = $null
+    if ($script:currentPlaybackId) { Write-Output ('STOPPED' + [char]9 + $script:currentPlaybackId + [char]9 + $script:currentPath) }
+    else { Write-Output ('STOPPED' + [char]9 + $script:currentPath) }
+    $script:playing = $false; $script:sawPlaying = $false; $script:currentPath = $null; $script:currentPlaybackId = $null
+  } elseif ($line.StartsWith('PLAYID' + [char]9)) {
+    $parts = $line -split ([char]9), 3
+    $id = $parts[1]
+    $p = $parts[2].Trim()
+    try {
+      $uri = New-Object System.Uri($p)
+      $script:player.Source = [Windows.Media.Core.MediaSource]::CreateFromUri($uri)
+      $script:player.Play()
+      $script:currentPath = $p; $script:currentPlaybackId = $id; $script:playing = $true; $script:sawPlaying = $false
+      Write-Output ('STARTED' + [char]9 + $id + [char]9 + $p)
+    } catch { Write-Output ('ERROR' + [char]9 + $id + [char]9 + $p + [char]9 + $_.Exception.Message); $script:playing = $false; $script:currentPath = $null; $script:currentPlaybackId = $null }
   } elseif ($line.StartsWith('PLAY ')) {
     $p = $line.Substring(5).Trim()
     try {
       $uri = New-Object System.Uri($p)
       $script:player.Source = [Windows.Media.Core.MediaSource]::CreateFromUri($uri)
       $script:player.Play()
-      $script:currentPath = $p; $script:playing = $true; $script:sawPlaying = $false
+      $script:currentPath = $p; $script:currentPlaybackId = $null; $script:playing = $true; $script:sawPlaying = $false
       Write-Output ('STARTED' + [char]9 + $p)
     } catch { Write-Output ('ERROR' + [char]9 + $_.Exception.Message); $script:playing = $false; $script:currentPath = $null }
   }
@@ -130,8 +145,9 @@ while ($true) {
     $pos = $session.Position.TotalMilliseconds
     $dur = $session.NaturalDuration.TotalMilliseconds
     if ($sawPlaying -and $state -ne $Playing -and $state -ne $Opening -and $state -ne $Buffering -and $dur -gt 0 -and $pos -ge ($dur - 80)) {
-      Write-Output ('ENDED' + [char]9 + $currentPath)
-      $playing = $false; $sawPlaying = $false; $currentPath = $null
+      if ($currentPlaybackId) { Write-Output ('ENDED' + [char]9 + $currentPlaybackId + [char]9 + $currentPath) }
+      else { Write-Output ('ENDED' + [char]9 + $currentPath) }
+      $playing = $false; $sawPlaying = $false; $currentPath = $null; $currentPlaybackId = $null
     }
   }
 }
@@ -172,15 +188,40 @@ const DEFAULT_ARGS = [
  * @returns {string}  書き出した WAV ファイルの絶対パス。
  */
 export function writeTempWav(bytes, options = {}) {
+  return writeOwnedTempWav(bytes, options).wavPath;
+}
+
+/**
+ * Write a WAV and return exact cleanup ownership. Only a directory created by
+ * this call is removable; caller-provided directories are never inferred.
+ * @param {Uint8Array} bytes
+ * @param {{dir?: string; prefix?: string}} [options]
+ * @returns {{wavPath: string; ownedDirectory: string | null; cleanup: () => boolean}}
+ */
+export function writeOwnedTempWav(bytes, options = {}) {
   if (!(bytes instanceof Uint8Array)) {
-    throw new TypeError("writeTempWav(bytes): bytes must be a Uint8Array.");
+    throw new TypeError("writeOwnedTempWav(bytes): bytes must be a Uint8Array.");
   }
+  const ownsDirectory = options.dir == null;
   const dir = options.dir ?? mkdtempSync(path.join(tmpdir(), "soul-agent-"));
   const prefix = options.prefix ?? "utterance-";
   const fileName = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`;
   const filePath = path.join(dir, fileName);
   writeFileSync(filePath, bytes);
-  return filePath;
+  let cleaned = false;
+  return {
+    wavPath: filePath,
+    ownedDirectory: ownsDirectory ? dir : null,
+    cleanup() {
+      if (cleaned) return false;
+      cleaned = true;
+      try { rmSync(filePath, { force: true }); } catch {}
+      if (ownsDirectory) {
+        try { rmdirSync(dir); } catch {}
+      }
+      return true;
+    }
+  };
 }
 
 /**
@@ -204,7 +245,7 @@ const MARK_ERROR = "ERROR";
  * @param {(line: string) => void} [options.onOutput]  子プロセス stdout の 1 行ごと（状態応答の観測用）。
  * @param {(line: string) => void} [options.onError]  子プロセス stderr の 1 行ごと（再生失敗の観測用）。
  * @returns {{
- *   play: (wavPath: string) => void;
+ *   play: (wavPath: string, playbackId?: string) => void;
  *   stop: () => void;
  *   isPlaying: () => boolean;
  *   dispose: () => void;
@@ -267,15 +308,23 @@ export function createAudioPlayer(options = {}) {
      * 再生指示を送る（非ブロッキング＝指示送出のみ・完了は待たない）。
      * MediaPlayer は非同期なので stdin ループは生きたまま = この後 stop() も届く。
      * @param {string} wavPath  再生する WAV の絶対パス。
+     * @param {string} [playbackId] generation-qualified marker authentication token。
      */
-    play(wavPath) {
+    play(wavPath, playbackId) {
       if (disposed) {
         throw new Error("audio player already disposed.");
       }
       if (typeof wavPath !== "string" || wavPath.length === 0) {
         throw new TypeError("play(wavPath): wavPath must be a non-empty string.");
       }
-      writeCommand(`PLAY ${wavPath}`);
+      if (playbackId != null) {
+        if (typeof playbackId !== "string" || playbackId.length === 0 || /[\r\n\t]/.test(playbackId)) {
+          throw new TypeError("play(wavPath, playbackId): playbackId must be a non-empty single-line token.");
+        }
+        writeCommand(`PLAYID\t${playbackId}\t${wavPath}`);
+      } else {
+        writeCommand(`PLAY ${wavPath}`);
+      }
     },
     /**
      * 再生中の声を途中で止める（barge-in 用・Domain B が呼ぶ）。

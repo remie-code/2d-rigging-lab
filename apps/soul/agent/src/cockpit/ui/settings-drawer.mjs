@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * ui: 設定引き出し（⚙ で開閉・cockpit-redesign.md §3/§7: 接続 / 入出力の区画見出し・
+ * ui: Cockpit Settings modal（⚙ で開閉・cockpit-redesign.md §3/§7: 接続 / 入出力の区画見出し・
  * ラベル幅揃え・select は chevron 付き・状態は色ドット + 文言・角丸 14px パネル・普段は畳む）。
  *
  * 現 cockpit.html の設定系セクションの移植先:
@@ -10,10 +10,9 @@
  *  - 各区画のエラー欄: devices-error（:168）→ マイク行 / channel-error（:177）→ Channel 行 /
  *    chat-error（:188）→ chat 行 / vision-error（:198）→ 視界行 / conversation-error（:212）は
  *    IA 再配置で分割 —— 音声出力系はここ（声の出力先行）・自発トグル系は運転バー（control-bar.mjs）。
- *  - 頭脳（多頭化 Domain C・brain-swap-wave-plan.md §3）: 「声の出力先」行の写経で新区画を追加。
- *    select（claude/codex の 2 択・BRAIN_LABELS＝ BRAINS[*].label 相当を view-logic に直書き）+
- *    Set ボタン（POST /api/brain）+ drawer-note に現在の頭ラベル + 資格情報の健康表示
- *    （brainCredentialHealthLabel・boolean の文言化のみ・中身は扱わない）。
+ *  - 頭脳・会話（Domain C）: technical brain の選択/Set に加え、同じダイアログ内で
+ *    conversation-instruction editor へ切り替える。編集本文だけを dedicated API へ保存し、
+ *    identity と memory structure は読み取り専用で表示する。
  *  - 記憶（配信間記憶・stream-memory-wave-plan.md §3 Domain B）: 頭脳区画の写経で新区画を追加。
  *    ON/OFF トグル（memoryToggleView・POST /api/memory・controlled component=selfFire/bargeIn pill と
  *    同型の一方向データフロー）+「今日を記録」ボタン（POST /api/memory-record）+ drawer-note に
@@ -35,7 +34,7 @@
  * ワイヤ契約上安全）。開閉は CSS（.open クラス）で行い、コンポーネントは常時 mount
  * = 初期ロードは 1 回だけ・入力欄のローカル状態は開閉で消えない。
  *
- * props 契約（app.mjs が結線する・domain-b.md §2）:
+ * props 契約（app.mjs が結線する・domain-b.md §2 / Domain C editor integration）:
  *  - open:          boolean       開閉状態（⚙ トグル・初回自動展開の判定は app.mjs）。
  *  - onClose:       () => void    ✕ ボタン。
  *  - settings:      settingsFromSnapshot の値（channel/visionTarget/selfFire/audioDevice/chat 生現況）。
@@ -68,6 +67,11 @@ import {
 } from "../view-logic/settings.mjs";
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
+import {
+  CONVERSATION_INSTRUCTION_BRAIN_IDS,
+  createConversationInstructionController
+} from "../view-logic/conversation-instruction.mjs";
+import { ConversationInstructionEditor } from "./conversation-instruction-editor.mjs";
 
 /**
  * 頭脳 select の選択肢（多頭化 Domain C）。BRAIN_LABELS（view-logic/health.mjs）から機械的に組み立てる
@@ -108,7 +112,130 @@ export function DrawerStatus({ view }) {
  * @param {{ open?: boolean; onClose?: () => void; settings: any; chatDisplay?: string | null;
  *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
  */
-export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnapshot, fetchImpl }) {
+export const SETTINGS_CATEGORIES = Object.freeze([
+  Object.freeze({ id: "connections", label: "接続" }),
+  Object.freeze({ id: "input-output", label: "入出力" }),
+  Object.freeze({ id: "brain-conversation", label: "頭脳・会話" }),
+  Object.freeze({ id: "memory", label: "記憶" })
+]);
+
+/** @param {string} currentId @param {string} key @returns {string} */
+export function settingsModalNextCategory(currentId, key) {
+  const index = SETTINGS_CATEGORIES.findIndex((category) => category.id === currentId);
+  if (index < 0) return SETTINGS_CATEGORIES[0].id;
+  if (key === "Home") return SETTINGS_CATEGORIES[0].id;
+  if (key === "End") return SETTINGS_CATEGORIES[SETTINGS_CATEGORIES.length - 1].id;
+  if (key === "ArrowLeft") return SETTINGS_CATEGORIES[(index - 1 + SETTINGS_CATEGORIES.length) % SETTINGS_CATEGORIES.length].id;
+  if (key === "ArrowRight") return SETTINGS_CATEGORIES[(index + 1) % SETTINGS_CATEGORIES.length].id;
+  return currentId;
+}
+
+/**
+ * Deterministic seam used by the real dialog key handler. Navigation is
+ * delegated to the caller, which supplies the same guarded category action
+ * used by tab clicks; focus is therefore moved only after that action is
+ * accepted (or after explicit discard of a dirty draft).
+ * @param {{ tabs: Array<any>; currentIndex: number; key: string; onNavigate: (nextId: string, after?: () => void) => void }} input
+ * @returns {string | null}
+ */
+export function settingsModalKeyboardCategoryAction({ tabs, currentIndex, key, onNavigate }) {
+  if (!Array.isArray(tabs) || currentIndex < 0 || currentIndex >= tabs.length) return null;
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return null;
+  const currentTab = tabs[currentIndex];
+  const currentId = currentTab && typeof currentTab.id === "string"
+    ? currentTab.id.replace("cockpit-settings-tab-", "")
+    : "";
+  const nextId = settingsModalNextCategory(currentId, key);
+  const nextTab = tabs.find((tab) => tab && tab.id === "cockpit-settings-tab-" + nextId);
+  if (!nextTab) return null;
+  onNavigate(nextId, () => {
+    if (typeof nextTab.focus === "function") nextTab.focus();
+  });
+  return nextId;
+}
+
+/**
+ * Shared executable navigation seam for every close/back/category/brain path.
+ * @param {{ dirty?: boolean; action: () => void; onPrompt: (action: () => void) => void }} input
+ * @returns {"prompt" | "proceed"}
+ */
+export function settingsModalGuardedNavigation({ dirty, action, onPrompt }) {
+  if (settingsModalCloseAction({ dirty }) === "prompt") {
+    onPrompt(action);
+    return "prompt";
+  }
+  action();
+  return "proceed";
+}
+
+/**
+ * Shared fake-only event routing seam. The mounted handlers below all call
+ * this through `runGuardedNavigation`; keeping the event kind explicit makes
+ * the dirty contract executable without a DOM dependency.
+ * @param {{ eventType: string; dirty?: boolean; action: () => void; onPrompt: (action: () => void) => void }} input
+ * @returns {"prompt" | "proceed" | null}
+ */
+export function settingsModalEventRoute({ eventType, dirty, action, onPrompt }) {
+  if (!["close", "back", "category-click", "category-keyboard", "brain"].includes(eventType)) return null;
+  return settingsModalGuardedNavigation({ dirty, action, onPrompt });
+}
+
+/** @param {{ dirty?: boolean }} state @returns {"prompt" | "close"} */
+export function settingsModalCloseAction(state) {
+  return state && state.dirty ? "prompt" : "close";
+}
+
+/** @param {number} index @param {number} length @param {boolean} shift @returns {number} */
+export function settingsModalFocusBoundary(index, length, shift) {
+  if (length <= 0) return -1;
+  if (shift && index <= 0) return length - 1;
+  if (!shift && index >= length - 1) return 0;
+  return index;
+}
+
+/** @param {Array<any>} nodes @returns {Array<any>} */
+export function settingsModalFocusableNodes(nodes) {
+  return nodes.filter((node) => {
+    const element = /** @type {any} */ (node);
+    return !element.closest?.("[hidden]") && element.getAttribute?.("aria-hidden") !== "true";
+  });
+}
+
+/** @param {Array<any>} nodes @returns {any | null} */
+export function settingsModalFocusEntryTarget(nodes) {
+  return settingsModalFocusableNodes(nodes)[0] || null;
+}
+
+/** @param {any} previous @param {boolean} open @returns {any | null} */
+export function settingsModalFocusReturnTarget(previous, open) {
+  return open ? null : previous || null;
+}
+
+/**
+ * Accessible Cockpit Settings modal. The component stays mounted while closed
+ * so immediate-control input state survives a close/reopen cycle. The
+ * conversation editor is a page within this same dialog; it never creates a
+ * nested dialog or changes existing immediate-setting endpoint handlers.
+ *
+ * @param {{ open?: boolean; onClose?: () => void; settings: any; chatDisplay?: string | null;
+ *   applySnapshot: (s: any) => void; fetchImpl?: any; promptEditorSlot?: any;
+ *   draftDirty?: boolean; dirty?: boolean; onDiscardDraft?: () => void; onContinueDraft?: () => void;
+ *   closeRequestRef?: { current: (() => void) | null } }} props
+ */
+export function CockpitSettingsModal({
+  open,
+  onClose,
+  settings,
+  chatDisplay,
+  applySnapshot,
+  fetchImpl,
+  promptEditorSlot,
+  draftDirty = false,
+  dirty = false,
+  onDiscardDraft,
+  onContinueDraft,
+  closeRequestRef
+}) {
   // ── マイク（:163-169 :697-750）──
   const [micOptions, setMicOptions] = useState(/** @type {Array<{value:string;label:string}>} */ ([]));
   const [micSelected, setMicSelected] = useState("");
@@ -138,8 +265,180 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
   const [memoryError, setMemoryError] = useState("");
   const [recordBusy, setRecordBusy] = useState(false); // 「今日を記録」の連打防止（Fire ボタンの localBusy と同型）。
 
+  const [activeCategory, setActiveCategory] = useState("connections");
+  const [conversationEditorOpen, setConversationEditorOpen] = useState(false);
+  const [conversationEditorVersion, setConversationEditorVersion] = useState(0);
+  const conversationEditorRef = useRef(/** @type {any} */ (null));
+  if (!conversationEditorRef.current) {
+    conversationEditorRef.current = createConversationInstructionController({
+      fetchImpl,
+      onChange: () => setConversationEditorVersion((value) => value + 1)
+    });
+  }
+  const conversationEditor = conversationEditorRef.current;
+  // Reading the version makes the controller's injected change hook an
+  // explicit render dependency while keeping the state itself outside JSX.
+  void conversationEditorVersion;
+  const conversationEditorState = conversationEditor.getState(brainSelected);
+  const currentSnapshotBrain = settings && settings.brain && settings.brain.brain;
+  const [closeWarning, setCloseWarning] = useState(false);
+  const pendingNavigationRef = useRef(/** @type {(() => void) | null} */ (null));
+  const dialogRef = useRef(/** @type {HTMLElement | null} */ (null));
+  const previousFocusRef = useRef(/** @type {HTMLElement | null} */ (null));
+  const wasOpenRef = useRef(false);
+  const isDraftDirty = !!(draftDirty || dirty || (conversationEditorOpen && conversationEditorState.dirty));
   const doFetch = (/** @type {string} */ path, /** @type {any} */ init) =>
     (fetchImpl || globalThis.fetch)(path, init);
+
+  const runGuardedNavigation = (/** @type {() => void} */ action, /** @type {string} */ eventType = "close") => {
+    settingsModalEventRoute({
+      eventType,
+      dirty: isDraftDirty,
+      action,
+      onPrompt: (pendingAction) => {
+        pendingNavigationRef.current = pendingAction;
+        setCloseWarning(true);
+      }
+    });
+  };
+
+  const requestClose = () => {
+    runGuardedNavigation(() => {
+      setCloseWarning(false);
+      if (typeof onClose === "function") onClose();
+    }, "close");
+  };
+
+  const discardCurrentConversationDraft = () => {
+    conversationEditor.discard(brainSelected);
+    if (typeof onDiscardDraft === "function") onDiscardDraft();
+  };
+
+  const continueCurrentConversationDraft = () => {
+    setCloseWarning(false);
+    pendingNavigationRef.current = null;
+    if (typeof onContinueDraft === "function") onContinueDraft();
+  };
+
+  const completeDiscardNavigation = () => {
+    discardCurrentConversationDraft();
+    setCloseWarning(false);
+    const action = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    if (action) action();
+  };
+
+  const requestCategory = (
+    /** @type {string} */ categoryId,
+    /** @type {(() => void) | undefined} */ afterNavigation,
+    /** @type {string} */ eventType = "category-click"
+  ) => {
+    if (categoryId === activeCategory && (!conversationEditorOpen || categoryId === "brain-conversation")) return;
+    runGuardedNavigation(() => {
+      setActiveCategory(categoryId);
+      if (categoryId !== "brain-conversation") setConversationEditorOpen(false);
+      if (typeof afterNavigation === "function") afterNavigation();
+    }, eventType);
+  };
+
+  const requestEditorBack = () => runGuardedNavigation(() => setConversationEditorOpen(false), "back");
+
+  const requestEditorBrain = (/** @type {any} */ ev) => {
+    const nextBrain = ev && ev.target ? ev.target.value : "";
+    if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(nextBrain)) return;
+    if (nextBrain === brainSelected) return;
+    runGuardedNavigation(() => setBrainSelected(nextBrain), "brain");
+  };
+
+  useEffect(() => {
+    if (CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(currentSnapshotBrain) && !conversationEditorOpen) {
+      setBrainSelected(currentSnapshotBrain);
+    }
+  }, [currentSnapshotBrain, conversationEditorOpen]);
+
+  useEffect(() => {
+    if (conversationEditorOpen && !conversationEditorState.loaded && conversationEditorState.status === "idle") {
+      conversationEditor.load(brainSelected);
+    }
+  }, [conversationEditorOpen, brainSelected, conversationEditorState.loaded, conversationEditorState.status]);
+
+  useEffect(() => {
+    if (!isDraftDirty && closeWarning) {
+      setCloseWarning(false);
+      pendingNavigationRef.current = null;
+    }
+  }, [isDraftDirty, closeWarning]);
+
+  // The header gear uses this ref when the modal is already open, so dirty
+  // drafts cannot be closed by bypassing the shell's close guard.
+  useEffect(() => {
+    if (!closeRequestRef || typeof closeRequestRef !== "object") return undefined;
+    closeRequestRef.current = requestClose;
+    return () => {
+      if (closeRequestRef.current === requestClose) closeRequestRef.current = null;
+    };
+  }, [closeRequestRef, open, isDraftDirty, onClose, onDiscardDraft, onContinueDraft]);
+
+  // One modal owns focus entry/containment/return and Escape handling.
+  useEffect(() => {
+    const doc = globalThis.document;
+    if (!open || !doc || !dialogRef.current) {
+      const returnTarget = settingsModalFocusReturnTarget(previousFocusRef.current, open);
+      if (!open && wasOpenRef.current && returnTarget) {
+        returnTarget.focus();
+        previousFocusRef.current = null;
+      }
+      wasOpenRef.current = !!open;
+      return undefined;
+    }
+    if (!wasOpenRef.current) {
+      previousFocusRef.current = /** @type {HTMLElement | null} */ (doc.activeElement);
+      const first = settingsModalFocusEntryTarget(Array.from(dialogRef.current.querySelectorAll("[data-cockpit-settings-focus], button, input, select, textarea")));
+      if (first && typeof first.focus === "function") first.focus();
+    }
+    wasOpenRef.current = true;
+    const dialog = dialogRef.current;
+    const onKeyDown = (/** @type {KeyboardEvent} */ ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        requestClose();
+        return;
+      }
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(ev.key)) {
+        const tabs = Array.from(dialog.querySelectorAll("[role='tab']"));
+        const currentIndex = tabs.indexOf(doc.activeElement);
+        if (currentIndex >= 0) {
+          const nextId = settingsModalKeyboardCategoryAction({
+            tabs,
+            currentIndex,
+            key: ev.key,
+            onNavigate: (nextId, after) => requestCategory(nextId, after, "category-keyboard")
+          });
+          if (nextId) {
+            ev.preventDefault();
+            return;
+          }
+        }
+      }
+      if (ev.key !== "Tab") return;
+      const focusable = settingsModalFocusableNodes(Array.from(dialog.querySelectorAll("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])")));
+      if (focusable.length === 0) return;
+      const first = /** @type {HTMLElement} */ (focusable[0]);
+      const last = /** @type {HTMLElement} */ (focusable[focusable.length - 1]);
+      const current = doc.activeElement;
+      const currentIndex = focusable.indexOf(current);
+      const boundaryIndex = settingsModalFocusBoundary(currentIndex, focusable.length, ev.shiftKey);
+      if (ev.shiftKey && current === first) {
+        ev.preventDefault();
+        /** @type {HTMLElement} */ (focusable[boundaryIndex]).focus();
+      } else if (!ev.shiftKey && current === last) {
+        ev.preventDefault();
+        /** @type {HTMLElement} */ (focusable[boundaryIndex]).focus();
+      }
+    };
+    dialog.addEventListener("keydown", onKeyDown);
+    return () => dialog.removeEventListener("keydown", onKeyDown);
+  }, [open, isDraftDirty, onClose, onDiscardDraft, onContinueDraft]);
 
   /** マイク一覧の取得（loadDevices :704-726・lastDevice 初期選択 :721）。 */
   const loadDevices = () =>
@@ -415,12 +714,35 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
   const memoryView = memoryToggleView(settings && settings.memory);
 
   return html`
-    <section class=${"settings-drawer" + (open ? " open" : "")} aria-label="settings drawer">
-      <div class="drawer-head">
-        <h2>設定</h2>
-        <button class="drawer-close" type="button" aria-label="close settings" onClick=${onClose}>✕</button>
+    <div class="cockpit-settings-backdrop" data-open=${open ? "true" : "false"} hidden=${!open}
+      onClick=${(/** @type {any} */ ev) => { if (ev && ev.target === ev.currentTarget) requestClose(); }}>
+    <section id="cockpit-settings-dialog" ref=${dialogRef}
+      class=${"cockpit-settings-modal" + (open ? " open" : "")}
+      role="dialog" aria-modal="true" aria-labelledby="cockpit-settings-title" tabIndex="-1">
+      <div class="drawer-head cockpit-settings-head">
+        <h2 id="cockpit-settings-title">Cockpit Settings</h2>
+        <button class="cockpit-settings-close" type="button" aria-label="Close settings" data-cockpit-settings-focus="true" onClick=${requestClose}>Close</button>
       </div>
-      <div class="drawer-section">
+      <nav class="cockpit-settings-tabs" aria-label="Settings categories" role="tablist">
+        ${SETTINGS_CATEGORIES.map((category) => html`
+          <button key=${category.id} id=${"cockpit-settings-tab-" + category.id}
+            class="cockpit-settings-tab" type="button" role="tab"
+            aria-selected=${activeCategory === category.id}
+            aria-controls=${"cockpit-settings-panel-" + category.id}
+            tabIndex=${activeCategory === category.id ? 0 : -1}
+            onClick=${() => requestCategory(category.id)}>${category.label}</button>
+          `)}
+      </nav>
+      ${closeWarning ? html`
+        <div class="cockpit-settings-dirty-warning" role="status" aria-live="polite">
+          <span>未保存の会話指示があります。</span>
+          <button type="button" onClick=${completeDiscardNavigation}>破棄して続ける</button>
+          <button type="button" onClick=${continueCurrentConversationDraft}>編集を続ける</button>
+        </div>
+      ` : null}
+      <div id="cockpit-settings-panel-connections" role="tabpanel"
+        aria-labelledby="cockpit-settings-tab-connections" hidden=${activeCategory !== "connections"}>
+      <div class="drawer-section" data-settings-category="connections" hidden=${activeCategory !== "connections"}>
         <h3>接続</h3>
         <div class="drawer-row">
           <label for="channel-url">器（Channel）</label>
@@ -472,7 +794,8 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
           <span class="err">${chatError}</span>
         </div>
       </div>
-      <div class="drawer-section">
+      </div>
+      <div id="cockpit-settings-panel-input-output" class="drawer-section" data-settings-category="input-output" role="tabpanel" aria-labelledby="cockpit-settings-tab-input-output" hidden=${activeCategory !== "input-output"}>
         <h3>入出力</h3>
         <div class="drawer-row">
           <label for="device-select">マイク</label>
@@ -524,26 +847,52 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
           <span class="err">${visionError}</span>
         </div>
       </div>
-      <div class="drawer-section">
-        <h3>頭脳</h3>
-        <div class="drawer-row">
-          <label for="brain-select">頭脳</label>
-          <${SettingsSelect}
-            id="brain-select"
-            className="drawer-select brain-select"
-            options=${BRAIN_OPTIONS}
-            value=${brainSelected}
-            onChange=${(/** @type {any} */ ev) => setBrainSelected(ev && ev.target ? ev.target.value : "")}
-          />
-          <button class="btn-brain-set" type="button" onClick=${onBrainSet}>Set</button>
-        </div>
-        <div class="drawer-note">
-          <span class="brain-status">${brainLabel(settings && settings.brain)}</span>
-          <span class="brain-credential-status">${brainCredentialHealthLabel(settings && settings.brain)}</span>
-          <span class="err">${brainError}</span>
-        </div>
+      <div id="cockpit-settings-panel-brain-conversation" class="drawer-section" data-settings-category="brain-conversation" role="tabpanel" aria-labelledby="cockpit-settings-tab-brain-conversation" hidden=${activeCategory !== "brain-conversation"}>
+        ${conversationEditorOpen ? html`
+          <div class="cockpit-settings-prompt-slot" data-prompt-editor-slot>
+            ${promptEditorSlot || html`
+              <${ConversationInstructionEditor}
+                brainId=${brainSelected}
+                brainLabel=${BRAIN_LABELS[brainSelected] || "unknown"}
+                identity=${settings && settings.brain ? settings.brain.identity : null}
+                activeBrainId=${currentSnapshotBrain || null}
+                memory=${settings && settings.memory}
+                state=${conversationEditorState}
+                onBrainChange=${requestEditorBrain}
+                onBack=${requestEditorBack}
+                onEdit=${(/** @type {any} */ ev) => conversationEditor.edit(brainSelected, ev && ev.target ? ev.target.value : "")}
+                onSave=${() => conversationEditor.save(brainSelected)}
+                onReset=${() => conversationEditor.reset(brainSelected)}
+              />
+            `}
+          </div>
+        ` : html`
+          <h3>頭脳</h3>
+          <div class="drawer-row">
+            <label for="brain-select">頭脳</label>
+            <${SettingsSelect}
+              id="brain-select"
+              className="drawer-select brain-select"
+              options=${BRAIN_OPTIONS}
+              value=${brainSelected}
+              onChange=${(/** @type {any} */ ev) => setBrainSelected(ev && ev.target ? ev.target.value : "")}
+            />
+            <button class="btn-brain-set" type="button" onClick=${onBrainSet}>Set</button>
+          </div>
+          <div class="drawer-note">
+            <span class="brain-status">${brainLabel(settings && settings.brain)}</span>
+            <span class="brain-credential-status">${brainCredentialHealthLabel(settings && settings.brain)}</span>
+            <span class="err">${brainError}</span>
+          </div>
+          <button class="conversation-instruction-open" type="button" onClick=${() => {
+            setConversationEditorOpen(true);
+            conversationEditor.load(brainSelected);
+          }}>
+            会話指示を編集
+          </button>
+        `}
       </div>
-      <div class="drawer-section">
+      <div id="cockpit-settings-panel-memory" class="drawer-section" data-settings-category="memory" role="tabpanel" aria-labelledby="cockpit-settings-tab-memory" hidden=${activeCategory !== "memory"}>
         <h3>記憶</h3>
         <div class="drawer-row">
           <label for="memory-toggle">記憶</label>
@@ -566,5 +915,10 @@ export function SettingsDrawer({ open, onClose, settings, chatDisplay, applySnap
         </div>
       </div>
     </section>
+    </div>
   `;
 }
+
+// Backwards-compatible name retained for existing imports while the rendered
+// surface is now the accessible Cockpit Settings modal.
+export const SettingsDrawer = CockpitSettingsModal;

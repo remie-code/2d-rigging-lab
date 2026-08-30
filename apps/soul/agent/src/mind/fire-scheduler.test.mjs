@@ -191,6 +191,134 @@ test("call: 自発 OFF 中・busy 中は呼びかけでも発火要求を出さ�
   sch.dispose();
 });
 
+test("call: nameVariantsProvider は scheduler を作り直さず handling 時点の現在 identity を使う", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  let activeVariants = ["コーディ", "コーディー", "コーティ", "コーティー"];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    nowImpl: clock.now,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    nameVariantsProvider: () => activeVariants
+  });
+
+  sch.handleTranscript(you("コーディこれ見て"));
+  activeVariants = ["チャッピー", "ちゃっぴー"];
+  // GPT identity へ切り替え後、旧 family は no longer active。
+  sch.handleTranscript(you("コーディーまだいる?"));
+  sch.handleTranscript(you("チャッピーこれ見て"));
+  assert.deepEqual(reqs.map((r) => r.kind), ["call", "call"]);
+  sch.dispose();
+});
+
+test("call: Chappy の voice variants 全値だけを handling 時点で受理し、未列挙 mixed-case は拒否する", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  let providerCalls = 0;
+  const chappyVoiceVariants = ["チャッピー", "ちゃっぴー"];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    nowImpl: clock.now,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    nameVariantsProvider: () => {
+      providerCalls += 1;
+      return chappyVoiceVariants;
+    }
+  });
+
+  assert.equal(providerCalls, 0, "provider is not read while constructing scheduler");
+  for (const variant of chappyVoiceVariants) sch.handleTranscript(you(variant));
+  sch.handleTranscript(you("ChApPy")); // accepted table does not include arbitrary mixed-case.
+  sch.handleTranscript(you("コーディ")); // old family is inactive after the provider switch.
+  assert.equal(providerCalls, 4);
+  assert.deepEqual(reqs.map((r) => r.kind), ["call", "call"]);
+  sch.dispose();
+});
+
+test("comment-call: commentNameVariantsProvider は handling 時点で更新され、旧 family を無効化する", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  let activeVariants = ["Cody", "cody", "CODY", "コーディ", "コーディー", "コーティ", "コーティー", "こーでぃー"];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    nowImpl: clock.now,
+    rng: rngMiss,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    commentNameVariantsProvider: () => activeVariants,
+    // comment の確率経路はこのテストの対象外（呼びかけのみ）。
+    commentBudget: 0
+  });
+
+  sch.handleChatMessage({ text: "Cody これ見て", displayName: "viewer" });
+  activeVariants = ["Chappy", "chappy", "CHAPPY", "チャッピー", "ちゃっぴー"];
+  sch.handleChatMessage({ text: "CODY まだいる?", displayName: "viewer" });
+  sch.handleChatMessage({ text: "チャッピーこれ見て", displayName: "viewer" });
+  assert.deepEqual(reqs.map((r) => r.kind), ["comment-call", "comment-call"]);
+  sch.dispose();
+});
+
+test("comment-call: Chappy の comment variants 全値だけを受理し、未列挙 mixed-case/旧 family は拒否する", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  let providerCalls = 0;
+  const chappyCommentVariants = ["Chappy", "chappy", "CHAPPY", "チャッピー", "ちゃっぴー"];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    nowImpl: clock.now,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    commentBudget: 0,
+    commentNameVariantsProvider: () => {
+      providerCalls += 1;
+      return chappyCommentVariants;
+    }
+  });
+
+  assert.equal(providerCalls, 0, "provider is not read while constructing scheduler");
+  for (const variant of chappyCommentVariants) sch.handleChatMessage({ text: variant, displayName: "viewer" });
+  sch.handleChatMessage({ text: "ChApPy" }); // unlisted mixed-case must stay inactive.
+  sch.handleChatMessage({ text: "Cody" }); // old family is inactive after the provider switch.
+  assert.equal(providerCalls, 7);
+  assert.deepEqual(reqs.map((r) => r.kind), ["comment-call", "comment-call", "comment-call", "comment-call", "comment-call"]);
+  sch.dispose();
+});
+
+test("scheduler: literal custom arrays remain active and invalid/non-function providers safely fall back", () => {
+  const clock = makeFakeClock();
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    nowImpl: clock.now,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    commentBudget: 0,
+    nameVariants: ["LocalVoice"],
+    commentNameVariants: ["LocalComment"],
+    nameVariantsProvider: /** @type {any} */ ("not a function"),
+    commentNameVariantsProvider: () => /** @type {any} */ ("not an array")
+  });
+
+  sch.handleTranscript(you("LocalVoice"));
+  sch.handleTranscript(you("コーディ")); // default Cody set is replaced by explicit literal array.
+  sch.handleChatMessage({ text: "LocalComment", displayName: "viewer" });
+  sch.handleChatMessage({ text: "Cody", displayName: "viewer" }); // invalid provider falls back to literal array.
+  assert.deepEqual(reqs.map((r) => r.kind), ["call", "comment-call"]);
+  sch.dispose();
+});
+
 // ── 区切り応答（turn-end・speechEnd 後 X 無音 + 不応期 + 確率）──────────────────────
 
 /** turn-end 判定用のスケジューラを組む（確率は rng で制御）。 */

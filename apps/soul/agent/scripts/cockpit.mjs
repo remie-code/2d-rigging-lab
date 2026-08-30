@@ -47,11 +47,16 @@ import { createFileSettingsStore } from "../src/cockpit/cockpit-settings-store.m
 import { cockpitHtmlPath } from "../src/cockpit/cockpit-page.mjs";
 import { assertSubscriptionAuthEnv } from "../src/mind/env-guard.mjs";
 import { createLlmSession } from "../src/mind/llm-session.mjs";
-import { BRAINS, BRAIN_IDS } from "../src/mind/brains.mjs";
-import { createFireOrchestrator, FIRE_SYSTEM_PROMPT } from "../src/mind/fire-orchestrator.mjs";
+import { BRAINS, BRAIN_IDS, resolveBrainIdentity } from "../src/mind/brains.mjs";
+import {
+  buildFireSystemPrompt,
+  createFireOrchestrator,
+  resolveConversationInstructionProfile
+} from "../src/mind/fire-orchestrator.mjs";
+import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
-import { createAudioPlayer, writeTempWav } from "../src/voice/audio-player.mjs";
+import { createAudioPlayer } from "../src/voice/audio-player.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import {
   generateDigest,
@@ -83,6 +88,24 @@ export const MEMORY_INJECT_MAX_CHARS = 4500;
  * ask 自体がより長くかかりうる一方、Ctrl+C からの体感待ち時間を無限に伸ばすわけにはいかない。
  */
 export const SHUTDOWN_MEMORY_TIMEOUT_MS = 15000;
+
+/**
+ * Compose the system prompt for one newly-created brain session.
+ *
+ * Identity resolution happens exactly once per invocation. The production
+ * ensureFireResources() uses the equivalent resolver-backed currentBrain
+ * provider directly; this pure helper keeps the mapping testable without
+ * starting a session.
+ *
+ * @param {unknown} brainId
+ * @param {string} [memoryText]
+ * @returns {string}
+ */
+export function buildBrainSessionSystemPrompt(brainId, memoryText = "", instructionOverrides = undefined) {
+  const identity = resolveBrainIdentity(brainId);
+  const profile = resolveConversationInstructionProfile(brainId, instructionOverrides);
+  return composeSystemPrompt(buildFireSystemPrompt(identity, profile.body), memoryText);
+}
 
 /** @param {string[]} argv */
 export function parseCockpitArgs(argv) {
@@ -120,6 +143,7 @@ export function parseCockpitArgs(argv) {
  *   未設定（null/undefined/空）なら操縦席から setUrl されるまで sendSpeech はエラー。
  * @param {object} [options]
  * @param {typeof connectChannel} [options.connectImpl]  接続実装（テスト注入・既定 connectChannel）。
+ * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace] passive diagnostics hook.
  * @returns {{
  *   sendSpeech: (timeline: unknown) => Promise<any>;
  *   sendEnvelope: (intent: unknown) => Promise<any>;
@@ -127,16 +151,20 @@ export function parseCockpitArgs(argv) {
  *   setUrl: (next: string | null | undefined) => void;
  *   getUrl: () => string | null;
  *   connectionStatus: () => string;
+ *   connectionGeneration: () => number;
+ *   acceptedConnectionGeneration: () => number;
  *   close: () => Promise<void>;
  * }}
  */
 export function createLazyChannel(url, options = {}) {
   const connectImpl = options.connectImpl ?? connectChannel;
+  const onTrace = options.onTrace;
   let currentUrl = typeof url === "string" && url.length > 0 ? url : null;
   /** @type {Promise<{ sendSpeech: Function; sendEnvelope: Function; close: () => Promise<void> }> | null} */
   let channelPromise = null;
   /** @type {"unset" | "idle" | "connecting" | "connected" | "error"} */
   let connState = currentUrl == null ? "unset" : "idle";
+  let connectionGeneration = 0;
 
   const ensure = () => {
     if (currentUrl == null) {
@@ -147,24 +175,55 @@ export function createLazyChannel(url, options = {}) {
     }
     if (channelPromise == null) {
       connState = "connecting";
-      channelPromise = Promise.resolve(connectImpl(currentUrl))
+      connectionGeneration += 1;
+      const pending = Promise.resolve(connectImpl(currentUrl, { onTrace, connectionGeneration }))
         .then((channel) => {
-          connState = "connected";
+          if (channelPromise === pending) connState = "connected";
           return channel;
         })
         .catch((error) => {
-          channelPromise = null; // 失敗は非キャッシュ = 次回 fire で再接続を試みる。
-          connState = "error";
+          // A superseded URL/connection must never clear a newer cache.
+          if (channelPromise === pending) {
+            channelPromise = null; // 失敗は非キャッシュ = 次回 fire で再接続を試みる。
+            connState = "error";
+          }
           throw error;
         });
+      channelPromise = pending;
     }
     return channelPromise;
   };
 
+  const terminalConnectionCodes = new Set([
+    "channel_closed",
+    "channel_socket_error",
+    "channel_send_failed",
+    "reply_timeout"
+  ]);
+  const invalidateExact = (pending, error) => {
+    if (channelPromise !== pending || !terminalConnectionCodes.has(error?.code)) return;
+    channelPromise = null;
+    connState = "error";
+    Promise.resolve(pending)
+      .then((channel) => channel.close())
+      .catch(() => {});
+  };
+  const delegate = async (method, value) => {
+    const pending = ensure();
+    const channel = await pending;
+    try {
+      return await channel[method](value);
+    } catch (error) {
+      // Never retry an ambiguous request. Only retire the exact failed cached
+      // generation; the next Fire/request is allowed to connect once afresh.
+      invalidateExact(pending, error);
+      throw error;
+    }
+  };
+
   return {
     async sendSpeech(timeline) {
-      const channel = await ensure();
-      return channel.sendSpeech(timeline);
+      return delegate("sendSpeech", timeline);
     },
     /**
      * intent.envelope を送る（S4 表情演出）。sendSpeech と同型に ensure()→接続へ委譲。
@@ -172,8 +231,7 @@ export function createLazyChannel(url, options = {}) {
      * @param {unknown} intent
      */
     async sendEnvelope(intent) {
-      const channel = await ensure();
-      return channel.sendEnvelope(intent);
+      return delegate("sendEnvelope", intent);
     },
     /**
      * intent.set を送る（S6 barge-in の口閉じ）。sendSpeech/sendEnvelope と同型に ensure()→接続へ委譲。
@@ -181,8 +239,7 @@ export function createLazyChannel(url, options = {}) {
      * @param {unknown} intent
      */
     async sendSet(intent) {
-      const channel = await ensure();
-      return channel.sendSet(intent);
+      return delegate("sendSet", intent);
     },
     /**
      * URL を後から設定/変更する。変更時は既存接続キャッシュを破棄（次回 fire で新 URL に再接続）。
@@ -211,6 +268,17 @@ export function createLazyChannel(url, options = {}) {
     connectionStatus() {
       return connState;
     },
+    connectionGeneration() {
+      return connectionGeneration;
+    },
+    /**
+     * This accepted Fire's exact logical connection generation. A cached
+     * connection keeps its generation; an idle proxy reserves the one ensure()
+     * will allocate on that Fire's first send without connecting early.
+     */
+    acceptedConnectionGeneration() {
+      return channelPromise == null ? connectionGeneration + 1 : connectionGeneration;
+    },
     async close() {
       if (channelPromise == null) return;
       const pending = channelPromise;
@@ -227,24 +295,83 @@ export function createLazyChannel(url, options = {}) {
 
 /**
  * session.ask への透過プロキシを作る（S3 の Channel URL 未設定チェック + 遅延生成は不変）。
- * S5: `ask(input)` は文字列（通常 Fire）と content ブロック配列（視覚発火）の両方を素通しする
- * （分岐しない＝透過。型ガードは llm-session 側が担う）。
+ * S5: `ask(input)` は文字列（通常 Fire）と content ブロック配列（視覚発火）の両方を素通しする。
+ * Progressive Speech C1: additive な ask options（onTextDelta）も同じ session へ透過する。
+ * （分岐しない＝透過。型ガードは session 側が担う）。
  * @param {object} options
  * @param {() => string | null} options.getUrl  現在の Channel URL（lazyChannel.getUrl）。
  * @param {() => void} options.ensureFireResources  session/player の遅延生成（冪等）。
- * @param {() => { ask: (input: string | Array<any>) => Promise<any> } | null} options.getSession
- * @returns {{ ask: (input: string | Array<any>) => Promise<any> }}
+ * @param {() => void | Promise<void>} [options.ensureSessionCurrent] 次の accepted Fire の設定反映。
+ * @param {() => { ask: (input: string | Array<any>, askOptions?: object) => Promise<any> } | null} options.getSession
+ * @returns {{ ask: (input: string | Array<any>, askOptions?: object) => Promise<any> }}
  */
 export function createSessionProxy(options) {
-  const { getUrl, ensureFireResources, getSession } = options;
+  const { getUrl, ensureFireResources, getSession, ensureSessionCurrent } = options;
   return {
-    /** @param {string | Array<any>} input */
-    async ask(input) {
+    /** @param {string | Array<any>} input @param {object} [askOptions] */
+    async ask(input, askOptions) {
+      if (typeof ensureSessionCurrent === "function") {
+        await ensureSessionCurrent();
+      }
       if (getUrl() == null) {
         throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
       }
       ensureFireResources();
-      return /** @type {any} */ (getSession()).ask(input);
+      return /** @type {any} */ (getSession()).ask(input, askOptions);
+    }
+  };
+}
+
+/**
+ * Track the in-process effective instruction revision. Callers must invoke
+ * `markPersisted()` only after a durable settings write succeeds; failed
+ * writes leave the revision unchanged and therefore cannot invalidate a live
+ * session.
+ */
+export function createInstructionRevisionController(initialRevision = 0) {
+  let revision = Number.isInteger(initialRevision) && initialRevision >= 0 ? initialRevision : 0;
+  return {
+    getRevision() {
+      return revision;
+    },
+    markPersisted() {
+      revision += 1;
+      return revision;
+    }
+  };
+}
+
+/**
+ * Adapt the file-backed settings store to the dedicated Cockpit instruction
+ * surface. Persistence owns validation and durable writes; this thin seam is
+ * responsible only for incrementing the effective revision after success.
+ *
+ * @param {object} settings
+ * @param {() => string} getBrainId
+ * @param {ReturnType<typeof createInstructionRevisionController>} [revision]
+ */
+export function createConversationInstructionHooks(settings, getBrainId, revision = createInstructionRevisionController()) {
+  const store = /** @type {any} */ (settings);
+  const currentId = () => getBrainId();
+  return {
+    getProfile(brainId = currentId()) {
+      return store.getConversationInstructionProfile(brainId);
+    },
+    getOverrides() {
+      return store.getConversationInstructionOverrides();
+    },
+    save(brainId, instruction) {
+      const persisted = store.setConversationInstruction(brainId, instruction);
+      if (persisted === true) revision.markPersisted();
+      return persisted;
+    },
+    reset(brainId) {
+      const persisted = store.resetConversationInstruction(brainId);
+      if (persisted === true) revision.markPersisted();
+      return persisted;
+    },
+    getRevision() {
+      return revision.getRevision();
     }
   };
 }
@@ -629,8 +756,18 @@ async function main() {
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
+  // Instruction changes are persisted independently from existing settings.
+  // A session captures the revision used to compose its system prompt; the
+  // next Fire refreshes only when this effective revision is stale.
+  const instructionRevision = createInstructionRevisionController();
+  let sessionInstructionRevision = null;
+  let sessionContextRevision = 0;
+  let sessionAcceptedContextRevision = null;
   /** @type {ReturnType<typeof createAudioPlayer> | null} */
   let player = null;
+  let audioRevision = 0;
+  let playerAudioRevision = null;
+  const playerOutputListeners = new Set();
   // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。recordMemory が
   // ライブ転写取得（server.getTranscript）に使うための前方参照（let・sessionProxy が session を forward
   // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
@@ -641,6 +778,15 @@ async function main() {
   // ensureFireResources が新頭を生成する＝inventory §2-1 のホットスワップ経路）。KILL 状態は orchestrator
   // 側にあり切替を跨いで生存する（頭非依存・触らない）。
   let currentBrain = brainHooks.resolveInitialBrain();
+  const conversationInstructionHooks = createConversationInstructionHooks(
+    settings,
+    () => currentBrain,
+    instructionRevision
+  );
+  // One runtime authority for the selected brain. All current identity seams
+  // (prompt, Whisper, scheduler, and public state) read this closure at the
+  // appropriate lifecycle boundary; no surface keeps its own brain/name map.
+  const getCurrentBrainIdentity = () => resolveBrainIdentity(currentBrain);
 
   // 配信間記憶: 記憶 ON/OFF の現在値（起動時は settings から復元・既定 ON）。
   let memoryEnabled = memoryHooks.resolveInitialEnabled();
@@ -668,7 +814,13 @@ async function main() {
 
   // 初期 Channel URL: --channel（後方互換）> settings の lastChannelUrl（前回起動の記憶）> 未設定。
   const initialUrl = args.channel ?? settings.getLastChannelUrl() ?? null;
-  const lazyChannel = createLazyChannel(initialUrl);
+  let desiredChannelUrl = initialUrl;
+  let channelRevision = 0;
+  let appliedChannelRevision = 0;
+  const fireDiagnostics = createFireDiagnostics();
+  const lazyChannel = createLazyChannel(initialUrl, {
+    onTrace: (event, fields) => fireDiagnostics.record(event, fields)
+  });
   if (args.channel) {
     // --channel 明示指定は初期値として settings にも載せる（次回起動で復元）。
     settings.setLastChannelUrl(args.channel);
@@ -693,6 +845,9 @@ async function main() {
     if (session == null) {
       // 多頭化 Domain B: 頭の生成は registry 経由（brains.mjs の BRAINS）。未知値は防御的に Claude へ。
       const brainDef = BRAINS[currentBrain] ?? BRAINS.claude;
+      // Resolve once for this newly-created session. A later brain selection
+      // disposes this session; the next Fire resolves the new identity again.
+      const sessionIdentity = getCurrentBrainIdentity();
       // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
       //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
       //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
@@ -712,17 +867,73 @@ async function main() {
       session = brainDef.create({
         // 配信間記憶: 仮面 + 記憶テキストを合成する（composeSystemPrompt・stream-memory.md 裁定 6
         // 「注入点は一箇所」・OFF or 記憶ゼロ件は素の仮面のまま=blocking #4 注入側）。
-        systemPrompt: composeSystemPrompt(FIRE_SYSTEM_PROMPT, memoryEnabled ? memoryText : ""),
+        systemPrompt: composeSystemPrompt(
+          buildFireSystemPrompt(
+            sessionIdentity,
+            conversationInstructionHooks.getProfile(currentBrain).body
+          ),
+          memoryEnabled ? memoryText : ""
+        ),
         onWarning: (w) => process.stderr.write(`[cockpit] WARN: ${w}\n`),
         onInit: (init) =>
           process.stderr.write(
             `${JSON.stringify({ event: "session_init", model: init.model, apiKeySource: init.apiKeySource, tools: init.tools })}\n`
           )
       });
+      sessionInstructionRevision = instructionRevision.getRevision();
+      sessionAcceptedContextRevision = sessionContextRevision;
     }
     if (player == null) {
       const deviceName = audioDeviceHooks.getAudioDevice() ?? undefined;
-      player = createAudioPlayer(deviceName ? { deviceName } : {});
+      player = createAudioPlayer({
+        ...(deviceName ? { deviceName } : {}),
+        onOutput: (line) => {
+          const marker = typeof line === "string" ? line.split("\t", 1)[0] : "unknown";
+          fireDiagnostics.record("player.child", { marker });
+          for (const listener of [...playerOutputListeners]) {
+            try {
+              listener(line);
+            } catch {
+              // Marker observers never own the resident player.
+            }
+          }
+        },
+        onError: () => fireDiagnostics.record("player.child.error")
+      });
+      playerAudioRevision = audioRevision;
+    }
+  };
+
+  const applyDesiredFireSettings = async () => {
+    if (appliedChannelRevision !== channelRevision) {
+      lazyChannel.setUrl(desiredChannelUrl);
+      appliedChannelRevision = channelRevision;
+    }
+    if (player != null && playerAudioRevision !== audioRevision) {
+      try {
+        player.dispose();
+      } catch {
+        // Best effort; replacement remains authoritative for the next Fire.
+      }
+      player = null;
+      playerAudioRevision = null;
+    }
+    const sessionStale =
+      session != null &&
+      (sessionInstructionRevision !== instructionRevision.getRevision() ||
+        sessionAcceptedContextRevision !== sessionContextRevision);
+    if (sessionStale) {
+      const stale = session;
+      try {
+        await stale.dispose();
+      } catch {
+        // Best effort; the stale session is never reused for the next Fire.
+      }
+      if (session === stale) {
+        session = null;
+        sessionInstructionRevision = null;
+        sessionAcceptedContextRevision = null;
+      }
     }
   };
 
@@ -732,7 +943,8 @@ async function main() {
   const sessionProxy = createSessionProxy({
     getUrl: () => lazyChannel.getUrl(),
     ensureFireResources,
-    getSession: () => session
+    getSession: () => session,
+    ensureSessionCurrent: applyDesiredFireSettings
   });
   const playerProxy = {
     /** @param {...any} playArgs */
@@ -745,33 +957,70 @@ async function main() {
       if (player != null && typeof (/** @type {any} */ (player).stop) === "function") {
         return /** @type {any} */ (player).stop();
       }
+    },
+    subscribeOutput(listener) {
+      playerOutputListeners.add(listener);
+      return () => playerOutputListeners.delete(listener);
     }
+  };
+  const productionSpeakDeps = Object.freeze({
+    ttsBaseUrl: args.ttsBaseUrl,
+    speaker: args.speaker
+  });
+  const acquireAcceptedFireResources = async () => {
+    await applyDesiredFireSettings();
+    if (lazyChannel.getUrl() == null) {
+      throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
+    }
+    ensureFireResources();
+    const acceptedSession = session;
+    const acceptedPlayer = player;
+    const acceptedPlayerFacade = Object.freeze({
+      play: (...playArgs) => acceptedPlayer.play(...playArgs),
+      stop: () => acceptedPlayer.stop?.(),
+      subscribeOutput(listener) {
+        playerOutputListeners.add(listener);
+        return () => playerOutputListeners.delete(listener);
+      }
+    });
+    return Object.freeze({
+      session: acceptedSession,
+      channel: lazyChannel,
+      player: acceptedPlayerFacade,
+      speakDeps: productionSpeakDeps,
+      configuration: Object.freeze({
+        brain: currentBrain,
+        sessionContextRevision,
+        instructionRevision: instructionRevision.getRevision(),
+        memoryEnabled,
+        audioDevice: audioDeviceHooks.getAudioDevice(),
+        audioRevision,
+        channelUrl: lazyChannel.getUrl(),
+        channelRevision
+      }),
+      metadata: Object.freeze({
+        sessionContextRevision,
+        instructionRevision: instructionRevision.getRevision(),
+        audioRevision,
+        channelRevision,
+        channelConnectionGeneration: lazyChannel.acceptedConnectionGeneration()
+      })
+    });
   };
 
   /**
    * 操縦席（POST /api/audio-device）から出力デバイスを設定/変更する（S6「会話が続く」）。
    *
-   * ── デバイス変更の適用方式【その場再起動】（設計判断・domain-a.md §7-3 の申し送りへの回答）────
+   * ── デバイス変更の適用方式【次 accepted Fire で再起動】──────────────────────
    *  常駐プレイヤーは起動時に env `SOUL_AUDIO_DEVICE_NAME` でデバイス名を受ける（Domain A）ため、
    *  デバイス変更を反映するには常駐プロセスの再起動が要る。「次回起動から適用」（設定だけ書き換えて
-   *  次回 `cockpit.mjs` 起動まで待つ）と「その場で再起動」（既存 player を dispose して player=null に
-   *  戻し、次回 ensureFireResources() で新デバイス名の player を再生成する）の 2 択のうち、**その場再起動**
-   *  を採る: 配信中に「マイクが声を拾う」と気づいてからデバイスを切り替える運用（wave-plan §5 choke
-   *  point・音響設営）を考えると、次回起動待ちは現実的でない。**再生中の発話は追跡できない**（barge-in
-   *  の interrupt を経由しない dispose のため、再生実区間の後始末は player.dispose() が担う・進行中の
-   *  fire があれば次の speak から新デバイスに切り替わる）。
+   *  次回 `cockpit.mjs` 起動まで待つ）と「次 accepted Fire で再起動」の後者を採る。進行中 Fire は accepted
+   *  snapshot の player を最後まで保持し、次の sessionProxy.ask 境界でのみ dispose→再生成する。
    * @param {string | null} name
    */
   const onSetAudioDevice = async (name) => {
     audioDeviceHooks.onSetAudioDevice(name); // 次回起動でも復元（file-backed・失敗寛容）。
-    if (player != null) {
-      try {
-        player.dispose();
-      } catch {
-        // best-effort（再生成の妨げにしない）。
-      }
-      player = null; // 次回 fire 時に ensureFireResources() が新デバイス名で再生成する。
-    }
+    audioRevision += 1;
     process.stdout.write(
       name ? `[cockpit] audio device set: ${name}\n` : "[cockpit] audio device cleared (default)\n"
     );
@@ -780,26 +1029,15 @@ async function main() {
   /**
    * 操縦席（POST /api/brain）から頭脳を設定/変更する（多頭化 Domain B・onSetAudioDevice の型）。
    *
-   * ── 頭のホットスワップ【切替=dispose→null→次発火から新頭】(brain-swap.md §9 (a'))───────────
-   *  brainHooks.onSetBrain(choice) で選択を永続化 → currentBrain を更新 → 現 session があれば dispose
-   *  して null に戻す。次回 ensureFireResources() が新 currentBrain で新頭を生成する（inventory §2-1 の
-   *  最小ホットスワップ経路: session は書き手 ensureFireResources のみ・読み手 sessionProxy.ask のみ）。
-   *  dispose は best-effort（Claude/Codex とも知性契約で dispose():Promise<void>・await 可）。進行中の
-   *  発火（in-flight ask）は既存の dispose 意味論に委ねる。KILL 状態は orchestrator 側にあり切替を跨いで
-   *  生存する（頭非依存・ここでは触らない）。
+   * ── 頭のホットスワップ【次 accepted Fire で dispose→再生成】──────────────────
+   *  brainHooks.onSetBrain(choice) で選択を永続化し desired context revision を進める。進行中 Fire の
+   *  session は触らず、次の sessionProxy.ask 境界でのみ置換する。
    * @param {string} choice
    */
   const onSetBrain = async (choice) => {
     brainHooks.onSetBrain(choice); // 次回起動でも復元（file-backed・失敗寛容）。
     currentBrain = choice;
-    if (session != null) {
-      try {
-        await session.dispose();
-      } catch {
-        // best-effort（再生成の妨げにしない・切替は続行する）。
-      }
-      session = null; // 次回 fire 時に ensureFireResources() が新頭で再生成する。
-    }
+    sessionContextRevision += 1;
     process.stdout.write(`[cockpit] brain set: ${choice}\n`);
   };
 
@@ -851,8 +1089,8 @@ async function main() {
    * 空にし(念のための二重防御・注入自体は composeSystemPrompt 側でも空文字列は素の仮面を返す)、
    * チェックポイントタイマーは isEnabled()/memoryEnabled のガードで空回りする。ON に切り替わったら
    * memoryText/memoryCount を loadRecentDigests で(再)取得する(起動時と同じ経路・申し送り 4「count は
-   * 実際に搭載した件数」)。切替は現 session を dispose→null にし、次発火から新 systemPrompt が効く
-   * (brain 切替のホットスワップと同型・inventory §2-5)。
+   * 実際に搭載した件数」)。切替は desired context revision を進め、進行中 Fire の session は保持したまま
+   * 次 accepted Fire から新 systemPrompt を効かせる。
    * @param {boolean} enabled
    */
   const onSetMemoryEnabled = async (enabled) => {
@@ -869,14 +1107,7 @@ async function main() {
     } else {
       memoryText = ""; // OFF: 注入テキストを空にする(念のため・composeSystemPrompt 側でも二重防御)。
     }
-    if (session != null) {
-      try {
-        await session.dispose();
-      } catch {
-        // best-effort(再生成の妨げにしない・切替は続行する)。
-      }
-      session = null; // 次回 fire 時に ensureFireResources() が新 systemPrompt で再生成する。
-    }
+    sessionContextRevision += 1;
     process.stdout.write(`[cockpit] memory ${memoryEnabled ? "enabled" : "disabled"}\n`);
   };
 
@@ -890,24 +1121,57 @@ async function main() {
   const fireOrchestratorFactory = (/** @type {any} */ hooks) =>
     createFireOrchestrator({
       ...hooks,
+      onFire: (info) => {
+        if (info?.accepted === true) {
+          fireDiagnostics.begin({
+            injectedChars: typeof info.injectedChars === "number" ? info.injectedChars : null,
+            includedCount: typeof info.includedCount === "number" ? info.includedCount : null,
+            vision: info.vision === true
+          });
+        }
+        hooks.onFire?.(info);
+      },
+      onDiagnostic: (diagnostic) => {
+        fireDiagnostics.record("fire.diagnostic", {
+          diagnosticType: typeof diagnostic?.type === "string" ? diagnostic.type : "unknown",
+          kind: typeof diagnostic?.kind === "string" ? diagnostic.kind : null
+        });
+        hooks.onDiagnostic?.(diagnostic);
+      },
+      onTrace: (trace) => {
+        if (trace?.event === "fire.completed") {
+          fireDiagnostics.finish({ fired: trace.fired === true, reason: trace.reason ?? null });
+          return;
+        }
+        if (trace?.event === "fire.failed") {
+          fireDiagnostics.fail(
+            typeof trace.stage === "string" ? trace.stage : "unknown",
+            { name: trace.failureName ?? "Error", code: trace.failureCode ?? null }
+          );
+          return;
+        }
+        if (trace && typeof trace.event === "string") {
+          const { event, ...fields } = trace;
+          fireDiagnostics.record(event, fields);
+        }
+      },
       session: /** @type {any} */ (sessionProxy),
       channel: /** @type {any} */ (lazyChannel),
       player: /** @type {any} */ (playerProxy),
+      progressivePlayback: true,
+      acquireFireResources: acquireAcceptedFireResources,
       // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。captureImpl は既定（Domain A の
       // captureWindow）のまま差し替えない。
       getVisionTarget: visionTargetHooks.getVisionTarget,
-      speakDeps: {
-        ttsBaseUrl: args.ttsBaseUrl,
-        speaker: args.speaker,
-        writeWav: writeTempWav
-      },
+      speakDeps: productionSpeakDeps,
       ...(windowMs != null ? { windowMs } : {}),
       ...(maxChars != null ? { maxChars } : {})
     });
 
   /** 操縦席（POST /api/channel）から Channel URL を設定/変更する。token を平文で保持/ログしない。 */
   const onSetChannelUrl = async (/** @type {string | null} */ url) => {
-    lazyChannel.setUrl(url); // URL 変更は既存接続キャッシュを破棄（次回 fire で再接続）。
+    desiredChannelUrl = url;
+    channelRevision += 1;
     try {
       settings.setLastChannelUrl(url); // 次回起動で復元（file-backed・失敗寛容）。
     } catch {
@@ -920,7 +1184,7 @@ async function main() {
 
   /** state snapshot に載せる Channel の現況（redact 済み・token を平文で出さない）。 */
   const channelStatus = () => {
-    const u = lazyChannel.getUrl();
+    const u = desiredChannelUrl;
     return {
       configured: u != null,
       url: u != null ? redactToken(u) : null,
@@ -937,6 +1201,11 @@ async function main() {
     port: args.port ?? DEFAULT_COCKPIT_PORT,
     indexHtmlPath: cockpitHtmlPath,
     settingsStore: settings,
+    // Current identity providers are request/handling-time closures. The
+    // server consumes this same resolver-backed view for Whisper, scheduler,
+    // and additive public state; changing currentBrain does not require ear or
+    // scheduler recreation.
+    currentBrainIdentity: getCurrentBrainIdentity,
     fireOrchestratorFactory,
     onSetChannelUrl,
     channelStatus,
@@ -964,6 +1233,9 @@ async function main() {
     // そのまま運ぶ（audioDevice/channel/visionTarget と同型＝別途 initial は持たせない）。
     onSetBrain,
     brainStatus,
+    // Conversation instructions are exposed only through the dedicated local API. The hook owns durable
+    // settings writes and effective revision advancement; no instruction text enters state/SSE/transcript.
+    conversationInstructionHooks,
     // S7「視聴者が混ざる」: 実チャット器官のファクトリを注入（本番 createLiveChatClient）。生成/Connect/
     // 停止のライフサイクルは cockpit-server が所有し、POST /api/chat/connect で `factory({ source })` を
     // 生成 start()・onMessage/onStatus/onDiagnostic を取り込み経路へ繋ぐ。配信 source は settings に記憶。
