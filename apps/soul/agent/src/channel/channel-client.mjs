@@ -38,10 +38,11 @@ import { performance } from "node:perf_hooks";
 
 const HELLO_TIMEOUT_MS = 4000;
 const REPLY_TIMEOUT_MS = 4000;
-// Runtime Player's current text-frame boundary. This observation-wave guard is
-// deliberately not a protocol redesign: retain/raise/remove it only after
-// serialized-envelope measurements have been reviewed.
-const SPEECH_ENVELOPE_UTF8_CAP = 4096;
+// A generous circuit breaker for corrupted/runaway speech envelopes, not a
+// normal sentence-size limit. The previous 4 KiB cap rejected an observed,
+// otherwise valid 4,149-byte Japanese sentence, so both channel endpoints use
+// 64 KiB while preserving local preflight and clean partial-delivery recovery.
+const SPEECH_ENVELOPE_UTF8_CAP = 64 * 1024;
 
 /**
  * 1 本の接続を張り、server.hello を照合し、intent.speech を送るハンドルを返す。
@@ -185,7 +186,7 @@ export async function connectChannel(url, options = {}) {
     // Runtime, and must not make this otherwise healthy connection unusable.
     if (kind === "intent.speech" && serializedUtf8Bytes > SPEECH_ENVELOPE_UTF8_CAP) {
       const failure = diagnosticError(
-        `intent.speech envelope is ${serializedUtf8Bytes} UTF-8 bytes; current observation cap is ${SPEECH_ENVELOPE_UTF8_CAP}.`,
+        `intent.speech envelope is ${serializedUtf8Bytes} UTF-8 bytes; safety cap is ${SPEECH_ENVELOPE_UTF8_CAP}.`,
         "speech_envelope_oversize",
         "control_channel.preflight"
       );

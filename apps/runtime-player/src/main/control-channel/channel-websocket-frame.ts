@@ -37,7 +37,9 @@ const OPCODE_CLOSE = 0x8;
 const OPCODE_PING = 0x9;
 const OPCODE_PONG = 0xa;
 
-export const controlChannelMaxClientMessageBytes = 4096;
+// This is a runaway/corruption circuit breaker, not a normal speech-size
+// constraint. Keep it aligned with Soul's serialized intent.speech preflight.
+export const controlChannelMaxClientMessageBytes = 64 * 1024;
 
 export const controlChannelWebSocketOpcodes = {
   text: OPCODE_TEXT,

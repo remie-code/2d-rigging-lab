@@ -82,7 +82,7 @@ test("connectChannel diagnostics: speech の実 envelope UTF-8 bytes と request
   }
 });
 
-test("connectChannel: 4096-byte preflight は local failure に留め、同じ healthy 接続で後続 small speech を送れる", async () => {
+test("connectChannel: 4 KiB 級の通常文は通し、64 KiB 超だけを local failure に留める", async () => {
   const server = createChannelServerDouble();
   const url = await server.listen();
   const traces = [];
@@ -91,7 +91,17 @@ test("connectChannel: 4096-byte preflight は local failure に留め、同じ h
     onTrace: (event, fields) => traces.push({ event, fields })
   });
   try {
-    const oversizeTimeline = Array.from({ length: 120 }, (_v, i) => ({
+    const observedLongSentenceTimeline = Array.from({ length: 120 }, (_v, i) => ({
+      timeMs: i * 10,
+      vowel: ["a", "i", "u", "e", "o"][i % 5],
+      s: 0.5
+    }));
+    const observedOutcome = await channel.sendSpeech(observedLongSentenceTimeline);
+    assert.equal(observedOutcome.result, "accepted");
+    assert.ok(observedOutcome.serializedUtf8Bytes > 4096);
+    assert.ok(observedOutcome.serializedUtf8Bytes <= 64 * 1024);
+
+    const oversizeTimeline = Array.from({ length: 2500 }, (_v, i) => ({
       timeMs: i * 10,
       vowel: ["a", "i", "u", "e", "o"][i % 5],
       s: 0.5
@@ -101,15 +111,15 @@ test("connectChannel: 4096-byte preflight は local failure に留め、同じ h
       assert.equal(error.diagnosticStage, "control_channel.preflight");
       return true;
     });
-    assert.equal(server.received.filter((message) => message.kind === "intent.speech").length, 0);
+    assert.equal(server.received.filter((message) => message.kind === "intent.speech").length, 1);
     const rejected = traces.find((entry) => entry.event === "channel.request.preflight_rejected");
     assert.ok(rejected);
-    assert.equal(rejected.fields.configuredUtf8Cap, 4096);
+    assert.equal(rejected.fields.configuredUtf8Cap, 64 * 1024);
     assert.ok(rejected.fields.serializedUtf8Bytes > rejected.fields.configuredUtf8Cap);
 
     const outcome = await channel.sendSpeech(SPEECH_TIMELINE);
     assert.equal(outcome.result, "accepted");
-    assert.equal(server.received.filter((message) => message.kind === "intent.speech").length, 1);
+    assert.equal(server.received.filter((message) => message.kind === "intent.speech").length, 2);
   } finally {
     await channel.close();
     await server.close();
@@ -296,7 +306,7 @@ test("connectChannel: cap 未満の複数モーラ timeline も往復する（16
   const url = await server.listen();
   const channel = await connectChannel(url, { WebSocketImpl: WS });
   try {
-    // 100 モーラ → JSON は 126byte 超だが 4096 byte observation cap 未満。
+    // 100 モーラ → JSON は 126byte 超だが 64 KiB safety cap 未満。
     const big = Array.from({ length: 100 }, (_v, i) => ({
       timeMs: i * 10,
       vowel: ["a", "i", "u", "e", "o"][i % 5],

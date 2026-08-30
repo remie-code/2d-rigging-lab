@@ -8,26 +8,36 @@ import {
   type ControlChannelWebSocketCloseInfo,
   type ControlChannelWebSocketTransportEvent
 } from "./channel-websocket-connection";
+import { controlChannelMaxClientMessageBytes } from "./channel-websocket-frame";
 
 describe("ControlChannelWebSocketConnection transport diagnostics", () => {
-  it("keeps the existing 4096-byte frame behavior and observes 4097 bytes as oversize", () => {
+  it("accepts the 64 KiB safety boundary and observes the next byte as oversize", () => {
     const exactLimit = createFixture();
-    exactLimit.socket.emit("data", createMaskedFrame({ payloadBytes: 4096 }));
+    exactLimit.socket.emit("data", createMaskedFrame({
+      payloadBytes: controlChannelMaxClientMessageBytes
+    }));
 
     expect(exactLimit.messages).toHaveLength(1);
-    expect(Buffer.byteLength(exactLimit.messages[0]!)).toBe(4096);
+    expect(Buffer.byteLength(exactLimit.messages[0]!)).toBe(
+      controlChannelMaxClientMessageBytes
+    );
     expect(exactLimit.events.some((event) =>
       event.kind === "close-requested"
     )).toBe(false);
 
     const oversize = createFixture();
-    oversize.socket.emit("data", createMaskedFrame({ payloadBytes: 4097 }));
+    const oversizeFrame = createMaskedFrame({
+      payloadBytes: controlChannelMaxClientMessageBytes + 1
+    });
+    // The extended-length header alone is sufficient to reject the declared
+    // payload before buffering its body.
+    oversize.socket.emit("data", oversizeFrame.subarray(0, 14));
     oversize.socket.emit("end");
 
     expect(oversize.events).toContainEqual(expect.objectContaining({
       kind: "close-requested",
       reason: "oversize",
-      framePayloadBytes: 4097
+      framePayloadBytes: controlChannelMaxClientMessageBytes + 1
     }));
     expect(oversize.closes).toEqual([{
       reason: "oversize",
@@ -38,7 +48,10 @@ describe("ControlChannelWebSocketConnection transport diagnostics", () => {
   it.each([
     {
       label: "an accumulation exceeding the raw incomplete-frame guard",
-      send: (socket: FakeSocket) => socket.emit("data", Buffer.alloc(4111)),
+      send: (socket: FakeSocket) => socket.emit(
+        "data",
+        Buffer.alloc(controlChannelMaxClientMessageBytes + 15)
+      ),
       reason: "incomplete-overflow"
     },
     {
@@ -153,14 +166,21 @@ function createMaskedFrame(input: {
 }): Buffer {
   const payload = Buffer.alloc(input.payloadBytes, 65);
   const mask = Buffer.from([1, 2, 3, 4]);
-  const headerBytes = input.payloadBytes < 126 ? 2 : 4;
+  const headerBytes = input.payloadBytes < 126
+    ? 2
+    : input.payloadBytes <= 0xffff
+      ? 4
+      : 10;
   const frame = Buffer.alloc(headerBytes + mask.byteLength + payload.byteLength);
   frame[0] = (input.final === false ? 0 : 0x80) | (input.opcode ?? 0x1);
   if (input.payloadBytes < 126) {
     frame[1] = 0x80 | input.payloadBytes;
-  } else {
+  } else if (input.payloadBytes <= 0xffff) {
     frame[1] = 0x80 | 126;
     frame.writeUInt16BE(input.payloadBytes, 2);
+  } else {
+    frame[1] = 0x80 | 127;
+    frame.writeBigUInt64BE(BigInt(input.payloadBytes), 2);
   }
   mask.copy(frame, headerBytes);
   for (let index = 0; index < payload.byteLength; index += 1) {
