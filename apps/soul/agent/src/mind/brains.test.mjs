@@ -15,9 +15,9 @@ import path from "node:path";
 import { BRAINS, BRAIN_IDS, resolveBrainIdentity } from "./brains.mjs";
 import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
 
-const EXPECTED_IDS = ["claude", "codex", "codex-55", "codex-56-sol"];
+const EXPECTED_IDS = ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"];
 
-test("brains: registry はフラット 4 項目（claude/codex/codex-55/codex-56-sol）", () => {
+test("brains: registry はフラット 5 項目（既存4頭 + Astra）", () => {
   assert.deepEqual(Object.keys(BRAINS).sort(), [...EXPECTED_IDS].sort());
   assert.deepEqual([...BRAIN_IDS].sort(), [...EXPECTED_IDS].sort());
 });
@@ -29,9 +29,9 @@ test("brains: registry は Object.freeze されている（唯一の宣言テー
   }
 });
 
-test("brains: 4 brain entries bind to the exact frozen Cody/Chappy identities", () => {
+test("brains: 5 brain entries bind to the exact frozen Cody/Chappy identities", () => {
   assert.equal(BRAINS.claude.identity, MODEL_IDENTITIES.cody);
-  for (const key of ["codex", "codex-55", "codex-56-sol"]) {
+  for (const key of ["codex", "codex-55", "codex-56-sol", "codex-astra"]) {
     assert.equal(BRAINS[key].identity, MODEL_IDENTITIES.chappy);
   }
   for (const key of EXPECTED_IDS) {
@@ -44,6 +44,8 @@ test("brains: identity resolver preserves Cody fallback for unknown or absent pe
   assert.equal(resolveBrainIdentity("codex"), MODEL_IDENTITIES.chappy);
   assert.equal(resolveBrainIdentity("codex-55"), MODEL_IDENTITIES.chappy);
   assert.equal(resolveBrainIdentity("codex-56-sol"), MODEL_IDENTITIES.chappy);
+  assert.equal(resolveBrainIdentity("codex-astra"), MODEL_IDENTITIES.chappy);
+  assert.equal(BRAINS["codex-astra"].label, "GPT-6 Astra");
   assert.equal(resolveBrainIdentity(undefined), DEFAULT_MODEL_IDENTITY);
   assert.equal(resolveBrainIdentity("removed-brain"), DEFAULT_MODEL_IDENTITY);
 });
@@ -66,8 +68,8 @@ test("brains: claude.credentialPath は .credentials.json で終わる絶対パ�
   assert.ok(p.includes(".claude"), p);
 });
 
-for (const key of ["codex", "codex-55", "codex-56-sol"]) {
-  test(`brains: ${key}.credentialPath は auth.json で終わる絶対パス（Codex 系 3 頭は資格情報を共有）`, () => {
+for (const key of ["codex", "codex-55", "codex-56-sol", "codex-astra"]) {
+  test(`brains: ${key}.credentialPath は auth.json で終わる絶対パス（Codex 系は資格情報を共有）`, () => {
     const p = BRAINS[key].credentialPath;
     assert.ok(p.endsWith("auth.json"), p);
     assert.ok(p.includes(".codex"), p);
@@ -124,7 +126,8 @@ async function withScratchHome(fn) {
 for (const [brainId, expectedModel, expectedEffort] of [
   ["codex", "gpt-5.6-terra", "none"],
   ["codex-55", "gpt-5.5", "none"],
-  ["codex-56-sol", "gpt-5.6-sol", "low"]
+  ["codex-56-sol", "gpt-5.6-sol", "low"],
+  ["codex-astra", "gpt-6-astra", "low"]
 ]) {
 test(`brains: ${brainId}.create は共通 App Server route で model=${expectedModel}, effort=${expectedEffort}`, async () => {
   await withScratchHome(async ({ homeDir, ledgerPath }) => {

@@ -1205,7 +1205,8 @@ export function createCockpitServer(options = {}) {
         body.brain !== "claude" &&
         body.brain !== "codex" &&
         body.brain !== "codex-55" &&
-        body.brain !== "codex-56-sol"
+        body.brain !== "codex-56-sol" &&
+        body.brain !== "codex-astra"
       ) {
         sendJson(res, 400, { error: "invalid brain" });
         return;

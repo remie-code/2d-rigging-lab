@@ -83,12 +83,12 @@ test("settings store: default path is the gitignored file inside apps/soul/agent
   assert.match(DEFAULT_SETTINGS_PATH.replace(/\\/g, "/"), /apps\/soul\/agent\/cockpit-settings\.local\.json$/);
 });
 
-test("conversation instruction settings: four brain overrides round-trip with the versioned additive key", () => {
+test("conversation instruction settings: five brain overrides round-trip with the versioned additive key", () => {
   const dir = tmpDir();
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    for (const id of ["claude", "codex", "codex-55", "codex-56-sol"]) {
+    for (const id of ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]) {
       assert.equal(store.getConversationInstruction(id), null);
       assert.equal(store.setConversationInstruction(id, `custom:${id}`), true);
       assert.equal(store.getConversationInstruction(id), `custom:${id}`);
@@ -98,9 +98,33 @@ test("conversation instruction settings: four brain overrides round-trip with th
       claude: "custom:claude",
       codex: "custom:codex",
       "codex-55": "custom:codex-55",
-      "codex-56-sol": "custom:codex-56-sol"
+      "codex-56-sol": "custom:codex-56-sol",
+      "codex-astra": "custom:codex-astra"
     });
     assert.equal(reopened.getConversationInstructionProfile("codex-55").body, "custom:codex-55");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("conversation instruction settings: Astra is additive and its choice persists without replacing existing instructions", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    const existing = ["claude", "codex", "codex-55", "codex-56-sol"];
+    store.setBrainChoice("codex-56-sol");
+    for (const id of existing) store.setConversationInstruction(id, `keep:${id}`);
+    const defaultBody = store.getConversationInstructionProfile("codex-astra").body;
+    store.setConversationInstruction("codex-astra", "astra custom");
+    assert.equal(createFileSettingsStore({ path }).getBrainChoice(), "codex-56-sol");
+    store.resetConversationInstruction("codex-astra");
+    store.setBrainChoice("codex-astra");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getBrainChoice(), "codex-astra");
+    assert.equal(reopened.getConversationInstruction("codex-astra"), null);
+    for (const id of existing) assert.equal(reopened.getConversationInstruction(id), `keep:${id}`);
+    assert.equal(reopened.getConversationInstructionProfile("codex-astra").body, defaultBody);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -179,7 +203,7 @@ test("conversation instruction settings: reset removes only selected override", 
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    const ids = ["claude", "codex", "codex-55", "codex-56-sol"];
+    const ids = ["codex-astra", "claude", "codex", "codex-55", "codex-56-sol"];
     for (const id of ids) store.setConversationInstruction(id, `${id} custom`);
     for (const [index, id] of ids.entries()) {
       assert.equal(store.resetConversationInstruction(id), true);

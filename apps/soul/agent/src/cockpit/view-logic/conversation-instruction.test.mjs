@@ -22,10 +22,11 @@ function payload(brainId, instruction, isOverride = false, revision = 1) {
   return { ok: true, brainId, instruction, isOverride, revision };
 }
 
-test("conversation instruction contract: exactly four technical brain IDs and encoded paths", () => {
-  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "codex", "codex-55", "codex-56-sol"]);
+test("conversation instruction contract: exactly five technical brain IDs and encoded paths", () => {
+  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]);
   assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_OPTIONS.map((item) => item.value), CONVERSATION_INSTRUCTION_BRAIN_IDS);
   assert.equal(conversationInstructionPath("codex-56-sol"), "/api/conversation-instructions/codex-56-sol");
+  assert.equal(conversationInstructionPath("codex-astra"), "/api/conversation-instructions/codex-astra");
   assert.equal(conversationInstructionPath("codex/unsafe"), "/api/conversation-instructions/codex%2Funsafe");
 });
 

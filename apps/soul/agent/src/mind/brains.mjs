@@ -25,7 +25,7 @@
  *
  * ── 頭の表のエントリ形 ─────────────────────────────────────────────────
  * @typedef {object} BrainEntry
- * @property {string} id  registry のキーと同じ一意識別子（"claude" | "codex" | "codex-55" | "codex-56-sol"）。
+ * @property {string} id  registry のキーと同じ一意識別子（"claude" | "codex" | "codex-55" | "codex-56-sol" | "codex-astra"）。
  * @property {string} label  操縦席の表示札（設定層「頭脳」区画の select 表記）。
  * @property {(options?: object) => MindSession} create  頭セッションを起動する（Domain B が options に
  *   systemPrompt 等を渡す）。**ここでは呼ばない**（health test は実 create を呼ばない＝実 SDK 消費ゼロ）。
@@ -83,6 +83,13 @@ export const BRAINS = Object.freeze({
     // App Server 0.144.5 の model/list 実測で Sol は low..ultra を列挙し none を列挙しなかった。
     // progressive speech の accepted decision に従い、Sol は effort=low へ共通 adapter 経由で配線する。
     create: (options) => createCodexSession({ ...options, model: "gpt-5.6-sol", effort: "low" }),
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
+    identity: MODEL_IDENTITIES.chappy
+  }),
+  "codex-astra": Object.freeze({
+    id: "codex-astra",
+    label: "GPT-6 Astra",
+    create: (options) => createCodexSession({ ...options, model: "gpt-6-astra", effort: "low" }),
     credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
     identity: MODEL_IDENTITIES.chappy
   })

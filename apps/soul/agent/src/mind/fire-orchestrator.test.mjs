@@ -129,8 +129,8 @@ test("buildFireSystemPrompt: unknown/absent identity は Cody 既定へ戻る", 
   assert.equal(buildFireSystemPrompt({ id: "unknown" }), FIRE_SYSTEM_PROMPT);
 });
 
-test("conversation instruction profile: four technical brain ids resolve independently and preserve default bytes", () => {
-  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "codex", "codex-55", "codex-56-sol"]);
+test("conversation instruction profile: five technical brain ids resolve independently and preserve default bytes", () => {
+  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]);
   const baseline = resolveConversationInstructionProfile("claude");
   assert.equal(baseline.body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
   assert.equal(buildFireSystemPrompt(MODEL_IDENTITIES.cody), FIRE_SYSTEM_PROMPT);

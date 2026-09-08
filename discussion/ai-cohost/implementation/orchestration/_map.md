@@ -4,6 +4,7 @@
 
 | Path | Status | Content |
 |---|---|---|
+| [gpt-6-astra-wave-plan.md](gpt-6-astra-wave-plan.md) | BOUNDED MACHINE / HUMAN PASS (2026-09-08) | CLI 0.153.4導入とAstra low追加。focused 461/461・実3turn・独立review一巡合格、ユーザーが動作と自然な会話を確認。[completion](../waves/gpt-6-astra-completion.md)。broad21件未分類・DB cleanup未確認を保持。 |
 | [c1-planning-inventory.md](c1-planning-inventory.md) | 完了(2026-07-10)。Verdict needs_design → ユーザー裁定で解消 | C1のコード接地棚卸し(合成ルート、userData DI、port/token、UDP、ライフサイクル、テスト流儀) |
 | [c1-wave-plan.md](c1-wave-plan.md) | **完全閉鎖(2026-07-10)**: 実装+3レーンレビューPASS+パッケージ版手動ゲート全項目合格+§14裁定済み | C1「二体が同居できる」wave計画: スロット基盤(Domain A)→役割合成と身元表示(Domain B)→最終統合(Domain C)。既知制限: dev引数なし起動(Status参照) |
 | [c2-planning-inventory.md](c2-planning-inventory.md) | 完了(2026-07-10)。Verdict needs_design → ユーザー裁定5件で解消 | C2のコード接地棚卸し(頭無し写像の可否、素の既定の挙動、意味スロット受け口の構造ギャップ、フレーム心臓の空白、決定論流儀) |

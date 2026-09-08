@@ -95,7 +95,8 @@ export const BRAIN_LABELS = Object.freeze({
   claude: "Claude (Opus 4.8)",
   codex: "Codex (GPT-5.6 Terra)",
   "codex-55": "Codex (GPT-5.5)",
-  "codex-56-sol": "Codex (GPT-5.6 Sol)"
+  "codex-56-sol": "Codex (GPT-5.6 Sol)",
+  "codex-astra": "GPT-6 Astra"
 });
 
 /**

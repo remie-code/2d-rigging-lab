@@ -521,7 +521,7 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
   const server = createCockpitServer({ conversationInstructionHooks: hooks });
   try {
     const url = await server.listen(0);
-    for (const brainId of ["claude", "codex", "codex-55", "codex-56-sol"]) {
+    for (const brainId of ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]) {
       const result = await getJson(`${url}/api/conversation-instructions/${brainId}`);
       assert.equal(result.status, 200);
       assert.deepEqual(result.json, {
@@ -557,6 +557,35 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
       isOverride: false,
       revision: 2
     });
+  } finally {
+    await server.close();
+  }
+});
+
+test("conversation instruction API: Astra save/load/reset preserves existing overrides", async () => {
+  const server = createCockpitServer({ conversationInstructionHooks: makeFakeConversationInstructionHooks() });
+  try {
+    const url = await server.listen(0);
+    const existing = ["claude", "codex", "codex-55", "codex-56-sol"];
+    for (const brainId of existing) {
+      const saved = await putJson(`${url}/api/conversation-instructions/${brainId}`, { instruction: `keep:${brainId}` });
+      assert.equal(saved.status, 200);
+    }
+    const astraPath = `${url}/api/conversation-instructions/codex-astra`;
+    const saved = await putJson(astraPath, { instruction: "astra custom" });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.json.isOverride, true);
+    const loaded = await getJson(astraPath);
+    assert.equal(loaded.json.instruction, "astra custom");
+    const reset = await deleteJson(astraPath);
+    assert.equal(reset.status, 200);
+    assert.equal(reset.json.instruction, "default:codex-astra");
+    assert.equal(reset.json.isOverride, false);
+    for (const brainId of existing) {
+      const kept = await getJson(`${url}/api/conversation-instructions/${brainId}`);
+      assert.equal(kept.json.instruction, `keep:${brainId}`);
+      assert.equal(kept.json.isOverride, true);
+    }
   } finally {
     await server.close();
   }
@@ -2592,7 +2621,7 @@ test("cockpit POST /api/brain: {brain:\"claude\"} → 200（Claude へ戻す）"
   }
 });
 
-test("cockpit POST /api/brain: {brain:\"codex-55\"}/{brain:\"codex-56-sol\"} → 200（2026-07-17 追撃・4頭目まで受理）", async () => {
+test("cockpit POST /api/brain: GPT-5.5 / Sol / Astra → 200 with shared Chappy identity", async () => {
   const wiring = makeFakeBrainWiring("claude");
   const server = createCockpitServer({
     onSetBrain: /** @type {any} */ (wiring.onSetBrain),
@@ -2608,7 +2637,11 @@ test("cockpit POST /api/brain: {brain:\"codex-55\"}/{brain:\"codex-56-sol\"} →
     assert.equal(rSol.status, 200);
     assert.equal(rSol.json.brain.brain, "codex-56-sol");
     assert.deepEqual(rSol.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
-    assert.deepEqual(wiring.record.calls, ["codex-55", "codex-56-sol"]);
+    const rAstra = await postJson(`${url}/api/brain`, { brain: "codex-astra" });
+    assert.equal(rAstra.status, 200);
+    assert.equal(rAstra.json.brain.brain, "codex-astra");
+    assert.deepEqual(rAstra.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
+    assert.deepEqual(wiring.record.calls, ["codex-55", "codex-56-sol", "codex-astra"]);
   } finally {
     await server.close();
   }

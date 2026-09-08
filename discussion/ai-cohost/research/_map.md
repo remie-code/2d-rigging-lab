@@ -4,6 +4,9 @@
 
 | Path | Content | Status |
 |---|---|---|
+| [gpt-6-astra-cli-compatibility-probe.md](gpt-6-astra-cli-compatibility-probe.md) | 隔離CLI 0.153.4でAstra low画像入力・同thread継続・deltaを実測 | Recorded(2026-09-08)。2ターン完了、最小対応版や意味的記憶品質の証明ではない。製品導入はimplementation計画へ |
+| [gpt-6-astra-reasoning-inventory.md](gpt-6-astra-reasoning-inventory.md) | Astraの公式reasoning最小値low・画像入力、現行Codex App Server経路の確認範囲 | Recorded(2026-09-08)。実経路の追試は次項integration inventoryを参照 |
+| [gpt-6-astra-integration-inventory.md](gpt-6-astra-integration-inventory.md) | Astra追加箇所・既存設定継承、同梱App Serverでの一覧照会と直接指定turnの実測 | Recorded(2026-09-08)。CLI 0.144.5は直接turnを新しいCodex版が必要として400拒否。対応版とvision/delta成功は未確認 |
 | [aituber-landscape-2026-07.md](aituber-landscape-2026-07.md) | 外部技術地形(2026-07): 標準パイプライン、TTS/感情駆動/チャット取得の選択肢、運用の落とし穴 | Recorded(2026-07-10) |
 | [human-ai-cohost-precedents.md](human-ai-cohost-precedents.md) | 人間×自律AI共演配信の先例と成立性、ASR選択肢、音声ルーティング、共演特有の落とし穴 | Recorded(2026-07-10) |
 | [runtime-player-input-integration.md](runtime-player-input-integration.md) | リポジトリ事実: runtime-player入力パイプラインの構造とAI入力の統合点 | Recorded(2026-07-10) |

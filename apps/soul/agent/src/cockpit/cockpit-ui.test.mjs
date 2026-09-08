@@ -647,12 +647,12 @@ test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backd
   assert.equal(settingsModalEventRoute({ eventType: "unknown", dirty: true, action: () => {}, onPrompt: () => {} }), null);
 });
 
-test("conversation identity seam: four editor brains consume only matching canonical active facts", () => {
+test("conversation identity seam: five editor brains consume only matching canonical active facts", () => {
   assert.deepEqual(
-    ["claude", "codex", "codex-55", "codex-56-sol"].map((brainId) => conversationBrainIdentity({ brainId })),
-    [null, null, null, null]
+    ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"].map((brainId) => conversationBrainIdentity({ brainId })),
+    [null, null, null, null, null]
   );
-  for (const brainId of ["claude", "codex", "codex-55", "codex-56-sol"]) {
+  for (const brainId of ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]) {
     const canonical = { id: `canonical-${brainId}`, displayName: `Canonical ${brainId}` };
     assert.deepEqual(conversationBrainIdentity({ brainId, activeBrainId: brainId, activeIdentity: canonical }), canonical);
     assert.deepEqual(
@@ -664,7 +664,7 @@ test("conversation identity seam: four editor brains consume only matching canon
   assert.doesNotMatch(source, /CONVERSATION_BRAIN_IDENTITY_PROJECTIONS/);
 });
 
-test("conversation instruction editor vnode: four brain choices, editable body, readonly identity/memory, and no dialog nesting", () => {
+test("conversation instruction editor vnode: five brain choices, editable body, readonly identity/memory, and no dialog nesting", () => {
   const seen = { back: false, edit: false, save: false, reset: false, brain: false };
   const vnode = ConversationInstructionEditor({
     brainId: "codex",
@@ -684,7 +684,7 @@ test("conversation instruction editor vnode: four brain choices, editable body, 
   const select = elements.find((node) => node.type === "select" && node.props.id === "conversation-instruction-brain");
   assert.equal(select.props.value, "codex");
   assert.deepEqual(elements.filter((node) => node.type === "option").map((node) => node.props.value), [
-    "claude", "codex", "codex-55", "codex-56-sol"
+    "claude", "codex", "codex-55", "codex-56-sol", "codex-astra"
   ]);
   const textarea = elements.find((node) => node.type === "textarea");
   assert.equal(textarea.props.value, "custom");
@@ -822,16 +822,16 @@ test("SettingsSelect vnode: view-logic の option 列（{value,label}）を機�
   assert.equal(collectText(vnode).join(""), "MV7+FooGame (foo.exe)");
 });
 
-test("SettingsSelect vnode: 頭脳区画の選択肢（BRAIN_LABELS 由来・多頭化 Domain C・settings-drawer.mjs の BRAIN_OPTIONS と同型・2026-07-17 追撃で4項目）", () => {
+test("SettingsSelect vnode: 頭脳区画の5選択肢（BRAIN_LABELS 由来・settings-drawer.mjs の BRAIN_OPTIONS と同型）", () => {
   const options = Object.keys(BRAIN_LABELS).map((id) => ({ value: id, label: BRAIN_LABELS[id] }));
   const vnode = SettingsSelect({ options, value: "codex", onChange: () => {} });
   const select = collectElements(vnode).find((n) => n.type === "select");
   assert.equal(select.props.value, "codex");
   const opts = collectElements(vnode).filter((n) => n.type === "option");
-  assert.deepEqual(opts.map((o) => o.props.value), ["claude", "codex", "codex-55", "codex-56-sol"]);
+  assert.deepEqual(opts.map((o) => o.props.value), ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]);
   assert.equal(
     collectText(vnode).join(""),
-    "Claude (Opus 4.8)Codex (GPT-5.6 Terra)Codex (GPT-5.5)Codex (GPT-5.6 Sol)"
+    "Claude (Opus 4.8)Codex (GPT-5.6 Terra)Codex (GPT-5.5)Codex (GPT-5.6 Sol)GPT-6 Astra"
   );
 });
 

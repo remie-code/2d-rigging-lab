@@ -1130,6 +1130,8 @@ test("createBrainHooks: registry 駆動（2026-07-17 追撃）— 追加2頭（c
   assert.equal(createBrainHooks(settings55, "claude").resolveInitialBrain(), "codex-55");
   const settingsSol = makeFakeBrainSettings("codex-56-sol");
   assert.equal(createBrainHooks(settingsSol, "claude").resolveInitialBrain(), "codex-56-sol");
+  const settingsAstra = makeFakeBrainSettings("codex-astra");
+  assert.equal(createBrainHooks(settingsAstra, "claude").resolveInitialBrain(), "codex-astra");
 });
 
 test("createBrainHooks: 記憶済みの未知値は defaultChoice にフォールバックする（防御的）", { timeout: 5000 }, () => {
@@ -1157,12 +1159,13 @@ test("createBrainHooks: settings.setBrainChoice が throw しても onSetBrain �
   assert.doesNotThrow(() => hooks.onSetBrain("codex"));
 });
 
-test("buildBrainSessionSystemPrompt: all four brains resolve the canonical self-name", { timeout: 5000 }, () => {
+test("buildBrainSessionSystemPrompt: all five brains resolve the canonical self-name", { timeout: 5000 }, () => {
   const expected = new Map([
     ["claude", "コーディ（Cody）"],
     ["codex", "チャッピー（Chappy）"],
     ["codex-55", "チャッピー（Chappy）"],
-    ["codex-56-sol", "チャッピー（Chappy）"]
+    ["codex-56-sol", "チャッピー（Chappy）"],
+    ["codex-astra", "チャッピー（Chappy）"]
   ]);
   for (const [brainId, selfName] of expected) {
     const prompt = buildBrainSessionSystemPrompt(brainId);
@@ -1188,7 +1191,8 @@ test("buildBrainSessionSystemPrompt: override follows identity and precedes opti
 //  コード（createSessionProxy = cockpit.mjs の実体）を通して「切替は accepted Fire snapshot を乱さず、
 //  次の ask 境界で新頭へ置換される」不変条件を固定する。
 
-test("brain 切替×in-flight: accepted session survives the setting write and is replaced at the next Fire", { timeout: 5000 }, async () => {
+for (const targetBrain of ["codex", "codex-astra"]) {
+test(`brain 切替×in-flight: ${targetBrain} accepted session survives the setting write and is replaced at the next Fire`, { timeout: 5000 }, async () => {
   /** @type {any} */ let session = null;
   let currentBrain = "claude";
   let contextRevision = 0;
@@ -1270,7 +1274,7 @@ test("brain 切替×in-flight: accepted session survives the setting write and i
   assert.equal(playerCreations, 1);
 
   // in-flight 中の setting write は accepted session/player を変更しない。
-  await onSetBrain("codex");
+  await onSetBrain(targetBrain);
   assert.equal(claudeHead.disposed, false);
   assert.deepEqual(disposed, []);
   assert.equal(session, claudeHead);
@@ -1279,9 +1283,9 @@ test("brain 切替×in-flight: accepted session survives the setting write and i
   const next = await proxy.ask("hi");
   assert.equal(claudeHead.disposed, true);
   assert.deepEqual(disposed, ["claude"]);
-  assert.deepEqual(created, ["claude", "codex"]);
-  assert.equal(next.replyText, "codex:hi");
-  assert.equal(session.systemPrompt, buildBrainSessionSystemPrompt("codex"));
+  assert.deepEqual(created, ["claude", targetBrain]);
+  assert.equal(next.replyText, `${targetBrain}:hi`);
+  assert.equal(session.systemPrompt, buildBrainSessionSystemPrompt(targetBrain));
   assert.equal(player, configuredPlayer, "brain swap must not reconstruct the configured TTS player");
   assert.equal(player.ttsConfig, ttsConfig, "brain swap must preserve TTS base URL/speaker config");
   assert.equal(playerCreations, 1, "brain swap must not create a second TTS dependency");
@@ -1291,10 +1295,10 @@ test("brain 切替×in-flight: accepted session survives the setting write and i
   await onSetBrain("claude");
   assert.equal(session, codexHead, "setting write does not dispose the accepted resource");
   const reverse = await proxy.ask("back");
-  assert.deepEqual(disposed, ["claude", "codex"]);
+  assert.deepEqual(disposed, ["claude", targetBrain]);
   assert.equal(reverse.replyText, "claude:back");
   assert.equal(session.systemPrompt, buildBrainSessionSystemPrompt("claude"));
-  assert.deepEqual(created, ["claude", "codex", "claude"]);
+  assert.deepEqual(created, ["claude", targetBrain, "claude"]);
   assert.equal(player, configuredPlayer);
   assert.equal(playerCreations, 1);
 
@@ -1303,6 +1307,7 @@ test("brain 切替×in-flight: accepted session survives the setting write and i
   /** @type {(v:any)=>void} */ (pendingResolve)({ replyText: "late", usage: {}, ttftMs: null, elapsedMs: 1 });
   await inflight;
 });
+}
 
 // ── createChatSourceHooks（S7「視聴者が混ざる」: 配信 source の settings ⇄ cockpit-server 橋渡し）───
 

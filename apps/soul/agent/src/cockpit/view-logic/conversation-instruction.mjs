@@ -15,7 +15,8 @@ export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
   "claude",
   "codex",
   "codex-55",
-  "codex-56-sol"
+  "codex-56-sol",
+  "codex-astra"
 ]);
 
 /** @type {ReadonlyArray<{ value: string; label: string }>} */
