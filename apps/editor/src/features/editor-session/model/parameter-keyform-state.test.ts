@@ -38,6 +38,93 @@ const RIG_FACE_WARP = RigControlIdSchema.parse("rig_face_warp");
 const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
 
 describe("parameter keyform editor state", () => {
+
+  it("evaluates both grid axes for every supported preview patch shape", () => {
+    const session = createRigFixtureSession();
+    const angle = createPreviewGridKeyform();
+    session.graph.keyformSets.push(
+      angle,
+      {
+        ...angle,
+        keyformSetId: KeyformSetIdSchema.parse("keyset_grid_scale"),
+        target: { kind: "rigControl", id: RIG_FACE_ROTATION, property: "scale" },
+        compositionMode: "additiveDelta",
+        keys: angle.keys.map(({ x, y }) => ({
+          x, y, statePatch: { x: (x / 30 + y) * 0.2, y: -(x / 30 + y) * 0.4 }
+        }))
+      },
+      {
+        ...angle,
+        keyformSetId: KeyformSetIdSchema.parse("keyset_grid_warp"),
+        target: { kind: "rigControl", id: RIG_FACE_WARP, property: "controlPointOffsets" },
+        keys: angle.keys.map(({ x, y }) => ({
+          x, y, statePatch: [...createUniformControlPointOffsets(4, (x / 30 + y) * 8, (x / 30 + y) * 4)]
+        }))
+      },
+      {
+        ...angle,
+        keyformSetId: KeyformSetIdSchema.parse("keyset_grid_translation"),
+        target: { kind: "rigControl", id: RIG_FACE_ROTATION, property: "translation" },
+        keys: angle.keys.map(({ x, y }) => ({
+          x, y, statePatch: { x: (x / 30 + y) * 8, y: -(x / 30 + y) * 4 }
+        }))
+      },
+      {
+        ...angle,
+        keyformSetId: KeyformSetIdSchema.parse("keyset_grid_opacity"),
+        target: { kind: "drawable", id: DRAW_FACE, property: "opacity" },
+        keys: angle.keys.map(({ x, y }) => ({ x, y, statePatch: (x / 30 + y) * 0.4 }))
+      }
+    );
+    const state = createEvaluatedParameterKeyformState(session, {
+      [FACE_ANGLE_X]: 15, [EYE_LEFT_OPEN]: 0.25
+    });
+    expect(state.rigAngleDegreesById.get(RIG_FACE_ROTATION)).toBe(15);
+    expect(state.rigScaleById.get(RIG_FACE_ROTATION)?.x).toBeCloseTo(1.15);
+    expect(state.rigScaleById.get(RIG_FACE_ROTATION)?.y).toBeCloseTo(0.7);
+    expect(state.rigControlPointOffsetsById.get(RIG_FACE_WARP)).toEqual(
+      createUniformControlPointOffsets(4, 6, 3)
+    );
+    expect(state.rigTranslationById.get(RIG_FACE_ROTATION)).toEqual({ x: 6, y: -3 });
+    expect(state.drawableOpacityById.get(DRAW_FACE)).toBeCloseTo(0.3);
+  });
+
+  it("composes linear and grid keyforms in their shared order", () => {
+    const session = createRigFixtureSession();
+    session.graph.keyformSets.push(
+      {
+        ...createRigNumberKeyformSet("keyset_linear_add", RIG_FACE_ROTATION, "angleDegrees", [[-30, 5], [30, 5]]),
+        compositionMode: "additiveDelta",
+        compositionOrder: 1
+      },
+      createPreviewGridKeyform()
+    );
+    const state = createEvaluatedParameterKeyformState(session, {
+      [FACE_ANGLE_X]: 15, [EYE_LEFT_OPEN]: 0.25
+    });
+    expect(state.rigAngleDegreesById.get(RIG_FACE_ROTATION)).toBe(20);
+  });
+
+  it("uses defaults and clamps both grid coordinates to parameter ranges", () => {
+    const session = createRigFixtureSession();
+    session.graph.keyformSets.push(createPreviewGridKeyform());
+    expect(createEvaluatedParameterKeyformState(session, {}).rigAngleDegreesById.get(RIG_FACE_ROTATION)).toBe(20);
+    expect(createEvaluatedParameterKeyformState(session, {
+      [FACE_ANGLE_X]: 300, [EYE_LEFT_OPEN]: -2
+    }).rigAngleDegreesById.get(RIG_FACE_ROTATION)).toBe(20);
+  });
+
+  it("skips incomplete grids without losing other valid keyforms", () => {
+    const session = createRigFixtureSession();
+    const grid = createPreviewGridKeyform();
+    session.graph.keyformSets.push(
+      { ...grid, keys: grid.keys.slice(0, 3) },
+      createRigNumberKeyformSet("keyset_linear_fallback", RIG_FACE_ROTATION, "angleDegrees", [[-30, 7], [30, 7]])
+    );
+    expect(createEvaluatedParameterKeyformState(session, {
+      [FACE_ANGLE_X]: 0, [EYE_LEFT_OPEN]: 0.5
+    }).rigAngleDegreesById.get(RIG_FACE_ROTATION)).toBe(7);
+  });
   it("locks target editing between keys and evaluates drawable opacity for preview", () => {
     const session = createFixtureSession();
     session.graph.keyformSets.push({
@@ -678,5 +765,21 @@ function createFixtureSession(): AuthoringSession {
       provenanceRecords: [],
       rightsRecords: []
     }
+  };
+}
+
+function createPreviewGridKeyform(): Extract<AuthoringSession["graph"]["keyformSets"][number], { evaluator: "parameter-grid-2d-v1" }> {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse("keyset_grid_angle"),
+    target: { kind: "rigControl", id: RIG_FACE_ROTATION, property: "angleDegrees" },
+    parameterX: FACE_ANGLE_X,
+    parameterY: EYE_LEFT_OPEN,
+    evaluator: "parameter-grid-2d-v1",
+    interpolation: "bilinear-grid-v1",
+    clampPolicy: "clamp-to-parameter-range",
+    missingKeyPolicy: "diagnostic-error",
+    compositionMode: "replace",
+    compositionOrder: 0,
+    keys: [-30, 30].flatMap(x => [0, 1].map(y => ({ x, y, statePatch: (x / 30 + y) * 20 })))
   };
 }

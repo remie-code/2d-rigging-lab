@@ -522,7 +522,11 @@ function createEvaluationRotationRigControl(input: {
     restAngleDegrees,
     angleDegrees: evaluatedAngleDegrees,
     translation: cloneVec2(translation),
-    scale: cloneVec2(input.rigControl.restScale ?? { x: 1, y: 1 })
+    scale: cloneVec2(
+      input.evaluatedKeyforms.rigScaleById.get(input.rigControl.rigControlId) ??
+        input.rigControl.restScale ??
+        { x: 1, y: 1 }
+    )
   };
 }
 

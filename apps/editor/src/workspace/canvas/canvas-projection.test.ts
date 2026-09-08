@@ -501,6 +501,35 @@ describe("canvas render projection", () => {
     ).toBeCloseTo(0.336);
   });
 
+  it("applies two-axis keyed scale to the rendered mesh around its pivot", () => {
+    const session = createFixtureSession();
+    const rig = createRotationDeformerRigControl();
+    rig.restAngleDegrees = 0;
+    session.graph.rigControls.push(rig);
+    session.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+    const eyeOpen = ParameterIdSchema.parse("param_eye_left_open");
+    session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_canvas_grid_scale"),
+      target: { kind: "rigControl", id: RIG_FACE_ROTATION, property: "scale" },
+      parameterX: FACE_ANGLE_X,
+      parameterY: eyeOpen,
+      evaluator: "parameter-grid-2d-v1",
+      interpolation: "bilinear-grid-v1",
+      clampPolicy: "clamp-to-parameter-range",
+      missingKeyPolicy: "diagnostic-error",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [-30, 30].flatMap((x) =>
+        [0, 1].map((y) => ({ x, y, statePatch: { x: 1 + x / 60, y: 1 + y } }))
+      )
+    });
+    const projection = createCanvasRenderProjection(session, null, {
+      parameterValues: { [FACE_ANGLE_X]: 30, [eyeOpen]: 1 }
+    });
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+    expect(front?.bounds).toEqual({ x: 0, y: -5, width: 30, height: 40 });
+  });
+
   it("projects Rotation rest and keyed translation into overlay and drawable geometry", () => {
     const restSession = createFixtureSession();
     const restRigControl = createRotationDeformerRigControl();

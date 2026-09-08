@@ -13,6 +13,8 @@ import type {
   StatePatchValueDto
 } from "@private-2d-rigging-lab/operation-core";
 
+import { interpolateGrid2dKeyform } from "@private-2d-rigging-lab/runtime-core";
+
 export type EditorParameter = ReturnType<typeof listInitializedParameters>[number];
 type KeyformSetDto = AuthoringSession["graph"]["keyformSets"][number];
 type LinearKeyformSetDto = Extract<KeyformSetDto, { readonly evaluator: "linear-1d-v1" }>;
@@ -85,6 +87,7 @@ export interface EvaluatedParameterKeyformState {
   readonly rigOpacityMultiplierById: ReadonlyMap<RigControlId, number>;
   readonly rigAngleDegreesById: ReadonlyMap<RigControlId, number>;
   readonly rigTranslationById: ReadonlyMap<RigControlId, Vec2Dto>;
+  readonly rigScaleById: ReadonlyMap<RigControlId, Vec2Dto>;
   readonly rigControlPointOffsetsById: ReadonlyMap<RigControlId, readonly Vec2Dto[]>;
 }
 
@@ -481,6 +484,7 @@ export const createEvaluatedParameterKeyformState = (
   const rigOpacityMultiplierById = new Map<RigControlId, number>();
   const rigAngleDegreesById = new Map<RigControlId, number>();
   const rigTranslationById = new Map<RigControlId, Vec2Dto>();
+  const rigScaleById = new Map<RigControlId, Vec2Dto>();
   const rigControlPointOffsetsById = new Map<RigControlId, readonly Vec2Dto[]>();
   const drawablesById = new Map(
     session.graph.drawables.map((drawable) => [drawable.drawableId, drawable])
@@ -489,14 +493,38 @@ export const createEvaluatedParameterKeyformState = (
     session.graph.rigControls.map((rigControl) => [rigControl.rigControlId, rigControl])
   );
 
-  for (const keyformSet of sortLinearKeyformSets(session.graph.keyformSets)) {
-    const parameter = parametersById.get(keyformSet.parameterId);
-    if (parameter === undefined) {
-      continue;
+  const sortedKeyformSets = [...session.graph.keyformSets].sort(
+    (left, right) =>
+      left.compositionOrder - right.compositionOrder ||
+      left.keyformSetId.localeCompare(right.keyformSetId)
+  );
+  for (const keyformSet of sortedKeyformSets) {
+    let sampled: ParameterKeyformValue;
+    if (keyformSet.evaluator === "linear-1d-v1") {
+      const parameter = parametersById.get(keyformSet.parameterId);
+      if (parameter === undefined) {
+        continue;
+      }
+      sampled = sampleLinearKeyformValue(
+        keyformSet,
+        resolveParameterCurrentValue(parameter, parameterValues)
+      ).value;
+    } else {
+      const parameterX = parametersById.get(keyformSet.parameterX);
+      const parameterY = parametersById.get(keyformSet.parameterY);
+      if (parameterX === undefined || parameterY === undefined) {
+        continue;
+      }
+      const result = interpolateGrid2dKeyform({
+        keys: keyformSet.keys,
+        x: resolveParameterCurrentValue(parameterX, parameterValues),
+        y: resolveParameterCurrentValue(parameterY, parameterValues)
+      });
+      if (!result.ok) {
+        continue;
+      }
+      sampled = result.statePatch;
     }
-
-    const currentParameterValue = resolveParameterCurrentValue(parameter, parameterValues);
-    const sampled = sampleLinearKeyformValue(keyformSet, currentParameterValue).value;
     const target = keyformSet.target;
 
     if (target.kind === "drawable" && target.property === "opacity") {
@@ -562,6 +590,19 @@ export const createEvaluatedParameterKeyformState = (
     }
 
     if (
+      target.property === "scale" &&
+      rigControl.kind === "rotation2d" &&
+      isVec2(sampled)
+    ) {
+      const current = rigScaleById.get(rigControlId) ?? rigControl.restScale ?? { x: 1, y: 1 };
+      rigScaleById.set(
+        rigControlId,
+        applyVec2Composition(current, sampled, keyformSet.compositionMode)
+      );
+      continue;
+    }
+
+    if (
       target.property === "controlPointOffsets" &&
       rigControl.kind === "warpLattice2d" &&
       Array.isArray(sampled)
@@ -584,6 +625,7 @@ export const createEvaluatedParameterKeyformState = (
     rigOpacityMultiplierById,
     rigAngleDegreesById,
     rigTranslationById,
+    rigScaleById,
     rigControlPointOffsetsById
   };
 };
@@ -844,21 +886,6 @@ function interpolateKeyformValue(
   }
 
   return cloneKeyformValue(left);
-}
-
-function sortLinearKeyformSets(
-  keyformSets: readonly KeyformSetDto[]
-): readonly LinearKeyformSetDto[] {
-  return keyformSets
-    .filter(
-      (keyformSet): keyformSet is LinearKeyformSetDto =>
-        keyformSet.evaluator === "linear-1d-v1"
-    )
-    .sort(
-      (left, right) =>
-        left.compositionOrder - right.compositionOrder ||
-        left.keyformSetId.localeCompare(right.keyformSetId)
-    );
 }
 
 function applyNumericComposition(
