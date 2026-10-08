@@ -1,7 +1,9 @@
 # UnaSlides用の出力
 
-- [動画](agent-friendly-2d-lt-unaslides.mp4)：UnaSlidesに読み込むためのMP4。5枚、1枚1秒、合計5秒。
-- [確認用PDF](agent-friendly-2d-lt.pdf)：同じ5枚を同じ順番で収録。
+> 動画とPDFは表紙にアーカイブQRを含むため、公開リポジトリには含めていない。
+
+- 動画（`agent-friendly-2d-lt-unaslides.mp4`）：UnaSlidesに読み込むためのMP4。5枚、1枚1秒、合計5秒。
+- 確認用PDF（`agent-friendly-2d-lt.pdf`）：同じ5枚を同じ順番で収録。
 - [出力記録](export-manifest.json)：入力画像のハッシュ、動画仕様、キーフレーム時刻。
 
 ## 会場での設定

@@ -3,7 +3,6 @@
 | ファイル | 内容 |
 |---|---|
 | [development-duration-burst.png](development-duration-burst.png) | 本編Cの集中線画像。既存の開発期間表記を参照し画像生成。ユーザー承認済み |
-| [archive-qr.png](archive-qr.png) | ユーザー添付QRの原本コピー。表紙に使用 |
 | [editor-gui.png](editor-gui.png) | ユーザー指定のEditorスクリーンショット原本。本編Aの左 |
 | [codex-modeling.png](codex-modeling.png) | ユーザー指定のCodexスクリーンショット原本。本編Aの右 |
 | [runtime-player.png](runtime-player.png) | ユーザー指定のPlayer操作画面。本編B左上 |
