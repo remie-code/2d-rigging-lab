@@ -15,3 +15,5 @@ packages/*/src/**/*.js
 apps/*/src/**/*.js
 !packages/authoring-core/src/mesh-generation-v6b-constrainautor-runtime.js
 !packages/authoring-core/src/mesh-generation-v7-constrainautor-runtime.js
+# Scratch output (logs, screenshots, browser profiles) never belongs in git.
+tmp/
