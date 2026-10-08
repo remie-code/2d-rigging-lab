@@ -46,7 +46,7 @@ describe("WebGl2Renderer", () => {
     expect(gl.calls.some((call) => call.name === "bufferData" && call.args[1] instanceof Float32Array)).toBe(true);
   });
 
-  it("uploads layer source textures with LINEAR min/mag filtering and CLAMP_TO_EDGE wrap", () => {
+  it("uploads layer source textures with NEAREST min/mag filtering and CLAMP_TO_EDGE wrap", () => {
     const gl = new FakeWebGl2Context();
     const renderer = new WebGl2Renderer(gl);
 
@@ -64,13 +64,13 @@ describe("WebGl2Renderer", () => {
     );
     expect(filterCalls.length).toBeGreaterThan(0);
     expect(
-      filterCalls.some((call) => call.args[1] === gl.TEXTURE_MIN_FILTER && call.args[2] === gl.LINEAR)
+      filterCalls.some((call) => call.args[1] === gl.TEXTURE_MIN_FILTER && call.args[2] === gl.NEAREST)
     ).toBe(true);
     expect(
-      filterCalls.some((call) => call.args[1] === gl.TEXTURE_MAG_FILTER && call.args[2] === gl.LINEAR)
+      filterCalls.some((call) => call.args[1] === gl.TEXTURE_MAG_FILTER && call.args[2] === gl.NEAREST)
     ).toBe(true);
-    // No layer source texture is sampled with NEAREST.
-    expect(filterCalls.every((call) => call.args[2] === gl.LINEAR)).toBe(true);
+    // No layer source texture is sampled with LINEAR.
+    expect(filterCalls.every((call) => call.args[2] === gl.NEAREST)).toBe(true);
     // Wrap stays CLAMP_TO_EDGE.
     expect(
       gl.calls.some(
