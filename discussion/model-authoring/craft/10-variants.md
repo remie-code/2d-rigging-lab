@@ -86,3 +86,24 @@ Variant は可視性だけを切り替える。**通常衣装の BodyX control �
 - 触らないグループ・キーは op を発行しない（最強の無傷保証）
 - dry-run の `outcome=error, diagnostics=0` は host 入口の payload 形式エラーであって operation reject ではない——過去 commands/ の実例照合が最速の復旧路
 - player の選択は永続化されない（再起動で defaultActive）。export に焼かれるのは常に defaultActive——配信の初期衣装は defaultActive で決める
+
+
+## 7. アトラス適用から Runtime Export への確認
+
+工程5の所属閉包の後、工程6ではアトラスをコミットしてから書き出す。配置計画では対象集合が所属台帳と一致することを照合し、必要ページ寸法は素材の実寸から決める。計画結果を保存するときは対象の画像バイト列をJSON化せず、settings / layoutSummary / included / excluded / usageを保存する。
+
+- アトラス適用が asyncLifecycleRequired で拒否された場合、同期CLIに同じ操作を再送しても進まない。生成画像のSHA-256が非同期のため、operation-coreの dryRunOperationAsync / commitOperationAsync を使う。作業用host adapterから呼ぶ場合も、AiCommandExecutorとDiagnosticGatedAutoApprovalPolicyを通す事前検査・承認・commit・ログ保存・1操作1git commitの規律を維持する。Editorソース変更は不要。
+- 適用前後で、既存キー・rig・Dynamics・メッシュ形状と代表姿勢の画像を照合する。UV投影とtexture参照の意図された変更だけを認める。
+- assembleRuntimeExportのfileSetを保存し、Runtime Player自身のディレクトリローダーで形式・ハッシュ・対象数を確認する。全パーツ、2軸keyform、mask、Dynamicsが出力に残ることを照合する。
+- Playerの評価器で時間を進め、表情・回転・Dynamicsを同時に評価する。authoring側との頂点・opacity・可視集合および画像を比較する。UV換算等の丸めで数画素のRGBが変わる場合は、幾何残差、変更画素数、最大色差、背景合成後の差を記録し、画像の完全一致と区別する。
+- strict validatorのblocking件数だけで「全通過」と呼ばない。非blocking errorや証跡不足は種類と件数を記録し、実行による検証と分けて報告する。Playerコアでの確認は、ユーザーによる最終実機gateの代替ではない。
+
+astra-chan（2026-09-08）の工程6で実証。UI実機の最終審美判定はユーザーgateに残す。
+
+## 8. 衣装の期待所属を現在のVariant設定から逆算しない
+
+非表示・未所属という状態だけでは参照専用素材と判定しない。首のフォルダにある後ろ襟など、描画順の都合で服から分離された素材も含め、衣装別の素材棚卸しと分離画像から本来の役割を確認する。現在のVariant所属は検査対象であり、期待集合の根拠にはしない。ユーザーと合意した素材対応から独立した期待集合を作る。
+
+second-rigging-astra（2026-09-09）では、青専用の rodos_back が非表示・デフォーマ未所属・Variant対象外のまま残り、通常用 neck_back が青でも表示されていた。現在の所属表だけを使った検査はこの誤りを見逃した。正しい対応は通常 neck_back、青 rodos_back、黄色 endomi_neck。青の後ろ襟を既存の青衣装専用BodyX場へ所属させ、可視性とVariant所属を修正し、アトラスとRuntime Exportにも含めた。既存場が素材全域を覆い、服との接続を保てるなら、新しい場やキーを追加する必要はない。
+
+確認では全衣装について専用襟の出現と他衣装の襟の消失、Faceのみの操作で襟が動かないこと、Body操作で服とともに動くことを照合する。変更対象外の衣装の画像を修正前と比較し、書き出し後も同じ期待集合で検査する。

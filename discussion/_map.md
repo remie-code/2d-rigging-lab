@@ -42,7 +42,7 @@
 | [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | Editor Perf Wave2 は accepted close。Player W13–19 diagnostics/fast-path/cadence は完了。C7 二体負荷は optional・未計測 |
 | [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | WS1–WS4 + electron-builder packaging は完了。PSD E2E、typecheck/unit、dead branch、metadata warning は残債 |
 | [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | C1–C7（器）完了、S1–S8 実装進行。S8 kill、brain-swap、stream-memory は human gate。D4 YouTube / D6 key-operation / D7 Variant-out-of-scope を保持。LLM/知覚は `apps/soul` 特区内のみ許可 |
-| [expo/](expo/_map.md) | 外部イベントへの出展物(ポスター等)の設計と出典事実 | 6面 HTML + 6面 A2 PDF は完成。採択・外部 acceptance は未検証、採択後 proof print と権利確認が必要 |
+| [expo/](expo/_map.md) | 外部イベントへの出展物(ポスター・LT等)の設計と出典事実 | 既存6面 HTML/PDF完成・外部acceptance未検証。別途7分LTの共通ベースと本編1を視覚確認中 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism/旧性能資料は private historical archive。現行 performance/runtime は専用 topic map が owner |
 
 ## 現在の状態サマリ

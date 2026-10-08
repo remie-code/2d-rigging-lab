@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>今回開発したもの — エージェントフレンドリーな2Dモデリングシステム</title>
+  <link rel="stylesheet" href="slide-theme.css">
+</head>
+<body>
+  <main class="slide-stage">
+    <section class="slide slide--with-summary" aria-labelledby="slide-title">
+      <h1 class="slide-title" id="slide-title">今回開発したもの</h1>
+      <div class="slide-rule" aria-hidden="true"></div>
+      <div class="slide-summary">
+        <p class="slide-lead">AIエージェントが読み書きしやすい2Dモデリング環境と、配信用ツール群を開発</p>
+        <p class="slide-fact">開発期間：<strong>約2週間</strong></p>
+      </div>
+      <div class="slide-content">
+        <object class="overview-diagram" type="image/svg+xml" data="assets/system-overview.svg" aria-label="画像素材から、自作のモデル制作・会話実行システムを経て、OBSとYouTube配信へつながる全体図">
+          <a href="assets/system-overview.svg">システム全体図</a>
+        </object>
+      </div>
+    </section>
+  </main>
+  <script>
+    function fitSlides() {
+      document.documentElement.style.setProperty('--preview-scale', Math.min(innerWidth / 1600, innerHeight / 900));
+    }
+    addEventListener('resize', fitSlides);
+    fitSlides();
+  </script>
+</body>
+</html>

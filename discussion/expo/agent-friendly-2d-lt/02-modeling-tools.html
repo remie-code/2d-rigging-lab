@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>モデリングツール：人間とAI、それぞれの入口</title>
+  <link rel="stylesheet" href="slide-theme.css">
+</head>
+<body>
+  <main class="slide-stage">
+    <section class="slide slide--with-summary" aria-labelledby="slide-title">
+      <h1 class="slide-title" id="slide-title">モデリングツール：人間とAI、それぞれの入口</h1>
+      <div class="slide-rule" aria-hidden="true"></div>
+      <div class="slide-summary">
+        <p class="slide-lead">人間用のGUIとエージェント用のCLIをそれぞれ用意</p>
+      </div>
+      <div class="slide-content">
+        <div class="screenshot-pair screenshot-pair--modeling">
+          <figure class="screenshot-figure">
+            <figcaption>人間用GUI</figcaption>
+            <img src="assets/editor-gui.png" width="1918" height="1030" alt="Editorの画面。モデルに変形用の格子を重ね、左に階層、右に編集設定を表示している。">
+          </figure>
+          <figure class="screenshot-figure">
+            <figcaption>エージェント用CLI<span class="screenshot-note">（Codexから利用）</span></figcaption>
+            <img src="assets/codex-modeling.png" width="806" height="528" alt="CLIを利用してモデル制作を進めるCodexの会話画面。顔の動きを比較する画像と作業結果が表示されている。">
+          </figure>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    function fitSlides() {
+      document.documentElement.style.setProperty('--preview-scale', Math.min(innerWidth / 1600, innerHeight / 900));
+    }
+    addEventListener('resize', fitSlides);
+    fitSlides();
+  </script>
+</body>
+</html>

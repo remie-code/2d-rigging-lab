@@ -12,6 +12,7 @@
 
 | Path | Event | Status |
 |---|---|---|
+| [agent-friendly-2d-lt/](agent-friendly-2d-lt/_map.md) | VRChatでの7分LT「エージェントフレンドリーな2Dモデリングシステム」。会場はUnaSlides | 表紙・本編1・Aはユーザー確認済み。本編B（配信用ツール）を制作し、見た目は確認待ち |
 | [genai-expo-2026/](genai-expo-2026/_map.md) | 生成AI EXPO(<https://www.genai-expo.com/>)。ポスター展示・パネル 180×90cm | 応募済み・**採択待ち（作業場記録／個別結果は外部未検証）**。**6面HTML + 6面A2 PDF完成**。採択後に実寸試し刷り |
 
 ## 未決事項

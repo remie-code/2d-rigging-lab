@@ -44,12 +44,18 @@ Cubism archive restart, if ever proposed, remains outside current work and requi
 | [editor-render-performance/](editor-render-performance/) | Editor/Viewer 描画パフォーマンスの静的診断（ホットパス・評価層・描画層・ボトルネック仮説） | Historical baseline (2026-07-07)。現行性能は [render-performance](../render-performance/_map.md) |
 | [psd-import-fidelity/](psd-import-fidelity/) | PSDインポート時のH1（`contentInset` 未適用）診断と修正後の証拠 | Current evidence: `8640d12` でUV remap実装済み。実装オーナーは上記ソースとpackage contract |
 | [map-freshness-audit/](map-freshness-audit/) | `discussion/**/_map.md` の鮮度、親子整合、歴史的mapとしての妥当性を調べるリポジトリ内監査 | Completed / final review pass (2026-08-08) |
+| [workspace-activity-refresh/](workspace-activity-refresh/) | 更新済みmap、現行source/test、Git、実験記録からワークスペース活動・現在地・未決gateを再構成した調査 | Completed / final review pass (2026-08-08) |
+| [ai-cohost-model-identity-inventory/](ai-cohost-model-identity-inventory/) | Claude/GPT系列ごとの魂名機能に向けた固定名・brain registry・memory・UI/contract/testの実装前inventory | Completed / final review pass (2026-08-08) |
+| [ai-cohost-fire-diagnostics/](ai-cohost-fire-diagnostics/) | AI Cohostの長発話時Control Channel切断と、`fired`表示から音声再生開始までの遅延に関するread-only inventory | Completed / two-lane inventory (2026-08-30) |
 
 ## 次の行動
 
 1. 性能、Runtime、設計、PSDの現行状態を確認するときは、上記のcurrent ownerを先に読む。historical archiveの古いnext actionは現行作業として再開しない。
 2. map鮮度の更新は [map-freshness-audit/](map-freshness-audit/) の契約と owner report に従い、監査出力を保持する。
-3. 配信デモや提案資料に出す情報は、別途 Streaming Demo Surface / Live2D Feature Proposal 文書で制御する。
+3. ワークスペース全体の現在地・開発史・未決gateを復元するときは [workspace-activity-refresh/](workspace-activity-refresh/) の統合reportを入口にする。
+4. AI Cohostのモデル別identity設計では [ai-cohost-model-identity-inventory/](ai-cohost-model-identity-inventory/) を事実basisにし、未決のidentity粒度・編集権限・履歴意味論・voice/persona範囲をユーザー判断として扱う。
+5. AI Cohostの長発話切断とFire-to-audio遅延では [ai-cohost-fire-diagnostics/](ai-cohost-fire-diagnostics/) を現行inventoryとして読む。上限変更前のbaselineと共通Fire相関は未実装である。
+6. 配信デモや提案資料に出す情報は、別途 Streaming Demo Surface / Live2D Feature Proposal 文書で制御する。
 
 ## 未決事項
 

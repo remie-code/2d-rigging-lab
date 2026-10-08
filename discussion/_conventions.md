@@ -61,6 +61,14 @@ discussion/
     closed-problems/
     research/
     craft/
+    reference-guided-rigging/ # 参照画像を起点にrigを作る議論・実験。将来craft v2へ蒸留
+      _map.md
+      scope-and-decisions.md
+      reference-generation.md
+      deformer-transfer.md
+      motion-review.md
+      experiments/
+        _map.md
   mesh-generation/      # メッシュ自動生成の商用風改修(v7)。概念設計、現状調査、実装、品質評価、v6系整理
     _map.md
     *.md
@@ -232,3 +240,7 @@ Dynamics関連のmachine-readable identifierも、`dynamicsGroup`、`computedDyn
 - 誤配置、明白な転記ミス、またはユーザーが明示した方針変更は、Undine が反映してよい。
 - `scenarios/` は Undine が議論に基づいて作成・更新する。
 - 規約や地図が現状に合わなくなった場合は、ユーザーと合意して `_conventions.md` と該当 `_map.md` を更新する。
+
+## 11. 参照画像に基づくriggingの記録（2026-09-25合意）
+
+model-authoring/reference-guided-rigging/ は、ユーザーとAstraの議論・実験を保存する。共通の合意、参照生成、デフォーマへの変換、動作評価の3主題、および個々の実験を分ける。本文は現在の方針・仮説・未決事項、experiments/ は入力・手順・観測・ユーザー判断を所有する。将来のcraft v2は、確認した内容を蒸留する段階で構成する。画像・スクリプトは当面ユーザー指定のsecond-rigging-6-sol workspaceに置き、実験記録から参照する。命名・map・主題追加・情報種別分離は本規約に従う。担当はユーザーとAstra。
