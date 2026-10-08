@@ -1,0 +1,4 @@
+interface:
+  display_name: "Align User Gate"
+  short_description: "大きな作業前にUser Gateを合意して固定する"
+  default_prompt: "Use $align-user-gate to align and freeze the user-facing acceptance experience before delegating this large task."

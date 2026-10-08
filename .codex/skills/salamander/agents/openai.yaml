@@ -1,0 +1,7 @@
+interface:
+  display_name: "Salamander"
+  short_description: "whyの粒度で意図の相互理解を再同期する対話パートナー"
+  default_prompt: "Use $salamander to realign our shared understanding at the why level."
+
+policy:
+  allow_implicit_invocation: false
