@@ -1,0 +1,49 @@
+[
+ {
+  "file": "fix-open-delkey0.json",
+  "operationId": "op_cp17_fix_open_delkey0",
+  "operationType": "editKeyformKey",
+  "gitMessage": "[cp17] fix: delete Mouth Open key 0 (lattice resize prep)",
+  "payload": {
+   "target": {
+    "kind": "rigControl",
+    "id": "rig_mouth_open"
+   },
+   "targetProperty": "controlPointOffsets",
+   "parameterId": "param_mouth_open",
+   "interpolation": "linear-1d-v1",
+   "action": "deleteCurrent",
+   "keyValue": 0
+  }
+ },
+ {
+  "file": "fix-open-delkey1.json",
+  "operationId": "op_cp17_fix_open_delkey1",
+  "operationType": "editKeyformKey",
+  "gitMessage": "[cp17] fix: delete Mouth Open key 1 (removes binding)",
+  "payload": {
+   "target": {
+    "kind": "rigControl",
+    "id": "rig_mouth_open"
+   },
+   "targetProperty": "controlPointOffsets",
+   "parameterId": "param_mouth_open",
+   "interpolation": "linear-1d-v1",
+   "action": "deleteCurrent",
+   "keyValue": 1
+  }
+ },
+ {
+  "file": "fix-open-resize.json",
+  "operationId": "op_cp17_fix_open_resize",
+  "operationType": "updateRigControl",
+  "gitMessage": "[cp17] fix: Mouth Open lattice 25x23 (crush kink rides the silhouette; 9x7 undershot by +4.9px vs +2px gate)",
+  "payload": {
+   "rigControlId": "rig_mouth_open",
+   "transformColumns": 25,
+   "transformRows": 23,
+   "bezierColumns": 25,
+   "bezierRows": 23
+  }
+ }
+]

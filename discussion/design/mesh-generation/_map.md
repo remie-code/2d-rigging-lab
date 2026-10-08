@@ -8,20 +8,20 @@
 |---|---|---|
 | [_map.md](_map.md) | このディレクトリの入口地図 | Active |
 | [auto-outline-v2.md](auto-outline-v2.md) | Drawable RGBA alpha maskから自然な初期meshを生成する `auto-outline-v2` アルゴリズム候補 | Draft algorithm spec |
-| [auto-outline-v2-5-soft-boundary.md](auto-outline-v2-5-soft-boundary.md) | `auto-outline-v2` を基礎に、bounds比率ベースのsoft boundaryで輪郭だけ少し包み、V2より粗いmeshを生成する次の主候補 | Draft algorithm spec / current next candidate |
-| [auto-outline-v2-6-soft-apron.md](auto-outline-v2-6-soft-apron.md) | V2.5の内部密度を維持し、alpha輪郭外側に薄いapron triangle帯を追加して境界不足を補う次候補 | Draft algorithm spec / next refinement candidate |
+| [auto-outline-v2-5-soft-boundary.md](auto-outline-v2-5-soft-boundary.md) | `auto-outline-v2` を基礎にした soft-boundary 比較案 | Historical / superseded by v6d mainline |
+| [auto-outline-v2-6-soft-apron.md](auto-outline-v2-6-soft-apron.md) | V2.5 の apron triangle 比較案 | Historical / superseded by v6d mainline |
 | [auto-outline-v3-envelope.md](auto-outline-v3-envelope.md) | `auto-outline-v2` 後の実験候補。alpha輪郭そのものではなく外側包絡 envelope boundary を使う方針だが、現状は包絡が強すぎるリスクがある | Draft algorithm spec / experimental |
-| [auto-outline-v4-contour-band.md](auto-outline-v4-contour-band.md) | Cubism三段階自動メッシュの観察をもとに、輪郭帯を明示生成し、その内側をpreset別target sizeで三角形充填する別系統候補 | Draft algorithm spec / next sidecar candidate |
-| [auto-outline-v4-recursive-offset-ring.md](auto-outline-v4-recursive-offset-ring.md) | V4試行後の最新整理。輪郭点を頂点化せず、内側から外側へoffset ringを成長させ、最後にalpha contourを高さ中央付近に通す輪郭帯を作る候補 | Draft algorithm spec / current discussion snapshot |
-| [auto-outline-v5-recursive-contour-band.md](auto-outline-v5-recursive-contour-band.md) | V4試行の破綻を受けた次候補。中心seedから広げず、輪郭点群を覆う三角形帯を最外層として確定し、内側へ帰納的にring-to-ring三角形帯を展開する | Draft algorithm spec / current next candidate |
-| [auto-outline-v6-alpha-constrained-delaunay.md](auto-outline-v6-alpha-constrained-delaunay.md) | alpha mask、adaptive contour simplification、adaptive interior sampling、boundary-preserving triangulationで初期meshを生成する新規sidecar候補。既存実装をアルゴリズム根拠にしない | Draft algorithm spec / current sidecar target |
-| [auto-outline-v6b-constrainautor.md](auto-outline-v6b-constrainautor.md) | v6 shared pipelineの `delaunator + @kninnug/constrainautor` triangulation backend。Editor一時比較用 | Draft backend spec / temporary comparison sidecar |
-| [auto-outline-v6c-poly2tri.md](auto-outline-v6c-poly2tri.md) | v6 shared pipelineの `poly2tri` triangulation backend。Editor一時比較用 | Draft backend spec / temporary comparison sidecar |
-| [auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md](auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md) | Wave68 v6A visual review後の次候補。v6Aを輪郭抽出器として救い、三角形化をv6D/v6Eのライブラリbackendとv6Fの自作backendへ差し替える | Draft algorithm spec / next-wave candidate |
-| [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) | Wave69 v6D visual review後の次候補。v6Dのsoft alpha contour/constrained triangulationを維持し、外側/内側support ringとlayer-bounds外mesh vertexを検討する。Wave70では実装名をv6D lineageへ戻すbasisとして扱い、`auto-outline-v6d-contour-band-support-rings` として実装された | Draft algorithm spec / Wave70 v6D-lineage implementation basis |
-| [auto-outline-v6d-staggered-inner-strip.md](auto-outline-v6d-staggered-inner-strip.md) | Wave70 visual tuning後の次候補。alpha boundary と inner ring の間をDelaunay任せにせず、alpha edge midpointから内側へずらしたstaggered inner ringと明示triangle stripで内側境界帯を広げる | Draft algorithm spec / next-wave candidate |
+| [auto-outline-v4-contour-band.md](auto-outline-v4-contour-band.md) | 輪郭帯を明示生成する別系統候補 | Historical / Wave67 non-default sidecar |
+| [auto-outline-v4-recursive-offset-ring.md](auto-outline-v4-recursive-offset-ring.md) | V4 試行後の recursive offset-ring 候補 | Historical discussion snapshot |
+| [auto-outline-v5-recursive-contour-band.md](auto-outline-v5-recursive-contour-band.md) | V4 試行後の recursive contour-band 候補 | Historical experiment |
+| [auto-outline-v6-alpha-constrained-delaunay.md](auto-outline-v6-alpha-constrained-delaunay.md) | alpha mask / adaptive contour / boundary-preserving triangulation の v6 設計基礎 | Historical design basis; current lineage is v6d |
+| [auto-outline-v6b-constrainautor.md](auto-outline-v6b-constrainautor.md) | v6 shared pipeline の constrainautor backend | Historical backend experiment |
+| [auto-outline-v6c-poly2tri.md](auto-outline-v6c-poly2tri.md) | v6 shared pipeline の poly2tri backend | Historical backend experiment |
+| [auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md](auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md) | Wave68 の v6D/v6E/v6F backend 比較基礎 | Historical experiment |
+| [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) | Wave69/70 の v6D-lineage support-ring 実装基礎 | Historical implementation basis |
+| [auto-outline-v6d-staggered-inner-strip.md](auto-outline-v6d-staggered-inner-strip.md) | Wave70 の staggered inner strip 候補 | Historical experiment |
 | [auto-outline-v6d-adaptive-staggered-band.md](auto-outline-v6d-adaptive-staggered-band.md) | Wave70後のvisual tuningとdensity tuningを統合し、パーツサイズ適応densityとstaggered alpha-to-inner explicit stripを追加したWave71実装basis。現在のdefault方向としてはsuperseded | Historical / superseded for default direction |
-| [auto-outline-v6d-adaptive-contour-constrainautor.md](auto-outline-v6d-adaptive-contour-constrainautor.md) | old v6D contour constrainautor、Wave71 adaptive density、後続のvirtual paddingを統合した現在のaccepted/default mainline | Accepted current mainline / implementation-proven by visual check and focused tests |
+| [auto-outline-v6d-adaptive-contour-constrainautor.md](auto-outline-v6d-adaptive-contour-constrainautor.md) | old v6D contour constrainautor、Wave71 adaptive density、後続のvirtual paddingを統合した現行の技術/default route | Technical/default route; implementation evidence (focused tests/visual evidence) only — v6/v7 product-quality and toggle-lifetime hold remains open |
 | [auto-outline-v6-library-candidate-inventory.md](auto-outline-v6-library-candidate-inventory.md) | v6 sidecarで利用可能な外部ライブラリ候補、依存リスク、spike順序の調査メモ | Research inventory |
 
 ## 境界
@@ -33,25 +33,14 @@
 
 ## 現在の焦点
 
-- Wave62で `auto-outline-v1` により矩形grid主体から輪郭追従へ進んだ。
-- Wave63で `auto-outline-v2` により自然なtriangular meshへ大きく近づいた。
-- `auto-outline-v2.5-soft-boundary` は、V2比でLarge Motionの密度と見た目を大きく改善し、現在の主候補として扱う。
-- `auto-outline-v2.6-soft-apron` は、V2.5の内部密度を保ったまま、輪郭外側に薄いapron triangle帯を追加して頭頂部などの境界不足を補うrefinementである。
-- `auto-outline-v4` 系は、中心seedから広げる方式や局所normal offsetで折り返し・重なり・interior-fill failureが残ったため、次候補は [auto-outline-v5-recursive-contour-band.md](auto-outline-v5-recursive-contour-band.md) とする。
-- `auto-outline-v3-envelope` は、外側包絡が強すぎるとDrawable描画領域から外れやすいことが分かったため、現時点では実験候補として扱う。
-- 2026-06-14のユーザー判断により、新方式は `auto-outline-v6` sidecarとして扱う。v6の設計根拠は [auto-outline-v6-alpha-constrained-delaunay.md](auto-outline-v6-alpha-constrained-delaunay.md) に限定し、既存実装やV1-V5系統をアルゴリズム根拠にしない。
-- v6は最終的に1方式へ絞る前提で、動作確認中だけEditorから `v6a local` / `v6b constrainautor` / `v6c poly2tri` を切り替えられる一時比較用backendとして扱う。
-- Wave68後のユーザー判断では、`v6a` は輪郭抽出・boundary samplingまでが有望だが、ear clipping + interior split triangulationは破棄する。ABC比較ではAの品質が最も高かったため、自作三角形化も有力候補として残す。次候補は [auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md](auto-outline-v6d-v6e-v6f-contour-salvage-triangulation.md) をbasisに、v6D/v6E/v6Fを作り、Editorの一時selectorからv6A/v6B/v6Cを外してよい。
-- Wave69後のユーザー判断では、`v6d` がかなり良い。Wave70では [auto-outline-v6g-contour-band-support-rings.md](auto-outline-v6g-contour-band-support-rings.md) を設計basisにしつつ、公開実装名をv6Gではなくv6D lineageへ戻し、改良v6Dを `auto-outline-v6d-contour-band-support-rings` として新ファイル・新method/source idで実装した。Editorの一時アルゴリズム選択UIは外れ、通常のmesh生成は改良v6D系列へ決め打つ。
-- Wave70後のvisual tuningでは、境界付近の内側帯がまだ狭く、`innerOffset` 調整だけでは見た目が変わりにくいことが分かった。次候補は [auto-outline-v6d-staggered-inner-strip.md](auto-outline-v6d-staggered-inner-strip.md) をbasisに、alpha edge midpointから内側へずらしたstaggered inner ringと明示triangle stripで、alpha boundary直下の帯をDelaunay任せにしない。
-- 2026-06-15のWave71では、[auto-outline-v6d-adaptive-staggered-band.md](auto-outline-v6d-adaptive-staggered-band.md) をbasisに、現行 `high` / `medium` / `low` 値を各presetの基準値とするパーツサイズ適応densityと、staggered inner strip / alpha-to-inner explicit stripを実装した。Wave70 support-ring v6Dはfallbackとして保持される。
-- Wave71後の直接tuningとvisual confirmationにより、[auto-outline-v6d-adaptive-contour-constrainautor.md](auto-outline-v6d-adaptive-contour-constrainautor.md) を現在のaccepted/default mainlineとする。これは old v6D contour constrainautor + adaptive density + virtual padding の系統であり、visible-inner-strip / staggered-band方向はdefault方針としてはhistorical/superseded扱いにする。Editorの通常生成は `auto-outline-v6d-adaptive-contour-constrainautor` をdefaultにし、algorithm selector UIは復活させない。
+- 現行 Editor の default method は `auto-outline-v6d-adaptive-contour-constrainautor`。`apps/editor/src/features/editor-session/model/mesh-tool-state.ts` の薄い generation-family toggle で v7 (`auto-outline-v7-margin-contour`) を比較できるが、v6a/b/c などの backend selector は現行 UI ではない。
+- 往復2のユーザー裁定は「v6 と v7 は一長一短」。品質勝敗は未確定のため、v6 default + v7 比較 toggle を維持し、Mesh Wave 2（v6削除）は未着手・未承認とする。
+- Wave108/109 は mesh quality の優劣を決めるものではなく、生成 UV 非クランプ、層サイズ依存の透明 padding/gutter、LINEAR、contentInset を含む export preflight の rendering/data contract を実装・検証した。詳細は [../mesh-rendering/_map.md](../mesh-rendering/_map.md) と [../../implementation/waves/wave108/wave108-final-integration-report.md](../../implementation/waves/wave108/wave108-final-integration-report.md) を参照。
+- V2–V6 系列の文書は比較・実験の根拠として保持する。自動テスト pass は商用風の目視品質勝利を意味せず、pixel/GPU gate と v6/v7 policy は別の未決事項である。
 
 ## 次の作業候補
 
-1. [auto-outline-v6d-adaptive-contour-constrainautor.md](auto-outline-v6d-adaptive-contour-constrainautor.md) を現在のaccepted/default mainlineとして扱う。
-2. [auto-outline-v6d-adaptive-staggered-band.md](auto-outline-v6d-adaptive-staggered-band.md) と [Wave71 final integration report](../../implementation/waves/wave71/wave71-final-integration-report.md) はhistorical implementation-proven basisとして保持する。
-3. [Wave70 final integration report](../../implementation/waves/wave70/wave70-final-integration-report.md) を改良v6D support-ring backendの実装済み基準として保持する。
-4. mesh verticesがlayer boundsを越えられる設計と、UVを有効texture範囲に留める設計を分けて扱い続ける。
-5. アルゴリズム品質の自動テスト境界と、人間visual check境界を分ける。
-6. Mesh形状品質とmesh rendering品質を混同しない。描画方式の改善は [../mesh-rendering/mesh-image-rendering-architecture.md](../mesh-rendering/mesh-image-rendering-architecture.md) をbasisにする。
+1. v6/v7 quality criteria と generation-family toggle の寿命をユーザーと再裁定するまで、Wave 2（v6削除）を計画・実装しない。
+2. v6d/v7 の自動契約テストと `evaluation-log.md` 往復2の人間所見を別証拠として保つ。必要ならユーザー指定の実モデル visual/pixel comparison を追加する。
+3. Wave108/109 の rendering/data contract は実装済みとして参照し、Atlas Runtime の実機目視、GPU/pixel parity、`original` inset の再現確認は [../mesh-rendering/_map.md](../mesh-rendering/_map.md) の gate として扱う。
+4. Mesh形状品質と mesh rendering 品質を混同しない。V2–V6 の候補文書は historical evidence として残し、現行 default の根拠は v6d source/tests とユーザー裁定に限定する。

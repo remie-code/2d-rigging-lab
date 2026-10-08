@@ -50,7 +50,7 @@ describe("ParameterManagerTable", () => {
         null,
         createElement(
           EditorSessionProvider,
-          null,
+          { initialWorkspaceOpen: true },
           createElement(AuthoringWorkspaceContent, { activeEntry: "parameters" })
         )
       )
@@ -78,30 +78,26 @@ describe("ParameterManagerTable", () => {
       dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_smile_follow"),
       displayName: "Smile Follow",
       enabled: true,
-      solverKind: "scalarDampedFollowV1",
-      drivers: [
+      inputs: [
         {
-          driverId: "driver_smile",
-          sourceParameterId: parameterId,
-          inputScale: 1,
-          inputOffset: 0,
-          invert: false
-        }
+          parameterId,
+          kind: "angle",
+        scale: 1}
       ],
-      output: {
-        outputId: "output_smile",
-        targetParameterId: ParameterIdSchema.parse("param_mouth_open"),
-        outputScale: 1,
-        outputOffset: 0,
-        min: 0,
-        max: 1,
-        clampPolicy: "clamp-to-output-range"
-      },
-      settings: {
-        stiffness: 0.5,
-        damping: 0.25
-      },
-      resetPolicy: "reset-on-load"
+      chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+      outputs: [
+        {
+          parameterId: ParameterIdSchema.parse("param_mouth_open"),
+          segmentIndex: 1,
+          scale: 1,
+          limit: 1
+        }
+      ]
     });
     const projection = createParameterManagerProjection(session);
     const row = projection.rows.find((candidate) => candidate.parameterId === parameterId);
@@ -129,7 +125,7 @@ describe("ParameterManagerTable", () => {
     expect(markup).toContain("disabled");
     expect(markup).toContain("Dynamics: Smile Follow");
     expect(markup).toContain("driver input parameter");
-    expect(markup).toContain("Driver driver_smile");
+    expect(markup).toContain("Input 1 / angle");
   });
 
   it("shares Set Active manager actions with the Parameter Bar projection", () => {

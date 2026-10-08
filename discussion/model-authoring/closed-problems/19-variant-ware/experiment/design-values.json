@@ -1,0 +1,51 @@
+{
+  "variantGroupId": "vgrp_ware",
+  "groupDisplayName": "Ware",
+  "mode": "singleSelect",
+  "variants": {
+    "var_default": "Default",
+    "var_rodos": "Rodos",
+    "var_endoministrator": "Endoministrator"
+  },
+  "membership": {
+    "var_default": [
+      "draw_r0_1cea4f6f_26f93e8b_topwear",
+      "draw_r0_1cea4f6f_26f93eaa_bottomwear",
+      "draw_r0_1cea4f6f_26f93ec9_handwear-l",
+      "draw_r0_1cea4f6f_26f93ee8_handwear-r",
+      "draw_r0_1cea4f6f_ea30e9c4_tie"
+    ],
+    "var_rodos": [
+      "draw_r0_1cea4f6f_a43f1585_topwear",
+      "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+      "draw_r0_1cea4f6f_a43f1647_handwear-r",
+      "draw_r0_1cea4f6f_a43f1666_handwear-l"
+    ],
+    "var_endoministrator": [
+      "draw_r0_1cea4f6f_8b5c54ca_topwear",
+      "draw_r0_1cea4f6f_8b5c5469_bottomwear",
+      "draw_r0_1cea4f6f_8b5c542b_handwear-r",
+      "draw_r0_1cea4f6f_8b5c5408_handwear-l"
+    ]
+  },
+  "meshGenTargets": [
+    "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+    "draw_r0_1cea4f6f_8b5c5469_bottomwear"
+  ],
+  "restoreVisibilityTargets": [
+    "draw_r0_1cea4f6f_a43f1585_topwear",
+    "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+    "draw_r0_1cea4f6f_a43f1647_handwear-r",
+    "draw_r0_1cea4f6f_a43f1666_handwear-l",
+    "draw_r0_1cea4f6f_8b5c54ca_topwear",
+    "draw_r0_1cea4f6f_8b5c5469_bottomwear",
+    "draw_r0_1cea4f6f_8b5c542b_handwear-r",
+    "draw_r0_1cea4f6f_8b5c5408_handwear-l"
+  ],
+  "meshMethod": "auto-outline-v6d-adaptive-contour-constrainautor",
+  "meshDensityHint": "medium",
+  "notes": {
+    "defaultBottomwearLocation": "定義は『bottoms part の衣類』と言うが、実際の通常下衣(スカート)は ware part の bottomwear。bottoms part は legwear/footwear/tail/endomi_back で全て空メッシュ(描画実績なし)のため対象外",
+    "bottomwearVisibilityTrap": "別衣装 bottomwear ×2 は cp18 で非表示化されておらず true のまま空メッシュ。generateMesh 前に false へ倒す(所属先行・可視旗後行の前提を成立させる)"
+  }
+}

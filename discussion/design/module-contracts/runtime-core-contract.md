@@ -572,7 +572,9 @@ RigControl rules:
 - Child deformation never mutates parent state.
 - `rotation2d` evaluates to a local affine transform.
 - `warpLattice2d` evaluates control points and maps child vertices in `rigControlLocalRest`.
-- Child vertex outside warp domain is `warning` unless strict profile escalates.
+- Nested `warpLattice2d` membership is based on stable rest / bind coordinates, not already-deformed current coordinates.
+- If child deformation moves a current vertex outside the parent warp visual domain, the parent warp still applies to that vertex when the rest / bind coordinate belongs to the parent warp.
+- Rest / bind coordinates outside the expected parent warp domain are authoring/binding diagnostics, not the normal nested-warp runtime path.
 
 ## Runtime Snapshot
 
@@ -728,7 +730,7 @@ flowchart TB
 | `parameter_resolution` | out-of-range raw input, missing parameter |
 | `dynamics_evaluation` | missing driver/output, output used as driver, unstable setting, non-deterministic output |
 | `keyform_sampling` | missing endpoint, grid2d missing key, duplicate coordinate |
-| `rigControl_evaluation` | cycle, missing child, child outside warp domain, NaN transform |
+| `rigControl_evaluation` | cycle, missing child, rest/bind outside expected warp domain, NaN transform |
 | `mesh_evaluation` | triangle out of range, degenerate triangle, NaN vertex |
 | `opacity_visibility` | opacity out of range, editor hide leak |
 | `mask_resolution` | missing mask source, visibility false mask source, zero-area mask |
@@ -792,7 +794,7 @@ MVP hair/cloth/accessory sway is represented by Minimum Open Dynamics v1 compute
 | Question | Impact | Status |
 |----------|--------|--------|
 | Exact target-property patch representation for mesh/rig control states | can-defer | operation/runtime implementers must keep patch schemas aligned before coding |
-| Whether child vertex outside warp domain escalates to fail in acceptance profile | can-defer | validator profile table decides severity |
+| Whether rest/bind outside expected warp domain escalates to fail in acceptance profile | can-defer | validator profile table decides severity |
 | Full vertex storage size for snapshot artifacts | can-defer | `summary/targeted/full` contract allows selective storage |
 
 ## Handoff Checklist

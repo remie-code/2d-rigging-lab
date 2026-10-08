@@ -1,0 +1,246 @@
+[
+  {
+    "file": "fix-foreshorten-brow_l.json",
+    "operationId": "op_cp07fix_foreshorten_brow_l",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_facey_brow_l"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_face_angle_y",
+      "interpolation": "linear-1d-v1",
+      "action": "updateCurrent",
+      "keyValue": -30,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 42.77
+          },
+          {
+            "x": 0,
+            "y": 42.77
+          },
+          {
+            "x": 0,
+            "y": 42.77
+          },
+          {
+            "x": 0,
+            "y": 42.77
+          },
+          {
+            "x": 0,
+            "y": 42.77
+          },
+          {
+            "x": 0,
+            "y": 39.3
+          },
+          {
+            "x": 0,
+            "y": 39.3
+          },
+          {
+            "x": 0,
+            "y": 39.3
+          },
+          {
+            "x": 0,
+            "y": 39.3
+          },
+          {
+            "x": 0,
+            "y": 39.3
+          },
+          {
+            "x": 0,
+            "y": 35.82
+          },
+          {
+            "x": 0,
+            "y": 35.82
+          },
+          {
+            "x": 0,
+            "y": 35.82
+          },
+          {
+            "x": 0,
+            "y": 35.82
+          },
+          {
+            "x": 0,
+            "y": 35.82
+          },
+          {
+            "x": 0,
+            "y": 32.36
+          },
+          {
+            "x": 0,
+            "y": 32.36
+          },
+          {
+            "x": 0,
+            "y": 32.36
+          },
+          {
+            "x": 0,
+            "y": 32.36
+          },
+          {
+            "x": 0,
+            "y": 32.36
+          },
+          {
+            "x": 0,
+            "y": 28.88
+          },
+          {
+            "x": 0,
+            "y": 28.88
+          },
+          {
+            "x": 0,
+            "y": 28.88
+          },
+          {
+            "x": 0,
+            "y": 28.88
+          },
+          {
+            "x": 0,
+            "y": 28.88
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp07fix] key FaceY brow_l down(-30): intra-element vertical gradient (squash 0.1, yref 439) — displacement/scale agreement"
+  },
+  {
+    "file": "fix-foreshorten-brow_r.json",
+    "operationId": "op_cp07fix_foreshorten_brow_r",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_facey_brow_r"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_face_angle_y",
+      "interpolation": "linear-1d-v1",
+      "action": "updateCurrent",
+      "keyValue": -30,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 42.54
+          },
+          {
+            "x": 0,
+            "y": 42.54
+          },
+          {
+            "x": 0,
+            "y": 42.54
+          },
+          {
+            "x": 0,
+            "y": 42.54
+          },
+          {
+            "x": 0,
+            "y": 42.54
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 38.89
+          },
+          {
+            "x": 0,
+            "y": 35.22
+          },
+          {
+            "x": 0,
+            "y": 35.22
+          },
+          {
+            "x": 0,
+            "y": 35.22
+          },
+          {
+            "x": 0,
+            "y": 35.22
+          },
+          {
+            "x": 0,
+            "y": 35.22
+          },
+          {
+            "x": 0,
+            "y": 31.57
+          },
+          {
+            "x": 0,
+            "y": 31.57
+          },
+          {
+            "x": 0,
+            "y": 31.57
+          },
+          {
+            "x": 0,
+            "y": 31.57
+          },
+          {
+            "x": 0,
+            "y": 31.57
+          },
+          {
+            "x": 0,
+            "y": 27.9
+          },
+          {
+            "x": 0,
+            "y": 27.9
+          },
+          {
+            "x": 0,
+            "y": 27.9
+          },
+          {
+            "x": 0,
+            "y": 27.9
+          },
+          {
+            "x": 0,
+            "y": 27.9
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp07fix] key FaceY brow_r down(-30): intra-element vertical gradient (squash 0.1, yref 448) — displacement/scale agreement"
+  }
+]

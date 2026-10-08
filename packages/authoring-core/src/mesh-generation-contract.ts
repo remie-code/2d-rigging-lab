@@ -144,6 +144,45 @@ export const V6_MESH_GENERATION_CANDIDATES = [
   }
 ] as const satisfies readonly V6MeshGenerationCandidate[];
 
+export const V7_MESH_GENERATION_METHOD_IDS = [
+  "auto-outline-v7-margin-contour"
+] as const;
+
+export const V7_MESH_GENERATION_SOURCE_IDS = [
+  "outline-v7-margin-contour-rgba"
+] as const;
+
+export const V7_MESH_GENERATION_BACKEND_IDS = [
+  "v7-margin-contour"
+] as const;
+
+export const V7_MESH_GENERATION_DEPENDENCY_PACKAGE_IDS = [
+  "@kninnug/constrainautor",
+  "delaunator"
+] as const;
+
+export type V7MeshGenerationMethod = (typeof V7_MESH_GENERATION_METHOD_IDS)[number];
+export type V7MeshGenerationSourceId = (typeof V7_MESH_GENERATION_SOURCE_IDS)[number];
+export type V7MeshGenerationBackendId = (typeof V7_MESH_GENERATION_BACKEND_IDS)[number];
+export type V7MeshGenerationDependencyPackageId =
+  (typeof V7_MESH_GENERATION_DEPENDENCY_PACKAGE_IDS)[number];
+
+export interface V7MeshGenerationCandidate {
+  readonly methodId: V7MeshGenerationMethod;
+  readonly sourceId: V7MeshGenerationSourceId;
+  readonly backendId: V7MeshGenerationBackendId;
+  readonly dependencyPackageIds: readonly V7MeshGenerationDependencyPackageId[];
+}
+
+export const V7_MESH_GENERATION_CANDIDATES = [
+  {
+    methodId: "auto-outline-v7-margin-contour",
+    sourceId: "outline-v7-margin-contour-rgba",
+    backendId: "v7-margin-contour",
+    dependencyPackageIds: ["delaunator", "@kninnug/constrainautor"]
+  }
+] as const satisfies readonly V7MeshGenerationCandidate[];
+
 export const MESH_GENERATION_METHOD_IDS = [
   "manual-empty",
   "auto-grid-v1",
@@ -153,7 +192,8 @@ export const MESH_GENERATION_METHOD_IDS = [
   "auto-outline-v2.6-soft-apron",
   "auto-outline-v3-envelope",
   "auto-outline-v4-contour-band",
-  ...V6_MESH_GENERATION_METHOD_IDS
+  ...V6_MESH_GENERATION_METHOD_IDS,
+  ...V7_MESH_GENERATION_METHOD_IDS
 ] as const;
 
 export type MeshGenerationMethod = (typeof MESH_GENERATION_METHOD_IDS)[number];
@@ -161,6 +201,7 @@ export type MeshDensityHint = "low" | "medium" | "high";
 
 export const DRAWABLE_GENERATED_MESH_SOURCE_IDS = [
   ...V6_MESH_GENERATION_SOURCE_IDS,
+  ...V7_MESH_GENERATION_SOURCE_IDS,
   "outline-v4-contour-band-rgba",
   "outline-v3-envelope-rgba",
   "outline-v2-6-soft-apron-rgba",
@@ -181,7 +222,8 @@ export const GENERATED_MESH_PREVIEW_COMMIT_METHOD_IDS = [
   "auto-outline-v2.6-soft-apron",
   "auto-outline-v3-envelope",
   "auto-outline-v4-contour-band",
-  ...V6_MESH_GENERATION_METHOD_IDS
+  ...V6_MESH_GENERATION_METHOD_IDS,
+  ...V7_MESH_GENERATION_METHOD_IDS
 ] as const;
 
 export type GeneratedMeshPreviewCommitMethod =
@@ -203,6 +245,8 @@ export type MeshGenerationV6FallbackReason =
   | "v6c-poly2tri-triangulation-threw"
   | "v6c-poly2tri-boundary-missing"
   | "v6d-constrainautor-generation-failed"
+  | "v6d-invalid-constraint-input"
+  | "v6d-untriangulated-points"
   | "v6d-constraint-recovery-failed"
   | "v6d-backend-threw"
   | "v6d-support-ring-geometry-invalid"
@@ -216,9 +260,16 @@ export type MeshGenerationV6FallbackReason =
   | "v6f-custom-cdt-constraint-recovery-failed"
   | "v6f-custom-cdt-local-improvement-rejected";
 
+export type MeshGenerationV7FallbackReason =
+  | "v7-margin-contour-alpha-empty"
+  | "v7-margin-contour-extraction-failed"
+  | "v7-margin-contour-triangulation-failed"
+  | "v7-margin-contour-generation-failed";
+
 export type MeshGenerationFallbackReason =
   | "texture-bytes-unavailable"
   | MeshGenerationV6FallbackReason
+  | MeshGenerationV7FallbackReason
   | AutoOutlineV4ContourBandFailureReason
   | AutoOutlineV3EnvelopeFailureReason
   | AutoOutlineV26SoftApronFailureReason
@@ -227,6 +278,7 @@ export type MeshGenerationFallbackReason =
 
 export type MeshGenerationFallbackMethod =
   | V6MeshGenerationMethod
+  | V7MeshGenerationMethod
   | "auto-outline-v4-contour-band"
   | "auto-outline-v3-envelope"
   | "auto-outline-v2.6-soft-apron"
@@ -248,6 +300,20 @@ export const getV6MeshGenerationCandidate = (
   const candidate = V6_MESH_GENERATION_CANDIDATES.find((entry) => entry.methodId === method);
   if (candidate === undefined) {
     throw new Error(`Unknown v6 mesh generation method: ${method}`);
+  }
+
+  return candidate;
+};
+
+export const isV7MeshGenerationMethod = (method: string): method is V7MeshGenerationMethod =>
+  (V7_MESH_GENERATION_METHOD_IDS as readonly string[]).includes(method);
+
+export const getV7MeshGenerationCandidate = (
+  method: V7MeshGenerationMethod
+): V7MeshGenerationCandidate => {
+  const candidate = V7_MESH_GENERATION_CANDIDATES.find((entry) => entry.methodId === method);
+  if (candidate === undefined) {
+    throw new Error(`Unknown v7 mesh generation method: ${method}`);
   }
 
   return candidate;

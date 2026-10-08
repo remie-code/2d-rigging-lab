@@ -18,8 +18,14 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { createOperationCore } from "../operation-core.js";
+import { getOperationHandler } from "../operation-registry.js";
+import { deleteRigControlOperationHandler } from "./delete-rig-control.js";
 
 describe("rig control operation handlers", () => {
+  it("registers deleteRigControl", () => {
+    expect(getOperationHandler("deleteRigControl")).toBe(deleteRigControlOperationHandler);
+  });
+
   it("dry-runs createRotation2dRigControl without mutating the original session", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -88,6 +94,91 @@ describe("rig control operation handlers", () => {
     ]);
   });
 
+  it("creates duplicate display-name rotation rig controls with base, _2, and _3 ids", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const first = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        displayName: "Duplicate Rotation"
+      })
+    );
+    const second = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Duplicate Rotation"
+      })
+    );
+    const third = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        displayName: "Duplicate Rotation"
+      })
+    );
+
+    expect([
+      first.result.modelDiff?.added[0]?.id,
+      second.result.modelDiff?.added[0]?.id,
+      third.result.modelDiff?.added[0]?.id
+    ]).toEqual([
+      "rig_duplicate_rotation",
+      "rig_duplicate_rotation_2",
+      "rig_duplicate_rotation_3"
+    ]);
+    expect(session.graph.rigControls.map((rigControl) => rigControl.displayName)).toEqual([
+      "Duplicate Rotation",
+      "Duplicate Rotation",
+      "Duplicate Rotation"
+    ]);
+  });
+
+  it("uses the same suffixed rig id for dry-run and commit without mutating the original session", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        displayName: "Repeat Rotation"
+      })
+    );
+
+    const dryRun = core.dryRunOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: true,
+        basePackageRevision: 1,
+        displayName: "Repeat Rotation"
+      })
+    );
+
+    expect(dryRun.status).toBe("dry_run");
+    expect(dryRun.modelDiff?.added).toEqual([{ kind: "rigControl", id: "rig_repeat_rotation_2" }]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_repeat_rotation_2"))).toBeUndefined();
+    expect(session.packageRevision).toBe(1);
+
+    const committed = core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Repeat Rotation"
+      })
+    );
+
+    expect(committed.result.status).toBe("committed");
+    expect(committed.result.modelDiff?.added).toEqual([{ kind: "rigControl", id: "rig_repeat_rotation_2" }]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_repeat_rotation_2"))).toMatchObject({
+      displayName: "Repeat Rotation"
+    });
+  });
+
   it("commits createWarpLattice2dRigControl with deterministic rest control points", () => {
     const session = createFixtureSession();
     const core = createOperationCore({
@@ -138,6 +229,50 @@ describe("rig control operation handlers", () => {
         id: "draw_body",
         path: "/model/rigControls/rigControls/rig_body_warp_lattice/childDrawableIds"
       }
+    ]);
+  });
+
+  it("creates duplicate display-name warp lattice rig controls with suffixed ids", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+
+    const first = core.commitOperation(
+      session,
+      createWarpLattice2dRigControlRequest({
+        dryRun: false,
+        displayName: "Duplicate Warp Lattice"
+      })
+    );
+    const second = core.commitOperation(
+      session,
+      createWarpLattice2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Duplicate Warp Lattice"
+      })
+    );
+    const third = core.commitOperation(
+      session,
+      createWarpLattice2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        displayName: "Duplicate Warp Lattice"
+      })
+    );
+
+    expect([
+      first.result.modelDiff?.added[0]?.id,
+      second.result.modelDiff?.added[0]?.id,
+      third.result.modelDiff?.added[0]?.id
+    ]).toEqual([
+      "rig_duplicate_warp_lattice",
+      "rig_duplicate_warp_lattice_2",
+      "rig_duplicate_warp_lattice_3"
+    ]);
+    expect(session.graph.rigControls.map((rigControl) => rigControl.displayName)).toEqual([
+      "Duplicate Warp Lattice",
+      "Duplicate Warp Lattice",
+      "Duplicate Warp Lattice"
     ]);
   });
 
@@ -238,6 +373,68 @@ describe("rig control operation handlers", () => {
         id: "draw_body",
         path: "/model/rigControls/rigControls/rig_head_warp_deformer/childDrawableIds"
       }
+    ]);
+  });
+
+  it("creates duplicate generic wrap-selected warp deformers with suffixed ids", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    addFixtureDrawable(session, "draw_a", "A");
+    addFixtureDrawable(session, "draw_b", "B");
+    addFixtureDrawable(session, "draw_c", "C");
+    addFixtureDrawable(session, "draw_d", "D");
+    addFixtureDrawable(session, "draw_e", "E");
+    addFixtureDrawable(session, "draw_f", "F");
+
+    const first = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        displayName: "2 Selected Warp Deformer",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_a" },
+          { kind: "drawable", id: "draw_b" }
+        ]
+      })
+    );
+    const second = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "2 Selected Warp Deformer",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_c" },
+          { kind: "drawable", id: "draw_d" }
+        ]
+      })
+    );
+    const third = core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        displayName: "2 Selected Warp Deformer",
+        wrapChildren: [
+          { kind: "drawable", id: "draw_e" },
+          { kind: "drawable", id: "draw_f" }
+        ]
+      })
+    );
+
+    expect([
+      first.result.modelDiff?.added[0]?.id,
+      second.result.modelDiff?.added[0]?.id,
+      third.result.modelDiff?.added[0]?.id
+    ]).toEqual([
+      "rig_2_selected_warp_deformer",
+      "rig_2_selected_warp_deformer_2",
+      "rig_2_selected_warp_deformer_3"
+    ]);
+    expect(session.graph.rigControls.map((rigControl) => rigControl.displayName)).toEqual([
+      "2 Selected Warp Deformer",
+      "2 Selected Warp Deformer",
+      "2 Selected Warp Deformer"
     ]);
   });
 
@@ -1445,6 +1642,220 @@ describe("rig control operation handlers", () => {
     expect(outcome.operationLogLength).toBe(1);
   });
 
+  it("dry-runs and commits deleteRigControl with promoted children and removed target keyforms", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    core.commitOperation(session, createRotation2dRigControlRequest({ dryRun: false }));
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Child Rotation"
+      })
+    );
+    core.commitOperation(
+      session,
+      createWarpDeformerRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        displayName: "Delete Target",
+        childDrawableIds: ["draw_body"],
+        childRigControlIds: ["rig_child_rotation"]
+      })
+    );
+    core.commitOperation(
+      session,
+      createBindRigControlChildRequest({
+        dryRun: false,
+        basePackageRevision: 3,
+        child: { kind: "rigControl", id: "rig_delete_target" }
+      })
+    );
+    session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_delete_target_offsets"),
+      target: {
+        kind: "rigControl",
+        id: RigControlIdSchema.parse("rig_delete_target"),
+        property: "controlPointOffsets"
+      },
+      parameterId: ParameterIdSchema.parse("param_delete_target"),
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [{ value: 0, statePatch: Array.from({ length: 20 }, () => ({ x: 0, y: 0 })) }]
+    });
+    session.graph.stableOrder.push("keyset_delete_target_offsets");
+
+    const dryRun = core.dryRunOperation(
+      session,
+      createDeleteRigControlRequest({
+        dryRun: true,
+        basePackageRevision: 4,
+        rigControlId: "rig_delete_target"
+      })
+    );
+
+    expect(dryRun.status).toBe("dry_run");
+    expect(dryRun.modelDiff?.removed).toEqual([
+      { kind: "rigControl", id: "rig_delete_target" },
+      { kind: "keyformSet", id: "keyset_delete_target_offsets" }
+    ]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_delete_target"))).toBeDefined();
+    expect(session.graph.keyformSets).toHaveLength(1);
+    expect(session.packageRevision).toBe(4);
+
+    const outcome = core.commitOperation(
+      session,
+      createDeleteRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 4,
+        rigControlId: "rig_delete_target"
+      })
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.logEntry?.operationType).toBe("deleteRigControl");
+    expect(outcome.logEntry?.targetIds).toEqual([
+      "rig_delete_target",
+      "rig_head_rotation",
+      "rig_child_rotation",
+      "draw_body",
+      "keyset_delete_target_offsets"
+    ]);
+    expect(outcome.result.modelDiff?.removed).toEqual([
+      { kind: "rigControl", id: "rig_delete_target" },
+      { kind: "keyformSet", id: "keyset_delete_target_offsets" }
+    ]);
+    expect(findChangedFieldPaths(outcome.result, "rig_head_rotation")).toEqual(
+      expect.arrayContaining([
+        "/model/rigControls/rigControls/rig_head_rotation/childDrawableIds",
+        "/model/rigControls/rigControls/rig_head_rotation/childRigControlIds"
+      ])
+    );
+    expect(findChangedFieldPaths(outcome.result, "rig_child_rotation")).toEqual([
+      "/model/rigControls/rigControls/rig_child_rotation/parentId"
+    ]);
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_delete_target"))).toBeUndefined();
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"))).toMatchObject({
+      childDrawableIds: ["draw_body"],
+      childRigControlIds: ["rig_child_rotation"]
+    });
+    expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_child_rotation"))).toMatchObject({
+      parentId: "rig_head_rotation"
+    });
+    expect(session.graph.keyformSets).toEqual([]);
+    expect(session.packageRevision).toBe(5);
+  });
+
+  it("rejects deleteRigControl for missing and incoherent rig controls", () => {
+    const missingSession = createFixtureSession();
+    const core = createOperationCore();
+
+    const missing = core.commitOperation(
+      missingSession,
+      createDeleteRigControlRequest({
+        dryRun: false,
+        rigControlId: "rig_missing"
+      })
+    );
+
+    expect(missing.result.status).toBe("rejected");
+    expect(missing.result.diagnostics[0]?.checkId).toBe("operation.deleteRigControl.missingRigControl");
+
+    const incoherentSession = createFixtureSession();
+    core.commitOperation(incoherentSession, createRotation2dRigControlRequest({ dryRun: false }));
+    core.commitOperation(
+      incoherentSession,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Child Rotation"
+      })
+    );
+    core.commitOperation(
+      incoherentSession,
+      createBindRigControlChildRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        child: { kind: "rigControl", id: "rig_child_rotation" }
+      })
+    );
+    const childRigControl = getRigControlById(incoherentSession.graph, RigControlIdSchema.parse("rig_child_rotation"));
+    if (childRigControl === undefined) {
+      throw new Error("Expected child rig control fixture.");
+    }
+    delete childRigControl.parentId;
+
+    const incoherent = core.commitOperation(
+      incoherentSession,
+      createDeleteRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 3,
+        rigControlId: "rig_head_rotation"
+      })
+    );
+
+    expect(incoherent.result.status).toBe("rejected");
+    expect(incoherent.result.diagnostics[0]?.checkId).toBe(
+      "operation.deleteRigControl.parentChildMismatch"
+    );
+    expect(getRigControlById(incoherentSession.graph, RigControlIdSchema.parse("rig_head_rotation"))).toBeDefined();
+    expect(incoherentSession.packageRevision).toBe(3);
+  });
+
+  it("rejects deleteRigControl cycles without mutating the session", () => {
+    const session = createFixtureSession();
+    const core = createOperationCore();
+    core.commitOperation(session, createRotation2dRigControlRequest({ dryRun: false }));
+    core.commitOperation(
+      session,
+      createRotation2dRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 1,
+        displayName: "Child Rotation"
+      })
+    );
+    core.commitOperation(
+      session,
+      createBindRigControlChildRequest({
+        dryRun: false,
+        basePackageRevision: 2,
+        child: { kind: "rigControl", id: "rig_child_rotation" }
+      })
+    );
+    const rigA = getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"));
+    const rigB = getRigControlById(session.graph, RigControlIdSchema.parse("rig_child_rotation"));
+    if (rigA === undefined || rigB === undefined) {
+      throw new Error("Expected cycle fixture rig controls.");
+    }
+    rigA.parentId = RigControlIdSchema.parse("rig_child_rotation");
+    rigB.childRigControlIds = [RigControlIdSchema.parse("rig_head_rotation")];
+    session.graph.rigControlRootIds = [];
+    const graphBefore = structuredClone(session.graph);
+    const packageRevisionBefore = session.packageRevision;
+    const authoringRevisionBefore = session.authoringRevision;
+    const dirtyBefore = session.dirty;
+
+    const rejected = core.commitOperation(
+      session,
+      createDeleteRigControlRequest({
+        dryRun: false,
+        basePackageRevision: 3,
+        rigControlId: "rig_head_rotation"
+      })
+    );
+
+    expect(rejected.result.status).toBe("rejected");
+    expect(rejected.result.diagnostics[0]?.checkId).toBe("operation.deleteRigControl.cycle");
+    expect(session.graph).toEqual(graphBefore);
+    expect(session.packageRevision).toBe(packageRevisionBefore);
+    expect(session.authoringRevision).toBe(authoringRevisionBefore);
+    expect(session.dirty).toBe(dirtyBefore);
+    expect(rejected.operationLogLength).toBe(3);
+  });
+
   it("commits bindRigControlChild for drawable children", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
@@ -1777,6 +2188,23 @@ const createUpdateRigControlRequest = (options: {
     ...(options.transformRows === undefined ? {} : { transformRows: options.transformRows }),
     ...(options.bezierColumns === undefined ? {} : { bezierColumns: options.bezierColumns }),
     ...(options.bezierRows === undefined ? {} : { bezierRows: options.bezierRows })
+  }
+});
+
+const createDeleteRigControlRequest = (options: {
+  readonly dryRun: boolean;
+  readonly basePackageRevision?: number;
+  readonly rigControlId: string;
+}) => ({
+  schemaVersion: "operation-request-v1",
+  operationId: `op_delete_${options.rigControlId}`,
+  actor: "test",
+  surface: "testFixture",
+  dryRun: options.dryRun,
+  basePackageRevision: options.basePackageRevision ?? 0,
+  operationType: "deleteRigControl",
+  payload: {
+    rigControlId: options.rigControlId
   }
 });
 

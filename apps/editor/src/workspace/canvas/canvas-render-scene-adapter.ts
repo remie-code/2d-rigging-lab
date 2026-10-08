@@ -4,6 +4,9 @@ import {
   DEFAULT_RENDER_UV_SPACE,
   createRenderScene,
   createRgba8TextureContentSignature,
+  recordLive2dPerformanceCounter,
+  recordLive2dPerformanceTiming,
+  startLive2dPerformanceTiming,
   type RenderDrawable,
   type RenderMesh,
   type RenderRgba8TextureSource,
@@ -26,6 +29,7 @@ export function createRenderSceneFromCanvasProjection(
   projection: CanvasRenderProjection,
   options: CanvasRenderSceneAdapterOptions = {}
 ): RenderScene {
+  const timingStart = startLive2dPerformanceTiming();
   const hasSelection = hasIsolatableCanvasSelection(projection);
   const textureSourcesById = new Map<string, RenderRgba8TextureSource>();
   const drawables = projection.drawables
@@ -59,10 +63,13 @@ export function createRenderSceneFromCanvasProjection(
     })
     .filter((drawable): drawable is RenderDrawable => drawable !== undefined);
 
-  return createRenderScene({
+  const scene = createRenderScene({
     textureSources: [...textureSourcesById.values()],
     drawables
   });
+  recordLive2dPerformanceCounter("canvas.renderScene.textureSources", scene.textureSources.length);
+  recordLive2dPerformanceTiming("canvas.renderSceneAdapter.ms", timingStart);
+  return scene;
 }
 
 function createRenderMeshForDrawable(drawable: CanvasRenderableDrawable): RenderMesh {
@@ -70,11 +77,13 @@ function createRenderMeshForDrawable(drawable: CanvasRenderableDrawable): Render
     return createBoundsQuadRenderMesh(drawable);
   }
 
+  const contentUvRemap = resolveContentUvRemap(drawable);
+
   return {
     coordinateSpace: DEFAULT_RENDER_MESH_COORDINATE_SPACE,
     uvSpace: DEFAULT_RENDER_UV_SPACE,
     vertices: drawable.evaluatedMesh.vertices.map(clonePoint),
-    uvs: drawable.evaluatedMesh.uvs.map(clonePoint),
+    uvs: drawable.evaluatedMesh.uvs.map((uv) => applyContentUvRemap(uv, contentUvRemap)),
     triangles: drawable.evaluatedMesh.triangles.map(
       (triangle): readonly [number, number, number] => [
         triangle[0],
@@ -82,6 +91,81 @@ function createRenderMeshForDrawable(drawable: CanvasRenderableDrawable): Render
         triangle[2]
       ]
     )
+  };
+}
+
+/**
+ * Wave 1.2 F: affine remap of content-space UV 0..1 onto the content sub-rect of the padded
+ * raster. Same form as the atlas placement `contentUvRect`
+ * (`packages/authoring-core/src/texture-atlas-packing.ts` `createTextureAtlasPlacement`):
+ *
+ *   u' = (insetLeft + u * contentW) / paddedW,  contentW = paddedW - insetLeft - insetRight
+ *   v' = (insetTop  + v * contentH) / paddedH,  contentH = paddedH - insetTop  - insetBottom
+ *
+ * The `original` render path samples the padded per-texture raster directly, so without this remap
+ * the content-space UV 0..1 maps to the full padded raster and the artwork appears inset by the
+ * padding P (`import-position-mismatch-investigation.md` H1). The remap is a pure affine map with
+ * no clamping: covering-margin overshoot (content UV outside [0,1]) lands in the raster's own
+ * transparent padding band, preserving the A1 boundary-transparent-margin design.
+ */
+interface ContentUvRemap {
+  readonly insetLeft: number;
+  readonly insetTop: number;
+  readonly contentWidth: number;
+  readonly contentHeight: number;
+  readonly paddedWidth: number;
+  readonly paddedHeight: number;
+}
+
+function resolveContentUvRemap(drawable: CanvasRenderableDrawable): ContentUvRemap | undefined {
+  const inset = drawable.contentInset;
+  const raster = drawable.rasterDimensions;
+  if (inset === undefined || raster === undefined) {
+    // Legacy / non-PSD entry (raster ≡ content): keep content UV 0..1 unchanged.
+    return undefined;
+  }
+
+  if (inset.left === 0 && inset.top === 0 && inset.right === 0 && inset.bottom === 0) {
+    // Zero inset on every side: remap is the identity, so skip it.
+    return undefined;
+  }
+
+  const paddedWidth = raster.width;
+  const paddedHeight = raster.height;
+  const contentWidth = paddedWidth - inset.left - inset.right;
+  const contentHeight = paddedHeight - inset.top - inset.bottom;
+  if (
+    paddedWidth <= 0 ||
+    paddedHeight <= 0 ||
+    contentWidth <= 0 ||
+    contentHeight <= 0
+  ) {
+    // Defensive: malformed inset/dimensions — keep the legacy content UVs rather than
+    // producing NaN/negative sub-rects.
+    return undefined;
+  }
+
+  return {
+    insetLeft: inset.left,
+    insetTop: inset.top,
+    contentWidth,
+    contentHeight,
+    paddedWidth,
+    paddedHeight
+  };
+}
+
+function applyContentUvRemap(
+  uv: { readonly x: number; readonly y: number },
+  remap: ContentUvRemap | undefined
+): { readonly x: number; readonly y: number } {
+  if (remap === undefined) {
+    return { x: uv.x, y: uv.y };
+  }
+
+  return {
+    x: (remap.insetLeft + uv.x * remap.contentWidth) / remap.paddedWidth,
+    y: (remap.insetTop + uv.y * remap.contentHeight) / remap.paddedHeight
   };
 }
 
@@ -105,12 +189,25 @@ function hasDrawableMeshTriangles(drawable: CanvasRenderableDrawable): boolean {
       return false;
     }
 
-    const destination = [
-      mesh.vertices[aIndex],
-      mesh.vertices[bIndex],
-      mesh.vertices[cIndex]
-    ] as const;
-    const source = [mesh.uvs[aIndex], mesh.uvs[bIndex], mesh.uvs[cIndex]] as const;
+    const destinationA = mesh.vertices[aIndex];
+    const destinationB = mesh.vertices[bIndex];
+    const destinationC = mesh.vertices[cIndex];
+    const sourceA = mesh.uvs[aIndex];
+    const sourceB = mesh.uvs[bIndex];
+    const sourceC = mesh.uvs[cIndex];
+    if (
+      destinationA === undefined ||
+      destinationB === undefined ||
+      destinationC === undefined ||
+      sourceA === undefined ||
+      sourceB === undefined ||
+      sourceC === undefined
+    ) {
+      return false;
+    }
+
+    const destination = [destinationA, destinationB, destinationC] as const;
+    const source = [sourceA, sourceB, sourceC] as const;
 
     return triangleHasArea(destination) && triangleHasArea(source);
   });
@@ -120,6 +217,7 @@ function createBoundsQuadRenderMesh(drawable: CanvasRenderableDrawable): RenderM
   const { x, y, width, height } = drawable.bounds;
   const right = x + width;
   const bottom = y + height;
+  const contentUvRemap = resolveContentUvRemap(drawable);
 
   return {
     coordinateSpace: DEFAULT_RENDER_MESH_COORDINATE_SPACE,
@@ -131,10 +229,10 @@ function createBoundsQuadRenderMesh(drawable: CanvasRenderableDrawable): RenderM
       { x, y: bottom }
     ],
     uvs: [
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 1, y: 1 },
-      { x: 0, y: 1 }
+      applyContentUvRemap({ x: 0, y: 0 }, contentUvRemap),
+      applyContentUvRemap({ x: 1, y: 0 }, contentUvRemap),
+      applyContentUvRemap({ x: 1, y: 1 }, contentUvRemap),
+      applyContentUvRemap({ x: 0, y: 1 }, contentUvRemap)
     ],
     triangles: [
       [0, 1, 2],

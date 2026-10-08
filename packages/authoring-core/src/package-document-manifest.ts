@@ -1,4 +1,9 @@
-import type { PackageDocumentDto, PackageManifestDto } from "@private-2d-rigging-lab/package-format";
+import {
+  VARIANTS_FILE_SCHEMA_VERSION,
+  VARIANTS_MODEL_FILE_PATH,
+  type PackageDocumentDto,
+  type PackageManifestDto
+} from "@private-2d-rigging-lab/package-format";
 
 import type { AuthoringSession } from "./authoring-session.js";
 import {
@@ -33,10 +38,12 @@ export const buildPackageDocumentManifest = (
     updatedAt: toUpdatedAtIsoString(options.updatedAt),
     schemaVersions: {
       ...schemaVersions,
+      variants: VARIANTS_FILE_SCHEMA_VERSION,
       ...(includeEditorState ? { editorState: PACKAGE_EDITOR_STATE_SCHEMA_VERSION } : {})
     },
     modelFiles: {
       ...modelFiles,
+      variants: VARIANTS_MODEL_FILE_PATH,
       ...(includeEditorState ? { editorState: PACKAGE_EDITOR_STATE_MODEL_FILE_PATH } : {})
     }
   };

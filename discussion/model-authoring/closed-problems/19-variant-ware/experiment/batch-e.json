@@ -1,0 +1,24 @@
+[
+  {
+    "file": "target-endomiback_c7ac.json",
+    "operationId": "op_cp19b_target_endomiback_c7ac",
+    "operationType": "addVariantTargetDrawable",
+    "payload": {
+      "variantGroupId": "vgrp_ware",
+      "drawableId": "draw_r0_1cea4f6f_c7ac42d3_endomi_back"
+    },
+    "gitMessage": "[cp19b] addVariantTargetDrawable vgrp_ware endomi_back"
+  },
+  {
+    "file": "member-endomiback_c7ac.json",
+    "operationId": "op_cp19b_member_endomiback_c7ac",
+    "operationType": "setVariantMembership",
+    "payload": {
+      "variantGroupId": "vgrp_ware",
+      "drawableId": "draw_r0_1cea4f6f_c7ac42d3_endomi_back",
+      "variantId": "var_endoministrator",
+      "member": true
+    },
+    "gitMessage": "[cp19b] setVariantMembership endomi_back var_endoministrator=true"
+  }
+]

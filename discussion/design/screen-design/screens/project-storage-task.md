@@ -1,10 +1,12 @@
 # Project Storage Task 画面仕様
 
-> 状態: Draft screen spec。
+> 状態: Superseded direction for Toolbox placement / Draft legacy screen spec。
 
 ## 1. 役割
 
-Project Storage Taskは、save/load/export/import/resetを扱うtask画面である。
+Project Storage Taskは、save/load/export/import/resetを扱うtask画面として定義されていた。
+
+Workspace-first UXでは、日常保存はWorkspace Save、共有・持ち運びはPortable JSON Exportとして分離する。これらはworkspace内部の編集toolではないため、Toolbox taskではなくHeaderのWorkspace menuまたはWorkspace detailsで扱う。新しい正の方針は [workspace-save-and-navigation.md](workspace-save-and-navigation.md) を参照する。
 
 ## 2. Task-Local Flow
 
@@ -47,3 +49,10 @@ stateDiagram-v2
 - `UX-FEAT-026`
 - `UX-FEAT-027`
 - 一部 `UX-FEAT-035`, `UX-FEAT-036`
+
+## 6. 後続方針
+
+- Project StorageをToolboxから外す。
+- Portable JSON Import / ExportはHeaderのWorkspace menuへ移す。
+- Save / Save As / Open WorkspaceはHeaderのWorkspace menuへ移す。
+- Workspaceを開いていない状態では編集UIを出さず、Workspace GateでCreate / Open / Import Portable JSONだけを提示する。

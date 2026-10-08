@@ -2,11 +2,11 @@ import { create } from "zustand";
 
 export type WorkspaceToolId = "select" | "mesh" | "rig" | "dynamics";
 export type WorkspaceEntryId =
-  | "import"
+  | "workspace"
   | "parameters"
   | "variants"
   | "atlas"
-  | "storage"
+  | "runtimeExport"
   | "validate"
   | "viewer";
 
@@ -27,7 +27,7 @@ type EditorUiState = {
 export const useEditorUiStore = create<EditorUiState>((set) => ({
   surfaceLabel: "Workspace draft",
   activeTool: "select",
-  activeEntry: "import",
+  activeEntry: "workspace",
   meshOverlayVisible: false,
   deformerOverlayVisible: false,
   setActiveTool: (tool) => set({ activeTool: tool }),

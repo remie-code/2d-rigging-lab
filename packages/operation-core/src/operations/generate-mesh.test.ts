@@ -669,6 +669,45 @@ describe("generateMesh operation handler", () => {
     }
   });
 
+  it("records v6d adaptive contour multi-island diagnostics in generated operation provenance", () => {
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize: { width: 64, height: 32 },
+      meshBounds: { x: 4, y: 8, width: 64, height: 32 },
+      opaquePixels: [
+        ...createPixelsFromPredicate(64, 32, (x, y) => x >= 8 && x <= 35 && y >= 6 && y <= 25),
+        [58, 5],
+        [59, 5]
+      ]
+    });
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6d-adaptive-contour-constrainautor",
+        "meshSource:outline-v6d-adaptive-contour-constrainautor-rgba",
+        "meshQuality:v6MultiIslandHandling=supported",
+        "meshQuality:v6RawAlphaComponents=2",
+        "meshQuality:v6KeptIslands=1",
+        "meshQuality:v6GeneratedIslands=1",
+        "meshQuality:v6BackendGeneratedIslands=1",
+        "meshQuality:v6SkippedTinyNoiseIslands=1",
+        "meshQuality:v6SkippedTinyNoisePixels=2",
+        "meshQuality:v6LocalizedFallbacks=0"
+      ])
+    );
+    expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6LocalizedFallbackReasons=")))
+      .toBe(false);
+    expect(() => toRuntimeGraph(session)).not.toThrow();
+  });
+
   it("records v6D v6E and v6F empty-alpha blocked metadata in operation provenance", () => {
     const newContourCandidates = V6_MESH_GENERATION_CANDIDATES.filter(
       (candidate) =>
@@ -1058,6 +1097,57 @@ describe("generateMesh operation handler", () => {
     expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6AdaptiveResolvedBoundarySpacing="))).toBe(true);
     expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6AdaptiveStaggeredInnerPoints="))).toBe(false);
     expect(transformHistory.some((entry) => entry.startsWith("meshQuality:v6AdaptiveExplicitAlphaInnerStripTriangles="))).toBe(false);
+  });
+
+  it("preserves v6d adaptive contour multi-island preview provenance diagnostics on previewMesh commit", () => {
+    const textureSize = { width: 48, height: 36 };
+    const session = createFixtureSessionWithSizedTextureBytes({
+      textureSize,
+      meshBounds: { x: 4, y: 8, width: 48, height: 36 },
+      opaquePixels: createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) => {
+        const leftLeg = x >= 7 && x <= 17 && y >= 5 && y <= 30 && !(x >= 7 && x <= 9 && y <= 9);
+        const rightLeg = x >= 30 && x <= 40 && y >= 5 && y <= 30 && !(x >= 38 && x <= 40 && y <= 9);
+        return leftLeg || rightLeg;
+      })
+    });
+    const preview = createGeneratedMeshForDrawable({
+      session,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_mesh_preview_body_v6d_adaptive_contour_multi_island"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+    if (preview === undefined) {
+      throw new Error("Expected v6d adaptive contour multi-island preview mesh.");
+    }
+    expect(preview.qualityMetrics?.v6Metrics?.multiIslandHandling).toBe("supported");
+    const request = createGenerateMeshRequest({
+      dryRun: false,
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium",
+      previewMesh: preview.mesh,
+      previewProvenance: createPreviewProvenance(preview)
+    });
+
+    const outcome = generateMeshOperationHandler.commit(session, request, getRequestOperationId(request));
+    const transformHistory = session.graph.provenanceRecords.at(-1)?.transformHistory ?? [];
+
+    expect(outcome.result.status).toBe("committed");
+    expect(transformHistory).toEqual(
+      expect.arrayContaining([
+        "generateMesh:auto-outline-v6d-adaptive-contour-constrainautor",
+        "meshSource:previewMesh",
+        "previewMeshSource:outline-v6d-adaptive-contour-constrainautor-rgba",
+        "meshQuality:v6MultiIslandHandling=supported",
+        "meshQuality:v6RawAlphaComponents=2",
+        "meshQuality:v6KeptIslands=2",
+        "meshQuality:v6GeneratedIslands=2",
+        "meshQuality:v6BackendGeneratedIslands=2",
+        "meshQuality:v6SkippedTinyNoiseIslands=0",
+        "meshQuality:v6SkippedTinyNoisePixels=0",
+        "meshQuality:v6LocalizedFallbacks=0"
+      ])
+    );
   });
 
   it("preserves v6 fallback preview provenance on previewMesh commit", () => {

@@ -5,6 +5,9 @@ export const PACKAGE_PROVENANCE_PATH = "assets/provenance.json";
 export const PACKAGE_RIGHTS_PATH = "assets/rights.json";
 export const PACKAGE_TEXTURE_ATLAS_PATH = "assets/textures/texture-atlas.json";
 
+type RequiredModelFileKey = Exclude<keyof RequiredModelFilesDto, "variants" | "editorState">;
+type OptionalModelFileKey = Extract<keyof RequiredModelFilesDto, "variants" | "editorState">;
+
 export const REQUIRED_MODEL_FILE_KEYS = [
   "graph",
   "drawables",
@@ -15,7 +18,12 @@ export const REQUIRED_MODEL_FILE_KEYS = [
   "dynamics",
   "masks",
   "drawOrder"
-] as const satisfies readonly (keyof Omit<RequiredModelFilesDto, "editorState">)[];
+] as const satisfies readonly RequiredModelFileKey[];
+
+export const OPTIONAL_MODEL_FILE_KEYS = [
+  "variants",
+  "editorState"
+] as const satisfies readonly OptionalModelFileKey[];
 
 export class PackageFilePathError extends Error {
   constructor(message: string) {
@@ -40,14 +48,19 @@ export function isPackageRelativePath(path: string): boolean {
 
 export function getAuthoredPackageFilePaths(manifest: PackageManifestDto): readonly string[] {
   const modelPaths = REQUIRED_MODEL_FILE_KEYS.map((key) => manifest.modelFiles[key]);
-  const editorStatePath = manifest.modelFiles.editorState === undefined
-    ? []
-    : [manifest.modelFiles.editorState];
+  const optionalModelPaths: string[] = [];
+
+  for (const key of OPTIONAL_MODEL_FILE_KEYS) {
+    const path = manifest.modelFiles[key];
+    if (path !== undefined) {
+      optionalModelPaths.push(path);
+    }
+  }
 
   return [
     PACKAGE_MANIFEST_PATH,
     ...modelPaths,
-    ...editorStatePath,
+    ...optionalModelPaths,
     manifest.assetIndex,
     PACKAGE_TEXTURE_ATLAS_PATH,
     PACKAGE_PROVENANCE_PATH,

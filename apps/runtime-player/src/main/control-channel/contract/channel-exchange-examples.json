@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Runtime Player Control Channel worked exchange examples (C4 §3/§8)",
+  "description": "Pure-JSON message sequences the soul zone reads to learn the wire contract. `direction` is serverToClient (器 -> 魂) or clientToServer (魂 -> 器). The happy path is connect -> server.hello -> intent.set -> accepted; each rejection code has one rejected example. The 器 keeps the connection open for every rejection (C4 §3.5).",
+  "happyPath": {
+    "description": "Connect, receive capabilities, set one intent, get accepted.",
+    "messages": [
+      {
+        "direction": "serverToClient",
+        "note": "Sent immediately on connect (C4 §3.4). C5 additively advertises intent.envelope; C6 additively advertises intent.speech, alongside intent.set.",
+        "message": {
+          "v": 1,
+          "kind": "server.hello",
+          "payload": {
+            "protocol": 1,
+            "supportedKinds": ["intent.set", "intent.envelope", "intent.speech"]
+          }
+        }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "Turn the head via the head-horizontal slot for 800ms.",
+        "message": {
+          "v": 1,
+          "id": "req-42",
+          "kind": "intent.set",
+          "payload": { "slotId": "head-horizontal", "value": 0.4, "ttlMs": 800 }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-42", "result": "accepted" }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "ttlMs omitted -> the 器's default window applies (streaming style).",
+        "message": {
+          "v": 1,
+          "id": "req-43",
+          "kind": "intent.set",
+          "payload": { "slotId": "eye-blink-left", "value": 1 }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-43", "result": "accepted" }
+      }
+    ]
+  },
+  "envelopePath": {
+    "description": "C5 intent.envelope worked exchange (additive over intent.set). The soul sends one envelope intent (peak + attack/sustain/decay) and the 器 draws the curve at 60Hz; the reply is accepted, correlated by replyTo. The intent.set path above is unchanged.",
+    "messages": [
+      {
+        "direction": "clientToServer",
+        "note": "Rise head-horizontal to 0.8 over 120ms, hold 600ms, decay 400ms — the 器 draws the curve, the soul sends once.",
+        "message": {
+          "v": 1,
+          "id": "req-70",
+          "kind": "intent.envelope",
+          "payload": {
+            "slotId": "head-horizontal",
+            "peak": 0.8,
+            "attackMs": 120,
+            "sustainMs": 600,
+            "decayMs": 400
+          }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-70", "result": "accepted" }
+      }
+    ]
+  },
+  "speechPath": {
+    "description": "C6 intent.speech worked exchange (additive over intent.set/intent.envelope). The soul sends ONE variable-length mora列 and the 器's group evaluator plays it back — the mouth speaks 「これじっさいのところどうなってるの」 (fixture phrase, 設計 §7 裁定7: all five vowels + a same-vowel run 「のところど」= o×5, the re-articulation-dip 試金石). No slotId on the wire — vowel labels map to the fixed mouth group. No attack field — attack ≈ the mora interval, derived by the 器. The reply is accepted, correlated by replyTo. The intent.set/intent.envelope paths above are unchanged.",
+    "messages": [
+      {
+        "direction": "clientToServer",
+        "note": "Speak 「これじっさいのところどうなってるの」. 15 moras (促音「っ」dropped): o,e,i,a,i, o,o,o,o,o, u,a,e,u,o. timeMs monotonically increasing (~110-130ms beats); s = pre-scale opening strength 0.5..0.9 (the 器 applies its universal 0.8 scale + re-articulation dip).",
+        "message": {
+          "v": 1,
+          "id": "req-90",
+          "kind": "intent.speech",
+          "payload": {
+            "timeline": [
+              { "timeMs": 0, "vowel": "o", "s": 0.6 },
+              { "timeMs": 120, "vowel": "e", "s": 0.7 },
+              { "timeMs": 250, "vowel": "i", "s": 0.5 },
+              { "timeMs": 380, "vowel": "a", "s": 0.85 },
+              { "timeMs": 510, "vowel": "i", "s": 0.55 },
+              { "timeMs": 630, "vowel": "o", "s": 0.7 },
+              { "timeMs": 740, "vowel": "o", "s": 0.65 },
+              { "timeMs": 850, "vowel": "o", "s": 0.7 },
+              { "timeMs": 960, "vowel": "o", "s": 0.65 },
+              { "timeMs": 1070, "vowel": "o", "s": 0.7 },
+              { "timeMs": 1190, "vowel": "u", "s": 0.6 },
+              { "timeMs": 1320, "vowel": "a", "s": 0.8 },
+              { "timeMs": 1450, "vowel": "e", "s": 0.7 },
+              { "timeMs": 1580, "vowel": "u", "s": 0.55 },
+              { "timeMs": 1700, "vowel": "o", "s": 0.6 }
+            ]
+          }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-90", "result": "accepted" }
+      }
+    ]
+  },
+  "rejections": [
+    {
+      "code": "unknownKind",
+      "note": "Unknown kind is rejected; the connection is KEPT (C4 §3.5).",
+      "request": {
+        "v": 1,
+        "id": "req-100",
+        "kind": "intent.wave",
+        "payload": {}
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-100",
+        "result": "rejected",
+        "error": {
+          "code": "unknownKind",
+          "message": "Unsupported request kind: intent.wave."
+        }
+      }
+    },
+    {
+      "code": "invalidPayload",
+      "note": "value is not a finite number.",
+      "request": {
+        "v": 1,
+        "id": "req-101",
+        "kind": "intent.set",
+        "payload": { "slotId": "head-horizontal", "value": "left" }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-101",
+        "result": "rejected",
+        "error": {
+          "code": "invalidPayload",
+          "message": "intent.set payload is malformed."
+        }
+      }
+    },
+    {
+      "code": "unknownSlot",
+      "note": "slotId is not part of the semantic-slot vocabulary.",
+      "request": {
+        "v": 1,
+        "id": "req-102",
+        "kind": "intent.set",
+        "payload": { "slotId": "left-elbow", "value": 0.2 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-102",
+        "result": "rejected",
+        "error": {
+          "code": "unknownSlot",
+          "message": "Unknown semantic slot: left-elbow."
+        }
+      }
+    },
+    {
+      "code": "slotValueOutOfRange",
+      "note": "head-horizontal is a centered slot (-1..1); 1.5 is out of range and is NOT clamped.",
+      "request": {
+        "v": 1,
+        "id": "req-103",
+        "kind": "intent.set",
+        "payload": { "slotId": "head-horizontal", "value": 1.5 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-103",
+        "result": "rejected",
+        "error": {
+          "code": "slotValueOutOfRange",
+          "message": "value 1.5 is outside the -1..1 range for slot head-horizontal."
+        }
+      }
+    },
+    {
+      "code": "slotNotWritable",
+      "note": "The loaded model has no enabled+targeted slot for body-z (or no model is loaded).",
+      "request": {
+        "v": 1,
+        "id": "req-104",
+        "kind": "intent.set",
+        "payload": { "slotId": "body-z", "value": 0.3 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-104",
+        "result": "rejected",
+        "error": {
+          "code": "slotNotWritable",
+          "message": "Slot body-z is not writable on the loaded model."
+        }
+      }
+    },
+    {
+      "code": "channelClosed",
+      "note": "A request arrived while the channel is not accepting intents.",
+      "request": {
+        "v": 1,
+        "id": "req-105",
+        "kind": "intent.set",
+        "payload": { "slotId": "head-horizontal", "value": 0.1 }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-105",
+        "result": "rejected",
+        "error": {
+          "code": "channelClosed",
+          "message": "The control channel is not accepting intents."
+        }
+      }
+    }
+  ]
+}

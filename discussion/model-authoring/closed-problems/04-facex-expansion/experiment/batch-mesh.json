@@ -1,0 +1,46 @@
+[
+ {
+  "file": "mesh-mouth.json",
+  "operationId": "op_cp04_mesh_mouth",
+  "operationType": "generateMesh",
+  "payload": {
+   "drawableId": "draw_r0_1cea4f6f_3a8f6fa8_mouth",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  },
+  "gitMessage": "[cp04] mesh: mouth (normal set)"
+ },
+ {
+  "file": "mesh-brow-l.json",
+  "operationId": "op_cp04_mesh_brow_l",
+  "operationType": "generateMesh",
+  "payload": {
+   "drawableId": "draw_r0_1cea4f6f_3a8f70c7_eyebrow-l",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  },
+  "gitMessage": "[cp04] mesh: eyebrow-l (normal set)"
+ },
+ {
+  "file": "mesh-brow-r.json",
+  "operationId": "op_cp04_mesh_brow_r",
+  "operationType": "generateMesh",
+  "payload": {
+   "drawableId": "draw_r0_1cea4f6f_3a8f70e6_eyebrow-r",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  },
+  "gitMessage": "[cp04] mesh: eyebrow-r (normal set)"
+ },
+ {
+  "file": "mesh-front-hair.json",
+  "operationId": "op_cp04_mesh_front_hair",
+  "operationType": "generateMesh",
+  "payload": {
+   "drawableId": "draw_r0_1cea4f6f_21b4dac0_front_hair",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  },
+  "gitMessage": "[cp04] mesh: front hair (main body)"
+ }
+]

@@ -18,9 +18,10 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 | [e2e-oracle.md](e2e-oracle.md) | Playwright E2Eが保証する範囲と保証しない範囲。人間のvisual checkとの境界 | Accepted oracle |
 | [screens/](screens/_map.md) | 各画面固有のレイアウト、Task-Local Flow、表示情報、非表示情報、関連機能ID | In discussion |
 | [components/](components/_map.md) | 複数画面で共有するUI概念、常設領域、共通操作部品 | In discussion |
-| [inventories/](inventories/_map.md) | 画面設計の根拠となる現状UI・依存・機能分類の棚卸 | Inventory |
 | [editor-rebuild-purge-policy.md](editor-rebuild-purge-policy.md) | 旧 `apps/editor` GUI / e2e / GUI由来ドキュメントを削除対象として扱い、UX駆動でEditorを再構築する方針 | Accepted / Wave56 basis |
 | [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) | React Editor再構築の技術スタック、source構成、validation境界、非ゴールに関する合意済みオラクル | Accepted / Wave57+ active basis |
+
+> `inventories/_map.md` はこの snapshot に存在しないため、現行の入口として登録しない。棚卸の監査記録は [11-design-and-conventions.md](../../reports/map-freshness-audit/11-design-and-conventions.md) と実装 Wave map を参照する。
 
 ## 現在の焦点
 
@@ -29,19 +30,20 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Wave56は破棄する。ただしWave56 Domain B/Cで完了したheadless baseline / package分離は後続事実として引き継ぐ。
 - Wave57は [react-editor-foundation-oracle.md](react-editor-foundation-oracle.md) に従い、`apps/editor` をReact stackで再削除・再作成し、起動直後のAuthoring Workspace placeholderまでを `pass` 記録済みである。Wave57後もこのoracleをEditor再構築のactive basisとして扱う。
 - PSD importは通常workspaceから呼び出すtaskであり、既存panel延命ではなくclean human task UIとして扱う。PSD Import Taskの目標UXはAuthoring Workspace上に重なる大きめのmodalである。Wave58で、fixture PSD選択からImport Review、placeholder preview、planned Editor Parts構造、Import後のWorkspace Parts Tree反映までのv0導線がpass記録済みである。次のPSD Import UXでは、Import Review右側のPSD単体previewをplaceholderからvisible layer / visible groupの確認表示へ進め、hidden PSD groupはPart Containerのeditor-only hidden gateへ写す。Import Review previewではclipping再現を必須要件にしない。
-- Canvas / PreviewはPSD由来drawableをEditor rendererで表示する中心領域であり、PSD描画を後回しにしない。MVPではPSD canvas基準、visible drawable配置、source order描画、opacity、normal alpha blend、clipping、selection overlay、zoom / pan / fit、Canvas toolbarを扱う。Photoshop pixel perfect parityやペイント機能は非ゴールである。
+- Canvas / PreviewはPSD由来drawableをEditor rendererで表示する中心領域であり、PSD描画を後回しにしない。MVPではPSD canvas基準、visible drawable配置、source order描画、opacity、normal alpha blend、clipping、selection overlay、zoom / pan / fit、Canvas toolbarを扱う。Wave66 で `CanvasEvaluatedScene`、evaluated rendering、overlay、hit-test は実装済み。Photoshop pixel perfect parityやペイント機能は非ゴールである。
 - PSD Import / structural scaffoldは、Human UI、Codex-facing surface、test-facing surface、Evidence surfaceを分離する。Human UIはPSD Import Task、Codexはdeterministic command / operation API、testはstable IDs / structured state、evidenceはDiagnostics / Evidence Viewを主に使う。Human UIの主役は、作成予定Parts構造、PSD単体preview、行単位Issue badge、Import / Cancelである。
 - Playwright E2Eは主要ユーザー導線とworkspaceへの状態反映だけを確認する。レイアウト、視認性、余白、pixel差分、Canvas描画品質は人間のvisual check領域であり、E2E oracleにしない。
 - Wave51 はこの screen-design 実装負債への最初の基盤整備として final integration `pass` 記録済み。対象は production `data-testid` behavior coupling 除去、minimal Task/View Shell metadata、PSD Import Task structured observation projector、production `data-testid` guard、focused PSD regression preservation に限られる。
 - Wave52 final integration report/review は PSD Import Task Migration v0 の bounded implementation baseline として `pass` 記録済み。PSD Import は Empty / Authoring Workspace から Task Shell task として開け、default では常設の巨大 workspace panel ではなくなった。Generic Task Shell / Task Chrome、PSD Import Task Human UI、narrow observation consumption、focused PSD regressions、standard `check` への `check:testids` 統合までが範囲である。
 - `check:testids:fixtures` は利用可能だが、standard `check` には含めない。
 - Wave53 final integration report/review は Workspace Layout Migration v0 の bounded implementation baseline として `pass` 記録済み。Authoring Workspace v0 skeleton、App Bar / Toolbox / Structure・Parts Tree / Canvas・Preview / Inspector / Parameter Bar / Diagnostics Strip の実配置、Toolbox経由の PSD Import Task entry、desktop/mobile smoke、既存 PSD focused paths、production `data-testid` guard、source/dependency guards の pass 記録を持つ。
-- Wave54 Domains A-H reports/reviews と Domain H verification は `pass` 記録済み。workspace-scoped Task Window Shell v0、Toolboxから開く PSD Import task-window route、Diagnostics / Evidence skeleton route、Codex / Automation skeleton route、selector/test-facing scope hardening、`taskWindowRoutingFocused`、desktop/mobile smoke、既存 PSD focused paths、guard pass が記録済みである。Wave54 final / Domain J は未完了である。
-- Wave54 A-H 後も、full visual redesign、full panel migration、最終的な Diagnostics / Evidence View または Codex / Automation View、Mesh / Atlas / Parameter Manager / Variant UI は未完了である。PSD Import Taskは大きめのmodalを目標UXとする。legacy support panels には旧 evidence/debug/Codex-heavy UI が残る。
-- Texture Atlasは専用Task画面として扱う。最低限はvisible drawableをpadding付きで決定的に自動配置し、layout previewをApplyしてからViewer / Runtime確認へ進む。
+- Wave54 Domains A-H reports/reviews と Domain H verification は `pass` 記録済み。workspace-scoped Task Window Shell v0、Toolboxから開く PSD Import task-window route、Diagnostics / Evidence skeleton route、Codex / Automation skeleton route、selector/test-facing scope hardening、`taskWindowRoutingFocused`、desktop/mobile smoke、既存 PSD focused paths、guard pass が記録済みである。Wave54 final / Domain J は歴史的な未完了記録として扱う。
+- Wave54-era の「Diagnostics / Evidence、Codex / Automation、Mesh / Atlas / Parameter / Variant は未完了」という記述は current status ではない。Wave66/85/92/99 で Canvas、Diagnostics v0、Runtime Export v0、Variant Manager v0 の実装 pass が記録済みで、残るのは full surface と visual/product gate（下記）である。PSD Import Taskは大きめのmodalを目標UXとし、legacy support panels の旧 evidence/debug/Codex UI は current human UI の正本ではない。
+- Texture Atlasは専用Task画面として扱う。対象は現在visibleなものではなくruntime graphに所属しているtexture-backed Drawableであり、Drawable Pool上の未所属Drawableはruntime未使用として除外する。hiddenな所属済みDrawableは含め、padding / edge extrusion付きのlayout previewをApplyするとruntime atlas artifactだけをproject stateへcommitし、authoring texture / UVは保持する。Canvasはoriginal表示を維持し、Viewer / Runtime Viewで `Original` / `Atlas Runtime` を切り替えて確認する。
+- Runtime ExportはWorkspace Save / Portable JSONとは別の専用Task画面として扱う。current Texture Atlasを必須にし、未生成/stale/missing bytesではExport不可にする。出力は外部OBS/camera-driven runtime app向けのdirectory artifactで、raw RGBA atlas pageとmaterialized runtime graphを含む。Drawable Pool上の未所属Drawableはwarningではなく単純にexport対象外とする。Runtime/player app、camera mapping、ZIP/PNG/single-file export、Editor内reload検証はv0対象外。
 - Parts Treeはpart / drawable hierarchy、drawable list、draw order、row操作、manual drawable create入口を扱う。`UX-FEAT-010` のdrawable list / layer orderはParts Treeを主ホームにする。
 - Parts Tree / Inspector v0では、Part ContainerとDrawableの基本UXを分ける。Part Container Inspectorはnameとvisibility gateを扱い、子Drawable個別のvisibilityを破壊しない。Drawable Inspectorはname、visibility、opacity、clipping / maskを扱う。Parts Treeはファイルツリーではなく描画順つきの階層スタックとして扱い、同じ親配下のPart ContainerとDrawableは混在ordered children listとして表示する。Tree順 = Draw Orderであり、Part Containerは配下Drawable群を持つ描画順ブロックとして順序に参加する。DnDは所属Container変更だけでなく、前 / 後 / 中 dropによるreorder / reparentを扱う。子要素数サマリ、subtree一括表示 / 非表示、container opacity、右クリックmenu、search / filterは初期UXに含めない。
-- Mesh Toolは単一Drawable中心のpreset-based initial mesh generationを扱う。Container選択中は配下Drawable pickerを出し、Container自体や配下一括にはmeshを作らない。画面側はpreset選択、preview -> Apply、Regenerate、fallback表示を扱い、詳細な生成アルゴリズムは [../mesh-generation/](../mesh-generation/_map.md) に分離する。Wave63の `auto-outline-v2` は自然なtriangular meshへかなり近づいたが、Large Motionでも細かすぎる印象と外周の輪郭追従過多が残った。現在の主候補はV2を基礎に輪郭付近だけsoft boundaryで少し包む [../mesh-generation/auto-outline-v2-5-soft-boundary.md](../mesh-generation/auto-outline-v2-5-soft-boundary.md) であり、次のrefinement候補はV2.5の内部密度を保って境界外側に薄いapron triangle帯を追加する [../mesh-generation/auto-outline-v2-6-soft-apron.md](../mesh-generation/auto-outline-v2-6-soft-apron.md) とする。`auto-outline-v3-envelope` は実験候補として残す。手動頂点編集、辺/頂点追加削除、詳細分割数UI、高度品質調整、一括生成は当面扱わない。
+- Mesh Toolは単一Drawable中心のpreset-based initial mesh generationを扱う。Container選択中は配下Drawable pickerを出し、Container自体や配下一括にはmeshを作らない。画面側はpreset選択、preview -> Apply、Regenerate、fallback表示を扱い、詳細な生成アルゴリズムは [../mesh-generation/](../mesh-generation/_map.md) に分離する。V2/V2.5/V2.6 は historical experiment/sidecar として保持し、現行 default は v6d adaptive contour-constrainautor、v7 は比較用 toggle である（実装 owner: `apps/editor/src/features/editor-session/model/mesh-tool-state.ts`）。v6/v7 の最終品質・toggle lifetime は visual/product gate として未決。手動頂点編集、辺/頂点追加削除、詳細分割数UI、高度品質調整、一括生成は当面扱わない。
 - PSD hidden groupはPart Containerのeditor-only hidden gateへ写す。`@webtoon/psd` v0.4.0 のpublic APIはGroup hiddenを公開していないため、当面はPSD Import adapter内に閉じたprivate shape shimで `layerFrame.layerProperties.hidden` を読む方針を [screens/psd-import-task.md](screens/psd-import-task.md) に記録済み。
 - Dynamicsは専用TaskではなくAuthoring Workspace上のActive Toolとして扱う。Inspectorでgroup / binding / coefficientを編集し、常設の大きなSimulation Controlsは置かず、本格確認はViewer / Runtime Viewへ委譲する。
 - Drawable Inspectorは選択中drawableの基本属性を扱う。Draw OrderはParts Tree上で上にあるdrawableほど前面、VisibilityはEditor visibilityとRuntime visibilityを分け、OpacityとClipping / MaskはDrawable Inspector内sectionとして扱う。
@@ -51,16 +53,33 @@ Wave51前のdiscussionをきっかけに作成されたが、内容としては�
 - Parameter ManagerはPreset parameterとCustom parameterを区別して管理する専用画面である。Preset parameterは初期状態からTableに全て表示し、個別にFrom Presetで追加するUXは置かない。Groupは左ペインではなく上部label filterで扱い、中央Parameter Tableと右Parameter Detailsを主構成にする。TableにはRole列を出さず、Name / Kind / Range / Usedを主表示にする。Preset parameterはrole / group / range / sign conventionをlockし削除不可、Custom parameterはroleなしで作成・編集・削除可能とする。Usageはsummary + details、warning/errorはCheck Stripで扱う。上位設計は [../parameter-preset-ecosystem.md](../parameter-preset-ecosystem.md)。
 - Parameter / Keyform authoringでは、Parameter Barは1つのactive parameterを横長1行で操作し、Keyform専用Inspectorは作らない。選択中Drawable / Deformer / Tool Inspectorをparameter-awareにし、current valueに対するAdd / Update / Delete、Ends、Ends + Centerを扱う。keyform位置以外では補間値を表示しつつproperty編集をlockし、`Add Keyform Here` だけを許可する。
 - v0のkeyform対象は、Drawable opacity、Warp Deformer lattice / opacity multiplier、Rotation Deformer angle / opacity multiplierに絞る。Parts Container、Mesh、Parameter definition自体、visibility、clipping、draw order、mesh topologyはkeyform対象にしない。
-- Variant / Expression Managerは表情差分、パーツ差分、衣装差分のstate setを専用画面で管理する。初期はexclusive setを基本とし、同時適用 / additive setは将来候補として扱う。
-- Viewer / Runtime Viewはmodalではなく、Toolbox / App Barから開く専用画面として扱う。編集overlayを出さず、runtime表示、parameter override、warning / diff summaryを確認する。
+- Variant / Expression Managerは表情差分、衣装差分、アクセサリ差分をVariant Group単位で管理する専用画面である。Groupは `single select` または `multi toggle` を持ち、Drawable membership matrixで「どのVariantでどのDrawableが表示対象になるか」を明示する。Variantは既存visibilityを上書きせず追加predicateとしてAND合成し、Drawable Pool上の未所属DrawableはVariant対象にしない。Groupごとのdefault active selectionはManagerで設定し、preview active selectionはManager / Viewerで確認する。Authoring Workspaceには常設Variant切り替えUIを置かない。Wave99 で package/evaluation/Manager UI/Canvas preview は実装済みであり、次の作業候補ではない。詳細は [screens/variant-expression-manager.md](screens/variant-expression-manager.md) と [Wave99 map](../../implementation/waves/wave99/_map.md)。
+- Viewer / Runtime Viewはmodalではなく、Toolbox / App Barから開く専用画面として扱う。作品確認を主目的とし、編集overlayを出さず、Clean StageとRuntime Controlsで完成品としての見え方を確認する。Runtime Controlsは `Original` / `Atlas Runtime` render source modeを最上部に置き、Variant Groupがある場合は折りたたみ可能なVariants sectionをその下、parameter searchの上に置く。`Atlas Runtime` はcommitted atlas artifactをViewer-only projection remapとして使う。missing/stale atlasではdisabledにし、詳細検査はDiagnostics / Evidence Viewへ委譲する。Compare / Diff、screenshot / export、presentation frame / crop guide、favorite parameterはv0対象外とする。
 - 人間向けUI、debug/evidence表示、Codex-facing surface、test-facing surfaceを分離する必要がある。
 - `UX-FEAT-001`〜`UX-FEAT-037` の機能IDを、今後の画面仕様議論の参照軸として使う。
 
+## 現在の実装状態（repository facts）
+
+画面仕様の Draft/Accepted は設計文書の状態であり、実装済み範囲と同義ではない。現行の implementation evidence は次のとおり。
+
+| Capability | Evidence | Surface status |
+|---|---|---|
+| Canvas evaluation / overlay / hit-test | [Wave66](../../implementation/waves/wave66/_map.md) | `CanvasEvaluatedScene` 実装済み。pixel/visual parity は未証明。 |
+| Validation / Diagnostics v0 | [Wave85](../../implementation/waves/wave85/_map.md) | read-only Diagnostics、badges、jump、inline diagnostics は pass。full Evidence View は未実装/未決。 |
+| Runtime Export v0 | [Wave92](../../implementation/waves/wave92/_map.md) | contract、assembly/preflight、Editor task は pass。browser picker / external player parity は非対象。 |
+| Variant Manager v0 | [Wave99](../../implementation/waves/wave99/_map.md) | package/evaluation/Manager UI/Canvas preview は pass。final visual polish は別 gate。 |
+
+## 残る visual / product gates
+
+- full Diagnostics / Evidence View と Codex / Automation View の最終 surface（専用 view / task / compact panel）は未決。
+- Canvas/renderer の real GPU pixel parity、Canvas2D sunset、v6/v7 quality hold と toggle lifetime は人間の品質判断であり、Wave pass だけでは閉じない。
+- PSD Import の preview clarity、Toolbox/task 表現、visual accessibility、Runtime Export の browser picker / external player parity は別途確認対象。実装済み v0 と product acceptance を混同しない。
+
 ## 次の作業候補
 
-1. Wave57後に、UI verification / browser check strategyを議論してから、validation拡張またはfeature workを増やす。
-2. Wave58のPSD Import E2E v0 baselineを前提に、Mesh、Rig、Atlas、Parameter、Variant / Expression、Dynamics、Viewerを新GUIのplaceholder導線から順に実装対象へ昇格する。
-3. Diagnostics / Evidence View と Codex / Automation View は、旧GUI再利用ではなく新GUI方針で必要になった時点で再設計する。
+1. 実装済み Canvas/Diagnostics/Runtime Export/Variant の browser・visual verification を、E2E の状態確認と人間の visual/product gate に分けて記録する。
+2. Mesh v6/v7 quality hold、real GPU/pixel parity、Canvas2D sunset の判断を [../mesh-generation/](../mesh-generation/_map.md) / rendering owner と同期する。
+3. full Diagnostics / Evidence と Codex / Automation surface の placement を決めるまで、Wave54-era skeleton を current product UI として再利用しない。
 
 ## 未決事項
 

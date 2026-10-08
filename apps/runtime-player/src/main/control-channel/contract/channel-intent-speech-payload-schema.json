@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runtime-player/control-channel/intent-speech-payload",
+  "title": "Runtime Player Control Channel intent.speech payload (C6 §2)",
+  "description": "C6 payload for the intent.speech kind (ADDED ADDITIVELY over intent.set/intent.envelope). The FIRST variable-length payload: `timeline` is a mora列 the 器's group evaluator plays back. Each mora is {timeMs, vowel, s}. timeMs is the relative time (ms from timeline start), monotonically increasing and non-negative. vowel is a LABEL (a/i/u/e/o), NOT a slot id — the 器 maps it to the fixed 6-slot mouth group (mouth-open + mouth-vowel-*) itself; the phoneme→vowel mapping is 魂側 (設計 §6). s is the opening strength in the mouth-vowel normalized domain 0..1; out of range is rejected with slotValueOutOfRange (never clamped). A malformed shape (non-record, empty timeline, non-monotonic/negative/non-finite timeMs, unknown vowel, non-finite s) or a timeline longer than maxItems is rejected with invalidPayload (裁定4, no new code). There is deliberately NO attack field: attack ≈ the mora interval, derived by the 器 (設計 §3.2). NOTE: this 'speech timeline' is the GROUP mouth timeline, a different concept from the C5 per-slot animation envelope (channel-intent-envelope-payload-schema.json) and the C4 message 封筒.",
+  "type": "object",
+  "required": ["timeline"],
+  "additionalProperties": false,
+  "properties": {
+    "timeline": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
+      "description": "The mora列 (1..512 moras). An empty timeline or a timeline longer than maxItems (512, 裁定4) is rejected with invalidPayload — the first variable-length payload's DoS bound, never clamped.",
+      "items": {
+        "type": "object",
+        "required": ["timeMs", "vowel", "s"],
+        "additionalProperties": false,
+        "properties": {
+          "timeMs": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Relative time (ms from timeline start). Must be non-negative and strictly greater than the previous mora's timeMs (monotonically increasing); otherwise the timeline is rejected with invalidPayload."
+          },
+          "vowel": {
+            "type": "string",
+            "enum": ["a", "i", "u", "e", "o"],
+            "description": "The vowel LABEL for this mora (not a slot id). An unknown label is rejected with invalidPayload."
+          },
+          "s": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Opening strength (PRE-scale) in the mouth-vowel normalized domain 0..1. Out of range is rejected with slotValueOutOfRange (never clamped). A non-finite s is rejected with invalidPayload."
+          }
+        }
+      }
+    }
+  },
+  "normalizedRanges": {
+    "mouth-vowel": { "min": 0, "max": 1 }
+  }
+}

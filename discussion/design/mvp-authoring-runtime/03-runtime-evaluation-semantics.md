@@ -149,8 +149,40 @@ MVP Runtime は次のrig control nodeを評価する。
 - cycleは `blocking`。
 - missing parent / child は `blocking`。
 - `warpLattice2d` のbind spaceは `rigControlLocalRest` をMVP既定とする。
+- nested warp の所属判定は、変形済みcurrent座標ではなく、stableなrest / bind座標で行う。
+- nested warp の変形適用先は、子rig controlで既に変形されたcurrent座標とする。
 - undefined interpolation、NaN、Infinityは `blocking` または対象単位の `error` とする。
-- child vertexが親warp domain外へ出る状態は、評価可能なら `warning` とする。
+
+#### 2.4.1 Nested warp membership
+
+親子関係を持つ `warpLattice2d` では、「その頂点が親warpの対象か」と「親warpの変形をどの座標へ適用するか」を分ける。
+
+設計判断:
+
+- 対象判定とlattice sampling weightは、親warp作成時または評価時に決まるstableなrest / bind座標から求める。
+- 子warp / 子rotation / mesh keyformなどによって頂点のcurrent座標が親warpのvisual domain外へ出ても、それだけを理由に親warpの対象外にしない。
+- 親warpが生成した変形量は、子の変形結果であるcurrent座標へ重ねて適用する。
+- rest / bind座標の時点で親warp対象外だった頂点は、親warpの対象外としてよい。
+- domain boundsはruntime時の動的な切り捨て領域ではなく、rest / bind座標をlatticeへ対応付ける基準領域として扱う。
+
+評価イメージ:
+
+```text
+rest / bind vertex
+  -> child rig controls produce current vertex
+  -> parent warp samples lattice by rest / bind coordinate
+  -> parent warp applies its displacement to current vertex
+  -> final vertex
+```
+
+この方針により、FaceX のような子warpで目の頂点が大きく横へ動いた後でも、FaceY のような親warpはその頂点へ継続して作用する。現在座標でinside/outsideを判定して突然pass-throughする挙動は、nested warpの既定セマンティクスとしては採用しない。
+
+実装上の注意:
+
+- Editor preview と Viewer / Runtime Export は同じmembership semanticsを使う。
+- persisted per-vertex bindingを持つか、評価時にdeterministicに導出するかは実装時に決める。
+- mesh再生成、domain bounds変更、child rig hierarchy変更時には、bindingの再導出またはstale診断が必要になる可能性がある。
+- 単純なdomain拡張 / refitは作成時UXの補助として有効だが、このnested warp問題の本質的な解決とはみなさない。
 
 ### 2.5 Drawable Mesh
 
@@ -284,7 +316,8 @@ Phase:
 | missing parameter referenced by keyform | `blocking` | fail |
 | out-of-range parameter raw input | clamp + `warning` | fail for strict representative evaluation |
 | empty rig control | `warning` | warning or needs_review |
-| child vertex outside warp domain | `warning` | warning or needs_review |
+| current vertex outside warp visual domain after child deformation | `info` or no diagnostic | rest / bind membershipで評価できる限り正常 |
+| rest / bind vertex outside expected warp domain | `warning` | authoring bounds / binding確認対象 |
 | unknown evaluator version | `blocking` | fail |
 
 ## 6. Unsupported Diagnostics

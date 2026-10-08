@@ -1,8 +1,13 @@
 import {
   getPartOrderedChildren,
-  type AuthoringSession
+  type AuthoringSession,
+  type VariantVisibilityPredicate
 } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId, RectDto, RigControlId } from "@private-2d-rigging-lab/contracts";
+import {
+  recordLive2dPerformanceTiming,
+  startLive2dPerformanceTiming
+} from "@private-2d-rigging-lab/render-core";
 
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
 import {
@@ -15,6 +20,7 @@ import {
   type CanvasEvaluatedDrawable,
   type CanvasEvaluatedMesh,
   type CanvasEvaluatedRigControl,
+  type CanvasEvaluationCaller,
   type CanvasEvaluationControlPointPreview,
   type CanvasEvaluationRotationPreview,
   type CanvasEvaluationRigDraft
@@ -22,6 +28,7 @@ import {
 
 type MeshDto = AuthoringSession["graph"]["meshes"][number];
 type RigControlDto = AuthoringSession["graph"]["rigControls"][number];
+type TextureAtlasEntryDto = NonNullable<AuthoringSession["graph"]["textureAtlas"]>["textures"][number];
 
 export interface CanvasPoint {
   readonly x: number;
@@ -58,6 +65,27 @@ export interface CanvasRenderableDrawable {
   readonly renderBytes?: Uint8Array;
   readonly renderWidth: number;
   readonly renderHeight: number;
+  /**
+   * Wave 1.2 F: the padded raster's per-side content inset (source pixels), carried so the
+   * render-scene adapter can remap content-space UV 0..1 onto the content sub-rect of the padded
+   * raster (see `boundary-transparent-margin-design.md` §5). Absent for legacy / non-PSD texture
+   * entries (raster ≡ content), in which case the adapter leaves UVs unchanged.
+   */
+  readonly contentInset?: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
+  /**
+   * Wave 1.2 F: the padded raster dimensions (= `textureEntry.dimensions`) that `contentInset` is
+   * expressed against. Paired with `contentInset` as the divisor of the UV remap. Absent for legacy
+   * entries without recorded padded dimensions.
+   */
+  readonly rasterDimensions?: {
+    readonly width: number;
+    readonly height: number;
+  };
   readonly maskSourceDrawableIds: readonly DrawableId[];
 }
 
@@ -90,6 +118,7 @@ export interface CanvasDeformerOverlayProjection {
   readonly translation?: CanvasPoint;
   readonly restAngleDegrees?: number;
   readonly evaluatedAngleDegrees?: number;
+  readonly restControlPoints?: readonly CanvasPoint[];
   readonly controlPointOffsets?: readonly CanvasPoint[];
   readonly evaluatedControlPoints?: readonly CanvasPoint[];
   readonly childDrawableIds: readonly DrawableId[];
@@ -114,6 +143,12 @@ export interface CanvasRenderProjection {
 
 export interface CanvasProjectionOptions {
   readonly editorHiddenPartIds?: ReadonlySet<PartId>;
+  /**
+   * Read-only diagnostics tag forwarded to `createCanvasEvaluatedScene` to record which surface
+   * drove the evaluation (`canvas.evaluation.caller.*` counter). Never affects the projection or
+   * evaluation result.
+   */
+  readonly evaluationCaller?: CanvasEvaluationCaller;
   readonly meshDraft?: {
     readonly drawableId: DrawableId;
     readonly mesh: MeshDto;
@@ -143,6 +178,7 @@ export interface CanvasProjectionOptions {
   readonly controlPointPreview?: CanvasEvaluationControlPointPreview | null;
   readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
   readonly parameterValues?: ParameterValueMap;
+  readonly variantVisibilityPredicate?: VariantVisibilityPredicate;
 }
 
 const DEFAULT_VIEW: CanvasViewState = {
@@ -159,6 +195,7 @@ export function createCanvasRenderProjection(
   selection: EditorSelection | null,
   options: CanvasProjectionOptions = {}
 ): CanvasRenderProjection {
+  const timingStart = startLive2dPerformanceTiming();
   const partsById = new Map(session.graph.parts.map((part) => [part.partId, part]));
   const meshesById = new Map(session.graph.meshes.map((mesh) => [mesh.meshId, mesh]));
   const rigControlsById = new Map(
@@ -166,6 +203,9 @@ export function createCanvasRenderProjection(
   );
   const binaryEntriesByPath = new Map(
     session.binaryAssets?.fileEntries.map((entry) => [entry.path, entry]) ?? []
+  );
+  const textureEntriesById = new Map<string, TextureAtlasEntryDto>(
+    session.graph.textureAtlas?.textures.map((entry) => [entry.textureId, entry]) ?? []
   );
   const sourceLayerByDrawableId = createSourceLayerIndex(session);
   const selectedDrawableIds = resolveSelectedDrawableIds(
@@ -181,12 +221,18 @@ export function createCanvasRenderProjection(
     ...(options.meshPreviewDrawableId === undefined ? [] : [options.meshPreviewDrawableId])
   ]);
   const evaluatedScene = createCanvasEvaluatedScene(session, {
+    ...(options.evaluationCaller === undefined
+      ? {}
+      : { evaluationCaller: options.evaluationCaller }),
     meshDraft: options.meshDraft ?? null,
     meshDrafts: options.meshDrafts ?? null,
     rigDraft: createEvaluationRigDraftFromProjectionDraft(options.deformerDraft ?? null),
     controlPointPreview: options.controlPointPreview ?? null,
     rotationPreview: options.rotationPreview ?? null,
     parameterValues: options.parameterValues ?? {},
+    ...(options.variantVisibilityPredicate === undefined
+      ? {}
+      : { variantVisibilityPredicate: options.variantVisibilityPredicate }),
     selection,
     ...(options.editorHiddenPartIds === undefined
       ? {}
@@ -204,14 +250,17 @@ export function createCanvasRenderProjection(
         drawable.evaluatedMesh.sourceMeshId === undefined
           ? undefined
           : meshesById.get(drawable.evaluatedMesh.sourceMeshId as MeshDto["meshId"]);
+      const textureEntry = textureEntriesById.get(drawable.textureRef.textureId);
+      const rasterDimensions = textureEntry?.dimensions;
+      const contentInset = textureEntry?.contentInset;
       const renderDimensions = resolveDrawableRenderDimensions({
         drawable,
         ...(baseMesh === undefined ? {} : { baseMesh }),
-        ...(sourceLayer === undefined ? {} : { sourceLayer })
+        ...(sourceLayer === undefined ? {} : { sourceLayer }),
+        ...(rasterDimensions === undefined ? {} : { rasterDimensions })
       });
       const selected = isDrawableSelected(selection, drawable.drawableId);
-      const selectedBySubtree =
-        !selected && selection?.kind === "part" && selectedDrawableIds.has(drawable.drawableId);
+      const selectedBySubtree = !selected && selectedDrawableIds.has(drawable.drawableId);
       const meshPreview = meshPreviewDrawableIds.has(drawable.drawableId);
 
       return {
@@ -240,6 +289,24 @@ export function createCanvasRenderProjection(
         ...(binaryEntry === undefined ? {} : { renderBytes: binaryEntry.bytes }),
         renderWidth: renderDimensions.width,
         renderHeight: renderDimensions.height,
+        ...(contentInset === undefined
+          ? {}
+          : {
+              contentInset: {
+                left: contentInset.left,
+                top: contentInset.top,
+                right: contentInset.right,
+                bottom: contentInset.bottom
+              }
+            }),
+        ...(rasterDimensions === undefined
+          ? {}
+          : {
+              rasterDimensions: {
+                width: rasterDimensions.width,
+                height: rasterDimensions.height
+              }
+            }),
         maskSourceDrawableIds: drawable.maskSourceDrawableIds
       };
     })
@@ -272,7 +339,7 @@ export function createCanvasRenderProjection(
     draft: options.deformerDraft ?? null
   });
 
-  return {
+  const projection = {
     canvasBounds: evaluatedScene.canvasBounds,
     ...(artworkBounds === undefined ? {} : { artworkBounds }),
     ...(selectionBounds === undefined ? {} : { selectionBounds }),
@@ -290,6 +357,8 @@ export function createCanvasRenderProjection(
     hasRenderableArtwork: renderableDrawables.length > 0,
     contentKey: createProjectionContentKey(session, drawables)
   };
+  recordLive2dPerformanceTiming("canvas.projection.ms", timingStart);
+  return projection;
 }
 
 function createEvaluationRigDraftFromProjectionDraft(
@@ -333,7 +402,29 @@ function resolveDrawableRenderDimensions(input: {
   readonly drawable: CanvasEvaluatedDrawable;
   readonly sourceLayer?: AuthoringSession["graph"]["sourceAssets"][number]["layers"][number];
   readonly baseMesh?: MeshDto;
+  readonly rasterDimensions?: TextureAtlasEntryDto["dimensions"];
 }): { readonly width: number; readonly height: number } {
+  // Wave108 D-atlas: the per-texture (`original` mode) render bytes are the layer
+  // raster, which since D-texprep carries a baked transparent covering-margin border
+  // — so its byte dimensions are the padded `textureEntry.dimensions`, not the content
+  // `bounds` (the historical `bounds ≡ raster` identity is broken). Prefer the padded
+  // raster dims here so `renderWidth * renderHeight * 4 === renderBytes.byteLength` and
+  // `isRenderableDrawable` keeps the drawable in the render set. Legacy entries without
+  // `dimensions` fall back to the content bounds chain (raster == content).
+  //
+  // This only sizes the sampled texture; it performs no UV remap. The padding offset that
+  // this would otherwise show in `original` mode (content-space UV 0..1 sampled against a
+  // padded raster) is corrected downstream: the projection now carries `contentInset` +
+  // `rasterDimensions` to the render-scene adapter, which remaps content UV onto the raster's
+  // content sub-rect (Wave 1.2 F, `boundary-transparent-margin-design.md` §5), so `original`
+  // display shows the content aligned to `bounds`.
+  if (input.rasterDimensions !== undefined) {
+    return {
+      width: Math.max(1, Math.round(input.rasterDimensions.width)),
+      height: Math.max(1, Math.round(input.rasterDimensions.height))
+    };
+  }
+
   const bounds =
     input.sourceLayer?.bounds ??
     input.baseMesh?.bounds ??
@@ -346,12 +437,24 @@ function resolveDrawableRenderDimensions(input: {
   };
 }
 
+/**
+ * Projects an evaluated mesh onto the projection's renderable drawable.
+ *
+ * Clone reduction (Perf Wave 2, Domain G / design §3-2): the incoming `mesh` is the display-only
+ * `evaluatedMesh` produced fresh this evaluation by `createCanvasEvaluatedScene` and owned solely by
+ * this projection — nothing shares it with the `session.graph` original or across projections. The
+ * downstream consumers (`createRenderSceneFromCanvasProjection`, the canvas renderer, the mesh
+ * overlay) only ever read the vertex/uv arrays, and the adapter re-clones them into the RenderScene
+ * anyway, so this layer's per-vertex `.map(clonePoint)` was a redundant middle copy of the three-deep
+ * clone chain. We pass the vertex/uv arrays through by reference and keep only the small metadata
+ * copies (bounds / triangles / stable ids) as defensive shallow copies.
+ */
 function cloneEvaluatedMesh(mesh: CanvasEvaluatedMesh): CanvasEvaluatedMesh {
   return {
     source: mesh.source,
     ...(mesh.sourceMeshId === undefined ? {} : { sourceMeshId: mesh.sourceMeshId }),
-    vertices: mesh.vertices.map(clonePoint),
-    uvs: mesh.uvs.map(clonePoint),
+    vertices: mesh.vertices,
+    uvs: mesh.uvs,
     triangles: mesh.triangles.map(
       (triangle): readonly [number, number, number] => [triangle[0], triangle[1], triangle[2]]
     ),
@@ -459,6 +562,7 @@ function createDeformerOverlayProjection(
     transformRows: rigControl.transformRows,
     bezierColumns: rigControl.bezierColumns,
     bezierRows: rigControl.bezierRows,
+    restControlPoints: rigControl.restControlPoints.map(clonePoint),
     controlPointOffsets: rigControl.controlPointOffsets.map(clonePoint),
     evaluatedControlPoints: rigControl.evaluatedControlPoints.map(clonePoint),
     childDrawableIds: [...rigControl.childDrawableIds],
@@ -645,6 +749,25 @@ function resolveSelectedDrawableIds(
 
   if (selection?.kind === "rigControl") {
     return collectRigControlDrawableIds(selection.id, rigControlsById);
+  }
+
+  if (selection?.kind === "deformerTreeSet") {
+    const result = new Set<DrawableId>();
+    for (const target of selection.targets) {
+      if (target.kind === "rigControl") {
+        for (const drawableId of collectRigControlDrawableIds(
+          target.rigControlId,
+          rigControlsById
+        )) {
+          result.add(drawableId);
+        }
+        continue;
+      }
+
+      result.add(target.drawableId);
+    }
+
+    return result;
   }
 
   if (selection?.kind !== "part") {

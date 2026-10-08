@@ -29,14 +29,14 @@ import type {
   RuntimeSnapshotDto
 } from "./snapshot.js";
 
-const PACKAGE_HASH = "sha256:minimum-open-dynamics-v1-evidence";
-const ARTIFACT_LABEL = "minimum-open-dynamics-v1-evidence";
+const PACKAGE_HASH = "sha256:minimum-open-dynamics-v2-evidence";
+const ARTIFACT_LABEL = "minimum-open-dynamics-v2-evidence";
 const DRIVER_PARAMETER_ID = "param_face_yaw";
 const OUTPUT_PARAMETER_ID = "param_hair_sway";
 const DRAWABLE_ID = "draw_hair";
 const MESH_ID = "mesh_hair";
 
-describe("minimum-open-dynamics-v1-evidence runtime contract fixture", () => {
+describe("minimum-open-dynamics-v2-evidence runtime contract fixture", () => {
   it("replays the fixture as deterministic runtime snapshot and diff evidence", () => {
     const evidence = buildFixtureRuntimeEvidence();
 
@@ -60,7 +60,7 @@ describe("minimum-open-dynamics-v1-evidence runtime contract fixture", () => {
     expect(editorSummary.workflow).toMatchObject({
       operationType: "createDynamicsGroup",
       dynamicsGroupId: "dyn_hair_sway",
-      driverParameterIds: [DRIVER_PARAMETER_ID],
+      inputParameterIds: [DRIVER_PARAMETER_ID],
       outputParameterId: OUTPUT_PARAMETER_ID
     });
     expect(editorSummary.previewEvidence).toMatchObject({
@@ -162,11 +162,13 @@ const summarizeSnapshot = (snapshot: RuntimeSnapshotDto) => ({
   })),
   dynamics: snapshot.dynamics.map((dynamics) => ({
     dynamicsGroupId: dynamics.dynamicsGroupId,
-    driverValues: dynamics.driverValues,
+    inputValues: dynamics.inputValues,
     outputParameterId: dynamics.outputParameterId,
-    outputValue: dynamics.outputValue,
-    position: dynamics.stateSummary.position,
-    velocity: dynamics.stateSummary.velocity,
+    outputOffset: dynamics.outputOffset,
+    effectiveOutputValue: dynamics.effectiveOutputValue,
+    particleCount: dynamics.stateSummary.particleCount,
+    maxParticleSpeed: dynamics.stateSummary.maxParticleSpeed,
+    tipAngleLocalDeg: dynamics.stateSummary.tipAngleLocalDeg,
     tick: dynamics.tick,
     resetCounter: dynamics.resetCounter,
     debug: dynamics.debug
@@ -280,25 +282,23 @@ const createRuntimeDynamicsGroup = (payload: any): NormalizedDynamicsGroup => ({
   dynamicsGroupId: DynamicsGroupIdSchema.parse(payload.dynamicsGroupId),
   displayName: payload.displayName,
   enabled: payload.enabled,
-  solverKind: payload.solverKind,
-  drivers: payload.drivers.map((driver: any) => ({
-    driverId: driver.driverId,
-    sourceParameterId: ParameterIdSchema.parse(driver.sourceParameterId),
-    inputScale: driver.inputScale,
-    inputOffset: driver.inputOffset,
-    invert: driver.invert
+  inputs: payload.inputs.map((input: any) => ({
+    parameterId: ParameterIdSchema.parse(input.parameterId),
+    kind: input.kind,
+    scale: input.scale
   })),
-  output: {
-    outputId: payload.output.outputId,
-    targetParameterId: ParameterIdSchema.parse(payload.output.targetParameterId),
-    outputScale: payload.output.outputScale,
-    outputOffset: payload.output.outputOffset,
-    min: payload.output.min,
-    max: payload.output.max,
-    clampPolicy: payload.output.clampPolicy
+  chain: {
+    rootOffset: payload.chain.rootOffset ?? { x: 0, y: 0 },
+    segmentLengths: payload.chain.segmentLengths,
+    damping: payload.chain.damping,
+    gravityScale: payload.chain.gravityScale
   },
-  settings: payload.settings,
-  resetPolicy: payload.resetPolicy
+  outputs: payload.outputs.map((output: any) => ({
+    parameterId: ParameterIdSchema.parse(output.parameterId),
+    segmentIndex: output.segmentIndex ?? 1,
+    scale: output.scale,
+    limit: output.limit
+  }))
 });
 
 const createKeyformBinding = (keyformSet: any): KeyformBinding => ({

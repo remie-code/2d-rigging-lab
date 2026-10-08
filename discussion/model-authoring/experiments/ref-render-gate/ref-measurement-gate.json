@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "ref-measurement-gate-v1",
+  "packageRevision": 1844,
+  "note": "Evaluated geometry measured against ref/ (read-only) via inspectEvaluatedGeometry. Stage-space rest-pose bounding boxes; see README.md.",
+  "measurements": [
+    {
+      "kind": "drawable",
+      "drawableId": "draw_r0_1cea4f6f_5c3cada6_face",
+      "found": true,
+      "visible": true,
+      "bounds": {
+        "x": 862,
+        "y": 304,
+        "width": 276,
+        "height": 273
+      }
+    },
+    {
+      "kind": "drawable",
+      "drawableId": "draw_r0_1cea4f6f_3a8f7081_irides-l",
+      "found": true,
+      "visible": true,
+      "bounds": {
+        "x": 1038,
+        "y": 411,
+        "width": 57,
+        "height": 56
+      }
+    },
+    {
+      "kind": "drawable",
+      "drawableId": "draw_r0_1cea4f6f_3a8f7005_eyewhite-r",
+      "found": true,
+      "visible": true,
+      "bounds": {
+        "x": 885,
+        "y": 416.426141074071,
+        "width": 79,
+        "height": 58.25842037931301
+      }
+    }
+  ]
+}

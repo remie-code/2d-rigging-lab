@@ -169,43 +169,45 @@ export const KeyformSetSchema = KeyformSetBaseSchema.superRefine((keyformSet, co
 });
 export type KeyformSetDto = z.infer<typeof KeyformSetSchema>;
 
-export const DynamicsDriverSchema = z.object({
-  driverId: z.string(),
-  sourceParameterId: ParameterIdSchema,
-  inputScale: z.number().finite().default(1),
-  inputOffset: z.number().finite().default(0),
-  invert: z.boolean().default(false)
-});
-export type DynamicsDriverDto = z.infer<typeof DynamicsDriverSchema>;
+export const DynamicsAxisKindSchema = z.enum(["angle", "positionX", "positionY"]);
+export type DynamicsAxisKindDto = z.infer<typeof DynamicsAxisKindSchema>;
 
+// dynamics-file-v3 (world-frame Verlet chain). See discussion/design/dynamics-world-frame-chain.md §4.
+// Input: rest basis is always the parameter default; weight and inversion are unified into the sign
+// and magnitude of `scale` (deg/unit for angle, cm/unit for positionX/Y). §3.2 / §4.
+export const DynamicsInputSchema = z.object({
+  parameterId: ParameterIdSchema,
+  kind: DynamicsAxisKindSchema,
+  scale: z.number().finite()
+});
+export type DynamicsInputDto = z.infer<typeof DynamicsInputSchema>;
+
+// Chain (one per group; successor of the old single-element pendulums array). §4.
+export const DynamicsChainSchema = z.object({
+  rootOffset: Vec2Schema.default({ x: 0, y: 0 }),
+  segmentLengths: z.array(z.number().finite().positive()).min(1),
+  damping: z.number().finite().nonnegative(),
+  gravityScale: z.number().finite().nonnegative()
+});
+export type DynamicsChainDto = z.infer<typeof DynamicsChainSchema>;
+
+// Output reads the angle of one chain segment (segmentIndex ≥ 1). §3.5 / §4.
 export const DynamicsOutputSchema = z.object({
-  outputId: z.string(),
-  targetParameterId: ParameterIdSchema,
-  outputScale: z.number().finite().default(1),
-  outputOffset: z.number().finite().default(0),
-  min: z.number().finite(),
-  max: z.number().finite(),
-  clampPolicy: z.literal("clamp-to-output-range")
+  parameterId: ParameterIdSchema,
+  segmentIndex: z.number().int().min(1).default(1),
+  scale: z.number().finite(),
+  limit: z.number().finite().nonnegative()
 });
 export type DynamicsOutputDto = z.infer<typeof DynamicsOutputSchema>;
-
-export const ScalarDampedFollowSettingsV1Schema = z.object({
-  stiffness: z.number().finite().nonnegative(),
-  damping: z.number().finite().nonnegative(),
-  maxVelocity: z.number().finite().positive().optional(),
-  maxAmplitude: z.number().finite().positive().optional()
-});
-export type ScalarDampedFollowSettingsV1Dto = z.infer<typeof ScalarDampedFollowSettingsV1Schema>;
 
 export const DynamicsGroupSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   displayName: z.string(),
   enabled: z.boolean().default(true),
-  solverKind: z.literal("scalarDampedFollowV1"),
-  drivers: z.array(DynamicsDriverSchema).min(1),
-  output: DynamicsOutputSchema,
-  settings: ScalarDampedFollowSettingsV1Schema,
-  resetPolicy: z.enum(["reset-on-load", "reset-on-manual-command", "reset-on-large-input-jump"])
+  presetId: z.string().min(1).optional(),
+  inputs: z.array(DynamicsInputSchema).min(1),
+  chain: DynamicsChainSchema,
+  outputs: z.array(DynamicsOutputSchema).min(1)
 });
 export type DynamicsGroupDto = z.infer<typeof DynamicsGroupSchema>;
 
@@ -348,7 +350,7 @@ export const RigControlsFileSchema = z.object({
 export type RigControlsFileDto = z.infer<typeof RigControlsFileSchema>;
 
 export const DynamicsFileSchema = z.object({
-  schemaVersion: z.literal("dynamics-file-v1"),
+  schemaVersion: z.literal("dynamics-file-v3"),
   dynamicsGroups: z.array(DynamicsGroupSchema)
 });
 export type DynamicsFileDto = z.infer<typeof DynamicsFileSchema>;

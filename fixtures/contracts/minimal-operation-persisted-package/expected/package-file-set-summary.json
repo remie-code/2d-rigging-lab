@@ -1,7 +1,7 @@
 {
   "schemaVersion": "package-file-set-summary-v1",
-  "entryCount": 20,
-  "authoredEntryCount": 13,
+  "entryCount": 21,
+  "authoredEntryCount": 14,
   "operationLogPath": "operations/log.jsonl",
   "operationLogEntryPresent": true,
   "generatedArtifactEntryCount": 6,

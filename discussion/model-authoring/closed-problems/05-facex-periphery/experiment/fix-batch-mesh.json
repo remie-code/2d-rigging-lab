@@ -1,0 +1,24 @@
+[
+  {
+    "file": "fix-mesh-back_top_hair_r.json",
+    "operationId": "op_cp05fix_mesh_back_top_hair_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r131_0bbc8ea5_f823b4c2_back_top_hair_r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05fix] mesh back_top_hair_r"
+  },
+  {
+    "file": "fix-mesh-back_top_hair_l.json",
+    "operationId": "op_cp05fix_mesh_back_top_hair_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r131_0bbc8ea5_f823b423_back_top_hair_l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp05fix] mesh back_top_hair_l"
+  }
+]

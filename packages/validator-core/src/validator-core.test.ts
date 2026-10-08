@@ -43,7 +43,7 @@ describe("validator-core foundation", () => {
     expect(catalog.has("runtime.loadBlocking")).toBe(true);
     expect(catalog.has("runtime.drawListEmpty")).toBe(true);
     expect(catalog.has("dynamics.driverMissing")).toBe(true);
-    expect(catalog.has("dynamics.runtimeEvidenceMissing")).toBe(true);
+    expect(catalog.has("dynamics.runtimeEvidenceMismatch")).toBe(true);
     expect(catalog.list("acceptance").map((definition) => definition.checkId)).toContain("evidence.guiOperationLogMissing");
   });
 
@@ -264,7 +264,7 @@ const createMinimalPackageDocument = () => ({
       rigControls: []
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v1",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: []
     },
     masks: {
@@ -384,7 +384,7 @@ const createMinimalRuntimeSnapshotLike = () => ({
   evaluation: {
     snapshotDetail: "summary",
     evaluatorVersions: {
-      dynamics: "scalarDampedFollowV1",
+      dynamics: "worldFrameChainV1",
       keyform1d: "linear-1d-v1",
       keyformGrid2d: "parameter-grid-2d-v1",
       warpLattice: "bilinear-grid-v1",

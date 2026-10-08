@@ -8,6 +8,8 @@
 
 この階層は、Private 2D Rigging Lab / Prototype のコンセプト、スコープ、方針変更、根本問いを保持する。
 
+Product requirement の正は [modified_concept.md](modified_concept.md) と Root/MVP AC である。Dynamics の schema / solver / cardinality などの具体的な実装意味論は、受入要件を置き換えず、accepted [dynamics-file-v3 design](../design/dynamics-world-frame-chain.md) と [Wave106](../implementation/waves/wave106/_map.md) を参照する。
+
 ## 直下のファイル
 
 | Path | Role | Status |
@@ -17,7 +19,7 @@
 
 ## 次の行動
 
-1. 実装着手時にPrivate Prototypeの設計未決を順に具体化する。
+1. Private Prototypeの設計未決を、実装済み成果とのcontract/test traceabilityへ照合し、未達・再設計・人間ゲートを列挙する。
 2. Live2Dへ最初に提案する機能テーマをユーザー判断で選ぶ。
 3. Future Public Clean Subsetが必要になった場合に別途scopeを設計する。
 

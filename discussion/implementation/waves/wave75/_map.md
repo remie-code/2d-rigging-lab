@@ -24,7 +24,7 @@
 
 ## Next Actions
 
-1. Use Wave75 as the current completed implementation baseline.
+1. Historical note: Wave75 was the completed implementation baseline at its closeout. The accepted Editor mainline stopping baseline is Wave102; use the parent/root maps for current planning.
 2. Carry the recorded residual risk that full `apps/editor` package typecheck has unrelated outside-domain failures.
 
 ## Unresolved Questions

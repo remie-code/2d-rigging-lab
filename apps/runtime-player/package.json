@@ -1,0 +1,72 @@
+{
+  "name": "@private-2d-rigging-lab/runtime-player",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev --watch",
+    "build": "pnpm run typecheck && electron-vite build",
+    "pack": "pnpm run build && electron-builder --dir",
+    "dist": "pnpm run dist:win",
+    "dist:win": "pnpm run build && electron-builder --win --x64",
+    "generate-icon": "node scripts/generate-icon.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run -c vitest.config.ts",
+    "preview": "electron-vite preview"
+  },
+  "dependencies": {
+    "@private-2d-rigging-lab/contracts": "workspace:*",
+    "@private-2d-rigging-lab/package-format": "workspace:*",
+    "@private-2d-rigging-lab/render-core": "workspace:*",
+    "@private-2d-rigging-lab/render-webgl2": "workspace:*",
+    "@private-2d-rigging-lab/runtime-core": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.16",
+    "@radix-ui/react-popover": "^1.1.16",
+    "@radix-ui/react-tabs": "^1.1.14",
+    "@radix-ui/react-tooltip": "^1.2.9",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/node": "22.15.29",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "png-to-ico": "^3.0.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "5.8.3",
+    "vite": "6.4.2"
+  },
+  "build": {
+    "appId": "com.private2drigginglab.runtimeplayer",
+    "productName": "Runtime Player",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    }
+  }
+}

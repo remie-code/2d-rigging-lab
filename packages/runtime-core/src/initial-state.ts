@@ -1,12 +1,10 @@
 import type { DynamicsGroupId, RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 import { RuntimeStateDtoSchema } from "@private-2d-rigging-lab/contracts";
 
-import { computeDynamicsTarget } from "./dynamics-evaluation.js";
+import { createResetDynamicsStateFromGraph } from "./dynamics-evaluation.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeInitialStateRequestInput } from "./runtime-input.js";
 import { RuntimeInitialStateRequestSchema } from "./runtime-input.js";
-
-export { computeDynamicsTarget } from "./dynamics-evaluation.js";
 
 export const createInitialRuntimeState = (
   graph: NormalizedRuntimeGraph,
@@ -20,13 +18,14 @@ export const createInitialRuntimeState = (
       continue;
     }
 
-    const currentTarget = computeDynamicsTarget(graph, group, request.authoredParameterValues);
-    dynamicsGroups[group.dynamicsGroupId] = {
-      position: currentTarget,
-      velocity: 0,
-      tick: 0,
-      resetCounter: 1
-    };
+    // §3.4: align particles straight below the current anchor pin with zero velocity.
+    dynamicsGroups[group.dynamicsGroupId] = createResetDynamicsStateFromGraph(
+      graph,
+      group,
+      request.authoredParameterValues,
+      0,
+      true
+    );
   }
 
   return RuntimeStateDtoSchema.parse({

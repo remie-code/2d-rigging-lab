@@ -1,65 +1,54 @@
 import {
   DynamicsGroupIdSchema,
-  ParameterIdSchema,
-  RuntimeEvaluationContextSchema,
-  RuntimeResetReasonSchema,
-  RuntimeSequenceFrameSchema,
-  RuntimeStateArtifactRefSchema,
-  RuntimeStateDtoSchema
+  ParameterIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
-export const DynamicsResetPolicySchema = z.enum([
-  "reset-on-load",
-  "reset-on-manual-command",
-  "reset-on-large-input-jump"
-]);
-export type DynamicsResetPolicy = z.infer<typeof DynamicsResetPolicySchema>;
+// Dynamics v3 world-frame chain operation payloads. See
+// discussion/design/dynamics-world-frame-chain.md §4. The payload mirrors the package-format v3
+// schema: inputs carry one signed `scale`, the chain replaces the old pendulums array, and outputs
+// read one chain segment (`segmentIndex`) with a signed `scale` and clamp `limit`.
 
-export const DynamicsSettingsSchema = z.object({
-  stiffness: z.number().finite().nonnegative(),
+export const DynamicsAxisKindPayloadSchema = z.enum(["angle", "positionX", "positionY"]);
+export type DynamicsAxisKindPayloadDto = z.infer<typeof DynamicsAxisKindPayloadSchema>;
+
+export const DynamicsInputPayloadSchema = z.object({
+  parameterId: ParameterIdSchema,
+  kind: DynamicsAxisKindPayloadSchema,
+  scale: z.number().finite()
+});
+export type DynamicsInputPayloadDto = z.infer<typeof DynamicsInputPayloadSchema>;
+
+export const DynamicsChainRootOffsetPayloadSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite()
+});
+export type DynamicsChainRootOffsetPayloadDto = z.infer<typeof DynamicsChainRootOffsetPayloadSchema>;
+
+export const DynamicsChainPayloadSchema = z.object({
+  rootOffset: DynamicsChainRootOffsetPayloadSchema.default({ x: 0, y: 0 }),
+  segmentLengths: z.array(z.number().finite().positive()).min(1),
   damping: z.number().finite().nonnegative(),
-  maxVelocity: z.number().finite().positive().optional(),
-  maxAmplitude: z.number().finite().positive().optional()
+  gravityScale: z.number().finite().nonnegative()
 });
-export type DynamicsSettingsDto = z.infer<typeof DynamicsSettingsSchema>;
+export type DynamicsChainPayloadDto = z.infer<typeof DynamicsChainPayloadSchema>;
 
-export const DynamicsDriverBindingPayloadSchema = z.object({
-  driverId: z.string().optional(),
-  sourceParameterId: ParameterIdSchema,
-  inputScale: z.number().finite().default(1),
-  inputOffset: z.number().finite().default(0),
-  invert: z.boolean().default(false)
+export const DynamicsOutputPayloadSchema = z.object({
+  parameterId: ParameterIdSchema,
+  segmentIndex: z.number().int().min(1).default(1),
+  scale: z.number().finite(),
+  limit: z.number().finite().nonnegative()
 });
-export type DynamicsDriverBindingPayloadDto = z.infer<typeof DynamicsDriverBindingPayloadSchema>;
-
-const dynamicsOutputBindingPayloadShape = {
-  outputId: z.string().optional(),
-  targetParameterId: ParameterIdSchema,
-  outputScale: z.number().finite().default(1),
-  outputOffset: z.number().finite().default(0),
-  min: z.number().finite(),
-  max: z.number().finite(),
-  clampPolicy: z.literal("clamp-to-output-range")
-};
-
-export const DynamicsOutputBindingPayloadSchema = z
-  .object(dynamicsOutputBindingPayloadShape)
-  .refine((payload) => payload.min <= payload.max, {
-    message: "min must be less than or equal to max",
-    path: ["min"]
-  });
-export type DynamicsOutputBindingPayloadDto = z.infer<typeof DynamicsOutputBindingPayloadSchema>;
+export type DynamicsOutputPayloadDto = z.infer<typeof DynamicsOutputPayloadSchema>;
 
 export const CreateDynamicsGroupPayloadSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema.optional(),
   displayName: z.string().min(1),
   enabled: z.boolean().default(true),
-  solverKind: z.literal("scalarDampedFollowV1"),
-  resetPolicy: DynamicsResetPolicySchema,
-  settings: DynamicsSettingsSchema,
-  drivers: z.array(DynamicsDriverBindingPayloadSchema).min(1).optional(),
-  output: DynamicsOutputBindingPayloadSchema.optional()
+  presetId: z.string().min(1).optional(),
+  inputs: z.array(DynamicsInputPayloadSchema).min(1).optional(),
+  chain: DynamicsChainPayloadSchema.optional(),
+  outputs: z.array(DynamicsOutputPayloadSchema).min(1).optional()
 });
 export type CreateDynamicsGroupPayloadDto = z.infer<typeof CreateDynamicsGroupPayloadSchema>;
 
@@ -67,7 +56,10 @@ export const UpdateDynamicsGroupPayloadSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema,
   displayName: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
-  resetPolicy: DynamicsResetPolicySchema.optional()
+  presetId: z.string().min(1).optional(),
+  inputs: z.array(DynamicsInputPayloadSchema).min(1).optional(),
+  chain: DynamicsChainPayloadSchema.optional(),
+  outputs: z.array(DynamicsOutputPayloadSchema).min(1).optional()
 });
 export type UpdateDynamicsGroupPayloadDto = z.infer<typeof UpdateDynamicsGroupPayloadSchema>;
 
@@ -75,46 +67,3 @@ export const DeleteDynamicsGroupPayloadSchema = z.object({
   dynamicsGroupId: DynamicsGroupIdSchema
 });
 export type DeleteDynamicsGroupPayloadDto = z.infer<typeof DeleteDynamicsGroupPayloadSchema>;
-
-export const BindDynamicsDriverPayloadSchema = z.object({
-  dynamicsGroupId: DynamicsGroupIdSchema,
-  ...DynamicsDriverBindingPayloadSchema.shape
-});
-export type BindDynamicsDriverPayloadDto = z.infer<typeof BindDynamicsDriverPayloadSchema>;
-
-export const BindDynamicsOutputPayloadSchema = z
-  .object({
-    dynamicsGroupId: DynamicsGroupIdSchema,
-    ...dynamicsOutputBindingPayloadShape
-  })
-  .refine((payload) => payload.min <= payload.max, {
-    message: "min must be less than or equal to max",
-    path: ["min"]
-  });
-export type BindDynamicsOutputPayloadDto = z.infer<typeof BindDynamicsOutputPayloadSchema>;
-
-export const SetDynamicsSettingsPayloadSchema = z.object({
-  dynamicsGroupId: DynamicsGroupIdSchema,
-  stiffness: z.number().finite().nonnegative(),
-  damping: z.number().finite().nonnegative(),
-  maxVelocity: z.number().finite().positive().optional(),
-  maxAmplitude: z.number().finite().positive().optional()
-});
-export type SetDynamicsSettingsPayloadDto = z.infer<typeof SetDynamicsSettingsPayloadSchema>;
-
-export const ResetDynamicsPreviewStatePayloadSchema = z.object({
-  dynamicsGroupIds: z.array(DynamicsGroupIdSchema).optional(),
-  reason: RuntimeResetReasonSchema
-});
-export type ResetDynamicsPreviewStatePayloadDto = z.infer<typeof ResetDynamicsPreviewStatePayloadSchema>;
-
-export const RunDynamicsPreviewSequencePayloadSchema = z.object({
-  frames: z.array(RuntimeSequenceFrameSchema).min(1),
-  initialState: RuntimeStateDtoSchema.optional(),
-  initialStateRef: RuntimeStateArtifactRefSchema.optional(),
-  fixedStepMs: z.number().positive().default(16.6666667),
-  maxSubSteps: z.number().int().min(1).max(16).default(4),
-  detail: z.enum(["summary", "targeted", "full"]).default("targeted"),
-  context: RuntimeEvaluationContextSchema.optional()
-});
-export type RunDynamicsPreviewSequencePayloadDto = z.infer<typeof RunDynamicsPreviewSequencePayloadSchema>;

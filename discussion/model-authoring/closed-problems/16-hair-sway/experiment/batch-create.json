@@ -1,0 +1,176 @@
+[
+  {
+    "file": "create-hair_front.json",
+    "operationId": "op_cp16_create_hair_front",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp16] warp Sway Hair Front (11x11 twin of rig_facex_hair_front) wrapping draw_r0_1cea4f6f_21b4dac0_front_hair",
+    "payload": {
+      "displayName": "Sway Hair Front",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 655,
+        "y": 135,
+        "width": 692,
+        "height": 638
+      },
+      "transformColumns": 11,
+      "transformRows": 11,
+      "bezierColumns": 11,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "drawable",
+          "id": "draw_r0_1cea4f6f_21b4dac0_front_hair"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-hair_f_l.json",
+    "operationId": "op_cp16_create_hair_f_l",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp16] warp Sway Hair F L (7x7 twin of rig_facex_hair_f_l) wrapping draw_r0_1cea4f6f_21b4da21_hair_f_l",
+    "payload": {
+      "displayName": "Sway Hair F L",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 695,
+        "y": 267,
+        "width": 274,
+        "height": 699
+      },
+      "transformColumns": 7,
+      "transformRows": 7,
+      "bezierColumns": 7,
+      "bezierRows": 7,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "drawable",
+          "id": "draw_r0_1cea4f6f_21b4da21_hair_f_l"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-hair_f_r.json",
+    "operationId": "op_cp16_create_hair_f_r",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp16] warp Sway Hair F R (7x7 twin of rig_facex_hair_f_r) wrapping draw_r0_1cea4f6f_21b4da82_hair_f_r",
+    "payload": {
+      "displayName": "Sway Hair F R",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 1008,
+        "y": 227,
+        "width": 288,
+        "height": 721
+      },
+      "transformColumns": 7,
+      "transformRows": 7,
+      "bezierColumns": 7,
+      "bezierRows": 7,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "drawable",
+          "id": "draw_r0_1cea4f6f_21b4da82_hair_f_r"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-back_hair_l.json",
+    "operationId": "op_cp16_create_back_hair_l",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp16] warp Sway Back Hair L (11x11 twin of rig_facex_back_hair_l) wrapping draw_r0_1cea4f6f_f2691750_back_hair_l",
+    "payload": {
+      "displayName": "Sway Back Hair L",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 967,
+        "y": 272,
+        "width": 537,
+        "height": 1505
+      },
+      "transformColumns": 11,
+      "transformRows": 11,
+      "bezierColumns": 11,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "drawable",
+          "id": "draw_r0_1cea4f6f_f2691750_back_hair_l"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-back_hair_r.json",
+    "operationId": "op_cp16_create_back_hair_r",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp16] warp Sway Back Hair R (11x11 twin of rig_facex_back_hair_r) wrapping draw_r0_1cea4f6f_f26916b1_back_hair_r",
+    "payload": {
+      "displayName": "Sway Back Hair R",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 375,
+        "y": 310,
+        "width": 662,
+        "height": 1520
+      },
+      "transformColumns": 11,
+      "transformRows": 11,
+      "bezierColumns": 11,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "drawable",
+          "id": "draw_r0_1cea4f6f_f26916b1_back_hair_r"
+        }
+      ]
+    }
+  },
+  {
+    "file": "create-tie.json",
+    "operationId": "op_cp16_create_tie",
+    "operationType": "createWarpDeformer",
+    "gitMessage": "[cp16] warp Sway Tie (5x7 twin of rig_bodyx_tie) wrapping draw_r0_1cea4f6f_ea30e9c4_tie",
+    "payload": {
+      "displayName": "Sway Tie",
+      "childDrawableIds": [],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 919,
+        "y": 620,
+        "width": 147,
+        "height": 603
+      },
+      "transformColumns": 5,
+      "transformRows": 7,
+      "bezierColumns": 5,
+      "bezierRows": 7,
+      "bezierEditType": "cubicBezierSurfaceV1",
+      "wrapChildren": [
+        {
+          "kind": "drawable",
+          "id": "draw_r0_1cea4f6f_ea30e9c4_tie"
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runtime-player/control-channel/intent-set-payload",
+  "title": "Runtime Player Control Channel intent.set payload (C4 §5)",
+  "description": "v0 payload for the intent.set kind. slotId rides the existing semantic-slot vocabulary; value is the slot's normalized value; ttlMs is optional (omitted = the 器's default window applies, C4 §4).",
+  "type": "object",
+  "required": ["slotId", "value"],
+  "additionalProperties": false,
+  "properties": {
+    "slotId": {
+      "type": "string",
+      "description": "Semantic-slot id (existing vocabulary). An unknown id is rejected with unknownSlot.",
+      "enum": [
+        "head-horizontal",
+        "head-vertical",
+        "head-tilt",
+        "eye-blink-left",
+        "eye-blink-right",
+        "gaze-horizontal",
+        "gaze-vertical",
+        "mouth-open",
+        "mouth-smile",
+        "mouth-vowel-a",
+        "mouth-vowel-i",
+        "mouth-vowel-u",
+        "mouth-vowel-e",
+        "mouth-vowel-o",
+        "body-x",
+        "body-z"
+      ]
+    },
+    "value": {
+      "type": "number",
+      "description": "Normalized slot value. Centered slots (head/gaze/body) accept -1..1; weight slots (blink/mouth-open/mouth-smile) and vowel slots accept 0..1. Out of range is rejected with slotValueOutOfRange (never clamped)."
+    },
+    "ttlMs": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Optional time-to-live in milliseconds. Omitted = the 器's default window. The intent expires at receivedAtMs + (ttlMs ?? defaultWindowMs)."
+    }
+  },
+  "normalizedRanges": {
+    "head-centered": { "min": -1, "max": 1 },
+    "gaze-centered": { "min": -1, "max": 1 },
+    "body-x": { "min": -1, "max": 1 },
+    "body-z": { "min": -1, "max": 1 },
+    "blink-left": { "min": 0, "max": 1 },
+    "blink-right": { "min": 0, "max": 1 },
+    "mouth-open": { "min": 0, "max": 1 },
+    "mouth-smile": { "min": 0, "max": 1 },
+    "mouth-vowel": { "min": 0, "max": 1 }
+  }
+}

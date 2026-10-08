@@ -102,7 +102,7 @@
     }
   ],
   "packageFileSet": {
-    "entryCount": 33,
+    "entryCount": 34,
     "operationLogPath": "operations/log.jsonl",
     "operationLogTypes": [
       "importSplitPngSourceAsset",

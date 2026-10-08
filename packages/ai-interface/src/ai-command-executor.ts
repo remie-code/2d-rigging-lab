@@ -1,3 +1,4 @@
+import { isMaterialCommandName, materialCommandCapability } from "./ai-material-command.js";
 import type { DiagnosticDto } from "@private-2d-rigging-lab/contracts";
 import { CheckIdSchema, OperationIdSchema } from "@private-2d-rigging-lab/contracts";
 import type { OperationRequestDto, OperationResultDto } from "@private-2d-rigging-lab/operation-core";
@@ -18,9 +19,28 @@ import {
 } from "./ai-command-transcript.js";
 import type { AiCommandTranscript } from "./ai-command-transcript.js";
 import type { AiOperationCommandHost } from "./ai-command-host.js";
+import type { RenderViewResult } from "./ai-render-view-command.js";
+import { executeAiReadCommand } from "./ai-read-command.js";
+import type { AiReadCommandHost } from "./ai-read-command.js";
 
 type DryRunCommandRequest = Extract<AiCommandRequest, { command: "dryRunOperation" }>;
 type CommitCommandRequest = Extract<AiCommandRequest, { command: "commitOperation" }>;
+/**
+ * read-style commands the {@link executeAiReadCommand} mechanism supports and that
+ * are dispatched through the injected {@link AiReadCommandHost} when one is present.
+ */
+type DispatchableReadCommandRequest = Extract<
+  AiCommandRequest,
+  {
+    command:
+      | "getEditorState"
+      | "inspectModel"
+      | "inspectTarget"
+      | "inspectEvaluatedGeometry"
+      | "validatePackage"
+      | "getOperationLog";
+  }
+>;
 type UnsupportedReadCommandRequest = Extract<
   AiCommandRequest,
   {
@@ -28,25 +48,40 @@ type UnsupportedReadCommandRequest = Extract<
       | "getEditorState"
       | "inspectModel"
       | "inspectTarget"
+      | "inspectEvaluatedGeometry"
       | "validatePackage"
       | "getOperationLog"
+      | "renderView"
       | "getPsdImportPlanState"
       | "setPsdImportPlanApproval"
       | "preflightPsdImportPlanIntake"
       | "executePsdImportPlanIntake";
   }
 >;
+type RenderViewCommandRequest = Extract<AiCommandRequest, { command: "renderView" }>;
 
 export interface AiCommandExecutorOptions {
   readonly host: AiOperationCommandHost;
   readonly approvalPolicy?: AiApprovalPolicy;
   readonly transcript?: AiCommandTranscript;
+  /**
+   * Optional read-command host. When provided, the five read commands supported by
+   * {@link executeAiReadCommand} (getEditorState / inspectModel / inspectTarget /
+   * validatePackage / getOperationLog) are dispatched through it with the executor's
+   * own transcript, so capability checks, permission_denied / not_implemented / ok
+   * resolution, and transcript recording all flow through the shared read mechanism.
+   * When absent, those commands fall back to the legacy not_implemented behavior.
+   * PSD import plan read commands are never routed here and always return
+   * not_implemented from the executor.
+   */
+  readonly readHost?: AiReadCommandHost;
 }
 
 export class AiCommandExecutor {
   readonly #host: AiOperationCommandHost;
   readonly #approvalPolicy: AiApprovalPolicy;
   readonly #transcript: AiCommandTranscript;
+  readonly #readHost: AiReadCommandHost | undefined;
 
   constructor(options: AiCommandExecutorOptions) {
     this.#host = options.host;
@@ -55,6 +90,7 @@ export class AiCommandExecutor {
       options.approvalPolicy ?? new InMemoryAiApprovalPolicy(),
       this.#transcript
     );
+    this.#readHost = options.readHost;
   }
 
   get approvalPolicy(): AiApprovalPolicy {
@@ -68,6 +104,12 @@ export class AiCommandExecutor {
   async execute(input: unknown): Promise<AiCommandResponse> {
     const request = AiCommandRequestSchema.parse(input);
 
+    if (isMaterialCommandName(request.command)) {
+      const response = AiCommandResponseSchema.parse({ schemaVersion: "ai-command-response-v1", commandId: request.commandId,
+        command: request.command, status: hasCapability(request, materialCommandCapability(request.command)) ? "not_implemented" : "permission_denied", payload: {} });
+      appendAiCommandResponseToTranscript({ transcript: this.#transcript, request, response });
+      return response;
+    }
     switch (request.command) {
       case "dryRunOperation":
         return this.#executeDryRun(request);
@@ -76,14 +118,62 @@ export class AiCommandExecutor {
       case "getEditorState":
       case "inspectModel":
       case "inspectTarget":
+      case "inspectEvaluatedGeometry":
       case "validatePackage":
       case "getOperationLog":
+        return this.#executeReadCommand(request);
+      case "renderView":
+        return this.#executeRenderView(request);
       case "getPsdImportPlanState":
       case "setPsdImportPlanApproval":
       case "preflightPsdImportPlanIntake":
       case "executePsdImportPlanIntake":
         return this.#unsupportedReadCommand(request);
+      default: throw new Error("Material commands require the authoring host.");
     }
+  }
+
+  async #executeReadCommand(request: DispatchableReadCommandRequest): Promise<AiCommandResponse> {
+    if (this.#readHost === undefined) {
+      // No read host configured: preserve the legacy behavior where read commands
+      // routed to the operation executor resolve to a command-matching not_implemented.
+      return this.#unsupportedReadCommand(request);
+    }
+
+    // Dispatch through the shared read mechanism, passing the executor's transcript so
+    // capability checks, permission_denied / not_implemented / ok resolution, and
+    // transcript recording all happen there (and are not duplicated by the executor).
+    return executeAiReadCommand(request, this.#readHost, this.#transcript);
+  }
+
+  /**
+   * `renderView` is a perception command whose concrete implementation (session
+   * evaluation, RenderScene assembly, rasterization, PNG + sidecar file output)
+   * lives in the authoring-host, so ai-interface never gains a renderer or
+   * filesystem dependency. The executor only enforces the `render` capability
+   * gate here; when the capability is present it returns `not_implemented`,
+   * which signals callers to route the render through the authoring-host render
+   * path. A caller that lacks the capability is stopped with `permission_denied`.
+   */
+  #executeRenderView(request: RenderViewCommandRequest): AiCommandResponse {
+    if (!hasCapability(request, "render")) {
+      const response = AiCommandResponseSchema.parse({
+        schemaVersion: "ai-command-response-v1",
+        commandId: request.commandId,
+        status: "permission_denied",
+        evidenceRefs: [],
+        command: request.command,
+        payload: renderViewNotImplementedPayload(request)
+      });
+      appendAiCommandResponseToTranscript({
+        transcript: this.#transcript,
+        request,
+        response
+      });
+      return response;
+    }
+
+    return this.#unsupportedReadCommand(request);
   }
 
   async #executeDryRun(request: DryRunCommandRequest): Promise<AiCommandResponse> {
@@ -217,6 +307,38 @@ export const executeAiCommand = (input: unknown, options: AiCommandExecutorOptio
 const hasCapability = (request: AiCommandRequest, capability: AiCapability): boolean =>
   request.session.capabilities.includes(capability);
 
+/**
+ * Schema-valid placeholder render result. The executor does not render; the
+ * authoring-host render path produces the real artifacts. This payload only
+ * satisfies the response union so capability gating and transcript recording
+ * work at the ai-interface layer.
+ */
+const renderViewNotImplementedPayload = (
+  request: RenderViewCommandRequest
+): RenderViewResult => ({
+  schemaVersion: "render-view-result-v1",
+  packageRevision: request.basis.packageRevision ?? 0,
+  pngPath: "not-implemented",
+  sidecarPath: "not-implemented",
+  outputWidth: 1,
+  outputHeight: 1,
+  sidecar: {
+    schemaVersion: "render-view-sidecar-v1",
+    packagePath: "not-implemented",
+    packageId: "pkg_unknown",
+    packageRevision: request.basis.packageRevision ?? 0,
+    pngPath: "not-implemented",
+    parameterOverrides: [],
+    resolvedView: {
+      stageViewport: { minX: 0, minY: 0, width: 1, height: 1 },
+      outputWidth: 1,
+      outputHeight: 1,
+      pixelsPerStageX: 1,
+      pixelsPerStageY: 1
+    }
+  }
+});
+
 const unsupportedReadPayload = (request: UnsupportedReadCommandRequest) => {
   switch (request.command) {
     case "getEditorState":
@@ -225,6 +347,13 @@ const unsupportedReadPayload = (request: UnsupportedReadCommandRequest) => {
       return { targets: [], editableTargets: [] };
     case "inspectTarget":
       return { target: request.payload.target, references: [] };
+    case "inspectEvaluatedGeometry":
+      return {
+        schemaVersion: "inspect-evaluated-geometry-result-v1",
+        packageRevision: 0,
+        parameterOverrides: [],
+        results: []
+      };
     case "validatePackage":
       return {
         reportId: "val_ai_operation_executor_not_implemented",
@@ -258,6 +387,8 @@ const unsupportedReadPayload = (request: UnsupportedReadCommandRequest) => {
       };
     case "getOperationLog":
       return { entries: [] };
+    case "renderView":
+      return renderViewNotImplementedPayload(request);
     case "getPsdImportPlanState":
     case "setPsdImportPlanApproval":
     case "preflightPsdImportPlanIntake":

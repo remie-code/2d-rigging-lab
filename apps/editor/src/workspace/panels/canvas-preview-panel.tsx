@@ -1,3 +1,4 @@
+import { createVariantVisibilityPredicate } from "@private-2d-rigging-lab/authoring-core";
 import {
   CircleOff,
   Focus,
@@ -25,7 +26,7 @@ import {
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
 import { cn } from "../../lib/class-name";
-import { useEditorUiStore } from "../../state/editor-ui-store";
+import { useEditorUiStore, type WorkspaceToolId } from "../../state/editor-ui-store";
 import { IconButton } from "../../ui/icon-button";
 import {
   INITIAL_CANVAS_AUTO_FIT_POLICY_STATE,
@@ -93,17 +94,23 @@ const DEFAULT_VIEWPORT: CanvasViewportSize = {
 
 const POINTER_CLICK_SLOP = 4;
 
+export function isCanvasAuthoringSelectionEnabled(activeTool: WorkspaceToolId): boolean {
+  return activeTool !== "dynamics";
+}
+
 export function CanvasPreviewPanel() {
   const {
     activeParameterId,
     commitGestureController,
+    dynamicsToolPreviewEvaluation,
     editorHiddenPartIds,
     meshDraft,
     parameterValues,
     rigDraft,
     selectDrawable,
     selection,
-    session
+    session,
+    variantPreviewActiveSelections
   } = useEditorSession();
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
@@ -138,20 +145,46 @@ export function CanvasPreviewPanel() {
     }),
     [deformerOverlayVisible, meshOverlayVisible, overlays]
   );
+  const variantVisibilityPredicate = useMemo(
+    () =>
+      createVariantVisibilityPredicate({
+        variantGroups: session.graph.variantGroups ?? [],
+        activeSelections: variantPreviewActiveSelections
+      }),
+    [session.graph.variantGroups, variantPreviewActiveSelections]
+  );
   const createProjection = useCallback(
-    (preview: CanvasPreviewProjectionPreview = {}) =>
-      createCanvasRenderProjection(session, selection, {
+    (preview: CanvasPreviewProjectionPreview = {}) => {
+      const effectiveParameterValues =
+        activeTool === "dynamics"
+          ? dynamicsToolPreviewEvaluation.parameterValues
+          : parameterValues;
+
+      return createCanvasRenderProjection(session, selection, {
+        evaluationCaller: "canvas",
         editorHiddenPartIds,
         meshDraft,
         deformerDraft: rigDraft,
         controlPointPreview: preview.controlPointPreview ?? null,
         rotationPreview: preview.rotationPreview ?? null,
-        parameterValues,
+        parameterValues: effectiveParameterValues,
+        variantVisibilityPredicate,
         ...(activeTool === "mesh" && selection?.kind === "drawable"
           ? { meshPreviewDrawableId: selection.id }
           : {})
-      }),
-    [activeTool, editorHiddenPartIds, meshDraft, parameterValues, rigDraft, selection, session]
+      });
+    },
+    [
+      activeTool,
+      dynamicsToolPreviewEvaluation.parameterValues,
+      editorHiddenPartIds,
+      meshDraft,
+      parameterValues,
+      rigDraft,
+      selection,
+      session,
+      variantVisibilityPredicate
+    ]
   );
   const projection = useMemo(() => createProjection(), [createProjection]);
   const warpControlPoints = useWarpDeformerControlPointInteraction({
@@ -376,6 +409,11 @@ export function CanvasPreviewPanel() {
       return;
     }
 
+    if (!isCanvasAuthoringSelectionEnabled(activeTool)) {
+      event.preventDefault();
+      return;
+    }
+
     if (
       rotationDeformer.handlePointerDown({
         pointerId: event.pointerId,
@@ -406,7 +444,7 @@ export function CanvasPreviewPanel() {
       moved: false
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [rotationDeformer, warpControlPoints]);
+  }, [activeTool, rotationDeformer, warpControlPoints]);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     const localPoint = toLocalPoint(event.currentTarget, event.clientX, event.clientY);
@@ -496,12 +534,16 @@ export function CanvasPreviewPanel() {
       return;
     }
 
+    if (!isCanvasAuthoringSelectionEnabled(activeTool)) {
+      return;
+    }
+
     const canvasPoint = screenToCanvasPoint(drag.last, view);
     const hitDrawableId = hitTestTopmostDrawable(renderProjection, canvasPoint);
     if (hitDrawableId !== undefined) {
       selectDrawable(hitDrawableId);
     }
-  }, [renderProjection, rotationDeformer, selectDrawable, view, warpControlPoints]);
+  }, [activeTool, renderProjection, rotationDeformer, selectDrawable, view, warpControlPoints]);
 
   const rotationHoveredLocked =
     rotationDeformer.hoveredHandle === "pivot"
@@ -617,11 +659,14 @@ export function CanvasPreviewPanel() {
                       ? "cursor-not-allowed"
                       : warpControlPoints.hoveredControlPointIndex !== undefined
                         ? "cursor-grab"
-                        : spacePressed
-                          ? "cursor-grab"
+                      : spacePressed
+                        ? "cursor-grab"
+                        : !isCanvasAuthoringSelectionEnabled(activeTool)
+                          ? "cursor-default"
                           : "cursor-crosshair"
             )}
             data-canvas-has-renderable-artwork={String(renderProjection.hasRenderableArtwork)}
+            data-dynamics-tool-active={String(activeTool === "dynamics")}
             data-mask-relation-count={renderProjection.maskRelations.length}
             data-primary-hit-screen-x={primaryHitScreenPoint?.x ?? ""}
             data-primary-hit-screen-y={primaryHitScreenPoint?.y ?? ""}

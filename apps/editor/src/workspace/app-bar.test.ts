@@ -1,6 +1,5 @@
 import type {
   ButtonHTMLAttributes,
-  ChangeEvent as ReactChangeEvent,
   MouseEvent as ReactMouseEvent,
   ReactNode
 } from "react";
@@ -8,27 +7,37 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DynamicsGroupIdSchema, ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
+
+import { createEmptyAuthoringSession } from "../features/editor-session/model/empty-authoring-session";
+
 const appBarTestState = vi.hoisted(() => ({
   editorSession: {
     canUndo: false,
     canRedo: false,
-    openProjectFile: vi.fn(),
-    openPsdImport: vi.fn(),
-    projectIdentityLabel: "Loaded model · rev 7",
-    projectSaveStatusLabel: "Saved",
-    projectStorage: {
-      status: "idle"
-    },
+    createWorkspace: vi.fn(),
+    hasOpenWorkspace: true,
+    openWorkspace: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
-    saveProject: vi.fn()
+    saveWorkspaceAs: vi.fn(),
+    saveProject: vi.fn(),
+    session: undefined as unknown,
+    workspaceIdentityLabel: "Loaded workspace · rev 7",
+    workspaceSaveStatusLabel: "Saved",
+    workspaceStorage: {
+      status: "saved",
+      message: "Workspace ready."
+    }
   },
   iconButtons: [] as Array<{
     readonly disabled: boolean;
     readonly label: string;
     readonly onClick?: ButtonHTMLAttributes<HTMLButtonElement>["onClick"];
   }>,
-  setActiveEntry: vi.fn()
+  activeEntry: "workspace",
+  setActiveEntry: vi.fn(),
+  surfaceLabel: "Mock Surface"
 }));
 
 vi.mock("../features/editor-session/editor-session-context", () => ({
@@ -44,8 +53,8 @@ vi.mock("../state/editor-ui-store", () => ({
     }) => unknown
   ) =>
     selector({
-      surfaceLabel: "Mock Surface",
-      activeEntry: "canvas",
+      surfaceLabel: appBarTestState.surfaceLabel,
+      activeEntry: appBarTestState.activeEntry,
       setActiveEntry: appBarTestState.setActiveEntry
     })
 }));
@@ -79,19 +88,24 @@ vi.mock("../ui/icon-button", () => ({
   }
 }));
 
-import { AppBar, createOpenProjectFileChangeHandler } from "./app-bar";
+import { AppBar } from "./app-bar";
 
 describe("AppBar history controls", () => {
   beforeEach(() => {
+    appBarTestState.activeEntry = "workspace";
     appBarTestState.editorSession.canUndo = false;
     appBarTestState.editorSession.canRedo = false;
-    appBarTestState.editorSession.projectIdentityLabel = "Loaded model · rev 7";
-    appBarTestState.editorSession.projectSaveStatusLabel = "Saved";
-    appBarTestState.editorSession.projectStorage.status = "idle";
-    appBarTestState.editorSession.openProjectFile.mockClear();
-    appBarTestState.editorSession.openPsdImport.mockClear();
+    appBarTestState.editorSession.hasOpenWorkspace = true;
+    appBarTestState.editorSession.workspaceIdentityLabel = "Loaded workspace · rev 7";
+    appBarTestState.editorSession.workspaceSaveStatusLabel = "Saved";
+    appBarTestState.editorSession.workspaceStorage.status = "saved";
+    appBarTestState.editorSession.workspaceStorage.message = "Workspace ready.";
+    appBarTestState.editorSession.session = createEmptyAuthoringSession();
+    appBarTestState.editorSession.createWorkspace.mockClear();
+    appBarTestState.editorSession.openWorkspace.mockClear();
     appBarTestState.editorSession.undo.mockClear();
     appBarTestState.editorSession.redo.mockClear();
+    appBarTestState.editorSession.saveWorkspaceAs.mockClear();
     appBarTestState.editorSession.saveProject.mockClear();
     appBarTestState.iconButtons.splice(0, appBarTestState.iconButtons.length);
     appBarTestState.setActiveEntry.mockClear();
@@ -125,18 +139,18 @@ describe("AppBar history controls", () => {
     expect(appBarTestState.editorSession.redo).toHaveBeenCalledTimes(1);
   });
 
-  it("renders project identity/save status from session storage state", () => {
+  it("renders workspace identity/save status from workspace state", () => {
     const markup = renderToStaticMarkup(createElement(AppBar));
 
-    expect(markup).toContain("Loaded model · rev 7");
+    expect(markup).toContain("Loaded workspace · rev 7");
     expect(markup).toContain("Saved");
     expect(markup).not.toContain("Untitled model");
   });
 
-  it("wires Save Project to the portable project save action", () => {
+  it("wires Save Workspace to the workspace save action", () => {
     renderToStaticMarkup(createElement(AppBar));
 
-    const saveButton = findIconButton("Save project");
+    const saveButton = findIconButton("Save Workspace");
     expect(saveButton.disabled).toBe(false);
 
     saveButton.onClick?.({} as ReactMouseEvent<HTMLButtonElement>);
@@ -144,35 +158,47 @@ describe("AppBar history controls", () => {
     expect(appBarTestState.editorSession.saveProject).toHaveBeenCalledTimes(1);
   });
 
-  it("renders Open Project file input and disables storage buttons while busy", () => {
-    appBarTestState.editorSession.projectStorage.status = "loading";
+  it("disables Save Workspace while workspace storage is busy", () => {
+    appBarTestState.editorSession.workspaceStorage.status = "saving";
+
+    renderToStaticMarkup(createElement(AppBar));
+
+    expect(findIconButton("Save Workspace").disabled).toBe(true);
+  });
+
+  it("starts in the Workspace Gate header when no workspace is open", () => {
+    appBarTestState.editorSession.hasOpenWorkspace = false;
+    appBarTestState.editorSession.workspaceStorage.status = "no-workspace";
 
     const markup = renderToStaticMarkup(createElement(AppBar));
 
-    expect(markup).toContain("Open portable project bundle file");
-    expect(findIconButton("Open project").disabled).toBe(true);
-    expect(findIconButton("Save project").disabled).toBe(true);
+    expect(markup).toContain("Create Workspace");
+    expect(markup).toContain("Open Workspace");
+    expect(markup).not.toContain("Save Workspace");
+    expect(markup).not.toContain("Parameters");
+    expect(markup).not.toContain("Texture Atlas");
+    expect(markup).not.toContain("Viewer");
   });
 
-  it("passes the selected portable project File from the hidden input to openProjectFile", () => {
-    const file = new File(["{}"], "loaded.portable-project.json", {
-      type: "application/json"
-    });
-    const input = {
-      files: [file],
-      value: "C:\\fakepath\\loaded.portable-project.json"
-    };
-    const handler = createOpenProjectFileChangeHandler(
-      appBarTestState.editorSession.openProjectFile
-    );
+  it("renders the Validate warning badge from diagnostics count outside Viewer", () => {
+    appBarTestState.editorSession.session = createAppBarWarningSession();
 
-    handler({
-      currentTarget: input
-    } as unknown as ReactChangeEvent<HTMLInputElement>);
+    const markup = renderToStaticMarkup(createElement(AppBar));
 
-    expect(appBarTestState.editorSession.openProjectFile).toHaveBeenCalledTimes(1);
-    expect(appBarTestState.editorSession.openProjectFile).toHaveBeenCalledWith(file);
-    expect(input.value).toBe("");
+    expect(markup).toContain('data-testid="diagnostics-warning-badge"');
+    expect(markup).toContain('aria-label="2 validation warnings"');
+    expect(markup).toContain(">2</span>");
+  });
+
+  it("hides the Validate warning badge when diagnostics are empty or Viewer is active", () => {
+    const emptyMarkup = renderToStaticMarkup(createElement(AppBar));
+    expect(emptyMarkup).not.toContain('data-testid="diagnostics-warning-badge"');
+
+    appBarTestState.activeEntry = "viewer";
+    appBarTestState.editorSession.session = createAppBarWarningSession();
+    const viewerMarkup = renderToStaticMarkup(createElement(AppBar));
+
+    expect(viewerMarkup).not.toContain('data-testid="diagnostics-warning-badge"');
   });
 });
 
@@ -192,4 +218,38 @@ function findIconButton(label: string) {
   }
 
   return button;
+}
+
+function createAppBarWarningSession() {
+  const session = createEmptyAuthoringSession();
+  const missingDriverId = ParameterIdSchema.parse("param_app_bar_badge_missing_driver");
+  const missingOutputId = ParameterIdSchema.parse("param_app_bar_badge_missing_output");
+  session.graph.dynamicsGroups.push({
+    dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_app_bar_badge"),
+    displayName: "Badge Dynamics",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: missingDriverId,
+        kind: "angle",
+        scale: 1}
+    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+    outputs: [
+      {
+        parameterId: missingOutputId,
+        segmentIndex: 1,
+        scale: 1,
+        limit: 15
+      }
+    ]
+  });
+
+  return session;
 }

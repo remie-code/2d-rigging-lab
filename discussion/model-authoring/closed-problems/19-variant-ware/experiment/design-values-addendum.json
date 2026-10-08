@@ -1,0 +1,50 @@
+{
+  "note": "cp19b 追補: 下半身素材のデフォーマ所属（アトラス仕様対応）。design-values.json (cp19本体) は不変のまま残す",
+  "variantGroupId": "vgrp_ware",
+  "targets": {
+    "legwear": "draw_r0_1cea4f6f_c7ac42f2_legwear",
+    "footwear": "draw_r0_1cea4f6f_c7ac4230_footwear",
+    "tail": "draw_r0_1cea4f6f_c7ac4211_tail",
+    "endomi_back": "draw_r0_1cea4f6f_c7ac42d3_endomi_back",
+    "bottomwear_default": "draw_r0_1cea4f6f_26f93eaa_bottomwear",
+    "bottomwear_rodos": "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+    "bottomwear_endo": "draw_r0_1cea4f6f_8b5c5469_bottomwear"
+  },
+  "meshGenTargets": [
+    "draw_r0_1cea4f6f_c7ac42f2_legwear",
+    "draw_r0_1cea4f6f_c7ac4230_footwear",
+    "draw_r0_1cea4f6f_c7ac4211_tail",
+    "draw_r0_1cea4f6f_c7ac42d3_endomi_back"
+  ],
+  "meshMethod": "auto-outline-v6d-adaptive-contour-constrainautor",
+  "meshDensityHint": "medium",
+  "deformers": {
+    "bottomsStatic": {
+      "displayName": "Bottoms Static",
+      "parent": null,
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_c7ac42f2_legwear",
+        "draw_r0_1cea4f6f_c7ac4230_footwear",
+        "draw_r0_1cea4f6f_c7ac4211_tail",
+        "draw_r0_1cea4f6f_26f93eaa_bottomwear",
+        "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+        "draw_r0_1cea4f6f_8b5c5469_bottomwear"
+      ]
+    },
+    "endomiBackCarrier": {
+      "displayName": "Endomi Back Carrier",
+      "parent": "rig_bodyz_upper_body",
+      "childDrawableIds": ["draw_r0_1cea4f6f_c7ac42d3_endomi_back"]
+    }
+  },
+  "membershipAddendum": {
+    "var_endoministrator": ["draw_r0_1cea4f6f_c7ac42d3_endomi_back"]
+  },
+  "showTargets": ["draw_r0_1cea4f6f_c7ac42d3_endomi_back"],
+  "notes": {
+    "meshExisting": "bottomwear_default は既に 308v メッシュ有り → generateMesh 対象外（指示の『無ければ』条項）",
+    "visibilityDerivation": "endomi_back は着手時 vis=false。variant ゲート = baseVisible AND 所属 のため、Endoministrator 選択で出現させるには setRuntimeVisibility=true が必要。cp19 の所属先行・可視旗後行に従い最終 op で true 化",
+    "meshBeforeWrap": "cp14 罠: 空メッシュを deformer 配下に入れると bounds ゼロ化で評価から消える → mesh 生成(F) → deformer 作成(G) の順を厳守",
+    "domainBounds": "各 deformer の domainBounds は F 完了後に子メッシュ頂点の union bbox + マージンで実測導出"
+  }
+}

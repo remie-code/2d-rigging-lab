@@ -7,29 +7,45 @@ import {
 import type { RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
+import { computeDynamicsOutputOffsetsFromGraph } from "./dynamics-evaluation.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import { resolveEffectiveParameterValues } from "./parameter-resolution.js";
 import { defaultRuntimeEvaluationOptions } from "./runtime-options.js";
 import { createRuntimeSnapshot } from "./snapshot.js";
 
+// A single-segment chain bent so its world angle is known; the dynamics offset is then θ_local·scale.
+// θ_world = atan2(x, y). Placing the particle at (sin θ, cos θ) (L = 1) gives θ_world = θ [deg].
+const bentParticleState = (thetaWorldDeg: number) => {
+  const thetaRad = (thetaWorldDeg * Math.PI) / 180;
+  const x = Math.sin(thetaRad);
+  const y = Math.cos(thetaRad);
+  return { particles: [{ x, y, px: x, py: y }], tick: 1, resetCounter: 1 };
+};
+
 describe("effective parameter resolution", () => {
-  it("resolves authored defaults, clamps authored input, and overlays computed dynamics values", () => {
+  it("resolves authored defaults, clamps authored input, and adds dynamics offsets", () => {
     const fixture = createParameterResolutionFixture();
+    // Yaw authored 2 → φ_deg = (2 − 0)·1 = 2°. A particle bent to θ_world = 12° gives
+    // θ_local = 12 − 2 = 10°, and with output scale 0.025 the offset is 0.25.
     const state = createRuntimeState(fixture.graph, {
-      [fixture.dynamicsGroupId]: {
-        position: 0.25,
-        velocity: 0,
-        tick: 1,
-        resetCounter: 1
-      }
+      [fixture.dynamicsGroupId]: bentParticleState(12)
     });
+    const authoredParameterValues = {
+      [fixture.yawParameterId]: 2,
+      [fixture.hairSwayParameterId]: 0.4
+    };
+
+    const expectedOffset = computeDynamicsOutputOffsetsFromGraph(
+      fixture.graph,
+      fixture.graph.dynamicsGroups.get(fixture.dynamicsGroupId)!,
+      state.dynamicsGroups[fixture.dynamicsGroupId]!,
+      authoredParameterValues
+    )[0]!.offset;
+    expect(expectedOffset).toBeCloseTo(0.25, 6);
 
     const resolution = resolveEffectiveParameterValues({
       graph: fixture.graph,
-      authoredParameterValues: {
-        [fixture.yawParameterId]: 2,
-        [fixture.hairSwayParameterId]: 0.9
-      },
+      authoredParameterValues,
       state
     });
 
@@ -38,33 +54,30 @@ describe("effective parameter resolution", () => {
         parameterId: fixture.yawParameterId,
         valueSource: "authoredInput",
         authoredValue: 2,
+        baseValue: 1,
         effectiveValue: 1,
         clamped: true,
         source: "viewerOverride"
       },
       {
         parameterId: fixture.hairSwayParameterId,
-        valueSource: "computedDynamics",
-        authoredValue: 0.9,
-        computedValue: 0.25,
-        effectiveValue: 0.25,
+        valueSource: "authoredInput",
+        authoredValue: 0.4,
+        baseValue: 0.4,
+        dynamicsOffset: expectedOffset,
+        effectiveValue: 0.4 + expectedOffset,
         clamped: false,
-        source: "dynamicsComputed"
+        source: "dynamicsAdditive"
       }
     ]);
     expect(resolution.effectiveParameterValues.get(fixture.yawParameterId)).toBe(1);
-    expect(resolution.effectiveParameterValues.get(fixture.hairSwayParameterId)).toBe(0.25);
+    expect(resolution.effectiveParameterValues.get(fixture.hairSwayParameterId)).toBeCloseTo(0.65, 6);
   });
 
   it("keeps snapshot parameter output and empty keyform samples unchanged without keyforms", () => {
     const fixture = createParameterResolutionFixture();
     const state = createRuntimeState(fixture.graph, {
-      [fixture.dynamicsGroupId]: {
-        position: -0.5,
-        velocity: 0,
-        tick: 1,
-        resetCounter: 1
-      }
+      [fixture.dynamicsGroupId]: bentParticleState(-12)
     });
     const authoredParameterValues = {
       [fixture.yawParameterId]: -2
@@ -124,7 +137,7 @@ const createParameterResolutionFixture = () => {
         {
           id: hairSwayParameterId,
           displayName: "Hair Sway",
-          valueSource: "computedDynamics",
+          valueSource: "authoredInput",
           min: -1,
           max: 1,
           default: 0
@@ -138,30 +151,27 @@ const createParameterResolutionFixture = () => {
           dynamicsGroupId,
           displayName: "Hair Sway",
           enabled: true,
-          solverKind: "scalarDampedFollowV1",
-          drivers: [
+          inputs: [
             {
-              driverId: "driver_yaw",
-              sourceParameterId: yawParameterId,
-              inputScale: 1,
-              inputOffset: 0,
-              invert: false
+              parameterId: yawParameterId,
+              kind: "angle",
+              scale: 1
             }
           ],
-          output: {
-            outputId: "output_hair",
-            targetParameterId: hairSwayParameterId,
-            outputScale: 1,
-            outputOffset: 0,
-            min: -1,
-            max: 1,
-            clampPolicy: "clamp-to-output-range"
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [1],
+            damping: 2.5,
+            gravityScale: 1
           },
-          settings: {
-            stiffness: 4,
-            damping: 1
-          },
-          resetPolicy: "reset-on-load"
+          outputs: [
+            {
+              parameterId: hairSwayParameterId,
+              segmentIndex: 1,
+              scale: 0.025,
+              limit: 1
+            }
+          ]
         }
       ]
     ]),

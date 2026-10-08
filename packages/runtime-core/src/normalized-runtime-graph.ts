@@ -54,36 +54,33 @@ export interface NormalizedDynamicsGroup {
   readonly dynamicsGroupId: DynamicsGroupId;
   readonly displayName: string;
   readonly enabled: boolean;
-  readonly solverKind: "scalarDampedFollowV1";
-  readonly drivers: readonly NormalizedDynamicsDriver[];
-  readonly output: NormalizedDynamicsOutput;
-  readonly settings: NormalizedDynamicsSettings;
-  readonly resetPolicy: "reset-on-load" | "reset-on-manual-command" | "reset-on-large-input-jump";
+  readonly presetId?: string;
+  readonly inputs: readonly NormalizedDynamicsInput[];
+  readonly chain: NormalizedDynamicsChain;
+  readonly outputs: readonly NormalizedDynamicsOutput[];
 }
 
-export interface NormalizedDynamicsDriver {
-  readonly driverId: string;
-  readonly sourceParameterId: ParameterId;
-  readonly inputScale: number;
-  readonly inputOffset: number;
-  readonly invert: boolean;
+export type NormalizedDynamicsAxisKind = "angle" | "positionX" | "positionY";
+
+// dynamics-file-v3 world-frame chain. See dynamics-world-frame-chain.md §3 / §4.
+export interface NormalizedDynamicsInput {
+  readonly parameterId: ParameterId;
+  readonly kind: NormalizedDynamicsAxisKind;
+  readonly scale: number;
+}
+
+export interface NormalizedDynamicsChain {
+  readonly rootOffset: Vec2Dto;
+  readonly segmentLengths: readonly number[];
+  readonly damping: number;
+  readonly gravityScale: number;
 }
 
 export interface NormalizedDynamicsOutput {
-  readonly outputId: string;
-  readonly targetParameterId: ParameterId;
-  readonly outputScale: number;
-  readonly outputOffset: number;
-  readonly min: number;
-  readonly max: number;
-  readonly clampPolicy: "clamp-to-output-range";
-}
-
-export interface NormalizedDynamicsSettings {
-  readonly stiffness: number;
-  readonly damping: number;
-  readonly maxVelocity?: number;
-  readonly maxAmplitude?: number;
+  readonly parameterId: ParameterId;
+  readonly segmentIndex: number;
+  readonly scale: number;
+  readonly limit: number;
 }
 
 export interface NormalizedDrawable {

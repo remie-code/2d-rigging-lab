@@ -30,11 +30,6 @@ export const operationTypes = [
   "createDynamicsGroup",
   "updateDynamicsGroup",
   "deleteDynamicsGroup",
-  "bindDynamicsDriver",
-  "bindDynamicsOutput",
-  "setDynamicsSettings",
-  "resetDynamicsPreviewState",
-  "runDynamicsPreviewSequence",
   "createRotation2dRigControl",
   "createWarpLattice2dRigControl",
   "createWarpDeformer",
@@ -42,10 +37,22 @@ export const operationTypes = [
   "moveDrawableRigControlBinding",
   "reparentRigControl",
   "updateRigControl",
+  "deleteRigControl",
   "setMaskRelation",
   "setDrawOrder",
   "setRuntimeVisibility",
-  "setRightsMetadata"
+  "setRightsMetadata",
+  "applyTextureAtlasPreview",
+  "createVariantGroup",
+  "updateVariantGroup",
+  "deleteVariantGroup",
+  "createVariant",
+  "updateVariant",
+  "deleteVariant",
+  "addVariantTargetDrawable",
+  "removeVariantTargetDrawable",
+  "setVariantMembership",
+  "setVariantDefaultActiveSelection"
 ] as const;
 
 export const OperationTypeSchema = z.enum(operationTypes);

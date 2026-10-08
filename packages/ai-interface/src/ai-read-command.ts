@@ -18,6 +18,11 @@ import {
   type InspectTargetResult
 } from "./ai-inspection-command.js";
 import {
+  InspectEvaluatedGeometryResultSchema,
+  type InspectEvaluatedGeometryPayload,
+  type InspectEvaluatedGeometryResult
+} from "./ai-measurement-command.js";
+import {
   filterAiOperationLogEntries,
   parseAiOperationLogQuery,
   type AiOperationLogQuery
@@ -29,11 +34,20 @@ import {
 } from "./ai-validation-command.js";
 
 export interface AiReadCommandHost {
-  getEditorState(payload: GetEditorStatePayload): AiEditorState | Promise<AiEditorState>;
+  /**
+   * All read command methods are optional. A host that omits a method has that command
+   * resolve to `not_implemented` (mirroring the inspect* / validatePackage handling),
+   * which lets a host implement only the read commands it supports — e.g. the headless
+   * authoring-host implements validatePackage while leaving getEditorState unimplemented.
+   */
+  getEditorState?(payload: GetEditorStatePayload): AiEditorState | Promise<AiEditorState>;
   inspectModel?(payload: InspectModelPayload): InspectModelResult | Promise<InspectModelResult>;
   inspectTarget?(payload: InspectTargetPayload): InspectTargetResult | Promise<InspectTargetResult>;
+  inspectEvaluatedGeometry?(
+    payload: InspectEvaluatedGeometryPayload
+  ): InspectEvaluatedGeometryResult | Promise<InspectEvaluatedGeometryResult>;
   validatePackage?(payload: ValidatePackagePayload): ValidatePackageResult | Promise<ValidatePackageResult>;
-  getOperationLog(
+  getOperationLog?(
     query: AiOperationLogQuery
   ): readonly OperationLogEntryDto[] | Promise<readonly OperationLogEntryDto[]>;
 }
@@ -42,6 +56,7 @@ type SupportedReadCommandName =
   | "getEditorState"
   | "inspectModel"
   | "inspectTarget"
+  | "inspectEvaluatedGeometry"
   | "validatePackage"
   | "getOperationLog";
 type SupportedReadRequest = Extract<AiCommandRequest, { command: SupportedReadCommandName }>;
@@ -50,6 +65,7 @@ const isSupportedReadCommand = (request: AiCommandRequest): request is Supported
   request.command === "getEditorState" ||
   request.command === "inspectModel" ||
   request.command === "inspectTarget" ||
+  request.command === "inspectEvaluatedGeometry" ||
   request.command === "validatePackage" ||
   request.command === "getOperationLog";
 
@@ -101,6 +117,10 @@ export const executeAiReadCommand = async (
   }
 
   if (request.command === "getEditorState") {
+    if (host.getEditorState === undefined) {
+      return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
+    }
+
     const editorState = AiEditorStateSchema.parse(await host.getEditorState(request.payload));
 
     return recordReadResponse(
@@ -158,6 +178,28 @@ export const executeAiReadCommand = async (
     );
   }
 
+  if (request.command === "inspectEvaluatedGeometry") {
+    if (host.inspectEvaluatedGeometry === undefined) {
+      return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
+    }
+
+    const result = InspectEvaluatedGeometryResultSchema.parse(
+      await host.inspectEvaluatedGeometry(request.payload)
+    );
+
+    return recordReadResponse(
+      request,
+      AiCommandResponseSchema.parse({
+        schemaVersion: "ai-command-response-v1",
+        commandId: request.commandId,
+        status: "ok",
+        command: "inspectEvaluatedGeometry",
+        payload: result
+      }),
+      transcript
+    );
+  }
+
   if (request.command === "validatePackage") {
     if (host.validatePackage === undefined) {
       return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
@@ -176,6 +218,10 @@ export const executeAiReadCommand = async (
       }),
       transcript
     );
+  }
+
+  if (host.getOperationLog === undefined) {
+    return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
   }
 
   const query = parseAiOperationLogQuery(request.payload);
@@ -220,6 +266,13 @@ const emptyPayloadForReadCommand = (request: SupportedReadRequest) => {
       return { targets: [], editableTargets: [] };
     case "inspectTarget":
       return { target: request.payload.target, references: [] };
+    case "inspectEvaluatedGeometry":
+      return {
+        schemaVersion: "inspect-evaluated-geometry-result-v1",
+        packageRevision: 0,
+        parameterOverrides: [],
+        results: []
+      };
     case "validatePackage":
       return {
         reportId: "val_ai_permission_denied",

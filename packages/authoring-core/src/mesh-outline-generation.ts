@@ -2,6 +2,7 @@ import type { DrawableId, MeshId, ProvenanceId, RectDto, TriangleId } from "@pri
 import type { MeshDto } from "@private-2d-rigging-lab/package-format";
 
 import type { MeshDensityHint } from "./mesh-generation.js";
+import { simplifyContourLoop } from "./mesh-geometry/polyline-simplification.js";
 
 export type AutoOutlineFailureReason =
   | "invalid-rgba"
@@ -345,103 +346,6 @@ const chooseNextEdge = (
   })[0]!;
 };
 
-const simplifyContourLoop = (
-  loop: readonly PixelPoint[],
-  config: OutlineConfig
-): readonly PixelPoint[] => {
-  const cleaned = removeConsecutiveDuplicatePoints(loop);
-  if (cleaned.length <= 3) {
-    return cleaned;
-  }
-
-  const startIndex = findLexicographicPointIndex(cleaned);
-  const rotated = rotatePoints(cleaned, startIndex);
-  const oppositeIndex = findFarthestPointIndex(rotated, rotated[0]!);
-  if (oppositeIndex <= 0 || oppositeIndex >= rotated.length - 1) {
-    return capContourVertices(removeCollinearPoints(rotated), config.contourVertexCap);
-  }
-
-  const firstChain = rotated.slice(0, oppositeIndex + 1);
-  const secondChain = [...rotated.slice(oppositeIndex), rotated[0]!];
-  const simplifiedFirst = simplifyOpenPolyline(firstChain, config.simplifyEpsilon);
-  const simplifiedSecond = simplifyOpenPolyline(secondChain, config.simplifyEpsilon);
-  const simplified = removeCollinearPoints([
-    ...simplifiedFirst,
-    ...simplifiedSecond.slice(1, -1)
-  ]);
-  const protectedPointKeys = collectProtectedConcavityPointKeys(rotated);
-  const selectedPointKeys = new Set([
-    ...simplified.map(pointKey),
-    ...protectedPointKeys
-  ]);
-  const protectedSimplified = removeCollinearPoints(
-    rotated.filter((point) => selectedPointKeys.has(pointKey(point)))
-  );
-
-  return capContourVertices(
-    protectedSimplified.length >= 3 ? protectedSimplified : rotated,
-    config.contourVertexCap
-  );
-};
-
-const collectProtectedConcavityPointKeys = (points: readonly PixelPoint[]): readonly string[] => {
-  if (points.length < 4) {
-    return [];
-  }
-
-  const areaSign = Math.sign(polygonArea(points));
-  if (areaSign === 0) {
-    return [];
-  }
-
-  const protectedKeys = new Set<string>();
-  for (let index = 0; index < points.length; index += 1) {
-    const previous = points[(index - 1 + points.length) % points.length]!;
-    const point = points[index]!;
-    const next = points[(index + 1) % points.length]!;
-    const cross =
-      (point.x - previous.x) * (next.y - point.y) -
-      (point.y - previous.y) * (next.x - point.x);
-    if (Math.sign(cross) !== 0 && Math.sign(cross) !== areaSign) {
-      protectedKeys.add(pointKey(previous));
-      protectedKeys.add(pointKey(point));
-      protectedKeys.add(pointKey(next));
-    }
-  }
-
-  return [...protectedKeys].sort();
-};
-
-const simplifyOpenPolyline = (
-  points: readonly PixelPoint[],
-  epsilon: number
-): readonly PixelPoint[] => {
-  if (points.length <= 2) {
-    return points;
-  }
-
-  const first = points[0]!;
-  const last = points[points.length - 1]!;
-  let maxDistance = -1;
-  let maxIndex = -1;
-
-  for (let index = 1; index < points.length - 1; index += 1) {
-    const distance = pointToSegmentDistance(points[index]!, first, last);
-    if (distance > maxDistance) {
-      maxDistance = distance;
-      maxIndex = index;
-    }
-  }
-
-  if (maxDistance <= epsilon || maxIndex < 0) {
-    return [first, last];
-  }
-
-  const left = simplifyOpenPolyline(points.slice(0, maxIndex + 1), epsilon);
-  const right = simplifyOpenPolyline(points.slice(maxIndex), epsilon);
-  return [...left.slice(0, -1), ...right];
-};
-
 const sampleInteriorPoints = (input: {
   readonly mask: Uint8Array;
   readonly width: number;
@@ -647,44 +551,6 @@ const removeConsecutiveDuplicatePoints = (points: readonly PixelPoint[]): PixelP
   return result;
 };
 
-const removeCollinearPoints = (points: readonly PixelPoint[]): PixelPoint[] => {
-  if (points.length <= 3) {
-    return [...points];
-  }
-
-  const result: PixelPoint[] = [];
-  for (let index = 0; index < points.length; index += 1) {
-    const previous = points[(index - 1 + points.length) % points.length]!;
-    const point = points[index]!;
-    const next = points[(index + 1) % points.length]!;
-    const cross =
-      (point.x - previous.x) * (next.y - point.y) -
-      (point.y - previous.y) * (next.x - point.x);
-    if (Math.abs(cross) > 0.0000001) {
-      result.push(point);
-    }
-  }
-
-  return result.length >= 3 ? result : [...points];
-};
-
-const capContourVertices = (
-  points: readonly PixelPoint[],
-  cap: number
-): readonly PixelPoint[] => {
-  if (points.length <= cap) {
-    return points;
-  }
-
-  const step = points.length / cap;
-  const result: PixelPoint[] = [];
-  for (let index = 0; index < cap; index += 1) {
-    result.push(points[Math.floor(index * step)]!);
-  }
-
-  return removeCollinearPoints(result);
-};
-
 const pixelBoundsToStageRect = (
   pixelBounds: PixelBounds,
   textureBounds: RectDto,
@@ -770,64 +636,6 @@ const compareTriangles = (left: DelaunayTriangle, right: DelaunayTriangle): numb
   return leftKey.localeCompare(rightKey);
 };
 
-const findLexicographicPointIndex = (points: readonly PixelPoint[]): number => {
-  let result = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    if (comparePoints(points[index]!, points[result]!) < 0) {
-      result = index;
-    }
-  }
-
-  return result;
-};
-
-const findFarthestPointIndex = (
-  points: readonly PixelPoint[],
-  origin: PixelPoint
-): number => {
-  let result = 0;
-  let maxDistance = -1;
-  for (let index = 1; index < points.length; index += 1) {
-    const distance = squaredDistance(points[index]!, origin);
-    if (distance > maxDistance) {
-      maxDistance = distance;
-      result = index;
-    }
-  }
-
-  return result;
-};
-
-const rotatePoints = (
-  points: readonly PixelPoint[],
-  startIndex: number
-): readonly PixelPoint[] => [...points.slice(startIndex), ...points.slice(0, startIndex)];
-
-const pointToSegmentDistance = (
-  point: PixelPoint,
-  segmentStart: PixelPoint,
-  segmentEnd: PixelPoint
-): number => {
-  const dx = segmentEnd.x - segmentStart.x;
-  const dy = segmentEnd.y - segmentStart.y;
-  const lengthSquared = dx * dx + dy * dy;
-  if (lengthSquared <= 0.0000001) {
-    return Math.sqrt(squaredDistance(point, segmentStart));
-  }
-
-  const ratio = clamp(
-    ((point.x - segmentStart.x) * dx + (point.y - segmentStart.y) * dy) / lengthSquared,
-    0,
-    1
-  );
-  return Math.sqrt(
-    squaredDistance(point, {
-      x: segmentStart.x + dx * ratio,
-      y: segmentStart.y + dy * ratio
-    })
-  );
-};
-
 const pointSetBounds = (points: readonly PixelPoint[]): PixelBounds => {
   let left = Number.POSITIVE_INFINITY;
   let top = Number.POSITIVE_INFINITY;
@@ -903,8 +711,6 @@ const roundCoordinate = (value: number): number => {
   return Object.is(rounded, -0) ? 0 : rounded;
 };
 
-const clamp = (value: number, min: number, max: number): number =>
-  Math.min(Math.max(value, min), max);
 
 const clampInt = (value: number, min: number, max: number): number =>
   Math.min(Math.max(Math.trunc(value), min), max);

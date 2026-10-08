@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,8 +18,6 @@ import type {
 } from "@private-2d-rigging-lab/contracts";
 import { describe, expect, it } from "vitest";
 
-import { projectEditorPreview } from "../../../apps/editor/src/editor-preview/preview-projection.js";
-import type { EditorPreviewProjectionDto } from "../../../apps/editor/src/editor-preview/preview-dto.js";
 import { createInitialRuntimeState } from "./initial-state.js";
 import type {
   KeyformBinding,
@@ -62,6 +60,14 @@ describe("preview-viewer equivalence contract fixture", () => {
       viewer
     });
 
+    if (process.env.WAVE106_REGEN === "1") {
+      writeFileSync(
+        join(fixtureRootDirectory, "expected/preview-viewer-equivalence-summary.json"),
+        `${JSON.stringify(summary, null, 2)}\n`,
+        "utf8"
+      );
+    }
+
     expect(summary.equivalence).toEqual({
       snapshotSummary: true,
       effectiveParameters: true,
@@ -85,6 +91,24 @@ interface PreviewRuntimeFixtureEvaluation {
   readonly snapshot: RuntimeSnapshotDto;
   readonly runtimeDiff: RuntimeDiffDto;
   readonly projection: EditorPreviewProjectionDto;
+}
+
+interface EditorPreviewProjectionDto {
+  readonly schemaVersion: "editor-preview-projection-v1";
+  readonly sourceSnapshotId: string;
+  readonly packageId: string;
+  readonly packageRevision: number;
+  readonly snapshotDetail: string;
+  readonly drawList: readonly string[];
+  readonly drawableCount: number;
+  readonly visibleDrawableCount: number;
+  readonly keyformSamples: {
+    readonly totalCount: number;
+  };
+  readonly diagnostics: {
+    readonly totalCount: number;
+  };
+  readonly diff?: ReturnType<typeof summarizeRuntimeDiff>;
 }
 
 const evaluatePreviewRuntimeFixture = (
@@ -232,9 +256,11 @@ const createComparableRuntimeSummary = (
     parameterId: parameter.parameterId,
     valueSource: parameter.valueSource,
     ...(parameter.authoredValue === undefined ? {} : { authoredValue: parameter.authoredValue }),
-    ...(parameter.computedValue === undefined ? {} : { computedValue: parameter.computedValue }),
+    baseValue: parameter.baseValue,
+    ...(parameter.dynamicsOffset === undefined ? {} : { dynamicsOffset: parameter.dynamicsOffset }),
     effectiveValue: parameter.effectiveValue,
-    clamped: parameter.clamped
+    clamped: parameter.clamped,
+    source: parameter.source
   })),
   targetedKeyforms: snapshot.keyformSamples.map((sample) => ({
     keyformSetId: sample.keyformSetId,
@@ -265,15 +291,40 @@ const createComparableRuntimeSummary = (
   })),
   targetedDynamics: snapshot.dynamics.map((dynamics) => ({
     dynamicsGroupId: dynamics.dynamicsGroupId,
-    driverValues: dynamics.driverValues,
+    solverKind: dynamics.solverKind,
+    inputValues: dynamics.inputValues,
     outputParameterId: dynamics.outputParameterId,
-    outputValue: dynamics.outputValue,
-    position: dynamics.stateSummary.position,
-    velocity: dynamics.stateSummary.velocity,
+    outputOffset: dynamics.outputOffset,
+    effectiveOutputValue: dynamics.effectiveOutputValue,
+    particleCount: dynamics.stateSummary.particleCount,
+    maxParticleSpeed: dynamics.stateSummary.maxParticleSpeed,
+    tipAngleLocalDeg: dynamics.stateSummary.tipAngleLocalDeg,
     tick: dynamics.tick,
     resetCounter: dynamics.resetCounter
   })),
   runtimeDiff: summarizeRuntimeDiff(runtimeDiff)
+});
+
+const projectEditorPreview = (input: {
+  readonly snapshot: RuntimeSnapshotDto;
+  readonly runtimeDiff: RuntimeDiffDto;
+  readonly drawableNames: Readonly<Record<string, string>>;
+}): EditorPreviewProjectionDto => ({
+  schemaVersion: "editor-preview-projection-v1",
+  sourceSnapshotId: input.snapshot.snapshotId,
+  packageId: input.snapshot.packageId,
+  packageRevision: input.snapshot.packageRevision,
+  snapshotDetail: input.snapshot.evaluation.snapshotDetail,
+  drawList: input.snapshot.drawList,
+  drawableCount: input.snapshot.drawables.length,
+  visibleDrawableCount: input.snapshot.drawables.filter((drawable) => drawable.visible).length,
+  keyformSamples: {
+    totalCount: input.snapshot.keyformSamples.length
+  },
+  diagnostics: {
+    totalCount: input.snapshot.diagnostics.length
+  },
+  diff: summarizeRuntimeDiff(input.runtimeDiff)
 });
 
 const summarizePreviewProjection = (projection: EditorPreviewProjectionDto) => ({
@@ -378,25 +429,23 @@ const createDynamicsGroupEntry = (
       dynamicsGroupId,
       displayName: group.displayName,
       enabled: group.enabled,
-      solverKind: group.solverKind,
-      drivers: group.drivers.map((driver: any) => ({
-        driverId: driver.driverId,
-        sourceParameterId: ParameterIdSchema.parse(driver.sourceParameterId),
-        inputScale: driver.inputScale,
-        inputOffset: driver.inputOffset,
-        invert: driver.invert
+      inputs: group.inputs.map((input: any) => ({
+        parameterId: ParameterIdSchema.parse(input.parameterId),
+        kind: input.kind,
+        scale: input.scale
       })),
-      output: {
-        outputId: group.output.outputId,
-        targetParameterId: ParameterIdSchema.parse(group.output.targetParameterId),
-        outputScale: group.output.outputScale,
-        outputOffset: group.output.outputOffset,
-        min: group.output.min,
-        max: group.output.max,
-        clampPolicy: group.output.clampPolicy
+      chain: {
+        rootOffset: group.chain.rootOffset ?? { x: 0, y: 0 },
+        segmentLengths: group.chain.segmentLengths,
+        damping: group.chain.damping,
+        gravityScale: group.chain.gravityScale
       },
-      settings: group.settings,
-      resetPolicy: group.resetPolicy
+      outputs: group.outputs.map((output: any) => ({
+        parameterId: ParameterIdSchema.parse(output.parameterId),
+        segmentIndex: output.segmentIndex ?? 1,
+        scale: output.scale,
+        limit: output.limit
+      }))
     }
   ];
 };

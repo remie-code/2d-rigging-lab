@@ -1,4 +1,11 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import {
+  cloneAuthoringSessionForGraphEdit,
+  type AuthoringSession
+} from "@private-2d-rigging-lab/authoring-core";
+import {
+  isLive2dPerformanceEnabled,
+  recordLive2dPerformanceCounter
+} from "@private-2d-rigging-lab/render-core";
 
 import type { EditorSessionCommandResult } from "./editor-session-commands";
 
@@ -65,12 +72,14 @@ export function recordEditorSessionCommit(
   };
   const undoStack = [...history.undoStack, entry].slice(-history.maxDepth);
 
-  return {
+  const nextHistory = {
     ...history,
     nextEntryIndex: history.nextEntryIndex + 1,
     undoStack,
     redoStack: []
   };
+  recordHistoryBinaryMemoryCounters(nextHistory, input.after);
+  return nextHistory;
 }
 
 export function undoEditorSessionHistory(
@@ -81,14 +90,18 @@ export function undoEditorSessionHistory(
     return null;
   }
 
+  const nextHistory = {
+    ...history,
+    undoStack: history.undoStack.slice(0, -1),
+    redoStack: [...history.redoStack, entry]
+  };
+  const session = cloneSession(entry.before);
+  recordHistoryBinaryMemoryCounters(nextHistory, session);
+
   return {
     entry,
-    session: cloneSession(entry.before),
-    history: {
-      ...history,
-      undoStack: history.undoStack.slice(0, -1),
-      redoStack: [...history.redoStack, entry]
-    }
+    session,
+    history: nextHistory
   };
 }
 
@@ -100,14 +113,18 @@ export function redoEditorSessionHistory(
     return null;
   }
 
+  const nextHistory = {
+    ...history,
+    undoStack: [...history.undoStack, entry],
+    redoStack: history.redoStack.slice(0, -1)
+  };
+  const session = cloneSession(entry.after);
+  recordHistoryBinaryMemoryCounters(nextHistory, session);
+
   return {
     entry,
-    session: cloneSession(entry.after),
-    history: {
-      ...history,
-      undoStack: [...history.undoStack, entry],
-      redoStack: history.redoStack.slice(0, -1)
-    }
+    session,
+    history: nextHistory
   };
 }
 
@@ -149,5 +166,86 @@ function normalizeHistoryDepth(maxDepth: number): number {
 }
 
 function cloneSession(session: AuthoringSession): AuthoringSession {
-  return structuredClone(session);
+  return cloneAuthoringSessionForGraphEdit(session);
+}
+
+function recordHistoryBinaryMemoryCounters(
+  history: EditorSessionHistoryState,
+  currentSession: AuthoringSession
+): void {
+  if (!isLive2dPerformanceEnabled()) {
+    return;
+  }
+
+  const current = summarizeSessionBinaryAssets(currentSession);
+  const historyEstimate = estimateHistoryBinaryMemory(history);
+  const avoidedBytes = Math.max(
+    0,
+    historyEstimate.deepClonedBytes - historyEstimate.retainedSharedBytes
+  );
+  const retainedRatioBasisPoints =
+    historyEstimate.deepClonedBytes === 0
+      ? 0
+      : Math.round(
+          (historyEstimate.retainedSharedBytes / historyEstimate.deepClonedBytes) * 10_000
+        );
+
+  recordLive2dPerformanceCounter("editorHistory.samples");
+  recordLive2dPerformanceCounter("editorHistory.undoDepth", history.undoStack.length);
+  recordLive2dPerformanceCounter("editorHistory.redoDepth", history.redoStack.length);
+  recordLive2dPerformanceCounter("editorHistory.currentBinaryAssetCount", current.count);
+  recordLive2dPerformanceCounter("editorHistory.currentBinaryBytes", current.bytes);
+  recordLive2dPerformanceCounter(
+    "editorHistory.estimatedDeepClonedHistoryBinaryBytes",
+    historyEstimate.deepClonedBytes
+  );
+  recordLive2dPerformanceCounter(
+    "editorHistory.estimatedRetainedSharedHistoryBinaryBytes",
+    historyEstimate.retainedSharedBytes
+  );
+  recordLive2dPerformanceCounter(
+    "editorHistory.estimatedAvoidedDuplicateHistoryBinaryBytes",
+    avoidedBytes
+  );
+  recordLive2dPerformanceCounter(
+    "editorHistory.retainedSharingRatioBasisPoints",
+    retainedRatioBasisPoints
+  );
+}
+
+function summarizeSessionBinaryAssets(session: AuthoringSession): {
+  readonly count: number;
+  readonly bytes: number;
+} {
+  const fileEntries = session.binaryAssets?.fileEntries ?? [];
+  return {
+    count: fileEntries.length,
+    bytes: fileEntries.reduce((total, entry) => total + entry.bytes.byteLength, 0)
+  };
+}
+
+function estimateHistoryBinaryMemory(history: EditorSessionHistoryState): {
+  readonly deepClonedBytes: number;
+  readonly retainedSharedBytes: number;
+} {
+  const uniqueBytes = new Set<Uint8Array>();
+  let deepClonedBytes = 0;
+  let retainedSharedBytes = 0;
+
+  for (const entry of [...history.undoStack, ...history.redoStack]) {
+    for (const session of [entry.before, entry.after]) {
+      for (const fileEntry of session.binaryAssets?.fileEntries ?? []) {
+        deepClonedBytes += fileEntry.bytes.byteLength;
+        if (!uniqueBytes.has(fileEntry.bytes)) {
+          uniqueBytes.add(fileEntry.bytes);
+          retainedSharedBytes += fileEntry.bytes.byteLength;
+        }
+      }
+    }
+  }
+
+  return {
+    deepClonedBytes,
+    retainedSharedBytes
+  };
 }

@@ -1,0 +1,107 @@
+# S2.5 UX定義: 魂の操縦席(Soul Cockpit)
+
+> Status: **Accepted(ユーザー合意 2026-07-12)**。S2.5実装のsource of truth。
+> 位置づけ: 閉問題S2.5「操縦席がある」([../s-series-decomposition.md](../s-series-decomposition.md) §2追補)のwave化前UX定義。
+> 動機(ユーザー指摘 2026-07-12): CLIは機能的には足りるが、配信という利用シチュエーション(OBS+ゲーム+器二体と並走)で「デバイス名を調べて打って起動」は成立しない。発話・AI応答の表示表現もCLIでは限界がある。
+
+## 1. 形の原則(議論で確定済み)
+
+- **器(runtime-player)には作らない**(特区憲章「器は魂を知らない」。ユーザー確認 2026-07-12)。
+- **魂が自分でローカルWeb UIを配る**: 魂プロセスが 127.0.0.1 に小さなHTTP+WebSocketを立て、ユーザーはブラウザで開く。「エンジンが自分の顔を持つ」型(AivisSpeechの/docsと同構図)。
+- **正本はプロセス側、UIは使い捨てのビュー**: タブを閉じても魂は死なない。開き直せば状態はそこにある(転写バッファ⇔SDKセッションと同じ思想)。
+- **ビルドツールチェーンを持ち込まない**: vanilla HTML/CSS/JS(単一ファイル配信)+WS。依存最小の流儀を維持。魂の作り直し(切替容易性の裁定)に耐える軽さ。
+- Electron不採用の理由と、唯一の正直な劣位(グローバルホットキー不可)は議論で確認済み——**発火キーの経路はS3の設計討議の明示論点**(タブ非フォーカス時のキー取得はブラウザでは不可。Stream Deck/AHK→ローカルHTTP等の代替がある)。
+
+## 2. S2.5(v0)の画面構造
+
+```text
++------------------------------------------------------------+
+|  Soul Cockpit                       ● Ears: Listening       |
+|                                     whisper: up  ffmpeg: up |
+|                                                              |
+|  Microphone  [ PicoStreamingMicrophone   v ]  [Start][Stop] |
+|                                                              |
+|  Timeline                                                    |
+|  ------------------------------------------------------     |
+|  12:01:34  you   こんにちは、今日はマイクのテストです (1.5s) |
+|  12:01:41  you   OBSを起動したまま喋っています      (1.7s)  |
+|  12:02:03  you   ······(speaking)                            |
+|  ------------------------------------------------------     |
+|                                                              |
+|  (footer) discarded: 2   uptime: 00:12:34                    |
++------------------------------------------------------------+
+```
+
+- **ヘッダ**: 魂の状態一目(耳のListening/Stopped、whisper-server/ffmpegの生存。死んだら赤+理由——S2の2経路監視をそのまま表示に)。
+- **Microphone**: デバイス列挙をドロップダウンに(--list-devicesの廃止置換)。Start/Stopで耳の起動停止。選択は記憶(次回起動時に復元)。
+- **Timeline**: 転写バッファの購読ビュー。話者ラベル(v0は `you` のみ)・時刻・本文・転写レイテンシ。**発話中はVADイベントで「(speaking)」のライブ行**を出す(耳が生きとる実感=S2ゲートのGUI再演)。
+  - 実装注記(v0、Undine裁定 2026-07-12): レイテンシ表示は**ライブで届いた行のみ**。ページ再読込後の履歴行には出ない(正本transcript-bufferはレイテンシを持たない=正本を汚さない設計判断を優先)。本モックの字面との差は許容。
+  - 実装注記(S2.5追撃 domain-f、2026-07-12): 破棄(discard)・ASR失敗(asrFailure)は「無言の消失」にせず、タイムライン上に淡色の**ゴースト行**(`(discarded)` / `(asr failed)`)として可視化する。
+- **footer**: discarded(空転写の破棄数=VAD閾値の診断材料)、uptime。
+- 数字(レイテンシ等)の露出は**可**(操縦席は診断面。Physiologyページの質感語規律とは別領分——Channelページと同じ扱い)。UI語彙は英語(器と同方針)。
+
+### 2.1 S3で実体化した拡張(2026-07-12, Domain B)
+
+§3の予約のうち「AI応答のタイムライン合流+発火マーカー」「発火ボタン/発火キー状態表示」をS3で実体化した:
+
+- **Fireセクション**(Microphoneの下・Timelineの上): `[Fire]` ボタン + `soul: idle|thinking|speaking` の
+  状態表示。SSE `soul` イベント連動で thinking/speaking 中はボタンdisable+状態が発話色(アンバー)に
+  変わる(busy表示)。非受理(`fired:false`)の reason(busy / ears-not-running / empty-window / empty-reply / error)は
+  ボタン横に淡色で控えめに表示。`--channel` なしで起動した操縦席では 503 を受けて
+  「fire not available」と案内する(S2.5挙動のまま)。
+  ※ **domain-c で更新**: `scripts/cockpit.mjs` は fire を常時結線するようになったため、この 503 案内は
+  cockpit.mjs 起動経路では実際には出ない(URL 未設定での Fire は `(fire error: …)` のゴースト行になる)。
+  503 分岐自体は fireOrchestratorFactory 未注入のサーバ(テスト等)向けに残る。下記「Channel URL 入力欄」参照。
+- **soul行**: SSE `transcript`(speaker:"soul")を既存の行描画がそのまま描く(話者ラベル `soul`・
+  who が青系 `#8fb7ff`)。履歴復元(`GET /api/state`)でも同様。
+- **発火マーカー行**: SSE `fire`(accepted:true)で Timeline に
+  `12:01:45  fire  *  fired (4 lines, 123 chars injected)` のマーカー行(アンバー)を刻む。直後の
+  soul行の.markerに印を付ける案は不採用——fire受理からsoul行到着まで思考時間の空白があり、
+  受理そのものを独立行にした方が時間差も読めるため。
+- **発火失敗のゴースト行**: empty-reply / error(SSE `diagnostic` の fireEmptyReply / fireError)は
+  S2.5のゴースト行の型で `(fire: empty reply)` / `(fire error: …)` を淡色表示(無言の消失にしない)。
+- **発火キー**: グローバルホットキーは同梱AHKスクリプト(`apps/soul/agent/scripts/fire-hotkey.ahk`)が
+  POST /api/fire を叩く(§1のElectron不採用の帰結どおりブラウザ外で解決)。導入は任意・ゲートは
+  ボタンで成立。
+
+**Channel URL 入力欄(S3追撃 domain-c で実体化、2026-07-12, Gnome)**: 器の Control Channel URL を
+**操縦席から入力**できるようにした(Microphoneと同格の運用面UI・「CLIを触らせない」思想の徹底)。
+
+- **場所**: Microphoneセクションの下(`[Channel] [ ws://127.0.0.1:PORT/channel?token=... ] [Set]  状態`)。
+  入力欄(生URL・token込み)+ `Set` ボタン + 接続状態表示。
+- **配線**: `Set` で `POST /api/channel {url}` → サーバは注入フック `onSetChannelUrl` に橋渡し
+  (`cockpit-server.mjs` は channel の中身を知らない=責務境界。`scripts/cockpit.mjs` が lazyChannel /
+  settings / session spawn を握る)。URLは`cockpit-settings.local.json`(.gitignore済・token含むため
+  非コミット)に `lastChannelUrl` として記憶し、次回起動で初期値に復元する。
+- **接続状態表示**: `state.channel`(`{configured, url(redact済), connection}`)を表示。connection は
+  `unset / idle / connecting / connected / error` を色分け(connected=緑 / error=赤 / connecting=アンバー)。
+  **URL・ログは必ず `redactToken` を通す**(token を平文で state/UI/ログに出さない)。`Set` 成功後は
+  入力欄を空にして生URL(token)をDOMに残さない。
+- **`--channel` は後方互換で残す**: CLI指定があれば初期値として lazyChannel + settings に載る
+  (指定時は起動時に LLM セッションを eager 生成・TTFT 先払い)。**未指定でも操縦席から URL を入れれば
+  Fire が有効化される**。
+- **S2.5 無退行**: URL も Fire も使わないユーザー(S2.5挙動)には LLM セッションの spawn(≈12s)を
+  強いない。session/player は「実際に fire される時(URL 設定後の初回 Fire)」まで遅延生成する
+  (`--channel` 明示時のみ eager)。URL未設定での Fire は spawn せず `(fire error: …)` のゴースト行で示す。
+
+## 3. 将来の拡張予約(v0では作らない。枠だけ意識した設計に)
+
+| 拡張 | 入る問題 |
+|---|---|
+| AI応答のタイムライン合流(話者 `soul`)+発火マーカー | S3 — **S3で実体化済み**(§2.1) |
+| 発火ボタン/発火キー状態表示 | S3(キー経路の設計討議とセット) — **S3で実体化済み**(§2.1・キーはAHK同梱) |
+| barge-in(遮り)の可視化 | S6 |
+| 視聴者コメントの合流 | S7 |
+| キルスイッチ・NGワード状態・AI開示チェックリスト | S8 |
+| コストメーター(`/usage`・レイテンシ実測) | experiments連動(S3以降) |
+
+## 4. ないもの、が設計
+
+- **認証**: v0はなし。バインドは 127.0.0.1 のみ(loopback外に出ない)。外部公開は永遠にしない。
+- **設定の編集UI**(閾値・スレッド数等): CLIフラグ/設定ファイルのまま。操縦席は運用面(選ぶ・起動する・見る)に限定。
+- **転写の編集・削除**: 正本はappend-only。UIは読むだけ。
+
+## 5. ゲート(S2.5)
+
+- **人間(一目)**: ブラウザで操縦席を開き、マイクを選んで耳を起動し、喋ると転写がタイムラインに積もるのが見える。CLIを一切触らない。
+- **機械**: cockpitサーバ(HTTP/WS)のテスト+既存全テスト無退行+lockfile不変。

@@ -1,5 +1,7 @@
 import {
   PackageDocumentSchema,
+  VARIANTS_FILE_SCHEMA_VERSION,
+  VARIANTS_MODEL_FILE_PATH,
   type PackageDocumentDto,
   type PackageRightsSummaryDto
 } from "@private-2d-rigging-lab/package-format";
@@ -37,9 +39,10 @@ export const createPackageDocumentBaseFromAuthoringSession = (
         parameters: "parameters-file-v1",
         keyforms: "keyforms-file-v1",
         rigControls: "rig-controls-file-v1",
-        dynamics: "dynamics-file-v1",
+        dynamics: "dynamics-file-v3",
         masks: "masks-file-v1",
         drawOrder: "draw-order-file-v1",
+        variants: VARIANTS_FILE_SCHEMA_VERSION,
         sourceManifest: "source-manifest-v1",
         textureAtlas: "texture-atlas-v1",
         provenance: "provenance-file-v1",
@@ -55,7 +58,8 @@ export const createPackageDocumentBaseFromAuthoringSession = (
         rigControls: "model/rig-controls.json",
         dynamics: "model/dynamics.json",
         masks: "model/masks.json",
-        drawOrder: "model/draw-order.json"
+        drawOrder: "model/draw-order.json",
+        variants: VARIANTS_MODEL_FILE_PATH
       },
       assetIndex: "assets/sources/source-manifest.json",
       operationLog: "operations/log.jsonl",
@@ -95,7 +99,7 @@ export const createPackageDocumentBaseFromAuthoringSession = (
         rigControls: session.graph.rigControls
       },
       dynamics: {
-        schemaVersion: "dynamics-file-v1",
+        schemaVersion: "dynamics-file-v3",
         dynamicsGroups: session.graph.dynamicsGroups
       },
       masks: {
@@ -105,6 +109,10 @@ export const createPackageDocumentBaseFromAuthoringSession = (
       drawOrder: {
         schemaVersion: "draw-order-file-v1",
         entries: session.graph.drawOrder
+      },
+      variants: {
+        schemaVersion: VARIANTS_FILE_SCHEMA_VERSION,
+        variantGroups: session.graph.variantGroups ?? []
       }
     },
     assets: {

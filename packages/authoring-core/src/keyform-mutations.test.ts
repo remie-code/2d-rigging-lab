@@ -25,6 +25,7 @@ import {
   createParameter,
   createParameterGrid2dKeyformSet,
   createRotation2dRigControl,
+  createWarpLattice2dRigControl,
   getKeyformSetById
 } from "./index.js";
 
@@ -75,6 +76,23 @@ describe("keyform authoring mutations", () => {
         ]
       })
     );
+  });
+
+  it("rejects warpLattice2d controlPointOffsets keyforms with invalid cardinality", () => {
+    const session = createAuthoringSessionFromPackageDocument(loadMinimalFixturePackageDocument());
+    const parameter = createTestParameter("param_face_yaw");
+    createParameter(session, parameter);
+    createWarpLattice2dRigControl(session, createTestWarpLattice2dRigControl("rig_face_warp"));
+    const keyformSet = createLinear1dWarpControlPointOffsetsKeyformSet(
+      "keyset_face_warp_offsets",
+      parameter.parameterId
+    );
+
+    expectMutationErrorCode(
+      () => createLinear1dKeyformSet(session, keyformSet),
+      "invalid_warp_lattice_control_point_offsets_patch"
+    );
+    expect(getKeyformSetById(session.graph, keyformSet.keyformSetId)).toBeUndefined();
   });
 
   it("creates a parameter grid 2d keyform set with distinct axis parameters", () => {
@@ -285,6 +303,33 @@ const createLinear1dRigControlAngleKeyformSet = (
   ]
 });
 
+const createLinear1dWarpControlPointOffsetsKeyformSet = (
+  keyformSetIdText: string,
+  parameterId: ParameterDto["parameterId"]
+): Linear1dKeyformSetDto => ({
+  keyformSetId: KeyformSetIdSchema.parse(keyformSetIdText),
+  target: {
+    kind: "rigControl",
+    id: "rig_face_warp",
+    property: "controlPointOffsets"
+  },
+  parameterId,
+  evaluator: "linear-1d-v1",
+  interpolation: "linear-1d-v1",
+  compositionMode: "replace",
+  compositionOrder: 0,
+  keys: [
+    {
+      value: 1,
+      statePatch: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 }
+      ]
+    }
+  ]
+});
+
 const createGrid2dMeshKeyformSet = (input: {
   readonly keyformSetId: string;
   readonly parameterX: ParameterDto["parameterId"];
@@ -333,6 +378,30 @@ const createTestRotation2dRigControl = (
   restAngleDegrees: 0,
   restTranslation: { x: 0, y: 0 },
   restScale: { x: 1, y: 1 },
+  enabled: true
+});
+
+const createTestWarpLattice2dRigControl = (
+  rigControlIdText: string
+): Extract<RigControlDto, { readonly kind: "warpLattice2d" }> => ({
+  kind: "warpLattice2d",
+  rigControlId: RigControlIdSchema.parse(rigControlIdText),
+  displayName: toDisplayName(rigControlIdText),
+  partId: PartIdSchema.parse("part_root"),
+  childDrawableIds: [],
+  childRigControlIds: [],
+  opacityMultiplier: 1,
+  bindSpace: "rigControlLocalRest",
+  domainBounds: { x: 0, y: 0, width: 10, height: 10 },
+  latticeColumns: 2,
+  latticeRows: 2,
+  restControlPoints: [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 0, y: 10 },
+    { x: 10, y: 10 }
+  ],
+  interpolationMethod: "bilinear-grid-v1",
   enabled: true
 });
 

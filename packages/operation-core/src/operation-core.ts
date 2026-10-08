@@ -1,8 +1,8 @@
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 
-import { commitOperation } from "./lifecycle/commit.js";
+import { commitOperation, commitOperationAsync } from "./lifecycle/commit.js";
 import type { CommitOperationOutcome } from "./lifecycle/commit.js";
-import { dryRunOperation } from "./lifecycle/dry-run.js";
+import { dryRunOperation, dryRunOperationAsync } from "./lifecycle/dry-run.js";
 import type { OperationEvidenceProviderLike } from "./operation-evidence-provider.js";
 import { createOperationLog } from "./operation-log.js";
 import type { OperationLog } from "./operation-log.js";
@@ -18,7 +18,9 @@ export interface OperationCoreOptions {
 export interface OperationCore {
   readonly operationLog: OperationLog;
   dryRunOperation(session: AuthoringSession, requestInput: unknown): OperationResultDto;
+  dryRunOperationAsync(session: AuthoringSession, requestInput: unknown): Promise<OperationResultDto>;
   commitOperation(session: AuthoringSession, requestInput: unknown): CommitOperationOutcome;
+  commitOperationAsync(session: AuthoringSession, requestInput: unknown): Promise<CommitOperationOutcome>;
 }
 
 export const createOperationCore = (options: OperationCoreOptions = {}): OperationCore => {
@@ -32,8 +34,22 @@ export const createOperationCore = (options: OperationCoreOptions = {}): Operati
           ? {}
           : { evidenceProvider: options.evidenceProvider })
       }),
+    dryRunOperationAsync: (session, requestInput) =>
+      dryRunOperationAsync(session, requestInput, {
+        ...(options.evidenceProvider === undefined
+          ? {}
+          : { evidenceProvider: options.evidenceProvider })
+      }),
     commitOperation: (session, requestInput) =>
       commitOperation(session, requestInput, {
+        operationLog,
+        ...(options.now === undefined ? {} : { now: options.now }),
+        ...(options.evidenceProvider === undefined
+          ? {}
+          : { evidenceProvider: options.evidenceProvider })
+      }),
+    commitOperationAsync: (session, requestInput) =>
+      commitOperationAsync(session, requestInput, {
         operationLog,
         ...(options.now === undefined ? {} : { now: options.now }),
         ...(options.evidenceProvider === undefined

@@ -48,6 +48,53 @@ discussion/
     orchestration/
     reviews/
     waves/
+  runtime-player/       # Editor外のRuntime Player / Capture Host appの調査、UX、設計
+    _map.md
+    architecture/
+    backlog/
+    implementation/
+    research/
+    screens/
+  model-authoring/      # LLM(Fable)によるモデル制作挑戦。前提合意、閉問題、調査事実、制作定石
+    _map.md
+    premises/
+    closed-problems/
+    research/
+    craft/
+    reference-guided-rigging/ # 参照画像を起点にrigを作る議論・実験。将来craft v2へ蒸留
+      _map.md
+      scope-and-decisions.md
+      reference-generation.md
+      deformer-transfer.md
+      motion-review.md
+      experiments/
+        _map.md
+  mesh-generation/      # メッシュ自動生成の商用風改修(v7)。概念設計、現状調査、実装、品質評価、v6系整理
+    _map.md
+    *.md
+    implementation/     # 実装フェーズ開始時に作成。wave計画・実装報告・レビューをトピック内に閉じる
+  render-performance/   # Editor/Viewer 描画パフォーマンス改善。計測基盤、実測、改善設計、実装、再計測
+    _map.md
+    *.md
+    measurements/       # 合成ベンチ・実モデルの計測結果
+    implementation/     # wave計画・実装報告・レビューをトピック内に閉じる
+  editor-electron-migration/ # apps/editorのWeb→Electron移行。why合意、分解、work-stream(shell/persistence)
+    _map.md
+    *.md
+    shell/              # WS1: Electron殻 & build(第一手)
+    persistence/        # WS2: 永続化のnode:fs/IPC化(本丸)
+  ai-cohost/            # ユーザー×自律AIの共演配信構想。コンセプト、前提合意、調査事実、設計判断
+    _map.md
+    concept/
+    premises/
+    research/
+    architecture/
+    implementation/     # 閉問題分解、wave計画・実装報告・レビュー(runtime-player方式)
+  expo/                 # 外部イベントへの出展物(ポスター等)の設計と出典事実
+    _map.md
+    <event-name>/
+      _map.md
+      *.md
   reports/              # 技術調査・成立性調査レポート。Cubism関連はprivate research archive扱い
     _map.md
     <research-topic>/
@@ -98,6 +145,13 @@ discussion/
 | `proposal/` | Live2D Feature Proposalのテンプレート、提案draft、非目標 | Undine | 互換実装、形式対応、SDK/Core代替を示唆しない |
 | `development_convention/` | P0/P1開発規約、/goal実装オーケストレーション規約、basis、review | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | L0用の薄いorchestration contractとdomain agent向け詳細規約を分離して管理する |
 | `implementation/` | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Undine / Orch-Sylph / Gnome / Review-Sylph / Integrator | Accepted development conventionに従い、実装証拠とレビュー成果物を永続化する |
+| `runtime-player/` | Editorが出力したRuntime Exportを読む外部Runtime Player / Capture Host appの調査、UX、設計、未決事項 | Undine / Sylph / Gnome | Editor本体と分離し、tracking input、runtime display、OBS想定、外部app境界を扱う |
+| `model-authoring/` | LLM(Fable)が作者として2Dモデルを制作する挑戦の前提合意、閉問題定義と結果、制作定石 | Undine / ユーザー | [design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) の後継トピック。実装waveが必要になった場合の置き場は未決 |
+| `mesh-generation/` | メッシュ自動生成の商用風改修(v7)。概念設計、現状実装調査、実装計画、品質評価、v6系整理 | Undine / Sylph / Gnome | 実装成果物(wave計画等)はトピック内 `implementation/` に置く(runtime-player方式)。Editor実装(Wave102停止中)の部分的再開 |
+| `render-performance/` | Editor/Viewer 描画パフォーマンス改善。計測基盤、実測、改善設計、実装、再計測 | Undine / Sylph / Gnome | 実装成果物はトピック内 `implementation/`、計測結果は `measurements/` に置く。現状調査は `reports/editor-render-performance/` を参照で繋ぐ |
+| `editor-electron-migration/` | apps/editor を Web(React/Vite) から Electron デスクトップへ移行する取り組み。why 合意、分解、work-stream 別設計・実装 | Undine / Gnome / Sylph | Undine が議論と地図を管理。runtime-player の Electron 構成を下敷きにする。実装成果物は runtime-player 方式でトピック内 `implementation/`(将来)。可視な work-stream(shell/persistence)のみ器を切り、必要に応じて増やす |
+| `ai-cohost/` | ユーザー×自律AI(別モデル)の共演配信構想。コンセプト、前提合意、調査事実、設計判断 | Undine / ユーザー | 実装成果物が必要になったらトピック内 `implementation/`(runtime-player方式)。実測は `experiments/`、キャラクター設計は `persona/` を必要時に追加する。runtime-player側の操縦チャネル議論も本トピックに置き、`runtime-player/_map.md` からリンクで繋ぐ |
+| `expo/` | 外部イベントへの出展物(ポスター・展示・発表資料)の設計と、その裏付けとなる出典事実 | Undine / ユーザー | イベントごとに子ディレクトリを切る。設計判断(何をどう見せるか)と出典事実(file:line 付き・**書けない線**を含む)を別ファイルに分離する。§7 Demo and Proposal Hygiene は expo/ にも同様に効く |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。
@@ -186,3 +240,7 @@ Dynamics関連のmachine-readable identifierも、`dynamicsGroup`、`computedDyn
 - 誤配置、明白な転記ミス、またはユーザーが明示した方針変更は、Undine が反映してよい。
 - `scenarios/` は Undine が議論に基づいて作成・更新する。
 - 規約や地図が現状に合わなくなった場合は、ユーザーと合意して `_conventions.md` と該当 `_map.md` を更新する。
+
+## 11. 参照画像に基づくriggingの記録（2026-09-25合意）
+
+model-authoring/reference-guided-rigging/ は、ユーザーとAstraの議論・実験を保存する。共通の合意、参照生成、デフォーマへの変換、動作評価の3主題、および個々の実験を分ける。本文は現在の方針・仮説・未決事項、experiments/ は入力・手順・観測・ユーザー判断を所有する。将来のcraft v2は、確認した内容を蒸留する段階で構成する。画像・スクリプトは当面ユーザー指定のsecond-rigging-6-sol workspaceに置き、実験記録から参照する。命名・map・主題追加・情報種別分離は本規約に従う。担当はユーザーとAstra。

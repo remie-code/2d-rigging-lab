@@ -54,7 +54,7 @@ describe("createInitialRuntimeState", () => {
           {
             id: outputParameterId,
             displayName: "Hair sway",
-            valueSource: "computedDynamics",
+            valueSource: "authoredInput",
             min: -1,
             max: 1,
             default: 0
@@ -68,30 +68,27 @@ describe("createInitialRuntimeState", () => {
             dynamicsGroupId,
             displayName: "Hair sway",
             enabled: true,
-            solverKind: "scalarDampedFollowV1",
-            drivers: [
+            inputs: [
               {
-                driverId: "driver-yaw",
-                sourceParameterId: driverParameterId,
-                inputScale: 1,
-                inputOffset: 0,
-                invert: false
+                parameterId: driverParameterId,
+                kind: "angle",
+                scale: 1
               }
             ],
-            output: {
-              outputId: "output-hair",
-              targetParameterId: outputParameterId,
-              outputScale: 1,
-              outputOffset: 0,
-              min: -1,
-              max: 1,
-              clampPolicy: "clamp-to-output-range"
+            chain: {
+              rootOffset: { x: 0, y: 0 },
+              segmentLengths: [1],
+              damping: 2.5,
+              gravityScale: 1
             },
-            settings: {
-              stiffness: 0.5,
-              damping: 0.2
-            },
-            resetPolicy: "reset-on-load"
+            outputs: [
+              {
+                parameterId: outputParameterId,
+                segmentIndex: 1,
+                scale: 1,
+                limit: 1
+              }
+            ]
           }
         ]
       ])
@@ -106,10 +103,11 @@ describe("createInitialRuntimeState", () => {
       resetReasons: ["packageLoad"]
     });
 
+    // §3.4: with rootOffset {0,0}, the anchor pin is at the origin regardless of φ; the single
+    // particle aligns straight below it (0, L) with zero velocity.
     expect(Object.keys(state.dynamicsGroups)).toEqual([dynamicsGroupId]);
     expect(state.dynamicsGroups[dynamicsGroupId]).toEqual({
-      position: 0.5,
-      velocity: 0,
+      particles: [{ x: 0, y: 1, px: 0, py: 1 }],
       tick: 0,
       resetCounter: 1
     });

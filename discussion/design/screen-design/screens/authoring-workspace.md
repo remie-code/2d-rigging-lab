@@ -4,13 +4,15 @@
 
 ## 1. 役割
 
-Authoring WorkspaceはEditorの中心画面である。起動直後のempty state、PSD import後の通常編集状態、既存project load後の編集状態を扱う。
+Authoring WorkspaceはEditorの中心shellである。workspace未open時のWorkspace Gate、PSD import後の通常編集状態、既存workspace open後の編集状態を扱う。
+
+Workspace-first UXでは、起動直後に編集可能なtemporary draftを出さない。workspaceが作成またはopenされるまでは、既存Header領域にCreate / Open / Import Portable JSONのworkspace-level actionだけを横並びで表示し、Toolbox、Parts Tree、Canvas、Inspector、Parameter Barなどの編集領域は表示しない。Workspace Gateの詳細は [workspace-save-and-navigation.md](workspace-save-and-navigation.md) を参照する。
 
 ## 2. レイアウト
 
 ```text
 +--------------------------------------------------------------------------------+
-| App Bar: project / save state / task/view entries / Viewer / Storage            |
+| App Bar: workspace identity / save state / workspace menu / undo / redo          |
 +----------+---------------------+-----------------------+----------------------+
 | Toolbox  | Structure / Parts   | Canvas / Preview      | Inspector            |
 |          |                     |                       |                      |
@@ -30,6 +32,18 @@ Authoring WorkspaceはEditorの中心画面である。起動直後のempty stat
 +--------------------------------------------------------------------------------+
 ```
 
+workspace未open時は、同じApp Bar / Header領域だけを使う。Create / Open / Import Portable JSONはHeader内で横並びに表示し、下部の編集paneは出さない。
+
+```text
++--------------------------------------------------------------------------------+
+| Private 2D Rigging Lab   [Create Workspace] [Open Workspace] [Import Portable]  |
++--------------------------------------------------------------------------------+
+|                                                                                |
+|                         No workspace is open                                   |
+|                                                                                |
++--------------------------------------------------------------------------------+
+```
+
 Toolboxは機能を呼び出す場所であり、model構造を表示・選択する場所ではない。Parts Treeは常設または即時展開できるStructure / Partsペインとして扱う。Import後の構造整理、mesh対象選択、rig対象選択はこのParts Treeを起点にする。Parts Treeの詳細は [../components/parts-tree.md](../components/parts-tree.md) を参照する。Toolboxの詳細は [../components/toolbox.md](../components/toolbox.md) を参照する。Canvas / PreviewはPSD由来drawableをEditor rendererで表示し、zoom / pan / fit、selection、overlay toolbarを扱う中心領域である。Canvas / Previewの詳細は [../components/canvas-preview.md](../components/canvas-preview.md) を参照する。
 
 Part Container選択時、InspectorはPart Container Inspectorとして、name、visibility gate、親子関係の確認を扱う。Part Containerを非表示にすると配下drawableのeffective visibilityはhiddenになるが、子Drawable個別のvisibility設定は変更しない。Part Container Inspectorの詳細は [../components/part-container-inspector.md](../components/part-container-inspector.md) を参照する。
@@ -44,13 +58,40 @@ Wave53 final integration report/review `pass` により、このレイアウト�
 
 これは final visual redesign ではない。legacy support panels には既存の Project Storage、Product Preflight、Viewer / Runtime、Codex/AI support、operation/evidence/debug 系UIが残る。duplicate drawable-list hooks は現時点で非blockingだが、将来 legacy Drawable Authoring list を対象にするテストは `drawableAuthoring.panel` などの stable wrapper で scope する必要がある。
 
-## 3. Empty State
+## 3. Workspace Gate / Empty State
+
+Workspace Gateはworkspace未open時の状態であり、通常のempty project編集状態ではない。ユーザーはここでCreate Workspace、Open Workspace、Import Portable JSONのいずれかを選び、workspaceを確定してから編集へ進む。
+
+Gateで表示するもの:
+
+- App Bar / Headerのアプリ名
+- Create Workspace
+- Open Workspace
+- Import Portable JSON
+- workspace未openであることを示す簡潔な空表示
+
+Gateで表示しないもの:
+
+- Toolbox
+- Parts Tree
+- Canvas / Preview
+- Inspector
+- Parameter Bar
+- PSD Import
+- Mesh / Rig / Dynamics
+- Texture Atlas
+- Validate
+- Viewer
+- Save
+
+workspace作成後またはopen後に、初めてAuthoring Workspaceの通常編集レイアウトへ入る。
+
+## 3.1 Workspace Open後の空Project State
 
 表示するもの:
 
 - 空projectであること
 - PSDを読み込む入口
-- 既存projectを開く入口
 - tutorialを開始する入口
 - Stage empty stateではPSD importを主導線として扱う
 

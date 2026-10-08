@@ -32,6 +32,10 @@ import {
 
 type EditKeyformRequest = Extract<OperationRequestDto, { operationType: "editKeyformKey" }>;
 type PackageKeyformTarget = EditLinearKeyformInput["target"];
+type LinearKeyformSetDto = Extract<
+  AuthoringSession["graph"]["keyformSets"][number],
+  { readonly evaluator: "linear-1d-v1" }
+>;
 
 export const editKeyformKeyOperationHandler: OperationHandler = {
   operationType: "editKeyformKey",
@@ -69,7 +73,13 @@ const applyEditKeyformKey = (
     };
   }
 
-  const keyformSetId = createKeyformSetIdFromOperationRequest(request);
+  const requestedKeyformSetId = createKeyformSetIdFromOperationRequest(request);
+  const existingKeyformSet = findExistingLinearKeyformSetForRequest(
+    session,
+    request,
+    requestedKeyformSetId
+  );
+  const keyformSetId = existingKeyformSet?.keyformSetId ?? requestedKeyformSetId;
   const targetIds = createEditKeyformTargetIds({
     keyformSetId,
     parameterId: request.payload.parameterId,
@@ -122,11 +132,16 @@ const applyEditKeyformKey = (
       ...(request.payload.compositionMode === undefined
         ? {}
         : { compositionMode: request.payload.compositionMode }),
-      keys: createKeyInputs(request, {
-        min: parameter.min,
-        default: parameter.default,
-        max: parameter.max
-      })
+      keys: createKeyInputs(
+        session,
+        request,
+        {
+          min: parameter.min,
+          default: parameter.default,
+          max: parameter.max
+        },
+        existingKeyformSet
+      )
     });
 
     return {
@@ -168,16 +183,25 @@ const applyEditKeyformKey = (
 };
 
 const createKeyInputs = (
+  session: AuthoringSession,
   request: EditKeyformRequest,
-  parameterRange: { readonly min: number; readonly default: number; readonly max: number }
+  parameterRange: { readonly min: number; readonly default: number; readonly max: number },
+  existingKeyformSet: LinearKeyformSetDto | undefined
 ): readonly LinearKeyformKeyInput[] => {
   if (request.payload.action === "deleteCurrent") {
-    return [{ value: request.payload.keyValue, statePatch: 0 }];
+    return [
+      {
+        value: resolveExistingKeyValue(existingKeyformSet, request.payload.keyValue),
+        statePatch: createDeletePlaceholderStatePatch(session, request)
+      }
+    ];
   }
   if (request.payload.action === "addCurrent" || request.payload.action === "updateCurrent") {
     return [
       {
-        value: request.payload.keyValue,
+        value: request.payload.action === "updateCurrent"
+          ? resolveExistingKeyValue(existingKeyformSet, request.payload.keyValue)
+          : request.payload.keyValue,
         statePatch: request.payload.statePatch.value
       }
     ];
@@ -210,6 +234,75 @@ const createKeyInputs = (
     }
   ];
 };
+
+const findExistingLinearKeyformSetForRequest = (
+  session: AuthoringSession,
+  request: EditKeyformRequest,
+  requestedKeyformSetId: KeyformSetId
+): LinearKeyformSetDto | undefined => {
+  const exactIdMatch = session.graph.keyformSets.find(
+    (keyformSet): keyformSet is LinearKeyformSetDto =>
+      keyformSet.evaluator === "linear-1d-v1" &&
+      keyformSet.keyformSetId === requestedKeyformSetId
+  );
+  if (request.payload.action !== "deleteCurrent" && request.payload.action !== "updateCurrent") {
+    return exactIdMatch;
+  }
+  const keyValue = request.payload.keyValue;
+
+  const bindingMatches = session.graph.keyformSets.filter(
+    (keyformSet): keyformSet is LinearKeyformSetDto =>
+      keyformSet.evaluator === "linear-1d-v1" &&
+      keyformSet.parameterId === request.payload.parameterId &&
+      keyformSet.target.kind === request.payload.target.kind &&
+      keyformSet.target.id === request.payload.target.id &&
+      keyformSet.target.property === request.payload.targetProperty
+  );
+  const keyMatch = bindingMatches.find((keyformSet) =>
+    keyformSet.keys.some((key) => sameKeyValue(key.value, keyValue))
+  );
+  if (keyMatch !== undefined) {
+    return keyMatch;
+  }
+
+  return exactIdMatch ?? (bindingMatches.length === 1 ? bindingMatches[0] : undefined);
+};
+
+const resolveExistingKeyValue = (
+  keyformSet: LinearKeyformSetDto | undefined,
+  requestedKeyValue: number
+): number =>
+  keyformSet?.keys.find((key) => sameKeyValue(key.value, requestedKeyValue))?.value ??
+  requestedKeyValue;
+
+const createDeletePlaceholderStatePatch = (
+  session: AuthoringSession,
+  request: EditKeyformRequest
+): LinearKeyformKeyInput["statePatch"] => {
+  if (request.payload.target.kind !== "rigControl") {
+    return 0;
+  }
+
+  if (request.payload.targetProperty === "translation") {
+    return { x: 0, y: 0 };
+  }
+
+  if (request.payload.targetProperty !== "controlPointOffsets") {
+    return 0;
+  }
+
+  const rigControl = session.graph.rigControls.find(
+    (candidate) => candidate.rigControlId === request.payload.target.id
+  );
+  if (rigControl?.kind !== "warpLattice2d") {
+    return [];
+  }
+
+  return Array.from({ length: rigControl.restControlPoints.length }, () => ({ x: 0, y: 0 }));
+};
+
+const sameKeyValue = (left: number, right: number): boolean =>
+  Math.abs(left - right) <= 0.000001;
 
 const validateStatePatchTargetProperties = (request: EditKeyformRequest): readonly DiagnosticDto[] => {
   const patches = listStatePatches(request);

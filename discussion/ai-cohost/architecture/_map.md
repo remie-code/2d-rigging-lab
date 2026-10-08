@@ -1,0 +1,25 @@
+# AI Cohost Architecture Map
+
+> `ai-cohost/architecture/` の地図。設計方向・設計判断を保持する。裏付けとなる調査事実は research/ に分離。
+
+| Path | Content | Status |
+|---|---|---|
+| [conversation-pipeline-direction.md](conversation-pipeline-direction.md) | 会話パイプラインの設計方向: テキストパイプライン採用、二層設計(反射層+LLM)、宛先判定、割り込み、音声ルーティング、候補スタック、知性のアクセスと文脈の器(§2.7: SDK・転写バッファが正・ツール無効+最小プロンプト) | **Accepted(2026-07-12、S前提討議②で最終化)**。①裁定織り込み+出力側をC4〜C6契約へ接地。先送りはS系列へ(§4。順序制約: persona声→相槌音声) |
+| [runtime-player-control-channel.md](runtime-player-control-channel.md) | runtime-playerへのAI操縦チャネル: 挿入点、セマンティック注入契約、表現力の三階建て(変調/エンベロープ付きインテント/Variant)、不変条件、トランスポート | 方向=Accepted(境界改定 案A)。契約詳細のC4分は [c4-control-channel-v0.md](c4-control-channel-v0.md) でAccepted(2026-07-11)。エンベロープ/変調payloadはC5以降で追加 |
+| [physiological-layer-and-envelope.md](physiological-layer-and-envelope.md) | 生理層生成器: 表現レパートリー、定義の所在(四層優先順位)、駆動と合成、Editor第一弾(エンベロープ宣言+アイドルプレビュー)、等価性検証 | 意味レベル=Accepted(2026-07-10)。**§2/§5/§6 に C2 実装事実を追記(physiology は apps/ 配置=裁定2 実装済み、packages 移設・Editor↔Player 等価性は第二段繰延。将来方針は不変)** |
+| [runtime-player-model-host-roles.md](runtime-player-model-host-roles.md) | Runtime Player=モデルホストの責務再定義、案(c)役割つき起動、前提条件(状態/ポート/身元)、防波堤(役割は構成で表現)、起動UX(三つの扉、生理自動/チャネル手動) | Accepted(2026-07-10) |
+| [c2-blink-and-generator-skeleton.md](c2-blink-and-generator-skeleton.md) | C2設計: まばたきゴール、体験=無、生成器は意味スロットで喋る(もう一人の入力ソース)、失敗も沈黙、シード決定論、ツマミ語彙の先行解剖(内部スキーマ/質感語露出/baseline×modulation) | 設計方向=Accepted(2026-07-10)。実装=C2 wave完了・**完全閉鎖(2026-07-11、手動美的ゲート合格)**。§3.3 に実装事実 |
+| [c3-gaze-head-posture.md](c3-gaze-head-posture.md) | C3設計: 三現象の解剖(サッカード+固視/多時間軸ノイズ/姿勢ドリフト)、貫く文法(ホーム+層状ノイズ+離散イベント)、結合3つ、アンチパターン5つ、Stage Motion裁定(C3最終ドメイン・独立ツマミ・姿勢連動のみ・既定Off)、質感語→内部素子対応 | 設計方向=Accepted(2026-07-11)。実装=C3完全閉鎖(2026-07-11) |
+| [c4-control-channel-v0.md](c4-control-channel-v0.md) | C4設計: 契約二層化(外殻=additive extension/payloadは所有閉問題が追加)、外殻5点(接続作法/要求/応答+拒否列挙/hello capabilities/寛容規則)、TTL統一機構(切断→基底復帰がタダ)、v0 intent.set、粗いオーバーレイ、参照ドライバ(特区最初の住人)、fixture=純JSON | 設計方向=Accepted(2026-07-11)。実装=C4完全閉鎖(2026-07-11) |
+| [c5-composition-and-envelopes.md](c5-composition-and-envelopes.md) | C5設計: スコープ裁定3件(Stage Presence=実効body信号に追従/変調は繰延/エンベロープは器側で描く)、intent.envelope、連続性原則(現在値からのre-attack)、解放も曲線で(失効・切断のスナップの一般解=「魂を殺しても」の見え方の完成)、C6前方互換 | 設計方向=Accepted(2026-07-11)。実装=C5完全閉鎖(2026-07-11、§7に裁定3改定=set ease-in) |
+| [c6-mouth-phoneme-timeline.md](c6-mouth-phoneme-timeline.md) | C6設計: モーラ契約(知識の置き場=音素→母音は魂側、凸不変条件は構造保証)、**時間仮説**(attack≈モーラ長のundershoot=coarticulation近似+開き縮小係数。実測不採用の理由=固定ゴール形は機械的)、C5相乗り、比較ゲート(実物の口との並置) | 設計方向=Accepted(2026-07-11) |
+
+## 未決事項(主要な設計分岐)
+
+| ID | 分岐 | 状態 |
+|---|---|---|
+| D1 | 魂(オーケストレータ)の居場所 | **解決→改定: リポジトリ内特区 `apps/<魂>`(D1改定二号=特区憲章、2026-07-11)**。当初は別リポジトリ(案A、2026-07-10)。憲章6条は [../concept/mvp-boundary-amendment.md](../concept/mvp-boundary-amendment.md) §6 |
+| D4 | プラットフォームとチャット取得層 | **解決: YouTube(ユーザー決定 2026-07-10。既存の配信環境・実績あり)**。チャット取得層は壊れる前提の抽象化必須(research参照) |
+| D6 | ターンテイキング/宛先判定の初手 | **解決: キー操作で明示から始める(ユーザー決定 2026-07-10)**。実機ゲートを経て名前呼び/自動判定へ段階的に(P5) |
+| D7 | Variant切替(離散表情・衣装)をAI制御面に含めるか | **解決: 当面対象外(ユーザー決定 2026-07-10)**。初期の操縦チャネル契約に含めない。将来の再検討は妨げない |
+| — | アプリの形 | **解決: 案(c)同一アプリの役割つき起動(2026-07-10)** |

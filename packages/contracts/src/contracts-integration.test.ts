@@ -47,8 +47,7 @@ const runtimeState = {
   accumulatorMs: 0,
   dynamicsGroups: {
     dyn_hairSway: {
-      position: 0,
-      velocity: 0,
+      particles: [{ x: 0, y: 14, px: 0, py: 14 }],
       tick: 0,
       resetCounter: 0
     }

@@ -14,10 +14,18 @@ Cubism公式資料は参考資料であり、Open 2D Character Rigging Stack の
 
 | Path | Role | Status |
 |------|------|--------|
-| [_map.md](_map.md) | この調査トピックの入口地図 | 作成済み |
+| [_map.md](_map.md) | この調査トピックの入口地図 | Historical evidence index（現行UX oracleではない） |
 | [cubism-editor-preview-observable-features.md](cubism-editor-preview-observable-features.md) | Cubism Editor の制作中 preview / view area / palette / warning 表示から観測できる確認機能の整理 | 作成済み |
 | [cubism-viewer-runtime-observable-features.md](cubism-viewer-runtime-observable-features.md) | Cubism Viewer / runtime package 確認で観測できる model loading、parameter、motion、expression、physics 等の確認機能の整理 | 作成済み |
 | [open-stack-viewer-preview-design-implications.md](open-stack-viewer-preview-design-implications.md) | Open Stack MVP の Editor preview / Viewer 境界、必要機能、設計推奨、未決事項の整理 | 作成済み |
+
+## 現行正本への導線
+
+- Editor Preview / Viewer / Shared Runtime の境界: [MVP vertical-slice architecture](../../design/mvp-authoring-runtime/00-mvp-vertical-slice-architecture.md)
+- Shared Runtime evaluation と diagnostics: [runtime-core-contract.md](../../design/module-contracts/runtime-core-contract.md)
+- Cubism Viewer 互換を採らない権利・スコープ境界: [rights-risk-cleanup map](../rights-risk-cleanup/_map.md)
+
+この階層の Cubism Editor / Viewer 観測は、上記の project-defined UI・runtime contract を置き換えない。
 
 ## 調査観点
 
@@ -29,16 +37,19 @@ Cubism公式資料は参考資料であり、Open 2D Character Rigging Stack の
 | MVP採用 | GUI Editor必須MVPで最低限必要なpreview / viewer能力と、MVP外へ送る機能 |
 | Validator / AI連携 | warning、runtime state、inspection、AI-readable report / diff へどう接続するか |
 
-## 次の行動
+## 歴史的フォローアップ（現行作業ではない）
 
-1. レポート間の差分を Undine が統合し、設計議論の論点として `discussion/design/` に反映する。
-2. Editor preview / Viewer / Shared Runtime / Validator-AI bridge の境界を設計文書化する。
+1. 過去レポート間の差分は、上記の MVP architecture / runtime contract に反映済み。ここから新たな設計タスクを起こさない。
+2. 境界を変更する場合は、現行 contract の変更提案として別途 review する。
+3. Cubism Viewer 相当機能を再検討する場合は、権利・permission・scope review を先行する。
 
-## 未決事項
+## 歴史的未決（現行作業ではない）
+
+以下は過去調査の候補・判断待ちを保存した register である。現行仕様の未完了タスクとして解釈しない。
 
 | 項目 | 状態 |
 |------|------|
-| Editor preview と Viewer が共有すべき runtime 評価API | 調査済み。Shared Runtime evaluation core 共有が推奨。loader境界は未決 |
-| Editor preview にのみ必要な制作支援表示 | 調査済み。selection / lock / hide / overlay / dirty operation などは Editor-only とする方向 |
-| Viewer に必要な runtime diagnostics / inspection | 調査済み。package load diagnostics、parameter操作、runtime snapshot、drawable / mask inspection がMVP候補 |
-| Cubism Viewer相当機能のうちMVP外に置くもの | 調査済み。motion / expression asset / full physics / pose / Cubism互換Viewer機能は現方針では対象外。扱う場合も権利確認前提の別調査 |
+| Editor preview と Viewer が共有すべき runtime 評価API | 過去調査時点の推奨（現行作業ではない）。Shared Runtime evaluation core 共有・loader境界の論点は [runtime-core-contract.md](../../design/module-contracts/runtime-core-contract.md) を正とする |
+| Editor preview にのみ必要な制作支援表示 | 過去調査時点の候補（現行作業ではない）。selection / lock / hide / overlay / dirty operation などの現行境界は MVP architecture を参照 |
+| Viewer に必要な runtime diagnostics / inspection | 過去調査時点の MVP候補（現行作業ではない）。package load diagnostics、parameter操作、runtime snapshot 等の現行契約は runtime-core / viewer design を参照 |
+| Cubism Viewer相当機能のうちMVP外に置くもの | 過去調査時点の除外整理（現行作業ではない）。motion / expression asset / full physics / pose / Cubism互換Viewer機能は現方針で対象外。再検討時も権利確認前提の別調査 |

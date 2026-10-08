@@ -3,23 +3,42 @@ import type {
   DrawableGeneratedMeshResult,
   GeneratedMeshPreviewCommitMethod,
   StructureOrderDrop,
-  StructureOrderItem
+  StructureOrderItem,
+  TextureAtlasPreview,
+  VariantActiveSelectionEntry
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   createGeneratedMeshForDrawable,
   createPackageDocumentBaseFromAuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
+import { recordLive2dPerformanceCounter } from "@private-2d-rigging-lab/render-core";
 import type {
+  DiagnosticDto,
+  DynamicsGroupId,
   DrawableId,
   ParameterId,
   PartId,
+  RectDto,
   RigControlId
 } from "@private-2d-rigging-lab/contracts";
 import type {
+  CreateDynamicsGroupPayloadDto,
+  CreateVariantGroupPayloadDto,
+  CreateVariantPayloadDto,
   CreateParameterPayloadDto,
+  DeleteVariantGroupPayloadDto,
+  DeleteVariantPayloadDto,
+  DeleteDynamicsGroupPayloadDto,
   DeleteParameterPayloadDto,
   EditKeyformKeyPayloadDto,
+  AddVariantTargetDrawablePayloadDto,
+  RemoveVariantTargetDrawablePayloadDto,
+  SetVariantDefaultActiveSelectionPayloadDto,
+  SetVariantMembershipPayloadDto,
+  UpdateDynamicsGroupPayloadDto,
   UpdateParameterPayloadDto,
+  UpdateVariantGroupPayloadDto,
+  UpdateVariantPayloadDto,
   UpdateRigControlPayloadDto
 } from "@private-2d-rigging-lab/operation-core";
 import {
@@ -33,28 +52,33 @@ import {
   type ReactNode
 } from "react";
 
-import {
-  exportEditorProjectBundle,
-  importEditorProjectBundle,
-  toEditorProjectStorageError
-} from "../project-storage/model/editor-project-storage";
-import {
-  readPortableProjectFileText,
-  triggerPortableProjectDownload
-} from "../project-storage/model/browser-portable-project-transfer";
-import {
-  createIdleProjectStorageState,
-  createLoadedProjectStorageState,
-  createLoadingProjectStorageState,
-  createProjectIdentityLabel,
-  createProjectSaveStatusLabel,
-  createProjectStorageErrorState,
-  createSavedProjectStorageState,
-  createSavingProjectStorageState,
-  type ProjectStorageState
-} from "../project-storage/model/project-storage-state";
 import { commitPsdImportPlan } from "../psd-import/model/psd-import-commit";
 import type { PsdImportPlan } from "../psd-import/model/psd-import-types";
+import {
+  detectWorkspaceDirectoryAccess,
+  type WorkspaceDirectoryHandleLike
+} from "../workspace-storage/model/workspace-directory-io";
+import {
+  createEditorWorkspace,
+  openEditorWorkspace,
+  saveEditorWorkspace,
+  saveEditorWorkspaceAs,
+  toEditorWorkspaceStorageError,
+  type WorkspaceDirectoryPicker
+} from "../workspace-storage/model/workspace-session-storage";
+import {
+  createCreatingWorkspaceStorageState,
+  createInitialWorkspaceStorageState,
+  createOpeningWorkspaceStorageState,
+  createSavedWorkspaceStorageState,
+  createSavingWorkspaceStorageState,
+  createWorkspaceBlockedStorageState,
+  createWorkspaceIdentityLabel,
+  createWorkspaceSaveStatusLabel,
+  createWorkspaceStorageErrorState,
+  type EditorWorkspaceTarget,
+  type WorkspaceStorageState
+} from "../workspace-storage/model/workspace-storage-state";
 import {
   commitDrawableMaskSourceEdit,
   commitDrawableNameEdit,
@@ -62,6 +86,9 @@ import {
   commitDrawableReorder,
   commitDrawableReparent,
   commitDrawableRuntimeVisibility,
+  commitCreateDynamicsGroup,
+  commitDeleteDynamicsGroup,
+  commitDeleteRigControl,
   commitEditKeyformKey,
   commitBindDrawableToRigControl,
   commitCreateRotationDeformer,
@@ -72,9 +99,11 @@ import {
   commitPartNameEdit,
   commitPartReparent,
   commitReparentRigControl,
+  commitUpdateDynamicsGroup,
   commitUpdateRigControl,
   type EditorSessionCommandResult
 } from "./model/editor-session-commands";
+import { commitMeshApplyAutoRefit } from "./model/mesh-apply-auto-refit";
 import { createEmptyAuthoringSession } from "./model/empty-authoring-session";
 import type { DeformerTreeSelectionTarget, EditorSelection } from "./model/editor-selection";
 import type {
@@ -82,6 +111,27 @@ import type {
   EditorSessionGestureCommitController
 } from "./model/editor-session-gesture-commit";
 import { commitEditorSessionGestureWithHistory } from "./model/editor-session-gesture-commit";
+import {
+  commitTextureAtlasPreview,
+  createTextureAtlasSessionChangedWarning,
+  type TextureAtlasEditorSessionCommandResult
+} from "./model/texture-atlas-session-command";
+import {
+  commitAddVariantTargetDrawable,
+  commitCreateVariant,
+  commitCreateVariantGroup,
+  commitDeleteVariant,
+  commitDeleteVariantGroup,
+  commitRemoveVariantTargetDrawable,
+  commitSetVariantDefaultActiveSelection,
+  commitSetVariantMembership,
+  commitUpdateVariant,
+  commitUpdateVariantGroup
+} from "../variants/model/variant-session-commands";
+import {
+  reconcileVariantPreviewActiveSelections,
+  upsertVariantPreviewActiveSelection
+} from "../variants/model/variant-preview-state";
 import {
   createDrawableSelection,
   getSelectedDrawableIds,
@@ -155,6 +205,19 @@ import {
   createInitialCollapsedPartIds,
   mergeNewPartInitialCollapsedPartIds
 } from "./model/part-tree-collapse-state";
+import {
+  advanceDynamicsToolPreviewSimulation as advanceDynamicsToolPreviewSimulationState,
+  clearDynamicsToolPreviewDefinitionOverride as clearDynamicsToolPreviewDefinitionOverrideState,
+  createDynamicsToolPreviewEvaluation,
+  createInitialDynamicsToolPreviewState,
+  resetDynamicsToolPreviewSimulation as resetDynamicsToolPreviewSimulationState,
+  selectDynamicsToolPreviewGroup,
+  setDynamicsToolPreviewDefinitionOverride as setDynamicsToolPreviewDefinitionOverrideState,
+  setDynamicsToolPreviewDriverValue,
+  type DynamicsToolGroup,
+  type DynamicsToolPreviewEvaluation,
+  type DynamicsToolPreviewState
+} from "./model/dynamics-tool-state";
 import { useEditorUiStore } from "../../state/editor-ui-store";
 
 export interface MeshToolDraft {
@@ -170,6 +233,48 @@ export interface MeshToolDraft {
   readonly fallbackSteps?: DrawableGeneratedMeshResult["fallbackSteps"];
   readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
 }
+
+export type MeshToolGenerationDiagnosticKind =
+  | "generationFailed"
+  | "fallback"
+  | "emptyResult";
+
+export interface MeshToolGenerationDiagnostic {
+  readonly kind: MeshToolGenerationDiagnosticKind;
+  readonly drawableId: DrawableId;
+  readonly drawableName?: string;
+  readonly presetId: MeshGenerationPresetId;
+  readonly densityHint?: string;
+  readonly method: GeneratedMeshPreviewCommitMethod;
+  readonly source?: DrawableGeneratedMeshResult["source"];
+  readonly meshBounds?: RectDto;
+  readonly alphaBounds?: DrawableGeneratedMeshResult["alphaBounds"];
+  readonly vertexCount: number;
+  readonly triangleCount: number;
+  readonly fallbackReason?: DrawableGeneratedMeshResult["fallbackReason"];
+  readonly fallbackSteps?: DrawableGeneratedMeshResult["fallbackSteps"];
+  readonly qualityMetrics?: DrawableGeneratedMeshResult["qualityMetrics"];
+  readonly failureReason?: string;
+}
+
+interface MeshGenerationV6MultiIslandDiagnostics {
+  readonly rawAlphaComponentCount: number;
+  readonly keptIslandCount: number;
+  readonly generatedIslandCount: number;
+  readonly backendGeneratedIslandCount: number;
+  readonly skippedTinyNoiseIslandCount: number;
+  readonly skippedTinyNoisePixelCount: number;
+  readonly localizedFallbackCount: number;
+  readonly localizedFallbackReasons: readonly {
+    readonly componentOrder: number;
+    readonly reason: string;
+  }[];
+}
+
+type MeshGenerationV6MetricsWithMultiIslandDiagnostics =
+  NonNullable<NonNullable<DrawableGeneratedMeshResult["qualityMetrics"]>["v6Metrics"]> & {
+    readonly multiIslandDiagnostics?: MeshGenerationV6MultiIslandDiagnostics;
+  };
 
 export function logMeshGenerationPreviewDebug(input: {
   readonly session: AuthoringSession;
@@ -187,6 +292,7 @@ export function logMeshGenerationPreviewDebug(input: {
   const contourPipelineDiagnostics = v6Metrics?.contourPipelineDiagnostics;
   const constrainautorDiagnostics = v6Metrics?.constrainautorDiagnostics;
   const adaptiveDensityDiagnostics = v6Metrics?.adaptiveDensityDiagnostics;
+  const multiIslandDiagnostics = getMeshGenerationV6MultiIslandDiagnostics(v6Metrics);
   const summary = {
     drawableId: input.drawableId,
     drawableName: drawable?.displayName,
@@ -206,6 +312,7 @@ export function logMeshGenerationPreviewDebug(input: {
     contourPipelineDiagnostics,
     constrainautorDiagnostics,
     adaptiveDensityDiagnostics,
+    multiIslandDiagnostics,
     supportRingDiagnostics,
     adaptiveStaggeredBandDiagnostics
   };
@@ -214,6 +321,13 @@ export function logMeshGenerationPreviewDebug(input: {
     ? console.warn
     : console.info;
   log("[mesh-generation:preview]", summary);
+}
+
+function getMeshGenerationV6MultiIslandDiagnostics(
+  v6Metrics: NonNullable<DrawableGeneratedMeshResult["qualityMetrics"]>["v6Metrics"] | undefined
+): MeshGenerationV6MultiIslandDiagnostics | undefined {
+  return (v6Metrics as MeshGenerationV6MetricsWithMultiIslandDiagnostics | undefined)
+    ?.multiIslandDiagnostics;
 }
 
 interface EditorSessionState {
@@ -229,6 +343,7 @@ interface EditorSessionContextValue {
   readonly editorHiddenPartIds: ReadonlySet<PartId>;
   readonly meshDraft: MeshToolDraft | null;
   readonly meshDrafts: readonly MeshToolDraft[];
+  readonly meshGenerationDiagnostic: MeshToolGenerationDiagnostic | null;
   readonly rigDraft: WarpDeformerDraft | null;
   readonly structureRows: readonly StructureTreeRow[];
   readonly deformerRows: readonly DeformerTreeRow[];
@@ -237,28 +352,48 @@ interface EditorSessionContextValue {
   readonly parameterBar: ParameterBarProjection;
   readonly activeParameterId: ParameterId | null;
   readonly parameterValues: ParameterValueMap;
+  readonly dynamicsToolPreview: DynamicsToolPreviewState;
+  readonly dynamicsToolPreviewEvaluation: DynamicsToolPreviewEvaluation;
   readonly rigOperationFeedback: string | null;
   readonly parameterOperationFeedback: string | null;
-  readonly projectStorage: ProjectStorageState;
-  readonly projectIdentityLabel: string;
-  readonly projectSaveStatusLabel: string;
+  readonly variantPreviewActiveSelections: readonly VariantActiveSelectionEntry[];
+  readonly workspaceStorage: WorkspaceStorageState;
+  readonly workspaceIdentityLabel: string;
+  readonly workspaceSaveStatusLabel: string;
+  readonly hasOpenWorkspace: boolean;
   readonly psdImportOpen: boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly undo: () => void;
   readonly redo: () => void;
+  readonly createWorkspace: () => Promise<void>;
+  readonly openWorkspace: () => Promise<void>;
+  readonly saveWorkspaceAs: () => Promise<void>;
   readonly saveProject: () => Promise<void>;
-  readonly openProjectFile: (file: File) => Promise<void>;
-  readonly openProjectFromPortableBundle: (
-    bundleText: string,
-    options?: { readonly fileName?: string }
-  ) => Promise<void>;
   readonly openPsdImport: () => void;
   readonly closePsdImport: () => void;
   readonly openParameterManager: () => void;
   readonly setActiveParameterId: (parameterId: ParameterId) => void;
   readonly setActiveParameterValue: (value: number) => void;
   readonly resetActiveParameterValue: () => void;
+  readonly setDynamicsToolPreviewGroupId: (dynamicsGroupId: DynamicsGroupId | null) => void;
+  readonly setDynamicsToolPreviewDriverValue: (
+    dynamicsGroupId: DynamicsGroupId,
+    parameterId: ParameterId,
+    value: number
+  ) => void;
+  readonly advanceDynamicsToolPreviewSimulation: (
+    dynamicsGroupId: DynamicsGroupId,
+    dtMs: number
+  ) => void;
+  readonly setDynamicsToolPreviewDefinitionOverride: (
+    dynamicsGroupId: DynamicsGroupId,
+    definition: DynamicsToolGroup
+  ) => void;
+  readonly clearDynamicsToolPreviewDefinitionOverride: (
+    dynamicsGroupId: DynamicsGroupId
+  ) => void;
+  readonly resetDynamicsToolPreviewSimulation: (dynamicsGroupId?: DynamicsGroupId) => void;
   readonly selectPart: (partId: PartId) => void;
   readonly selectDrawable: (
     drawableId: DrawableId,
@@ -299,11 +434,13 @@ interface EditorSessionContextValue {
   readonly moveStructureChild: (moved: StructureOrderItem, drop: StructureOrderDrop) => void;
   readonly previewMeshDraft: (
     drawableId: DrawableId,
-    presetId: MeshGenerationPresetId
+    presetId: MeshGenerationPresetId,
+    method?: GeneratedMeshPreviewCommitMethod
   ) => void;
   readonly previewMeshDrafts: (
     drawableIds: readonly DrawableId[],
-    presetId: MeshGenerationPresetId
+    presetId: MeshGenerationPresetId,
+    method?: GeneratedMeshPreviewCommitMethod
   ) => void;
   readonly applyMeshDraft: () => void;
   readonly cancelMeshDraft: () => void;
@@ -333,7 +470,51 @@ interface EditorSessionContextValue {
     parentRigControlId: RigControlId | null
   ) => void;
   readonly updateRigControl: (payload: UpdateRigControlPayloadDto) => void;
+  readonly deleteRigControl: (rigControlId: RigControlId) => void;
   readonly editKeyformKey: (payload: EditKeyformKeyPayloadDto) => void;
+  readonly createDynamicsGroup: (
+    payload: CreateDynamicsGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly updateDynamicsGroup: (
+    payload: UpdateDynamicsGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly deleteDynamicsGroup: (
+    payload: DeleteDynamicsGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly createVariantGroup: (
+    payload: CreateVariantGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly updateVariantGroup: (
+    payload: UpdateVariantGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly deleteVariantGroup: (
+    payload: DeleteVariantGroupPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly createVariant: (
+    payload: CreateVariantPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly updateVariant: (
+    payload: UpdateVariantPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly deleteVariant: (
+    payload: DeleteVariantPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly addVariantTargetDrawable: (
+    payload: AddVariantTargetDrawablePayloadDto
+  ) => EditorSessionCommandResult;
+  readonly removeVariantTargetDrawable: (
+    payload: RemoveVariantTargetDrawablePayloadDto
+  ) => EditorSessionCommandResult;
+  readonly setVariantMembership: (
+    payload: SetVariantMembershipPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly setVariantDefaultActiveSelection: (
+    payload: SetVariantDefaultActiveSelectionPayloadDto
+  ) => EditorSessionCommandResult;
+  readonly setVariantPreviewActiveSelection: (
+    selection: VariantActiveSelectionEntry
+  ) => void;
+  readonly resetVariantPreviewActiveSelections: () => void;
   readonly commitGestureCommand: (gesture: EditorSessionGestureCommit<unknown>) => void;
   readonly commitGestureController: <
     Preview,
@@ -355,20 +536,46 @@ interface EditorSessionContextValue {
     readonly label: string;
   };
   readonly commitPsdImport: (plan: PsdImportPlan) => void;
+  readonly applyTextureAtlasPreview: (
+    preview: TextureAtlasPreview
+  ) => Promise<TextureAtlasEditorSessionCommandResult>;
 }
 
 const EditorSessionContext = createContext<EditorSessionContextValue | null>(null);
 
 export interface EditorSessionProviderProps {
   readonly children?: ReactNode;
+  readonly confirmDirtyWorkspaceReplacement?: DirtyWorkspaceReplacementConfirmation;
   readonly initialSelection?: EditorSelection | null;
   readonly initialSession?: AuthoringSession;
+  readonly initialWorkspaceDirectory?: WorkspaceDirectoryHandleLike;
+  readonly initialWorkspaceOpen?: boolean;
+  readonly workspaceDirectoryPicker?: WorkspaceDirectoryPicker;
+  readonly workspaceGlobalObject?: unknown;
 }
+
+export type DirtyWorkspaceReplacementReason = "open-workspace" | "import-portable-json";
+export type DirtyWorkspaceReplacementDecision = "save-and-open" | "cancel";
+
+export interface DirtyWorkspaceReplacementRequest {
+  readonly reason: DirtyWorkspaceReplacementReason;
+  readonly workspaceName: string | null;
+  readonly message: string;
+}
+
+export type DirtyWorkspaceReplacementConfirmation = (
+  request: DirtyWorkspaceReplacementRequest
+) => DirtyWorkspaceReplacementDecision | Promise<DirtyWorkspaceReplacementDecision>;
 
 export function EditorSessionProvider({
   children,
+  confirmDirtyWorkspaceReplacement = confirmDirtyWorkspaceReplacementWithBrowser,
+  initialWorkspaceDirectory,
+  initialWorkspaceOpen = false,
   initialSelection = null,
-  initialSession
+  initialSession,
+  workspaceDirectoryPicker,
+  workspaceGlobalObject
 }: EditorSessionProviderProps) {
   const activeTool = useEditorUiStore((state) => state.activeTool);
   const setActiveEntry = useEditorUiStore((state) => state.setActiveEntry);
@@ -395,6 +602,12 @@ export function EditorSessionProvider({
     useState<DeformerTreeSelectionTarget | null>(null);
   const [activeParameterId, setActiveParameterIdState] = useState<ParameterId | null>(null);
   const [parameterValues, setParameterValues] = useState<ParameterValueMap>({});
+  const [dynamicsToolPreview, setDynamicsToolPreview] =
+    useState<DynamicsToolPreviewState>(createInitialDynamicsToolPreviewState);
+  const [variantPreviewActiveSelectionsState, setVariantPreviewActiveSelectionsState] =
+    useState<readonly VariantActiveSelectionEntry[]>(() =>
+      reconcileVariantPreviewActiveSelections(session.graph.variantGroups ?? [], undefined)
+    );
   const [collapsedPartIds, setCollapsedPartIds] = useState<ReadonlySet<PartId>>(
     () => createInitialCollapsedPartIds(session)
   );
@@ -403,11 +616,40 @@ export function EditorSessionProvider({
   );
   const [meshDrafts, setMeshDrafts] = useState<readonly MeshToolDraft[]>([]);
   const meshDraft = useMemo(() => createMeshToolDraftCompatValue(meshDrafts), [meshDrafts]);
+  const [meshGenerationDiagnostic, setMeshGenerationDiagnostic] =
+    useState<MeshToolGenerationDiagnostic | null>(null);
   const [rigDraft, setRigDraft] = useState<WarpDeformerDraft | null>(null);
   const [rigOperationFeedback, setRigOperationFeedback] = useState<string | null>(null);
   const [parameterOperationFeedback, setParameterOperationFeedback] = useState<string | null>(null);
-  const [projectStorage, setProjectStorage] = useState<ProjectStorageState>(() =>
-    createIdleProjectStorageState()
+  const workspaceDirectoryAccess = useMemo(
+    () => detectWorkspaceDirectoryAccess(workspaceGlobalObject),
+    [workspaceGlobalObject]
+  );
+  const workspaceAccessSupported =
+    workspaceDirectoryAccess.supported ||
+    workspaceDirectoryPicker !== undefined ||
+    initialWorkspaceDirectory !== undefined ||
+    initialWorkspaceOpen;
+  const [workspaceStorage, setWorkspaceStorage] = useState<WorkspaceStorageState>(() =>
+    initialWorkspaceDirectory === undefined && !initialWorkspaceOpen
+      ? createInitialWorkspaceStorageState({ supported: workspaceAccessSupported })
+      : createSavedWorkspaceStorageState({
+          workspaceName: initialWorkspaceDirectory?.name ?? "Test Workspace",
+          binaryWriteCount: 0,
+          binarySkipCount: 0,
+          message: "Workspace is ready."
+        })
+  );
+  const [workspaceTarget, setWorkspaceTarget] = useState<EditorWorkspaceTarget | null>(() =>
+    initialWorkspaceDirectory === undefined
+      ? null
+      : {
+          directory: initialWorkspaceDirectory,
+          workspaceName: initialWorkspaceDirectory.name
+        }
+  );
+  const [workspaceOpenOverride, setWorkspaceOpenOverride] = useState(
+    initialWorkspaceDirectory !== undefined || initialWorkspaceOpen
   );
   const [psdImportOpen, setPsdImportOpen] = useState(false);
   const resolvedActiveParameterId = useMemo(
@@ -438,15 +680,37 @@ export function EditorSessionProvider({
     () => createParameterBarProjection(session, resolvedActiveParameterId, parameterValues),
     [parameterValues, resolvedActiveParameterId, session]
   );
-  const projectIdentityLabel = useMemo(
-    () => createProjectIdentityLabel(session),
-    [session]
+  const dynamicsToolPreviewEvaluation = useMemo(
+    () => createDynamicsToolPreviewEvaluation(session, dynamicsToolPreview),
+    [dynamicsToolPreview, session]
   );
-  const projectSaveStatusLabel = useMemo(
-    () => createProjectSaveStatusLabel(session, projectStorage),
-    [projectStorage, session]
+  const variantPreviewActiveSelections = useMemo(
+    () =>
+      reconcileVariantPreviewActiveSelections(
+        session.graph.variantGroups ?? [],
+        variantPreviewActiveSelectionsState
+      ),
+    [session.graph.variantGroups, variantPreviewActiveSelectionsState]
   );
-
+  const hasOpenWorkspace = workspaceOpenOverride || workspaceTarget !== null;
+  const workspaceIdentityLabel = useMemo(
+    () =>
+      createWorkspaceIdentityLabel({
+        session,
+        target: workspaceTarget,
+        hasOpenWorkspace
+      }),
+    [hasOpenWorkspace, session, workspaceTarget]
+  );
+  const workspaceSaveStatusLabel = useMemo(
+    () =>
+      createWorkspaceSaveStatusLabel({
+        session,
+        storageState: workspaceStorage,
+        hasOpenWorkspace
+      }),
+    [hasOpenWorkspace, session, workspaceStorage]
+  );
   useEffect(() => {
     if (activeParameterId !== resolvedActiveParameterId) {
       setActiveParameterIdState(resolvedActiveParameterId);
@@ -456,6 +720,7 @@ export function EditorSessionProvider({
   useEffect(() => {
     if (activeTool !== "mesh") {
       setMeshDrafts([]);
+      setMeshGenerationDiagnostic(null);
     }
   }, [activeTool]);
 
@@ -483,6 +748,7 @@ export function EditorSessionProvider({
 
   useEffect(() => {
     setMeshDrafts((current) => filterMeshDraftsForSelection(current, selection));
+    setMeshGenerationDiagnostic(null);
   }, [selection]);
 
   const resolvePsdImportDestination = useCallback(() => {
@@ -496,7 +762,15 @@ export function EditorSessionProvider({
 
   const clearTransientCommitState = useCallback(() => {
     setMeshDrafts([]);
+    setMeshGenerationDiagnostic(null);
     setRigDraft(null);
+    setDynamicsToolPreview(createInitialDynamicsToolPreviewState());
+    setVariantPreviewActiveSelectionsState(
+      reconcileVariantPreviewActiveSelections(
+        editorStateRef.current.session.graph.variantGroups ?? [],
+        undefined
+      )
+    );
     setRigOperationFeedback(null);
     setParameterOperationFeedback(null);
   }, []);
@@ -513,8 +787,20 @@ export function EditorSessionProvider({
     setParameterValues({});
     setCollapsedPartIds(createInitialCollapsedPartIds(input.loadedSession));
     setEditorHiddenPartIds(new Set(input.editorHiddenPartIds));
+    setVariantPreviewActiveSelectionsState(
+      reconcileVariantPreviewActiveSelections(input.loadedSession.graph.variantGroups ?? [], undefined)
+    );
     setPsdImportOpen(false);
   }, [clearTransientCommitState]);
+
+  const requireOpenWorkspace = useCallback((action: string): boolean => {
+    if (hasOpenWorkspace) {
+      return true;
+    }
+
+    setWorkspaceStorage(createWorkspaceBlockedStorageState(action));
+    return false;
+  }, [hasOpenWorkspace]);
 
   const runCommandWithHistory = useCallback(
     <Result extends EditorSessionCommandResult,>(
@@ -522,6 +808,13 @@ export function EditorSessionProvider({
       label?: string
     ): Result => {
       const currentState = editorStateRef.current;
+      if (!requireOpenWorkspace(label ?? "editing")) {
+        return createWorkspaceRequiredCommandResult(
+          currentState.session,
+          label ?? "editing"
+        ) as Result;
+      }
+
       const baseInput = {
         currentSession: currentState.session,
         history: currentState.history,
@@ -546,7 +839,7 @@ export function EditorSessionProvider({
 
       return outcome.result;
     },
-    [setEditorSessionState]
+    [requireOpenWorkspace, setEditorSessionState]
   );
 
   const undo = useCallback(() => {
@@ -579,91 +872,260 @@ export function EditorSessionProvider({
     clearTransientCommitState();
   }, [clearTransientCommitState, setEditorSessionState]);
 
-  const saveProject = useCallback(async () => {
+  const applyWorkspaceStorageError = useCallback((error: unknown, workspaceName?: string | null) => {
+    const workspaceError = toEditorWorkspaceStorageError(error);
+    setWorkspaceStorage(
+      createWorkspaceStorageErrorState({
+        status: classifyWorkspaceStorageErrorStatus(workspaceError.code),
+        workspaceName: workspaceName ?? null,
+        code: workspaceError.code,
+        message: workspaceError.message,
+        ...(workspaceError.path === undefined ? {} : { path: workspaceError.path })
+      })
+    );
+  }, []);
+
+  const persistSessionToWorkspace = useCallback(
+    async (input: {
+      readonly target: EditorWorkspaceTarget | null;
+      readonly sessionToSave: AuthoringSession;
+      readonly history: EditorSessionHistoryState;
+      readonly baseDocument: unknown;
+      readonly message?: string;
+    }) => {
+      if (input.target === null) {
+        setWorkspaceStorage(createWorkspaceBlockedStorageState("saving"));
+        return null;
+      }
+
+      setWorkspaceStorage(createSavingWorkspaceStorageState(input.target.workspaceName));
+
+      try {
+        const result = await saveEditorWorkspace({
+          target: input.target,
+          session: input.sessionToSave,
+          baseDocument: input.baseDocument,
+          editorHiddenPartIds
+        });
+
+        if (editorStateRef.current.session === input.sessionToSave) {
+          const savedSession = structuredClone(input.sessionToSave);
+          savedSession.dirty = false;
+          setEditorSessionState({
+            session: savedSession,
+            history: input.history,
+            baseDocument: result.packageDocument
+          });
+          setWorkspaceStorage(
+            createSavedWorkspaceStorageState({
+              workspaceName: result.workspaceName,
+              binaryWriteCount: result.binaryWriteCount,
+              binarySkipCount: result.binarySkipCount,
+              ...(input.message === undefined ? {} : { message: input.message }),
+              completedAt: result.savedAt
+            })
+          );
+        }
+
+        return result;
+      } catch (error) {
+        applyWorkspaceStorageError(error, input.target.workspaceName);
+        return null;
+      }
+    },
+    [applyWorkspaceStorageError, editorHiddenPartIds, setEditorSessionState]
+  );
+
+  const prepareDirtyWorkspaceReplacement = useCallback(
+    async (reason: DirtyWorkspaceReplacementReason): Promise<boolean> => {
+      const currentState = editorStateRef.current;
+      if (!hasOpenWorkspace || !currentState.session.dirty) {
+        return true;
+      }
+
+      const message = reason === "open-workspace"
+        ? "Save the current workspace before opening another workspace?"
+        : "Save the current workspace before importing Portable JSON?";
+      const decision = await confirmDirtyWorkspaceReplacement({
+        reason,
+        workspaceName: workspaceTarget?.workspaceName ?? null,
+        message
+      });
+
+      if (decision === "cancel") {
+        return false;
+      }
+
+      const saved = await persistSessionToWorkspace({
+        target: workspaceTarget,
+        sessionToSave: currentState.session,
+        history: currentState.history,
+        baseDocument: currentState.baseDocument,
+        message: "Saved current workspace before replacing it."
+      });
+
+      return saved !== null;
+    },
+    [
+      confirmDirtyWorkspaceReplacement,
+      hasOpenWorkspace,
+      persistSessionToWorkspace,
+      workspaceTarget
+    ]
+  );
+
+  const createWorkspace = useCallback(async () => {
     const currentState = editorStateRef.current;
-    setProjectStorage(createSavingProjectStorageState());
+    setWorkspaceStorage(createCreatingWorkspaceStorageState());
 
     try {
-      const result = await exportEditorProjectBundle({
+      const result = await createEditorWorkspace({
         session: currentState.session,
         baseDocument: currentState.baseDocument,
-        editorHiddenPartIds
+        editorHiddenPartIds,
+        ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
+        ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
       });
-      triggerPortableProjectDownload({
-        bundleJson: result.bundleJson,
-        fileName: result.fileName
+      setWorkspaceTarget(result.target);
+      setWorkspaceOpenOverride(true);
+      setActiveEntry("workspace");
+      setEditorSessionState({
+        session: result.session,
+        history: currentState.history,
+        baseDocument: result.packageDocument
       });
-
-      if (editorStateRef.current.session === currentState.session) {
-        const savedSession = structuredClone(currentState.session);
-        savedSession.dirty = false;
-        setEditorSessionState({
-          session: savedSession,
-          history: currentState.history,
-          baseDocument: result.packageDocument
-        });
-      }
-
-      setProjectStorage(createSavedProjectStorageState(result));
-    } catch (error) {
-      setProjectStorage(
-        createProjectStorageErrorState(toEditorProjectStorageError(error, "save"), "save")
+      resetEditorLocalStateAfterProjectLoad({
+        loadedSession: result.session,
+        editorHiddenPartIds: result.editorHiddenPartIds
+      });
+      setWorkspaceStorage(
+        createSavedWorkspaceStorageState({
+          workspaceName: result.target.workspaceName,
+          binaryWriteCount: result.binaryFileCount,
+          binarySkipCount: 0,
+          message: `Created workspace ${result.target.workspaceName}.`,
+          completedAt: result.openedAt
+        })
       );
+    } catch (error) {
+      applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
     }
-  }, [editorHiddenPartIds, setEditorSessionState]);
+  }, [
+    applyWorkspaceStorageError,
+    editorHiddenPartIds,
+    resetEditorLocalStateAfterProjectLoad,
+    setActiveEntry,
+    setEditorSessionState,
+    workspaceDirectoryPicker,
+    workspaceGlobalObject,
+    workspaceTarget
+  ]);
 
-  const openProjectFromPortableBundle = useCallback(
-    async (bundleText: string, options: { readonly fileName?: string } = {}) => {
-      setProjectStorage(createLoadingProjectStorageState(options.fileName));
+  const openWorkspace = useCallback(async () => {
+    if (!(await prepareDirtyWorkspaceReplacement("open-workspace"))) {
+      return;
+    }
 
-      try {
-        const result = await importEditorProjectBundle({ bundleText });
-        setEditorSessionState({
-          session: result.session,
-          history: createEmptyEditorSessionHistory(),
-          baseDocument: result.packageDocument
-        });
-        resetEditorLocalStateAfterProjectLoad({
-          loadedSession: result.session,
-          editorHiddenPartIds: result.editorHiddenPartIds
-        });
-        setProjectStorage(createLoadedProjectStorageState(result, options.fileName));
-      } catch (error) {
-        setProjectStorage(
-          createProjectStorageErrorState(
-            toEditorProjectStorageError(error, "open"),
-            "open",
-            options.fileName
-          )
-        );
-      }
-    },
-    [resetEditorLocalStateAfterProjectLoad, setEditorSessionState]
-  );
+    setWorkspaceStorage(createOpeningWorkspaceStorageState());
 
-  const openProjectFile = useCallback(
-    async (file: File) => {
-      setProjectStorage(createLoadingProjectStorageState(file.name));
+    try {
+      const result = await openEditorWorkspace({
+        ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
+        ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
+      });
+      setWorkspaceTarget(result.target);
+      setWorkspaceOpenOverride(true);
+      setActiveEntry("workspace");
+      setEditorSessionState({
+        session: result.session,
+        history: createEmptyEditorSessionHistory(),
+        baseDocument: result.packageDocument
+      });
+      resetEditorLocalStateAfterProjectLoad({
+        loadedSession: result.session,
+        editorHiddenPartIds: result.editorHiddenPartIds
+      });
+      setWorkspaceStorage(
+        createSavedWorkspaceStorageState({
+          workspaceName: result.target.workspaceName,
+          binaryWriteCount: 0,
+          binarySkipCount: result.binaryFileCount,
+          message: `Opened workspace ${result.target.workspaceName}.`,
+          completedAt: result.openedAt
+        })
+      );
+    } catch (error) {
+      applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
+    }
+  }, [
+    applyWorkspaceStorageError,
+    prepareDirtyWorkspaceReplacement,
+    resetEditorLocalStateAfterProjectLoad,
+    setActiveEntry,
+    setEditorSessionState,
+    workspaceDirectoryPicker,
+    workspaceGlobalObject,
+    workspaceTarget
+  ]);
 
-      try {
-        await openProjectFromPortableBundle(await readPortableProjectFileText(file), {
-          fileName: file.name
-        });
-      } catch (error) {
-        setProjectStorage(
-          createProjectStorageErrorState(
-            toEditorProjectStorageError(error, "open"),
-            "open",
-            file.name
-          )
-        );
-      }
-    },
-    [openProjectFromPortableBundle]
-  );
+  const saveProject = useCallback(async () => {
+    const currentState = editorStateRef.current;
+    await persistSessionToWorkspace({
+      target: workspaceTarget,
+      sessionToSave: currentState.session,
+      history: currentState.history,
+      baseDocument: currentState.baseDocument
+    });
+  }, [persistSessionToWorkspace, workspaceTarget]);
+
+  const saveWorkspaceAs = useCallback(async () => {
+    const currentState = editorStateRef.current;
+    setWorkspaceStorage(createCreatingWorkspaceStorageState());
+
+    try {
+      const result = await saveEditorWorkspaceAs({
+        session: currentState.session,
+        baseDocument: currentState.baseDocument,
+        editorHiddenPartIds,
+        ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
+        ...(workspaceGlobalObject === undefined ? {} : { globalObject: workspaceGlobalObject })
+      });
+      setWorkspaceTarget(result.target);
+      setWorkspaceOpenOverride(true);
+      setActiveEntry("workspace");
+      setEditorSessionState({
+        session: result.session,
+        history: currentState.history,
+        baseDocument: result.packageDocument
+      });
+      setWorkspaceStorage(
+        createSavedWorkspaceStorageState({
+          workspaceName: result.target.workspaceName,
+          binaryWriteCount: result.binaryFileCount,
+          binarySkipCount: 0,
+          message: `Saved as workspace ${result.target.workspaceName}.`,
+          completedAt: result.openedAt
+        })
+      );
+    } catch (error) {
+      applyWorkspaceStorageError(error, workspaceTarget?.workspaceName ?? null);
+    }
+  }, [
+    applyWorkspaceStorageError,
+    editorHiddenPartIds,
+    setActiveEntry,
+    setEditorSessionState,
+    workspaceDirectoryPicker,
+    workspaceGlobalObject,
+    workspaceTarget
+  ]);
 
   const commitPsdImport = useCallback(
     (plan: PsdImportPlan) => {
+      if (!requireOpenWorkspace("importing PSD")) {
+        return;
+      }
+
       const currentState = editorStateRef.current;
       const result = commitPsdImportPlan({ session: currentState.session, plan });
       const nextHistory = recordEditorSessionCommit(currentState.history, {
@@ -687,8 +1149,78 @@ export function EditorSessionProvider({
       setSelection({ kind: "part", id: plan.importRootPartId });
       setSelectionAnchorDrawableId(null);
       setPsdImportOpen(false);
+      void persistSessionToWorkspace({
+        target: workspaceTarget,
+        sessionToSave: result.session,
+        history: nextHistory,
+        baseDocument: currentState.baseDocument,
+        message: "Saved PSD import to workspace."
+      });
     },
-    [setEditorSessionState]
+    [persistSessionToWorkspace, requireOpenWorkspace, setEditorSessionState, workspaceTarget]
+  );
+
+  const applyTextureAtlasPreview = useCallback(
+    async (preview: TextureAtlasPreview): Promise<TextureAtlasEditorSessionCommandResult> => {
+      if (!requireOpenWorkspace("applying Texture Atlas")) {
+        return {
+          committed: false,
+          session: editorStateRef.current.session,
+          warnings: [createWorkspaceRequiredDiagnostic("applying Texture Atlas")]
+        };
+      }
+
+      const currentState = editorStateRef.current;
+      const result = await commitTextureAtlasPreview(currentState.session, preview, {
+        editorHiddenPartIds
+      });
+
+      if (!result.committed) {
+        if (result.warnings.length > 0) {
+          console.warn("Texture Atlas Apply was rejected.", result.warnings);
+        }
+        return result;
+      }
+
+      if (editorStateRef.current.session !== currentState.session) {
+        const staleResult: TextureAtlasEditorSessionCommandResult = {
+          committed: false,
+          session: editorStateRef.current.session,
+          warnings: [createTextureAtlasSessionChangedWarning()]
+        };
+        console.warn("Texture Atlas Apply was rejected.", staleResult.warnings);
+        return staleResult;
+      }
+
+      const nextHistory = recordEditorSessionCommit(currentState.history, {
+        before: currentState.session,
+        after: result.session,
+        label: "Apply Texture Atlas"
+      });
+      setEditorSessionState({
+        session: result.session,
+        history: nextHistory,
+        baseDocument: currentState.baseDocument
+      });
+      clearTransientCommitState();
+      await persistSessionToWorkspace({
+        target: workspaceTarget,
+        sessionToSave: result.session,
+        history: nextHistory,
+        baseDocument: currentState.baseDocument,
+        message: "Saved Texture Atlas artifact to workspace."
+      });
+
+      return result;
+    },
+    [
+      clearTransientCommitState,
+      editorHiddenPartIds,
+      persistSessionToWorkspace,
+      requireOpenWorkspace,
+      setEditorSessionState,
+      workspaceTarget
+    ]
   );
 
   const applyCommand = useCallback(
@@ -732,6 +1264,10 @@ export function EditorSessionProvider({
   );
 
   const editKeyformKey = useCallback((payload: EditKeyformKeyPayloadDto) => {
+    if (activeTool === "dynamics") {
+      return;
+    }
+
     const result = runCommandWithHistory(
       (sessionForCommand) => commitEditKeyformKey(sessionForCommand, payload),
       "Edit keyform"
@@ -747,7 +1283,7 @@ export function EditorSessionProvider({
     } else {
       setParameterOperationFeedback("No keyform change was applied.");
     }
-  }, [runCommandWithHistory]);
+  }, [activeTool, runCommandWithHistory]);
 
   const applyParameterDefinitionCommand = useCallback(
     (
@@ -796,12 +1332,223 @@ export function EditorSessionProvider({
     [applyParameterDefinitionCommand]
   );
 
+  const createDynamicsGroup = useCallback(
+    (payload: CreateDynamicsGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitCreateDynamicsGroup(currentSession, payload),
+        "Create Dynamics Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const updateDynamicsGroup = useCallback(
+    (payload: UpdateDynamicsGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitUpdateDynamicsGroup(currentSession, payload),
+        "Update Dynamics Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const deleteDynamicsGroup = useCallback(
+    (payload: DeleteDynamicsGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitDeleteDynamicsGroup(currentSession, payload),
+        "Delete Dynamics Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const createVariantGroup = useCallback(
+    (payload: CreateVariantGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitCreateVariantGroup(currentSession, payload),
+        "Create Variant Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const updateVariantGroup = useCallback(
+    (payload: UpdateVariantGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitUpdateVariantGroup(currentSession, payload),
+        "Update Variant Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const deleteVariantGroup = useCallback(
+    (payload: DeleteVariantGroupPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitDeleteVariantGroup(currentSession, payload),
+        "Delete Variant Group"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const createVariant = useCallback(
+    (payload: CreateVariantPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitCreateVariant(currentSession, payload),
+        "Create Variant"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const updateVariant = useCallback(
+    (payload: UpdateVariantPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitUpdateVariant(currentSession, payload),
+        "Update Variant"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const deleteVariant = useCallback(
+    (payload: DeleteVariantPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitDeleteVariant(currentSession, payload),
+        "Delete Variant"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const addVariantTargetDrawable = useCallback(
+    (payload: AddVariantTargetDrawablePayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitAddVariantTargetDrawable(currentSession, payload),
+        "Add Variant target Drawable"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const removeVariantTargetDrawable = useCallback(
+    (payload: RemoveVariantTargetDrawablePayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitRemoveVariantTargetDrawable(currentSession, payload),
+        "Remove Variant target Drawable"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const setVariantMembership = useCallback(
+    (payload: SetVariantMembershipPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitSetVariantMembership(currentSession, payload),
+        "Set Variant membership"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const setVariantDefaultActiveSelection = useCallback(
+    (payload: SetVariantDefaultActiveSelectionPayloadDto) =>
+      runCommandWithHistory(
+        (currentSession) => commitSetVariantDefaultActiveSelection(currentSession, payload),
+        "Set Variant default active selection"
+      ),
+    [runCommandWithHistory]
+  );
+
+  const setVariantPreviewActiveSelection = useCallback(
+    (entry: VariantActiveSelectionEntry) => {
+      setVariantPreviewActiveSelectionsState((current) =>
+        upsertVariantPreviewActiveSelection(
+          editorStateRef.current.session.graph.variantGroups ?? [],
+          current,
+          entry
+        )
+      );
+    },
+    []
+  );
+
+  const resetVariantPreviewActiveSelections = useCallback(() => {
+    setVariantPreviewActiveSelectionsState(
+      reconcileVariantPreviewActiveSelections(
+        editorStateRef.current.session.graph.variantGroups ?? [],
+        undefined
+      )
+    );
+  }, []);
+
+  const setDynamicsToolPreviewGroupId = useCallback(
+    (dynamicsGroupId: DynamicsGroupId | null) => {
+      setDynamicsToolPreview((current) =>
+        selectDynamicsToolPreviewGroup(editorStateRef.current.session, current, dynamicsGroupId)
+      );
+    },
+    []
+  );
+
+  const setDynamicsToolPreviewDriver = useCallback(
+    (dynamicsGroupId: DynamicsGroupId, parameterId: ParameterId, value: number) => {
+      setDynamicsToolPreview((current) =>
+        setDynamicsToolPreviewDriverValue(editorStateRef.current.session, current, {
+          dynamicsGroupId,
+          parameterId,
+          value
+        })
+      );
+    },
+    []
+  );
+
+  const advanceDynamicsToolPreviewSimulation = useCallback(
+    (dynamicsGroupId: DynamicsGroupId, dtMs: number) => {
+      setDynamicsToolPreview((current) =>
+        advanceDynamicsToolPreviewSimulationState(editorStateRef.current.session, current, {
+          dynamicsGroupId,
+          dtMs
+        })
+      );
+    },
+    []
+  );
+
+  const setDynamicsToolPreviewDefinitionOverride = useCallback(
+    (dynamicsGroupId: DynamicsGroupId, definition: DynamicsToolGroup) => {
+      setDynamicsToolPreview((current) =>
+        setDynamicsToolPreviewDefinitionOverrideState(editorStateRef.current.session, current, {
+          dynamicsGroupId,
+          definition
+        })
+      );
+    },
+    []
+  );
+
+  const clearDynamicsToolPreviewDefinitionOverride = useCallback(
+    (dynamicsGroupId: DynamicsGroupId) => {
+      setDynamicsToolPreview((current) =>
+        clearDynamicsToolPreviewDefinitionOverrideState(current, dynamicsGroupId)
+      );
+    },
+    []
+  );
+
+  const resetDynamicsToolPreviewSimulation = useCallback(
+    (dynamicsGroupId?: DynamicsGroupId) => {
+      setDynamicsToolPreview((current) =>
+        resetDynamicsToolPreviewSimulationState(
+          editorStateRef.current.session,
+          current,
+          dynamicsGroupId ?? current.selectedGroupId
+        )
+      );
+    },
+    []
+  );
+
   const setActiveParameterId = useCallback((parameterId: ParameterId) => {
     setActiveParameterIdState(parameterId);
   }, []);
 
   const setActiveParameterValue = useCallback(
     (value: number) => {
+      if (activeTool === "dynamics") {
+        return;
+      }
+
       if (resolvedActiveParameterId === null) {
         return;
       }
@@ -813,15 +1560,32 @@ export function EditorSessionProvider({
         return;
       }
 
-      setParameterValues((current) => ({
-        ...current,
-        [resolvedActiveParameterId]: clampParameterValue(parameter, value)
-      }));
+      const nextValue = clampParameterValue(parameter, value);
+      setParameterValues((current) => {
+        const currentValue = clampParameterValue(
+          parameter,
+          current[resolvedActiveParameterId] ?? parameter.default
+        );
+        if (samePreviewParameterValue(currentValue, nextValue)) {
+          recordLive2dPerformanceCounter("parameterBar.skippedNoOpUpdates");
+          return current;
+        }
+
+        recordLive2dPerformanceCounter("parameterBar.appliedUpdates");
+        return {
+          ...current,
+          [resolvedActiveParameterId]: nextValue
+        };
+      });
     },
-    [resolvedActiveParameterId, session]
+    [activeTool, resolvedActiveParameterId, session]
   );
 
   const resetActiveParameterValue = useCallback(() => {
+    if (activeTool === "dynamics") {
+      return;
+    }
+
     if (resolvedActiveParameterId === null) {
       return;
     }
@@ -833,11 +1597,24 @@ export function EditorSessionProvider({
       return;
     }
 
-    setParameterValues((current) => ({
-      ...current,
-      [resolvedActiveParameterId]: parameter.default
-    }));
-  }, [resolvedActiveParameterId, session]);
+    const nextValue = clampParameterValue(parameter, parameter.default);
+    setParameterValues((current) => {
+      const currentValue = clampParameterValue(
+        parameter,
+        current[resolvedActiveParameterId] ?? parameter.default
+      );
+      if (samePreviewParameterValue(currentValue, nextValue)) {
+        recordLive2dPerformanceCounter("parameterBar.skippedNoOpUpdates");
+        return current;
+      }
+
+      recordLive2dPerformanceCounter("parameterBar.appliedUpdates");
+      return {
+        ...current,
+        [resolvedActiveParameterId]: nextValue
+      };
+    });
+  }, [activeTool, resolvedActiveParameterId, session]);
 
   const openParameterManager = useCallback(() => {
     setActiveEntry("parameters");
@@ -955,21 +1732,25 @@ export function EditorSessionProvider({
 
   const cancelMeshDraft = useCallback(() => {
     setMeshDrafts([]);
+    setMeshGenerationDiagnostic(null);
   }, []);
 
   const previewMeshDraft = useCallback(
     (
       drawableId: DrawableId,
-      presetId: MeshGenerationPresetId
+      presetId: MeshGenerationPresetId,
+      method: GeneratedMeshPreviewCommitMethod = DEFAULT_MESH_GENERATION_METHOD
     ) => {
-      const draft = createMeshToolDraft({
+      const result = createMeshToolDraft({
         commitMode: "single",
         drawableId,
         presetId,
+        method,
         session
       });
 
-      setMeshDrafts(draft === undefined ? [] : [draft]);
+      setMeshDrafts(result.draft === undefined ? [] : [result.draft]);
+      setMeshGenerationDiagnostic(result.diagnostic);
     },
     [session]
   );
@@ -977,23 +1758,28 @@ export function EditorSessionProvider({
   const previewMeshDrafts = useCallback(
     (
       drawableIds: readonly DrawableId[],
-      presetId: MeshGenerationPresetId
+      presetId: MeshGenerationPresetId,
+      method: GeneratedMeshPreviewCommitMethod = DEFAULT_MESH_GENERATION_METHOD
     ) => {
       const eligibleDrawableIds = createMeshDrawableBatchTargets(session, drawableIds)
         .filter((target) => target.eligible)
         .map((target) => target.drawableId);
-      const drafts = eligibleDrawableIds
-        .map((drawableId) =>
-          createMeshToolDraft({
-            commitMode: "batchEligible",
-            drawableId,
-            presetId,
-            session
-          })
-        )
+      const results = eligibleDrawableIds.map((drawableId) =>
+        createMeshToolDraft({
+          commitMode: "batchEligible",
+          drawableId,
+          presetId,
+          method,
+          session
+        })
+      );
+      const drafts = results
+        .map((result) => result.draft)
         .filter(isDefined);
+      const firstDiagnostic = results.find((result) => result.diagnostic !== null)?.diagnostic ?? null;
 
       setMeshDrafts(drafts);
+      setMeshGenerationDiagnostic(firstDiagnostic);
     },
     [session]
   );
@@ -1044,12 +1830,21 @@ export function EditorSessionProvider({
 
         return committedDrawableIds.length === 0
           ? { committed: false, session: sessionForCommand, diagnostics }
-          : { committed: true, session: nextSession, diagnostics };
+          : (() => {
+              const refitResult = commitMeshApplyAutoRefit(nextSession, committedDrawableIds);
+              diagnostics.push(...refitResult.diagnostics);
+              return {
+                committed: true,
+                session: refitResult.session,
+                diagnostics
+              };
+            })();
       },
       draftsToApply.length === 1 ? "Apply mesh" : "Apply meshes"
     );
     if (result.committed) {
       setMeshDrafts([]);
+      setMeshGenerationDiagnostic(null);
       if (draftsToApply.length === 1 && draftsToApply[0]?.commitMode === "single") {
         const committedDrawableId = committedDrawableIds[0]!;
         setSelection({ kind: "drawable", id: committedDrawableId });
@@ -1374,9 +2169,30 @@ export function EditorSessionProvider({
     [applyRigCommand]
   );
 
+  const deleteRigControl = useCallback(
+    (rigControlId: RigControlId) => {
+      applyRigCommand(
+        (currentSession) => commitDeleteRigControl(currentSession, { rigControlId }),
+        () => {
+          setSelection(null);
+          setSelectionAnchorDrawableId(null);
+          setSelectionAnchorDeformerTreeTarget(null);
+          setRigDraft(null);
+          setRigOperationFeedback(null);
+        },
+        "Delete Deformer"
+      );
+    },
+    [applyRigCommand]
+  );
+
   const commitGestureCommand = useCallback(
     (gesture: EditorSessionGestureCommit<unknown>) => {
       const currentState = editorStateRef.current;
+      if (!requireOpenWorkspace("editing")) {
+        return;
+      }
+
       const outcome = commitEditorSessionGestureWithHistory({
         gesture,
         currentSession: currentState.session,
@@ -1396,7 +2212,7 @@ export function EditorSessionProvider({
         console.warn("Gesture command was rejected.", result.diagnostics);
       }
     },
-    [setEditorSessionState]
+    [requireOpenWorkspace, setEditorSessionState]
   );
 
   const commitGestureController = useCallback(
@@ -1407,6 +2223,10 @@ export function EditorSessionProvider({
       controller: EditorSessionGestureCommitController<Preview, Result>
     ): Result | null => {
       const currentState = editorStateRef.current;
+      if (!requireOpenWorkspace("editing")) {
+        return createWorkspaceRequiredCommandResult(currentState.session, "editing") as Result;
+      }
+
       const outcome = controller.commitOnce({
         currentSession: currentState.session,
         history: currentState.history
@@ -1436,8 +2256,16 @@ export function EditorSessionProvider({
 
       return result;
     },
-    [setEditorSessionState]
+    [requireOpenWorkspace, setEditorSessionState]
   );
+
+  const openPsdImport = useCallback(() => {
+    if (!requireOpenWorkspace("importing PSD")) {
+      return;
+    }
+
+    setPsdImportOpen(true);
+  }, [requireOpenWorkspace]);
 
   const value = useMemo<EditorSessionContextValue>(
     () => ({
@@ -1447,6 +2275,7 @@ export function EditorSessionProvider({
       selection,
       meshDraft,
       meshDrafts,
+      meshGenerationDiagnostic,
       rigDraft,
       structureRows,
       deformerRows,
@@ -1455,25 +2284,36 @@ export function EditorSessionProvider({
       parameterBar,
       activeParameterId: resolvedActiveParameterId,
       parameterValues,
+      dynamicsToolPreview,
+      dynamicsToolPreviewEvaluation,
       rigOperationFeedback,
       parameterOperationFeedback,
-      projectStorage,
-      projectIdentityLabel,
-      projectSaveStatusLabel,
+      variantPreviewActiveSelections,
+      workspaceStorage,
+      workspaceIdentityLabel,
+      workspaceSaveStatusLabel,
+      hasOpenWorkspace,
       psdImportOpen,
       canUndo: canUndoEditorSessionHistory(history),
       canRedo: canRedoEditorSessionHistory(history),
       undo,
       redo,
+      createWorkspace,
+      openWorkspace,
+      saveWorkspaceAs,
       saveProject,
-      openProjectFile,
-      openProjectFromPortableBundle,
-      openPsdImport: () => setPsdImportOpen(true),
+      openPsdImport,
       closePsdImport: () => setPsdImportOpen(false),
       openParameterManager,
       setActiveParameterId,
       setActiveParameterValue,
       resetActiveParameterValue,
+      setDynamicsToolPreviewGroupId,
+      setDynamicsToolPreviewDriverValue: setDynamicsToolPreviewDriver,
+      advanceDynamicsToolPreviewSimulation,
+      setDynamicsToolPreviewDefinitionOverride,
+      clearDynamicsToolPreviewDefinitionOverride,
+      resetDynamicsToolPreviewSimulation,
       selectPart,
       selectDrawable,
       selectRigControl,
@@ -1530,23 +2370,44 @@ export function EditorSessionProvider({
       moveDrawableRigControlBinding,
       reparentRigControl,
       updateRigControl,
+      deleteRigControl,
       editKeyformKey,
+      createDynamicsGroup,
+      updateDynamicsGroup,
+      deleteDynamicsGroup,
+      createVariantGroup,
+      updateVariantGroup,
+      deleteVariantGroup,
+      createVariant,
+      updateVariant,
+      deleteVariant,
+      addVariantTargetDrawable,
+      removeVariantTargetDrawable,
+      setVariantMembership,
+      setVariantDefaultActiveSelection,
+      setVariantPreviewActiveSelection,
+      resetVariantPreviewActiveSelections,
       commitGestureCommand,
       commitGestureController,
       createCustomParameter,
       updateCustomParameter,
       deleteCustomParameter,
       resolvePsdImportDestination,
-      commitPsdImport
+      commitPsdImport,
+      applyTextureAtlasPreview
     }),
     [
       applyCommand,
+      applyTextureAtlasPreview,
+      advanceDynamicsToolPreviewSimulation,
+      addVariantTargetDrawable,
       collapsedPartIds,
       applyMeshDraft,
       cancelMeshDraft,
       commitPsdImport,
       cancelRigDraft,
       bindDrawableToRigControl,
+      clearDynamicsToolPreviewDefinitionOverride,
       createParentRotationDeformerForRigControl,
       createParentWarpDeformerForRigControl,
       createRotationDeformerForDrawable,
@@ -1555,11 +2416,20 @@ export function EditorSessionProvider({
       createWarpDeformerForDrawables,
       createWarpDeformerForDeformerTreeSelection,
       createCustomParameter,
+      createDynamicsGroup,
+      createVariant,
+      createVariantGroup,
       commitGestureCommand,
       commitGestureController,
       deformerRows,
       deleteCustomParameter,
+      deleteDynamicsGroup,
+      deleteRigControl,
+      deleteVariant,
+      deleteVariantGroup,
       drawablePoolItems,
+      dynamicsToolPreview,
+      dynamicsToolPreviewEvaluation,
       editKeyformKey,
       editorHiddenPartIds,
       fitRigDraft,
@@ -1567,23 +2437,29 @@ export function EditorSessionProvider({
       inspector,
       meshDraft,
       meshDrafts,
+      meshGenerationDiagnostic,
       moveDrawableRigControlBinding,
-      openProjectFile,
-      openProjectFromPortableBundle,
       openParameterManager,
       parameterBar,
       parameterOperationFeedback,
       parameterValues,
-      projectIdentityLabel,
-      projectSaveStatusLabel,
-      projectStorage,
+      workspaceStorage,
+      workspaceIdentityLabel,
+      workspaceSaveStatusLabel,
+      hasOpenWorkspace,
       psdImportOpen,
       previewMeshDraft,
       previewMeshDrafts,
       applyRigDraft,
+      createWorkspace,
+      openWorkspace,
+      saveWorkspaceAs,
+      openPsdImport,
       redo,
       reparentRigControl,
       resetActiveParameterValue,
+      resetDynamicsToolPreviewSimulation,
+      resetVariantPreviewActiveSelections,
       resetRigDraft,
       resolvePsdImportDestination,
       rigOperationFeedback,
@@ -1596,8 +2472,14 @@ export function EditorSessionProvider({
       selectRigControl,
       selectDeformerTreeTarget,
       session,
+      setVariantDefaultActiveSelection,
+      setVariantMembership,
+      setVariantPreviewActiveSelection,
       setActiveParameterId,
       setActiveParameterValue,
+      setDynamicsToolPreviewDefinitionOverride,
+      setDynamicsToolPreviewDriver,
+      setDynamicsToolPreviewGroupId,
       startWarpDeformerDraftForDrawable,
       structureRows,
       moveStructureChild,
@@ -1605,8 +2487,13 @@ export function EditorSessionProvider({
       togglePartEditorVisibility,
       undo,
       updateCustomParameter,
+      updateDynamicsGroup,
+      updateVariant,
+      updateVariantGroup,
       updateRigControl,
-      updateRigDraft
+      updateRigDraft,
+      removeVariantTargetDrawable,
+      variantPreviewActiveSelections
     ]
   );
 
@@ -1624,48 +2511,77 @@ export function useEditorSession() {
   return context;
 }
 
-function createMeshToolDraft(input: {
+interface MeshToolDraftResult {
+  readonly draft?: MeshToolDraft;
+  readonly diagnostic: MeshToolGenerationDiagnostic | null;
+}
+
+export function createMeshToolDraft(input: {
   readonly session: AuthoringSession;
   readonly drawableId: DrawableId;
   readonly presetId: MeshGenerationPresetId;
+  readonly method: GeneratedMeshPreviewCommitMethod;
   readonly commitMode: MeshToolDraft["commitMode"];
-}): MeshToolDraft | undefined {
+}): MeshToolDraftResult {
   const preset = getMeshGenerationPreset(input.presetId);
+  const drawable = input.session.graph.drawables.find(
+    (candidate) => candidate.drawableId === input.drawableId
+  );
+  const existingMesh =
+    drawable === undefined
+      ? undefined
+      : input.session.graph.meshes.find((candidate) => candidate.meshId === drawable.meshId);
   const generated = createGeneratedMeshForDrawable({
     session: input.session,
     drawableId: input.drawableId,
     provenanceId: createMeshPreviewProvenanceId(
       input.drawableId,
       input.presetId,
-      DEFAULT_MESH_GENERATION_METHOD
+      input.method
     ),
-    method: DEFAULT_MESH_GENERATION_METHOD,
+    method: input.method,
     densityHint: preset.densityHint
   });
   logMeshGenerationPreviewDebug({
     session: input.session,
     drawableId: input.drawableId,
     presetId: input.presetId,
-    method: DEFAULT_MESH_GENERATION_METHOD,
+    method: input.method,
     densityHint: preset.densityHint,
     generated
   });
 
   if (generated === undefined) {
-    return undefined;
+    return {
+      diagnostic: {
+        kind: "generationFailed",
+        drawableId: input.drawableId,
+        ...(drawable === undefined ? {} : { drawableName: drawable.displayName }),
+        presetId: input.presetId,
+        densityHint: preset.densityHint,
+        method: input.method,
+        ...(existingMesh === undefined ? {} : { meshBounds: existingMesh.bounds }),
+        vertexCount: 0,
+        triangleCount: 0,
+        failureReason: "createGeneratedMeshForDrawable returned no preview result."
+      }
+    };
   }
 
   return {
-    drawableId: input.drawableId,
-    presetId: input.presetId,
-    commitMode: input.commitMode,
-    method: DEFAULT_MESH_GENERATION_METHOD,
-    mesh: generated.mesh,
-    source: generated.source,
-    ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
-    ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
-    ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
-    ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
+    draft: {
+      drawableId: input.drawableId,
+      presetId: input.presetId,
+      commitMode: input.commitMode,
+      method: input.method,
+      mesh: generated.mesh,
+      source: generated.source,
+      ...(generated.alphaBounds === undefined ? {} : { alphaBounds: generated.alphaBounds }),
+      ...(generated.fallbackReason === undefined ? {} : { fallbackReason: generated.fallbackReason }),
+      ...(generated.fallbackSteps === undefined ? {} : { fallbackSteps: generated.fallbackSteps }),
+      ...(generated.qualityMetrics === undefined ? {} : { qualityMetrics: generated.qualityMetrics })
+    },
+    diagnostic: null
   };
 }
 
@@ -1705,4 +2621,69 @@ function formatCommandFeedback(result: EditorSessionCommandResult): string {
 
 function formatParameterCommandFeedback(result: EditorSessionCommandResult): string {
   return result.diagnostics[0]?.message ?? "Parameter definition operation was rejected.";
+}
+
+function createWorkspaceRequiredCommandResult(
+  session: AuthoringSession,
+  action: string
+): EditorSessionCommandResult {
+  return {
+    committed: false,
+    session,
+    diagnostics: [createWorkspaceRequiredDiagnostic(action)]
+  };
+}
+
+function createWorkspaceRequiredDiagnostic(action: string): DiagnosticDto {
+  return {
+    checkId: "workspace.required" as DiagnosticDto["checkId"],
+    status: "fail",
+    severity: "error",
+    phase: "editor.workspace",
+    target: {
+      kind: "package",
+      id: "current"
+    },
+    message: `Create or open a workspace before ${action}.`,
+    evidence: [],
+    relatedAC: [],
+    relatedScenarios: [],
+    repairCandidateIds: []
+  };
+}
+
+function classifyWorkspaceStorageErrorStatus(
+  code: string
+): NonNullable<Parameters<typeof createWorkspaceStorageErrorState>[0]["status"]> {
+  if (code === "permission-denied") {
+    return "permission-denied";
+  }
+
+  if (code === "permission-lost") {
+    return "permission-lost";
+  }
+
+  if (code === "unsupported") {
+    return "unsupported";
+  }
+
+  return "save-failed";
+}
+
+function confirmDirtyWorkspaceReplacementWithBrowser(
+  request: DirtyWorkspaceReplacementRequest
+): DirtyWorkspaceReplacementDecision {
+  const confirm = globalThis.confirm;
+
+  if (typeof confirm !== "function") {
+    return "cancel";
+  }
+
+  return confirm(`${request.message}\n\nOK saves and continues. Cancel keeps the current workspace.`)
+    ? "save-and-open"
+    : "cancel";
+}
+
+function samePreviewParameterValue(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
 }

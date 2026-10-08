@@ -1,0 +1,114 @@
+<meta charset="utf-8">
+<title>02 AIによるモデリング結果</title>
+<style>
+  /* ── A2 縦(420 × 594mm)。上段右=遠くから足を止める枠なので、絵を主役にして
+     文字は最小に留める。縦の余りは大きい立ち絵の枠が吸って版面を使い切る(flex)。
+     画像は未配置(枠のみ)。素材が入ったら .ph を <img> に差し替える。 */
+  @page { size: 420mm 594mm; margin: 0; }
+
+  :root {
+    --u: 4.2mm;
+    --paper: #fcfdfe;
+    --navy: #05285b;
+    --navy-d: #072c62;
+    --ink: #16233a;
+    --sub: #5b6472;
+    --line: #d8dde6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--paper); color: var(--ink); }
+  body {
+    width: 420mm; height: 594mm; overflow: hidden;
+    padding: calc(var(--u) * 2.2) calc(var(--u) * 2.4);
+    font-family: "Yu Gothic", "Hiragino Sans", sans-serif;
+    font-feature-settings: "palt" 1; line-height: 1.5;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── ヘッダ ─────────────────────────────────────────────── */
+  .head { display: flex; align-items: center; gap: calc(var(--u) * 1.8); }
+  .no {
+    background: var(--navy-d); color: #fff; font-weight: 900;
+    font-size: calc(var(--u) * 3.4); line-height: 1;
+    padding: calc(var(--u) * 0.85) calc(var(--u) * 1.5); border-radius: 1.6mm;
+  }
+  .eyebrow { font-size: calc(var(--u) * 1.8); color: #46505f; letter-spacing: 0.05em; }
+  h1 {
+    font-size: calc(var(--u) * 6.6); font-weight: 900; letter-spacing: -0.035em;
+    line-height: 1.15; margin-top: calc(var(--u) * 1); white-space: nowrap; color: var(--navy);
+  }
+  .sub { font-size: calc(var(--u) * 2.1); color: #2c3648; margin-top: calc(var(--u) * 0.7); }
+
+  /* ── 主役の枠 ───────────────────────────────────────────── */
+  .hero {
+    margin-top: calc(var(--u) * 1.8);
+    flex: 1 1 auto; min-height: 0;
+    border: 0.6mm solid var(--line); border-radius: 3mm; background: #fff;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  /* 立ち絵は 773 × 869px。引き伸ばさず 88dpi 相当(=1m からの視力限界)で止め、
+     枠の中に額装する。これ以上大きくしても輪郭は甘くなるだけで綺麗にならない。 */
+  .hero img { display: block; width: auto; height: auto; max-width: 240mm; max-height: 270mm; }
+
+  /* ── 状態の列 ───────────────────────────────────────────── */
+  .states { display: grid; grid-template-columns: repeat(4, 1fr); column-gap: calc(var(--u) * 1.1); margin-top: calc(var(--u) * 1.2); }
+  .st { display: flex; flex-direction: column; }
+  /* 4 枚は元素材の画角が揃っていない(0.86〜1.14)ため、正方の枠に contain で収める */
+  .st .fr {
+    border: 0.5mm solid var(--line); border-radius: 2mm; background: #fff;
+    aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; overflow: hidden;
+    padding: calc(var(--u) * 0.5);
+  }
+  .st .fr img { display: block; max-width: 100%; max-height: 100%; }
+  .st .cap {
+    text-align: center; font-size: calc(var(--u) * 1.85); font-weight: 800;
+    margin-top: calc(var(--u) * 0.6); color: var(--navy);
+  }
+
+  /* 素材待ちの枠(入ったら消える) */
+  .ph {
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+    text-align: center; color: #aab3c0; font-size: calc(var(--u) * 1.6); line-height: 1.5;
+    background: repeating-linear-gradient(45deg, #fbfcfd 0 5mm, #f5f7fa 5mm 10mm);
+  }
+  .hero .ph { font-size: calc(var(--u) * 2.2); }
+
+  /* ── 帯 ─────────────────────────────────────────────────── */
+  .band {
+    margin-top: calc(var(--u) * 1.4); border: 0.6mm solid var(--navy); border-radius: 2mm;
+    background: #fff; padding: calc(var(--u) * 1.1) calc(var(--u) * 1.6);
+    display: flex; align-items: center; gap: calc(var(--u) * 1.3);
+  }
+  .band .mk {
+    width: calc(var(--u) * 4.6); height: calc(var(--u) * 4.6); flex: none;
+    border-radius: 50%; background: var(--navy); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: calc(var(--u) * 2.2);
+  }
+  .band p { font-size: calc(var(--u) * 2.3); font-weight: 900; line-height: 1.4; color: var(--navy); }
+  .band p small { display: block; font-size: calc(var(--u) * 1.6); font-weight: 500; color: var(--sub); margin-top: calc(var(--u) * 0.3); }
+</style>
+
+<div class="head">
+  <div class="no">02</div>
+  <p class="eyebrow">生成AIなんでも展示会 Vol.6　出展パネル</p>
+</div>
+<h1>AIによるモデリング結果</h1>
+<p class="sub">実際に配信で使用しているモデル。</p>
+
+<div class="hero">
+  <img src="../assets/02_centor.png" alt="AIがモデリングした、配信で使用しているモデルの立ち絵（正面・通常）">
+</div>
+
+<div class="states">
+  <div class="st"><div class="fr"><img src="../assets/02_face-left.png" alt="左を向いた状態"></div><p class="cap">左を向く</p></div>
+  <div class="st"><div class="fr"><img src="../assets/02_face-right.png" alt="右を向いた状態"></div><p class="cap">右を向く</p></div>
+  <div class="st"><div class="fr"><img src="../assets/02-lipsync.png" alt="口を開いて発話している状態"></div><p class="cap">話す</p></div>
+  <div class="st"><div class="fr"><img src="../assets/02_close-eye.png" alt="目を閉じた状態"></div><p class="cap">まばたき</p></div>
+</div>
+
+<div class="band">
+  <div class="mk">◆</div>
+  <p>顔の向き・表情・口パク・まばたきに対応。
+    <small>一枚の絵から、AIがメッシュ・変形構造・物理を与えて動くようにしたもの。</small>
+  </p>
+</div>

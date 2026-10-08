@@ -1,0 +1,160 @@
+[
+  {
+    "file": "dyn-fix1-hair_front_sway_x.json",
+    "operationId": "op_cp16fix1_dyn_hair_front_sway_x",
+    "operationType": "updateDynamicsGroup",
+    "gitMessage": "[cp16-fix1] dynamics dyn_hair_front_sway_x: all inputs positionX (angle retired — statics own the gravity steady state), rootOffset -> (0,0); chain/outputs/damping unchanged",
+    "payload": {
+      "dynamicsGroupId": "dyn_hair_front_sway_x",
+      "inputs": [
+        {
+          "parameterId": "param_face_angle_x",
+          "kind": "positionX",
+          "scale": 0.031
+        },
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": 0.056
+        },
+        {
+          "parameterId": "param_face_angle_z",
+          "kind": "positionX",
+          "scale": 0.018
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.34
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "segmentLengths": [
+          8.6
+        ],
+        "damping": 2.5,
+        "gravityScale": 1
+      }
+    }
+  },
+  {
+    "file": "dyn-fix1-hair_side_sway_x.json",
+    "operationId": "op_cp16fix1_dyn_hair_side_sway_x",
+    "operationType": "updateDynamicsGroup",
+    "gitMessage": "[cp16-fix1] dynamics dyn_hair_side_sway_x: all inputs positionX (angle retired — statics own the gravity steady state), rootOffset -> (0,0); chain/outputs/damping unchanged",
+    "payload": {
+      "dynamicsGroupId": "dyn_hair_side_sway_x",
+      "inputs": [
+        {
+          "parameterId": "param_face_angle_x",
+          "kind": "positionX",
+          "scale": 0.037
+        },
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": 0.067
+        },
+        {
+          "parameterId": "param_face_angle_z",
+          "kind": "positionX",
+          "scale": 0.027
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.36
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "segmentLengths": [
+          16.5
+        ],
+        "damping": 2.5,
+        "gravityScale": 1
+      }
+    }
+  },
+  {
+    "file": "dyn-fix1-hair_back_sway_x.json",
+    "operationId": "op_cp16fix1_dyn_hair_back_sway_x",
+    "operationType": "updateDynamicsGroup",
+    "gitMessage": "[cp16-fix1] dynamics dyn_hair_back_sway_x: all inputs positionX (angle retired — statics own the gravity steady state), rootOffset -> (0,0); chain/outputs/damping unchanged",
+    "payload": {
+      "dynamicsGroupId": "dyn_hair_back_sway_x",
+      "inputs": [
+        {
+          "parameterId": "param_face_angle_x",
+          "kind": "positionX",
+          "scale": -0.006
+        },
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": -0.011
+        },
+        {
+          "parameterId": "param_face_angle_z",
+          "kind": "positionX",
+          "scale": 0.018
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.34
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "segmentLengths": [
+          46.8
+        ],
+        "damping": 2.2,
+        "gravityScale": 1
+      }
+    }
+  },
+  {
+    "file": "dyn-fix1-tie_sway_x.json",
+    "operationId": "op_cp16fix1_dyn_tie_sway_x",
+    "operationType": "updateDynamicsGroup",
+    "gitMessage": "[cp16-fix1] dynamics dyn_tie_sway_x: all inputs positionX (angle retired — statics own the gravity steady state), rootOffset -> (0,0); chain/outputs/damping unchanged",
+    "payload": {
+      "dynamicsGroupId": "dyn_tie_sway_x",
+      "inputs": [
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": 0.055
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.24
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "segmentLengths": [
+          19
+        ],
+        "damping": 3,
+        "gravityScale": 1
+      }
+    }
+  }
+]

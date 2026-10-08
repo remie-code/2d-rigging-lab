@@ -21,7 +21,7 @@
   - Test Adequacy Review: `pass`
 - Domain B removed the visible backend algorithm selector from Mesh Tool.
 - Domain B keeps product-facing presets visible and working.
-- Domain B routes normal Editor mesh preview/apply defaults to `auto-outline-v6d-contour-band-support-rings`.
+- Domain B routes normal Editor mesh preview/apply defaults to `auto-outline-v6d-contour-band-support-rings` at Wave70 closeout; this historical route was superseded by the Wave71 adaptive-contour route.
 - Domain B focused unit, PSD import e2e, typecheck, and source organization checks pass.
 - Domain B independent review lanes pass:
   - Spec Compliance Review: `pass`

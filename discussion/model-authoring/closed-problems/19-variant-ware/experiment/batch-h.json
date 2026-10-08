@@ -1,0 +1,15 @@
+[
+  {
+    "file": "show-endomiback_c7ac.json",
+    "operationId": "op_cp19b_show_endomiback_c7ac",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_c7ac42d3_endomi_back"
+      },
+      "runtimeVisibility": true
+    },
+    "gitMessage": "[cp19b] setRuntimeVisibility endomi_back=true (variant gate keeps it hidden outside Endoministrator)"
+  }
+]

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="560" viewBox="0 0 1440 560" role="img" aria-labelledby="title desc">
+  <title id="title">今回開発したもののシステム境界</title>
+  <desc id="desc">画像素材を入力し、人間向け編集ツールとAI用の編集窓口で共通のモデルを制作する。完成モデルをプレイヤーで動かし、AI会話・行動システムから操作する。出力はOBSからYouTube配信へつながる。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1L9 5L1 9Z" fill="#536a79"/></marker>
+    <style>
+      text { font-family: "Yu Gothic", "YuGothic", "Meiryo", sans-serif; fill: #182a38; text-anchor: middle; }
+      .boundary { fill: #fff; stroke: #247cad; stroke-width: 2.5; }
+      .zone { stroke-width: 1.5; }
+      .box { fill: #fff; stroke: #8ba4b4; stroke-width: 1.8; }
+      .system-title { font-size: 30px; font-weight: 700; fill: #247cad; }
+      .zone-title { font-size: 28px; font-weight: 700; }
+      .component { font-size: 25px; font-weight: 700; }
+      .external { font-size: 24px; font-weight: 700; }
+      .connection-label { font-size: 22px; font-weight: 600; fill: #536a79; paint-order: stroke; stroke: white; stroke-width: 9px; stroke-linejoin: round; }
+      .link { fill: none; stroke: #536a79; stroke-width: 2.5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <!-- Geometry: two 432px zones; upper nodes share y=160..260;
+       model/player centers and all external endpoints share y=420. -->
+  <rect class="boundary" x="160" y="24" width="960" height="500" rx="10"/>
+  <text class="system-title" x="640" y="76">自作システム</text>
+  <rect class="zone" x="184" y="104" width="432" height="396" rx="8" fill="#f1f7fb" stroke="#c1d7e5"/>
+  <rect class="zone" x="664" y="104" width="432" height="396" rx="8" fill="#f1f8f7" stroke="#c0d9d5"/>
+  <text class="zone-title" x="400" y="142">モデル制作</text>
+  <text class="zone-title" x="880" y="142">会話・実行</text>
+
+  <rect class="box" x="204" y="176" width="184" height="108" rx="5"/>
+  <text class="component" x="296" y="220"><tspan x="296">2Dモデル</tspan><tspan x="296" dy="34">編集ツール</tspan></text>
+  <rect class="box" x="412" y="176" width="184" height="108" rx="5"/>
+  <text class="component" x="504" y="210"><tspan x="504">AI用の</tspan><tspan x="504" dy="29">モデル編集</tspan><tspan x="504" dy="29">窓口</tspan></text>
+  <rect class="box" x="280" y="368" width="240" height="104" rx="5"/>
+  <text class="component" x="400" y="429">モデル</text>
+  <path class="link" d="M296 284V368"/>
+  <path class="link" d="M504 284V368"/>
+
+  <rect class="box" x="708" y="176" width="344" height="108" rx="5"/>
+  <text class="component" x="880" y="220"><tspan x="880">AI会話・行動</tspan><tspan x="880" dy="34">システム</tspan></text>
+  <rect class="box" x="708" y="368" width="344" height="104" rx="5"/>
+  <text class="component" x="880" y="429">2Dモデルプレイヤー</text>
+  <path class="link" d="M880 284V368"/>
+  <text class="connection-label" x="970" y="334">モデル操作</text>
+
+  <path class="link" d="M520 420H708"/>
+  <text class="connection-label" x="614" y="403">完成モデル</text>
+  <path class="link" d="M120 420H280"/>
+  <path class="link" d="M1052 420H1160"/>
+  <path class="link" d="M1272 420H1320"/>
+
+  <!-- Three external symbols have a shared icon area and label baseline. -->
+  <g transform="translate(28 370)" fill="none" stroke="#536a79" stroke-width="3" stroke-linejoin="round">
+    <path d="M8 44V4H58"/>
+    <rect x="16" y="12" width="52" height="42" rx="3" fill="#fff"/>
+    <circle cx="31" cy="25" r="4" fill="#536a79" stroke="none"/>
+    <path d="M23 47L37 33L45 40L54 30L63 47Z" fill="#536a79" stroke="none"/>
+  </g>
+  <text class="external" x="64" y="468">画像素材</text>
+  <image href="obs-generated.png" x="1184" y="366" width="64" height="64"/>
+  <text class="external" x="1216" y="468">OBS</text>
+  <image href="youtube-generated-v2.png" x="1344" y="362" width="72" height="72"/>
+  <text class="external" x="1380" y="468" style="font-size:20px">YouTube配信</text>
+</svg>

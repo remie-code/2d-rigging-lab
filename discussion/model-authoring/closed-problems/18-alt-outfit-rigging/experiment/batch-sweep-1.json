@@ -1,0 +1,93 @@
+[
+ {
+  "file": "sweep-s1-hide-main-topwear.json",
+  "operationId": "op_cp18_sweep_s1_hide_main_topwear",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_26f93e8b_topwear"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s1: temp hide main-topwear"
+ },
+ {
+  "file": "sweep-s1-hide-main-handwear_l.json",
+  "operationId": "op_cp18_sweep_s1_hide_main_handwear_l",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_26f93ec9_handwear-l"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s1: temp hide main-handwear_l"
+ },
+ {
+  "file": "sweep-s1-hide-main-handwear_r.json",
+  "operationId": "op_cp18_sweep_s1_hide_main_handwear_r",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_26f93ee8_handwear-r"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s1: temp hide main-handwear_r"
+ },
+ {
+  "file": "sweep-s1-hide-main-tie.json",
+  "operationId": "op_cp18_sweep_s1_hide_main_tie",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_ea30e9c4_tie"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s1: temp hide main-tie"
+ },
+ {
+  "file": "sweep-s1-show-rodos-topwear.json",
+  "operationId": "op_cp18_sweep_s1_show_rodos_topwear",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1585_topwear"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s1: temp show rodos-topwear"
+ },
+ {
+  "file": "sweep-s1-show-rodos-handwear_r.json",
+  "operationId": "op_cp18_sweep_s1_show_rodos_handwear_r",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1647_handwear-r"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s1: temp show rodos-handwear_r"
+ },
+ {
+  "file": "sweep-s1-show-rodos-handwear_l.json",
+  "operationId": "op_cp18_sweep_s1_show_rodos_handwear_l",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f1666_handwear-l"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s1: temp show rodos-handwear_l"
+ }
+]

@@ -1,0 +1,3055 @@
+{
+  "schemaVersion": "authoring-host-command-response-v1",
+  "outcome": "success",
+  "command": "validatePackage",
+  "commandId": "cmd_validate-strict_1783206039334",
+  "aiCommandStatus": "ok",
+  "aiCommandResponse": {
+    "schemaVersion": "ai-command-response-v1",
+    "commandId": "cmd_validate-strict_1783206039334",
+    "status": "ok",
+    "diagnostics": [],
+    "evidenceRefs": [],
+    "command": "validatePackage",
+    "payload": {
+      "reportId": "val_editor_workspace_strict",
+      "report": {
+        "schemaVersion": "validation-report-v1",
+        "reportId": "val_editor_workspace_strict",
+        "createdAt": "2026-07-04T23:00:43.080Z",
+        "packageId": "pkg_editor_workspace",
+        "packageRevision": 418,
+        "validatorVersion": "authoring-host-validate-package-v1",
+        "profile": "strict",
+        "relatedScenarios": [],
+        "summary": {
+          "status": "fail",
+          "highestSeverity": "error",
+          "counts": {
+            "info": 0,
+            "warning": 0,
+            "error": 94,
+            "blocking": 0
+          }
+        },
+        "checks": [
+          {
+            "checkId": "mask.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "mask_resolution",
+            "target": {
+              "kind": "maskRelation",
+              "id": "maskrel_mask_r0_1cea4f6f_3a8f7024_eyewhite-l_target_r0_1cea4f6f_3a8f7081_irides-l",
+              "path": "/model/masks/masks/0"
+            },
+            "message": "Mask relation maskrel_mask_r0_1cea4f6f_3a8f7024_eyewhite-l_target_r0_1cea4f6f_3a8f7081_irides-l has no runtime snapshot evidence.",
+            "evidence": [
+              "maskRelationId=maskrel_mask_r0_1cea4f6f_3a8f7024_eyewhite-l_target_r0_1cea4f6f_3a8f7081_irides-l",
+              "enabled=true",
+              "runtimeSnapshot=missing"
+            ],
+            "relatedAC": [
+              "AC-MVP-007",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-MVP-004"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/masks/masks/0",
+            "impact": "Validator cannot prove semantic mask relation runtime behavior without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "mask.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "mask_resolution",
+            "target": {
+              "kind": "maskRelation",
+              "id": "maskrel_mask_r0_1cea4f6f_3a8f7005_eyewhite-r_target_r0_1cea4f6f_3a8f7143_irides-r",
+              "path": "/model/masks/masks/1"
+            },
+            "message": "Mask relation maskrel_mask_r0_1cea4f6f_3a8f7005_eyewhite-r_target_r0_1cea4f6f_3a8f7143_irides-r has no runtime snapshot evidence.",
+            "evidence": [
+              "maskRelationId=maskrel_mask_r0_1cea4f6f_3a8f7005_eyewhite-r_target_r0_1cea4f6f_3a8f7143_irides-r",
+              "enabled=true",
+              "runtimeSnapshot=missing"
+            ],
+            "relatedAC": [
+              "AC-MVP-007",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-MVP-004"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/masks/masks/1",
+            "impact": "Validator cannot prove semantic mask relation runtime behavior without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "mask.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "mask_resolution",
+            "target": {
+              "kind": "maskRelation",
+              "id": "maskrel_mask_r0_1cea4f6f_ee159ce5_eyewhite-l_target_r0_1cea4f6f_ee159d23_irides-l",
+              "path": "/model/masks/masks/2"
+            },
+            "message": "Mask relation maskrel_mask_r0_1cea4f6f_ee159ce5_eyewhite-l_target_r0_1cea4f6f_ee159d23_irides-l has no runtime snapshot evidence.",
+            "evidence": [
+              "maskRelationId=maskrel_mask_r0_1cea4f6f_ee159ce5_eyewhite-l_target_r0_1cea4f6f_ee159d23_irides-l",
+              "enabled=true",
+              "runtimeSnapshot=missing"
+            ],
+            "relatedAC": [
+              "AC-MVP-007",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-MVP-004"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/masks/masks/2",
+            "impact": "Validator cannot prove semantic mask relation runtime behavior without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "mask.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "mask_resolution",
+            "target": {
+              "kind": "maskRelation",
+              "id": "maskrel_mask_r0_1cea4f6f_ee159c84_eyewhite-r_target_r0_1cea4f6f_ee159dc2_irides-r",
+              "path": "/model/masks/masks/3"
+            },
+            "message": "Mask relation maskrel_mask_r0_1cea4f6f_ee159c84_eyewhite-r_target_r0_1cea4f6f_ee159dc2_irides-r has no runtime snapshot evidence.",
+            "evidence": [
+              "maskRelationId=maskrel_mask_r0_1cea4f6f_ee159c84_eyewhite-r_target_r0_1cea4f6f_ee159dc2_irides-r",
+              "enabled=true",
+              "runtimeSnapshot=missing"
+            ],
+            "relatedAC": [
+              "AC-MVP-007",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-MVP-004"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/masks/masks/3",
+            "impact": "Validator cannot prove semantic mask relation runtime behavior without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.warpLatticeUnsupportedProperty",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_semantic",
+            "target": {
+              "kind": "keyformSet",
+              "id": "keyset_rigcontrol_rig_eye_l_open_opacitymultiplier_eye_left_open",
+              "path": "/model/keyforms/keyformSets/4/target/property"
+            },
+            "message": "warpLattice2d keyform keyset_rigcontrol_rig_eye_l_open_opacitymultiplier_eye_left_open targets unsupported property opacityMultiplier.",
+            "evidence": [
+              "keyformSetId=keyset_rigcontrol_rig_eye_l_open_opacitymultiplier_eye_left_open",
+              "rigControlId=rig_eye_l_open",
+              "targetProperty=opacityMultiplier",
+              "supportedProperty=controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-001",
+              "SC-MVP-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/keyforms/keyformSets/4/target/property",
+            "impact": "Wave32 warp lattice keyforms only support project-defined controlPointOffsets patches.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.warpLatticeUnsupportedProperty",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_semantic",
+            "target": {
+              "kind": "keyformSet",
+              "id": "keyset_rigcontrol_rig_eye_r_open_opacitymultiplier_eye_right_open",
+              "path": "/model/keyforms/keyformSets/5/target/property"
+            },
+            "message": "warpLattice2d keyform keyset_rigcontrol_rig_eye_r_open_opacitymultiplier_eye_right_open targets unsupported property opacityMultiplier.",
+            "evidence": [
+              "keyformSetId=keyset_rigcontrol_rig_eye_r_open_opacitymultiplier_eye_right_open",
+              "rigControlId=rig_eye_r_open",
+              "targetProperty=opacityMultiplier",
+              "supportedProperty=controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-001",
+              "SC-MVP-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/keyforms/keyformSets/5/target/property",
+            "impact": "Wave32 warp lattice keyforms only support project-defined controlPointOffsets patches.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.warpLatticeUnsupportedProperty",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_semantic",
+            "target": {
+              "kind": "keyformSet",
+              "id": "keyset_rigcontrol_rig_eye_l_half_opacitymultiplier_eye_left_open",
+              "path": "/model/keyforms/keyformSets/6/target/property"
+            },
+            "message": "warpLattice2d keyform keyset_rigcontrol_rig_eye_l_half_opacitymultiplier_eye_left_open targets unsupported property opacityMultiplier.",
+            "evidence": [
+              "keyformSetId=keyset_rigcontrol_rig_eye_l_half_opacitymultiplier_eye_left_open",
+              "rigControlId=rig_eye_l_half",
+              "targetProperty=opacityMultiplier",
+              "supportedProperty=controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-001",
+              "SC-MVP-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/keyforms/keyformSets/6/target/property",
+            "impact": "Wave32 warp lattice keyforms only support project-defined controlPointOffsets patches.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.warpLatticeUnsupportedProperty",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_semantic",
+            "target": {
+              "kind": "keyformSet",
+              "id": "keyset_rigcontrol_rig_eye_r_half_opacitymultiplier_eye_right_open",
+              "path": "/model/keyforms/keyformSets/7/target/property"
+            },
+            "message": "warpLattice2d keyform keyset_rigcontrol_rig_eye_r_half_opacitymultiplier_eye_right_open targets unsupported property opacityMultiplier.",
+            "evidence": [
+              "keyformSetId=keyset_rigcontrol_rig_eye_r_half_opacitymultiplier_eye_right_open",
+              "rigControlId=rig_eye_r_half",
+              "targetProperty=opacityMultiplier",
+              "supportedProperty=controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-001",
+              "SC-MVP-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/keyforms/keyformSets/7/target/property",
+            "impact": "Wave32 warp lattice keyforms only support project-defined controlPointOffsets patches.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.warpLatticeUnsupportedProperty",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_semantic",
+            "target": {
+              "kind": "keyformSet",
+              "id": "keyset_rigcontrol_rig_eye_l_close_opacitymultiplier_eye_left_open",
+              "path": "/model/keyforms/keyformSets/8/target/property"
+            },
+            "message": "warpLattice2d keyform keyset_rigcontrol_rig_eye_l_close_opacitymultiplier_eye_left_open targets unsupported property opacityMultiplier.",
+            "evidence": [
+              "keyformSetId=keyset_rigcontrol_rig_eye_l_close_opacitymultiplier_eye_left_open",
+              "rigControlId=rig_eye_l_close",
+              "targetProperty=opacityMultiplier",
+              "supportedProperty=controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-001",
+              "SC-MVP-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/keyforms/keyformSets/8/target/property",
+            "impact": "Wave32 warp lattice keyforms only support project-defined controlPointOffsets patches.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.warpLatticeUnsupportedProperty",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_semantic",
+            "target": {
+              "kind": "keyformSet",
+              "id": "keyset_rigcontrol_rig_eye_r_close_opacitymultiplier_eye_right_open",
+              "path": "/model/keyforms/keyformSets/9/target/property"
+            },
+            "message": "warpLattice2d keyform keyset_rigcontrol_rig_eye_r_close_opacitymultiplier_eye_right_open targets unsupported property opacityMultiplier.",
+            "evidence": [
+              "keyformSetId=keyset_rigcontrol_rig_eye_r_close_opacitymultiplier_eye_right_open",
+              "rigControlId=rig_eye_r_close",
+              "targetProperty=opacityMultiplier",
+              "supportedProperty=controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-012",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-001",
+              "SC-MVP-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/keyforms/keyformSets/9/target/property",
+            "impact": "Wave32 warp lattice keyforms only support project-defined controlPointOffsets patches.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_arm_l",
+              "path": "/model/rigControls/rigControls/49"
+            },
+            "message": "Rig control rig_bodyx_arm_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_arm_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_arm_l_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_arm_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/49",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_arm_r",
+              "path": "/model/rigControls/rigControls/48"
+            },
+            "message": "Rig control rig_bodyx_arm_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_arm_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_arm_r_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_arm_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/48",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_back_hair_l",
+              "path": "/model/rigControls/rigControls/66"
+            },
+            "message": "Rig control rig_bodyx_back_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_back_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_back_hair_l_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_back_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/66",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_back_hair_r",
+              "path": "/model/rigControls/rigControls/67"
+            },
+            "message": "Rig control rig_bodyx_back_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_back_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_back_hair_r_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_back_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/67",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_back_top_hair_l",
+              "path": "/model/rigControls/rigControls/68"
+            },
+            "message": "Rig control rig_bodyx_back_top_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_back_top_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_back_top_hair_l_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_back_top_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/68",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_back_top_hair_r",
+              "path": "/model/rigControls/rigControls/69"
+            },
+            "message": "Rig control rig_bodyx_back_top_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_back_top_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_back_top_hair_r_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_back_top_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/69",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_brow_l",
+              "path": "/model/rigControls/rigControls/57"
+            },
+            "message": "Rig control rig_bodyx_brow_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_brow_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_brow_l_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_brow_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/57",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_brow_r",
+              "path": "/model/rigControls/rigControls/58"
+            },
+            "message": "Rig control rig_bodyx_brow_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_brow_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_brow_r_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_brow_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/58",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_ears_l",
+              "path": "/model/rigControls/rigControls/61"
+            },
+            "message": "Rig control rig_bodyx_ears_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_ears_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_ears_l_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_ears_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/61",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_ears_r",
+              "path": "/model/rigControls/rigControls/62"
+            },
+            "message": "Rig control rig_bodyx_ears_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_ears_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_ears_r_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_ears_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/62",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_eye_l",
+              "path": "/model/rigControls/rigControls/55"
+            },
+            "message": "Rig control rig_bodyx_eye_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_eye_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_eye_l_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_eye_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/55",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_eye_r",
+              "path": "/model/rigControls/rigControls/56"
+            },
+            "message": "Rig control rig_bodyx_eye_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_eye_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_eye_r_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_eye_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/56",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_eyewear",
+              "path": "/model/rigControls/rigControls/59"
+            },
+            "message": "Rig control rig_bodyx_eyewear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_eyewear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_eyewear_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_eyewear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/59",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_face",
+              "path": "/model/rigControls/rigControls/52"
+            },
+            "message": "Rig control rig_bodyx_face has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_face",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_face_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_face.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/52",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_hair_f_l",
+              "path": "/model/rigControls/rigControls/64"
+            },
+            "message": "Rig control rig_bodyx_hair_f_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_hair_f_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_hair_f_l_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_hair_f_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/64",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_hair_f_r",
+              "path": "/model/rigControls/rigControls/65"
+            },
+            "message": "Rig control rig_bodyx_hair_f_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_hair_f_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_hair_f_r_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_hair_f_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/65",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_hair_front",
+              "path": "/model/rigControls/rigControls/63"
+            },
+            "message": "Rig control rig_bodyx_hair_front has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_hair_front",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_hair_front_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_hair_front.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/63",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_headwear",
+              "path": "/model/rigControls/rigControls/60"
+            },
+            "message": "Rig control rig_bodyx_headwear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_headwear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_headwear_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_headwear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/60",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_mouth",
+              "path": "/model/rigControls/rigControls/54"
+            },
+            "message": "Rig control rig_bodyx_mouth has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_mouth",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_mouth_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_mouth.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/54",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_neck",
+              "path": "/model/rigControls/rigControls/50"
+            },
+            "message": "Rig control rig_bodyx_neck has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_neck",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_neck_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_neck.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/50",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_nose",
+              "path": "/model/rigControls/rigControls/53"
+            },
+            "message": "Rig control rig_bodyx_nose has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_nose",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_nose_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_nose.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/53",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_tie",
+              "path": "/model/rigControls/rigControls/47"
+            },
+            "message": "Rig control rig_bodyx_tie has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_tie",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_tie_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_tie.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/47",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyx_topwear",
+              "path": "/model/rigControls/rigControls/46"
+            },
+            "message": "Rig control rig_bodyx_topwear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyx_topwear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyx_topwear_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_bodyx_topwear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/46",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_back_hair_l",
+              "path": "/model/rigControls/rigControls/81"
+            },
+            "message": "Rig control rig_bodyz_back_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_back_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_back_hair_l_controlpointoffsets_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_back_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/81",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_back_hair_r",
+              "path": "/model/rigControls/rigControls/80"
+            },
+            "message": "Rig control rig_bodyz_back_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_back_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_back_hair_r_controlpointoffsets_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_back_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/80",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_hair_f_l",
+              "path": "/model/rigControls/rigControls/79"
+            },
+            "message": "Rig control rig_bodyz_hair_f_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_hair_f_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_hair_f_l_controlpointoffsets_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_hair_f_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/79",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_hair_f_r",
+              "path": "/model/rigControls/rigControls/78"
+            },
+            "message": "Rig control rig_bodyz_hair_f_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_hair_f_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_hair_f_r_controlpointoffsets_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_hair_f_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/78",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_hair_front",
+              "path": "/model/rigControls/rigControls/77"
+            },
+            "message": "Rig control rig_bodyz_hair_front has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_hair_front",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_hair_front_controlpointoffsets_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_hair_front.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/77",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_tie",
+              "path": "/model/rigControls/rigControls/82"
+            },
+            "message": "Rig control rig_bodyz_tie has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_tie",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_tie_controlpointoffsets_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_tie.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/82",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_topwear",
+              "path": "/model/rigControls/rigControls/83"
+            },
+            "message": "Rig control rig_bodyz_topwear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_topwear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_topwear_controlpointoffsets_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_topwear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/83",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_bodyz_upper_body",
+              "path": "/model/rigControls/rigControls/76"
+            },
+            "message": "Rig control rig_bodyz_upper_body has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_bodyz_upper_body",
+              "rigControlKind=rotation2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_bodyz_upper_body_angledegrees_body_angle_z",
+              "expectedKeyformTargets=rigControl:rig_bodyz_upper_body.angleDegrees"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/76",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eye_l_close",
+              "path": "/model/rigControls/rigControls/8"
+            },
+            "message": "Rig control rig_eye_l_close has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eye_l_close",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eye_l_close_opacitymultiplier_eye_left_open",
+              "expectedKeyformTargets=rigControl:rig_eye_l_close.opacityMultiplier"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/8",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eye_l_half",
+              "path": "/model/rigControls/rigControls/6"
+            },
+            "message": "Rig control rig_eye_l_half has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eye_l_half",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eye_l_half_controlpointoffsets_eye_left_open,keyset_rigcontrol_rig_eye_l_half_opacitymultiplier_eye_left_open",
+              "expectedKeyformTargets=rigControl:rig_eye_l_half.controlPointOffsets,rigControl:rig_eye_l_half.opacityMultiplier"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/6",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eye_l_open",
+              "path": "/model/rigControls/rigControls/4"
+            },
+            "message": "Rig control rig_eye_l_open has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eye_l_open",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eye_l_open_controlpointoffsets_eye_left_open,keyset_rigcontrol_rig_eye_l_open_opacitymultiplier_eye_left_open",
+              "expectedKeyformTargets=rigControl:rig_eye_l_open.controlPointOffsets,rigControl:rig_eye_l_open.opacityMultiplier"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/4",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eye_r_close",
+              "path": "/model/rigControls/rigControls/9"
+            },
+            "message": "Rig control rig_eye_r_close has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eye_r_close",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eye_r_close_opacitymultiplier_eye_right_open",
+              "expectedKeyformTargets=rigControl:rig_eye_r_close.opacityMultiplier"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/9",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eye_r_half",
+              "path": "/model/rigControls/rigControls/7"
+            },
+            "message": "Rig control rig_eye_r_half has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eye_r_half",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eye_r_half_controlpointoffsets_eye_right_open,keyset_rigcontrol_rig_eye_r_half_opacitymultiplier_eye_right_open",
+              "expectedKeyformTargets=rigControl:rig_eye_r_half.controlPointOffsets,rigControl:rig_eye_r_half.opacityMultiplier"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/7",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eye_r_open",
+              "path": "/model/rigControls/rigControls/5"
+            },
+            "message": "Rig control rig_eye_r_open has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eye_r_open",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eye_r_open_controlpointoffsets_eye_right_open,keyset_rigcontrol_rig_eye_r_open_opacitymultiplier_eye_right_open",
+              "expectedKeyformTargets=rigControl:rig_eye_r_open.controlPointOffsets,rigControl:rig_eye_r_open.opacityMultiplier"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/5",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eyeball_l_half_warp",
+              "path": "/model/rigControls/rigControls/2"
+            },
+            "message": "Rig control rig_eyeball_l_half_warp has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eyeball_l_half_warp",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eyeball_l_half_warp_controlpointoffsets_eyeball_x",
+              "expectedKeyformTargets=rigControl:rig_eyeball_l_half_warp.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/2",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eyeball_l_warp",
+              "path": "/model/rigControls/rigControls/0"
+            },
+            "message": "Rig control rig_eyeball_l_warp has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eyeball_l_warp",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eyeball_l_warp_controlpointoffsets_eyeball_x",
+              "expectedKeyformTargets=rigControl:rig_eyeball_l_warp.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/0",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eyeball_r_half_warp",
+              "path": "/model/rigControls/rigControls/3"
+            },
+            "message": "Rig control rig_eyeball_r_half_warp has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eyeball_r_half_warp",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eyeball_r_half_warp_controlpointoffsets_eyeball_x",
+              "expectedKeyformTargets=rigControl:rig_eyeball_r_half_warp.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/3",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_eyeball_r_warp",
+              "path": "/model/rigControls/rigControls/1"
+            },
+            "message": "Rig control rig_eyeball_r_warp has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_eyeball_r_warp",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_eyeball_r_warp_controlpointoffsets_eyeball_x",
+              "expectedKeyformTargets=rigControl:rig_eyeball_r_warp.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/1",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_back_hair_l",
+              "path": "/model/rigControls/rigControls/23"
+            },
+            "message": "Rig control rig_facex_back_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_back_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_back_hair_l_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_back_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/23",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_back_hair_r",
+              "path": "/model/rigControls/rigControls/22"
+            },
+            "message": "Rig control rig_facex_back_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_back_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_back_hair_r_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_back_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/22",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_back_top_hair_l",
+              "path": "/model/rigControls/rigControls/25"
+            },
+            "message": "Rig control rig_facex_back_top_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_back_top_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_back_top_hair_l_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_back_top_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/25",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_back_top_hair_r",
+              "path": "/model/rigControls/rigControls/24"
+            },
+            "message": "Rig control rig_facex_back_top_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_back_top_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_back_top_hair_r_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_back_top_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/24",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_brow_l",
+              "path": "/model/rigControls/rigControls/15"
+            },
+            "message": "Rig control rig_facex_brow_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_brow_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_brow_l_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_brow_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/15",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_brow_r",
+              "path": "/model/rigControls/rigControls/16"
+            },
+            "message": "Rig control rig_facex_brow_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_brow_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_brow_r_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_brow_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/16",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_ears_l",
+              "path": "/model/rigControls/rigControls/19"
+            },
+            "message": "Rig control rig_facex_ears_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_ears_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_ears_l_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_ears_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/19",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_ears_r",
+              "path": "/model/rigControls/rigControls/18"
+            },
+            "message": "Rig control rig_facex_ears_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_ears_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_ears_r_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_ears_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/18",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_eye_l",
+              "path": "/model/rigControls/rigControls/12"
+            },
+            "message": "Rig control rig_facex_eye_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_eye_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_eye_l_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_eye_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/12",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_eye_r",
+              "path": "/model/rigControls/rigControls/14"
+            },
+            "message": "Rig control rig_facex_eye_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_eye_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_eye_r_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_eye_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/14",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_eyewear",
+              "path": "/model/rigControls/rigControls/26"
+            },
+            "message": "Rig control rig_facex_eyewear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_eyewear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_eyewear_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_eyewear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/26",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_face",
+              "path": "/model/rigControls/rigControls/11"
+            },
+            "message": "Rig control rig_facex_face has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_face",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_face_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_face.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/11",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_hair_f_l",
+              "path": "/model/rigControls/rigControls/21"
+            },
+            "message": "Rig control rig_facex_hair_f_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_hair_f_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_hair_f_l_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_hair_f_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/21",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_hair_f_r",
+              "path": "/model/rigControls/rigControls/20"
+            },
+            "message": "Rig control rig_facex_hair_f_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_hair_f_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_hair_f_r_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_hair_f_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/20",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_hair_front",
+              "path": "/model/rigControls/rigControls/17"
+            },
+            "message": "Rig control rig_facex_hair_front has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_hair_front",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_hair_front_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_hair_front.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/17",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_headwear",
+              "path": "/model/rigControls/rigControls/27"
+            },
+            "message": "Rig control rig_facex_headwear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_headwear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_headwear_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_headwear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/27",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_mouth",
+              "path": "/model/rigControls/rigControls/13"
+            },
+            "message": "Rig control rig_facex_mouth has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_mouth",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_mouth_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_mouth.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/13",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facex_nose",
+              "path": "/model/rigControls/rigControls/10"
+            },
+            "message": "Rig control rig_facex_nose has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facex_nose",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facex_nose_controlpointoffsets_face_angle_x",
+              "expectedKeyformTargets=rigControl:rig_facex_nose.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/10",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_back_hair_l",
+              "path": "/model/rigControls/rigControls/39"
+            },
+            "message": "Rig control rig_facey_back_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_back_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_back_hair_l_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_back_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/39",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_back_hair_r",
+              "path": "/model/rigControls/rigControls/38"
+            },
+            "message": "Rig control rig_facey_back_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_back_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_back_hair_r_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_back_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/38",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_back_top_hair_l",
+              "path": "/model/rigControls/rigControls/41"
+            },
+            "message": "Rig control rig_facey_back_top_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_back_top_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_back_top_hair_l_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_back_top_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/41",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_back_top_hair_r",
+              "path": "/model/rigControls/rigControls/40"
+            },
+            "message": "Rig control rig_facey_back_top_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_back_top_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_back_top_hair_r_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_back_top_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/40",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_brow_l",
+              "path": "/model/rigControls/rigControls/33"
+            },
+            "message": "Rig control rig_facey_brow_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_brow_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_brow_l_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_brow_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/33",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_brow_r",
+              "path": "/model/rigControls/rigControls/34"
+            },
+            "message": "Rig control rig_facey_brow_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_brow_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_brow_r_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_brow_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/34",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_ears_l",
+              "path": "/model/rigControls/rigControls/45"
+            },
+            "message": "Rig control rig_facey_ears_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_ears_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_ears_l_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_ears_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/45",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_ears_r",
+              "path": "/model/rigControls/rigControls/44"
+            },
+            "message": "Rig control rig_facey_ears_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_ears_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_ears_r_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_ears_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/44",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_eye_l",
+              "path": "/model/rigControls/rigControls/31"
+            },
+            "message": "Rig control rig_facey_eye_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_eye_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_eye_l_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_eye_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/31",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_eye_r",
+              "path": "/model/rigControls/rigControls/32"
+            },
+            "message": "Rig control rig_facey_eye_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_eye_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_eye_r_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_eye_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/32",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_eyewear",
+              "path": "/model/rigControls/rigControls/42"
+            },
+            "message": "Rig control rig_facey_eyewear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_eyewear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_eyewear_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_eyewear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/42",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_face",
+              "path": "/model/rigControls/rigControls/28"
+            },
+            "message": "Rig control rig_facey_face has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_face",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_face_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_face.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/28",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_hair_f_l",
+              "path": "/model/rigControls/rigControls/37"
+            },
+            "message": "Rig control rig_facey_hair_f_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_hair_f_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_hair_f_l_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_hair_f_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/37",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_hair_f_r",
+              "path": "/model/rigControls/rigControls/36"
+            },
+            "message": "Rig control rig_facey_hair_f_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_hair_f_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_hair_f_r_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_hair_f_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/36",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_hair_front",
+              "path": "/model/rigControls/rigControls/35"
+            },
+            "message": "Rig control rig_facey_hair_front has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_hair_front",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_hair_front_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_hair_front.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/35",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_headwear",
+              "path": "/model/rigControls/rigControls/43"
+            },
+            "message": "Rig control rig_facey_headwear has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_headwear",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_headwear_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_headwear.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/43",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_mouth",
+              "path": "/model/rigControls/rigControls/30"
+            },
+            "message": "Rig control rig_facey_mouth has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_mouth",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_mouth_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_mouth.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/30",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facey_nose",
+              "path": "/model/rigControls/rigControls/29"
+            },
+            "message": "Rig control rig_facey_nose has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facey_nose",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facey_nose_controlpointoffsets_face_angle_y",
+              "expectedKeyformTargets=rigControl:rig_facey_nose.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/29",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facez_back_hair_l",
+              "path": "/model/rigControls/rigControls/75"
+            },
+            "message": "Rig control rig_facez_back_hair_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facez_back_hair_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facez_back_hair_l_controlpointoffsets_face_angle_z",
+              "expectedKeyformTargets=rigControl:rig_facez_back_hair_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/75",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facez_back_hair_r",
+              "path": "/model/rigControls/rigControls/74"
+            },
+            "message": "Rig control rig_facez_back_hair_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facez_back_hair_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facez_back_hair_r_controlpointoffsets_face_angle_z",
+              "expectedKeyformTargets=rigControl:rig_facez_back_hair_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/74",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facez_hair_f_l",
+              "path": "/model/rigControls/rigControls/73"
+            },
+            "message": "Rig control rig_facez_hair_f_l has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facez_hair_f_l",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facez_hair_f_l_controlpointoffsets_face_angle_z",
+              "expectedKeyformTargets=rigControl:rig_facez_hair_f_l.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/73",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facez_hair_f_r",
+              "path": "/model/rigControls/rigControls/72"
+            },
+            "message": "Rig control rig_facez_hair_f_r has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facez_hair_f_r",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facez_hair_f_r_controlpointoffsets_face_angle_z",
+              "expectedKeyformTargets=rigControl:rig_facez_hair_f_r.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/72",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facez_hair_front",
+              "path": "/model/rigControls/rigControls/71"
+            },
+            "message": "Rig control rig_facez_hair_front has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facez_hair_front",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facez_hair_front_controlpointoffsets_face_angle_z",
+              "expectedKeyformTargets=rigControl:rig_facez_hair_front.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/71",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_facez_head",
+              "path": "/model/rigControls/rigControls/70"
+            },
+            "message": "Rig control rig_facez_head has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_facez_head",
+              "rigControlKind=rotation2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_facez_head_angledegrees_face_angle_z",
+              "expectedKeyformTargets=rigControl:rig_facez_head.angleDegrees"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/70",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          },
+          {
+            "checkId": "rigControl.runtimeEvidenceMissing",
+            "status": "fail",
+            "severity": "error",
+            "phase": "rigControl_evaluation",
+            "target": {
+              "kind": "rigControl",
+              "id": "rig_neck_back_warp_deformer",
+              "path": "/model/rigControls/rigControls/51"
+            },
+            "message": "Rig control rig_neck_back_warp_deformer has no runtime snapshot evidence.",
+            "evidence": [
+              "rigControlId=rig_neck_back_warp_deformer",
+              "rigControlKind=warpLattice2d",
+              "runtimeSnapshot=missing",
+              "requiredKeyformSetIds=keyset_rigcontrol_rig_neck_back_warp_deformer_controlpointoffsets_body_angle_x",
+              "expectedKeyformTargets=rigControl:rig_neck_back_warp_deformer.controlPointOffsets"
+            ],
+            "relatedAC": [
+              "AC-MVP-009",
+              "AC-MVP-010",
+              "AC-MVP-013"
+            ],
+            "relatedScenarios": [
+              "SC-DEF-002"
+            ],
+            "repairCandidateIds": [],
+            "targetPath": "/model/rigControls/rigControls/51",
+            "impact": "Validator cannot prove deterministic keyform-driven rig control runtime evaluation without matching runtime snapshot evidence.",
+            "snapshotIds": [],
+            "operationIds": []
+          }
+        ],
+        "repairCandidates": [],
+        "evidence": {
+          "operationLogPresent": false,
+          "runtimeSnapshotIds": [],
+          "supplementalGuiEvidenceRefs": []
+        }
+      }
+    }
+  },
+  "saved": false,
+  "packageRevision": 418,
+  "diagnostics": []
+}

@@ -2,7 +2,7 @@
   "manifest": {
     "schemaVersion": "open-model-package-manifest-v1",
     "packageId": "pkg_minimum_open_dynamics_v1_evidence",
-    "packageDisplayName": "Minimum Open Dynamics v1 Evidence",
+    "packageDisplayName": "Minimum Open Dynamics v2 Evidence",
     "formatVersion": "open-model-package-v1",
     "packageRevision": 0,
     "createdAt": "2026-05-31T00:00:00.000Z",
@@ -212,7 +212,7 @@
       "rigControls": []
     },
     "dynamics": {
-      "schemaVersion": "dynamics-file-v1",
+      "schemaVersion": "dynamics-file-v3",
       "dynamicsGroups": []
     },
     "masks": {

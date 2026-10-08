@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runtime-player/control-channel/intent-envelope-payload",
+  "title": "Runtime Player Control Channel intent.envelope payload (C5 §2)",
+  "description": "C5 payload for the intent.envelope kind (ADDED ADDITIVELY over intent.set). slotId rides the same semantic-slot vocabulary; peak is the slot's normalized target value; attackMs/sustainMs/decayMs are the非負 curve durations the 器 draws at 60Hz (attack: current→peak, sustain: hold peak, decay: peak→rest). Release is the universal non-exposed default, so it is NOT on the wire. NOTE: this 'envelope' is the animation envelope, a different concept from the C4 message 封筒 (channel-envelope-schema.json).",
+  "type": "object",
+  "required": ["slotId", "peak", "attackMs", "sustainMs", "decayMs"],
+  "additionalProperties": false,
+  "properties": {
+    "slotId": {
+      "type": "string",
+      "description": "Semantic-slot id (existing vocabulary). An unknown id is rejected with unknownSlot.",
+      "enum": [
+        "head-horizontal",
+        "head-vertical",
+        "head-tilt",
+        "eye-blink-left",
+        "eye-blink-right",
+        "gaze-horizontal",
+        "gaze-vertical",
+        "mouth-open",
+        "mouth-smile",
+        "mouth-vowel-a",
+        "mouth-vowel-i",
+        "mouth-vowel-u",
+        "mouth-vowel-e",
+        "mouth-vowel-o",
+        "body-x",
+        "body-z"
+      ]
+    },
+    "peak": {
+      "type": "number",
+      "description": "Normalized peak value the curve rises to. Centered slots (head/gaze/body) accept -1..1; weight slots (blink/mouth-open/mouth-smile) and vowel slots accept 0..1. Out of range is rejected with slotValueOutOfRange (never clamped)."
+    },
+    "attackMs": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Rise time (current effective value → peak) in milliseconds. Negative is rejected with invalidPayload."
+    },
+    "sustainMs": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Hold time at peak in milliseconds. Negative is rejected with invalidPayload."
+    },
+    "decayMs": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Fall time (peak → rest) in milliseconds. Negative is rejected with invalidPayload. attackMs + sustainMs + decayMs must be > 0 (a zero-life envelope is rejected with invalidPayload)."
+    }
+  },
+  "normalizedRanges": {
+    "head-centered": { "min": -1, "max": 1 },
+    "gaze-centered": { "min": -1, "max": 1 },
+    "body-x": { "min": -1, "max": 1 },
+    "body-z": { "min": -1, "max": 1 },
+    "blink-left": { "min": 0, "max": 1 },
+    "blink-right": { "min": 0, "max": 1 },
+    "mouth-open": { "min": 0, "max": 1 },
+    "mouth-smile": { "min": 0, "max": 1 },
+    "mouth-vowel": { "min": 0, "max": 1 }
+  }
+}

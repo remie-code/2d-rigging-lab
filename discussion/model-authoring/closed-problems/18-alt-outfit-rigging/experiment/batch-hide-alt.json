@@ -1,0 +1,44 @@
+[
+  {
+    "file": "hide-rodos-topwear.json",
+    "operationId": "op_cp18_hide_rodos_topwear",
+    "operationType": "setRuntimeVisibility",
+    "payload": { "target": { "kind": "drawable", "id": "draw_r0_1cea4f6f_a43f1585_topwear" }, "runtimeVisibility": false },
+    "gitMessage": "[cp18] hide rodos topwear (make design-notes rest premise explicit: alt outfit hidden)"
+  },
+  {
+    "file": "hide-rodos-handwear_r.json",
+    "operationId": "op_cp18_hide_rodos_handwear_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": { "target": { "kind": "drawable", "id": "draw_r0_1cea4f6f_a43f1647_handwear-r" }, "runtimeVisibility": false },
+    "gitMessage": "[cp18] hide rodos handwear-r (alt outfit hidden at rest)"
+  },
+  {
+    "file": "hide-rodos-handwear_l.json",
+    "operationId": "op_cp18_hide_rodos_handwear_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": { "target": { "kind": "drawable", "id": "draw_r0_1cea4f6f_a43f1666_handwear-l" }, "runtimeVisibility": false },
+    "gitMessage": "[cp18] hide rodos handwear-l (alt outfit hidden at rest)"
+  },
+  {
+    "file": "hide-endo-topwear.json",
+    "operationId": "op_cp18_hide_endo_topwear",
+    "operationType": "setRuntimeVisibility",
+    "payload": { "target": { "kind": "drawable", "id": "draw_r0_1cea4f6f_8b5c54ca_topwear" }, "runtimeVisibility": false },
+    "gitMessage": "[cp18] hide endo topwear (alt outfit hidden at rest)"
+  },
+  {
+    "file": "hide-endo-handwear_r.json",
+    "operationId": "op_cp18_hide_endo_handwear_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": { "target": { "kind": "drawable", "id": "draw_r0_1cea4f6f_8b5c542b_handwear-r" }, "runtimeVisibility": false },
+    "gitMessage": "[cp18] hide endo handwear-r (alt outfit hidden at rest)"
+  },
+  {
+    "file": "hide-endo-handwear_l.json",
+    "operationId": "op_cp18_hide_endo_handwear_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": { "target": { "kind": "drawable", "id": "draw_r0_1cea4f6f_8b5c5408_handwear-l" }, "runtimeVisibility": false },
+    "gitMessage": "[cp18] hide endo handwear-l (alt outfit hidden at rest)"
+  }
+]

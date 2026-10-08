@@ -130,30 +130,26 @@ describe("parameter definition editor commands", () => {
       dynamicsGroupId: DynamicsGroupIdSchema.parse("dyn_custom_driver"),
       displayName: "Custom Driver Dynamics",
       enabled: true,
-      solverKind: "scalarDampedFollowV1",
-      drivers: [
+      inputs: [
         {
-          driverId: "driver_custom",
-          sourceParameterId: parameterId,
-          inputScale: 1,
-          inputOffset: 0,
-          invert: false
-        }
+          parameterId,
+          kind: "angle",
+        scale: 1}
       ],
-      output: {
-        outputId: "output_custom",
-        targetParameterId: ParameterIdSchema.parse("param_mouth_open"),
-        outputScale: 1,
-        outputOffset: 0,
-        min: 0,
-        max: 1,
-        clampPolicy: "clamp-to-output-range"
-      },
-      settings: {
-        stiffness: 0.5,
-        damping: 0.25
-      },
-      resetPolicy: "reset-on-load"
+      chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+      outputs: [
+        {
+          parameterId: ParameterIdSchema.parse("param_mouth_open"),
+          segmentIndex: 1,
+          scale: 1,
+          limit: 1
+        }
+      ]
     });
 
     const deleted = commitDeleteCustomParameter(created.session, { parameterId });

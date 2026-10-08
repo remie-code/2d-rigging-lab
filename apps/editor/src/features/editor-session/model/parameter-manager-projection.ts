@@ -221,18 +221,20 @@ function createUsageIndex(
   });
 
   session.graph.dynamicsGroups.forEach((group) => {
-    group.drivers.forEach((driver) => {
-      addUsage(driver.sourceParameterId, {
+    group.inputs.forEach((input, index) => {
+      addUsage(input.parameterId, {
         targetLabel: `Dynamics: ${group.displayName}`,
         propertyLabel: "driver input parameter",
-        detailLabel: `Driver ${driver.driverId}`
+        detailLabel: `Input ${index + 1} / ${input.kind}`
       });
     });
 
-    addUsage(group.output.targetParameterId, {
-      targetLabel: `Dynamics: ${group.displayName}`,
-      propertyLabel: "output target parameter",
-      detailLabel: `Output ${group.output.outputId}`
+    group.outputs.forEach((output, index) => {
+      addUsage(output.parameterId, {
+        targetLabel: `Dynamics: ${group.displayName}`,
+        propertyLabel: "output target parameter",
+        detailLabel: `Output ${index + 1} / segment ${output.segmentIndex}`
+      });
     });
   });
 

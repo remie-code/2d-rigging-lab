@@ -25,11 +25,11 @@
 - Test Adequacy Review passed.
 - Design / Development Compliance passed after Undine authorized and Gnome completed the dependency registry update.
 - `generated/dependencies/dependency-registry.json` now records the five Wave68 direct dependencies and three observed transitive dependencies.
-- Domain B implements dependency-free `auto-outline-v6a-local` as an approximate local backend and keeps v6b/v6c deferred.
+- Domain B implements dependency-free `auto-outline-v6a-local` as an approximate local backend. Domains C and D implement v6b/v6c sidecars and record them `pass` in this Wave68 historical evidence; later waves select the v6D lineage.
 - Domain B review lanes passed after Fix Loop 1 resolved a v6a DTO invariant test coverage gap.
 - Domain C implements `auto-outline-v6b-constrainautor` as a `delaunator + @kninnug/constrainautor` sidecar. Initial Design / Development Review passed; initial Spec and Test Adequacy reviews found report/retry/fixture/empty-alpha coverage gaps; Fix Loop 1 resolved them and all re-reviews passed.
 - Domain D implements `auto-outline-v6c-poly2tri` as a `poly2tri` constrained polygon + Steiner point sidecar. Spec Compliance, Design / Development Compliance, and Test Adequacy are final `pass` after two bounded fix loops.
-- Domain E adds a temporary Mesh Tool backend selector for default v2.6 plus v6a/v6b/v6c, keeps presets separate, and preserves default v2.6 behavior when the selector is not used.
+- Domain E's Wave68 temporary Mesh Tool backend selector offered default v2.6 plus v6a/v6b/v6c, kept presets separate, and preserved default v2.6 behavior when the selector was not used; later waves replaced this selector route.
 - Domain E Fix Loop 1 added durable `previewProvenance` through the generateMesh preview commit path so applied v6 previews retain actual source, fallback, and v6 output quality provenance.
 - Domain E Spec Compliance, Design / Development Compliance, and Test Adequacy reviews are final `pass` after Fix Loop 1.
 - Domain F final validation found and fixed a Vite/browser boot blocker from `poly2tri` reading Node `global`; `apps/editor/vite.config.ts` now maps `global` to `globalThis` for Vite and optimized dependencies.
@@ -39,7 +39,7 @@
 ## Next Actions
 
 1. No further Wave68 implementation action required before Undine closeout.
-2. Future backend-selection work should compare v6a/v6b/v6c visually and semantically before promoting any v6 backend to default.
+2. Historical next action: compare v6a/v6b/v6c visually and semantically before promoting any v6 backend to default. Later Wave70/71 maps record the v6D route; this Wave68 note is not the current default decision.
 3. Future hardening can add direct operation-payload rejection for mismatched `previewProvenance` method metadata.
 
 ## Unresolved Questions

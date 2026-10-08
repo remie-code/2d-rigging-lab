@@ -7,6 +7,7 @@
         "parameterId": "param_fixture_face_x",
         "valueSource": "authoredInput",
         "authoredValue": -1,
+        "baseValue": -1,
         "effectiveValue": -1,
         "clamped": false,
         "source": "viewerOverride"
@@ -15,6 +16,7 @@
         "parameterId": "param_fixture_face_y",
         "valueSource": "authoredInput",
         "authoredValue": -1,
+        "baseValue": -1,
         "effectiveValue": -1,
         "clamped": false,
         "source": "viewerOverride"
@@ -165,6 +167,7 @@
         "parameterId": "param_fixture_face_x",
         "valueSource": "authoredInput",
         "authoredValue": 0,
+        "baseValue": 0,
         "effectiveValue": 0,
         "clamped": false,
         "source": "viewerOverride"
@@ -173,6 +176,7 @@
         "parameterId": "param_fixture_face_y",
         "valueSource": "authoredInput",
         "authoredValue": 0,
+        "baseValue": 0,
         "effectiveValue": 0,
         "clamped": false,
         "source": "viewerOverride"

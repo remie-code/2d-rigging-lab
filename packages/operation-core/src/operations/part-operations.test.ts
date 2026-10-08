@@ -585,7 +585,7 @@ const createBaseDocument = (session: AuthoringSession): Parameters<typeof toPack
       parameters: { schemaVersion: "parameters-file-v1", parameters: session.graph.parameters },
       keyforms: { schemaVersion: "keyforms-file-v1", keyformSets: session.graph.keyformSets },
       rigControls: { schemaVersion: "rig-controls-file-v1", rigControls: session.graph.rigControls },
-      dynamics: { schemaVersion: "dynamics-file-v1", dynamicsGroups: session.graph.dynamicsGroups },
+      dynamics: { schemaVersion: "dynamics-file-v3", dynamicsGroups: session.graph.dynamicsGroups },
       masks: { schemaVersion: "masks-file-v1", masks: session.graph.masks },
       drawOrder: { schemaVersion: "draw-order-file-v1", entries: session.graph.drawOrder }
     },

@@ -1,0 +1,215 @@
+[
+  {
+    "file": "dyn-hair_front_sway_x.json",
+    "operationId": "op_cp16_dyn_hair_front_sway_x",
+    "operationType": "createDynamicsGroup",
+    "gitMessage": "[cp16] dynamics dyn_hair_front_sway_x: L=8.6cm damping=2.5 rootOffset=(0,-3.1)cm, output 0.0333/deg limit 1",
+    "payload": {
+      "dynamicsGroupId": "dyn_hair_front_sway_x",
+      "displayName": "Hair Front Sway X",
+      "enabled": true,
+      "inputs": [
+        {
+          "parameterId": "param_face_angle_x",
+          "kind": "positionX",
+          "scale": 0.031
+        },
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": 0.056
+        },
+        {
+          "parameterId": "param_face_angle_z",
+          "kind": "angle",
+          "scale": 0.3333
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "angle",
+          "scale": 0.6
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.31
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": -3.1
+        },
+        "segmentLengths": [
+          8.6
+        ],
+        "damping": 2.5,
+        "gravityScale": 1
+      },
+      "outputs": [
+        {
+          "parameterId": "param_hair_front_sway_x",
+          "segmentIndex": 1,
+          "scale": 0.0333,
+          "limit": 1
+        }
+      ]
+    }
+  },
+  {
+    "file": "dyn-hair_side_sway_x.json",
+    "operationId": "op_cp16_dyn_hair_side_sway_x",
+    "operationType": "createDynamicsGroup",
+    "gitMessage": "[cp16] dynamics dyn_hair_side_sway_x: L=16.5cm damping=2.5 rootOffset=(0,-4.6)cm, output 0.0333/deg limit 1",
+    "payload": {
+      "dynamicsGroupId": "dyn_hair_side_sway_x",
+      "displayName": "Hair Side Sway X",
+      "enabled": true,
+      "inputs": [
+        {
+          "parameterId": "param_face_angle_x",
+          "kind": "positionX",
+          "scale": 0.037
+        },
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": 0.067
+        },
+        {
+          "parameterId": "param_face_angle_z",
+          "kind": "angle",
+          "scale": 0.3333
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "angle",
+          "scale": 0.6
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.31
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": -4.6
+        },
+        "segmentLengths": [
+          16.5
+        ],
+        "damping": 2.5,
+        "gravityScale": 1
+      },
+      "outputs": [
+        {
+          "parameterId": "param_hair_side_sway_x",
+          "segmentIndex": 1,
+          "scale": 0.0333,
+          "limit": 1
+        }
+      ]
+    }
+  },
+  {
+    "file": "dyn-hair_back_sway_x.json",
+    "operationId": "op_cp16_dyn_hair_back_sway_x",
+    "operationType": "createDynamicsGroup",
+    "gitMessage": "[cp16] dynamics dyn_hair_back_sway_x: L=46.8cm damping=2.2 rootOffset=(0,-3.1)cm, output 0.0333/deg limit 1",
+    "payload": {
+      "dynamicsGroupId": "dyn_hair_back_sway_x",
+      "displayName": "Hair Back Sway X",
+      "enabled": true,
+      "inputs": [
+        {
+          "parameterId": "param_face_angle_x",
+          "kind": "positionX",
+          "scale": -0.006
+        },
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": -0.011
+        },
+        {
+          "parameterId": "param_face_angle_z",
+          "kind": "angle",
+          "scale": 0.3333
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "angle",
+          "scale": 0.6
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "positionX",
+          "scale": 0.31
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": -3.1
+        },
+        "segmentLengths": [
+          46.8
+        ],
+        "damping": 2.2,
+        "gravityScale": 1
+      },
+      "outputs": [
+        {
+          "parameterId": "param_hair_back_sway_x",
+          "segmentIndex": 1,
+          "scale": 0.0333,
+          "limit": 1
+        }
+      ]
+    }
+  },
+  {
+    "file": "dyn-tie_sway_x.json",
+    "operationId": "op_cp16_dyn_tie_sway_x",
+    "operationType": "createDynamicsGroup",
+    "gitMessage": "[cp16] dynamics dyn_tie_sway_x: L=19cm damping=3 rootOffset=(-0.3,-23)cm, output 0.0333/deg limit 1",
+    "payload": {
+      "dynamicsGroupId": "dyn_tie_sway_x",
+      "displayName": "Tie Sway X",
+      "enabled": true,
+      "inputs": [
+        {
+          "parameterId": "param_body_angle_x",
+          "kind": "positionX",
+          "scale": 0.055
+        },
+        {
+          "parameterId": "param_body_angle_z",
+          "kind": "angle",
+          "scale": 0.6
+        }
+      ],
+      "chain": {
+        "rootOffset": {
+          "x": -0.3,
+          "y": -23
+        },
+        "segmentLengths": [
+          19
+        ],
+        "damping": 3,
+        "gravityScale": 1
+      },
+      "outputs": [
+        {
+          "parameterId": "param_accessory_sway_x",
+          "segmentIndex": 1,
+          "scale": 0.0333,
+          "limit": 1
+        }
+      ]
+    }
+  }
+]

@@ -5,6 +5,7 @@ import {
   PackageIdSchema,
   PartIdSchema,
   ProvenanceIdSchema,
+  RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
@@ -25,6 +26,7 @@ const PART_EYE = PartIdSchema.parse("part_eye");
 const DRAW_FRONT = DrawableIdSchema.parse("draw_front");
 const DRAW_BACK = DrawableIdSchema.parse("draw_back");
 const DRAW_HIDDEN = DrawableIdSchema.parse("draw_hidden");
+const RIG_FRONT = RigControlIdSchema.parse("rig_front_warp");
 
 describe("editor session tree projection", () => {
   it("projects compact rows in front-to-back tree order with effective hidden state", () => {
@@ -247,6 +249,49 @@ describe("editor session tree projection", () => {
       ["drawable", "Back", false],
       ["drawable", "Hidden", true]
     ]);
+  });
+
+  it("adds compact mesh-missing warning metadata without verbose row text", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push({
+      rigControlId: RIG_FRONT,
+      kind: "warpLattice2d",
+      displayName: "Front Warp",
+      childDrawableIds: [DRAW_FRONT],
+      childRigControlIds: [],
+      bindSpace: {
+        kind: "model"
+      },
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      latticeColumns: 2,
+      latticeRows: 2,
+      restControlPoints: [
+        { x: 0, y: 0 },
+        { x: 32, y: 0 },
+        { x: 0, y: 32 },
+        { x: 32, y: 32 }
+      ],
+      interpolationMethod: "bilinear-grid-v1",
+      enabled: true
+    });
+
+    const rows = createStructureTreeRows(session, null);
+    const frontRow = rows.find(
+      (row): row is Extract<(typeof rows)[number], { readonly kind: "drawable" }> =>
+        row.kind === "drawable" && row.id === DRAW_FRONT
+    );
+
+    expect(frontRow).toMatchObject({
+      name: "Front",
+      detail: "Drawable",
+      warning: {
+        count: 1,
+        codes: ["mesh.drawableMeshMissing"]
+      }
+    });
+    expect(frontRow?.warning?.label).toContain("mesh is missing");
+    expect(frontRow?.name).not.toContain("mesh is missing");
+    expect(frontRow?.detail).not.toContain("mesh is missing");
   });
 
   it("projects a minimal Select Inspector Drawable name list for Drawable set selections", () => {

@@ -1,0 +1,74 @@
+/* Shared 16:9 master. Change these tokens to update every content slide. */
+:root {
+  --slide-width: 1600px;
+  --slide-height: 900px;
+  --page-margin: 72px;
+  --title-top: 60px;
+  --title-size: 48px;
+  --rule-top: 148px;
+  --content-top: 210px;
+  --content-bottom: 64px;
+  --ink: #182a38;
+  --muted: #536a79;
+  --accent: #247cad;
+  --rule: #b8cedb;
+  --paper: #ffffff;
+  --font: "Yu Gothic", "YuGothic", "Meiryo", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; }
+body { background: #e9edf0; font-family: var(--font); color: var(--ink); }
+.slide-stage { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
+.slide {
+  position: relative; flex: none; width: var(--slide-width); height: var(--slide-height);
+  background: var(--paper); transform: scale(var(--preview-scale, 1));
+  transform-origin: center; overflow: hidden;
+}
+.slide-title {
+  position: absolute; top: var(--title-top); left: var(--page-margin); right: var(--page-margin);
+  margin: 0; font-size: var(--title-size); font-weight: 700; line-height: 1.3; letter-spacing: .015em;
+}
+.slide-rule {
+  position: absolute; top: var(--rule-top); left: var(--page-margin); right: var(--page-margin);
+  height: 2px; background: var(--rule);
+}
+.slide-content {
+  position: absolute; top: var(--content-top); bottom: var(--content-bottom);
+  left: var(--page-margin); right: var(--page-margin);
+  display: grid; place-items: center;
+}
+.overview-diagram { display: block; width: 100%; height: auto; }
+/* Optional shared variant for a short introduction above the main visual. */
+.slide--with-summary { --content-top: 284px; --content-bottom: 32px; }
+.slide-summary {
+  position: absolute; top: 177px; left: var(--page-margin); right: var(--page-margin);
+}
+.slide-lead { margin: 0; font-size: 30px; line-height: 1.5; font-weight: 500; }
+.slide-lead + .slide-lead { margin-top: 10px; }
+.slide-fact { margin: 10px 0 0; font-size: 27px; line-height: 1.4; color: var(--muted); }
+.slide-fact strong { font-weight: 700; color: var(--accent); }
+.archive-qr { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.archive-qr img { display: block; width: 520px; height: 520px; object-fit: contain; }
+.archive-qr figcaption { font-size: 30px; line-height: 1.5; font-weight: 600; color: var(--ink); }
+/* Use source aspect ratios as column weights to give both images equal height. */
+.screenshot-pair { display: grid; width: 100%; column-gap: 40px; align-items: start; }
+.screenshot-pair--modeling { grid-template-columns: 1.862136fr 1.526515fr; }
+.screenshot-figure { margin: 0; min-width: 0; }
+.screenshot-figure figcaption { margin-bottom: 20px; font-size: 29px; font-weight: 700; line-height: 1.5; }
+.screenshot-note { font-size: 24px; font-weight: 500; color: var(--muted); }
+.screenshot-figure img { display: block; width: 100%; height: auto; }
+/* Two control screenshots and one large model view; preserve source ratios. */
+.slide--runtime { --content-top: 248px; --content-bottom: 32px; }
+.runtime-layout { display: grid; grid-template-columns: 580px 604px; gap: 96px; align-items: start; }
+.runtime-controls { display: grid; gap: 8px; }
+.runtime-layout figcaption { line-height: 1.25; margin-bottom: 8px; }
+.runtime-model img { width: auto; height: 576px; max-width: 100%; object-fit: contain; }
+.duration-punchline { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+@page { size: 1600px 900px; margin: 0; }
+@media print {
+  html, body { width: 1600px; height: auto; background: white; }
+  * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .slide-stage { position: static; display: block; overflow: visible; }
+  .slide { transform: none; break-after: page; }
+  .slide:last-child { break-after: auto; }
+}

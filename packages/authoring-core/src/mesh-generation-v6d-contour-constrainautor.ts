@@ -23,8 +23,10 @@ import Constrainautor from "./mesh-generation-v6b-constrainautor-runtime.js";
 import {
   computeMeshQualityMetrics,
   type MeshGenerationQualityMetrics,
+  type MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics,
   type MeshGenerationV6ConstrainautorDiagnostics,
-  type MeshGenerationV6ContourPipelineDiagnostics
+  type MeshGenerationV6ContourPipelineDiagnostics,
+  type MeshGenerationV6CrossingConstraintEdgePairSampleDiagnostics
 } from "./mesh-quality-metrics.js";
 
 export interface AutoOutlineV6DContourConstrainautorMeshInput {
@@ -89,7 +91,11 @@ export type V6DConstrainautorRecoveryResult =
       readonly status: "failed";
       readonly reason: Extract<
         MeshGenerationV6FallbackReason,
-        "v6d-constrainautor-generation-failed" | "v6d-constraint-recovery-failed" | "v6d-backend-threw"
+        | "v6d-constrainautor-generation-failed"
+        | "v6d-invalid-constraint-input"
+        | "v6d-untriangulated-points"
+        | "v6d-constraint-recovery-failed"
+        | "v6d-backend-threw"
       >;
       readonly points: readonly V6DConstrainautorPoint[];
       readonly constraintEdges: readonly [number, number][];
@@ -107,13 +113,35 @@ interface SanitizedConstrainautorInput {
   readonly status: "ok";
   readonly points: readonly V6DConstrainautorPoint[];
   readonly constraintEdges: readonly [number, number][];
+  readonly diagnostics: SanitizedConstrainautorDiagnostics;
 }
 
 interface SanitizedConstrainautorFailure {
   readonly status: "failed";
   readonly points: readonly V6DConstrainautorPoint[];
   readonly constraintEdges: readonly [number, number][];
-  readonly constraintEdgeCount: number;
+  readonly diagnostics: SanitizedConstrainautorDiagnostics;
+}
+
+interface SanitizedConstraintEdgeSource {
+  readonly inputConstraintEdgeIndex: number;
+  readonly inputConstraintEdgePointIndexes: readonly [number, number];
+}
+
+interface SanitizedConstrainautorDiagnostics {
+  readonly invalidConstraintInputReasons: readonly string[];
+  readonly inputPointCount: number;
+  readonly finitePointCount: number;
+  readonly sanitizedPointCount: number;
+  readonly mergedPointCount: number;
+  readonly inputConstraintEdgeCount: number;
+  readonly sanitizedConstraintEdgeCount: number;
+  readonly zeroLengthConstraintEdgeCount: number;
+  readonly invalidConstraintEndpointCount: number;
+  readonly duplicateConstraintEdgeCount: number;
+  readonly crossingConstraintEdgeCount: number;
+  readonly crossingConstraintEdgePairSample?: MeshGenerationV6CrossingConstraintEdgePairSampleDiagnostics;
+  readonly pointOnConstraintEdgeCount: number;
 }
 
 export interface PixelBounds {
@@ -139,6 +167,8 @@ export interface V6DAlphaBoundsFallbackMeshInput {
 
 const TRIANGLE_AREA_EPSILON = 0.000001;
 const POINT_KEY_SCALE = 1_000_000;
+const CROSSING_CONSTRAINT_EDGE_PAIR_SAMPLE_LIMIT = 8;
+const V6D_BOUNDARY_REPAIR_CANDIDATE_LIMIT = 4;
 
 export const createAutoOutlineV6DContourConstrainautorMesh = (
   input: AutoOutlineV6DContourConstrainautorMeshInput
@@ -191,7 +221,8 @@ export const createAutoOutlineV6DContourConstrainautorMesh = (
     preservedConstraintEdgeCount: finalConstraintCounts.preserved,
     missingConstraintEdgeCount: finalConstraintCounts.missing,
     constraintRecoveryFailed: finalConstraintCounts.missing > 0,
-    outsideTriangleCount: filtered.outsideOrCrossingTriangleCount
+    outsideTriangleCount: filtered.outsideOrCrossingTriangleCount,
+    filteredTriangleCount: filtered.triangles.length
   } satisfies MeshGenerationV6ConstrainautorDiagnostics;
 
   if (filtered.triangles.length === 0 || finalConstraintCounts.missing > 0) {
@@ -200,7 +231,10 @@ export const createAutoOutlineV6DContourConstrainautorMesh = (
       candidateInput,
       contourPipeline,
       reason: "v6d-constraint-recovery-failed",
-      diagnostics,
+      diagnostics: markV6DConstrainautorBoundaryRepairFinalVerificationFailed({
+        ...diagnostics,
+        failureStage: "final-boundary-verification"
+      }),
       provenance: createV6DFallbackProvenance(candidateInput, "v6d-constraint-recovery-failed", [
         "v6d-final-boundary-constraint-verification-failed"
       ])
@@ -223,30 +257,31 @@ export const recoverV6DConstrainautorTriangles = (
 ): V6DConstrainautorRecoveryResult => {
   const sanitized = sanitizeConstrainautorInput(input);
   if (sanitized.status === "failed") {
-    return {
-      status: "failed",
-      reason: "v6d-constrainautor-generation-failed",
-      points: sanitized.points,
-      constraintEdges: sanitized.constraintEdges,
-      triangles: [],
-      diagnostics: createConstrainautorDiagnostics({
-        constraintEdgeCount: sanitized.constraintEdgeCount,
-        preservedConstraintEdgeCount: 0,
-        missingConstraintEdgeCount: sanitized.constraintEdgeCount,
-        constraintRecoveryFailed: true
-      })
-    };
+    const repair = tryRecoverSingleCrossingBoundaryRepair(sanitized);
+    if (repair.status === "generated") {
+      return repair.result;
+    }
+
+    return createConstraintInputFailureResult(sanitized, repair.diagnostics);
   }
 
+  return recoverSanitizedV6DConstrainautorTriangles(sanitized);
+};
+
+const recoverSanitizedV6DConstrainautorTriangles = (
+  sanitized: SanitizedConstrainautorInput,
+  boundaryRepairDiagnostics?: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics
+): V6DConstrainautorRecoveryResult => {
   let delaunay: Delaunator<Float64Array<ArrayBuffer>>;
   let constrainer: Constrainautor;
   try {
     delaunay = Delaunator.from([...sanitized.points], (point) => point.x, (point) => point.y);
     constrainer = new Constrainautor(delaunay);
-    if (constrainer.untriangulatedPoints().length > 0) {
+    const untriangulatedPointIndexes = constrainer.untriangulatedPoints();
+    if (untriangulatedPointIndexes.length > 0) {
       return {
         status: "failed",
-        reason: "v6d-constrainautor-generation-failed",
+        reason: "v6d-untriangulated-points",
         points: sanitized.points,
         constraintEdges: sanitized.constraintEdges,
         triangles: [],
@@ -254,7 +289,12 @@ export const recoverV6DConstrainautorTriangles = (
           constraintEdgeCount: sanitized.constraintEdges.length,
           preservedConstraintEdgeCount: 0,
           missingConstraintEdgeCount: sanitized.constraintEdges.length,
-          constraintRecoveryFailed: true
+          constraintRecoveryFailed: true,
+          failureStage: "delaunay-untriangulated",
+          sanitizeDiagnostics: sanitized.diagnostics,
+          ...(boundaryRepairDiagnostics === undefined ? {} : { boundaryRepairDiagnostics }),
+          untriangulatedPointCount: untriangulatedPointIndexes.length,
+          untriangulatedPointIndexes
         })
       };
     }
@@ -272,6 +312,9 @@ export const recoverV6DConstrainautorTriangles = (
         preservedConstraintEdgeCount: 0,
         missingConstraintEdgeCount: sanitized.constraintEdges.length,
         constraintRecoveryFailed: true,
+        failureStage: "backend-threw",
+        sanitizeDiagnostics: sanitized.diagnostics,
+        ...(boundaryRepairDiagnostics === undefined ? {} : { boundaryRepairDiagnostics }),
         thrownErrorKind: classifyConstrainautorError(error)
       })
     };
@@ -287,7 +330,11 @@ export const recoverV6DConstrainautorTriangles = (
     constraintEdgeCount: sanitized.constraintEdges.length,
     preservedConstraintEdgeCount: preserved,
     missingConstraintEdgeCount: missing,
-    constraintRecoveryFailed: missing > 0
+    constraintRecoveryFailed: missing > 0,
+    ...(missing > 0 ? { failureStage: "post-constrain-recovery" as const } : {}),
+    sanitizeDiagnostics: sanitized.diagnostics,
+    ...(boundaryRepairDiagnostics === undefined ? {} : { boundaryRepairDiagnostics }),
+    postConstrainTriangleCount: triangles.length
   });
 
   if (missing > 0) {
@@ -310,6 +357,237 @@ export const recoverV6DConstrainautorTriangles = (
   };
 };
 
+const createConstraintInputFailureResult = (
+  sanitized: SanitizedConstrainautorFailure,
+  boundaryRepairDiagnostics?: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics
+): V6DConstrainautorRecoveryResult => ({
+  status: "failed",
+  reason: "v6d-invalid-constraint-input",
+  points: sanitized.points,
+  constraintEdges: sanitized.constraintEdges,
+  triangles: [],
+  diagnostics: createConstrainautorDiagnostics({
+    constraintEdgeCount: sanitized.constraintEdges.length,
+    preservedConstraintEdgeCount: 0,
+    missingConstraintEdgeCount: sanitized.constraintEdges.length,
+    constraintRecoveryFailed: true,
+    failureStage: "constraint-input",
+    sanitizeDiagnostics: sanitized.diagnostics,
+    ...(boundaryRepairDiagnostics === undefined ? {} : { boundaryRepairDiagnostics })
+  })
+});
+
+const tryRecoverSingleCrossingBoundaryRepair = (
+  sanitized: SanitizedConstrainautorFailure
+):
+  | { readonly status: "generated"; readonly result: Extract<V6DConstrainautorRecoveryResult, { readonly status: "generated" }> }
+  | { readonly status: "failed"; readonly diagnostics: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics } => {
+  const preRepairCrossingConstraintEdgePairSample = sanitized.diagnostics.crossingConstraintEdgePairSample;
+  const preRepairCrossingConstraintEdgeCount = sanitized.diagnostics.crossingConstraintEdgeCount;
+  const skipped = (
+    result: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics["result"]
+  ): { readonly status: "failed"; readonly diagnostics: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics } => ({
+    status: "failed",
+    diagnostics: {
+      attempted: false,
+      result,
+      candidateCount: 0,
+      failedCandidateCount: 0,
+      removedBoundaryPointCount: 0,
+      preRepairCrossingConstraintEdgeCount,
+      ...(preRepairCrossingConstraintEdgePairSample === undefined
+        ? {}
+        : { preRepairCrossingConstraintEdgePairSample })
+    }
+  });
+
+  if (
+    sanitized.diagnostics.invalidConstraintInputReasons.length !== 1 ||
+    sanitized.diagnostics.invalidConstraintInputReasons[0] !== "crossing-constraint-edge"
+  ) {
+    return skipped("not-attempted-non-crossing-only");
+  }
+
+  if (preRepairCrossingConstraintEdgeCount !== 1) {
+    return skipped("not-attempted-crossing-pair-count");
+  }
+
+  const crossingSample = preRepairCrossingConstraintEdgePairSample;
+  if (crossingSample === undefined || crossingSample.pairs.length === 0) {
+    return skipped("not-attempted-crossing-sample-unavailable");
+  }
+  const crossingPair = mustGet(crossingSample.pairs, 0);
+
+  if (!isBoundaryCrossingPair(sanitized.points, crossingPair.sanitizedConstraintEdgePointIndexes)) {
+    return skipped("not-attempted-non-boundary-crossing-pair");
+  }
+
+  if (!isCyclicBoundaryConstraintSet(sanitized.points, sanitized.constraintEdges)) {
+    return skipped("not-attempted-non-cyclic-boundary-constraints");
+  }
+
+  const candidateBoundaryPointIndexes = uniqueOrdered([
+    crossingPair.sanitizedConstraintEdgePointIndexes[0][0],
+    crossingPair.sanitizedConstraintEdgePointIndexes[0][1],
+    crossingPair.sanitizedConstraintEdgePointIndexes[1][0],
+    crossingPair.sanitizedConstraintEdgePointIndexes[1][1]
+  ])
+    .filter((pointIndex) => sanitized.points[pointIndex]?.role === "boundary")
+    .slice(0, V6D_BOUNDARY_REPAIR_CANDIDATE_LIMIT);
+  const viableCandidateBoundaryPointIndexes = candidateBoundaryPointIndexes.filter((pointIndex) =>
+    countBoundaryPointsAfterRemoval(sanitized.points, pointIndex) >= 3
+  );
+
+  if (viableCandidateBoundaryPointIndexes.length === 0) {
+    return skipped("not-attempted-too-few-repaired-boundary-points");
+  }
+
+  let failedCandidateCount = 0;
+  let postRepairCrossingConstraintEdgeCount: number | undefined;
+  let postRepairPointOnConstraintEdgeCount: number | undefined;
+
+  for (const candidateBoundaryPointIndex of viableCandidateBoundaryPointIndexes) {
+    const repairedSanitized = sanitizeConstrainautorInput(
+      createBoundaryPointRemovalRepairInput(sanitized.points, candidateBoundaryPointIndex)
+    );
+    postRepairCrossingConstraintEdgeCount = repairedSanitized.diagnostics.crossingConstraintEdgeCount;
+    postRepairPointOnConstraintEdgeCount = repairedSanitized.diagnostics.pointOnConstraintEdgeCount;
+    if (
+      repairedSanitized.status === "failed" ||
+      repairedSanitized.diagnostics.crossingConstraintEdgeCount > 0 ||
+      repairedSanitized.diagnostics.pointOnConstraintEdgeCount > 0
+    ) {
+      failedCandidateCount += 1;
+      continue;
+    }
+
+    const boundaryRepairDiagnostics: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics = {
+      attempted: true,
+      result: "repaired",
+      candidateCount: viableCandidateBoundaryPointIndexes.length,
+      failedCandidateCount,
+      removedBoundaryPointCount: 1,
+      preRepairCrossingConstraintEdgeCount,
+      postRepairCrossingConstraintEdgeCount: repairedSanitized.diagnostics.crossingConstraintEdgeCount,
+      postRepairPointOnConstraintEdgeCount: repairedSanitized.diagnostics.pointOnConstraintEdgeCount,
+      selectedRemovedBoundaryPointIndex: candidateBoundaryPointIndex,
+      repairedConstraintEdgeCount: repairedSanitized.constraintEdges.length,
+      preRepairCrossingConstraintEdgePairSample: crossingSample
+    };
+    const recovered = recoverSanitizedV6DConstrainautorTriangles(
+      repairedSanitized,
+      boundaryRepairDiagnostics
+    );
+    if (recovered.status === "generated") {
+      return {
+        status: "generated",
+        result: recovered
+      };
+    }
+
+    failedCandidateCount += 1;
+  }
+
+  const diagnostics: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics = {
+    attempted: true,
+    result: "failed-no-candidate-succeeded",
+    candidateCount: viableCandidateBoundaryPointIndexes.length,
+    failedCandidateCount,
+    removedBoundaryPointCount: 0,
+    preRepairCrossingConstraintEdgeCount,
+    ...(postRepairCrossingConstraintEdgeCount === undefined
+      ? {}
+      : { postRepairCrossingConstraintEdgeCount }),
+    ...(postRepairPointOnConstraintEdgeCount === undefined
+      ? {}
+      : { postRepairPointOnConstraintEdgeCount }),
+    preRepairCrossingConstraintEdgePairSample: crossingSample
+  };
+
+  return {
+    status: "failed",
+    diagnostics
+  };
+};
+
+const isBoundaryCrossingPair = (
+  points: readonly V6DConstrainautorPoint[],
+  edgePointIndexes: readonly [readonly [number, number], readonly [number, number]]
+): boolean =>
+  edgePointIndexes.every((edge) =>
+    edge.every((pointIndex) => points[pointIndex]?.role === "boundary")
+  );
+
+const isCyclicBoundaryConstraintSet = (
+  points: readonly V6DConstrainautorPoint[],
+  constraintEdges: readonly (readonly [number, number])[]
+): boolean => {
+  const boundaryPointIndexes = points
+    .map((point, index) => ({ point, index }))
+    .filter(({ point }) => point.role === "boundary")
+    .map(({ index }) => index);
+  if (boundaryPointIndexes.length < 3 || constraintEdges.length !== boundaryPointIndexes.length) {
+    return false;
+  }
+
+  const expectedEdgeKeys = new Set(
+    boundaryPointIndexes.map((pointIndex, index) =>
+      undirectedEdgeKey(pointIndex, mustGet(boundaryPointIndexes, (index + 1) % boundaryPointIndexes.length))
+    )
+  );
+  for (const [left, right] of constraintEdges) {
+    if (points[left]?.role !== "boundary" || points[right]?.role !== "boundary") {
+      return false;
+    }
+
+    const key = undirectedEdgeKey(left, right);
+    if (!expectedEdgeKeys.delete(key)) {
+      return false;
+    }
+  }
+
+  return expectedEdgeKeys.size === 0;
+};
+
+const countBoundaryPointsAfterRemoval = (
+  points: readonly V6DConstrainautorPoint[],
+  removedPointIndex: number
+): number =>
+  points.filter((point, index) => point.role === "boundary" && index !== removedPointIndex).length;
+
+const createBoundaryPointRemovalRepairInput = (
+  points: readonly V6DConstrainautorPoint[],
+  removedBoundaryPointIndex: number
+): V6DConstrainautorRecoveryInput => {
+  const boundaryPoints = points.filter((point, index) =>
+    point.role === "boundary" && index !== removedBoundaryPointIndex
+  );
+  const interiorPoints = points.filter((point) => point.role === "interior");
+  const repairedPoints = [...boundaryPoints, ...interiorPoints];
+  return {
+    points: repairedPoints,
+    constraintEdges: boundaryPoints.map((_point, index) => [
+      index,
+      (index + 1) % boundaryPoints.length
+    ] as [number, number])
+  };
+};
+
+const uniqueOrdered = (values: readonly number[]): readonly number[] => {
+  const seen = new Set<number>();
+  const result: number[] = [];
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+
+    seen.add(value);
+    result.push(value);
+  }
+
+  return result;
+};
+
 export const probeV6DOutsideTriangleFilterForTest = (input: {
   readonly points: readonly V6DConstrainautorPoint[];
   readonly boundaryEdges: readonly (readonly [number, number])[];
@@ -321,6 +599,22 @@ export const filterV6DConstrainautorTrianglesToMainMask = (input: {
   readonly boundaryEdges: readonly (readonly [number, number])[];
   readonly triangles: readonly (readonly [number, number, number])[];
 }): FilteredTriangles => filterTrianglesToMainMask(input);
+
+export const markV6DConstrainautorBoundaryRepairFinalVerificationFailed = (
+  diagnostics: MeshGenerationV6ConstrainautorDiagnostics
+): MeshGenerationV6ConstrainautorDiagnostics => {
+  if (diagnostics.boundaryRepair?.result !== "repaired") {
+    return diagnostics;
+  }
+
+  return {
+    ...diagnostics,
+    boundaryRepair: {
+      ...diagnostics.boundaryRepair,
+      result: "failed-final-boundary-verification"
+    }
+  };
+};
 
 export const createV6DAlphaBoundsFallbackMesh = (
   input: V6DAlphaBoundsFallbackMeshInput
@@ -497,12 +791,14 @@ const sanitizeConstrainautorInput = (
 ): SanitizedConstrainautorInput | SanitizedConstrainautorFailure => {
   const uniqueByKey = new Map<string, V6DConstrainautorPoint>();
   const originalKeyByIndex = new Map<number, string>();
+  let finitePointCount = 0;
   for (let index = 0; index < input.points.length; index += 1) {
     const point = input.points[index];
     if (point === undefined || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
       continue;
     }
 
+    finitePointCount += 1;
     const rounded = roundRecoveryPoint(point);
     const key = pointKey(rounded);
     originalKeyByIndex.set(index, key);
@@ -516,47 +812,132 @@ const sanitizeConstrainautorInput = (
   const remapByKey = new Map(points.map((point, index) => [pointKey(point), index]));
   const edgeKeySet = new Set<string>();
   const constraintEdges: [number, number][] = [];
+  const constraintEdgeSources: SanitizedConstraintEdgeSource[] = [];
   let zeroLengthEdgeCount = 0;
+  let invalidConstraintEndpointCount = 0;
+  let duplicateConstraintEdgeCount = 0;
 
-  for (const [leftOriginal, rightOriginal] of input.constraintEdges) {
+  for (let inputEdgeIndex = 0; inputEdgeIndex < input.constraintEdges.length; inputEdgeIndex += 1) {
+    const [leftOriginal, rightOriginal] = mustGet(input.constraintEdges, inputEdgeIndex);
     const leftKey = originalKeyByIndex.get(leftOriginal);
     const rightKey = originalKeyByIndex.get(rightOriginal);
     const left = leftKey === undefined ? undefined : remapByKey.get(leftKey);
     const right = rightKey === undefined ? undefined : remapByKey.get(rightKey);
-    if (left === undefined || right === undefined || left === right) {
+    if (left === undefined || right === undefined) {
+      invalidConstraintEndpointCount += 1;
+      continue;
+    }
+
+    if (left === right) {
       zeroLengthEdgeCount += 1;
       continue;
     }
 
     const edgeKey = undirectedEdgeKey(left, right);
     if (edgeKeySet.has(edgeKey)) {
+      duplicateConstraintEdgeCount += 1;
       continue;
     }
 
     edgeKeySet.add(edgeKey);
     constraintEdges.push([left, right]);
+    constraintEdgeSources.push({
+      inputConstraintEdgeIndex: inputEdgeIndex,
+      inputConstraintEdgePointIndexes: [leftOriginal, rightOriginal]
+    });
   }
+
+  const crossingConstraintEdgePairs = collectCrossingConstraintEdgePairDiagnostics(
+    points,
+    constraintEdges,
+    constraintEdgeSources
+  );
+  const crossingConstraintEdgeCount = crossingConstraintEdgePairs.totalPairCount;
+  const pointOnConstraintEdgeCount = countConstraintPointIntersections(points, constraintEdges);
+  const invalidConstraintInputReasons = createInvalidConstraintInputReasons({
+    points,
+    constraintEdges,
+    zeroLengthConstraintEdgeCount: zeroLengthEdgeCount,
+    invalidConstraintEndpointCount,
+    duplicateConstraintEdgeCount,
+    crossingConstraintEdgeCount,
+    pointOnConstraintEdgeCount
+  });
+  const diagnostics: SanitizedConstrainautorDiagnostics = {
+    invalidConstraintInputReasons,
+    inputPointCount: input.points.length,
+    finitePointCount,
+    sanitizedPointCount: points.length,
+    mergedPointCount: Math.max(0, finitePointCount - points.length),
+    inputConstraintEdgeCount: input.constraintEdges.length,
+    sanitizedConstraintEdgeCount: constraintEdges.length,
+    zeroLengthConstraintEdgeCount: zeroLengthEdgeCount,
+    invalidConstraintEndpointCount,
+    duplicateConstraintEdgeCount,
+    crossingConstraintEdgeCount,
+    ...(crossingConstraintEdgePairs.totalPairCount === 0
+      ? {}
+      : { crossingConstraintEdgePairSample: crossingConstraintEdgePairs }),
+    pointOnConstraintEdgeCount
+  };
 
   if (
     points.length < 3 ||
     constraintEdges.length < 3 ||
     zeroLengthEdgeCount > 0 ||
-    countCrossingConstraintEdges(points, constraintEdges) > 0 ||
-    countConstraintPointIntersections(points, constraintEdges) > 0
+    invalidConstraintEndpointCount > 0 ||
+    crossingConstraintEdgeCount > 0 ||
+    pointOnConstraintEdgeCount > 0
   ) {
     return {
       status: "failed",
       points,
       constraintEdges,
-      constraintEdgeCount: constraintEdges.length
+      diagnostics
     };
   }
 
   return {
     status: "ok",
     points,
-    constraintEdges
+    constraintEdges,
+    diagnostics
   };
+};
+
+const createInvalidConstraintInputReasons = (input: {
+  readonly points: readonly V6DConstrainautorPoint[];
+  readonly constraintEdges: readonly [number, number][];
+  readonly zeroLengthConstraintEdgeCount: number;
+  readonly invalidConstraintEndpointCount: number;
+  readonly duplicateConstraintEdgeCount: number;
+  readonly crossingConstraintEdgeCount: number;
+  readonly pointOnConstraintEdgeCount: number;
+}): readonly string[] => {
+  const reasons: string[] = [];
+  if (input.points.length < 3) {
+    reasons.push("not-enough-points");
+  }
+  if (input.constraintEdges.length < 3) {
+    reasons.push("not-enough-constraint-edges");
+  }
+  if (input.invalidConstraintEndpointCount > 0) {
+    reasons.push("invalid-constraint-endpoint");
+  }
+  if (input.zeroLengthConstraintEdgeCount > 0) {
+    reasons.push("zero-length-constraint-edge");
+  }
+  if (input.duplicateConstraintEdgeCount > 0) {
+    reasons.push("duplicate-constraint-edge");
+  }
+  if (input.crossingConstraintEdgeCount > 0) {
+    reasons.push("crossing-constraint-edge");
+  }
+  if (input.pointOnConstraintEdgeCount > 0) {
+    reasons.push("point-on-constraint-edge");
+  }
+
+  return reasons;
 };
 
 const filterTrianglesToMainMask = (input: {
@@ -757,6 +1138,12 @@ const createConstrainautorDiagnostics = (input: {
   readonly missingConstraintEdgeCount?: number;
   readonly constraintRecoveryFailed: boolean;
   readonly outsideTriangleCount?: number;
+  readonly failureStage?: MeshGenerationV6ConstrainautorDiagnostics["failureStage"];
+  readonly sanitizeDiagnostics?: SanitizedConstrainautorDiagnostics;
+  readonly boundaryRepairDiagnostics?: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics;
+  readonly untriangulatedPointCount?: number;
+  readonly untriangulatedPointIndexes?: readonly number[];
+  readonly postConstrainTriangleCount?: number;
   readonly thrownErrorKind?: string;
 }): MeshGenerationV6ConstrainautorDiagnostics => ({
   dependencyGateStatus: "available",
@@ -765,6 +1152,38 @@ const createConstrainautorDiagnostics = (input: {
   missingConstraintEdgeCount: input.missingConstraintEdgeCount ?? 0,
   constraintRecoveryFailed: input.constraintRecoveryFailed,
   outsideTriangleCount: input.outsideTriangleCount ?? 0,
+  ...(input.failureStage === undefined ? {} : { failureStage: input.failureStage }),
+  ...(input.sanitizeDiagnostics === undefined
+    ? {}
+    : {
+        invalidConstraintInputReasons: input.sanitizeDiagnostics.invalidConstraintInputReasons,
+        inputPointCount: input.sanitizeDiagnostics.inputPointCount,
+        finitePointCount: input.sanitizeDiagnostics.finitePointCount,
+        sanitizedPointCount: input.sanitizeDiagnostics.sanitizedPointCount,
+        mergedPointCount: input.sanitizeDiagnostics.mergedPointCount,
+        inputConstraintEdgeCount: input.sanitizeDiagnostics.inputConstraintEdgeCount,
+        sanitizedConstraintEdgeCount: input.sanitizeDiagnostics.sanitizedConstraintEdgeCount,
+        zeroLengthConstraintEdgeCount: input.sanitizeDiagnostics.zeroLengthConstraintEdgeCount,
+        invalidConstraintEndpointCount: input.sanitizeDiagnostics.invalidConstraintEndpointCount,
+        duplicateConstraintEdgeCount: input.sanitizeDiagnostics.duplicateConstraintEdgeCount,
+        crossingConstraintEdgeCount: input.sanitizeDiagnostics.crossingConstraintEdgeCount,
+        ...(input.sanitizeDiagnostics.crossingConstraintEdgePairSample === undefined
+          ? {}
+          : { crossingConstraintEdgePairSample: input.sanitizeDiagnostics.crossingConstraintEdgePairSample }),
+        pointOnConstraintEdgeCount: input.sanitizeDiagnostics.pointOnConstraintEdgeCount
+      }),
+  ...(input.boundaryRepairDiagnostics === undefined
+    ? {}
+    : { boundaryRepair: input.boundaryRepairDiagnostics }),
+  ...(input.untriangulatedPointCount === undefined
+    ? {}
+    : { untriangulatedPointCount: input.untriangulatedPointCount }),
+  ...(input.untriangulatedPointIndexes === undefined
+    ? {}
+    : { untriangulatedPointIndexes: input.untriangulatedPointIndexes }),
+  ...(input.postConstrainTriangleCount === undefined
+    ? {}
+    : { postConstrainTriangleCount: input.postConstrainTriangleCount }),
   ...(input.thrownErrorKind === undefined ? {} : { thrownErrorKind: input.thrownErrorKind })
 });
 
@@ -876,11 +1295,13 @@ const edgeSetHasUndirectedEdge = (
   return false;
 };
 
-const countCrossingConstraintEdges = (
+const collectCrossingConstraintEdgePairDiagnostics = (
   points: readonly V6DConstrainautorPoint[],
-  edges: readonly (readonly [number, number])[]
-): number => {
-  let count = 0;
+  edges: readonly (readonly [number, number])[],
+  edgeSources: readonly SanitizedConstraintEdgeSource[]
+): MeshGenerationV6CrossingConstraintEdgePairSampleDiagnostics => {
+  let totalPairCount = 0;
+  const pairs: MeshGenerationV6CrossingConstraintEdgePairSampleDiagnostics["pairs"][number][] = [];
   for (let leftIndex = 0; leftIndex < edges.length; leftIndex += 1) {
     const left = mustGet(edges, leftIndex);
     for (let rightIndex = leftIndex + 1; rightIndex < edges.length; rightIndex += 1) {
@@ -897,13 +1318,60 @@ const countCrossingConstraintEdges = (
           mustGet(points, right[1])
         )
       ) {
-        count += 1;
+        totalPairCount += 1;
+        if (pairs.length < CROSSING_CONSTRAINT_EDGE_PAIR_SAMPLE_LIMIT) {
+          const leftSource = edgeSources[leftIndex];
+          const rightSource = edgeSources[rightIndex];
+          pairs.push({
+            sanitizedConstraintEdgeIndexes: [leftIndex, rightIndex],
+            sanitizedConstraintEdgePointIndexes: [
+              [left[0], left[1]],
+              [right[0], right[1]]
+            ],
+            ...(leftSource === undefined || rightSource === undefined
+              ? {}
+              : {
+                  inputConstraintEdgeIndexes: [
+                    leftSource.inputConstraintEdgeIndex,
+                    rightSource.inputConstraintEdgeIndex
+                  ],
+                  inputConstraintEdgePointIndexes: [
+                    leftSource.inputConstraintEdgePointIndexes,
+                    rightSource.inputConstraintEdgePointIndexes
+                  ]
+                }),
+            segments: [
+              {
+                start: toConstraintPointDiagnostics(mustGet(points, left[0])),
+                end: toConstraintPointDiagnostics(mustGet(points, left[1]))
+              },
+              {
+                start: toConstraintPointDiagnostics(mustGet(points, right[0])),
+                end: toConstraintPointDiagnostics(mustGet(points, right[1]))
+              }
+            ]
+          });
+        }
       }
     }
   }
 
-  return count;
+  return {
+    coordinateSpace: "candidate-texture-pixels",
+    sampleLimit: CROSSING_CONSTRAINT_EDGE_PAIR_SAMPLE_LIMIT,
+    sampledPairCount: pairs.length,
+    totalPairCount,
+    sampleTruncated: totalPairCount > pairs.length,
+    pairs
+  };
 };
+
+const toConstraintPointDiagnostics = (
+  point: V6DConstrainautorPoint
+): { readonly x: number; readonly y: number } => ({
+  x: roundCoordinate(point.x),
+  y: roundCoordinate(point.y)
+});
 
 const countConstraintPointIntersections = (
   points: readonly V6DConstrainautorPoint[],

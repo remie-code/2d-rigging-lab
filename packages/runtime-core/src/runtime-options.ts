@@ -15,14 +15,14 @@ export const RuntimeEvaluationOptionsSchema = z.object({
   snapshotDetail: SnapshotDetailSchema.default("summary"),
   evaluatorVersions: z
     .object({
-      dynamics: z.literal("scalarDampedFollowV1"),
+      dynamics: z.literal("worldFrameChainV1"),
       keyform1d: z.literal("linear-1d-v1"),
       keyformGrid2d: z.literal("parameter-grid-2d-v1"),
       warpLattice: z.literal("bilinear-grid-v1"),
       rigControlHierarchy: z.literal("parent-before-child-v1")
     })
     .default({
-      dynamics: "scalarDampedFollowV1",
+      dynamics: "worldFrameChainV1",
       keyform1d: "linear-1d-v1",
       keyformGrid2d: "parameter-grid-2d-v1",
       warpLattice: "bilinear-grid-v1",

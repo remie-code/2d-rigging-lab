@@ -1,0 +1,17 @@
+[
+  {
+    "file": "op-nose-warp.json",
+    "operationId": "op_blind_facex_warp_nose",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Nose",
+      "childDrawableIds": ["draw_r0_1cea4f6f_5c3cad87_nose"],
+      "domainBounds": {"x": 942, "y": 458, "width": 117, "height": 50},
+      "transformColumns": 5,
+      "transformRows": 5,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[blind] facex: create FaceX Nose warp deformer"
+  }
+]

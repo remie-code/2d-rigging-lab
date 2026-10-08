@@ -1,11 +1,11 @@
-import type {
-  NormalizedDynamicsSettings,
-  NormalizedRuntimeGraph
-} from "@private-2d-rigging-lab/runtime-core";
-import type { DynamicsGroupDto } from "@private-2d-rigging-lab/package-format";
+import type { NormalizedRuntimeGraph } from "@private-2d-rigging-lab/runtime-core";
 
 import type { AuthoringGraph } from "./authoring-graph.js";
 
+// dynamics-file-v3 world-frame chain. DTO → Normalized projection (see
+// discussion/design/dynamics-world-frame-chain.md §4). The mapping is a straight structural copy:
+// inputs carry a single signed `scale`, the chain replaces the old pendulums array, and outputs
+// read one chain segment (`segmentIndex`) with a signed `scale` and clamp `limit`.
 export const createRuntimeDynamicsGroupMap = (
   graph: AuthoringGraph
 ): NormalizedRuntimeGraph["dynamicsGroups"] =>
@@ -16,40 +16,24 @@ export const createRuntimeDynamicsGroupMap = (
         dynamicsGroupId: group.dynamicsGroupId,
         displayName: group.displayName,
         enabled: group.enabled,
-        solverKind: group.solverKind,
-        drivers: group.drivers.map((driver) => ({
-          driverId: driver.driverId,
-          sourceParameterId: driver.sourceParameterId,
-          inputScale: driver.inputScale,
-          inputOffset: driver.inputOffset,
-          invert: driver.invert
+        ...(group.presetId === undefined ? {} : { presetId: group.presetId }),
+        inputs: group.inputs.map((input) => ({
+          parameterId: input.parameterId,
+          kind: input.kind,
+          scale: input.scale
         })),
-        output: {
-          outputId: group.output.outputId,
-          targetParameterId: group.output.targetParameterId,
-          outputScale: group.output.outputScale,
-          outputOffset: group.output.outputOffset,
-          min: group.output.min,
-          max: group.output.max,
-          clampPolicy: group.output.clampPolicy
+        chain: {
+          rootOffset: { x: group.chain.rootOffset.x, y: group.chain.rootOffset.y },
+          segmentLengths: [...group.chain.segmentLengths],
+          damping: group.chain.damping,
+          gravityScale: group.chain.gravityScale
         },
-        settings: cloneDefinedSettings(group.settings),
-        resetPolicy: group.resetPolicy
+        outputs: group.outputs.map((output) => ({
+          parameterId: output.parameterId,
+          segmentIndex: output.segmentIndex,
+          scale: output.scale,
+          limit: output.limit
+        }))
       }
     ])
   );
-
-const cloneDefinedSettings = (settings: DynamicsGroupDto["settings"]): NormalizedDynamicsSettings => {
-  const cloned: NormalizedDynamicsSettings = {
-    stiffness: settings.stiffness,
-    damping: settings.damping
-  };
-
-  if (settings.maxVelocity !== undefined) {
-    return settings.maxAmplitude === undefined
-      ? { ...cloned, maxVelocity: settings.maxVelocity }
-      : { ...cloned, maxVelocity: settings.maxVelocity, maxAmplitude: settings.maxAmplitude };
-  }
-
-  return settings.maxAmplitude === undefined ? cloned : { ...cloned, maxAmplitude: settings.maxAmplitude };
-};

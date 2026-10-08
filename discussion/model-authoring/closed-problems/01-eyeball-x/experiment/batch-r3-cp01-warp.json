@@ -1,0 +1,46 @@
+[
+  {
+    "file": "r3-20-warp-l.json",
+    "operationId": "op_r3_warp_eyeball_l",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eyeball L Warp",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f7081_irides-l"
+      ],
+      "domainBounds": {
+        "x": 1022,
+        "y": 408,
+        "width": 102,
+        "height": 61
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[r3-cp01] createWarpDeformer Eyeball L Warp"
+  },
+  {
+    "file": "r3-21-warp-r.json",
+    "operationId": "op_r3_warp_eyeball_r",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eyeball R Warp",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f7143_irides-r"
+      ],
+      "domainBounds": {
+        "x": 871,
+        "y": 418,
+        "width": 107,
+        "height": 60
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[r3-cp01] createWarpDeformer Eyeball R Warp"
+  }
+]

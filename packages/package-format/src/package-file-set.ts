@@ -37,6 +37,7 @@ export function serializePackageDocumentToFileSet(
 ): PackageFileSet {
   const parsedDocument = PackageDocumentSchema.parse(document);
   assertEditorStateManifestConsistency(parsedDocument);
+  assertVariantsManifestConsistency(parsedDocument);
 
   const entries: PackageTextFileEntry[] = [
     createJsonFileEntry(PACKAGE_MANIFEST_PATH, parsedDocument.manifest),
@@ -44,6 +45,13 @@ export function serializePackageDocumentToFileSet(
       createJsonFileEntry(parsedDocument.manifest.modelFiles[key], parsedDocument.model[key])
     ))
   ];
+
+  if (parsedDocument.manifest.modelFiles.variants !== undefined) {
+    entries.push(createJsonFileEntry(
+      parsedDocument.manifest.modelFiles.variants,
+      parsedDocument.model.variants
+    ));
+  }
 
   if (parsedDocument.manifest.modelFiles.editorState !== undefined) {
     entries.push(createJsonFileEntry(
@@ -90,6 +98,9 @@ export function parsePackageDocumentFromFileSet(fileSet: PackageFileSet): Packag
     dynamics: parseJsonFile(manifest.modelFiles.dynamics, fileMap),
     masks: parseJsonFile(manifest.modelFiles.masks, fileMap),
     drawOrder: parseJsonFile(manifest.modelFiles.drawOrder, fileMap),
+    ...(manifest.modelFiles.variants === undefined
+      ? {}
+      : { variants: parseJsonFile(manifest.modelFiles.variants, fileMap) }),
     ...(manifest.modelFiles.editorState === undefined
       ? {}
       : { editorState: parseJsonFile(manifest.modelFiles.editorState, fileMap) })
@@ -158,6 +169,17 @@ function assertEditorStateManifestConsistency(document: PackageDocumentDto): voi
   if (manifestHasEditorState !== documentHasEditorState) {
     throw new PackageFileSetError(
       "model/editor-state.json must be present in both manifest.modelFiles and document.model, or absent from both"
+    );
+  }
+}
+
+function assertVariantsManifestConsistency(document: PackageDocumentDto): void {
+  const manifestHasVariants = document.manifest.modelFiles.variants !== undefined;
+  const variantGroups = document.model.variants?.variantGroups ?? [];
+
+  if (!manifestHasVariants && variantGroups.length > 0) {
+    throw new PackageFileSetError(
+      "model/variants.json must be listed in manifest.modelFiles when document.model.variants contains Variant Groups"
     );
   }
 }

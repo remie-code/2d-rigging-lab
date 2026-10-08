@@ -1,5 +1,0 @@
-
-> @private-2d-rigging-lab/editor@0.0.0 dev C:\workspace\remie\code\ai-native-live2d-editor\apps\editor
-> vite --host 127.0.0.1 "--" "--port" "5173"
-
- ELIFECYCLE  Command failed with exit code 1.

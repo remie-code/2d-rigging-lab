@@ -1,6 +1,7 @@
 import { createInitialAuthoringRevision, type AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MaskRelationIdSchema,
   MeshIdSchema,
@@ -26,6 +27,8 @@ import {
   zoomViewAtScreenPoint
 } from "./canvas-projection";
 import { commitUpdateRigControl } from "../../features/editor-session/model/editor-session-commands";
+import { createDynamicsToolPreviewEvaluation } from "../../features/editor-session/model/dynamics-tool-state";
+import { computeWarpDeformerScaledControlPointOffsets } from "./warp-deformer-scale";
 
 const PART_ROOT = PartIdSchema.parse("part_root");
 const PART_FACE = PartIdSchema.parse("part_face");
@@ -48,6 +51,8 @@ const RIG_PARENT_WARP = RigControlIdSchema.parse("rig_parent_warp");
 const RIG_CHILD_WARP = RigControlIdSchema.parse("rig_child_warp");
 const RIG_FACE_ROTATION = RigControlIdSchema.parse("rig_face_rotation");
 const FACE_ANGLE_X = ParameterIdSchema.parse("param_face_angle_x");
+const DYNAMICS_GROUP = DynamicsGroupIdSchema.parse("dyn_canvas_hair_sway");
+const DYNAMICS_OUTPUT = ParameterIdSchema.parse("param_canvas_hair_sway");
 const TEX_BACK = TextureIdSchema.parse("tex_back");
 const TEX_FRONT = TextureIdSchema.parse("tex_front");
 const TEX_HIDDEN = TextureIdSchema.parse("tex_hidden");
@@ -104,6 +109,9 @@ describe("canvas render projection", () => {
     expect(projection.selectedDrawableIds).toEqual(
       new Set([DRAW_BACK, DRAW_FRONT, DRAW_HIDDEN, DRAW_MASK, DRAW_TARGET])
     );
+    expect(
+      projection.drawables.every((drawable) => !drawable.selected && drawable.selectedBySubtree)
+    ).toBe(true);
     expect(projection.selectionBounds).toEqual({ x: 0, y: 0, width: 40, height: 40 });
 
     const view = fitCanvasView(projection, { width: 640, height: 480 });
@@ -185,6 +193,16 @@ describe("canvas render projection", () => {
         createCanvasRenderProjection(session, {
           kind: "part",
           id: PART_FACE
+        })
+      )
+    ).toBe(true);
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+    expect(
+      hasIsolatableCanvasSelection(
+        createCanvasRenderProjection(session, {
+          kind: "rigControl",
+          id: RIG_FACE_WARP
         })
       )
     ).toBe(true);
@@ -409,6 +427,13 @@ describe("canvas render projection", () => {
     });
 
     expect(committedProjection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
+    expect(
+      committedProjection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)
+    ).toMatchObject({
+      selected: false,
+      selectedBySubtree: true
+    });
+    expect(hasIsolatableCanvasSelection(committedProjection)).toBe(true);
     expect(committedProjection.deformerOverlay).toMatchObject({
       kind: "warp",
       rigControlId: RIG_FACE_WARP,
@@ -476,6 +501,35 @@ describe("canvas render projection", () => {
     ).toBeCloseTo(0.336);
   });
 
+  it("applies two-axis keyed scale to the rendered mesh around its pivot", () => {
+    const session = createFixtureSession();
+    const rig = createRotationDeformerRigControl();
+    rig.restAngleDegrees = 0;
+    session.graph.rigControls.push(rig);
+    session.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+    const eyeOpen = ParameterIdSchema.parse("param_eye_left_open");
+    session.graph.keyformSets.push({
+      keyformSetId: KeyformSetIdSchema.parse("keyset_canvas_grid_scale"),
+      target: { kind: "rigControl", id: RIG_FACE_ROTATION, property: "scale" },
+      parameterX: FACE_ANGLE_X,
+      parameterY: eyeOpen,
+      evaluator: "parameter-grid-2d-v1",
+      interpolation: "bilinear-grid-v1",
+      clampPolicy: "clamp-to-parameter-range",
+      missingKeyPolicy: "diagnostic-error",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [-30, 30].flatMap((x) =>
+        [0, 1].map((y) => ({ x, y, statePatch: { x: 1 + x / 60, y: 1 + y } }))
+      )
+    });
+    const projection = createCanvasRenderProjection(session, null, {
+      parameterValues: { [FACE_ANGLE_X]: 30, [eyeOpen]: 1 }
+    });
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+    expect(front?.bounds).toEqual({ x: 0, y: -5, width: 30, height: 40 });
+  });
+
   it("projects Rotation rest and keyed translation into overlay and drawable geometry", () => {
     const restSession = createFixtureSession();
     const restRigControl = createRotationDeformerRigControl();
@@ -523,6 +577,107 @@ describe("canvas render projection", () => {
       pivot: { x: 23, y: 20 },
       translation: { x: 8, y: 5 }
     });
+  });
+
+  it("projects Dynamics preview additive output through Canvas keyform evaluation", () => {
+    const session = createFixtureSession();
+    const rigControl = createRotationDeformerRigControl();
+    rigControl.restAngleDegrees = 0;
+    session.graph.rigControls.push(rigControl);
+    session.graph.rigControlRootIds = [RIG_FACE_ROTATION];
+    session.graph.parameters.push(
+      {
+        parameterId: FACE_ANGLE_X,
+        displayName: "Face Angle X",
+        valueSource: "authoredInput",
+        min: -30,
+        default: 0,
+        max: 30,
+        recommendedUiStep: 1
+      },
+      {
+        parameterId: DYNAMICS_OUTPUT,
+        displayName: "Hair Sway",
+        valueSource: "authoredInput",
+        min: -20,
+        default: 0,
+        max: 20,
+        recommendedUiStep: 0.1
+      }
+    );
+    session.graph.keyformSets.push(createRotationAngleKeyformSet([
+      { value: 0, statePatch: 0 },
+      { value: 10, statePatch: 10 }
+    ]));
+    session.graph.dynamicsGroups.push({
+      dynamicsGroupId: DYNAMICS_GROUP,
+      displayName: "Hair Sway",
+      enabled: true,
+      presetId: "hair",
+      inputs: [
+        {
+          parameterId: FACE_ANGLE_X,
+          kind: "angle",
+        scale: 1}
+      ],
+      chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+      outputs: [
+        {
+          parameterId: DYNAMICS_OUTPUT,
+          segmentIndex: 1,
+          scale: 1,
+          limit: 20
+        }
+      ]
+    });
+
+    // §3.2 φ = 30° (FACE_ANGLE_X 30, scale 1), rootOffset (0,0) → pin at origin. Place the single
+    // particle at θ_world = 35° so θ_local = θ_world − φ = 5°; output scale 1 → offset = 5.
+    const worldAngleRad = (35 * Math.PI) / 180;
+    const tip = {
+      x: 14 * Math.sin(worldAngleRad),
+      y: 14 * Math.cos(worldAngleRad)
+    };
+    const dynamicsEvaluation = createDynamicsToolPreviewEvaluation(session, {
+      selectedGroupId: DYNAMICS_GROUP,
+      driverValuesByGroupId: {
+        [DYNAMICS_GROUP]: {
+          [FACE_ANGLE_X]: 30
+        }
+      },
+      simulationStatesByGroupId: {
+        [DYNAMICS_GROUP]: {
+          particles: [{ x: tip.x, y: tip.y, px: tip.x, py: tip.y }],
+          tick: 1,
+          resetCounter: 1
+        }
+      },
+      definitionOverridesByGroupId: {},
+      resetSerial: 0
+    });
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_ROTATION
+      },
+      {
+        parameterValues: dynamicsEvaluation.parameterValues
+      }
+    );
+
+    expect(dynamicsEvaluation.output?.baseValue).toBe(0);
+    expect(dynamicsEvaluation.output?.offset ?? 0).toBeCloseTo(5, 6);
+    expect(dynamicsEvaluation.output?.effectiveValue ?? 0).toBeCloseTo(5, 6);
+    expect(projection.deformerOverlay?.kind).toBe("rotation");
+    expect(
+      (projection.deformerOverlay as { readonly evaluatedAngleDegrees: number }).evaluatedAngleDegrees
+    ).toBeCloseTo(5, 6);
   });
 
   it("projects Rotation preview into overlay and evaluated drawable geometry", () => {
@@ -595,6 +750,9 @@ describe("canvas render projection", () => {
       controlPointOffsets: createOffsets(12, 40, 0)
     });
     expect(rigProjection.deformerOverlay?.evaluatedControlPoints?.[0]).toEqual({ x: 45, y: 5 });
+    expect(rigProjection.deformerOverlay?.restControlPoints).toHaveLength(12);
+    expect(rigProjection.deformerOverlay?.restControlPoints?.[0]).toEqual({ x: 5, y: 5 });
+    expect(rigProjection.deformerOverlay?.restControlPoints?.[11]).toEqual({ x: 25, y: 25 });
     expect(hitTestTopmostDrawable(rigProjection, { x: 46, y: 6 })).toBe(DRAW_FRONT);
     expect(hitTestTopmostDrawable(rigProjection, { x: 6, y: 6 })).toBe(DRAW_BACK);
 
@@ -623,6 +781,72 @@ describe("canvas render projection", () => {
     });
   });
 
+  it("projects parent Deformer selection as descendant drawable subtree selection", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(
+      createHierarchyWarpDeformerRigControl({
+        rigControlId: RIG_PARENT_WARP,
+        displayName: "Parent Warp",
+        childRigControlIds: [RIG_CHILD_WARP],
+        domainBounds: { x: 0, y: 0, width: 80, height: 80 }
+      }),
+      createHierarchyWarpDeformerRigControl({
+        rigControlId: RIG_CHILD_WARP,
+        displayName: "Child Warp",
+        parentId: RIG_PARENT_WARP,
+        childDrawableIds: [DRAW_FRONT],
+        domainBounds: { x: 5, y: 5, width: 20, height: 20 }
+      })
+    );
+    session.graph.rigControlRootIds = [RIG_PARENT_WARP];
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "rigControl",
+      id: RIG_PARENT_WARP
+    });
+
+    expect(projection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT]));
+    expect(
+      projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT)
+    ).toMatchObject({
+      selected: false,
+      selectedBySubtree: true
+    });
+    expect(projection.selectionBounds).toEqual({ x: 5, y: 5, width: 20, height: 20 });
+    expect(hasIsolatableCanvasSelection(projection)).toBe(true);
+  });
+
+  it("projects Deformer tree multi-selection targets as isolatable drawable selections", () => {
+    const session = createFixtureSession();
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "deformerTreeSet",
+      targets: [
+        {
+          kind: "rigControl",
+          rigControlId: RIG_FACE_WARP
+        },
+        {
+          kind: "poolDrawable",
+          drawableId: DRAW_TARGET
+        }
+      ]
+    });
+
+    expect(projection.selectedDrawableIds).toEqual(new Set([DRAW_FRONT, DRAW_TARGET]));
+    expect(
+      projection.drawables
+        .filter((drawable) => projection.selectedDrawableIds.has(drawable.drawableId))
+        .map((drawable) => [drawable.drawableId, drawable.selected, drawable.selectedBySubtree])
+    ).toEqual([
+      [DRAW_TARGET, false, true],
+      [DRAW_FRONT, false, true]
+    ]);
+    expect(hasIsolatableCanvasSelection(projection)).toBe(true);
+  });
+
   it("projects Warp control point preview into actual drawable geometry", () => {
     const session = createFixtureSession();
     session.graph.rigControls.push(createWarpDeformerRigControl());
@@ -647,6 +871,49 @@ describe("canvas render projection", () => {
     expect(front?.evaluatedMesh.vertices[0]).toEqual({ x: 13, y: 3 });
     expect(projection.deformerOverlay?.controlPointOffsets?.[0]).toEqual({ x: 8, y: -2 });
     expect(projection.deformerOverlay?.evaluatedControlPoints?.[0]).toEqual({ x: 13, y: 3 });
+  });
+
+  it("projects scaled Warp preview offsets into evaluated drawable geometry", () => {
+    const session = createFixtureSession();
+    const domainBounds = { x: 5, y: 5, width: 20, height: 20 };
+    const scaled = computeWarpDeformerScaledControlPointOffsets({
+      restControlPoints: createRestControlPoints(domainBounds, 4, 3),
+      controlPointOffsets: createOffsets(12, 0, 0),
+      latticeColumns: 4,
+      latticeRows: 3,
+      handle: "rightEdge",
+      dragDeltaCanvas: { x: 10, y: 0 }
+    });
+    if (!scaled.ok) {
+      throw new Error(`Expected scaled preview offsets: ${scaled.reason}`);
+    }
+    session.graph.rigControls.push(createWarpDeformerRigControl());
+    session.graph.rigControlRootIds = [RIG_FACE_WARP];
+
+    const projection = createCanvasRenderProjection(
+      session,
+      {
+        kind: "rigControl",
+        id: RIG_FACE_WARP
+      },
+      {
+        controlPointPreview: {
+          rigControlId: RIG_FACE_WARP,
+          compositionMode: "replaceEvaluated",
+          controlPointOffsets: scaled.nextOffsets
+        }
+      }
+    );
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+
+    expect(projection.deformerOverlay?.controlPointOffsets).toHaveLength(12);
+    expect(projection.deformerOverlay?.controlPointOffsets?.[0]).toEqual({ x: 0, y: 0 });
+    expect(projection.deformerOverlay?.controlPointOffsets?.[3]).toEqual({ x: 10, y: 0 });
+    expect(front?.bounds.x).toBeCloseTo(5);
+    expect(front?.bounds.y).toBeCloseTo(5);
+    expect(front?.bounds.width).toBeCloseTo(30);
+    expect(front?.bounds.height).toBeCloseTo(20);
+    expect(front?.evaluatedMesh.vertices[1]?.x).toBeCloseTo(35);
   });
 
   it("projects child Warp overlay in the same evaluated space as mesh under parent movement", () => {
@@ -724,6 +991,82 @@ describe("canvas render projection", () => {
     expect(overlay.evaluatedControlPoints[1]).toEqual(front?.evaluatedMesh.vertices[1]);
     expect(overlay.evaluatedControlPoints[2]).toEqual(front?.evaluatedMesh.vertices[3]);
     expect(overlay.evaluatedControlPoints[3]).toEqual(front?.evaluatedMesh.vertices[2]);
+  });
+
+  it("keeps a padded-raster drawable renderable using padded texture dimensions (Wave108 D-atlas)", () => {
+    // D-texprep bakes a transparent covering-margin border into the layer raster, so its
+    // bytes are the padded raster (content 20 + 2·4 = 28) while the stage bounds stay
+    // content-sized (20). resolveDrawableRenderDimensions must report the padded dims from
+    // textureEntry.dimensions so isRenderableDrawable's byteLength check passes.
+    const PADDING = 4;
+    const CONTENT = 20;
+    const PADDED = CONTENT + PADDING * 2;
+    const session = createFixtureSession();
+    const frontEntry = session.graph.textureAtlas?.textures.find(
+      (entry) => entry.textureId === TEX_FRONT
+    );
+    const frontBinary = session.binaryAssets?.fileEntries.find(
+      (entry) => entry.path === frontEntry?.binaryAssetRef.packageRelativePath
+    );
+    if (frontEntry === undefined || frontBinary === undefined) {
+      throw new Error("Expected front texture entry and binary bytes.");
+    }
+    frontEntry.dimensions = { width: PADDED, height: PADDED, pixelFormat: "rgba8" };
+    frontEntry.contentInset = { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING };
+    frontBinary.bytes = new Uint8Array(PADDED * PADDED * 4);
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "drawable",
+      id: DRAW_FRONT
+    });
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+
+    expect(front?.renderWidth).toBe(PADDED);
+    expect(front?.renderHeight).toBe(PADDED);
+    expect(front?.renderBytes?.byteLength).toBe(PADDED * PADDED * 4);
+    // Stage bounds remain content-sized (bounds != raster).
+    expect(front?.bounds).toEqual({ x: 5, y: 5, width: CONTENT, height: CONTENT });
+    // Still renderable (byteLength matches padded render dims) and drives artwork bounds.
+    expect(hitTestTopmostDrawable(projection, { x: 6, y: 6 })).toBe(DRAW_FRONT);
+    expect(projection.hasRenderableArtwork).toBe(true);
+  });
+
+  it("propagates textureEntry contentInset and padded rasterDimensions to the renderable drawable (Wave 1.2 F)", () => {
+    // The render-scene adapter needs both the padded raster dimensions and the per-side content
+    // inset to remap content-space UV onto the raster's content sub-rect, so the projection must
+    // carry them onto the drawable (they were previously dropped downstream).
+    const PADDING = 4;
+    const CONTENT = 20;
+    const PADDED = CONTENT + PADDING * 2;
+    const session = createFixtureSession();
+    const frontEntry = session.graph.textureAtlas?.textures.find(
+      (entry) => entry.textureId === TEX_FRONT
+    );
+    if (frontEntry === undefined) {
+      throw new Error("Expected front texture entry.");
+    }
+    // Propagation onto the projection drawable happens in the map before the renderable filter, so
+    // only the textureEntry metadata needs to carry contentInset + padded dimensions here.
+    frontEntry.dimensions = { width: PADDED, height: PADDED, pixelFormat: "rgba8" };
+    frontEntry.contentInset = { left: PADDING, top: PADDING, right: PADDING, bottom: PADDING };
+
+    const projection = createCanvasRenderProjection(session, {
+      kind: "drawable",
+      id: DRAW_FRONT
+    });
+    const front = projection.drawables.find((drawable) => drawable.drawableId === DRAW_FRONT);
+    expect(front?.contentInset).toEqual({
+      left: PADDING,
+      top: PADDING,
+      right: PADDING,
+      bottom: PADDING
+    });
+    expect(front?.rasterDimensions).toEqual({ width: PADDED, height: PADDED });
+
+    // Legacy entries without dimensions/contentInset leave the fields undefined (raster ≡ content).
+    const back = projection.drawables.find((drawable) => drawable.drawableId === DRAW_BACK);
+    expect(back?.contentInset).toBeUndefined();
+    expect(back?.rasterDimensions).toBeUndefined();
   });
 
   it("can temporarily render a selected hidden Drawable for Mesh Tool preview", () => {
@@ -1130,6 +1473,31 @@ function createRotationTranslationKeyformSet(
     keys: keys.map((key) => ({
       value: key.value,
       statePatch: { x: key.statePatch.x, y: key.statePatch.y }
+    }))
+  };
+}
+
+function createRotationAngleKeyformSet(
+  keys: readonly {
+    readonly value: number;
+    readonly statePatch: number;
+  }[]
+) {
+  return {
+    keyformSetId: KeyformSetIdSchema.parse("keyset_canvas_projection_rotation_angle"),
+    target: {
+      kind: "rigControl" as const,
+      id: RIG_FACE_ROTATION,
+      property: "angleDegrees" as const
+    },
+    parameterId: DYNAMICS_OUTPUT,
+    evaluator: "linear-1d-v1" as const,
+    interpolation: "linear-1d-v1" as const,
+    compositionMode: "replace" as const,
+    compositionOrder: 0,
+    keys: keys.map((key) => ({
+      value: key.value,
+      statePatch: key.statePatch
     }))
   };
 }

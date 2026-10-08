@@ -1,7 +1,7 @@
 import type { DiagnosticDto, RuntimeStateDto } from "@private-2d-rigging-lab/contracts";
 
 import { createRuntimeDiagnostic } from "./diagnostics.js";
-import { computeDynamicsTarget } from "./dynamics-evaluation.js";
+import { createResetDynamicsStateFromGraph } from "./dynamics-evaluation.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeEvaluationInputDto } from "./runtime-input.js";
 
@@ -53,13 +53,14 @@ export const createCompatibleRuntimeState = (
           message: "Previous runtime state is missing an active dynamics group; initialized the group for this frame."
         })
       );
-      const currentTarget = computeDynamicsTarget(graph, group, input.authoredParameterValues);
-      dynamicsGroups[group.dynamicsGroupId] = {
-        position: currentTarget,
-        velocity: 0,
-        tick: 0,
-        resetCounter: 1
-      };
+      // §3.4: initialize the missing group's chain straight below the current anchor pin.
+      dynamicsGroups[group.dynamicsGroupId] = createResetDynamicsStateFromGraph(
+        graph,
+        group,
+        input.authoredParameterValues,
+        0,
+        true
+      );
       continue;
     }
 

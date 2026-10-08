@@ -14,7 +14,9 @@ import { createParameterOperationHandler } from "./operations/create-parameter.j
 import { createRotation2dRigControlOperationHandler } from "./operations/create-rotation2d-rig-control.js";
 import { createWarpDeformerOperationHandler } from "./operations/create-warp-deformer.js";
 import { createWarpLattice2dRigControlOperationHandler } from "./operations/create-warp-lattice2d-rig-control.js";
+import { deleteRigControlOperationHandler } from "./operations/delete-rig-control.js";
 import { deletePartOperationHandler } from "./operations/delete-part.js";
+import { deleteDynamicsGroupOperationHandler } from "./operations/delete-dynamics-group.js";
 import { generateMeshOperationHandler } from "./operations/generate-mesh.js";
 import { importPsdLayerMaterializationBatchOperationHandler } from "./operations/import-psd-layer-materialization-batch.js";
 import { importPsdLayerMaterializationOperationHandler } from "./operations/import-psd-layer-materialization.js";
@@ -47,6 +49,19 @@ import { updatePartOperationHandler } from "./operations/update-part.js";
 import { updateDynamicsGroupOperationHandler } from "./operations/update-dynamics-group.js";
 import { updateRigControlOperationHandler } from "./operations/update-rig-control.js";
 import { editKeyformKeyOperationHandler } from "./operations/edit-keyform-key.js";
+import { applyTextureAtlasPreviewOperationHandler } from "./operations/apply-texture-atlas-preview.js";
+import {
+  addVariantTargetDrawableOperationHandler,
+  createVariantGroupOperationHandler,
+  createVariantOperationHandlerEntry,
+  deleteVariantGroupOperationHandler,
+  deleteVariantOperationHandler,
+  removeVariantTargetDrawableOperationHandler,
+  setVariantDefaultActiveSelectionOperationHandler,
+  setVariantMembershipOperationHandler,
+  updateVariantGroupOperationHandler,
+  updateVariantOperationHandler
+} from "./operations/variants.js";
 
 export interface OperationApplyOutcome {
   readonly result: OperationResultDto;
@@ -61,11 +76,21 @@ export interface OperationHandler {
     request: OperationRequestDto,
     operationId: OperationId
   ): OperationApplyOutcome;
+  dryRunAsync?(
+    session: AuthoringSession,
+    request: OperationRequestDto,
+    operationId: OperationId
+  ): Promise<OperationApplyOutcome>;
   commit(
     session: AuthoringSession,
     request: OperationRequestDto,
     operationId: OperationId
   ): OperationApplyOutcome;
+  commitAsync?(
+    session: AuthoringSession,
+    request: OperationRequestDto,
+    operationId: OperationId
+  ): Promise<OperationApplyOutcome>;
 }
 
 export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = new Map([
@@ -106,6 +131,7 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [addKeyformGrid2dOperationHandler.operationType, addKeyformGrid2dOperationHandler],
   [createDynamicsGroupOperationHandler.operationType, createDynamicsGroupOperationHandler],
   [updateDynamicsGroupOperationHandler.operationType, updateDynamicsGroupOperationHandler],
+  [deleteDynamicsGroupOperationHandler.operationType, deleteDynamicsGroupOperationHandler],
   [createRotation2dRigControlOperationHandler.operationType, createRotation2dRigControlOperationHandler],
   [createWarpLattice2dRigControlOperationHandler.operationType, createWarpLattice2dRigControlOperationHandler],
   [createWarpDeformerOperationHandler.operationType, createWarpDeformerOperationHandler],
@@ -113,10 +139,25 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
   [moveDrawableRigControlBindingOperationHandler.operationType, moveDrawableRigControlBindingOperationHandler],
   [reparentRigControlOperationHandler.operationType, reparentRigControlOperationHandler],
   [updateRigControlOperationHandler.operationType, updateRigControlOperationHandler],
+  [deleteRigControlOperationHandler.operationType, deleteRigControlOperationHandler],
   [setMaskRelationOperationHandler.operationType, setMaskRelationOperationHandler],
   [setDrawOrderOperationHandler.operationType, setDrawOrderOperationHandler],
   [setRightsMetadataOperationHandler.operationType, setRightsMetadataOperationHandler],
-  [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler]
+  [setRuntimeVisibilityOperationHandler.operationType, setRuntimeVisibilityOperationHandler],
+  [applyTextureAtlasPreviewOperationHandler.operationType, applyTextureAtlasPreviewOperationHandler],
+  [createVariantGroupOperationHandler.operationType, createVariantGroupOperationHandler],
+  [updateVariantGroupOperationHandler.operationType, updateVariantGroupOperationHandler],
+  [deleteVariantGroupOperationHandler.operationType, deleteVariantGroupOperationHandler],
+  [createVariantOperationHandlerEntry.operationType, createVariantOperationHandlerEntry],
+  [updateVariantOperationHandler.operationType, updateVariantOperationHandler],
+  [deleteVariantOperationHandler.operationType, deleteVariantOperationHandler],
+  [addVariantTargetDrawableOperationHandler.operationType, addVariantTargetDrawableOperationHandler],
+  [removeVariantTargetDrawableOperationHandler.operationType, removeVariantTargetDrawableOperationHandler],
+  [setVariantMembershipOperationHandler.operationType, setVariantMembershipOperationHandler],
+  [
+    setVariantDefaultActiveSelectionOperationHandler.operationType,
+    setVariantDefaultActiveSelectionOperationHandler
+  ]
 ]);
 
 export const getOperationHandler = (operationType: OperationType): OperationHandler | undefined =>

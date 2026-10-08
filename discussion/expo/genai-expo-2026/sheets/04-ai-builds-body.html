@@ -1,0 +1,160 @@
+<meta charset="utf-8">
+<title>01 AIに、自分の体を作らせてみた。</title>
+<style>
+  /* ── A2 縦(420 × 594mm)。ChatGPT で作った版下イメージを、実素材で組み直したもの。
+     生成画像は中の screenshot が崩れるため、ここでは実 PNG を配置し、
+     文字はすべてテキスト(印刷でベクターのまま出る)。 */
+  @page { size: 420mm 594mm; margin: 0; }
+
+  :root {
+    --u: 4.2mm;                 /* 版面幅の 1/100 */
+    --bg: #eef1f5;
+    --card: #ffffff;
+    --navy: #05285b;        /* 6 枚共通(生成画像から実測) */
+    --navy-d: #072c62;
+    --ink: #1a1d21;
+    --sub: #5b6472;
+    --line: #d3d9e2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); }
+  body {
+    /* 1 枚に収める。溢れると印刷時に 2 ページへ割れるため高さは厳守。 */
+    width: 420mm; height: 594mm; overflow: hidden;
+    padding: calc(var(--u) * 2.2) calc(var(--u) * 2.4);   /* 6 枚共通 */
+    font-family: "Yu Gothic", "Hiragino Sans", sans-serif;
+    font-feature-settings: "palt" 1; line-height: 1.5;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── ヘッダ ─────────────────────────────────────────────── */
+  .head { display: flex; align-items: center; gap: calc(var(--u) * 1.8); }   /* 6 枚共通 */
+  /* ── パネル番号と小見出しは 6 枚共通の寸法 ─────────────────── */
+  .no {
+    background: var(--navy-d); color: #fff; font-weight: 900;
+    font-size: calc(var(--u) * 3.4); line-height: 1; letter-spacing: -0.02em;
+    padding: calc(var(--u) * 0.85) calc(var(--u) * 1.5); border-radius: 1.6mm;
+  }
+  .eyebrow { font-size: calc(var(--u) * 1.8); color: #46505f; letter-spacing: 0.05em; }
+  h1 {
+    /* 折り返させない。版面幅いっぱいを使って最大サイズで一行に収める。 */
+    font-size: calc(var(--u) * 5.6); font-weight: 900; letter-spacing: -0.03em;
+    line-height: 1.15; margin-top: calc(var(--u) * 1); white-space: nowrap;
+    color: var(--navy);   /* 6 枚共通 */
+  }
+  .sub { font-size: calc(var(--u) * 1.95); color: #2f3742; margin-top: calc(var(--u) * 0.7); }
+
+  /* ── 見出しチップ ───────────────────────────────────────── */
+  .chip {
+    display: inline-block; background: var(--navy); color: #fff;
+    font-size: calc(var(--u) * 1.85); font-weight: 800; letter-spacing: 0.02em;
+    padding: calc(var(--u) * 0.7) calc(var(--u) * 2);
+    border-radius: 1.2mm; margin-bottom: calc(var(--u) * 0.8);
+  }
+
+  /* ── 図版カード ─────────────────────────────────────────── */
+  .card {
+    background: var(--card); border: 0.4mm solid var(--line); border-radius: 1.5mm;
+    padding: calc(var(--u) * 1.1); box-shadow: 0 0.8mm 2mm rgba(20,40,70,.07);
+  }
+  .card img { display: block; width: 100%; height: auto; border-radius: 0.8mm; }
+  /* 図版は高さを食うため、A2 一枚に収まる幅へ絞る(数値は実測で調整) */
+  .card.narrow { width: 80%; margin: 0 auto; }
+  .card.wide { width: 86%; margin: 0 auto; }
+
+  /* 縦の余りは 2 つの図版ブロックが分け合って吸う(①②③⑤⑥ と同じ配り方) */
+  .imgblock {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .shot { position: relative; }
+
+  /* 吹き出し */
+  .callout {
+    position: absolute; background: #fff; border: 0.5mm solid var(--navy-d);
+    border-radius: 1.6mm; padding: calc(var(--u) * 0.85) calc(var(--u) * 1.3);
+    font-size: calc(var(--u) * 1.55); font-weight: 700; line-height: 1.4;
+    color: var(--ink); box-shadow: 0 0.6mm 1.6mm rgba(0,0,0,.18); max-width: calc(var(--u) * 30);
+  }
+  .callout small { display: block; font-weight: 500; font-size: calc(var(--u) * 1.32); color: var(--sub); }
+  .callout::after {
+    content: ""; position: absolute; width: 0; height: 0;
+    border: calc(var(--u) * 1.1) solid transparent;
+  }
+  /* 上側の吹き出し → 下向きの尻尾 */
+  .c-top { top: calc(var(--u) * 3.2); right: calc(var(--u) * 7); }
+  .c-top::after { bottom: calc(var(--u) * -2.1); left: calc(var(--u) * 4); border-top-color: var(--navy-d); }
+  /* 下側の吹き出し → 上向きの尻尾 */
+  .c-bottom { bottom: calc(var(--u) * 4.5); left: calc(var(--u) * 4); }
+  .c-bottom::after { top: calc(var(--u) * -2.1); left: calc(var(--u) * 6); border-bottom-color: var(--navy-d); }
+
+  /* ── つなぎ ─────────────────────────────────────────────── */
+  .bridge { text-align: center; padding: calc(var(--u) * 1) 0 calc(var(--u) * 0.8); }
+  .bridge p { font-size: calc(var(--u) * 1.95); font-weight: 800; }
+  .bridge .arrow {
+    width: 0; height: 0; margin: calc(var(--u) * 0.5) auto 0;
+    border-left: calc(var(--u) * 1.7) solid transparent;
+    border-right: calc(var(--u) * 1.7) solid transparent;
+    border-top: calc(var(--u) * 1.8) solid var(--navy);
+  }
+
+  /* ── まとめ箱 ───────────────────────────────────────────── */
+  .summary {
+    margin-top: auto; background: #e3e9f1; border-radius: 1.5mm;
+    padding: calc(var(--u) * 1.5) calc(var(--u) * 2.2);
+    display: grid; grid-template-columns: calc(var(--u) * 7) 1fr; column-gap: calc(var(--u) * 1.8);
+    align-items: center;
+  }
+  .summary .mark {
+    width: calc(var(--u) * 6); height: calc(var(--u) * 6); border-radius: 50%;
+    background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--u) * 2.9); font-weight: 900;
+  }
+  .summary h2 { font-size: calc(var(--u) * 2.2); font-weight: 900; line-height: 1.4; }
+  .summary p { font-size: calc(var(--u) * 1.5); color: #46505f; margin-top: calc(var(--u) * 0.5); line-height: 1.55; }
+
+  .foot {
+    margin-top: calc(var(--u) * 1); text-align: center;
+    font-size: calc(var(--u) * 1.35); color: var(--sub); letter-spacing: 0.03em;
+  }
+</style>
+
+<div class="head">
+  <div class="no">04</div>
+  <p class="eyebrow">生成AIなんでも展示会 Vol.6　出展パネル</p>
+</div>
+<h1>AIに、自分用のモデルを組ませた。</h1>
+<p class="sub">AIに指示すると、変更内容と確認画像を返しながら作業を進める。</p>
+
+<div class="imgblock" style="margin-top: calc(var(--u) * 1.8)">
+  <div><span class="chip">AIでの作業記録</span></div>
+  <div class="card narrow">
+    <img src="../assets/codex-edit.png" alt="AIとの作業記録。指示に対して変更内容の要約と、髪の角度を振った確認画像が返ってくる">
+  </div>
+</div>
+
+<div class="bridge">
+  <p>作業結果を Editor で開くと、こうなる</p>
+  <div class="arrow"></div>
+</div>
+
+<div class="imgblock">
+  <div><span class="chip">Editor で見た作業結果</span></div>
+  <div class="card wide">
+    <div class="shot">
+      <img src="../assets/editor-image.png" alt="自作エディタで開いた作業結果。AIが追加した変形構造が選択されている">
+      <div class="callout c-top">頭の傾きに追従する<br>後ろ髪の変形</div>
+      <div class="callout c-bottom">AIが追加・調整した変形構造<small>BodyZ BackHair Gravity</small></div>
+    </div>
+  </div>
+</div>
+
+<div class="summary">
+  <div class="mark">✓</div>
+  <div>
+    <h2>指示を出し、返ってきた結果を見て、また指示を出す。それを繰り返す。</h2>
+    <p>AIは変更範囲を限定して安全に編集し、複数姿勢で検証しながら、実際のモデルデータに反映していく。</p>
+  </div>
+</div>
+
+<p class="foot">使用ツール: Private 2D Rigging Lab（自作エディタ） ／ AI: Codex（OpenAI）</p>

@@ -95,8 +95,11 @@ export const applyTutorialMiniModelRecipe = (
     const outcome = core.commitOperation(seed.session, request);
 
     if (outcome.result.status !== "committed") {
+      const diagnostics = outcome.result.diagnostics
+        .map((diagnostic) => `${diagnostic.checkId}:${diagnostic.message}`)
+        .join("; ");
       throw new Error(
-        `Tutorial mini model recipe operation ${request.operationId} was not committed: ${outcome.result.status}.`
+        `Tutorial mini model recipe operation ${request.operationId} was not committed: ${outcome.result.status}. ${diagnostics}`
       );
     }
 
@@ -327,38 +330,32 @@ const addDynamicsRequests = (addRequest: AddTutorialRequest): void => {
     dynamicsGroupId: TUTORIAL_MINI_MODEL_IDS.dynamicsGroups.hairSway,
     displayName: "Tutorial Hair Sway",
     enabled: true,
-    solverKind: "scalarDampedFollowV1",
-    resetPolicy: "reset-on-load",
-    drivers: [
+    inputs: [
       {
-        driverId: "driver_tutorial_hair_sway_face_yaw",
-        sourceParameterId: TUTORIAL_MINI_MODEL_IDS.parameters.faceYaw,
-        inputScale: 0.6,
-        inputOffset: 0,
-        invert: false
+        parameterId: TUTORIAL_MINI_MODEL_IDS.parameters.faceYaw,
+        kind: "angle",
+        scale: 30
       },
       {
-        driverId: "driver_tutorial_hair_sway_body_bob",
-        sourceParameterId: TUTORIAL_MINI_MODEL_IDS.parameters.bodyBob,
-        inputScale: 0.4,
-        inputOffset: 0,
-        invert: false
+        parameterId: TUTORIAL_MINI_MODEL_IDS.parameters.bodyBob,
+        kind: "positionY",
+        scale: 6
       }
     ],
-    output: {
-      outputId: "output_tutorial_hair_sway",
-      targetParameterId: TUTORIAL_MINI_MODEL_IDS.parameters.hairSway,
-      outputScale: 1,
-      outputOffset: 0,
-      min: -1,
-      max: 1,
-      clampPolicy: "clamp-to-output-range"
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
     },
-    settings: {
-      stiffness: 0.32,
-      damping: 0.68,
-      maxAmplitude: 1
-    }
+    outputs: [
+      {
+        parameterId: TUTORIAL_MINI_MODEL_IDS.parameters.hairSway,
+        segmentIndex: 1,
+        scale: 0.0333,
+        limit: 1
+      }
+    ]
   });
 };
 

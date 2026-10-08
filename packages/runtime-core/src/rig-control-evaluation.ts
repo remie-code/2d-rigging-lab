@@ -1,11 +1,13 @@
 import {
   DrawableIdSchema,
   RectDtoSchema,
-  RigControlIdSchema
+  RigControlIdSchema,
+  Vec2DtoSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DiagnosticDto,
   DrawableId,
+  RectDto,
   RigControlId,
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
@@ -19,15 +21,16 @@ import type {
   NormalizedRuntimeGraph,
   NormalizedWarpLattice2dRigControl
 } from "./normalized-runtime-graph.js";
-import type { EvaluatedDrawableDto } from "./snapshot.js";
+import type { RuntimeDrawableEvaluationBase } from "./runtime-drawable-evaluation.js";
 import type { RuntimeKeyformSample } from "./keyform-sampling.js";
 import { applyRigControlOpacityMultiplierSamples } from "./rig-control-opacity-keyform-state.js";
 import { applyRotation2dSamples } from "./rig-control-keyform-state.js";
 import {
-  createAffectedDrawableIds,
-  createRigControlHierarchyEvaluation,
+  createRigControlTopologyEvaluation,
   sortDrawableIds,
-  sortRigControlIds
+  sortRigControlIds,
+  type RigControlDrawableParentCandidate,
+  type RigControlTopologyEvaluation
 } from "./rig-control-hierarchy.js";
 import {
   applyAffine2dToVertices,
@@ -45,6 +48,7 @@ import {
   evaluateWarpLattice2dState
 } from "./rig-control-warp-lattice.js";
 import type { WarpLattice2dLocalState } from "./rig-control-warp-lattice.js";
+import type { RuntimeCoreEvaluationProfiler } from "./runtime-profiling.js";
 
 export const EvaluatedRigControlSchema = z.object({
   rigControlId: RigControlIdSchema,
@@ -61,12 +65,29 @@ export const EvaluatedRigControlSchema = z.object({
   bounds: RectDtoSchema.optional(),
   localTransform: Rotation2dTransformStateSchema.optional(),
   worldTransform: Rotation2dTransformStateSchema.optional(),
+  /**
+   * Evaluated absolute lattice control-point coordinates for warpLattice2d rig
+   * controls (Wave104 Domain C, §3.3). Each entry is
+   * `restControlPoints[i] + evaluated controlPointOffsets[i]` in the rig
+   * control's rest/domain space, in the same index order as
+   * `restControlPoints`. Present only for `kind === "warpLattice2d"` rig
+   * controls; omitted for rotation2d and when the warp evaluation produced no
+   * offsets (e.g. blocked configuration). This is a NARROW, additive export of a
+   * value already computed internally during warp evaluation
+   * (`WarpLattice2dLocalState.controlPointOffsets`); it does not change any
+   * evaluation behavior. At rest (no keyform samples) the offsets are zero, so
+   * these coordinates equal `restControlPoints`; keyform-driven offsets move
+   * them off rest.
+   */
+  evaluatedControlPoints: z.array(Vec2DtoSchema).optional(),
   unsupportedReason: z.string().optional()
 });
 export type EvaluatedRigControlDto = z.infer<typeof EvaluatedRigControlSchema>;
 
-export interface RigControlEvaluationResult {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+export interface RigControlEvaluationResult<
+  TDrawable extends RuntimeDrawableEvaluationBase = RuntimeDrawableEvaluationBase
+> {
+  readonly drawables: readonly TDrawable[];
   readonly rigControls: readonly EvaluatedRigControlDto[];
   readonly diagnostics: readonly DiagnosticDto[];
 }
@@ -82,16 +103,23 @@ interface RigControlEffect {
   readonly evaluated: EvaluatedRigControlInternal;
 }
 
-export const evaluateRigControlHierarchy = (input: {
+export const evaluateRigControlHierarchy = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
   readonly graph: NormalizedRuntimeGraph;
-  readonly drawables: readonly EvaluatedDrawableDto[];
+  readonly drawables: readonly TDrawable[];
+  readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
   readonly samples: readonly RuntimeKeyformSample[];
   readonly hashPrecisionDecimals: number;
-}): RigControlEvaluationResult => {
+  readonly topology?: RigControlTopologyEvaluation;
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
+  readonly includeRigControls?: boolean;
+}): RigControlEvaluationResult<TDrawable> => {
   const diagnostics: DiagnosticDto[] = [];
   const patchesByRigControlId = groupRigControlSamples(input.samples);
-  const hierarchy = createRigControlHierarchyEvaluation(input.graph);
-  diagnostics.push(...hierarchy.diagnostics);
+  const topology = input.topology ?? createRigControlTopologyEvaluation(input.graph);
+  const hierarchy = topology.hierarchy;
+  diagnostics.push(...cloneDiagnostics(hierarchy.diagnostics));
   const orderedRigControlIds = hierarchy.orderedRigControlIds;
   const evaluatedById = new Map<RigControlId, EvaluatedRigControlInternal>();
 
@@ -106,11 +134,7 @@ export const evaluateRigControlHierarchy = (input: {
         ? identityAffine2d()
         : evaluatedById.get(rigControl.parentId)?.worldMatrix ?? identityAffine2d();
     const descendantRigControlIds = hierarchy.descendantRigControlIdsById.get(rigControl.rigControlId) ?? [];
-    const affectedDrawableIds = createAffectedDrawableIds(
-      rigControl,
-      hierarchy.descendantRigControlIdsById,
-      hierarchy.declaredChildDrawableIdsById
-    );
+    const affectedDrawableIds = topology.affectedDrawableIdsByRigControlId.get(rigControl.rigControlId) ?? [];
     const blockedReasons = hierarchy.blockedRigControlIds.get(rigControl.rigControlId) ?? [];
     const evaluated =
       blockedReasons.length > 0
@@ -135,17 +159,21 @@ export const evaluateRigControlHierarchy = (input: {
   const transformedDrawables = applyRigControlTransformsToDrawables({
     drawables: input.drawables,
     graph: input.graph,
-    orderedRigControlIds,
+    referenceVerticesByDrawableId: input.referenceVerticesByDrawableId,
+    topology,
     evaluatedById,
     hashPrecisionDecimals: input.hashPrecisionDecimals,
-    diagnostics
+    diagnostics,
+    ...(input.profiling === undefined ? {} : { profiling: input.profiling })
   });
 
   return {
     drawables: transformedDrawables,
-    rigControls: orderedRigControlIds
-      .map((rigControlId) => evaluatedById.get(rigControlId)?.dto)
-      .filter((rigControl): rigControl is EvaluatedRigControlDto => rigControl !== undefined),
+    rigControls: input.includeRigControls === false
+      ? []
+      : orderedRigControlIds
+        .map((rigControlId) => evaluatedById.get(rigControlId)?.dto)
+        .filter((rigControl): rigControl is EvaluatedRigControlDto => rigControl !== undefined),
     diagnostics
   };
 };
@@ -298,6 +326,10 @@ const evaluateWarpLatticeRigControl = (input: {
     samples: input.samples.filter((sample) => !isOpacityMultiplierSample(sample)),
     diagnostics: input.diagnostics
   });
+  const evaluatedControlPoints = computeEvaluatedWarpControlPoints(
+    input.rigControl.restControlPoints,
+    latticeEvaluation.localState.controlPointOffsets
+  );
 
   return {
     worldMatrix: input.parentWorldMatrix,
@@ -315,6 +347,7 @@ const evaluateWarpLatticeRigControl = (input: {
       affectedDrawableIds: input.affectedDrawableIds,
       affectedRigControlIds: input.descendantRigControlIds,
       bounds: input.rigControl.domainBounds,
+      ...(evaluatedControlPoints === undefined ? {} : { evaluatedControlPoints }),
       ...(latticeEvaluation.evaluationStatus === "unsupported"
         ? { unsupportedReason: latticeEvaluation.unsupportedReason }
         : {})
@@ -322,40 +355,51 @@ const evaluateWarpLatticeRigControl = (input: {
   };
 };
 
-const applyRigControlTransformsToDrawables = (input: {
-  readonly drawables: readonly EvaluatedDrawableDto[];
+/**
+ * Absolute evaluated lattice control points = rest control points + evaluated
+ * offsets, element-wise. Returns undefined when the offsets do not line up with
+ * the rest points (defensive; a blocked/invalid config can yield mismatched
+ * lengths) so the additive export never emits partially-aligned coordinates.
+ * Pure and deterministic; introduces no new evaluation behavior.
+ */
+const computeEvaluatedWarpControlPoints = (
+  restControlPoints: readonly Vec2Dto[],
+  controlPointOffsets: readonly Vec2Dto[]
+): readonly Vec2Dto[] | undefined => {
+  if (
+    restControlPoints.length === 0 ||
+    restControlPoints.length !== controlPointOffsets.length
+  ) {
+    return undefined;
+  }
+
+  return restControlPoints.map((restPoint, index) => {
+    const offset = controlPointOffsets[index] ?? { x: 0, y: 0 };
+    return {
+      x: restPoint.x + offset.x,
+      y: restPoint.y + offset.y
+    };
+  });
+};
+
+const applyRigControlTransformsToDrawables = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
+  readonly drawables: readonly TDrawable[];
   readonly graph: NormalizedRuntimeGraph;
-  readonly orderedRigControlIds: readonly RigControlId[];
+  readonly referenceVerticesByDrawableId: ReadonlyMap<DrawableId, readonly Vec2Dto[]>;
+  readonly topology: RigControlTopologyEvaluation;
   readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
   readonly hashPrecisionDecimals: number;
   readonly diagnostics: DiagnosticDto[];
-}): readonly EvaluatedDrawableDto[] => {
-  const directRigControlByDrawableId = new Map<DrawableId, RigControlEffect>();
-
-  for (const rigControlId of input.orderedRigControlIds) {
-    const rigControl = input.graph.rigControls.get(rigControlId);
-    const evaluated = input.evaluatedById.get(rigControlId);
-    if (rigControl === undefined || evaluated === undefined) {
-      continue;
-    }
-    if (evaluated.dto.evaluationStatus === "blocked") {
-      continue;
-    }
-
-    for (const drawableId of sortDrawableIds(rigControl.childDrawableIds)) {
-      if (!input.drawables.some((drawable) => drawable.drawableId === drawableId)) {
-        input.diagnostics.push(createMissingDrawableDiagnostic(drawableId, rigControlId));
-        continue;
-      }
-
-      if (directRigControlByDrawableId.has(drawableId)) {
-        input.diagnostics.push(createDuplicateDrawableParentDiagnostic(drawableId, rigControlId));
-        continue;
-      }
-
-      directRigControlByDrawableId.set(drawableId, { rigControl, evaluated });
-    }
-  }
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
+}): readonly TDrawable[] => {
+  const directRigControlByDrawableId = createDirectRigControlByDrawableId({
+    graph: input.graph,
+    candidates: input.topology.directDrawableParentCandidates,
+    evaluatedById: input.evaluatedById,
+    diagnostics: input.diagnostics
+  });
 
   return input.drawables.map((drawable) => {
     const directRigControl = directRigControlByDrawableId.get(drawable.drawableId);
@@ -366,7 +410,9 @@ const applyRigControlTransformsToDrawables = (input: {
     const effects = createRigControlEffectChain({
       graph: input.graph,
       directRigControl,
-      evaluatedById: input.evaluatedById
+      evaluatedById: input.evaluatedById,
+      effectChainRigControlIds:
+        input.topology.effectChainRigControlIdsByRigControlId.get(directRigControl.rigControl.rigControlId) ?? []
     });
     const opacity = applyRigControlOpacityMultiplier(drawable.opacity, effects);
     if (drawable.vertices === undefined) {
@@ -375,22 +421,82 @@ const applyRigControlTransformsToDrawables = (input: {
         opacity
       };
     }
+    const referenceVertices = input.referenceVerticesByDrawableId.get(drawable.drawableId);
+    if (referenceVertices === undefined) {
+      input.diagnostics.push(createMissingReferenceVerticesDiagnostic(drawable.drawableId, directRigControl.rigControl.rigControlId));
+      return {
+        ...drawable,
+        opacity
+      };
+    }
+
+    if (referenceVertices.length !== drawable.vertices.length) {
+      input.diagnostics.push(
+        createVertexStreamLengthMismatchDiagnostic({
+          drawableId: drawable.drawableId,
+          rigControlId: directRigControl.rigControl.rigControlId,
+          currentVertexCount: drawable.vertices.length,
+          referenceVertexCount: referenceVertices.length
+        })
+      );
+      return {
+        ...drawable,
+        opacity
+      };
+    }
 
     const transformedVertices = applyRigControlEffectChainToVertices({
-      vertices: drawable.vertices,
-      effects
+      currentVertices: drawable.vertices,
+      referenceVertices,
+      effects,
+      ...(input.profiling === undefined ? {} : { profiling: input.profiling })
     });
-    return {
-      ...drawable,
+    return withRigControlTransformedVertices({
+      drawable,
       opacity,
       vertices: transformedVertices,
-      bounds: computeBoundsFromVertices(transformedVertices),
-      vertexHash: createStableVertexHash(transformedVertices, {
-        hashPrecisionDecimals: input.hashPrecisionDecimals
-      })
-    };
+      hashPrecisionDecimals: input.hashPrecisionDecimals
+    });
   });
 };
+
+const withRigControlTransformedVertices = <
+  TDrawable extends RuntimeDrawableEvaluationBase
+>(input: {
+  readonly drawable: TDrawable;
+  readonly opacity: number;
+  readonly vertices: readonly Vec2Dto[];
+  readonly hashPrecisionDecimals: number;
+}): TDrawable => {
+  const nextDrawable = {
+    ...input.drawable,
+    opacity: input.opacity,
+    vertices: input.vertices
+  };
+
+  if (!hasPublicGeometryFields(input.drawable)) {
+    return nextDrawable as TDrawable;
+  }
+
+  return {
+    ...nextDrawable,
+    bounds: computeBoundsFromVertices(input.vertices),
+    vertexHash: createStableVertexHash(input.vertices, {
+      hashPrecisionDecimals: input.hashPrecisionDecimals
+    })
+  } as TDrawable;
+};
+
+interface RuntimeDrawableWithPublicGeometry {
+  readonly bounds: RectDto;
+  readonly vertexHash: string;
+}
+
+const hasPublicGeometryFields = (
+  drawable: RuntimeDrawableEvaluationBase
+): drawable is RuntimeDrawableEvaluationBase & RuntimeDrawableWithPublicGeometry =>
+  typeof (drawable as { readonly bounds?: unknown }).bounds === "object" &&
+  typeof (drawable as { readonly vertexHash?: unknown }).vertexHash === "string";
 
 const applyRigControlOpacityMultiplier = (
   opacity: number,
@@ -411,17 +517,54 @@ const applyRigControlOpacityMultiplier = (
 const isOpacityMultiplierSample = (sample: RuntimeKeyformSample): boolean =>
   sample.targetMetadata.targetProperty === "opacityMultiplier";
 
+const createDirectRigControlByDrawableId = (input: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly candidates: readonly RigControlDrawableParentCandidate[];
+  readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
+  readonly diagnostics: DiagnosticDto[];
+}): ReadonlyMap<DrawableId, RigControlEffect> => {
+  const directRigControlByDrawableId = new Map<DrawableId, RigControlEffect>();
+
+  for (const candidate of input.candidates) {
+    const rigControl = input.graph.rigControls.get(candidate.rigControlId);
+    const evaluated = input.evaluatedById.get(candidate.rigControlId);
+    if (rigControl === undefined || evaluated === undefined) {
+      continue;
+    }
+    if (evaluated.dto.evaluationStatus === "blocked") {
+      continue;
+    }
+
+    if (!candidate.drawableExists) {
+      input.diagnostics.push(createMissingDrawableDiagnostic(candidate.drawableId, candidate.rigControlId));
+      continue;
+    }
+
+    if (directRigControlByDrawableId.has(candidate.drawableId)) {
+      input.diagnostics.push(createDuplicateDrawableParentDiagnostic(candidate.drawableId, candidate.rigControlId));
+      continue;
+    }
+
+    directRigControlByDrawableId.set(candidate.drawableId, { rigControl, evaluated });
+  }
+
+  return directRigControlByDrawableId;
+};
+
 const createRigControlEffectChain = (input: {
   readonly graph: NormalizedRuntimeGraph;
   readonly directRigControl: RigControlEffect;
   readonly evaluatedById: ReadonlyMap<RigControlId, EvaluatedRigControlInternal>;
+  readonly effectChainRigControlIds: readonly RigControlId[];
 }): readonly RigControlEffect[] => {
   const effects: RigControlEffect[] = [];
-  const visited = new Set<RigControlId>();
-  let currentRigControl: NormalizedRigControlNode | undefined = input.directRigControl.rigControl;
 
-  while (currentRigControl !== undefined && !visited.has(currentRigControl.rigControlId)) {
-    visited.add(currentRigControl.rigControlId);
+  for (const rigControlId of input.effectChainRigControlIds) {
+    const currentRigControl = input.graph.rigControls.get(rigControlId);
+    if (currentRigControl === undefined) {
+      break;
+    }
+
     const evaluated =
       currentRigControl.rigControlId === input.directRigControl.rigControl.rigControlId
         ? input.directRigControl.evaluated
@@ -431,40 +574,85 @@ const createRigControlEffectChain = (input: {
     }
 
     effects.push({ rigControl: currentRigControl, evaluated });
-    currentRigControl =
-      currentRigControl.parentId === undefined ? undefined : input.graph.rigControls.get(currentRigControl.parentId);
   }
 
   return effects;
 };
 
 const applyRigControlEffectChainToVertices = (input: {
-  readonly vertices: readonly Vec2Dto[];
+  readonly currentVertices: readonly Vec2Dto[];
+  readonly referenceVertices: readonly Vec2Dto[];
   readonly effects: readonly RigControlEffect[];
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
 }): Vec2Dto[] =>
-  input.effects.reduce<Vec2Dto[]>((vertices, effect) => applyRigControlEffectToVertices(effect, vertices), [
-    ...input.vertices
-  ]);
+  input.effects.reduce<RigControlVertexStreams>(
+    (streams, effect) => applyRigControlEffectToVertices({
+      effect,
+      streams,
+      ...(input.profiling === undefined ? {} : { profiling: input.profiling })
+    }),
+    {
+      currentVertices: cloneVertices(input.currentVertices),
+      referenceVertices: input.referenceVertices
+    }
+  ).currentVertices;
 
-const applyRigControlEffectToVertices = (
-  effect: RigControlEffect,
-  vertices: readonly Vec2Dto[]
-): Vec2Dto[] => {
-  if (effect.rigControl.kind === "rotation2d") {
-    const localMatrix = effect.evaluated.dto.localTransform?.matrix;
-    return effect.evaluated.dto.evaluationStatus === "evaluated" && localMatrix !== undefined
-      ? applyAffine2dToVertices(localMatrix, vertices)
-      : [...vertices];
+const applyRigControlEffectToVertices = (input: {
+  readonly effect: RigControlEffect;
+  readonly streams: RigControlVertexStreams;
+  readonly profiling?: RuntimeCoreEvaluationProfiler;
+}): RigControlVertexStreams => {
+  if (input.effect.rigControl.kind === "rotation2d") {
+    const localMatrix = input.effect.evaluated.dto.localTransform?.matrix;
+    return {
+      ...input.streams,
+      currentVertices:
+        input.effect.evaluated.dto.evaluationStatus === "evaluated" &&
+          localMatrix !== undefined
+          ? input.profiling?.measure(
+              "rotationDeformerVertexTransformDurationMs",
+              () => applyAffine2dToVertices(
+                localMatrix,
+                input.streams.currentVertices
+              )
+            ) ?? applyAffine2dToVertices(
+              localMatrix,
+              input.streams.currentVertices
+            )
+          : cloneVertices(input.streams.currentVertices)
+    };
   }
 
-  return effect.evaluated.dto.evaluationStatus === "evaluated" && effect.evaluated.warpLatticeState !== undefined
-    ? applyWarpLattice2dToVertices({
-        rigControl: effect.rigControl,
-        localState: effect.evaluated.warpLatticeState,
-        vertices
-      })
-    : [...vertices];
+  const warpRigControl = input.effect.rigControl;
+  const warpLatticeState = input.effect.evaluated.warpLatticeState;
+
+  return {
+    ...input.streams,
+    currentVertices:
+      input.effect.evaluated.dto.evaluationStatus === "evaluated" &&
+        warpLatticeState !== undefined
+        ? input.profiling?.measure(
+            "warpDeformerVertexTransformDurationMs",
+            () => applyWarpLattice2dToVertices({
+              rigControl: warpRigControl,
+              localState: warpLatticeState,
+              currentVertices: input.streams.currentVertices,
+              referenceVertices: input.streams.referenceVertices
+            })
+          ) ?? applyWarpLattice2dToVertices({
+            rigControl: warpRigControl,
+            localState: warpLatticeState,
+            currentVertices: input.streams.currentVertices,
+            referenceVertices: input.streams.referenceVertices
+          })
+        : cloneVertices(input.streams.currentVertices)
+  };
 };
+
+interface RigControlVertexStreams {
+  readonly currentVertices: Vec2Dto[];
+  readonly referenceVertices: readonly Vec2Dto[];
+}
 
 const createMissingDrawableDiagnostic = (
   drawableId: DrawableId,
@@ -492,6 +680,38 @@ const createDuplicateDrawableParentDiagnostic = (
     evidence: [`drawableId=${drawableId}`]
   });
 
+const createMissingReferenceVerticesDiagnostic = (
+  drawableId: DrawableId,
+  rigControlId: RigControlId
+): DiagnosticDto =>
+  createRuntimeDiagnostic({
+    checkId: "rigControl.referenceVertexStreamMissing",
+    severity: "error",
+    phase: "rigControl_evaluation",
+    target: { kind: "rigControl", id: rigControlId },
+    message: `Drawable ${drawableId} cannot be rig-evaluated because its reference vertex stream is missing.`,
+    evidence: [`drawableId=${drawableId}`]
+  });
+
+const createVertexStreamLengthMismatchDiagnostic = (input: {
+  readonly drawableId: DrawableId;
+  readonly rigControlId: RigControlId;
+  readonly currentVertexCount: number;
+  readonly referenceVertexCount: number;
+}): DiagnosticDto =>
+  createRuntimeDiagnostic({
+    checkId: "rigControl.vertexStreamLengthMismatch",
+    severity: "error",
+    phase: "rigControl_evaluation",
+    target: { kind: "rigControl", id: input.rigControlId },
+    message: `Drawable ${input.drawableId} cannot be rig-evaluated because current and reference vertex streams differ in length.`,
+    evidence: [
+      `drawableId=${input.drawableId}`,
+      `currentVertices=${input.currentVertexCount}`,
+      `referenceVertices=${input.referenceVertexCount}`
+    ]
+  });
+
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
 const extractRotationDegrees = (matrix: Affine2dMatrixDto): number => {
@@ -503,3 +723,16 @@ const extractScale = (matrix: Affine2dMatrixDto): Vec2Dto => ({
   x: Number(Math.hypot(matrix.a, matrix.b).toFixed(12)),
   y: Number(Math.hypot(matrix.c, matrix.d).toFixed(12))
 });
+
+const cloneDiagnostics = (diagnostics: readonly DiagnosticDto[]): DiagnosticDto[] =>
+  diagnostics.map((diagnostic) => ({
+    ...diagnostic,
+    target: { ...diagnostic.target },
+    evidence: [...diagnostic.evidence],
+    relatedAC: [...diagnostic.relatedAC],
+    relatedScenarios: [...diagnostic.relatedScenarios],
+    repairCandidateIds: [...diagnostic.repairCandidateIds]
+  }));
+
+const cloneVertices = (vertices: readonly Vec2Dto[]): Vec2Dto[] =>
+  vertices.map((vertex) => ({ x: vertex.x, y: vertex.y }));

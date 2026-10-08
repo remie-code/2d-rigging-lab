@@ -105,6 +105,82 @@ export const commitOperation = (
   };
 };
 
+export const commitOperationAsync = async (
+  session: AuthoringSession,
+  requestInput: unknown,
+  options: CommitOperationOptions = {}
+): Promise<CommitOperationOutcome> => {
+  const operationLog = options.operationLog ?? createOperationLog();
+  const prepared = prepareOperationRequest(session, requestInput, false);
+
+  if ("status" in prepared) {
+    return {
+      result: prepared,
+      operationLogLength: operationLog.entries.length
+    };
+  }
+
+  const handler = getOperationHandler(prepared.request.operationType);
+  if (handler === undefined) {
+    return {
+      result: createRejectedOperationResult({
+        operationId: prepared.operationId,
+        diagnostics: [
+          createOperationDiagnostic({
+            checkId: "operation.lifecycle.unsupportedOperation",
+            message: `Operation is not supported by the Wave 3 lifecycle foundation: ${prepared.request.operationType}.`,
+            target: { kind: "operation", id: prepared.operationId }
+          })
+        ]
+      }),
+      operationLogLength: operationLog.entries.length
+    };
+  }
+
+  const baselineSession =
+    options.evidenceProvider === undefined ? undefined : cloneAuthoringSession(session);
+  const applied = handler.commitAsync === undefined
+    ? handler.commit(session, prepared.request, prepared.operationId)
+    : await handler.commitAsync(session, prepared.request, prepared.operationId);
+  if (applied.result.status !== "committed") {
+    return {
+      result: applied.result,
+      operationLogLength: operationLog.entries.length
+    };
+  }
+
+  incrementCommittedPackageRevision(session, prepared.request.basePackageRevision);
+  const result = applyOperationEvidence({
+    ...(options.evidenceProvider === undefined
+      ? {}
+      : { provider: options.evidenceProvider }),
+    lifecycle: "commit",
+    baselineSession: baselineSession ?? session,
+    candidateSession: applied.candidateSession,
+    request: prepared.request,
+    result: applied.result,
+    targetIds: applied.targetIds
+  });
+
+  const logEntry = createOperationLogEntry({
+    request: prepared.request,
+    result,
+    targetIds: applied.targetIds,
+    precondition: createPreconditionResult(
+      result.precondition.diagnostics,
+      getCommittedCheckedTargetRefs(result)
+    ),
+    timestamp: options.now?.() ?? new Date()
+  });
+  const operationLogLength = operationLog.append(logEntry);
+
+  return {
+    result,
+    logEntry,
+    operationLogLength
+  };
+};
+
 type ResultPreconditionWithCheckedTargets = OperationResultDto["precondition"] & {
   readonly checkedTargetRefs?: readonly TargetRefDto[];
 };

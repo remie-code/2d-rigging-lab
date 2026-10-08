@@ -1,14 +1,22 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
-import type { StructureOrderDrop, StructureOrderItem } from "@private-2d-rigging-lab/authoring-core";
+import {
+  cloneAuthoringSessionForGraphEdit,
+  type AuthoringSession,
+  type StructureOrderDrop,
+  type StructureOrderItem
+} from "@private-2d-rigging-lab/authoring-core";
 import type { DiagnosticDto, DrawableId, PartId, RigControlId } from "@private-2d-rigging-lab/contracts";
 import {
   createOperationCore,
-  createRigControlIdFromDisplayName,
   OperationRequestSchema,
+  type CreateDynamicsGroupPayloadDto,
   type CreateRotation2dRigControlPayloadDto,
   type CreateWarpDeformerPayloadDto,
+  type DeleteDynamicsGroupPayloadDto,
+  type DeleteRigControlPayloadDto,
   type EditKeyformKeyPayloadDto,
   type GenerateMeshPayloadDto,
+  type OperationResultDto,
+  type UpdateDynamicsGroupPayloadDto,
   type UpdateRigControlPayloadDto,
   type OperationRequestDto
 } from "@private-2d-rigging-lab/operation-core";
@@ -24,6 +32,7 @@ export interface EditorSessionCommandResult {
   readonly committed: boolean;
   readonly session: AuthoringSession;
   readonly diagnostics: readonly DiagnosticDto[];
+  readonly operationResult?: OperationResultDto;
 }
 
 export interface CreateWarpDeformerCommandResult extends EditorSessionCommandResult {
@@ -165,7 +174,7 @@ export function commitDrawableMaskSourceEdit(
     return noOp(session);
   }
 
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   if (existingRelation !== undefined && existingRelation.targetDrawableIds.length > 1) {
     const removal = commitMaskRelationTargetRemovalOnSession(
       nextSession,
@@ -215,7 +224,7 @@ export function commitDrawableReorder(
     return noOp(session);
   }
 
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   const priorDiagnostics: DiagnosticDto[] = [];
   let hasCommitted = false;
   if (draggedDrawable.partId !== targetDrawable.partId) {
@@ -296,7 +305,6 @@ export function commitCreateWarpDeformer(
   session: AuthoringSession,
   payload: EditorCreateWarpDeformerPayloadDto
 ): CreateWarpDeformerCommandResult {
-  const rigControlId = createRigControlIdFromDisplayName(payload.displayName);
   const result = commitSingleOperation(session, {
     operationType: "createWarpDeformer",
     payload: {
@@ -304,21 +312,22 @@ export function commitCreateWarpDeformer(
       opacityMultiplier: payload.opacityMultiplier ?? 1
     }
   });
+  const rigControlId = extractAddedRigControlId(result.operationResult);
 
-  return result.committed ? { ...result, rigControlId } : result;
+  return result.committed && rigControlId !== undefined ? { ...result, rigControlId } : result;
 }
 
 export function commitCreateRotationDeformer(
   session: AuthoringSession,
   payload: CreateRotation2dRigControlPayloadDto
 ): CreateRotationDeformerCommandResult {
-  const rigControlId = createRigControlIdFromDisplayName(payload.displayName);
   const result = commitSingleOperation(session, {
     operationType: "createRotation2dRigControl",
     payload
   });
+  const rigControlId = extractAddedRigControlId(result.operationResult);
 
-  return result.committed ? { ...result, rigControlId } : result;
+  return result.committed && rigControlId !== undefined ? { ...result, rigControlId } : result;
 }
 
 export function commitBindDrawableToRigControl(
@@ -376,12 +385,52 @@ export function commitUpdateRigControl(
   });
 }
 
+export function commitDeleteRigControl(
+  session: AuthoringSession,
+  payload: DeleteRigControlPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "deleteRigControl",
+    payload
+  });
+}
+
 export function commitEditKeyformKey(
   session: AuthoringSession,
   payload: EditKeyformKeyPayloadDto
 ): EditorSessionCommandResult {
   return commitSingleOperation(session, {
     operationType: "editKeyformKey",
+    payload
+  });
+}
+
+export function commitCreateDynamicsGroup(
+  session: AuthoringSession,
+  payload: CreateDynamicsGroupPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "createDynamicsGroup",
+    payload
+  });
+}
+
+export function commitUpdateDynamicsGroup(
+  session: AuthoringSession,
+  payload: UpdateDynamicsGroupPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "updateDynamicsGroup",
+    payload
+  });
+}
+
+export function commitDeleteDynamicsGroup(
+  session: AuthoringSession,
+  payload: DeleteDynamicsGroupPayloadDto
+): EditorSessionCommandResult {
+  return commitSingleOperation(session, {
+    operationType: "deleteDynamicsGroup",
     payload
   });
 }
@@ -453,7 +502,7 @@ function commitMaskRelationTargetRemoval(
   relation: AuthoringSession["graph"]["masks"][number],
   targetDrawableId: DrawableId
 ): EditorSessionCommandResult {
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   const result = commitMaskRelationTargetRemovalOnSession(nextSession, relation, targetDrawableId);
   return result.committed ? { ...result, session: nextSession } : { ...result, session };
 }
@@ -482,7 +531,7 @@ function commitSingleOperation(
   session: AuthoringSession,
   draft: OperationDraft
 ): EditorSessionCommandResult {
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   const result = commitOperationInPlace(nextSession, draft);
   return result.committed ? { ...result, session: nextSession } : { ...result, session };
 }
@@ -506,7 +555,8 @@ function commitOperationInPlace(
   return {
     committed: outcome.result.status === "committed",
     session,
-    diagnostics: outcome.result.diagnostics
+    diagnostics: outcome.result.diagnostics,
+    operationResult: outcome.result
   };
 }
 
@@ -520,4 +570,14 @@ function noOp(session: AuthoringSession): EditorSessionCommandResult {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function extractAddedRigControlId(
+  operationResult: OperationResultDto | undefined
+): RigControlId | undefined {
+  const target = operationResult?.modelDiff?.added.find(
+    (candidate) => candidate.kind === "rigControl"
+  );
+
+  return target?.id as RigControlId | undefined;
 }

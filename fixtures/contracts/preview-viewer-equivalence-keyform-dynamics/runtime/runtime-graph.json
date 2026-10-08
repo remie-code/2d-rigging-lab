@@ -18,7 +18,7 @@
       "id": "param_hair_sway",
       "displayName": "Hair Sway",
       "semanticRole": "dynamics",
-      "valueSource": "computedDynamics",
+      "valueSource": "authoredInput",
       "min": -1,
       "max": 1,
       "default": 0
@@ -29,30 +29,32 @@
       "dynamicsGroupId": "dyn_hair_sway",
       "displayName": "Hair Sway",
       "enabled": true,
-      "solverKind": "scalarDampedFollowV1",
-      "drivers": [
+      "inputs": [
         {
-          "driverId": "driver_face_yaw",
-          "sourceParameterId": "param_face_yaw",
-          "inputScale": 1,
-          "inputOffset": 0,
-          "invert": false
+          "parameterId": "param_face_yaw",
+          "kind": "angle",
+          "scale": 30
         }
       ],
-      "output": {
-        "outputId": "output_hair_sway",
-        "targetParameterId": "param_hair_sway",
-        "outputScale": 1,
-        "outputOffset": 0,
-        "min": -1,
-        "max": 1,
-        "clampPolicy": "clamp-to-output-range"
+      "chain": {
+        "rootOffset": {
+          "x": 0,
+          "y": 0
+        },
+        "segmentLengths": [
+          14
+        ],
+        "damping": 2.5,
+        "gravityScale": 1
       },
-      "settings": {
-        "stiffness": 4,
-        "damping": 1
-      },
-      "resetPolicy": "reset-on-load"
+      "outputs": [
+        {
+          "parameterId": "param_hair_sway",
+          "segmentIndex": 1,
+          "scale": 0.0333,
+          "limit": 1
+        }
+      ]
     }
   ],
   "drawables": [

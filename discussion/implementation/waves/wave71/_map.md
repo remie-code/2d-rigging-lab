@@ -24,7 +24,7 @@
 - Wave70 support-ring v6D remains registered, routed, and used as fallback before coarse fallback.
 - Adaptive density uses the tuned `high` / `medium` / `low` values as reference baselines and scales by component/alpha-bounds area.
 - The staggered alpha-to-inner strip is explicit, diagnosed, and test-covered.
-- Editor Mesh Tool default preview/apply route uses the new method while preserving visible presets and keeping algorithm selection UI absent.
+- Wave71's Editor Mesh Tool default preview/apply route used `auto-outline-v6d-adaptive-staggered-band` while preserving visible presets and keeping algorithm selection UI absent; current source later uses `auto-outline-v6d-adaptive-contour-constrainautor`.
 - Domain A review lanes pass:
   - Spec Compliance Review: `pass`
   - Design / Development Compliance Review: `pass`

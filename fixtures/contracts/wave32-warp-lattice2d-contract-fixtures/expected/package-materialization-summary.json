@@ -4,15 +4,14 @@
   "packageRevision": 3,
   "updatedAt": "2026-06-02T00:01:00.000Z",
   "rigControl": {
-    "rigControlId": "rig_wave32_body_warp_lattice",
     "kind": "warpLattice2d",
+    "rigControlId": "rig_wave32_body_warp_lattice",
     "displayName": "Wave32 Body Warp Lattice",
-    "partId": "part_root",
-    "parentId": null,
     "childDrawableIds": [
       "draw_wave32_body"
     ],
     "childRigControlIds": [],
+    "opacityMultiplier": 1,
     "bindSpace": "rigControlLocalRest",
     "domainBounds": {
       "x": 0,
@@ -41,7 +40,8 @@
       }
     ],
     "interpolationMethod": "bilinear-grid-v1",
-    "enabled": true
+    "enabled": true,
+    "parentId": null
   },
   "keyformSet": {
     "keyformSetId": "keyset_rigcontrol_rig_wave32_body_warp_lattice_controlpointoffsets_wave32_warp_x_1",

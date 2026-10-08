@@ -122,7 +122,7 @@ describe("tutorial runtime/viewer evidence summary", () => {
     expect(summary.runtimeSummary.dynamics.refs).toEqual([
       expect.objectContaining({
         dynamicsGroupId: "dyn_hairSway",
-        driverParameterIds: ["param_headYaw"],
+        inputParameterIds: ["param_headYaw"],
         outputParameterId: "param_hairSway"
       })
     ]);
@@ -355,32 +355,27 @@ const createTutorialGraph = (input: { readonly editedFaceMesh: boolean }): Norma
           dynamicsGroupId: dynHairSway,
           displayName: "Hair Sway",
           enabled: true,
-          solverKind: "scalarDampedFollowV1",
-          drivers: [
+          inputs: [
             {
-              driverId: "driver_headYaw",
-              sourceParameterId: paramHeadYaw,
-              inputScale: 0.35,
-              inputOffset: 0,
-              invert: false
+              parameterId: paramHeadYaw,
+              kind: "angle",
+              scale: 1
             }
           ],
-          output: {
-            outputId: "output_hairSway",
-            targetParameterId: paramHairSway,
-            outputScale: 1,
-            outputOffset: 0,
-            min: -1,
-            max: 1,
-            clampPolicy: "clamp-to-output-range"
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [1],
+            damping: 2.5,
+            gravityScale: 1
           },
-          settings: {
-            stiffness: 8,
-            damping: 2,
-            maxVelocity: 4,
-            maxAmplitude: 1
-          },
-          resetPolicy: "reset-on-load"
+          outputs: [
+            {
+              parameterId: paramHairSway,
+              segmentIndex: 1,
+              scale: 1,
+              limit: 1
+            }
+          ]
         }
       ]
     ]),

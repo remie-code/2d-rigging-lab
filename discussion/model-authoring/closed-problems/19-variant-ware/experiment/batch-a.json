@@ -1,0 +1,50 @@
+[
+ {
+  "file": "hide-bottomwear_a43f.json",
+  "operationId": "op_cp19_hide_bottomwear_a43f",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_a43f15a4_bottomwear"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp19] hide alt bottomwear bottomwear_a43f before mesh gen (align with cp18 hidden-alt premise)"
+ },
+ {
+  "file": "hide-bottomwear_8b5c.json",
+  "operationId": "op_cp19_hide_bottomwear_8b5c",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c5469_bottomwear"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp19] hide alt bottomwear bottomwear_8b5c before mesh gen (align with cp18 hidden-alt premise)"
+ },
+ {
+  "file": "mesh-bottomwear_a43f.json",
+  "operationId": "op_cp19_mesh_bottomwear_a43f",
+  "operationType": "generateMesh",
+  "payload": {
+   "drawableId": "draw_r0_1cea4f6f_a43f15a4_bottomwear",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  },
+  "gitMessage": "[cp19] mesh alt bottomwear bottomwear_a43f (static, no rigging)"
+ },
+ {
+  "file": "mesh-bottomwear_8b5c.json",
+  "operationId": "op_cp19_mesh_bottomwear_8b5c",
+  "operationType": "generateMesh",
+  "payload": {
+   "drawableId": "draw_r0_1cea4f6f_8b5c5469_bottomwear",
+   "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+   "densityHint": "medium"
+  },
+  "gitMessage": "[cp19] mesh alt bottomwear bottomwear_8b5c (static, no rigging)"
+ }
+]

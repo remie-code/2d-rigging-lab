@@ -14,13 +14,50 @@ import { createInitialRuntimeState } from "./initial-state.js";
 import type { NormalizedRuntimeGraph } from "./normalized-runtime-graph.js";
 import type { RuntimeComparisonResult, SnapshotComparisonPolicyInput } from "./snapshot-comparison.js";
 import { compareRuntimeSnapshots } from "./snapshot-comparison.js";
-import type { RuntimeSnapshotDto } from "./snapshot.js";
-import { createRuntimeSnapshot } from "./snapshot.js";
+import type {
+  RuntimeRenderDrawableEvaluationDto,
+  RuntimeSnapshotDto,
+  RuntimeSnapshotValidationMode
+} from "./snapshot.js";
+import { createRuntimeSnapshot, evaluateRuntimeRenderDrawables } from "./snapshot.js";
 import { createCompatibleRuntimeState } from "./state-compatibility.js";
 import type { RuntimeEvaluationInputInput } from "./runtime-input.js";
 import { RuntimeEvaluationInputSchema } from "./runtime-input.js";
 import type { RuntimeEvaluationOptionsInput } from "./runtime-options.js";
 import { RuntimeEvaluationOptionsSchema } from "./runtime-options.js";
+import {
+  createCompiledRuntimeModel,
+  type CompiledRuntimeModel,
+  type RuntimeFrameEvaluator,
+  type RuntimeModelFrameEvaluationOptions,
+  type RuntimeModelInitialStateRequestInput,
+  type RuntimeModelInstance,
+  type RuntimeModelInstanceOptions,
+  type RuntimeModelRenderFrameEvaluationOptions,
+  type RuntimeRenderFrame,
+  type RuntimeRenderFrameEvaluator,
+  type RuntimeRenderFrameDrawable,
+  type RuntimeRenderFrameEvaluationResult
+} from "./runtime-model.js";
+import {
+  createRuntimeCoreEvaluationProfiler,
+  type RuntimeCoreEvaluationProfile,
+  type RuntimeCoreEvaluationProfilingOptions
+} from "./runtime-profiling.js";
+import type { RigControlTopologyEvaluation } from "./rig-control-hierarchy.js";
+import type { RuntimeSnapshotStaticTemplates } from "./snapshot-static-templates.js";
+
+export type {
+  CompiledRuntimeModel,
+  RuntimeModelFrameEvaluationOptions,
+  RuntimeModelInitialStateRequestInput,
+  RuntimeModelInstance,
+  RuntimeModelInstanceOptions,
+  RuntimeModelRenderFrameEvaluationOptions,
+  RuntimeRenderFrame,
+  RuntimeRenderFrameDrawable,
+  RuntimeRenderFrameEvaluationResult
+} from "./runtime-model.js";
 
 export type RuntimeEvaluationContextInput = z.input<typeof RuntimeEvaluationContextSchema>;
 export type RuntimeSequenceFrameInput = z.input<typeof RuntimeSequenceFrameSchema>;
@@ -28,6 +65,11 @@ export type RuntimeSequenceFrameInput = z.input<typeof RuntimeSequenceFrameSchem
 export interface RuntimeFrameEvaluationResult {
   readonly snapshot: RuntimeSnapshotDto;
   readonly nextState: RuntimeStateDto;
+  readonly profile?: RuntimeCoreEvaluationProfile;
+}
+
+export interface RuntimeFrameEvaluationControlOptions {
+  readonly snapshotValidation?: RuntimeSnapshotValidationMode;
 }
 
 export interface RuntimeSequenceEvaluationResult {
@@ -37,6 +79,7 @@ export interface RuntimeSequenceEvaluationResult {
 
 export interface RuntimeCore {
   readonly createInitialRuntimeState: typeof createInitialRuntimeState;
+  readonly compileRuntimeModel: typeof compileRuntimeModel;
   readonly evaluateRuntimeFrame: typeof evaluateRuntimeFrame;
   readonly evaluateRuntimeSequence: typeof evaluateRuntimeSequence;
   readonly compareRuntimeSnapshots: (
@@ -51,28 +94,221 @@ export const evaluateRuntimeFrame = (
   inputValue: RuntimeEvaluationInputInput,
   previousStateValue: RuntimeStateDto,
   optionsValue: RuntimeEvaluationOptionsInput,
-  contextValue: RuntimeEvaluationContextInput
-): RuntimeFrameEvaluationResult => {
-  const input = RuntimeEvaluationInputSchema.parse(inputValue);
-  const previousState = RuntimeStateDtoSchema.parse(previousStateValue);
-  const options = RuntimeEvaluationOptionsSchema.parse(optionsValue);
-  const context = RuntimeEvaluationContextSchema.parse(contextValue);
-  const compatibility = createCompatibleRuntimeState(graph, previousState, input);
-  const nextState = advanceRuntimeState(graph, compatibility.state, input, options.maxSubSteps);
-  const snapshot = createRuntimeSnapshot({
+  contextValue: RuntimeEvaluationContextInput,
+  profilingOptions?: RuntimeCoreEvaluationProfilingOptions,
+  controlOptions: RuntimeFrameEvaluationControlOptions = {}
+): RuntimeFrameEvaluationResult =>
+  evaluateRuntimeFrameInternal({
     graph,
-    evaluationInput: input,
-    state: nextState,
-    options,
-    context,
-    diagnostics: compatibility.diagnostics
+    inputValue,
+    previousStateValue,
+    optionsValue,
+    contextValue,
+    ...(profilingOptions === undefined ? {} : { profilingOptions }),
+    controlOptions
   });
+
+const evaluateCompiledRuntimeFrame: RuntimeFrameEvaluator = (
+  graph,
+  inputValue,
+  previousStateValue,
+  optionsValue,
+  contextValue,
+  profilingOptions,
+  controlOptions = {},
+  compiledArtifacts
+): RuntimeFrameEvaluationResult =>
+  evaluateRuntimeFrameInternal({
+    graph,
+    inputValue,
+    previousStateValue,
+    optionsValue,
+    contextValue,
+    ...(profilingOptions === undefined ? {} : { profilingOptions }),
+    controlOptions,
+    ...(compiledArtifacts === undefined
+      ? {}
+      : {
+          snapshotStaticTemplates: compiledArtifacts.snapshotStaticTemplates,
+          rigControlTopology: compiledArtifacts.rigControlTopology
+        })
+  });
+
+const evaluateCompiledRuntimeRenderFrame: RuntimeRenderFrameEvaluator = (
+  graph,
+  inputValue,
+  previousStateValue,
+  optionsValue,
+  contextValue,
+  profilingOptions,
+  controlOptions = {},
+  compiledArtifacts,
+  drawableIndexById
+): RuntimeRenderFrameEvaluationResult => {
+  void controlOptions;
+
+  return evaluateRuntimeRenderFrameInternal({
+    graph,
+    inputValue,
+    previousStateValue,
+    optionsValue,
+    contextValue,
+    ...(profilingOptions === undefined ? {} : { profilingOptions }),
+    snapshotStaticTemplates: compiledArtifacts.snapshotStaticTemplates,
+    rigControlTopology: compiledArtifacts.rigControlTopology,
+    drawableIndexById
+  });
+};
+
+const evaluateRuntimeFrameInternal = (request: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly inputValue: RuntimeEvaluationInputInput;
+  readonly previousStateValue: RuntimeStateDto;
+  readonly optionsValue: RuntimeEvaluationOptionsInput;
+  readonly contextValue: RuntimeEvaluationContextInput;
+  readonly profilingOptions?: RuntimeCoreEvaluationProfilingOptions;
+  readonly controlOptions: RuntimeFrameEvaluationControlOptions;
+  readonly snapshotStaticTemplates?: RuntimeSnapshotStaticTemplates;
+  readonly rigControlTopology?: RigControlTopologyEvaluation;
+}): RuntimeFrameEvaluationResult => {
+  const profiler = createRuntimeCoreEvaluationProfiler(request.profilingOptions);
+  const {
+    input,
+    previousState,
+    options,
+    context
+  } = profiler.measure("inputValidationDurationMs", () => ({
+    input: RuntimeEvaluationInputSchema.parse(request.inputValue),
+    previousState: RuntimeStateDtoSchema.parse(request.previousStateValue),
+    options: RuntimeEvaluationOptionsSchema.parse(request.optionsValue),
+    context: RuntimeEvaluationContextSchema.parse(request.contextValue)
+  }));
+  const compatibility = profiler.measure(
+    "stateCompatibilityDurationMs",
+    () => createCompatibleRuntimeState(request.graph, previousState, input)
+  );
+  const nextState = profiler.measure(
+    "dynamicsEvaluationDurationMs",
+    () => advanceRuntimeState(
+      request.graph,
+      compatibility.state,
+      input,
+      options.maxSubSteps
+    )
+  );
+  const snapshot = profiler.measure("runtimeSnapshotCreationDurationMs", () =>
+    createRuntimeSnapshot({
+      graph: request.graph,
+      evaluationInput: input,
+      state: nextState,
+      options,
+      context,
+      diagnostics: compatibility.diagnostics,
+      ...(request.snapshotStaticTemplates === undefined
+        ? {}
+        : { snapshotStaticTemplates: request.snapshotStaticTemplates }),
+      ...(request.rigControlTopology === undefined
+        ? {}
+        : { rigControlTopology: request.rigControlTopology }),
+      profiling: profiler,
+      snapshotValidationMode: request.controlOptions.snapshotValidation ?? "schema"
+    }));
+  const profile = profiler.finish();
 
   return {
     snapshot,
-    nextState
+    nextState,
+    ...(profile === undefined ? {} : { profile })
   };
 };
+
+const evaluateRuntimeRenderFrameInternal = (request: {
+  readonly graph: NormalizedRuntimeGraph;
+  readonly inputValue: RuntimeEvaluationInputInput;
+  readonly previousStateValue: RuntimeStateDto;
+  readonly optionsValue: RuntimeEvaluationOptionsInput;
+  readonly contextValue: RuntimeEvaluationContextInput;
+  readonly profilingOptions?: RuntimeCoreEvaluationProfilingOptions;
+  readonly snapshotStaticTemplates: RuntimeSnapshotStaticTemplates;
+  readonly rigControlTopology: RigControlTopologyEvaluation;
+  readonly drawableIndexById: ReadonlyMap<string, number>;
+}): RuntimeRenderFrameEvaluationResult => {
+  const profiler = createRuntimeCoreEvaluationProfiler(request.profilingOptions);
+  const {
+    input,
+    previousState,
+    options
+  } = profiler.measure("inputValidationDurationMs", () => ({
+    input: RuntimeEvaluationInputSchema.parse(request.inputValue),
+    previousState: RuntimeStateDtoSchema.parse(request.previousStateValue),
+    options: RuntimeEvaluationOptionsSchema.parse(request.optionsValue),
+    context: RuntimeEvaluationContextSchema.parse(request.contextValue)
+  }));
+  const compatibility = profiler.measure(
+    "stateCompatibilityDurationMs",
+    () => createCompatibleRuntimeState(request.graph, previousState, input)
+  );
+  const nextState = profiler.measure(
+    "dynamicsEvaluationDurationMs",
+    () => advanceRuntimeState(
+      request.graph,
+      compatibility.state,
+      input,
+      options.maxSubSteps
+    )
+  );
+  const frame = profiler.measure("runtimeCoreRenderFrameOutputDurationMs", () =>
+    createRuntimeRenderFrame({
+      drawables: evaluateRuntimeRenderDrawables({
+        graph: request.graph,
+        evaluationInput: input,
+        state: nextState,
+        options,
+        snapshotStaticTemplates: request.snapshotStaticTemplates,
+        rigControlTopology: request.rigControlTopology,
+        profiling: profiler
+      }),
+      drawableIndexById: request.drawableIndexById
+    }));
+  const profile = profiler.finish();
+
+  return {
+    frame,
+    nextState,
+    ...(profile === undefined ? {} : { profile })
+  };
+};
+
+export const compileRuntimeModel = (
+  graph: NormalizedRuntimeGraph
+): CompiledRuntimeModel =>
+  createCompiledRuntimeModel(
+    graph,
+    evaluateCompiledRuntimeFrame,
+    evaluateCompiledRuntimeRenderFrame
+  );
+
+const createRuntimeRenderFrame = (input: {
+  readonly drawables: readonly RuntimeRenderDrawableEvaluationDto[];
+  readonly drawableIndexById: ReadonlyMap<string, number>;
+}): RuntimeRenderFrame => ({
+  drawables: input.drawables.map((drawable, fallbackIndex) => ({
+    drawableId: drawable.drawableId,
+    index: input.drawableIndexById.get(drawable.drawableId) ?? fallbackIndex,
+    vertices: cloneRuntimeRenderVertices(drawable.vertices),
+    opacity: drawable.opacity,
+    drawOrder: drawable.evaluatedDrawOrder,
+    visible: drawable.visible
+  }))
+});
+
+const cloneRuntimeRenderVertices = (
+  vertices: readonly { readonly x: number; readonly y: number }[] | undefined
+): { readonly x: number; readonly y: number }[] =>
+  vertices?.map((vertex) => ({
+    x: vertex.x,
+    y: vertex.y
+  })) ?? [];
 
 export const evaluateRuntimeSequence = (
   graph: NormalizedRuntimeGraph,
@@ -112,6 +348,7 @@ export const evaluateRuntimeSequence = (
 
 export const runtimeCore: RuntimeCore = {
   createInitialRuntimeState,
+  compileRuntimeModel,
   evaluateRuntimeFrame,
   evaluateRuntimeSequence,
   compareRuntimeSnapshots

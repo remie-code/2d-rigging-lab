@@ -1,0 +1,89 @@
+{
+  "blink-both-eyes-partial-and-full": {
+    "param_eye_left_open": 0,
+    "param_eye_right_open": 0.6
+  },
+  "blink-open-eyes-zero-activation": {
+    "param_eye_left_open": 1,
+    "param_eye_right_open": 1
+  },
+  "head-and-gaze-centered-with-session-neutral": {
+    "param_face_angle_x": 15,
+    "param_face_angle_y": 7.5,
+    "param_face_angle_z": 20,
+    "param_eyeball_y": 0
+  },
+  "head-centered-invert-strength-clamp": {
+    "param_face_angle_x": -15
+  },
+  "custom-learned-signs-and-ranges": {
+    "param_face_angle_x": 15
+  },
+  "mouth-open-jawopen-fallback": {
+    "param_mouth_open": 0.5
+  },
+  "mouth-smile-averaged": {
+    "param_mouth_smile": 0.5
+  },
+  "mixed-face-eyes-mouth-slots": {
+    "param_face_angle_x": 15,
+    "param_eyeball_x": 0.5,
+    "param_eye_left_open": 0,
+    "param_mouth_open": 0.5,
+    "param_mouth_smile": 0.5
+  },
+  "disabled-slot-and-clamped-target": {
+    "param_face_angle_x": -15
+  },
+  "nan-infinity-invalid-range-silence": {},
+  "body-x-and-body-z-calibrated": {
+    "param_body_angle_x": 3.5,
+    "param_body_angle_z": 6.5
+  },
+  "body-z-component-strengths-and-inversion": {
+    "param_body_angle_z": -2.5
+  },
+  "body-clamp-extremes": {
+    "param_body_angle_x": 10,
+    "param_body_angle_z": 10
+  },
+  "body-z-rotation-only-missing-position-calibration": {
+    "param_face_angle_x": 15,
+    "param_mouth_open": 0.5,
+    "param_body_angle_z": 2.5
+  },
+  "body-smoothing-lag-across-frames": {
+    "param_body_angle_x": 1.75
+  },
+  "vowel-blend-enabled-a": {
+    "param_mouth_open": 0.9999141351200291,
+    "param_mouth_vowel_a": 0.9234442540521833,
+    "param_mouth_vowel_i": 0.01799698262387763,
+    "param_mouth_vowel_u": 0.004707908122581513,
+    "param_mouth_vowel_e": 0.03487793993109122,
+    "param_mouth_vowel_o": 0.018887050390295403
+  },
+  "vowel-blend-enabled-i-with-strength-boost": {
+    "param_mouth_open": 0.9997276073003802,
+    "param_mouth_vowel_a": 0.006212813633885314,
+    "param_mouth_vowel_i": 0.956070905916557,
+    "param_mouth_vowel_u": 0.007408479663783434,
+    "param_mouth_vowel_e": 0,
+    "param_mouth_vowel_o": 0.030035408086154493
+  },
+  "vowel-gate-closed-neutral": {
+    "param_mouth_open": 0,
+    "param_mouth_vowel_a": 0,
+    "param_mouth_vowel_i": 0,
+    "param_mouth_vowel_u": 0,
+    "param_mouth_vowel_e": 0,
+    "param_mouth_vowel_o": 0
+  },
+  "vowel-disabled-drops-vowel-keys": {
+    "param_mouth_open": 0.7585
+  },
+  "no-session-neutral-uses-profile-neutral": {
+    "param_face_angle_x": 15,
+    "param_mouth_open": 0.5
+  }
+}

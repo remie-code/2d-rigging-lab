@@ -350,14 +350,8 @@ describe("operation lifecycle foundation", () => {
     expect(session.dirty).toBe(true);
     expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toMatchObject({
       dynamicsGroupId: "dyn_hair_sway",
-      drivers: [
-        {
-          sourceParameterId: "param_face_yaw"
-        }
-      ],
-      output: {
-        targetParameterId: "param_hair_sway"
-      }
+      inputs: [{ parameterId: "param_face_yaw" }],
+      outputs: [{ parameterId: "param_hair_sway" }]
     });
     expect(outcome.operationLogLength).toBe(1);
     expect(core.operationLog.entries).toHaveLength(1);
@@ -372,12 +366,12 @@ describe("operation lifecycle foundation", () => {
       {
         kind: "parameter",
         id: "param_face_yaw",
-        path: "/model/dynamics/dynamicsGroups/dyn_hair_sway/drivers/driver_hair_sway_face_yaw/sourceParameterId"
+        path: "/model/dynamics/dynamicsGroups/dyn_hair_sway/inputs/0/parameterId"
       },
       {
         kind: "parameter",
         id: "param_hair_sway",
-        path: "/model/dynamics/dynamicsGroups/dyn_hair_sway/output/targetParameterId"
+        path: "/model/dynamics/dynamicsGroups/dyn_hair_sway/outputs/0/parameterId"
       }
     ]);
   });
@@ -397,19 +391,19 @@ describe("operation lifecycle foundation", () => {
     expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("rejects still-unimplemented operations without changing package or authoring revision", () => {
-    const session = createFixtureSession();
+  it("commits deleteDynamicsGroup through the registry and logs the removal", () => {
+    const session = createDynamicsFixtureSession();
     const core = createOperationCore();
+    core.commitOperation(session, createDynamicsGroupRequest({ dryRun: false }));
 
-    const unsupported = core.commitOperation(session, createUnsupportedDynamicsGroupDeleteRequest());
+    const deletion = core.commitOperation(session, createDeleteDynamicsGroupRequest());
 
-    expect(unsupported.result.status).toBe("rejected");
-    expect(unsupported.result.diagnostics[0]?.checkId).toBe("operation.lifecycle.unsupportedOperation");
-    expect(session.packageRevision).toBe(0);
-    expect(session.authoringRevision).toBe(0);
-    expect(session.dirty).toBe(false);
-    expect(unsupported.operationLogLength).toBe(0);
-    expect(core.operationLog.entries).toHaveLength(0);
+    expect(deletion.result.status).toBe("committed");
+    expect(session.packageRevision).toBe(2);
+    expect(session.authoringRevision).toBe(2);
+    expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toBeUndefined();
+    expect(deletion.operationLogLength).toBe(2);
+    expect(core.operationLog.entries.at(-1)?.operationType).toBe("deleteDynamicsGroup");
   });
 });
 
@@ -508,40 +502,37 @@ const createDynamicsGroupRequest = (options: {
     dynamicsGroupId: "dyn_hair_sway",
     displayName: "Hair Sway",
     enabled: true,
-    solverKind: "scalarDampedFollowV1",
-    resetPolicy: "reset-on-load",
-    drivers: [
+    inputs: [
       {
-        driverId: "driver_hair_sway_face_yaw",
-        sourceParameterId: "param_face_yaw",
-        inputScale: 1,
-        inputOffset: 0,
-        invert: false
+        parameterId: "param_face_yaw",
+        kind: "angle",
+        scale: 30
       }
     ],
-    output: {
-      outputId: "output_hair_sway",
-      targetParameterId: "param_hair_sway",
-      outputScale: 1,
-      outputOffset: 0,
-      min: -1,
-      max: 1,
-      clampPolicy: "clamp-to-output-range"
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
     },
-    settings: {
-      stiffness: 0.35,
-      damping: 0.7
-    }
+    outputs: [
+      {
+        parameterId: "param_hair_sway",
+        segmentIndex: 1,
+        scale: 0.0333,
+        limit: 1
+      }
+    ]
   }
 });
 
-const createUnsupportedDynamicsGroupDeleteRequest = () => ({
+const createDeleteDynamicsGroupRequest = () => ({
   schemaVersion: "operation-request-v1",
   operationId: "op_delete_dynamics_group",
   actor: "test",
   surface: "testFixture",
   dryRun: false,
-  basePackageRevision: 0,
+  basePackageRevision: 1,
   operationType: "deleteDynamicsGroup",
   payload: {
     dynamicsGroupId: "dyn_hair_sway"

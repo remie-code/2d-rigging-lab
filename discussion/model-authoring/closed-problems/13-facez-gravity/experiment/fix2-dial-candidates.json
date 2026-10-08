@@ -1,0 +1,6 @@
+{
+  "hair_f_r":    { "yHead": 320, "yFree": 380 },
+  "hair_f_l":    { "yHead": 360, "yFree": 420 },
+  "back_hair_r": { "yHead": 424, "yFree": 484 },
+  "back_hair_l": { "yHead": 386, "yFree": 446 }
+}

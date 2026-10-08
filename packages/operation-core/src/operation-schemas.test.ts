@@ -4,7 +4,8 @@ import {
   OperationLogEntrySchema,
   OperationPayloadSchema,
   OperationRequestSchema,
-  OperationResultSchema
+  OperationResultSchema,
+  OperationTypeSchema
 } from "./index.js";
 
 const psdAdapterResultPayload = {
@@ -234,12 +235,27 @@ const operationPayloads = [
     payload: {
       dynamicsGroupId: "dyn_hair_sway",
       displayName: "Hair Sway",
-      solverKind: "scalarDampedFollowV1",
-      resetPolicy: "reset-on-load",
-      settings: {
-        stiffness: 0.35,
-        damping: 0.7
-      }
+      inputs: [
+        {
+          parameterId: "param_face_yaw",
+          kind: "angle",
+          scale: 30
+        }
+      ],
+      chain: {
+        rootOffset: { x: 0, y: 0 },
+        segmentLengths: [14],
+        damping: 2.5,
+        gravityScale: 1
+      },
+      outputs: [
+        {
+          parameterId: "param_hair_sway",
+          segmentIndex: 1,
+          scale: 0.0333,
+          limit: 1
+        }
+      ]
     }
   },
   {
@@ -364,6 +380,12 @@ const operationPayloads = [
       bezierRows: 2,
       opacityMultiplier: 0.5
     }
+  },
+  {
+    operationType: "deleteRigControl",
+    payload: {
+      rigControlId: "rig_face_warp"
+    }
   }
 ] as const;
 
@@ -382,6 +404,19 @@ const dryRunCreateParameterRequest = {
     max: 1,
     default: 1,
     recommendedUiStep: 0.01
+  }
+};
+
+const dryRunDeleteRigControlRequest = {
+  schemaVersion: "operation-request-v1",
+  operationId: "op_delete_face_warp",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: true,
+  basePackageRevision: 0,
+  operationType: "deleteRigControl",
+  payload: {
+    rigControlId: "rig_face_warp"
   }
 };
 
@@ -434,7 +469,8 @@ describe("operation-core DTO schemas", () => {
       "bindRigControlChild",
       "moveDrawableRigControlBinding",
       "reparentRigControl",
-      "updateRigControl"
+      "updateRigControl",
+      "deleteRigControl"
     ]);
   });
 
@@ -490,6 +526,18 @@ describe("operation-core DTO schemas", () => {
 
     expect(parsed.dryRun).toBe(true);
     expect(parsed.operationType).toBe("createParameter");
+  });
+
+  it("parses deleteRigControl operation type and request payload", () => {
+    const operationType = OperationTypeSchema.parse("deleteRigControl");
+    const request = OperationRequestSchema.parse(dryRunDeleteRigControlRequest);
+
+    expect(operationType).toBe("deleteRigControl");
+    expect(request.operationType).toBe("deleteRigControl");
+    if (request.operationType !== "deleteRigControl") {
+      throw new Error("Expected deleteRigControl request.");
+    }
+    expect(request.payload.rigControlId).toBe("rig_face_warp");
   });
 
   it("parses operation results and log entries with required fields", () => {

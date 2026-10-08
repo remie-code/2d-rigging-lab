@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soul Cockpit</title>
+<style>
+  /* FOUC 対策の最小限のみ（操縦席UI改定 Domain D の裁定）。
+     スタイルの正本は ui/styles.mjs（COCKPIT_CSS）で、mount() が <style id="cockpit-styles"> を注入する。
+     ここは module 解決〜mount までの一瞬に白背景が出ないための下地だけ
+     （値は styles.mjs :root の --bg/--fg の複写・二重管理はこの 2 値に限定）。 */
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0e1114; color: #e7eaee; }
+</style>
+</head>
+<body>
+  <!-- 正本はプロセス側・UI は使い捨てのビュー（screens/soul-cockpit.md §1 の思想は観測系に継承）。
+       操縦席UI改定（コントロールルーム化・screens/cockpit-redesign.md）: 三層 IA（観測/運転/設定）の
+       実体は ui/*.mjs（preact+htm no-build・vendor はローカル配信・CDN/外部リソースゼロ）。
+       エントリはこの inline module だけ——<script src> は使わない（自己完結＝外部ネットワーク非依存）。 -->
+  <div id="app"></div>
+  <script type="module">
+    import { mount } from "./ui/app.mjs";
+    mount(document.getElementById("app"));
+  </script>
+</body>
+</html>

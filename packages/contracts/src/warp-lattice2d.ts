@@ -5,7 +5,7 @@ import { RectSchema, Vec2Schema } from "./primitives.js";
 // Row 0 / column 0 is domainBounds.x/y; indices then advance across columns before rows.
 export const WARP_LATTICE_2D_CONTROL_POINT_ORDER = "rowMajorYThenXFromDomainMinV1";
 export const WARP_LATTICE_2D_CONTROL_POINT_OFFSETS_PROPERTY = "controlPointOffsets";
-// Runtime evaluators use domainBounds as the only authored warp domain; outside vertices pass through.
+// Runtime evaluators bind/sampling through rest-space domainBounds; rest-outside vertices pass through.
 export const WARP_LATTICE_2D_OUTSIDE_DOMAIN_POLICY = "passThroughOutsideDomainV1";
 
 export const WarpLattice2dControlPointOrderSchema = z.literal(WARP_LATTICE_2D_CONTROL_POINT_ORDER);

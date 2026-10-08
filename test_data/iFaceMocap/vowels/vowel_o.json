@@ -1,0 +1,279 @@
+{
+  "label": "o",
+  "capturedAtIso": "2026-07-06T00:55:21.830Z",
+  "sampleCount": 93,
+  "durationMs": 1500,
+  "rawFrameSample": "trackingStatus-1|mouthFunnel-24|eyeLookOut_R-0|eyeSquint_L-32|mouthLowerDown_R-20|browOuterUp_L-0|mouthRight-1|mouthClose-25|eyeLookUp_R-0|noseSneer_R-12|mouthDimple_L-3|mouthDimple_R-3|cheekSquint_R-15|browInnerUp-7|eyeSquint_R-32|mouthPress_L-3|jawOpen-31|mouthPucker-22|eyeBlink_R-0|jawForward-6|mouthUpperUp_R-4|browDown_L-11|eyeLookIn_R-1|mouthShrugUpper-4|jawLeft-4|eyeLookDown_R-9|eyeLookIn_L-10|mouthUpperUp_L-4|browOuterUp_R-0|mouthRollLower-4|mouthSmile_R-0|tongueOut-0|eyeWide_L-2|mouthStretch_R-13|mouthPress_R-4|mouthStretch_L-13|jawRight-0|eyeLookUp_L-0|mouthSmile_L-0|mouthFrown_L-2|ch...",
+  "blendshapes": {
+    "browDown_L": {
+      "mean": 0.1101,
+      "min": 0.1,
+      "max": 0.12
+    },
+    "browDown_R": {
+      "mean": 0.1104,
+      "min": 0.1,
+      "max": 0.12
+    },
+    "browInnerUp": {
+      "mean": 0.0782,
+      "min": 0.07,
+      "max": 0.11
+    },
+    "browOuterUp_L": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "browOuterUp_R": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "cheekPuff": {
+      "mean": 0.0171,
+      "min": 0.01,
+      "max": 0.02
+    },
+    "cheekSquint_L": {
+      "mean": 0.1585,
+      "min": 0.14,
+      "max": 0.21
+    },
+    "cheekSquint_R": {
+      "mean": 0.1497,
+      "min": 0.13,
+      "max": 0.21
+    },
+    "eyeBlink_L": {
+      "mean": 0.1601,
+      "min": 0,
+      "max": 0.97
+    },
+    "eyeBlink_R": {
+      "mean": 0.1604,
+      "min": 0,
+      "max": 0.97
+    },
+    "eyeLookDown_L": {
+      "mean": 0.1023,
+      "min": 0,
+      "max": 0.27
+    },
+    "eyeLookDown_R": {
+      "mean": 0.1025,
+      "min": 0,
+      "max": 0.27
+    },
+    "eyeLookIn_L": {
+      "mean": 0.0729,
+      "min": 0.06,
+      "max": 0.1
+    },
+    "eyeLookIn_R": {
+      "mean": 0.0358,
+      "min": 0.01,
+      "max": 0.05
+    },
+    "eyeLookOut_L": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "eyeLookOut_R": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "eyeLookUp_L": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "eyeLookUp_R": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "eyeSquint_L": {
+      "mean": 0.306,
+      "min": 0.21,
+      "max": 0.38
+    },
+    "eyeSquint_R": {
+      "mean": 0.306,
+      "min": 0.21,
+      "max": 0.38
+    },
+    "eyeWide_L": {
+      "mean": 0.0198,
+      "min": 0,
+      "max": 0.05
+    },
+    "eyeWide_R": {
+      "mean": 0.0198,
+      "min": 0,
+      "max": 0.05
+    },
+    "hapihapi": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "jawForward": {
+      "mean": 0.06,
+      "min": 0.06,
+      "max": 0.06
+    },
+    "jawLeft": {
+      "mean": 0.0384,
+      "min": 0.03,
+      "max": 0.04
+    },
+    "jawOpen": {
+      "mean": 0.2704,
+      "min": 0.23,
+      "max": 0.31
+    },
+    "jawRight": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "mouthClose": {
+      "mean": 0.226,
+      "min": 0.19,
+      "max": 0.29
+    },
+    "mouthDimple_L": {
+      "mean": 0.0298,
+      "min": 0.02,
+      "max": 0.03
+    },
+    "mouthDimple_R": {
+      "mean": 0.03,
+      "min": 0.03,
+      "max": 0.03
+    },
+    "mouthFrown_L": {
+      "mean": 0.0135,
+      "min": 0,
+      "max": 0.03
+    },
+    "mouthFrown_R": {
+      "mean": 0.0087,
+      "min": 0,
+      "max": 0.02
+    },
+    "mouthFunnel": {
+      "mean": 0.1918,
+      "min": 0.15,
+      "max": 0.24
+    },
+    "mouthLeft": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "mouthLowerDown_L": {
+      "mean": 0.1755,
+      "min": 0.15,
+      "max": 0.2
+    },
+    "mouthLowerDown_R": {
+      "mean": 0.1776,
+      "min": 0.15,
+      "max": 0.2
+    },
+    "mouthPress_L": {
+      "mean": 0.0315,
+      "min": 0.03,
+      "max": 0.04
+    },
+    "mouthPress_R": {
+      "mean": 0.0342,
+      "min": 0.03,
+      "max": 0.04
+    },
+    "mouthPucker": {
+      "mean": 0.1888,
+      "min": 0.14,
+      "max": 0.3
+    },
+    "mouthRight": {
+      "mean": 0.006,
+      "min": 0,
+      "max": 0.01
+    },
+    "mouthRollLower": {
+      "mean": 0.047,
+      "min": 0.04,
+      "max": 0.05
+    },
+    "mouthRollUpper": {
+      "mean": 0.0414,
+      "min": 0.04,
+      "max": 0.05
+    },
+    "mouthShrugLower": {
+      "mean": 0.073,
+      "min": 0.06,
+      "max": 0.08
+    },
+    "mouthShrugUpper": {
+      "mean": 0.04,
+      "min": 0.04,
+      "max": 0.04
+    },
+    "mouthSmile_L": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "mouthSmile_R": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "mouthStretch_L": {
+      "mean": 0.1299,
+      "min": 0.12,
+      "max": 0.14
+    },
+    "mouthStretch_R": {
+      "mean": 0.1258,
+      "min": 0.12,
+      "max": 0.13
+    },
+    "mouthUpperUp_L": {
+      "mean": 0.0381,
+      "min": 0.03,
+      "max": 0.05
+    },
+    "mouthUpperUp_R": {
+      "mean": 0.0378,
+      "min": 0.03,
+      "max": 0.05
+    },
+    "noseSneer_L": {
+      "mean": 0.1265,
+      "min": 0.11,
+      "max": 0.16
+    },
+    "noseSneer_R": {
+      "mean": 0.1269,
+      "min": 0.11,
+      "max": 0.17
+    },
+    "tongueOut": {
+      "mean": 0,
+      "min": 0,
+      "max": 0
+    },
+    "trackingStatus": {
+      "mean": 0.01,
+      "min": 0.01,
+      "max": 0.01
+    }
+  }
+}

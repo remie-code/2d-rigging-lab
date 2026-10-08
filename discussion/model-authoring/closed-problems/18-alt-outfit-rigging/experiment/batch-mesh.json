@@ -1,0 +1,68 @@
+[
+  {
+    "file": "mesh-rodos-topwear.json",
+    "operationId": "op_cp18_mesh_rodos_topwear",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_a43f1585_topwear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp18] mesh rodos topwear (auto-outline medium)"
+  },
+  {
+    "file": "mesh-rodos-handwear_r.json",
+    "operationId": "op_cp18_mesh_rodos_handwear_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_a43f1647_handwear-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp18] mesh rodos handwear-r (auto-outline medium)"
+  },
+  {
+    "file": "mesh-rodos-handwear_l.json",
+    "operationId": "op_cp18_mesh_rodos_handwear_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_a43f1666_handwear-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp18] mesh rodos handwear-l (auto-outline medium)"
+  },
+  {
+    "file": "mesh-endo-topwear.json",
+    "operationId": "op_cp18_mesh_endo_topwear",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_8b5c54ca_topwear",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp18] mesh endo topwear (auto-outline medium)"
+  },
+  {
+    "file": "mesh-endo-handwear_r.json",
+    "operationId": "op_cp18_mesh_endo_handwear_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_8b5c542b_handwear-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp18] mesh endo handwear-r (auto-outline medium)"
+  },
+  {
+    "file": "mesh-endo-handwear_l.json",
+    "operationId": "op_cp18_mesh_endo_handwear_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_8b5c5408_handwear-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp18] mesh endo handwear-l (auto-outline medium)"
+  }
+]

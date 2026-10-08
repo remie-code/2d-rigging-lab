@@ -24,6 +24,7 @@ import {
   commitBindDrawableToRigControl,
   commitCreateRotationDeformer,
   commitCreateWarpDeformer,
+  commitDeleteRigControl,
   commitDrawableReorder,
   commitDrawableReparent,
   commitEditKeyformKey,
@@ -106,7 +107,6 @@ describe("editor session commands", () => {
     expect(rigControl).toMatchObject({
       kind: "warpLattice2d",
       displayName: "Part A Warp",
-      partId: PART_A,
       childDrawableIds: [DRAW_A],
       latticeColumns: 5,
       latticeRows: 4,
@@ -124,6 +124,68 @@ describe("editor session commands", () => {
         }
       }
     });
+  });
+
+  it("returns the actual suffixed rig control ID for duplicate display names", () => {
+    const session = createFixtureSession([DRAW_A, DRAW_B]);
+    const first = commitCreateRotationDeformer(session, {
+      partId: PART_A,
+      displayName: "Repeat Rotation",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 10, y: 20 },
+      restAngleDegrees: 0
+    });
+    const second = commitCreateRotationDeformer(first.session, {
+      partId: PART_B,
+      displayName: "Repeat Rotation",
+      childDrawableIds: [DRAW_B],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      pivot: { x: 30, y: 40 },
+      restAngleDegrees: 0
+    });
+
+    expect(first.rigControlId).toBe(RigControlIdSchema.parse("rig_repeat_rotation"));
+    expect(second.rigControlId).toBe(RigControlIdSchema.parse("rig_repeat_rotation_2"));
+    expect(
+      second.session.graph.rigControls.find(
+        (candidate) => candidate.rigControlId === second.rigControlId
+      )
+    ).toMatchObject({
+      displayName: "Repeat Rotation",
+      childDrawableIds: [DRAW_B]
+    });
+  });
+
+  it("commits Deformer deletion through the package operation contract", () => {
+    const session = createFixtureSession([DRAW_A]);
+    const created = commitCreateWarpDeformer(session, {
+      partId: PART_A,
+      displayName: "Delete Me Warp",
+      childDrawableIds: [DRAW_A],
+      childRigControlIds: [],
+      domainBounds: { x: 0, y: 0, width: 32, height: 32 },
+      transformColumns: 5,
+      transformRows: 5,
+      bezierColumns: 3,
+      bezierRows: 3,
+      bezierEditType: "cubicBezierSurfaceV1"
+    });
+
+    const deleted = commitDeleteRigControl(created.session, {
+      rigControlId: created.rigControlId!
+    });
+
+    expect(deleted.committed).toBe(true);
+    expect(
+      deleted.session.graph.rigControls.find(
+        (candidate) => candidate.rigControlId === created.rigControlId
+      )
+    ).toBeUndefined();
+    expect(deleted.session.graph.rigControlRootIds).not.toContain(created.rigControlId);
+    expect(created.session.graph.rigControls).toHaveLength(1);
   });
 
   it("routes Deformer Tree bind, rebind, and reparent operations without changing Parts or draw order", () => {

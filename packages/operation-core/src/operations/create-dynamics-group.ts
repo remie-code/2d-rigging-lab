@@ -10,14 +10,11 @@ import type {
   JsonValue,
   ModelDiffDto,
   OperationId,
-  ParameterId,
   TargetRefDto
 } from "@private-2d-rigging-lab/contracts";
 
 import {
-  createDynamicsDriverId,
-  createDynamicsGroupIdFromDisplayName,
-  createDynamicsOutputId
+  createDynamicsGroupIdFromDisplayName
 } from "../operation-ids.js";
 import type { OperationRequestDto } from "../operation-request.js";
 import type { OperationResultDto } from "../operation-result.js";
@@ -122,22 +119,32 @@ const evaluateInitialBindingPreconditions = (
 ): DiagnosticDto[] => {
   const diagnostics: DiagnosticDto[] = [];
 
-  if (request.payload.drivers === undefined || request.payload.drivers.length === 0) {
+  if (request.payload.inputs === undefined || request.payload.inputs.length === 0) {
     diagnostics.push(
       createOperationDiagnostic({
-        checkId: "operation.createDynamicsGroup.missingDriverBinding",
-        message: "createDynamicsGroup requires at least one authoredInput driver binding for package materialization.",
-        target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/drivers" }
+        checkId: "operation.createDynamicsGroup.missingInputBinding",
+        message: "createDynamicsGroup requires at least one Dynamics input binding for package materialization.",
+        target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/inputs" }
       })
     );
   }
 
-  if (request.payload.output === undefined) {
+  if (request.payload.chain === undefined) {
+    diagnostics.push(
+      createOperationDiagnostic({
+        checkId: "operation.createDynamicsGroup.missingChain",
+        message: "createDynamicsGroup requires a Dynamics chain for package materialization.",
+        target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/chain" }
+      })
+    );
+  }
+
+  if (request.payload.outputs === undefined || request.payload.outputs.length === 0) {
     diagnostics.push(
       createOperationDiagnostic({
         checkId: "operation.createDynamicsGroup.missingOutputBinding",
-        message: "createDynamicsGroup requires one computedDynamics output binding for package materialization.",
-        target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/output" }
+        message: "createDynamicsGroup requires at least one additive output binding for package materialization.",
+        target: { kind: "dynamicsGroup", id: dynamicsGroupId, path: "/payload/outputs" }
       })
     );
   }
@@ -149,36 +156,36 @@ const createPackageDynamicsGroup = (
   request: CreateDynamicsGroupRequest,
   dynamicsGroupId: DynamicsGroupId
 ): PackageDynamicsGroup => {
-  const drivers = request.payload.drivers ?? [];
-  const output = request.payload.output;
+  const inputs = request.payload.inputs ?? [];
+  const chain = request.payload.chain;
+  const outputs = request.payload.outputs ?? [];
 
-  if (output === undefined) {
-    throw new Error("createPackageDynamicsGroup requires output after precondition evaluation.");
+  if (chain === undefined || inputs.length === 0 || outputs.length === 0) {
+    throw new Error("createPackageDynamicsGroup requires inputs, a chain, and outputs after precondition evaluation.");
   }
 
   return {
     dynamicsGroupId,
     displayName: request.payload.displayName,
     enabled: request.payload.enabled,
-    solverKind: request.payload.solverKind,
-    drivers: drivers.map((driver) => ({
-      driverId: driver.driverId ?? createDynamicsDriverId(dynamicsGroupId, driver.sourceParameterId),
-      sourceParameterId: driver.sourceParameterId,
-      inputScale: driver.inputScale,
-      inputOffset: driver.inputOffset,
-      invert: driver.invert
+    ...(request.payload.presetId === undefined ? {} : { presetId: request.payload.presetId }),
+    inputs: inputs.map((input) => ({
+      parameterId: input.parameterId,
+      kind: input.kind,
+      scale: input.scale
     })),
-    output: {
-      outputId: output.outputId ?? createDynamicsOutputId(dynamicsGroupId, output.targetParameterId),
-      targetParameterId: output.targetParameterId,
-      outputScale: output.outputScale,
-      outputOffset: output.outputOffset,
-      min: output.min,
-      max: output.max,
-      clampPolicy: output.clampPolicy
+    chain: {
+      rootOffset: { x: chain.rootOffset.x, y: chain.rootOffset.y },
+      segmentLengths: [...chain.segmentLengths],
+      damping: chain.damping,
+      gravityScale: chain.gravityScale
     },
-    settings: structuredClone(request.payload.settings),
-    resetPolicy: request.payload.resetPolicy
+    outputs: outputs.map((output) => ({
+      parameterId: output.parameterId,
+      segmentIndex: output.segmentIndex,
+      scale: output.scale,
+      limit: output.limit
+    }))
   };
 };
 
@@ -195,15 +202,15 @@ const createCreateDynamicsGroupResult = (input: {
     id: input.dynamicsGroup.dynamicsGroupId
   };
   const dynamicsGroupPath = `/model/dynamics/dynamicsGroups/${input.dynamicsGroup.dynamicsGroupId}`;
-  const driverParameterTargets = input.dynamicsGroup.drivers.map((driver) => ({
+  const inputParameterTargets = input.dynamicsGroup.inputs.map((dynamicsInput, index) => ({
     kind: "parameter" as const,
-    id: driver.sourceParameterId,
-    path: `${dynamicsGroupPath}/drivers/${driver.driverId}/sourceParameterId`
+    id: dynamicsInput.parameterId,
+    path: `${dynamicsGroupPath}/inputs/${index}/parameterId`
   }));
   const outputParameterTarget: TargetRefDto = {
     kind: "parameter",
-    id: input.dynamicsGroup.output.targetParameterId,
-    path: `${dynamicsGroupPath}/output/targetParameterId`
+    id: input.dynamicsGroup.outputs[0]?.parameterId ?? input.dynamicsGroup.dynamicsGroupId,
+    path: `${dynamicsGroupPath}/outputs/0/parameterId`
   };
   const modelDiff: ModelDiffDto = {
     schemaVersion: "model-diff-v1",
@@ -236,13 +243,13 @@ const createCreateDynamicsGroupResult = (input: {
           }
         ]
       },
-      ...input.dynamicsGroup.drivers.map((driver, index) => ({
-        target: driverParameterTargets[index] as TargetRefDto,
+      ...input.dynamicsGroup.inputs.map((dynamicsInput, index) => ({
+        target: inputParameterTargets[index] as TargetRefDto,
         fields: [
           {
-            path: `${dynamicsGroupPath}/drivers/${driver.driverId}/sourceParameterId`,
+            path: `${dynamicsGroupPath}/inputs/${index}/parameterId`,
             before: null,
-            after: driver.sourceParameterId
+            after: dynamicsInput.parameterId
           }
         ]
       })),
@@ -250,9 +257,9 @@ const createCreateDynamicsGroupResult = (input: {
         target: outputParameterTarget,
         fields: [
           {
-            path: `${dynamicsGroupPath}/output/targetParameterId`,
+            path: `${dynamicsGroupPath}/outputs/0/parameterId`,
             before: null,
-            after: input.dynamicsGroup.output.targetParameterId
+            after: input.dynamicsGroup.outputs[0]?.parameterId ?? null
           }
         ]
       }
@@ -266,7 +273,7 @@ const createCreateDynamicsGroupResult = (input: {
     status: input.status,
     precondition: createPreconditionResult([], [
       dynamicsGroupTarget,
-      ...driverParameterTargets,
+      ...inputParameterTargets,
       outputParameterTarget
     ]),
     modelDiff,
@@ -294,12 +301,12 @@ const createCreateDynamicsGroupMutationDiagnostic = (
       });
     case "missing_dynamics_driver_parameter":
       return createOperationDiagnostic({
-        checkId: "operation.createDynamicsGroup.missingDriverParameter",
+        checkId: "operation.createDynamicsGroup.missingInputParameter",
         message: error.message,
         target: {
           kind: "dynamicsGroup",
           id: dynamicsGroup.dynamicsGroupId,
-          path: "/payload/drivers"
+          path: "/payload/inputs"
         }
       });
     case "missing_dynamics_output_parameter":
@@ -308,38 +315,18 @@ const createCreateDynamicsGroupMutationDiagnostic = (
         message: error.message,
         target: {
           kind: "parameter",
-          id: dynamicsGroup.output.targetParameterId,
-          path: "/payload/output/targetParameterId"
+          id: dynamicsGroup.outputs[0]?.parameterId ?? dynamicsGroup.dynamicsGroupId,
+          path: "/payload/outputs/0/parameterId"
         }
       });
-    case "invalid_dynamics_driver_parameter_source":
+    case "invalid_dynamics_group":
       return createOperationDiagnostic({
-        checkId: "operation.createDynamicsGroup.invalidDriverParameterSource",
+        checkId: "operation.createDynamicsGroup.invalidDynamicsGroup",
         message: error.message,
         target: {
           kind: "dynamicsGroup",
           id: dynamicsGroup.dynamicsGroupId,
-          path: "/payload/drivers"
-        }
-      });
-    case "invalid_dynamics_output_parameter_source":
-      return createOperationDiagnostic({
-        checkId: "operation.createDynamicsGroup.invalidOutputParameterSource",
-        message: error.message,
-        target: {
-          kind: "parameter",
-          id: dynamicsGroup.output.targetParameterId,
-          path: "/payload/output/targetParameterId"
-        }
-      });
-    case "duplicate_dynamics_driver":
-      return createOperationDiagnostic({
-        checkId: "operation.createDynamicsGroup.duplicateDriver",
-        message: error.message,
-        target: {
-          kind: "dynamicsGroup",
-          id: dynamicsGroup.dynamicsGroupId,
-          path: "/payload/drivers"
+          path: "/payload"
         }
       });
     case "duplicate_dynamics_output_parameter":
@@ -348,8 +335,8 @@ const createCreateDynamicsGroupMutationDiagnostic = (
         message: error.message,
         target: {
           kind: "parameter",
-          id: dynamicsGroup.output.targetParameterId,
-          path: "/payload/output/targetParameterId"
+          id: dynamicsGroup.outputs[0]?.parameterId ?? dynamicsGroup.dynamicsGroupId,
+          path: "/payload/outputs/0/parameterId"
         }
       });
     default:
@@ -368,8 +355,8 @@ const createCreateDynamicsGroupTargetIds = (
   dynamicsGroupId: DynamicsGroupId
 ): readonly string[] => {
   const parameterIds = [
-    ...(request.payload.drivers?.map((driver) => driver.sourceParameterId) ?? []),
-    ...(request.payload.output === undefined ? [] : [request.payload.output.targetParameterId])
+    ...(request.payload.inputs?.map((input) => input.parameterId) ?? []),
+    ...(request.payload.outputs?.map((output) => output.parameterId) ?? [])
   ];
 
   return [...new Set([dynamicsGroupId, ...parameterIds])];

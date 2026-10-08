@@ -1,0 +1,46 @@
+[
+  {
+    "file": "84-warp-half-l.json",
+    "operationId": "op_cp02_warp_half_l",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eyeball L Half Warp",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_ee159d23_irides-l"
+      ],
+      "domainBounds": {
+        "x": 1020,
+        "y": 425,
+        "width": 101,
+        "height": 42
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eyeball L Half Warp"
+  },
+  {
+    "file": "85-warp-half-r.json",
+    "operationId": "op_cp02_warp_half_r",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eyeball R Half Warp",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_ee159dc2_irides-r"
+      ],
+      "domainBounds": {
+        "x": 868,
+        "y": 436,
+        "width": 104,
+        "height": 39
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eyeball R Half Warp"
+  }
+]

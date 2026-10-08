@@ -94,7 +94,8 @@ export const ContractFixtureIdSchema = z.enum([
   "invalid-mask-reference",
   "rights-provenance-missing",
   "keyform-grid-overdimension",
-  "parent-child-out-of-domain",
+  "nested-warp-rest-binding",
+  "warp-binding-outside-domain",
   "runtime-load-blocking",
   "ai-invalid-mutation",
   "out-of-range-parameter-dry-run",
@@ -154,7 +155,8 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `invalid-mask-reference` | missing/invalid mask relation | validation report + snapshot diagnostic | validator-core, runtime-core |
 | `rights-provenance-missing` | missing source provenance / blocked rights | validation fail report | package-format, validator-core |
 | `keyform-grid-overdimension` | three or more parameters on one target grid | validation needs_review/fail report | operation-core, runtime-core, validator-core |
-| `parent-child-out-of-domain` | child vertex outside parent warp domain | warning/needs_review report | runtime-core, validator-core |
+| `nested-warp-rest-binding` | child warp moves current vertices outside parent visual domain, while parent warp still applies from rest/bind membership | runtime snapshot diff with no pass-through discontinuity | runtime-core, editor preview |
+| `warp-binding-outside-domain` | rest/bind coordinate is outside expected parent warp domain | warning/needs_review report | runtime-core, validator-core |
 | `runtime-load-blocking` | normalized graph cannot produce deterministic snapshot | blocking report | package-format, runtime-core, validator-core |
 | `ai-invalid-mutation` | AI dry-run incorrectly mutates package | acceptance fail report | ai-interface, operation-core, validator-core |
 | `out-of-range-parameter-dry-run` | AI/API range clamp and strict fail | operation result, snapshot, validation diff | operation-core, runtime-core, validator-core |
@@ -176,7 +178,8 @@ export type ContractFixtureManifestDto = z.infer<typeof ContractFixtureManifestS
 | `invalid-mesh-triangle` | `mesh.triangleIndexOutOfRange` with `severity=blocking`; optional `mesh.degenerateTriangle` warning on second mesh |
 | `invalid-missing-texture` | `ref.drawableTextureMissing` with `severity=error`, target visible drawable ID, acceptance `status=fail` |
 | `invalid-rigControl-cycle` | `rigControl.cycle` with `severity=blocking`, target kind `rigControl`, no successful topological order |
-| `parent-child-out-of-domain` | `rigControl.childOutsideWarpDomain` with `severity=warning`, acceptance `status=needs_review` |
+| `nested-warp-rest-binding` | child-driven current vertex outside parent visual domain still receives parent warp displacement because parent membership is sampled from rest/bind coordinates |
+| `warp-binding-outside-domain` | `rigControl.warpBindingOutsideDomain` with `severity=warning`, acceptance `status=needs_review` |
 | `minimal-dynamics-hairSway` | no `dynamics.*` error/blocking diagnostics; output parameter has `valueSource="computedDynamics"`; one group has exactly one output |
 | `invalid-dynamics-missing-driver` | `dynamics.driverMissing` or `dynamics.driverMustBeAuthoredInput` with `severity=error` |
 | `invalid-dynamics-missing-output` | `dynamics.outputMissing` or `dynamics.outputMustBeComputedParameter` with `severity=error` |

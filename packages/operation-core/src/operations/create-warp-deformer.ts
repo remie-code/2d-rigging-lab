@@ -19,7 +19,7 @@ import type {
   Vec2Dto
 } from "@private-2d-rigging-lab/contracts";
 
-import { createRigControlIdFromDisplayName } from "../operation-ids.js";
+import { createAvailableRigControlIdFromDisplayName } from "../operation-ids.js";
 import type { OperationRequestDto } from "../operation-request.js";
 import type { OperationResultDto } from "../operation-result.js";
 import { OperationResultSchema } from "../operation-result.js";
@@ -106,7 +106,10 @@ const applyCreateWarpDeformer = (
     };
   }
 
-  const rigControlId = createRigControlIdFromDisplayName(request.payload.displayName);
+  const rigControlId = createAvailableRigControlIdFromDisplayName(
+    request.payload.displayName,
+    session.graph.rigControls.map((rigControl) => rigControl.rigControlId)
+  );
   const rigControl = createPackageWarpDeformerRigControl(request, rigControlId);
   const targetIds = createCreateWarpDeformerTargetIds(request, rigControlId);
   const baseRevision = session.authoringRevision;

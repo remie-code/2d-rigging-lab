@@ -6,6 +6,8 @@ import * as meshToolState from "./mesh-tool-state";
 
 import {
   DEFAULT_MESH_GENERATION_METHOD,
+  DEFAULT_MESH_GENERATION_METHOD_CHOICE,
+  MESH_GENERATION_METHOD_CHOICES,
   MESH_GENERATION_PRESETS,
   createMeshDrawableBatchTargets,
   createMeshPreviewProvenanceId
@@ -36,6 +38,24 @@ describe("mesh tool state", () => {
         "auto-outline-v6d-contour-constrainautor"
       )
     ).toBe("prov_mesh_preview_face_standard_auto-outline-v6d-contour-constrainautor");
+  });
+
+  it("exposes exactly the current-generation and v7 generation choices with the current default first", () => {
+    expect(MESH_GENERATION_METHOD_CHOICES.map((choice) => choice.method)).toEqual([
+      "auto-outline-v6d-adaptive-contour-constrainautor",
+      "auto-outline-v7-margin-contour"
+    ]);
+    // 既定(先頭)は現行 method と一致し、初期選択・未操作時のフォールバックがv6のまま。
+    expect(DEFAULT_MESH_GENERATION_METHOD_CHOICE).toBe(MESH_GENERATION_METHOD_CHOICES[0]);
+    expect(DEFAULT_MESH_GENERATION_METHOD_CHOICE.method).toBe(DEFAULT_MESH_GENERATION_METHOD);
+    // v7 を既定と異なる method として選ぶと provenance ID に v7 トークンが乗る(既存機構)。
+    expect(
+      createMeshPreviewProvenanceId(
+        DrawableIdSchema.parse("draw_hair"),
+        "standard",
+        "auto-outline-v7-margin-contour"
+      )
+    ).toBe("prov_mesh_preview_hair_standard_auto-outline-v7-margin-contour");
   });
 
   it("keeps product-facing mesh presets as the visible control dimension", () => {

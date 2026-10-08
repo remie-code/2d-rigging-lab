@@ -1,0 +1,767 @@
+# Runtime Player Backlog
+
+> Runtime Playerで後から実行すべきタスク、延期されたリスク、将来wave候補の一覧。
+
+## 1. Purpose
+
+この文書は、Runtime Playerの実装中に発見されたが、現在waveでは扱わないと決めた作業を失わないためのbacklogである。
+
+各項目は、次のplanning-gateでそのまま判断材料にできる粒度で書く。
+
+## 2. Status Values
+
+| Status | Meaning |
+|---|---|
+| Deferred | 意図的に後回しにしている |
+| Planned | 次waveまたは近いwaveで扱う予定 |
+| In progress | 現在実装中 |
+| Done | 完了済み |
+| Superseded | 別方針に置き換わった |
+
+## 3. Backlog Items
+
+### 3.1 Package Build Artifact Exports Migration
+
+- Status: Deferred
+- Kind: Architecture debt
+- Priority: Medium before packaging, high before distribution
+
+Problem:
+
+- 現在のworkspace packagesは、開発中monorepoとしてTypeScript sourceを直接exportsしている。
+- Runtime Player Wave2では、短期対応としてElectron main/preloadで使うworkspace packagesをbundleに含める方針にした。
+- これは開発中の短期対応として妥当だが、長期的には配布アプリや外部consumerがNode/Electron runtimeで直接使えるpackage形態ではない。
+
+Trigger:
+
+- Runtime Player packaging/distribution workを始める。
+- Runtime Playerのworkspace package bundling例外が増える。
+- Runtime Player以外の外部app/CLIが `packages/**` をruntime dependencyとして使い始める。
+- CIでsource workspace linkではなくbuild artifactからRuntime Playerを検証したくなる。
+
+Desired outcome:
+
+- `packages/package-format`, `packages/contracts`, `packages/runtime-core`, `packages/render-core`, `packages/render-webgl2` などが `dist/index.js` と `dist/index.d.ts` を生成する。
+- package exportsがbuild済みJSと型定義を指す。
+- Electron appがworkspace packagesをexternalizeしても、Nodeがbuild済みJSを解決できる。
+
+Source:
+
+- [../architecture/workspace-package-bundling-decision.md](../architecture/workspace-package-bundling-decision.md)
+
+Suggested next action:
+
+- 専用のpackage build/export migration waveとしてplanning-gateにかける。
+- Runtime Player app側のbundling exceptionを増やす前に、build pipelineとexports方針を検討する。
+
+### 3.2 Real Runtime Export Visual Verification
+
+- Status: Deferred
+- Kind: Runtime verification
+- Priority: High before input adapter work depends on visual confidence
+
+Problem:
+
+- Runtime Player Wave2はstatic Stage renderを実装したが、実物Runtime ExportでのGUI screenshot/pixel smokeは未実施。
+- 子エージェント側のunit/typecheckは通っているが、透明Stage上での見え方、alpha edge、clipping/masksの実視覚確認はユーザー操作に依存している。
+
+Trigger:
+
+- Wave2実装後に実物Runtime ExportをPlayerで開く。
+- 次のinput adapter / parameter mapping / dynamics runtimeへ進む前。
+
+Desired outcome:
+
+- Stageにモデルだけが表示される。
+- 背景がtransparent/capture-friendlyである。
+- alpha edgeが不自然でない。
+- clipping/masksがEditor/Viewerに近い見え方をする。
+- invalid directoryを開いた時、Controlにerrorが出てStageが安全状態になる。
+
+Source:
+
+- [../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md](../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md)
+
+Suggested next action:
+
+- ユーザーの実物Runtime Exportでmanual checklistを実行する。
+- 問題が出たら、Runtime Player Wave2 follow-upとして狭い修正waveを切る。
+
+### 3.3 Large Raw RGBA IPC Payload Measurement
+
+- Status: Deferred
+- Kind: Runtime verification
+- Priority: Medium
+
+Problem:
+
+- Runtime Export textureはraw RGBA8で、single page atlasでも大きなbyte payloadになり得る。
+- Wave2ではmain processからStageへloaded payloadを渡すが、大きなRuntime ExportでIPC転送負荷をまだ計測していない。
+
+Trigger:
+
+- 実物モデルでloadが重い、Stage表示までに長い停止がある、または将来複数texture pageを扱う必要が出る。
+- Runtime Playerのruntime loopやinput adapterを入れる前に、load時のUXを安定させたい。
+
+Desired outcome:
+
+- 代表的なRuntime Exportでload時間、IPC payload size、Stage表示開始までの時間を記録する。
+- 必要ならraw bytesの転送方法を見直す。
+
+Source:
+
+- [../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md](../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md)
+
+Suggested next action:
+
+- 実物Runtime Exportでload timing logを追加するか、manual measurementを行う。
+- 問題がある場合は、main/Stage間のtexture bytes delivery設計を再検討する。
+
+### 3.4 Native Stage Window Platform Behavior
+
+- Status: Deferred
+- Kind: Platform risk
+- Priority: Medium
+
+Problem:
+
+- Wave9以降、native Stage Windowはprimary broadcast pathではなくlocal preview / fallbackである。
+- それでもStage Windowはtransparent/capture-friendly fallbackとして有用である。
+- Electronのtransparent/frameless windowやOBS capture behaviorはOSやGPU環境の差分を受ける。
+- Wave8でStage Arrange、click-through、always-on-top、stable Stage title / Copy Window Titleはsource/test上実装済みだが、Electron-native挙動は未検証。
+
+Trigger:
+
+- Native Stage Windowをlocal preview / fallback captureとして実運用する。
+- Stage Windowのposition / size / always-on-top / click-throughを配信準備で実運用する。
+- packaging/distribution前。
+
+Desired outcome:
+
+- 対象OSでStageが透明背景のlocal preview / fallbackとして使える。
+- captureに不要なUIが入らない。
+- always-on-top / click-through / window placementが対象OS上で期待どおり動く。
+- 必要ならOBS Window Capture fallbackで`Runtime Player Stage`を選べるか確認する。ただしPrimary probeはBrowser Sourceである。
+
+Source:
+
+- [../architecture/technology-stack-decision.md](../architecture/technology-stack-decision.md)
+- [../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md](../implementation/waves/wave2/runtime-player-wave2-final-integration-report.md)
+- [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
+
+Suggested next action:
+
+- Browser Source manual OBS probeを優先する。
+- Native Stage Windowのmanual Electron checksを実行し、fallback/local previewで差分が出たらplatform-specific follow-up waveを切る。
+
+### 3.5 iFacialMocap Input Adapter And Parameter Mapping
+
+- Status: Deferred
+- Kind: Future UX / feature
+- Priority: High after static render is visually accepted
+
+Problem:
+
+- Runtime Playerの主目的は、Editorが出したRuntime Exportをtracking inputで動かすこと。
+- Wave2はstatic renderまでで、iFacialMocap受信、normalized tracking frame、parameter mapping、calibrationは未実装。
+
+Trigger:
+
+- Runtime Export static renderが実物確認で許容できる。
+- 次に「顔・頭・目・口の入力でモデルが動く」UXへ進む。
+
+Desired outcome:
+
+- iFacialMocapからtracking frameを受信する。
+- adapter境界でnormalized frameへ変換する。
+- normalized frameをRuntime Export内parameterへmappingする。
+- Control Windowで接続状態とcalibrationを扱う。
+
+Source:
+
+- [../research/ifacialmocap-input-adapter-research.md](../research/ifacialmocap-input-adapter-research.md)
+- [../architecture/runtime-player-development-policy.md](../architecture/runtime-player-development-policy.md)
+- [../architecture/tracking-input-mapping-baseline.md](../architecture/tracking-input-mapping-baseline.md)
+
+Suggested next action:
+
+- planning-gateで、最初に扱うinput subsetとparameter mapping UXを決める。
+
+### 3.6 Body Follow v0 From Head Pose
+
+- Status: Done
+- Final clean integration review: pass ([../implementation/reviews/wave6/runtime-player-wave6-final-clean-integration-review.md](../implementation/reviews/wave6/runtime-player-wave6-final-clean-integration-review.md))
+- Kind: Future UX / feature completed by Runtime Player Wave6
+- Priority: N/A
+
+Problem:
+
+- iFacialMocapは主に顔周辺のtracking sourceであり、Body Angle X/Zに直接対応するbody tracking signalは期待しにくい。
+- Wave5のユーザー実機確認では、顔・目・口のlive motionは自然に見える一方、首から上だけが動いて体が静止する違和感が大きかった。
+
+Implemented outcome:
+
+- Existing Input Profiles can remain usable without `headPositionRaw`.
+- Saved profiles can add head position left/right calibration through missing-only or head-position-only recalibration.
+- Auto Mapping preserves the existing nine Wave5 head/eyes/mouth slots and adds Body X/Z slots when matching body targets exist.
+- `Body Angle X` uses calibrated head horizontal input with conservative strength and lag.
+- `Body Angle Z` combines calibrated head tilt and optional calibrated head positionX.
+- Body outputs are emitted through the existing sanitized live parameter frame path.
+- Stage remains model-only and receives no raw tracking frame, raw head position, or debug body data.
+
+Source:
+
+- [../implementation/orchestration/player-wave6-plan.md](../implementation/orchestration/player-wave6-plan.md)
+- [../implementation/waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md](../implementation/waves/wave6/runtime-player-wave6-domain-a-input-profile-position-calibration-report.md)
+- [../implementation/waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md](../implementation/waves/wave6/runtime-player-wave6-domain-b-body-auto-mapping-live-follow-report.md)
+- [../implementation/waves/wave6/runtime-player-wave6-final-integration-report.md](../implementation/waves/wave6/runtime-player-wave6-final-integration-report.md)
+
+Remaining manual verification:
+
+- Run Electron Runtime Player with real iFacialMocap input and a Runtime Export with authored Body Angle X/Z keyforms.
+- Tune default Body X/Z strengths and lag if real-device visual evidence shows the defaults feel wrong.
+
+### 3.7 Head-Position Stage Motion
+
+- Status: Done at source/test/review level through Runtime Player Wave11; manual OBS and real-device tuning pending
+- Final integration report: pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md))
+- Kind: Future UX / feature completed by Runtime Player Wave11
+- Priority: Manual verification is high before treating tuned Stage Motion as product-ready
+
+Problem:
+
+- Wave6 intentionally stops at authored Body Angle X/Z parameter output.
+- Head position may also be useful for Stage scale and Stage translation, but those are separate from Runtime Export parameter mapping and separate from Wave8 capture-target ergonomics.
+- Wave8 intentionally stopped at native capture-target controls and did not add Stage Motion, Spout, or OBS automation.
+- Wave9 added Browser Source Output as the primary broadcast candidate and kept Spout2 deferred.
+- Wave10 kept Browser Source as the fixed primary broadcast path and added duplicate native local preview live render suspension, sampled Control diagnostics, and Browser Source resync de-duplication.
+
+Implemented outcome:
+
+- Input Profile now has explicit near/far head-position calibration in addition to left/right.
+- Existing Input Profiles without near/far still load; near/far is shown as missing and recoverable through Input calibration.
+- Stage Motion belongs to the Stage page, not the Mapping page.
+- Manual Stage pan/zoom remains the saved base transform.
+- Head position X adds transient horizontal Stage offset.
+- Calibrated near/far depth adds transient Stage scale offset.
+- Settings auto-save through Window State / local display settings.
+- Current live offsets and smoothed runtime state are not saved.
+- Browser Source receives the sanitized composed Stage transform and no raw tracking/debug/calibration data.
+- Wave10 native local preview live rendering suspension remains effective; Browser Source continues receiving Stage Motion while native preview is suspended.
+
+Source:
+
+- [../screens/initial-runtime-player-screen.md](../screens/initial-runtime-player-screen.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md)
+- [../architecture/tracking-input-mapping-baseline.md](../architecture/tracking-input-mapping-baseline.md)
+- [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
+- [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
+- [../implementation/orchestration/player-wave11-plan.md](../implementation/orchestration/player-wave11-plan.md)
+- [../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)
+
+Remaining manual verification:
+
+- Recalibrate or missing-only calibrate near/far with real iFacialMocap input.
+- Confirm left/right Stage offset direction and depth scale direction in native Stage and OBS Browser Source.
+- Tune strength, limit, invert, dead zone, and reaction with real motion.
+- Confirm manual Stage pan/zoom remains the base transform.
+- Restart Runtime Player and confirm Stage Motion settings restore.
+- Confirm Browser Source parity and Wave10 native preview suspension/resume behavior.
+- Compare CPU/GPU usage or perceived smoothness after Wave10 suspension while Stage Motion is active.
+
+### 3.8 Model Mapping Profile Auto Save
+
+- Status: Done
+- Final integration report: pass ([../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md))
+- Kind: Future UX / feature completed by Runtime Player Wave7
+- Priority: N/A
+
+Problem:
+
+- Wave5/Wave6でMapping画面の`enabled / invert / strength`とBody Follow controlsを細かく調整できるようになった。
+- 現在のModel Mapping Stateはsession/local stateであり、Runtime Playerを再起動したりRuntime Exportを開き直すと調整値が失われる。
+- 特にBody Followは実機で自然に見える値へ詰めるため、保存されないことが強いUX欠落になる。
+
+Decision:
+
+- Model Mapping Profileは手動`Save`ではなく自動保存する。
+- Mapping page上部の`Mapping Profile` cardで`Saved / Saving / Unsaved changes / Save failed / Stale export`を表示する。
+- HeaderにはMapping保存ボタンを置かない。
+- 保存失敗時だけ`Retry`を出す。
+- 試行錯誤から戻る主導線は`Reset to Auto Map`にする。
+
+Implemented outcome:
+
+- Runtime Exportを開いた時、そのexportに対応するModel Mapping Profileが自動復元される。
+- Profileがない場合はAuto Mappingへフォールバックする。
+- Runtime Exportが古い/staleの場合は、状態を表示しつつ有効slotを復元し、stale targetはAuto Mappingへfallbackする。
+- Mapping変更はStageへ即時反映され、debounce後に保存される。
+- `Reset to Auto Map`はmappingを再生成し、Body Follow lag stateをresetし、profileを保存する。
+- 保存場所は`<electron userData>/model-mapping-profiles/<safe-package-id>/<fingerprint>.json`。
+- Runtime Export identityは`packageHash`優先、hashなしでは`packageId + packageRevision + parameterSignatureHash` fallback。
+
+Remaining manual verification:
+
+- Mapping / Body Follow tune -> restart/reopen same Runtime Export -> restore。
+- Real iFacialMocap tracking after profile restore。
+
+Original trigger:
+
+- Body Followの実機調整が有効であると確認された。
+- ユーザーが次回起動時にも同じmapping調整を復元したい。
+- Persistent Model Mapping Profile auto-save/readを次wave候補にする。
+
+Source:
+
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md)
+- [../implementation/orchestration/player-wave7-plan.md](../implementation/orchestration/player-wave7-plan.md)
+- [../implementation/waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md](../implementation/waves/wave7/runtime-player-wave7-domain-a-model-mapping-profile-auto-save-report.md)
+
+### 3.9 Stage Page + Window/View State Auto Save
+
+- Status: Done
+- Final integration report: pass ([../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md))
+- Kind: Future UX / feature completed by Runtime Player Wave7
+- Priority: N/A
+
+Problem:
+
+- Wave3以降、Stageはpan/zoomできるが、その表示状態はまだ次回起動へ持ち越せない。
+- Body FollowとMapping調整が自然になったことで、次に必要なのは「調整した動き」と「整えた表示位置」が次回も戻ってくる体験である。
+- OverviewにStage操作を増やすとLive readiness確認画面が肥大化する。Stage操作は低頻度なので専用pageへ逃がす方がよい。
+
+Decision:
+
+- Stage page v0を実体pageとして追加する。
+- Stage page v0はBroadcast/OBS設定ではなく、Stage Window boundsとStage view transformを扱う。
+- Window State Persistenceは自動保存する。
+- 保存場所はModel Mapping Profileとは分ける。
+
+Implemented outcome:
+
+- Stage page v0 is a real Control Window page.
+- Stage Window bounds and Control Window bounds are auto-saved.
+- Stage view transform stores pan/zoom with coordinate space `stage-viewport-px-v1`.
+- Focus Stage, Reset View, and Center Model are real Stage view actions.
+- Center Model preserves current zoom and recenters pan.
+- Window State storage is separate from Model Mapping Profile storage.
+- Storage path is `<electron userData>/window-state/runtime-player.json`.
+- Stage remains model-only and receives no raw tracking frame/debug setup UI.
+
+Remaining manual verification:
+
+- Stage move/resize -> restart -> restore。
+- Stage pan/zoom -> restart -> restore。
+- Stage page Focus/Reset/Center。
+
+Implemented scope:
+
+- Stage Window bounds: `x / y / width / height`。
+- Control Window bounds: `x / y / width / height`。同時に扱うかはplanningで最終確認する。
+- Stage view transform: `panX / panY / zoom`。
+- Stage page actions: `Focus Stage`, `Reset View`, `Center Model`。
+- Save status: `Saved / Saving / Save failed` and optional `Retry`。
+
+Out of scope for Wave7:
+
+- Runtime Export auto restore。
+- Stage transparency。
+- click-through。
+- always-on-top。
+- OBS/capture settings。
+- head-position Stage Motion。Completed later by Wave11.
+- near/far distance response。Completed later by Wave11 as Stage Motion depth scale.
+
+Storage:
+
+```text
+<electron userData>/
+  window-state/
+    runtime-player.json
+```
+
+Rationale:
+
+- Model Mapping Profile is per Runtime Export and describes how the model moves.
+- Window State is per device/display environment and describes where/how the Stage is shown.
+- The same PC should generally reuse Stage window placement across models.
+- The same Runtime Export on another PC should not inherit window coordinates from a different display environment.
+
+Original trigger:
+
+- Model Mapping Profile auto-save is planned, and a parallel independent domain is desirable.
+- User wants the next launch to restore both motion tuning and Stage placement.
+
+Source:
+
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/tracking-setup-live-mapping.md](../screens/tracking-setup-live-mapping.md)
+- [../implementation/orchestration/player-wave7-plan.md](../implementation/orchestration/player-wave7-plan.md)
+- [../implementation/waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md](../implementation/waves/wave7/runtime-player-wave7-domain-b-stage-window-state-auto-save-report.md)
+
+### 3.10 Wave7 Manual Electron Persistence Verification
+
+- Status: Done
+- Kind: Runtime verification
+- Priority: N/A
+
+Problem:
+
+- Wave7 source checks, focused tests, typecheck, and review reports support a pass verdict, but Electron restart/reopen flows were not manually executed in Domain C.
+- These checks need a real Runtime Player session, real Runtime Export, and real iFacialMocap input for final product confidence.
+
+Verified checks:
+
+- Mapping/Body Follow tune -> restart/reopen same Runtime Export -> restore。
+- Stage move/resize -> restart -> restore。
+- Stage pan/zoom -> restart -> restore。
+- Stage page Focus/Reset/Center。
+- Real iFacialMocap tracking after profile restore。
+
+Result:
+
+- User manually confirmed all checks behaved as expected after Wave7.
+
+Source:
+
+- [../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md](../implementation/waves/wave7/runtime-player-wave7-final-integration-report.md)
+
+### 3.11 Broadcast Stage Setup v0
+
+- Status: Done
+- Final integration report: pass ([../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md))
+- Kind: Next UX / feature completed by Runtime Player Wave8
+- Priority: N/A
+
+Problem:
+
+- Before Wave8, Runtime Player could move the model naturally and persist mapping/stage state, but the Stage was not yet comfortable as a broadcast capture target.
+- Stage Window is frameless, so it needs an explicit arrangement path.
+- Before Wave20, closing Control hid the window and required a recovery path. Current behavior is Control close requests app quit; direct Stage close remains recoverable through `Focus Stage`.
+- Click-through is useful for broadcast but dangerous without a recovery path.
+- OBS integration should not be overclaimed; Runtime Player can prepare the Stage as a capture target but cannot know whether OBS is actually capturing it.
+
+Implemented outcome:
+
+- Runtime Export startup restore stores the last successful Runtime Export path under `<electron userData>/startup-state/runtime-player-startup.json`.
+- Startup restore runs from Control after initial renderer effect/status setup and uses the same load workflow as manual open.
+- Missing/invalid saved Runtime Export paths show a non-crashing restore failure and remain available for Retry/Open New behavior.
+- Input Source auto-connect remains out of scope; iFacialMocap connect stays manual.
+- Wave20 supersedes the original close-hide behavior: Control Window close requests app quit and closes Stage, while direct Stage close leaves Control alive and recoverable through `Focus Stage`.
+- Explicit Quit flushes input disconnect, Model Mapping Profile, and Window State through the quit controller.
+- Stage Arrange mode shows a temporary native drag handle/overlay and disables normal Stage pan/zoom while active.
+- Normal Stage mode remains model-only.
+- Click-through can be toggled from Control, starts Off on startup, is not persisted, and can be disabled from tray/application menu.
+- Always-on-top can be toggled from Control, defaults Off, and is persisted in Window State as `stageEnvironment.alwaysOnTop`.
+- Capture Target checklist is local Runtime Player readiness only and does not claim OBS integration/readiness.
+- Stable Stage native title remains `Runtime Player Stage`, with Copy Window Title.
+- Wave9 later demoted this native capture-target surface to `Local Preview / Fallback`; it is no longer the primary broadcast setup path.
+
+Out of scope:
+
+- Spout sender implementation.
+- obs-websocket integration.
+- automatic OBS source creation.
+- Input Source auto-connect.
+- head-position Stage Motion. Completed later by Wave11.
+- near/far distance response. Completed later by Wave11 as Stage Motion depth scale.
+
+Source:
+
+- [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md)
+- [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
+- [../implementation/orchestration/player-wave8-plan.md](../implementation/orchestration/player-wave8-plan.md)
+- [../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md](../implementation/waves/wave8/runtime-player-wave8-final-integration-report.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
+
+Remaining manual verification:
+
+- Control close exits the app and closes Stage through the normal quit path.
+- Direct Stage close leaves Control alive, reports Stage unavailable, and `Focus Stage` reopens/focuses Stage.
+- Quit flushes input disconnect, Model Mapping Profile, Window State, and Runtime Dynamics Tune Profile where pending.
+- Runtime Export valid/invalid startup restore.
+- Stage Arrange drag handle moves the native Stage Window.
+- Click-through toggle and tray recovery.
+- Always-on-top toggle and persistence.
+- Local Preview / Fallback controls and Copy Window Title.
+- OBS Window Capture title/alpha fallback smoke check, only if fallback capture remains needed.
+
+### 3.12 OBS Browser Source Probe
+
+- Status: Done at source/test level through Wave21 Dynamics Tune Profile; manual OBS verification pending
+- Final integration reports: Wave9 pass ([../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)); Wave10 final integration pass ([../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)); Wave11 final integration pass ([../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)); Wave12 Domain A parent verdict passed; Wave13 final integration pass ([../implementation/waves/wave13/wave13-final-integration-report.md](../implementation/waves/wave13/wave13-final-integration-report.md)); Wave21 Domain A/B pass ([../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md](../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md), [../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md](../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md))
+- Kind: Broadcast output probe completed by Runtime Player Wave9
+- Priority: Manual verification is high before treating Browser Source as product-ready
+
+Problem:
+
+- OBS Game Capture was not reliable for Chromium/Electron transparency in the target environment.
+- Runtime Player needed a broadcast path that does not depend on capturing the native Electron Stage Window.
+- Browser Source can load a Runtime Player-served web page, but OBS CEF/WebGL2/alpha/lifecycle behavior must be verified manually.
+
+Implemented outcome:
+
+- Runtime Player starts a loopback Browser Source HTTP/WebSocket server bound to `127.0.0.1`.
+- Control shows a tokenized Browser Source URL and `Copy URL`.
+- Missing/invalid token is rejected for protected HTTP routes and WebSocket upgrades.
+- `/stage`, Runtime Export status/payload, and WebSocket live transport are implemented.
+- Generated Browser Source JS/CSS assets are tokenless by accepted design, with `.js` / `.css` allowlist and path containment.
+- Browser Source Stage client is transparent, model-only, and independent of Electron preload APIs.
+- Browser Source receives Runtime Export payload plus sanitized live parameter frames, Stage display state, active Variant selection, and effective dynamics tuning.
+- Raw tracking frames, raw iFacialMocap diagnostics, debug calibration data, private paths, and Control-only status fields do not cross into Browser Source.
+- Control shows connected client count, heartbeat, WebGL2, renderer status, Browser Source Runtime Export status, frame age, and FPS.
+- Native Stage Window controls remain available under `Local Preview / Fallback`.
+- Wave10 suspends only native Stage local live rendering while Browser Source client count is greater than zero; Browser Source rendering, live parameter frame production, input processing, mapping, body follow, dynamics, Runtime Export state, and Stage transform sync stay active.
+- Native Stage local live rendering resumes after the zero-client grace period, and reconnect during grace avoids preview bounce.
+- Control reports local preview suspension and samples repeated Browser Source live-frame/renderer diagnostics without hiding important server/client/export/render transitions.
+- Browser Source resync de-duplicates identical Runtime Export payload application while preserving reload/reconnect and replacement payload behavior.
+- Wave11 adds Stage Motion to the same Browser Source path: Browser Source receives the sanitized composed Stage transform and no raw tracking/debug/calibration data.
+- Wave12 adds active Variant selection to the same Browser Source path: reload/resync receives the current session active Variant selection, and updates carry sanitized active Variant selection without raw tracking/debug/calibration data.
+- Wave13 adds sanitized Browser Source renderer diagnostics/metrics for Performance Diagnostics reports. Reports separate source/input FPS from render FPS and exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Wave21 adds Runtime Dynamics Tune effective tuning to Browser Source startup/resync and separate `dynamics-tuning-changed` messages. Browser Source uses the same effective tuning as Native Stage without receiving Player-local profile paths or raw tracking/debug data.
+- Spout2, obs-websocket, automatic OBS source creation, and automatic OBS capture verification remain out of scope.
+
+Source:
+
+- [../screens/browser-source-output-probe-v0.md](../screens/browser-source-output-probe-v0.md)
+- [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md)
+- [../research/broadcast-capture-paths.md](../research/broadcast-capture-paths.md)
+- [../implementation/orchestration/player-wave9-plan.md](../implementation/orchestration/player-wave9-plan.md)
+- [../implementation/orchestration/player-wave10-plan.md](../implementation/orchestration/player-wave10-plan.md)
+- [../implementation/orchestration/player-wave11-plan.md](../implementation/orchestration/player-wave11-plan.md)
+- [../implementation/orchestration/player-wave12-plan.md](../implementation/orchestration/player-wave12-plan.md)
+- [../implementation/orchestration/player-wave13-plan.md](../implementation/orchestration/player-wave13-plan.md)
+- [../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md](../implementation/waves/wave9/runtime-player-wave9-final-integration-report.md)
+- [../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md](../implementation/waves/wave10/runtime-player-wave10-final-integration-report.md)
+- [../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md](../implementation/waves/wave11/runtime-player-wave11-final-integration-report.md)
+- [../implementation/waves/wave13/domain-b-completion-report.md](../implementation/waves/wave13/domain-b-completion-report.md)
+- [../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md](../implementation/reviews/wave9/runtime-player-wave9-final-clean-integration-review.md)
+
+Remaining manual verification:
+
+- Add OBS Browser Source.
+- Paste Runtime Player Browser Source URL.
+- Set width/height.
+- Set custom FPS to 30 or 60 for test.
+- Keep transparent background/custom CSS behavior enabled.
+- Initially leave `Shutdown source when not visible` off.
+- Initially leave `Refresh browser source when scene becomes active` off.
+- Confirm transparent areas show lower OBS layers.
+- Confirm model renders without black/white fill.
+- Confirm WebGL2 status appears in Control.
+- Confirm connected client and heartbeat appear in Control.
+- Confirm Control reports local preview live rendering suspension while Browser Source is connected.
+- Move face/head with iFacialMocap and confirm model motion.
+- Confirm body follow/dynamics remain visible in Browser Source while native local preview live rendering is suspended.
+- Tune a visible dynamics group in `Dynamics Tune` and confirm Browser Source matches Native Stage behavior.
+- Reset the tuned dynamics group and confirm Browser Source returns to exported defaults.
+- Enable Stage Motion and confirm left/right Stage offset in Browser Source.
+- Confirm near/far depth scale in Browser Source after explicit near/far calibration.
+- Confirm Browser Source composition matches native local preview when native preview is active.
+- Switch Variants in Live Controller and confirm Browser Source matches the native Stage visible result.
+- Refresh Browser Source and confirm the current session active Variant selection is retained.
+- Confirm manual Stage pan/zoom remains the base transform while Stage Motion adds only transient offsets.
+- Restart Runtime Player and confirm Stage Motion settings restore.
+- Run Performance Diagnostics with Browser Source connected and confirm source/input FPS and render FPS are separate.
+- Copy a Browser Source or Both report and confirm it excludes raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Hide/show scene and manually refresh Browser Source, then confirm reconnect/resync.
+- Disconnect/close OBS Browser Source and confirm native Stage local preview resumes after the grace period.
+- Compare CPU/GPU usage, render FPS/source FPS, and perceived smoothness against the Wave9/Wave10 baseline.
+- Confirm OBS audio meter does not receive unintended audio.
+
+Suggested next action:
+
+- Run the manual OBS Browser Source probe with a real Runtime Export and iFacialMocap input after Wave13 final integration is ready.
+- If it passes, keep Browser Source as the primary broadcast path.
+- If it fails, record the exact failure and decide between a narrow Browser Source follow-up and Spout2 feasibility.
+
+### 3.13 Live Controller Variant Switching v0
+
+- Status: Done at source/test level through Runtime Player Wave12; manual broadcast verification pending
+- Kind: Live operation feature completed by Runtime Player Wave12
+- Priority: Manual verification is high before relying on Variant switching during real broadcast
+
+Problem:
+
+- Runtime Export can contain Variant Groups for expressions, outfits, and accessories.
+- Before Wave12, Runtime Player did not expose a live control surface for changing active Variants during broadcast.
+- Stage Window and OBS Browser Source needed to use the same active Variant selection.
+
+Implemented outcome:
+
+- Control Window includes a real `Live Controller` page.
+- Live Controller lists Runtime Export Variant Groups when present.
+- `singleSelect` chooses exactly one active Variant.
+- `multiToggle` allows zero or more active Variants.
+- `Reset to Model Default` restores Runtime Export default active selections.
+- New Runtime Exports with drawable `baseVisible` support runtime Variant switching with `baseVisible && activeVariantPredicate`.
+- Legacy exports without complete `baseVisible` still load, but Variant switching is disabled with re-export guidance.
+- Active Variant selection is session-only and is not persisted.
+- Loading, reloading, or restarting resets active Variant selection to Runtime Export defaults.
+- Clearing or unloading the Runtime Export clears active Variant selection until another export is loaded.
+- Native Stage Window and Browser Source use the same session active Variant selection.
+- Browser Source reload/resync includes current active Variant selection.
+- Browser Source receives sanitized active Variant selection only, not raw tracking frames, raw iFacialMocap diagnostics, calibration internals, or private file paths.
+- `Look Forward`, `Center Model`, and `Stage Motion` On/Off reuse existing ownership.
+- Wave10 native local preview suspension remains preserved.
+- Runtime Player Wave12 did not change Runtime Export schema/materialization.
+
+Deferred future scope:
+
+- Hotkeys.
+- StreamDeck / MIDI.
+- Separate compact controller window.
+- Player-side Variant definition editing.
+- Drawable membership editing.
+- Last-active Variant persistence.
+- Stage Motion quick strength sliders.
+- Body Follow quick controls.
+
+Source:
+
+- [../screens/live-controller-page.md](../screens/live-controller-page.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../implementation/orchestration/player-wave12-plan.md](../implementation/orchestration/player-wave12-plan.md)
+- [../../implementation/waves/wave102/wave102-final-integration-report.md](../../implementation/waves/wave102/wave102-final-integration-report.md)
+
+Remaining manual verification:
+
+- Open a new Runtime Export that includes Variants and drawable `baseVisible`.
+- Open `Live Controller`.
+- Switch a `singleSelect` expression/outfit Variant.
+- Toggle a `multiToggle` accessory Variant.
+- Confirm native Stage Window updates.
+- Confirm OBS Browser Source updates to the same visible result.
+- Click `Reset to Model Default`.
+- Reload Browser Source and confirm the current session active Variant selection remains.
+- Restart Runtime Player and confirm active Variant selection resets to Runtime Export defaults.
+- Open a legacy Runtime Export without `baseVisible` and confirm switching is disabled with re-export guidance.
+
+### 3.14 Stage Frame Pacing And Performance Diagnostics
+
+- Status: Done at source/test/final review level through Runtime Player Wave17; manual native/OBS verification pending
+- Kind: Performance / diagnostics feature in Runtime Player Wave13
+- Priority: High before treating smoothness improvements as product-ready
+
+Problem:
+
+- Runtime Player could be functionally correct while still feeling less smooth than expected.
+- Before Wave13, live parameter frames and Stage view/display transform changes could use different render rhythms.
+- Browser Source and native Stage needed comparable metrics that distinguish source/input FPS from actual render FPS.
+
+Implemented outcome:
+
+- Shared Stage renderer frame pacing converges live frames and Stage view/display transform invalidation on scheduled rAF rendering where practical.
+- Duplicate unchanged Stage view/display transforms are skipped and counted.
+- Metrics include render count, scheduled/immediate render count, live frame message count, Stage view/display transform counts, duplicate transform skip count, coalesced live frame count, rAF delta, render duration, canvas size, and devicePixelRatio.
+- Native Stage reports renderer metrics through Stage view IPC.
+- Browser Source reports sanitized renderer diagnostics/metrics through the Browser Source diagnostics path.
+- Control Window includes a low-priority `Performance Diagnostics` page.
+- Performance Diagnostics supports target `Native Stage` / `Browser Source` / `Both`, duration `10s` / `30s`, `Start Capture`, `Stop Capture`, `Copy Report`, `Clear Report`, report preview, target availability, and comparison run guidance.
+- Reports separate source/input FPS from render FPS and include enough counters for logs back to agents.
+- Reports exclude raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Wave10 local preview suspension, Wave11 Stage Motion, and Wave12 Variant switching remain intended preserved behavior.
+- Wave16 adds compiled evaluator proof counters and target-local `RuntimeModelInstance` cache counters.
+- Wave17 implements the public snapshot materialization bypass for live render-frame evaluation. Runtime Player live evaluated Stage render input defaults to render-frame output, and Performance Diagnostics surfaces `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, and `runtimeCoreRenderFrameOutputDurationMs`.
+- Wave17 copied reports scope render-frame fast-path metrics separately from public snapshot path metrics and print `renderInputDrawableMappingDurationMs` for the compatibility source field `snapshotToRenderDrawableDurationMs`.
+
+Deferred future scope:
+
+- WebGL persistent buffer/cache redesign.
+- Runtime graph cache.
+- physics/body follow smoothing semantics changes.
+- input interpolation or server-side frame throttling/resampling.
+- Spout2.
+- OBS automation.
+- Browser Source protocol redesign.
+- binary websocket protocol.
+- Runtime Export format changes.
+- Editor changes.
+
+Source:
+
+- [../screens/performance-diagnostics.md](../screens/performance-diagnostics.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/broadcast-stage-setup-v0.md](../screens/broadcast-stage-setup-v0.md)
+- [../implementation/orchestration/player-wave13-plan.md](../implementation/orchestration/player-wave13-plan.md)
+- [../implementation/waves/wave13/domain-b-completion-report.md](../implementation/waves/wave13/domain-b-completion-report.md)
+- [../implementation/waves/wave13/wave13-final-integration-report.md](../implementation/waves/wave13/wave13-final-integration-report.md)
+- [../implementation/reviews/wave13/wave13-final-clean-integration-review.md](../implementation/reviews/wave13/wave13-final-clean-integration-review.md)
+- [../implementation/waves/wave16/wave16-final-integration-report.md](../implementation/waves/wave16/wave16-final-integration-report.md)
+- [../implementation/waves/wave16/wave16-followup-compiled-evaluator-proof-diagnostics-report.md](../implementation/waves/wave16/wave16-followup-compiled-evaluator-proof-diagnostics-report.md)
+- [../implementation/waves/wave17/wave17-final-integration-report.md](../implementation/waves/wave17/wave17-final-integration-report.md)
+
+Remaining manual verification:
+
+- Open Runtime Player with a real Runtime Export.
+- Confirm native Stage still displays and moves normally.
+- Run Performance Diagnostics for native Stage and copy the report.
+- Connect OBS Browser Source.
+- Run Performance Diagnostics for Browser Source connected state or Both.
+- Run Browser Source Performance Diagnostics with deep capture on a real Runtime Export + real iFacialMocap + OBS Browser Source setup.
+- Toggle Stage Motion off/on and capture both states.
+- Compare OBS Browser Source custom FPS off/30/60 if relevant.
+- Confirm report separates source/input FPS from render FPS.
+- Confirm report includes rAF delta, render duration, render counts, transform counts, duplicate transform skips, coalesced live frames, canvas size, and devicePixelRatio.
+- Compare before/after `renderFps`, `appliedLiveFrameFps`, `compiledRenderFrameCount`, `publicSnapshotMaterializationCount`, `runtimeCoreRenderFrameOutputDurationMs`, `runtimeCoreEvaluationDurationMs`, `runtimeCoreSnapshotCreationDurationMs`, `runtimeCoreDrawableSnapshotCreationDurationMs`, `runtimeCoreDeformerHierarchyEvaluationDurationMs`, `runtimeCoreWarpDeformerVertexTransformDurationMs`, and `renderDurationMs`.
+- Confirm stable live render-frame captures show `compiledRenderFrameCount > 0` and `publicSnapshotMaterializationCount: 0`.
+- Confirm copied report is safe to paste into `tmp/player-performance.log` or chat.
+- Confirm copied report excludes raw tracking frames, calibration internals, Browser Source token, private file paths, and full Runtime Export payload.
+- Save the copied Browser Source deep capture report to `tmp/report.log`.
+- Subjectively check whether native Stage and Browser Source feel smoother than before.
+
+Suggested next action:
+
+- Run the manual OBS Browser Source performance checklist with a real Runtime Export and iFacialMocap input, then save the copied deep report to `tmp/report.log`.
+- If smoothness still feels wrong after Wave17, use the copied Performance Diagnostics report to decide whether the next narrow follow-up should target deformer vertex transform cost, render-frame vertex copy cost, or renderer upload/draw cost.
+
+### 3.15 Runtime Dynamics Tune Profile
+
+- Status: Done at source/test/domain-review level through Runtime Player Wave21; real-device Native Stage / OBS Browser Source manual tuning checks pending
+- Kind: Runtime tuning feature completed by Runtime Player Wave21
+- Priority: Manual verification is high before treating defaults and profile restore as product-ready
+
+Problem:
+
+- Editor dynamics preview uses controlled slider input, while real iFacialMocap motion has different velocity, acceleration, range, and rhythm.
+- Users need to tune exported dynamics against real tracking motion without returning to Editor for small operational adjustments.
+- Player tuning must not become Dynamics authoring and must not rewrite the Runtime Export artifact.
+
+Implemented outcome:
+
+- Control Window includes `Dynamics Tune` after `Mapping` and before `Stage`.
+- Runtime Export Dynamics Groups are listed when available.
+- Empty states cover no Runtime Export and Runtime Exports with no dynamics groups.
+- Quick tune controls cover `enabled`, `strength`, `limit`, `length`, `sway`, `reaction`, and `convergence`.
+- Per-group reset restores exported defaults.
+- Runtime Dynamics Tune Profile auto-saves under `<electron userData>/dynamics-tuning-profiles/<safe-package-id>/<fingerprint>.json`.
+- Profile identity prefers `packageHash` and otherwise uses package/revision/parameter signature fallback; `dynamicsSignatureHash` prevents stale dynamics structure reuse.
+- Effective dynamics are layered over exported base dynamics before runtime evaluation without mutating Runtime Export DTOs or artifact files.
+- Native Stage and Browser Source use the same effective dynamics tuning. Browser Source receives sanitized effective tuning in payload/resync and `dynamics-tuning-changed` messages.
+- Runtime Export schema, package-format schema, Editor source, dependencies, and lockfile remain unchanged.
+
+Source:
+
+- [../screens/dynamics-tune-profile.md](../screens/dynamics-tune-profile.md)
+- [../screens/control-window-screen-structure.md](../screens/control-window-screen-structure.md)
+- [../screens/browser-source-output-probe-v0.md](../screens/browser-source-output-probe-v0.md)
+- [../implementation/orchestration/player-wave21-plan.md](../implementation/orchestration/player-wave21-plan.md)
+- [../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md](../implementation/waves/wave21/domain-a-dynamics-tuning-profile-runtime-layer-report.md)
+- [../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md](../implementation/waves/wave21/domain-b-dynamics-tune-control-page-report.md)
+
+Remaining manual verification:
+
+- Open a Runtime Export with visible dynamics.
+- Connect iFacialMocap.
+- Open `Dynamics Tune`.
+- Adjust `Strength`, `Reaction`, `Convergence`, and `Sway` while moving naturally.
+- Confirm Native Stage motion changes immediately.
+- Restart Runtime Player and confirm tuning restores.
+- Open OBS Browser Source and confirm Browser Source uses the same tuning.
+- Switch to a different Runtime Export and confirm stale tuning does not leak.
+- Reset a group to exported defaults and confirm behavior returns.
+- Confirm Runtime Export artifact files remain unmodified on disk.

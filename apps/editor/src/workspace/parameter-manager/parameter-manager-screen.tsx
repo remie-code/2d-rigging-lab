@@ -138,7 +138,7 @@ export function ParameterManagerScreen() {
           <button
             aria-label="Close Parameter Manager"
             className="inline-flex size-8 items-center justify-center rounded border border-neutral-800 bg-neutral-950 text-neutral-300 transition hover:border-amber-500/70 hover:text-amber-100"
-            onClick={() => setActiveEntry("import")}
+            onClick={() => setActiveEntry("workspace")}
             type="button"
           >
             <X aria-hidden="true" size={16} strokeWidth={1.8} />

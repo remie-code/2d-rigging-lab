@@ -1,0 +1,152 @@
+[
+  {
+    "file": "warp-ears_r.json",
+    "operationId": "op_cp05_warp_ears_r",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Ears R",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5c3cadc5_ears-r"
+      ],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 836,
+        "y": 411,
+        "width": 81,
+        "height": 96
+      },
+      "transformColumns": 5,
+      "transformRows": 5,
+      "bezierColumns": 5,
+      "bezierRows": 5,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp05] warp FaceX Ears R (5x5)"
+  },
+  {
+    "file": "warp-ears_l.json",
+    "operationId": "op_cp05_warp_ears_l",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Ears L",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5c3cade4_ears-l"
+      ],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 1078,
+        "y": 411,
+        "width": 82,
+        "height": 96
+      },
+      "transformColumns": 5,
+      "transformRows": 5,
+      "bezierColumns": 5,
+      "bezierRows": 5,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp05] warp FaceX Ears L (5x5)"
+  },
+  {
+    "file": "warp-hair_f_r.json",
+    "operationId": "op_cp05_warp_hair_f_r",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Hair F R",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_21b4da82_hair_f_r"
+      ],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 1008,
+        "y": 227,
+        "width": 288,
+        "height": 721
+      },
+      "transformColumns": 7,
+      "transformRows": 7,
+      "bezierColumns": 7,
+      "bezierRows": 7,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp05] warp FaceX Hair F R (7x7)"
+  },
+  {
+    "file": "warp-hair_f_l.json",
+    "operationId": "op_cp05_warp_hair_f_l",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Hair F L",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_21b4da21_hair_f_l"
+      ],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 695,
+        "y": 267,
+        "width": 274,
+        "height": 699
+      },
+      "transformColumns": 7,
+      "transformRows": 7,
+      "bezierColumns": 7,
+      "bezierRows": 7,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp05] warp FaceX Hair F L (7x7)"
+  },
+  {
+    "file": "warp-back_hair_r.json",
+    "operationId": "op_cp05_warp_back_hair_r",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Back Hair R",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_f26916b1_back_hair_r"
+      ],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 375,
+        "y": 310,
+        "width": 662,
+        "height": 1520
+      },
+      "transformColumns": 11,
+      "transformRows": 11,
+      "bezierColumns": 11,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp05] warp FaceX Back Hair R (11x11)"
+  },
+  {
+    "file": "warp-back_hair_l.json",
+    "operationId": "op_cp05_warp_back_hair_l",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "FaceX Back Hair L",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_f2691750_back_hair_l"
+      ],
+      "childRigControlIds": [],
+      "opacityMultiplier": 1,
+      "domainBounds": {
+        "x": 967,
+        "y": 272,
+        "width": 537,
+        "height": 1505
+      },
+      "transformColumns": 11,
+      "transformRows": 11,
+      "bezierColumns": 11,
+      "bezierRows": 11,
+      "bezierEditType": "cubicBezierSurfaceV1"
+    },
+    "gitMessage": "[cp05] warp FaceX Back Hair L (11x11)"
+  }
+]

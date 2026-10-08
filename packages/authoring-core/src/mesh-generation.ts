@@ -5,7 +5,9 @@ import type { AuthoringSession } from "./authoring-session.js";
 import { getDrawableById, getMeshById } from "./drawable-selectors.js";
 import {
   getV6MeshGenerationCandidate,
+  getV7MeshGenerationCandidate,
   isV6MeshGenerationMethod,
+  isV7MeshGenerationMethod,
   type DrawableGeneratedMeshSource,
   type MeshDensityHint,
   type MeshGenerationFallbackReason,
@@ -13,6 +15,7 @@ import {
   type MeshGenerationMethod,
   type V6MeshGenerationCandidate
 } from "./mesh-generation-contract.js";
+import { createAutoOutlineV7MarginContourMesh } from "./mesh-generation-v7-margin-contour.js";
 import { createAutoOutlineV6ALocalMesh } from "./mesh-generation-v6a-local.js";
 import { createAutoOutlineV6BConstrainautorMesh } from "./mesh-generation-v6b-constrainautor.js";
 import {
@@ -137,6 +140,16 @@ export const createGeneratedMeshForDrawable = (
   }
 
   const textureBytes = resolveDrawableTextureBytes(input.session, drawable.textureId, existingMesh.bounds);
+
+  if (isV7MeshGenerationMethod(input.method)) {
+    return createV7MarginContourMeshResult({
+      existingMesh,
+      drawableId: drawable.drawableId,
+      provenanceId: input.provenanceId,
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+      ...(textureBytes === undefined ? {} : { textureBytes })
+    });
+  }
 
   if (isV6MeshGenerationMethod(input.method)) {
     if (input.method === "auto-outline-v6a-local") {
@@ -1039,6 +1052,86 @@ type ResolvedDrawableTextureBytes = {
   readonly textureSize: {
     readonly width: number;
     readonly height: number;
+  };
+};
+
+const createV7MarginContourMeshResult = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const candidate = getV7MeshGenerationCandidate("auto-outline-v7-margin-contour");
+  if (input.textureBytes === undefined) {
+    return createV7FallbackToV6Chain({
+      existingMesh: input.existingMesh,
+      drawableId: input.drawableId,
+      provenanceId: input.provenanceId,
+      fallbackReason: "texture-bytes-unavailable",
+      ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+    });
+  }
+
+  const generated = createAutoOutlineV7MarginContourMesh({
+    meshId: input.existingMesh.meshId,
+    drawableId: input.drawableId,
+    bounds: input.existingMesh.bounds,
+    provenanceId: input.provenanceId,
+    textureSize: input.textureBytes.textureSize,
+    rgbaBytes: input.textureBytes.bytes,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint })
+  });
+
+  if (generated.status === "generated") {
+    return {
+      mesh: generated.mesh,
+      source: candidate.sourceId,
+      alphaBounds: generated.alphaBounds,
+      qualityMetrics: generated.qualityMetrics
+    };
+  }
+
+  return createV7FallbackToV6Chain({
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    fallbackReason: generated.reason,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(input.textureBytes === undefined ? {} : { textureBytes: input.textureBytes })
+  });
+};
+
+/**
+ * When v7 is blocked, connect to the existing fallback chain starting at
+ * v6d-adaptive-contour-constrainautor (the current default). The v7 blocked
+ * reason is recorded as the leading fallback step so provenance shows v7 was
+ * attempted first.
+ */
+const createV7FallbackToV6Chain = (input: {
+  readonly existingMesh: MeshDto;
+  readonly drawableId: DrawableId;
+  readonly provenanceId: ProvenanceId;
+  readonly densityHint?: MeshDensityHint;
+  readonly fallbackReason: MeshGenerationFallbackReason;
+  readonly textureBytes?: ResolvedDrawableTextureBytes;
+}): DrawableGeneratedMeshResult => {
+  const downstream = createV6DAdaptiveContourConstrainautorMeshResult({
+    existingMesh: input.existingMesh,
+    drawableId: input.drawableId,
+    provenanceId: input.provenanceId,
+    ...(input.densityHint === undefined ? {} : { densityHint: input.densityHint }),
+    ...(input.textureBytes === undefined ? {} : { textureBytes: input.textureBytes })
+  });
+  const v7Step: MeshGenerationFallbackStep = {
+    method: "auto-outline-v7-margin-contour",
+    reason: input.fallbackReason
+  };
+
+  return {
+    ...downstream,
+    fallbackReason: input.fallbackReason,
+    fallbackSteps: [v7Step, ...(downstream.fallbackSteps ?? [])]
   };
 };
 
@@ -2372,10 +2465,72 @@ const resolveDrawableTextureBytes = (
   const binaryEntry = session.binaryAssets?.fileEntries.find(
     (entry) => entry.path === binaryAssetRef.packageRelativePath
   );
-  const width = Math.round(bounds.width);
-  const height = Math.round(bounds.height);
+  if (binaryEntry === undefined) {
+    return undefined;
+  }
+
+  // Wave108 (boundary transparent margin / Option E): layer rasters are stored
+  // padded — the content plus a transparent alpha-edge border of P px on every
+  // side — with the padded extents in `texture.dimensions` and the border widths
+  // in `texture.contentInset`. The generator normalizes UV as pixel/textureSize
+  // (mapV6ContourPointToUv) and the atlas assumes layer-local UV 0/1 map to the
+  // CONTENT edges, so we must feed the generator the CONTENT raster (border
+  // cropped away) with CONTENT dimensions. Handing over padded bytes/size would
+  // emit padding-normalized UVs that shear every drawable against the atlas.
+  const inset = texture?.contentInset;
+  const isPadded =
+    inset !== undefined && (inset.left > 0 || inset.top > 0 || inset.right > 0 || inset.bottom > 0);
+
+  if (isPadded) {
+    const paddedDimensions = texture?.dimensions;
+    if (paddedDimensions === undefined) {
+      // contentInset without padded dimensions is a malformed/ambiguous record;
+      // fall back safely rather than guess the padded extents.
+      return undefined;
+    }
+
+    const paddedWidth = paddedDimensions.width;
+    const paddedHeight = paddedDimensions.height;
+    // Self-consistency: the stored bytes must be exactly the padded raster.
+    if (binaryEntry.bytes.byteLength !== paddedWidth * paddedHeight * 4) {
+      return undefined;
+    }
+
+    const contentWidth = paddedWidth - (inset.left + inset.right);
+    const contentHeight = paddedHeight - (inset.top + inset.bottom);
+    if (contentWidth <= 0 || contentHeight <= 0) {
+      return undefined;
+    }
+
+    // Crop the content sub-rectangle (left, top, contentWidth, contentHeight) out
+    // of the padded raster row by row — the exact inverse of
+    // padLayerRasterWithTransparentBorder. Pure and deterministic.
+    const contentBytes = new Uint8Array(contentWidth * contentHeight * 4);
+    const paddedRowBytes = paddedWidth * 4;
+    const contentRowBytes = contentWidth * 4;
+    for (let row = 0; row < contentHeight; row += 1) {
+      const srcStart = (row + inset.top) * paddedRowBytes + inset.left * 4;
+      const dstStart = row * contentRowBytes;
+      contentBytes.set(binaryEntry.bytes.subarray(srcStart, srcStart + contentRowBytes), dstStart);
+    }
+
+    // textureSize MUST be the cropped raster's real pixel extents so the
+    // generator's pixel/textureSize indexing and UV normalization stay in sync
+    // with the bytes returned here — never derive it from `bounds`.
+    return {
+      bytes: contentBytes,
+      textureSize: {
+        width: contentWidth,
+        height: contentHeight
+      }
+    };
+  }
+
+  // Declared raster dimensions are pixels; stage bounds may have any placement scale.
+  // Preserve the historical bounds fallback only for legacy textures without dimensions.
+  const width = texture?.dimensions?.width ?? Math.round(bounds.width);
+  const height = texture?.dimensions?.height ?? Math.round(bounds.height);
   if (
-    binaryEntry === undefined ||
     width <= 0 ||
     height <= 0 ||
     binaryEntry.bytes.byteLength !== width * height * 4

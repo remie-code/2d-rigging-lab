@@ -5,11 +5,11 @@ import type {
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   createInitialAuthoringRevision,
-  exportAuthoringSessionPortableBundle,
   registerAuthoringSessionBinaryBytes
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
+  DynamicsGroupIdSchema,
   KeyformSetIdSchema,
   MeshIdSchema,
   PackageIdSchema,
@@ -19,8 +19,27 @@ import {
   RigControlIdSchema,
   SourceAssetIdSchema,
   TextureIdSchema,
-  type ParameterId
+  TriangleIdSchema,
+  type MeshId,
+  type ParameterId,
+  type RectDto,
+  type RigControlId
 } from "@private-2d-rigging-lab/contracts";
+import {
+  PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
+  type PsdAdapterLayerMaterializationEvidenceDto,
+  type PsdAdapterParserEvidenceDto,
+  type PsdAdapterResultDto
+} from "@private-2d-rigging-lab/operation-core";
+import {
+  getLive2dPerformanceStats,
+  resetLive2dPerformanceStats
+} from "@private-2d-rigging-lab/render-core";
+import type {
+  BrowserPsdMaterializedLayerBytes,
+  BrowserPsdParserInput,
+  BrowserPsdParserResult
+} from "../../editor-workflow/browser-psd-parser-adapter";
 import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
@@ -28,9 +47,30 @@ import { describe, expect, it, vi } from "vitest";
 import {
   EditorSessionProvider,
   logMeshGenerationPreviewDebug,
+  type DirtyWorkspaceReplacementConfirmation,
   useEditorSession
 } from "./editor-session-context";
+import { ROOT_PART_ID, createEmptyAuthoringSession } from "./model/empty-authoring-session";
 import type { DeformerTreeSelectionTarget } from "./model/editor-selection";
+import { createPsdImportPlan } from "../psd-import/model/psd-import-planner";
+import {
+  createFakeWorkspaceDirectoryHandle,
+  type FakeWorkspaceDirectoryHandle
+} from "../workspace-storage/model/fake-workspace-directory";
+import {
+  createEditorWorkspace,
+  type WorkspaceDirectoryPicker
+} from "../workspace-storage/model/workspace-session-storage";
+import {
+  createTextureAtlasTaskPreviewState
+} from "../../workspace/atlas/atlas-task-projection";
+
+const parsePsdForEditorImportMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../editor-workflow/browser-psd-parser-adapter", () => ({
+  createPsdSourceAssetId: (planToken: string) => `src_${planToken}`,
+  parsePsdForEditorImport: parsePsdForEditorImportMock
+}));
 
 type EditorSessionContextSnapshot = ReturnType<typeof useEditorSession>;
 type FakeNode = FakeElement | FakeTextNode;
@@ -40,6 +80,14 @@ const CUSTOM_PARAMETER_ID = ParameterIdSchema.parse("param_custom_history");
 const ROTATION_PARAMETER_ID = ParameterIdSchema.parse("param_rotation_selection_x");
 const ROTATION_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_rotation_selection");
 const ROTATION_PART_ID = PartIdSchema.parse("part_rotation_selection");
+const DYNAMICS_HISTORY_GROUP_ID = DynamicsGroupIdSchema.parse("dyn_history_sway");
+const DYNAMICS_HISTORY_DRIVER_ID = ParameterIdSchema.parse("param_history_driver_x");
+const DYNAMICS_HISTORY_OUTPUT_ID = ParameterIdSchema.parse("param_history_output_sway");
+const DYNAMICS_PRESET_HISTORY_GROUP_ID = DynamicsGroupIdSchema.parse("dyn_preset_history_sway");
+const DYNAMICS_PRESET_HISTORY_DRIVER_ID = ParameterIdSchema.parse("param_face_angle_x");
+const DYNAMICS_PRESET_HISTORY_OUTPUT_ID = ParameterIdSchema.parse("param_hair_front_sway_x");
+const DYNAMICS_UPDATED_PRESET_HISTORY_DRIVER_ID = ParameterIdSchema.parse("param_body_angle_x");
+const DYNAMICS_UPDATED_PRESET_HISTORY_OUTPUT_ID = ParameterIdSchema.parse("param_hair_side_sway_x");
 const LOADED_CHILD_PART_ID = PartIdSchema.parse("part_loaded_child");
 const LOADED_DRAWABLE_ID = DrawableIdSchema.parse("draw_loaded_child");
 const BATCH_PART_ID = PartIdSchema.parse("part_mesh_batch");
@@ -51,14 +99,50 @@ const BATCH_MESH_EXISTING = MeshIdSchema.parse("mesh_mesh_batch_existing");
 const BATCH_MESH_EMPTY_B = MeshIdSchema.parse("mesh_mesh_batch_empty_b");
 const WRAP_ROOT_RIG_CONTROL_ID = RigControlIdSchema.parse("rig_wrap_existing_root");
 const WRAP_CREATED_ROTATION_ID = RigControlIdSchema.parse("rig_2_selected_rotation_deformer");
+const MESH_APPLY_AUTO_REFIT_WARP_ID = RigControlIdSchema.parse("rig_mesh_apply_auto_refit");
 const TRANSIENT_DRAFT_DRAWABLE_ID = DrawableIdSchema.parse("draw_provider_fixture");
 const TEXTURE_BYTES = new Uint8Array([0x61, 0x62, 0x63]);
 const TEXTURE_BYTES_SHA256_HEX =
   "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+const PSD_WRITE_LAYER_ID = "psd:root/layer[write-once]";
+const PSD_WRITE_GROUP_ID = "psd:root/group[write-once]";
+const PSD_WRITE_BYTES = new Uint8Array([
+  255, 0, 0, 255,
+  0, 255, 0, 255,
+  0, 0, 255, 255,
+  255, 255, 255, 255
+]);
+const PSD_SOURCE_DIGEST = {
+  algorithm: "sha256" as const,
+  hex: "abababababababababababababababababababababababababababababababab"
+};
+const PSD_PARSER_EVIDENCE: PsdAdapterParserEvidenceDto = {
+  evidenceKind: "psd-parser-evidence-v1",
+  parserName: "provider-write-once-parser",
+  parserPackageName: "provider-write-once-parser",
+  parserVersion: "0.0.0",
+  adapterName: "provider-write-once-adapter",
+  adapterVersion: "0.0.0",
+  runtime: "browser",
+  privateShapePolicy: "parser-private-shape-excluded-v1"
+};
+const ATLAS_SOURCE_PART_ID = PartIdSchema.parse("part_atlas_write_once");
+const ATLAS_SOURCE_DRAWABLE_ID = DrawableIdSchema.parse("draw_atlas_write_once");
+const ATLAS_SOURCE_MESH_ID = MeshIdSchema.parse("mesh_atlas_write_once");
+const ATLAS_SOURCE_TEXTURE_ID = TextureIdSchema.parse("tex_atlas_write_once_source");
+const ATLAS_SOURCE_ASSET_ID = SourceAssetIdSchema.parse("src_atlas_write_once");
+const ATLAS_SOURCE_PROVENANCE_ID = ProvenanceIdSchema.parse("prov_atlas_write_once");
+const ATLAS_SOURCE_BYTES = new Uint8Array([
+  255, 0, 0, 255,
+  255, 0, 0, 255,
+  255, 0, 0, 255,
+  255, 0, 0, 255
+]);
 
 describe("EditorSessionProvider history integration", () => {
   it("includes v6 adaptive contour diagnostics in mesh preview debug logs", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     try {
       logMeshGenerationPreviewDebug({
@@ -88,10 +172,20 @@ describe("EditorSessionProvider history integration", () => {
         adaptiveDensityDiagnostics: {
           resolvedBoundarySpacing: 12,
           resolvedMaxBoundaryVertices: 128
+        },
+        multiIslandDiagnostics: {
+          rawAlphaComponentCount: 2,
+          keptIslandCount: 1,
+          generatedIslandCount: 1,
+          skippedTinyNoiseIslandCount: 1,
+          skippedTinyNoisePixelCount: 2,
+          localizedFallbackCount: 0
         }
       });
+      expect(warn).not.toHaveBeenCalled();
     } finally {
       info.mockRestore();
+      warn.mockRestore();
     }
   });
 
@@ -130,6 +224,86 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
+  it("keeps history binary pressure counters default-off and enables them with the existing perf flag", async () => {
+    delete (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__;
+    resetLive2dPerformanceStats();
+    const disabledHarness = await renderEditorSessionProbe({
+      initialSession: createTextureBundleSession()
+    });
+
+    try {
+      await act(async () => {
+        const result = disabledHarness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(getLive2dPerformanceStats()).toBeUndefined();
+    } finally {
+      await disabledHarness.cleanup();
+    }
+
+    (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__ = true;
+    resetLive2dPerformanceStats();
+    const enabledHarness = await renderEditorSessionProbe({
+      initialSession: createTextureBundleSession()
+    });
+
+    try {
+      await act(async () => {
+        const result = enabledHarness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(getLive2dPerformanceStats()?.counters).toMatchObject({
+        "editorHistory.samples": 1,
+        "editorHistory.undoDepth": 1,
+        "editorHistory.redoDepth": 0,
+        "editorHistory.currentBinaryAssetCount": 1,
+        "editorHistory.currentBinaryBytes": TEXTURE_BYTES.byteLength,
+        "editorHistory.estimatedDeepClonedHistoryBinaryBytes": TEXTURE_BYTES.byteLength * 2,
+        "editorHistory.estimatedRetainedSharedHistoryBinaryBytes": TEXTURE_BYTES.byteLength,
+        "editorHistory.estimatedAvoidedDuplicateHistoryBinaryBytes": TEXTURE_BYTES.byteLength,
+        "editorHistory.retainedSharingRatioBasisPoints": 5000
+      });
+    } finally {
+      delete (globalThis as Live2dPerformanceTestGlobal).__LIVE2D_PERF__;
+      resetLive2dPerformanceStats();
+      await enabledHarness.cleanup();
+    }
+  });
+
+  it("rejects PSD import and editing commands before a workspace is open", async () => {
+    const harness = await renderEditorSessionProbe({ initialWorkspaceOpen: false });
+
+    try {
+      await act(async () => {
+        harness.context().openPsdImport();
+      });
+
+      expect(harness.context().psdImportOpen).toBe(false);
+      expect(harness.context().workspaceStorage).toMatchObject({
+        status: "no-workspace",
+        errorCode: "workspace.required"
+      });
+      expect(harness.context().workspaceStorage.message).toContain(
+        "Create or open a workspace"
+      );
+
+      const result = await act(async () =>
+        harness.context().createCustomParameter(createCustomParameterPayload())
+      );
+
+      expect(result.committed).toBe(false);
+      expect(result.diagnostics[0]).toMatchObject({
+        checkId: "workspace.required",
+        severity: "error"
+      });
+      expect(hasCustomParameter(harness.context())).toBe(false);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("does not dirty history for active parameter scrub or reset", async () => {
     const harness = await renderEditorSessionProbe();
 
@@ -141,6 +315,15 @@ describe("EditorSessionProvider history integration", () => {
       });
 
       expect(harness.context().parameterValues[activeParameterId]).toBe(1);
+      expect(harness.context().canUndo).toBe(false);
+      expect(harness.context().canRedo).toBe(false);
+
+      const parameterValuesAfterFirstScrub = harness.context().parameterValues;
+      await act(async () => {
+        harness.context().setActiveParameterValue(1);
+      });
+
+      expect(harness.context().parameterValues).toBe(parameterValuesAfterFirstScrub);
       expect(harness.context().canUndo).toBe(false);
       expect(harness.context().canRedo).toBe(false);
 
@@ -164,6 +347,179 @@ describe("EditorSessionProvider history integration", () => {
 
       expect(harness.context().canUndo).toBe(false);
       expect(harness.context().canRedo).toBe(true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("records Dynamics create/update/delete while preview state stays out of history", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createDynamicsHistorySession()
+    });
+
+    try {
+      await act(async () => {
+        const result = harness.context().createDynamicsGroup(createDynamicsHistoryPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups).toHaveLength(1);
+      expect(harness.context().canUndo).toBe(true);
+
+      await act(async () => {
+        harness.context().setDynamicsToolPreviewGroupId(DYNAMICS_HISTORY_GROUP_ID);
+        harness.context().setDynamicsToolPreviewDriverValue(
+          DYNAMICS_HISTORY_GROUP_ID,
+          DYNAMICS_HISTORY_DRIVER_ID,
+          30
+        );
+        harness.context().resetDynamicsToolPreviewSimulation(DYNAMICS_HISTORY_GROUP_ID);
+      });
+
+      expect(harness.context().dynamicsToolPreview.selectedGroupId).toBe(DYNAMICS_HISTORY_GROUP_ID);
+      expect(harness.context().canUndo).toBe(true);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups).toHaveLength(0);
+      expect(harness.context().canUndo).toBe(false);
+      expect(harness.context().canRedo).toBe(true);
+
+      await act(async () => {
+        harness.context().redo();
+      });
+
+      await act(async () => {
+        const result = harness.context().updateDynamicsGroup({
+          dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID,
+          displayName: "History Sway Updated"
+        });
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups[0]?.displayName)
+        .toBe("History Sway Updated");
+
+      await act(async () => {
+        const result = harness.context().deleteDynamicsGroup({
+          dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID
+        });
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups).toHaveLength(0);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups[0]?.displayName)
+        .toBe("History Sway Updated");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps Dynamics preview animation ticks out of history while coefficient commits stay undoable", async () => {
+    const initialSession = createDynamicsHistorySession();
+    initialSession.graph.dynamicsGroups.push(createDynamicsHistoryPayload());
+    const harness = await renderEditorSessionProbe({ initialSession });
+
+    try {
+      expect(harness.context().canUndo).toBe(false);
+
+      await act(async () => {
+        harness.context().setDynamicsToolPreviewGroupId(DYNAMICS_HISTORY_GROUP_ID);
+        harness.context().setDynamicsToolPreviewDriverValue(
+          DYNAMICS_HISTORY_GROUP_ID,
+          DYNAMICS_HISTORY_DRIVER_ID,
+          30
+        );
+        harness.context().advanceDynamicsToolPreviewSimulation(
+          DYNAMICS_HISTORY_GROUP_ID,
+          16.6666667
+        );
+        harness.context().advanceDynamicsToolPreviewSimulation(
+          DYNAMICS_HISTORY_GROUP_ID,
+          16.6666667
+        );
+      });
+
+      expect(harness.context().dynamicsToolPreview.simulationStatesByGroupId[
+        DYNAMICS_HISTORY_GROUP_ID
+      ]?.tick).toBe(2);
+      expect(harness.context().canUndo).toBe(false);
+      expect(harness.context().canRedo).toBe(false);
+
+      await act(async () => {
+        const result = harness.context().updateDynamicsGroup({
+          dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID,
+          chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+          outputs: [
+            {
+              parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
+              segmentIndex: 1,
+              scale: 1,
+              limit: 12
+            }
+          ]
+        });
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().canUndo).toBe(true);
+      // The update changed the output limit (12); undo restores the committed value (20).
+      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.limit).toBe(12);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(harness.context().session.graph.dynamicsGroups[0]?.outputs[0]?.limit).toBe(20);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("commits Dynamics create and apply with initialized preset parameter candidates", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createEmptyAuthoringSession()
+    });
+
+    try {
+      expect(harness.context().session.graph.parameters).toEqual([]);
+
+      await act(async () => {
+        const result = harness.context().createDynamicsGroup(createPresetDynamicsHistoryPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.parameters).toEqual([]);
+      expect(harness.context().session.graph.dynamicsGroups[0]).toMatchObject({
+        dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+        inputs: [{ parameterId: DYNAMICS_PRESET_HISTORY_DRIVER_ID }],
+        outputs: [{ parameterId: DYNAMICS_PRESET_HISTORY_OUTPUT_ID }]
+      });
+
+      await act(async () => {
+        const result = harness.context().updateDynamicsGroup(createUpdatedPresetDynamicsHistoryPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      expect(harness.context().session.graph.parameters).toEqual([]);
+      expect(harness.context().session.graph.dynamicsGroups[0]).toMatchObject({
+        dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+        inputs: [{ parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_DRIVER_ID }],
+        outputs: [{ parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_OUTPUT_ID }]
+      });
+      expect(harness.context().canUndo).toBe(true);
     } finally {
       await harness.cleanup();
     }
@@ -265,8 +621,13 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
-  it("marks the current project saved after portable bundle save", async () => {
-    const harness = await renderEditorSessionProbe();
+  it("marks the current workspace saved after workspace save", async () => {
+    const workspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "history-save.ail2d-workspace"
+    });
+    const harness = await renderEditorSessionProbe({
+      initialWorkspaceDirectory: workspaceDirectory
+    });
 
     try {
       await act(async () => {
@@ -275,114 +636,230 @@ describe("EditorSessionProvider history integration", () => {
       });
 
       expect(harness.context().session.dirty).toBe(true);
-      expect(harness.context().projectSaveStatusLabel).toBe("Unsaved changes");
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Unsaved changes");
 
       await act(async () => {
         await harness.context().saveProject();
       });
 
       expect(harness.context().session.dirty).toBe(false);
-      expect(harness.context().projectStorage.status).toBe("saved");
-      expect(harness.context().projectSaveStatusLabel).toBe("Saved");
-      expect(harness.context().projectStorage.binaryPayloadCount).toBe(0);
+      expect(harness.context().workspaceStorage.status).toBe("saved");
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Saved");
+      expect(workspaceDirectory.readTextFile("workspace.json")).toContain(
+        "directory-workspace-v1"
+      );
+      expect(workspaceDirectory.readTextFile("model/parameters.json")).toContain(
+        "param_custom_history"
+      );
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("loads a portable bundle by replacing session and clearing transient editor state", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  it("cancels opening another workspace when dirty replacement is canceled", async () => {
+    const currentDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "current.ail2d-workspace"
+    });
+    const nextDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "next.ail2d-workspace"
+    });
+    const picker: WorkspaceDirectoryPicker = {
+      pickDirectory: vi.fn(async () => nextDirectory)
+    };
+    const confirmDirtyWorkspaceReplacement = vi.fn(async () => "cancel" as const);
     const harness = await renderEditorSessionProbe({
-      initialSession: createTextureBundleSession()
+      confirmDirtyWorkspaceReplacement,
+      initialWorkspaceDirectory: currentDirectory,
+      workspaceDirectoryPicker: picker
     });
 
     try {
-      const activeParameterId = requireActiveParameterId(harness.context());
-
       await act(async () => {
-        harness.context().selectPart(PartIdSchema.parse("part_root"));
-        harness.context().togglePartCollapse(PartIdSchema.parse("part_root"));
-        harness.context().togglePartEditorVisibility(PartIdSchema.parse("part_root"));
-        harness.context().openPsdImport();
-        harness.context().setActiveParameterValue(1);
         const result = harness.context().createCustomParameter(createCustomParameterPayload());
         expect(result.committed).toBe(true);
-        harness.context().startWarpDeformerDraftForDrawable(TRANSIENT_DRAFT_DRAWABLE_ID);
-        harness.context().previewMeshDraft(TRANSIENT_DRAFT_DRAWABLE_ID, "standard");
       });
-
-      expect(harness.context().selection).toEqual({
-        kind: "drawable",
-        id: TRANSIENT_DRAFT_DRAWABLE_ID
-      });
-      expect(harness.context().psdImportOpen).toBe(true);
-      expect(harness.context().parameterValues[activeParameterId]).toBe(1);
-      expect(harness.context().collapsedPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
-      expect(harness.context().editorHiddenPartIds.has(PartIdSchema.parse("part_root"))).toBe(true);
-      expect(harness.context().meshDraft).toMatchObject({
-        drawableId: TRANSIENT_DRAFT_DRAWABLE_ID,
-        presetId: "standard"
-      });
-      expect(harness.context().rigDraft).toMatchObject({
-        childDrawableIds: [TRANSIENT_DRAFT_DRAWABLE_ID]
-      });
-      expect(harness.context().canUndo).toBe(true);
 
       await act(async () => {
-        harness.context().createRotationDeformerForDrawable(
-          DrawableIdSchema.parse("draw_missing_operation_feedback")
+        await harness.context().openWorkspace();
+      });
+
+      expect(confirmDirtyWorkspaceReplacement).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: "open-workspace" })
+      );
+      expect(picker.pickDirectory).not.toHaveBeenCalled();
+      expect(hasCustomParameter(harness.context())).toBe(true);
+      expect(harness.context().workspaceIdentityLabel).toContain("current.ail2d-workspace");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("saves the dirty workspace before opening another workspace", async () => {
+    const currentDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "current-save-open.ail2d-workspace"
+    });
+    const nextDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "next-open.ail2d-workspace"
+    });
+    await createEditorWorkspace({
+      session: createLoadedProjectSession(),
+      picker: { pickDirectory: async () => nextDirectory }
+    });
+    const picker: WorkspaceDirectoryPicker = {
+      pickDirectory: vi.fn(async () => nextDirectory)
+    };
+    const confirmDirtyWorkspaceReplacement = vi.fn(async () => "save-and-open" as const);
+    const harness = await renderEditorSessionProbe({
+      confirmDirtyWorkspaceReplacement,
+      initialWorkspaceDirectory: currentDirectory,
+      workspaceDirectoryPicker: picker
+    });
+
+    try {
+      await act(async () => {
+        const result = harness.context().createCustomParameter(createCustomParameterPayload());
+        expect(result.committed).toBe(true);
+      });
+
+      await act(async () => {
+        await harness.context().openWorkspace();
+      });
+
+      expect(confirmDirtyWorkspaceReplacement).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: "open-workspace" })
+      );
+      expect(picker.pickDirectory).toHaveBeenCalledTimes(1);
+      expect(currentDirectory.readTextFile("model/parameters.json")).toContain(
+        "param_custom_history"
+      );
+      expect(harness.context().session.packageIdentity.packageDisplayName).toBe("Loaded Project");
+      expect(harness.context().workspaceIdentityLabel).toContain("next-open.ail2d-workspace");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("writes PSD import raw RGBA to the workspace once and later Save skips it", async () => {
+    parsePsdForEditorImportMock.mockReset();
+    parsePsdForEditorImportMock.mockImplementation(async (input: BrowserPsdParserInput) =>
+      createPsdWriteOnceParserResult(input)
+    );
+    const workspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "psd-write-once.ail2d-workspace"
+    });
+    const plan = await createPsdImportPlan({
+      fileName: "write-once.psd",
+      bytes: new ArrayBuffer(16),
+      destination: {
+        parentPartId: ROOT_PART_ID,
+        label: "Project Root"
+      },
+      packageRevision: 0
+    });
+    const rawRgbaPath = plan.materializedLayerBytes[0]?.binaryAssetRef.packageRelativePath;
+    if (rawRgbaPath === undefined) {
+      throw new Error("Expected PSD import plan to include materialized raw RGBA bytes.");
+    }
+    const harness = await renderEditorSessionProbe({
+      initialWorkspaceDirectory: workspaceDirectory
+    });
+
+    try {
+      await act(async () => {
+        harness.context().commitPsdImport(plan);
+        await waitForCondition(
+          () => workspaceDirectory.getWriteCount(rawRgbaPath) === 1,
+          `Expected ${rawRgbaPath} to be written once after PSD import.`
         );
-        const duplicatePresetResult = harness.context().createCustomParameter({
-          parameterId: ParameterIdSchema.parse("param_face_angle_x"),
-          displayName: "Duplicate Preset",
-          valueSource: "authoredInput",
-          min: -1,
-          default: 0,
-          max: 1,
-          recommendedUiStep: 0.01
-        });
-        expect(duplicatePresetResult.committed).toBe(false);
       });
 
-      expect(harness.context().rigOperationFeedback).toBe(
-        "Rotation Deformer could not be created for the selected Drawable."
+      expect(workspaceDirectory.readBinaryFile(rawRgbaPath)).toEqual(
+        plan.materializedLayerBytes[0]?.bytes
       );
-      expect(harness.context().parameterOperationFeedback).not.toBeNull();
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
 
-      const loadedBundle = await exportAuthoringSessionPortableBundle({
-        session: createLoadedProjectSession(),
-        editorHiddenPartIds: [LOADED_CHILD_PART_ID],
-        updatedAt: "2026-06-15T02:00:00.000Z"
+      await act(async () => {
+        await harness.context().saveProject();
+      });
+
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
+    } finally {
+      await harness.cleanup();
+      parsePsdForEditorImportMock.mockReset();
+    }
+  });
+
+  it("writes Texture Atlas generated raw RGBA to the workspace once and later Save skips it", async () => {
+    const workspaceDirectory = createFakeWorkspaceDirectoryHandle({
+      name: "atlas-write-once.ail2d-workspace"
+    });
+    const initialSession = await createAtlasWriteOnceSession();
+    const previewState = createTextureAtlasTaskPreviewState({
+      session: initialSession,
+      editorHiddenPartIds: new Set(),
+      settings: {
+        pageSize: 8,
+        paddingPixels: 1,
+        edgeExtrusionEnabled: true
+      }
+    });
+    if (previewState.preview.status !== "ready") {
+      throw new Error("Expected Texture Atlas preview to be ready.");
+    }
+    const harness = await renderEditorSessionProbe({
+      initialSession,
+      initialWorkspaceDirectory: workspaceDirectory
+    });
+
+    try {
+      const result = await act(async () =>
+        harness.context().applyTextureAtlasPreview(previewState.preview)
+      );
+
+      expect(result.committed).toBe(true);
+      if (!result.committed) {
+        throw new Error("Expected Texture Atlas Apply to commit.");
+      }
+      const rawRgbaPath = getGeneratedAtlasRawRgbaPath(result.session);
+
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
+
+      await act(async () => {
+        await harness.context().saveProject();
+      });
+
+      expect(workspaceDirectory.getWriteCount(rawRgbaPath)).toBe(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps mesh generation failure diagnostics transient and clears them on cancel", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await renderEditorSessionProbe();
+
+    try {
+      await act(async () => {
+        harness.context().previewMeshDraft(
+          DrawableIdSchema.parse("draw_missing_mesh_diagnostic"),
+          "standard"
+        );
+      });
+
+      expect(harness.context().meshDrafts).toEqual([]);
+      expect(harness.context().meshGenerationDiagnostic).toMatchObject({
+        kind: "generationFailed",
+        drawableId: DrawableIdSchema.parse("draw_missing_mesh_diagnostic"),
+        presetId: "standard",
+        method: "auto-outline-v6d-adaptive-contour-constrainautor",
+        failureReason: "createGeneratedMeshForDrawable returned no preview result."
       });
 
       await act(async () => {
-        await harness.context().openProjectFromPortableBundle(loadedBundle.bundleJson, {
-          fileName: "loaded-project.portable-project.json"
-        });
+        harness.context().cancelMeshDraft();
       });
 
-      expect(harness.context().session.packageIdentity.packageDisplayName).toBe(
-        "Loaded Project"
-      );
-      expect(harness.context().session.graph.parameters.map((parameter) => parameter.parameterId))
-        .toEqual([ParameterIdSchema.parse("param_loaded_wave72")]);
-      expect(harness.context().selection).toBeNull();
-      expect(harness.context().psdImportOpen).toBe(false);
-      expect(harness.context().parameterValues).toEqual({});
-      expect(harness.context().meshDraft).toBeNull();
-      expect(harness.context().rigDraft).toBeNull();
-      expect(harness.context().rigOperationFeedback).toBeNull();
-      expect(harness.context().parameterOperationFeedback).toBeNull();
-      expect(harness.context().collapsedPartIds.has(LOADED_CHILD_PART_ID)).toBe(true);
-      expect(harness.context().collapsedPartIds.has(PartIdSchema.parse("part_root"))).toBe(false);
-      expect(harness.context().editorHiddenPartIds.has(LOADED_CHILD_PART_ID)).toBe(true);
-      expect(harness.context().editorHiddenPartIds.has(PartIdSchema.parse("part_root"))).toBe(false);
-      expect(harness.context().canUndo).toBe(false);
-      expect(harness.context().canRedo).toBe(false);
-      expect(harness.context().projectStorage.status).toBe("loaded");
-      expect(harness.context().projectStorage.fileName).toBe(
-        "loaded-project.portable-project.json"
-      );
+      expect(harness.context().meshGenerationDiagnostic).toBeNull();
     } finally {
       warn.mockRestore();
       await harness.cleanup();
@@ -441,6 +918,117 @@ describe("EditorSessionProvider history integration", () => {
       expect(requireMesh(harness.context().session, BATCH_MESH_EMPTY_A).triangles.length).toBeGreaterThan(0);
       expect(requireMesh(harness.context().session, BATCH_MESH_EMPTY_B).triangles.length).toBeGreaterThan(0);
       expect(requireMesh(harness.context().session, BATCH_MESH_EXISTING)).toEqual(existingMeshBefore);
+    } finally {
+      info.mockRestore();
+      warn.mockRestore();
+      await harness.cleanup();
+    }
+  });
+
+  it("deletes the selected Deformer, clears selection, and keeps delete undoable and redoable", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createRotationSelectionSession(),
+      initialSelection: {
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      }
+    });
+
+    try {
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: ROTATION_RIG_CONTROL_ID
+      });
+
+      await act(async () => {
+        harness.context().deleteRigControl(ROTATION_RIG_CONTROL_ID);
+      });
+
+      expect(harness.context().selection).toBeNull();
+      expect(findRigControl(harness.context().session, ROTATION_RIG_CONTROL_ID)).toBeUndefined();
+      expect(harness.context().canUndo).toBe(true);
+
+      await act(async () => {
+        harness.context().undo();
+      });
+
+      expect(findRigControl(harness.context().session, ROTATION_RIG_CONTROL_ID)).toBeDefined();
+      expect(harness.context().canRedo).toBe(true);
+
+      await act(async () => {
+        harness.context().redo();
+      });
+
+      expect(findRigControl(harness.context().session, ROTATION_RIG_CONTROL_ID)).toBeUndefined();
+      expect(harness.context().selection).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("selects the actual suffixed rig control after duplicate display-name creation", async () => {
+    const harness = await renderEditorSessionProbe({
+      initialSession: createDuplicateDisplayNameDrawableSession()
+    });
+
+    try {
+      await act(async () => {
+        harness.context().createRotationDeformerForDrawable(BATCH_DRAW_EMPTY_A);
+      });
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: RigControlIdSchema.parse("rig_twin_rotation_deformer")
+      });
+
+      await act(async () => {
+        harness.context().selectDrawable(BATCH_DRAW_EMPTY_B);
+        harness.context().createRotationDeformerForDrawable(BATCH_DRAW_EMPTY_B);
+      });
+
+      expect(harness.context().selection).toEqual({
+        kind: "rigControl",
+        id: RigControlIdSchema.parse("rig_twin_rotation_deformer_2")
+      });
+      expect(findRigControl(
+        harness.context().session,
+        RigControlIdSchema.parse("rig_twin_rotation_deformer_2")
+      )).toMatchObject({
+        displayName: "Twin Rotation Deformer",
+        childDrawableIds: [BATCH_DRAW_EMPTY_B]
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-refits an unkeyed Warp ancestor after Mesh Apply and clears drafts", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const harness = await renderEditorSessionProbe({
+      initialSession: createBatchMeshSessionWithAutoRefitWarp()
+    });
+
+    try {
+      await act(async () => {
+        harness.context().selectDrawable(BATCH_DRAW_EMPTY_A);
+        harness.context().previewMeshDraft(BATCH_DRAW_EMPTY_A, "standard");
+      });
+      expect(harness.context().meshDraft).toMatchObject({
+        drawableId: BATCH_DRAW_EMPTY_A,
+        presetId: "standard"
+      });
+
+      await act(async () => {
+        harness.context().applyMeshDraft();
+      });
+
+      expect(harness.context().meshDrafts).toEqual([]);
+      expect(requireMesh(harness.context().session, BATCH_MESH_EMPTY_A).triangles.length)
+        .toBeGreaterThan(0);
+      expect(rectContainsVertices(
+        getWarpDomain(harness.context().session, MESH_APPLY_AUTO_REFIT_WARP_ID),
+        requireMesh(harness.context().session, BATCH_MESH_EMPTY_A).vertices
+      )).toBe(true);
     } finally {
       info.mockRestore();
       warn.mockRestore();
@@ -509,108 +1097,6 @@ describe("EditorSessionProvider history integration", () => {
     }
   });
 
-  it("preserves the current session and reports invalid bundle import errors", async () => {
-    const harness = await renderEditorSessionProbe();
-
-    try {
-      const initialSession = harness.context().session;
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle("{", {
-          fileName: "invalid.portable-project.json"
-        });
-      });
-
-      expect(harness.context().session).toBe(initialSession);
-      expect(harness.context().projectStorage).toMatchObject({
-        status: "error",
-        lastAction: "open",
-        fileName: "invalid.portable-project.json",
-        errorCode: "invalidBundle"
-      });
-      expect(harness.context().projectStorage.issues).toEqual([
-        expect.objectContaining({ code: "portableBundle.json.invalid" })
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("preserves the current session and reports missing payload import errors", async () => {
-    const harness = await renderEditorSessionProbe();
-
-    try {
-      const initialSession = harness.context().session;
-      const exported = await exportAuthoringSessionPortableBundle({
-        session: createTextureBundleSession()
-      });
-      const bundle = JSON.parse(exported.bundleJson) as { binaryPayloads: unknown[] };
-      bundle.binaryPayloads = [];
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle(JSON.stringify(bundle), {
-          fileName: "missing-payload.portable-project.json"
-        });
-      });
-
-      expect(harness.context().session).toBe(initialSession);
-      expect(harness.context().projectStorage).toMatchObject({
-        status: "error",
-        lastAction: "open",
-        fileName: "missing-payload.portable-project.json",
-        errorCode: "missingBytes"
-      });
-      expect(harness.context().projectStorage.issues).toEqual([
-        expect.objectContaining({
-          code: "portableBundle.binaryPayload.missing",
-          targetPath: "/binaryPayloads"
-        })
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("preserves the current session and reports digest mismatch import errors", async () => {
-    const harness = await renderEditorSessionProbe();
-
-    try {
-      const initialSession = harness.context().session;
-      const exported = await exportAuthoringSessionPortableBundle({
-        session: createTextureBundleSession()
-      });
-      const bundle = JSON.parse(exported.bundleJson) as {
-        binaryPayloads: Array<{ payloadBase64: string }>;
-      };
-      const firstPayload = bundle.binaryPayloads[0];
-      if (firstPayload === undefined) {
-        throw new Error("Expected provider test bundle payload.");
-      }
-      firstPayload.payloadBase64 = "YWJk";
-
-      await act(async () => {
-        await harness.context().openProjectFromPortableBundle(JSON.stringify(bundle), {
-          fileName: "digest-mismatch.portable-project.json"
-        });
-      });
-
-      expect(harness.context().session).toBe(initialSession);
-      expect(harness.context().projectStorage).toMatchObject({
-        status: "error",
-        lastAction: "open",
-        fileName: "digest-mismatch.portable-project.json",
-        errorCode: "digestMismatch"
-      });
-      expect(harness.context().projectStorage.issues).toEqual([
-        expect.objectContaining({
-          code: "portableBundle.digest.mismatch",
-          targetPath: "/binaryPayloads/0"
-        })
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
 });
 
 function Probe({
@@ -623,7 +1109,12 @@ function Probe({
 }
 
 async function renderEditorSessionProbe(options: {
+  readonly confirmDirtyWorkspaceReplacement?: DirtyWorkspaceReplacementConfirmation;
+  readonly initialSelection?: EditorSessionContextSnapshot["selection"];
   readonly initialSession?: AuthoringSession;
+  readonly initialWorkspaceDirectory?: FakeWorkspaceDirectoryHandle;
+  readonly initialWorkspaceOpen?: boolean;
+  readonly workspaceDirectoryPicker?: WorkspaceDirectoryPicker;
 } = {}): Promise<{
   readonly cleanup: () => Promise<void>;
   readonly context: () => EditorSessionContextSnapshot;
@@ -640,9 +1131,24 @@ async function renderEditorSessionProbe(options: {
         null,
         createElement(
           EditorSessionProvider,
-          options.initialSession === undefined
-            ? null
-            : { initialSession: options.initialSession },
+          {
+            ...(options.confirmDirtyWorkspaceReplacement === undefined
+              ? {}
+              : { confirmDirtyWorkspaceReplacement: options.confirmDirtyWorkspaceReplacement }),
+            initialWorkspaceOpen: options.initialWorkspaceOpen ?? true,
+            ...(options.initialSelection === undefined
+              ? {}
+              : { initialSelection: options.initialSelection }),
+            ...(options.initialSession === undefined
+              ? {}
+              : { initialSession: options.initialSession }),
+            ...(options.initialWorkspaceDirectory === undefined
+              ? {}
+              : { initialWorkspaceDirectory: options.initialWorkspaceDirectory }),
+            ...(options.workspaceDirectoryPicker === undefined
+              ? {}
+              : { workspaceDirectoryPicker: options.workspaceDirectoryPicker })
+          },
           createElement(Probe, {
             onRender: (nextContext) => {
               context = nextContext;
@@ -686,6 +1192,118 @@ function hasCustomParameter(context: EditorSessionContextSnapshot): boolean {
   return context.session.graph.parameters.some(
     (parameter) => parameter.parameterId === CUSTOM_PARAMETER_ID
   );
+}
+
+function createDynamicsHistorySession(): AuthoringSession {
+  const session = createEmptyAuthoringSession();
+  session.graph.parameters.push(
+    {
+      parameterId: DYNAMICS_HISTORY_DRIVER_ID,
+      displayName: "History Driver X",
+      valueSource: "authoredInput",
+      min: -30,
+      default: 0,
+      max: 30,
+      recommendedUiStep: 1
+    },
+    {
+      parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
+      displayName: "History Output Sway",
+      valueSource: "authoredInput",
+      min: -20,
+      default: 0,
+      max: 20,
+      recommendedUiStep: 0.1
+    }
+  );
+  return session;
+}
+
+function createDynamicsHistoryPayload() {
+  return {
+    dynamicsGroupId: DYNAMICS_HISTORY_GROUP_ID,
+    displayName: "History Sway",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: DYNAMICS_HISTORY_DRIVER_ID,
+        kind: "angle" as const,
+        scale: 1}
+    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+    outputs: [
+      {
+        parameterId: DYNAMICS_HISTORY_OUTPUT_ID,
+        segmentIndex: 1,
+        scale: 1,
+        limit: 20
+      }
+    ]
+  };
+}
+
+function createPresetDynamicsHistoryPayload() {
+  return {
+    dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+    displayName: "Preset History Sway",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: DYNAMICS_PRESET_HISTORY_DRIVER_ID,
+        kind: "angle" as const,
+        scale: 1}
+    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+    outputs: [
+      {
+        parameterId: DYNAMICS_PRESET_HISTORY_OUTPUT_ID,
+        segmentIndex: 1,
+        scale: 1,
+        limit: 20
+      }
+    ]
+  };
+}
+
+function createUpdatedPresetDynamicsHistoryPayload() {
+  return {
+    dynamicsGroupId: DYNAMICS_PRESET_HISTORY_GROUP_ID,
+    displayName: "Preset History Sway Updated",
+    enabled: true,
+    presetId: "hair",
+    inputs: [
+      {
+        parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_DRIVER_ID,
+        kind: "angle" as const,
+        scale: 1}
+    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+    outputs: [
+      {
+        parameterId: DYNAMICS_UPDATED_PRESET_HISTORY_OUTPUT_ID,
+        segmentIndex: 1,
+        scale: 1,
+        limit: 10
+      }
+    ]
+  };
 }
 
 function createRotationSelectionSession(): AuthoringSession {
@@ -824,13 +1442,42 @@ async function selectBatchDrawables(
   });
 }
 
-function requireMesh(session: AuthoringSession, meshId: typeof BATCH_MESH_EMPTY_A) {
+function requireMesh(session: AuthoringSession, meshId: MeshId) {
   const mesh = session.graph.meshes.find((candidate) => candidate.meshId === meshId);
   if (mesh === undefined) {
     throw new Error(`Expected mesh ${meshId}.`);
   }
 
   return mesh;
+}
+
+function findRigControl(session: AuthoringSession, rigControlId: RigControlId) {
+  return session.graph.rigControls.find((candidate) => candidate.rigControlId === rigControlId);
+}
+
+function getWarpDomain(
+  session: AuthoringSession,
+  rigControlId: RigControlId
+): RectDto {
+  const rigControl = findRigControl(session, rigControlId);
+  if (rigControl?.kind !== "warpLattice2d") {
+    throw new Error(`Expected Warp Deformer ${rigControlId}.`);
+  }
+
+  return rigControl.domainBounds;
+}
+
+function rectContainsVertices(
+  rect: RectDto,
+  vertices: readonly { readonly x: number; readonly y: number }[]
+): boolean {
+  return vertices.every(
+    (vertex) =>
+      vertex.x >= rect.x &&
+      vertex.y >= rect.y &&
+      vertex.x <= rect.x + rect.width &&
+      vertex.y <= rect.y + rect.height
+  );
 }
 
 function createBatchMeshSession(): AuthoringSession {
@@ -899,6 +1546,47 @@ function createBatchMeshSession(): AuthoringSession {
       rightsRecords: []
     }
   };
+}
+
+function createDuplicateDisplayNameDrawableSession(): AuthoringSession {
+  const session = createBatchMeshSession();
+  session.graph.drawables = session.graph.drawables.map((drawable) =>
+    drawable.drawableId === BATCH_DRAW_EMPTY_A || drawable.drawableId === BATCH_DRAW_EMPTY_B
+      ? { ...drawable, displayName: "Twin" }
+      : drawable
+  );
+
+  return session;
+}
+
+function createBatchMeshSessionWithAutoRefitWarp(): AuthoringSession {
+  const session = createBatchMeshSession();
+  session.graph.rigControls = [
+    {
+      kind: "warpLattice2d",
+      rigControlId: MESH_APPLY_AUTO_REFIT_WARP_ID,
+      displayName: "Mesh Apply Auto Refit",
+      childDrawableIds: [BATCH_DRAW_EMPTY_A],
+      childRigControlIds: [],
+      opacityMultiplier: 1,
+      bindSpace: "rigControlLocalRest",
+      domainBounds: { x: 0, y: 0, width: 1, height: 1 },
+      latticeColumns: 2,
+      latticeRows: 2,
+      restControlPoints: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+        { x: 1, y: 1 }
+      ],
+      interpolationMethod: "bilinear-grid-v1",
+      enabled: true
+    }
+  ];
+  session.graph.rigControlRootIds = [MESH_APPLY_AUTO_REFIT_WARP_ID];
+  session.graph.stableOrder = [...session.graph.stableOrder, MESH_APPLY_AUTO_REFIT_WARP_ID];
+
+  return session;
 }
 
 function createDeformerTreeWrapProviderSession(): AuthoringSession {
@@ -1230,12 +1918,335 @@ function createBinaryAssetReference(): BinaryAssetReference {
   } as BinaryAssetReference;
 }
 
+async function createPsdWriteOnceParserResult(
+  input: BrowserPsdParserInput
+): Promise<BrowserPsdParserResult> {
+  const materialization = await createPsdWriteOnceMaterialization(input);
+  const layerBytes = createPsdWriteOnceLayerBytes(materialization);
+
+  return {
+    adapterResult: createPsdWriteOnceAdapterResult(materialization),
+    materializedLayerBytes: [layerBytes],
+    sourceDigest: PSD_SOURCE_DIGEST,
+    sourceByteLength: input.bytes.byteLength,
+    sourceFilePath: `assets/sources/private/${input.planToken}/${input.fileName}`
+  };
+}
+
+function createPsdWriteOnceAdapterResult(
+  materialization: PsdAdapterLayerMaterializationEvidenceDto
+): PsdAdapterResultDto {
+  return {
+    schemaVersion: "psd-adapter-result-v1",
+    sourceProfile: "layered-character-psd-profile-v1",
+    adapterName: "provider-write-once-adapter",
+    adapterVersion: "0.0.0",
+    intakeKind: "realPsdParseResult",
+    parser: PSD_PARSER_EVIDENCE,
+    canvas: {
+      width: 2,
+      height: 2,
+      bounds: { x: 0, y: 0, width: 2, height: 2 }
+    },
+    sourceGroups: [
+      {
+        sourceGroupId: "psd:root",
+        originalName: "Write Once Import",
+        normalizedName: "write once import",
+        groupPath: ["Write Once Import"],
+        sourceOrder: 0,
+        visibleInSource: true,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: true,
+        opacityInSource: 1,
+        bounds: { x: 0, y: 0, width: 2, height: 2 },
+        unsupportedFeatures: []
+      },
+      {
+        sourceGroupId: PSD_WRITE_GROUP_ID,
+        originalName: "Write Once Group",
+        normalizedName: "write once group",
+        parentGroupId: "psd:root",
+        groupPath: ["Write Once Import", "Write Once Group"],
+        sourceOrder: 1,
+        visibleInSource: true,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: true,
+        opacityInSource: 1,
+        bounds: { x: 0, y: 0, width: 2, height: 2 },
+        unsupportedFeatures: []
+      }
+    ],
+    sourceLayers: [
+      {
+        sourceLayerId: PSD_WRITE_LAYER_ID,
+        originalName: "Write Once",
+        normalizedName: "write once",
+        parentGroupId: PSD_WRITE_GROUP_ID,
+        groupPath: ["Write Once Import", "Write Once Group"],
+        sourceOrder: 2,
+        bounds: { x: 0, y: 0, width: 2, height: 2 },
+        visibleInSource: true,
+        localVisibleInSource: true,
+        effectiveVisibleInSource: true,
+        opacityInSource: 1,
+        role: "editableLayer",
+        unsupportedFeatures: []
+      }
+    ],
+    unsupportedFeatures: [],
+    materializationEvidence: [materialization],
+    diagnostics: []
+  };
+}
+
+async function createPsdWriteOnceMaterialization(
+  input: BrowserPsdParserInput
+): Promise<PsdAdapterLayerMaterializationEvidenceDto> {
+  const digest = {
+    algorithm: "sha256" as const,
+    hex: await computeTestSha256Hex(PSD_WRITE_BYTES)
+  };
+  const binaryAssetRef: NonNullable<PsdAdapterLayerMaterializationEvidenceDto["binaryAssetRef"]> = {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: `bin_${input.planToken}_write_once_rgba`,
+    packageRelativePath: `assets/textures/psd/${input.planToken}/write_once.raw-rgba`,
+    digest,
+    byteLength: PSD_WRITE_BYTES.byteLength,
+    mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
+    storageStatus: "stored-package-local-v1",
+    provenanceId: ProvenanceIdSchema.parse(`prov_${input.planToken}_write_once`),
+    rightsAssetId: input.sourceAssetId
+  };
+
+  return {
+    evidenceKind: "psd-layer-materialization-evidence-v1",
+    materializationId: `mat_${input.planToken}_write_once`,
+    sourceLayerRef: {
+      sourceAssetId: input.sourceAssetId,
+      sourceLayerId: PSD_WRITE_LAYER_ID,
+      sourceLayerName: "Write Once",
+      sourceLayerPath: ["Write Once Import", "Write Once Group", "Write Once"]
+    },
+    mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
+    byteLength: PSD_WRITE_BYTES.byteLength,
+    digest,
+    width: 2,
+    height: 2,
+    binaryAssetRef,
+    provenance: {
+      sourceFilePath: input.fileName,
+      sourceDigest: PSD_SOURCE_DIGEST,
+      sourceByteLength: input.bytes.byteLength,
+      sourceMediaType: "image/vnd.adobe.photoshop",
+      privacyLabel: "packageLocalAsset",
+      publicDistribution: "notPublicDistributable",
+      generatedBy: "provider-write-once-adapter",
+      publicDemoAsset: false
+    },
+    parser: PSD_PARSER_EVIDENCE,
+    extraction: {
+      extractionKind: "selectedLayerRasterV1",
+      optionsSchemaVersion: "psd-layer-extraction-options-v1",
+      options: {
+        channelOrder: "rgba",
+        includeEffects: false,
+        includeHiddenLayers: false,
+        composeWithOtherLayers: false,
+        layerSelection: PSD_WRITE_LAYER_ID
+      }
+    }
+  };
+}
+
+function createPsdWriteOnceLayerBytes(
+  materialization: PsdAdapterLayerMaterializationEvidenceDto
+): BrowserPsdMaterializedLayerBytes {
+  if (materialization.binaryAssetRef === undefined) {
+    throw new Error("Expected materialized PSD layer binary asset ref.");
+  }
+
+  return {
+    sourceLayerId: PSD_WRITE_LAYER_ID,
+    materializationId: materialization.materializationId,
+    binaryAssetRef: materialization.binaryAssetRef,
+    width: 2,
+    height: 2,
+    bytes: PSD_WRITE_BYTES
+  };
+}
+
+async function createAtlasWriteOnceSession(): Promise<AuthoringSession> {
+  const session = createEmptyAuthoringSession();
+  const binaryAssetRef = await createAtlasSourceBinaryAssetReference();
+
+  session.graph.parts[0] = {
+    ...session.graph.parts[0]!,
+    childPartIds: [ATLAS_SOURCE_PART_ID],
+    children: [{ kind: "part", partId: ATLAS_SOURCE_PART_ID }]
+  };
+  session.graph.parts.push({
+    partId: ATLAS_SOURCE_PART_ID,
+    displayName: "Atlas Write Once",
+    parentPartId: ROOT_PART_ID,
+    childPartIds: [],
+    drawableIds: [ATLAS_SOURCE_DRAWABLE_ID],
+    children: [{ kind: "drawable", drawableId: ATLAS_SOURCE_DRAWABLE_ID }]
+  });
+  session.graph.drawables.push({
+    drawableId: ATLAS_SOURCE_DRAWABLE_ID,
+    displayName: "Atlas Source",
+    partId: ATLAS_SOURCE_PART_ID,
+    sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+    textureId: ATLAS_SOURCE_TEXTURE_ID,
+    meshId: ATLAS_SOURCE_MESH_ID,
+    defaultOpacity: 1,
+    runtimeVisibility: true,
+    baseDrawOrder: 0,
+    sourceProvenanceId: ATLAS_SOURCE_PROVENANCE_ID
+  });
+  session.graph.meshes.push({
+    meshId: ATLAS_SOURCE_MESH_ID,
+    drawableId: ATLAS_SOURCE_DRAWABLE_ID,
+    vertices: [
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+      { x: 0, y: 2 }
+    ],
+    uvs: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 }
+    ],
+    triangles: [[0, 1, 2]],
+    vertexStableIds: ["vtx_atlas_write_once_0", "vtx_atlas_write_once_1", "vtx_atlas_write_once_2"],
+    triangleStableIds: [TriangleIdSchema.parse("tri_atlas_write_once_0")],
+    topologyRevision: 1,
+    bounds: { x: 0, y: 0, width: 2, height: 2 },
+    generationProvenanceId: ATLAS_SOURCE_PROVENANCE_ID
+  });
+  session.graph.drawOrder.push({
+    drawableId: ATLAS_SOURCE_DRAWABLE_ID,
+    baseDrawOrder: 0,
+    stableOrder: 0
+  });
+  session.graph.stableOrder.push(
+    ATLAS_SOURCE_PART_ID,
+    ATLAS_SOURCE_DRAWABLE_ID,
+    ATLAS_SOURCE_MESH_ID
+  );
+  session.graph.sourceAssets.push({
+    sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+    kind: "generated-fixture-v1",
+    filePath: "assets/sources/generated/atlas-write-once.json",
+    contentHash: "sha256:atlas-write-once",
+    importProfile: "split-png-fallback-v1",
+    layers: [],
+    diagnostics: []
+  });
+  session.graph.textureAtlas = {
+    schemaVersion: "texture-atlas-v1",
+    textures: [
+      {
+        textureId: ATLAS_SOURCE_TEXTURE_ID,
+        filePath: binaryAssetRef.packageRelativePath,
+        sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+        sourceLayerId: "layer_atlas_write_once",
+        provenanceId: ATLAS_SOURCE_PROVENANCE_ID,
+        dimensions: { width: 2, height: 2, pixelFormat: "rgba8" },
+        binaryAssetRef
+      }
+    ]
+  };
+  session.graph.provenanceRecords.push({
+    provenanceId: ATLAS_SOURCE_PROVENANCE_ID,
+    assetId: ATLAS_SOURCE_TEXTURE_ID,
+    assetKind: "texture",
+    filePath: binaryAssetRef.packageRelativePath,
+    contentHash: `sha256:${binaryAssetRef.digest.hex}`,
+    creator: "test fixture",
+    license: "private-local",
+    redistributionAllowed: false,
+    aiUsed: false,
+    transformHistory: [],
+    relatedOperationIds: []
+  });
+  session.graph.rightsRecords.push({
+    assetId: ATLAS_SOURCE_ASSET_ID,
+    rightsStatus: "cleared",
+    license: "private-local",
+    redistributionAllowed: false
+  });
+  registerAuthoringSessionBinaryBytes(session, {
+    binaryAssetRef,
+    bytes: ATLAS_SOURCE_BYTES,
+    role: "texture-raster-v1",
+    sourceAssetId: ATLAS_SOURCE_ASSET_ID,
+    textureId: ATLAS_SOURCE_TEXTURE_ID
+  });
+
+  return session;
+}
+
+async function createAtlasSourceBinaryAssetReference(): Promise<BinaryAssetReference> {
+  return {
+    referenceKind: "package-binary-asset-ref-v1",
+    binaryAssetId: "bin_atlas_write_once_source_rgba",
+    packageRelativePath: "assets/textures/atlas-write-once-source.raw-rgba",
+    digest: {
+      algorithm: "sha256",
+      hex: await computeTestSha256Hex(ATLAS_SOURCE_BYTES)
+    },
+    byteLength: ATLAS_SOURCE_BYTES.byteLength,
+    mediaType: "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8",
+    storageStatus: "stored-package-local-v1",
+    provenanceId: ATLAS_SOURCE_PROVENANCE_ID,
+    rightsAssetId: ATLAS_SOURCE_ASSET_ID
+  } as BinaryAssetReference;
+}
+
+function getGeneratedAtlasRawRgbaPath(session: AuthoringSession): string {
+  const atlasTextureId = session.graph.textureAtlas?.layoutSummary?.atlasTextureId;
+  const texture = session.graph.textureAtlas?.textures.find(
+    (candidate) => candidate.textureId === atlasTextureId
+  );
+  const path = texture?.binaryAssetRef?.packageRelativePath;
+  if (path === undefined) {
+    throw new Error("Expected generated Texture Atlas binary asset path.");
+  }
+
+  return path;
+}
+
+async function computeTestSha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await globalThis.crypto?.subtle?.digest("SHA-256", bytes);
+  if (digest === undefined) {
+    throw new Error("SHA-256 digest support is required for this test.");
+  }
+
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function waitForCondition(check: () => boolean, message: string): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (check()) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error(message);
+}
+
 function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGeneratedMeshResult {
   return {
     source: "outline-v6d-adaptive-contour-constrainautor-rgba",
     mesh: {
-      meshId: "mesh_body",
-      drawableId: "draw_body",
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
       vertices: [],
       uvs: [],
       triangles: [],
@@ -1243,7 +2254,7 @@ function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGene
       triangleStableIds: [],
       topologyRevision: 0,
       bounds: { x: 0, y: 0, width: 10, height: 10 },
-      generationProvenanceId: "prov_generate_body"
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body")
     },
     qualityMetrics: {
       maxEdgeLength: 0,
@@ -1295,6 +2306,32 @@ function createGeneratedMeshResultWithAdaptiveContourDiagnostics(): DrawableGene
           resolvedMaxBoundaryVertices: 128,
           resolvedMaxInteriorVertices: 32,
           resolvedInteriorBoundaryClearance: 1.1
+        },
+        multiIslandDiagnostics: {
+          rawAlphaComponentCount: 2,
+          keptIslandCount: 1,
+          generatedIslandCount: 1,
+          backendGeneratedIslandCount: 1,
+          skippedTinyNoiseIslandCount: 1,
+          skippedTinyNoisePixelCount: 2,
+          rawOpaquePixelCount: 122,
+          largestComponentPixelCount: 120,
+          localizedFallbackCount: 0,
+          localizedFallbackReasons: [],
+          islands: [
+            {
+              componentOrder: 0,
+              pixelCount: 120,
+              bounds: { minX: 2, minY: 2, maxX: 13, maxY: 11 },
+              handling: "generated"
+            },
+            {
+              componentOrder: 1,
+              pixelCount: 2,
+              bounds: { minX: 18, minY: 1, maxX: 19, maxY: 1 },
+              handling: "skipped-tiny-noise"
+            }
+          ]
         }
       }
     }
@@ -1491,6 +2528,10 @@ class FakeDocument {
 
 type ReactActGlobal = typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+};
+
+type Live2dPerformanceTestGlobal = typeof globalThis & {
+  __LIVE2D_PERF__?: boolean;
 };
 
 function createFakeDomRoot(): {

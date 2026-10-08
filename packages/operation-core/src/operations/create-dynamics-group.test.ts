@@ -13,8 +13,13 @@ import { describe, expect, it } from "vitest";
 import { createOperationCore } from "../operation-core.js";
 import type { OperationEvidenceProviderInput } from "../operation-evidence-provider.js";
 
+const PRESET_DRIVER_ID = "param_face_angle_x";
+const PRESET_OUTPUT_ID = "param_hair_front_sway_x";
+const UPDATED_PRESET_DRIVER_ID = "param_body_angle_x";
+const UPDATED_PRESET_OUTPUT_ID = "param_hair_side_sway_x";
+
 describe("createDynamicsGroup operation", () => {
-  it("commits a deterministic dynamics group and exposes driver/output parameter evidence", () => {
+  it("commits a deterministic dynamics group and exposes input/output parameter evidence", () => {
     const session = createDynamicsFixtureSession();
     const calls: OperationEvidenceProviderInput[] = [];
     const core = createOperationCore({
@@ -64,9 +69,8 @@ describe("createDynamicsGroup operation", () => {
     ]);
     expect(outcome.logEntry?.runtimeSnapshotIds).toEqual(["snap_after_dynamics"]);
     expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toMatchObject({
-      output: {
-        targetParameterId: "param_hair_sway"
-      }
+      inputs: [{ parameterId: "param_face_yaw" }],
+      outputs: [{ parameterId: "param_hair_sway" }]
     });
   });
 
@@ -104,25 +108,55 @@ describe("createDynamicsGroup operation", () => {
     expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toMatchObject({
       displayName: "Hair Sway Preview",
       enabled: false,
-      output: {
-        targetParameterId: "param_hair_sway"
-      }
+      outputs: [{ parameterId: "param_hair_sway" }]
     });
     expect(outcome.logEntry?.operationType).toBe("updateDynamicsGroup");
     expect(outcome.logEntry?.targetIds).toEqual(["dyn_hair_sway"]);
   });
 
-  it("rejects non-computed output parameters with an operation diagnostic", () => {
+  it("allows authored scalar output parameters for additive dynamics", () => {
     const session = createDynamicsFixtureSession({ outputValueSource: "authoredInput" });
     const core = createOperationCore();
 
     const outcome = core.commitOperation(session, createDynamicsGroupRequest({ dryRun: false }));
 
-    expect(outcome.result.status).toBe("rejected");
-    expect(outcome.result.diagnostics[0]?.checkId).toBe(
-      "operation.createDynamicsGroup.invalidOutputParameterSource"
-    );
-    expect(session.graph.dynamicsGroups).toEqual([]);
+    expect(outcome.result.status).toBe("committed");
+    expect(session.graph.dynamicsGroups).toHaveLength(1);
+  });
+
+  it("commits create and update with initialized preset refs from an empty graph", () => {
+    const session = createPresetOnlyDynamicsFixtureSession();
+    const core = createOperationCore();
+
+    const creation = core.commitOperation(session, createPresetDynamicsGroupRequest());
+
+    expect(creation.result.status).toBe("committed");
+    expect(session.graph.parameters).toEqual([]);
+    expect(creation.logEntry?.targetIds).toEqual([
+      "dyn_preset_hair_sway",
+      PRESET_DRIVER_ID,
+      PRESET_OUTPUT_ID
+    ]);
+    expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_preset_hair_sway")))
+      .toMatchObject({
+        inputs: [{ parameterId: PRESET_DRIVER_ID }],
+        outputs: [{ parameterId: PRESET_OUTPUT_ID }]
+      });
+
+    const update = core.commitOperation(session, createPresetDynamicsGroupUpdateRequest());
+
+    expect(update.result.status).toBe("committed");
+    expect(session.graph.parameters).toEqual([]);
+    expect(update.logEntry?.targetIds).toEqual([
+      "dyn_preset_hair_sway",
+      UPDATED_PRESET_DRIVER_ID,
+      UPDATED_PRESET_OUTPUT_ID
+    ]);
+    expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_preset_hair_sway")))
+      .toMatchObject({
+        inputs: [{ parameterId: UPDATED_PRESET_DRIVER_ID }],
+        outputs: [{ parameterId: UPDATED_PRESET_OUTPUT_ID }]
+      });
   });
 });
 
@@ -141,32 +175,31 @@ const createDynamicsGroupRequest = (options: {
     dynamicsGroupId: "dyn_hair_sway",
     displayName: "Hair Sway",
     enabled: true,
-    solverKind: "scalarDampedFollowV1",
-    resetPolicy: "reset-on-load",
-    drivers: [
+    inputs: [
       {
-        sourceParameterId: "param_face_yaw",
-        inputScale: 1,
-        inputOffset: 0,
-        invert: false
+        parameterId: "param_face_yaw",
+        kind: "angle",
+        scale: 30
       }
     ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
     ...(options.includeOutput === false
       ? {}
       : {
-          output: {
-            targetParameterId: "param_hair_sway",
-            outputScale: 1,
-            outputOffset: 0,
-            min: -1,
-            max: 1,
-            clampPolicy: "clamp-to-output-range"
-          }
+          outputs: [
+            {
+              parameterId: "param_hair_sway",
+              segmentIndex: 1,
+              scale: 0.0333,
+              limit: 1
+            }
+          ]
         }),
-    settings: {
-      stiffness: 0.35,
-      damping: 0.7
-    }
   }
 });
 
@@ -181,8 +214,71 @@ const createUpdateDynamicsGroupRequest = () => ({
   payload: {
     dynamicsGroupId: "dyn_hair_sway",
     displayName: "Hair Sway Preview",
-    enabled: false,
-    resetPolicy: "reset-on-manual-command"
+    enabled: false
+  }
+});
+
+const createPresetDynamicsGroupRequest = () => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_create_preset_dynamics_group",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: false,
+  basePackageRevision: 0,
+  operationType: "createDynamicsGroup",
+  payload: {
+    dynamicsGroupId: "dyn_preset_hair_sway",
+    displayName: "Preset Hair Sway",
+    enabled: true,
+    inputs: [
+      {
+        parameterId: PRESET_DRIVER_ID,
+        kind: "angle",
+        scale: 30
+      }
+    ],
+    chain: {
+      rootOffset: { x: 0, y: 0 },
+      segmentLengths: [14],
+      damping: 2.5,
+      gravityScale: 1
+    },
+    outputs: [
+      {
+        parameterId: PRESET_OUTPUT_ID,
+        segmentIndex: 1,
+        scale: 0.0333,
+        limit: 1
+      }
+    ]
+  }
+});
+
+const createPresetDynamicsGroupUpdateRequest = () => ({
+  schemaVersion: "operation-request-v1",
+  operationId: "op_update_preset_dynamics_group",
+  actor: "test",
+  surface: "testFixture",
+  dryRun: false,
+  basePackageRevision: 1,
+  operationType: "updateDynamicsGroup",
+  payload: {
+    dynamicsGroupId: "dyn_preset_hair_sway",
+    inputs: [
+      {
+        parameterId: UPDATED_PRESET_DRIVER_ID,
+        kind: "angle",
+        scale: -15
+      }
+    ],
+    outputs: [
+      {
+        parameterId: UPDATED_PRESET_OUTPUT_ID,
+        segmentIndex: 1,
+        scale: -0.025,
+        limit: 0.75
+      }
+    ]
   }
 });
 
@@ -221,7 +317,7 @@ const createDynamicsFixtureSession = (options: {
         parameterId: ParameterIdSchema.parse("param_hair_sway"),
         displayName: "Hair Sway",
         semanticRole: "dynamics",
-        valueSource: options.outputValueSource ?? "computedDynamics",
+        valueSource: options.outputValueSource ?? "authoredInput",
         min: -1,
         max: 1,
         default: 0,
@@ -235,6 +331,38 @@ const createDynamicsFixtureSession = (options: {
     drawOrder: [],
     rigControlRootIds: [],
     stableOrder: ["param_face_yaw", "param_hair_sway"],
+    sourceAssets: [],
+    provenanceRecords: [],
+    rightsRecords: []
+  }
+});
+
+const createPresetOnlyDynamicsFixtureSession = (): AuthoringSession => ({
+  packageIdentity: {
+    packageId: PackageIdSchema.parse("pkg_operation_preset_dynamics_test"),
+    packageDisplayName: "Operation Preset Dynamics Test",
+    formatVersion: "open-model-package-v1"
+  },
+  packageRevision: 0,
+  authoringRevision: createInitialAuthoringRevision(),
+  dirty: false,
+  graph: {
+    coordinateSystem: "canvas-y-down-v1",
+    canvasSize: {
+      width: 1024,
+      height: 1024
+    },
+    parts: [],
+    drawables: [],
+    meshes: [],
+    parameters: [],
+    keyformSets: [],
+    rigControls: [],
+    dynamicsGroups: [],
+    masks: [],
+    drawOrder: [],
+    rigControlRootIds: [],
+    stableOrder: [],
     sourceAssets: [],
     provenanceRecords: [],
     rightsRecords: []

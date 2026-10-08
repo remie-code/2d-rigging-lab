@@ -197,7 +197,90 @@ export interface MeshGenerationV6ConstrainautorDiagnostics {
   readonly missingConstraintEdgeCount: number;
   readonly constraintRecoveryFailed: boolean;
   readonly outsideTriangleCount: number;
+  readonly failureStage?:
+    | "constraint-input"
+    | "delaunay-untriangulated"
+    | "backend-threw"
+    | "post-constrain-recovery"
+    | "final-boundary-verification";
+  readonly invalidConstraintInputReasons?: readonly string[];
+  readonly inputPointCount?: number;
+  readonly finitePointCount?: number;
+  readonly sanitizedPointCount?: number;
+  readonly mergedPointCount?: number;
+  readonly inputConstraintEdgeCount?: number;
+  readonly sanitizedConstraintEdgeCount?: number;
+  readonly zeroLengthConstraintEdgeCount?: number;
+  readonly invalidConstraintEndpointCount?: number;
+  readonly duplicateConstraintEdgeCount?: number;
+  readonly crossingConstraintEdgeCount?: number;
+  readonly crossingConstraintEdgePairSample?: MeshGenerationV6CrossingConstraintEdgePairSampleDiagnostics;
+  readonly pointOnConstraintEdgeCount?: number;
+  readonly boundaryRepair?: MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics;
+  readonly untriangulatedPointCount?: number;
+  readonly untriangulatedPointIndexes?: readonly number[];
+  readonly postConstrainTriangleCount?: number;
+  readonly filteredTriangleCount?: number;
   readonly thrownErrorKind?: string;
+}
+
+export interface MeshGenerationV6CrossingConstraintEdgePairSampleDiagnostics {
+  readonly coordinateSpace: "candidate-texture-pixels";
+  readonly sampleLimit: number;
+  readonly sampledPairCount: number;
+  readonly totalPairCount: number;
+  readonly sampleTruncated: boolean;
+  readonly pairs: readonly MeshGenerationV6CrossingConstraintEdgePairSample[];
+}
+
+export interface MeshGenerationV6CrossingConstraintEdgePairSample {
+  readonly sanitizedConstraintEdgeIndexes: readonly [number, number];
+  readonly sanitizedConstraintEdgePointIndexes: readonly [
+    readonly [number, number],
+    readonly [number, number]
+  ];
+  readonly inputConstraintEdgeIndexes?: readonly [number, number];
+  readonly inputConstraintEdgePointIndexes?: readonly [
+    readonly [number, number],
+    readonly [number, number]
+  ];
+  readonly segments: readonly [
+    MeshGenerationV6ConstraintSegmentDiagnostics,
+    MeshGenerationV6ConstraintSegmentDiagnostics
+  ];
+}
+
+export interface MeshGenerationV6ConstraintSegmentDiagnostics {
+  readonly start: MeshGenerationV6ConstraintPointDiagnostics;
+  readonly end: MeshGenerationV6ConstraintPointDiagnostics;
+}
+
+export interface MeshGenerationV6ConstraintPointDiagnostics {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface MeshGenerationV6ConstrainautorBoundaryRepairDiagnostics {
+  readonly attempted: boolean;
+  readonly result:
+    | "not-attempted-non-crossing-only"
+    | "not-attempted-crossing-pair-count"
+    | "not-attempted-crossing-sample-unavailable"
+    | "not-attempted-non-boundary-crossing-pair"
+    | "not-attempted-non-cyclic-boundary-constraints"
+    | "not-attempted-too-few-repaired-boundary-points"
+    | "failed-no-candidate-succeeded"
+    | "failed-final-boundary-verification"
+    | "repaired";
+  readonly candidateCount: number;
+  readonly failedCandidateCount: number;
+  readonly removedBoundaryPointCount: number;
+  readonly preRepairCrossingConstraintEdgeCount: number;
+  readonly postRepairCrossingConstraintEdgeCount?: number;
+  readonly postRepairPointOnConstraintEdgeCount?: number;
+  readonly selectedRemovedBoundaryPointIndex?: number;
+  readonly repairedConstraintEdgeCount?: number;
+  readonly preRepairCrossingConstraintEdgePairSample?: MeshGenerationV6CrossingConstraintEdgePairSampleDiagnostics;
 }
 
 export interface MeshGenerationV6SupportRingDiagnostics {

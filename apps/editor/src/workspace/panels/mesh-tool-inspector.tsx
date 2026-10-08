@@ -1,5 +1,7 @@
 import {
+  AlertTriangle,
   Check,
+  Copy,
   Eye,
   EyeOff,
   RefreshCw,
@@ -12,14 +14,21 @@ import { getPartOrderedChildren } from "@private-2d-rigging-lab/authoring-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type { DrawableId, PartId } from "@private-2d-rigging-lab/contracts";
 
-import { useEditorSession } from "../../features/editor-session/editor-session-context";
+import {
+  useEditorSession,
+  type MeshToolDraft,
+  type MeshToolGenerationDiagnostic
+} from "../../features/editor-session/editor-session-context";
 import {
   createMeshDrawableBatchTargets,
+  DEFAULT_MESH_GENERATION_METHOD_CHOICE,
   getMeshGenerationPreset,
+  MESH_GENERATION_METHOD_CHOICES,
   MESH_GENERATION_PRESETS,
   type MeshDrawableBatchTarget,
   type MeshGenerationPresetId
 } from "../../features/editor-session/model/mesh-tool-state";
+import type { GeneratedMeshPreviewCommitMethod } from "@private-2d-rigging-lab/authoring-core";
 import type { EditorSelection } from "../../features/editor-session/model/editor-selection";
 import { cn } from "../../lib/class-name";
 import { useEditorUiStore } from "../../state/editor-ui-store";
@@ -33,6 +42,7 @@ export function MeshToolInspector() {
     applyMeshDraft,
     cancelMeshDraft,
     editorHiddenPartIds,
+    meshGenerationDiagnostic,
     meshDrafts,
     previewMeshDraft,
     previewMeshDrafts,
@@ -43,6 +53,9 @@ export function MeshToolInspector() {
   const meshOverlayVisible = useEditorUiStore((state) => state.meshOverlayVisible);
   const setMeshOverlayVisible = useEditorUiStore((state) => state.setMeshOverlayVisible);
   const [presetId, setPresetId] = useState<MeshGenerationPresetId>("standard");
+  const [method, setMethod] = useState<GeneratedMeshPreviewCommitMethod>(
+    DEFAULT_MESH_GENERATION_METHOD_CHOICE.method
+  );
   const [autoPreviewKey, setAutoPreviewKey] = useState<string | undefined>(undefined);
   const target = useMemo(
     () => resolveMeshToolTarget(session, selection, editorHiddenPartIds),
@@ -81,15 +94,15 @@ export function MeshToolInspector() {
     }
 
     const meshEmpty = target.mesh === undefined || target.mesh.vertices.length === 0 || target.mesh.triangles.length === 0;
-    const key = createPreviewKey(target.drawable.drawableId, presetId);
+    const key = createPreviewKey(target.drawable.drawableId, presetId, method);
     if (!meshEmpty || autoPreviewKey === key) {
       return;
     }
 
     setAutoPreviewKey(key);
-    previewMeshDraft(target.drawable.drawableId, presetId);
+    previewMeshDraft(target.drawable.drawableId, presetId, method);
     setMeshOverlayVisible(true);
-  }, [autoPreviewKey, presetId, previewMeshDraft, setMeshOverlayVisible, target]);
+  }, [autoPreviewKey, method, presetId, previewMeshDraft, setMeshOverlayVisible, target]);
 
   if (target.kind === "part") {
     return (
@@ -143,7 +156,10 @@ export function MeshToolInspector() {
     ? formatBatchWorkflowStatus(eligibleBatchTargets, excludedBatchTargets, draftsForTarget)
     : resolveWorkflowStatus(target.mesh, currentDraft !== null);
   const preset = getMeshGenerationPreset(presetId);
-  const generatePreview = (nextPresetId: MeshGenerationPresetId) => {
+  const generatePreviewWithMethod = (
+    nextPresetId: MeshGenerationPresetId,
+    nextMethod: GeneratedMeshPreviewCommitMethod
+  ) => {
     if (target.kind === "drawableSet" && eligibleBatchTargets.length === 0) {
       return;
     }
@@ -151,11 +167,12 @@ export function MeshToolInspector() {
     setIsGenerating(true);
     try {
       if (target.kind === "drawable") {
-        previewMeshDraft(target.drawable.drawableId, nextPresetId);
+        previewMeshDraft(target.drawable.drawableId, nextPresetId, nextMethod);
       } else if (target.kind === "drawableSet") {
         previewMeshDrafts(
           eligibleBatchTargets.map((candidate) => candidate.drawableId),
-          nextPresetId
+          nextPresetId,
+          nextMethod
         );
       }
       setMeshOverlayVisible(true);
@@ -163,17 +180,39 @@ export function MeshToolInspector() {
       setIsGenerating(false);
     }
   };
+  const generatePreview = (nextPresetId: MeshGenerationPresetId) => {
+    generatePreviewWithMethod(nextPresetId, method);
+  };
   const previewPreset = (nextPresetId: MeshGenerationPresetId) => {
     setPresetId(nextPresetId);
     if (target.kind === "drawable") {
-      setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, nextPresetId));
+      setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, nextPresetId, method));
     }
     generatePreview(nextPresetId);
+  };
+  const selectMethod = (nextMethod: GeneratedMeshPreviewCommitMethod) => {
+    if (nextMethod === method) {
+      return;
+    }
+
+    setMethod(nextMethod);
+    if (target.kind === "drawable") {
+      setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId, nextMethod));
+    }
+    generatePreviewWithMethod(presetId, nextMethod);
   };
   const canGeneratePreview = target.kind === "drawable"
     ? !isGenerating
     : !isGenerating && eligibleBatchTargets.length > 0;
   const canApplyPreview = draftsForTarget.length > 0;
+  const diagnostic = createMeshDiagnosticView({
+    draft: currentDraft,
+    draftsForTarget,
+    lastGenerationDiagnostic: meshGenerationDiagnostic,
+    preset,
+    session,
+    targetDrawableIds
+  });
   const targetNameItems = target.kind === "drawableSet"
     ? target.drawables.map((candidate) => ({
         drawableId: candidate.drawable.drawableId,
@@ -216,9 +255,43 @@ export function MeshToolInspector() {
         </p>
       </section>
 
+      {diagnostic === null ? null : <MeshDiagnosticCard diagnostic={diagnostic} />}
+
       {excludedBatchTargets.length === 0 ? null : (
         <ExistingMeshWarning targets={excludedBatchTargets} />
       )}
+
+      {/*
+        世代切替トグル(評価用の薄い実装)。v6削除時はこの section ブロックごと撤去し、
+        MESH_GENERATION_METHOD_CHOICES から v7 行を残すか配列自体を畳めば評価機構が消える。
+      */}
+      <section
+        className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3"
+        data-testid="mesh-tool-generation-toggle"
+      >
+        <h3 className="text-xs font-semibold uppercase text-neutral-500">Generation</h3>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {MESH_GENERATION_METHOD_CHOICES.map((candidate) => (
+            <button
+              aria-label={`Use ${candidate.label} mesh generation`}
+              aria-pressed={method === candidate.method}
+              className={cn(
+                "flex min-h-8 items-center justify-center gap-2 rounded border px-2 text-xs font-medium transition",
+                method === candidate.method
+                  ? "border-teal-500/70 bg-teal-950/25 text-teal-100"
+                  : "border-neutral-800 bg-neutral-950 text-neutral-200 hover:border-neutral-700"
+              )}
+              data-testid="mesh-tool-generation-choice"
+              data-method={candidate.method}
+              key={candidate.method}
+              onClick={() => selectMethod(candidate.method)}
+              type="button"
+            >
+              {candidate.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <h3 className="text-xs font-semibold uppercase text-neutral-500">Preset</h3>
@@ -265,7 +338,7 @@ export function MeshToolInspector() {
             className="flex min-h-8 items-center justify-center gap-2 rounded border border-amber-600/70 bg-amber-950/25 px-2 text-xs font-semibold text-amber-100 transition enabled:hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:bg-neutral-950 disabled:text-neutral-600"
             onClick={() => {
               if (target.kind === "drawable") {
-                setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId));
+                setAutoPreviewKey(createPreviewKey(target.drawable.drawableId, presetId, method));
               }
               generatePreview(presetId);
             }}
@@ -492,9 +565,10 @@ function formatMeshStatus(mesh: MeshDto | undefined): string {
 
 function createPreviewKey(
   drawableId: DrawableId,
-  presetId: MeshGenerationPresetId
+  presetId: MeshGenerationPresetId,
+  method: GeneratedMeshPreviewCommitMethod
 ): string {
-  return `${drawableId}:${presetId}`;
+  return `${drawableId}:${presetId}:${method}`;
 }
 
 function formatBatchWorkflowStatus(
@@ -513,6 +587,402 @@ function formatBatchWorkflowStatus(
   }
 
   return `${eligibleTargets.length} eligible / ${excludedTargets.length} excluded`;
+}
+
+interface MeshDiagnosticView {
+  readonly title: string;
+  readonly reason: string;
+  readonly details: readonly {
+    readonly label: string;
+    readonly value: string;
+  }[];
+  readonly copyPayload: string;
+}
+
+interface MeshV6MultiIslandDiagnostics {
+  readonly rawAlphaComponentCount: number;
+  readonly keptIslandCount: number;
+  readonly generatedIslandCount: number;
+  readonly backendGeneratedIslandCount: number;
+  readonly skippedTinyNoiseIslandCount: number;
+  readonly skippedTinyNoisePixelCount: number;
+  readonly rawOpaquePixelCount: number;
+  readonly largestComponentPixelCount: number;
+  readonly localizedFallbackCount: number;
+  readonly localizedFallbackReasons: readonly {
+    readonly componentOrder: number;
+    readonly reason: string;
+  }[];
+  readonly islands: readonly {
+    readonly componentOrder: number;
+    readonly pixelCount: number;
+    readonly bounds?: unknown;
+    readonly handling: "generated" | "localized-fallback" | "kept-not-generated" | "skipped-tiny-noise";
+    readonly vertexCount?: number;
+    readonly triangleCount?: number;
+  }[];
+}
+
+type MeshV6MetricsWithMultiIslandDiagnostics =
+  NonNullable<NonNullable<MeshToolGenerationDiagnostic["qualityMetrics"]>["v6Metrics"]> & {
+    readonly multiIslandDiagnostics?: MeshV6MultiIslandDiagnostics;
+  };
+
+function MeshDiagnosticCard({ diagnostic }: { readonly diagnostic: MeshDiagnosticView }) {
+  return (
+    <section
+      className="rounded-md border border-amber-700/60 bg-amber-950/20 p-3"
+      data-testid="mesh-tool-diagnostic-card"
+    >
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-amber-200">
+        <AlertTriangle aria-hidden="true" size={14} strokeWidth={1.8} />
+        <h3>{diagnostic.title}</h3>
+      </div>
+      <p
+        className="mt-2 text-xs text-amber-100"
+        data-testid="mesh-tool-diagnostic-reason"
+      >
+        {diagnostic.reason}
+      </p>
+      <dl className="mt-3 grid gap-1.5">
+        {diagnostic.details.map((detail) => (
+          <div
+            className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 text-xs"
+            data-testid="mesh-tool-diagnostic-detail"
+            key={detail.label}
+          >
+            <dt className="text-amber-100/60">{detail.label}</dt>
+            <dd className="min-w-0 truncate text-amber-50">{detail.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <button
+        className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded border border-amber-700/70 bg-amber-950/30 px-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/30"
+        data-testid="mesh-tool-copy-diagnostic"
+        onClick={() => copyTextToClipboard(diagnostic.copyPayload)}
+        type="button"
+      >
+        <Copy aria-hidden="true" size={14} strokeWidth={1.8} />
+        Copy diagnostic details
+      </button>
+      <pre className="sr-only" data-testid="mesh-tool-diagnostic-copy-payload">
+        {diagnostic.copyPayload}
+      </pre>
+    </section>
+  );
+}
+
+function createMeshDiagnosticView(input: {
+  readonly draft: MeshToolDraft | null;
+  readonly draftsForTarget: readonly MeshToolDraft[];
+  readonly lastGenerationDiagnostic: MeshToolGenerationDiagnostic | null;
+  readonly preset: ReturnType<typeof getMeshGenerationPreset>;
+  readonly session: AuthoringSession;
+  readonly targetDrawableIds: readonly DrawableId[];
+}): MeshDiagnosticView | null {
+  if (
+    input.lastGenerationDiagnostic !== null &&
+    input.targetDrawableIds.includes(input.lastGenerationDiagnostic.drawableId)
+  ) {
+    return createMeshDiagnosticViewFromDiagnostic(input.lastGenerationDiagnostic, input.preset);
+  }
+
+  if (input.draft === null) {
+    return createFirstMeshDiagnosticViewFromDrafts(input);
+  }
+
+  const currentDraftDiagnostic = createMeshDiagnosticViewFromDraft(input.draft, input);
+  return currentDraftDiagnostic ?? createFirstMeshDiagnosticViewFromDrafts(input);
+}
+
+function createFirstMeshDiagnosticViewFromDrafts(input: {
+  readonly draftsForTarget: readonly MeshToolDraft[];
+  readonly preset: ReturnType<typeof getMeshGenerationPreset>;
+  readonly session: AuthoringSession;
+}): MeshDiagnosticView | null {
+  for (const draft of input.draftsForTarget) {
+    const diagnostic = createMeshDiagnosticViewFromDraft(draft, input);
+    if (diagnostic !== null) {
+      return diagnostic;
+    }
+  }
+
+  return null;
+}
+
+function createMeshDiagnosticViewFromDraft(
+  draft: MeshToolDraft,
+  input: {
+    readonly preset: ReturnType<typeof getMeshGenerationPreset>;
+    readonly session: AuthoringSession;
+  }
+): MeshDiagnosticView | null {
+  const drawable = input.session.graph.drawables.find(
+    (candidate) => candidate.drawableId === draft.drawableId
+  );
+  const diagnostic = createMeshDiagnosticFromDraft(draft, drawable?.displayName, input.preset);
+  return diagnostic === null ? null : createMeshDiagnosticViewFromDiagnostic(diagnostic, input.preset);
+}
+
+function createMeshDiagnosticFromDraft(
+  draft: MeshToolDraft,
+  drawableName: string | undefined,
+  preset: ReturnType<typeof getMeshGenerationPreset>
+): MeshToolGenerationDiagnostic | null {
+  const v6Metrics = draft.qualityMetrics?.v6Metrics;
+  const multiIslandDiagnostics = getMeshV6MultiIslandDiagnostics(v6Metrics);
+  const triangleCount = draft.mesh.triangles.length;
+  const isFallback =
+    draft.fallbackReason !== undefined ||
+    v6Metrics?.outputKind === "fallback-output" ||
+    v6Metrics?.outputKind === "blocked" ||
+    shouldShowMultiIslandDiagnostic(multiIslandDiagnostics);
+
+  if (triangleCount === 0) {
+    return {
+      kind: "emptyResult",
+      drawableId: draft.drawableId,
+      ...(drawableName === undefined ? {} : { drawableName }),
+      presetId: draft.presetId,
+      densityHint: preset.densityHint,
+      method: draft.method,
+      source: draft.source,
+      meshBounds: draft.mesh.bounds,
+      ...(draft.alphaBounds === undefined ? {} : { alphaBounds: draft.alphaBounds }),
+      vertexCount: draft.mesh.vertices.length,
+      triangleCount,
+      ...(draft.fallbackReason === undefined ? {} : { fallbackReason: draft.fallbackReason }),
+      ...(draft.fallbackSteps === undefined ? {} : { fallbackSteps: draft.fallbackSteps }),
+      ...(draft.qualityMetrics === undefined ? {} : { qualityMetrics: draft.qualityMetrics })
+    };
+  }
+
+  if (!isFallback) {
+    return null;
+  }
+
+  return {
+    kind: "fallback",
+    drawableId: draft.drawableId,
+    ...(drawableName === undefined ? {} : { drawableName }),
+    presetId: draft.presetId,
+    densityHint: preset.densityHint,
+    method: draft.method,
+    source: draft.source,
+    meshBounds: draft.mesh.bounds,
+    ...(draft.alphaBounds === undefined ? {} : { alphaBounds: draft.alphaBounds }),
+    vertexCount: draft.mesh.vertices.length,
+    triangleCount,
+    ...(draft.fallbackReason === undefined ? {} : { fallbackReason: draft.fallbackReason }),
+    ...(draft.fallbackSteps === undefined ? {} : { fallbackSteps: draft.fallbackSteps }),
+    ...(draft.qualityMetrics === undefined ? {} : { qualityMetrics: draft.qualityMetrics })
+  };
+}
+
+function createMeshDiagnosticViewFromDiagnostic(
+  diagnostic: MeshToolGenerationDiagnostic,
+  preset: ReturnType<typeof getMeshGenerationPreset>
+): MeshDiagnosticView {
+  const reason = formatMeshDiagnosticReason(diagnostic);
+  const payload = createMeshDiagnosticPayload(diagnostic, preset);
+  const multiIslandDetails = createMultiIslandDiagnosticDetails(diagnostic);
+
+  return {
+    title: "Mesh diagnostic",
+    reason,
+    details: [
+      { label: "Drawable", value: diagnostic.drawableName ?? diagnostic.drawableId },
+      { label: "Preset", value: preset.label },
+      { label: "Method", value: diagnostic.method },
+      {
+        label: "Triangles",
+        value: `${diagnostic.triangleCount} / ${diagnostic.vertexCount} vertices`
+      },
+      ...multiIslandDetails,
+      ...(diagnostic.fallbackReason === undefined
+        ? []
+        : [{ label: "Fallback", value: diagnostic.fallbackReason }])
+    ],
+    copyPayload: [
+      "Mesh generation diagnostic",
+      `reason: ${reason}`,
+      "payload:",
+      JSON.stringify(payload, null, 2)
+    ].join("\n")
+  };
+}
+
+function formatMeshDiagnosticReason(diagnostic: MeshToolGenerationDiagnostic): string {
+  if (diagnostic.kind === "generationFailed") {
+    return diagnostic.failureReason ?? "Mesh generation returned no preview.";
+  }
+
+  if (diagnostic.kind === "emptyResult") {
+    return "Mesh preview has 0 triangles.";
+  }
+
+  return diagnostic.fallbackReason === undefined
+    ? "Mesh generation used fallback output."
+    : `Mesh generation used fallback: ${diagnostic.fallbackReason}.`;
+}
+
+function createMeshDiagnosticPayload(
+  diagnostic: MeshToolGenerationDiagnostic,
+  preset: ReturnType<typeof getMeshGenerationPreset>
+) {
+  const v6Metrics = diagnostic.qualityMetrics?.v6Metrics;
+  const multiIsland = createMultiIslandDiagnosticPayload(v6Metrics);
+  return {
+    diagnosticKind: diagnostic.kind,
+    algorithmId: v6Metrics?.algorithmId ?? resolveLegacyAlgorithmId(diagnostic),
+    method: diagnostic.method,
+    source: diagnostic.source,
+    preset: {
+      id: diagnostic.presetId,
+      label: preset.label,
+      densityHint: diagnostic.densityHint ?? preset.densityHint
+    },
+    drawable: {
+      id: diagnostic.drawableId,
+      name: diagnostic.drawableName
+    },
+    bounds: {
+      mesh: diagnostic.meshBounds,
+      alpha: diagnostic.alphaBounds
+    },
+    counts: {
+      vertices: diagnostic.vertexCount,
+      triangles: diagnostic.triangleCount,
+      boundaryVertices: v6Metrics?.boundaryVertexCount,
+      interiorVertices: v6Metrics?.interiorVertexCount,
+      contourLoops: v6Metrics?.contourLoopCount,
+      sampledBoundaryPoints: v6Metrics?.contourPipelineDiagnostics?.boundaryPointCount,
+      removedTriangles: v6Metrics?.removedTriangleCount,
+      outsideOrCrossingTriangles: v6Metrics?.outsideOrCrossingTriangleCount
+    },
+    multiIsland,
+    fallback: {
+      reason: diagnostic.fallbackReason,
+      steps: diagnostic.fallbackSteps
+    },
+    failureReason: diagnostic.failureReason,
+    qualityMetrics: diagnostic.qualityMetrics
+  };
+}
+
+function createMultiIslandDiagnosticDetails(
+  diagnostic: MeshToolGenerationDiagnostic
+): readonly { readonly label: string; readonly value: string }[] {
+  const diagnostics = getMeshV6MultiIslandDiagnostics(diagnostic.qualityMetrics?.v6Metrics);
+  if (diagnostics === undefined) {
+    return [];
+  }
+
+  return [
+    {
+      label: "Islands",
+      value: `raw ${diagnostics.rawAlphaComponentCount} / kept ${diagnostics.keptIslandCount} / generated ${diagnostics.generatedIslandCount}`
+    },
+    ...(diagnostics.skippedTinyNoiseIslandCount === 0
+      ? []
+      : [
+          {
+            label: "Noise",
+            value: `${diagnostics.skippedTinyNoiseIslandCount} skipped / ${diagnostics.skippedTinyNoisePixelCount} px`
+          }
+        ]),
+    ...(diagnostics.localizedFallbackCount === 0
+      ? []
+      : [
+          {
+            label: "Local fail",
+            value: `${diagnostics.localizedFallbackCount}: ${formatLocalizedFallbackReasons(
+              diagnostics.localizedFallbackReasons
+            )}`
+          }
+        ])
+  ];
+}
+
+function createMultiIslandDiagnosticPayload(
+  v6Metrics: NonNullable<MeshToolGenerationDiagnostic["qualityMetrics"]>["v6Metrics"] | undefined
+) {
+  const diagnostics = getMeshV6MultiIslandDiagnostics(v6Metrics);
+  if (diagnostics === undefined) {
+    return undefined;
+  }
+
+  return {
+    multiIslandHandling: v6Metrics?.multiIslandHandling,
+    rawAlphaComponentCount: diagnostics.rawAlphaComponentCount,
+    keptIslandCount: diagnostics.keptIslandCount,
+    generatedIslandCount: diagnostics.generatedIslandCount,
+    backendGeneratedIslandCount: diagnostics.backendGeneratedIslandCount,
+    skippedTinyNoiseIslandCount: diagnostics.skippedTinyNoiseIslandCount,
+    skippedTinyNoisePixelCount: diagnostics.skippedTinyNoisePixelCount,
+    rawOpaquePixelCount: diagnostics.rawOpaquePixelCount,
+    largestComponentPixelCount: diagnostics.largestComponentPixelCount,
+    localizedFallbackCount: diagnostics.localizedFallbackCount,
+    localizedFallbackReasons: diagnostics.localizedFallbackReasons,
+    islands: diagnostics.islands.map((island) => ({
+      componentOrder: island.componentOrder,
+      pixelCount: island.pixelCount,
+      bounds: island.bounds,
+      handling: island.handling,
+      vertexCount: island.vertexCount,
+      triangleCount: island.triangleCount
+    }))
+  };
+}
+
+function shouldShowMultiIslandDiagnostic(
+  diagnostics: MeshV6MultiIslandDiagnostics | undefined
+): boolean {
+  if (diagnostics === undefined) {
+    return false;
+  }
+
+  return (
+    diagnostics.keptIslandCount === 0 ||
+    diagnostics.localizedFallbackCount > 0 ||
+    diagnostics.islands.some(
+      (island) => island.handling === "localized-fallback" || island.handling === "kept-not-generated"
+    )
+  );
+}
+
+function getMeshV6MultiIslandDiagnostics(
+  v6Metrics: NonNullable<MeshToolGenerationDiagnostic["qualityMetrics"]>["v6Metrics"] | undefined
+): MeshV6MultiIslandDiagnostics | undefined {
+  return (v6Metrics as MeshV6MetricsWithMultiIslandDiagnostics | undefined)
+    ?.multiIslandDiagnostics;
+}
+
+function formatLocalizedFallbackReasons(
+  reasons: readonly { readonly componentOrder: number; readonly reason: string }[]
+): string {
+  if (reasons.length === 0) {
+    return "none";
+  }
+
+  return reasons.map((reason) => `${reason.componentOrder}:${reason.reason}`).join(", ");
+}
+
+function resolveLegacyAlgorithmId(diagnostic: MeshToolGenerationDiagnostic): string | undefined {
+  return (
+    diagnostic.qualityMetrics?.envelopeMetrics?.algorithmId ??
+    diagnostic.qualityMetrics?.softBoundaryMetrics?.algorithmId ??
+    diagnostic.qualityMetrics?.softApronMetrics?.algorithmId ??
+    diagnostic.qualityMetrics?.contourBandMetrics?.algorithmId
+  );
+}
+
+function copyTextToClipboard(value: string): void {
+  if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
+    return;
+  }
+
+  void navigator.clipboard.writeText(value);
 }
 
 function ExistingMeshWarning({

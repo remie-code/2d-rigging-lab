@@ -12,6 +12,7 @@ import {
   BinaryAssetMediaTypeSchema,
   BinaryAssetReferenceSchema
 } from "./binary-asset.js";
+import { TextureContentInsetSchema } from "./texture-atlas.js";
 
 const PSD_EVIDENCE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_.:-]*$/;
 const PSD_LAYER_TREE_EVIDENCE_ID_PATTERN = /^layerTree_[A-Za-z0-9_-]+$/;
@@ -144,8 +145,13 @@ export const PsdLayerMaterializationEvidenceSchema = z.object({
   mediaType: BinaryAssetMediaTypeSchema,
   byteLength: BinaryAssetByteLengthSchema,
   digest: BinaryAssetDigestSchema,
+  // width/height are the padded raster dimensions (content + transparent
+  // alpha-edge border). contentInset locates the tightly-cropped content
+  // region inside that padded raster (see texture-atlas.ts
+  // TextureContentInsetSchema and boundary-transparent-margin-design.md §3.1).
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
+  contentInset: TextureContentInsetSchema.optional(),
   binaryAssetRef: BinaryAssetReferenceSchema.optional(),
   textureId: TextureIdSchema.optional(),
   provenance: PsdLayerMaterializationProvenanceSchema,

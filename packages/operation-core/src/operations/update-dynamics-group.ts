@@ -71,7 +71,10 @@ const applyUpdateDynamicsGroup = (
       dynamicsGroupId: request.payload.dynamicsGroupId,
       ...(request.payload.displayName === undefined ? {} : { displayName: request.payload.displayName }),
       ...(request.payload.enabled === undefined ? {} : { enabled: request.payload.enabled }),
-      ...(request.payload.resetPolicy === undefined ? {} : { resetPolicy: request.payload.resetPolicy })
+      ...(request.payload.presetId === undefined ? {} : { presetId: request.payload.presetId }),
+      ...(request.payload.inputs === undefined ? {} : { inputs: request.payload.inputs }),
+      ...(request.payload.chain === undefined ? {} : { chain: request.payload.chain }),
+      ...(request.payload.outputs === undefined ? {} : { outputs: request.payload.outputs })
     });
     const result = createUpdateDynamicsGroupResult({
       operationId,
@@ -84,7 +87,7 @@ const applyUpdateDynamicsGroup = (
 
     return {
       result,
-      targetIds: [request.payload.dynamicsGroupId],
+      targetIds: createUpdateDynamicsGroupTargetIds(request),
       candidateSession: session
     };
   } catch (error) {
@@ -97,7 +100,7 @@ const applyUpdateDynamicsGroup = (
         operationId,
         diagnostics: [createUpdateDynamicsGroupMutationDiagnostic(error, target)]
       }),
-      targetIds: [request.payload.dynamicsGroupId],
+      targetIds: createUpdateDynamicsGroupTargetIds(request),
       candidateSession: session
     };
   }
@@ -172,6 +175,30 @@ const createUpdateDynamicsGroupMutationDiagnostic = (
         target,
         severity: "warning"
       });
+    case "invalid_dynamics_group":
+      return createOperationDiagnostic({
+        checkId: "operation.updateDynamicsGroup.invalidDynamicsGroup",
+        message: error.message,
+        target
+      });
+    case "missing_dynamics_driver_parameter":
+      return createOperationDiagnostic({
+        checkId: "operation.updateDynamicsGroup.missingInputParameter",
+        message: error.message,
+        target
+      });
+    case "missing_dynamics_output_parameter":
+      return createOperationDiagnostic({
+        checkId: "operation.updateDynamicsGroup.missingOutputParameter",
+        message: error.message,
+        target
+      });
+    case "duplicate_dynamics_output_parameter":
+      return createOperationDiagnostic({
+        checkId: "operation.updateDynamicsGroup.duplicateOutputParameter",
+        message: error.message,
+        target
+      });
     default:
       return createOperationDiagnostic({
         checkId: "operation.updateDynamicsGroup.authoringMutationFailed",
@@ -182,3 +209,14 @@ const createUpdateDynamicsGroupMutationDiagnostic = (
 };
 
 const toJsonValue = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value)) as JsonValue;
+
+const createUpdateDynamicsGroupTargetIds = (
+  request: Extract<OperationRequestDto, { operationType: "updateDynamicsGroup" }>
+): readonly string[] => {
+  const parameterIds = [
+    ...(request.payload.inputs?.map((input) => input.parameterId) ?? []),
+    ...(request.payload.outputs?.map((output) => output.parameterId) ?? [])
+  ];
+
+  return [...new Set([request.payload.dynamicsGroupId, ...parameterIds])];
+};

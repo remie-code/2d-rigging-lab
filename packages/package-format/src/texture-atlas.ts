@@ -1,9 +1,13 @@
 import { z } from "zod";
 
 import {
+  DrawableIdSchema,
+  MeshIdSchema,
+  OperationIdSchema,
   ProvenanceIdSchema,
   SourceAssetIdSchema,
-  TextureIdSchema
+  TextureIdSchema,
+  Vec2Schema
 } from "@private-2d-rigging-lab/contracts";
 
 import { BinaryAssetReferenceSchema } from "./binary-asset.js";
@@ -56,10 +60,38 @@ export const TexturePreviewAssetSchema = z.object({
 });
 export type TexturePreviewAssetDto = z.infer<typeof TexturePreviewAssetSchema>;
 
+// Content inset (source texture pixels) describing where the tightly-cropped
+// content region sits inside a padded layer raster. See §3.1/§5 of
+// discussion/design/mesh-rendering/boundary-transparent-margin-design.md:
+// layer rasters carry a transparent alpha-edge border so contour overshoot
+// (covering margin) samples transparency rather than stretched edge texels.
+// This breaks the historical `bounds ≡ raster` identity, so the inset is the
+// explicit bridge between padded raster dimensions (`dimensions`) and content
+// bounds (stage `mesh.bounds`). Four-sided form stays robust to future
+// non-uniform padding; today all four sides equal the per-layer padding P
+// (= maxCoverageMarginSourcePixels(longEdge)).
+export const TextureContentInsetSchema = z.object({
+  left: z.number().int().nonnegative(),
+  top: z.number().int().nonnegative(),
+  right: z.number().int().nonnegative(),
+  bottom: z.number().int().nonnegative()
+});
+export type TextureContentInsetDto = z.infer<typeof TextureContentInsetSchema>;
+
 export const TextureAtlasEntrySchema = z.object({
   textureId: TextureIdSchema,
   filePath: PackageLocalTextureAssetPathSchema,
   contentHash: z.string().optional(),
+  // `dimensions` are the padded raster dimensions (content + 2K border) once
+  // transparent padding has been baked. Consumers that need the content region
+  // must combine `dimensions` with `contentInset` (below) — do not assume
+  // `dimensions` equal the content bounds.
+  dimensions: z.object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+    pixelFormat: z.literal("rgba8")
+  }).optional(),
+  contentInset: TextureContentInsetSchema.optional(),
   sourceAssetId: SourceAssetIdSchema.optional(),
   sourceLayerId: z.string().optional(),
   provenanceId: ProvenanceIdSchema.optional(),
@@ -67,9 +99,108 @@ export const TextureAtlasEntrySchema = z.object({
 });
 export type TextureAtlasEntryDto = z.infer<typeof TextureAtlasEntrySchema>;
 
+export const TextureAtlasRectPixelsSchema = z.object({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive()
+});
+export type TextureAtlasRectPixelsDto = z.infer<typeof TextureAtlasRectPixelsSchema>;
+
+export const TextureAtlasSizePixelsSchema = z.object({
+  width: z.number().int().positive(),
+  height: z.number().int().positive()
+});
+export type TextureAtlasSizePixelsDto = z.infer<typeof TextureAtlasSizePixelsSchema>;
+
+export const TextureAtlasUvRectSchema = z.object({
+  topLeft: Vec2Schema,
+  bottomRight: Vec2Schema
+});
+export type TextureAtlasUvRectDto = z.infer<typeof TextureAtlasUvRectSchema>;
+
+export const TextureAtlasPlacementSchema = z.object({
+  placementId: z.string().regex(/^atlas_place_[A-Za-z0-9_-]+$/),
+  pageId: z.string().regex(/^atlas_page_[A-Za-z0-9_-]+$/),
+  drawableId: DrawableIdSchema,
+  meshId: MeshIdSchema,
+  originalTextureId: TextureIdSchema,
+  atlasTextureId: TextureIdSchema,
+  sourceTextureSize: TextureAtlasSizePixelsSchema,
+  sourceRectPixels: TextureAtlasRectPixelsSchema,
+  contentRectPixels: TextureAtlasRectPixelsSchema,
+  paddedRectPixels: TextureAtlasRectPixelsSchema,
+  uvRect: TextureAtlasUvRectSchema,
+  hiddenAtApply: z.boolean().default(false),
+  hiddenReasons: z.array(z.enum([
+    "runtime-visibility-off",
+    "editor-part-hidden"
+  ])).default([])
+});
+export type TextureAtlasPlacementDto = z.infer<typeof TextureAtlasPlacementSchema>;
+
+export const TextureAtlasPageSchema = z.object({
+  pageId: z.string().regex(/^atlas_page_[A-Za-z0-9_-]+$/),
+  textureId: TextureIdSchema,
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  pixelFormat: z.literal("rgba8"),
+  placements: z.array(TextureAtlasPlacementSchema)
+});
+export type TextureAtlasPageDto = z.infer<typeof TextureAtlasPageSchema>;
+
+export const TextureAtlasPackingAlgorithmIdSchema = z.enum([
+  "single-page-shelf-v1",
+  "single-page-skyline-v1"
+]);
+export type TextureAtlasPackingAlgorithmIdDto = z.infer<
+  typeof TextureAtlasPackingAlgorithmIdSchema
+>;
+
+export const TextureAtlasLayoutSettingsSchema = z.object({
+  algorithmId: TextureAtlasPackingAlgorithmIdSchema,
+  pageWidth: z.number().int().positive(),
+  pageHeight: z.number().int().positive(),
+  paddingPixels: z.number().int().nonnegative(),
+  edgeExtrusion: z.object({
+    enabled: z.boolean(),
+    pixels: z.number().int().nonnegative()
+  })
+});
+export type TextureAtlasLayoutSettingsDto = z.infer<
+  typeof TextureAtlasLayoutSettingsSchema
+>;
+
+export const TextureAtlasSourceSignatureSchema = z.object({
+  schemaVersion: z.literal("texture-atlas-source-signature-v1"),
+  inputVersion: z.literal("atlas-source-inputs-v1"),
+  algorithmId: z.literal("stable-json-fnv1a32-v1"),
+  digest: z.string().regex(/^fnv1a32:[a-f0-9]{8}$/),
+  boundDrawableIds: z.array(DrawableIdSchema),
+  packableDrawableIds: z.array(DrawableIdSchema)
+});
+export type TextureAtlasSourceSignatureDto = z.infer<
+  typeof TextureAtlasSourceSignatureSchema
+>;
+
+export const TextureAtlasLayoutSummarySchema = z.object({
+  schemaVersion: z.literal("texture-atlas-layout-v1"),
+  layoutId: z.string().regex(/^atlas_layout_[A-Za-z0-9_-]+$/),
+  atlasTextureId: TextureIdSchema,
+  sourceTexturePolicy: z.literal("retain-source-textures-v1"),
+  generatedByOperationId: OperationIdSchema.optional(),
+  sourceSignature: TextureAtlasSourceSignatureSchema.optional(),
+  settings: TextureAtlasLayoutSettingsSchema,
+  pages: z.array(TextureAtlasPageSchema).length(1)
+});
+export type TextureAtlasLayoutSummaryDto = z.infer<
+  typeof TextureAtlasLayoutSummarySchema
+>;
+
 export const TextureAtlasFileSchema = z.object({
   schemaVersion: z.literal("texture-atlas-v1"),
   textures: z.array(TextureAtlasEntrySchema),
-  previewAssets: z.array(TexturePreviewAssetSchema).optional()
+  previewAssets: z.array(TexturePreviewAssetSchema).optional(),
+  layoutSummary: TextureAtlasLayoutSummarySchema.optional()
 });
 export type TextureAtlasFileDto = z.infer<typeof TextureAtlasFileSchema>;

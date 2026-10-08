@@ -22,8 +22,7 @@ const runtimeState = {
   accumulatorMs: 0,
   dynamicsGroups: {
     dyn_hairSway: {
-      position: 0.25,
-      velocity: -0.1,
+      particles: [{ x: 0, y: 14, px: 0.1, py: 13.9 }],
       tick: 12,
       resetCounter: 1
     }
@@ -65,8 +64,7 @@ describe("runtime state DTO", () => {
         ...runtimeState,
         dynamicsGroups: {
           dyn_hairSway: {
-            position: Number.POSITIVE_INFINITY,
-            velocity: 0,
+            particles: [{ x: Number.POSITIVE_INFINITY, y: 0, px: 0, py: 0 }],
             tick: 0,
             resetCounter: 0
           }

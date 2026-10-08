@@ -8,7 +8,7 @@
 
 この階層は、ドメイン別ACを保持する。
 
-現在のRoot/MVP baselineは Private 2D Rigging Lab / Prototype である。Domain AC本文は、Private PrototypeのCurrent範囲、Optional範囲、Future / out of current MVP範囲へ整理済みである。
+現在のRoot/MVP baselineは Private 2D Rigging Lab / Prototype である。Domain AC本文は、Private PrototypeのCurrent範囲、Optional範囲、Future / out of current MVP範囲へ整理済みである。ACはproduct requirementの合否オラクルであり、Dynamics の schema / solver / cardinality の具体的実装意味論は accepted [dynamics-file-v3 design](../../design/dynamics-world-frame-chain.md) と [Wave106](../../implementation/waves/wave106/_map.md) を参照する。
 
 ## 直下のファイル
 
@@ -23,7 +23,7 @@
 | [206_Part_Visibility_and_Composition_Semantics.md](206_Part_Visibility_and_Composition_Semantics.md) | Part, Visibility, and Composition Semantics | Current / Private Prototypeへ整理済み |
 | [207_Facial_Motion_Modeling.md](207_Facial_Motion_Modeling.md) | Facial Motion Modeling | Current / manual authored parameter gridへ整理済み |
 | [208_Body_and_Secondary_Motion_Modeling.md](208_Body_and_Secondary_Motion_Modeling.md) | Body and Secondary Motion Modeling | Current / manual seam + hairSway keyformへ整理済み |
-| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | Open Dynamics and Secondary Motion | Current MVP for Minimum Open Dynamics v1 RuntimeState evidenceへ更新済み |
+| [209_Physics_and_Dynamic_Behavior.md](209_Physics_and_Dynamic_Behavior.md) | Open Dynamics and Secondary Motion | Current MVP for Minimum Open Dynamics v1 RuntimeState evidenceの要求オラクルへ更新済み（具体的Dynamics semanticsはdesign/Wave106） |
 | [210_Animation_and_Timeline_Production.md](210_Animation_and_Timeline_Production.md) | Animation and Timeline Production | Optional / current MVP外へ分類済み |
 | [211_Runtime_Export_and_Compatibility.md](211_Runtime_Export_and_Compatibility.md) | Project Package Save and Runtime Readiness | Current / project-defined packageへ整理済み |
 | [212_Model_Verification.md](212_Model_Verification.md) | Model Verification | Current / demo-safe分類を含め整理済み |
@@ -43,7 +43,7 @@
 
 ## 次の行動
 
-1. 実装時にCurrent domainをmodule contract / testsへ落とす。
+1. Current domainのACを実装済みmodule contract / testsへ照合し、未達・再設計・人間ゲートを列挙する。
 2. Future domainを再開する場合は、別途ユーザー判断、rights/dependency review、scope再定義を行う。
 3. Demo/proposal運用時にhygiene ruleを更新する。
 
@@ -53,3 +53,4 @@
 |------|------|
 | Domain ACのmemo対応 | 完了 |
 | Future Public Clean Subset 用Domain | SDK/API/配信アプリ/sample公開をFuture分類として保持。詳細設計は別課題 |
+| Domain-09 のDynamics v3 semantics/cardinalityをAC本文へ反映する時期・表現 | accepted design/Wave106の実装意味論を参照しつつ、要求文面の追跡方法はユーザー判断 |

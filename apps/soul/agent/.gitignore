@@ -1,0 +1,44 @@
+# 魂 zone（apps/soul/agent）ローカル .gitignore — S2 Domain A で新設。
+# 器の領分（リポジトリルート .gitignore）には触れない。この無視は魂 zone 内に閉じる。
+
+# ── whisper.cpp バイナリ一式 + ASR/VAD モデル（非コミット）────────────────────
+# ユーザーが wave 発進前に配置する外部成果物（whisper-server.exe 等 + kotoba q5_0 ≈538MB +
+# silero_vad.onnx ≈2.3MB）。巨大バイナリ・モデルをリポジトリに載せない（S2 計画 §2）。
+# パスは設定で上書き可能なので、vendor/ 配置は既定であって強制ではない。
+vendor/
+
+# ── 操縦席 UI の凍結 vendor（preact+htm standalone・コミットして持つ）─────────────
+# 上の `vendor/` は un-anchored ゆえ任意深さの vendor/ を無視し、操縦席 UI 改定で新設する
+# src/cockpit/vendor/（ブラウザ配信の凍結ソース・htm.preact.standalone.mjs ≈13KB・実行時 npm 依存
+# ゼロ）まで巻き込む。UI vendor は whisper の巨大バイナリとは性格が異なり**リポジトリにコミットして
+# 持つ**（wave 計画 §2/§3・ソース=実行物）。この 1 サブツリーだけ無視を解く（whisper vendor は無視のまま）。
+!src/cockpit/vendor/
+!src/cockpit/vendor/*.mjs
+
+# ── マイク録音・一時音声データ（プライバシー: リポジトリ/成果物に残さない）──────
+# 実マイクの録音物や中間 PCM/WAV を魂 zone に一切コミットしない（S2 計画 §4・blocking 基準4）。
+# 機械テストは合成 PCM を in-memory で扱い、ディスクに書かない。preflight 等が書く一時 WAV は
+# OS の temp 配下（リポジトリ外）だが、万一 zone 内へ書いた場合の安全網としてここでも無視する。
+*.wav
+*.pcm
+*.raw
+recordings/
+
+# ── コクピットのデバイス選択の永続化（S2.5 Domain B・非コミット）──────────────
+# 操縦席で選んだマイクの記憶（cockpit-settings-store.mjs の既定保存先）。ローカル運用の設定で
+# あって成果物ではない（wave 計画 §2「マイク選択の記憶は魂ローカルの設定・gitignore 対象」）。
+cockpit-settings.local.json
+
+# ── Codex 頭の rollout 掃除台帳（多頭化 Domain A・非コミット）────────────────
+# 自分が作った thread_id の sidecar 台帳（codex-session.mjs）。~/.codex/sessions の rollout を
+# 完全一致だけで掃除するための記録であり、cockpit-settings.local.json と同格の魂ローカル設定。
+codex-rollouts.local.json
+
+# ── 配信間記憶のダイジェスト（配信間記憶 Domain A・非コミット）────────────────
+# 1 配信 1 ファイルの人間可読 Markdown（memory.mjs saveDigest の既定保存先）。視聴者名は書かせない
+# 生成指示だが、記憶の主権はファイルシステム側にある運用面のローカル資産であり成果物ではない
+# （stream-memory.md 裁定 5）。
+memories/
+
+# ── Fire latency/failure diagnostics（自動・ローカル・bounded JSONL）────────────
+fire-diagnostics/

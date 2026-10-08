@@ -37,12 +37,12 @@ import {
 import type { ValidationReportDto } from "../../validator-core/src/index.js";
 
 const CREATED_AT = "2026-05-31T00:00:00.000Z";
-const PACKAGE_HASH = "sha256:minimum-open-dynamics-v1-evidence";
-const ARTIFACT_LABEL = "minimum-open-dynamics-v1-evidence";
+const PACKAGE_HASH = "sha256:minimum-open-dynamics-v2-evidence";
+const ARTIFACT_LABEL = "minimum-open-dynamics-v2-evidence";
 const DRIVER_PARAMETER_ID = "param_face_yaw";
 const OUTPUT_PARAMETER_ID = "param_hair_sway";
 
-describe("minimum-open-dynamics-v1-evidence operation contract fixture", () => {
+describe("minimum-open-dynamics-v2-evidence operation contract fixture", () => {
   it("parses fixture createDynamicsGroup requests through operation-core DTOs", () => {
     const dryRunRequest = OperationRequestSchema.parse(
       loadFixtureJson("request/create-dynamics-group-dry-run.request.json")
@@ -56,16 +56,12 @@ describe("minimum-open-dynamics-v1-evidence operation contract fixture", () => {
       dryRun: true,
       payload: {
         dynamicsGroupId: "dyn_hair_sway",
-        solverKind: "scalarDampedFollowV1",
-        drivers: [
+        inputs: [
           {
-            sourceParameterId: DRIVER_PARAMETER_ID
+            parameterId: DRIVER_PARAMETER_ID
           }
         ],
-        output: {
-          targetParameterId: OUTPUT_PARAMETER_ID,
-          clampPolicy: "clamp-to-output-range"
-        }
+        outputs: [{ parameterId: OUTPUT_PARAMETER_ID }]
       }
     });
     expect(commitRequest).toMatchObject({

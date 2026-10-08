@@ -40,13 +40,11 @@
         "afterSnapshotId": "snap_preview_viewer_equivalence_1",
         "parameterChangeCount": 2,
         "dynamicsChangeCount": 1,
-        "drawableGeometryChangeCount": 1,
+        "drawableGeometryChangeCount": 0,
         "drawableRuntimeStateChangeCount": 0,
         "drawListChangeCount": 0,
         "diagnosticDeltaCount": 0,
-        "affectedDrawableIds": [
-          "draw_hair"
-        ]
+        "affectedDrawableIds": []
       }
     },
     "comparable": {
@@ -69,15 +67,19 @@
           "parameterId": "param_face_yaw",
           "valueSource": "authoredInput",
           "authoredValue": 1,
+          "baseValue": 1,
           "effectiveValue": 1,
-          "clamped": false
+          "clamped": false,
+          "source": "viewerOverride"
         },
         {
           "parameterId": "param_hair_sway",
-          "valueSource": "computedDynamics",
-          "computedValue": 1,
-          "effectiveValue": 1,
-          "clamped": false
+          "valueSource": "authoredInput",
+          "baseValue": 0,
+          "dynamicsOffset": -0.9990000000000001,
+          "effectiveValue": -0.9990000000000001,
+          "clamped": false,
+          "source": "dynamicsAdditive"
         }
       ],
       "targetedKeyforms": [
@@ -85,12 +87,12 @@
           "keyformSetId": "keyset_hair_sway_vertices",
           "evaluator": "linear-1d-v1",
           "sampledCoordinates": {
-            "param_hair_sway": 1
+            "param_hair_sway": 0
           },
           "target": "mesh:mesh_hair.vertices",
           "compositionMode": "replace",
           "compositionOrder": 0,
-          "samplingStatus": "exact"
+          "samplingStatus": "clamped-min"
         }
       ],
       "targetedDrawables": [
@@ -102,24 +104,24 @@
           "baseDrawOrder": 20,
           "evaluatedDrawOrder": 20,
           "bounds": {
-            "x": 0.25,
-            "y": 0.5,
+            "x": 0,
+            "y": 0,
             "width": 2,
             "height": 2
           },
           "vertexCount": 3,
           "vertices": [
             {
-              "x": 0.25,
-              "y": 0.5
+              "x": 0,
+              "y": 0
             },
             {
-              "x": 2.25,
-              "y": 0.75
+              "x": 2,
+              "y": 0
             },
             {
-              "x": 0.5,
-              "y": 2.5
+              "x": 0,
+              "y": 2
             }
           ]
         }
@@ -127,13 +129,16 @@
       "targetedDynamics": [
         {
           "dynamicsGroupId": "dyn_hair_sway",
-          "driverValues": {
+          "solverKind": "worldFrameChainV1",
+          "inputValues": {
             "param_face_yaw": 1
           },
           "outputParameterId": "param_hair_sway",
-          "outputValue": 1,
-          "position": 1,
-          "velocity": 0,
+          "outputOffset": -0.9990000000000001,
+          "effectiveOutputValue": -0.9990000000000001,
+          "particleCount": 1,
+          "maxParticleSpeed": 0,
+          "tipAngleLocalDeg": -30,
           "tick": 0,
           "resetCounter": 2
         }
@@ -143,13 +148,11 @@
         "afterSnapshotId": "snap_preview_viewer_equivalence_1",
         "parameterChangeCount": 2,
         "dynamicsChangeCount": 1,
-        "drawableGeometryChangeCount": 1,
+        "drawableGeometryChangeCount": 0,
         "drawableRuntimeStateChangeCount": 0,
         "drawListChangeCount": 0,
         "diagnosticDeltaCount": 0,
-        "affectedDrawableIds": [
-          "draw_hair"
-        ]
+        "affectedDrawableIds": []
       }
     }
   },
@@ -188,15 +191,19 @@
           "parameterId": "param_face_yaw",
           "valueSource": "authoredInput",
           "authoredValue": 1,
+          "baseValue": 1,
           "effectiveValue": 1,
-          "clamped": false
+          "clamped": false,
+          "source": "viewerOverride"
         },
         {
           "parameterId": "param_hair_sway",
-          "valueSource": "computedDynamics",
-          "computedValue": 1,
-          "effectiveValue": 1,
-          "clamped": false
+          "valueSource": "authoredInput",
+          "baseValue": 0,
+          "dynamicsOffset": -0.9990000000000001,
+          "effectiveValue": -0.9990000000000001,
+          "clamped": false,
+          "source": "dynamicsAdditive"
         }
       ],
       "targetedKeyforms": [
@@ -204,12 +211,12 @@
           "keyformSetId": "keyset_hair_sway_vertices",
           "evaluator": "linear-1d-v1",
           "sampledCoordinates": {
-            "param_hair_sway": 1
+            "param_hair_sway": 0
           },
           "target": "mesh:mesh_hair.vertices",
           "compositionMode": "replace",
           "compositionOrder": 0,
-          "samplingStatus": "exact"
+          "samplingStatus": "clamped-min"
         }
       ],
       "targetedDrawables": [
@@ -221,24 +228,24 @@
           "baseDrawOrder": 20,
           "evaluatedDrawOrder": 20,
           "bounds": {
-            "x": 0.25,
-            "y": 0.5,
+            "x": 0,
+            "y": 0,
             "width": 2,
             "height": 2
           },
           "vertexCount": 3,
           "vertices": [
             {
-              "x": 0.25,
-              "y": 0.5
+              "x": 0,
+              "y": 0
             },
             {
-              "x": 2.25,
-              "y": 0.75
+              "x": 2,
+              "y": 0
             },
             {
-              "x": 0.5,
-              "y": 2.5
+              "x": 0,
+              "y": 2
             }
           ]
         }
@@ -246,13 +253,16 @@
       "targetedDynamics": [
         {
           "dynamicsGroupId": "dyn_hair_sway",
-          "driverValues": {
+          "solverKind": "worldFrameChainV1",
+          "inputValues": {
             "param_face_yaw": 1
           },
           "outputParameterId": "param_hair_sway",
-          "outputValue": 1,
-          "position": 1,
-          "velocity": 0,
+          "outputOffset": -0.9990000000000001,
+          "effectiveOutputValue": -0.9990000000000001,
+          "particleCount": 1,
+          "maxParticleSpeed": 0,
+          "tipAngleLocalDeg": -30,
           "tick": 0,
           "resetCounter": 2
         }
@@ -262,13 +272,11 @@
         "afterSnapshotId": "snap_preview_viewer_equivalence_1",
         "parameterChangeCount": 2,
         "dynamicsChangeCount": 1,
-        "drawableGeometryChangeCount": 1,
+        "drawableGeometryChangeCount": 0,
         "drawableRuntimeStateChangeCount": 0,
         "drawListChangeCount": 0,
         "diagnosticDeltaCount": 0,
-        "affectedDrawableIds": [
-          "draw_hair"
-        ]
+        "affectedDrawableIds": []
       }
     }
   },

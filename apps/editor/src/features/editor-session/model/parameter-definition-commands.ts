@@ -1,4 +1,7 @@
-import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
+import {
+  cloneAuthoringSessionForGraphEdit,
+  type AuthoringSession
+} from "@private-2d-rigging-lab/authoring-core";
 import {
   createOperationCore,
   OperationRequestSchema,
@@ -52,7 +55,7 @@ function commitSingleParameterOperation(
   session: AuthoringSession,
   draft: ParameterOperationDraft
 ): EditorSessionCommandResult {
-  const nextSession = structuredClone(session);
+  const nextSession = cloneAuthoringSessionForGraphEdit(session);
   const result = commitParameterOperationInPlace(nextSession, draft);
   return result.committed ? { ...result, session: nextSession } : { ...result, session };
 }

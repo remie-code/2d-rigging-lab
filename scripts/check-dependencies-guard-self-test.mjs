@@ -34,6 +34,36 @@ const testCases = [
     }
   },
   {
+    name: "forbidden lockfile mention via real cmo3 package name (v9)",
+    expectedStatus: 1,
+    expectedOutput: "Cubism cmo3 parser/runtime dependency",
+    files: {
+      "pnpm-lock.yaml":
+        "packages:\n\n  cmo3-parser@2.3.4:\n    resolution: {integrity: sha512-deadbeef==}\n"
+    }
+  },
+  {
+    name: "forbidden lockfile mention via scoped moc3 package name (v9)",
+    expectedStatus: 1,
+    expectedOutput: "Cubism moc3 parser/runtime dependency",
+    files: {
+      "pnpm-lock.yaml":
+        "packages:\n\n  '@vendor/moc3-loader@1.0.0':\n    resolution: {integrity: sha512-abcd==}\n"
+    }
+  },
+  {
+    name: "lockfile integrity-hash substring is not a false positive",
+    expectedStatus: 0,
+    files: {
+      // The `cmo3` substring appears only inside the base64 integrity hash of an
+      // unrelated generic package. It must not be mistaken for a Cubism cmo3
+      // dependency. Regression guard for the check-dependencies lockfile scan.
+      "pnpm-lock.yaml":
+        "packages:\n\n  truncate-utf8-bytes@1.0.2:\n" +
+        "    resolution: {integrity: sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcmo3O5Au6SO3AWCSEfW4mQ==}\n"
+    }
+  },
+  {
     name: "forbidden asset path",
     expectedStatus: 1,
     expectedOutput: "Cubism model descriptor",

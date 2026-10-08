@@ -3,3 +3,17 @@ dist/
 coverage/
 .vitest/
 *.tsbuildinfo
+ref/
+llm-workspace
+
+# Compiled TS output must never shadow source .ts under src/.
+# Vite/vitest resolve a `./foo.js` specifier to the sibling `foo.ts`, so a stale
+# compiled `foo.js` silently shadows source and makes tests run old logic
+# (wave108: 501 stale .js purged). Ignore compiled .js in src; keep the two
+# hand-written runtime .js that have no .ts sibling.
+packages/*/src/**/*.js
+apps/*/src/**/*.js
+!packages/authoring-core/src/mesh-generation-v6b-constrainautor-runtime.js
+!packages/authoring-core/src/mesh-generation-v7-constrainautor-runtime.js
+# Scratch output (logs, screenshots, browser profiles) never belongs in git.
+tmp/

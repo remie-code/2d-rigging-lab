@@ -1,0 +1,252 @@
+[
+  {
+    "file": "92-show-irides-l.json",
+    "operationId": "op_cp02b_show_irides_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7081_irides-l"
+      },
+      "runtimeVisibility": true
+    },
+    "gitMessage": "[cp02] restore normal irides-l visible (final structure needs all sets)"
+  },
+  {
+    "file": "92-show-irides-r.json",
+    "operationId": "op_cp02b_show_irides_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7143_irides-r"
+      },
+      "runtimeVisibility": true
+    },
+    "gitMessage": "[cp02] restore normal irides-r visible (final structure needs all sets)"
+  },
+  {
+    "file": "92-show-eyelash-l.json",
+    "operationId": "op_cp02b_show_eyelash_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f70a0_eyelash-l"
+      },
+      "runtimeVisibility": true
+    },
+    "gitMessage": "[cp02] restore normal eyelash-l visible (final structure needs all sets)"
+  },
+  {
+    "file": "92-show-eyelash-r.json",
+    "operationId": "op_cp02b_show_eyelash_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7162_eyelash-r"
+      },
+      "runtimeVisibility": true
+    },
+    "gitMessage": "[cp02] restore normal eyelash-r visible (final structure needs all sets)"
+  },
+  {
+    "file": "92-show-eyewhite-l.json",
+    "operationId": "op_cp02b_show_eyewhite_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7024_eyewhite-l"
+      },
+      "runtimeVisibility": true
+    },
+    "gitMessage": "[cp02] restore normal eyewhite-l visible (final structure needs all sets)"
+  },
+  {
+    "file": "92-show-eyewhite-r.json",
+    "operationId": "op_cp02b_show_eyewhite_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7005_eyewhite-r"
+      },
+      "runtimeVisibility": true
+    },
+    "gitMessage": "[cp02] restore normal eyewhite-r visible (final structure needs all sets)"
+  },
+  {
+    "file": "93-mesh-close-lash-l.json",
+    "operationId": "op_cp02b_mesh_close_lash_l",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_5246caa2_eyelash-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp02] generateMesh close-eye lash l"
+  },
+  {
+    "file": "93-mesh-close-lash-r.json",
+    "operationId": "op_cp02b_mesh_close_lash_r",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_5246ca83_eyelash-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[cp02] generateMesh close-eye lash r"
+  },
+  {
+    "file": "94-deformer-eye-l-open.json",
+    "operationId": "op_cp02b_deformer_eye_l_open",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye L Open",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f70a0_eyelash-l",
+        "draw_r0_1cea4f6f_3a8f7024_eyewhite-l"
+      ],
+      "childRigControlIds": [
+        "rig_eyeball_l_warp"
+      ],
+      "domainBounds": {
+        "x": 1012,
+        "y": 386,
+        "width": 122,
+        "height": 93
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eye L Open"
+  },
+  {
+    "file": "94-deformer-eye-r-open.json",
+    "operationId": "op_cp02b_deformer_eye_r_open",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye R Open",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_3a8f7162_eyelash-r",
+        "draw_r0_1cea4f6f_3a8f7005_eyewhite-r"
+      ],
+      "childRigControlIds": [
+        "rig_eyeball_r_warp"
+      ],
+      "domainBounds": {
+        "x": 855,
+        "y": 394,
+        "width": 133,
+        "height": 94
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eye R Open"
+  },
+  {
+    "file": "94-deformer-eye-l-half.json",
+    "operationId": "op_cp02b_deformer_eye_l_half",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye L Half",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_ee159d61_eyelash-l",
+        "draw_r0_1cea4f6f_ee159ce5_eyewhite-l"
+      ],
+      "childRigControlIds": [
+        "rig_eyeball_l_half_warp"
+      ],
+      "domainBounds": {
+        "x": 1010,
+        "y": 411,
+        "width": 121,
+        "height": 66
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eye L Half"
+  },
+  {
+    "file": "94-deformer-eye-r-half.json",
+    "operationId": "op_cp02b_deformer_eye_r_half",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye R Half",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_ee159d00_eyelash-r",
+        "draw_r0_1cea4f6f_ee159c84_eyewhite-r"
+      ],
+      "childRigControlIds": [
+        "rig_eyeball_r_half_warp"
+      ],
+      "domainBounds": {
+        "x": 856,
+        "y": 420,
+        "width": 126,
+        "height": 65
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eye R Half"
+  },
+  {
+    "file": "94-deformer-eye-l-close.json",
+    "operationId": "op_cp02b_deformer_eye_l_close",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye L Close",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5246caa2_eyelash-l"
+      ],
+      "childRigControlIds": [],
+      "domainBounds": {
+        "x": 1024,
+        "y": 434,
+        "width": 108,
+        "height": 50
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eye L Close"
+  },
+  {
+    "file": "94-deformer-eye-r-close.json",
+    "operationId": "op_cp02b_deformer_eye_r_close",
+    "operationType": "createWarpDeformer",
+    "payload": {
+      "displayName": "Eye R Close",
+      "childDrawableIds": [
+        "draw_r0_1cea4f6f_5246ca83_eyelash-r"
+      ],
+      "childRigControlIds": [],
+      "domainBounds": {
+        "x": 857,
+        "y": 440,
+        "width": 109,
+        "height": 52
+      },
+      "transformColumns": 5,
+      "transformRows": 4,
+      "bezierColumns": 2,
+      "bezierRows": 2
+    },
+    "gitMessage": "[cp02] createWarpDeformer Eye R Close"
+  }
+]

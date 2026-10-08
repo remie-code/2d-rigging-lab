@@ -124,6 +124,80 @@ describe("editKeyformKey operation handler", () => {
     expect(getKeyformSetById(session.graph, expectedDrawableOpacityKeyformSetId())).toBeUndefined();
   });
 
+  it("deletes an existing binding whose keyform set id is not the generated binding id", () => {
+    const session = createFixtureSession();
+    const legacyKeyformSetId = KeyformSetIdSchema.parse("keyset_legacy_drawable_opacity");
+    session.graph.keyformSets.push({
+      keyformSetId: legacyKeyformSetId,
+      target: { kind: "drawable", id: "draw_face", property: "opacity" },
+      parameterId: ParameterIdSchema.parse("param_face_yaw"),
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [{ value: 0.3, statePatch: 0.5 }]
+    });
+    session.graph.stableOrder.push(legacyKeyformSetId);
+    const deleteRequest = createEditRequest({
+      dryRun: false,
+      action: "deleteCurrent",
+      keyValue: 0.3000004
+    });
+
+    const outcome = editKeyformKeyOperationHandler.commit(
+      session,
+      deleteRequest,
+      getRequestOperationId(deleteRequest)
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(outcome.result.modelDiff?.removed).toEqual([
+      { kind: "keyformSet", id: legacyKeyformSetId }
+    ]);
+    expect(getKeyformSetById(session.graph, legacyKeyformSetId)).toBeUndefined();
+    expect(session.graph.stableOrder).not.toContain(legacyKeyformSetId);
+  });
+
+  it("deletes a non-number rig-control key from a restored binding id", () => {
+    const session = createFixtureSession();
+    const restoredKeyformSetId = KeyformSetIdSchema.parse(
+      "keyset_restored_rotation_translation"
+    );
+    session.graph.keyformSets.push({
+      keyformSetId: restoredKeyformSetId,
+      target: { kind: "rigControl", id: "rig_head_rotation", property: "translation" },
+      parameterId: ParameterIdSchema.parse("param_face_yaw"),
+      evaluator: "linear-1d-v1",
+      interpolation: "linear-1d-v1",
+      compositionMode: "replace",
+      compositionOrder: 0,
+      keys: [
+        { value: -30, statePatch: { x: -2, y: 1 } },
+        { value: 30, statePatch: { x: 2, y: -1 } }
+      ]
+    });
+    session.graph.stableOrder.push(restoredKeyformSetId);
+    const deleteRequest = createEditRequest({
+      dryRun: false,
+      action: "deleteCurrent",
+      targetKind: "rigControl",
+      targetId: "rig_head_rotation",
+      targetProperty: "translation",
+      keyValue: 30
+    });
+
+    const outcome = editKeyformKeyOperationHandler.commit(
+      session,
+      deleteRequest,
+      getRequestOperationId(deleteRequest)
+    );
+
+    expect(outcome.result.status).toBe("committed");
+    expect(getKeyformSetById(session.graph, restoredKeyformSetId)?.keys).toEqual([
+      { value: -30, statePatch: { x: -2, y: 1 } }
+    ]);
+  });
+
   it("creates Ends and Ends+Center keys at parameter range positions", () => {
     const session = createFixtureSession();
     const endsRequest = createEditRequest({
@@ -305,6 +379,28 @@ describe("editKeyformKey operation handler", () => {
       target: { kind: "rigControl", id: "rig_head_rotation", property: "translation" },
       keys: [{ value: 10, statePatch: { x: 2, y: -3 } }]
     });
+  });
+
+  it("rejects warp controlPointOffsets with invalid cardinality without mutation", () => {
+    const session = createFixtureSession();
+
+    expectRejectedWithoutMutation(
+      session,
+      createEditRequest({
+        dryRun: false,
+        action: "addCurrent",
+        targetKind: "rigControl",
+        targetId: "rig_head_warp",
+        targetProperty: "controlPointOffsets",
+        keyValue: 0,
+        statePatchValue: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 0, y: 1 }
+        ]
+      }),
+      "operation.editKeyformKey.invalidPatchShape"
+    );
   });
 
   it("rejects duplicate key, missing key, missing binding, duplicate binding, missing parameter, and missing target atomically", () => {

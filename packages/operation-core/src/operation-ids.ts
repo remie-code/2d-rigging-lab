@@ -53,6 +53,24 @@ export const createDynamicsGroupIdFromDisplayName = (displayName: string): Dynam
 export const createRigControlIdFromDisplayName = (displayName: string): RigControlId =>
   RigControlIdSchema.parse(`rig_${sanitizeIdToken(displayName)}`);
 
+export const createAvailableRigControlIdFromDisplayName = (
+  displayName: string,
+  existingRigControlIds: readonly RigControlId[]
+): RigControlId => {
+  const existingIds = new Set<string>(existingRigControlIds);
+  const baseRigControlId = createRigControlIdFromDisplayName(displayName);
+  if (!existingIds.has(baseRigControlId)) {
+    return baseRigControlId;
+  }
+
+  for (let suffix = 2; ; suffix += 1) {
+    const candidateRigControlId = RigControlIdSchema.parse(`${baseRigControlId}_${suffix}`);
+    if (!existingIds.has(candidateRigControlId)) {
+      return candidateRigControlId;
+    }
+  }
+};
+
 export const createMaskRelationIdFromDrawableIds = (
   maskDrawableIds: readonly DrawableId[],
   targetDrawableIds: readonly DrawableId[]
@@ -207,6 +225,12 @@ const operationToken = (request: OperationRequestDto): string => {
     ].map(sanitizeIdToken).join("_")}`;
   }
 
+  if (request.operationType === "applyTextureAtlasPreview") {
+    return `apply_texture_atlas_preview_${sanitizeIdToken(
+      stripIdPrefix(request.payload.expectedLayoutSummary.atlasTextureId, "tex_")
+    )}`;
+  }
+
   if (request.operationType === "createRotation2dRigControl") {
     return `create_rotation2d_rig_control_${sanitizeIdToken(request.payload.displayName)}`;
   }
@@ -217,6 +241,10 @@ const operationToken = (request: OperationRequestDto): string => {
 
   if (request.operationType === "createWarpDeformer") {
     return `create_warp_deformer_${sanitizeIdToken(request.payload.displayName)}`;
+  }
+
+  if (request.operationType === "deleteRigControl") {
+    return `delete_rig_control_${sanitizeIdToken(stripIdPrefix(request.payload.rigControlId, "rig_"))}`;
   }
 
   if (request.operationType === "generateMesh") {

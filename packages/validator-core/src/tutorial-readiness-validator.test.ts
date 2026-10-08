@@ -834,38 +834,33 @@ const createTutorialPackageDocument = (): PackageDocumentDto => PackageDocumentS
       ]
     },
     dynamics: {
-      schemaVersion: "dynamics-file-v1",
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: [
         {
           dynamicsGroupId: DYNAMICS_HAIR,
           displayName: "Front hair sway",
           enabled: true,
-          solverKind: "scalarDampedFollowV1",
-          drivers: [
+          inputs: [
             {
-              driverId: "driver_faceYaw",
-              sourceParameterId: PARAM_FACE_YAW,
-              inputScale: 1,
-              inputOffset: 0,
-              invert: false
+              parameterId: PARAM_FACE_YAW,
+              kind: "angle",
+              scale: 30
             }
           ],
-          output: {
-            outputId: "out_hairSway",
-            targetParameterId: PARAM_HAIR_SWAY,
-            outputScale: 1,
-            outputOffset: 0,
-            min: -1,
-            max: 1,
-            clampPolicy: "clamp-to-output-range"
+          chain: {
+            rootOffset: { x: 0, y: 0 },
+            segmentLengths: [14],
+            damping: 2.5,
+            gravityScale: 1
           },
-          settings: {
-            stiffness: 0.35,
-            damping: 0.6,
-            maxVelocity: 2,
-            maxAmplitude: 1
-          },
-          resetPolicy: "reset-on-load"
+          outputs: [
+            {
+              parameterId: PARAM_HAIR_SWAY,
+              segmentIndex: 1,
+              scale: 0.0333,
+              limit: 1
+            }
+          ]
         }
       ]
     },
@@ -1061,32 +1056,27 @@ const createTutorialRuntimeGraph = (): NormalizedRuntimeGraph => ({
         dynamicsGroupId: DYNAMICS_HAIR,
         displayName: "Front hair sway",
         enabled: true,
-        solverKind: "scalarDampedFollowV1",
-        drivers: [
+        inputs: [
           {
-            driverId: "driver_faceYaw",
-            sourceParameterId: PARAM_FACE_YAW,
-            inputScale: 1,
-            inputOffset: 0,
-            invert: false
+            parameterId: PARAM_FACE_YAW,
+            kind: "angle",
+            scale: 30
           }
         ],
-        output: {
-          outputId: "out_hairSway",
-          targetParameterId: PARAM_HAIR_SWAY,
-          outputScale: 1,
-          outputOffset: 0,
-          min: -1,
-          max: 1,
-          clampPolicy: "clamp-to-output-range"
+        chain: {
+          rootOffset: { x: 0, y: 0 },
+          segmentLengths: [14],
+          damping: 2.5,
+          gravityScale: 1
         },
-        settings: {
-          stiffness: 0.35,
-          damping: 0.6,
-          maxVelocity: 2,
-          maxAmplitude: 1
-        },
-        resetPolicy: "reset-on-load"
+        outputs: [
+          {
+            parameterId: PARAM_HAIR_SWAY,
+            segmentIndex: 1,
+            scale: 0.0333,
+            limit: 1
+          }
+        ]
       }
     ]
   ]),

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Undine"
+  short_description: "how粒度の認知ガードレールに姿勢を戻す（明示呼び出し専用）"
+  default_prompt: "Use $undine to reset posture to the how-granularity cognitive guardrail; establish mutual understanding before any deliverable."
+
+policy:
+  allow_implicit_invocation: false

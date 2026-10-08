@@ -33,6 +33,8 @@ import {
   type ParameterKeyMarker
 } from "../../features/editor-session/model/parameter-keyform-state";
 import { cn } from "../../lib/class-name";
+import { useEditorUiStore } from "../../state/editor-ui-store";
+import { useRafCoalescedNumberCommit } from "../controls/raf-coalesced-number";
 
 export function ParameterBar() {
   const {
@@ -40,6 +42,7 @@ export function ParameterBar() {
     editKeyformKey,
     openParameterManager,
     parameterBar,
+    parameterOperationFeedback,
     parameterValues,
     resetActiveParameterValue,
     selection,
@@ -47,6 +50,8 @@ export function ParameterBar() {
     setActiveParameterId,
     setActiveParameterValue
   } = useEditorSession();
+  const activeTool = useEditorUiStore((state) => state.activeTool);
+  const disabledForDynamics = activeTool === "dynamics";
   const selectedBindings = useMemo(
     () => createSelectedBindings(session, selection),
     [selection, session]
@@ -99,6 +104,10 @@ export function ParameterBar() {
     projection: ParameterBindingProjection,
     action: "addCurrent" | "updateCurrent" | "deleteCurrent" | "createEnds" | "createEndsCenter"
   ) => {
+    if (disabledForDynamics) {
+      return;
+    }
+
     if (projection.parameter === null) {
       return;
     }
@@ -117,6 +126,7 @@ export function ParameterBar() {
   return (
     <section
       className="flex h-12 shrink-0 items-center gap-3 border-t border-neutral-800 bg-[#151514] px-4 py-1.5"
+      data-readonly-for-dynamics={String(disabledForDynamics)}
       data-testid="parameter-bar"
     >
       <div className="flex min-w-36 shrink-0 items-center gap-2 text-sm font-semibold text-neutral-100">
@@ -127,6 +137,7 @@ export function ParameterBar() {
       <button
         className="flex h-8 shrink-0 items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs font-medium text-neutral-300 transition hover:border-teal-700 hover:text-teal-100"
         data-testid="parameter-manager-link"
+        disabled={disabledForDynamics}
         onClick={openParameterManager}
         type="button"
       >
@@ -138,7 +149,7 @@ export function ParameterBar() {
         <select
           aria-label="Active parameter"
           className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-100 outline-none focus:border-teal-500"
-          disabled={parameterBar.parameters.length === 0}
+          disabled={disabledForDynamics || parameterBar.parameters.length === 0}
           onChange={(event) => setActiveParameterId(event.currentTarget.value as ParameterId)}
           value={activeParameterId ?? ""}
         >
@@ -152,7 +163,7 @@ export function ParameterBar() {
         <select
           aria-label="Keyform target"
           className="h-8 min-w-0 rounded border border-neutral-800 bg-neutral-950 px-2 text-xs text-neutral-100 outline-none focus:border-teal-500 disabled:cursor-not-allowed disabled:text-neutral-600"
-          disabled={selectedBindings.length <= 1}
+          disabled={disabledForDynamics || selectedBindings.length <= 1}
           onChange={(event) => setSelectedBindingKey(event.currentTarget.value)}
           value={selectedBinding === undefined ? "" : createBindingKey(selectedBinding)}
         >
@@ -170,6 +181,7 @@ export function ParameterBar() {
         <ParameterSlider
           activeParameter={activeParameter}
           currentValue={currentValue}
+          disabled={disabledForDynamics}
           keyMarkers={visibleKeyMarkers}
           onChange={setActiveParameterValue}
         />
@@ -183,7 +195,7 @@ export function ParameterBar() {
         <input
           aria-label="Parameter numeric value"
           className="h-8 rounded border border-neutral-800 bg-neutral-950 px-2 text-right text-xs text-neutral-100 outline-none focus:border-teal-500 disabled:cursor-not-allowed disabled:text-neutral-600"
-          disabled={!canUseSlider}
+          disabled={disabledForDynamics || !canUseSlider}
           max={activeParameter?.max ?? 1}
           min={activeParameter?.min ?? 0}
           onBlur={(event) => setActiveParameterValue(Number(event.currentTarget.value))}
@@ -195,12 +207,33 @@ export function ParameterBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        <BarButton label="Reset active parameter" onClick={resetActiveParameterValue}>
+        {disabledForDynamics ? (
+          <span
+            className="shrink-0 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-[11px] font-medium text-neutral-500"
+            data-testid="parameter-bar-readonly-reason"
+          >
+            Dynamics preview
+          </span>
+        ) : null}
+        {parameterOperationFeedback === null ? null : (
+          <span
+            className="max-w-56 shrink truncate rounded border border-amber-800/70 bg-amber-950/40 px-2 py-1 text-[11px] font-medium text-amber-100"
+            data-testid="parameter-bar-feedback"
+            title={parameterOperationFeedback}
+          >
+            {parameterOperationFeedback}
+          </span>
+        )}
+        <BarButton
+          disabled={disabledForDynamics}
+          label="Reset active parameter"
+          onClick={resetActiveParameterValue}
+        >
           <RotateCcw aria-hidden="true" size={14} strokeWidth={1.8} />
           Reset
         </BarButton>
         <BarButton
-          disabled={selectedProjection === undefined || !selectedProjection.canAddCurrent}
+          disabled={disabledForDynamics || selectedProjection === undefined || !selectedProjection.canAddCurrent}
           label="Add keyform at current value"
           onClick={() => {
             if (selectedProjection !== undefined) {
@@ -212,7 +245,7 @@ export function ParameterBar() {
           Add
         </BarButton>
         <BarButton
-          disabled={selectedProjection === undefined || !selectedProjection.canUpdateCurrent}
+          disabled={disabledForDynamics || selectedProjection === undefined || !selectedProjection.canUpdateCurrent}
           label="Update keyform at current value"
           onClick={() => {
             if (selectedProjection !== undefined) {
@@ -223,7 +256,7 @@ export function ParameterBar() {
           Update
         </BarButton>
         <BarButton
-          disabled={selectedProjection === undefined || !selectedProjection.canDeleteCurrent}
+          disabled={disabledForDynamics || selectedProjection === undefined || !selectedProjection.canDeleteCurrent}
           label="Delete keyform at current value"
           onClick={() => {
             if (selectedProjection !== undefined) {
@@ -235,7 +268,7 @@ export function ParameterBar() {
           Delete
         </BarButton>
         <BarButton
-          disabled={selectedProjection === undefined || !selectedProjection.canCreateEnds}
+          disabled={disabledForDynamics || selectedProjection === undefined || !selectedProjection.canCreateEnds}
           label="Create end keyforms"
           onClick={() => {
             if (selectedProjection !== undefined) {
@@ -247,7 +280,7 @@ export function ParameterBar() {
           Ends
         </BarButton>
         <BarButton
-          disabled={selectedProjection === undefined || !selectedProjection.canCreateEndsCenter}
+          disabled={disabledForDynamics || selectedProjection === undefined || !selectedProjection.canCreateEndsCenter}
           label="Create end and center keyforms"
           onClick={() => {
             if (selectedProjection !== undefined) {
@@ -295,21 +328,27 @@ function KeyPositionStateIcon({
 function ParameterSlider({
   activeParameter,
   currentValue,
+  disabled = false,
   keyMarkers,
   onChange
 }: {
   readonly activeParameter: EditorParameter | null;
   readonly currentValue: number;
+  readonly disabled?: boolean;
   readonly keyMarkers: readonly ParameterKeyMarker[];
   readonly onChange: (value: number) => void;
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
-  const canScrub = activeParameter !== null;
+  const canScrub = activeParameter !== null && !disabled;
   const min = activeParameter?.min ?? 0;
   const max = activeParameter?.max ?? 1;
   const step = activeParameter?.recommendedUiStep ?? 0.01;
   const currentPercent = projectParameterSliderPercent(min, max, currentValue);
+  const scrubCommit = useRafCoalescedNumberCommit({
+    counterPrefix: "parameterBar.slider",
+    onCommit: onChange
+  });
 
   const updateFromPointer = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -323,7 +362,7 @@ function ParameterSlider({
         return;
       }
 
-      onChange(
+      scrubCommit.schedule(
         projectParameterSliderValue({
           clientX: event.clientX,
           max,
@@ -334,7 +373,7 @@ function ParameterSlider({
         })
       );
     },
-    [max, min, onChange, step]
+    [max, min, scrubCommit, step]
   );
 
   const startThumbDrag = useCallback(
@@ -364,17 +403,22 @@ function ParameterSlider({
     [updateFromPointer]
   );
 
-  const endThumbDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (activePointerIdRef.current !== event.pointerId) {
-      return;
-    }
+  const endThumbDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (activePointerIdRef.current !== event.pointerId) {
+        return;
+      }
 
-    event.preventDefault();
-    activePointerIdRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  }, []);
+      event.preventDefault();
+      updateFromPointer(event);
+      activePointerIdRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      scrubCommit.flush();
+    },
+    [scrubCommit, updateFromPointer]
+  );
 
   return (
     <div
@@ -405,10 +449,14 @@ function ParameterSlider({
                   : ""
               )}
               data-parameter-value={formatParameterValue(marker.value)}
+              data-disabled={String(disabled)}
               data-testid="parameter-key-marker"
               key={marker.value}
               onClick={(event) => {
                 event.stopPropagation();
+                if (disabled) {
+                  return;
+                }
                 onChange(marker.value);
               }}
               onPointerDown={(event) => event.stopPropagation()}

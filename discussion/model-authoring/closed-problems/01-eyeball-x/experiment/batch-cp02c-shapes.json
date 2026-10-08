@@ -1,0 +1,818 @@
+[
+  {
+    "file": "98-shape-l_open-identity.json",
+    "operationId": "op_cp02c_shape_l_open_id",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_open"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 1,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_l_open identity@1"
+  },
+  {
+    "file": "98-shape-l_open-target.json",
+    "operationId": "op_cp02c_shape_l_open_target",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_open"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.5,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": -6.2912,
+            "y": 29.1538
+          },
+          {
+            "x": -4.2355,
+            "y": 29.1538
+          },
+          {
+            "x": -2.1798,
+            "y": 29.1538
+          },
+          {
+            "x": -0.1241,
+            "y": 29.1538
+          },
+          {
+            "x": 1.9316,
+            "y": 29.1538
+          },
+          {
+            "x": -6.2912,
+            "y": 16.2361
+          },
+          {
+            "x": -4.2355,
+            "y": 16.2361
+          },
+          {
+            "x": -2.1798,
+            "y": 16.2361
+          },
+          {
+            "x": -0.1241,
+            "y": 16.2361
+          },
+          {
+            "x": 1.9316,
+            "y": 16.2361
+          },
+          {
+            "x": -6.2912,
+            "y": 3.3184
+          },
+          {
+            "x": -4.2355,
+            "y": 3.3184
+          },
+          {
+            "x": -2.1798,
+            "y": 3.3184
+          },
+          {
+            "x": -0.1241,
+            "y": 3.3184
+          },
+          {
+            "x": 1.9316,
+            "y": 3.3184
+          },
+          {
+            "x": -6.2912,
+            "y": -9.5993
+          },
+          {
+            "x": -4.2355,
+            "y": -9.5993
+          },
+          {
+            "x": -2.1798,
+            "y": -9.5993
+          },
+          {
+            "x": -0.1241,
+            "y": -9.5993
+          },
+          {
+            "x": 1.9316,
+            "y": -9.5993
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_l_open morph@0.5"
+  },
+  {
+    "file": "98-shape-r_open-identity.json",
+    "operationId": "op_cp02c_shape_r_open_id",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_open"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 1,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_r_open identity@1"
+  },
+  {
+    "file": "98-shape-r_open-target.json",
+    "operationId": "op_cp02c_shape_r_open_target",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_open"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.5,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 1.613,
+            "y": 29.75
+          },
+          {
+            "x": -0.3621,
+            "y": 29.75
+          },
+          {
+            "x": -2.3371,
+            "y": 29.75
+          },
+          {
+            "x": -4.3121,
+            "y": 29.75
+          },
+          {
+            "x": -6.2872,
+            "y": 29.75
+          },
+          {
+            "x": 1.613,
+            "y": 18
+          },
+          {
+            "x": -0.3621,
+            "y": 18
+          },
+          {
+            "x": -2.3371,
+            "y": 18
+          },
+          {
+            "x": -4.3121,
+            "y": 18
+          },
+          {
+            "x": -6.2872,
+            "y": 18
+          },
+          {
+            "x": 1.613,
+            "y": 6.25
+          },
+          {
+            "x": -0.3621,
+            "y": 6.25
+          },
+          {
+            "x": -2.3371,
+            "y": 6.25
+          },
+          {
+            "x": -4.3121,
+            "y": 6.25
+          },
+          {
+            "x": -6.2872,
+            "y": 6.25
+          },
+          {
+            "x": 1.613,
+            "y": -5.5
+          },
+          {
+            "x": -0.3621,
+            "y": -5.5
+          },
+          {
+            "x": -2.3371,
+            "y": -5.5
+          },
+          {
+            "x": -4.3121,
+            "y": -5.5
+          },
+          {
+            "x": -6.2872,
+            "y": -5.5
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_r_open morph@0.5"
+  },
+  {
+    "file": "98-shape-l_half-identity.json",
+    "operationId": "op_cp02c_shape_l_half_id",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.5,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_l_half identity@0.5"
+  },
+  {
+    "file": "98-shape-l_half-target.json",
+    "operationId": "op_cp02c_shape_l_half_target",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_l_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_left_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 9.163,
+            "y": 25.8773
+          },
+          {
+            "x": 6.9336,
+            "y": 25.8773
+          },
+          {
+            "x": 4.7042,
+            "y": 25.8773
+          },
+          {
+            "x": 2.4747,
+            "y": 25.8773
+          },
+          {
+            "x": 0.2453,
+            "y": 25.8773
+          },
+          {
+            "x": 9.163,
+            "y": 19.5919
+          },
+          {
+            "x": 6.9336,
+            "y": 19.5919
+          },
+          {
+            "x": 4.7042,
+            "y": 19.5919
+          },
+          {
+            "x": 2.4747,
+            "y": 19.5919
+          },
+          {
+            "x": 0.2453,
+            "y": 19.5919
+          },
+          {
+            "x": 9.163,
+            "y": 13.3065
+          },
+          {
+            "x": 6.9336,
+            "y": 13.3065
+          },
+          {
+            "x": 4.7042,
+            "y": 13.3065
+          },
+          {
+            "x": 2.4747,
+            "y": 13.3065
+          },
+          {
+            "x": 0.2453,
+            "y": 13.3065
+          },
+          {
+            "x": 9.163,
+            "y": 7.0211
+          },
+          {
+            "x": 6.9336,
+            "y": 7.0211
+          },
+          {
+            "x": 4.7042,
+            "y": 7.0211
+          },
+          {
+            "x": 2.4747,
+            "y": 7.0211
+          },
+          {
+            "x": 0.2453,
+            "y": 7.0211
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_l_half morph@0"
+  },
+  {
+    "file": "98-shape-r_half-identity.json",
+    "operationId": "op_cp02c_shape_r_half_id",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0.5,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0,
+            "y": 0
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_r_half identity@0.5"
+  },
+  {
+    "file": "98-shape-r_half-target.json",
+    "operationId": "op_cp02c_shape_r_half_target",
+    "operationType": "editKeyformKey",
+    "payload": {
+      "action": "addCurrent",
+      "target": {
+        "kind": "rigControl",
+        "id": "rig_eye_r_half"
+      },
+      "targetProperty": "controlPointOffsets",
+      "parameterId": "param_eye_right_open",
+      "interpolation": "linear-1d-v1",
+      "keyValue": 0,
+      "statePatch": {
+        "propertyPath": "controlPointOffsets",
+        "value": [
+          {
+            "x": 1.6008,
+            "y": 22.862
+          },
+          {
+            "x": -0.39,
+            "y": 22.862
+          },
+          {
+            "x": -2.3808,
+            "y": 22.862
+          },
+          {
+            "x": -4.3716,
+            "y": 22.862
+          },
+          {
+            "x": -6.3624,
+            "y": 22.862
+          },
+          {
+            "x": 1.6008,
+            "y": 16.6025
+          },
+          {
+            "x": -0.39,
+            "y": 16.6025
+          },
+          {
+            "x": -2.3808,
+            "y": 16.6025
+          },
+          {
+            "x": -4.3716,
+            "y": 16.6025
+          },
+          {
+            "x": -6.3624,
+            "y": 16.6025
+          },
+          {
+            "x": 1.6008,
+            "y": 10.343
+          },
+          {
+            "x": -0.39,
+            "y": 10.343
+          },
+          {
+            "x": -2.3808,
+            "y": 10.343
+          },
+          {
+            "x": -4.3716,
+            "y": 10.343
+          },
+          {
+            "x": -6.3624,
+            "y": 10.343
+          },
+          {
+            "x": 1.6008,
+            "y": 4.0835
+          },
+          {
+            "x": -0.39,
+            "y": 4.0835
+          },
+          {
+            "x": -2.3808,
+            "y": 4.0835
+          },
+          {
+            "x": -4.3716,
+            "y": 4.0835
+          },
+          {
+            "x": -6.3624,
+            "y": 4.0835
+          }
+        ]
+      }
+    },
+    "gitMessage": "[cp02] shape key rig_eye_r_half morph@0"
+  }
+]

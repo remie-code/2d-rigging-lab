@@ -42,6 +42,7 @@ export const buildPackageDocumentModelFiles = (
     },
     dynamics: {
       ...cloneDto(baseModelFiles.dynamics),
+      schemaVersion: "dynamics-file-v3",
       dynamicsGroups: cloneDto(session.graph.dynamicsGroups)
     },
     masks: {
@@ -51,6 +52,10 @@ export const buildPackageDocumentModelFiles = (
     drawOrder: {
       ...cloneDto(baseModelFiles.drawOrder),
       entries: cloneDto(session.graph.drawOrder)
+    },
+    variants: {
+      schemaVersion: "variants-file-v1",
+      variantGroups: cloneDto(session.graph.variantGroups ?? [])
     }
   };
 

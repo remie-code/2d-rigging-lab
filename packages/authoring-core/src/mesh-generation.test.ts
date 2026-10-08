@@ -29,6 +29,7 @@ import {
   createV6MeshGenerationFixtureRgbaBytes,
   getV6MeshGenerationContractFixture
 } from "./mesh-generation-v6-fixtures.js";
+import { maxCoverageMarginSourcePixels } from "./mesh-generation-coverage-margin.js";
 import { createV6ContourCandidateInput } from "./mesh-generation-v6-contour-pipeline.js";
 import { resolveV6DAdaptiveDensityForTest } from "./mesh-generation-v6d-adaptive-density.js";
 import {
@@ -2088,7 +2089,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: meshBounds
+      bounds: meshBounds,
+      textureSize
     });
     const outsideVertexIndexes =
       generated?.mesh.vertices
@@ -2102,18 +2104,346 @@ describe("alpha-aware mesh generation", () => {
         .map(({ index }) => index) ?? [];
 
     expect(outsideVertexIndexes.length).toBeGreaterThan(0);
+    // Non-clamp (Wave108 D-gen): vertices pushed outside the mesh bounds now
+    // carry UVs that spill PAST [0,1] by the covering margin, symmetric with the
+    // (already unclamped) stage vertices — no longer pinned to the [0,1] edge.
+    const maxMarginPixels = maxCoverageMarginSourcePixels(
+      Math.max(textureSize.width, textureSize.height)
+    );
+    const marginX = (maxMarginPixels + 1) / textureSize.width;
+    const marginY = (maxMarginPixels + 1) / textureSize.height;
     for (const index of outsideVertexIndexes) {
       const uv = generated?.mesh.uvs[index];
       expect(uv).toBeDefined();
-      expect(uv?.x).toBeGreaterThanOrEqual(0);
-      expect(uv?.x).toBeLessThanOrEqual(1);
-      expect(uv?.y).toBeGreaterThanOrEqual(0);
-      expect(uv?.y).toBeLessThanOrEqual(1);
+      expect(uv?.x ?? 0).toBeGreaterThanOrEqual(-marginX);
+      expect(uv?.x ?? 0).toBeLessThanOrEqual(1 + marginX);
+      expect(uv?.y ?? 0).toBeGreaterThanOrEqual(-marginY);
+      expect(uv?.y ?? 0).toBeLessThanOrEqual(1 + marginY);
     }
+    // At least one out-of-bounds vertex spills past [0,1] rather than pinning to 0/1.
     expect(outsideVertexIndexes.some((index) => {
       const uv = generated?.mesh.uvs[index];
-      return uv?.x === 0 || uv?.y === 0;
+      return uv !== undefined && (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1);
     })).toBe(true);
+  });
+
+  it("recovers content raster from Wave108 padded texture bytes so v6d generation stays content-normalized and never falls back", () => {
+    // Regression (Wave108 followup): layer rasters are stored PADDED (content plus
+    // a transparent alpha-edge border). resolveDrawableTextureBytes must crop the
+    // content sub-rectangle back out (content-normalized UV contract) instead of
+    // matching padded byteLength against unpadded bounds and returning
+    // `texture-bytes-unavailable` for every drawable.
+    const contentInset = { left: 5, top: 5, right: 5, bottom: 5 } as const;
+    const textureSize = { width: 24, height: 20 }; // content extents
+    const meshBounds = { x: 10, y: 20, width: 24, height: 20 }; // content-sized bounds
+    const opaquePixels = createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) =>
+      x >= 0 && x <= 13 && y >= 0 && y <= 11
+    );
+
+    const paddedSession = createFixtureSession({
+      includeBytes: true,
+      textureSize,
+      meshBounds,
+      opaquePixels,
+      contentInset
+    });
+
+    // Sanity: the fixture genuinely stores PADDED bytes ((cw+2P)(ch+2P)*4), so this
+    // test walks the real padded seam rather than an unpadded stand-in.
+    const storedEntry = paddedSession.binaryAssets?.fileEntries.find(
+      (entry) => entry.path === "assets/textures/body.raw-rgba"
+    );
+    const paddedWidth = textureSize.width + contentInset.left + contentInset.right;
+    const paddedHeight = textureSize.height + contentInset.top + contentInset.bottom;
+    expect(storedEntry?.bytes.byteLength).toBe(paddedWidth * paddedHeight * 4);
+    expect(storedEntry?.bytes.byteLength).not.toBe(textureSize.width * textureSize.height * 4);
+
+    const generated = createGeneratedMeshForDrawable({
+      session: paddedSession,
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    // Did NOT fall back: real backend output, no texture-bytes-unavailable.
+    expect(generated?.source).toBe("outline-v6d-adaptive-contour-constrainautor-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expect(generated?.fallbackSteps).toBeUndefined();
+
+    // Content-normalization proof: cropping the padded raster yields byte-identical
+    // input to the equivalent unpadded fixture, so a deterministic generator must
+    // emit byte-identical UVs/vertices — no padding-derived P/pw offset baked in.
+    const unpaddedGenerated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({ includeBytes: true, textureSize, meshBounds, opaquePixels }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+    expect(generated?.mesh.uvs).toEqual(unpaddedGenerated?.mesh.uvs);
+    expect(generated?.mesh.vertices).toEqual(unpaddedGenerated?.mesh.vertices);
+
+    // UVs stay within the covering-margin band around content-normalized [0,1]; a
+    // padding offset (P/pw ~= 5/34) would push edge UVs well outside this band.
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds,
+      textureSize
+    });
+  });
+
+  it("generates disconnected v6d adaptive contour geometry for two separated alpha islands", () => {
+    const textureSize = { width: 48, height: 36 };
+    const meshBounds = { x: 0, y: 0, width: 48, height: 36 };
+    const opaquePixels = createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) => {
+      const leftLeg = x >= 7 && x <= 17 && y >= 5 && y <= 30 && !(x >= 7 && x <= 9 && y <= 9);
+      const rightLeg = x >= 30 && x <= 40 && y >= 5 && y <= 30 && !(x >= 38 && x <= 40 && y <= 9);
+      return leftLeg || rightLeg;
+    });
+    const baseInput = {
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor" as const,
+      densityHint: "medium" as const
+    };
+    const generated = createGeneratedMeshForDrawable(baseInput);
+    const second = createGeneratedMeshForDrawable(baseInput);
+
+    expect(second?.mesh).toEqual(generated?.mesh);
+    expect(second?.alphaBounds).toEqual(generated?.alphaBounds);
+    expect(getV6MultiIslandDiagnosticsForTest(second?.qualityMetrics?.v6Metrics)).toEqual(
+      getV6MultiIslandDiagnosticsForTest(generated?.qualityMetrics?.v6Metrics)
+    );
+    expect(generated?.source).toBe("outline-v6d-adaptive-contour-constrainautor-rgba");
+    expect(generated?.fallbackReason).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds,
+      textureSize
+    });
+    expectNoDuplicateStableIds(generated?.mesh);
+    expect(countTriangleVertexConnectedComponents(generated?.mesh)).toBe(2);
+    expect(countTrianglesCrossingVerticalGap(generated?.mesh, 21, 27)).toBe(0);
+    expect(generated?.mesh.vertices.some((vertex) => vertex.x < 21)).toBe(true);
+    expect(generated?.mesh.vertices.some((vertex) => vertex.x > 27)).toBe(true);
+    const leftIslandUvXRange = getUvXRangeForVertices(generated?.mesh, (vertex) => vertex.x < 21);
+    const rightIslandUvXRange = getUvXRangeForVertices(generated?.mesh, (vertex) => vertex.x > 27);
+    expect(leftIslandUvXRange?.max).toBeLessThan(0.5);
+    expect(rightIslandUvXRange?.min).toBeGreaterThan(0.5);
+    expect(leftIslandUvXRange?.min).toBeLessThanOrEqual(7 / textureSize.width);
+    expect(rightIslandUvXRange?.max).toBeGreaterThanOrEqual(40 / textureSize.width);
+    expect(generated?.alphaBounds?.x).toBeLessThanOrEqual(7);
+    expect(generated?.alphaBounds?.y).toBeLessThanOrEqual(5);
+    expect((generated?.alphaBounds?.x ?? 0) + (generated?.alphaBounds?.width ?? 0)).toBeGreaterThanOrEqual(41);
+    expect((generated?.alphaBounds?.y ?? 0) + (generated?.alphaBounds?.height ?? 0)).toBeGreaterThanOrEqual(31);
+
+    const v6Metrics = generated?.qualityMetrics?.v6Metrics;
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(v6Metrics);
+    expect(v6Metrics?.multiIslandHandling).toBe("supported");
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 2,
+      keptIslandCount: 2,
+      generatedIslandCount: 2,
+      backendGeneratedIslandCount: 2,
+      skippedTinyNoiseIslandCount: 0,
+      skippedTinyNoisePixelCount: 0,
+      localizedFallbackCount: 0
+    });
+    expect(multiIslandDiagnostics?.islands.map((island) => island.handling)).toEqual([
+      "generated",
+      "generated"
+    ]);
+    expect(
+      multiIslandDiagnostics?.islands.every(
+        (island) =>
+          typeof island.maxBoundaryVertices === "number" &&
+          island.maxBoundaryVertices > 0 &&
+          typeof island.maxInteriorVertices === "number"
+      )
+    ).toBe(true);
+    const budgetPolicy = multiIslandDiagnostics?.budgetPolicy;
+    const allocatedBoundaryTotal =
+      multiIslandDiagnostics?.islands.reduce((sum, island) => sum + (island.maxBoundaryVertices ?? 0), 0) ?? 0;
+    const allocatedInteriorTotal =
+      multiIslandDiagnostics?.islands.reduce((sum, island) => sum + (island.maxInteriorVertices ?? 0), 0) ?? 0;
+    expect(budgetPolicy?.allocatedMaxBoundaryVertices).toBe(allocatedBoundaryTotal);
+    expect(budgetPolicy?.allocatedMaxInteriorVertices).toBe(allocatedInteriorTotal);
+    expect(budgetPolicy?.allocatedMaxBoundaryVertices).toBeLessThanOrEqual(
+      budgetPolicy?.globalMaxBoundaryVertices ?? 0
+    );
+    expect(budgetPolicy?.allocatedMaxInteriorVertices).toBeLessThanOrEqual(
+      budgetPolicy?.globalMaxInteriorVertices ?? 0
+    );
+    expect(budgetPolicy?.minimumBoundaryFloorExceededGlobalCap).toBe(false);
+    expect(budgetPolicy?.minimumInteriorFloorExceededGlobalCap).toBe(false);
+    expect(
+      multiIslandDiagnostics?.islands.every(
+        (island) => (island.maxBoundaryVertices ?? Number.POSITIVE_INFINITY) < (budgetPolicy?.globalMaxBoundaryVertices ?? 0)
+      )
+    ).toBe(true);
+  });
+
+  it("skips tiny v6d adaptive contour alpha speck noise without emitting geometry in the noise bbox", () => {
+    const textureSize = { width: 64, height: 32 };
+    const meshBounds = { x: 0, y: 0, width: 64, height: 32 };
+    const generated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels: [
+          ...createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) =>
+            x >= 8 && x <= 35 && y >= 6 && y <= 25
+          ),
+          [58, 5],
+          [59, 5]
+        ]
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.fallbackReason).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds,
+      textureSize
+    });
+    expect(meshHasVertexInRect(generated?.mesh, { x: 56, y: 3, width: 7, height: 6 })).toBe(false);
+    expect(countTriangleCentroidsInRect(generated?.mesh, { x: 56, y: 3, width: 7, height: 6 })).toBe(0);
+
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(generated?.qualityMetrics?.v6Metrics);
+    expect(generated?.qualityMetrics?.v6Metrics?.multiIslandHandling).toBe("supported");
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 2,
+      keptIslandCount: 1,
+      generatedIslandCount: 1,
+      skippedTinyNoiseIslandCount: 1,
+      skippedTinyNoisePixelCount: 2,
+      localizedFallbackCount: 0
+    });
+    expect([...new Set(multiIslandDiagnostics?.islands.map((island) => island.handling))].sort()).toEqual([
+      "generated",
+      "skipped-tiny-noise"
+    ]);
+  });
+
+  it("routes all tiny raw v6d adaptive contour islands to visible no-valid-island fallback", () => {
+    const textureSize = { width: 24, height: 14 };
+    const meshBounds = { x: 0, y: 0, width: 24, height: 14 };
+    const generated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels: [
+          [2, 2],
+          [8, 4],
+          [9, 4],
+          [18, 10]
+        ]
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.source).toBe("alpha-aware-rgba");
+    expect(generated?.fallbackReason).toBe("v6-contour-extraction-failed");
+    expect(generated?.fallbackSteps).toEqual([
+      {
+        method: "auto-outline-v6d-adaptive-contour-constrainautor",
+        reason: "v6-contour-extraction-failed"
+      }
+    ]);
+    expectValidMeshDto(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds
+    });
+    const v6Metrics = generated?.qualityMetrics?.v6Metrics;
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(v6Metrics);
+    expect(v6Metrics).toMatchObject({
+      actualSourceId: "alpha-aware-rgba",
+      outputKind: "fallback-output",
+      fallbackReason: "v6-contour-extraction-failed",
+      multiIslandHandling: "supported"
+    });
+    expect(v6Metrics?.provenance).not.toContain(
+      "v6d-adaptive-contour-constrainautor-delaunator-all-points"
+    );
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 3,
+      keptIslandCount: 0,
+      generatedIslandCount: 0,
+      backendGeneratedIslandCount: 0,
+      skippedTinyNoiseIslandCount: 3,
+      skippedTinyNoisePixelCount: 4,
+      localizedFallbackCount: 0
+    });
+    expect(multiIslandDiagnostics?.islands.every((island) => island.handling === "skipped-tiny-noise")).toBe(true);
+  });
+
+  it("retains a small but meaningful separated v6d adaptive contour island", () => {
+    const textureSize = { width: 64, height: 36 };
+    const meshBounds = { x: 0, y: 0, width: 64, height: 36 };
+    const generated = createGeneratedMeshForDrawable({
+      session: createFixtureSession({
+        includeBytes: true,
+        textureSize,
+        meshBounds,
+        opaquePixels: createPixelsFromPredicate(textureSize.width, textureSize.height, (x, y) => {
+          const body = x >= 8 && x <= 35 && y >= 7 && y <= 27;
+          const slimStrand = x >= 54 && x <= 55 && y >= 10 && y <= 24;
+          return body || slimStrand;
+        })
+      }),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      provenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      method: "auto-outline-v6d-adaptive-contour-constrainautor",
+      densityHint: "medium"
+    });
+
+    expect(generated?.fallbackReason).toBeUndefined();
+    expectValidMeshDtoAllowingOutsideBounds(generated?.mesh, {
+      meshId: MeshIdSchema.parse("mesh_body"),
+      drawableId: DrawableIdSchema.parse("draw_body"),
+      generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
+      bounds: meshBounds,
+      textureSize
+    });
+    expect(countTriangleVertexConnectedComponents(generated?.mesh)).toBe(2);
+    expect(meshHasVertexInRect(generated?.mesh, { x: 52, y: 8, width: 7, height: 19 })).toBe(true);
+    expect(countTrianglesCrossingVerticalGap(generated?.mesh, 40, 50)).toBe(0);
+
+    const multiIslandDiagnostics = getV6MultiIslandDiagnosticsForTest(generated?.qualityMetrics?.v6Metrics);
+    expect(multiIslandDiagnostics).toMatchObject({
+      rawAlphaComponentCount: 2,
+      keptIslandCount: 2,
+      generatedIslandCount: 2,
+      skippedTinyNoiseIslandCount: 0
+    });
+    expect(multiIslandDiagnostics?.islands[1]).toMatchObject({
+      pixelCount: 30,
+      handling: "generated"
+    });
   });
 
   it("filters v6d outside and crossing triangles before backend success", () => {
@@ -2211,20 +2541,311 @@ describe("alpha-aware mesh generation", () => {
 
     expect(duplicateZeroLength).toMatchObject({
       status: "failed",
-      reason: "v6d-constrainautor-generation-failed",
+      reason: "v6d-invalid-constraint-input",
       diagnostics: {
         dependencyGateStatus: "available",
-        constraintRecoveryFailed: true
+        constraintRecoveryFailed: true,
+        failureStage: "constraint-input",
+        invalidConstraintInputReasons: ["zero-length-constraint-edge"],
+        inputPointCount: 4,
+        finitePointCount: 4,
+        sanitizedPointCount: 3,
+        mergedPointCount: 1,
+        inputConstraintEdgeCount: 4,
+        sanitizedConstraintEdgeCount: 3,
+        zeroLengthConstraintEdgeCount: 1,
+        invalidConstraintEndpointCount: 0,
+        duplicateConstraintEdgeCount: 0,
+        crossingConstraintEdgeCount: 0,
+        pointOnConstraintEdgeCount: 0
       }
     });
     expect(crossing).toMatchObject({
       status: "failed",
-      reason: "v6d-constrainautor-generation-failed",
+      reason: "v6d-invalid-constraint-input",
       diagnostics: {
         dependencyGateStatus: "available",
         constraintEdgeCount: 2,
         missingConstraintEdgeCount: 2,
-        constraintRecoveryFailed: true
+        constraintRecoveryFailed: true,
+        failureStage: "constraint-input",
+        invalidConstraintInputReasons: [
+          "not-enough-constraint-edges",
+          "crossing-constraint-edge"
+        ],
+        inputPointCount: 4,
+        finitePointCount: 4,
+        sanitizedPointCount: 4,
+        mergedPointCount: 0,
+        inputConstraintEdgeCount: 2,
+        sanitizedConstraintEdgeCount: 2,
+        zeroLengthConstraintEdgeCount: 0,
+        invalidConstraintEndpointCount: 0,
+        duplicateConstraintEdgeCount: 0,
+        crossingConstraintEdgeCount: 1,
+        pointOnConstraintEdgeCount: 0,
+        boundaryRepair: {
+          attempted: false,
+          result: "not-attempted-non-crossing-only",
+          candidateCount: 0,
+          removedBoundaryPointCount: 0,
+          preRepairCrossingConstraintEdgeCount: 1
+        }
+      }
+    });
+  });
+
+  it("reports v6d crossing pair samples with sanitized and input edge indexes", () => {
+    const crossing = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 1 },
+        { x: 1, y: 1, role: "boundary", stableOrder: 2 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 2],
+        [1, 3]
+      ]
+    });
+
+    expect(crossing.status).toBe("failed");
+    expect(crossing.diagnostics).toMatchObject({
+      invalidConstraintInputReasons: [
+        "not-enough-constraint-edges",
+        "crossing-constraint-edge"
+      ],
+      crossingConstraintEdgeCount: 1,
+      pointOnConstraintEdgeCount: 0,
+      crossingConstraintEdgePairSample: {
+        coordinateSpace: "candidate-texture-pixels",
+        sampleLimit: 8,
+        sampledPairCount: 1,
+        totalPairCount: 1,
+        sampleTruncated: false,
+        pairs: [
+          {
+            sanitizedConstraintEdgeIndexes: [0, 1],
+            sanitizedConstraintEdgePointIndexes: [
+              [0, 2],
+              [1, 3]
+            ],
+            inputConstraintEdgeIndexes: [0, 1],
+            inputConstraintEdgePointIndexes: [
+              [0, 2],
+              [1, 3]
+            ],
+            segments: [
+              {
+                start: { x: 0, y: 0 },
+                end: { x: 1, y: 1 }
+              },
+              {
+                start: { x: 1, y: 0 },
+                end: { x: 0, y: 1 }
+              }
+            ]
+          }
+        ]
+      }
+    });
+  });
+
+  it("caps v6d crossing pair samples while preserving the exact crossing count", () => {
+    const crossing = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 0, y: 5, role: "boundary", stableOrder: 0 },
+        { x: 10, y: 5, role: "boundary", stableOrder: 1 },
+        { x: 5, y: 0, role: "boundary", stableOrder: 2 },
+        { x: 5, y: 10, role: "boundary", stableOrder: 3 },
+        { x: 1, y: 1, role: "boundary", stableOrder: 4 },
+        { x: 9, y: 9, role: "boundary", stableOrder: 5 },
+        { x: 1, y: 9, role: "boundary", stableOrder: 6 },
+        { x: 9, y: 1, role: "boundary", stableOrder: 7 },
+        { x: 2, y: 0, role: "boundary", stableOrder: 8 },
+        { x: 8, y: 10, role: "boundary", stableOrder: 9 },
+        { x: 0, y: 2, role: "boundary", stableOrder: 10 },
+        { x: 10, y: 8, role: "boundary", stableOrder: 11 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [2, 3],
+        [4, 5],
+        [6, 7],
+        [8, 9],
+        [10, 11]
+      ]
+    });
+
+    const sample = crossing.diagnostics.crossingConstraintEdgePairSample;
+    expect(crossing.status).toBe("failed");
+    expect(crossing.diagnostics.crossingConstraintEdgeCount).toBe(15);
+    expect(sample).toMatchObject({
+      sampleLimit: 8,
+      sampledPairCount: 8,
+      totalPairCount: 15,
+      sampleTruncated: true
+    });
+    expect(sample?.pairs).toHaveLength(8);
+    expect(crossing.diagnostics.boundaryRepair).toMatchObject({
+      attempted: false,
+      result: "not-attempted-crossing-pair-count",
+      candidateCount: 0,
+      preRepairCrossingConstraintEdgeCount: 15
+    });
+  });
+
+  it("repairs a single crossing cyclic v6d boundary by removing one endpoint", () => {
+    const repaired = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+        { x: 1, y: 1, role: "boundary", stableOrder: 1 },
+        { x: 0, y: 1, role: "boundary", stableOrder: 2 },
+        { x: 1, y: 0, role: "boundary", stableOrder: 3 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0]
+      ]
+    });
+
+    expect(repaired.status).toBe("generated");
+    expect(repaired.constraintEdges).toHaveLength(3);
+    expect(repaired.triangles.length).toBeGreaterThan(0);
+    expect(repaired.diagnostics).toMatchObject({
+      constraintEdgeCount: 3,
+      preservedConstraintEdgeCount: 3,
+      missingConstraintEdgeCount: 0,
+      constraintRecoveryFailed: false,
+      crossingConstraintEdgeCount: 0,
+      pointOnConstraintEdgeCount: 0,
+      boundaryRepair: {
+        attempted: true,
+        result: "repaired",
+        candidateCount: 4,
+        removedBoundaryPointCount: 1,
+        preRepairCrossingConstraintEdgeCount: 1,
+        postRepairCrossingConstraintEdgeCount: 0,
+        postRepairPointOnConstraintEdgeCount: 0,
+        repairedConstraintEdgeCount: 3,
+        preRepairCrossingConstraintEdgePairSample: {
+          totalPairCount: 1,
+          pairs: [
+            {
+              sanitizedConstraintEdgeIndexes: [0, 2],
+              inputConstraintEdgeIndexes: [0, 2],
+              sanitizedConstraintEdgePointIndexes: [
+                [0, 1],
+                [2, 3]
+              ]
+            }
+          ]
+        }
+      }
+    });
+  });
+
+  it("does not activate v6d crossing repair for duplicate, zero-length, or point-on-edge invalid input", () => {
+    const cases = [
+      {
+        name: "duplicate",
+        points: [
+          { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+          { x: 1, y: 1, role: "boundary", stableOrder: 1 },
+          { x: 0, y: 1, role: "boundary", stableOrder: 2 },
+          { x: 1, y: 0, role: "boundary", stableOrder: 3 }
+        ],
+        constraintEdges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0],
+          [1, 0]
+        ]
+      },
+      {
+        name: "zero-length",
+        points: [
+          { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+          { x: 1, y: 1, role: "boundary", stableOrder: 1 },
+          { x: 0, y: 1, role: "boundary", stableOrder: 2 },
+          { x: 1, y: 0, role: "boundary", stableOrder: 3 }
+        ],
+        constraintEdges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0],
+          [1, 1]
+        ]
+      },
+      {
+        name: "point-on-edge",
+        points: [
+          { x: 0, y: 0, role: "boundary", stableOrder: 0 },
+          { x: 2, y: 0, role: "boundary", stableOrder: 1 },
+          { x: 2, y: 2, role: "boundary", stableOrder: 2 },
+          { x: 0, y: 2, role: "boundary", stableOrder: 3 },
+          { x: 1, y: 0, role: "interior", stableOrder: 0 }
+        ],
+        constraintEdges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0]
+        ]
+      }
+    ] as const;
+
+    for (const testCase of cases) {
+      const result = recoverV6DConstrainautorTriangles(testCase);
+      expect(result.status, testCase.name).toBe("failed");
+      expect(result.diagnostics.boundaryRepair, testCase.name).toMatchObject({
+        attempted: false,
+        result: "not-attempted-non-crossing-only",
+        candidateCount: 0,
+        removedBoundaryPointCount: 0
+      });
+    }
+  });
+
+  it("preserves v6d fallback when every bounded repair candidate remains invalid", () => {
+    const failedRepair = recoverV6DConstrainautorTriangles({
+      points: [
+        { x: 4, y: 2, role: "boundary", stableOrder: 0 },
+        { x: 4, y: 0, role: "boundary", stableOrder: 1 },
+        { x: 3, y: 4, role: "boundary", stableOrder: 2 },
+        { x: 2, y: 3, role: "boundary", stableOrder: 3 },
+        { x: 2, y: 2, role: "boundary", stableOrder: 4 },
+        { x: 4, y: 3, role: "boundary", stableOrder: 5 }
+      ],
+      constraintEdges: [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 0]
+      ]
+    });
+
+    expect(failedRepair).toMatchObject({
+      status: "failed",
+      reason: "v6d-invalid-constraint-input",
+      diagnostics: {
+        failureStage: "constraint-input",
+        invalidConstraintInputReasons: ["crossing-constraint-edge"],
+        crossingConstraintEdgeCount: 1,
+        boundaryRepair: {
+          attempted: true,
+          result: "failed-no-candidate-succeeded",
+          candidateCount: 4,
+          failedCandidateCount: 4,
+          removedBoundaryPointCount: 0,
+          preRepairCrossingConstraintEdgeCount: 1
+        }
       }
     });
   });
@@ -2262,7 +2883,8 @@ describe("alpha-aware mesh generation", () => {
         meshId: MeshIdSchema.parse("mesh_body"),
         drawableId: baseInput.drawableId,
         generationProvenanceId: baseInput.provenanceId,
-        bounds: fixture.meshBounds
+        bounds: fixture.meshBounds,
+        textureSize: fixture.textureSize
       });
       expect(first?.alphaBounds).toBeDefined();
       if (first?.alphaBounds !== undefined) {
@@ -2392,7 +3014,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: meshBounds
+      bounds: meshBounds,
+      textureSize
     });
     expect(
       generated?.mesh.vertices.some(
@@ -2772,7 +3395,8 @@ describe("alpha-aware mesh generation", () => {
       meshId: MeshIdSchema.parse("mesh_body"),
       drawableId: DrawableIdSchema.parse("draw_body"),
       generationProvenanceId: ProvenanceIdSchema.parse("prov_generate_body"),
-      bounds: fixture.meshBounds
+      bounds: fixture.meshBounds,
+      textureSize: fixture.textureSize
     });
     const v6Metrics = generated?.qualityMetrics?.v6Metrics;
     const adaptiveDiagnostics = v6Metrics?.adaptiveStaggeredBandDiagnostics;
@@ -4004,6 +4628,12 @@ function expectValidMeshDtoAllowingOutsideBounds(
     readonly drawableId?: MeshDto["drawableId"];
     readonly generationProvenanceId?: MeshDto["generationProvenanceId"];
     readonly bounds?: RectDto;
+    // Texture size lets this helper bound the (Wave108 D-gen) covering-margin UV
+    // overshoot. v6d-family generators push boundary vertices outside the texture,
+    // so with the UV clamp removed their layer-local UVs spill past [0,1] by at
+    // most K source pixels (mesh-generation-coverage-margin.ts). When omitted the
+    // UVs are asserted strictly inside [0,1] (no-overshoot generators).
+    readonly textureSize?: { readonly width: number; readonly height: number };
   }
 ): void {
   expect(mesh).toBeDefined();
@@ -4033,13 +4663,26 @@ function expectValidMeshDtoAllowingOutsideBounds(
     expect(Number.isFinite(vertex.y)).toBe(true);
   }
 
+  // Covering-margin UV overshoot budget: the size-dependent maximum covering
+  // margin in source pixels (+1 for rounding), expressed per axis in UV. 0 when
+  // textureSize is not supplied (strict [0,1]).
+  const maxMarginPixels =
+    expected?.textureSize === undefined
+      ? 0
+      : maxCoverageMarginSourcePixels(
+          Math.max(expected.textureSize.width, expected.textureSize.height)
+        );
+  const marginX =
+    expected?.textureSize === undefined ? 0 : (maxMarginPixels + 1) / expected.textureSize.width;
+  const marginY =
+    expected?.textureSize === undefined ? 0 : (maxMarginPixels + 1) / expected.textureSize.height;
   for (const uv of mesh.uvs) {
     expect(Number.isFinite(uv.x)).toBe(true);
     expect(Number.isFinite(uv.y)).toBe(true);
-    expect(uv.x).toBeGreaterThanOrEqual(0);
-    expect(uv.x).toBeLessThanOrEqual(1);
-    expect(uv.y).toBeGreaterThanOrEqual(0);
-    expect(uv.y).toBeLessThanOrEqual(1);
+    expect(uv.x).toBeGreaterThanOrEqual(-marginX);
+    expect(uv.x).toBeLessThanOrEqual(1 + marginX);
+    expect(uv.y).toBeGreaterThanOrEqual(-marginY);
+    expect(uv.y).toBeLessThanOrEqual(1 + marginY);
   }
 
   for (const stableId of mesh.vertexStableIds) {
@@ -4081,6 +4724,180 @@ function expectRectInsideBounds(rect: RectDto, bounds: RectDto): void {
   expect(rect.y).toBeGreaterThanOrEqual(bounds.y);
   expect(rect.x + rect.width).toBeLessThanOrEqual(bounds.x + bounds.width);
   expect(rect.y + rect.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+}
+
+interface V6MultiIslandDiagnosticsForTest {
+  readonly rawAlphaComponentCount: number;
+  readonly keptIslandCount: number;
+  readonly generatedIslandCount: number;
+  readonly backendGeneratedIslandCount: number;
+  readonly skippedTinyNoiseIslandCount: number;
+  readonly skippedTinyNoisePixelCount: number;
+  readonly localizedFallbackCount: number;
+  readonly budgetPolicy: {
+    readonly globalMaxBoundaryVertices: number;
+    readonly globalMaxInteriorVertices: number;
+    readonly allocatedMaxBoundaryVertices: number;
+    readonly allocatedMaxInteriorVertices: number;
+    readonly minimumBoundaryFloorExceededGlobalCap: boolean;
+    readonly minimumInteriorFloorExceededGlobalCap: boolean;
+  };
+  readonly islands: readonly {
+    readonly componentOrder: number;
+    readonly pixelCount: number;
+    readonly handling: "generated" | "localized-fallback" | "kept-not-generated" | "skipped-tiny-noise";
+    readonly maxBoundaryVertices?: number;
+    readonly maxInteriorVertices?: number;
+  }[];
+}
+
+function getV6MultiIslandDiagnosticsForTest(
+  v6Metrics: MeshGenerationV6Metrics | undefined
+): V6MultiIslandDiagnosticsForTest | undefined {
+  return (v6Metrics as unknown as { readonly multiIslandDiagnostics?: V6MultiIslandDiagnosticsForTest } | undefined)
+    ?.multiIslandDiagnostics;
+}
+
+function expectNoDuplicateStableIds(mesh: MeshDto | undefined): void {
+  expect(mesh).toBeDefined();
+  if (mesh === undefined) {
+    return;
+  }
+
+  expect(new Set(mesh.vertexStableIds).size).toBe(mesh.vertexStableIds.length);
+  const triangleStableIds = mesh.triangleStableIds ?? [];
+  expect(new Set(triangleStableIds).size).toBe(triangleStableIds.length);
+}
+
+function countTriangleVertexConnectedComponents(mesh: MeshDto | undefined): number {
+  if (mesh === undefined || mesh.triangles.length === 0) {
+    return 0;
+  }
+
+  const triangleIndexesByVertex = new Map<number, number[]>();
+  for (let triangleIndex = 0; triangleIndex < mesh.triangles.length; triangleIndex += 1) {
+    for (const vertexIndex of mesh.triangles[triangleIndex] ?? []) {
+      const current = triangleIndexesByVertex.get(vertexIndex);
+      if (current === undefined) {
+        triangleIndexesByVertex.set(vertexIndex, [triangleIndex]);
+        continue;
+      }
+
+      current.push(triangleIndex);
+    }
+  }
+
+  const visited = new Set<number>();
+  let componentCount = 0;
+  for (let triangleIndex = 0; triangleIndex < mesh.triangles.length; triangleIndex += 1) {
+    if (visited.has(triangleIndex)) {
+      continue;
+    }
+
+    componentCount += 1;
+    const stack = [triangleIndex];
+    visited.add(triangleIndex);
+    while (stack.length > 0) {
+      const currentTriangleIndex = stack.pop();
+      if (currentTriangleIndex === undefined) {
+        continue;
+      }
+
+      for (const vertexIndex of mesh.triangles[currentTriangleIndex] ?? []) {
+        for (const neighborTriangleIndex of triangleIndexesByVertex.get(vertexIndex) ?? []) {
+          if (visited.has(neighborTriangleIndex)) {
+            continue;
+          }
+
+          visited.add(neighborTriangleIndex);
+          stack.push(neighborTriangleIndex);
+        }
+      }
+    }
+  }
+
+  return componentCount;
+}
+
+function countTrianglesCrossingVerticalGap(
+  mesh: MeshDto | undefined,
+  gapLeft: number,
+  gapRight: number
+): number {
+  if (mesh === undefined) {
+    return 0;
+  }
+
+  return mesh.triangles.filter((triangle) => {
+    const vertices = triangle.map((vertexIndex) => mesh.vertices[vertexIndex]).filter(
+      (vertex): vertex is MeshDto["vertices"][number] => vertex !== undefined
+    );
+    const minX = Math.min(...vertices.map((vertex) => vertex.x));
+    const maxX = Math.max(...vertices.map((vertex) => vertex.x));
+    return minX < gapLeft && maxX > gapRight;
+  }).length;
+}
+
+function meshHasVertexInRect(mesh: MeshDto | undefined, rect: RectDto): boolean {
+  return mesh?.vertices.some((vertex) => pointInRect(vertex, rect)) ?? false;
+}
+
+function countTriangleCentroidsInRect(mesh: MeshDto | undefined, rect: RectDto): number {
+  if (mesh === undefined) {
+    return 0;
+  }
+
+  return mesh.triangles.filter((triangle) => {
+    const a = mesh.vertices[triangle[0]];
+    const b = mesh.vertices[triangle[1]];
+    const c = mesh.vertices[triangle[2]];
+    if (a === undefined || b === undefined || c === undefined) {
+      return false;
+    }
+
+    return pointInRect(
+      {
+        x: (a.x + b.x + c.x) / 3,
+        y: (a.y + b.y + c.y) / 3
+      },
+      rect
+    );
+  }).length;
+}
+
+function pointInRect(point: MeshDto["vertices"][number], rect: RectDto): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x <= rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y <= rect.y + rect.height
+  );
+}
+
+function getUvXRangeForVertices(
+  mesh: MeshDto | undefined,
+  predicate: (vertex: MeshDto["vertices"][number]) => boolean
+): { readonly min: number; readonly max: number } | undefined {
+  if (mesh === undefined) {
+    return undefined;
+  }
+
+  const values = mesh.vertices.flatMap((vertex, index) => {
+    if (!predicate(vertex)) {
+      return [];
+    }
+
+    const uv = mesh.uvs[index];
+    return uv === undefined ? [] : [uv.x];
+  });
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values)
+  };
 }
 
 function countMaxBoundaryNeighborCount(mesh: MeshDto | undefined, boundaryStableIdToken: string): number {
@@ -4374,14 +5191,42 @@ function createFixtureSession({
     [2, 1],
     [1, 2],
     [2, 2]
-  ]
+  ],
+  contentInset
 }: {
   readonly includeBytes: boolean;
   readonly textureSize?: { readonly width: number; readonly height: number };
   readonly meshBounds?: RectDto;
   readonly opaquePixels?: readonly (readonly [number, number])[];
+  // When provided, `textureSize`/`opaquePixels`/`meshBounds` describe the CONTENT
+  // raster and the fixture bakes a Wave108 padded raster around it (transparent
+  // border of the given inset), storing padded bytes + `dimensions`(padded) +
+  // `contentInset` on the texture entry — exactly like a real post-Wave108 import.
+  readonly contentInset?: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
 }): AuthoringSession {
-  const bytes = createAlphaBytes(textureSize.width, textureSize.height, opaquePixels);
+  const contentBytes = createAlphaBytes(textureSize.width, textureSize.height, opaquePixels);
+  const paddedDimensions =
+    contentInset === undefined
+      ? undefined
+      : {
+          width: textureSize.width + contentInset.left + contentInset.right,
+          height: textureSize.height + contentInset.top + contentInset.bottom,
+          pixelFormat: "rgba8" as const
+        };
+  const bytes =
+    contentInset === undefined || paddedDimensions === undefined
+      ? contentBytes
+      : padAlphaBytesWithTransparentBorder(
+          contentBytes,
+          textureSize.width,
+          textureSize.height,
+          contentInset
+        );
 
   return {
     packageIdentity: {
@@ -4454,6 +5299,8 @@ function createFixtureSession({
           {
             textureId: TextureIdSchema.parse("tex_body"),
             filePath: "assets/textures/body.raw-rgba",
+            ...(paddedDimensions === undefined ? {} : { dimensions: paddedDimensions }),
+            ...(contentInset === undefined ? {} : { contentInset }),
             sourceAssetId: SourceAssetIdSchema.parse("src_body"),
             binaryAssetRef: {
               referenceKind: "package-binary-asset-ref-v1",
@@ -4510,6 +5357,29 @@ function createAlphaBytes(
     bytes[index + 3] = 255;
   }
 
+  return bytes;
+}
+
+// Bake a Wave108-style padded raster: place `content` (contentWidth x contentHeight)
+// inside a transparent border of `inset` px per side. Mirror of the production
+// padLayerRasterWithTransparentBorder so the padded-seam regression test exercises
+// real padded bytes rather than an unpadded stand-in.
+function padAlphaBytesWithTransparentBorder(
+  content: Uint8Array,
+  contentWidth: number,
+  contentHeight: number,
+  inset: { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number }
+): Uint8Array {
+  const paddedWidth = contentWidth + inset.left + inset.right;
+  const paddedHeight = contentHeight + inset.top + inset.bottom;
+  const bytes = new Uint8Array(paddedWidth * paddedHeight * 4);
+  const contentRowBytes = contentWidth * 4;
+  const paddedRowBytes = paddedWidth * 4;
+  for (let row = 0; row < contentHeight; row += 1) {
+    const srcStart = row * contentRowBytes;
+    const dstStart = (row + inset.top) * paddedRowBytes + inset.left * 4;
+    bytes.set(content.subarray(srcStart, srcStart + contentRowBytes), dstStart);
+  }
   return bytes;
 }
 

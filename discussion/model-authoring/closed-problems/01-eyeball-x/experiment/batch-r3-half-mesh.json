@@ -1,0 +1,146 @@
+[
+  {
+    "file": "r3-30-hide-irides-l.json",
+    "operationId": "op_r3_hide_irides_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7081_irides-l"
+      },
+      "runtimeVisibility": false
+    },
+    "gitMessage": "[r3-cp02] scaffold hide normal irides-l"
+  },
+  {
+    "file": "r3-30-hide-irides-r.json",
+    "operationId": "op_r3_hide_irides_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7143_irides-r"
+      },
+      "runtimeVisibility": false
+    },
+    "gitMessage": "[r3-cp02] scaffold hide normal irides-r"
+  },
+  {
+    "file": "r3-30-hide-eyelash-l.json",
+    "operationId": "op_r3_hide_eyelash_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f70a0_eyelash-l"
+      },
+      "runtimeVisibility": false
+    },
+    "gitMessage": "[r3-cp02] scaffold hide normal eyelash-l"
+  },
+  {
+    "file": "r3-30-hide-eyelash-r.json",
+    "operationId": "op_r3_hide_eyelash_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7162_eyelash-r"
+      },
+      "runtimeVisibility": false
+    },
+    "gitMessage": "[r3-cp02] scaffold hide normal eyelash-r"
+  },
+  {
+    "file": "r3-30-hide-eyewhite-l.json",
+    "operationId": "op_r3_hide_eyewhite_l",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7024_eyewhite-l"
+      },
+      "runtimeVisibility": false
+    },
+    "gitMessage": "[r3-cp02] scaffold hide normal eyewhite-l"
+  },
+  {
+    "file": "r3-30-hide-eyewhite-r.json",
+    "operationId": "op_r3_hide_eyewhite_r",
+    "operationType": "setRuntimeVisibility",
+    "payload": {
+      "target": {
+        "kind": "drawable",
+        "id": "draw_r0_1cea4f6f_3a8f7005_eyewhite-r"
+      },
+      "runtimeVisibility": false
+    },
+    "gitMessage": "[r3-cp02] scaffold hide normal eyewhite-r"
+  },
+  {
+    "file": "r3-31-mesh-eyelash-l2.json",
+    "operationId": "op_r3_mesh_eyelash_l2",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_ee159d61_eyelash-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp02] generateMesh half eyelash-l2"
+  },
+  {
+    "file": "r3-31-mesh-eyelash-r2.json",
+    "operationId": "op_r3_mesh_eyelash_r2",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_ee159d00_eyelash-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp02] generateMesh half eyelash-r2"
+  },
+  {
+    "file": "r3-31-mesh-irides-l2.json",
+    "operationId": "op_r3_mesh_irides_l2",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_ee159d23_irides-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp02] generateMesh half irides-l2"
+  },
+  {
+    "file": "r3-31-mesh-irides-r2.json",
+    "operationId": "op_r3_mesh_irides_r2",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_ee159dc2_irides-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp02] generateMesh half irides-r2"
+  },
+  {
+    "file": "r3-31-mesh-eyewhite-l2.json",
+    "operationId": "op_r3_mesh_eyewhite_l2",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_ee159ce5_eyewhite-l",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp02] generateMesh half eyewhite-l2"
+  },
+  {
+    "file": "r3-31-mesh-eyewhite-r2.json",
+    "operationId": "op_r3_mesh_eyewhite_r2",
+    "operationType": "generateMesh",
+    "payload": {
+      "drawableId": "draw_r0_1cea4f6f_ee159c84_eyewhite-r",
+      "method": "auto-outline-v6d-adaptive-contour-constrainautor",
+      "densityHint": "medium"
+    },
+    "gitMessage": "[r3-cp02] generateMesh half eyewhite-r2"
+  }
+]

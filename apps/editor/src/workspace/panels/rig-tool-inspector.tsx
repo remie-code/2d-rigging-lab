@@ -7,6 +7,7 @@ import {
   Maximize2,
   RotateCcw,
   Spline,
+  Trash2,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -54,6 +55,7 @@ export function RigToolInspector() {
     createWarpDeformerForDrawables,
     createWarpDeformerForDeformerTreeSelection,
     createRotationDeformerForDrawable,
+    deleteRigControl,
     reparentRigControl,
     startWarpDeformerDraftForDrawable,
     updateRigControl,
@@ -98,6 +100,7 @@ export function RigToolInspector() {
         feedback={rigOperationFeedback}
         onCreateParentRotation={createParentRotationDeformerForRigControl}
         onCreateParentWarp={createParentWarpDeformerForRigControl}
+        onDelete={deleteRigControl}
         onReparent={reparentRigControl}
         onUpdate={updateRigControl}
         readModel={warpReadModel}
@@ -108,6 +111,7 @@ export function RigToolInspector() {
         feedback={rigOperationFeedback}
         onCreateParentRotation={createParentRotationDeformerForRigControl}
         onCreateParentWarp={createParentWarpDeformerForRigControl}
+        onDelete={deleteRigControl}
         onReparent={reparentRigControl}
         onUpdate={updateRigControl}
         readModel={rotationReadModel}
@@ -621,6 +625,7 @@ export function CommittedWarpDeformerInspector({
   feedback,
   onCreateParentRotation,
   onCreateParentWarp,
+  onDelete,
   onReparent,
   onUpdate,
   readModel,
@@ -629,6 +634,7 @@ export function CommittedWarpDeformerInspector({
   readonly feedback: string | null;
   readonly onCreateParentRotation: (rigControlId: RigControlId) => void;
   readonly onCreateParentWarp: (rigControlId: RigControlId) => void;
+  readonly onDelete: (rigControlId: RigControlId) => void;
   readonly onReparent: (childRigControlId: RigControlId, parentRigControlId: RigControlId | null) => void;
   readonly onUpdate: ReturnType<typeof useEditorSession>["updateRigControl"];
   readonly readModel: WarpDeformerReadModel;
@@ -738,6 +744,7 @@ export function CommittedWarpDeformerInspector({
         onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
         onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}
       />
+      <DeleteDeformerAction onDelete={() => onDelete(readModel.rigControlId)} />
 
       <section className="rounded-md border border-neutral-800 bg-neutral-950/40 p-3">
         <SectionTitle>Domain bounds</SectionTitle>
@@ -864,6 +871,7 @@ export function CommittedRotationDeformerInspector({
   feedback,
   onCreateParentRotation,
   onCreateParentWarp,
+  onDelete,
   onReparent,
   onUpdate,
   readModel,
@@ -872,6 +880,7 @@ export function CommittedRotationDeformerInspector({
   readonly feedback: string | null;
   readonly onCreateParentRotation: (rigControlId: RigControlId) => void;
   readonly onCreateParentWarp: (rigControlId: RigControlId) => void;
+  readonly onDelete: (rigControlId: RigControlId) => void;
   readonly onReparent: (childRigControlId: RigControlId, parentRigControlId: RigControlId | null) => void;
   readonly onUpdate: ReturnType<typeof useEditorSession>["updateRigControl"];
   readonly readModel: RotationDeformerReadModel;
@@ -1027,6 +1036,7 @@ export function CommittedRotationDeformerInspector({
         onCreateParentRotation={() => onCreateParentRotation(readModel.rigControlId)}
         onCreateParentWarp={() => onCreateParentWarp(readModel.rigControlId)}
       />
+      <DeleteDeformerAction onDelete={() => onDelete(readModel.rigControlId)} />
       <OperationFeedback feedback={feedback} />
       <button
         className="flex min-h-9 items-center justify-center gap-2 rounded border border-teal-700 bg-teal-950/60 px-3 text-xs font-semibold text-teal-100 transition hover:border-teal-500"
@@ -1286,6 +1296,22 @@ function ParentDeformerActions({
           Create Parent Warp Deformer
         </button>
       </div>
+    </section>
+  );
+}
+
+function DeleteDeformerAction({ onDelete }: { readonly onDelete: () => void }) {
+  return (
+    <section className="rounded-md border border-red-900/70 bg-red-950/15 p-3">
+      <SectionTitle>Delete deformer</SectionTitle>
+      <button
+        className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded border border-red-800 bg-red-950/50 px-3 text-xs font-semibold text-red-100 transition hover:border-red-600"
+        onClick={onDelete}
+        type="button"
+      >
+        <Trash2 aria-hidden="true" size={14} strokeWidth={1.8} />
+        Delete Deformer
+      </button>
     </section>
   );
 }

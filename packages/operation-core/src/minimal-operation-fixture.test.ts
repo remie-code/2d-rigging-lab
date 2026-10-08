@@ -158,7 +158,6 @@ interface CommitSummaryFixture extends OperationSummaryFixture {
     readonly addedParameter: {
       readonly parameterId: string;
       readonly displayName: string;
-      readonly semanticRole: string;
       readonly valueSource: string;
       readonly min: number;
       readonly max: number;

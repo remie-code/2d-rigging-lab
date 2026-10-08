@@ -166,6 +166,42 @@ describe("importPsdLayerMaterialization operation handler", () => {
     expect(JSON.stringify(outcome.result.psdLayerMaterializationEvidence)).not.toContain("rawLayerObject");
   });
 
+  it("propagates padded raster dimensions and content inset onto the texture entry while keeping mesh bounds content-sized", () => {
+    // Padded raster: 10x10 (content 2x2 + padding=4 border on every side), byteLength 400.
+    const session = createFixtureSession();
+    const request = createImportMaterializationRequest({
+      dryRun: false,
+      destinationPart: {
+        destinationKind: "existingPart",
+        partId: "part_root"
+      },
+      materializationOverrides: {
+        width: 10,
+        height: 10,
+        byteLength: 400,
+        contentInset: { left: 4, top: 4, right: 4, bottom: 4 },
+        binaryAssetRef: createTextureBinaryAssetReference({ byteLength: 400 })
+      }
+    });
+
+    const outcome = createOperationCore().commitOperation(session, request);
+    expect(outcome.result.status).toBe("committed");
+
+    const textureEntry = getTextureAtlasEntryById(
+      session.graph,
+      TextureIdSchema.parse("tex_face_rgba")
+    );
+    // Texture entry dimensions point at the PADDED raster, with contentInset as bridge.
+    expect(textureEntry?.dimensions).toEqual({ width: 10, height: 10, pixelFormat: "rgba8" });
+    expect(textureEntry?.contentInset).toEqual({ left: 4, top: 4, right: 4, bottom: 4 });
+
+    // Stage bounds stay content-sized (unchanged by padding).
+    expect(session.graph.meshes[0]).toMatchObject({
+      meshId: "mesh_face_materialized",
+      bounds: { x: 320, y: 240, width: 512, height: 512 }
+    });
+  });
+
   it("creates a new destination part before connecting the materialized layer drawable", () => {
     const session = createFixtureSession();
     const request = createImportMaterializationRequest({
@@ -358,6 +394,13 @@ const createImportMaterializationRequest = (options: {
     }
   });
 
+type ContentInset = {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+};
+
 type MaterializationOverrides = {
   readonly digest?: FixtureDigest;
   readonly sourceLayerPath?: readonly string[];
@@ -366,6 +409,10 @@ type MaterializationOverrides = {
   };
   readonly extraction?: ReturnType<typeof createSelectedLayerExtractionEvidence>;
   readonly binaryAssetRef?: ReturnType<typeof createTextureBinaryAssetReference>;
+  readonly width?: number;
+  readonly height?: number;
+  readonly byteLength?: number;
+  readonly contentInset?: ContentInset;
 };
 
 const createMaterializationEvidence = (overrides: MaterializationOverrides = {}) => ({
@@ -378,10 +425,11 @@ const createMaterializationEvidence = (overrides: MaterializationOverrides = {})
     sourceLayerPath: [...(overrides.sourceLayerPath ?? ["Root", "Head", "Face"])]
   },
   mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
-  byteLength: 16,
+  byteLength: overrides.byteLength ?? 16,
   digest: overrides.digest ?? MATERIALIZED_DIGEST,
-  width: 2,
-  height: 2,
+  width: overrides.width ?? 2,
+  height: overrides.height ?? 2,
+  ...(overrides.contentInset === undefined ? {} : { contentInset: overrides.contentInset }),
   binaryAssetRef: overrides.binaryAssetRef ?? createTextureBinaryAssetReference(),
   textureId: "tex_face_rgba",
   provenance: {
@@ -535,6 +583,7 @@ const createSourceBinaryAssetReference = () => ({
 
 const createTextureBinaryAssetReference = (overrides: {
   readonly digest?: FixtureDigest;
+  readonly byteLength?: number;
   readonly storageStatus?:
     | "stored-package-local-v1"
     | "missing-package-local-bytes-v1"
@@ -544,7 +593,7 @@ const createTextureBinaryAssetReference = (overrides: {
   binaryAssetId: "bin_psd_face_rgba",
   packageRelativePath: "assets/textures/psd/face.raw-rgba",
   digest: overrides.digest ?? MATERIALIZED_DIGEST,
-  byteLength: 16,
+  byteLength: overrides.byteLength ?? 16,
   mediaType: PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE,
   storageStatus: overrides.storageStatus ?? "stored-package-local-v1",
   provenanceId: ProvenanceIdSchema.parse("prov_psd_face_rgba"),

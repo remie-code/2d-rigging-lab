@@ -596,7 +596,7 @@ const createPackageDocument = (input: {
     parameters: { schemaVersion: "parameters-file-v1" as const, parameters: [] },
     keyforms: { schemaVersion: "keyforms-file-v1" as const, keyformSets: [] },
     rigControls: { schemaVersion: "rig-controls-file-v1" as const, rigControls: [] },
-    dynamics: { schemaVersion: "dynamics-file-v1" as const, dynamicsGroups: [] },
+    dynamics: { schemaVersion: "dynamics-file-v3" as const, dynamicsGroups: [] },
     masks: { schemaVersion: "masks-file-v1" as const, masks: [] },
     drawOrder: {
       schemaVersion: "draw-order-file-v1" as const,

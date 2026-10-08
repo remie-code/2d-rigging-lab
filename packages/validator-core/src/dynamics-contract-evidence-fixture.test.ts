@@ -31,14 +31,14 @@ import type {
 import { validatePackageRuntime } from "./validators/package-runtime.js";
 
 const CREATED_AT = "2026-05-31T00:00:00.000Z";
-const PACKAGE_HASH = "sha256:minimum-open-dynamics-v1-evidence";
-const ARTIFACT_LABEL = "minimum-open-dynamics-v1-evidence";
+const PACKAGE_HASH = "sha256:minimum-open-dynamics-v2-evidence";
+const ARTIFACT_LABEL = "minimum-open-dynamics-v2-evidence";
 const DRIVER_PARAMETER_ID = "param_face_yaw";
 const OUTPUT_PARAMETER_ID = "param_hair_sway";
 const DRAWABLE_ID = "draw_hair";
 const MESH_ID = "mesh_hair";
 
-describe("minimum-open-dynamics-v1-evidence validator contract fixture", () => {
+describe("minimum-open-dynamics-v2-evidence validator contract fixture", () => {
   it("reports the fixture baseline failures and candidate pass deterministically", () => {
     const runtimeEvidence = buildFixtureRuntimeEvidence();
     const baselineReport = withReportEvidence(
@@ -100,11 +100,7 @@ describe("minimum-open-dynamics-v1-evidence validator contract fixture", () => {
                 ...createPackageDynamicsGroup(),
                 dynamicsGroupId: "dyn_hair_sway_duplicate",
                 displayName: "Hair Sway Duplicate",
-                enabled: false,
-                output: {
-                  ...createPackageDynamicsGroup().output,
-                  outputId: "output_hair_sway_duplicate"
-                }
+                enabled: false
               }
             ]),
             runtimeSnapshot: validSnapshot,
@@ -112,58 +108,27 @@ describe("minimum-open-dynamics-v1-evidence validator contract fixture", () => {
           }).checks
         ),
         summarizeCase(
-          "wrong-source-type",
+          "missing-input-parameter",
           validatePackageRuntime({
-            packageDocument: withParameters(
-              withDynamicsGroups(validPackage, [
-                {
-                  ...createPackageDynamicsGroup(),
-                  drivers: [
-                    {
-                      driverId: "driver_debug_override",
-                      sourceParameterId: "param_debug_override",
-                      inputScale: 1,
-                      inputOffset: 0,
-                      invert: false
-                    }
-                  ]
-                }
-              ]),
+            packageDocument: withDynamicsGroups(
+              withParameters(
+                validPackage,
+                validPackage.model.parameters.parameters.filter(
+                  (parameter: any) => parameter.parameterId !== DRIVER_PARAMETER_ID
+                )
+              ),
               [
-                ...validPackage.model.parameters.parameters,
-                {
-                  parameterId: "param_debug_override",
-                  displayName: "Debug Override",
-                  semanticRole: "custom",
-                  valueSource: "debugOverride",
-                  min: -1,
-                  max: 1,
-                  default: 0,
-                  recommendedUiStep: 0.01
-                }
-              ]
-            ),
-            runtimeSnapshot: validSnapshot,
-            createdAt: CREATED_AT
-          }).checks
-        ),
-        summarizeCase(
-          "output-as-driver",
-          validatePackageRuntime({
-            packageDocument: withDynamicsGroups(validPackage, [
               {
                 ...createPackageDynamicsGroup(),
-                drivers: [
+                inputs: [
                   {
-                    driverId: "driver_hair_sway",
-                    sourceParameterId: OUTPUT_PARAMETER_ID,
-                    inputScale: 1,
-                    inputOffset: 0,
-                    invert: false
+                    ...createPackageDynamicsGroup().inputs[0],
+                    parameterId: DRIVER_PARAMETER_ID
                   }
                 ]
               }
-            ]),
+              ]
+            ),
             runtimeSnapshot: validSnapshot,
             createdAt: CREATED_AT
           }).checks
@@ -174,29 +139,6 @@ describe("minimum-open-dynamics-v1-evidence validator contract fixture", () => {
             packageDocument: validPackage,
             runtimeSnapshot: withRuntimeDynamics(validSnapshot, {
               outputParameterId: "param_other_output"
-            }),
-            createdAt: CREATED_AT
-          }).checks
-        ),
-        summarizeCase(
-          "runtime-output-out-of-range",
-          validatePackageRuntime({
-            packageDocument: validPackage,
-            runtimeSnapshot: withRuntimeDynamics(validSnapshot, {
-              outputValue: 2
-            }),
-            createdAt: CREATED_AT
-          }).checks
-        ),
-        summarizeCase(
-          "runtime-output-clamped",
-          validatePackageRuntime({
-            packageDocument: validPackage,
-            runtimeSnapshot: withRuntimeDynamics(validSnapshot, {
-              debug: {
-                ...validSnapshot.dynamics[0]?.debug,
-                outputClamped: true
-              }
             }),
             createdAt: CREATED_AT
           }).checks
@@ -446,25 +388,23 @@ const createRuntimeDynamicsGroup = (payload: any): NormalizedDynamicsGroup => ({
   dynamicsGroupId: DynamicsGroupIdSchema.parse(payload.dynamicsGroupId),
   displayName: payload.displayName,
   enabled: payload.enabled,
-  solverKind: payload.solverKind,
-  drivers: payload.drivers.map((driver: any) => ({
-    driverId: driver.driverId,
-    sourceParameterId: ParameterIdSchema.parse(driver.sourceParameterId),
-    inputScale: driver.inputScale,
-    inputOffset: driver.inputOffset,
-    invert: driver.invert
+  inputs: payload.inputs.map((input: any) => ({
+    parameterId: ParameterIdSchema.parse(input.parameterId),
+    kind: input.kind,
+    scale: input.scale
   })),
-  output: {
-    outputId: payload.output.outputId,
-    targetParameterId: ParameterIdSchema.parse(payload.output.targetParameterId),
-    outputScale: payload.output.outputScale,
-    outputOffset: payload.output.outputOffset,
-    min: payload.output.min,
-    max: payload.output.max,
-    clampPolicy: payload.output.clampPolicy
+  chain: {
+    rootOffset: { x: payload.chain.rootOffset.x, y: payload.chain.rootOffset.y },
+    segmentLengths: [...payload.chain.segmentLengths],
+    damping: payload.chain.damping,
+    gravityScale: payload.chain.gravityScale
   },
-  settings: payload.settings,
-  resetPolicy: payload.resetPolicy
+  outputs: payload.outputs.map((output: any) => ({
+    parameterId: ParameterIdSchema.parse(output.parameterId),
+    segmentIndex: output.segmentIndex,
+    scale: output.scale,
+    limit: output.limit
+  }))
 });
 
 const createKeyformBinding = (keyformSet: any): KeyformBinding => ({

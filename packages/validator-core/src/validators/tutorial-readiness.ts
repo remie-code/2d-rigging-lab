@@ -434,12 +434,12 @@ const validateDynamicsPresence = (
         path: "/model/dynamics/dynamicsGroups"
       },
       targetPath: "/model/dynamics/dynamicsGroups",
-      message: "Tutorial mini model is missing an enabled Minimum Open Dynamics v1 group.",
+      message: "Tutorial mini model is missing an enabled Dynamics v2 additive pendulum group.",
       evidence: [
         `dynamicsGroupCount=${packageDocument.model.dynamics.dynamicsGroups.length}`,
         "enabledDynamicsGroupCount=0"
       ],
-      impact: "The tutorial model cannot prove the dynamics slice without enabled scalar dynamics evidence."
+      impact: "The tutorial model cannot prove the dynamics slice without enabled additive pendulum evidence."
     })
   ];
 };

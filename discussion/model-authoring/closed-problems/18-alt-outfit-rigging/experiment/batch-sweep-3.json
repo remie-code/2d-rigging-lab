@@ -1,0 +1,93 @@
+[
+ {
+  "file": "sweep-s3-hide-endo-topwear.json",
+  "operationId": "op_cp18_sweep_s3_hide_endo_topwear",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c54ca_topwear"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s3: temp hide endo-topwear"
+ },
+ {
+  "file": "sweep-s3-hide-endo-handwear_r.json",
+  "operationId": "op_cp18_sweep_s3_hide_endo_handwear_r",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c542b_handwear-r"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s3: temp hide endo-handwear_r"
+ },
+ {
+  "file": "sweep-s3-hide-endo-handwear_l.json",
+  "operationId": "op_cp18_sweep_s3_hide_endo_handwear_l",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_8b5c5408_handwear-l"
+   },
+   "runtimeVisibility": false
+  },
+  "gitMessage": "[cp18] sweep s3: temp hide endo-handwear_l"
+ },
+ {
+  "file": "sweep-s3-show-main-topwear.json",
+  "operationId": "op_cp18_sweep_s3_show_main_topwear",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_26f93e8b_topwear"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s3: temp show main-topwear"
+ },
+ {
+  "file": "sweep-s3-show-main-handwear_l.json",
+  "operationId": "op_cp18_sweep_s3_show_main_handwear_l",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_26f93ec9_handwear-l"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s3: temp show main-handwear_l"
+ },
+ {
+  "file": "sweep-s3-show-main-handwear_r.json",
+  "operationId": "op_cp18_sweep_s3_show_main_handwear_r",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_26f93ee8_handwear-r"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s3: temp show main-handwear_r"
+ },
+ {
+  "file": "sweep-s3-show-main-tie.json",
+  "operationId": "op_cp18_sweep_s3_show_main_tie",
+  "operationType": "setRuntimeVisibility",
+  "payload": {
+   "target": {
+    "kind": "drawable",
+    "id": "draw_r0_1cea4f6f_ea30e9c4_tie"
+   },
+   "runtimeVisibility": true
+  },
+  "gitMessage": "[cp18] sweep s3: temp show main-tie"
+ }
+]

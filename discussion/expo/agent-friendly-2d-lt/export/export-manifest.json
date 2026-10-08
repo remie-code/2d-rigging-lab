@@ -1,0 +1,98 @@
+{
+  "source_previews": [
+    {
+      "file": "00-cover-preview.png",
+      "sha256": "90c217971481925f4e54844a9cf64e5d0c1b18dd1f87f254e42d3b39d8c60bbc"
+    },
+    {
+      "file": "01-overview-preview.png",
+      "sha256": "5a107528a742b56a268fa65d47bff735d0a70b8401d775e2bedd869af15b2690"
+    },
+    {
+      "file": "02-modeling-tools-preview.png",
+      "sha256": "5bd8ca3124aa78a0ce1327e46b20851e45a17970b3f3550e4045990298fa990f"
+    },
+    {
+      "file": "03-streaming-tools-preview.png",
+      "sha256": "15c14546ff949d1080df2927f026618ca94adf7f06a76bbe77eae30ca159a82a"
+    },
+    {
+      "file": "04-development-duration-preview.png",
+      "sha256": "c8729d88603b04cce50d4d68b38d94b5f0bd7de192ccc390416197453387ed85"
+    }
+  ],
+  "video": "agent-friendly-2d-lt-unaslides.mp4",
+  "pdf": "agent-friendly-2d-lt.pdf",
+  "duration_seconds": 5,
+  "slide_count": 5,
+  "seconds_per_slide": 1,
+  "recommended_offset_seconds": 0.5,
+  "keyframe_seconds": [
+    0.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0
+  ],
+  "video_stream": {
+    "index": 0,
+    "codec_name": "h264",
+    "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+    "profile": "Constrained Baseline",
+    "codec_type": "video",
+    "codec_tag_string": "avc1",
+    "codec_tag": "0x31637661",
+    "mime_codec_string": "avc1.42c028",
+    "width": 1920,
+    "height": 1080,
+    "coded_width": 1920,
+    "coded_height": 1080,
+    "has_b_frames": 0,
+    "pix_fmt": "yuv420p",
+    "level": 40,
+    "chroma_location": "left",
+    "field_order": "progressive",
+    "is_avc": "true",
+    "nal_length_size": "4",
+    "id": "0x1",
+    "r_frame_rate": "30/1",
+    "avg_frame_rate": "30/1",
+    "time_base": "1/15360",
+    "start_pts": 0,
+    "start_time": "0.000000",
+    "duration_ts": 76800,
+    "duration": "5.000000",
+    "bit_rate": "1294347",
+    "bits_per_raw_sample": "8",
+    "nb_frames": "150",
+    "extradata_size": 42,
+    "disposition": {
+      "default": 1,
+      "dub": 0,
+      "original": 0,
+      "comment": 0,
+      "lyrics": 0,
+      "karaoke": 0,
+      "forced": 0,
+      "hearing_impaired": 0,
+      "visual_impaired": 0,
+      "clean_effects": 0,
+      "attached_pic": 0,
+      "timed_thumbnails": 0,
+      "non_diegetic": 0,
+      "captions": 0,
+      "descriptions": 0,
+      "metadata": 0,
+      "dependent": 0,
+      "still_image": 0,
+      "multilayer": 0
+    },
+    "tags": {
+      "language": "und",
+      "handler_name": "VideoHandler",
+      "encoder": "Lavc62.28.102 libx264"
+    }
+  },
+  "venue_tested": false,
+  "uploaded": false
+}
