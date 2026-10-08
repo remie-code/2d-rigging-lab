@@ -1,0 +1,41 @@
+MIT License
+
+Copyright (c) 2026 remie_m
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Avatar assets exception
+
+The MIT License above applies to the source code and documentation text only.
+It does NOT apply to the author's avatar character and any material depicting
+or derived from it, including but not limited to:
+
+  - test_data/sample_model.psd
+  - screenshots, renders, slides, PDFs, and videos depicting the avatar
+    (e.g. under discussion/)
+  - fixture data derived from those assets
+
+All rights to these assets are reserved by the author. You may view them as
+part of this repository, but you may not use, modify, or redistribute them
+(for example, as your own avatar or model) without explicit permission.
+
+アバター素材（上記）は MIT ライセンスの対象外です。無断での使用・改変・再配布は
+お断りします。
