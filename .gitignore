@@ -17,3 +17,12 @@ apps/*/src/**/*.js
 !packages/authoring-core/src/mesh-generation-v7-constrainautor-runtime.js
 # Scratch output (logs, screenshots, browser profiles) never belongs in git.
 tmp/
+
+# Kept locally, never published: private notes, the author's avatar source,
+# and generated dev/test output.
+memo/
+test_data/sample_model.psd
+.github.zip
+.tmp-editor-vite*.log
+apps/editor/.dev-server.*.log
+apps/editor/test-results/
