@@ -41,6 +41,7 @@
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
 
 import { createCockpitServer, DEFAULT_COCKPIT_PORT } from "../src/cockpit/cockpit-server.mjs";
 import { createFileSettingsStore } from "../src/cockpit/cockpit-settings-store.mjs";
@@ -112,6 +113,7 @@ export function parseCockpitArgs(argv) {
   const args = {
     port: /** @type {number | undefined} */ (undefined),
     help: false,
+    open: false,
     /** @type {string | undefined} */ channel: undefined,
     /** @type {string | undefined} */ ttsBaseUrl: undefined,
     /** @type {string | undefined} */ speaker: undefined,
@@ -121,6 +123,7 @@ export function parseCockpitArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--help" || a === "-h") args.help = true;
+    else if (a === "--open") args.open = true;
     else if (a === "--port") args.port = Number(argv[++i]);
     else if (a === "--channel") args.channel = argv[++i];
     else if (a === "--tts-base-url") args.ttsBaseUrl = argv[++i];
@@ -129,6 +132,24 @@ export function parseCockpitArgs(argv) {
     else if (a === "--fire-max-chars") args.fireMaxChars = Number(argv[++i]);
   }
   return args;
+}
+
+/**
+ * Windows launcher: open the actual listening URL without a shell or extra console.
+ * A browser-launch failure must not stop the already-running server.
+ * @param {string} url
+ * @param {typeof execFile} [execFileImpl]
+ * @param {(message: string) => void} [warn]
+ */
+export function openCockpitBrowser(url, execFileImpl = execFile, warn = (message) => process.stderr.write(message)) {
+  const onFailure = (error) => {
+    if (error) warn(`[cockpit] Could not open the browser. Open ${url} manually: ${error.message}\n`);
+  };
+  try {
+    execFileImpl("rundll32.exe", ["url.dll,FileProtocolHandler", url], { windowsHide: true }, onFailure);
+  } catch (error) {
+    onFailure(error);
+  }
 }
 
 /**
@@ -714,6 +735,7 @@ export function createChatSourceHooks(settings) {
 
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
+  --open                待受け完了後に既定ブラウザを開く（Windows）
   --channel <ws-url>    器の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の**初期値**
                         （後方互換）。指定すると起動時に LLM セッションを eager 生成し Fire を先充填。
                         未指定でも操縦席（ブラウザ）の Channel 欄から URL を入力すれば Fire が有効化される
@@ -1316,6 +1338,7 @@ async function main() {
   // stdin EOF（Ctrl+Z→Enter / パイプ終端）でも畳む（ears-cli.mjs の型）。
   const rl = createInterface({ input: process.stdin });
   rl.on("close", shutdown);
+  if (args.open) openCockpitBrowser(`${url}/`);
 }
 
 const invokedDirectly = process.argv[1] != null && import.meta.url === pathToFileURL(process.argv[1]).href;

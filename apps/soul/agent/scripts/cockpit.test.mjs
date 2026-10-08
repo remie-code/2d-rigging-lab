@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 import {
   parseCockpitArgs,
+  openCockpitBrowser,
   buildBrainSessionSystemPrompt,
   createLazyChannel,
   createSessionProxy,
@@ -36,6 +37,7 @@ test("parseCockpitArgs: no flags → everything undefined (S2.5 挙動不変の�
   const args = parseCockpitArgs([]);
   assert.equal(args.port, undefined);
   assert.equal(args.help, false);
+  assert.equal(args.open, false);
   assert.equal(args.channel, undefined);
   assert.equal(args.ttsBaseUrl, undefined);
   assert.equal(args.speaker, undefined);
@@ -47,6 +49,38 @@ test("parseCockpitArgs: --port keeps existing behaviour", { timeout: 5000 }, () 
   assert.equal(parseCockpitArgs(["--port", "9000"]).port, 9000);
   assert.equal(parseCockpitArgs(["--help"]).help, true);
   assert.equal(parseCockpitArgs(["-h"]).help, true);
+});
+
+test("--open is opt-in and preserves a custom port", () => {
+  const args = parseCockpitArgs(["--open", "--port", "9000"]);
+  assert.equal(args.open, true);
+  assert.equal(args.port, 9000);
+});
+
+test("openCockpitBrowser passes the listening URL to Windows without a shell", () => {
+  const calls = [];
+  openCockpitBrowser("http://127.0.0.1:9000/", (file, args, options, callback) => {
+    calls.push({ file, args, options });
+    callback(null);
+  });
+  assert.deepEqual(calls, [{
+    file: "rundll32.exe",
+    args: ["url.dll,FileProtocolHandler", "http://127.0.0.1:9000/"],
+    options: { windowsHide: true }
+  }]);
+});
+
+test("openCockpitBrowser failure leaves a manual URL and does not throw", () => {
+  for (const synchronous of [false, true]) {
+    const warnings = [];
+    openCockpitBrowser("http://127.0.0.1:9000/", (_file, _args, _options, callback) => {
+      const error = new Error("test launch failure");
+      if (synchronous) throw error;
+      callback(error);
+    }, (message) => warnings.push(message));
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /Open http:\/\/127\.0\.0\.1:9000\/ manually/);
+  }
 });
 
 test("parseCockpitArgs: S3 fire flags are parsed (channel / tts / window / maxChars)", { timeout: 5000 }, () => {
