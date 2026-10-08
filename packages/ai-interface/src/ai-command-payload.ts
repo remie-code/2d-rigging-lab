@@ -1,3 +1,4 @@
+import { MaterialCommandPayloadOptions } from "./ai-material-command.js";
 import { OperationIdSchema, SurfaceSchema } from "@private-2d-rigging-lab/contracts";
 import { OperationRequestSchema } from "@private-2d-rigging-lab/operation-core";
 import { z } from "zod";
@@ -44,6 +45,7 @@ export const GetOperationLogPayloadSchema = z.object({
 export type GetOperationLogPayload = z.infer<typeof GetOperationLogPayloadSchema>;
 
 export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
+  ...MaterialCommandPayloadOptions,
   z.object({
     command: z.literal("getEditorState"),
     payload: GetEditorStatePayloadSchema

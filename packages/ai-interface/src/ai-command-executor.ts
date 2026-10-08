@@ -1,3 +1,4 @@
+import { isMaterialCommandName, materialCommandCapability } from "./ai-material-command.js";
 import type { DiagnosticDto } from "@private-2d-rigging-lab/contracts";
 import { CheckIdSchema, OperationIdSchema } from "@private-2d-rigging-lab/contracts";
 import type { OperationRequestDto, OperationResultDto } from "@private-2d-rigging-lab/operation-core";
@@ -103,6 +104,12 @@ export class AiCommandExecutor {
   async execute(input: unknown): Promise<AiCommandResponse> {
     const request = AiCommandRequestSchema.parse(input);
 
+    if (isMaterialCommandName(request.command)) {
+      const response = AiCommandResponseSchema.parse({ schemaVersion: "ai-command-response-v1", commandId: request.commandId,
+        command: request.command, status: hasCapability(request, materialCommandCapability(request.command)) ? "not_implemented" : "permission_denied", payload: {} });
+      appendAiCommandResponseToTranscript({ transcript: this.#transcript, request, response });
+      return response;
+    }
     switch (request.command) {
       case "dryRunOperation":
         return this.#executeDryRun(request);
@@ -122,6 +129,7 @@ export class AiCommandExecutor {
       case "preflightPsdImportPlanIntake":
       case "executePsdImportPlanIntake":
         return this.#unsupportedReadCommand(request);
+      default: throw new Error("Material commands require the authoring host.");
     }
   }
 

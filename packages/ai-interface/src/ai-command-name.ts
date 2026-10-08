@@ -1,6 +1,8 @@
+import { AiMaterialCommandNameSchema } from "./ai-material-command.js";
 import { z } from "zod";
 
 export const AiCommandNameSchema = z.enum([
+  ...AiMaterialCommandNameSchema.options,
   "getEditorState",
   "inspectModel",
   "inspectTarget",

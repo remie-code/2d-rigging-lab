@@ -21,6 +21,7 @@
     "@private-2d-rigging-lab/render-software": "workspace:*",
     "@private-2d-rigging-lab/runtime-core": "workspace:*",
     "@private-2d-rigging-lab/validator-core": "workspace:*",
+    "pngjs": "7.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

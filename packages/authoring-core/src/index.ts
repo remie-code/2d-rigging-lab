@@ -69,3 +69,6 @@ export * from "./runtime-export-assembly.js";
 export * from "./tutorial-mini-model-seed.js";
 export * from "./to-package-document.js";
 export * from "./to-runtime-graph.js";
+
+export * from "./material-candidate-build.js";
+export { analyzeMaterialImpact, guardMaterialCandidateOperation } from "./material-impact-analysis.js";

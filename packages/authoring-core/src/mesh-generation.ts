@@ -2526,11 +2526,10 @@ const resolveDrawableTextureBytes = (
     };
   }
 
-  // Legacy / unpadded path: bytes are the raw content raster and `bounds` are the
-  // raster extents (historical `bounds ≡ raster`). Preserve prior behavior exactly
-  // so Wave108-era packages without padding keep generating.
-  const width = Math.round(bounds.width);
-  const height = Math.round(bounds.height);
+  // Declared raster dimensions are pixels; stage bounds may have any placement scale.
+  // Preserve the historical bounds fallback only for legacy textures without dimensions.
+  const width = texture?.dimensions?.width ?? Math.round(bounds.width);
+  const height = texture?.dimensions?.height ?? Math.round(bounds.height);
   if (
     width <= 0 ||
     height <= 0 ||

@@ -1,3 +1,7 @@
+import { DiagnosticSchema } from "@private-2d-rigging-lab/contracts";
+import { MaterialHostError } from "./material-host-error.js";
+import { withMaterialPackageLock } from "./material-package-transaction.js";
+import { isMaterialCommand, runMaterialCommand } from "./run-material-command.js";
 import {
   AiCommandExecutor,
   DiagnosticGatedAutoApprovalPolicy
@@ -48,9 +52,10 @@ export interface RunAuthoringHostCommandInput {
 
 const DEFAULT_HOST_TIMESTAMP = "2026-07-02T00:00:00.000Z";
 
-export const runAuthoringHostCommand = async (
+const runUnlockedAuthoringHostCommand = async (
   input: RunAuthoringHostCommandInput
 ): Promise<AuthoringHostCommandResponse> => {
+  if (isMaterialCommand(input.command)) return runMaterialCommand(input);
   const now = input.now ?? (() => new Date(DEFAULT_HOST_TIMESTAMP));
 
   // Guard against writing approval/transcript state inside the package directory even on
@@ -245,4 +250,15 @@ const safeParseAiCommandRequest = (command: unknown): AiCommandRequest | undefin
   }
 
   return command as AiCommandRequest;
+};
+
+export const runAuthoringHostCommand = async (input: RunAuthoringHostCommandInput): Promise<AuthoringHostCommandResponse> => {
+  try { return await withMaterialPackageLock(input.packageDirectory, () => runUnlockedAuthoringHostCommand(input)); }
+  catch (error) {
+    if (!(error instanceof MaterialHostError) || error.code !== "package-busy") throw error;
+    const raw = input.command as { command?: unknown; commandId?: unknown } | null;
+    return { schemaVersion: "authoring-host-command-response-v1", outcome: "rejected", command: typeof raw?.command === "string" ? raw.command : "unknown",
+      ...(typeof raw?.commandId === "string" ? { commandId: raw.commandId } : {}), aiCommandStatus: "rejected", saved: false,
+      diagnostics: [DiagnosticSchema.parse({ checkId: "material.packageBusy", status: "fail", severity: "error", phase: "authoring-host", target: { kind: "operation", id: "op_authoring_lock" }, message: error.message })] };
+  }
 };
