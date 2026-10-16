@@ -3240,3 +3240,62 @@ test("onSoulTranscript: NG ブロック時の entry には latencyMs フィー�
 
   orch.dispose();
 });
+
+// ── コメント反応の内部指示（fire({ instruction })・discussion/ai-cohost/decisions/comment-react/integration.md §1-7）──
+
+test("fire({instruction}): この 1 発の ask の先頭にだけ付く・会話ログには残らない・次の fire には付かない", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("このボス強い");
+  buffer.append({ startMs: 0, endMs: 0, text: "その武器なに？", speaker: "viewer", displayName: "taro" });
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */
+  const inputs = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(input) {
+        inputs.push(input);
+        return { replyText: "それは大剣だよ" };
+      }
+    },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer
+  });
+  const instruction = "[内部の指示: 視聴者のコメントに反応してください。\n視聴者(taro): 「その武器なに？」]";
+  const r = await orch.fire({ instruction });
+  assert.equal(r.fired, true);
+  assert.ok(inputs[0].startsWith(`${instruction}\n\n`), "先頭に付く");
+  assert.match(inputs[0], /viewer\(taro\): その武器なに？/, "会話窓はそのまま続く");
+  assert.equal(JSON.stringify(buffer.all()).includes("内部の指示"), false, "会話ログに残らない");
+  await orch.fire();
+  assert.equal(inputs[1].includes("内部の指示"), false, "次の fire には付かない");
+  await orch.fire({ instruction: "   " });
+  assert.equal(inputs[2].includes("内部の指示"), false, "空の指示は無し扱い");
+  orch.dispose();
+});
+
+test("fire({vision:\"preferred\", instruction}): 画像付き ask でも最初の text ブロックの先頭に付く", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("見て");
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 8, height: 6, elapsedMs: 1 });
+  /** @type {any[]} */
+  const inputs = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(input) {
+        inputs.push(input);
+        return { replyText: "うん" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "ゲーム"
+  });
+  await orch.fire({ vision: "preferred", instruction: "[内部の指示: X]" });
+  assert.ok(Array.isArray(inputs[0]));
+  assert.equal(inputs[0][0].type, "image");
+  assert.ok(inputs[0][1].text.startsWith("[内部の指示: X]\n\n"));
+  orch.dispose();
+});

@@ -21,6 +21,8 @@ import {
   formatSttLatencyLine,
   createSpeakStartHooks,
   formatSpeakNowLine,
+  createCommentBusyHooks,
+  formatCommentJudgmentLine,
   createMemoryHooks,
   shouldSkipMemoryCheckpoint,
   createMemoryRecorder,
@@ -1687,5 +1689,68 @@ test("formatSpeakNowLine: 遅延・選択・確率の 1 行（本文なし）・
   assert.equal(
     formatSpeakNowLine({ ok: false, trigger: "transcript", error: "キーが見つからない", latencyMs: null }),
     "[cockpit] speak-now: error ms=- trigger=transcript reason=キーが見つからない\n"
+  );
+});
+
+// ── createCommentBusyHooks / formatCommentJudgmentLine（コメント反応の合意 §2・§3）────────────────
+
+test("createCommentBusyHooks: 未記憶・未知値は hold（あとで拾う）・記憶済みは復元・切替は settings へ（失敗寛容）・鮮度と件数", { timeout: 5000 }, () => {
+  let stored = /** @type {string | null} */ (null);
+  /** @type {{ maxAgeSec: number | null; maxCount: number | null }} */
+  let hold = { maxAgeSec: null, maxCount: null };
+  const settings = {
+    getCommentBusyPolicy: () => stored,
+    setCommentBusyPolicy: (/** @type {string | null} */ p) => {
+      stored = p;
+    },
+    getCommentHold: () => hold
+  };
+  const hooks = createCommentBusyHooks(settings);
+  assert.equal(hooks.resolveInitialCommentBusyPolicy(), "hold");
+  stored = "bogus";
+  assert.equal(hooks.resolveInitialCommentBusyPolicy(), "hold");
+  hooks.onSetCommentBusyPolicy("drop");
+  assert.equal(stored, "drop");
+  assert.equal(hooks.resolveInitialCommentBusyPolicy(), "drop");
+  assert.deepEqual(hooks.resolveCommentHold(), { maxAgeMs: undefined, maxCount: undefined });
+  hold = { maxAgeSec: 30, maxCount: 5 };
+  assert.deepEqual(hooks.resolveCommentHold(), { maxAgeMs: 30_000, maxCount: 5 });
+  const failing = createCommentBusyHooks({
+    getCommentBusyPolicy: () => null,
+    setCommentBusyPolicy: () => {
+      throw new Error("disk full");
+    },
+    getCommentHold: () => {
+      throw new Error("broken");
+    }
+  });
+  assert.doesNotThrow(() => failing.onSetCommentBusyPolicy("hold"));
+  assert.deepEqual(failing.resolveCommentHold(), { maxAgeMs: undefined, maxCount: undefined });
+});
+
+test("formatCommentJudgmentLine: 弾く判定・反応する判定の 1 行（コメント本文なし）", { timeout: 5000 }, () => {
+  assert.equal(
+    formatCommentJudgmentLine({ stage: "guard", commentId: "m1", pass: true, kind: "ok", verdict: "ok", hijackProbability: 0.021, latencyMs: 180.4, error: null }),
+    "[cockpit] comment-guard: ms=180 id=m1 action=pass verdict=ok hijack=0.02\n"
+  );
+  assert.equal(
+    formatCommentJudgmentLine({ stage: "guard", commentId: "m2", pass: false, kind: "hijack", verdict: "refusal", hijackProbability: 0.81, latencyMs: 200 }),
+    "[cockpit] comment-guard: ms=200 id=m2 action=reject:hijack verdict=refusal hijack=0.81\n"
+  );
+  assert.equal(
+    formatCommentJudgmentLine({ stage: "guard", commentId: "m3", pass: false, kind: "error", verdict: null, hijackProbability: null, latencyMs: 5000, error: "タイムアウト（5 秒）" }),
+    "[cockpit] comment-guard: ms=5000 id=m3 action=reject:error verdict=- hijack=- reason=タイムアウト（5 秒）\n"
+  );
+  assert.equal(
+    formatCommentJudgmentLine({ stage: "react", ok: true, trigger: "comment", commentId: "m4", choice: "react", probability: 0.92, latencyMs: 240, action: "fire" }),
+    "[cockpit] comment-react: ms=240 id=m4 choice=react p=0.92 action=fire trigger=comment\n"
+  );
+  assert.equal(
+    formatCommentJudgmentLine({ stage: "react", ok: false, trigger: "after-busy", commentId: "m5", error: "キーが見つからない", latencyMs: null }),
+    "[cockpit] comment-react: error ms=- id=m5 trigger=after-busy reason=キーが見つからない\n"
+  );
+  assert.equal(
+    formatCommentJudgmentLine({ stage: "react", ok: true, skipped: true, commentId: "m6", action: "hold" }),
+    "[cockpit] comment-react: id=m6 action=hold\n"
   );
 });

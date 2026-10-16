@@ -29,6 +29,8 @@
  *  - speakStartPostErrorText   → POST /api/speak-start 応答（503 / invalid mode / set failed・成功は null・
  *                                 verbosityPostErrorText の写経・speak-now 合意 §5）
  *  - speakStartRequestErrorText → POST /api/speak-start の fetch catch（"speak-start error: e"）
+ *  - commentBusyPostErrorText / commentBusyRequestErrorText → POST /api/comment-busy（忙しい間のコメントの
+ *                                 扱い・コメント反応の合意 §2）の応答 / fetch catch（speakStart の写経）
  *  - killSwitchView            → S8「キルスイッチ」: snapshot の `killed` から KILL ボタン / 復帰ボタンの
  *                                 表示構造体を導出（selfFireToggleView の様式踏襲）。通常時は「■ KILL」・
  *                                 キル中は「殺し中」+ 復帰ラベル。
@@ -173,6 +175,26 @@ export function speakStartPostErrorText(res) {
  */
 export function speakStartRequestErrorText(e) {
   return "speak-start error: " + e;
+}
+
+/**
+ * POST /api/comment-busy 応答 → エラー文言（成功は null・speakStartPostErrorText の写経・コメント反応の合意 §2）。
+ * @param {{ status: number; ok: boolean; j: any }} res
+ * @returns {string | null}
+ */
+export function commentBusyPostErrorText(res) {
+  if (res.status === 503) return "comment-busy control not available";
+  if (!res.ok) return "set failed: " + ((res.j && res.j.error) || "error");
+  return null;
+}
+
+/**
+ * POST /api/comment-busy の fetch 失敗 → エラー文言（speakStartRequestErrorText の写経）。
+ * @param {unknown} e
+ * @returns {string}
+ */
+export function commentBusyRequestErrorText(e) {
+  return "comment-busy error: " + e;
 }
 
 // ── S8「キルスイッチ」: KILL ボタン / 復帰ボタンの表示導出（selfFireToggleView の様式踏襲）───────

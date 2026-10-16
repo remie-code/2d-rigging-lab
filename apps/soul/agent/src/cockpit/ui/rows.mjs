@@ -38,14 +38,16 @@ import {
   visionMarkerText,
   bargeInMarkerText,
   selfFireMarkerText,
-  speakNowJudgmentText
+  speakNowJudgmentText,
+  commentJudgmentText
 } from "../view-logic/markers.mjs";
 import {
   discardGhostLabel,
   diagnosticGhostLabel,
   selfFireGhostLabel,
   chatDiagnosticGhostLabel,
-  speakNowErrorGhostLabel
+  speakNowErrorGhostLabel,
+  commentJudgmentErrorGhostLabel
 } from "../view-logic/ghost.mjs";
 import { formatClock } from "../view-logic/format-time.mjs";
 
@@ -174,15 +176,17 @@ export function feedWithSelfFireMarker(feed, d, nowMs) {
 /**
  * speak-now の判定行を積む（speak-now 合意 §5・SSE selfFire kind:"speak-now-judgment" の成功分）。
  * マーカー行の一種（speaking 行は除去しない＝自発マーカーと同じ規律）。
+ * コメント反応の判定行（「コメント判定: 反応 0.92」）も同じ行種で描く（text を渡す）。
  * @param {FeedState} feed  @param {any} d  SSE selfFire（kind:"speak-now-judgment"・choice/probability）。  @param {number} nowMs
+ * @param {string} [text]  行の文字列（省略時は speak-now の判定行）。
  */
-export function feedWithJudgmentMarker(feed, d, nowMs) {
+export function feedWithJudgmentMarker(feed, d, nowMs, text) {
   return appended(feed, {
     kind: "judgment-marker",
     timeText: formatClock(nowMs),
     whoText: "judge",
     markerText: "?",
-    text: speakNowJudgmentText(d)
+    text: text ?? speakNowJudgmentText(d)
   });
 }
 
@@ -232,7 +236,10 @@ export function feedFromHistory(transcripts, nowMs) {
  *  - selfFire（:874-878）: fired:true はマーカー行 / fired:false はゴースト行。
  *    kind:"speak-now-judgment"（speak-now の判定・相乗り）は先に分流: error ありはゴースト行
  *    「(判定エラー: …)」・それ以外は判定行「判定: 自発 0.45」。
+ *    kind:"comment-judgment"（コメント反応の判定・相乗り）も同様: error ありは「(コメント判定エラー: …)」・
+ *    それ以外は判定行「コメント判定: 反応 0.92」。発火結果（kind:"comment-react"）は従来の自発マーカー。
  *  - chatDiagnostic（:888-897）: chatDiagnosticGhostLabel 経由（観測補助 4 種は null = 非表示）。
+ *    kind:"commentRejected"（弾いたコメント）は「(弾いた: 乗っ取り)」。
  *
  * @param {FeedState} feed  @param {string} eventName  @param {any} d  @param {number} nowMs
  * @returns {FeedState}
@@ -263,6 +270,12 @@ export function feedAfterSseEvent(feed, eventName, d, nowMs) {
         return d.error != null
           ? feedWithGhost(feed, speakNowErrorGhostLabel(d), nowMs)
           : feedWithJudgmentMarker(feed, d, nowMs);
+      }
+      if (d && d.kind === "comment-judgment") {
+        // コメント反応の判定（反応する のときだけサーバが流す）/ 判定エラー（コメント反応の合意 §3）。
+        return d.error != null
+          ? feedWithGhost(feed, commentJudgmentErrorGhostLabel(d), nowMs)
+          : feedWithJudgmentMarker(feed, d, nowMs, commentJudgmentText(d));
       }
       return d && d.fired
         ? feedWithSelfFireMarker(feed, d, nowMs)

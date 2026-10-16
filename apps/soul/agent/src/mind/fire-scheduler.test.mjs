@@ -1350,7 +1350,7 @@ test("interjection: LLM 非依存の担保に抵触しない(fire-scheduler は 
 });
 
 // ── speak-now モードのスイッチ（speak-now 合意 §4: turn-end / call / interjection を止め、silence と
-//    comment 系は残す）──────────────────────────────────────────────────────────
+//    comment 系は残す。コメント反応の合意 §1-6 で comment 系も止める）──────────────────────────────────────────────────────────
 
 /** speak-now スイッチ検証用のスケジューラ（全語彙が短い時間で出る設定）。 */
 function makeSpeakNowSwitchScheduler(clock, overrides = {}) {
@@ -1403,7 +1403,7 @@ test("speak-now スイッチ: ON の間は call / turn-end / interjection を出
   sch.dispose();
 });
 
-test("speak-now スイッチ: ON の間も silence と comment / comment-call は残る（you 発話は活動として沈黙を先送り）", () => {
+test("speak-now スイッチ: ON の間も silence は残る・comment / comment-call は止まる（you 発話・コメントは活動として沈黙を先送り）", () => {
   const clock = makeFakeClock();
   const { sch, reqs } = makeSpeakNowSwitchScheduler(clock, { speakNowMode: true });
   clock.advance(90_000);
@@ -1412,9 +1412,21 @@ test("speak-now スイッチ: ON の間も silence と comment / comment-call �
   assert.equal(reqs.filter((r) => r.kind === "silence").length, 0, "you 発話で沈黙が先送りされる");
   clock.advance(1);
   assert.equal(reqs.filter((r) => r.kind === "silence").length, 1, "silence は speak-now 中も出る");
+  // コメント反応の合意 §1-6: speak-now の間はコメントの機械的な発火を止める（判定は comment-react 部品）。
+  clock.advance(50_000); // t=240000（次の沈黙は本来 t=290000）。
   sch.handleChatMessage({ text: "コーディ見てる？" });
   sch.handleChatMessage({ text: "こんにちは" });
-  assert.deepEqual(reqs.map((r) => r.kind), ["silence", "comment-call", "comment"]);
+  assert.deepEqual(reqs.map((r) => r.kind), ["silence"], "comment-call / comment は出ない");
+  assert.equal(sch.commentBudgetRemaining(), 30, "予算も消費しない");
+  // コメントは活動として沈黙を先送りする（t=240000 のコメントから 100000 後まで出ない）。
+  clock.advance(99_999);
+  assert.equal(reqs.filter((r) => r.kind === "silence").length, 1, "コメントで沈黙が先送りされる");
+  clock.advance(1);
+  assert.equal(reqs.filter((r) => r.kind === "silence").length, 2);
+  // OFF に戻すと従来どおりコメント系が出る。
+  sch.setSpeakNowMode(false);
+  sch.handleChatMessage({ text: "コーディ見てる？" });
+  assert.deepEqual(reqs.map((r) => r.kind), ["silence", "silence", "comment-call"]);
   sch.dispose();
 });
 

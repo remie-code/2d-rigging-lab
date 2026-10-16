@@ -302,7 +302,7 @@ export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
  * @param {boolean} [options.initialKilled=false]  キル状態の初期値（S8）。キル状態の正本はサーバ側
  *   （Domain B）にあるため、orchestrator 生成時にサーバの現況を渡し「キル中に生まれる orchestrator は
  *   キル済みで生まれる」不変を成立させる（born-killed）。
- * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred" }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; kill: (atMs?: number) => Promise<object>; revive: () => void; getKilled: () => boolean; getState: () => FireState; dispose: () => void }}
+ * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred"; instruction?: string }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; kill: (atMs?: number) => Promise<object>; revive: () => void; getKilled: () => boolean; getState: () => FireState; dispose: () => void }}
  */
 export function createFireOrchestrator(options) {
   if (options == null || typeof options !== "object") {
@@ -379,6 +379,13 @@ export function createFireOrchestrator(options) {
   const progressiveProjectionOwners = new Map();
   /** Latest unconsumed partial; single-flight Fire makes one pending slot sufficient. */
   let pendingProgressiveCorrection = null;
+  /**
+   * 受理した 1 発だけに付く内部指示（`fire({ instruction })`・コメント反応でどのコメントかを明示する・
+   * discussion/ai-cohost/decisions/comment-react/integration.md §1-7）。ask の先頭に付けるだけで、会話ログ
+   * （転写バッファ）には残らない（progressive correction と同じ作り）。fire() の finally で必ず畳む。
+   * @type {string | null}
+   */
+  let currentFireInstruction = null;
 
   const acquireResources = async () => {
     const supplied =
@@ -486,18 +493,7 @@ export function createFireOrchestrator(options) {
     trace("progressive.continuity.consumed", {
       sourceGenerationId: correction.sourceGenerationId
     });
-    if (typeof content === "string") {
-      return `${PROGRESSIVE_CONTINUITY_INSTRUCTION}\n\n${content}`;
-    }
-    if (Array.isArray(content)) {
-      let applied = false;
-      return content.map((block) => {
-        if (applied || block?.type !== "text" || typeof block.text !== "string") return block;
-        applied = true;
-        return { ...block, text: `${PROGRESSIVE_CONTINUITY_INSTRUCTION}\n\n${block.text}` };
-      });
-    }
-    return content;
+    return prependInstruction(content, PROGRESSIVE_CONTINUITY_INSTRUCTION);
   };
 
   /**
@@ -598,7 +594,10 @@ export function createFireOrchestrator(options) {
     const boundary = createProgressiveBoundary(delivery);
     currentProgressiveBoundary = boundary;
     try {
-      const askContent = consumeProgressiveCorrection(content);
+      // 先頭から: progressive correction → この 1 発の内部指示（コメント反応）→ 会話窓（+ 画像）。
+      const askContent = consumeProgressiveCorrection(
+        currentFireInstruction ? prependInstruction(content, currentFireInstruction) : content
+      );
       const asked = await resources.session.ask(askContent, { onTextDelta: (delta) => boundary.append(delta) });
       // A successful terminal result owns exactly one final remainder flush.
       boundary.flush();
@@ -1346,7 +1345,9 @@ export function createFireOrchestrator(options) {
   return {
     /**
      * Fire 1 発を処理する（Promise を返す・テストが await 可能）。
-     * @param {{ vision?: boolean | "preferred" }} [fireOptions]  省略/未指定時は従来どおり通常 Fire（完全不変）。
+     * @param {{ vision?: boolean | "preferred"; instruction?: string }} [fireOptions]  省略/未指定時は従来どおり通常 Fire（完全不変）。
+     *   `instruction` はこの 1 発だけ ask の先頭に付ける内部指示（コメント反応でどのコメントかを明示する・
+     *   会話ログには残らない）。vision の各モードと併用できる。
      *   `{ vision: true }` で視覚発火（S5・見えなければ中止）。`{ vision: "preferred" }` で視覚優先発火
      *   （S6 追撃・自発 call/turn-end 用・対象あれば画像付き・無/失敗なら画像なしの通常 Fire へ劣化）。
      * @returns {Promise<object>}
@@ -1373,6 +1374,11 @@ export function createFireOrchestrator(options) {
       }
 
       fireClaimed = true;
+      // コメント反応: この 1 発だけの内部指示（空・非文字列は無し = 従来と同じ ask）。
+      currentFireInstruction =
+        fireOptions != null && typeof fireOptions.instruction === "string" && fireOptions.instruction.trim().length > 0
+          ? fireOptions.instruction
+          : null;
       try {
         // S5/S6: 視覚系は別フローへ振り分ける。通常 fire()（fireOptions 省略 = vision undefined）の挙動は
         // 完全不変（無退行・fireNormalCore へ抽出しただけ）。
@@ -1390,6 +1396,7 @@ export function createFireOrchestrator(options) {
         return await fireNormalCore(buffer, { alreadyAccepted: false });
       } finally {
         fireClaimed = false;
+        currentFireInstruction = null;
       }
     },
 
@@ -1428,6 +1435,32 @@ export function createFireOrchestrator(options) {
       }
     }
   };
+}
+
+/**
+ * ask の内容の先頭に内部指示を付ける（文字列はそのまま前置・content 配列は最初の text ブロックに前置）。
+ * progressive correction とコメント反応の指示が共有する。
+ * @param {string | Array<any>} content
+ * @param {string} instruction
+ * @returns {string | Array<any>}
+ */
+function prependInstruction(content, instruction) {
+  if (typeof content === "string") {
+    return `${instruction}
+
+${content}`;
+  }
+  if (Array.isArray(content)) {
+    let applied = false;
+    return content.map((block) => {
+      if (applied || block?.type !== "text" || typeof block.text !== "string") return block;
+      applied = true;
+      return { ...block, text: `${instruction}
+
+${block.text}` };
+    });
+  }
+  return content;
 }
 
 /**

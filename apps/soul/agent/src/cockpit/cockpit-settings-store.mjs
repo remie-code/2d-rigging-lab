@@ -48,6 +48,13 @@
  *     フォールバック（初回既定 speak-now）は呼び出し側（cockpit.mjs の createSpeakStartHooks）に委ねる
  *     （verbosityMode と同型の文字列キー・asStringOrNull）。
  *   setSpeakStartMode(mode): 操縦席で話し始めの方式を切替えたときに記憶（次回起動で復元）。
+ *   getCommentBusyPolicy(): 忙しい間に届いたコメントの扱い（hold = あとで拾う / drop = 見逃す）の初期値
+ *     （コメント反応の合意 discussion/ai-cohost/decisions/comment-react/integration.md §2）。未記憶/未知値の
+ *     フォールバック（既定 hold）は呼び出し側（cockpit.mjs の createCommentBusyHooks）に委ねる。
+ *   setCommentBusyPolicy(policy): 操縦席で切替えたときに記憶（次回起動で復元）。
+ *   getCommentHold(): あとで拾うの鮮度（秒）と件数（`{ maxAgeSec, maxCount }`・各 null = 既定）。操縦席に
+ *     ツマミは置かず、このファイルのキー `commentHoldMaxAgeSec` / `commentHoldMaxCount` を手で書き換えて
+ *     次回起動から効かせる（合意 §2「秒数と件数は設定で変えられるようにする」の最小の形）。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -110,6 +117,9 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setSttEngine: (engine: string | null) => void;
  *   getSpeakStartMode: () => string | null;
  *   setSpeakStartMode: (mode: string | null) => void;
+ *   getCommentBusyPolicy: () => string | null;
+ *   setCommentBusyPolicy: (policy: string | null) => void;
+ *   getCommentHold: () => { maxAgeSec: number | null; maxCount: number | null };
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -282,6 +292,18 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} mode */
     setSpeakStartMode(mode) {
       writeMerged({ speakStartMode: mode ?? null });
+    },
+    getCommentBusyPolicy() {
+      return asStringOrNull(readAll().commentBusyPolicy);
+    },
+    /** @param {string | null} policy */
+    setCommentBusyPolicy(policy) {
+      writeMerged({ commentBusyPolicy: policy ?? null });
+    },
+    getCommentHold() {
+      const all = readAll();
+      const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+      return { maxAgeSec: num(all.commentHoldMaxAgeSec), maxCount: num(all.commentHoldMaxCount) };
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

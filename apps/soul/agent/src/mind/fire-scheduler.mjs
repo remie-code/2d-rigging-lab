@@ -15,7 +15,9 @@
  *  このモジュールは従来モードの機械信号側を担い、判定 API にも LLM にも触れない——依存ゼロ（import 文が
  *  1 つも無い）＝LLM/SDK/session/判定 API への到達経路が構造的に存在しない。speak-now の判定は別部品
  *  （speak-now.mjs）が担い、ここには「speak-now の間は区切り応答・呼びかけ・合いの手を止める」スイッチ
- *  （setSpeakNowMode）だけを置く。沈黙とコメント系は speak-now の間も動く。
+ *  （setSpeakNowMode）だけを置く。沈黙は speak-now の間も動く。コメント系（comment / comment-call）は
+ *  speak-now の間は止める（コメントへの反応は判定 API の別部品 comment-react.mjs が担う・
+ *  discussion/ai-cohost/decisions/comment-react/integration.md §1-6）。
  *  発火要求を出すだけで、実際の発話は結線層の fire-orchestrator が担う。
  *  fake clock（nowImpl）+ 注入 setTimeout/clearTimeout + 注入 RNG で全分岐を決定論的にテストできる。
  *
@@ -70,7 +72,8 @@
  * ── speak-now モード（speak-now 合意 §4）──────────────────────────────────────
  *  setSpeakNowMode(true)（既定 false = 従来どおり）の間は、区切り応答（turn-end）・呼びかけ（call）・
  *  合いの手（interjection）を出さない（タイマも張らない・切替時に pending/run は畳む）。you 発話・VAD は
- *  活動として沈黙タイマの再武装にだけ使う。沈黙（silence）とコメント応答（comment / comment-call）は残す。
+ *  活動として沈黙タイマの再武装にだけ使う。沈黙（silence）は残す。コメント応答（comment / comment-call）は
+ *  止める（コメント反応の合意 §1-6）——通ったコメントは活動として沈黙タイマの再武装にだけ使う。
  *
  * ── 直近発火の基点（lastFireAtMs）─────────────────────────────────────────────
  *  不応期の基点は「直近発火からの経過」。スケジューラが発火要求を出したとき（call/turn-end/silence）に
@@ -427,7 +430,8 @@ function isValidVerbosityMode(mode) {
  *   VERBOSITY_BUNDLES[mode] から解決する（上記オプションを明示指定すればそちらが優先
  *   される = 既存テストの明示 options は従来どおり効く・無退行の鍵）。
  * @param {boolean} [options.speakNowMode=false]  speak-now モードの初期値（true の間は turn-end / call /
- *   interjection を出さない・speak-now 合意 §4）。既定 false = 従来どおり。
+ *   interjection を出さない・speak-now 合意 §4。comment / comment-call も出さない・コメント反応の合意 §1-6）。
+ *   既定 false = 従来どおり。
  * @returns {{
  *   handleVadEvent: (event: { type: string }) => void;
  *   handleTranscript: (entry: { text?: string; speaker?: string }) => void;
@@ -784,6 +788,9 @@ export function createFireScheduler(options) {
     if (disposed || msg == null || typeof msg !== "object") return;
     // 活動 → 沈黙タイマ再武装（armSilence は enabled/disposed/予算を自己ガード）。
     armSilence();
+    // speak-now 中はコメントの機械的な発火（comment / comment-call）を止める（活動の反映だけ・コメント反応の
+    // 合意 §1-6。反応するかは comment-react.mjs の判定が決める）。
+    if (speakNowMode) return;
     if (!enabled || isBusy()) return;
     if (typeof msg.text !== "string" || msg.text.length === 0) return;
     const now = nowImpl();
@@ -872,7 +879,8 @@ export function createFireScheduler(options) {
   /**
    * speak-now モードの切替（speak-now 合意 §4）。ON で turn-end / call / interjection を止め、進行中の
    * 無音待ち・pending turn-end・合いの手 run を畳む（再 OFF でも復活しない = 次の VAD/転写から測り直す）。
-   * 沈黙・コメント系・自発 ON/OFF・口数には触らない。
+   * 沈黙・自発 ON/OFF・口数には触らない。コメント系は ON の間 handleChatMessage が活動の反映だけで抜ける
+   * （止めるのは入口だけ・畳むタイマは無い）。
    * @param {boolean} on
    */
   const setSpeakNowMode = (on) => {

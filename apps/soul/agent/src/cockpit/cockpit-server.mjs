@@ -56,6 +56,15 @@ import { createBargeInGate } from "../mind/barge-in.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
 import { createSpeakNowController } from "../mind/speak-now.mjs";
 import { createDecisionsJudge, loadDecisionsApiKey } from "../mind/speak-now-decisions.mjs";
+import { createCommentGuard, COMMENT_JUDGE_TIMEOUT_MS } from "../mind/comment-guard.mjs";
+import {
+  createCommentReactController,
+  buildCommentReactFireInstruction,
+  COMMENT_BUSY_POLICIES,
+  DEFAULT_COMMENT_BUSY_POLICY,
+  COMMENT_HOLD_MAX_AGE_MS,
+  COMMENT_HOLD_MAX_COUNT
+} from "../mind/comment-react.mjs";
 import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
 import { resolveBrainIdentity } from "../mind/brains.mjs";
 import { resolveModelIdentity } from "../mind/model-identity.mjs";
@@ -465,6 +474,25 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {(info: object) => void} [options.onSpeakNowJudgment]
  *   判定ごとの記録（遅延・選択・確率・行き先 or 失敗理由。会話の本文は渡さない）。cockpit.mjs が標準出力に
  *   1 行書く（合意 §5）。
+ * @param {(comment: { text: string; displayName: string | null; name: string }) =>
+ *   (import("../mind/comment-guard.mjs").CommentGuardDecision | Promise<import("../mind/comment-guard.mjs").CommentGuardDecision>)} [options.commentGuard]
+ *   コメントの弾く判定（discussion/ai-cohost/decisions/comment-react/integration.md §1-3）。既定は Decisions API
+ *   実装（createCommentGuard・タイムアウト 5 秒・キーは decisionsApiKeyProvider で判定ごとに読む）。**全モード**
+ *   （KILL 中・自発 OFF・従来モードも）で、通ったコメントだけを転写バッファに積む。テスト注入用に同期で
+ *   `{ pass, kind }` を返してもよい（そのときは従来どおり同期で追記・放送する）。
+ * @param {(request: { input: string; instructions: string; choices: ReadonlyArray<{ value: string; description: string }> }) =>
+ *   Promise<{ choice: string; probs?: Record<string, number>; latencyMs?: number }>} [options.commentReactJudge]
+ *   コメントの反応する判定（合意 §1-6・speak-now モードの間だけ）。既定は Decisions API 実装（createDecisionsJudge・
+ *   タイムアウト 5 秒）。
+ * @param {"hold" | "drop"} [options.commentBusyPolicyInitial="hold"]
+ *   忙しい間に届いたコメントの扱い（"hold" = あとで拾う・既定 / "drop" = 見逃す・合意 §2）の初期値。
+ * @param {(policy: string) => void | Promise<void>} [options.onSetCommentBusyPolicy]
+ *   その永続化フック（POST /api/comment-busy が呼ぶ・onSetSpeakStartMode と同型の失敗寛容）。
+ * @param {number} [options.commentHoldMaxAgeMs=COMMENT_HOLD_MAX_AGE_MS]  あとで拾う: 届いてから捨てるまで（約 20 秒）。
+ * @param {number} [options.commentHoldMaxCount=COMMENT_HOLD_MAX_COUNT]  あとで拾う: まとめる件数（新しい方から 3 件）。
+ * @param {(info: object) => void} [options.onCommentJudgment]
+ *   コメント判定ごとの記録（弾く判定・反応する判定。遅延・結果・コメント ID。コメント本文は渡さない）。
+ *   cockpit.mjs が標準出力に 1 行書く（合意 §3）。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -475,7 +503,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   setSelfFireEnabled: (enabled: boolean) => boolean;
  *   selfFireStatus: () => { enabled: boolean } | null;
  *   bargeInStatus: () => { enabled: boolean } | null;
- *   ingestChatMessage: (msg: { text?: string; displayName?: string } | null) => void;
+ *   ingestChatMessage: (msg: { text?: string; displayName?: string; messageId?: string | null } | null) => void;
  *   broadcastChatStatus: (status: string) => void;
  *   broadcastChatDiagnostic: (info: any) => void;
  *   getTranscript: () => Array<any>;
@@ -553,6 +581,34 @@ export function createCockpitServer(options = {}) {
             typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
         });
   const onSpeakNowJudgment = typeof options.onSpeakNowJudgment === "function" ? options.onSpeakNowJudgment : null;
+  // コメント判定（discussion/ai-cohost/decisions/comment-react/integration.md）: 弾く判定・反応する判定・
+  // 忙しい間のコメントの扱い（あとで拾う / 見逃す）・判定ログの口。
+  const commentGuard =
+    typeof options.commentGuard === "function"
+      ? options.commentGuard
+      : createCommentGuard(
+          typeof options.decisionsApiKeyProvider === "function" ? { apiKeyProvider: options.decisionsApiKeyProvider } : {}
+        );
+  const commentReactJudge =
+    typeof options.commentReactJudge === "function"
+      ? options.commentReactJudge
+      : createDecisionsJudge({
+          timeoutMs: COMMENT_JUDGE_TIMEOUT_MS,
+          apiKeyProvider:
+            typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
+        });
+  /** @type {"hold" | "drop"} */
+  let commentBusyPolicy = COMMENT_BUSY_POLICIES.includes(/** @type {any} */ (options.commentBusyPolicyInitial))
+    ? /** @type {"hold" | "drop"} */ (options.commentBusyPolicyInitial)
+    : /** @type {"hold"} */ (DEFAULT_COMMENT_BUSY_POLICY);
+  const onSetCommentBusyPolicy = typeof options.onSetCommentBusyPolicy === "function" ? options.onSetCommentBusyPolicy : null;
+  const commentHoldMaxAgeMs =
+    typeof options.commentHoldMaxAgeMs === "number" && options.commentHoldMaxAgeMs > 0 ? options.commentHoldMaxAgeMs : COMMENT_HOLD_MAX_AGE_MS;
+  const commentHoldMaxCount =
+    typeof options.commentHoldMaxCount === "number" && options.commentHoldMaxCount >= 1
+      ? Math.floor(options.commentHoldMaxCount)
+      : COMMENT_HOLD_MAX_COUNT;
+  const onCommentJudgment = typeof options.onCommentJudgment === "function" ? options.onCommentJudgment : null;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -590,6 +646,15 @@ export function createCockpitServer(options = {}) {
   // speak-now の判定部品（fireScheduler と同じく orchestrator が fire/getState を持つときだけ生成する）。
   /** @type {ReturnType<typeof createSpeakNowController> | null} */
   let speakNow = null;
+  // コメント反応の判定部品（speakNow と同じく orchestrator が fire/getState を持つときだけ生成する）。
+  /** @type {ReturnType<typeof createCommentReactController> | null} */
+  let commentReact = null;
+  // 弾く判定の待ち行列。判定は並行に走らせるが、転写バッファへは届いた順に積む（先のコメントの判定完了を
+  // 待つ・合意 §1-5）。decision が付いた先頭から順に取り出す。
+  /** @type {Array<{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }>} */
+  let guardQueue = [];
+  // チャット器官が ID を持たないコメント（テスト・旧器官）に振る操縦席内の ID。
+  let localCommentSeq = 0;
   // サーバが呼んだ fire() のうち、まだ Promise が片付いていない数。orchestrator は fire() の受理直後
   // （fireClaimed）から thinking に入るまで getState() が idle のままなので、speak-now の「忙しい」は
   // この数も見る（最小の安全側: 受理の窓も忙しいとみなす）。
@@ -681,6 +746,9 @@ export function createCockpitServer(options = {}) {
       verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
       // 話し始めの方式（"classic" | "speak-now"・scheduler 未生成なら null・verbosity と同型）。
       speakStart: fireScheduler ? speakStartMode : null,
+      // 忙しい間に届いたコメントの扱い（"hold" = あとで拾う / "drop" = 見逃す・scheduler 未生成なら null・
+      // コメント反応の合意 §2）。
+      commentBusy: fireScheduler ? commentBusyPolicy : null,
       // S8「キルスイッチ」: キル状態の正本（サーバ側 boolean をそのまま載せる・既定 false・additive）。
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
@@ -1331,6 +1399,33 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/comment-busy") {
+      // 忙しい間に届いたコメントの扱い（あとで拾う / 見逃す）の切替継ぎ目（コメント反応の合意 §2・
+      // POST /api/speak-start の写経）。scheduler 未生成（orchestrator 未注入）なら 503。
+      if (!fireScheduler) {
+        sendJson(res, 503, { error: "comment-busy control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const policy = body.policy;
+      if (!COMMENT_BUSY_POLICIES.includes(policy)) {
+        sendJson(res, 400, { error: "invalid comment-busy policy" });
+        return;
+      }
+      commentBusyPolicy = policy;
+      // 見逃すへ切り替えたら、取っておいたコメントも捨てる（以後は忙しい間のコメントを判定しない）。
+      if (commentBusyPolicy === "drop" && commentReact) commentReact.reset();
+      if (onSetCommentBusyPolicy) {
+        try {
+          await onSetCommentBusyPolicy(commentBusyPolicy);
+        } catch {
+          // 永続化失敗は操作を止めない（onSetSpeakStartMode と同型の失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/kill") {
       // S8「キルスイッチ」: 全発火 OFF + 声の即切断（POST /api/fire の :798 と同型のゲート・orchestrator が
       // 要る）。キル状態の正本はサーバ側（この関数を囲む `killed` 変数）にあり、ここが唯一の書き手。
@@ -1636,6 +1731,8 @@ export function createCockpitServer(options = {}) {
         // speak-now: 喋り終わって手が空いたら、忙しい間の配信者の発言を 1 回判定する（合意 §3）。
         // fire() の Promise がまだ片付いていなければ、片付いた時点（trackFire）で改めて確かめる。
         if (state === "idle" && speakNow) speakNow.notifyIdle();
+        // コメント反応: 忙しい間に取っておいたコメントを、手が空いたらまとめて判定する（合意 §2）。
+        if (state === "idle" && commentReact) commentReact.notifyIdle();
       },
       onFire: (info) => broadcast("fire", info),
       onDiagnostic: (diag) => handleDiagnostic(diag),
@@ -1764,6 +1861,49 @@ export function createCockpitServer(options = {}) {
         reportSpeakNow({ ok: false, trigger: e.trigger, error: e.message, latencyMs: e.latencyMs });
       }
     });
+
+    // コメント反応（反応する判定・コメント反応の合意 §1-6〜§2）の部品。speak-now と同じ置き方・同じ「忙しい」と
+    // 「判定してよい」（speak-now モード・自発 ON・KILL でない）。従来モードでは呼ばない（今の comment /
+    // comment-call のまま）。
+    //  - 反応する → 通常の自発発火と同じ fire({vision:"preferred"}) に、どのコメントかを明示する内部指示を
+    //    付ける（コメント本文は視聴者の発言として括る・返事は短め）。speak-now の発火とは先に出た方が勝つ
+    //    （後から返った方は忙しいので、あとで拾う / 捨てる）。
+    //  - 判定行（反応する のときだけ）と失敗は selfFire SSE に相乗りしてフィードへ（新 SSE を足さない）。
+    commentReact = createCommentReactController({
+      judge: commentReactJudge,
+      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      isActive: () =>
+        speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
+      getName: () => currentSoulName(),
+      getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
+      getBusyPolicy: () => commentBusyPolicy,
+      getHoldLimits: () => ({ maxAgeMs: commentHoldMaxAgeMs, maxCount: commentHoldMaxCount }),
+      nowImpl,
+      onFire: ({ comments }) =>
+        requestSelfFire(
+          "comment-react",
+          { vision: "preferred", instruction: buildCommentReactFireInstruction(comments, currentSoulName()) },
+          { commentIds: comments.map((c) => c.id) }
+        ),
+      onJudgment: (j) => {
+        if (j.choice === "react") {
+          broadcast("selfFire", {
+            kind: "comment-judgment",
+            choice: j.choice,
+            probability: j.probability,
+            latencyMs: j.latencyMs,
+            commentId: j.commentId
+          });
+        }
+        reportComment({ stage: "react", ok: true, ...j });
+      },
+      onError: (e) => {
+        broadcast("selfFire", { kind: "comment-judgment", error: e.message, latencyMs: e.latencyMs, commentId: e.commentId });
+        reportComment({ stage: "react", ok: false, trigger: e.trigger, commentId: e.commentId, error: e.message, latencyMs: e.latencyMs });
+      },
+      onSkip: (s) => reportComment({ stage: "react", ok: true, skipped: true, commentId: s.commentId, action: s.action })
+    });
   }
 
   /**
@@ -1773,23 +1913,25 @@ export function createCockpitServer(options = {}) {
    * 失敗で常駐を殺さない）。結果（fired/reason）が判明してから broadcast する（同期 throw も非同期
    * rejection もどちらも "fired:false" として扱う）。
    * @param {string | undefined} kind
-   * @param {{ vision: true | "preferred" }} fireOptions
+   * @param {{ vision: true | "preferred"; instruction?: string }} fireOptions
+   * @param {object} [extra]  selfFire SSE に足す付随情報（コメント反応の commentIds = どのコメントで発火したか）。
    */
-  function requestSelfFire(kind, fireOptions) {
+  function requestSelfFire(kind, fireOptions, extra = {}) {
     try {
       trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
         .then((result) => {
           broadcast("selfFire", {
             kind,
             fired: !!(result && /** @type {any} */ (result).fired),
-            reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null
+            reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null,
+            ...extra
           });
         })
         .catch((error) => {
-          broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
+          broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error), ...extra });
         });
     } catch (error) {
-      broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
+      broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error), ...extra });
     }
   }
 
@@ -1813,6 +1955,7 @@ export function createCockpitServer(options = {}) {
     return p.finally(() => {
       fireInFlight -= 1;
       if (speakNow) speakNow.notifyIdle();
+      if (commentReact) commentReact.notifyIdle();
     });
   }
 
@@ -1825,6 +1968,7 @@ export function createCockpitServer(options = {}) {
     speakStartMode = mode;
     if (fireScheduler) fireScheduler.setSpeakNowMode(mode === "speak-now");
     if (speakNow) speakNow.reset();
+    if (commentReact) commentReact.reset();
   }
 
   /** 今の頭の名前（判定の問いと会話のラベル用・snapshot の identity と同じ解決）。 */
@@ -1840,6 +1984,16 @@ export function createCockpitServer(options = {}) {
     if (!onSpeakNowJudgment) return;
     try {
       onSpeakNowJudgment(info);
+    } catch {
+      // ログの失敗で判定を止めない。
+    }
+  }
+
+  /** コメント判定ごとの記録を呼び出し側（cockpit.mjs のターミナル 1 行）へ渡す（本文は含めない・失敗寛容）。 */
+  function reportComment(/** @type {object} */ info) {
+    if (!onCommentJudgment) return;
+    try {
+      onCommentJudgment(info);
     } catch {
       // ログの失敗で判定を止めない。
     }
@@ -1866,10 +2020,21 @@ export function createCockpitServer(options = {}) {
   //  なるため scheduler も回さない）。バッファ所有権の巻き上げ（耳非依存化）は S1〜S6 挙動・器不変を
   //  脅かしうる構造変更ゆえ v0 では実装せず domain-b.md §質問で escalate する。
 
+  //  ── コメント判定（discussion/ai-cohost/decisions/comment-react/integration.md §1）──────────────
+  //  (a) の前に**弾く判定**（commentGuard）を挟む。全モード（KILL 中・自発 OFF・従来モードも）で動く。
+  //   - 弾いたら: 積まない（LLM・記憶・履歴のどれにも入らない）・発火判定にも渡さない・場の活動にも数えない。
+  //     フィードには chatDiagnostic kind:"commentRejected"（種類だけ・本文は送らない）。
+  //   - 通ったら: (a)(b)(c) を今と同じく行い、speak-now モードなら (d) 反応する判定（commentReact）へ回す。
+  //   - 判定は並行に走らせるが、積むのは届いた順（guardQueue の先頭から、判定が付いたものだけ取り出す）。
+  //   - 判定がテスト注入の同期値なら、その場で (a)(b)(c) まで終える（従来の同期の追記と放送を保つ）。
+  //  コメント ID（チャット器官の messageId・無ければ操縦席内の連番）を viewer 行・弾いた行・判定行・発火結果に
+  //  載せ、どのコメントで判定して発火したかを結べるようにする（合意 §3）。
+
   /**
    * チャット器官の 1 コメントを取り込む（Domain C の onMessage フックから呼ぶ attach 点）。best-effort
-   * （throw は握って診断に落とす・器官の常駐を殺さない）。
-   * @param {{ text?: string; displayName?: string } | null} msg
+   * （throw は握って診断に落とす・器官の常駐を殺さない）。フックは戻り値を見ないので、非同期の判定の
+   * 失敗もここで握る（settleGuard へ「判定できず」として渡す）。
+   * @param {{ text?: string; displayName?: string; messageId?: string | null } | null} msg
    */
   function ingestChatMessage(msg) {
     if (closed) return;
@@ -1879,7 +2044,7 @@ export function createCockpitServer(options = {}) {
       if (text.trim().length === 0) return; // 空コメントは捨てる（バッファも捨てる・二度手間を避ける）。
       const buffer = pipeline ? pipeline.transcriptBuffer : null;
       if (!buffer) {
-        // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、append/scheduler はスキップ。
+        // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、判定・append/scheduler はスキップ。
         handleDiagnostic({
           type: "chatBufferAbsent",
           message: "ears not running; viewer comment cannot merge into transcript buffer (no fire).",
@@ -1887,21 +2052,127 @@ export function createCockpitServer(options = {}) {
         });
         return;
       }
-      const result = buffer.append({ startMs: 0, endMs: 0, text, speaker: "viewer", displayName });
-      if (!result.appended || !result.entry) return; // blank discard 等。
-      // (b) viewer 行を放送（耳の onTranscript は viewer を除外＝ここが唯一の放送元）。
-      const stats = buffer.stats();
-      broadcast("transcript", {
-        ...toWireEntry(result.entry),
-        latencyMs: null,
-        audioCtx: null,
-        appended: stats.appended,
-        discarded: stats.discarded
-      });
-      // (c) 発火スケジューラへ（comment / comment-call 判定）。scheduler 未生成なら活動反映もスキップ。
-      if (fireScheduler) fireScheduler.handleChatMessage({ text, displayName });
+      const id =
+        msg && typeof msg.messageId === "string" && msg.messageId.length > 0 ? msg.messageId : `local-${++localCommentSeq}`;
+      const slot = { id, text, displayName, arrivedAtMs: nowImpl(), decision: null };
+      guardQueue.push(slot);
+      /** @type {any} */
+      let out;
+      try {
+        out = commentGuard({ text, displayName: displayName ?? null, name: currentSoulName() });
+      } catch (error) {
+        out = { pass: false, kind: "error", error: errMessage(error), latencyMs: null };
+      }
+      if (out != null && typeof out.then === "function") {
+        Promise.resolve(out).then(
+          (decision) => settleGuard(slot, decision),
+          (error) => settleGuard(slot, { pass: false, kind: "error", error: errMessage(error), latencyMs: null })
+        );
+      } else {
+        settleGuard(slot, out);
+      }
     } catch (error) {
       handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
+    }
+  }
+
+  /**
+   * 弾く判定の結果を付け、届いた順に取り出せる分を処理する。
+   * @param {{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }} slot
+   * @param {any} decision
+   */
+  function settleGuard(slot, decision) {
+    if (closed) return;
+    const pass = !!(decision && decision.pass === true);
+    slot.decision = {
+      pass,
+      kind: pass ? "ok" : decision && typeof decision.kind === "string" && decision.kind !== "ok" ? decision.kind : "error",
+      verdict: decision && typeof decision.verdict === "string" ? decision.verdict : null,
+      hijackProbability: decision && typeof decision.hijackProbability === "number" ? decision.hijackProbability : null,
+      latencyMs: decision && typeof decision.latencyMs === "number" ? decision.latencyMs : null,
+      // 判定できなかった理由に本文が混ざっていたら（サーバの文言が入力を引用した等）理由ごと伏せる（フィードにも
+      // ターミナルにも本文を出さない）。
+      error: decision && typeof decision.error === "string" ? scrubCommentText(decision.error, slot.text) : null
+    };
+    while (guardQueue.length > 0 && guardQueue[0].decision != null) {
+      const head = /** @type {any} */ (guardQueue.shift());
+      try {
+        reportComment({
+          stage: "guard",
+          commentId: head.id,
+          pass: head.decision.pass,
+          kind: head.decision.kind,
+          verdict: head.decision.verdict,
+          hijackProbability: head.decision.hijackProbability,
+          latencyMs: head.decision.latencyMs,
+          error: head.decision.error
+        });
+        if (head.decision.pass) commitComment(head);
+        else rejectComment(head);
+      } catch (error) {
+        handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
+      }
+    }
+  }
+
+  /**
+   * 弾いたコメントをフィードに 1 行だけ知らせる（種類と ID・本文と名前は送らない）。
+   * @param {{ id: string; text: string; decision: any }} slot
+   */
+  function rejectComment(slot) {
+    broadcast("chatDiagnostic", {
+      kind: "commentRejected",
+      message: null,
+      atMs: nowImpl(),
+      delayMs: null,
+      attempt: null,
+      commentId: slot.id,
+      reject: slot.decision.kind,
+      error: slot.decision.error,
+      latencyMs: slot.decision.latencyMs
+    });
+  }
+
+  /**
+   * 通ったコメントを今と同じく積んで放送し、発火判定へ回す（(a)(b)(c)）。speak-now モードなら反応する判定へ（(d)）。
+   * @param {{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number }} slot
+   */
+  function commitComment(slot) {
+    const { text, displayName } = slot;
+    const buffer = pipeline ? pipeline.transcriptBuffer : null;
+    if (!buffer) {
+      // 判定を待つ間に耳が止まった = 合流先が無い（取り込み時と同じ扱い）。
+      handleDiagnostic({
+        type: "chatBufferAbsent",
+        message: "ears not running; viewer comment cannot merge into transcript buffer (no fire).",
+        reason: displayName ?? null
+      });
+      return;
+    }
+    const result = buffer.append({ startMs: 0, endMs: 0, text, speaker: "viewer", displayName });
+    if (!result.appended || !result.entry) return; // blank discard 等。
+    // (b) viewer 行を放送（耳の onTranscript は viewer を除外＝ここが唯一の放送元）。commentId は追加フィールド。
+    const stats = buffer.stats();
+    broadcast("transcript", {
+      ...toWireEntry(result.entry),
+      latencyMs: null,
+      audioCtx: null,
+      appended: stats.appended,
+      discarded: stats.discarded,
+      commentId: slot.id
+    });
+    // (c) 発火スケジューラへ（従来モードは comment / comment-call 判定・speak-now モードは活動の反映だけ）。
+    // scheduler 未生成なら活動反映もスキップ。
+    if (fireScheduler) fireScheduler.handleChatMessage({ text, displayName });
+    // (d) 反応する判定（speak-now モード・自発 ON・KILL でないときだけ・部品内で判定）。
+    if (commentReact) {
+      commentReact.handleComment({
+        id: slot.id,
+        seq: result.entry.seq,
+        text,
+        displayName: displayName ?? null,
+        arrivedAtMs: slot.arrivedAtMs
+      });
     }
   }
 
@@ -1973,7 +2244,12 @@ export function createCockpitServer(options = {}) {
     // フックを取り込み経路へ結線（購読解除は畳み時に全撤去）。器官のフック throw は器官側が握る（Domain A）。
     chatUnsubs.push(
       client.onMessage((/** @type {any} */ msg) =>
-        ingestChatMessage({ text: msg && msg.text, displayName: msg && msg.displayName })
+        ingestChatMessage({
+          text: msg && msg.text,
+          displayName: msg && msg.displayName,
+          // コメント ID（器官の messageId）を操縦席まで通す（判定と発火の結び付け・コメント反応の合意 §3）。
+          messageId: msg && typeof msg.messageId === "string" ? msg.messageId : null
+        })
       )
     );
     chatUnsubs.push(client.onStatus((/** @type {any} */ state) => broadcastChatStatus(state)));
@@ -2068,6 +2344,11 @@ export function createCockpitServer(options = {}) {
         speakNow.dispose(); // 返事待ちの判定が後から返っても無視する（タイマは judge 側で畳まれる）。
         speakNow = null;
       }
+      if (commentReact) {
+        commentReact.dispose(); // speakNow と同じ（取っておいたコメントも捨てる）。
+        commentReact = null;
+      }
+      guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が closed で無視する。
       if (fireOrchestrator) {
         try {
           fireOrchestrator.dispose();
@@ -2209,6 +2490,15 @@ function readJsonBodyStrict(req) {
     });
     req.on("error", fail);
   });
+}
+
+/**
+ * 判定の失敗理由にコメント本文が混ざっていたら理由ごと伏せる（本文はサーバから送らない・ログにも書かない）。
+ * @param {string} message  @param {string} text
+ */
+function scrubCommentText(message, text) {
+  const t = String(text).trim();
+  return t.length > 0 && message.includes(t) ? "理由は伏せた（本文を含むため）" : message;
 }
 
 /** @param {unknown} err */

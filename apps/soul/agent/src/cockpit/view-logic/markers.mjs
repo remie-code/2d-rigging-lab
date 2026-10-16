@@ -13,6 +13,8 @@
  *  - selfFireMarkerText → :539     `addSelfFireMarkerRow` の text（"self-fire (kind)"）
  *  - speakNowJudgmentText → speak-now の判定行（SSE selfFire kind:"speak-now-judgment"・"判定: 自発 0.45"・
  *                           speak-now 合意 §5。待つはサーバが流さない）
+ *  - commentJudgmentText  → コメント反応の判定行（SSE selfFire kind:"comment-judgment"・"コメント判定: 反応 0.92"・
+ *                           コメント反応の合意 §3。反応しないはサーバが流さない）
  */
 
 /**
@@ -91,4 +93,19 @@ export function speakNowJudgmentText(d) {
   const label = /** @type {Record<string, string>} */ (SPEAK_NOW_CHOICE_LABELS)[choice] ?? choice;
   const p = d && typeof d.probability === "number" && Number.isFinite(d.probability) ? d.probability.toFixed(2) : "?";
   return "判定: " + label + " " + p;
+}
+
+/** コメント反応の選択の表示名（src/mind/comment-react.mjs の COMMENT_REACT_CHOICE_LABELS と同じ。UI は mind を import しない）。 */
+export const COMMENT_REACT_CHOICE_LABELS = Object.freeze({ react: "反応", ignore: "反応しない" });
+
+/**
+ * コメント反応の判定行の文字列（"コメント判定: 反応 0.92"・コメント反応の合意 §3。反応しないはサーバが流さない）。
+ * @param {{ choice?: string | null; probability?: number | null }} d
+ * @returns {string}
+ */
+export function commentJudgmentText(d) {
+  const choice = (d && d.choice) || "?";
+  const label = /** @type {Record<string, string>} */ (COMMENT_REACT_CHOICE_LABELS)[choice] ?? choice;
+  const p = d && typeof d.probability === "number" && Number.isFinite(d.probability) ? d.probability.toFixed(2) : "?";
+  return "コメント判定: " + label + " " + p;
 }

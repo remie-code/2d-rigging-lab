@@ -14,6 +14,9 @@
  *  - chatDiagnosticGhostLabel → :888-897 chatDiagnostic の取得死分類ゴースト行
  *  - speakNowErrorGhostLabel  → speak-now の判定失敗（SSE selfFire kind:"speak-now-judgment" + error・
  *                               キー欠落/タイムアウト等・speak-now 合意 §5）
+ *  - commentRejectedGhostLabel → 弾いたコメント（SSE chatDiagnostic kind:"commentRejected"・"(弾いた: 乗っ取り)"・
+ *                               コメント反応の合意 §1-4。chatDiagnosticGhostLabel から振る）
+ *  - commentJudgmentErrorGhostLabel → コメント反応の判定失敗（SSE selfFire kind:"comment-judgment" + error）
  *
  * ★ 意図的非表示（cockpit.html:850-854 の裁定・page test:244-246 が根拠）:
  *   expressionBrokenTag / expressionRejected / expressionSendError は行を作らない（→ null）。
@@ -78,6 +81,8 @@ export function selfFireGhostLabel(d) {
  */
 export function chatDiagnosticGhostLabel(d) {
   const kind = (d && d.kind) || "?";
+  // コメント反応の合意 §1-4: 弾いたコメントは種類だけの薄い行（本文はサーバから来ない）。
+  if (kind === "commentRejected") return commentRejectedGhostLabel(/** @type {any} */ (d));
   if (
     kind === "notLive" ||
     kind === "ended" ||
@@ -97,4 +102,38 @@ export function chatDiagnosticGhostLabel(d) {
  */
 export function speakNowErrorGhostLabel(d) {
   return "(判定エラー: " + ((d && d.error) || "?") + ")";
+}
+
+/**
+ * 弾いた種類の表示名（src/mind/comment-guard.mjs の COMMENT_GUARD_KIND_LABELS と同じ。UI は mind を import しない）。
+ * error は判定の失敗・タイムアウト（安全側に弾いた）。
+ */
+export const COMMENT_GUARD_KIND_LABELS = Object.freeze({
+  ok: "問題なし",
+  hijack: "乗っ取り",
+  harassment: "誹謗中傷",
+  spam: "荒らし",
+  error: "判定できず"
+});
+
+/**
+ * 弾いたコメントのゴースト行ラベル（"(弾いた: 乗っ取り)"・判定できずは理由つき・コメント反応の合意 §1-4 / §3）。
+ * SSE chatDiagnostic kind:"commentRejected"（reject = 種類・error = 判定できなかった理由）。
+ * @param {{ reject?: string | null; error?: string | null }} d
+ * @returns {string}
+ */
+export function commentRejectedGhostLabel(d) {
+  const kind = (d && d.reject) || "error";
+  const label = /** @type {Record<string, string>} */ (COMMENT_GUARD_KIND_LABELS)[kind] ?? kind;
+  const reason = kind === "error" && d && d.error ? " — " + d.error : "";
+  return "(弾いた: " + label + reason + ")";
+}
+
+/**
+ * コメント反応の判定失敗のゴースト行ラベル（"(コメント判定エラー: 理由)"・コメント反応の合意 §3）。
+ * @param {{ error?: string | null }} d
+ * @returns {string}
+ */
+export function commentJudgmentErrorGhostLabel(d) {
+  return "(コメント判定エラー: " + ((d && d.error) || "?") + ")";
 }

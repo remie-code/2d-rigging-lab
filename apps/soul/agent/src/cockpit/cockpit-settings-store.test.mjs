@@ -932,3 +932,25 @@ test("settings store: speak-start mode は set→get roundtrip で永続化し�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: 忙しい間のコメントの扱いは set→get roundtrip・鮮度と件数はファイルのキーから読む（コメント反応の合意 §2）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getCommentBusyPolicy(), null); // 未作成 = 記憶なし（既定 hold は呼び出し側）。
+    assert.deepEqual(store.getCommentHold(), { maxAgeSec: null, maxCount: null });
+    store.setSpeakStartMode("speak-now");
+    store.setCommentBusyPolicy("drop");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getCommentBusyPolicy(), "drop");
+    assert.equal(reopened.getSpeakStartMode(), "speak-now", "他のキーと同居");
+    writeFileSync(path, JSON.stringify({ commentBusyPolicy: "hold", commentHoldMaxAgeSec: 30, commentHoldMaxCount: 5 }), "utf8");
+    assert.equal(store.getCommentBusyPolicy(), "hold");
+    assert.deepEqual(store.getCommentHold(), { maxAgeSec: 30, maxCount: 5 });
+    writeFileSync(path, JSON.stringify({ commentHoldMaxAgeSec: "30", commentHoldMaxCount: -1 }), "utf8");
+    assert.deepEqual(store.getCommentHold(), { maxAgeSec: null, maxCount: null }, "数でない・正でない値は既定");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

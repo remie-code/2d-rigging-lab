@@ -37,6 +37,8 @@
  * 話し始め（speak-now 合意 §5）: 自発 pill と口数の隣に「話し始め: 従来 / speak-now」のプルダウン。
  * snapshot の `speakStart`（"classic" | "speak-now"）で **controlled**（口数と同型）。onChange は
  * POST /api/speak-start → 成功時 applySnapshot。選択の保存はサーバ側（cockpit.mjs の settings 橋渡し）。
+ * 忙しい間のコメント（コメント反応の合意 §2）: 話し始めの隣に「あとで拾う / 見逃す」のプルダウン（画面の
+ * 作り直しまでの仮置き）。snapshot の `commentBusy` で controlled・onChange は POST /api/comment-busy。
  * KILL: **S8 で実装済み**（§7 赤枠の意匠を踏襲）。snapshot の `killed` で **controlled**（自発トグル/
  * 口数と同型）。通常時は「■ KILL」ボタン（押すと POST /api/kill {killed:true}）。キル中はバー全体に
  * `killing` class が付き視覚的に「殺し中」と分かる + 一クリック復帰ボタン（POST /api/kill
@@ -58,6 +60,8 @@ import {
   verbosityRequestErrorText,
   speakStartPostErrorText,
   speakStartRequestErrorText,
+  commentBusyPostErrorText,
+  commentBusyRequestErrorText,
   killSwitchView,
   killPostErrorText,
   killRequestErrorText,
@@ -182,6 +186,36 @@ export function SpeakStartSelect({ speakStart, onChange }) {
   `;
 }
 
+/** 忙しい間に届いたコメントの扱いの選択肢（コメント反応の合意 §2「見逃す / あとで拾う（既定）」）。 */
+export const COMMENT_BUSY_OPTIONS = [
+  { value: "hold", label: "あとで拾う" },
+  { value: "drop", label: "見逃す" }
+];
+
+/**
+ * 忙しい間に届いたコメントの扱いのプルダウン（コメント反応の合意 §2・画面の作り直しまでは運転バーの
+ * 話し始めの隣に置く。SpeakStartSelect と同型の controlled 部品・hooks 非使用）。value は snapshot 由来の
+ * commentBusy。null（scheduler 未生成）は disable して "hold" 表示に畳む。効くのは speak-now の間だけ
+ * （従来モードのコメントは今の comment / comment-call のまま）。
+ * @param {{ commentBusy?: string | null; onChange: (ev: any) => void }} props
+ */
+export function CommentBusySelect({ commentBusy, onChange }) {
+  return html`
+    <label class="verbosity comment-busy">
+      <span class="pill-label">忙しい間のコメント</span>
+      <select
+        class="verbosity-select comment-busy-select"
+        value=${commentBusy ?? "hold"}
+        disabled=${commentBusy == null}
+        onChange=${onChange}
+        title="speak-now の間、チャッピーが考えて喋っている間に届いたコメントを、あとで拾う（手が空いたらまとめて判定）か見逃すか"
+      >
+        ${COMMENT_BUSY_OPTIONS.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}
+      </select>
+    </label>
+  `;
+}
+
 /**
  * KILL スイッチ（S8 実装済み・hooks 非使用・vnode 走査テスト対象）。view は killSwitchView 導出済み。
  * 通常時は「■ KILL」ボタン・キル中は「殺し中」status + 復帰ラベルのボタン（同じボタン 1 個・
@@ -202,11 +236,12 @@ export function KillSwitch({ view, onClick }) {
  * 運転バー本体。
  * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
  *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null; speakStart?: string | null;
+ *           commentBusy?: string | null;
  *           killed?: boolean | null;
  *           bargeIn?: { enabled?: boolean } | null;
  *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
  */
-export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, speakStart, killed, bargeIn, applySnapshot, fetchImpl }) {
+export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, speakStart, commentBusy, killed, bargeIn, applySnapshot, fetchImpl }) {
   // Fire 連打防止のローカル busy（:556 :574 の即時 disable 相当・応答/失敗で復帰）。
   const [localBusy, setLocalBusy] = useState(false);
   // 自発トグル/口数/KILL/barge-in のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
@@ -343,6 +378,31 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
   };
 
   /**
+   * 忙しい間のコメントの扱いの変更（onChangeSpeakStart の写経・コメント反応の合意 §2）。
+   * @param {any} ev
+   */
+  const onChangeCommentBusy = (ev) => {
+    const policy = ev && ev.target ? ev.target.value : "hold";
+    const doFetch = fetchImpl || globalThis.fetch;
+    setControlError("");
+    doFetch("/api/comment-busy", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ policy })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = commentBusyPostErrorText(res);
+        if (err != null) {
+          setControlError(err);
+          return;
+        }
+        applySnapshot(res.j); // 200 応答は snapshot 全体（speak-start 経路と同源）。
+      })
+      .catch((/** @type {unknown} */ e) => setControlError(commentBusyRequestErrorText(e)));
+  };
+
+  /**
    * KILL / 復帰（onToggleSelfFire の写経・S8）。**明示 boolean を送る**（トグルではない）: 現在
    * killView.killed の逆を送る（false→{killed:true}=KILL・true→{killed:false}=revive）。UI 側で
    * 逆算しているだけでサーバは反転せず受けた boolean をそのまま正本に設定する（cockpit-server.mjs
@@ -387,6 +447,7 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
         <${BargeInPill} view=${biView} onChange=${onToggleBargeIn} />
         <${VerbositySelect} verbosity=${verbosity} onChange=${onChangeVerbosity} />
         <${SpeakStartSelect} speakStart=${speakStart} onChange=${onChangeSpeakStart} />
+        <${CommentBusySelect} commentBusy=${commentBusy} onChange=${onChangeCommentBusy} />
         <${KillSwitch} view=${killView} onClick=${onClickKill} />
       </div>
     </div>

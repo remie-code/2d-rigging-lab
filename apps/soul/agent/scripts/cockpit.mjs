@@ -806,6 +806,78 @@ export function createSpeakStartHooks(settings, defaultMode = "speak-now") {
   };
 }
 
+/**
+ * settings の忙しい間のコメントの扱い（commentBusyPolicy）とあとで拾うの鮮度・件数を、cockpit-server の口
+ * （commentBusyPolicyInitial / onSetCommentBusyPolicy / commentHoldMaxAgeMs / commentHoldMaxCount）へ橋渡しする
+ * （コメント反応の合意 §2・createSpeakStartHooks と同型の薄い配線層）。未記憶/未知値は "hold"（あとで拾う・既定）。
+ *
+ * @param {{ getCommentBusyPolicy: () => string | null; setCommentBusyPolicy: (policy: string | null) => void;
+ *   getCommentHold?: () => { maxAgeSec: number | null; maxCount: number | null } }} settings
+ * @returns {{
+ *   resolveInitialCommentBusyPolicy: () => "hold" | "drop";
+ *   onSetCommentBusyPolicy: (policy: string) => void;
+ *   resolveCommentHold: () => { maxAgeMs: number | undefined; maxCount: number | undefined };
+ * }}
+ */
+export function createCommentBusyHooks(settings) {
+  return {
+    /** 起動時の扱い（未記憶/未知値は hold）。 */
+    resolveInitialCommentBusyPolicy: () => {
+      const remembered = settings.getCommentBusyPolicy();
+      return remembered === "drop" ? "drop" : "hold";
+    },
+    /** cockpit-server の onSetCommentBusyPolicy（POST /api/comment-busy が呼ぶ）。 */
+    onSetCommentBusyPolicy: (policy) => {
+      try {
+        settings.setCommentBusyPolicy(policy); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetSpeakStartMode と同型の失敗寛容）。
+      }
+    },
+    /** 鮮度（秒 → ミリ秒）と件数。未設定は undefined（= cockpit-server の既定 20 秒 / 3 件）。 */
+    resolveCommentHold: () => {
+      let hold = { maxAgeSec: null, maxCount: null };
+      try {
+        if (typeof settings.getCommentHold === "function") hold = settings.getCommentHold() ?? hold;
+      } catch {
+        // 読めなければ既定。
+      }
+      return {
+        maxAgeMs: typeof hold.maxAgeSec === "number" ? hold.maxAgeSec * 1000 : undefined,
+        maxCount: typeof hold.maxCount === "number" ? hold.maxCount : undefined
+      };
+    }
+  };
+}
+
+/**
+ * コメント判定のログ 1 行（操縦席の標準出力・コメント反応の合意 §3「遅延・判定結果」。コメント本文は書かない）。
+ * 弾く判定（stage:"guard"）: 遅延・ID・通した/弾いた（種類）・4 択の選択・乗っ取りの確率・判定できなかった理由。
+ * 反応する判定（stage:"react"）: 遅延・ID・選択・確率・行き先・きっかけ。判定しなかったコメントは行き先だけ。
+ * @param {any} info  cockpit-server の onCommentJudgment が渡す記録。
+ * @returns {string}
+ */
+export function formatCommentJudgmentLine(info) {
+  const ms = typeof info?.latencyMs === "number" && Number.isFinite(info.latencyMs) ? String(Math.round(info.latencyMs)) : "-";
+  const id = info?.commentId ?? "-";
+  if (info?.stage === "guard") {
+    const action = info.pass ? "pass" : `reject:${info.kind ?? "error"}`;
+    const reason = info.pass || !info.error ? "" : ` reason=${info.error}`;
+    return (
+      `[cockpit] comment-guard: ms=${ms} id=${id} action=${action} verdict=${info.verdict ?? "-"} ` +
+      `hijack=${fmtProb(info.hijackProbability)}${reason}\n`
+    );
+  }
+  if (info?.skipped) return `[cockpit] comment-react: id=${id} action=${info.action ?? "-"}\n`;
+  if (!info || info.ok !== true) {
+    return `[cockpit] comment-react: error ms=${ms} id=${id} trigger=${info?.trigger ?? "-"} reason=${info?.error ?? "unknown"}\n`;
+  }
+  return (
+    `[cockpit] comment-react: ms=${ms} id=${id} choice=${info.choice} p=${fmtProb(info.probability)} ` +
+    `action=${info.action ?? "-"} trigger=${info.trigger ?? "-"}\n`
+  );
+}
+
 /** @param {unknown} v */
 function fmtProb(v) {
   return typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "-";
@@ -878,6 +950,9 @@ async function main() {
   const sttEngineHooks = createSttEngineHooks(settings);
   // 話し始めの方式（従来 / speak-now・初回既定 speak-now・§createSpeakStartHooks）。
   const speakStartHooks = createSpeakStartHooks(settings);
+  // 忙しい間のコメントの扱い（あとで拾う / 見逃す・既定 あとで拾う・§createCommentBusyHooks）。
+  const commentBusyHooks = createCommentBusyHooks(settings);
+  const commentHold = commentBusyHooks.resolveCommentHold();
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -1382,7 +1457,15 @@ async function main() {
     // （.env.decisions.local をコード内で直接読む）に任せる。
     speakStartModeInitial: speakStartHooks.resolveInitialSpeakStartMode(),
     onSetSpeakStartMode: speakStartHooks.onSetSpeakStartMode,
-    onSpeakNowJudgment: (info) => process.stdout.write(formatSpeakNowLine(info))
+    onSpeakNowJudgment: (info) => process.stdout.write(formatSpeakNowLine(info)),
+    // コメント判定（弾く判定は全モード・反応する判定は speak-now の間）: 忙しい間のコメントの扱いは settings から
+    // 復元（既定 あとで拾う）・切替ごとに記憶。鮮度と件数は settings ファイルの値（無ければ 20 秒 / 3 件）。
+    // 判定ごとに標準出力へ 1 行（コメント本文は書かない）。キーは speak-now と同じ既定の読み口。
+    commentBusyPolicyInitial: commentBusyHooks.resolveInitialCommentBusyPolicy(),
+    onSetCommentBusyPolicy: commentBusyHooks.onSetCommentBusyPolicy,
+    commentHoldMaxAgeMs: commentHold.maxAgeMs,
+    commentHoldMaxCount: commentHold.maxCount,
+    onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info))
   });
 
   const url = await server.listen();

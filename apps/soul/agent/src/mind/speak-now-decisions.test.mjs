@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 import {
   createDecisionsJudge,
+  createDecisionsQuestionsJudge,
   loadDecisionsApiKey,
   SpeakNowJudgeError,
   DECISIONS_ENDPOINT,
@@ -193,4 +194,103 @@ test("judge: 通信失敗・想定外の応答（choice 欠落/選択肢外）�
     const judge = createDecisionsJudge({ apiKeyProvider: keyOk, fetchImpl: makeFetch({ ok: true, status: 200, json: async () => json }).fetchImpl });
     await assert.rejects(judge(request()), (e) => e instanceof SpeakNowJudgeError && /想定外/.test(e.message), JSON.stringify(json));
   }
+});
+
+// ── createDecisionsQuestionsJudge（コメント判定: choice + predicate の複数問・判定拒否を区別して返す）────────
+
+const guardQuestions = () => [
+  { type: "choice", name: "verdict", instructions: "4 択", choices: [{ value: "ok", description: "a" }, { value: "hijack", description: "b" }] },
+  { type: "predicate", name: "hijack", instructions: "乗っ取りか" }
+];
+
+test("questions judge: 複数問を 1 リクエストで送り、choice / predicate を名前ごとに返す", async () => {
+  const timers = makeTimers();
+  const { fetchImpl, calls } = makeFetch({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      answers: [
+        { name: "verdict", choice: "ok", probabilities: [{ value: "ok", probability: 0.9 }, { value: "hijack", probability: 0.1 }] },
+        { name: "hijack", probability: 0.03 }
+      ]
+    })
+  });
+  let clock = 0;
+  const judge = createDecisionsQuestionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl,
+    timeoutMs: 5000,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    nowImpl: () => (clock += 150)
+  });
+  const r = await judge({ input: "こんばんは", questions: guardQuestions() });
+  assert.deepEqual(r, {
+    answers: {
+      verdict: { type: "choice", choice: "ok", probs: { ok: 0.9, hijack: 0.1 } },
+      hijack: { type: "predicate", probability: 0.03 }
+    },
+    latencyMs: 150
+  });
+  assert.equal(calls[0].url, DECISIONS_ENDPOINT);
+  assert.equal(calls[0].body.model, "gpt-6-luna");
+  assert.equal(calls[0].body.input, "こんばんは");
+  assert.deepEqual(calls[0].body.questions.map((q) => [q.type, q.name]), [["choice", "verdict"], ["predicate", "hijack"]]);
+  assert.equal(calls[0].body.questions[1].choices, undefined, "predicate に choices は付けない");
+  assert.equal(calls[0].init.headers.Authorization, `Bearer ${SECRET}`);
+  assert.equal(timers.pending(), 0);
+});
+
+test("questions judge: 判定拒否は失敗にせず { type: refusal }・読めない答えは載せない・answers 無しは失敗", async () => {
+  const judge = createDecisionsQuestionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl: makeFetch({
+      ok: true,
+      status: 200,
+      json: async () => ({ answers: [{ name: "verdict", type: "refusal" }, { name: "hijack", probability: "high" }] })
+    }).fetchImpl
+  });
+  assert.deepEqual((await judge({ input: "草", questions: guardQuestions() })).answers, { verdict: { type: "refusal" } });
+  const outOfRange = createDecisionsQuestionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl: makeFetch({ ok: true, status: 200, json: async () => ({ answers: [{ name: "verdict", choice: "spam" }] }) }).fetchImpl
+  });
+  assert.deepEqual((await outOfRange({ input: "x", questions: guardQuestions() })).answers, {}, "選択肢外の choice は載せない");
+  const noAnswers = createDecisionsQuestionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl: makeFetch({ ok: true, status: 200, json: async () => ({}) }).fetchImpl
+  });
+  await assert.rejects(noAnswers({ input: "x", questions: guardQuestions() }), (e) => e instanceof SpeakNowJudgeError && /想定外/.test(e.message));
+});
+
+test("questions judge: timeoutMs（コメント判定は 5 秒）で諦める・キーが無ければ通信しない・401 は文言を出さない", async () => {
+  const timers = makeTimers();
+  const judge = createDecisionsQuestionsJudge({
+    apiKeyProvider: keyOk,
+    timeoutMs: 5000,
+    fetchImpl: /** @type {any} */ (() => new Promise(() => {})),
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    nowImpl: timers.now
+  });
+  const p = judge({ input: "x", questions: guardQuestions() });
+  await Promise.resolve();
+  timers.advance(4999);
+  let settled = false;
+  p.catch(() => {}).finally(() => (settled = true));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(settled, false);
+  timers.advance(1);
+  await assert.rejects(p, (e) => e instanceof SpeakNowJudgeError && /タイムアウト（5 秒）/.test(e.message) && e.latencyMs === 5000);
+
+  const { fetchImpl, calls } = makeFetch({ ok: true, status: 200, json: async () => ({ answers: [] }) });
+  const noKey = createDecisionsQuestionsJudge({ apiKeyProvider: () => loadDecisionsApiKey({ readFileImpl: () => "" }), fetchImpl });
+  await assert.rejects(noKey({ input: "x", questions: guardQuestions() }), /キーが見つからない/);
+  assert.equal(calls.length, 0);
+
+  const j401 = createDecisionsQuestionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl: makeFetch({ ok: false, status: 401, json: async () => ({ error: { message: "Incorrect API key provided: sk-te****" } }) }).fetchImpl
+  });
+  await assert.rejects(j401({ input: "x", questions: guardQuestions() }), (e) => e.message === "認証失敗（401）");
 });
