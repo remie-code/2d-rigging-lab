@@ -42,3 +42,9 @@ memories/
 
 # ── Fire latency/failure diagnostics（自動・ローカル・bounded JSONL）────────────
 fire-diagnostics/
+
+# ── 従量課金 API キーの置き場（gaze-target 実験・非コミット）──────────────────
+# OpenAI Decisions API 実験用のキーを `node --env-file=` で読ませるローカルファイル。変数名は
+# env-guard が拒否する `OPENAI_API_KEY` を避け `OPENAI_DECISIONS_API_KEY` とする（Codex 頭の
+# サブスク枠を API 課金へ切り替えないため）。特区憲章第5条「秘密はコミットされない」。
+.env*.local
