@@ -17,6 +17,7 @@
 | [reaction-trigger/](reaction-trigger/_map.md) | 反応すべきか(チャッピーの感情が大きく動くか) | 合意済み・未着手 |
 | `voice-direction/` | ElevenLabs の音声タグ選び | 未作成(必要になったら切る) |
 | [speak-now/](speak-now/_map.md) | 発言の確定ごとに、チャッピーが今どう反応するか(待つ/相槌/話す/見送る)を判定する。区切り応答の作り直しの中心 | **Created(2026-10-16)**。アーカイブ 732 か所で判定済み、ユーザーの流し読み待ち |
+| [comment-guard/](comment-guard/_map.md) | YouTube コメントを LLM に入れる前に悪意あるもの(乗っ取り・誹謗中傷・荒らし)を弾く | **Created(2026-10-16)**。テスト用コメント集で v1/v2 実施。4 択(具体化)+ 乗っ取り単独の predicate の併用で乗っ取り 8/8 |
 
 ## 3. Shared Facts (要点のみ。詳細はリンク先)
 
