@@ -16,6 +16,7 @@
 | [gaze-target/](gaze-target/_map.md) | 画面のどこを見るか(視線注視先) | **一区切り(2026-10-12)**: 4x3 粒度で推定でき、発言で動かせる |
 | [reaction-trigger/](reaction-trigger/_map.md) | 反応すべきか(チャッピーの感情が大きく動くか) | 合意済み・未着手 |
 | `voice-direction/` | ElevenLabs の音声タグ選び | 未作成(必要になったら切る) |
+| `speak-now/`(仮) | 今チャッピーが喋るべきか(区切り応答の固定 2 秒待ち `TURN_END_SILENCE_MS` の代わりに判定する) | 未作成。ユーザー構想(2026-10-16)。STT 切り替えの作業では 2 秒待ちに触れない |
 
 ## 3. Shared Facts (要点のみ。詳細はリンク先)
 

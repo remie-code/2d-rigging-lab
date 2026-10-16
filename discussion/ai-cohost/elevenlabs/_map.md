@@ -32,6 +32,8 @@
 - 初期調査は Free プランで行う。配信本番で使うときはサブスクに加入する(商用利用の問題を避けるため)。
 - commit の速さは要実験。既定 VAD(1.5 秒)では足りない。`turn_prediction` に期待していたが、`scribe_v2_realtime` では使えない(実機確認 2026-10-16)。
 
+- 操縦席で whisper / ElevenLabs を選べるようにする(体験の合意 → [../implementation/screens/cockpit-stt-selection.md](../implementation/screens/cockpit-stt-selection.md))。合図(barge-in・区切り応答)は手元 VAD のまま、転写だけ ElevenLabs の commit にする。
+
 ## 5. Unresolved Questions
 
 - 全体構想(何をどこまで差し替えるか)の合意。

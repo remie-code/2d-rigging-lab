@@ -36,4 +36,5 @@
 - 既定値を 50ms にする。
 - 配信負荷下の確認は「たぶん大丈夫」との見立てで、今は求めない。
 - 修正は**ElevenLabs 調査が一段落してから別セッションで行う**。ElevenLabs の計測スクリプトが同じ部品を読み込んでいるため、並行作業を避ける。
+- (2026-10-16 追記)この修正は、操縦席の文字起こし選択の作業に含めて行う → [../implementation/screens/cockpit-stt-selection.md](../implementation/screens/cockpit-stt-selection.md)。
 - 修正の範囲(案): `buildFfmpegArgs` に `audioBufferMs`(既定 50、dshow のときだけ `-f dshow` の後・`-i` の前に挿入、0/null で付けない)。`ffmpeg-capture.test.mjs` に引数の並び順のテスト。s2-ears.md に注記。

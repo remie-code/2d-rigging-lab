@@ -63,7 +63,7 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 2. 多頭化最終3点: 4頭の速度/品質体感、Claude無退行、配信後rollout掃除 ([implementation/orchestration/brain-swap-wave-plan.md](implementation/orchestration/brain-swap-wave-plan.md))。
 3. 配信間記憶4点: 保存/秘匿、次回自動搭載、OFF、手動/定期更新 ([implementation/orchestration/stream-memory-wave-plan.md](implementation/orchestration/stream-memory-wave-plan.md))。
 4. persona/S9: 声・人格の確定時期をユーザーが決める。身体/リグは model-authoring 責務。
-5. 耳の取り込み遅延の修正: dshow `-audio_buffer_size` を既定 50ms に(現行は約 500ms ずつ届き、発話検出が 0〜0.5 秒遅れる)。**ElevenLabs 調査が一段落したら別セッションで行う**(ユーザー判断 2026-10-16) ([research/ears-capture-buffer-2026-10.md](research/ears-capture-buffer-2026-10.md))。
+5. 文字起こしの選択(whisper / ElevenLabs)を操縦席に入れる。耳の取り込み 50ms 化(現行は約 500ms ずつ届く。[research/ears-capture-buffer-2026-10.md](research/ears-capture-buffer-2026-10.md))と起動中表示の修正も同じ作業で行う。体験は合意済み → [implementation/screens/cockpit-stt-selection.md](implementation/screens/cockpit-stt-selection.md)。context-check 済み。サブエージェント(Gnome)に実装を委任する(ユーザー判断 2026-10-16)。
 
 > 下記の番号付き履歴は各wave時点の記録であり、上記の現在キューを置き換える。
 
@@ -89,4 +89,5 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 | 配信間記憶の人間ゲート | **未記録**。957緑・6レーンPASS。保存/秘匿・次回搭載・OFF・手動/定期更新を確認する |
 | persona / S9 相槌の声 | **未着手**。自己名「コーディ」は実装済み。声・人格の確定時期をユーザーが決め、身体はmodel-authoringへ渡す |
 | 役割別userData分離・ポート割当の具体方式 | **解決: プロファイルスロット方式+スロットごと自動採番(2026-07-10)**([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status) |
+| **話し始めの判定(区切り応答・呼びかけ)の全面改定** | 未着手。ユーザー構想(2026-10-16)。ElevenLabs 選択時に区切り応答がほぼ出ない既知の影響を含めて扱う([implementation/screens/cockpit-stt-selection.md](implementation/screens/cockpit-stt-selection.md) §7)。Decisions API の「今喋るべきか」([decisions/_map.md](decisions/_map.md) speak-now)と関連 |
 | **監視条件(常設)**: S2S級応答+カスタムキャラ声+外部アバター同期面の三点が揃った製品の出現でS2S再評価 | 監視中([research/gpt-live-impact-2026-07.md](research/gpt-live-impact-2026-07.md) §4。GPT-Live/Gemini Liveは三点未達で採用転換なし) |
