@@ -90,6 +90,13 @@ discussion/
     research/
     architecture/
     implementation/     # 閉問題分解、wave計画・実装報告・レビュー(runtime-player方式)
+    decisions/          # Decisions API等で知覚・演出を判定する(子トピック群の親、2026-10-12合意)
+      _map.md
+      gaze-target/      #   画面上の視線注視先
+      reaction-trigger/ #   反応すべきか(チャッピーの感情が大きく動くか)
+    elevenlabs/         # ElevenLabs一式(STT/TTS)への差し替え評価(子トピック、2026-10-12合意)
+      _map.md
+      research/
   expo/                 # 外部イベントへの出展物(ポスター等)の設計と出典事実
     _map.md
     <event-name>/
@@ -150,7 +157,7 @@ discussion/
 | `mesh-generation/` | メッシュ自動生成の商用風改修(v7)。概念設計、現状実装調査、実装計画、品質評価、v6系整理 | Undine / Sylph / Gnome | 実装成果物(wave計画等)はトピック内 `implementation/` に置く(runtime-player方式)。Editor実装(Wave102停止中)の部分的再開 |
 | `render-performance/` | Editor/Viewer 描画パフォーマンス改善。計測基盤、実測、改善設計、実装、再計測 | Undine / Sylph / Gnome | 実装成果物はトピック内 `implementation/`、計測結果は `measurements/` に置く。現状調査は `reports/editor-render-performance/` を参照で繋ぐ |
 | `editor-electron-migration/` | apps/editor を Web(React/Vite) から Electron デスクトップへ移行する取り組み。why 合意、分解、work-stream 別設計・実装 | Undine / Gnome / Sylph | Undine が議論と地図を管理。runtime-player の Electron 構成を下敷きにする。実装成果物は runtime-player 方式でトピック内 `implementation/`(将来)。可視な work-stream(shell/persistence)のみ器を切り、必要に応じて増やす |
-| `ai-cohost/` | ユーザー×自律AI(別モデル)の共演配信構想。コンセプト、前提合意、調査事実、設計判断 | Undine / ユーザー | 実装成果物が必要になったらトピック内 `implementation/`(runtime-player方式)。実測は `experiments/`、キャラクター設計は `persona/` を必要時に追加する。runtime-player側の操縦チャネル議論も本トピックに置き、`runtime-player/_map.md` からリンクで繋ぐ |
+| `ai-cohost/` | ユーザー×自律AI(別モデル)の共演配信構想。コンセプト、前提合意、調査事実、設計判断 | Undine / ユーザー | 実装成果物が必要になったらトピック内 `implementation/`(runtime-player方式)。実測は `experiments/`、キャラクター設計は `persona/` を必要時に追加する。runtime-player側の操縦チャネル議論も本トピックに置き、`runtime-player/_map.md` からリンクで繋ぐ。Decisions API等による判定は子トピック `decisions/`(配下に gaze-target / reaction-trigger 等)、ElevenLabs への差し替え評価は `elevenlabs/` に閉じる(2026-10-12合意) |
 | `expo/` | 外部イベントへの出展物(ポスター・展示・発表資料)の設計と、その裏付けとなる出典事実 | Undine / ユーザー | イベントごとに子ディレクトリを切る。設計判断(何をどう見せるか)と出典事実(file:line 付き・**書けない線**を含む)を別ファイルに分離する。§7 Demo and Proposal Hygiene は expo/ にも同様に効く |
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 

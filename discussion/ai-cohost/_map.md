@@ -21,6 +21,8 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [implementation/](implementation/) | 実装フェーズの計画・実行成果物(runtime-player方式) | Created(2026-07-10)。**C1〜C7全閉鎖=器の完成**。S1〜S7実装済み(S7は`/live/<id>`実配信30分ノーブレイクで実ゲート実質合格)、操縦席改定・口数/コーディ語彙も閉鎖。S8安全弁は実装/機械ゲート済みだがkill実射・通常発話無退行の人間ゲート待ち。多頭化・配信間記憶も実装済みだが各最終人間ゲートを残す。 |
 | [soul/](soul/) | S系列の前提討議・モデル/記憶判断・残るゲート | Created(2026-07-12)。①②は裁定済みクローズ(主経路=Max 20x+Agent SDK/パイプラインAccepted)。現行registryは4頭。brain-swap/stream-memoryの最終人間ゲートとpersona/S9声確定が残る。 |
 | [experiments/](experiments/) | 魂の実測(枠消費・レイテンシ・会話品質)。S系列の常設計器 | **Created(2026-07-12、S1 Domain C)**。初回=[experiments/s1-first-light.md](experiments/s1-first-light.md)(tools:[]無効実証・apiKeySource=none・常駐初期化≈1.9s・warm ask~3.2s・synthesis~1s) |
+| [decisions/](decisions/_map.md) | 子トピック群: OpenAI Decisions API 等で知覚・演出を判定する(視線注視先・反応判定・音声タグ選び) | **Created(2026-10-12)**。gaze-target は一区切り(4x3粒度で推定可)、reaction-trigger は合意済み・未着手 |
+| [elevenlabs/](elevenlabs/_map.md) | 子トピック: ElevenLabs 一式(STT/TTS)への差し替え評価。発端は STT 確定遅延の短縮 | **Created(2026-10-12)**。TTS 調査のみ。STT 調査と全体構想の合意は後日 |
 
 AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
@@ -61,6 +63,7 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 2. 多頭化最終3点: 4頭の速度/品質体感、Claude無退行、配信後rollout掃除 ([implementation/orchestration/brain-swap-wave-plan.md](implementation/orchestration/brain-swap-wave-plan.md))。
 3. 配信間記憶4点: 保存/秘匿、次回自動搭載、OFF、手動/定期更新 ([implementation/orchestration/stream-memory-wave-plan.md](implementation/orchestration/stream-memory-wave-plan.md))。
 4. persona/S9: 声・人格の確定時期をユーザーが決める。身体/リグは model-authoring 責務。
+5. 耳の取り込み遅延の修正: dshow `-audio_buffer_size` を既定 50ms に(現行は約 500ms ずつ届き、発話検出が 0〜0.5 秒遅れる)。**ElevenLabs 調査が一段落したら別セッションで行う**(ユーザー判断 2026-10-16) ([research/ears-capture-buffer-2026-10.md](research/ears-capture-buffer-2026-10.md))。
 
 > 下記の番号付き履歴は各wave時点の記録であり、上記の現在キューを置き換える。
 
