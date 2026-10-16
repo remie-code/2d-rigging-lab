@@ -25,6 +25,7 @@
  */
 
 import {
+  resolveSpeaker,
   speakerLabel,
   speakerRowClass,
   latencyLabel
@@ -65,6 +66,8 @@ function rowsWithoutSpeaking(rows) {
  * 転写行を積む（addTranscriptRow :386-408 同値・speaking 行は除去してから）。
  * 時刻は d.appendedAtMs 優先（:392 `fmtClock(d.appendedAtMs || Date.now())`）。
  * レイテンシは live 行のみ（latencyLabel が null なら描かない・履歴行は契約上載らない）。
+ * **you の行（文字起こし）には遅延を出さない**（whisper / ElevenLabs とも・操縦席の文字起こし選択
+ * cockpit-stt-selection.md §4.2。値は SSE には残り、操縦席の標準出力に 1 行ずつ書かれる）。
  * @param {FeedState} feed  @param {any} d  SSE transcript ペイロード。  @param {number} nowMs
  */
 export function feedWithTranscript(feed, d, nowMs) {
@@ -77,7 +80,7 @@ export function feedWithTranscript(feed, d, nowMs) {
     text: d && d.text,
     // 多頭化 Domain C: brain 札を additive で latencyLabel へ渡す（d.brain 未搭載の you/viewer 行や
     // brain 未注入時の soul 行は undefined のまま＝従来どおり (Ns) のみ）。
-    latText: latencyLabel(d && d.latencyMs, d && d.brain)
+    latText: resolveSpeaker(d) === "you" ? null : latencyLabel(d && d.latencyMs, d && d.brain)
   });
 }
 

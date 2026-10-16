@@ -17,6 +17,8 @@ import {
   createVerbosityHooks,
   createBrainHooks,
   createChatSourceHooks,
+  createSttEngineHooks,
+  formatSttLatencyLine,
   createMemoryHooks,
   shouldSkipMemoryCheckpoint,
   createMemoryRecorder,
@@ -1594,4 +1596,36 @@ test("instruction revision/hooks: revision advances only after a successful dura
   settings.setConversationInstruction = () => false;
   assert.equal(hooks.save("claude", "not persisted"), false);
   assert.equal(hooks.getRevision(), 2);
+});
+
+// ── createSttEngineHooks / formatSttLatencyLine（操縦席の文字起こし選択・cockpit-stt-selection.md）────────
+
+test("createSttEngineHooks: 未記憶/未知値は whisper・記憶済みの既知値は復元する", { timeout: 5000 }, () => {
+  /** @param {string | null} v */
+  const settingsWith = (v) => ({ getSttEngine: () => v, setSttEngine: () => {} });
+  assert.equal(createSttEngineHooks(settingsWith(null)).resolveInitialSttEngine(), "whisper");
+  assert.equal(createSttEngineHooks(settingsWith("google")).resolveInitialSttEngine(), "whisper");
+  assert.equal(createSttEngineHooks(settingsWith("elevenlabs")).resolveInitialSttEngine(), "elevenlabs");
+  assert.equal(createSttEngineHooks(settingsWith("whisper"), "elevenlabs").resolveInitialSttEngine(), "whisper");
+});
+
+test("createSttEngineHooks: onSetSttEngine は settings へ橋渡しし・throw は握る", { timeout: 5000 }, () => {
+  /** @type {string | null} */
+  let stored = null;
+  const hooks = createSttEngineHooks({ getSttEngine: () => stored, setSttEngine: (e) => { stored = e; } });
+  hooks.onSetSttEngine("elevenlabs");
+  assert.equal(hooks.resolveInitialSttEngine(), "elevenlabs");
+  const throwing = createSttEngineHooks({
+    getSttEngine: () => null,
+    setSttEngine: () => {
+      throw new Error("disk full");
+    }
+  });
+  assert.doesNotThrow(() => throwing.onSetSttEngine("whisper"));
+});
+
+test("formatSttLatencyLine: 数字だけの 1 行（物差しが無いときは -）", { timeout: 5000 }, () => {
+  assert.equal(formatSttLatencyLine({ engine: "elevenlabs", latencyMs: 512.4 }), "[cockpit] stt latency: engine=elevenlabs ms=512\n");
+  assert.equal(formatSttLatencyLine({ engine: "whisper", latencyMs: null }), "[cockpit] stt latency: engine=whisper ms=-\n");
+  assert.equal(formatSttLatencyLine({ engine: "whisper", latencyMs: NaN }), "[cockpit] stt latency: engine=whisper ms=-\n");
 });

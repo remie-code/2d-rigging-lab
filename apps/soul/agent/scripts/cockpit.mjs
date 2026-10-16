@@ -733,6 +733,49 @@ export function createChatSourceHooks(settings) {
   };
 }
 
+/**
+ * settings の文字起こしの方式（sttEngine）を、cockpit-server の口（sttEngineInitial/onSetSttEngine）へ
+ * 橋渡しする（操縦席の文字起こし選択・cockpit-stt-selection.md・createVerbosityHooks と同型の薄い配線層）。
+ * 未記憶/未知値は defaultEngine（既定 "whisper"）。選択だけを記憶し、ElevenLabs のキーはここで扱わない
+ * （キーは cockpit-server が Start ごとに .env.elevenlabs.local から直接読む）。
+ *
+ * @param {{ getSttEngine: () => string | null; setSttEngine: (engine: string | null) => void }} settings
+ * @param {"whisper" | "elevenlabs"} [defaultEngine="whisper"]
+ * @returns {{
+ *   resolveInitialSttEngine: () => "whisper" | "elevenlabs";
+ *   onSetSttEngine: (engine: string) => void;
+ * }}
+ */
+export function createSttEngineHooks(settings, defaultEngine = "whisper") {
+  return {
+    /** 起動時の初期選択（未記憶/未知値は defaultEngine）。 */
+    resolveInitialSttEngine: () => {
+      const remembered = settings.getSttEngine();
+      return remembered === "whisper" || remembered === "elevenlabs" ? remembered : defaultEngine;
+    },
+    /** cockpit-server の onSetSttEngine（耳の Start ごとに呼ぶ）。 */
+    onSetSttEngine: (engine) => {
+      try {
+        settings.setSttEngine(engine); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は Start を止めない（onSetVerbosity と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
+/**
+ * 文字起こしの遅延ログ 1 行（操縦席の標準出力・数字だけ・文字起こし本文は書かない）。
+ * 物差しは whisper が「speechEnd → 転写到着」、ElevenLabs が「直前の commit 以降で最後の speechEnd →
+ * commit 到着」（ear-pipeline.mjs）。物差しが無い commit（直前の commit 以降に speechEnd が無い）は "-"。
+ * @param {{ engine: string; latencyMs: number | null }} info
+ * @returns {string}
+ */
+export function formatSttLatencyLine(info) {
+  const ms = typeof info.latencyMs === "number" && Number.isFinite(info.latencyMs) ? String(Math.round(info.latencyMs)) : "-";
+  return `[cockpit] stt latency: engine=${info.engine} ms=${ms}\n`;
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --open                待受け完了後に既定ブラウザを開く（Windows）
@@ -775,6 +818,8 @@ async function main() {
   // S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化（Channel URL と同型の薄い橋渡し・
   // §createChatSourceHooks）。実チャット器官の Connect/停止は cockpit-server 所有（POST 駆動）。
   const chatSourceHooks = createChatSourceHooks(settings);
+  // 操縦席の文字起こし選択（whisper / ElevenLabs・既定 whisper・§createSttEngineHooks）。
+  const sttEngineHooks = createSttEngineHooks(settings);
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -1267,7 +1312,12 @@ async function main() {
     // 配信間記憶: 記憶 ON/OFF の永続トグル + 手動「今日を記録」+ 現況(additive・POST +2・snapshot +1)。
     onSetMemoryEnabled,
     onMemoryRecord,
-    memoryStatus
+    memoryStatus,
+    // 操縦席の文字起こし選択: 起動時に前回の選択を復元・Start ごとに記憶・遅延は標準出力へ 1 行（数字のみ）。
+    // ElevenLabs のキーは cockpit-server の既定（.env.elevenlabs.local をコード内で直接読む）に任せる。
+    sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
+    onSetSttEngine: sttEngineHooks.onSetSttEngine,
+    onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info))
   });
 
   const url = await server.listen();

@@ -179,8 +179,8 @@ async function main() {
   const chunkGaps = [];
   let lastChunkWall = null;
   const device = deviceName.startsWith("audio=") ? deviceName : `audio=${deviceName}`;
-  const args = buildFfmpegArgs({ device, sampleRate: SAMPLE_RATE, channels: 1 });
-  if (bufferMs > 0) args.splice(args.indexOf("-i"), 0, "-audio_buffer_size", String(bufferMs));
+  // -audio_buffer_size は buildFfmpegArgs が付ける（既定 50。0 で付けない）。ここで足すと二重になる。
+  const args = buildFfmpegArgs({ device, sampleRate: SAMPLE_RATE, channels: 1, audioBufferMs: bufferMs });
   const capture = createFfmpegCapture({
     args,
     sampleRate: SAMPLE_RATE,

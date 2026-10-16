@@ -63,7 +63,7 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 2. 多頭化最終3点: 4頭の速度/品質体感、Claude無退行、配信後rollout掃除 ([implementation/orchestration/brain-swap-wave-plan.md](implementation/orchestration/brain-swap-wave-plan.md))。
 3. 配信間記憶4点: 保存/秘匿、次回自動搭載、OFF、手動/定期更新 ([implementation/orchestration/stream-memory-wave-plan.md](implementation/orchestration/stream-memory-wave-plan.md))。
 4. persona/S9: 声・人格の確定時期をユーザーが決める。身体/リグは model-authoring 責務。
-5. 文字起こしの選択(whisper / ElevenLabs)を操縦席に入れる。耳の取り込み 50ms 化(現行は約 500ms ずつ届く。[research/ears-capture-buffer-2026-10.md](research/ears-capture-buffer-2026-10.md))と起動中表示の修正も同じ作業で行う。体験は合意済み → [implementation/screens/cockpit-stt-selection.md](implementation/screens/cockpit-stt-selection.md)。context-check 済み。サブエージェント(Gnome)に実装を委任する(ユーザー判断 2026-10-16)。
+5. 文字起こしの選択(whisper / ElevenLabs)を操縦席に入れる。耳の取り込み 50ms 化(現行は約 500ms ずつ届く。[research/ears-capture-buffer-2026-10.md](research/ears-capture-buffer-2026-10.md))と起動中表示の修正も同じ作業で行う。体験は合意済み → [implementation/screens/cockpit-stt-selection.md](implementation/screens/cockpit-stt-selection.md)。**実装済み・ユーザー確認合格(2026-10-16)**。
 
 > 下記の番号付き履歴は各wave時点の記録であり、上記の現在キューを置き換える。
 

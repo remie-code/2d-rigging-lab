@@ -12,6 +12,8 @@
  *  - health:           { whisper, ffmpeg }  各々 { status, reason }（app.mjs が mergeHealth で
  *                       「欠落は前値保持」を済ませた後の値・初期 { status:"unknown", reason:null }）。
  *  - audioDevice:      { name } | null  s.audioDevice（生値・声の出力先表示に使う）。
+ *  - stt:              { engine, status, reason } | null  s.stt（文字起こしの方式と状態・`stt: ElevenLabs up`）。
+ *  - device:           string | null  s.device（Start 時のマイク名・耳が listening の間だけ `mic:` に出す）。
  *  - identity:         { id, displayName } | null  state.brain.identity（サーバー提供の生値）。
  *  - onToggleSettings: () => void    ⚙ クリック（設定引き出しの開閉フック・**引き出し本体は
  *                       Domain C**——ここは開閉のフックだけを用意する）。
@@ -20,7 +22,7 @@
  */
 
 import { html } from "../vendor/htm.preact.standalone.mjs";
-import { earsStatusView, healthStatusView, voiceOutputLabel } from "../view-logic/health.mjs";
+import { earsStatusView, healthStatusView, voiceOutputLabel, sttStatusView, micInputLabel } from "../view-logic/health.mjs";
 
 /**
  * Current public identity is supplied by the server. The UI validates the
@@ -63,9 +65,10 @@ export function HealthStat({ label, view }) {
 
 /**
  * ヘッダ本体。
- * @param {{ ears?: string; health: { whisper: any; ffmpeg: any }; audioDevice?: any; identity?: unknown; onToggleSettings?: () => void }} props
+ * @param {{ ears?: string; health: { whisper: any; ffmpeg: any }; audioDevice?: any; identity?: unknown;
+ *           stt?: any; device?: string | null; settingsOpen?: boolean; onToggleSettings?: () => void }} props
  */
-export function Header({ ears, health, audioDevice, identity, settingsOpen = false, onToggleSettings }) {
+export function Header({ ears, health, audioDevice, identity, stt = null, device = null, settingsOpen = false, onToggleSettings }) {
   const earsView = earsStatusView(ears);
   const currentDisplayName = identityDisplayName(identity);
   // health は app.mjs 側で initialHealth() + mergeHealth（欠落は前値保持）を済ませた実値だけが来る
@@ -73,6 +76,9 @@ export function Header({ ears, health, audioDevice, identity, settingsOpen = fal
   // だったため Domain D で削除・design レビュー non-blocking 1。view-logic 外の表示リテラルゼロ）。
   const whisperView = healthStatusView(health.whisper);
   const ffmpegView = healthStatusView(health.ffmpeg);
+  // 操縦席の文字起こし選択: 方式と状態（既存の whisper 死活は残したまま足す）・使用中のマイク名（listening の間だけ）。
+  const sttView = sttStatusView(stt);
+  const micName = micInputLabel(ears, device);
   return html`
     <header class="cockpit-header">
       <h1>${currentDisplayName}</h1>
@@ -83,6 +89,8 @@ export function Header({ ears, health, audioDevice, identity, settingsOpen = fal
       <div class="health">
         <${HealthStat} label="whisper" view=${whisperView} />
         <${HealthStat} label="ffmpeg" view=${ffmpegView} />
+        ${sttView ? html`<${HealthStat} label="stt" view=${sttView} />` : null}
+        ${micName != null ? html`<span class="mic-in" title=${micName}>mic: ${micName}</span>` : null}
         <span class="voice-out">voice: ${voiceOutputLabel(audioDevice)}</span>
       </div>
       <button id="cockpit-settings-trigger" class="settings-toggle" type="button"

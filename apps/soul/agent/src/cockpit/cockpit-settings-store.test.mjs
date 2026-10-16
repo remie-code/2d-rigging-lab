@@ -875,3 +875,36 @@ test("settings store: memory enabled 用の unwritable path は set を握って
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: stt engine は set→get roundtrip で永続化し・他のキーと同居する（操縦席の文字起こし選択）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getSttEngine(), null); // 未作成 = 記憶なし（既定 whisper は呼び出し側）。
+    store.setLastDevice("Mic A");
+    store.setSttEngine("elevenlabs");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getSttEngine(), "elevenlabs");
+    assert.equal(reopened.getLastDevice(), "Mic A");
+    reopened.setSttEngine("whisper");
+    assert.equal(store.getSttEngine(), "whisper");
+    store.setSttEngine(null);
+    assert.equal(store.getSttEngine(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getSttEngine returns null・unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(path, "{ not json", "utf8");
+    assert.equal(createFileSettingsStore({ path }).getSttEngine(), null);
+    const unwritable = createFileSettingsStore({ path: join(dir, "settings.json", "nested", "x.json") });
+    assert.doesNotThrow(() => unwritable.setSttEngine("elevenlabs"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -20,7 +20,9 @@ import {
   memoryToggleView,
   memoryPostErrorText,
   memoryRecordPostErrorText,
-  memoryStatusLabel
+  memoryStatusLabel,
+  STT_ENGINE_OPTIONS,
+  sttEngineSelection
 } from "./settings.mjs";
 
 test("visionTargetLabel: title 無しは not configured（applyVisionTarget :317-322）", () => {
@@ -260,4 +262,18 @@ test("memoryStatusLabel: count/lastRecordAtMs から「記憶 N 件を搭載（�
   assert.equal(memoryStatusLabel({ enabled: true, count: 2, lastRecordAtMs: epochMs }), "記憶 2 件を搭載（最新: 21:05:09）");
   // count 欠落は 0 扱い。
   assert.equal(memoryStatusLabel({ enabled: false, lastRecordAtMs: null }), "記憶 0 件を搭載（最新: まだ記録なし）");
+});
+
+test("STT_ENGINE_OPTIONS / sttEngineSelection: 文字起こしの選択肢（whisper / ElevenLabs）と state.stt からの復元", () => {
+  assert.deepEqual(
+    STT_ENGINE_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      ["whisper", "ローカル（whisper）"],
+      ["elevenlabs", "ElevenLabs"]
+    ]
+  );
+  assert.equal(sttEngineSelection({ engine: "elevenlabs" }), "elevenlabs");
+  assert.equal(sttEngineSelection({ engine: "whisper" }), "whisper");
+  assert.equal(sttEngineSelection({ engine: "google" }), null);
+  assert.equal(sttEngineSelection(null), null);
 });

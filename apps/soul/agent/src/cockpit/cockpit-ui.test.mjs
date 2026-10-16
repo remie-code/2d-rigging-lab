@@ -862,3 +862,52 @@ test("COCKPIT_CSS: 運転バー/設定引き出しの意匠トークン（§7: K
   assert.match(COCKPIT_CSS, /\.drawer-status::before \{[^}]*border-radius: 50%/, "状態は色ドット + 文言（§7）");
   assert.match(COCKPIT_CSS, /\.err \{ color: var\(--down\); \}/, "エラー欄（旧 .err の意味論継承）");
 });
+
+// ── 操縦席の文字起こし選択（cockpit-stt-selection.md §4.2）──
+
+test("transcript: you の行には遅延を出さない（whisper / ElevenLabs とも）・soul 行の (Ns · brain) は従来どおり", () => {
+  let feed = feedWithTranscript(emptyFeed(), { speaker: "you", text: "こんにちは", latencyMs: 1500, appendedAtMs: T0 }, T1);
+  assert.equal(feed.rows[0].latText, null);
+  feed = feedWithTranscript(emptyFeed(), { text: "speaker 欠落も you", latencyMs: 900, appendedAtMs: T0 }, T1);
+  assert.equal(feed.rows[0].latText, null);
+  feed = feedAfterSseEvent(emptyFeed(), "transcript", { speaker: "you", text: "x", latencyMs: 480, appendedAtMs: T0 }, T1);
+  assert.equal(feed.rows[0].latText, null);
+  feed = feedWithTranscript(emptyFeed(), { speaker: "soul", text: "はい", latencyMs: 2345, brain: "claude", appendedAtMs: T0 }, T1);
+  assert.equal(feed.rows[0].latText, "(2.3s · claude)");
+});
+
+test("Header: stt（方式と状態）を whisper 死活に足して出し・マイク名は listening の間だけ出す", () => {
+  const base = {
+    health: { whisper: { status: "unknown", reason: null }, ffmpeg: { status: "up", reason: null } },
+    audioDevice: { name: "MV7+" },
+    identity: { id: "cody", displayName: "こーでぃー" },
+    onToggleSettings: () => {}
+  };
+  const listening = collectText(
+    Header({
+      ...base,
+      ears: "listening",
+      stt: { engine: "elevenlabs", status: "up", reason: null },
+      device: "マイク (2- Shure MV7+)"
+    })
+  ).join("");
+  assert.ok(listening.includes("stt: ElevenLabs up"), listening);
+  assert.ok(listening.includes("whisper: unknown"), "既存の whisper 死活は残す");
+  assert.ok(listening.includes("mic: マイク (2- Shure MV7+)"));
+  const reconnecting = collectText(
+    Header({ ...base, ears: "listening", stt: { engine: "elevenlabs", status: "reconnecting", reason: null }, device: "Mic" })
+  ).join("");
+  assert.ok(reconnecting.includes("stt: ElevenLabs reconnecting"));
+  const starting = collectText(
+    Header({ ...base, ears: "starting", stt: { engine: "whisper", status: "unknown", reason: null }, device: "Mic" })
+  ).join("");
+  assert.ok(starting.includes("Starting"));
+  assert.ok(!starting.includes("mic:"), "起動中・停止中はマイク名を出さない");
+  const stopped = collectText(Header({ ...base, ears: "stopped", stt: null, device: "Mic" })).join("");
+  assert.ok(!stopped.includes("mic:"));
+  assert.ok(!stopped.includes("stt:"), "stt が無ければ出さない");
+});
+
+test("COCKPIT_CSS: 文字起こしの繋ぎ直し中（.hstat.reconnecting）は黄色（--speaking）", () => {
+  assert.match(COCKPIT_CSS, /\.hstat\.reconnecting \{ color: var\(--speaking\)/);
+});

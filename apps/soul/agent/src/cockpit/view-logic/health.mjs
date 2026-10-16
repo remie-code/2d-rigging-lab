@@ -27,6 +27,11 @@
  *  - brainCredentialHealthLabel → `cockpit.mjs` の `brainStatus()` が返す `credentialHealth`
  *    （資格情報ファイルの**存在確認 boolean のみ**・中身は扱わない・blocking #4）を文言化する。
  *    操縦席は資格情報そのものを扱わない（brain-swap.md §2 UX 裁定）。
+ *
+ * 操縦席の文字起こし選択（cockpit-stt-selection.md §4.2・§8）追加:
+ *  - STT_ENGINE_LABELS / sttStatusView → ヘッダの `stt: ElevenLabs up` / `stt: whisper up` /
+ *    `stt: ElevenLabs reconnecting`（黄色）。既存の whisper 死活表示は残したまま足す。
+ *  - micInputLabel → 耳が動いている（listening）間だけ出す使用中のマイク名。
  */
 
 /**
@@ -73,6 +78,45 @@ export function mergeHealth(prev, next) {
     whisper: next.whisper ? next.whisper : prev.whisper,
     ffmpeg: next.ffmpeg ? next.ffmpeg : prev.ffmpeg
   });
+}
+
+/**
+ * 文字起こしの方式 id → ヘッダ表示名（選択肢の表示は view-logic/settings.mjs の STT_ENGINE_OPTIONS）。
+ * @type {Readonly<Record<string, string>>}
+ */
+export const STT_ENGINE_LABELS = Object.freeze({
+  whisper: "whisper",
+  elevenlabs: "ElevenLabs"
+});
+
+/**
+ * ヘッダの文字起こし表示（`ElevenLabs up` 等）。state.stt（{ engine, status, reason }）を受ける。
+ * down は reason を em-dash で併記（healthStatusView と同じ流儀）。connecting / reconnecting は
+ * 黄色のクラス（styles.mjs の .hstat.reconnecting / .hstat.connecting）。stt が無ければ null（出さない）。
+ * @param {{ engine?: string | null; status?: string | null; reason?: string | null } | null | undefined} stt
+ * @returns {{ text: string; className: string; title: string } | null}
+ */
+export function sttStatusView(stt) {
+  if (!stt) return null;
+  const label = (stt.engine && STT_ENGINE_LABELS[stt.engine]) || "unknown";
+  const status = stt.status || "unknown";
+  return {
+    text: label + " " + status + (status === "down" && stt.reason ? " — " + stt.reason : ""),
+    className: "hstat " + status,
+    title: stt.reason || ""
+  };
+}
+
+/**
+ * ヘッダに出す使用中のマイク名（耳が listening の間だけ・それ以外は null = 出さない）。
+ * state.device は Start 時の生のデバイス名（未指定 = 既定入力は "default"）。
+ * @param {string | null | undefined} ears
+ * @param {string | null | undefined} device
+ * @returns {string | null}
+ */
+export function micInputLabel(ears, device) {
+  if (ears !== "listening") return null;
+  return device ? device : "default";
 }
 
 /**

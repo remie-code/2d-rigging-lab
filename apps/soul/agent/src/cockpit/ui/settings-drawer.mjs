@@ -5,7 +5,8 @@
  *
  * 現 cockpit.html の設定系セクションの移植先:
  *  - 接続: 器 Channel（:172-178 :753-770）/ YouTube Live chat（:182-189 :775-803）
- *  - 入出力: マイク + Start/Stop（:163-169 :697-750 :804-811）/ 声の出力先（:207-212 :654-695）/
+ *  - 入出力: マイク + Start/Stop（:163-169 :697-750 :804-811）/ 文字起こし（whisper / ElevenLabs・
+ *    cockpit-stt-selection.md §4.2: マイクの下・Start の前に選ぶ・Start で記憶）/ 声の出力先（:207-212 :654-695）/
  *    視界 = ゲーム窓（:192-199 :591-631）
  *  - 各区画のエラー欄: devices-error（:168）→ マイク行 / channel-error（:177）→ Channel 行 /
  *    chat-error（:188）→ chat 行 / vision-error（:198）→ 視界行 / conversation-error（:212）は
@@ -58,6 +59,8 @@ import {
   chatConnectErrorText,
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
+  STT_ENGINE_OPTIONS,
+  sttEngineSelection,
   requestErrorText,
   brainPostErrorText,
   memoryToggleView,
@@ -217,7 +220,7 @@ export function settingsModalFocusReturnTarget(previous, open) {
  * conversation editor is a page within this same dialog; it never creates a
  * nested dialog or changes existing immediate-setting endpoint handlers.
  *
- * @param {{ open?: boolean; onClose?: () => void; settings: any; chatDisplay?: string | null;
+ * @param {{ open?: boolean; onClose?: () => void; settings: any; sttEngine?: string | null; chatDisplay?: string | null;
  *   applySnapshot: (s: any) => void; fetchImpl?: any; promptEditorSlot?: any;
  *   draftDirty?: boolean; dirty?: boolean; onDiscardDraft?: () => void; onContinueDraft?: () => void;
  *   closeRequestRef?: { current: (() => void) | null } }} props
@@ -226,6 +229,7 @@ export function CockpitSettingsModal({
   open,
   onClose,
   settings,
+  sttEngine = null,
   chatDisplay,
   applySnapshot,
   fetchImpl,
@@ -241,6 +245,10 @@ export function CockpitSettingsModal({
   const [micSelected, setMicSelected] = useState("");
   const [micBusy, setMicBusy] = useState(false); // setBusy :729（Start/Stop 両 disable）。
   const [micError, setMicError] = useState(""); //  devices-error :168（一覧/start/stop の共用欄）。
+  // ── 文字起こし（whisper / ElevenLabs）: マイクと同じく Start の前に選ぶ。前回の選択は state.stt.engine から
+  //    復元（ユーザーが選び直したら上書きしない）。Start の body で送り、サーバー側で記憶される。──
+  const [sttSelected, setSttSelected] = useState("whisper");
+  const sttEditedRef = useRef(false);
   // ── 器 Channel（:172-178 :753-770）──
   const [channelUrl, setChannelUrl] = useState("");
   const [channelError, setChannelError] = useState(""); // channel-error :177
@@ -513,13 +521,24 @@ export function CockpitSettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brainCurrent]);
 
+  // 文字起こしの選択の復元（state.stt.engine・ユーザーが選び直した後は上書きしない）。
+  const sttRestored = sttEngineSelection(sttEngine ? { engine: sttEngine } : null);
+  useEffect(() => {
+    if (sttRestored != null && !sttEditedRef.current) setSttSelected(sttRestored);
+  }, [sttRestored]);
+
   // ── ハンドラ（すべて「POST → view-logic で文言 → snapshot 適用」の同型フロー）──
 
   /** Start（:730-750）。 */
   const onStart = () => {
     const device = micSelected || null; // :731
     setMicBusy(true); //                    :732 setBusy(true)
-    doFetch("/api/ears/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device }) })
+    sttEditedRef.current = false; // Start 後はサーバーの記憶（state.stt.engine）に同期してよい。
+    doFetch("/api/ears/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ device, sttEngine: sttSelected || "whisper" })
+    })
       .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, j })))
       .then((/** @type {any} */ res) => {
         const err = earsStartFailureText(res);
@@ -808,6 +827,19 @@ export function CockpitSettingsModal({
           />
           <button class="btn-start" type="button" disabled=${micBusy} onClick=${onStart}>Start</button>
           <button class="btn-stop" type="button" disabled=${micBusy} onClick=${onStop}>Stop</button>
+        </div>
+        <div class="drawer-row">
+          <label for="stt-engine-select">文字起こし</label>
+          <${SettingsSelect}
+            id="stt-engine-select"
+            className="drawer-select stt-engine-select"
+            options=${STT_ENGINE_OPTIONS}
+            value=${sttSelected}
+            onChange=${(/** @type {any} */ ev) => {
+              sttEditedRef.current = true;
+              setSttSelected(ev && ev.target ? ev.target.value : "whisper");
+            }}
+          />
         </div>
         <div class="drawer-note">
           <span class="err">${micError}</span>

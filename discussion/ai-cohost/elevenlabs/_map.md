@@ -14,7 +14,7 @@
 |---|---|
 | [research/tts-controls-2026-10.md](research/tts-controls-2026-10.md) | TTS で設定・制御できる要素(モデル、voice_settings、音声タグ、料金)。サブエージェント調査 |
 | [research/stt-plans-and-realtime-2026-10.md](research/stt-plans-and-realtime-2026-10.md) | STT のプラン差(Free から API で使える、差は同梱量・同時接続・優先度・商用可否)、リアルタイムの確定制御・接続維持・課金・再接続 |
-| [experiments/01-stt-behavior.md](experiments/01-stt-behavior.md) | 実マイクでリアルタイム STT を観測。partial は約1秒おき・言葉から0.5〜1.3秒遅れ。commit は喋り終わりから既定 VAD で≈1.6〜1.9秒、VAD 0.3秒で≈0.9秒。無音中に「うん/はい」の partial が出る |
+| [experiments/01-stt-behavior.md](experiments/01-stt-behavior.md) | 実マイクでリアルタイム STT を観測。partial は約1秒おき・言葉から0.5〜1.3秒遅れ。commit は喋り終わりから既定 VAD で≈1.6〜1.9秒、VAD 0.3秒指定(実効0.5秒)で≈0.9秒。無音中に「うん/はい」の partial が出る |
 
 ## 3. Observations (第三者事例。画像はリポジトリに置かない)
 
@@ -27,7 +27,7 @@
 ## 4. Decisions (2026-10-16、ユーザー)
 
 - 使うのはリアルタイム用(`scribe_v2_realtime`)。
-- partial と commit の使い方: VAD 無音しきい値 0.3 秒(サーバーの下限)で commit を順に LLM へ渡す方向(experiments/01 の結果を受けて合意)。短い断片の commit をどうまとめるかは未決。
+- partial と commit の使い方: VAD 無音しきい値 0.3 秒指定(実効はサーバー側で 0.5 秒に丸められる)で commit を順に LLM へ渡す方向(experiments/01 の結果を受けて合意)。短い断片の commit をどうまとめるかは未決。
 - 計測の入力は実際のマイク発話(配信と同じ条件)。
 - 初期調査は Free プランで行う。配信本番で使うときはサブスクに加入する(商用利用の問題を避けるため)。
 - commit の速さは要実験。既定 VAD(1.5 秒)では足りない。`turn_prediction` に期待していたが、`scribe_v2_realtime` では使えない(実機確認 2026-10-16)。

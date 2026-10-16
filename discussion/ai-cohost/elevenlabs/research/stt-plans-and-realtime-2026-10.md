@@ -63,6 +63,8 @@
 - `session_started` の config 例: `vad_commit_strategy: true`、`vad_silence_threshold_secs: 1.5`、`vad_threshold: 0.4`、`timestamps_granularity: "word"`。
 - **`commit_strategy=turn_prediction` は拒否される**: `invalid_request` 「commit_strategy 'turn_prediction' is not supported by model_id 'scribe_v2_realtime'」(close 1008)。changelog(2026-10-12)は「ターンを予測するモデルの既定」とし、そうしたモデルの partial には `turn_probability` が付くとするが、API の model_id は `scribe_v2_realtime` のみ。**ターン予測モデルは API に未公開**と読める。
 
+- **VAD 無音しきい値の実効下限は 0.5 秒**: 受け付ける範囲は 0.3〜3.0(範囲外は `invalid_request`)だが、0.3 を送ると `session_started` の config は 0.5 になる。0.8 を送ると 0.8(2026-10-16、実験ログと Gnome の実機確認)。
+
 ## 8. 未確認
 
 - commit までの実時間(日本語、日本から)。確定方式(VAD 既定・短縮 VAD・手動)ごとの差。

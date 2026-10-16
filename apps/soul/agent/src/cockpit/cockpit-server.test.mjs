@@ -3360,3 +3360,264 @@ test("cockpit onFireRequest: kind:\"interjection\" は selfFire SSE に素通し
     await server.close();
   }
 });
+
+// ── 操縦席の文字起こし選択（whisper / ElevenLabs・cockpit-stt-selection.md）──────────────────
+//  pipeline は fake（ElevenLabs にも whisper にも繋がない）。キーは fake provider で渡し、state/SSE/
+//  ログの口に漏れないことを固定する。
+
+const FAKE_EL_KEY = "sk_fake_elevenlabs_key_do_not_leak";
+
+test("cockpit 文字起こし選択: Start 直後に ears=starting の state が SSE に流れる（起動中も Stopped のままにしない）", async () => {
+  const fake = makeFakePipeline();
+  /** @type {() => void} */
+  let release = () => {};
+  const gate = new Promise((r) => (release = () => r(undefined)));
+  const factory = (/** @type {any} */ options) => {
+    const p = fake.factory(options);
+    return {
+      ...p,
+      start: async () => {
+        await gate;
+        await p.start();
+      }
+    };
+  };
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state" && e.data.ears === "stopped");
+    const startP = postJson(`${url}/api/ears/start`, { device: "Mic" });
+    const starting = await client.waitFor((e) => e.event === "state" && e.data.ears === "starting");
+    assert.equal(starting.data.stt.engine, "whisper");
+    release();
+    const res = await startP;
+    assert.equal(res.json.ears, "listening");
+    const order = client.events.filter((e) => e.event === "state").map((e) => e.data.ears);
+    assert.ok(order.indexOf("starting") < order.lastIndexOf("listening"));
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: 既定は whisper（stt を pipeline に渡さない・stt: whisper up）", async () => {
+  const fake = makeFakePipeline();
+  /** @type {string[]} */
+  const saved = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onSetSttEngine: (e) => {
+      saved.push(e);
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const initial = await getJson(`${url}/api/state`);
+    assert.deepEqual(initial.json.stt, { engine: "whisper", status: "unknown", reason: null });
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(start.status, 200);
+    assert.equal(Object.prototype.hasOwnProperty.call(fake.record.options, "stt"), false);
+    assert.deepEqual(start.json.stt, { engine: "whisper", status: "up", reason: null });
+    assert.equal(start.json.health.whisper.status, "up");
+    assert.deepEqual(saved, ["whisper"]);
+    const stop = await postJson(`${url}/api/ears/stop`, {});
+    assert.deepEqual(stop.json.stt, { engine: "whisper", status: "unknown", reason: null });
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: ElevenLabs を選ぶとキーを pipeline に渡し・選択を記憶・whisper は起動扱いにしない", async () => {
+  const fake = makeFakePipeline();
+  /** @type {string[]} */
+  const saved = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    elevenLabsApiKeyProvider: () => ({ ok: true, apiKey: FAKE_EL_KEY }),
+    onSetSttEngine: (e) => {
+      saved.push(e);
+    },
+    pipelineOptions: { stt: { elevenLabs: { marker: "passthrough" } } }
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "elevenlabs" });
+    assert.equal(start.status, 200);
+    assert.equal(start.json.ears, "listening");
+    assert.deepEqual(fake.record.options.stt, {
+      elevenLabs: { marker: "passthrough" },
+      engine: "elevenlabs",
+      apiKey: FAKE_EL_KEY
+    });
+    assert.deepEqual(start.json.stt, { engine: "elevenlabs", status: "up", reason: null });
+    assert.equal(start.json.health.whisper.status, "unknown", "whisper-server は起動していない");
+    assert.equal(start.json.health.ffmpeg.status, "up");
+    assert.deepEqual(saved, ["elevenlabs"]);
+
+    // 接続状態の遷移はヘッダ用の stt に反映される（reconnecting → up）。
+    fake.record.options.onSttStatus("reconnecting", { reason: "closed code=1006" });
+    const rec = await client.waitFor((e) => e.event === "state" && e.data.stt.status === "reconnecting");
+    assert.equal(rec.data.stt.engine, "elevenlabs");
+    assert.equal(rec.data.stt.reason, "closed code=1006");
+    fake.record.options.onSttStatus("up", { reason: null });
+    const back = await getJson(`${url}/api/state`);
+    assert.equal(back.json.stt.status, "up");
+
+    // Stop 後も選択（engine）は残る（次回の選択肢の復元に使う）。
+    const stop = await postJson(`${url}/api/ears/stop`, {});
+    assert.deepEqual(stop.json.stt, { engine: "elevenlabs", status: "unknown", reason: null });
+    // Stop 後に届いた古い通知は無視する。
+    fake.record.options.onSttStatus("reconnecting", { reason: "late" });
+    assert.equal((await getJson(`${url}/api/state`)).json.stt.status, "unknown");
+    // キーは state/SSE/応答のどこにも載らない。
+    const state = await getJson(`${url}/api/state`);
+    assert.equal(JSON.stringify(state.json).includes(FAKE_EL_KEY), false);
+    assert.equal(JSON.stringify(client.events).includes(FAKE_EL_KEY), false);
+    assert.equal(JSON.stringify(start.json).includes(FAKE_EL_KEY), false);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: sttEngineInitial で前回の選択を復元し・body 省略の Start はそれを使う", async () => {
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    sttEngineInitial: "elevenlabs",
+    elevenLabsApiKeyProvider: () => ({ ok: true, apiKey: FAKE_EL_KEY })
+  });
+  try {
+    const url = await server.listen(0);
+    assert.equal((await getJson(`${url}/api/state`)).json.stt.engine, "elevenlabs");
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(start.status, 200);
+    assert.equal(fake.record.options.stt.engine, "elevenlabs");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: ElevenLabs のキーが無ければ Start 失敗（理由つき 500・pipeline を作らない）", async () => {
+  const fake = makeFakePipeline();
+  let factoryCalls = 0;
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (
+      (/** @type {any} */ o) => {
+        factoryCalls += 1;
+        return fake.factory(o);
+      }
+    ),
+    elevenLabsApiKeyProvider: () => ({ ok: false, reason: "ElevenLabs のキーが見つからない（テスト）" })
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "elevenlabs" });
+    assert.equal(start.status, 500);
+    assert.equal(start.json.error, "ElevenLabs のキーが見つからない（テスト）");
+    assert.equal(start.json.state.ears, "stopped");
+    assert.deepEqual(start.json.state.stt, {
+      engine: "elevenlabs",
+      status: "down",
+      reason: "ElevenLabs のキーが見つからない（テスト）"
+    });
+    assert.equal(factoryCalls, 0);
+    assert.equal(server.earsStatus(), "stopped");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: ElevenLabs の接続失敗は Start 失敗（stt down・whisper は unknown のまま）", async () => {
+  const fake = makeFakePipeline();
+  fake.record.startShouldThrow = new Error(
+    "earPipeline.start: failed to bring up ears (ElevenLabs に接続できない（auth_error: x）)"
+  );
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    elevenLabsApiKeyProvider: () => ({ ok: true, apiKey: FAKE_EL_KEY })
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "elevenlabs" });
+    assert.equal(start.status, 500);
+    assert.match(start.json.error, /ElevenLabs に接続できない/);
+    assert.equal(start.json.state.stt.status, "down");
+    assert.match(start.json.state.stt.reason, /ElevenLabs に接続できない/);
+    assert.equal(start.json.state.health.whisper.status, "unknown");
+    assert.equal(start.json.state.ears, "stopped");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: 未知の sttEngine は 400（耳を起動しない）", async () => {
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (fake.factory) });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "google" });
+    assert.equal(start.status, 400);
+    assert.equal(fake.record.options, null);
+    assert.equal(server.earsStatus(), "stopped");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: whisper の死は stt も down にする", async () => {
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (fake.factory) });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fake.record.options.onDiagnostic({ type: "whisperDown", phase: "runtime", code: 1, signal: null });
+    const state = await getJson(`${url}/api/state`);
+    assert.equal(state.json.stt.status, "down");
+    assert.match(state.json.stt.reason, /whisper-server down/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 文字起こし選択: you の転写ごとに遅延（数字のみ・本文なし）をログの口へ渡す（SSE の latencyMs は従来どおり）", async () => {
+  const fake = makeFakePipeline();
+  /** @type {any[]} */
+  const logged = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    elevenLabsApiKeyProvider: () => ({ ok: true, apiKey: FAKE_EL_KEY }),
+    onSttLatency: (info) => logged.push(info)
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "elevenlabs" });
+    fake.record.options.onTranscript(
+      { seq: 0, startMs: 5, endMs: 5, text: "ひみつの本文", appendedAtMs: 1 },
+      { latencyMs: 512, audioCtx: null }
+    );
+    fake.record.options.onTranscript(
+      { seq: 1, startMs: 6, endMs: 6, text: "だから", appendedAtMs: 2 },
+      { latencyMs: null, audioCtx: null }
+    );
+    fake.record.options.onTranscript(
+      { seq: 2, startMs: 0, endMs: 0, text: "魂", speaker: "soul", appendedAtMs: 3 },
+      { latencyMs: NaN, audioCtx: null }
+    );
+    assert.deepEqual(logged, [
+      { engine: "elevenlabs", latencyMs: 512 },
+      { engine: "elevenlabs", latencyMs: null }
+    ]);
+    assert.equal(JSON.stringify(logged).includes("ひみつ"), false);
+    const tx = await client.waitFor((e) => e.event === "transcript" && e.data.text === "ひみつの本文");
+    assert.equal(tx.data.latencyMs, 512);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});

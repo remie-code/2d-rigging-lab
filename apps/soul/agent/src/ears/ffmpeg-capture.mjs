@@ -11,6 +11,10 @@
  *  - ffmpegPath: 既定は PATH 解決の "ffmpeg"。環境変数 FFMPEG_PATH → options.ffmpegPath の順で上書き。
  *  - device / inputFormat: dshow デバイス名・入力フォーマットを設定で差し替え（未指定なら既定入力）。
  *  - args: 全引数を丸ごと上書き（テスト注入・特殊経路用）。
+ *  - audioBufferMs: dshow の `-audio_buffer_size`（ms・既定 50）。dshow 既定のデバイスバッファだと
+ *    マイク音声が約 500ms ずつまとめて届き、VAD の speechStart/End の壁時計での発火が 0〜500ms 遅れる
+ *    （実測: discussion/ai-cohost/research/ears-capture-buffer-2026-10.md。50ms でチャンク間隔の中央値
+ *    51.5ms・欠落/警告なし）。dshow のときだけ `-f dshow` の直後（`-i` の前）に付け、0/null で付けない。
  *
  * ── 再起動耐性（クラッシュループ・バックオフ）───────────────────────────────
  *  ffmpeg が異常終了しても魂の耳が黙らないよう、dispose していなければ restartDelayMs 後に
@@ -29,6 +33,8 @@ const DEFAULT_FFMPEG = "ffmpeg";
 const DEFAULT_INPUT_FORMAT = process.platform === "win32" ? "dshow" : "";
 const DEFAULT_SAMPLE_RATE = 16000;
 const DEFAULT_CHANNELS = 1;
+/** dshow の取り込みバッファ既定（ms）。根拠はヘッダの audioBufferMs 節。 */
+export const DEFAULT_AUDIO_BUFFER_MS = 50;
 
 /**
  * ffmpeg 引数を組む純関数（spawn せずにテストできる）。
@@ -39,6 +45,8 @@ const DEFAULT_CHANNELS = 1;
  * @param {string} [opts.device]       入力デバイス指定（dshow なら 'audio="マイク名"' 相当の値）。
  * @param {number} [opts.sampleRate=16000]
  * @param {number} [opts.channels=1]
+ * @param {number | null} [opts.audioBufferMs=50]  dshow の `-audio_buffer_size`（ms）。dshow のときだけ
+ *   `-f dshow` の直後（`-i` の前）に付ける。0 / null で付けない（デバイス既定のバッファ）。
  * @returns {string[]}
  */
 export function buildFfmpegArgs(opts = {}) {
@@ -46,10 +54,15 @@ export function buildFfmpegArgs(opts = {}) {
   const device = opts.device;
   const sampleRate = opts.sampleRate ?? DEFAULT_SAMPLE_RATE;
   const channels = opts.channels ?? DEFAULT_CHANNELS;
+  const audioBufferMs = opts.audioBufferMs === undefined ? DEFAULT_AUDIO_BUFFER_MS : opts.audioBufferMs;
 
   const args = ["-hide_banner", "-loglevel", "error", "-nostdin"];
   if (inputFormat) {
     args.push("-f", inputFormat);
+    // dshow の入力オプションは -i より前に置く（ffmpeg の入力オプションは直後の -i に掛かる）。
+    if (inputFormat === "dshow" && typeof audioBufferMs === "number" && audioBufferMs > 0) {
+      args.push("-audio_buffer_size", String(audioBufferMs));
+    }
   }
   if (device) {
     args.push("-i", device);
@@ -88,6 +101,7 @@ export function resolveFfmpegPath(optionPath, env = process.env) {
  * @param {string} [options.device]
  * @param {number} [options.sampleRate=16000]
  * @param {number} [options.channels=1]
+ * @param {number | null} [options.audioBufferMs=50]  dshow の取り込みバッファ（buildFfmpegArgs へ渡る）。
  * @param {string[]} [options.args]  引数の丸ごと上書き（テスト注入・特殊経路）。既定は buildFfmpegArgs。
  * @param {(chunk: Uint8Array) => void} [options.onPcm]   stdout の PCM バイトチャンクごと。
  * @param {(line: string) => void} [options.onError]      stderr の 1 行ごと。
@@ -113,7 +127,8 @@ export function createFfmpegCapture(options = {}) {
       inputFormat: options.inputFormat,
       device: options.device,
       sampleRate: options.sampleRate,
-      channels: options.channels
+      channels: options.channels,
+      audioBufferMs: options.audioBufferMs
     });
   const onPcm = options.onPcm;
   const onError = options.onError;

@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import {
   createFfmpegCapture,
   buildFfmpegArgs,
-  resolveFfmpegPath
+  resolveFfmpegPath,
+  DEFAULT_AUDIO_BUFFER_MS
 } from "./ffmpeg-capture.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,49 @@ test("buildFfmpegArgs: inputFormat 空なら -f 入力指定を付けない", ()
   const fIndexes = args.map((a, i) => (a === "-f" ? i : -1)).filter((i) => i >= 0);
   assert.equal(fIndexes.length, 1);
   assert.equal(args[fIndexes[0] + 1], "s16le");
+});
+
+test("buildFfmpegArgs: dshow は既定で -audio_buffer_size 50 を -f dshow の直後・-i の前に付ける", () => {
+  const args = buildFfmpegArgs({ inputFormat: "dshow", device: "audio=Mic" });
+  const f = args.indexOf("-f");
+  assert.deepEqual(args.slice(f, f + 6), ["-f", "dshow", "-audio_buffer_size", "50", "-i", "audio=Mic"]);
+  assert.equal(DEFAULT_AUDIO_BUFFER_MS, 50);
+});
+
+test("buildFfmpegArgs: audioBufferMs で値を変えられ・0/null では付けない", () => {
+  const custom = buildFfmpegArgs({ inputFormat: "dshow", device: "audio=Mic", audioBufferMs: 100 });
+  assert.deepEqual(custom.slice(custom.indexOf("-audio_buffer_size"), custom.indexOf("-audio_buffer_size") + 2), [
+    "-audio_buffer_size",
+    "100"
+  ]);
+  assert.ok(custom.indexOf("-audio_buffer_size") < custom.indexOf("-i"));
+  for (const off of [0, null]) {
+    const args = buildFfmpegArgs({ inputFormat: "dshow", device: "audio=Mic", audioBufferMs: off });
+    assert.equal(args.includes("-audio_buffer_size"), false, `audioBufferMs=${off}`);
+    const f = args.indexOf("-f");
+    assert.deepEqual(args.slice(f, f + 4), ["-f", "dshow", "-i", "audio=Mic"]);
+  }
+});
+
+test("buildFfmpegArgs: dshow 以外の入力フォーマットには -audio_buffer_size を付けない", () => {
+  for (const inputFormat of ["avfoundation", "pulse", ""]) {
+    const args = buildFfmpegArgs({ inputFormat, device: "x", audioBufferMs: 50 });
+    assert.equal(args.includes("-audio_buffer_size"), false, inputFormat);
+  }
+});
+
+test("createFfmpegCapture: audioBufferMs が spawn 引数まで届く（既定 50）", () => {
+  /** @type {string[][]} */
+  const seen = [];
+  const spawnImpl = /** @type {any} */ ((_cmd, args) => {
+    seen.push(args);
+    const child = { stdout: null, stderr: null, stdin: null, on() {}, kill() {}, unref() {} };
+    return child;
+  });
+  createFfmpegCapture({ inputFormat: "dshow", device: "audio=Mic", spawnImpl }).dispose();
+  createFfmpegCapture({ inputFormat: "dshow", device: "audio=Mic", audioBufferMs: 0, spawnImpl }).dispose();
+  assert.equal(seen[0][seen[0].indexOf("-audio_buffer_size") + 1], "50");
+  assert.equal(seen[1].includes("-audio_buffer_size"), false);
 });
 
 test("resolveFfmpegPath: option > env > 既定 ffmpeg", () => {

@@ -102,6 +102,9 @@ body {
 .hstat.up { color: var(--up); }
 .hstat.down { color: var(--down); font-weight: bold; }
 .hstat.unknown { color: var(--muted); }
+.hstat.connecting { color: var(--speaking); }
+.hstat.reconnecting { color: var(--speaking); font-weight: bold; } /* 文字起こしの繋ぎ直し中（黄色） */
+.mic-in { color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .voice-out { color: var(--muted); }
 .settings-toggle {
   background: var(--panel-raised);

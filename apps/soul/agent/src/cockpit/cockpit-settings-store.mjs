@@ -39,6 +39,11 @@
  *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる（bool の
  *     有無を区別するため asStringOrNull は使わない・getBargeInEnabled と同型）。
  *   setMemoryEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
+ *   getSttEngine(): 文字起こしの方式（whisper / elevenlabs）の初期値（操縦席の文字起こし選択・
+ *     cockpit-stt-selection.md）。未記憶/未知値のフォールバック（既定 whisper）は呼び出し側（cockpit.mjs）
+ *     に委ねる（verbosityMode と同型の文字列キー・asStringOrNull）。キーそのものはここに置かない
+ *     （キーは .env.elevenlabs.local・選択だけを記憶する）。
+ *   setSttEngine(engine): 耳の Start 時に選んでいた方式を記憶（次回起動で復元）。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -97,6 +102,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setBrainChoice: (choice: string | null) => void;
  *   getMemoryEnabled: () => boolean | null;
  *   setMemoryEnabled: (enabled: boolean) => void;
+ *   getSttEngine: () => string | null;
+ *   setSttEngine: (engine: string | null) => void;
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -255,6 +262,13 @@ export function createFileSettingsStore(options = {}) {
     /** @param {boolean} enabled */
     setMemoryEnabled(enabled) {
       writeMerged({ memoryEnabled: enabled === true });
+    },
+    getSttEngine() {
+      return asStringOrNull(readAll().sttEngine);
+    },
+    /** @param {string | null} engine */
+    setSttEngine(engine) {
+      writeMerged({ sttEngine: engine ?? null });
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

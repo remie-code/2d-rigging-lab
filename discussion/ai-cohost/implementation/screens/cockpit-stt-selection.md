@@ -1,6 +1,6 @@
 # 操縦席: 文字起こしの選択(whisper / ElevenLabs)
 
-> Status: 体験の合意 Accepted、context-check 済み(2026-10-16、ユーザー × ウンディーネ)。実装はサブエージェント(Gnome)1本に委任する(未着手)。
+> Status: 体験の合意 Accepted、context-check 済み(2026-10-16、ユーザー × ウンディーネ)。Gnome が実装済み(2026-10-16、`node --test` 1130/1130、check:soul-zone 通過)。**ユーザーが操縦席で確認し合格**(ElevenLabs で動作、確認事項に問題なし。2026-10-16)。
 > ゴール: **文字起こしが ElevenLabs で動くようになること**(ユーザー 2026-10-16)。
 > 前提の実験・調査: [../../elevenlabs/_map.md](../../elevenlabs/_map.md)(特に experiments/01-stt-behavior.md)、[../../research/ears-capture-buffer-2026-10.md](../../research/ears-capture-buffer-2026-10.md)。現在の操縦席の UI 定義: [cockpit-redesign.md](cockpit-redesign.md)。
 
@@ -28,7 +28,7 @@
 - **合図は手元、文字起こしは ElevenLabs**。手元の Silero VAD(speechStart / speechEnd / speechCancel)は今のまま動かし、barge-in と区切り応答はそれで動く。ElevenLabs が置き換えるのは whisper による転写の部分だけ。
   - 理由: ElevenLabs には「喋り始めた」合図がなく、最初の partial は喋り始めから約 1 秒後(barge-in には遅すぎる)。commit を speechEnd の代わりにすると遅く(≈0.9 秒 vs 手元 ≈0.45 秒)、約 36 秒の自動確定など発話途中の commit もあり、取り消しに使う speechStart もない。手元 VAD は 1 フレーム ≈0.18ms で軽い。
 - ElevenLabs を選んだときは whisper-server を起動しない。
-- ElevenLabs の設定: `scribe_v2_realtime`、`commit_strategy=vad`、`vad_silence_threshold_secs=0.3`(サーバーの下限)、`audio_format=pcm_16000`、`language_code=ja`。耳の取り込み(16kHz mono s16le)をそのままストリームで送る。
+- ElevenLabs の設定: `scribe_v2_realtime`、`commit_strategy=vad`、`vad_silence_threshold_secs=0.3`(受け付ける下限。ただしサーバーは実効 0.5 秒に丸める。2026-10-16 判明)、`audio_format=pcm_16000`、`language_code=ja`。耳の取り込み(16kHz mono s16le)をそのままストリームで送る。
 - **commit 1 件を、文字起こし 1 件として転写バッファに積む**。partial は積まない。
 - 接続が切れたら自動で繋ぎ直すだけ。whisper へは自動で切り替えない。
 - キーは `apps/soul/agent/.env.elevenlabs.local` の `ELEVENLABS_API_KEY`(gitignore 済み)を、操縦席の起動時に読む。
@@ -96,3 +96,17 @@
 - 繋ぎ直しの間のマイク音は捨てる。空の commit は既存と同じく discarded として数える。
 - 取り込み 50ms は whisper のときにも効かせる。計測スクリプト(probe-elevenlabs-stt.mjs)の二重付与を直す。
 - 進め方: サブエージェント(Gnome)1本で実装とテストまで行い、ウンディーネが合意と突き合わせて確認し、最後にユーザーが操縦席で触って確かめる(wave 計画は作らない。当初は別セッション案だったがユーザー提案でサブエージェントに変更 2026-10-16)。
+
+## 9. 実装報告(Gnome、2026-10-16)
+
+- 新規: `src/ears/elevenlabs-stt.mjs`(接続・commit 受け取り・指数バックオフの無限再接続 1s→最大15s・キー読み込み)、そのテスト、`src/test-support/fake-websocket.mjs`。変更: ffmpeg-capture(audioBufferMs 既定 50)、ear-pipeline(`stt` 分岐、既定 whisper)、cockpit-server(Starting の broadcast、Start の `sttEngine`、snapshot の `stt`)、settings-store(`sttEngine` の保存)、cockpit.mjs(遅延ログ)、UI(入出力タブの「文字起こし」、ヘッダの `stt:` と `mic:`、you 行の遅延表示の削除)、probe の二重付与の解消。
+- 検証: `node --test` 1130/1130(新規 30 件、既存の書き換えなし)、check:soul-zone 通過(ウンディーネも再実行して確認)。fake の耳でブラウザ表示を確認。実 ElevenLabs には無音約 2 秒のみで接続確認(マイクは開いていない)。
+- 正本からの逸脱・Gnome が決めた点:
+  1. キーは Start のたびに読む(§3 の「起動時に読む」と違う)。キーを置き直しても操縦席の再起動が要らない。process.env には入れない。
+  2. 文字起こし方式の保存は Start 時(マイクと同じ)。
+  3. エラー欄は「文字起こし」行の下(マイク行の直下ではない)。select は動作中も操作でき、次の Start から効く。
+  4. マイク名は Listening の間だけ出す。既定デバイスなら `mic: default`。
+  5. 遅延表示を消したのは you 行だけ。soul 行の `(Ns · brain)` は残る。SSE の latencyMs も送り続ける。
+  6. 遅延ログは `[cockpit] stt latency: engine=elevenlabs ms=512` の形で whisper のときも出す。起点は speechEnd 発火時刻(whisper の既存 latencyMs と同じ定義)なので、実験の「無音開始」起点より約 0.4 秒小さく出る。
+  7. `stt:` の状態は unknown / connecting / up / reconnecting / down。接続後の切断は無限に再接続するので down にならない。
+- 判明した事実: VAD 0.3 秒指定は実効 0.5 秒(§3 に反映)。

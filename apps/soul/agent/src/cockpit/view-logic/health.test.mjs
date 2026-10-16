@@ -9,7 +9,10 @@ import {
   voiceOutputLabel,
   BRAIN_LABELS,
   brainLabel,
-  brainCredentialHealthLabel
+  brainCredentialHealthLabel,
+  STT_ENGINE_LABELS,
+  sttStatusView,
+  micInputLabel
 } from "./health.mjs";
 
 test("earsStatusView: listening/starting/stopped の文言 + ランプクラス（cockpit.html:267-270 同値）", () => {
@@ -128,4 +131,36 @@ test("brainCredentialHealthLabel: 健康/未検出/未指定の3分岐（credent
   assert.equal(brainCredentialHealthLabel(undefined), "unknown");
   assert.equal(brainCredentialHealthLabel({}), "unknown");
   assert.equal(brainCredentialHealthLabel({ credentialHealth: /** @type {any} */ ("true") }), "unknown"); // 非 boolean は unknown。
+});
+
+// ── 操縦席の文字起こし選択（cockpit-stt-selection.md §4.2・§8）──
+
+test("sttStatusView: `ElevenLabs up` / `whisper up` / reconnecting は黄色クラス / down は reason 併記", () => {
+  assert.deepEqual(STT_ENGINE_LABELS, { whisper: "whisper", elevenlabs: "ElevenLabs" });
+  assert.deepEqual(sttStatusView({ engine: "elevenlabs", status: "up", reason: null }), {
+    text: "ElevenLabs up",
+    className: "hstat up",
+    title: ""
+  });
+  assert.equal(sttStatusView({ engine: "whisper", status: "up", reason: null })?.text, "whisper up");
+  assert.deepEqual(sttStatusView({ engine: "elevenlabs", status: "reconnecting", reason: "closed code=1006" }), {
+    text: "ElevenLabs reconnecting",
+    className: "hstat reconnecting",
+    title: "closed code=1006"
+  });
+  assert.equal(
+    sttStatusView({ engine: "elevenlabs", status: "down", reason: "ElevenLabs のキーが見つからない" })?.text,
+    "ElevenLabs down — ElevenLabs のキーが見つからない"
+  );
+  assert.equal(sttStatusView({ engine: "elevenlabs", status: "unknown", reason: null })?.className, "hstat unknown");
+  assert.equal(sttStatusView(null), null);
+  assert.equal(sttStatusView({ engine: "bogus", status: null })?.text, "unknown unknown");
+});
+
+test("micInputLabel: 耳が listening の間だけマイク名（未指定は default）・それ以外は null", () => {
+  assert.equal(micInputLabel("listening", "マイク (2- Shure MV7+)"), "マイク (2- Shure MV7+)");
+  assert.equal(micInputLabel("listening", null), "default");
+  assert.equal(micInputLabel("starting", "Mic"), null);
+  assert.equal(micInputLabel("stopped", "Mic"), null);
+  assert.equal(micInputLabel(undefined, "Mic"), null);
 });

@@ -108,6 +108,9 @@ export function App(props) {
   // ── ヘッダ/計器（applyState :265-284 が更新する層） ──
   const [ears, setEars] = useState("stopped");
   const [health, setHealth] = useState(initialHealth);
+  // 操縦席の文字起こし選択: 方式と状態（ヘッダの `stt:`・設定の選択肢の復元）と Start 時のマイク名（ヘッダの `mic:`）。
+  const [stt, setStt] = useState(/** @type {any} */ (null));
+  const [device, setDevice] = useState(/** @type {string | null} */ (null));
   const [discarded, setDiscarded] = useState(/** @type {number | string} */ (0));
   const [uptime, setUptime] = useState(() => ({ baseMs: 0, anchorMs: now() }));
   const [nowTick, setNowTick] = useState(() => now());
@@ -129,6 +132,8 @@ export function App(props) {
     if (!s) return;
     setEars(s.ears);
     setHealth((prev) => mergeHealth(prev, s.health));
+    if (s.stt) setStt(s.stt); //                                  欠落は前値保持（health と同じ流儀）
+    setDevice(typeof s.device === "string" ? s.device : null);
     setDiscarded(s.discarded);
     setUptime({ baseMs: s.uptimeMs || 0, anchorMs: now() }); // :276-277 再同期
     setNowTick(now()); //                                        :278 renderUptime 即時反映
@@ -247,6 +252,8 @@ export function App(props) {
         health=${health}
         audioDevice=${settings.audioDevice}
         identity=${currentIdentity}
+        stt=${stt}
+        device=${device}
         settingsOpen=${settingsOpen}
         onToggleSettings=${() => {
           if (settingsOpen) {
@@ -262,6 +269,7 @@ export function App(props) {
         open=${settingsOpen}
         onClose=${() => setSettingsOpen(false)}
         settings=${settings}
+        sttEngine=${stt ? stt.engine : null}
         chatDisplay=${chatDisplay}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}

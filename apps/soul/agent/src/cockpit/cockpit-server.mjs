@@ -46,7 +46,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createEarPipeline } from "../ears/ear-pipeline.mjs";
+import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
+import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
@@ -430,6 +431,20 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   記憶の現況（`{ enabled: boolean, count: number, lastRecordAtMs: number | null }`）を返す。
  *   state snapshot の `memory` に載せる（brainStatus/audioDeviceStatus と同型）。未注入なら
  *   snapshot の memory:null。
+ * @param {"whisper" | "elevenlabs"} [options.sttEngineInitial="whisper"]
+ *   文字起こしの方式の初期選択（操縦席の文字起こし選択・cockpit-stt-selection.md）。起動時の値は
+ *   呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（selfFireInitialEnabled と同型）。
+ *   選択は POST /api/ears/start の body `sttEngine` で受け、Start ごとに onSetSttEngine で永続化する
+ *   （マイクと同じく [Start] の前に選ぶ・動作中に変えるなら Stop→Start）。
+ * @param {(engine: string) => void | Promise<void>} [options.onSetSttEngine]
+ *   文字起こしの方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.elevenLabsApiKeyProvider]
+ *   ElevenLabs のキーを返す（既定 loadElevenLabsApiKey = `apps/soul/agent/.env.elevenlabs.local` を
+ *   コード内で直接読む・process.env に入れない）。Start ごとに読む。キーは pipeline へ渡すだけで、
+ *   state/SSE/ログ/エラーには載せない。
+ * @param {(info: { engine: string; latencyMs: number | null }) => void} [options.onSttLatency]
+ *   you の転写 1 件ごとの遅延（数字のみ・本文は渡さない）。cockpit.mjs が標準出力に 1 行書く
+ *   （画面の行の横の遅延表示は出さない方針・合意 §4.2）。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -495,6 +510,16 @@ export function createCockpitServer(options = {}) {
   const onSetMemoryEnabled = options.onSetMemoryEnabled;
   const onMemoryRecord = options.onMemoryRecord;
   const memoryStatusImpl = options.memoryStatus;
+  // 操縦席の文字起こし選択: 現在の選択（Start のたびに更新・耳が動いている間は使用中の方式）・
+  // 永続化フック・ElevenLabs キーの読み口・遅延ログの口。
+  /** @type {"whisper" | "elevenlabs"} */
+  let sttEngine = STT_ENGINES.includes(/** @type {any} */ (options.sttEngineInitial))
+    ? /** @type {"whisper" | "elevenlabs"} */ (options.sttEngineInitial)
+    : "whisper";
+  const onSetSttEngine = typeof options.onSetSttEngine === "function" ? options.onSetSttEngine : null;
+  const elevenLabsApiKeyProvider =
+    typeof options.elevenLabsApiKeyProvider === "function" ? options.elevenLabsApiKeyProvider : () => loadElevenLabsApiKey();
+  const onSttLatency = typeof options.onSttLatency === "function" ? options.onSttLatency : null;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -542,7 +567,11 @@ export function createCockpitServer(options = {}) {
     /** @type {"up" | "down" | "unknown"} */ whisper: "unknown",
     /** @type {string | null} */ whisperReason: null,
     /** @type {"up" | "down" | "unknown"} */ ffmpeg: "unknown",
-    /** @type {string | null} */ ffmpegReason: null
+    /** @type {string | null} */ ffmpegReason: null,
+    // 文字起こし（engine は sttEngine）の状態。whisper は whisper の死活に連動、ElevenLabs は接続状態
+    // （connecting / up / reconnecting / down）。耳が止まっている間は unknown。
+    /** @type {"up" | "down" | "unknown" | "connecting" | "reconnecting"} */ stt: "unknown",
+    /** @type {string | null} */ sttReason: null
   };
 
   // ── 状態スナップショット ───────────────────────────────────────────
@@ -592,6 +621,9 @@ export function createCockpitServer(options = {}) {
         whisper: { status: health.whisper, reason: health.whisperReason },
         ffmpeg: { status: health.ffmpeg, reason: health.ffmpegReason }
       },
+      // 操縦席の文字起こし選択: 方式（耳が動いている間は使用中、止まっている間は前回 Start の選択）と状態。
+      // ヘッダの `stt: ElevenLabs up` 表示と、設定の選択肢の復元に使う（キーは載せない）。
+      stt: { engine: sttEngine, status: health.stt, reason: health.sttReason },
       appended: bufStats.appended,
       discarded: bufStats.discarded,
       uptimeMs: earsState === "listening" && startedAtMs != null ? Math.max(0, nowImpl() - startedAtMs) : 0,
@@ -651,15 +683,15 @@ export function createCockpitServer(options = {}) {
   // ── 死活の反映 ─────────────────────────────────────────────────────
 
   /**
-   * @param {"whisper" | "ffmpeg"} which
-   * @param {"up" | "down" | "unknown"} status
+   * @param {"whisper" | "ffmpeg" | "stt"} which
+   * @param {"up" | "down" | "unknown" | "connecting" | "reconnecting"} status
    * @param {string | null} reason
    */
   function setHealth(which, status, reason) {
     const statusKey = which;
-    const reasonKey = /** @type {"whisperReason" | "ffmpegReason"} */ (`${which}Reason`);
+    const reasonKey = /** @type {"whisperReason" | "ffmpegReason" | "sttReason"} */ (`${which}Reason`);
     if (health[statusKey] === status && health[reasonKey] === reason) return;
-    health[statusKey] = status;
+    /** @type {any} */ (health)[statusKey] = status;
     health[reasonKey] = reason;
     broadcastState();
   }
@@ -667,11 +699,10 @@ export function createCockpitServer(options = {}) {
   /** @param {any} d  pipeline の診断イベント。 */
   function handleDiagnostic(d) {
     if (d && d.type === "whisperDown") {
-      setHealth(
-        "whisper",
-        "down",
-        `whisper-server down (${d.phase ?? "runtime"}; code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`
-      );
+      const reason = `whisper-server down (${d.phase ?? "runtime"}; code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`;
+      setHealth("whisper", "down", reason);
+      // whisper で文字起こし中なら stt も down（ヘッダの `stt: whisper down`）。
+      if (sttEngine === "whisper" && earsState !== "stopped") setHealth("stt", "down", reason);
     } else if (d && d.type === "ffmpegExit" && d.willRestart === false) {
       // willRestart=false = 再起動予算切れ/恒久死（capture の再起動耐性が尽きた）。
       // willRestart=true は capture が自己回復するため up のまま（transient blip）。
@@ -703,9 +734,10 @@ export function createCockpitServer(options = {}) {
 
   /**
    * @param {string | null} deviceRaw
+   * @param {"whisper" | "elevenlabs"} [engineChoice]  文字起こしの方式（省略時は現在の選択）。
    * @returns {Promise<{ ok: true; state: object } | { ok: false; error: string; state: object }>}
    */
-  async function startEars(deviceRaw) {
+  async function startEars(deviceRaw, engineChoice) {
     if (pipeline && earsState !== "stopped") {
       // 既に起動中/起動済み。冪等に現状を返す（デバイス変更は Stop→Start）。
       return { ok: true, state: snapshot() };
@@ -718,11 +750,50 @@ export function createCockpitServer(options = {}) {
       // 永続化失敗は起動を止めない（B の file-backed 実体の I/O 失敗を握る）。
     }
 
+    // 文字起こしの方式（マイクと同じく Start の前に選ぶ）。Start ごとに記憶する（失敗寛容）。
+    if (engineChoice) sttEngine = engineChoice;
+    const engine = sttEngine;
+    if (onSetSttEngine) {
+      try {
+        await onSetSttEngine(engine);
+      } catch {
+        // 永続化失敗は起動を止めない（setLastDevice と同型）。
+      }
+    }
+
     earsState = "starting";
     health.whisper = "unknown";
     health.whisperReason = null;
     health.ffmpeg = "unknown";
     health.ffmpegReason = null;
+    health.stt = engine === "elevenlabs" ? "connecting" : "unknown";
+    health.sttReason = null;
+    // Start 押下直後からヘッダを「Starting」にする（whisper のモデル読み込み待ち等の間も Stopped のまま
+    // にならないように・合意 §2 範囲 3）。
+    broadcastState();
+
+    /** @type {{ engine: "elevenlabs"; apiKey: string } | null} */
+    let elevenLabs = null;
+    if (engine === "elevenlabs") {
+      // キーは Start ごとにコード内で読む（process.env に入れない）。無ければ Start 失敗（理由はキーを含まない）。
+      /** @type {{ ok: boolean; apiKey?: string; reason?: string }} */
+      let key;
+      try {
+        key = elevenLabsApiKeyProvider();
+      } catch {
+        key = { ok: false };
+      }
+      if (!key || !key.ok || typeof key.apiKey !== "string" || key.apiKey.length === 0) {
+        const reason = (key && key.reason) || "ElevenLabs のキーが見つからない";
+        earsState = "stopped";
+        startedAtMs = null;
+        health.stt = "down";
+        health.sttReason = reason;
+        broadcastState();
+        return { ok: false, error: reason, state: snapshot() };
+      }
+      elevenLabs = { engine: "elevenlabs", apiKey: key.apiKey };
+    }
 
     const baseOptions = options.pipelineOptions ?? {};
     // Resolve the Whisper lexical-bias prompt at request time. The injected
@@ -740,6 +811,12 @@ export function createCockpitServer(options = {}) {
     const p = pipelineFactory({
       ...baseOptions,
       whisper: whisperOptions,
+      // ElevenLabs のときだけ stt を渡す（whisper は pipeline の既定＝従来と同じ options 形）。
+      ...(elevenLabs ? { stt: { ...(/** @type {any} */ (baseOptions).stt ?? {}), ...elevenLabs } } : {}),
+      onSttStatus: (status, info) => {
+        if (pipeline !== p) return; // 畳んだ後・別の Start の通知は無視。
+        setHealth("stt", /** @type {any} */ (status), info && info.reason ? info.reason : null);
+      },
       capture: {
         ...(/** @type {any} */ (baseOptions).capture ?? {}),
         ...(device != null ? { device } : {}),
@@ -772,6 +849,15 @@ export function createCockpitServer(options = {}) {
         // ★ S7: viewer コメントも同じ transcriptBuffer へ append されるため onTranscript を通るが、
         // viewer 行の放送は取り込み経路（ingestChatMessage）が 1 本で担う。ここで除外しないと二重放送。
         if (/** @type {any} */ (entry).speaker === "soul" || /** @type {any} */ (entry).speaker === "viewer") return;
+        // 文字起こしの遅延は画面に出さず（合意 §4.2）、数字だけをログの口へ（本文は渡さない）。
+        if (onSttLatency) {
+          const latency = meta && typeof meta.latencyMs === "number" && Number.isFinite(meta.latencyMs) ? meta.latencyMs : null;
+          try {
+            onSttLatency({ engine, latencyMs: latency });
+          } catch {
+            // ログの失敗で耳を止めない。
+          }
+        }
         const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
         broadcast("transcript", {
           ...toWireEntry(entry),
@@ -808,16 +894,29 @@ export function createCockpitServer(options = {}) {
       pipeline = null;
       earsState = "stopped";
       startedAtMs = null;
-      setHealth("whisper", "down", `ears failed to start: ${errMessage(error)}`);
+      const reason = `ears failed to start: ${errMessage(error)}`;
+      if (engine === "whisper") {
+        health.stt = "down";
+        health.sttReason = reason;
+        setHealth("whisper", "down", reason);
+      } else {
+        // ElevenLabs は whisper を起動していない（whisper の死活は unknown のまま）。
+        setHealth("stt", "down", reason);
+      }
       earsState = "stopped"; // setHealth の broadcast 後も stopped を確定。
       return { ok: false, error: errMessage(error), state: snapshot() };
     }
 
     earsState = "listening";
     startedAtMs = nowImpl();
-    // start 成功 = whisper ready・ffmpeg spawn 済み（楽観的 up。以後の死は診断で down に落ちる）。
-    health.whisper = "up";
-    health.whisperReason = null;
+    // start 成功 = (whisper ready または ElevenLabs session_started)・ffmpeg spawn 済み
+    // （楽観的 up。以後の死は診断で down に落ちる）。
+    if (engine === "whisper") {
+      health.whisper = "up";
+      health.whisperReason = null;
+    }
+    health.stt = "up";
+    health.sttReason = null;
     health.ffmpeg = "up";
     health.ffmpegReason = null;
     broadcastState();
@@ -847,6 +946,8 @@ export function createCockpitServer(options = {}) {
     health.whisperReason = null;
     health.ffmpeg = "unknown";
     health.ffmpegReason = null;
+    health.stt = "unknown";
+    health.sttReason = null;
     broadcastState();
     return snapshot();
   }
@@ -986,7 +1087,12 @@ export function createCockpitServer(options = {}) {
       try {
         const body = await readJsonBody(req);
         const deviceRaw = body.device ?? url.searchParams.get("device") ?? (await resolveLastDevice());
-        const result = await startEars(deviceRaw ?? null);
+        // 文字起こしの方式（任意・省略時は現在の選択）。未知値は 400（誤 POST を早期に弾く）。
+        if (body.sttEngine !== undefined && body.sttEngine !== null && !STT_ENGINES.includes(body.sttEngine)) {
+          sendJson(res, 400, { error: "invalid stt engine", state: snapshot() });
+          return;
+        }
+        const result = await startEars(deviceRaw ?? null, body.sttEngine ?? undefined);
         sendJson(res, result.ok ? 200 : 500, result.ok ? result.state : { error: result.error, state: result.state });
       } finally {
         transitioning = false;

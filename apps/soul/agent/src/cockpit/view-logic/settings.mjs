@@ -246,6 +246,26 @@ export function chatConnectErrorText(res) {
 export const CHAT_EMPTY_SOURCE_ERROR = "enter a stream URL / video ID first";
 
 /**
+ * 文字起こしの方式の選択肢（設定「入出力」タブのマイクの下・cockpit-stt-selection.md §4.2）。
+ * value は POST /api/ears/start の body `sttEngine`（サーバー側 STT_ENGINES と同じ語彙）。
+ * @type {ReadonlyArray<{ value: string; label: string }>}
+ */
+export const STT_ENGINE_OPTIONS = Object.freeze([
+  Object.freeze({ value: "whisper", label: "ローカル（whisper）" }),
+  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" })
+]);
+
+/**
+ * state.stt.engine を選択肢の値へ（未知/欠落は null = 選択を変えない）。
+ * @param {{ engine?: string | null } | null | undefined} stt
+ * @returns {string | null}
+ */
+export function sttEngineSelection(stt) {
+  const engine = stt && stt.engine;
+  return STT_ENGINE_OPTIONS.some((o) => o.value === engine) ? /** @type {string} */ (engine) : null;
+}
+
+/**
  * POST /api/ears/start 応答 → 失敗文言（:740-742）。!ok（409 transitioning / 500 とも）は
  * "start failed: error"・成功は null（呼び出し側は snapshot を適用しエラー欄をクリア :743-745）。
  * @param {{ ok: boolean; j?: { error?: string | null } | null }} res
