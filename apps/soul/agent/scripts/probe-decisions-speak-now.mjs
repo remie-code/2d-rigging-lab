@@ -24,6 +24,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { pathToFileURL } from "node:url";
 
 const ENDPOINT = "https://api.openai.com/v1/decisions";
 const MODEL = "gpt-6-luna";
@@ -197,7 +198,8 @@ async function main() {
   console.log(JSON.stringify({ points: todo.length, ok: ok.length, counts, latencyMs: { p50: lat[Math.floor(lat.length / 2)], p90: lat[Math.floor(lat.length * 0.9)] }, inputTokens: tokens }));
 }
 
-main().catch((error) => {
+// 直接実行されたときだけ動かす（comment-react の probe が PERSONAS / segmentWords を import するため）。
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main().catch((error) => {
   console.error(String(error));
   process.exitCode = 1;
 });
