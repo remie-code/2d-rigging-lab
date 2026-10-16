@@ -369,6 +369,7 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
   assert.deepEqual(settingsFromSnapshot(null), {
     channel: null, visionTarget: null, selfFire: null, verbosity: null, audioDevice: null, chat: null,
     bargeIn: null, // 「朗読と合いの手」: gate 未生成なら null（selfFire と同型）。
+    speakStart: null, // speak-now 合意 §5: scheduler 未生成なら null（verbosity と同型）。
     killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
     brain: null, // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
     memory: null // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
@@ -378,6 +379,7 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     visionTarget: { title: "FooGame" },
     selfFire: { enabled: true },
     verbosity: "chatty",
+    speakStart: "speak-now",
     audioDevice: { name: "MV7+" },
     chat: { source: "abc", connected: true, state: "live" },
     bargeIn: { enabled: false },

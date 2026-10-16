@@ -12,6 +12,8 @@
  *  - diagnosticGhostLabel     → :831-855 の diagnostic ハンドラ全分岐
  *  - selfFireGhostLabel       → :877 selfFire fired:false のゴースト行
  *  - chatDiagnosticGhostLabel → :888-897 chatDiagnostic の取得死分類ゴースト行
+ *  - speakNowErrorGhostLabel  → speak-now の判定失敗（SSE selfFire kind:"speak-now-judgment" + error・
+ *                               キー欠落/タイムアウト等・speak-now 合意 §5）
  *
  * ★ 意図的非表示（cockpit.html:850-854 の裁定・page test:244-246 が根拠）:
  *   expressionBrokenTag / expressionRejected / expressionSendError は行を作らない（→ null）。
@@ -86,4 +88,13 @@ export function chatDiagnosticGhostLabel(d) {
     return "(chat: " + kind + (d && d.message ? " — " + d.message : "") + ")";
   }
   return null;
+}
+
+/**
+ * speak-now の判定失敗のゴースト行ラベル（"(判定エラー: 理由)"・speak-now 合意 §5）。
+ * @param {{ error?: string | null }} d
+ * @returns {string}
+ */
+export function speakNowErrorGhostLabel(d) {
+  return "(判定エラー: " + ((d && d.error) || "?") + ")";
 }

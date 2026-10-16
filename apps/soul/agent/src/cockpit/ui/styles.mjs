@@ -207,6 +207,8 @@ body {
 .row.barge-in-marker, .row.barge-in-marker .who, .row.barge-in-marker .text { color: var(--marker-barge); }
 /* 自発マーカー行（§7: 淡 teal） */
 .row.self-fire-marker, .row.self-fire-marker .who, .row.self-fire-marker .text { color: var(--marker-self); }
+/* speak-now の判定行（「判定: 自発 0.45」・speak-now 合意 §5）。小さく淡く。 */
+.row.judgment-marker, .row.judgment-marker .who, .row.judgment-marker .text { color: var(--muted); font-size: 12px; }
 
 /* ── 運転バー（Domain C・§7: 常駐・左 = Fire/Fire+視覚・右 = 自発 pill・口数・KILL 赤枠）── */
 .control-bar {

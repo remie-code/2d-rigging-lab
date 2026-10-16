@@ -776,6 +776,62 @@ export function formatSttLatencyLine(info) {
   return `[cockpit] stt latency: engine=${info.engine} ms=${ms}\n`;
 }
 
+/**
+ * settings の話し始めの方式（speakStartMode）を、cockpit-server の口（speakStartModeInitial/
+ * onSetSpeakStartMode）へ橋渡しする（speak-now 合意 §5・createVerbosityHooks と同型の薄い配線層）。
+ * 未記憶/未知値は defaultMode（**初回既定 "speak-now"**・合意 §5）。
+ *
+ * @param {{ getSpeakStartMode: () => string | null; setSpeakStartMode: (mode: string | null) => void }} settings
+ * @param {"classic" | "speak-now"} [defaultMode="speak-now"]
+ * @returns {{
+ *   resolveInitialSpeakStartMode: () => "classic" | "speak-now";
+ *   onSetSpeakStartMode: (mode: string) => void;
+ * }}
+ */
+export function createSpeakStartHooks(settings, defaultMode = "speak-now") {
+  return {
+    /** 起動時の話し始めの方式（未記憶/未知値は defaultMode）。 */
+    resolveInitialSpeakStartMode: () => {
+      const remembered = settings.getSpeakStartMode();
+      return remembered === "classic" || remembered === "speak-now" ? remembered : defaultMode;
+    },
+    /** cockpit-server の onSetSpeakStartMode（POST /api/speak-start が呼ぶ）。 */
+    onSetSpeakStartMode: (mode) => {
+      try {
+        settings.setSpeakStartMode(mode); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
+/** @param {unknown} v */
+function fmtProb(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "-";
+}
+
+/**
+ * speak-now の判定ログ 1 行（操縦席の標準出力・合意 §5「遅延・選択・確率」。会話の本文は書かない）。
+ * 成功: 遅延・選択・その確率・行き先（fire / drop-busy / drop-inactive / none）・きっかけ・全選択肢の確率。
+ * 失敗: 遅延（分かれば）・きっかけ・理由（キー欠落・タイムアウト等。キー値は judge 側で含めない）。
+ * @param {any} info  cockpit-server の onSpeakNowJudgment が渡す記録。
+ * @returns {string}
+ */
+export function formatSpeakNowLine(info) {
+  const ms = typeof info?.latencyMs === "number" && Number.isFinite(info.latencyMs) ? String(Math.round(info.latencyMs)) : "-";
+  const trigger = info?.trigger ?? "-";
+  if (!info || info.ok !== true) {
+    return `[cockpit] speak-now: error ms=${ms} trigger=${trigger} reason=${info?.error ?? "unknown"}\n`;
+  }
+  const probs = info.probs && typeof info.probs === "object" ? info.probs : {};
+  const all = ["wait", "backchannel", "respond", "initiate"].map((k) => `${k}:${fmtProb(probs[k])}`).join(",");
+  return (
+    `[cockpit] speak-now: ms=${ms} choice=${info.choice} p=${fmtProb(info.probability)} ` +
+    `action=${info.action ?? "-"} trigger=${trigger} probs=${all}\n`
+  );
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --open                待受け完了後に既定ブラウザを開く（Windows）
@@ -820,6 +876,8 @@ async function main() {
   const chatSourceHooks = createChatSourceHooks(settings);
   // 操縦席の文字起こし選択（whisper / ElevenLabs・既定 whisper・§createSttEngineHooks）。
   const sttEngineHooks = createSttEngineHooks(settings);
+  // 話し始めの方式（従来 / speak-now・初回既定 speak-now・§createSpeakStartHooks）。
+  const speakStartHooks = createSpeakStartHooks(settings);
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -1318,7 +1376,13 @@ async function main() {
     // ElevenLabs のキーは cockpit-server の既定（.env.elevenlabs.local をコード内で直接読む）に任せる。
     sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
     onSetSttEngine: sttEngineHooks.onSetSttEngine,
-    onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info))
+    onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
+    // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
+    // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
+    // （.env.decisions.local をコード内で直接読む）に任せる。
+    speakStartModeInitial: speakStartHooks.resolveInitialSpeakStartMode(),
+    onSetSpeakStartMode: speakStartHooks.onSetSpeakStartMode,
+    onSpeakNowJudgment: (info) => process.stdout.write(formatSpeakNowLine(info))
   });
 
   const url = await server.listen();

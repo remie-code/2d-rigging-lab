@@ -1,6 +1,6 @@
 # speak-now を操縦席に組み込む — 合意
 
-> Status: 合意 Accepted、context-check 済み(2026-10-16、ユーザー × ウンディーネ)。実装は Gnome に委任予定(未着手)。
+> Status: 合意 Accepted、context-check 済み(2026-10-16)。Gnome が実装済み・未コミット(`node --test` 1182/1182、check:soul-zone 通過)。ユーザー確認おおむね合格(§9)。
 > 目的: 判定 → チャッピーが喋る → 次の判定、の流れを、ユーザーが操縦席から実際に喋って確かめられるようにする(アーカイブ実験では確かめられない)。
 > 前提の実験: [_map.md](_map.md)、[experiments/](experiments/)。棚卸しの根拠: fire-scheduler / fire-orchestrator / cockpit-server の読解(2026-10-16、Sylph)。
 
@@ -57,3 +57,17 @@
 - 相槌をどう鳴らすか(S9 の声と合わせて)。
 - 判定まわりの見え方の体験。
 - 視聴者コメントの扱い。
+
+## 8. 実装報告(Gnome、2026-10-16)
+
+- 追加: `src/mind/speak-now.mjs`(判定入力の組み立て・問い C・タイミングの制御 `createSpeakNowController`)、`src/mind/speak-now-decisions.mjs`(差し替え可能な `judge()` の Decisions API 実装、タイムアウト 3 秒、`loadDecisionsApiKey`)、各テスト。
+- 変更: fire-scheduler に `speakNowMode`(ON の間 turn-end / call / interjection を止める。既定 OFF)と原則文の書き換え。cockpit-server に `POST /api/speak-start`、snapshot の `speakStart`、you 転写の受け渡し、idle 通知。運転バーに「話し始め」select(初回既定 speak-now は cockpit.mjs 側で設定)。フィードの判定行は selfFire SSE に相乗り(SSE 本数は不変)。ターミナルに `[cockpit] speak-now: ms=… choice=… p=… action=… trigger=… probs=…`。
+- Gnome が決めた点: 「忙しい」には orchestrator が idle でない間に加え、fire() の Promise が片付くまで(受理から thinking までの窓)も含む。結果到着時に忙しかった判定も、フィードには判定行を出す(捨てたことはターミナルの action=drop-busy でだけ分かる)。判定のたびにキーを読む。直近 3 分に会話が無ければ判定しない。
+- 実 API 確認(架空の短い会話 2 回): 「…チャッピー、次どうしたらいいと思う？」→ 応答 .93(2072ms)、「えーと、その、なんだっけ」→ 待つ 1.00(314ms)。2 秒台はタイムアウト 3 秒に近く、判定エラーになりうる。
+
+## 9. ユーザー確認(2026-10-16)
+
+- 「すごく自然に会話ができた気がする」。判定行はフィードに出る。応答・自発でチャッピーが喋る。
+- 名前を呼んで質問すると「ほぼ確実に応答する。しかもこれまでよりもノーストレス」。
+- Gnome の決定(忙しいの範囲を広めに取る、ターミナルの trigger 区別と全確率)はユーザー了承。捨てた判定の見え方は見せ方の議論で再検討。
+- 未確認: ターミナルの `[cockpit] speak-now:` 行(見ていなかった)、喋っている間の発言を喋り終わった後に拾うか(後で試す)。タイムアウト 3 秒は、判定エラーが頻発したらユーザーが知らせる。

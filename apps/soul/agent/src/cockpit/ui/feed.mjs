@@ -75,6 +75,7 @@ export function FeedRow({ row }) {
     case "fire-marker":
     case "barge-in-marker":
     case "self-fire-marker":
+    case "judgment-marker":
       // addFireMarkerRow :448-461 / addBargeInMarkerRow :512-525 / addSelfFireMarkerRow :531-543 同値。
       return html`<div class=${"row " + row.kind}>
         <span class="time">${row.timeText}</span><span class="who">${row.whoText}</span>

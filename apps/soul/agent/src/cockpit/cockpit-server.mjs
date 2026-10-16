@@ -54,6 +54,8 @@ import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
 import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-player.mjs";
 import { createBargeInGate } from "../mind/barge-in.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
+import { createSpeakNowController } from "../mind/speak-now.mjs";
+import { createDecisionsJudge, loadDecisionsApiKey } from "../mind/speak-now-decisions.mjs";
 import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
 import { resolveBrainIdentity } from "../mind/brains.mjs";
 import { resolveModelIdentity } from "../mind/model-identity.mjs";
@@ -445,6 +447,24 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {(info: { engine: string; latencyMs: number | null }) => void} [options.onSttLatency]
  *   you の転写 1 件ごとの遅延（数字のみ・本文は渡さない）。cockpit.mjs が標準出力に 1 行書く
  *   （画面の行の横の遅延表示は出さない方針・合意 §4.2）。
+ * @param {"classic" | "speak-now"} [options.speakStartModeInitial="classic"]
+ *   話し始めの方式（speak-now 合意 §5 の「話し始め: 従来 / speak-now」）の初期値。サーバ単体の既定は
+ *   "classic"（従来・無退行）で、操縦席の初回既定 speak-now は呼び出し側（cockpit.mjs の settings 橋渡し）が
+ *   決める（selfFireInitialEnabled と同型）。"speak-now" の間は fireScheduler の turn-end / call /
+ *   interjection を止め、you の転写ごとに speak-now の判定を回す（src/mind/speak-now.mjs）。
+ *   scheduler が無ければ意味を持たない。
+ * @param {(mode: string) => void | Promise<void>} [options.onSetSpeakStartMode]
+ *   話し始めの方式の永続化フック（POST /api/speak-start が呼ぶ・onSetVerbosity と同型の失敗寛容）。
+ * @param {(request: { input: string; instructions: string; choices: ReadonlyArray<{ value: string; description: string }> }) =>
+ *   Promise<{ choice: string; probs?: Record<string, number>; latencyMs?: number }>} [options.speakNowJudge]
+ *   speak-now の判定エンジン（テスト注入用）。既定は Decisions API 実装（createDecisionsJudge・キーは
+ *   decisionsApiKeyProvider で判定ごとに読む・タイムアウト 3 秒）。
+ * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.decisionsApiKeyProvider]
+ *   Decisions API のキーの読み口（既定 loadDecisionsApiKey = `.env.decisions.local` を直接読む・
+ *   process.env に入れない）。キーは state/SSE/ログ/エラーに載せない。
+ * @param {(info: object) => void} [options.onSpeakNowJudgment]
+ *   判定ごとの記録（遅延・選択・確率・行き先 or 失敗理由。会話の本文は渡さない）。cockpit.mjs が標準出力に
+ *   1 行書く（合意 §5）。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -520,6 +540,19 @@ export function createCockpitServer(options = {}) {
   const elevenLabsApiKeyProvider =
     typeof options.elevenLabsApiKeyProvider === "function" ? options.elevenLabsApiKeyProvider : () => loadElevenLabsApiKey();
   const onSttLatency = typeof options.onSttLatency === "function" ? options.onSttLatency : null;
+  // speak-now（話し始めの判定・discussion/ai-cohost/decisions/speak-now/integration.md）: 方式の現在値・
+  // 永続化フック・判定エンジン・判定ログの口。
+  /** @type {"classic" | "speak-now"} */
+  let speakStartMode = options.speakStartModeInitial === "speak-now" ? "speak-now" : "classic";
+  const onSetSpeakStartMode = typeof options.onSetSpeakStartMode === "function" ? options.onSetSpeakStartMode : null;
+  const speakNowJudge =
+    typeof options.speakNowJudge === "function"
+      ? options.speakNowJudge
+      : createDecisionsJudge({
+          apiKeyProvider:
+            typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
+        });
+  const onSpeakNowJudgment = typeof options.onSpeakNowJudgment === "function" ? options.onSpeakNowJudgment : null;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -554,6 +587,13 @@ export function createCockpitServer(options = {}) {
   // 側で fake clock/注入 RNG により全分岐テスト済み（domain-c.md）。
   /** @type {ReturnType<typeof createFireScheduler> | null} */
   let fireScheduler = null;
+  // speak-now の判定部品（fireScheduler と同じく orchestrator が fire/getState を持つときだけ生成する）。
+  /** @type {ReturnType<typeof createSpeakNowController> | null} */
+  let speakNow = null;
+  // サーバが呼んだ fire() のうち、まだ Promise が片付いていない数。orchestrator は fire() の受理直後
+  // （fireClaimed）から thinking に入るまで getState() が idle のままなので、speak-now の「忙しい」は
+  // この数も見る（最小の安全側: 受理の窓も忙しいとみなす）。
+  let fireInFlight = 0;
   // S7「視聴者が混ざる」チャット器官（cockpit-server 所有・POST 駆動遅延起動＝ear-pipeline の流儀）。
   // POST /api/chat/connect で chatClientFactory から生成し start()・onMessage/onStatus/onDiagnostic を
   // 取り込み経路（ingestChatMessage/broadcastChatStatus/broadcastChatDiagnostic）へ繋ぐ。POST
@@ -639,6 +679,8 @@ export function createCockpitServer(options = {}) {
       bargeIn: bargeInGate ? { enabled: bargeInGate.isEnabled() } : null,
       // 口数モードの現況（scheduler 未生成 = orchestrator 未注入なら null・selfFire と同型）。
       verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
+      // 話し始めの方式（"classic" | "speak-now"・scheduler 未生成なら null・verbosity と同型）。
+      speakStart: fireScheduler ? speakStartMode : null,
       // S8「キルスイッチ」: キル状態の正本（サーバ側 boolean をそのまま載せる・既定 false・additive）。
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
@@ -842,6 +884,8 @@ export function createCockpitServer(options = {}) {
         // viewer = handleTranscript 内で no-op ★二重発火の断ち）。**soul 除外の前**に回す（scheduler は
         // soul 発話を不応期の基点に使うため you/soul 両方を要る。viewer は scheduler 内で無視される）。
         if (fireScheduler) fireScheduler.handleTranscript(entry);
+        // speak-now: you の転写 1 件ごとに判定（soul/viewer は部品内で無視・モード外/OFF/KILL も部品内で無視）。
+        if (speakNow) speakNow.handleTranscript(entry);
         // soul の発話行はここ（耳の onTranscript 経路）では放送しない。soul も you と同じ
         // transcriptBuffer に append されるため onAppend→onTranscript を必ず通るが、soul の正経路は
         // orchestrator の onSoulTranscript → broadcastSoulTranscript の 1 本。ここで除外しないと
@@ -1120,7 +1164,7 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
-      const result = await fireOrchestrator.fire();
+      const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire());
       // accepted（発火成功）は 202・busy/empty/ears-not-running/error は 200 に {fired:false,...}。
       const status = /** @type {any} */ (result).fired ? 202 : 200;
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
@@ -1160,7 +1204,7 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
-      const result = await fireOrchestrator.fire({ vision: true });
+      const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ vision: true }));
       // accepted（発火成功）は 202・busy/no-target/capture-failed/empty/error は 200 に {fired:false,...}。
       const status = /** @type {any} */ (result).fired ? 202 : 200;
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
@@ -1256,6 +1300,31 @@ export function createCockpitServer(options = {}) {
           await onSetVerbosity(fireScheduler.getVerbosity());
         } catch {
           // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && pathname === "/api/speak-start") {
+      // 話し始めの方式（従来 / speak-now）の切替継ぎ目（speak-now 合意 §5・POST /api/verbosity の写経）。
+      // scheduler 未生成（orchestrator 未注入）なら 503。
+      if (!fireScheduler) {
+        sendJson(res, 503, { error: "speak-start control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const mode = body.mode;
+      if (mode !== "classic" && mode !== "speak-now") {
+        sendJson(res, 400, { error: "invalid speak-start mode" });
+        return;
+      }
+      applySpeakStartMode(mode);
+      if (onSetSpeakStartMode) {
+        try {
+          await onSetSpeakStartMode(speakStartMode);
+        } catch {
+          // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
         }
       }
       broadcastState();
@@ -1562,7 +1631,12 @@ export function createCockpitServer(options = {}) {
   if (typeof options.fireOrchestratorFactory === "function") {
     fireOrchestrator = options.fireOrchestratorFactory({
       getBuffer: () => (pipeline ? pipeline.transcriptBuffer : null),
-      onState: (state) => broadcast("soul", { state }),
+      onState: (state) => {
+        broadcast("soul", { state });
+        // speak-now: 喋り終わって手が空いたら、忙しい間の配信者の発言を 1 回判定する（合意 §3）。
+        // fire() の Promise がまだ片付いていなければ、片付いた時点（trackFire）で改めて確かめる。
+        if (state === "idle" && speakNow) speakNow.notifyIdle();
+      },
       onFire: (info) => broadcast("fire", info),
       onDiagnostic: (diag) => handleDiagnostic(diag),
       onSoulTranscript: (entry) => broadcastSoulTranscript(entry),
@@ -1649,36 +1723,126 @@ export function createCockpitServer(options = {}) {
             }
           }
         : {}),
+      speakNowMode: speakStartMode === "speak-now",
       onFireRequest: (req) => {
-        // S6 Domain D: 発火要求の kind（call/turn-end/silence）を SSE "selfFire" で結線層外へ通知する
-        // （操縦席のタイムラインが自発発火マーカー行/スケジューラ診断のゴースト行を描く材料・domain-d.md §）。
-        // fire() 自体は best-effort（throw は握る・自発発火の失敗で常駐を殺さない）。結果（fired/reason）が
-        // 判明してから broadcast する（同期 throw も非同期 rejection もどちらも "fired:false" として扱う）。
+        // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end および
+        // S7 の comment/comment-call は視覚優先（対象あれば画像付き・無/失敗なら画像なしの通常発火へ
+        // 劣化）。手動 Fire は scheduler 非経由で無関係。
         const kind = req && req.kind;
-        try {
-          // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end および
-          // S7 の comment/comment-call は視覚優先（対象あれば画像付き・無/失敗なら画像なしの通常発火へ
-          // 劣化）。手動 Fire は scheduler 非経由で無関係。
-          const firePromise =
-            req && req.kind === "silence"
-              ? /** @type {any} */ (fireOrchestrator).fire({ vision: true })
-              : /** @type {any} */ (fireOrchestrator).fire({ vision: "preferred" });
-          Promise.resolve(firePromise)
-            .then((result) => {
-              broadcast("selfFire", {
-                kind,
-                fired: !!(result && /** @type {any} */ (result).fired),
-                reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null
-              });
-            })
-            .catch((error) => {
-              broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
-            });
-        } catch (error) {
-          broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
-        }
+        requestSelfFire(kind, req && req.kind === "silence" ? { vision: true } : { vision: "preferred" });
       }
     });
+
+    // speak-now（話し始めの判定・合意 §1〜§3）の部品。fire-scheduler の外に置き、結線だけをここで張る。
+    //  - 忙しい: orchestrator が idle でない、またはサーバが呼んだ fire() がまだ片付いていない。
+    //  - 判定してよい: speak-now モード・自発 pill ON・KILL でない。
+    //  - 応答・自発 → 通常の自発発火と同じ fire({vision:"preferred"})（LLM に区別は伝えない・合意 §2）。
+    //  - 判定行（待つ以外）と失敗は selfFire SSE に相乗りしてフィードへ（合意 §5・新 SSE を足さない）。
+    speakNow = createSpeakNowController({
+      judge: speakNowJudge,
+      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      isActive: () =>
+        speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
+      getName: () => currentSoulName(),
+      getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
+      nowImpl,
+      onFire: () => requestSelfFire("speak-now", { vision: "preferred" }),
+      onJudgment: (j) => {
+        if (j.choice !== "wait") {
+          broadcast("selfFire", {
+            kind: "speak-now-judgment",
+            choice: j.choice,
+            probability: j.probability,
+            latencyMs: j.latencyMs
+          });
+        }
+        reportSpeakNow({ ok: true, ...j });
+      },
+      onError: (e) => {
+        broadcast("selfFire", { kind: "speak-now-judgment", error: e.message, latencyMs: e.latencyMs });
+        reportSpeakNow({ ok: false, trigger: e.trigger, error: e.message, latencyMs: e.latencyMs });
+      }
+    });
+  }
+
+  /**
+   * 自発の発火要求を fire() へ渡し、結果を SSE "selfFire" で結線層外へ通知する（S6 Domain D・
+   * 操縦席のタイムラインが自発発火マーカー行/ゴースト行を描く材料・domain-d.md §）。scheduler の
+   * onFireRequest と speak-now の発火が共有する。fire() 自体は best-effort（throw は握る・自発発火の
+   * 失敗で常駐を殺さない）。結果（fired/reason）が判明してから broadcast する（同期 throw も非同期
+   * rejection もどちらも "fired:false" として扱う）。
+   * @param {string | undefined} kind
+   * @param {{ vision: true | "preferred" }} fireOptions
+   */
+  function requestSelfFire(kind, fireOptions) {
+    try {
+      trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
+        .then((result) => {
+          broadcast("selfFire", {
+            kind,
+            fired: !!(result && /** @type {any} */ (result).fired),
+            reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null
+          });
+        })
+        .catch((error) => {
+          broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
+        });
+    } catch (error) {
+      broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
+    }
+  }
+
+  /**
+   * fire() を呼び、Promise が片付くまでを fireInFlight に数える（speak-now の「忙しい」用）。片付いたら
+   * speak-now に「手が空いたかも」を知らせる。同期 throw は数を戻してそのまま投げ直す（呼び出し側の
+   * 既存の握り方を変えない）。
+   * @param {() => any} start
+   * @returns {Promise<any>}
+   */
+  function trackFire(start) {
+    fireInFlight += 1;
+    /** @type {Promise<any>} */
+    let p;
+    try {
+      p = Promise.resolve(start());
+    } catch (error) {
+      fireInFlight -= 1;
+      throw error;
+    }
+    return p.finally(() => {
+      fireInFlight -= 1;
+      if (speakNow) speakNow.notifyIdle();
+    });
+  }
+
+  /**
+   * 話し始めの方式を切り替える（POST /api/speak-start の実体）。scheduler の turn-end / call /
+   * interjection のスイッチを合わせ、speak-now の積み残しを捨てる。
+   * @param {"classic" | "speak-now"} mode
+   */
+  function applySpeakStartMode(mode) {
+    speakStartMode = mode;
+    if (fireScheduler) fireScheduler.setSpeakNowMode(mode === "speak-now");
+    if (speakNow) speakNow.reset();
+  }
+
+  /** 今の頭の名前（判定の問いと会話のラベル用・snapshot の identity と同じ解決）。 */
+  function currentSoulName() {
+    if (currentBrainIdentityImpl) return resolveModelIdentity(currentBrainIdentityImpl()?.id).canonicalName;
+    const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
+    return resolveBrainIdentity(rawBrain && typeof rawBrain === "object" ? /** @type {any} */ (rawBrain).brain : undefined)
+      .canonicalName;
+  }
+
+  /** 判定ごとの記録を呼び出し側（cockpit.mjs のターミナル 1 行）へ渡す（本文は含めない・失敗寛容）。 */
+  function reportSpeakNow(/** @type {object} */ info) {
+    if (!onSpeakNowJudgment) return;
+    try {
+      onSpeakNowJudgment(info);
+    } catch {
+      // ログの失敗で判定を止めない。
+    }
   }
 
   // ── チャット器官（S7「視聴者が混ざる」）の取り込み経路（プラミング + attach 点）─────────────
@@ -1899,6 +2063,10 @@ export function createCockpitServer(options = {}) {
           // best-effort
         }
         fireScheduler = null;
+      }
+      if (speakNow) {
+        speakNow.dispose(); // 返事待ちの判定が後から返っても無視する（タイマは judge 側で畳まれる）。
+        speakNow = null;
       }
       if (fireOrchestrator) {
         try {

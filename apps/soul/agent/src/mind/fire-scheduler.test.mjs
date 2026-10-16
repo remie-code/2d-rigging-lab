@@ -1348,3 +1348,99 @@ test("interjection: LLM 非依存の担保に抵触しない(fire-scheduler は 
   const src = readFileSync(new URL("./fire-scheduler.mjs", import.meta.url), "utf8");
   assert.equal(/^\s*import\s.+from\s/m.test(src), false, "interjection 追加後も fire-scheduler は import ゼロ");
 });
+
+// ── speak-now モードのスイッチ（speak-now 合意 §4: turn-end / call / interjection を止め、silence と
+//    comment 系は残す）──────────────────────────────────────────────────────────
+
+/** speak-now スイッチ検証用のスケジューラ（全語彙が短い時間で出る設定）。 */
+function makeSpeakNowSwitchScheduler(clock, overrides = {}) {
+  /** @type {any[]} */
+  const reqs = [];
+  const sch = createFireScheduler({
+    onFireRequest: (r) => reqs.push(r),
+    enabled: true,
+    nowImpl: clock.now,
+    rng: rngHit,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl,
+    turnEndRefractoryMs: 0,
+    silenceBaseMs: 100_000,
+    silenceJitterMs: 0,
+    silenceRefractoryMs: 0,
+    interjectionBaseMs: 3000,
+    interjectionJitterMs: 0,
+    interjectionRefractoryMs: 0,
+    commentRefractoryMs: 0,
+    commentProbability: 1,
+    ...overrides
+  });
+  return { sch, reqs };
+}
+
+test("speak-now スイッチ: 既定 OFF（isSpeakNowMode false）で従来どおり call が出る", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeSpeakNowSwitchScheduler(clock);
+  assert.equal(sch.isSpeakNowMode(), false);
+  sch.handleTranscript(you("コーディこれ見て"));
+  assert.deepEqual(reqs.map((r) => r.kind), ["call"]);
+  sch.dispose();
+});
+
+test("speak-now スイッチ: ON の間は call / turn-end / interjection を出さない", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeSpeakNowSwitchScheduler(clock, { speakNowMode: true });
+  assert.equal(sch.isSpeakNowMode(), true);
+  // 呼びかけ: 名前を含む you 転写でも出ない。
+  sch.handleTranscript(you("コーディこれ見て"));
+  // 区切り応答: speechEnd → 無音 → 転写でも出ない。
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS);
+  sch.handleTranscript(you("さっきの話"));
+  // 合いの手: 長い連続発話 run でも出ない。
+  sch.handleVadEvent({ type: "speechStart" });
+  clock.advance(10_000);
+  assert.deepEqual(reqs, []);
+  sch.dispose();
+});
+
+test("speak-now スイッチ: ON の間も silence と comment / comment-call は残る（you 発話は活動として沈黙を先送り）", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeSpeakNowSwitchScheduler(clock, { speakNowMode: true });
+  clock.advance(90_000);
+  sch.handleTranscript(you("ひとりごと")); // 活動 → 沈黙タイマ再武装（t=90000 から 100000）。
+  clock.advance(99_999);
+  assert.equal(reqs.filter((r) => r.kind === "silence").length, 0, "you 発話で沈黙が先送りされる");
+  clock.advance(1);
+  assert.equal(reqs.filter((r) => r.kind === "silence").length, 1, "silence は speak-now 中も出る");
+  sch.handleChatMessage({ text: "コーディ見てる？" });
+  sch.handleChatMessage({ text: "こんにちは" });
+  assert.deepEqual(reqs.map((r) => r.kind), ["silence", "comment-call", "comment"]);
+  sch.dispose();
+});
+
+test("speak-now スイッチ: ON への切替で pending turn-end と合いの手 run を畳む・OFF に戻すと従来どおり", () => {
+  const clock = makeFakeClock();
+  const { sch, reqs } = makeSpeakNowSwitchScheduler(clock);
+  // 合いの手 run 開始 + 区切り応答を armed にしておく。
+  sch.handleVadEvent({ type: "speechStart" });
+  sch.handleVadEvent({ type: "speechEnd" });
+  clock.advance(TURN_END_SILENCE_MS); // turn-end armed・run は間隙 2s で終了。
+  sch.handleVadEvent({ type: "speechStart" }); // 新しい run。
+  sch.setSpeakNowMode(true);
+  sch.handleTranscript(you("さっきの話")); // armed は畳まれているので出ない。
+  clock.advance(10_000); // run も畳まれているので interjection も出ない。
+  assert.deepEqual(reqs, []);
+  sch.setSpeakNowMode(false);
+  assert.equal(sch.isSpeakNowMode(), false);
+  sch.handleTranscript(you("コーディ"));
+  assert.deepEqual(reqs.map((r) => r.kind), ["call"], "OFF に戻すと呼びかけが効く");
+  sch.dispose();
+});
+
+test("speak-now スイッチ: 原則改訂後も fire-scheduler は import ゼロ・判定 API/LLM へ到達しない", () => {
+  const src = readFileSync(new URL("./fire-scheduler.mjs", import.meta.url), "utf8");
+  assert.equal(/^\s*import\s.+from\s/m.test(src), false);
+  assert.equal(/fetch\s*\(|\/v1\/decisions/.test(src), false, "判定 API は speak-now 部品の側");
+  // 冒頭の原則文が speak-now 合意 §4 の趣旨に書き換わっている。
+  assert.match(src, /リアルタイムの判定 API を使うモード（speak-now）ではそれに任せ/);
+});

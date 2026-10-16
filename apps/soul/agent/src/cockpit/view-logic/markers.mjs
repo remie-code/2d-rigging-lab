@@ -11,6 +11,8 @@
  *  - visionMarkerText   → :495-496 `addVisionMarkerRow` の text（'saw "title" (WxH, Nms)'）
  *  - bargeInMarkerText  → :520-521 `addBargeInMarkerRow` の text（"interrupted (X/Y chars spoken, Nms)"）
  *  - selfFireMarkerText → :539     `addSelfFireMarkerRow` の text（"self-fire (kind)"）
+ *  - speakNowJudgmentText → speak-now の判定行（SSE selfFire kind:"speak-now-judgment"・"判定: 自発 0.45"・
+ *                           speak-now 合意 §5。待つはサーバが流さない）
  */
 
 /**
@@ -68,4 +70,25 @@ export function bargeInMarkerText(d) {
  */
 export function selfFireMarkerText(d) {
   return "self-fire (" + ((d && d.kind) || "?") + ")";
+}
+
+/** speak-now の選択の表示名（src/mind/speak-now.mjs の SPEAK_NOW_CHOICE_LABELS と同じ。UI は mind を import しない）。 */
+export const SPEAK_NOW_CHOICE_LABELS = Object.freeze({
+  wait: "待つ",
+  backchannel: "相槌",
+  respond: "応答",
+  initiate: "自発"
+});
+
+/**
+ * speak-now の判定行の文字列（"判定: 自発 0.45"・speak-now 合意 §5）。未知の選択は値をそのまま、
+ * 確率が無ければ "?"。
+ * @param {{ choice?: string | null; probability?: number | null }} d
+ * @returns {string}
+ */
+export function speakNowJudgmentText(d) {
+  const choice = (d && d.choice) || "?";
+  const label = /** @type {Record<string, string>} */ (SPEAK_NOW_CHOICE_LABELS)[choice] ?? choice;
+  const p = d && typeof d.probability === "number" && Number.isFinite(d.probability) ? d.probability.toFixed(2) : "?";
+  return "判定: " + label + " " + p;
 }

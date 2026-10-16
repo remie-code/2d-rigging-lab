@@ -912,3 +912,23 @@ test("settings store: corrupt JSON → getSttEngine returns null・unwritable pa
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: speak-start mode は set→get roundtrip で永続化し・他のキーと同居する（speak-now 合意 §5）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getSpeakStartMode(), null); // 未作成 = 記憶なし（初回既定 speak-now は呼び出し側）。
+    store.setVerbosityMode("quiet");
+    store.setSpeakStartMode("classic");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getSpeakStartMode(), "classic");
+    assert.equal(reopened.getVerbosityMode(), "quiet");
+    reopened.setSpeakStartMode("speak-now");
+    assert.equal(store.getSpeakStartMode(), "speak-now");
+    store.setSpeakStartMode(null);
+    assert.equal(store.getSpeakStartMode(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -78,6 +78,8 @@ export function settingsFromSnapshot(s) {
     visionTarget: (s && s.visionTarget) ?? null,
     selfFire: (s && s.selfFire) ?? null,
     verbosity: (s && s.verbosity) ?? null,
+    // 話し始めの方式（"classic" | "speak-now"・scheduler 未生成なら null・verbosity と同型・speak-now 合意 §5）。
+    speakStart: (s && s.speakStart) ?? null,
     // 「朗読と合いの手」: barge-in トグルの現況（gate 未生成 = orchestrator.interrupt 未対応なら null・
     // selfFire と同型）。
     bargeIn: (s && s.bargeIn) ?? null,
@@ -284,6 +286,7 @@ export function App(props) {
         setFireNote=${setFireNote}
         selfFire=${settings.selfFire}
         verbosity=${settings.verbosity}
+        speakStart=${settings.speakStart}
         killed=${settings.killed}
         bargeIn=${settings.bargeIn}
         applySnapshot=${applySnapshot}

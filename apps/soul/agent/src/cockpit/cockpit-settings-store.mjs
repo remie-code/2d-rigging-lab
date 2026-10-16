@@ -44,6 +44,10 @@
  *     に委ねる（verbosityMode と同型の文字列キー・asStringOrNull）。キーそのものはここに置かない
  *     （キーは .env.elevenlabs.local・選択だけを記憶する）。
  *   setSttEngine(engine): 耳の Start 時に選んでいた方式を記憶（次回起動で復元）。
+ *   getSpeakStartMode(): 話し始めの方式（classic / speak-now）の初期値（speak-now 合意 §5）。未記憶/未知値の
+ *     フォールバック（初回既定 speak-now）は呼び出し側（cockpit.mjs の createSpeakStartHooks）に委ねる
+ *     （verbosityMode と同型の文字列キー・asStringOrNull）。
+ *   setSpeakStartMode(mode): 操縦席で話し始めの方式を切替えたときに記憶（次回起動で復元）。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -104,6 +108,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setMemoryEnabled: (enabled: boolean) => void;
  *   getSttEngine: () => string | null;
  *   setSttEngine: (engine: string | null) => void;
+ *   getSpeakStartMode: () => string | null;
+ *   setSpeakStartMode: (mode: string | null) => void;
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -269,6 +275,13 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} engine */
     setSttEngine(engine) {
       writeMerged({ sttEngine: engine ?? null });
+    },
+    getSpeakStartMode() {
+      return asStringOrNull(readAll().speakStartMode);
+    },
+    /** @param {string | null} mode */
+    setSpeakStartMode(mode) {
+      writeMerged({ speakStartMode: mode ?? null });
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

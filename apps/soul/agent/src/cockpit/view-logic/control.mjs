@@ -26,6 +26,9 @@
  *                                 selfFirePostErrorText の写経・wave 計画「口数配線」§2 裁定 A）
  *  - verbosityRequestErrorText → POST /api/verbosity の fetch catch（"verbosity error: e"・
  *                                 selfFireRequestErrorText の写経）
+ *  - speakStartPostErrorText   → POST /api/speak-start 応答（503 / invalid mode / set failed・成功は null・
+ *                                 verbosityPostErrorText の写経・speak-now 合意 §5）
+ *  - speakStartRequestErrorText → POST /api/speak-start の fetch catch（"speak-start error: e"）
  *  - killSwitchView            → S8「キルスイッチ」: snapshot の `killed` から KILL ボタン / 復帰ボタンの
  *                                 表示構造体を導出（selfFireToggleView の様式踏襲）。通常時は「■ KILL」・
  *                                 キル中は「殺し中」+ 復帰ラベル。
@@ -149,6 +152,27 @@ export function verbosityPostErrorText(res) {
  */
 export function verbosityRequestErrorText(e) {
   return "verbosity error: " + e;
+}
+
+/**
+ * POST /api/speak-start 応答 → エラー文言（verbosityPostErrorText の写経・speak-now 合意 §5）。
+ * 成功（200）は **null = エラーなし**（呼び出し側は snapshot 応答を適用する）。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function speakStartPostErrorText(res) {
+  if (res.status === 503) return "speak-start control not available";
+  if (!res.ok) return "set failed: " + ((res.j && res.j.error) || "error");
+  return null;
+}
+
+/**
+ * POST /api/speak-start の fetch 失敗 → エラー文言（verbosityRequestErrorText の写経）。
+ * @param {unknown} e
+ * @returns {string}
+ */
+export function speakStartRequestErrorText(e) {
+  return "speak-start error: " + e;
 }
 
 // ── S8「キルスイッチ」: KILL ボタン / 復帰ボタンの表示導出（selfFireToggleView の様式踏襲）───────

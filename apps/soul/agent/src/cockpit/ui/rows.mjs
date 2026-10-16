@@ -17,6 +17,8 @@
  *  - vision-marker:    { id, kind:"vision-marker", timeText, whoText:"vision", markerText:"*", text, thumbSrc: string|null }
  *  - barge-in-marker:  { id, kind:"barge-in-marker", timeText, whoText:"barge-in", markerText:"!!", text }
  *  - self-fire-marker: { id, kind:"self-fire-marker", timeText, whoText:"self", markerText:"~", text }
+ *  - judgment-marker:  { id, kind:"judgment-marker", timeText, whoText:"judge", markerText:"?", text }
+ *                      （speak-now の判定行「判定: 自発 0.45」・speak-now 合意 §5）
  *
  * speaking 行の規律（現 cockpit.html と機能同値）:
  *  - transcript / ghost の追加は speaking 行を**除去してから**積む（:387 :418 removeSpeakingRow）。
@@ -35,13 +37,15 @@ import {
   expressionRowText,
   visionMarkerText,
   bargeInMarkerText,
-  selfFireMarkerText
+  selfFireMarkerText,
+  speakNowJudgmentText
 } from "../view-logic/markers.mjs";
 import {
   discardGhostLabel,
   diagnosticGhostLabel,
   selfFireGhostLabel,
-  chatDiagnosticGhostLabel
+  chatDiagnosticGhostLabel,
+  speakNowErrorGhostLabel
 } from "../view-logic/ghost.mjs";
 import { formatClock } from "../view-logic/format-time.mjs";
 
@@ -168,6 +172,21 @@ export function feedWithSelfFireMarker(feed, d, nowMs) {
 }
 
 /**
+ * speak-now の判定行を積む（speak-now 合意 §5・SSE selfFire kind:"speak-now-judgment" の成功分）。
+ * マーカー行の一種（speaking 行は除去しない＝自発マーカーと同じ規律）。
+ * @param {FeedState} feed  @param {any} d  SSE selfFire（kind:"speak-now-judgment"・choice/probability）。  @param {number} nowMs
+ */
+export function feedWithJudgmentMarker(feed, d, nowMs) {
+  return appended(feed, {
+    kind: "judgment-marker",
+    timeText: formatClock(nowMs),
+    whoText: "judge",
+    markerText: "?",
+    text: speakNowJudgmentText(d)
+  });
+}
+
+/**
  * speaking 行の出現/消滅（showSpeakingRow :374-384 / removeSpeakingRow :370-373 同値）。
  * visible=true: 既にあれば同一 feed（:375 `if (speakingRow) return;`）・なければ末尾に追加。
  * visible=false: あれば除去・なければ同一 feed。
@@ -211,6 +230,8 @@ export function feedFromHistory(transcripts, nowMs) {
  *  - fire（:860-864）: accepted:true のみマーカー行（fire-note は app.mjs）。
  *  - visionCaptured（:866）: 視覚マーカー行。
  *  - selfFire（:874-878）: fired:true はマーカー行 / fired:false はゴースト行。
+ *    kind:"speak-now-judgment"（speak-now の判定・相乗り）は先に分流: error ありはゴースト行
+ *    「(判定エラー: …)」・それ以外は判定行「判定: 自発 0.45」。
  *  - chatDiagnostic（:888-897）: chatDiagnosticGhostLabel 経由（観測補助 4 種は null = 非表示）。
  *
  * @param {FeedState} feed  @param {string} eventName  @param {any} d  @param {number} nowMs
@@ -238,6 +259,11 @@ export function feedAfterSseEvent(feed, eventName, d, nowMs) {
     case "visionCaptured":
       return feedWithVisionMarker(feed, d, nowMs);
     case "selfFire":
+      if (d && d.kind === "speak-now-judgment") {
+        return d.error != null
+          ? feedWithGhost(feed, speakNowErrorGhostLabel(d), nowMs)
+          : feedWithJudgmentMarker(feed, d, nowMs);
+      }
       return d && d.fired
         ? feedWithSelfFireMarker(feed, d, nowMs)
         : feedWithGhost(feed, selfFireGhostLabel(d), nowMs);

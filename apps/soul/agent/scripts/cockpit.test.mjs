@@ -19,6 +19,8 @@ import {
   createChatSourceHooks,
   createSttEngineHooks,
   formatSttLatencyLine,
+  createSpeakStartHooks,
+  formatSpeakNowLine,
   createMemoryHooks,
   shouldSkipMemoryCheckpoint,
   createMemoryRecorder,
@@ -1637,4 +1639,53 @@ test("formatSttLatencyLine: 数字だけの 1 行（物差しが無いときは 
   assert.equal(formatSttLatencyLine({ engine: "elevenlabs", latencyMs: 512.4 }), "[cockpit] stt latency: engine=elevenlabs ms=512\n");
   assert.equal(formatSttLatencyLine({ engine: "whisper", latencyMs: null }), "[cockpit] stt latency: engine=whisper ms=-\n");
   assert.equal(formatSttLatencyLine({ engine: "whisper", latencyMs: NaN }), "[cockpit] stt latency: engine=whisper ms=-\n");
+});
+
+// ── createSpeakStartHooks / formatSpeakNowLine（speak-now 合意 §5: 話し始めの切替の保存・判定ログ）────────
+
+test("createSpeakStartHooks: 初回（未記憶）・未知値は speak-now・記憶済みは復元・切替は settings へ（失敗寛容）", { timeout: 5000 }, () => {
+  let stored = /** @type {string | null} */ (null);
+  const settings = {
+    getSpeakStartMode: () => stored,
+    setSpeakStartMode: (/** @type {string | null} */ m) => {
+      stored = m;
+    }
+  };
+  const hooks = createSpeakStartHooks(settings);
+  assert.equal(hooks.resolveInitialSpeakStartMode(), "speak-now", "初回既定は speak-now");
+  stored = "bogus";
+  assert.equal(hooks.resolveInitialSpeakStartMode(), "speak-now");
+  hooks.onSetSpeakStartMode("classic");
+  assert.equal(stored, "classic");
+  assert.equal(hooks.resolveInitialSpeakStartMode(), "classic");
+  const failing = createSpeakStartHooks({
+    getSpeakStartMode: () => null,
+    setSpeakStartMode: () => {
+      throw new Error("disk full");
+    }
+  });
+  assert.doesNotThrow(() => failing.onSetSpeakStartMode("speak-now"));
+});
+
+test("formatSpeakNowLine: 遅延・選択・確率の 1 行（本文なし）・失敗は理由", { timeout: 5000 }, () => {
+  assert.equal(
+    formatSpeakNowLine({
+      ok: true,
+      trigger: "transcript",
+      choice: "initiate",
+      probability: 0.4512,
+      probs: { wait: 0.2, backchannel: 0.15, respond: 0.2, initiate: 0.4512 },
+      latencyMs: 812.4,
+      action: "fire"
+    }),
+    "[cockpit] speak-now: ms=812 choice=initiate p=0.45 action=fire trigger=transcript probs=wait:0.20,backchannel:0.15,respond:0.20,initiate:0.45\n"
+  );
+  assert.equal(
+    formatSpeakNowLine({ ok: false, trigger: "after-busy", error: "タイムアウト（3 秒）", latencyMs: 3000 }),
+    "[cockpit] speak-now: error ms=3000 trigger=after-busy reason=タイムアウト（3 秒）\n"
+  );
+  assert.equal(
+    formatSpeakNowLine({ ok: false, trigger: "transcript", error: "キーが見つからない", latencyMs: null }),
+    "[cockpit] speak-now: error ms=- trigger=transcript reason=キーが見つからない\n"
+  );
 });

@@ -34,6 +34,9 @@
  * **controlled**（自発トグル pill と同型・ローカル state の綻び回避）。onChange は POST /api/verbosity
  * （onToggleSelfFire の写経）→成功時 applySnapshot。コメント応答の頻度変化は S7 YouTube 実ゲート保留の
  * ため配線済みだが体感対象外（untested・wave 計画 §1）。
+ * 話し始め（speak-now 合意 §5）: 自発 pill と口数の隣に「話し始め: 従来 / speak-now」のプルダウン。
+ * snapshot の `speakStart`（"classic" | "speak-now"）で **controlled**（口数と同型）。onChange は
+ * POST /api/speak-start → 成功時 applySnapshot。選択の保存はサーバ側（cockpit.mjs の settings 橋渡し）。
  * KILL: **S8 で実装済み**（§7 赤枠の意匠を踏襲）。snapshot の `killed` で **controlled**（自発トグル/
  * 口数と同型）。通常時は「■ KILL」ボタン（押すと POST /api/kill {killed:true}）。キル中はバー全体に
  * `killing` class が付き視覚的に「殺し中」と分かる + 一クリック復帰ボタン（POST /api/kill
@@ -53,6 +56,8 @@ import {
   selfFireRequestErrorText,
   verbosityPostErrorText,
   verbosityRequestErrorText,
+  speakStartPostErrorText,
+  speakStartRequestErrorText,
   killSwitchView,
   killPostErrorText,
   killRequestErrorText,
@@ -66,6 +71,12 @@ export const VERBOSITY_OPTIONS = [
   { value: "quiet", label: "控えめ" },
   { value: "normal", label: "ふつう" },
   { value: "chatty", label: "おしゃべり" }
+];
+
+/** 話し始めの方式の選択肢（speak-now 合意 §5「話し始め: 従来 / speak-now」）。 */
+export const SPEAK_START_OPTIONS = [
+  { value: "classic", label: "従来" },
+  { value: "speak-now", label: "speak-now" }
 ];
 
 /**
@@ -150,6 +161,28 @@ export function VerbositySelect({ verbosity, onChange }) {
 }
 
 /**
+ * 話し始めの方式のプルダウン（speak-now 合意 §5・VerbositySelect と同型の controlled 部品・hooks 非使用）。
+ * value は snapshot 由来の speakStart。null（scheduler 未生成）は disable して "classic" 表示に畳む。
+ * @param {{ speakStart?: string | null; onChange: (ev: any) => void }} props
+ */
+export function SpeakStartSelect({ speakStart, onChange }) {
+  return html`
+    <label class="verbosity speak-start">
+      <span class="pill-label">話し始め</span>
+      <select
+        class="verbosity-select speak-start-select"
+        value=${speakStart ?? "classic"}
+        disabled=${speakStart == null}
+        onChange=${onChange}
+        title="従来: 区切り・呼びかけ・合いの手の機械信号 / speak-now: 配信者の発言ごとに判定 API が反応を決める"
+      >
+        ${SPEAK_START_OPTIONS.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}
+      </select>
+    </label>
+  `;
+}
+
+/**
  * KILL スイッチ（S8 実装済み・hooks 非使用・vnode 走査テスト対象）。view は killSwitchView 導出済み。
  * 通常時は「■ KILL」ボタン・キル中は「殺し中」status + 復帰ラベルのボタン（同じボタン 1 個・
  * ラベル/class が view で切り替わるだけ・onClick は呼び出し側が明示 boolean を送る）。
@@ -168,11 +201,12 @@ export function KillSwitch({ view, onClick }) {
 /**
  * 運転バー本体。
  * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
- *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null; killed?: boolean | null;
+ *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null; speakStart?: string | null;
+ *           killed?: boolean | null;
  *           bargeIn?: { enabled?: boolean } | null;
  *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
  */
-export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, killed, bargeIn, applySnapshot, fetchImpl }) {
+export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, speakStart, killed, bargeIn, applySnapshot, fetchImpl }) {
   // Fire 連打防止のローカル busy（:556 :574 の即時 disable 相当・応答/失敗で復帰）。
   const [localBusy, setLocalBusy] = useState(false);
   // 自発トグル/口数/KILL/barge-in のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
@@ -284,6 +318,31 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
   };
 
   /**
+   * 話し始めの方式の変更（onChangeVerbosity の写経・speak-now 合意 §5）。
+   * @param {any} ev
+   */
+  const onChangeSpeakStart = (ev) => {
+    const mode = ev && ev.target ? ev.target.value : "classic";
+    const doFetch = fetchImpl || globalThis.fetch;
+    setControlError("");
+    doFetch("/api/speak-start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = speakStartPostErrorText(res);
+        if (err != null) {
+          setControlError(err);
+          return;
+        }
+        applySnapshot(res.j); // 200 応答は snapshot 全体（verbosity 経路と同源）。
+      })
+      .catch((/** @type {unknown} */ e) => setControlError(speakStartRequestErrorText(e)));
+  };
+
+  /**
    * KILL / 復帰（onToggleSelfFire の写経・S8）。**明示 boolean を送る**（トグルではない）: 現在
    * killView.killed の逆を送る（false→{killed:true}=KILL・true→{killed:false}=revive）。UI 側で
    * 逆算しているだけでサーバは反転せず受けた boolean をそのまま正本に設定する（cockpit-server.mjs
@@ -327,6 +386,7 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
         <${SelfFirePill} view=${sfView} onChange=${onToggleSelfFire} />
         <${BargeInPill} view=${biView} onChange=${onToggleBargeIn} />
         <${VerbositySelect} verbosity=${verbosity} onChange=${onChangeVerbosity} />
+        <${SpeakStartSelect} speakStart=${speakStart} onChange=${onChangeSpeakStart} />
         <${KillSwitch} view=${killView} onClick=${onClickKill} />
       </div>
     </div>
