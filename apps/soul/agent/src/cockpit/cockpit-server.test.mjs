@@ -521,7 +521,7 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
   const server = createCockpitServer({ conversationInstructionHooks: hooks });
   try {
     const url = await server.listen(0);
-    for (const brainId of ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]) {
+    for (const brainId of ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]) {
       const result = await getJson(`${url}/api/conversation-instructions/${brainId}`);
       assert.equal(result.status, 200);
       assert.deepEqual(result.json, {
@@ -533,14 +533,14 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
       });
     }
 
-    const saved = await putJson(`${url}/api/conversation-instructions/codex-55`, {
-      instruction: "custom codex-55 instruction"
+    const saved = await putJson(`${url}/api/conversation-instructions/codex-61-sol`, {
+      instruction: "custom codex-61-sol instruction"
     });
     assert.equal(saved.status, 200);
     assert.deepEqual(saved.json, {
       ok: true,
-      brainId: "codex-55",
-      instruction: "custom codex-55 instruction",
+      brainId: "codex-61-sol",
+      instruction: "custom codex-61-sol instruction",
       isOverride: true,
       revision: 1
     });
@@ -548,12 +548,12 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
     assert.equal(other.json.instruction, "default:codex");
     assert.equal(other.json.isOverride, false);
 
-    const reset = await deleteJson(`${url}/api/conversation-instructions/codex-55`);
+    const reset = await deleteJson(`${url}/api/conversation-instructions/codex-61-sol`);
     assert.equal(reset.status, 200);
     assert.deepEqual(reset.json, {
       ok: true,
-      brainId: "codex-55",
-      instruction: "default:codex-55",
+      brainId: "codex-61-sol",
+      instruction: "default:codex-61-sol",
       isOverride: false,
       revision: 2
     });
@@ -566,7 +566,7 @@ test("conversation instruction API: Astra save/load/reset preserves existing ove
   const server = createCockpitServer({ conversationInstructionHooks: makeFakeConversationInstructionHooks() });
   try {
     const url = await server.listen(0);
-    const existing = ["claude", "codex", "codex-55", "codex-56-sol"];
+    const existing = ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-61-sol"];
     for (const brainId of existing) {
       const saved = await putJson(`${url}/api/conversation-instructions/${brainId}`, { instruction: `keep:${brainId}` });
       assert.equal(saved.status, 200);
@@ -734,7 +734,7 @@ test("conversation instruction privacy: successful secret save stays only in ded
     pipelineFactory: /** @type {any} */ (pipeline.factory),
     fireOrchestratorFactory: /** @type {any} */ (orchestrator.factory),
     currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
-    brainStatus: () => ({ brain: "codex-55", credentialHealth: true }),
+    brainStatus: () => ({ brain: "codex-61-sol", credentialHealth: true }),
     memoryStatus: () => ({ enabled: true, count: memoryRecords, lastRecordAtMs: memoryRecords > 0 ? 12345 : null }),
     onMemoryRecord: async () => {
       memoryRecords += 1;
@@ -745,10 +745,10 @@ test("conversation instruction privacy: successful secret save stays only in ded
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((event) => event.event === "state");
-    const put = await putJson(`${url}/api/conversation-instructions/codex-55`, { instruction: secret });
+    const put = await putJson(`${url}/api/conversation-instructions/codex-61-sol`, { instruction: secret });
     assert.equal(put.status, 200);
     assert.equal(put.json.instruction, secret);
-    const get = await getJson(`${url}/api/conversation-instructions/codex-55`);
+    const get = await getJson(`${url}/api/conversation-instructions/codex-61-sol`);
     assert.equal(get.status, 200);
     assert.equal(get.json.instruction, secret);
     const dedicatedResponses = JSON.stringify([put.json, get.json]);
@@ -2621,7 +2621,7 @@ test("cockpit POST /api/brain: {brain:\"claude\"} → 200（Claude へ戻す）"
   }
 });
 
-test("cockpit POST /api/brain: GPT-5.5 / Sol / Astra → 200 with shared Chappy identity", async () => {
+test("cockpit POST /api/brain: GPT-6.1 Sol / 5.6 Sol / Astra → 200 with shared Chappy identity", async () => {
   const wiring = makeFakeBrainWiring("claude");
   const server = createCockpitServer({
     onSetBrain: /** @type {any} */ (wiring.onSetBrain),
@@ -2629,10 +2629,10 @@ test("cockpit POST /api/brain: GPT-5.5 / Sol / Astra → 200 with shared Chappy 
   });
   try {
     const url = await server.listen(0);
-    const r55 = await postJson(`${url}/api/brain`, { brain: "codex-55" });
-    assert.equal(r55.status, 200);
-    assert.equal(r55.json.brain.brain, "codex-55");
-    assert.deepEqual(r55.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
+    const r61 = await postJson(`${url}/api/brain`, { brain: "codex-61-sol" });
+    assert.equal(r61.status, 200);
+    assert.equal(r61.json.brain.brain, "codex-61-sol");
+    assert.deepEqual(r61.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
     const rSol = await postJson(`${url}/api/brain`, { brain: "codex-56-sol" });
     assert.equal(rSol.status, 200);
     assert.equal(rSol.json.brain.brain, "codex-56-sol");
@@ -2641,7 +2641,28 @@ test("cockpit POST /api/brain: GPT-5.5 / Sol / Astra → 200 with shared Chappy 
     assert.equal(rAstra.status, 200);
     assert.equal(rAstra.json.brain.brain, "codex-astra");
     assert.deepEqual(rAstra.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
-    assert.deepEqual(wiring.record.calls, ["codex-55", "codex-56-sol", "codex-astra"]);
+    assert.deepEqual(wiring.record.calls, ["codex-61-sol", "codex-56-sol", "codex-astra"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/brain: Claude Opus 5.5 → 200 with Cody identity / 削除済み GPT-5.5 は 400", async () => {
+  const wiring = makeFakeBrainWiring("codex");
+  const server = createCockpitServer({
+    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
+    brainStatus: /** @type {any} */ (wiring.brainStatus)
+  });
+  try {
+    const url = await server.listen(0);
+    const rOpus = await postJson(`${url}/api/brain`, { brain: "claude-opus-55" });
+    assert.equal(rOpus.status, 200);
+    assert.equal(rOpus.json.brain.brain, "claude-opus-55");
+    assert.deepEqual(rOpus.json.brain.identity, { id: "cody", displayName: "こーでぃー" });
+    const r55 = await postJson(`${url}/api/brain`, { brain: "codex-55" });
+    assert.equal(r55.status, 400);
+    assert.match(r55.json.error, /invalid brain/);
+    assert.deepEqual(wiring.record.calls, ["claude-opus-55"]);
   } finally {
     await server.close();
   }

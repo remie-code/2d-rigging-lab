@@ -510,7 +510,7 @@ export function CockpitSettingsModal({
   }, [settings]);
 
   // 頭脳 select の現況同期（多頭化 Domain C）: snapshot.brain.brain（起動時の現況 / POST /api/brain 後の
-  // 反映）が既知 4 値（2026-07-17 追撃で claude/codex の 2 値から Codex 側 2 頭を追加）なら select 表示へ
+  // 反映）が既知値（2026-07-17 追撃で claude/codex の 2 値から Codex 側 2 頭を追加・2026-10-16 時点で 6 値）なら select 表示へ
   // 反映する。マイク/視界/出力先と違い一覧取得 API を持たない固定選択肢のため、select の初期値・以後の
   // 現況表示はこの effect が担う（未知値/欠落は変更しない）。既知値の集合は BRAIN_OPTIONS（health.mjs の
   // BRAIN_LABELS 由来）と同じ語彙——ここも「頭 id を直書きする」責務境界規律に合わせ、BRAIN_OPTIONS の

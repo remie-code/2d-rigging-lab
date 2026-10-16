@@ -1302,17 +1302,19 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
-      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 4 値は
+      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 6 値は
       // ここに直書きする（API の受理値/技術札は従来のワイヤ検証を保持する）。
       // `resolveBrainIdentity` の import はこの検証表を置き換えるためではなく、下流の current public
       // projection だけを canonical resolver から導出するための additive read-path である。2026-07-17
-      // 追撃で Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）がここへ追加された既存契約は変えない。
+      // 追撃で Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）がここへ追加された既存契約は変えない。2026-10-16 に
+      // GPT-5.5（"codex-55"）を外し、GPT-6.1 Sol / Claude Opus 5.5 を追加（brains.mjs と同じ値を保つ）。
       if (
         body.brain !== "claude" &&
+        body.brain !== "claude-opus-55" &&
         body.brain !== "codex" &&
-        body.brain !== "codex-55" &&
         body.brain !== "codex-56-sol" &&
-        body.brain !== "codex-astra"
+        body.brain !== "codex-astra" &&
+        body.brain !== "codex-61-sol"
       ) {
         sendJson(res, 400, { error: "invalid brain" });
         return;

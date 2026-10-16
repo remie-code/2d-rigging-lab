@@ -923,7 +923,8 @@ async function main() {
       //  Codex 経路では codex-session が内部で OpenAI 版ガード（assertSubscriptionAuthEnvOpenAI）を
       //  onWarning 経由で走らせるため、ここで Anthropic ガードは呼ばない（別 provider へ Anthropic ガードを
       //  当てると誤った拒否/検査になる）。
-      if (currentBrain === "claude") {
+      //  2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session 経路なので同じガードを通す。
+      if (currentBrain === "claude" || currentBrain === "claude-opus-55") {
         const { warnings } = assertSubscriptionAuthEnv(process.env);
         for (const warning of warnings) {
           process.stderr.write(`[cockpit] WARN: ${warning}\n`);

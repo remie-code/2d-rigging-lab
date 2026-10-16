@@ -1161,9 +1161,11 @@ test("createBrainHooks: 記憶済みの既知2頭（claude/codex）は defaultCh
   assert.equal(createBrainHooks(settingsCodex, "claude").resolveInitialBrain(), "codex");
 });
 
-test("createBrainHooks: registry 駆動（2026-07-17 追撃）— 追加2頭（codex-55/codex-56-sol）も BRAIN_IDS 経由で優先される", { timeout: 5000 }, () => {
-  const settings55 = makeFakeBrainSettings("codex-55");
-  assert.equal(createBrainHooks(settings55, "claude").resolveInitialBrain(), "codex-55");
+test("createBrainHooks: registry 駆動（2026-07-17 追撃・2026-10-16 更新）— 追加頭（claude-opus-55/codex-56-sol/codex-astra/codex-61-sol）も BRAIN_IDS 経由で優先される", { timeout: 5000 }, () => {
+  const settingsOpus55 = makeFakeBrainSettings("claude-opus-55");
+  assert.equal(createBrainHooks(settingsOpus55, "claude").resolveInitialBrain(), "claude-opus-55");
+  const settingsSol61 = makeFakeBrainSettings("codex-61-sol");
+  assert.equal(createBrainHooks(settingsSol61, "claude").resolveInitialBrain(), "codex-61-sol");
   const settingsSol = makeFakeBrainSettings("codex-56-sol");
   assert.equal(createBrainHooks(settingsSol, "claude").resolveInitialBrain(), "codex-56-sol");
   const settingsAstra = makeFakeBrainSettings("codex-astra");
@@ -1174,6 +1176,12 @@ test("createBrainHooks: 記憶済みの未知値は defaultChoice にフォー�
   const settings = makeFakeBrainSettings("gpt");
   const hooks = createBrainHooks(settings, "claude");
   assert.equal(hooks.resolveInitialBrain(), "claude");
+});
+
+test("createBrainHooks: 削除済みの GPT-5.5（記憶済み \"codex-55\"）は既定へ倒れる（2026-10-16）", { timeout: 5000 }, () => {
+  const settings = makeFakeBrainSettings("codex-55");
+  assert.equal(createBrainHooks(settings).resolveInitialBrain(), "claude");
+  assert.equal(createBrainHooks(settings, "codex").resolveInitialBrain(), "codex");
 });
 
 test("createBrainHooks: onSetBrain は settings.setBrainChoice へ橋渡しし・次回 resolveInitialBrain に反映する", { timeout: 5000 }, () => {
@@ -1195,13 +1203,14 @@ test("createBrainHooks: settings.setBrainChoice が throw しても onSetBrain �
   assert.doesNotThrow(() => hooks.onSetBrain("codex"));
 });
 
-test("buildBrainSessionSystemPrompt: all five brains resolve the canonical self-name", { timeout: 5000 }, () => {
+test("buildBrainSessionSystemPrompt: all six brains resolve the canonical self-name", { timeout: 5000 }, () => {
   const expected = new Map([
     ["claude", "コーディ（Cody）"],
+    ["claude-opus-55", "コーディ（Cody）"],
     ["codex", "チャッピー（Chappy）"],
-    ["codex-55", "チャッピー（Chappy）"],
     ["codex-56-sol", "チャッピー（Chappy）"],
-    ["codex-astra", "チャッピー（Chappy）"]
+    ["codex-astra", "チャッピー（Chappy）"],
+    ["codex-61-sol", "チャッピー（Chappy）"]
   ]);
   for (const [brainId, selfName] of expected) {
     const prompt = buildBrainSessionSystemPrompt(brainId);
@@ -1388,7 +1397,7 @@ test("createChatSourceHooks: settings.setChatSource が throw しても onSetCha
 });
 
 test("conversation instruction revision: production session seam reuses, replaces only on next accepted Fire, and preserves brain/memory/TTS", { timeout: 5000 }, async () => {
-  const currentBrain = "codex-55";
+  const currentBrain = "codex-61-sol";
   const memoryText = "memory section stays unchanged";
   const overrides = { codex: "other brain must remain untouched" };
   const settings = {
@@ -1537,7 +1546,7 @@ test("conversation instruction revision: production session seam reuses, replace
   assert.equal(session, reused);
   assert.equal(reused.disposed, 0);
 
-  assert.equal(currentBrain, "codex-55");
+  assert.equal(currentBrain, "codex-61-sol");
   assert.equal(memoryText, "memory section stays unchanged");
   assert.equal(playerCreations, 1, "instruction revisions do not recreate the TTS player");
   assert.equal(player.ttsConfig.speaker, "stable");

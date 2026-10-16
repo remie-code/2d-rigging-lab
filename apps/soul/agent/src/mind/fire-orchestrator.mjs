@@ -191,10 +191,11 @@ export const DEFAULT_CONVERSATION_INSTRUCTION = DEFAULT_CONVERSATION_INSTRUCTION
 /** The only technical brain ids that may carry a conversation override. */
 export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
   "claude",
+  "claude-opus-55",
   "codex",
-  "codex-55",
   "codex-56-sol",
-  "codex-astra"
+  "codex-astra",
+  "codex-61-sol"
 ]);
 
 /** @param {unknown} value */
@@ -565,13 +566,16 @@ export function createFireOrchestrator(options) {
   /**
    * Shared normal/vision ask seam. Passing options is additive for Claude (its
    * one-argument implementation ignores them) and reaches App Server through
-   * Cockpit's transparent session proxy for the three Codex brains.
+   * Cockpit's transparent session proxy for the Codex brains.
    * @param {string | Array<any>} content
    */
   const askIncrementally = async (content, resources, buffer) => {
     // Production snapshots identify Claude explicitly. Its full-result session
-    // keeps the legacy one-shot path; the three Codex brains own delta delivery.
-    const progressiveEligible = resources.configuration?.brain !== "claude";
+    // keeps the legacy one-shot path; the Codex brains own delta delivery.
+    // 2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session（onTextDelta を受けない）なので
+    // Claude 既定と同じ one-shot 経路に倒す。
+    const configuredBrain = resources.configuration?.brain;
+    const progressiveEligible = configuredBrain !== "claude" && configuredBrain !== "claude-opus-55";
     const delivery = progressivePlayback && progressiveEligible
       ? progressiveDeliveryFactory({
           generationId: `fire-${++nextProgressiveGeneration}`,

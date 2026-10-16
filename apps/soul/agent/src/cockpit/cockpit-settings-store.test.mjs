@@ -83,12 +83,12 @@ test("settings store: default path is the gitignored file inside apps/soul/agent
   assert.match(DEFAULT_SETTINGS_PATH.replace(/\\/g, "/"), /apps\/soul\/agent\/cockpit-settings\.local\.json$/);
 });
 
-test("conversation instruction settings: five brain overrides round-trip with the versioned additive key", () => {
+test("conversation instruction settings: six brain overrides round-trip with the versioned additive key", () => {
   const dir = tmpDir();
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    for (const id of ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]) {
+    for (const id of ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]) {
       assert.equal(store.getConversationInstruction(id), null);
       assert.equal(store.setConversationInstruction(id, `custom:${id}`), true);
       assert.equal(store.getConversationInstruction(id), `custom:${id}`);
@@ -96,12 +96,14 @@ test("conversation instruction settings: five brain overrides round-trip with th
     const reopened = createFileSettingsStore({ path });
     assert.deepEqual(reopened.getConversationInstructionOverrides(), {
       claude: "custom:claude",
+      "claude-opus-55": "custom:claude-opus-55",
       codex: "custom:codex",
-      "codex-55": "custom:codex-55",
       "codex-56-sol": "custom:codex-56-sol",
-      "codex-astra": "custom:codex-astra"
+      "codex-astra": "custom:codex-astra",
+      "codex-61-sol": "custom:codex-61-sol"
     });
-    assert.equal(reopened.getConversationInstructionProfile("codex-55").body, "custom:codex-55");
+    assert.equal(reopened.getConversationInstructionProfile("codex-61-sol").body, "custom:codex-61-sol");
+    assert.equal(reopened.getConversationInstructionProfile("claude-opus-55").body, "custom:claude-opus-55");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -112,7 +114,7 @@ test("conversation instruction settings: Astra is additive and its choice persis
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    const existing = ["claude", "codex", "codex-55", "codex-56-sol"];
+    const existing = ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-61-sol"];
     store.setBrainChoice("codex-56-sol");
     for (const id of existing) store.setConversationInstruction(id, `keep:${id}`);
     const defaultBody = store.getConversationInstructionProfile("codex-astra").body;
@@ -141,7 +143,9 @@ test("conversation instruction settings: direct-map and malformed/unknown values
           codex: "legacy direct-map value",
           unknown: "must be ignored",
           claude: "   ",
-          "codex-55": 42
+          "codex-56-sol": 42,
+          // 2026-10-16 に削除した GPT-5.5 の保存済み上書きは未知 id として無視される。
+          "codex-55": "removed GPT-5.5 override must be ignored"
         }
       }),
       "utf8"
@@ -203,7 +207,7 @@ test("conversation instruction settings: reset removes only selected override", 
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    const ids = ["codex-astra", "claude", "codex", "codex-55", "codex-56-sol"];
+    const ids = ["codex-astra", "claude", "codex", "codex-61-sol", "codex-56-sol", "claude-opus-55"];
     for (const id of ids) store.setConversationInstruction(id, `${id} custom`);
     for (const [index, id] of ids.entries()) {
       assert.equal(store.resetConversationInstruction(id), true);

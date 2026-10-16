@@ -129,19 +129,23 @@ test("buildFireSystemPrompt: unknown/absent identity は Cody 既定へ戻る", 
   assert.equal(buildFireSystemPrompt({ id: "unknown" }), FIRE_SYSTEM_PROMPT);
 });
 
-test("conversation instruction profile: five technical brain ids resolve independently and preserve default bytes", () => {
-  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]);
+test("conversation instruction profile: six technical brain ids resolve independently and preserve default bytes", () => {
+  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
   const baseline = resolveConversationInstructionProfile("claude");
   assert.equal(baseline.body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
   assert.equal(buildFireSystemPrompt(MODEL_IDENTITIES.cody), FIRE_SYSTEM_PROMPT);
-  const override = resolveConversationInstructionProfile("codex-55", {
-    "codex-55": "Use a short custom response."
+  const override = resolveConversationInstructionProfile("codex-61-sol", {
+    "codex-61-sol": "Use a short custom response."
   });
   assert.equal(override.hasOverride, true);
   assert.equal(override.body, "Use a short custom response.");
   assert.equal(resolveConversationInstructionProfile("codex").hasOverride, false);
   const unknown = resolveConversationInstructionProfile("unknown", { claude: "must-not-leak", unknown: "bad" });
   assert.equal(unknown.brainId, "claude");
+  // 削除済みの GPT-5.5（2026-10-16）は未知 id として既定へ倒れ、保存済み上書きも引き継がない。
+  const removed = resolveConversationInstructionProfile("codex-55", { "codex-55": "stale override" });
+  assert.equal(removed.brainId, "claude");
+  assert.equal(removed.hasOverride, false);
   assert.equal(unknown.body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
   assert.equal(resolveConversationInstructionProfile("codex", { codex: "   " }).body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
   const customPrompt = buildFireSystemPrompt(MODEL_IDENTITIES.chappy, override.body);
@@ -2159,7 +2163,9 @@ test("C2: Codex delta/TTS/playback を overlapし、LLM完了後もmatching ENDE
   orch.dispose();
 });
 
-test("C2: progressive productionでもClaude/full-result snapshotはlegacy one-shotをexact once維持する", async () => {
+// 2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session（full-result）なので同じ one-shot 経路。
+for (const claudeBrain of ["claude", "claude-opus-55"]) {
+test(`C2: progressive productionでもClaude/full-result snapshot（${claudeBrain}）はlegacy one-shotをexact once維持する`, async () => {
   const buffer = bufferWithYou("Claude fallback");
   const fakeSpeak = makeFakeSpeak();
   let askCount = 0;
@@ -2181,7 +2187,7 @@ test("C2: progressive productionでもClaude/full-result snapshotはlegacy one-s
       session,
       channel: fakeChannel,
       player: fakePlayer,
-      configuration: { brain: "claude" }
+      configuration: { brain: claudeBrain }
     }),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
@@ -2193,6 +2199,7 @@ test("C2: progressive productionでもClaude/full-result snapshotはlegacy one-s
   assert.deepEqual(terminals, [], "Claude does not create a progressive delivery generation");
   orch.dispose();
 });
+}
 
 test("C2 barge gate: ask開始後first delta前のinterruptはnot-speakingでsame Fireが正常完了する", { timeout: 5000 }, async () => {
   const buffer = bufferWithYou("delta前 race");

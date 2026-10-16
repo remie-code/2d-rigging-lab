@@ -4,6 +4,7 @@
  * **実 create は呼ばない**（実 SDK 消費ゼロ・llm-session/codex-session を実際に起動しない）。
  *
  * 2026-07-17 追撃: Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）を追加し claude/codex の 2 項目から 4 項目へ。
+ * 2026-10-16: GPT-5.5（codex-55）を削除し、GPT-6.1 Sol（codex-61-sol）/ Claude Opus 5.5（claude-opus-55）を追加して 6 項目へ。
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -15,9 +16,10 @@ import path from "node:path";
 import { BRAINS, BRAIN_IDS, resolveBrainIdentity } from "./brains.mjs";
 import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
 
-const EXPECTED_IDS = ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"];
+const EXPECTED_IDS = ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"];
+const CODEX_IDS = ["codex", "codex-56-sol", "codex-astra", "codex-61-sol"];
 
-test("brains: registry はフラット 5 項目（既存4頭 + Astra）", () => {
+test("brains: registry はフラット 6 項目（Claude 2 頭 + Codex 4 頭・GPT-5.5 は削除済み）", () => {
   assert.deepEqual(Object.keys(BRAINS).sort(), [...EXPECTED_IDS].sort());
   assert.deepEqual([...BRAIN_IDS].sort(), [...EXPECTED_IDS].sort());
 });
@@ -29,9 +31,10 @@ test("brains: registry は Object.freeze されている（唯一の宣言テー
   }
 });
 
-test("brains: 5 brain entries bind to the exact frozen Cody/Chappy identities", () => {
+test("brains: 6 brain entries bind to the exact frozen Cody/Chappy identities", () => {
   assert.equal(BRAINS.claude.identity, MODEL_IDENTITIES.cody);
-  for (const key of ["codex", "codex-55", "codex-56-sol", "codex-astra"]) {
+  assert.equal(BRAINS["claude-opus-55"].identity, MODEL_IDENTITIES.cody);
+  for (const key of CODEX_IDS) {
     assert.equal(BRAINS[key].identity, MODEL_IDENTITIES.chappy);
   }
   for (const key of EXPECTED_IDS) {
@@ -42,10 +45,16 @@ test("brains: 5 brain entries bind to the exact frozen Cody/Chappy identities", 
 test("brains: identity resolver preserves Cody fallback for unknown or absent persisted selections", () => {
   assert.equal(resolveBrainIdentity("claude"), MODEL_IDENTITIES.cody);
   assert.equal(resolveBrainIdentity("codex"), MODEL_IDENTITIES.chappy);
-  assert.equal(resolveBrainIdentity("codex-55"), MODEL_IDENTITIES.chappy);
+  assert.equal(resolveBrainIdentity("claude-opus-55"), MODEL_IDENTITIES.cody);
   assert.equal(resolveBrainIdentity("codex-56-sol"), MODEL_IDENTITIES.chappy);
   assert.equal(resolveBrainIdentity("codex-astra"), MODEL_IDENTITIES.chappy);
+  assert.equal(resolveBrainIdentity("codex-61-sol"), MODEL_IDENTITIES.chappy);
   assert.equal(BRAINS["codex-astra"].label, "GPT-6 Astra");
+  assert.equal(BRAINS["codex-61-sol"].label, "GPT-6.1 Sol");
+  assert.equal(BRAINS["claude-opus-55"].label, "Claude (Opus 5.5)");
+  // 削除済みの GPT-5.5（保存済み設定に残り得る値）は未知値として Cody 既定へ倒れる。
+  assert.equal(BRAINS["codex-55"], undefined);
+  assert.equal(resolveBrainIdentity("codex-55"), DEFAULT_MODEL_IDENTITY);
   assert.equal(resolveBrainIdentity(undefined), DEFAULT_MODEL_IDENTITY);
   assert.equal(resolveBrainIdentity("removed-brain"), DEFAULT_MODEL_IDENTITY);
 });
@@ -62,13 +71,15 @@ for (const key of EXPECTED_IDS) {
   });
 }
 
-test("brains: claude.credentialPath は .credentials.json で終わる絶対パス", () => {
-  const p = BRAINS.claude.credentialPath;
-  assert.ok(p.endsWith(".credentials.json"), p);
-  assert.ok(p.includes(".claude"), p);
-});
+for (const key of ["claude", "claude-opus-55"]) {
+  test(`brains: ${key}.credentialPath は .credentials.json で終わる絶対パス（Claude 系は資格情報を共有）`, () => {
+    const p = BRAINS[key].credentialPath;
+    assert.ok(p.endsWith(".credentials.json"), p);
+    assert.ok(p.includes(".claude"), p);
+  });
+}
 
-for (const key of ["codex", "codex-55", "codex-56-sol", "codex-astra"]) {
+for (const key of CODEX_IDS) {
   test(`brains: ${key}.credentialPath は auth.json で終わる絶対パス（Codex 系は資格情報を共有）`, () => {
     const p = BRAINS[key].credentialPath;
     assert.ok(p.endsWith("auth.json"), p);
@@ -76,7 +87,30 @@ for (const key of ["codex", "codex-55", "codex-56-sol", "codex-astra"]) {
   });
 }
 
-// ── Codex 三頭の共通 App Server route と model/effort 配線 ─────────────────────
+// ── Claude 系 2 頭の model 配線（queryImpl 注入・実 SDK は起動しない）──────────────────
+
+for (const [brainId, expectedModel] of [
+  ["claude", "claude-opus-4-8"],
+  ["claude-opus-55", "claude-opus-5-5"]
+]) {
+  test(`brains: ${brainId}.create は llm-session へ model=${expectedModel} を渡す`, async () => {
+    /** @type {any} */
+    let capturedOptions = null;
+    const queryImpl = (/** @type {any} */ { options }) => {
+      capturedOptions = options;
+      return {
+        next: async () => ({ done: true, value: undefined }),
+        return: async () => ({ done: true, value: undefined })
+      };
+    };
+    const session = BRAINS[brainId].create({ skipEnvGuard: true, queryImpl, systemPrompt: "sp" });
+    assert.equal(capturedOptions.model, expectedModel);
+    assert.equal(capturedOptions.systemPrompt, "sp");
+    await session.dispose();
+  });
+}
+
+// ── Codex 頭の共通 App Server route と model/effort 配線 ─────────────────────
 
 function makeFakeAppServer(onTurnStart) {
   return () => {
@@ -125,9 +159,9 @@ async function withScratchHome(fn) {
 
 for (const [brainId, expectedModel, expectedEffort] of [
   ["codex", "gpt-5.6-terra", "none"],
-  ["codex-55", "gpt-5.5", "none"],
   ["codex-56-sol", "gpt-5.6-sol", "low"],
-  ["codex-astra", "gpt-6-astra", "low"]
+  ["codex-astra", "gpt-6-astra", "low"],
+  ["codex-61-sol", "gpt-6.1-sol", "low"]
 ]) {
 test(`brains: ${brainId}.create は共通 App Server route で model=${expectedModel}, effort=${expectedEffort}`, async () => {
   await withScratchHome(async ({ homeDir, ledgerPath }) => {
