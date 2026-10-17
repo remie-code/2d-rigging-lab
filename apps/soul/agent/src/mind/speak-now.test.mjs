@@ -61,7 +61,7 @@ function makeHarness(over = {}) {
   });
   /** you の転写を 1 件積んで食わせる（ear-pipeline の onAppend と同順: append → onTranscript）。 */
   const say = (text, speaker = "you") => {
-    const entry = { speaker, text, appendedAtMs: state.now };
+    const entry = { seq: entries.length, speaker, text, appendedAtMs: state.now };
     entries.push(entry);
     ctl.handleTranscript(entry);
   };
@@ -142,7 +142,7 @@ test("応答・自発・相槌 → 発火（応答・自発に不応期・確率
     await flush();
   }
   assert.deepEqual(
-    h.fires,
+    h.fires.map((f) => ({ choice: f.choice })),
     [{ choice: "respond" }, { choice: "initiate" }, { choice: "backchannel" }, { choice: "respond" }],
     "連続しても毎回発火（不応期なし）・相槌は choice で結線層が発火の仕方を分ける"
   );
@@ -240,7 +240,7 @@ test("判定の失敗は onError（発火しない）・reset で積み残しを
   const err = Object.assign(new Error("タイムアウト（3 秒）"), { latencyMs: 3000 });
   h.calls[0].reject(err);
   await flush();
-  assert.deepEqual(h.errors, [{ trigger: "transcript", message: "タイムアウト（3 秒）", latencyMs: 3000 }]);
+  assert.deepEqual(h.errors, [{ trigger: "transcript", triggerSeq: 0, message: "タイムアウト（3 秒）", latencyMs: 3000 }]);
   assert.equal(h.fires.length, 0);
   // judge が同期 throw しても onError に落ちる。
   const sync = makeHarness({
@@ -296,7 +296,7 @@ async function judgeOnce(h, choice, text = `発言 ${choice}`) {
 test("相槌どうしの歯止め: 前の相槌を喋り始めてから 8 秒は次の相槌を流す（skip-interval）・8 秒で再び発火", async () => {
   const h = makeHarness();
   await judgeOnce(h, "backchannel");
-  assert.deepEqual(h.fires, [{ choice: "backchannel" }]);
+  assert.deepEqual(h.fires.map((f) => ({ choice: f.choice })), [{ choice: "backchannel" }]);
   h.state.now += 500; // 発火から喋り始めまで（考える時間）。
   h.ctl.markBackchannelSpoken(); // 数え始め = 喋り始めた時点。
   h.state.now += 7_999;
@@ -422,4 +422,30 @@ test("相槌のあとの after-busy 止め: reset（モード切替）で畳む"
   h.state.busy = false;
   h.ctl.notifyIdle();
   assert.equal(h.calls.length, 1, "reset 後の忙しさでは after-busy を回す");
+});
+
+// ── きっかけの seq（操縦席の作り直し・cockpit-glance-redesign.md §9）──────────────────────────
+
+test("きっかけの seq: transcript はその転写の seq・判定結果と発火の要求に確率と遅延と一緒に載る", async () => {
+  const h = makeHarness();
+  h.say("ひとりごと", "soul"); // seq 0
+  h.say("これどう思う？"); // seq 1
+  h.calls[0].resolve(result("respond", 0.72, 640));
+  await flush();
+  assert.equal(h.judgments[0].triggerSeq, 1);
+  assert.deepEqual(h.fires, [{ choice: "respond", probability: 0.72, trigger: "transcript", triggerSeq: 1, latencyMs: 640 }]);
+});
+
+test("きっかけの seq: after-busy は判定する時点で最後の配信者の行の seq・失敗にも載る", async () => {
+  const h = makeHarness();
+  h.state.busy = true;
+  h.say("一つ目"); // seq 0
+  h.say("二つ目"); // seq 1
+  h.say("返事", "soul"); // seq 2
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, 1);
+  h.calls[0].reject(Object.assign(new Error("タイムアウト（3 秒）"), { latencyMs: 3000 }));
+  await flush();
+  assert.deepEqual(h.errors, [{ trigger: "after-busy", triggerSeq: 1, message: "タイムアウト（3 秒）", latencyMs: 3000 }]);
 });

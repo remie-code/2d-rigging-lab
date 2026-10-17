@@ -207,7 +207,11 @@ function createDecisionsTransport(options = {}) {
           throw new SpeakNowJudgeError(`認証失敗（${status}）`, elapsed());
         }
         const detail = json && json.error && typeof json.error.message === "string" ? json.error.message.slice(0, 200) : "no detail";
-        throw new SpeakNowJudgeError(redactKey(`HTTP ${status}: ${detail}`, apiKey), elapsed());
+        // エラーの種類（例 429 の credit_balance_exhausted）を末尾に残す（操縦席の「残高切れ」の警告の材料・
+        // discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.2）。
+        const rawCode = json && json.error ? (json.error.code ?? json.error.type) : null;
+        const code = typeof rawCode === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(rawCode) ? ` [${rawCode}]` : "";
+        throw new SpeakNowJudgeError(redactKey(`HTTP ${status}: ${detail}${code}`, apiKey), elapsed());
       }
       return parse(json, elapsed);
     })();

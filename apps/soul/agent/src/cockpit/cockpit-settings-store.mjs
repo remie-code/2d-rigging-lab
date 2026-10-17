@@ -59,6 +59,10 @@
  *     同じく操縦席にツマミは置かず、このファイルのキー `backchannelMinIntervalSec` を手で書き換えて次回起動から
  *     効かせる（discussion/ai-cohost/decisions/speak-now/backchannel.md §2「秒数は設定で変えられるようにする」）。
  *     0 は「歯止めなし」として有効（間隔なので 0 も意味を持つ）。数でない・負は null。
+ *   getLatencyThresholds(): 返事の遅延の合計の「遅い」しきい値（秒・`{ warnSec, alertSec }`・各 null = 既定 4 / 6 秒）。
+ *     操縦席にツマミは置かず、このファイルのキー `latencyWarnSec` / `latencyAlertSec` を手で書き換えて次回起動から
+ *     効かせる（discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.1「秒数は設定で変えられる」）。
+ *     正の数でなければ null。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -125,6 +129,7 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setCommentBusyPolicy: (policy: string | null) => void;
  *   getCommentHold: () => { maxAgeSec: number | null; maxCount: number | null };
  *   getBackchannelMinIntervalSec: () => number | null;
+ *   getLatencyThresholds: () => { warnSec: number | null; alertSec: number | null };
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -313,6 +318,11 @@ export function createFileSettingsStore(options = {}) {
     getBackchannelMinIntervalSec() {
       const v = readAll().backchannelMinIntervalSec;
       return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+    },
+    getLatencyThresholds() {
+      const all = readAll();
+      const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+      return { warnSec: num(all.latencyWarnSec), alertSec: num(all.latencyAlertSec) };
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

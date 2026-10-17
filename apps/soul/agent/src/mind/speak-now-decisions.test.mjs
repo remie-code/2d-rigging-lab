@@ -294,3 +294,24 @@ test("questions judge: timeoutMs（コメント判定は 5 秒）で諦める・
   });
   await assert.rejects(j401({ input: "x", questions: guardQuestions() }), (e) => e.message === "認証失敗（401）");
 });
+
+test("judge: HTTP エラーの種類（error.code）を末尾に残す（429 の credit_balance_exhausted は操縦席の残高切れの警告の材料）", async () => {
+  const judge429 = createDecisionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl: makeFetch({
+      ok: false,
+      status: 429,
+      json: async () => ({ error: { message: "Your credit balance is too low.", code: "credit_balance_exhausted" } })
+    }).fetchImpl
+  });
+  await assert.rejects(judge429(request()), (e) => {
+    assert.equal(e.message, "HTTP 429: Your credit balance is too low. [credit_balance_exhausted]");
+    return true;
+  });
+  // 種類として不自然な文字列（空白や長すぎ）は付けない。
+  const judgeOdd = createDecisionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl: makeFetch({ ok: false, status: 400, json: async () => ({ error: { message: "bad", code: "not a code" } }) }).fetchImpl
+  });
+  await assert.rejects(judgeOdd(request()), (e) => e.message === "HTTP 400: bad");
+});

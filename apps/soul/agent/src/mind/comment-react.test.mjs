@@ -281,3 +281,21 @@ test("controller: 取っておいた分も、手が空いた時に判定して�
   assert.deepEqual(h.fires, [], "畳んだ後に返った結果は無視");
   assert.deepEqual(h.judgments, []);
 });
+
+test("controller: 発火の要求に「反応する」の確率（コメントと同じ順）と判定の遅延（並行なら一番遅いもの）が載る", async () => {
+  /** @type {any[]} */
+  const requests = [];
+  const h = makeController({ onFire: (r) => requests.push(r) });
+  h.state.busy = true;
+  h.ctl.handleComment(comment("a", 1));
+  h.ctl.handleComment(comment("b", 2));
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  h.fake.calls[0].resolve({ choice: "react", probs: { react: 0.8, ignore: 0.2 }, latencyMs: 300 });
+  h.fake.calls[1].resolve({ choice: "react", probs: { react: 0.6, ignore: 0.4 }, latencyMs: 900 });
+  await settle();
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0].comments.map((c) => c.id), ["a", "b"]);
+  assert.deepEqual(requests[0].probabilities, [0.8, 0.6]);
+  assert.equal(requests[0].latencyMs, 900);
+});

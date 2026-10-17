@@ -187,7 +187,9 @@ export function buildCommentReactFireInstruction(comments, name) {
  * @param {() => boolean} options.isActive  判定を呼んでよいか（speak-now モード・自発 ON・KILL でない）。
  * @param {() => string} options.getName  今の頭の名前（チャッピー / コーディ）。
  * @param {() => string | null | undefined} options.getVerbosity  口数モード（quiet / normal / chatty）。
- * @param {(request: { comments: ReactComment[] }) => void} options.onFire  反応するコメント（届いた順）で発火を要求する。
+ * @param {(request: { comments: ReactComment[]; probabilities: Array<number | null>; latencyMs: number | null }) => void} options.onFire
+ *   反応するコメント（届いた順）で発火を要求する。probabilities は comments と同じ順の「反応する」の確率、latencyMs は
+ *   判定の遅延（まとめて並行に聞いたときは一番遅かったもの = 発火を待たせた時間）。
  * @param {() => string} [options.getBusyPolicy]  "hold"（既定）/ "drop"。
  * @param {() => { maxAgeMs?: number; maxCount?: number }} [options.getHoldLimits]  あとで拾うの鮮度と件数。
  * @param {(judgment: CommentReactJudgment) => void} [options.onJudgment]  判定結果（反応しないも含め毎回）。
@@ -326,7 +328,15 @@ export function createCommentReactController(options) {
         }
       }
       if (action === "hold-busy") hold(reacting);
-      if (action === "fire") safe(() => onFire({ comments: reacting }));
+      if (action === "fire") {
+        const probabilities = reacting.map((c) => {
+          const r = results.find((x) => x.ok && x.comment === c);
+          return r && r.ok ? r.probability : null;
+        });
+        const latencies = results.map((r) => r.latencyMs).filter((v) => typeof v === "number");
+        const latencyMs = latencies.length > 0 ? Math.max(...latencies) : null;
+        safe(() => onFire({ comments: reacting, probabilities, latencyMs }));
+      }
     });
   };
 

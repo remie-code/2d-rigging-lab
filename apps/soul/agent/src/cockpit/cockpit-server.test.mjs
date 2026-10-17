@@ -1462,7 +1462,7 @@ test("cockpit POST /api/vision-fire: fire({ vision: true }) を呼び・受理�
     assert.equal(r.json.fired, true);
     assert.equal(r.json.replyText, "画面見えたよ");
     // 通常 /api/fire ではなく vision:true で呼ばれたことを固定。
-    assert.deepEqual(fake.record.lastFireOptions, { vision: true });
+    assert.deepEqual(fake.record.lastFireOptions, { vision: true, cause: { type: "manual", vision: true } });
     assert.equal(fake.record.fireCount, 1);
   } finally {
     await server.close();
@@ -1480,7 +1480,7 @@ test("cockpit POST /api/vision-fire: 対象未設定は 200 で {fired:false, re
     assert.equal(r.status, 200);
     assert.equal(r.json.fired, false);
     assert.equal(r.json.reason, "vision-no-target");
-    assert.deepEqual(fake.record.lastFireOptions, { vision: true });
+    assert.deepEqual(fake.record.lastFireOptions, { vision: true, cause: { type: "manual", vision: true } });
   } finally {
     await server.close();
   }
@@ -1655,7 +1655,7 @@ test("cockpit self-fire: 呼びかけ命中の you 転写が fireOrchestrator.fi
     // 格上げ（対象あれば画像付き・無/失敗なら画像なしの通常発火へ劣化）。従来 fire() 引数なしから変更。
     fakePipe.record.buffer.append({ startMs: 1000, endMs: 2000, text: "コーディこれ見て" });
     assert.equal(fakeOrch.record.fireCount, 1);
-    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" }); // call は視覚優先（Domain E 裁定）。
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred", cause: { type: "call" } }); // call は視覚優先（Domain E 裁定）。
 
     // soul 発話が名前を含んでも自己応答しない（scheduler は soul を除外）。
     fakeOrch.record.hooks.onSoulTranscript({ seq: 2, startMs: 0, endMs: 0, text: "コーディだよ", speaker: "soul", appendedAtMs: 1000 });
@@ -1816,7 +1816,7 @@ test("cockpit S7 chat: comment-call は fire({vision:preferred}) を 1 回・kin
 
     // 同期的に fire は 1 回だけ（comment-call のみ・call は出ない＝二重発火の断ち）。
     assert.equal(fakeOrch.record.fireCount, 1);
-    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" }); // S7 も視覚優先。
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred", cause: { type: "comment-call" } }); // S7 も視覚優先。
 
     // selfFire SSE に kind:"comment-call" が載る（call ではない）。
     const evt = await sse.waitFor((e) => e.event === "selfFire");
@@ -2038,7 +2038,7 @@ test("cockpit S7 chat Connect: 結線した onMessage 経由の呼びかけコ�
     // 器官が呼びかけコメントを配信 → onMessage → ingest → scheduler.handleChatMessage → comment-call 確実発火。
     fakeChat.last.emitMessage({ text: "コーディこれ見て", displayName: "Taro" });
     assert.equal(fakeOrch.record.fireCount, 1);
-    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" });
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred", cause: { type: "comment-call" } });
     const evt = await sse.waitFor((e) => e.event === "selfFire");
     assert.equal(evt.data.kind, "comment-call");
     assert.equal(evt.data.fired, true);
@@ -3427,7 +3427,7 @@ test("cockpit onFireRequest: kind:\"interjection\" は silence でない→ fire
     // fire() は非同期に呼ばれる（onFireRequest 内で Promise.resolve().then(...) するため一 tick 待つ）。
     await new Promise((r) => setTimeout(r, 20));
     assert.equal(fakeOrch.record.fireCount, 1);
-    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred" });
+    assert.deepEqual(fakeOrch.record.lastFireOptions, { vision: "preferred", cause: { type: "interjection" } });
   } finally {
     await server.close();
   }
@@ -3814,11 +3814,22 @@ test("cockpit speak-now: you の転写で判定 → 自発なら fire({vision:pr
 
     h.fakeJudge.calls[0].resolve(judgeResult("initiate", 0.45));
     const row = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "speak-now-judgment");
-    assert.deepEqual(row.data, { kind: "speak-now-judgment", choice: "initiate", probability: 0.45, latencyMs: 812 });
+    assert.deepEqual(row.data, {
+      kind: "speak-now-judgment",
+      choice: "initiate",
+      probability: 0.45,
+      latencyMs: 812,
+      action: "fire",
+      trigger: "transcript",
+      triggerSeq: 2
+    });
     const fired = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "speak-now");
     assert.deepEqual(fired.data, { kind: "speak-now", fired: true, reason: null });
     assert.equal(h.fakeOrch.record.fireCount, 1);
-    assert.deepEqual(h.fakeOrch.record.lastFireOptions, { vision: "preferred" });
+    assert.deepEqual(h.fakeOrch.record.lastFireOptions, {
+      vision: "preferred",
+      cause: { type: "speak-now", choice: "initiate", probability: 0.45, trigger: "transcript", triggerSeq: 2, judgeLatencyMs: 812 }
+    });
     // ターミナル用の記録（本文は渡さない）。
     assert.equal(h.logged.length, 1);
     assert.equal(h.logged[0].ok, true);
@@ -3858,7 +3869,15 @@ test("cockpit speak-now: 相槌は画面を撮らず内部指示付きで発火�
     assert.deepEqual(
       rows.map((e) => e.data),
       [
-        { kind: "speak-now-judgment", choice: "backchannel", probability: 0.5, latencyMs: 812 },
+        {
+          kind: "speak-now-judgment",
+          choice: "backchannel",
+          probability: 0.5,
+          latencyMs: 812,
+          action: "fire",
+          trigger: "transcript",
+          triggerSeq: 0
+        },
         { kind: "speak-now", fired: true, reason: null }
       ],
       "判定: 相槌 → 発火結果の順・待つは出さない"
@@ -3866,7 +3885,8 @@ test("cockpit speak-now: 相槌は画面を撮らず内部指示付きで発火�
     assert.equal(h.fakeOrch.record.fireCount, 1);
     assert.deepEqual(h.fakeOrch.record.lastFireOptions, {
       vision: false,
-      instruction: "今は配信者の話に相槌を打つタイミング。"
+      instruction: "今は配信者の話に相槌を打つタイミング。",
+      cause: { type: "speak-now", choice: "backchannel", probability: 0.5, trigger: "transcript", triggerSeq: 0, judgeLatencyMs: 812 }
     });
     assert.deepEqual(h.logged.map((l) => [l.choice, l.action]), [["backchannel", "fire"], ["wait", "none"]], "ターミナルには毎回");
   } finally {
@@ -3912,7 +3932,9 @@ test("cockpit speak-now: 相槌どうしの歯止め — 前の相槌を喋り�
     // 応答・自発は歯止めの外。応答の直後の相槌も止めない（応答は数え始めにしない）。
     await say("四つ目", "respond");
     assert.equal(h.fakeOrch.record.fireCount, 3, "相槌の直後の応答は止めない");
-    assert.deepEqual(h.fakeOrch.record.lastFireOptions, { vision: "preferred" }, "応答は従来どおり");
+    assert.equal(h.fakeOrch.record.lastFireOptions.vision, "preferred", "応答は従来どおり");
+    assert.equal(h.fakeOrch.record.lastFireOptions.instruction, undefined);
+    assert.equal(h.fakeOrch.record.lastFireOptions.cause.choice, "respond");
     clock.now += 8_000;
     await say("五つ目", "initiate");
     await say("六つ目", "backchannel");
@@ -4122,7 +4144,13 @@ test("cockpit speak-now: 判定の失敗はフィードにエラー（selfFire �
     h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "失敗する" });
     h.fakeJudge.calls[0].reject(Object.assign(new Error("タイムアウト（3 秒）"), { latencyMs: 3000 }));
     const row = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "speak-now-judgment");
-    assert.deepEqual(row.data, { kind: "speak-now-judgment", error: "タイムアウト（3 秒）", latencyMs: 3000 });
+    assert.deepEqual(row.data, {
+      kind: "speak-now-judgment",
+      error: "タイムアウト（3 秒）",
+      latencyMs: 3000,
+      trigger: "transcript",
+      triggerSeq: 0
+    });
     assert.equal(h.fakeOrch.record.fireCount, 0);
     assert.deepEqual(h.logged, [{ ok: false, trigger: "transcript", error: "タイムアウト（3 秒）", latencyMs: 3000 }]);
     assert.equal((await getJson(`${h.url}/api/state`)).json.speakStart, "speak-now", "自動で従来へ戻さない");
@@ -4385,7 +4413,15 @@ test("cockpit コメント反応: speak-now では機械的な comment-call を�
 
     h.reactJudge.calls[0].resolve(reactResult("react", 0.92));
     const row = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "comment-judgment");
-    assert.deepEqual(row.data, { kind: "comment-judgment", choice: "react", probability: 0.92, latencyMs: 240, commentId: "msg-9" });
+    assert.deepEqual(row.data, {
+      kind: "comment-judgment",
+      choice: "react",
+      probability: 0.92,
+      latencyMs: 240,
+      commentId: "msg-9",
+      action: "fire",
+      trigger: "comment"
+    });
     const fired = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "comment-react");
     assert.deepEqual(fired.data, { kind: "comment-react", fired: true, reason: null, commentIds: ["msg-9"] });
     assert.equal(h.fakeOrch.record.fireCount, 1);
@@ -4414,7 +4450,7 @@ test("cockpit コメント反応: 反応しないは判定行を出さない・�
     h.reactJudge.calls[0].resolve(reactResult("ignore", 0.8));
     h.reactJudge.calls[1].reject(Object.assign(new Error("タイムアウト（5 秒）"), { latencyMs: 5000 }));
     const err = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "comment-judgment");
-    assert.deepEqual(err.data, { kind: "comment-judgment", error: "タイムアウト（5 秒）", latencyMs: 5000, commentId: "x2" });
+    assert.deepEqual(err.data, { kind: "comment-judgment", error: "タイムアウト（5 秒）", latencyMs: 5000, commentId: "x2", trigger: "comment" });
     await settle();
     assert.equal(h.sse.events.filter((e) => e.event === "selfFire" && e.data.kind === "comment-judgment").length, 1);
     assert.equal(h.fakeOrch.record.fireCount, 0);
@@ -4571,5 +4607,287 @@ test("cockpit コメント判定: 判定できなかった理由に本文が混�
   } finally {
     h.sse.close();
     await h.server.close();
+  }
+});
+
+// ── 操縦席の作り直し 1 回目（データの通り道・cockpit-glance-redesign.md §9）────────────────────────
+//  発火番号ときっかけ・推論の範囲・遅延・残量・警告が SSE / snapshot まで届くことを固定する。画面は 2 回目。
+
+test("cockpit 作り直しデータ: 手動 /api/fire → fire（fireId・cause:manual）・fireAsk（窓の seq）・soul 行の fireId・latency が同じ番号で届く", async () => {
+  const fake = makeOnAppendPipeline();
+  let t = 0;
+  const listeners = new Set();
+  const player = {
+    play() {},
+    subscribeOutput(/** @type {any} */ l) {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    }
+  };
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    fireOrchestratorFactory: (hooks) =>
+      createFireOrchestrator({
+        ...hooks,
+        session: { async ask() { t = 900; return { replyText: "はーい", ttftMs: 600 }; } },
+        speakImpl: /** @type {any} */ (async (_text, deps) => {
+          t = 1000;
+          deps.onTrace("tts.audio_query.started", {});
+          t = 1300;
+          deps.onTrace("tts.synthesis.completed", {});
+          t = 1450;
+          for (const l of [...listeners]) l("STARTED\tx.wav");
+          return { timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "x.wav" };
+        }),
+        channel: { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
+        player,
+        nowImpl: () => 2000,
+        monotonicNowImpl: () => t
+      }),
+    latencyThresholds: { warnSec: 1, alertSec: 2 }
+  });
+  try {
+    const url = await server.listen(0);
+    const sse = openSseClient(`${url}/api/events`);
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    fake.record.buffer.append({ startMs: 0, endMs: 900, text: "ねえ" }); // seq 0
+    fake.record.buffer.append({ startMs: 0, endMs: 900, text: "聞いてる？" }); // seq 1
+    const r = await postJson(`${url}/api/fire`, {});
+    assert.equal(r.status, 202);
+    assert.equal(r.json.fireId, 1);
+
+    const fired = await sse.waitFor((e) => e.event === "fire" && e.data.accepted === true);
+    assert.equal(fired.data.fireId, 1);
+    assert.deepEqual(fired.data.cause, { type: "manual", vision: false });
+    const ask = await sse.waitFor((e) => e.event === "fireAsk");
+    assert.deepEqual(
+      { fireId: ask.data.fireId, first: ask.data.windowFirstSeq, last: ask.data.windowLastSeq, n: ask.data.includedCount, vision: ask.data.vision },
+      { fireId: 1, first: 0, last: 1, n: 2, vision: false }
+    );
+    assert.equal(typeof ask.data.atMs, "number");
+    const soul = await sse.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
+    assert.equal(soul.data.fireId, 1);
+    const lat = await sse.waitFor((e) => e.event === "latency");
+    assert.equal(lat.data.fireId, 1);
+    assert.deepEqual(lat.data.cause, { type: "manual", vision: false });
+    assert.equal(lat.data.spoken, true);
+    assert.deepEqual(lat.data.segments, {
+      transcribeMs: null,
+      judgeMs: null,
+      screenMs: null,
+      llmFirstMs: 600,
+      firstSentenceMs: null,
+      ttsMs: 300,
+      voiceMs: 150
+    });
+    assert.equal(lat.data.totalMs, 1450, "手動は文字起こし・判定なし = 発火の中だけ");
+    assert.equal(lat.data.otherMs, 1450 - 600 - 300 - 150);
+    assert.equal(lat.data.level, "warn", "しきい値は設定値（1 秒超で warn）");
+    assert.equal(lat.data.vision, false);
+    const s = await getJson(`${url}/api/state`);
+    assert.deepEqual(s.json.latencyThresholds, { warnSec: 1, alertSec: 2 });
+    sse.close();
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 作り直しデータ: speak-now の発火の遅延は 文字起こし（きっかけの行）+ 判定 + 発火の中・しきい値の既定は 4 / 6 秒", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeJudge = makeFakeJudge();
+  /** @type {any[]} */ const logged = [];
+  const fakeOrch = makeFakeOrchestrator({
+    fireResult: { fired: true, fireId: 7 },
+    drive: (hooks, record) => {
+      hooks.onLatency({
+        fireId: 7,
+        cause: record.lastFireOptions.cause,
+        vision: false,
+        spoken: true,
+        screenMs: null,
+        llmFirstMs: 2000,
+        firstSentenceMs: 300,
+        ttsMs: 400,
+        voiceMs: 200,
+        inFireMs: 3000,
+        otherMs: 100
+      });
+    }
+  });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    selfFireInitialEnabled: true,
+    speakStartModeInitial: "speak-now",
+    speakNowJudge: fakeJudge.judge,
+    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    nowImpl: () => 1000,
+    onReplyLatency: (rec) => logged.push(rec)
+  });
+  try {
+    const url = await server.listen(0);
+    const sse = openSseClient(`${url}/api/events`);
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    // きっかけの行の文字起こしの遅延（耳の onTranscript の meta）を 512ms にして積む。
+    const entry = fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "チャッピー、どう？" }).entry;
+    fakePipe.record.options.onTranscript(entry, { latencyMs: 512, audioCtx: null });
+    fakeJudge.calls[0].resolve(judgeResult("respond", 0.72));
+    const lat = await sse.waitFor((e) => e.event === "latency");
+    assert.equal(lat.data.fireId, 7);
+    assert.equal(lat.data.cause.type, "speak-now");
+    assert.equal(lat.data.cause.triggerSeq, 0);
+    assert.equal(lat.data.segments.transcribeMs, 512);
+    assert.equal(lat.data.segments.judgeMs, 812);
+    assert.equal(lat.data.totalMs, 512 + 812 + 3000);
+    assert.equal(lat.data.level, "warn", "4.3 秒 = 4 秒超で琥珀（既定）");
+    const fired = await sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "speak-now");
+    assert.equal(fired.data.fireId, 7, "発火結果の行にも番号");
+    assert.equal(logged.length, 1);
+    assert.equal(JSON.stringify(logged).includes("どう？"), false, "ログの口に本文を渡さない");
+    assert.deepEqual((await getJson(`${url}/api/state`)).json.latencyThresholds, { warnSec: 4, alertSec: 6 });
+    sse.close();
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 作り直しデータ: コメント反応のきっかけは commentIds・commentSeqs・確率・判定の遅延", async () => {
+  const h = await startCommentServer();
+  try {
+    h.server.ingestChatMessage({ text: "その武器なに？", displayName: "moco", messageId: "msg-9" });
+    h.reactJudge.calls[0].resolve(reactResult("react", 0.92));
+    await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "comment-react");
+    assert.deepEqual(h.fakeOrch.record.lastFireOptions.cause, {
+      type: "comment-react",
+      commentIds: ["msg-9"],
+      commentSeqs: [0],
+      probabilities: [0.92],
+      judgeLatencyMs: 240
+    });
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 作り直しデータ: 残量は snapshot の quota と SSE quota・残り 20% 未満は警告（5% 未満は alert）・未注入は null", async () => {
+  /** @type {any} */
+  let current = { codex: null, elevenlabs: { remainingPercent: 55.6, used: 4444, limit: 10000, resetsAtMs: 1763164800000, updatedAtMs: 1 } };
+  const listeners = new Set();
+  const quotaSource = {
+    snapshot: () => current,
+    onChange: (/** @type {any} */ fn) => {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    }
+  };
+  const server = createCockpitServer({ quotaSource: /** @type {any} */ (quotaSource) });
+  try {
+    const url = await server.listen(0);
+    const sse = openSseClient(`${url}/api/events`);
+    const first = await sse.waitFor((e) => e.event === "state");
+    assert.equal(first.data.quota.elevenlabs.remainingPercent, 55.6);
+    assert.equal(first.data.quota.codex, null);
+    assert.deepEqual(first.data.warnings, []);
+    current = { ...current, codex: { remainingPercent: 3, usedPercent: 97, resetsAtMs: 1, windowMins: 10080, limited: false, reachedType: null, limitId: "codex", updatedAtMs: 2 } };
+    for (const fn of listeners) fn(current);
+    const q = await sse.waitFor((e) => e.event === "quota");
+    assert.equal(q.data.codex.remainingPercent, 3);
+    const w = await sse.waitFor((e) => e.event === "warnings" && e.data.warnings.length > 0);
+    assert.deepEqual(
+      w.data.warnings.map((x) => [x.id, x.kind, x.severity, x.lifetime]),
+      [["quota-low:codex", "quota-low", "alert", "state"]]
+    );
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.warnings[0].message, "Codex の残りが少ない（3%）");
+    // 直ったら消える。
+    const mark = sse.events.length;
+    current = { ...current, codex: { ...current.codex, remainingPercent: 80 } };
+    for (const fn of listeners) fn(current);
+    await sse.waitFor((e) => sse.events.indexOf(e) >= mark && e.event === "warnings" && e.data.warnings.length === 0);
+    sse.close();
+  } finally {
+    await server.close();
+  }
+  const bare = createCockpitServer({});
+  try {
+    const url = await bare.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.quota, null);
+    assert.deepEqual(s.json.warnings, []);
+  } finally {
+    await bare.close();
+  }
+});
+
+test("cockpit 作り直しデータ: 警告 — 文字起こしの繋ぎ直し中は状態で出て直ったら消える・判定のエラーは一回きり（時間で消える）・残高切れは別の警告", async () => {
+  const h = await startSpeakNowServer({ options: { warningEventTtlMs: 40 } });
+  try {
+    h.fakePipe.record.options.onSttStatus("reconnecting", { reason: "socket closed" });
+    const w1 = await h.sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((x) => x.kind === "stt-reconnecting"));
+    const stt = w1.data.warnings.find((x) => x.kind === "stt-reconnecting");
+    assert.equal(stt.lifetime, "state");
+    assert.equal(stt.expiresAtMs, null);
+    let mark = h.sse.events.length;
+    const after = (/** @type {any} */ e) => h.sse.events.indexOf(e) >= mark;
+    h.fakePipe.record.options.onSttStatus("up", null);
+    await h.sse.waitFor((e) => after(e) && e.event === "warnings" && !e.data.warnings.some((x) => x.kind === "stt-reconnecting"));
+
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "一つ目" });
+    h.fakeJudge.calls[0].reject(Object.assign(new Error("タイムアウト（3 秒）"), { latencyMs: 3000 }));
+    const w2 = await h.sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((x) => x.kind === "judge-error"));
+    const je = w2.data.warnings.find((x) => x.kind === "judge-error");
+    assert.deepEqual([je.lifetime, je.source, je.detail, je.severity], ["event", "speak-now", "タイムアウト（3 秒）", "warn"]);
+    assert.equal(typeof je.expiresAtMs, "number");
+    mark = h.sse.events.length;
+    await h.sse.waitFor((e) => after(e) && e.event === "warnings" && !e.data.warnings.some((x) => x.kind === "judge-error"), 2000);
+
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "二つ目" });
+    h.fakeJudge.calls[1].reject(new Error("HTTP 429: low balance [credit_balance_exhausted]"));
+    const w3 = await h.sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((x) => x.kind === "openai-credit"));
+    const credit = w3.data.warnings.find((x) => x.kind === "openai-credit");
+    assert.equal(credit.severity, "alert");
+    assert.equal(w3.data.warnings.some((x) => x.kind === "judge-error"), false, "残高切れは判定のエラーとは別に出す");
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 作り直しデータ: 警告 — 頭のエラー（fireError）は一回きり・チャットの切断は状態（自分で切ったら消える）", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: false, reason: "error" } });
+  const fakeChat = makeFakeChatClientFactory();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    chatClientFactory: /** @type {any} */ (fakeChat.factory),
+    commentGuard: passAllGuard
+  });
+  try {
+    const url = await server.listen(0);
+    const sse = openSseClient(`${url}/api/events`);
+    await sse.waitFor((e) => e.event === "state");
+    fakeOrch.record.hooks.onDiagnostic({ type: "fireError", message: "Channel URL is not set" });
+    const w1 = await sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((x) => x.kind === "brain-error"));
+    const be = w1.data.warnings.find((x) => x.kind === "brain-error");
+    assert.deepEqual([be.lifetime, be.severity, be.detail], ["event", "alert", "Channel URL is not set"]);
+    fakeOrch.record.hooks.onDiagnostic({ type: "fireError", message: "Channel URL is not set" });
+    const w1b = await sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((x) => x.kind === "brain-error" && x.count === 2));
+    assert.equal(w1b.data.warnings.filter((x) => x.kind === "brain-error").length, 1, "同じ出来事は 1 行で数える");
+
+    await postJson(`${url}/api/chat/connect`, { source: "https://www.youtube.com/watch?v=abc" });
+    fakeChat.last.emitStatus("dead");
+    await sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((x) => x.kind === "chat-disconnected"));
+    const mark = sse.events.length;
+    await postJson(`${url}/api/chat/disconnect`, {});
+    await sse.waitFor(
+      (e) => sse.events.indexOf(e) >= mark && e.event === "warnings" && !e.data.warnings.some((x) => x.kind === "chat-disconnected")
+    );
+    sse.close();
+  } finally {
+    await server.close();
   }
 });

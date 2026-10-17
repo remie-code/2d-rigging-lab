@@ -113,3 +113,24 @@ test("不正 nowMs は throw", () => {
   assert.throws(() => formatFireInjection([], { nowMs: /** @type {any} */ ("x") }), TypeError);
   assert.throws(() => formatFireInjection([], { nowMs: NaN }), TypeError);
 });
+
+test("推論の範囲: 残った行の始まりと終わりの seq（窓と文字上限で落とした後・空窓は null）", () => {
+  const withSeq = (seq, appendedAtMs, text) => ({ ...entry(appendedAtMs, text), seq });
+  const entries = [
+    withSeq(3, 10, "窓の外"),
+    withSeq(4, 1000, "AAAAA"),
+    withSeq(5, 1001, "BBBBB"),
+    withSeq(6, 1002, "CCCCC")
+  ];
+  // 窓で seq 3 を落とし、文字上限（21）で seq 4 を落とす → 範囲は 5〜6。
+  const out = formatFireInjection(entries, { nowMs: 2000, windowMs: 1500, maxChars: 21 });
+  assert.equal(out.firstSeq, 5);
+  assert.equal(out.lastSeq, 6);
+  const empty = formatFireInjection(entries, { nowMs: 10_000_000, windowMs: 1 });
+  assert.equal(empty.firstSeq, null);
+  assert.equal(empty.lastSeq, null);
+  // seq を持たない行（防御的）は null。
+  const noSeq = formatFireInjection([{ text: "x", appendedAtMs: 1000 }], { nowMs: 2000 });
+  assert.equal(noSeq.firstSeq, null);
+  assert.equal(noSeq.lastSeq, null);
+});

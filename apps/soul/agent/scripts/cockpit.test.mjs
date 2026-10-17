@@ -1814,3 +1814,58 @@ test("formatCommentJudgmentLine: 弾く判定・反応する判定の 1 行（�
     "[cockpit] comment-react: id=m6 action=hold\n"
   );
 });
+
+// ── 操縦席の作り直し 1 回目（データ側）: 残量の読み口・遅延のしきい値・遅延の 1 行 ─────────────────────
+
+test("isCodexBrainId / createCodexQuotaReader: 頭が Codex で readRateLimits を持つセッションのときだけ読む（それ以外は null = 不明）", async () => {
+  const { isCodexBrainId, createCodexQuotaReader } = await import("./cockpit.mjs");
+  assert.equal(isCodexBrainId("codex"), true);
+  assert.equal(isCodexBrainId("codex-61-sol"), true);
+  assert.equal(isCodexBrainId("claude"), false);
+  assert.equal(isCodexBrainId("claude-opus-55"), false);
+  assert.equal(isCodexBrainId(undefined), false);
+  let brain = "claude";
+  /** @type {any} */
+  let session = { readRateLimits: async () => ({ rateLimits: { primary: { usedPercent: 1 } } }) };
+  const read = createCodexQuotaReader({ getBrain: () => brain, getSession: () => session });
+  assert.equal(await read(), null, "頭が Claude なら読まない");
+  brain = "codex-61-sol";
+  assert.equal((await read()).rateLimits.primary.usedPercent, 1);
+  session = { ask() {} };
+  assert.equal(await read(), null, "readRateLimits の無いセッション");
+  session = null;
+  assert.equal(await read(), null, "まだセッションが無い");
+});
+
+test("resolveLatencyThresholdsFromSettings: settings の latencyWarnSec / latencyAlertSec・未設定や読めなければ 4 / 6 秒", async () => {
+  const { resolveLatencyThresholdsFromSettings } = await import("./cockpit.mjs");
+  assert.deepEqual(resolveLatencyThresholdsFromSettings({ getLatencyThresholds: () => ({ warnSec: 3, alertSec: 5 }) }), { warnSec: 3, alertSec: 5 });
+  assert.deepEqual(resolveLatencyThresholdsFromSettings({ getLatencyThresholds: () => ({ warnSec: null, alertSec: null }) }), { warnSec: 4, alertSec: 6 });
+  assert.deepEqual(resolveLatencyThresholdsFromSettings({}), { warnSec: 4, alertSec: 6 });
+  assert.deepEqual(
+    resolveLatencyThresholdsFromSettings({
+      getLatencyThresholds: () => {
+        throw new Error("x");
+      }
+    }),
+    { warnSec: 4, alertSec: 6 }
+  );
+});
+
+test("formatReplyLatencyLine: 数字ときっかけの種類だけの 1 行（測れない区間は -）", async () => {
+  const { formatReplyLatencyLine } = await import("./cockpit.mjs");
+  const line = formatReplyLatencyLine({
+    fireId: 3,
+    cause: { type: "speak-now", choice: "respond", triggerSeq: 41 },
+    spoken: true,
+    segments: { transcribeMs: 512.4, judgeMs: 812, screenMs: null, llmFirstMs: 900, firstSentenceMs: 300, ttsMs: 400, voiceMs: 200 },
+    otherMs: 100,
+    totalMs: 3224,
+    level: "ok"
+  });
+  assert.equal(
+    line,
+    "[cockpit] latency: fire=3 cause=speak-now total=3224 level=ok stt=512 judge=812 screen=- llm=900 sentence=300 tts=400 voice=200 other=100\n"
+  );
+  assert.match(formatReplyLatencyLine({ fireId: 4, cause: null, spoken: false, segments: {}, totalMs: null, level: null }), /cause=- total=- level=- .* spoken=no\n$/);
+});

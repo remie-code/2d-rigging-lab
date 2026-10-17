@@ -32,6 +32,11 @@
  *  - 判定を待つ間に配信者が喋り始めても判定は捨てない（VAD はこの部品に入れない）。
  *  - isActive が偽（speak-now モードでない・自発 pill OFF・KILL 中）の間は判定を呼ばない。
  *
+ * ── きっかけの seq（操縦席の作り直し・cockpit-glance-redesign.md §9）──────────────────────────
+ *  判定ごとに、きっかけになった配信者の行の seq（triggerSeq）を判定結果・失敗・発火の要求に載せる。
+ *  transcript のきっかけはその転写の seq、after-busy は判定する時点で最後の配信者の行の seq（無ければ null）。
+ *  発火の要求には選択の確率と判定の遅延も載せる（結線層が発火のきっかけ = cause にする）。
+ *
  * 依存（judge・バッファ・busy・identity・口数・通知先・時計）は全部注入。純ロジックとして fake で
  * 全分岐をテストする。
  */
@@ -146,14 +151,29 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
  * @typedef {"transcript" | "after-busy"} SpeakNowTrigger
  * @typedef {{
  *   trigger: SpeakNowTrigger;
+ *   triggerSeq: number | null;
  *   choice: string;
  *   probability: number | null;
  *   probs: Record<string, number>;
  *   latencyMs: number | null;
  *   action: "fire" | "drop-busy" | "drop-inactive" | "skip-interval" | "none";
  * }} SpeakNowJudgment
- * @typedef {{ trigger: SpeakNowTrigger; message: string; latencyMs: number | null }} SpeakNowJudgeFailure
+ * @typedef {{ trigger: SpeakNowTrigger; triggerSeq: number | null; message: string; latencyMs: number | null }} SpeakNowJudgeFailure
+ * @typedef {{ choice: string; probability: number | null; trigger: SpeakNowTrigger; triggerSeq: number | null; latencyMs: number | null }} SpeakNowFireRequest
  */
+
+/**
+ * エントリ列の最後の配信者（you）の行の seq（after-busy のきっかけ）。無ければ null。
+ * @param {ReadonlyArray<{ speaker?: string; seq?: number }>} entries
+ * @returns {number | null}
+ */
+function lastHostSeq(entries) {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const e = entries[i];
+    if (e && (e.speaker ?? "you") === "you" && typeof e.seq === "number" && Number.isFinite(e.seq)) return e.seq;
+  }
+  return null;
+}
 
 /**
  * speak-now の判定を回す部品を作る。
@@ -165,8 +185,8 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
  * @param {() => boolean} options.isActive  判定を呼んでよいか（speak-now モード・自発 ON・KILL でない）。
  * @param {() => string} options.getName  今の頭の名前（チャッピー / コーディ）。
  * @param {() => string | null | undefined} options.getVerbosity  口数モード（quiet / normal / chatty）。
- * @param {(request: { choice: string }) => void} options.onFire  応答・自発・相槌で発火を要求する（choice で結線層が
- *   発火の仕方を分ける: 相槌は画面なし + 内部指示）。
+ * @param {(request: SpeakNowFireRequest) => void} options.onFire  応答・自発・相槌で発火を要求する（choice で結線層が
+ *   発火の仕方を分ける: 相槌は画面なし + 内部指示）。確率・きっかけの seq・判定の遅延も載る。
  * @param {(judgment: SpeakNowJudgment) => void} [options.onJudgment]  判定結果（待つも含め毎回）。
  * @param {(failure: SpeakNowJudgeFailure) => void} [options.onError]  判定の失敗（キー欠落・タイムアウト等）。
  * @param {() => number} [options.nowImpl=Date.now]  入力の窓の基準時刻（appendedAtMs と同じ時計）。相槌の
@@ -174,7 +194,7 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
  * @param {number} [options.backchannelMinIntervalMs=SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS]  相槌どうしの最小間隔
  *   （前の相槌を喋り始めてから、次の相槌を喋らせない時間）。0 なら歯止めなし。負・非数は既定。
  * @returns {{
- *   handleTranscript: (entry: { speaker?: string } | null) => void;
+ *   handleTranscript: (entry: { speaker?: string; seq?: number } | null) => void;
  *   notifyIdle: () => void;
  *   markBackchannelSpoken: () => void;
  *   reset: () => void;
@@ -221,11 +241,16 @@ export function createSpeakNowController(options) {
     }
   };
 
-  /** @param {SpeakNowTrigger} trigger */
-  const runJudge = (trigger) => {
+  /**
+   * @param {SpeakNowTrigger} trigger
+   * @param {number | null} [seqHint]  きっかけの転写の seq（transcript のとき）。
+   */
+  const runJudge = (trigger, seqHint = null) => {
     const name = getName();
-    const input = buildSpeakNowInput(getEntries() ?? [], { nowMs: nowImpl(), soulName: name });
+    const entries = getEntries() ?? [];
+    const input = buildSpeakNowInput(entries, { nowMs: nowImpl(), soulName: name });
     if (input.length === 0) return; // 窓に会話が無い（判定する材料が無い）。
+    const triggerSeq = typeof seqHint === "number" && Number.isFinite(seqHint) ? seqHint : lastHostSeq(entries);
     const request = {
       input,
       instructions: buildSpeakNowInstructions({ name, verbosity: getVerbosity() }),
@@ -262,15 +287,15 @@ export function createSpeakNowController(options) {
             action = "skip-interval";
           } else action = "fire";
         }
-        safe(() => onJudgment({ trigger, choice, probability, probs, latencyMs, action }));
-        if (action === "fire") safe(() => onFire({ choice }));
+        safe(() => onJudgment({ trigger, triggerSeq, choice, probability, probs, latencyMs, action }));
+        if (action === "fire") safe(() => onFire({ choice, probability, trigger, triggerSeq, latencyMs }));
       },
       (error) => {
         inFlight -= 1;
         if (disposed) return;
         const message = error instanceof Error ? error.message : String(error);
         const latencyMs = error && typeof error.latencyMs === "number" ? error.latencyMs : null;
-        safe(() => onError({ trigger, message, latencyMs }));
+        safe(() => onError({ trigger, triggerSeq, message, latencyMs }));
       }
     );
   };
@@ -278,7 +303,7 @@ export function createSpeakNowController(options) {
   return {
     /**
      * 転写バッファへの append を 1 件食わせる（you 以外は無視）。忙しい間は数えるだけ。
-     * @param {{ speaker?: string } | null} entry
+     * @param {{ speaker?: string; seq?: number } | null} entry
      */
     handleTranscript(entry) {
       if (disposed || entry == null || typeof entry !== "object") return;
@@ -288,7 +313,7 @@ export function createSpeakNowController(options) {
         pending += 1;
         return;
       }
-      runJudge("transcript");
+      runJudge("transcript", typeof entry.seq === "number" ? entry.seq : null);
     },
     /**
      * 忙しさが明けたかもしれないときに呼ぶ（orchestrator が idle に戻った・発火の Promise が片付いた）。

@@ -55,6 +55,8 @@ import {
   resolveConversationInstructionProfile
 } from "../src/mind/fire-orchestrator.mjs";
 import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
+import { resolveLatencyThresholds } from "../src/mind/fire-latency.mjs";
+import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/quota.mjs";
 import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
@@ -951,6 +953,63 @@ export function formatSpeakNowLine(info) {
   );
 }
 
+/**
+ * 頭が Codex 系か（Codex の残量ゲージは頭が Codex のときだけ・cockpit-glance-redesign.md §9.2）。
+ * @param {unknown} brainId
+ */
+export function isCodexBrainId(brainId) {
+  return typeof brainId === "string" && (brainId === "codex" || brainId.startsWith("codex-"));
+}
+
+/**
+ * Codex の使用率の読み口（残量の監視が呼ぶ）。頭が Codex で、今のセッションが App Server を持つ
+ * （readRateLimits がある）ときだけ読む。それ以外は null（不明）。セッションは起動していなければ自分で null を返す
+ * （読むためだけに App Server を起こさない）。
+ * @param {{ getBrain: () => string; getSession: () => any }} deps
+ * @returns {() => Promise<any | null>}
+ */
+export function createCodexQuotaReader(deps) {
+  return async () => {
+    if (!isCodexBrainId(deps.getBrain())) return null;
+    const session = deps.getSession();
+    if (!session || typeof session.readRateLimits !== "function") return null;
+    return session.readRateLimits();
+  };
+}
+
+/**
+ * settings の遅延の「遅い」しきい値（latencyWarnSec / latencyAlertSec）→ cockpit-server の latencyThresholds
+ * （未設定・読めなければ既定 4 / 6 秒）。
+ * @param {{ getLatencyThresholds?: () => { warnSec: number | null; alertSec: number | null } }} settings
+ * @returns {{ warnSec: number; alertSec: number }}
+ */
+export function resolveLatencyThresholdsFromSettings(settings) {
+  let raw = null;
+  try {
+    raw = typeof settings.getLatencyThresholds === "function" ? settings.getLatencyThresholds() : null;
+  } catch {
+    raw = null;
+  }
+  return resolveLatencyThresholds({ warnSec: raw?.warnSec ?? undefined, alertSec: raw?.alertSec ?? undefined });
+}
+
+/**
+ * 返事の遅延のログ 1 行（操縦席の標準出力・数字ときっかけの種類だけ・本文は書かない）。
+ * @param {any} record  cockpit-server の onReplyLatency が渡すレコード。
+ * @returns {string}
+ */
+export function formatReplyLatencyLine(record) {
+  const ms = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) ? String(Math.round(v)) : "-");
+  const seg = record && record.segments ? record.segments : {};
+  const cause = record && record.cause && typeof record.cause.type === "string" ? record.cause.type : "-";
+  return (
+    `[cockpit] latency: fire=${record?.fireId ?? "-"} cause=${cause} total=${ms(record?.totalMs)} level=${record?.level ?? "-"} ` +
+    `stt=${ms(seg.transcribeMs)} judge=${ms(seg.judgeMs)} screen=${ms(seg.screenMs)} llm=${ms(seg.llmFirstMs)} ` +
+    `sentence=${ms(seg.firstSentenceMs)} tts=${ms(seg.ttsMs)} voice=${ms(seg.voiceMs)} other=${ms(record?.otherMs)}` +
+    `${record?.spoken === false ? " spoken=no" : ""}\n`
+  );
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --open                待受け完了後に既定ブラウザを開く（Windows）
@@ -1065,6 +1124,12 @@ async function main() {
   let channelRevision = 0;
   let appliedChannelRevision = 0;
   const fireDiagnostics = createFireDiagnostics();
+  // 残量ゲージの材料（Codex は頭が Codex のときに App Server から・ElevenLabs は 10 分おき・cockpit-glance-redesign.md §9.2）。
+  // 監視は listen の後に始め、終了時に止める。キーやアカウント情報は状態にもログにも載せない。
+  const quotaMonitor = createQuotaMonitor({
+    readCodex: createCodexQuotaReader({ getBrain: () => currentBrain, getSession: () => session }),
+    readElevenLabs: () => fetchElevenLabsSubscription()
+  });
   // 画面キャプチャの撮る係（常駐 PowerShell）。耳の Start で立ち上げ、耳の Stop・操縦席の終了で止める
   // （discussion/ai-cohost/research/vision-capture-latency-2026-10.md §4）。使えない間の撮影は今の
   // captureWindow（毎回起動）に戻る。記録は標準出力へ 1 行（数字と種類だけ）。
@@ -1129,6 +1194,10 @@ async function main() {
           memoryEnabled ? memoryText : ""
         ),
         onWarning: (w) => process.stderr.write(`[cockpit] WARN: ${w}\n`),
+        // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
+        onRateLimits: (/** @type {any} */ rateLimits) => {
+          if (isCodexBrainId(currentBrain)) quotaMonitor.mergeCodexUpdate(rateLimits);
+        },
         onInit: (init) =>
           process.stderr.write(
             `${JSON.stringify({ event: "session_init", model: init.model, apiKeySource: init.apiKeySource, tools: init.tools })}\n`
@@ -1292,6 +1361,8 @@ async function main() {
     brainHooks.onSetBrain(choice); // 次回起動でも復元（file-backed・失敗寛容）。
     currentBrain = choice;
     sessionContextRevision += 1;
+    // Codex の残量は頭が Codex のときだけ（Codex でなくなったら不明に戻す・Codex 同士の切替は同じアカウントなので保つ）。
+    if (!isCodexBrainId(choice)) quotaMonitor.clearCodex();
     process.stdout.write(`[cockpit] brain set: ${choice}\n`);
   };
 
@@ -1380,7 +1451,10 @@ async function main() {
           fireDiagnostics.begin({
             injectedChars: typeof info.injectedChars === "number" ? info.injectedChars : null,
             includedCount: typeof info.includedCount === "number" ? info.includedCount : null,
-            vision: info.vision === true
+            vision: info.vision === true,
+            // 操縦席の発火番号ときっかけの種類（本文なし）で、診断の JSONL と画面のデータを結べるようにする。
+            fireNo: typeof info.fireId === "number" ? info.fireId : null,
+            causeType: info.cause && typeof info.cause.type === "string" ? info.cause.type : null
           });
         }
         hooks.onFire?.(info);
@@ -1393,6 +1467,8 @@ async function main() {
         hooks.onDiagnostic?.(diagnostic);
       },
       onTrace: (trace) => {
+        // 発火のたびに Codex の使用率を読む（ask が済んだ直後・失敗したとき。App Server の起動後にしか読めない）。
+        if (trace?.event === "llm.ask.completed" || trace?.event === "fire.failed") void quotaMonitor.refreshCodex();
         if (trace?.event === "fire.completed") {
           fireDiagnostics.finish({ fired: trace.fired === true, reason: trace.reason ?? null });
           return;
@@ -1524,10 +1600,16 @@ async function main() {
     onSetCommentBusyPolicy: commentBusyHooks.onSetCommentBusyPolicy,
     commentHoldMaxAgeMs: commentHold.maxAgeMs,
     commentHoldMaxCount: commentHold.maxCount,
-    onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info))
+    onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info)),
+    // 操縦席の作り直し 1 回目（データ側）: 残量・遅延のしきい値（settings の latencyWarnSec / latencyAlertSec・既定 4 / 6 秒）・
+    // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
+    quotaSource: quotaMonitor,
+    latencyThresholds: resolveLatencyThresholdsFromSettings(settings),
+    onReplyLatency: (record) => process.stdout.write(formatReplyLatencyLine(record))
   });
 
   const url = await server.listen();
+  quotaMonitor.start();
   process.stdout.write(`[cockpit] listening on ${url} (loopback only)\n`);
   process.stdout.write(`[cockpit] open  ${url}/  in your browser — pick a mic, press Start, speak.\n`);
   const startupUrl = lazyChannel.getUrl();
@@ -1590,6 +1672,7 @@ async function main() {
     } finally {
       // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
       residentCapture.stop();
+      quotaMonitor.stop();
       process.exit(0);
     }
   };

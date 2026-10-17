@@ -34,6 +34,16 @@
  *  で生存接続を即断）。デバイス列挙の spawn タイマは unref。リークするタイマ/ハンドル/子プロセスを
  *  残さない（node:test が自然終了する型）。
  *
+ * ── 操縦席の作り直し 1 回目: 画面へ届けるデータ（cockpit-glance-redesign.md §9）──────────────────
+ *  画面そのものは 2 回目。ここでは画面が使うデータを SSE / snapshot まで届ける（既存の SSE と画面は壊さない）:
+ *   - 発火番号ときっかけ: 発火ごとに `fire({ cause })` できっかけを渡し、orchestrator が振る fireId を
+ *     SSE "fire"（受理）・"fireAsk"・"transcript"（soul 行）・"latency"・"selfFire"（発火結果）に載せる。
+ *     判定の行（selfFire の speak-now-judgment / comment-judgment）には、きっかけの seq と行き先（action）を載せる。
+ *   - 推論の範囲: SSE "fireAsk"（ask の時点の会話の窓の始まりと終わりの seq・復元しない）。
+ *   - 遅延: SSE "latency"（1 返事 1 レコード・区間と合計と区分）。しきい値は snapshot の latencyThresholds。
+ *   - 残量: snapshot の quota と SSE "quota"（Codex / ElevenLabs の残りの割合とリセット時刻・不明は null）。
+ *   - 警告: snapshot の warnings と SSE "warnings"（状態で決まるもの・60 秒で消える出来事・./warnings.mjs）。
+ *
  * ── 既存コードは変更しない ────────────────────────────────────────────
  *  ear-pipeline / transcript-buffer / whisper-server / ffmpeg-capture は購読・呼び出しのみ。
  *  結線に必要なフックは全て既存 API（onVadEvent/onTranscript/onDiagnostic・transcriptBuffer.onDiscard・
@@ -70,6 +80,13 @@ import {
   COMMENT_HOLD_MAX_COUNT
 } from "../mind/comment-react.mjs";
 import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
+import { composeReplyLatency, resolveLatencyThresholds } from "../mind/fire-latency.mjs";
+import {
+  createWarningBoard,
+  isCreditExhaustedError,
+  quotaLowWarning,
+  WARNING_EVENT_TTL_MS
+} from "./warnings.mjs";
 import { resolveBrainIdentity } from "../mind/brains.mjs";
 import { resolveModelIdentity } from "../mind/model-identity.mjs";
 
@@ -344,6 +361,8 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   onExpression: (info: object) => void;
  *   onVisionCaptured: (info: object) => void;
  *   onUsage: (info: object) => void;
+ *   onAsk: (info: object) => void;
+ *   onLatency: (info: object) => void;
  *   initialKilled: boolean;
  * }) => { fire: (fireOptions?: object) => Promise<object>; getState: () => string; dispose: () => void;
  *   kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean }} [options.fireOrchestratorFactory]
@@ -357,6 +376,8 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   経由（diagnostic イベントに kind フィールドが乗る）。**S8**: initialKilled はサーバのキル状態正本
  *   （born-killed・下の `killed` 変数）を生成時に渡す。orchestrator が kill/revive/getKilled を持てば
  *   POST /api/kill がそれらを呼ぶ（未対応でも 503 にはならない・fireOrchestrator 自体の有無だけがゲート）。
+ *   **操縦席の作り直し 1 回目**: onAsk（推論の範囲）は SSE "fireAsk"、onLatency（発火の中の遅延）は文字起こし・判定の
+ *   区間を足して SSE "latency" へ。fire() には `{ cause }`（きっかけ）を渡す。
  *   本番は Domain B が session/speak/channel/player を結線した createFireOrchestrator を返す。
  * @param {boolean} [options.selfFireInitialEnabled=false]
  *   S6「会話が続く」自発発火（呼びかけ/区切り/沈黙）の初期 ON/OFF。既定 OFF。orchestrator 注入時のみ
@@ -506,6 +527,15 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {(info: object) => void} [options.onCommentJudgment]
  *   コメント判定ごとの記録（弾く判定・反応する判定。遅延・結果・コメント ID。コメント本文は渡さない）。
  *   cockpit.mjs が標準出力に 1 行書く（合意 §3）。
+ * @param {{ warnSec?: number; alertSec?: number }} [options.latencyThresholds]
+ *   返事の遅延の合計の「遅い」しきい値（秒・既定 4 / 6・cockpit-glance-redesign.md §9.1）。cockpit.mjs が settings の
+ *   `latencyWarnSec` / `latencyAlertSec` から渡す。snapshot の latencyThresholds に載せ、latency の level に使う。
+ * @param {{ snapshot: () => any; onChange: (fn: (snapshot: any) => void) => (() => void) }} [options.quotaSource]
+ *   残量の正本（./quota.mjs の createQuotaMonitor）。snapshot の quota に載せ、変わったら SSE "quota" と警告を更新する。
+ *   未注入なら quota:null。
+ * @param {(record: object) => void} [options.onReplyLatency]  1 返事の遅延レコード（数字ときっかけの種類だけ・本文なし）。
+ *   cockpit.mjs が標準出力に 1 行書く。
+ * @param {number} [options.warningEventTtlMs=WARNING_EVENT_TTL_MS]  一回きりの警告が消えるまで（テスト注入用）。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -640,6 +670,11 @@ export function createCockpitServer(options = {}) {
       ? Math.floor(options.commentHoldMaxCount)
       : COMMENT_HOLD_MAX_COUNT;
   const onCommentJudgment = typeof options.onCommentJudgment === "function" ? options.onCommentJudgment : null;
+  // 操縦席の作り直し 1 回目（データ側）: 遅延のしきい値・残量の正本・遅延ログの口。
+  const latencyThresholds = resolveLatencyThresholds(options.latencyThresholds);
+  const quotaSource =
+    options.quotaSource && typeof options.quotaSource.snapshot === "function" ? options.quotaSource : null;
+  const onReplyLatency = typeof options.onReplyLatency === "function" ? options.onReplyLatency : null;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -703,6 +738,24 @@ export function createCockpitServer(options = {}) {
   let chatClient = null;
   /** @type {Array<() => void>} チャット器官フックの購読解除（破棄時に全撤去）。 */
   let chatUnsubs = [];
+  /** チャット器官が最後に知らせた状態（connect / 畳むときに戻す・警告の材料）。 */
+  /** @type {string | null} */
+  let lastChatStatus = null;
+  /**
+   * 配信者の行の文字起こしの遅延（seq → ms・遅延の「文字起こし」区間の材料）。直近だけ持つ。
+   * @type {Map<number, number | null>}
+   */
+  const sttLatencyBySeq = new Map();
+  const STT_LATENCY_KEEP = 500;
+  // 上の帯の警告（状態で決まるもの・一回きりの出来事）。変わったら SSE "warnings" で一覧ごと流す。
+  const warningBoard = createWarningBoard({
+    nowImpl,
+    eventTtlMs:
+      typeof options.warningEventTtlMs === "number" && options.warningEventTtlMs > 0 ? options.warningEventTtlMs : WARNING_EVENT_TTL_MS,
+    onChange: (list) => broadcast("warnings", { warnings: list })
+  });
+  /** @type {(() => void) | null} */
+  let quotaUnsub = null;
 
   const health = {
     /** @type {"up" | "down" | "unknown"} */ whisper: "unknown",
@@ -799,8 +852,85 @@ export function createCockpitServer(options = {}) {
         source: typeof chatSourceStatusImpl === "function" ? (chatSourceStatusImpl()?.source ?? null) : null,
         connected: chatClient != null,
         state: chatClient ? chatClient.getState() : null
-      }
+      },
+      // 操縦席の作り直し 1 回目（データ側・cockpit-glance-redesign.md §9）: 残量・警告・遅延のしきい値。
+      quota: quotaSource ? quotaSnapshotSafe() : null,
+      warnings: warningBoard.list(),
+      latencyThresholds: { ...latencyThresholds }
     };
+  }
+
+  /** 残量の今の値（読み口の throw は不明として扱う）。 */
+  function quotaSnapshotSafe() {
+    try {
+      return /** @type {any} */ (quotaSource).snapshot() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 状態で決まる警告を今の状態から決め直す（死活・チャット・残量が変わるたびに呼ぶ）。直ったものは消える。
+   */
+  function refreshStateWarnings() {
+    if (closed) return;
+    // 文字起こし（耳を止めている間は unknown = 警告なし）。
+    const sttLabel = sttEngine === "elevenlabs" ? "ElevenLabs" : "whisper";
+    warningBoard.setCondition(
+      "stt",
+      health.stt === "down"
+        ? { kind: "stt-down", severity: "alert", message: "文字起こしが止まっている", detail: health.sttReason, source: sttEngine }
+        : health.stt === "reconnecting"
+          ? { kind: "stt-reconnecting", severity: "warn", message: `文字起こしを繋ぎ直し中（${sttLabel}）`, detail: health.sttReason, source: sttEngine }
+          : null
+    );
+    warningBoard.setCondition(
+      "mic",
+      health.ffmpeg === "down"
+        ? { kind: "mic-down", severity: "alert", message: "マイクの取り込みが止まっている", detail: health.ffmpegReason }
+        : null
+    );
+    // チャット（繋いでいる間だけ。自分で切ったら警告なし）。
+    const chatState = chatClient ? (lastChatStatus ?? chatClient.getState()) : null;
+    warningBoard.setCondition(
+      "chat",
+      chatState === "dead"
+        ? { kind: "chat-disconnected", severity: "warn", message: "チャットが切れている" }
+        : chatState === "retrying"
+          ? { kind: "chat-reconnecting", severity: "warn", message: "チャットを繋ぎ直し中" }
+          : null
+    );
+    // 残量（残り 20% 未満・5% 未満は赤）と Codex の使用上限。
+    const quota = quotaSource ? quotaSnapshotSafe() : null;
+    warningBoard.setCondition("quota-low:codex", quotaLowWarning("Codex", quota?.codex));
+    warningBoard.setCondition("quota-low:elevenlabs", quotaLowWarning("ElevenLabs", quota?.elevenlabs));
+    warningBoard.setCondition(
+      "codex-limited",
+      quota?.codex?.limited ? { kind: "codex-limited", severity: "alert", message: "Codex の使用上限に達した", detail: quota.codex.reachedType ?? null } : null
+    );
+  }
+
+  /**
+   * 判定のエラーを一回きりの警告にする（OpenAI の残高切れは別の警告）。detail は本文を含まない文言だけを渡す。
+   * @param {"speak-now" | "comment-react" | "comment-guard"} source  @param {string | null | undefined} message
+   */
+  function warnJudgeError(source, message) {
+    if (isCreditExhaustedError(message)) {
+      warningBoard.pushEvent("openai-credit", {
+        kind: "openai-credit",
+        severity: "alert",
+        message: "OpenAI の残高切れ（判定が止まる）",
+        source
+      });
+      return;
+    }
+    warningBoard.pushEvent(`judge-error:${source}`, {
+      kind: "judge-error",
+      severity: "warn",
+      message: "判定のエラー",
+      detail: typeof message === "string" ? message : null,
+      source
+    });
   }
 
   // ── SSE ライブチャネル ─────────────────────────────────────────────
@@ -821,8 +951,9 @@ export function createCockpitServer(options = {}) {
     }
   }
 
-  /** 現在状態を丸ごと push（ヘッダ/フッタの権威スナップショット）。 */
+  /** 現在状態を丸ごと push（ヘッダ/フッタの権威スナップショット）。状態で決まる警告もここで決め直す。 */
   function broadcastState() {
+    refreshStateWarnings();
     broadcast("state", snapshot());
   }
 
@@ -853,6 +984,15 @@ export function createCockpitServer(options = {}) {
       // willRestart=false = 再起動予算切れ/恒久死（capture の再起動耐性が尽きた）。
       // willRestart=true は capture が自己回復するため up のまま（transient blip）。
       setHealth("ffmpeg", "down", `ffmpeg exited (code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`);
+    }
+    // 頭のエラー（発火の失敗）は一回きりの警告にも出す（cockpit-glance-redesign.md §9.2）。
+    if (d && d.type === "fireError") {
+      warningBoard.pushEvent("brain-error", {
+        kind: "brain-error",
+        severity: "alert",
+        message: "頭のエラー",
+        detail: typeof d.message === "string" ? d.message : null
+      });
     }
     // 診断そのものも流す（B が任意で表示できる。健康以外は状態を変えない）。
     // startMs/endMs はゴースト行の対象 span（asrFailure が持つ・S2.5 追撃 domain-f）。
@@ -1005,6 +1145,12 @@ export function createCockpitServer(options = {}) {
           } catch {
             // ログの失敗で耳を止めない。
           }
+        }
+        // 遅延の「文字起こし」区間の材料（この行がきっかけで喋ったときに使う・直近だけ持つ）。
+        if (typeof (/** @type {any} */ (entry).seq) === "number") {
+          const ms = meta && typeof meta.latencyMs === "number" && Number.isFinite(meta.latencyMs) ? meta.latencyMs : null;
+          sttLatencyBySeq.set(/** @type {any} */ (entry).seq, ms);
+          if (sttLatencyBySeq.size > STT_LATENCY_KEEP) sttLatencyBySeq.delete(sttLatencyBySeq.keys().next().value);
         }
         const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
         broadcast("transcript", {
@@ -1270,7 +1416,8 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
-      const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire());
+      // きっかけ = 手動（操縦席のボタン・AHK のホットキー）。
+      const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ cause: { type: "manual", vision: false } }));
       // accepted（発火成功）は 202・busy/empty/ears-not-running/error は 200 に {fired:false,...}。
       const status = /** @type {any} */ (result).fired ? 202 : 200;
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
@@ -1310,7 +1457,9 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
-      const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ vision: true }));
+      const result = await trackFire(() =>
+        /** @type {any} */ (fireOrchestrator).fire({ vision: true, cause: { type: "manual", vision: true } })
+      );
       // accepted（発火成功）は 202・busy/no-target/capture-failed/empty/error は 200 に {fired:false,...}。
       const status = /** @type {any} */ (result).fired ? 202 : 200;
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
@@ -1755,8 +1904,34 @@ export function createCockpitServer(options = {}) {
       audioCtx: null,
       appended: stats.appended,
       discarded: stats.discarded,
-      brain
+      brain,
+      // その返事を出した発火の番号（受理・推論の範囲・遅延と結ぶ・cockpit-glance-redesign.md §9）。
+      fireId: entry && typeof (/** @type {any} */ (entry).fireId) === "number" ? /** @type {any} */ (entry).fireId : null
     });
+  }
+
+  /**
+   * 1 返事の遅延（orchestrator の発火の中の区間）に、文字起こし（きっかけの配信者の行）と判定の区間を足して流す。
+   * @param {any} inFire
+   */
+  function broadcastReplyLatency(inFire) {
+    const cause = inFire && inFire.cause && typeof inFire.cause === "object" ? inFire.cause : null;
+    const triggerSeq = cause && typeof cause.triggerSeq === "number" ? cause.triggerSeq : null;
+    const record = composeReplyLatency(inFire, {
+      transcribeMs: triggerSeq != null ? sttLatencyBySeq.get(triggerSeq) ?? null : null,
+      judgeMs: cause && typeof cause.judgeLatencyMs === "number" ? cause.judgeLatencyMs : null,
+      thresholds: latencyThresholds
+    });
+    const brain = typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null;
+    const payload = { ...record, vision: inFire?.vision === true, brain };
+    broadcast("latency", payload);
+    if (onReplyLatency) {
+      try {
+        onReplyLatency(payload);
+      } catch {
+        // ログの失敗で発火を止めない。
+      }
+    }
   }
 
   /** @type {{ fire: () => Promise<object>; interrupt?: (atMs?: number) => Promise<object>; getState: () => string; dispose: () => void } | null} */
@@ -1778,6 +1953,10 @@ export function createCockpitServer(options = {}) {
       onFire: (info) => broadcast("fire", info),
       onDiagnostic: (diag) => handleDiagnostic(diag),
       onSoulTranscript: (entry) => broadcastSoulTranscript(entry),
+      // 推論の範囲: ask の時点の会話の窓の始まりと終わりの seq（全経路・SSE "fireAsk"）。
+      onAsk: (info) => broadcast("fireAsk", info),
+      // 遅延: 1 返事 1 レコード（SSE "latency"）。
+      onLatency: (info) => broadcastReplyLatency(info),
       // S4「表情が乗る」: 演出適用の語ごとの通知（{word, args?, applied, rejected}）を
       // SSE "expression" として broadcast する（onFire→broadcast("fire") と同型）。ページは
       // fire マーカーと同型の演出イベント行に描く。orchestrator の onExpression ワイヤ契約は
@@ -1867,7 +2046,9 @@ export function createCockpitServer(options = {}) {
         // S7 の comment/comment-call は視覚優先（対象あれば画像付き・無/失敗なら画像なしの通常発火へ
         // 劣化）。手動 Fire は scheduler 非経由で無関係。
         const kind = req && req.kind;
-        requestSelfFire(kind, req && req.kind === "silence" ? { vision: true } : { vision: "preferred" });
+        // きっかけ = スケジューラの語彙（silence = 沈黙・call / turn-end / interjection / comment / comment-call）。
+        const cause = { type: typeof kind === "string" ? kind : "unknown" };
+        requestSelfFire(kind, req && req.kind === "silence" ? { vision: true, cause } : { vision: "preferred", cause });
       }
     });
 
@@ -1890,30 +2071,50 @@ export function createCockpitServer(options = {}) {
       getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
       nowImpl,
       backchannelMinIntervalMs,
-      onFire: ({ choice }) => {
+      onFire: ({ choice, probability, trigger, triggerSeq, latencyMs }) => {
+        // きっかけ = 判定（応答 / 自発 / 相槌 + 確率 + きっかけの配信者の行の seq + 判定の遅延）。
+        const cause = {
+          type: "speak-now",
+          choice,
+          probability: probability ?? null,
+          trigger: trigger ?? null,
+          triggerSeq: triggerSeq ?? null,
+          judgeLatencyMs: latencyMs ?? null
+        };
         if (choice !== "backchannel") {
-          requestSelfFire("speak-now", { vision: "preferred" });
+          requestSelfFire("speak-now", { vision: "preferred", cause });
           return;
         }
         backchannelFirePending = true;
-        requestSelfFire("speak-now", { vision: false, instruction: SPEAK_NOW_BACKCHANNEL_INSTRUCTION }).finally(() => {
+        requestSelfFire("speak-now", { vision: false, instruction: SPEAK_NOW_BACKCHANNEL_INSTRUCTION, cause }).finally(() => {
           backchannelFirePending = false;
         });
       },
       onJudgment: (j) => {
         if (j.choice !== "wait") {
+          // 判定の行: きっかけの seq と行き先（fire / drop-busy / drop-inactive / skip-interval）も載せる（§9）。
           broadcast("selfFire", {
             kind: "speak-now-judgment",
             choice: j.choice,
             probability: j.probability,
-            latencyMs: j.latencyMs
+            latencyMs: j.latencyMs,
+            action: j.action,
+            trigger: j.trigger,
+            triggerSeq: j.triggerSeq ?? null
           });
         }
         reportSpeakNow({ ok: true, ...j });
       },
       onError: (e) => {
-        broadcast("selfFire", { kind: "speak-now-judgment", error: e.message, latencyMs: e.latencyMs });
+        broadcast("selfFire", {
+          kind: "speak-now-judgment",
+          error: e.message,
+          latencyMs: e.latencyMs,
+          trigger: e.trigger,
+          triggerSeq: e.triggerSeq ?? null
+        });
         reportSpeakNow({ ok: false, trigger: e.trigger, error: e.message, latencyMs: e.latencyMs });
+        warnJudgeError("speak-now", e.message);
       }
     });
 
@@ -1935,10 +2136,21 @@ export function createCockpitServer(options = {}) {
       getBusyPolicy: () => commentBusyPolicy,
       getHoldLimits: () => ({ maxAgeMs: commentHoldMaxAgeMs, maxCount: commentHoldMaxCount }),
       nowImpl,
-      onFire: ({ comments }) =>
+      onFire: ({ comments, probabilities, latencyMs }) =>
         requestSelfFire(
           "comment-react",
-          { vision: "preferred", instruction: buildCommentReactFireInstruction(comments, currentSoulName()) },
+          {
+            vision: "preferred",
+            instruction: buildCommentReactFireInstruction(comments, currentSoulName()),
+            // きっかけ = コメント反応（どのコメントか: ID と転写の seq・反応するの確率・判定の遅延）。
+            cause: {
+              type: "comment-react",
+              commentIds: comments.map((c) => c.id),
+              commentSeqs: comments.map((c) => (typeof c.seq === "number" ? c.seq : null)),
+              probabilities: Array.isArray(probabilities) ? probabilities : comments.map(() => null),
+              judgeLatencyMs: typeof latencyMs === "number" ? latencyMs : null
+            }
+          },
           { commentIds: comments.map((c) => c.id) }
         ),
       onJudgment: (j) => {
@@ -1948,14 +2160,18 @@ export function createCockpitServer(options = {}) {
             choice: j.choice,
             probability: j.probability,
             latencyMs: j.latencyMs,
-            commentId: j.commentId
+            commentId: j.commentId,
+            // 行き先（fire / hold-busy / drop-busy / drop-inactive）ときっかけ（comment / after-busy）。
+            action: j.action,
+            trigger: j.trigger
           });
         }
         reportComment({ stage: "react", ok: true, ...j });
       },
       onError: (e) => {
-        broadcast("selfFire", { kind: "comment-judgment", error: e.message, latencyMs: e.latencyMs, commentId: e.commentId });
+        broadcast("selfFire", { kind: "comment-judgment", error: e.message, latencyMs: e.latencyMs, commentId: e.commentId, trigger: e.trigger });
         reportComment({ stage: "react", ok: false, trigger: e.trigger, commentId: e.commentId, error: e.message, latencyMs: e.latencyMs });
+        warnJudgeError("comment-react", e.message);
       },
       onSkip: (s) => reportComment({ stage: "react", ok: true, skipped: true, commentId: s.commentId, action: s.action })
     });
@@ -1968,8 +2184,8 @@ export function createCockpitServer(options = {}) {
    * 失敗で常駐を殺さない）。結果（fired/reason）が判明してから broadcast する（同期 throw も非同期
    * rejection もどちらも "fired:false" として扱う）。
    * @param {string | undefined} kind
-   * @param {{ vision: boolean | "preferred"; instruction?: string }} fireOptions  vision:false は画面を撮らない通常発火
-   *   （speak-now の相槌）。
+   * @param {{ vision: boolean | "preferred"; instruction?: string; cause?: object }} fireOptions  vision:false は画面を撮らない通常発火
+   *   （speak-now の相槌）。cause はきっかけ（orchestrator が受理・遅延に載せる）。
    * @param {object} [extra]  selfFire SSE に足す付随情報（コメント反応の commentIds = どのコメントで発火したか）。
    * @returns {Promise<void>}  発火の結果を放送し終えたら片付く（reject しない）。
    */
@@ -1977,11 +2193,14 @@ export function createCockpitServer(options = {}) {
     try {
       return trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
         .then((result) => {
+          const fireId = result && typeof (/** @type {any} */ (result).fireId) === "number" ? /** @type {any} */ (result).fireId : null;
           broadcast("selfFire", {
             kind,
             fired: !!(result && /** @type {any} */ (result).fired),
             reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null,
-            ...extra
+            ...extra,
+            // 受理した発火の番号（受理・返事・遅延と結ぶ）。受理しなかった発火には付けない。
+            ...(fireId != null ? { fireId } : {})
           });
         })
         .catch((error) => {
@@ -2015,6 +2234,19 @@ export function createCockpitServer(options = {}) {
       if (speakNow) speakNow.notifyIdle();
       if (commentReact) commentReact.notifyIdle();
     });
+  }
+
+  // 残量: 変わったら SSE "quota" で流し、残量の警告を決め直す（cockpit-glance-redesign.md §9.2）。
+  if (quotaSource && typeof quotaSource.onChange === "function") {
+    try {
+      quotaUnsub = quotaSource.onChange((q) => {
+        if (closed) return;
+        broadcast("quota", q ?? null);
+        refreshStateWarnings();
+      });
+    } catch {
+      quotaUnsub = null;
+    }
   }
 
   /**
@@ -2167,6 +2399,8 @@ export function createCockpitServer(options = {}) {
         });
         if (head.decision.pass) commitComment(head);
         else rejectComment(head);
+        // 判定できずに弾いた（キー欠落・タイムアウト等）は判定のエラーの警告にも出す（理由は本文を伏せた文言）。
+        if (!head.decision.pass && head.decision.kind === "error") warnJudgeError("comment-guard", head.decision.error);
       } catch (error) {
         handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
       }
@@ -2241,7 +2475,9 @@ export function createCockpitServer(options = {}) {
    */
   function broadcastChatStatus(status) {
     if (closed) return;
-    broadcast("chatStatus", { status: typeof status === "string" ? status : String(status) });
+    lastChatStatus = typeof status === "string" ? status : String(status);
+    broadcast("chatStatus", { status: lastChatStatus });
+    refreshStateWarnings();
   }
 
   /**
@@ -2274,6 +2510,7 @@ export function createCockpitServer(options = {}) {
       }
     }
     chatUnsubs = [];
+    lastChatStatus = null;
     if (chatClient) {
       const c = chatClient;
       chatClient = null;
@@ -2407,6 +2644,15 @@ export function createCockpitServer(options = {}) {
         commentReact = null;
       }
       guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が closed で無視する。
+      warningBoard.dispose(); // 一回きりの警告の消えるタイマを残さない。
+      if (quotaUnsub) {
+        try {
+          quotaUnsub();
+        } catch {
+          // best-effort
+        }
+        quotaUnsub = null;
+      }
       if (fireOrchestrator) {
         try {
           fireOrchestrator.dispose();

@@ -19,8 +19,11 @@
  *  （安全弁はベストエフォート——単一発話が maxChars を超えても空注入にはしない・発火判定を殺さない）。
  *
  * ── 出力 ────────────────────────────────────────────────────────────────
- *  { text, includedCount, charCount, droppedByWindow, droppedByLimit }。
+ *  { text, includedCount, charCount, droppedByWindow, droppedByLimit, firstSeq, lastSeq }。
  *  空窓（includedCount===0・text===""）は発火オーケストレータが「ask を無駄撃ちしない」判定に使う。
+ *  firstSeq / lastSeq は注入に残った行の始まりと終わりの seq（転写バッファの seq・空窓や seq が無い行は null）。
+ *  操縦席の「推論に使った範囲」の材料（discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.2）。
+ *  窓は常に末尾から連続する（窓で絞り・古い方から落とすだけ）ので、範囲は始まりと終わりの 2 つで表せる。
  */
 
 /** 注入窓の既定（直近 5 分・wave 計画 §2 裁定 2）。設定で差し替え可能。 */
@@ -72,13 +75,13 @@ function joinedLength(lines) {
 /**
  * 会話ログを Fire 注入テキストへ整形する（純関数）。
  *
- * @param {ReadonlyArray<{ text: string; speaker?: string; displayName?: string; appendedAtMs: number }>} entries
+ * @param {ReadonlyArray<{ seq?: number; text: string; speaker?: string; displayName?: string; appendedAtMs: number }>} entries
  *   転写バッファの all() が返す形（seq 昇順 = 時系列）。viewer エントリは displayName を持ちうる。
  * @param {object} options
  * @param {number} options.nowMs  現在の壁時計（窓の起点・注入必須）。
  * @param {number} [options.windowMs=FIRE_WINDOW_MS]  窓幅（ミリ秒）。
  * @param {number} [options.maxChars=FIRE_MAX_CHARS]  注入テキストの文字数上限。
- * @returns {{ text: string; includedCount: number; charCount: number; droppedByWindow: number; droppedByLimit: number }}
+ * @returns {{ text: string; includedCount: number; charCount: number; droppedByWindow: number; droppedByLimit: number; firstSeq: number | null; lastSeq: number | null }}
  */
 export function formatFireInjection(entries, options = /** @type {any} */ ({})) {
   const nowMs = options.nowMs;
@@ -114,11 +117,16 @@ export function formatFireInjection(entries, options = /** @type {any} */ ({})) 
   }
 
   const text = kept.join("\n");
+  // 残った行（inWindow の末尾 kept.length 件）の始まりと終わりの seq。
+  const keptEntries = inWindow.slice(inWindow.length - kept.length);
+  const seqOf = (/** @type {any} */ e) => (e && typeof e.seq === "number" && Number.isFinite(e.seq) ? e.seq : null);
   return {
     text,
     includedCount: kept.length,
     charCount: text.length,
     droppedByWindow,
-    droppedByLimit
+    droppedByLimit,
+    firstSeq: keptEntries.length > 0 ? seqOf(keptEntries[0]) : null,
+    lastSeq: keptEntries.length > 0 ? seqOf(keptEntries[keptEntries.length - 1]) : null
   };
 }

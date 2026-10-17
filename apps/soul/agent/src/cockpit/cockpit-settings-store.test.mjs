@@ -976,3 +976,20 @@ test("settings store: 相槌どうしの最小間隔はファイルのキー bac
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: 遅延の「遅い」しきい値はファイルのキー latencyWarnSec / latencyAlertSec から読む（cockpit-glance-redesign.md §9.1）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: null, alertSec: null }, "未作成 = 既定（4 / 6 秒は呼び出し側）");
+    writeFileSync(path, JSON.stringify({ latencyWarnSec: 3.5, latencyAlertSec: 5 }), "utf8");
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: 3.5, alertSec: 5 });
+    store.setSpeakStartMode("classic");
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: 3.5, alertSec: 5 }, "他のキーの set で消えない");
+    writeFileSync(path, JSON.stringify({ latencyWarnSec: "4", latencyAlertSec: 0 }), "utf8");
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: null, alertSec: null }, "数でない・正でない値は既定");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

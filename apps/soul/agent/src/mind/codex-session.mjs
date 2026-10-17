@@ -412,6 +412,8 @@ function turnIdFromNotification(message) {
  * @param {number} [options.rpcTimeoutMs]
  * @param {number} [options.disposeRpcTimeoutMs]
  * @param {number} [options.shutdownTimeoutMs]
+ * @param {(rateLimits: any) => void} [options.onRateLimits]  App Server の `account/rateLimits/updated` 通知（使用率の
+ *   差分・RateLimitSnapshot をそのまま渡す）。操縦席の残量ゲージがマージする（cockpit-glance-redesign.md §9.2）。
  */
 export function createCodexSession(options = {}) {
   const systemPrompt = `${options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT}`;
@@ -479,6 +481,11 @@ export function createCodexSession(options = {}) {
   const dispatchNotification = (generation, message) => {
     const active = activeAsk;
     const method = message.method;
+    // 使用率の差分は turn に属さない（いつ来てもよい）。本文を含まない数値だけの通知なので、そのまま渡す。
+    if (method === "account/rateLimits/updated") {
+      try { options.onRateLimits?.(message.params?.rateLimits ?? null); } catch {}
+      return;
+    }
     const turnScoped = method === "turn/started" || method === "turn/completed" || method === "item/started" ||
       method === "item/completed" || method === "item/agentMessage/delta" ||
       method === "thread/tokenUsage/updated" || method === "error";
@@ -687,6 +694,19 @@ export function createCodexSession(options = {}) {
           try { unlinkSync(filePath); } catch {}
         }
       }
+    },
+
+    /**
+     * Codex の使用率を読む（`account/rateLimits/read`・reset credit の詳細は省いて速く読む）。App Server が
+     * 起動・初期化済みのときだけ読み、まだ起動していなければ null（読むためだけに起こさない）。
+     * 返り値は GetAccountRateLimitsResponse そのまま（正規化は呼び出し側）。失敗は throw。
+     * @returns {Promise<any | null>}
+     */
+    async readRateLimits() {
+      if (disposed) return null;
+      const live = connection;
+      if (!live || !live.initialized || live.closed || live.closing) return null;
+      return live.request("account/rateLimits/read", { excludeResetCreditDetails: true });
     },
 
     threadIds,

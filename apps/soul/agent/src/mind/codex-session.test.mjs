@@ -109,6 +109,9 @@ function makeSpawnHarness(specForProcess = () => ({})) {
         turnRequests.push(message);
         if (spec.onTurn) spec.onTurn(message, api, child);
         else successfulTurn(api, message, spec.replyText ?? "はい。", spec.successOptions);
+      } else if (message.method === "account/rateLimits/read") {
+        if (spec.onRateLimits) spec.onRateLimits(message, api, child);
+        else api.response(message, { ordinaryUsageAllowed: true, rateLimits: { primary: { usedPercent: 12, windowDurationMins: 10080, resetsAt: 1700000000 } } });
       } else if (message.method === "turn/interrupt" || message.method === "thread/delete") {
         if (spec.onCleanup) spec.onCleanup(message, api, child);
         else api.response(message, {});
@@ -520,5 +523,42 @@ test("codex-session: exact-id ledger sweep and dispose cleanup never delete byst
     assert.equal(existsSync(ownCurrent), false);
     assert.equal(existsSync(bystander), true);
     assert.deepEqual(JSON.parse(readFileSync(scratch.ledgerPath, "utf8")).threadIds, []);
+  });
+});
+
+test("codex-session: readRateLimits は起動前は null（読むために起こさない）・起動後は account/rateLimits/read（詳細省略）を返す", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness();
+    const session = createTestSession(harness, scratch);
+    assert.equal(await session.readRateLimits(), null);
+    assert.equal(harness.children.length, 0, "起動していなければ spawn しない");
+    await session.ask("やあ");
+    const read = await session.readRateLimits();
+    assert.equal(read.rateLimits.primary.usedPercent, 12);
+    const req = harness.children[0].messages.find((m) => m.method === "account/rateLimits/read");
+    assert.deepEqual(req.params, { excludeResetCreditDetails: true });
+    await session.dispose();
+    assert.equal(await session.readRateLimits(), null, "畳んだ後は null");
+  });
+});
+
+test("codex-session: account/rateLimits/updated 通知は onRateLimits へ（turn の外でも・警告ログに落とさない）", async () => {
+  await withScratch(async (scratch) => {
+    const warnings = [];
+    const updates = [];
+    const harness = makeSpawnHarness(() => ({
+      onTurn: (request, api) => {
+        api.notification("account/rateLimits/updated", { rateLimits: { primary: { usedPercent: 40, windowDurationMins: 10080, resetsAt: null } } });
+        successfulTurn(api, request, "うん。");
+      }
+    }));
+    const session = createTestSession(harness, scratch, {
+      onWarning: (w) => warnings.push(w),
+      onRateLimits: (r) => updates.push(r)
+    });
+    await session.ask("やあ");
+    assert.deepEqual(updates, [{ primary: { usedPercent: 40, windowDurationMins: 10080, resetsAt: null } }]);
+    assert.equal(warnings.some((w) => w.includes("rateLimits")), false);
+    await session.dispose();
   });
 });

@@ -3327,3 +3327,274 @@ test("fire({vision:false, instruction}): 画面を撮らない通常発火の as
   assert.equal(JSON.stringify(buffer.all()).includes("相槌を打つタイミング"), false, "会話ログに残らない");
   orch.dispose();
 });
+
+// ── 操縦席の作り直し 1 回目（データの通り道）: 発火番号・きっかけ・推論の範囲・遅延 ─────────────────
+//  discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9。
+
+/** 手で進める単調時計（遅延の区間を決定論で測る）。 */
+function makeClock(start = 0) {
+  let t = start;
+  return { now: () => t, set: (v) => { t = v; }, add: (d) => { t += d; } };
+}
+
+/** "STARTED\t<path>" を流せる一括の読み上げ用 player（subscribeOutput あり）。 */
+function makeLegacyPlayer() {
+  const listeners = new Set();
+  return {
+    play() {},
+    subscribeOutput(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    emit(line) {
+      for (const l of [...listeners]) l(line);
+    },
+    listenerCount: () => listeners.size
+  };
+}
+
+test("発火番号: 受理ごとに 1 から振り、受理・ask・soul 追記・遅延・戻り値に同じ番号ときっかけが載る", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const fires = [];
+  const asks = [];
+  const souls = [];
+  const latencies = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "うん", ttftMs: 321 }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onFire: (f) => fires.push(f),
+    onAsk: (a) => asks.push(a),
+    onSoulTranscript: (e) => souls.push(e),
+    onLatency: (l) => latencies.push(l)
+  });
+  const cause = { type: "speak-now", choice: "respond", probability: 0.72, triggerSeq: 0 };
+  const r1 = await orch.fire({ cause });
+  assert.equal(r1.fireId, 1);
+  assert.equal(fires[0].fireId, 1);
+  assert.deepEqual(fires[0].cause, cause);
+  assert.equal(asks.length, 1);
+  assert.deepEqual(
+    { fireId: asks[0].fireId, first: asks[0].windowFirstSeq, last: asks[0].windowLastSeq, n: asks[0].includedCount, vision: asks[0].vision },
+    { fireId: 1, first: 0, last: 0, n: 1, vision: false }
+  );
+  assert.equal(souls[0].fireId, 1);
+  assert.equal(souls[0].speaker, "soul");
+  assert.equal(latencies.length, 1, "1 返事 1 回");
+  assert.equal(latencies[0].fireId, 1);
+  assert.deepEqual(latencies[0].cause, cause);
+  assert.equal(latencies[0].llmFirstMs, 321, "delta の無い頭は session の ttftMs");
+  assert.equal(latencies[0].spoken, true);
+  assert.equal(latencies[0].voiceMs, null, "STARTED を見られない player では声の区間は測れない");
+
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  const r2 = await orch.fire();
+  assert.equal(r2.fireId, 2);
+  assert.equal(fires[1].cause, null, "cause 無しの手動は null");
+  assert.deepEqual([asks[1].windowFirstSeq, asks[1].windowLastSeq], [0, 2], "窓は末尾から連続（you, soul, you）");
+  orch.dispose();
+});
+
+test("発火番号: 受理しなかった発火（耳未起動・空窓）は番号を振らず、cause は棄却の通知にも載る", { timeout: 5000 }, async () => {
+  const fires = [];
+  /** @type {any} */
+  let buffer = null;
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "うん" }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onFire: (f) => fires.push(f)
+  });
+  const cause = { type: "manual", vision: false };
+  const r = await orch.fire({ cause });
+  assert.equal(r.reason, "ears-not-running");
+  assert.equal(r.fireId, undefined);
+  assert.deepEqual(fires[0], { accepted: false, reason: "ears-not-running", cause });
+  buffer = createTranscriptBuffer();
+  const empty = await orch.fire({ cause });
+  assert.equal(empty.reason, "empty-window");
+  assert.deepEqual(fires[1], { accepted: false, reason: "empty-window", cause });
+  buffer.append({ startMs: 0, endMs: 1, text: "やあ" });
+  const ok = await orch.fire({ cause });
+  assert.equal(ok.fireId, 1, "棄却は番号を消費しない");
+  orch.dispose();
+});
+
+test("推論の範囲: 画面ありの発火も ask の時点で窓の始まりと終わりの seq を通知する（受理はキャプチャ前）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("画面見て");
+  buffer.append({ startMs: 0, endMs: 0, text: "ほら", speaker: "you" });
+  const asks = [];
+  const fires = [];
+  const latencies = [];
+  const clock = makeClock(1000);
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => { clock.add(200); return { replyText: "見えた", ttftMs: 150 }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "テストゲーム",
+    captureImpl: async () => { clock.add(600); return { jpegBase64: "AAAA", width: 10, height: 10, elapsedMs: 580 }; },
+    monotonicNowImpl: clock.now,
+    onFire: (f) => fires.push(f),
+    onAsk: (a) => asks.push(a),
+    onLatency: (l) => latencies.push(l)
+  });
+  const r = await orch.fire({ vision: true, cause: { type: "manual", vision: true } });
+  assert.equal(r.fired, true);
+  assert.equal(fires[0].accepted, true);
+  assert.equal(fires[0].fireId, 1);
+  assert.equal(fires[0].includedCount, undefined, "画面ありの受理は撮影前なので窓をまだ持たない（範囲は onAsk）");
+  assert.deepEqual(
+    [asks[0].fireId, asks[0].windowFirstSeq, asks[0].windowLastSeq, asks[0].vision],
+    [1, 0, 1, true]
+  );
+  assert.equal(latencies[0].screenMs, 580, "画面 = キャプチャの elapsedMs");
+  assert.equal(latencies[0].vision, true);
+  orch.dispose();
+});
+
+test("推論の範囲: 画面優先（preferred）の劣化フォールバックでも ask の時点で範囲を通知する", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("呼んだ？");
+  const asks = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "うん" }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "テストゲーム",
+    captureImpl: /** @type {any} */ (async () => ({ error: { kind: "not-found", message: "x" } })),
+    onAsk: (a) => asks.push(a)
+  });
+  const r = await orch.fire({ vision: "preferred" });
+  assert.equal(r.fired, true);
+  assert.equal(asks.length, 1);
+  assert.deepEqual([asks[0].windowFirstSeq, asks[0].windowLastSeq, asks[0].vision], [0, 0, false]);
+  orch.dispose();
+});
+
+test("遅延（一括の読み上げ）: TTS = audio_query 開始→合成完了、声 = 合成完了→STARTED、声が鳴った時点で 1 回だけ通知", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("Claude 経路");
+  const clock = makeClock(0);
+  const player = makeLegacyPlayer();
+  const latencies = [];
+  /** @type {number | null} */
+  let latencyAtStart = null;
+  const speakImpl = async (_text, deps) => {
+    clock.set(1500);
+    deps.onTrace("tts.audio_query.started", { speechChars: 3 });
+    clock.set(1900);
+    deps.onTrace("tts.synthesis.completed", { wavBytes: 10 });
+    clock.set(2100);
+    player.emit("STARTED\tC:/tmp/fake.wav");
+    latencyAtStart = latencies.length;
+    return { timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "C:/tmp/fake.wav" };
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => { clock.set(1300); return { replyText: "はい", ttftMs: 700 }; } },
+    speakImpl: /** @type {any} */ (speakImpl),
+    channel: fakeChannel,
+    player,
+    monotonicNowImpl: clock.now,
+    onLatency: (l) => latencies.push(l)
+  });
+  const r = await orch.fire();
+  assert.equal(r.fired, true);
+  assert.equal(latencyAtStart, 1, "STARTED を見た時点で通知（喋り終わりを待たない）");
+  assert.equal(latencies.length, 1);
+  const l = latencies[0];
+  assert.equal(l.llmFirstMs, 700);
+  assert.equal(l.firstSentenceMs, null, "一括の読み上げには最初の文の区間がない");
+  assert.equal(l.ttsMs, 400);
+  assert.equal(l.voiceMs, 200);
+  assert.equal(l.screenMs, null);
+  assert.equal(l.inFireMs, 2100, "fire() 呼び出し→声が鳴り始めるまで");
+  assert.equal(l.otherMs, 2100 - 700 - 400 - 200, "名前の付いた区間の残り（Claude は最初の文字以降の生成が主）");
+  assert.equal(player.listenerCount(), 0, "再生が終わったら STARTED の購読を外す");
+  orch.dispose();
+});
+
+test("遅延（文ごとの読み上げ）: LLM 最初の文字 = ask→first delta、最初の文 = first delta→最初の安全な文、最初の文の TTS と STARTED", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("二文で");
+  const clock = makeClock(0);
+  const player = makeProgressivePlayer();
+  const latencies = [];
+  const channel = {
+    async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; },
+    async sendSet() { return { result: "accepted", error: null, rttMs: 1 }; }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(_input, askOptions) {
+        clock.set(800);
+        askOptions.onTextDelta("一");
+        clock.set(1000);
+        askOptions.onTextDelta("。");
+        return { replyText: "一。", elapsedMs: 55, ttftMs: 999 };
+      }
+    },
+    speakImpl: /** @type {any} */ (async () => {}),
+    channel,
+    player,
+    progressivePlayback: true,
+    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
+      ...options,
+      prepareSpeechImpl: /** @type {any} */ (async (text, deps) => {
+        clock.set(1100);
+        deps.onTrace("tts.audio_query.started", { speechChars: text.length });
+        clock.set(1500);
+        deps.onTrace("tts.synthesis.completed", { wavBytes: 10 });
+        return progressiveArtifact(text);
+      }),
+      cleanupArtifact: () => {}
+    }),
+    monotonicNowImpl: clock.now,
+    onLatency: (l) => latencies.push(l)
+  });
+  const firePromise = orch.fire();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  clock.set(1700);
+  emitProgressiveOwned(player, "STARTED", 0);
+  assert.equal(latencies.length, 1, "最初の文の STARTED で通知");
+  emitProgressiveOwned(player, "ENDED", 0);
+  const r = await firePromise;
+  assert.equal(r.fired, true);
+  assert.equal(latencies.length, 1);
+  const l = latencies[0];
+  assert.equal(l.llmFirstMs, 800, "orchestrator が測った first delta を session の ttftMs より優先");
+  assert.equal(l.firstSentenceMs, 200);
+  assert.equal(l.ttsMs, 400);
+  assert.equal(l.voiceMs, 200);
+  assert.equal(l.inFireMs, 1700);
+  orch.dispose();
+});
+
+test("遅延: 声が鳴らずに終わった返事（空応答）も ask した回は spoken:false で 1 回だけ通知・ask 前に止まった発火は通知しない", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("空で返して");
+  const latencies = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "" }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => null,
+    onLatency: (l) => latencies.push(l)
+  });
+  const r = await orch.fire();
+  assert.equal(r.reason, "empty-reply");
+  assert.equal(latencies.length, 1);
+  assert.equal(latencies[0].spoken, false);
+  assert.equal(latencies[0].inFireMs, null);
+  await orch.fire({ vision: true }); // 対象未設定 = ask しない。
+  assert.equal(latencies.length, 1);
+  orch.dispose();
+});
