@@ -730,6 +730,11 @@ export function createCockpitServer(options = {}) {
   // fire() は single-flight で、相槌の発火は「忙しくない」ときにしか要求しないので、この間の speaking は
   // その相槌のもの。
   let backchannelFirePending = false;
+  // 隙間で手動の圧縮（context-growth-2026-10.md §6）の材料: 配信者が今喋っているか（VAD の speechStart から
+  // speechEnd / speechCancel まで）と、喋り終わりの時刻（壁時計）。getQuietGap() が読む。
+  let userSpeaking = false;
+  /** @type {number | null} */
+  let lastSpeechEndAtMs = null;
   // S7「視聴者が混ざる」チャット器官（cockpit-server 所有・POST 駆動遅延起動＝ear-pipeline の流儀）。
   // POST /api/chat/connect で chatClientFactory から生成し start()・onMessage/onStatus/onDiagnostic を
   // 取り込み経路（ingestChatMessage/broadcastChatStatus/broadcastChatDiagnostic）へ繋ぐ。POST
@@ -1109,6 +1114,11 @@ export function createCockpitServer(options = {}) {
         ...(inputFormat ? { inputFormat } : {})
       },
       onVadEvent: (e) => {
+        if (e && e.type === "speechStart") userSpeaking = true;
+        else if (e && (e.type === "speechEnd" || e.type === "speechCancel")) {
+          userSpeaking = false;
+          lastSpeechEndAtMs = nowImpl();
+        }
         broadcast("vad", {
           type: e.type,
           tMs: e.tMs,
@@ -2583,6 +2593,49 @@ export function createCockpitServer(options = {}) {
     earsStatus: () => earsState,
     /** 発火状態（idle/thinking/speaking）。orchestrator 未注入なら null。 */
     fireState: () => (fireOrchestrator ? fireOrchestrator.getState() : null),
+    /**
+     * 隙間で手動の圧縮（context-growth-2026-10.md §6）の材料（additive な内部 JS API・HTTP/SSE の契約ではない）。
+     * soulIdle = orchestrator が idle で、サーバが呼んだ fire() も片付いている。judging = 話し始め・コメント反応の
+     * 判定が進行中か積み残しがある、または弾く判定の待ち行列がある。userSpeaking / lastSpeechEndAtMs = 配信者の
+     * VAD（耳が止まっていれば喋っていない扱い）。orchestrator 未注入なら null（圧縮しない）。
+     * @returns {{ soulIdle: boolean; judging: boolean; userSpeaking: boolean; lastSpeechEndAtMs: number | null } | null}
+     */
+    getQuietGap() {
+      if (!fireOrchestrator) return null;
+      const judging =
+        (speakNow != null && (speakNow.inFlight() > 0 || speakNow.pendingWhileBusy() > 0)) ||
+        (commentReact != null && (commentReact.inFlight() > 0 || commentReact.heldCount() > 0)) ||
+        guardQueue.length > 0;
+      return {
+        soulIdle: fireInFlight === 0 && fireOrchestrator.getState() === "idle",
+        judging,
+        userSpeaking: pipeline != null && userSpeaking,
+        lastSpeechEndAtMs
+      };
+    },
+    /**
+     * 圧縮の開始・終了をログのタブへ 1 行（SSE "diagnostic" type:"contextCompaction"・メイン画面は使わない）。
+     * 数字と種類だけ（本文なし）。kind = "started" | "finished" | "failed"、elapsedMs = 所要時間。
+     * @param {{ phase: "started" | "finished" | "failed"; ratio?: number | null; durationMs?: number | null; reason?: string | null; personaInjected?: boolean }} info
+     */
+    broadcastContextCompaction(info) {
+      if (closed) return;
+      broadcast("diagnostic", {
+        type: "contextCompaction",
+        message: null,
+        reason: info && typeof info.reason === "string" ? info.reason : null,
+        startMs: null,
+        endMs: null,
+        tag: null,
+        kind: info && typeof info.phase === "string" ? info.phase : null,
+        elapsedMs: info && typeof info.durationMs === "number" ? info.durationMs : null,
+        charsSpoken: null,
+        totalChars: null,
+        prefix: null,
+        ratio: info && typeof info.ratio === "number" ? info.ratio : null,
+        personaInjected: info?.personaInjected === true
+      });
+    },
     /**
      * 自発発火の ON/OFF を切り替える（S6・Domain D の永続トグルが呼ぶ継ぎ目）。scheduler 未生成
      * （orchestrator 未注入）なら no-op。返り値は反映後の enabled（scheduler 無しは false）。

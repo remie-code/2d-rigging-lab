@@ -4891,3 +4891,54 @@ test("cockpit 作り直しデータ: 警告 — 頭のエラー（fireError）�
     await server.close();
   }
 });
+
+// ── 隙間で手動の圧縮の材料とログの 1 行（context-growth-2026-10.md §6）─────────────────────────
+
+test("cockpit getQuietGap: orchestrator 未注入は null・チャッピーの忙しさと配信者の VAD（喋っている / 喋り終わりの時刻）を返す", async () => {
+  const bare = createCockpitServer({});
+  assert.equal(bare.getQuietGap(), null);
+  await bare.close();
+  const pipeline = makeFakePipeline();
+  const orchestrator = makeFakeOrchestrator();
+  let clock = 50_000;
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (pipeline.factory),
+    fireOrchestratorFactory: /** @type {any} */ (orchestrator.factory),
+    nowImpl: () => clock
+  });
+  try {
+    const url = await server.listen(0);
+    assert.deepEqual(server.getQuietGap(), { soulIdle: true, judging: false, userSpeaking: false, lastSpeechEndAtMs: null });
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    pipeline.record.options.onVadEvent({ type: "speechStart", tMs: 1000 });
+    assert.equal(server.getQuietGap()?.userSpeaking, true);
+    clock = 51_234;
+    pipeline.record.options.onVadEvent({ type: "speechEnd", tMs: 2000, startMs: 1000, endMs: 2000, durationMs: 1000 });
+    assert.deepEqual(server.getQuietGap(), { soulIdle: true, judging: false, userSpeaking: false, lastSpeechEndAtMs: 51_234 });
+    orchestrator.record.state = "thinking";
+    assert.equal(server.getQuietGap()?.soulIdle, false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit broadcastContextCompaction: SSE diagnostic type:contextCompaction（数字と種類だけ）でログのタブへ", async () => {
+  const orchestrator = makeFakeOrchestrator();
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (orchestrator.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    server.broadcastContextCompaction({ phase: "started", ratio: 0.7 });
+    server.broadcastContextCompaction({ phase: "finished", durationMs: 12_000, personaInjected: true });
+    const started = await client.waitFor((e) => e.event === "diagnostic" && e.data.kind === "started");
+    assert.equal(started.data.type, "contextCompaction");
+    assert.equal(started.data.ratio, 0.7);
+    const finished = await client.waitFor((e) => e.event === "diagnostic" && e.data.kind === "finished");
+    assert.equal(finished.data.elapsedMs, 12_000);
+    assert.equal(finished.data.personaInjected, true);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});

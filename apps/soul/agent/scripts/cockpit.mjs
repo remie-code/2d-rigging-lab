@@ -55,6 +55,13 @@ import {
   resolveConversationInstructionProfile
 } from "../src/mind/fire-orchestrator.mjs";
 import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
+import {
+  createContextCompactor,
+  DEFAULT_COMPACT_THRESHOLD_RATIO,
+  DEFAULT_COMPACT_QUIET_MS,
+  DEFAULT_COMPACT_MIN_INTERVAL_MS
+} from "../src/mind/context-compactor.mjs";
+import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord } from "../src/mind/session-usage-log.mjs";
 import { resolveLatencyThresholds } from "../src/mind/fire-latency.mjs";
 import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/quota.mjs";
 import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
@@ -994,6 +1001,47 @@ export function resolveLatencyThresholdsFromSettings(settings) {
 }
 
 /**
+ * settings の圧縮のしきい値（compactThresholdRatio / compactQuietSec / compactMinIntervalMin）→ 圧縮の部品の
+ * options（未設定・読めなければ既定 0.66 / 3 秒 / 10 分・context-growth-2026-10.md §6）。
+ * @param {{ getContextCompaction?: () => { thresholdRatio: number | null; quietSec: number | null; minIntervalMin: number | null } }} settings
+ * @returns {{ thresholdRatio: number; quietMs: number; minIntervalMs: number }}
+ */
+export function resolveContextCompactionOptions(settings) {
+  let raw = null;
+  try {
+    raw = typeof settings.getContextCompaction === "function" ? settings.getContextCompaction() : null;
+  } catch {
+    raw = null;
+  }
+  return {
+    thresholdRatio: raw?.thresholdRatio ?? DEFAULT_COMPACT_THRESHOLD_RATIO,
+    quietMs: raw?.quietSec != null ? raw.quietSec * 1000 : DEFAULT_COMPACT_QUIET_MS,
+    minIntervalMs: raw?.minIntervalMin != null ? raw.minIntervalMin * 60_000 : DEFAULT_COMPACT_MIN_INTERVAL_MS
+  };
+}
+
+/**
+ * 頭の会話の圧縮の開始・終了のターミナル 1 行（数字と理由だけ・本文は書かない）。
+ * @param {any} event  context-compactor の onEvent。
+ * @returns {string}
+ */
+export function formatContextCompactionLine(event) {
+  if (event?.type === "started") {
+    const pct = typeof event.ratio === "number" ? `${Math.round(event.ratio * 100)}%` : "-";
+    return (
+      `[cockpit] context compaction started: ${pct} of window ` +
+      `(last input ${event.lastInputTokens ?? "-"} / ${event.modelContextWindow ?? "-"} tokens, total ${event.totalInputTokens ?? "-"})\n`
+    );
+  }
+  const secs = typeof event?.durationMs === "number" ? `${(event.durationMs / 1000).toFixed(1)}s` : "-";
+  if (event?.ok === true) {
+    const persona = event.personaInjected ? "persona re-injected" : event.personaDeferred ? "persona deferred to next turn" : "persona not injected";
+    return `[cockpit] context compaction finished: ${secs} (${persona})\n`;
+  }
+  return `[cockpit] context compaction failed: ${secs} reason=${event?.reason ?? "unknown"}${event?.message ? ` — ${event.message}` : ""}\n`;
+}
+
+/**
  * 返事の遅延のログ 1 行（操縦席の標準出力・数字ときっかけの種類だけ・本文は書かない）。
  * @param {any} record  cockpit-server の onReplyLatency が渡すレコード。
  * @returns {string}
@@ -1124,6 +1172,37 @@ async function main() {
   let channelRevision = 0;
   let appliedChannelRevision = 0;
   const fireDiagnostics = createFireDiagnostics();
+  // 頭の文脈の記録（起動ごと 1 ファイル・session-usage/・本文なし・context-growth-2026-10.md §6）。
+  // 発火ごとの 1 行（Codex の頭のとき）と、圧縮の開始・終了を 1 行ずつ。
+  const sessionUsageLog = createSessionUsageLog();
+  // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6）。しきい値は settings ファイルのキー
+  // （無ければ 0.66 / 3 秒 / 10 分）。隙間の材料は cockpit-server、頭のセッションは今の session（Codex で、
+  // 設定の変更で作り直し待ちになっていないときだけ）。見え方はターミナル 1 行・ログのタブ 1 行・記録 1 行。
+  const contextCompactor = createContextCompactor({
+    ...resolveContextCompactionOptions(settings),
+    getSession: () => {
+      if (!isCodexBrainId(currentBrain) || session == null) return null;
+      const stale =
+        sessionInstructionRevision !== instructionRevision.getRevision() ||
+        sessionAcceptedContextRevision !== sessionContextRevision;
+      return stale ? null : /** @type {any} */ (session);
+    },
+    getQuietGap: () => (server ? server.getQuietGap() : null),
+    onEvent: (event) => {
+      process.stdout.write(formatContextCompactionLine(event));
+      sessionUsageLog.append(compactionUsageRecord(event, currentBrain));
+      server?.broadcastContextCompaction(
+        event.type === "started"
+          ? { phase: "started", ratio: event.ratio }
+          : {
+              phase: event.ok ? "finished" : "failed",
+              durationMs: event.durationMs,
+              reason: event.reason,
+              personaInjected: event.personaInjected
+            }
+      );
+    }
+  });
   // 残量ゲージの材料（Codex は頭が Codex のときに App Server から・ElevenLabs は 10 分おき・cockpit-glance-redesign.md §9.2）。
   // 監視は listen の後に始め、終了時に止める。キーやアカウント情報は状態にもログにも載せない。
   const quotaMonitor = createQuotaMonitor({
@@ -1466,9 +1545,15 @@ async function main() {
         });
         hooks.onDiagnostic?.(diagnostic);
       },
+      // 頭の文脈の記録: ask が返るたびに 1 行（Codex の頭のときだけ・本文なし）。
+      onAskRecord: (info) => {
+        if (isCodexBrainId(info?.brain ?? currentBrain)) sessionUsageLog.append(fireUsageRecord(info));
+      },
       onTrace: (trace) => {
         // 発火のたびに Codex の使用率を読む（ask が済んだ直後・失敗したとき。App Server の起動後にしか読めない）。
         if (trace?.event === "llm.ask.completed" || trace?.event === "fire.failed") void quotaMonitor.refreshCodex();
+        // 返事が終わるたびに、隙間で圧縮してよいかを確かめる（発火の後始末が済んでから）。
+        if (trace?.event === "fire.completed" || trace?.event === "fire.failed") contextCompactor.noteReplyFinished();
         if (trace?.event === "fire.completed") {
           fireDiagnostics.finish({ fired: trace.fired === true, reason: trace.reason ?? null });
           return;
@@ -1610,6 +1695,7 @@ async function main() {
 
   const url = await server.listen();
   quotaMonitor.start();
+  contextCompactor.start();
   process.stdout.write(`[cockpit] listening on ${url} (loopback only)\n`);
   process.stdout.write(`[cockpit] open  ${url}/  in your browser — pick a mic, press Start, speak.\n`);
   const startupUrl = lazyChannel.getUrl();
@@ -1635,6 +1721,7 @@ async function main() {
     if (closing) return;
     closing = true;
     process.stdout.write("\n[cockpit] closing…\n");
+    contextCompactor.dispose();
     // 配信間記憶: 引き金③(SIGINT 最終版)。★重要な配管事実: 転写バッファは pipeline 所有(cockpit-server
     // 内)で、server.close() は pipeline を dispose して null に戻す(cockpit-server.mjs の close 契約)。
     // よって転写のスナップショットは close() より前に確保する(close 後には転写が取れない)。
@@ -1673,6 +1760,8 @@ async function main() {
       // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
       residentCapture.stop();
       quotaMonitor.stop();
+      // 記録の書き残しを少しだけ待つ（固まらないよう上限つき）。
+      await Promise.race([sessionUsageLog.flush(), new Promise((resolve) => setTimeout(resolve, 1000))]);
       process.exit(0);
     }
   };

@@ -89,6 +89,18 @@ function successfulTurn(api, request, replyText, { fragments = null, usage = nul
   api.notification("turn/completed", { threadId, turn: { id: turnId, status: "completed", items: [] } });
 }
 
+/** 圧縮の turn（実機の流れ: 応答 {} → turn/started → contextCompaction item → tokenUsage → turn/completed）。 */
+function successfulCompaction(api, request, { usage = null, turnId = `compact-${request.id}`, respond = true } = {}) {
+  const threadId = request.params.threadId;
+  if (respond) api.response(request, {});
+  api.notification("turn/started", { threadId, turn: { id: turnId, status: "inProgress", items: [] } });
+  api.notification("item/started", { threadId, turnId, item: { id: `cc-${request.id}`, type: "contextCompaction" } });
+  api.notification("item/completed", { threadId, turnId, item: { id: `cc-${request.id}`, type: "contextCompaction" } });
+  if (usage) api.notification("thread/tokenUsage/updated", { threadId, turnId, tokenUsage: usage });
+  api.notification("thread/compacted", { threadId, turnId });
+  api.notification("turn/completed", { threadId, turn: { id: turnId, status: "completed", items: [] } });
+}
+
 function makeSpawnHarness(specForProcess = () => ({})) {
   const children = [];
   const spawnCalls = [];
@@ -112,6 +124,12 @@ function makeSpawnHarness(specForProcess = () => ({})) {
       } else if (message.method === "account/rateLimits/read") {
         if (spec.onRateLimits) spec.onRateLimits(message, api, child);
         else api.response(message, { ordinaryUsageAllowed: true, rateLimits: { primary: { usedPercent: 12, windowDurationMins: 10080, resetsAt: 1700000000 } } });
+      } else if (message.method === "thread/compact/start") {
+        if (spec.onCompact) spec.onCompact(message, api, child);
+        else successfulCompaction(api, message);
+      } else if (message.method === "thread/inject_items") {
+        if (spec.onInject) spec.onInject(message, api, child);
+        else api.response(message, {});
       } else if (message.method === "turn/interrupt" || message.method === "thread/delete") {
         if (spec.onCleanup) spec.onCleanup(message, api, child);
         else api.response(message, {});
@@ -560,5 +578,262 @@ test("codex-session: account/rateLimits/updated 通知は onRateLimits へ（tur
     assert.deepEqual(updates, [{ primary: { usedPercent: 40, windowDurationMins: 10080, resetsAt: null } }]);
     assert.equal(warnings.some((w) => w.includes("rateLimits")), false);
     await session.dispose();
+  });
+});
+
+// ── 長い配信の文脈（context-growth-2026-10.md §5・§6）────────────────────────────────
+
+const usageOf = (input, { total = input * 3, window = 200_000, cached = 0 } = {}) => ({
+  last: { inputTokens: input, cachedInputTokens: cached, cacheWriteInputTokens: 0, outputTokens: 5, reasoningOutputTokens: 0, totalTokens: input + 5 },
+  total: { inputTokens: total, cachedInputTokens: cached, cacheWriteInputTokens: 0, outputTokens: 15, reasoningOutputTokens: 0, totalTokens: total + 15 },
+  modelContextWindow: window
+});
+
+const turnAndInjectMethods = (child) =>
+  child.messages.map((m) => m.method).filter((m) => m === "thread/inject_items" || m === "turn/start");
+
+test("codex-session: ask の戻りに tokenUsage（last / total / modelContextWindow）を additive に載せ、usage は従来の形のまま", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ successOptions: { usage: usageOf(1200, { total: 5000, cached: 800 }) } }));
+    const session = createTestSession(harness, scratch);
+    const result = await session.ask("やあ");
+    assert.deepEqual(result.usage, { input_tokens: 1200, cached_input_tokens: 800, output_tokens: 5, reasoning_output_tokens: 0, total_tokens: 1205 });
+    assert.deepEqual(result.tokenUsage, {
+      last: { inputTokens: 1200, cachedInputTokens: 800, outputTokens: 5, reasoningOutputTokens: 0, totalTokens: 1205 },
+      total: { inputTokens: 5000, cachedInputTokens: 800, outputTokens: 15, reasoningOutputTokens: 0, totalTokens: 5015 },
+      modelContextWindow: 200_000
+    });
+    assert.deepEqual(session.getContextUsage(), {
+      conversationKey: harness.turnRequests[0].params.threadId,
+      lastInputTokens: 1200,
+      lastCachedInputTokens: 800,
+      totalInputTokens: 5000,
+      modelContextWindow: 200_000
+    });
+    await session.dispose();
+    assert.equal(session.getContextUsage(), null);
+  });
+});
+
+test("codex-session: conversationKey は thread が続く間は同じ・turn の失敗で捨てたら null・次の ask で新しい値", async () => {
+  await withScratch(async (scratch) => {
+    let turnAttempt = 0;
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        turnAttempt += 1;
+        if (turnAttempt === 2) {
+          api.response(request, { turn: { id: "bad", status: "inProgress", items: [] } });
+          api.notification("turn/completed", { threadId: request.params.threadId, turn: { id: "bad", status: "failed", items: [], error: { message: "boom" } } });
+          return;
+        }
+        successfulTurn(api, request, "ok", { usage: usageOf(100) });
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    assert.equal(session.conversationKey(), null, "まだ thread が無い");
+    await session.ask("one");
+    const first = session.conversationKey();
+    assert.equal(typeof first, "string");
+    await assert.rejects(() => session.ask("two"), /boom/);
+    assert.equal(session.conversationKey(), null, "turn の失敗で thread を捨てた");
+    assert.equal(session.getContextUsage(), null);
+    await session.ask("three");
+    assert.notEqual(session.conversationKey(), first);
+    await session.dispose();
+  });
+});
+
+test("codex-session: compact は thread/compact/start → 圧縮の turn の完了を待ち → 最初と同じ人格の指示を 1 回だけ inject_items", async () => {
+  await withScratch(async (scratch) => {
+    const warnings = [];
+    const harness = makeSpawnHarness(() => ({
+      successOptions: { usage: usageOf(150_000) },
+      onCompact: (request, api) => successfulCompaction(api, request, { usage: usageOf(160_000) })
+    }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "PERSONA", onWarning: (w) => warnings.push(w) });
+    assert.deepEqual(await session.compact(), { compacted: false, reason: "no-conversation" });
+    await session.ask("hello");
+    const threadId = session.conversationKey();
+    const result = await session.compact();
+    assert.equal(result.compacted, true);
+    assert.equal(result.personaInjected, true);
+    assert.equal(result.personaDeferred, false);
+    assert.equal(result.before.lastInputTokens, 150_000);
+    assert.equal(result.compactionUsage.last.inputTokens, 160_000);
+    assert.ok(result.durationMs >= 0);
+    const messages = harness.children[0].messages;
+    const compactReq = messages.find((m) => m.method === "thread/compact/start");
+    assert.deepEqual(compactReq.params, { threadId });
+    const injects = messages.filter((m) => m.method === "thread/inject_items");
+    assert.equal(injects.length, 1);
+    assert.deepEqual(injects[0].params, {
+      threadId,
+      items: [{ type: "message", role: "user", content: [{ type: "input_text", text: "PERSONA" }] }]
+    });
+    assert.equal(session.getContextUsage(), null, "圧縮前の大きさはもう古い");
+    assert.equal(session.conversationKey(), threadId, "圧縮しても会話は同じ thread");
+    assert.equal(session.isCompacting(), false);
+    // 圧縮の turn の通知は警告に落とさない（ask の外の turn として受ける）。
+    assert.equal(warnings.length, 0, warnings.join("\n"));
+    // 次の ask は普段どおり（人格の指示を連結しない・同じ thread）。
+    await session.ask("after");
+    const lastTurn = harness.turnRequests.at(-1);
+    assert.equal(lastTurn.params.threadId, threadId);
+    assert.deepEqual(lastTurn.params.input, [{ type: "text", text: "after" }]);
+    assert.equal(messages.filter((m) => m.method === "thread/inject_items").length, 1, "普段の ask では差し込まない");
+    await session.dispose();
+  });
+});
+
+test("codex-session: 圧縮の処理中の ask は終わる（人格の差し込みまで）を待ってから turn を始める", async () => {
+  await withScratch(async (scratch) => {
+    let compactCtx = null;
+    const harness = makeSpawnHarness(() => ({
+      onCompact: (request, api) => { compactCtx = { request, api }; api.response(request, {}); }
+    }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "P" });
+    await session.ask("one");
+    const compacting = session.compact();
+    while (!compactCtx) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(session.isCompacting(), true);
+    assert.deepEqual(await session.compact(), { compacted: false, reason: "in-progress" });
+    const asking = session.ask("two");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(harness.turnRequests.length, 1, "圧縮の最中は turn を始めない");
+    const threadId = compactCtx.request.params.threadId;
+    compactCtx.api.notification("turn/started", { threadId, turn: { id: "ct", status: "inProgress", items: [] } });
+    compactCtx.api.notification("turn/completed", { threadId, turn: { id: "ct", status: "completed", items: [] } });
+    assert.equal((await compacting).compacted, true);
+    await asking;
+    assert.deepEqual(turnAndInjectMethods(harness.children[0]), ["turn/start", "thread/inject_items", "turn/start"], "差し込みが ask の turn より先");
+    await session.dispose();
+  });
+});
+
+test("codex-session: 圧縮が待ちの上限を超えたら ask は待つのをやめて turn を始め、遅れた圧縮の通知は ask を壊さない", async () => {
+  await withScratch(async (scratch) => {
+    let compactCtx = null;
+    const harness = makeSpawnHarness(() => ({
+      onCompact: (request, api) => {
+        compactCtx = { request, api };
+        api.response(request, {});
+        api.notification("turn/started", { threadId: request.params.threadId, turn: { id: "slow-compact", status: "inProgress", items: [] } });
+      }
+    }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "P", compactionWaitMs: 15 });
+    await session.ask("one");
+    const compacting = session.compact();
+    while (!compactCtx) await new Promise((resolve) => setImmediate(resolve));
+    const second = await session.ask("two");
+    assert.equal(second.replyText, "はい。", "待ちきれずに turn を始めた");
+    assert.equal(harness.turnRequests.length, 2);
+    // ask の turn の後に圧縮が終わる（ask は終わっているのでその場で差し込む）。
+    const threadId = compactCtx.request.params.threadId;
+    compactCtx.api.notification("item/completed", { threadId, turnId: "slow-compact", item: { id: "c", type: "contextCompaction" } });
+    compactCtx.api.notification("turn/completed", { threadId, turn: { id: "slow-compact", status: "completed", items: [] } });
+    const result = await compacting;
+    assert.equal(result.compacted, true);
+    assert.equal(result.personaInjected, true);
+    await session.ask("three");
+    assert.deepEqual(turnAndInjectMethods(harness.children[0]), ["turn/start", "turn/start", "thread/inject_items", "turn/start"]);
+    await session.dispose();
+  });
+});
+
+test("codex-session: ask の turn の最中に圧縮が済んだら、差し込みは次の turn の前に回す（1 回だけ）", async () => {
+  await withScratch(async (scratch) => {
+    let compactCtx = null;
+    let heldTurn = null;
+    let turnCount = 0;
+    const harness = makeSpawnHarness(() => ({
+      onCompact: (request, api) => {
+        compactCtx = { request, api };
+        api.response(request, {});
+        api.notification("turn/started", { threadId: request.params.threadId, turn: { id: "cmp", status: "inProgress", items: [] } });
+      },
+      onTurn: (request, api) => {
+        turnCount += 1;
+        if (turnCount === 2) heldTurn = { request, api };
+        else successfulTurn(api, request, "ok");
+      }
+    }));
+    const session = createTestSession(harness, scratch, { systemPrompt: "P", compactionWaitMs: 10 });
+    await session.ask("one");
+    const compacting = session.compact();
+    while (!compactCtx) await new Promise((resolve) => setImmediate(resolve));
+    const asking = session.ask("two");
+    while (!heldTurn) await new Promise((resolve) => setImmediate(resolve));
+    const threadId = compactCtx.request.params.threadId;
+    compactCtx.api.notification("turn/completed", { threadId, turn: { id: "cmp", status: "completed", items: [] } });
+    const result = await compacting;
+    assert.equal(result.personaInjected, false);
+    assert.equal(result.personaDeferred, true);
+    successfulTurn(heldTurn.api, heldTurn.request, "ok");
+    await asking;
+    await session.ask("three");
+    await session.ask("four");
+    assert.deepEqual(turnAndInjectMethods(harness.children[0]), ["turn/start", "turn/start", "thread/inject_items", "turn/start", "turn/start"]);
+    await session.dispose();
+  });
+});
+
+test("codex-session: 圧縮の失敗（RPC error / turn failed）は compacted:false で返し、会話はそのまま・差し込まない", async () => {
+  await withScratch(async (scratch) => {
+    let compactAttempt = 0;
+    const harness = makeSpawnHarness(() => ({
+      onCompact: (request, api) => {
+        compactAttempt += 1;
+        if (compactAttempt === 1) {
+          api.rpcError(request, "nope");
+          return;
+        }
+        api.response(request, {});
+        const threadId = request.params.threadId;
+        api.notification("turn/started", { threadId, turn: { id: "fc", status: "inProgress", items: [] } });
+        api.notification("turn/completed", { threadId, turn: { id: "fc", status: "failed", items: [], error: { message: "compact backend failed" } } });
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    await session.ask("one");
+    const key = session.conversationKey();
+    const rpcFailed = await session.compact();
+    assert.equal(rpcFailed.compacted, false);
+    assert.match(rpcFailed.message, /nope/);
+    const turnFailed = await session.compact();
+    assert.equal(turnFailed.compacted, false);
+    assert.match(turnFailed.message, /compact backend failed/);
+    assert.equal(session.conversationKey(), key);
+    assert.equal(harness.children[0].messages.some((m) => m.method === "thread/inject_items"), false);
+    assert.equal((await session.ask("two")).replyText, "はい。");
+    await session.dispose();
+  });
+});
+
+test("codex-session: ask の最中は compact しない（busy）・dispose は圧縮の待ちを畳む", async () => {
+  await withScratch(async (scratch) => {
+    let pendingTurn = null;
+    let compactCtx = null;
+    let turnCount = 0;
+    const harness = makeSpawnHarness(() => ({
+      onTurn: (request, api) => {
+        turnCount += 1;
+        if (turnCount === 2) pendingTurn = { request, api };
+        else successfulTurn(api, request, "ok");
+      },
+      onCompact: (request, api) => { compactCtx = { request, api }; api.response(request, {}); }
+    }));
+    const session = createTestSession(harness, scratch);
+    await session.ask("one");
+    const asking = session.ask("two");
+    while (!pendingTurn) await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(await session.compact(), { compacted: false, reason: "busy" });
+    successfulTurn(pendingTurn.api, pendingTurn.request, "ok");
+    await asking;
+    const compacting = session.compact();
+    while (!compactCtx) await new Promise((resolve) => setImmediate(resolve));
+    await session.dispose();
+    const result = await compacting;
+    assert.equal(result.compacted, false);
+    assert.match(result.message, /disposed/);
   });
 });

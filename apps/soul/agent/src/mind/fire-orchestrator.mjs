@@ -114,6 +114,17 @@
  *  ask の直前に通知する（通常・画面あり・画面優先の全経路）。遅延は ./fire-latency.mjs の createFireTiming に
  *  既存のトレースを食わせて測り、声が鳴り始めた時点（鳴らなかった返事は発火の終わり）で 1 回だけ通知する。
  *
+ * ── 増えた分だけ渡す（長い配信の文脈・context-growth-2026-10.md §5・§6）───────────────────────
+ *  頭のセッションが conversationKey()（今の会話 = Codex の thread の識別子・次の ask が新しい会話なら null）を
+ *  持つときだけ、前回の ask で渡した最後の seq より後ろの行だけを渡す（formatFireInjectionSince・チャッピーの
+ *  実際に聞こえた分の soul 行も含む・新しい行が無ければ「（前回から新しい発言はなし）」・窓と 4000 字の上限は
+ *  そのまま）。会話が新しく始まったとき・頭のセッションが替わったとき・Codex が内部で thread を作り直したとき
+ *  （turn の失敗・接続の作り直し）は key が変わるので、従来どおり直近 5 分を全部渡す。conversationKey を
+ *  持たない頭（Claude）は従来のまま（毎回直近 5 分）。空窓（直近 5 分に 1 行も無い）の判定は従来どおり全体で行う。
+ *  onAsk・onFire（受理）の範囲と行数・文字数は実際に渡した分をそのまま出す。
+ *  ask が返るたびに onAskRecord（発火番号・頭・渡した行数と文字数・usage・tokenUsage・最初の文字までの時間。
+ *  本文なし）を通知する（結線層が起動ごとの記録ファイルへ 1 行書く）。
+ *
  * ── soul 記録の broadcast 経路 ───────────────────────────────────────────────
  *  soul を buffer.append した直後に onSoulTranscript(entry) フックで結線層（cockpit）へ通知し、
  *  cockpit が既存 transcript イベント（speaker:"soul"）として SSE broadcast する（domain-a.md
@@ -127,7 +138,7 @@
 
 import { speak as defaultSpeak } from "../voice/speak.mjs";
 import { createProgressiveSpeechDelivery } from "../voice/progressive-speech-delivery.mjs";
-import { formatFireInjection, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
+import { formatFireInjection, formatFireInjectionSince, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { translateExpression } from "./expression-translator.mjs";
 import { captureWindow as defaultCaptureWindow } from "../eyes/window-capture.mjs";
@@ -313,6 +324,9 @@ export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
  * @param {(info: import("./fire-latency.mjs").FireLatency) => void} [options.onLatency]
  *   1 返事 1 回の遅延の通知（発火の中の区間）。声が鳴り始めた時点、鳴らなかったときは発火の終わり（ask した回だけ）。
  * @param {() => number} [options.monotonicNowImpl]  遅延を測る単調時計（既定 performance.now・テスト注入）。
+ * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; atMs: number }) => void} [options.onAskRecord]
+ *   ask が返るたびの記録（本文なし・数字と種類だけ）。windowMode は渡した会話の窓の種類
+ *   （legacy = 会話の世代を持たない頭の従来の窓 / full = 新しい会話なので直近 5 分の全部 / delta = 増えた分だけ）。
  * @param {boolean} [options.initialKilled=false]  キル状態の初期値（S8）。キル状態の正本はサーバ側
  *   （Domain B）にあるため、orchestrator 生成時にサーバの現況を渡し「キル中に生まれる orchestrator は
  *   キル済みで生まれる」不変を成立させる（born-killed）。
@@ -356,7 +370,8 @@ export function createFireOrchestrator(options) {
     onProgressiveSentence,
     onProgressiveTerminal,
     onAsk,
-    onLatency
+    onLatency,
+    onAskRecord
   } = options;
   const monotonicNowImpl = options.monotonicNowImpl ?? (() => performance.now());
   const progressivePlayback = options.progressivePlayback === true;
@@ -412,6 +427,13 @@ export function createFireOrchestrator(options) {
    */
   let currentFire = null;
 
+  /**
+   * 増えた分だけ渡すための目印: 前回 ask が返った会話（session と conversationKey）と、そこまでに渡した最後の seq。
+   * 会話が替わったら使わない（直近 5 分を全部渡す）。
+   * @type {null | { session: any; key: string; lastSeq: number | null }}
+   */
+  let conversationCursor = null;
+
   /** 受理した発火に番号を振る（冪等・劣化フォールバックで二重に振らない）。 */
   const acceptFireId = () => {
     if (!currentFire) return null;
@@ -450,6 +472,83 @@ export function createFireOrchestrator(options) {
       windowLastSeq: injection.lastSeq ?? null,
       includedCount: injection.includedCount,
       vision,
+      atMs: nowImpl()
+    });
+  };
+
+  /**
+   * 頭のセッションの今の会話の識別子。口を持たない頭（Claude）は undefined、次の ask が新しい会話なら null。
+   * @param {any} target
+   * @returns {string | null | undefined}
+   */
+  const conversationKeyOf = (target) => {
+    if (!target || typeof target.conversationKey !== "function") return undefined;
+    try {
+      const key = target.conversationKey();
+      return typeof key === "string" && key.length > 0 ? key : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * この ask に渡す会話の窓を作る。同じ会話が続いていれば前回より後ろの行だけ、そうでなければ従来の窓。
+   * fullWindow を渡されたら（通常の発火の空窓判定で作ったもの）従来の窓としてそれを使う（同じ時刻で作り直さない）。
+   * @param {{ all: Function }} buffer  @param {any} resources  @param {number} nowMs
+   * @param {ReturnType<typeof formatFireInjection>} [fullWindow]
+   */
+  const buildInjection = (buffer, resources, nowMs, fullWindow) => {
+    const target = resources?.session;
+    const key = conversationKeyOf(target);
+    const cursor = conversationCursor;
+    if (typeof key === "string" && cursor && cursor.session === target && cursor.key === key) {
+      return {
+        injection: formatFireInjectionSince(buffer.all(), { nowMs, windowMs, maxChars, afterSeq: cursor.lastSeq }),
+        windowMode: /** @type {"delta"} */ ("delta")
+      };
+    }
+    return {
+      injection: fullWindow ?? formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars }),
+      windowMode: key === undefined ? /** @type {"legacy"} */ ("legacy") : /** @type {"full"} */ ("full")
+    };
+  };
+
+  /**
+   * ask が返った後に目印を進める（その会話へ渡した最後の seq）。会話の世代を持たない頭・会話が無くなった頭では消す。
+   * @param {any} resources  @param {{ lastSeq: number | null }} injection  @param {string} windowMode
+   */
+  const commitInjection = (resources, injection, windowMode) => {
+    const target = resources?.session;
+    const key = conversationKeyOf(target);
+    if (typeof key !== "string") {
+      conversationCursor = null;
+      return;
+    }
+    const cursor = conversationCursor;
+    const sameConversation = windowMode === "delta" && cursor && cursor.session === target && cursor.key === key;
+    const previous = sameConversation ? cursor.lastSeq : null;
+    conversationCursor = { session: target, key, lastSeq: injection.lastSeq ?? previous };
+  };
+
+  /**
+   * ask が返るたびの記録（本文なし）。
+   * @param {any} asked  @param {any} resources  @param {boolean} vision  @param {string} windowMode
+   * @param {{ includedCount: number; charCount: number }} injection  @param {number} injectedChars
+   */
+  const emitAskRecord = (asked, resources, vision, windowMode, injection, injectedChars) => {
+    if (typeof onAskRecord !== "function") return;
+    const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    emit(onAskRecord, {
+      fireId: currentFire?.fireId ?? null,
+      brain: typeof resources?.configuration?.brain === "string" ? resources.configuration.brain : null,
+      vision,
+      windowMode,
+      includedCount: injection.includedCount,
+      injectedChars,
+      usage: asked && asked.usage != null ? asked.usage : null,
+      tokenUsage: asked && asked.tokenUsage != null ? asked.tokenUsage : null,
+      ttftMs: num(asked?.ttftMs),
+      elapsedMs: num(asked?.elapsedMs),
       atMs: nowImpl()
     });
   };
@@ -1169,7 +1268,7 @@ export function createFireOrchestrator(options) {
 
     // 会話窓 + 視覚指示テキストと画像ブロックを content 配列（**画像先行**）にして注入。
     const nowMs = nowImpl();
-    const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
+    const { injection, windowMode } = buildInjection(buffer, resources, nowMs);
     const injectedText = injection.text;
     const injectedChars = injection.charCount;
     const includedCount = injection.includedCount;
@@ -1192,6 +1291,8 @@ export function createFireOrchestrator(options) {
     } catch (error) {
       throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
     }
+    commitInjection(resources, injection, windowMode);
+    emitAskRecord(asked, resources, true, windowMode, injection, injectedChars);
     trace("llm.ask.completed", {
       vision: true,
       modelOutputChars: typeof asked?.replyText === "string" ? asked.replyText.length : 0,
@@ -1228,16 +1329,14 @@ export function createFireOrchestrator(options) {
   const fireNormalCore = async (buffer, { alreadyAccepted, resources: acceptedResources }) => {
     // 3. 直近窓を収集。空窓なら ask を無駄撃ちしない。
     const nowMs = nowImpl();
-    const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
-    if (injection.includedCount === 0) {
+    // 空窓の判定は従来どおり直近 5 分の全体で行う（増えた分が 0 でも、窓に行があれば発火する）。
+    const fullWindow = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
+    if (fullWindow.includedCount === 0) {
       if (!alreadyAccepted) {
         emit(onFire, { accepted: false, reason: "empty-window", ...(currentFire?.cause != null ? { cause: currentFire.cause } : {}) });
       }
       return { fired: false, reason: "empty-window" };
     }
-    const injectedText = injection.text;
-    const injectedChars = injection.charCount;
-    const includedCount = injection.includedCount;
 
     let resources = acceptedResources;
     if (!alreadyAccepted) {
@@ -1250,6 +1349,12 @@ export function createFireOrchestrator(options) {
       }
       currentFireResources = resources;
     }
+
+    // 実際に渡す窓（同じ会話が続いていれば増えた分だけ・頭のセッションが決まってから作る）。
+    const { injection, windowMode } = buildInjection(buffer, resources, nowMs, fullWindow);
+    const injectedText = injection.text;
+    const injectedChars = injection.charCount;
+    const includedCount = injection.includedCount;
 
     // 4. Snapshot acquired → thinking → accepted publication.
     if (!alreadyAccepted) {
@@ -1270,6 +1375,8 @@ export function createFireOrchestrator(options) {
       } catch (error) {
         throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
       }
+      commitInjection(resources, injection, windowMode);
+      emitAskRecord(asked, resources, false, windowMode, injection, injectedChars);
       trace("llm.ask.completed", {
         vision: false,
         modelOutputChars: typeof asked?.replyText === "string" ? asked.replyText.length : 0,

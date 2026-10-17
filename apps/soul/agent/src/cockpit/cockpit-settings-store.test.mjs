@@ -993,3 +993,20 @@ test("settings store: 遅延の「遅い」しきい値はファイルのキー 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: 圧縮のしきい値はファイルのキー compactThresholdRatio / compactQuietSec / compactMinIntervalMin から読む（context-growth-2026-10.md §6）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: null, quietSec: null, minIntervalMin: null }, "未作成 = 既定（呼び出し側）");
+    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 0.75, compactQuietSec: 5, compactMinIntervalMin: 0 }), "utf8");
+    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: 0.75, quietSec: 5, minIntervalMin: 0 });
+    store.setSpeakStartMode("classic");
+    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: 0.75, quietSec: 5, minIntervalMin: 0 }, "他のキーの set で消えない");
+    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 66, compactQuietSec: -1, compactMinIntervalMin: "10" }), "utf8");
+    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: null, quietSec: null, minIntervalMin: null }, "範囲外・数でない値は既定");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

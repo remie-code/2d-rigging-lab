@@ -63,6 +63,10 @@
  *     操縦席にツマミは置かず、このファイルのキー `latencyWarnSec` / `latencyAlertSec` を手で書き換えて次回起動から
  *     効かせる（discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.1「秒数は設定で変えられる」）。
  *     正の数でなければ null。
+ *   getContextCompaction(): Codex の頭の隙間で手動の圧縮（context-growth-2026-10.md §6）のしきい値
+ *     （`{ thresholdRatio, quietSec, minIntervalMin }`・各 null = 既定 0.66 / 3 秒 / 10 分）。操縦席にツマミは置かず、
+ *     このファイルのキー `compactThresholdRatio`（0 より大きく 1 以下）/ `compactQuietSec`（0 以上）/
+ *     `compactMinIntervalMin`（0 以上）を手で書き換えて次回起動から効かせる。範囲外・数でない値は null。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -130,6 +134,7 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   getCommentHold: () => { maxAgeSec: number | null; maxCount: number | null };
  *   getBackchannelMinIntervalSec: () => number | null;
  *   getLatencyThresholds: () => { warnSec: number | null; alertSec: number | null };
+ *   getContextCompaction: () => { thresholdRatio: number | null; quietSec: number | null; minIntervalMin: number | null };
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -323,6 +328,18 @@ export function createFileSettingsStore(options = {}) {
       const all = readAll();
       const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
       return { warnSec: num(all.latencyWarnSec), alertSec: num(all.latencyAlertSec) };
+    },
+    getContextCompaction() {
+      const all = readAll();
+      const finite = (/** @type {unknown} */ v) => typeof v === "number" && Number.isFinite(v);
+      const ratio = all.compactThresholdRatio;
+      const quiet = all.compactQuietSec;
+      const interval = all.compactMinIntervalMin;
+      return {
+        thresholdRatio: finite(ratio) && ratio > 0 && ratio <= 1 ? ratio : null,
+        quietSec: finite(quiet) && quiet >= 0 ? quiet : null,
+        minIntervalMin: finite(interval) && interval >= 0 ? interval : null
+      };
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

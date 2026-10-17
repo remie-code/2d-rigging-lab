@@ -3598,3 +3598,182 @@ test("遅延: 声が鳴らずに終わった返事（空応答）も ask した�
   assert.equal(latencies.length, 1);
   orch.dispose();
 });
+
+// ── 増えた分だけ渡す（長い配信の文脈・context-growth-2026-10.md §5・§6）───────────────────────
+
+/** conversationKey を持つ偽物の Codex 頭（ask に渡された内容を記録・key は外から替えられる）。 */
+function makeConversationSession(replyText = "うん") {
+  const inputs = [];
+  const state = { key: /** @type {string | null} */ ("thread-a"), nextKeyOnAsk: /** @type {string | null} */ (null) };
+  return {
+    inputs,
+    state,
+    session: {
+      conversationKey: () => state.key,
+      ask: async (content) => {
+        inputs.push(content);
+        if (state.key === null) state.key = state.nextKeyOnAsk ?? "thread-new";
+        return {
+          replyText,
+          usage: { input_tokens: 10 },
+          tokenUsage: { last: { inputTokens: 10 }, total: { inputTokens: 30 }, modelContextWindow: 1000 },
+          ttftMs: 42,
+          elapsedMs: 80
+        };
+      }
+    }
+  };
+}
+
+test("増えた分だけ: 同じ会話の 2 回目以降は前回渡した最後の seq より後ろの行だけ（チャッピーの行も含む）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const head = makeConversationSession("はいよ");
+  const asks = [];
+  const fires = [];
+  const records = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onAsk: (a) => asks.push(a),
+    onFire: (f) => fires.push(f),
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  assert.equal(head.inputs[0], "you: 一つ目", "最初は直近の窓の全部");
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  await orch.fire();
+  assert.equal(head.inputs[1], "soul: はいよ\nyou: 二つ目", "前回より後ろだけ（実際に聞こえた soul 行を含む）");
+  assert.deepEqual([asks[1].windowFirstSeq, asks[1].windowLastSeq, asks[1].includedCount], [1, 2, 2], "範囲は実際に渡した分");
+  assert.deepEqual([fires[1].includedCount, fires[1].injectedChars], [2, head.inputs[1].length], "受理の行数・文字数も実際に渡した分");
+  assert.deepEqual(records.map((r) => r.windowMode), ["full", "delta"]);
+  assert.deepEqual(
+    { ...records[1], atMs: null },
+    {
+      fireId: 2,
+      brain: null,
+      vision: false,
+      windowMode: "delta",
+      includedCount: 2,
+      injectedChars: head.inputs[1].length,
+      usage: { input_tokens: 10 },
+      tokenUsage: { last: { inputTokens: 10 }, total: { inputTokens: 30 }, modelContextWindow: 1000 },
+      ttftMs: 42,
+      elapsedMs: 80,
+      atMs: null
+    }
+  );
+  orch.dispose();
+});
+
+test("増えた分だけ: 新しい行が無い発火は「（前回から新しい発言はなし）」（画面ありは指示の前に置く）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("見て");
+  const head = makeConversationSession("");
+  const asks = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "ゲーム",
+    captureImpl: async () => ({ jpegBase64: "AAAA", width: 1, height: 1, elapsedMs: 1 }),
+    onAsk: (a) => asks.push(a)
+  });
+  await orch.fire(); // 空の返事（soul 行は増えない）
+  await orch.fire();
+  assert.equal(head.inputs[1], "（前回から新しい発言はなし）");
+  assert.deepEqual([asks[1].windowFirstSeq, asks[1].windowLastSeq, asks[1].includedCount], [null, null, 0]);
+  await orch.fire({ vision: true });
+  const blocks = /** @type {any[]} */ (head.inputs[2]);
+  assert.equal(blocks[0].type, "image");
+  assert.equal(blocks[1].text, "（前回から新しい発言はなし）\n今の画面を見て、直近の会話と合わせて自然に反応してください。");
+  orch.dispose();
+});
+
+test("増えた分だけ: 会話の世代が変わったら（thread の作り直し・頭のセッションの差し替え）直近の窓を全部渡す", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const head = makeConversationSession("");
+  const other = makeConversationSession("");
+  let current = head.session;
+  const records = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    acquireFireResources: () => ({ session: current, configuration: { brain: "codex-61-sol" } }),
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  head.state.key = null; // Codex が内部で thread を捨てた（次の ask が新しい thread）
+  await orch.fire();
+  assert.equal(head.inputs[1], "you: 一つ目\nyou: 二つ目", "新しい会話には直近の窓の全部");
+  buffer.append({ startMs: 0, endMs: 0, text: "三つ目" });
+  await orch.fire();
+  assert.equal(head.inputs[2], "you: 三つ目", "新しい会話の 2 回目からはまた増えた分だけ");
+  current = other.session; // 頭のセッションの差し替え（同じ key でも別の会話）
+  buffer.append({ startMs: 0, endMs: 0, text: "四つ目" });
+  await orch.fire();
+  assert.equal(other.inputs[0], "you: 一つ目\nyou: 二つ目\nyou: 三つ目\nyou: 四つ目");
+  assert.deepEqual(records.map((r) => r.windowMode), ["full", "full", "delta", "full"]);
+  assert.equal(records[3].brain, "codex-61-sol");
+  orch.dispose();
+});
+
+test("増えた分だけ: ask が失敗したら目印を進めない（次の ask で同じ行をもう一度渡す）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const head = makeConversationSession("");
+  let fail = false;
+  const session = {
+    conversationKey: head.session.conversationKey,
+    ask: async (content) => {
+      if (fail) {
+        head.inputs.push(content);
+        throw new Error("transient");
+      }
+      return head.session.ask(content);
+    }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer
+  });
+  await orch.fire();
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  fail = true;
+  const failed = await orch.fire();
+  assert.equal(failed.reason, "error");
+  fail = false;
+  await orch.fire();
+  assert.equal(head.inputs[1], "you: 二つ目");
+  assert.equal(head.inputs[2], "you: 二つ目");
+  orch.dispose();
+});
+
+test("増えた分だけ: conversationKey を持たない頭（Claude）は従来どおり毎回直近の窓の全部・記録は legacy", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const inputs = [];
+  const records = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async (content) => { inputs.push(content); return { replyText: "" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  await orch.fire();
+  assert.deepEqual(inputs, ["you: 一つ目", "you: 一つ目\nyou: 二つ目"]);
+  assert.deepEqual(records.map((r) => [r.windowMode, r.usage, r.tokenUsage, r.ttftMs]), [["legacy", null, null, null], ["legacy", null, null, null]]);
+  orch.dispose();
+});

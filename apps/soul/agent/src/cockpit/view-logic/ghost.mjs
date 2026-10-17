@@ -57,11 +57,31 @@ export function diagnosticGhostLabel(d) {
       return "(barge-in: mouth-close failed — " + ((d && d.message) || "?") + ")";
     case "chatBufferAbsent":
       return "(chat: ears not running — comment did not merge)";
+    case "contextCompaction":
+      return contextCompactionGhostLabel(/** @type {any} */ (d));
     // 意図的非表示（行を作らない）: expressionBrokenTag / expressionRejected / expressionSendError。
     // bargeIn は専用マーカー行へ（ここでは null）。他の未知型も拡張予約で非表示（null）。
     default:
       return null;
   }
+}
+
+/**
+ * 頭の会話の圧縮（Codex の隙間で手動の圧縮・context-growth-2026-10.md §6）のログの行。
+ * SSE diagnostic type:"contextCompaction"（kind = started / finished / failed・ratio = 文脈の大きさの割合・
+ * elapsedMs = 所要時間・reason = 失敗の理由）。メイン画面には出さない（ログのタブだけ）。
+ * @param {{ kind?: string | null; ratio?: number | null; elapsedMs?: number | null; reason?: string | null }} d
+ * @returns {string}
+ */
+export function contextCompactionGhostLabel(d) {
+  const kind = d && d.kind;
+  if (kind === "started") {
+    const pct = d && typeof d.ratio === "number" ? " — 文脈 " + Math.round(d.ratio * 100) + "%" : "";
+    return "(圧縮: 開始" + pct + ")";
+  }
+  const secs = d && typeof d.elapsedMs === "number" ? " " + (d.elapsedMs / 1000).toFixed(1) + "s" : "";
+  if (kind === "finished") return "(圧縮: 終了" + secs + ")";
+  return "(圧縮: 失敗" + secs + (d && d.reason ? " — " + d.reason : "") + ")";
 }
 
 /**

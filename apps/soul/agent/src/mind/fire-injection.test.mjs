@@ -2,7 +2,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { formatFireInjection, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
+import {
+  formatFireInjection,
+  formatFireInjectionSince,
+  FIRE_NO_NEW_LINES_TEXT,
+  FIRE_WINDOW_MS,
+  FIRE_MAX_CHARS
+} from "./fire-injection.mjs";
 
 // 注入整形の純関数（S3 Domain A）の fixture テスト。窓の内外境界・話者ラベル・文字上限で
 // 古い方落とし・空窓・you/soul 混在を網羅的に固定する。純関数なので I/O・時計は全て引数。
@@ -133,4 +139,56 @@ test("推論の範囲: 残った行の始まりと終わりの seq（窓と文�
   const noSeq = formatFireInjection([{ text: "x", appendedAtMs: 1000 }], { nowMs: 2000 });
   assert.equal(noSeq.firstSeq, null);
   assert.equal(noSeq.lastSeq, null);
+});
+
+// ── 増えた分だけ渡す（context-growth-2026-10.md §6）──────────────────────────────
+
+/** seq 付きの最小エントリ。 */
+function seqEntry(seq, appendedAtMs, text, speaker = "you") {
+  return { seq, startMs: 0, endMs: 0, text, speaker, appendedAtMs };
+}
+
+test("増えた分だけ: afterSeq より後ろの行だけ（you / soul / viewer）・範囲はその行の seq", () => {
+  const nowMs = 100_000;
+  const entries = [
+    seqEntry(1, 90_000, "前に渡した"),
+    seqEntry(2, 91_000, "これも前", "soul"),
+    seqEntry(3, 95_000, "新しい"),
+    seqEntry(4, 96_000, "聞こえた分", "soul"),
+    { ...seqEntry(5, 97_000, "こんにちは", "viewer"), displayName: "A" }
+  ];
+  const out = formatFireInjectionSince(entries, { nowMs, afterSeq: 2 });
+  assert.equal(out.text, "you: 新しい\nsoul: 聞こえた分\nviewer(A): こんにちは");
+  assert.equal(out.includedCount, 3);
+  assert.equal(out.charCount, out.text.length);
+  assert.equal(out.firstSeq, 3);
+  assert.equal(out.lastSeq, 5);
+  assert.equal(out.droppedBySeq, 2);
+});
+
+test("増えた分だけ: 新しい行が無ければ「（前回から新しい発言はなし）」・範囲は null", () => {
+  const out = formatFireInjectionSince([seqEntry(1, 90_000, "前に渡した")], { nowMs: 100_000, afterSeq: 1 });
+  assert.equal(FIRE_NO_NEW_LINES_TEXT, "（前回から新しい発言はなし）");
+  assert.equal(out.text, FIRE_NO_NEW_LINES_TEXT);
+  assert.equal(out.includedCount, 0);
+  assert.equal(out.charCount, FIRE_NO_NEW_LINES_TEXT.length);
+  assert.equal(out.firstSeq, null);
+  assert.equal(out.lastSeq, null);
+});
+
+test("増えた分だけ: 直近の窓と 4000 字の上限はそのまま効く・afterSeq null は窓の全部", () => {
+  const nowMs = 1_000_000;
+  const entries = [seqEntry(1, 0, "窓の外"), seqEntry(2, 999_000, "a".repeat(30)), seqEntry(3, 999_500, "b".repeat(30))];
+  const windowed = formatFireInjectionSince(entries, { nowMs, windowMs: 5000, afterSeq: null });
+  assert.equal(windowed.includedCount, 2, "窓の外（5 分より前）は新しくても入れない");
+  assert.equal(windowed.firstSeq, 2);
+  const limited = formatFireInjectionSince(entries, { nowMs, windowMs: 5000, maxChars: 40, afterSeq: 1 });
+  assert.equal(limited.includedCount, 1, "上限を超えたら古い方から落とす");
+  assert.equal(limited.lastSeq, 3);
+  assert.equal(limited.droppedByLimit, 1);
+});
+
+test("増えた分だけ: seq を持たない行は前回より後か分からないので入れない", () => {
+  const out = formatFireInjectionSince([{ text: "seq なし", speaker: "you", appendedAtMs: 99_000 }], { nowMs: 100_000, afterSeq: 0 });
+  assert.equal(out.text, FIRE_NO_NEW_LINES_TEXT);
 });

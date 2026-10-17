@@ -1869,3 +1869,35 @@ test("formatReplyLatencyLine: 数字ときっかけの種類だけの 1 行（�
   );
   assert.match(formatReplyLatencyLine({ fireId: 4, cause: null, spoken: false, segments: {}, totalMs: null, level: null }), /cause=- total=- level=- .* spoken=no\n$/);
 });
+
+test("resolveContextCompactionOptions: settings の compact* キー・未設定や読めなければ 0.66 / 3 秒 / 10 分", async () => {
+  const { resolveContextCompactionOptions } = await import("./cockpit.mjs");
+  assert.deepEqual(
+    resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdRatio: 0.8, quietSec: 5, minIntervalMin: 15 }) }),
+    { thresholdRatio: 0.8, quietMs: 5000, minIntervalMs: 900_000 }
+  );
+  const defaults = { thresholdRatio: 0.66, quietMs: 3000, minIntervalMs: 600_000 };
+  assert.deepEqual(resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdRatio: null, quietSec: null, minIntervalMin: null }) }), defaults);
+  assert.deepEqual(resolveContextCompactionOptions({}), defaults);
+  assert.deepEqual(resolveContextCompactionOptions({ getContextCompaction: () => { throw new Error("x"); } }), defaults);
+});
+
+test("formatContextCompactionLine: 圧縮の開始・終了・失敗をターミナルに 1 行（数字と理由だけ）", async () => {
+  const { formatContextCompactionLine } = await import("./cockpit.mjs");
+  assert.equal(
+    formatContextCompactionLine({ type: "started", ratio: 0.684, lastInputTokens: 176_000, modelContextWindow: 258_400, totalInputTokens: 3_000_000 }),
+    "[cockpit] context compaction started: 68% of window (last input 176000 / 258400 tokens, total 3000000)\n"
+  );
+  assert.equal(
+    formatContextCompactionLine({ type: "finished", ok: true, durationMs: 12_345, personaInjected: true }),
+    "[cockpit] context compaction finished: 12.3s (persona re-injected)\n"
+  );
+  assert.equal(
+    formatContextCompactionLine({ type: "finished", ok: true, durationMs: 1000, personaInjected: false, personaDeferred: true }),
+    "[cockpit] context compaction finished: 1.0s (persona deferred to next turn)\n"
+  );
+  assert.equal(
+    formatContextCompactionLine({ type: "finished", ok: false, durationMs: 500, reason: "failed", message: "codex-session: compaction timed out." }),
+    "[cockpit] context compaction failed: 0.5s reason=failed — codex-session: compaction timed out.\n"
+  );
+});
