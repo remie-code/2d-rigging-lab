@@ -88,8 +88,9 @@ test("feedAfterSseEvent: 弾いた行（chatDiagnostic）・反応の判定行 /
   assert.equal(feed.rows[4].text, "判定: 応答 0.80");
 });
 
-test("SSE は増やさない（13 本のまま）・settingsFromSnapshot は commentBusy を取り出す", () => {
-  assert.equal(SSE_EVENT_NAMES.length, 13);
+test("SSE はコメント判定のために増やさない（selfFire / chatDiagnostic に相乗り・作り直しの 4 本を足して 17 本）・settingsFromSnapshot は commentBusy を取り出す", () => {
+  assert.equal(SSE_EVENT_NAMES.length, 17);
+  assert.ok(SSE_EVENT_NAMES.includes("selfFire") && SSE_EVENT_NAMES.includes("chatDiagnostic"));
   assert.equal(settingsFromSnapshot({ commentBusy: "drop" }).commentBusy, "drop");
   assert.equal(settingsFromSnapshot({}).commentBusy, null);
 });
@@ -110,7 +111,7 @@ test("CommentBusySelect vnode: 「忙しい間のコメント: あとで拾う /
   assert.equal(select.props.disabled, true);
 });
 
-test("ControlBar: 話し始めの隣に忙しい間のコメントのプルダウン・POST /api/comment-busy・エラー文言", () => {
+test("DrivePanel（運転タブ）: 話し始めの隣に忙しい間のコメントのプルダウン・POST /api/comment-busy・エラー文言", () => {
   const src = readFileSync(new URL("./ui/control-bar.mjs", import.meta.url), "utf8");
   const speakAt = src.indexOf("<${SpeakStartSelect}");
   const busyAt = src.indexOf("<${CommentBusySelect}");

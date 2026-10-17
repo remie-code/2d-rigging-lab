@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 //      に閉じている（魂の他部位・node:* を import しない = ブラウザコード純度）。
 //  (3) rows.mjs の fixture: SSE イベント → 行レコードが現 cockpit.html の表示文字列と機能同値・
 //      speaking 行の規律・**意図的非表示（view-logic が null）で行を作らない**の機械的遵守。
-//  (4) hooks を使わないコンポーネント（Header/FeedRow）の vnode 走査スモーク（render 不要・
+//  (4) hooks を使わないコンポーネント（TopBar/HealthLine/FeedRow）の vnode 走査スモーク（render 不要・
 //      preact 公開形状 type/props のみに依存）。
 // このファイルは src/cockpit/ 直下（配信サブツリー外）に置く: 静的配信ツリー（/ui/*.mjs）へ
 // node:test を import するファイルを混ぜないため。
@@ -21,7 +21,7 @@ const COCKPIT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(COCKPIT_DIR, "ui");
 
 import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot } from "./ui/app.mjs";
-import { Header, HealthStat, identityDisplayName, cockpitDocumentTitle, NEUTRAL_COCKPIT_TITLE } from "./ui/header.mjs";
+import { TopBar, HealthLine, HealthStat, identityDisplayName, cockpitDocumentTitle, NEUTRAL_COCKPIT_TITLE } from "./ui/header.mjs";
 import { Feed, FeedRow, isStuckToBottom, STICK_THRESHOLD_PX } from "./ui/feed.mjs";
 import {
   emptyFeed,
@@ -37,7 +37,7 @@ import {
   feedAfterSseEvent
 } from "./ui/rows.mjs";
 import { COCKPIT_CSS, injectStyles } from "./ui/styles.mjs";
-import { ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, BargeInPill, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
+import { DrivePanel, FireButtons, SelfFirePill, VerbositySelect, BargeInPill, VERBOSITY_OPTIONS } from "./ui/control-bar.mjs";
 import {
   SettingsDrawer,
   CockpitSettingsModal,
@@ -63,7 +63,7 @@ import { conversationBrainIdentity } from "./view-logic/conversation-instruction
 // ── (1) Node インポートスモーク（import 文自体が成功している時点で副作用ゼロの構造証明）──
 
 test("ui import スモーク: 全 ui/*.mjs が Node で import でき、主要 export が関数/文字列", () => {
-  for (const fn of [App, mount, Header, HealthStat, Feed, FeedRow, injectStyles,
+  for (const fn of [App, mount, TopBar, HealthLine, HealthStat, Feed, FeedRow, injectStyles,
     emptyFeed, feedWithTranscript, feedWithGhost, feedWithFireMarker, feedWithExpression,
     feedWithVisionMarker, feedWithBargeInMarker, feedWithSelfFireMarker, feedWithSpeaking,
     feedFromHistory, feedAfterSseEvent, isStuckToBottom, settingsFromSnapshot, initialHealth]) {
@@ -95,14 +95,15 @@ test("ui 構造: ui/*.mjs の import は ../vendor/・../view-logic/・./（ui �
   }
 });
 
-// ── (3) SSE 購読リスト = ワイヤ契約 13 SSE の写像（移植漏れゼロの機械的固定点）──
+// ── (3) SSE 購読リスト = 既存 13 SSE + 操縦席の作り直し 1 回目の 4 本の写像（移植漏れゼロの機械的固定点）──
 
-test("SSE_EVENT_NAMES: 既存 13 SSE イベントと 1:1（名前・本数を固定）", () => {
+test("SSE_EVENT_NAMES: 既存 13 本 + fireAsk / latency / quota / warnings の 17 本と 1:1（名前・本数を固定）", () => {
   assert.deepEqual(SSE_EVENT_NAMES, [
     "state", "vad", "transcript", "expression", "discard", "diagnostic", "soul",
-    "fire", "visionCaptured", "usage", "selfFire", "chatStatus", "chatDiagnostic"
+    "fire", "visionCaptured", "usage", "selfFire", "chatStatus", "chatDiagnostic",
+    "fireAsk", "latency", "quota", "warnings"
   ]);
-  assert.equal(SSE_EVENT_NAMES.length, 13);
+  assert.equal(SSE_EVENT_NAMES.length, 17);
 });
 
 // ── (4) rows fixture: 現 cockpit.html と機能同値の行レコード ──
@@ -449,13 +450,8 @@ test("FeedRow vnode スモーク: 各行種が view-logic 導出済み文字列�
   assert.equal(texts({ kind: "unknown-kind" }), ""); // 未知 kind は何も描かない。
 });
 
-test("Header identity: サーバー提供の Cody/Chappy displayName を描き、欠落/未知は中立表示", () => {
-  const props = {
-    ears: "listening",
-    health: { whisper: { status: "up", reason: null }, ffmpeg: { status: "up", reason: null } },
-    audioDevice: { name: "MV7+" },
-    onToggleSettings: () => {}
-  };
+test("TopBar identity: サーバー提供の Cody/Chappy displayName を描き、欠落/未知は中立表示", () => {
+  const props = { ears: "listening", soul: "idle", warnings: [], quota: null, nowMs: 0 };
   assert.equal(identityDisplayName({ id: "cody", displayName: "こーでぃー" }), "こーでぃー");
   assert.equal(identityDisplayName({ id: "chappy", displayName: "チャッピー" }), "チャッピー");
   assert.equal(identityDisplayName(null), NEUTRAL_COCKPIT_TITLE);
@@ -465,9 +461,9 @@ test("Header identity: サーバー提供の Cody/Chappy displayName を描き�
   assert.equal(identityDisplayName({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(identityDisplayName({ id: 1, displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(identityDisplayName({ id: "cody", displayName: 1 }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(collectText(Header({ ...props, identity: { id: "cody", displayName: "こーでぃー" } })).join("").includes("こーでぃー"), true);
-  assert.equal(collectText(Header({ ...props, identity: { id: "chappy", displayName: "チャッピー" } })).join("").includes("チャッピー"), true);
-  assert.equal(collectText(Header({ ...props, identity: undefined })).join("").includes(NEUTRAL_COCKPIT_TITLE), true);
+  assert.equal(collectText(TopBar({ ...props, identity: { id: "cody", displayName: "こーでぃー" } })).join("").includes("こーでぃー"), true);
+  assert.equal(collectText(TopBar({ ...props, identity: { id: "chappy", displayName: "チャッピー" } })).join("").includes("チャッピー"), true);
+  assert.equal(collectText(TopBar({ ...props, identity: undefined })).join("").includes(NEUTRAL_COCKPIT_TITLE), true);
   assert.equal(cockpitDocumentTitle({ id: "cody", displayName: "こーでぃー" }), "こーでぃー — Soul Cockpit");
   assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "チャッピー" }), "チャッピー — Soul Cockpit");
   assert.equal(cockpitDocumentTitle({ id: "unknown", displayName: "GPT" }), NEUTRAL_COCKPIT_TITLE);
@@ -475,21 +471,17 @@ test("Header identity: サーバー提供の Cody/Chappy displayName を描き�
   assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
 });
 
-test("Header vnode スモーク: 名前・ランプ・死活・声の出力先・⚙ が乗る", () => {
-  const vnode = Header({
+test("HealthLine vnode スモーク（ログのタブ）: ランプ・死活・声の出力先が乗る", () => {
+  const vnode = HealthLine({
     ears: "listening",
     health: { whisper: { status: "up", reason: null }, ffmpeg: { status: "down", reason: "gone" } },
-    audioDevice: { name: "MV7+" },
-    identity: { id: "cody", displayName: "こーでぃー" },
-    onToggleSettings: () => {}
+    audioDevice: { name: "MV7+" }
   });
   const text = collectText(vnode).join("");
-  assert.ok(text.includes("こーでぃー"), "名前");
   assert.ok(text.includes("Listening"), "ears 状態文言");
   assert.ok(text.includes("whisper"), "whisper 死活ラベル");
   assert.ok(text.includes("down — gone"), "down は reason 併記（healthStatusView 経由）");
   assert.ok(text.includes("MV7+"), "声の出力先（voiceOutputLabel 経由）");
-  assert.ok(text.includes("⚙"), "設定トグル");
 });
 
 // ── (9) styles: CSS 文字列の骨子（§7 の配色トークンが存在する・注入は冪等関数）──
@@ -509,11 +501,11 @@ test("injectStyles: doc なしは何もしない（Node から安全に呼べる
   assert.doesNotThrow(() => injectStyles(undefined));
 });
 
-// ── (10) Domain C: 運転バー + 設定引き出し（import スモーク / hooks 非使用部品の vnode 走査 / CSS）──
-// ControlBar / SettingsDrawer 本体は hooks（ローカル busy・入力欄 state）を使うため collectText の
+// ── (10) Domain C: 運転タブ + 設定引き出し（import スモーク / hooks 非使用部品の vnode 走査 / CSS）──
+// DrivePanel / SettingsDrawer 本体は hooks（ローカル busy・入力欄 state）を使うため collectText の
 // 「関数コンポーネント展開」流儀では走査できない（domain-b レビュー §6 申し送り 8）。
 // → 表示導出は view-logic fixture（control.test.mjs / settings.test.mjs）で固定し、hooks 非使用の
-//   葉部品（FireButtons/SelfFirePill/KillSwitch/SettingsSelect/DrawerStatus）を vnode 走査で固定する。
+//   葉部品（FireButtons/SelfFirePill/SettingsSelect/DrawerStatus）と上の帯の KILL（TopBar）を vnode 走査で固定する。
 
 /** vnode ツリーから要素 vnode を集める（関数コンポーネントは hooks 非使用前提で展開）。 */
 function collectElements(node, out = []) {
@@ -528,7 +520,7 @@ function collectElements(node, out = []) {
 }
 
 test("Domain C import スモーク: control-bar/settings-drawer が Node で import でき、主要 export が揃う", () => {
-  for (const fn of [ControlBar, FireButtons, SelfFirePill, VerbositySelect, KillSwitch, BargeInPill, SettingsDrawer, CockpitSettingsModal, SettingsSelect, DrawerStatus]) {
+  for (const fn of [DrivePanel, FireButtons, SelfFirePill, VerbositySelect, BargeInPill, SettingsDrawer, CockpitSettingsModal, SettingsSelect, DrawerStatus]) {
     assert.equal(typeof fn, "function");
   }
   // 口数モードの選択肢（値は固定の 3 択・wave 計画「口数配線」§2 裁定 A で実配線済み）。
@@ -539,14 +531,17 @@ test("Domain C import スモーク: control-bar/settings-drawer が Node で imp
   ]);
 });
 
-test("Cockpit Settings modal shell: one labelled dialog, four internal tabs, and bounded prompt slot", () => {
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["connections", "input-output", "brain-conversation", "memory"]);
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["接続", "入出力", "頭脳・会話", "記憶"]);
+test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (運転・ログを足した), and bounded prompt slot", () => {
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["connections", "input-output", "brain-conversation", "memory", "drive", "log"]);
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["接続", "入出力", "頭脳・会話", "記憶", "運転", "ログ"]);
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.match(source, /role="dialog"\s+aria-modal="true"/);
   assert.match(source, /role="tablist"/);
   assert.match(source, /role="tab"/);
-  assert.equal((source.match(/role="tabpanel"/g) || []).length, 4, "one panel per category");
+  assert.equal((source.match(/role="tabpanel"/g) || []).length, 6, "one panel per category");
+  assert.match(source, /driveSlot/);
+  assert.match(source, /logSlot/);
+  assert.match(source, />準備・設定</);
   assert.match(source, /id="cockpit-settings-panel-connections"[\s\S]*?hidden=\$\{activeCategory !== "connections"\}/);
   assert.match(source, /data-prompt-editor-slot/);
   assert.doesNotMatch(source, /role="alertdialog"/);
@@ -557,9 +552,9 @@ test("Cockpit Settings modal shell: one labelled dialog, four internal tabs, and
   assert.match(source, /ArrowLeft/);
   assert.match(source, /closeRequestRef/);
   assert.equal(settingsModalNextCategory("connections", "ArrowRight"), "input-output");
-  assert.equal(settingsModalNextCategory("connections", "ArrowLeft"), "memory");
+  assert.equal(settingsModalNextCategory("connections", "ArrowLeft"), "log");
   assert.equal(settingsModalNextCategory("memory", "Home"), "connections");
-  assert.equal(settingsModalNextCategory("connections", "End"), "memory");
+  assert.equal(settingsModalNextCategory("connections", "End"), "log");
   assert.equal(settingsModalCloseAction({ dirty: false }), "close");
   assert.equal(settingsModalCloseAction({ dirty: true }), "prompt");
   assert.equal(settingsModalFocusBoundary(0, 3, true), 2);
@@ -574,7 +569,7 @@ test("Cockpit Settings modal shell: one labelled dialog, four internal tabs, and
 });
 
 test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navigation and focuses only after acceptance", () => {
-  const tabs = ["connections", "input-output", "brain-conversation", "memory"].map((id) => ({
+  const tabs = ["connections", "input-output", "brain-conversation", "memory", "drive", "log"].map((id) => ({
     id: "cockpit-settings-tab-" + id,
     focusCount: 0,
     focus() { this.focusCount += 1; }
@@ -583,8 +578,9 @@ test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navig
   for (const [index, key, expected] of [
     [0, "ArrowRight", "input-output"],
     [1, "ArrowLeft", "connections"],
-    [1, "End", "memory"],
-    [3, "Home", "connections"]
+    [1, "End", "log"],
+    [3, "Home", "connections"],
+    [3, "ArrowRight", "drive"]
   ]) {
     const result = settingsModalKeyboardCategoryAction({
       tabs,
@@ -772,7 +768,7 @@ test("VerbositySelect vnode: verbosity prop が select の value に反映され
   select = collectElements(vnode).find((n) => n.type === "select");
   assert.equal(select.props.value, "normal");
   // onChange は呼び出し側のハンドラをそのまま素通しする（ここでは fetch は起きない・POST 配線は
-  // ControlBar 側・onToggleSelfFire の写経）。
+  // DrivePanel 側・onToggleSelfFire の写経）。
   let called = null;
   vnode = VerbositySelect({ verbosity: "quiet", onChange: (ev) => (called = ev) });
   select = collectElements(vnode).find((n) => n.type === "select");
@@ -786,31 +782,31 @@ test("VerbositySelect vnode: verbosity prop が select の value に反映され
   assert.ok(text.includes("控えめ") && text.includes("ふつう") && text.includes("おしゃべり"), "3 択の表示文言");
 });
 
-test("KillSwitch vnode: killed=false は「■ KILL」ボタン・status 非表示（S8 実装済み）", () => {
-  const vnode = KillSwitch({ view: killSwitchView(false), onClick: () => {} });
+test("TopBar の KILL: killed=false は「KILL」ボタン（onKill）・KILL 中の表示なし", () => {
+  let killed = 0;
+  let revived = 0;
+  const vnode = TopBar({ soul: "idle", ears: "listening", nowMs: 0, killed: false, onKill: () => (killed += 1), onRevive: () => (revived += 1) });
+  const header = collectElements(vnode).find((n) => n.type === "header");
+  assert.equal(header.props.class, "top-bar");
   const button = collectElements(vnode).find((n) => n.type === "button");
-  assert.equal(button.props.disabled, undefined, "disabled ではない（S8 実装済み）");
-  assert.equal(typeof button.props.onClick, "function");
-  const text = collectText(vnode).join("");
-  assert.ok(text.includes("KILL"));
-  assert.ok(!text.includes("殺し中"), "通常時は殺し中 status を描かない");
+  assert.equal(button.props.class, "kill-switch");
+  assert.equal(collectText(button).join(""), "KILL");
+  button.props.onClick();
+  assert.deepEqual([killed, revived], [1, 0]);
+  assert.ok(!collectText(vnode).join("").includes("KILL 中"));
 });
 
-test("KillSwitch vnode: killed=true は復帰ボタン + 「殺し中」status（バー全体の視覚化は control-bar の killing class）", () => {
-  const vnode = KillSwitch({ view: killSwitchView(true), onClick: () => {} });
+test("TopBar の KILL: killed=true は帯を赤く（killing）・「KILL 中」+ 復帰ボタン（onRevive）", () => {
+  let revived = 0;
+  const vnode = TopBar({ soul: "idle", ears: "listening", nowMs: 0, killed: true, onKill: () => {}, onRevive: () => (revived += 1) });
+  const header = collectElements(vnode).find((n) => n.type === "header");
+  assert.equal(header.props.class, "top-bar killing");
   const button = collectElements(vnode).find((n) => n.type === "button");
   assert.equal(button.props.class, "kill-switch killed");
-  const text = collectText(vnode).join("");
-  assert.ok(text.includes("復帰"));
-  assert.ok(text.includes("殺し中"));
-});
-
-test("KillSwitch vnode: onClick は呼び出し側のハンドラをそのまま素通しする", () => {
-  let called = false;
-  const vnode = KillSwitch({ view: killSwitchView(false), onClick: () => (called = true) });
-  const button = collectElements(vnode).find((n) => n.type === "button");
+  assert.equal(collectText(button).join(""), "復帰");
   button.props.onClick();
-  assert.equal(called, true);
+  assert.equal(revived, 1);
+  assert.ok(collectText(vnode).join("").includes("KILL 中"));
 });
 
 test("SettingsSelect vnode: view-logic の option 列（{value,label}）を機械的に描く", () => {
@@ -852,12 +848,11 @@ test("DrawerStatus vnode: 状態構造体（chatStatusView/channelStatusView）�
   assert.equal(collectText(vnode).join(""), "ws://a/channel — connected");
 });
 
-test("COCKPIT_CSS: 運転バー/設定引き出しの意匠トークン（§7: KILL 赤枠・畳み・chevron・pill）", () => {
-  assert.ok(COCKPIT_CSS.includes(".control-bar {"), "運転バー（常駐）");
-  assert.match(COCKPIT_CSS, /\.control-bar \.kill-switch \{[^}]*border-color: var\(--down\)/, "KILL は赤枠（§7）");
-  // S8: killed 中はバー全体が視覚的に「殺し中」と分かる（人間ゲート要求）。
-  assert.ok(COCKPIT_CSS.includes(".control-bar .kill-switch.killed"), "killed 中はボタン自体も反転表示");
-  assert.ok(COCKPIT_CSS.includes(".control-bar.killing"), "killed 中はバー全体に視覚化 class");
+test("COCKPIT_CSS: 上の帯の KILL / 運転タブ / 設定引き出しの意匠トークン（KILL 赤枠・畳み・chevron・pill）", () => {
+  assert.match(COCKPIT_CSS, /\.top-bar \.kill-switch \{[^}]*border: 1px solid var\(--down\)/, "KILL は赤枠");
+  assert.ok(COCKPIT_CSS.includes(".top-bar .kill-switch.killed"), "killed 中はボタン自体も反転表示");
+  assert.ok(COCKPIT_CSS.includes(".top-bar.killing"), "killed 中は上の帯全体が赤い");
+  assert.ok(COCKPIT_CSS.includes(".drive-panel"), "運転タブ（旧運転バー）");
   assert.match(COCKPIT_CSS, /\.settings-drawer \{ display: none; \}/, "引き出しは普段畳む");
   assert.ok(COCKPIT_CSS.includes(".settings-drawer.open"), "⚙ で開く");
   assert.match(COCKPIT_CSS, /\.drawer-select,\s*\.verbosity-select \{[^}]*appearance: none/, "select は chevron 付き（§7）");
@@ -880,15 +875,13 @@ test("transcript: you の行には遅延を出さない（whisper / ElevenLabs �
   assert.equal(feed.rows[0].latText, "(2.3s · claude)");
 });
 
-test("Header: stt（方式と状態）を whisper 死活に足して出し・マイク名は listening の間だけ出す", () => {
+test("HealthLine（ログのタブ）: stt（方式と状態）を whisper 死活に足して出し・マイク名は listening の間だけ出す", () => {
   const base = {
     health: { whisper: { status: "unknown", reason: null }, ffmpeg: { status: "up", reason: null } },
-    audioDevice: { name: "MV7+" },
-    identity: { id: "cody", displayName: "こーでぃー" },
-    onToggleSettings: () => {}
+    audioDevice: { name: "MV7+" }
   };
   const listening = collectText(
-    Header({
+    HealthLine({
       ...base,
       ears: "listening",
       stt: { engine: "elevenlabs", status: "up", reason: null },
@@ -899,15 +892,15 @@ test("Header: stt（方式と状態）を whisper 死活に足して出し・マ
   assert.ok(listening.includes("whisper: unknown"), "既存の whisper 死活は残す");
   assert.ok(listening.includes("mic: マイク (2- Shure MV7+)"));
   const reconnecting = collectText(
-    Header({ ...base, ears: "listening", stt: { engine: "elevenlabs", status: "reconnecting", reason: null }, device: "Mic" })
+    HealthLine({ ...base, ears: "listening", stt: { engine: "elevenlabs", status: "reconnecting", reason: null }, device: "Mic" })
   ).join("");
   assert.ok(reconnecting.includes("stt: ElevenLabs reconnecting"));
   const starting = collectText(
-    Header({ ...base, ears: "starting", stt: { engine: "whisper", status: "unknown", reason: null }, device: "Mic" })
+    HealthLine({ ...base, ears: "starting", stt: { engine: "whisper", status: "unknown", reason: null }, device: "Mic" })
   ).join("");
   assert.ok(starting.includes("Starting"));
   assert.ok(!starting.includes("mic:"), "起動中・停止中はマイク名を出さない");
-  const stopped = collectText(Header({ ...base, ears: "stopped", stt: null, device: "Mic" })).join("");
+  const stopped = collectText(HealthLine({ ...base, ears: "stopped", stt: null, device: "Mic" })).join("");
   assert.ok(!stopped.includes("mic:"));
   assert.ok(!stopped.includes("stt:"), "stt が無ければ出さない");
 });

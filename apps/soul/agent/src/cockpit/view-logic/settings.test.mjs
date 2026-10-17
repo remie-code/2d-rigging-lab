@@ -15,7 +15,6 @@ import {
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
   requestErrorText,
-  shouldAutoOpenSettings,
   brainPostErrorText,
   memoryToggleView,
   memoryPostErrorText,
@@ -150,50 +149,6 @@ test("requestErrorText: 各 fetch catch の prefix（現 cockpit.html の catch 
   assert.equal(requestErrorText("chatConnect", e), "chat connect error: Error: net"); //       :794
   assert.equal(requestErrorText("chatDisconnect", e), "chat disconnect error: Error: net"); // :802
   assert.equal(requestErrorText("brain", e), "brain error: Error: net"); // 多頭化 Domain C。
-});
-
-test("shouldAutoOpenSettings: 設定が全て空のときだけ true（導線 §4・初回自動展開）", () => {
-  // 初回（設定空）: channel 未設定・視界/出力先/chat source 未記憶・耳停止 → 自動展開。
-  assert.equal(
-    shouldAutoOpenSettings({
-      ears: "stopped",
-      device: null,
-      channel: null,
-      visionTarget: null,
-      audioDevice: null,
-      chat: { source: null, connected: false, state: null }
-    }),
-    true
-  );
-  // channel の { configured:false } / visionTarget・audioDevice の値 null 形も「空」扱い。
-  assert.equal(
-    shouldAutoOpenSettings({
-      device: null,
-      channel: { configured: false },
-      visionTarget: { title: null },
-      audioDevice: { name: null },
-      chat: { source: null }
-    }),
-    true
-  );
-});
-
-test("shouldAutoOpenSettings: どれか 1 つでも記憶済み/稼働中なら false（二回目以降は観測直行）", () => {
-  const empty = {
-    device: null,
-    channel: null,
-    visionTarget: null,
-    audioDevice: null,
-    chat: { source: null }
-  };
-  assert.equal(shouldAutoOpenSettings({ ...empty, channel: { configured: true, url: "ws://x" } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, visionTarget: { title: "FooGame" } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, audioDevice: { name: "MV7+" } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, chat: { source: "vid1", connected: false } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, device: "MV7+" }), false); // 耳が稼働中（開き直し）。
-  // snapshot 欠落（取得失敗系）は開かない = 誤展開防止。
-  assert.equal(shouldAutoOpenSettings(null), false);
-  assert.equal(shouldAutoOpenSettings(undefined), false);
 });
 
 // ── 配信間記憶: 記憶 ON/OFF トグル + 「今日を記録」の表示導出（settings-drawer「記憶」区画） ─────

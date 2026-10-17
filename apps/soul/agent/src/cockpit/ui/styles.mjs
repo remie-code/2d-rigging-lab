@@ -1,6 +1,9 @@
 // @ts-check
 /**
- * ui: 操縦席の視覚仕様（cockpit-redesign.md §7・モック承認済み 2026-07-14）の CSS。
+ * ui: 操縦席の視覚仕様の CSS。メイン画面は操縦席の作り直し（cockpit-glance-redesign.md・4 枚目の模型
+ * tmp/cockpit-mock/cockpit-mock-v4.png）: 上の細い帯・会話（左）+ コメント（右）・下の細い帯。配色の基調は
+ * 旧操縦席（cockpit-redesign.md §7・モック承認済み 2026-07-14）のトークンを流用する。準備・設定（ダイアログ）と
+ * ログのタブの観測フィードは旧来の意匠のまま。
  *
  * 置き場の裁定（Domain B・タスク B-3 の推奨 (a) を採用）: CSS 文字列を .mjs で export し、
  * mount 時に <style> 要素として注入する。根拠: ソース=実行物（配信される .mjs がそのまま
@@ -54,6 +57,32 @@ export const COCKPIT_CSS = `
   --down: #ff5d5d;
   /* ── パネル（§7: 角丸 14px）── */
   --radius: 14px;
+  /* ── 横目で見る画面（操縦席の作り直し・4 枚目の模型） ── */
+  --fg-soft: #b9c0cb;
+  --row-line: #1d242d;
+  --track: #222a35;
+  --gauge: #4cc9e6;
+  --amber: #f0b44b;
+  --amber-dim: #7a5d2a;
+  --amber-bg: rgba(240, 180, 75, 0.08);
+  --alert-text: #ff8a84;
+  --alert-bg: rgba(255, 93, 93, 0.12);
+  --kill-bg: #3b1215;
+  --who-streamer: #e9c46a;     /* 会話の話者「配信者」（模型の金色） */
+  --viewer-name: #e7eaee;
+  --chip: #5fc4e8;             /* 判定の札（応答 / 自発 / 相槌 + 確率） */
+  --range: #3fb4cf;            /* 推論に使った範囲の縦線 */
+  --latest-bg: rgba(86, 212, 176, 0.09);
+  --linked-bg: rgba(86, 212, 176, 0.05);
+  /* 遅延の区間（8 色・凡例と同じ並び） */
+  --seg-transcribe: #4cc9e6;
+  --seg-judge: #4a8fe7;
+  --seg-screen: #d8c35a;
+  --seg-llm-first: #a685f2;
+  --seg-first-sentence: #ee7cc6;
+  --seg-tts: #f2807a;
+  --seg-voice: #5fdc9c;
+  --seg-other: #5b6573;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -65,39 +94,294 @@ body {
 }
 #app { height: 100%; }
 
-/* ── 三層レイアウト: ヘッダ（固定）/ 観測フィード（主役・伸縮）/ 運転バー（常駐・Domain C）── */
+/* ── 横目で見る画面（操縦席の作り直し・cockpit-glance-redesign.md §3・§8）: 上の細い帯 / 会話（左 約 6 割）+
+      コメント（右 約 3.5 割）/ 下の細い帯。縦スクロールなしの 1 画面（1920×1080 基準・横 1280 まで崩さない）。── */
+html, body { overflow: hidden; }
 .cockpit {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 1200px;
 }
 
-/* ── ヘッダ（§7: 名前 + Listening ランプ + 一目の健康 + 右端 ⚙）── */
-.cockpit-header {
-  flex: 0 0 auto;
+/* ── 上の細い帯 ── */
+.top-bar {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-height: 52px;
+  padding: 8px 22px;
   background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.top-bar.killing { background: var(--kill-bg); border-bottom-color: var(--down); }
+.top-name { font-size: 16px; font-weight: 700; margin: 0; color: var(--fg); letter-spacing: 0.02em; }
+.top-model { color: var(--muted); padding-left: 14px; border-left: 1px solid var(--border); }
+.status-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.pill-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.status-pill.listening { color: var(--up); }
+.status-pill.thinking { color: var(--speaking); }
+.status-pill.speaking { color: var(--teal); }
+.status-pill.speaking .pill-dot { box-shadow: 0 0 8px var(--teal); }
+.kill-status.killed {
+  color: #fff;
+  background: var(--down);
+  border-radius: 6px;
+  padding: 2px 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.top-warnings { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.warn-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+.warn-chip.warn { color: var(--amber); border-color: var(--amber-dim); background: var(--amber-bg); }
+.warn-chip.alert { color: var(--alert-text); border-color: var(--down); background: var(--alert-bg); font-weight: 600; }
+.warn-chip.more { color: var(--muted); border-color: var(--border); flex: 0 0 auto; }
+.top-right { display: flex; align-items: center; gap: 20px; margin-left: auto; flex: 0 0 auto; }
+.kill-error { font-size: 12px; }
+.gauge { display: inline-flex; align-items: center; gap: 9px; font-size: 12px; color: var(--fg); }
+.gauge-track { width: 112px; height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.gauge-fill { display: block; height: 100%; background: var(--gauge); }
+.gauge.low { color: var(--amber); }
+.gauge.low .gauge-fill { background: var(--amber); }
+.gauge.critical { color: var(--alert-text); font-weight: 600; }
+.gauge.critical .gauge-fill { background: var(--down); }
+.gauge.unknown { color: var(--muted); }
+.top-bar .kill-switch {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--down);
+  background: transparent;
+  border: 1px solid var(--down);
+  border-radius: 6px;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+.top-bar .kill-switch:hover { background: var(--alert-bg); }
+.top-bar .kill-switch.killed { color: var(--down); background: #fff; border-color: #fff; }
+
+/* ── 本体（会話 + コメント） ── */
+.glance-main {
+  display: grid;
+  grid-template-columns: minmax(0, 60fr) minmax(0, 36fr);
+  min-height: 0;
+  padding: 0 22px;
+  column-gap: 0;
+}
+.glance-panel { display: flex; flex-direction: column; min-height: 0; padding: 14px 18px 10px 0; }
+.comments-panel { padding: 14px 0 10px 22px; border-left: 1px solid var(--border); }
+.panel-title { font-size: 14px; font-weight: 700; margin: 0 0 8px; color: var(--fg); }
+
+/* 会話: 最新が下。入らない古い行は上で切る（スクロールしない・上端は淡く消す）。 */
+.convo-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 32px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 32px);
+}
+.convo-row {
+  flex: 0 0 auto;
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px 84px 104px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  min-height: 42px;
+  padding: 5px 10px 5px 0;
+  border-bottom: 1px solid var(--row-line);
+  font-size: 14px;
+}
+.convo-row > .time { grid-column: 2; color: var(--muted); font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.convo-row > .who { grid-column: 3; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.convo-row.you > .who { color: var(--who-streamer); }
+.convo-row.soul > .who { color: var(--teal); }
+.convo-row > .text { grid-column: 4; min-width: 0; display: flex; align-items: baseline; gap: 14px; }
+.convo-row .body {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.react-tag { flex: 0 0 auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.kind-tag {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 16px;
+  border-radius: 5px;
+  padding: 0 6px;
 }
-.cockpit-header h1 {
-  font-size: 16px;
-  margin: 0;
-  color: var(--teal);
-  letter-spacing: 0.03em;
+.convo-row > .side { grid-column: 5; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.judge-chip { color: var(--chip); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* 相槌の間隔で流れた判定の薄い 1 行 */
+.convo-row.note { min-height: 30px; color: var(--ghost); font-size: 12px; }
+.convo-row.note > .text { color: var(--ghost); }
+/* 最新の返事の行と、そのきっかけの配信者の行（同じ色で淡くつなぐ） */
+.convo-row.latest { background: var(--latest-bg); }
+.convo-row.linked { background: var(--linked-bg); }
+/* 推論に使った範囲: 行の左端につながった細い縦線 + 範囲の始まりの上に極小の見出し */
+.convo-row.in-range::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: -1px;
+  width: 2px;
+  background: var(--range);
+}
+.convo-row.range-start::before { top: 0; }
+.convo-row.range-end::before { bottom: 6px; }
+.range-label { flex: 0 0 auto; font-size: 11px; color: var(--range); padding: 8px 0 2px 0; letter-spacing: 0.04em; }
+
+/* 遅延の棒: 長さ固定・中の区間は比（8 色）・合計の数字（4 秒超琥珀・6 秒超赤） */
+.lat { display: inline-flex; align-items: center; gap: 10px; }
+.lat-bar { display: flex; width: 132px; height: 9px; border-radius: 2px; overflow: hidden; background: var(--track); }
+.lat-seg { display: block; height: 100%; }
+.lat-seg + .lat-seg { border-left: 2px solid var(--bg); }
+.lat-total { min-width: 52px; text-align: right; font-size: 13px; color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lat-total.warn { color: var(--amber); font-weight: 600; }
+.lat-total.alert { color: var(--down); font-weight: 700; }
+.seg-transcribe { background: var(--seg-transcribe); }
+.seg-judge { background: var(--seg-judge); }
+.seg-screen { background: var(--seg-screen); }
+.seg-llm-first { background: var(--seg-llm-first); }
+.seg-first-sentence { background: var(--seg-first-sentence); }
+.seg-tts { background: var(--seg-tts); }
+.seg-voice { background: var(--seg-voice); }
+.seg-other { background: var(--seg-other); }
+
+/* 配信前（耳が止まっている間）: 会話の場所の中央に大きく「準備・設定を開く」 */
+.prestream { flex: 1 1 auto; display: grid; place-items: center; }
+.prestream-open {
+  font: inherit;
+  font-size: 20px;
   font-weight: 600;
+  color: var(--teal);
+  background: var(--latest-bg);
+  border: 1px solid var(--teal);
+  border-radius: var(--radius);
+  padding: 22px 48px;
+  cursor: pointer;
 }
+.prestream-open:hover { background: var(--linked-bg); }
+
+/* コメント: 新しいものが上。入らない古い行は下で切る（下端は淡く消す）。 */
+.comments-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  -webkit-mask-image: linear-gradient(to top, transparent 0, #000 32px);
+  mask-image: linear-gradient(to top, transparent 0, #000 32px);
+}
+.comment-row {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--row-line);
+  font-size: 14px;
+}
+.comment-row .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--viewer-name); }
+.comment-row .text { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.comment-row.reacted { background: var(--latest-bg); }
+.react-mark { color: var(--teal); font-size: 12px; white-space: nowrap; }
+.comment-row.rejected { display: flex; min-height: 34px; opacity: 0.8; }
+.reject-chip { color: var(--alert-text); font-size: 12px; }
+
+/* ── 下の細い帯（薄い文字） ── */
+.bottom-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 44px;
+  padding: 6px 22px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.drive-summary { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.drive-item .sep { margin: 0 10px; opacity: 0.6; }
+.drive-value { color: var(--fg-soft); }
+.lat-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  padding-left: 18px;
+  border-left: 1px solid var(--border);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.bottom-bar .settings-toggle {
+  flex: 0 0 auto;
+  color: var(--fg-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  padding: 4px 0 4px 18px;
+  font-size: 12px;
+}
+.bottom-bar .settings-toggle:hover { color: var(--teal); }
+/* 横 1280 程度まで: 帯の文字と間隔を詰める */
+@media (max-width: 1500px) {
+  .top-bar, .bottom-bar { gap: 10px; padding-left: 14px; padding-right: 14px; }
+  .lat-legend { gap: 9px; padding-left: 10px; }
+  .drive-item .sep { margin: 0 6px; }
+  .top-right { gap: 12px; }
+  .gauge-track { width: 80px; }
+  .glance-main { padding: 0 14px; }
+  .convo-row { grid-template-columns: 14px 76px 92px minmax(0, 1fr) auto; }
+  .lat-bar { width: 110px; }
+}
+
+/* ── 準備・設定の「ログ」タブ（今の観測フィード + 旧ヘッダの一目の健康） ── */
+.log-section .feed-panel { height: 62vh; }
+.health-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── 一目の健康（ログのタブ）・死活の色 ── */
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }
 .dot.on { background: var(--up); box-shadow: 0 0 8px var(--up); } /* 発光ドット（§7） */
 .dot.off { background: var(--muted); }
 .ears { display: flex; align-items: center; gap: 8px; }
 .ears-status { color: var(--muted); }
-.health { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 12px; margin-left: auto; }
+.health { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 12px; }
 .hstat { color: var(--muted); }
 .hstat.up { color: var(--up); }
 .hstat.down { color: var(--down); font-weight: bold; }
@@ -210,21 +494,10 @@ body {
 /* speak-now の判定行（「判定: 自発 0.45」・speak-now 合意 §5）。小さく淡く。 */
 .row.judgment-marker, .row.judgment-marker .who, .row.judgment-marker .text { color: var(--muted); font-size: 12px; }
 
-/* ── 運転バー（Domain C・§7: 常駐・左 = Fire/Fire+視覚・右 = 自発 pill・口数・KILL 赤枠）── */
-.control-bar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-}
-.control-bar-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
-.control-bar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-/* 運転バー/引き出し共通のボタン意匠（現 cockpit.html:75-80 の意味論を新トークンで継承）。 */
-.control-bar button,
+/* ── 準備・設定の「運転」タブ（旧運転バーの部品・cockpit-glance-redesign.md §5・§9.2）── */
+.drive-panel { padding: 2px 0; }
+.drive-row { gap: 12px; }
+/* 引き出し共通のボタン意匠（現 cockpit.html:75-80 の意味論を新トークンで継承）。 */
 .settings-drawer button,
 .cockpit-settings-modal button {
   background: var(--panel-raised);
@@ -235,15 +508,13 @@ body {
   font: inherit;
   cursor: pointer;
 }
-.control-bar button:hover:not(:disabled),
 .settings-drawer button:hover:not(:disabled),
 .cockpit-settings-modal button:hover:not(:disabled) { border-color: var(--teal); }
-.control-bar button:disabled,
 .settings-drawer button:disabled,
 .cockpit-settings-modal button:disabled { opacity: 0.45; cursor: default; }
 /* Fire = 黄（現 cockpit.html:86 #btn-fire）・Fire+視覚 = 淡青（現 :96 #btn-vision-fire）を継承。 */
-.control-bar .btn-fire { color: var(--marker-fire); font-weight: 600; letter-spacing: 0.04em; }
-.control-bar .btn-vision-fire { color: var(--marker-vision); font-weight: 600; letter-spacing: 0.04em; }
+.drive-panel .btn-fire { color: var(--marker-fire); font-weight: 600; letter-spacing: 0.04em; }
+.drive-panel .btn-vision-fire { color: var(--marker-vision); font-weight: 600; letter-spacing: 0.04em; }
 /* soul busy 表示 + fire-note（現 cockpit.html:87-90 の意味論を継承）。 */
 .soul-note { color: var(--muted); font-size: 12px; }
 .soul-state { color: var(--muted); }
@@ -251,7 +522,7 @@ body {
 .soul-state.speaking { color: var(--speaking); font-weight: bold; }
 .fire-note { color: var(--muted); font-size: 12px; }
 .control-error { font-size: 12px; }
-/* 自発トグル pill（§7: 右側の pill・on = 緑は現 :100-101 継承）。 */
+/* 自発トグル pill（on = 緑は現 :100-101 継承）。 */
 .self-fire-pill {
   display: flex;
   align-items: center;
@@ -265,7 +536,7 @@ body {
 .self-fire-toggle { accent-color: var(--teal); }
 .self-fire-status { color: var(--muted); font-size: 12px; }
 .self-fire-status.on { color: var(--up); }
-/* barge-in トグル pill（「朗読と合いの手」・self-fire pill の写経・既定 ON は server 側 born-disabled）。 */
+/* barge-in（かぶり）トグル pill（self-fire pill の写経）。 */
 .barge-in-pill {
   display: flex;
   align-items: center;
@@ -278,8 +549,9 @@ body {
 .barge-in-toggle { accent-color: var(--teal); }
 .barge-in-status { color: var(--muted); font-size: 12px; }
 .barge-in-status.on { color: var(--up); }
-/* 口数モード（プルダウンの場所のみ・実配線は s6-followup §12 の将来課題）。 */
+/* 口数・話し始め・忙しい間のコメントのプルダウン。 */
 .verbosity { display: flex; align-items: center; gap: 8px; }
+.drawer-row .verbosity .pill-label { flex: 0 0 auto; }
 .verbosity-select {
   background-color: var(--bg);
   color: var(--fg);
@@ -287,24 +559,6 @@ body {
   border-radius: 8px;
   padding: 5px 26px 5px 10px;
   font: inherit;
-}
-/* KILL（§7: 赤枠・S8 実装済み）。killed 中はボタン自体を反転表示 + バー全体（.control-bar.killing）に
-   赤いアクセントを付けて視覚的に「殺し中」と分かるようにする（人間ゲート要求）。 */
-.control-bar .kill-switch {
-  color: var(--down);
-  border-color: var(--down);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-}
-.control-bar .kill-switch.killed {
-  background: var(--down);
-  color: var(--panel);
-}
-.kill-switch-wrap { display: flex; align-items: center; gap: 8px; }
-.kill-status { font-size: 12px; color: var(--down); font-weight: 600; }
-.control-bar.killing {
-  border-color: var(--down);
-  box-shadow: 0 0 0 1px var(--down) inset;
 }
 
 /* ── 設定引き出し（Domain C・§7: 区画見出し・ラベル幅揃え・chevron select・色ドット・
@@ -333,7 +587,7 @@ body {
 .drawer-section + .drawer-section { border-top: 1px solid var(--border); }
 .drawer-section h3 { font-size: 12px; margin: 0 0 8px; color: var(--teal); letter-spacing: 0.06em; }
 .drawer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 4px 0; }
-.drawer-row label { flex: 0 0 9em; color: var(--muted); } /* ラベル幅揃え（§7）。 */
+.drawer-row > label:not([class]) { flex: 0 0 9em; color: var(--muted); } /* ラベル幅揃え（§7）。 */
 /* 状態/エラーの補助行（ラベル幅ぶんインデントして入力列に揃える）。 */
 .drawer-note {
   display: flex;

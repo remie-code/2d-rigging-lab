@@ -1,22 +1,20 @@
 // @ts-check
 /**
- * ui: 運転バー（常駐・cockpit-redesign.md §2/§7: 左 = Fire / Fire+視覚、右 = 自発トグル pill・
- * 口数モード・KILL 赤枠）。
+ * ui: 準備・設定の「運転」タブ（操縦席の作り直し・cockpit-glance-redesign.md §5・§9.2 / 依頼の既定 1）。
  *
- * 現 cockpit.html の fire セクション（:217-223）+ Fire ボタン（:555-570）+ 視覚発火ボタン（:573-589）+
- * 自発トグル（:204-206 :635-652）の移植先。soul の busy 表示（soul-status :220）と fire-note（:221）も
- * 運転層としてここに常駐する。表示文字列・状態導出はすべて view-logic/control.mjs 経由
- * （ここで再実装しない・L0 裁定）。
+ * 旧「運転バー」（常駐・メイン画面の下）の部品と POST 処理をそのまま移した先。メイン画面には操作部品を置かず
+ * （下の帯に運転設定の表示だけ）、ここに自発・口数・話し始め・忙しい間のコメント・かぶり（barge-in）と、手動の発火
+ * ボタン（Fire / Fire+視覚）を置く。KILL は上の帯（header.mjs の TopBar）へ移った（§7: 小さな KILL を常に置く）。
+ * 表示文字列・状態導出はすべて view-logic/control.mjs 経由（ここで再実装しない・L0 裁定）。
  *
- * props 契約（app.mjs が結線する・domain-b.md §2 + design レビュー申し送り 2 の 4 点セット）:
+ * props 契約（app.mjs が結線する）:
  *  - soul:          string        SSE soul / POST fire 応答の生 state（busy disable は soulStatusView 導出）。
- *  - setSoul:       (s) => void   Fire/vision-fire 応答の state 反映（:564 :583 applySoulState 相当。
- *                    応答 j は {fired, state, reason} 形で snapshot ではない = applySnapshot に乗らない）。
+ *  - setSoul:       (s) => void   Fire/vision-fire 応答の state 反映（応答 j は {fired, state, reason} 形で
+ *                    snapshot ではない = applySnapshot に乗らない）。
  *  - fireNote:      string        fire-note 表示（SSE fire 非受理 / ボタン応答 503 / fetch 失敗）。
- *  - setFireNote:   (t) => void   同上の更新（押下時の "" クリア :557 :575 も含む）。
- *  - selfFire:      { enabled } | null  state snapshot の selfFire（null = not available）。
- *  - applySnapshot: (s) => void   POST /api/self-fire の 200 応答（snapshot 全体）の適用
- *                    （applyStateRef.current 共有・原実装 applySelfFire(res.j.selfFire) と同源の値）。
+ *  - setFireNote:   (t) => void   同上の更新（押下時の "" クリアも含む）。
+ *  - selfFire / verbosity / speakStart / commentBusy / bargeIn: snapshot の現況（null = 使えない）。
+ *  - applySnapshot: (s) => void   POST の 200 応答（snapshot 全体）の適用。
  *  - fetchImpl:     任意          fetch の注入（既定は関数実行時に globalThis.fetch を参照）。
  *
  * 自発トグルは **controlled component**（checked = state 由来・onChange = POST のみ）。原実装の
@@ -38,12 +36,7 @@
  * snapshot の `speakStart`（"classic" | "speak-now"）で **controlled**（口数と同型）。onChange は
  * POST /api/speak-start → 成功時 applySnapshot。選択の保存はサーバ側（cockpit.mjs の settings 橋渡し）。
  * 忙しい間のコメント（コメント反応の合意 §2）: 話し始めの隣に「あとで拾う / 見逃す」のプルダウン（画面の
- * 作り直しまでの仮置き）。snapshot の `commentBusy` で controlled・onChange は POST /api/comment-busy。
- * KILL: **S8 で実装済み**（§7 赤枠の意匠を踏襲）。snapshot の `killed` で **controlled**（自発トグル/
- * 口数と同型）。通常時は「■ KILL」ボタン（押すと POST /api/kill {killed:true}）。キル中はバー全体に
- * `killing` class が付き視覚的に「殺し中」と分かる + 一クリック復帰ボタン（POST /api/kill
- * {killed:false}）。明示 boolean 指定であり**トグルではない**（onToggleSelfFire の写経・
- * killSwitchView/killPostErrorText/killRequestErrorText は view-logic/control.mjs）。
+ * 作り直しで運転タブへ）。snapshot の `commentBusy` で controlled・onChange は POST /api/comment-busy。
  *
  * トップレベル副作用ゼロ（export function/const のみ）。
  */
@@ -62,26 +55,22 @@ import {
   speakStartRequestErrorText,
   commentBusyPostErrorText,
   commentBusyRequestErrorText,
-  killSwitchView,
-  killPostErrorText,
-  killRequestErrorText,
   bargeInToggleView,
   bargeInPostErrorText,
   bargeInRequestErrorText
 } from "../view-logic/control.mjs";
+import { VERBOSITY_LABELS, SPEAK_START_LABELS, COMMENT_BUSY_LABELS } from "../view-logic/glance-meters.mjs";
+
+/** @param {Record<string, string>} labels @returns {Array<{ value: string; label: string }>} */
+function optionsFrom(labels) {
+  return Object.keys(labels).map((value) => ({ value, label: labels[value] }));
+}
 
 /** 口数モードの選択肢（wave 計画「口数配線」§2 裁定 A・実配線済み）。 */
-export const VERBOSITY_OPTIONS = [
-  { value: "quiet", label: "控えめ" },
-  { value: "normal", label: "ふつう" },
-  { value: "chatty", label: "おしゃべり" }
-];
+export const VERBOSITY_OPTIONS = optionsFrom(VERBOSITY_LABELS);
 
 /** 話し始めの方式の選択肢（speak-now 合意 §5「話し始め: 従来 / speak-now」）。 */
-export const SPEAK_START_OPTIONS = [
-  { value: "classic", label: "従来" },
-  { value: "speak-now", label: "speak-now" }
-];
+export const SPEAK_START_OPTIONS = optionsFrom(SPEAK_START_LABELS);
 
 /**
  * Fire / Fire+視覚ボタン（hooks 非使用・vnode 走査テスト対象）。
@@ -145,7 +134,7 @@ export function BargeInPill({ view, onChange }) {
  * 口数モードのプルダウン（hooks 非使用・vnode 走査テスト対象・SelfFirePill と同型の controlled
  * 部品）。value は snapshot 由来の verbosity（未設定/scheduler 未生成 = null は "normal" 表示に畳む・
  * server 側 setVerbosity の「未知値は normal」フォールバックと対称）。onChange は呼び出し側
- * （ControlBar）の POST ハンドラを素通しする。
+ * （DrivePanel）の POST ハンドラを素通しする。
  * @param {{ verbosity?: string | null; onChange: (ev: any) => void }} props
  */
 export function VerbositySelect({ verbosity, onChange }) {
@@ -187,10 +176,7 @@ export function SpeakStartSelect({ speakStart, onChange }) {
 }
 
 /** 忙しい間に届いたコメントの扱いの選択肢（コメント反応の合意 §2「見逃す / あとで拾う（既定）」）。 */
-export const COMMENT_BUSY_OPTIONS = [
-  { value: "hold", label: "あとで拾う" },
-  { value: "drop", label: "見逃す" }
-];
+export const COMMENT_BUSY_OPTIONS = optionsFrom(COMMENT_BUSY_LABELS);
 
 /**
  * 忙しい間に届いたコメントの扱いのプルダウン（コメント反応の合意 §2・画面の作り直しまでは運転バーの
@@ -217,39 +203,21 @@ export function CommentBusySelect({ commentBusy, onChange }) {
 }
 
 /**
- * KILL スイッチ（S8 実装済み・hooks 非使用・vnode 走査テスト対象）。view は killSwitchView 導出済み。
- * 通常時は「■ KILL」ボタン・キル中は「殺し中」status + 復帰ラベルのボタン（同じボタン 1 個・
- * ラベル/class が view で切り替わるだけ・onClick は呼び出し側が明示 boolean を送る）。
- * @param {{ view: { killed: boolean; label: string; className: string; statusText: string; statusClassName: string };
- *           onClick: () => void }} props
- */
-export function KillSwitch({ view, onClick }) {
-  return html`
-    <span class="kill-switch-wrap">
-      <button class=${view.className} type="button" onClick=${onClick}>${view.label}</button>
-      ${view.killed ? html`<span class=${view.statusClassName}>${view.statusText}</span>` : ""}
-    </span>
-  `;
-}
-
-/**
- * 運転バー本体。
+ * 「運転」タブ本体。
  * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
  *           selfFire?: { enabled?: boolean } | null; verbosity?: string | null; speakStart?: string | null;
  *           commentBusy?: string | null;
- *           killed?: boolean | null;
  *           bargeIn?: { enabled?: boolean } | null;
  *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
  */
-export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, speakStart, commentBusy, killed, bargeIn, applySnapshot, fetchImpl }) {
+export function DrivePanel({ soul, setSoul, fireNote, setFireNote, selfFire, verbosity, speakStart, commentBusy, bargeIn, applySnapshot, fetchImpl }) {
   // Fire 連打防止のローカル busy（:556 :574 の即時 disable 相当・応答/失敗で復帰）。
   const [localBusy, setLocalBusy] = useState(false);
-  // 自発トグル/口数/KILL/barge-in のエラー欄（旧 conversation-error :212 のうち自発系の文言。IA 再配置で運転バーに常駐）。
+  // 自発トグル/口数/話し始め/忙しい間のコメント/barge-in のエラー欄。
   const [controlError, setControlError] = useState("");
 
   const soulView = soulStatusView(soul);
   const sfView = selfFireToggleView(selfFire);
-  const killView = killSwitchView(killed);
   const biView = bargeInToggleView(bargeIn);
 
   /**
@@ -402,36 +370,22 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
       .catch((/** @type {unknown} */ e) => setControlError(commentBusyRequestErrorText(e)));
   };
 
-  /**
-   * KILL / 復帰（onToggleSelfFire の写経・S8）。**明示 boolean を送る**（トグルではない）: 現在
-   * killView.killed の逆を送る（false→{killed:true}=KILL・true→{killed:false}=revive）。UI 側で
-   * 逆算しているだけでサーバは反転せず受けた boolean をそのまま正本に設定する（cockpit-server.mjs
-   * POST /api/kill）。
-   */
-  const onClickKill = () => {
-    const doFetch = fetchImpl || globalThis.fetch;
-    const nextKilled = !killView.killed;
-    setControlError("");
-    doFetch("/api/kill", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ killed: nextKilled })
-    })
-      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
-      .then((/** @type {any} */ res) => {
-        const err = killPostErrorText(res);
-        if (err != null) {
-          setControlError(err);
-          return;
-        }
-        applySnapshot(res.j); // 200 応答は snapshot 全体（selfFire/verbosity 経路と同源）。
-      })
-      .catch((/** @type {unknown} */ e) => setControlError(killRequestErrorText(e)));
-  };
-
   return html`
-    <div class=${"control-bar" + (killView.killed ? " killing" : "")}>
-      <div class="control-bar-left">
+    <div class="drive-panel">
+      <div class="drawer-row drive-row">
+        <label>運転</label>
+        <${SelfFirePill} view=${sfView} onChange=${onToggleSelfFire} />
+        <${BargeInPill} view=${biView} onChange=${onToggleBargeIn} />
+      </div>
+      <div class="drawer-row drive-row">
+        <label>話し方</label>
+        <${VerbositySelect} verbosity=${verbosity} onChange=${onChangeVerbosity} />
+        <${SpeakStartSelect} speakStart=${speakStart} onChange=${onChangeSpeakStart} />
+        <${CommentBusySelect} commentBusy=${commentBusy} onChange=${onChangeCommentBusy} />
+      </div>
+      <div class="drawer-note"><span class="control-error err">${controlError}</span></div>
+      <div class="drawer-row drive-row">
+        <label>手動の発火</label>
         <${FireButtons}
           soulView=${soulView}
           localBusy=${localBusy}
@@ -439,17 +393,8 @@ export function ControlBar({ soul, setSoul, fireNote, setFireNote, selfFire, ver
           onVisionFire=${() => fireWith("/api/vision-fire", "vision")}
         />
         <span class="soul-note">soul: <span class=${soulView.className}>${soulView.text}</span></span>
-        <span class="fire-note">${fireNote}</span>
       </div>
-      <div class="control-bar-right">
-        <span class="control-error err">${controlError}</span>
-        <${SelfFirePill} view=${sfView} onChange=${onToggleSelfFire} />
-        <${BargeInPill} view=${biView} onChange=${onToggleBargeIn} />
-        <${VerbositySelect} verbosity=${verbosity} onChange=${onChangeVerbosity} />
-        <${SpeakStartSelect} speakStart=${speakStart} onChange=${onChangeSpeakStart} />
-        <${CommentBusySelect} commentBusy=${commentBusy} onChange=${onChangeCommentBusy} />
-        <${KillSwitch} view=${killView} onClick=${onClickKill} />
-      </div>
+      <div class="drawer-note"><span class="fire-note">${fireNote}</span></div>
     </div>
   `;
 }

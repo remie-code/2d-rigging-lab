@@ -224,12 +224,14 @@ test("static assets: 存在しない .mjs は 404", async () => {
 
 // ── Domain B: ui/*.mjs は「置くだけで配信される」（サーバ無改変・許可サブツリーの事実の固定）──
 
-test("static assets: ui/*.mjs（app/header/feed/rows/styles/control-bar/settings-drawer）は 200 + text/javascript + 実バイト", async () => {
+test("static assets: ui/*.mjs（app/header/feed/rows/styles/control-bar/settings-drawer/conversation/comments/bottom-bar）は 200 + text/javascript + 実バイト", async () => {
   const server = createCockpitServer({});
   try {
     const url = await server.listen(0);
     // Domain C で control-bar.mjs / settings-drawer.mjs が加わった（「置くだけで配信される」の固定を拡張）。
-    for (const name of ["app.mjs", "header.mjs", "feed.mjs", "rows.mjs", "styles.mjs", "control-bar.mjs", "settings-drawer.mjs"]) {
+    // 操縦席の作り直し（2 回目: 画面）で conversation.mjs / comments.mjs / bottom-bar.mjs が加わった。
+    for (const name of ["app.mjs", "header.mjs", "feed.mjs", "rows.mjs", "styles.mjs", "control-bar.mjs", "settings-drawer.mjs",
+      "conversation.mjs", "comments.mjs", "bottom-bar.mjs"]) {
       const r = /** @type {any} */ (await rawGet(url, "/ui/" + name));
       assert.equal(r.status, 200, `/ui/${name} が 200`);
       assert.match(String(r.headers["content-type"]), /text\/javascript/);

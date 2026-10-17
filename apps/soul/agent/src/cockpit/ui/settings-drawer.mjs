@@ -14,6 +14,11 @@
  *  - 頭脳・会話（Domain C）: technical brain の選択/Set に加え、同じダイアログ内で
  *    conversation-instruction editor へ切り替える。編集本文だけを dedicated API へ保存し、
  *    identity と memory structure は読み取り専用で表示する。
+ *  - 運転・ログ（操縦席の作り直し・cockpit-glance-redesign.md §5・§9.2）: 「運転」（自発・口数・話し始め・
+ *    忙しい間のコメント・かぶり・手動の発火 = 旧運転バー）と「ログ」（今の観測フィードそのまま）のタブ。中身は
+ *    app.mjs が組んだ部品を driveSlot / logSlot で受けて描くだけ（ここは器）。logSlot は関数なら
+ *    「ログのタブが見えているか」を渡して呼ぶ（フィードの末尾追従の寄せ直しに使う）。
+ *    画面上の名前は「準備・設定」（メイン画面の歯車・配信前の「準備・設定を開く」から開く）。
  *  - 記憶（配信間記憶・stream-memory-wave-plan.md §3 Domain B）: 頭脳区画の写経で新区画を追加。
  *    ON/OFF トグル（memoryToggleView・POST /api/memory・controlled component=selfFire/bargeIn pill と
  *    同型の一方向データフロー）+「今日を記録」ボタン（POST /api/memory-record）+ drawer-note に
@@ -119,7 +124,9 @@ export const SETTINGS_CATEGORIES = Object.freeze([
   Object.freeze({ id: "connections", label: "接続" }),
   Object.freeze({ id: "input-output", label: "入出力" }),
   Object.freeze({ id: "brain-conversation", label: "頭脳・会話" }),
-  Object.freeze({ id: "memory", label: "記憶" })
+  Object.freeze({ id: "memory", label: "記憶" }),
+  Object.freeze({ id: "drive", label: "運転" }),
+  Object.freeze({ id: "log", label: "ログ" })
 ]);
 
 /** @param {string} currentId @param {string} key @returns {string} */
@@ -223,7 +230,7 @@ export function settingsModalFocusReturnTarget(previous, open) {
  * @param {{ open?: boolean; onClose?: () => void; settings: any; sttEngine?: string | null; chatDisplay?: string | null;
  *   applySnapshot: (s: any) => void; fetchImpl?: any; promptEditorSlot?: any;
  *   draftDirty?: boolean; dirty?: boolean; onDiscardDraft?: () => void; onContinueDraft?: () => void;
- *   closeRequestRef?: { current: (() => void) | null } }} props
+ *   closeRequestRef?: { current: (() => void) | null }; driveSlot?: any; logSlot?: any }} props
  */
 export function CockpitSettingsModal({
   open,
@@ -238,7 +245,9 @@ export function CockpitSettingsModal({
   dirty = false,
   onDiscardDraft,
   onContinueDraft,
-  closeRequestRef
+  closeRequestRef,
+  driveSlot = null,
+  logSlot = null
 }) {
   // ── マイク（:163-169 :697-750）──
   const [micOptions, setMicOptions] = useState(/** @type {Array<{value:string;label:string}>} */ ([]));
@@ -739,7 +748,7 @@ export function CockpitSettingsModal({
       class=${"cockpit-settings-modal" + (open ? " open" : "")}
       role="dialog" aria-modal="true" aria-labelledby="cockpit-settings-title" tabIndex="-1">
       <div class="drawer-head cockpit-settings-head">
-        <h2 id="cockpit-settings-title">Cockpit Settings</h2>
+        <h2 id="cockpit-settings-title">準備・設定</h2>
         <button class="cockpit-settings-close" type="button" aria-label="Close settings" data-cockpit-settings-focus="true" onClick=${requestClose}>Close</button>
       </div>
       <nav class="cockpit-settings-tabs" aria-label="Settings categories" role="tablist">
@@ -945,6 +954,13 @@ export function CockpitSettingsModal({
           <span class="memory-status-label">${memoryStatusLabel(settings && settings.memory)}</span>
           <span class="err">${memoryError}</span>
         </div>
+      </div>
+      <div id="cockpit-settings-panel-drive" class="drawer-section" data-settings-category="drive" role="tabpanel" aria-labelledby="cockpit-settings-tab-drive" hidden=${activeCategory !== "drive"}>
+        <h3>運転</h3>
+        ${driveSlot}
+      </div>
+      <div id="cockpit-settings-panel-log" class="drawer-section log-section" data-settings-category="log" role="tabpanel" aria-labelledby="cockpit-settings-tab-log" hidden=${activeCategory !== "log"}>
+        ${typeof logSlot === "function" ? logSlot(!!open && activeCategory === "log") : logSlot}
       </div>
     </section>
     </div>

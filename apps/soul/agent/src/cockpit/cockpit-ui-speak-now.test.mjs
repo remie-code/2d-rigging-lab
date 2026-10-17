@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 import { emptyFeed, feedAfterSseEvent } from "./ui/rows.mjs";
 import { FeedRow } from "./ui/feed.mjs";
-import { SpeakStartSelect, SPEAK_START_OPTIONS, ControlBar } from "./ui/control-bar.mjs";
+import { SpeakStartSelect, SPEAK_START_OPTIONS, DrivePanel } from "./ui/control-bar.mjs";
 import { SSE_EVENT_NAMES, settingsFromSnapshot } from "./ui/app.mjs";
 import { COCKPIT_CSS } from "./ui/styles.mjs";
 import { speakNowJudgmentText, SPEAK_NOW_CHOICE_LABELS } from "./view-logic/markers.mjs";
@@ -76,8 +76,8 @@ test("feedAfterSseEvent: selfFire kind:speak-now-judgment は判定行 / error �
   assert.ok(collectText(vnode).join("").includes("判定: 自発 0.45"));
 });
 
-test("SSE は増やさない（selfFire に相乗り・13 本のまま）", () => {
-  assert.equal(SSE_EVENT_NAMES.length, 13);
+test("SSE は speak-now のために増やさない（selfFire に相乗り・作り直しの 4 本を足して 17 本）", () => {
+  assert.equal(SSE_EVENT_NAMES.length, 17);
   assert.ok(SSE_EVENT_NAMES.includes("selfFire"));
 });
 
@@ -114,13 +114,13 @@ test("speakStartPostErrorText / speakStartRequestErrorText: 503/!ok の文言・
   assert.equal(speakStartRequestErrorText(new Error("net")), "speak-start error: Error: net");
 });
 
-test("ControlBar: 口数の隣に話し始めのプルダウンが並ぶ（hooks を使うため関数としてはソースで確認）", async () => {
+test("DrivePanel（運転タブ）: 口数の隣に話し始めのプルダウンが並ぶ（hooks を使うため関数としてはソースで確認）", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("./ui/control-bar.mjs", import.meta.url), "utf8");
   const verbosityAt = src.indexOf("<${VerbositySelect}");
   const speakAt = src.indexOf("<${SpeakStartSelect}");
   assert.ok(verbosityAt > 0 && speakAt > verbosityAt, "口数の直後");
   assert.ok(src.includes('doFetch("/api/speak-start"'));
-  assert.equal(typeof ControlBar, "function");
+  assert.equal(typeof DrivePanel, "function");
   assert.ok(COCKPIT_CSS.includes(".row.judgment-marker"), "判定行の意匠");
 });

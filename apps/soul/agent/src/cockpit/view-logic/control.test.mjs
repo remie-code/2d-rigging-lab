@@ -123,10 +123,10 @@ test("verbosityRequestErrorText: catch 文言", () => {
 
 // ── S8「キルスイッチ」: KILL ボタン / 復帰ボタンの表示導出（selfFireToggleView の写経）─────────
 
-test("killSwitchView: killed=false は「■ KILL」ボタン・status 非表示", () => {
+test("killSwitchView: killed=false は「KILL」ボタン・status 非表示", () => {
   assert.deepEqual(killSwitchView(false), {
     killed: false,
-    label: "■ KILL",
+    label: "KILL",
     className: "kill-switch",
     statusText: "",
     statusClassName: "kill-status"
@@ -136,12 +136,12 @@ test("killSwitchView: killed=false は「■ KILL」ボタン・status 非表示
   assert.deepEqual(killSwitchView(null), killSwitchView(false));
 });
 
-test("killSwitchView: killed=true は復帰ボタン・「殺し中」status + killed class", () => {
+test("killSwitchView: killed=true は復帰ボタン・「KILL 中」status + killed class（上の帯）", () => {
   assert.deepEqual(killSwitchView(true), {
     killed: true,
-    label: "◆ 復帰",
+    label: "復帰",
     className: "kill-switch killed",
-    statusText: "殺し中",
+    statusText: "KILL 中",
     statusClassName: "kill-status killed"
   });
 });

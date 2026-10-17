@@ -200,9 +200,10 @@ export function commentBusyRequestErrorText(e) {
 // ── S8「キルスイッチ」: KILL ボタン / 復帰ボタンの表示導出（selfFireToggleView の様式踏襲）───────
 
 /**
- * KILL スイッチの表示導出（S8）。killed=false（通常時）は「■ KILL」ボタン（押すと POST /api/kill
- * {killed:true}）。killed=true（キル中）はバー全体が「殺し中」と分かる表示 + 一クリック復帰ボタン
- * （押すと POST /api/kill {killed:false}）。selfFireToggleView と異なり「not available」の disable
+ * KILL スイッチの表示導出（S8）。killed=false（通常時）は「KILL」ボタン（押すと POST /api/kill
+ * {killed:true}）。killed=true（キル中）は上の帯を赤くして「KILL 中」+ 一クリック復帰ボタン
+ * （押すと POST /api/kill {killed:false}）。操縦席の作り直し（cockpit-glance-redesign.md §4・§7）で
+ * 置き場所が運転バーから上の帯へ移り、文言を「KILL」「KILL 中」「復帰」にした。selfFireToggleView と異なり「not available」の disable
  * 概念は持たない（orchestrator 未注入かどうかは snapshot からは分からず、押下時の 503 応答で正直に
  * 表す＝killPostErrorText の責務）。
  * @param {boolean | null | undefined} killed  state snapshot の killed（既定 false 扱い）。
@@ -212,9 +213,9 @@ export function killSwitchView(killed) {
   const on = killed === true;
   return {
     killed: on,
-    label: on ? "◆ 復帰" : "■ KILL",
+    label: on ? "復帰" : "KILL",
     className: "kill-switch" + (on ? " killed" : ""),
-    statusText: on ? "殺し中" : "",
+    statusText: on ? "KILL 中" : "",
     statusClassName: "kill-status" + (on ? " killed" : "")
   };
 }

@@ -5,8 +5,9 @@
  * 操縦席 UI 改定 Domain C の追加抽出。現 cockpit.html の設定系ハンドラ（loadDevices / loadWindows /
  * loadAudioDevices の一覧構築・各 POST の失敗文言・視界の現況表示）から DOM 構築 / fetch 配線を
  * 剥がして「応答 JSON → 表示構造体 / 文字列」の導出だけを取り出す。機能同値（fixture で固定）。
- * 加えて導線（cockpit-redesign.md §4）の「初回 = 設定空なら引き出しを自動展開」の判定式
- * `shouldAutoOpenSettings` をここで固定する（stateLoaded ガードは app.mjs 側・fixture 固定）。
+ * （旧導線の「初回 = 設定空なら引き出しを自動展開」の判定式 shouldAutoOpenSettings は、操縦席の作り直しで
+ * 初回の自動展開をやめた（cockpit-glance-redesign.md §7・§9.2）ため削除した。配信前は会話の場所の中央の
+ * 「準備・設定を開く」が入口。）
  *
  * 様式統一（全 view-logic 共通・L0 裁定）: 行テキスト=文字列・状態導出={text, className, …}構造体・
  * **非表示（エラーなし）= null**。
@@ -301,34 +302,4 @@ const REQUEST_ERROR_PREFIX = {
  */
 export function requestErrorText(kind, e) {
   return REQUEST_ERROR_PREFIX[kind] + ": " + e;
-}
-
-/**
- * 導線（cockpit-redesign.md §4）: 初回（設定が空）は設定引き出しを自動展開・二回目以降
- * （何か記憶済み）は観測フィードへ直行、の判定式。
- *
- * 入力は **GET /api/state の成功応答 snapshot**（呼び出し側 = app.mjs が「取得完了
- * （stateLoaded=true）後に一度だけ」呼ぶ・fetch 完了前/失敗時の誤展開はそのガードで防ぐ）。
- *
- * 「設定済み（= 二回目以降）」とみなす材料（6 設定キーのうち snapshot に「未設定」と区別可能な
- * 形で載るもの + 稼働状態）:
- *  - channel.configured     … 器 Channel URL 記憶済み
- *  - visionTarget.title     … 視界（ゲーム窓）記憶済み
- *  - audioDevice.name       … 声の出力先記憶済み
- *  - chat.source            … YouTube 配信 source 記憶済み
- *  - device                 … 耳が現デバイスで稼働中（タブ開き直し = 観測直行が正）
- * ※ lastDevice（マイク記憶）は snapshot に載らず（GET /api/devices 応答のみ）判定に使わない。
- * ※ selfFire は {enabled} | null（scheduler 有無）で「未記憶」と「明示 false」が snapshot 上
- *   区別できないため判定に使わない。
- * @param {any} s  GET /api/state の snapshot。
- * @returns {boolean}  true = 設定が空（初回）→ 自動展開。
- */
-export function shouldAutoOpenSettings(s) {
-  if (!s) return false; // snapshot 欠落では開かない（誤展開防止・観測直行が既定）。
-  if (s.channel && s.channel.configured) return false;
-  if (s.visionTarget && s.visionTarget.title) return false;
-  if (s.audioDevice && s.audioDevice.name) return false;
-  if (s.chat && s.chat.source) return false;
-  if (s.device) return false;
-  return true;
 }
