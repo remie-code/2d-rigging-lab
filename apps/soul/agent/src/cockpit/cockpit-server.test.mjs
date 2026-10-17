@@ -3855,7 +3855,7 @@ test("cockpit speak-now: 口数は問いの性格の 1 文にだけ効く（POST
   }
 });
 
-test("cockpit speak-now: 相槌は画面を撮らず内部指示付きで発火・判定行の直後に発火結果の行／待つは判定行も出さない", async () => {
+test("cockpit speak-now: 相槌も画面を見て（preferred）内部指示付きで発火・判定行の直後に発火結果の行／待つは判定行も出さない", async () => {
   const h = await startSpeakNowServer();
   try {
     h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "いやー難しい" });
@@ -3884,7 +3884,7 @@ test("cockpit speak-now: 相槌は画面を撮らず内部指示付きで発火�
     );
     assert.equal(h.fakeOrch.record.fireCount, 1);
     assert.deepEqual(h.fakeOrch.record.lastFireOptions, {
-      vision: false,
+      vision: "preferred",
       instruction: "今は配信者の話に相槌を打つタイミング。",
       cause: { type: "speak-now", choice: "backchannel", probability: 0.5, trigger: "transcript", triggerSeq: 0, judgeLatencyMs: 812 }
     });

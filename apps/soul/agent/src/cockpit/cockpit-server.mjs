@@ -2056,7 +2056,7 @@ export function createCockpitServer(options = {}) {
     //  - 忙しい: orchestrator が idle でない、またはサーバが呼んだ fire() がまだ片付いていない。
     //  - 判定してよい: speak-now モード・自発 pill ON・KILL でない。
     //  - 応答・自発 → 通常の自発発火と同じ fire({vision:"preferred"})（LLM に区別は伝えない・合意 §2）。
-    //  - 相槌 → 同じ頭・同じセッションで fire({vision:false, instruction})（画面は撮らない・その 1 回だけ先頭に
+    //  - 相槌 → 同じ頭・同じセッションで fire({vision:"preferred", instruction})（画面も見る・2026-10-17 改め。その 1 回だけ先頭に
     //    「今は配信者の話に相槌を打つタイミング。」・backchannel.md §2）。発火結果は kind:"speak-now" で
     //    応答・自発と同じ selfFire 行（判定行「判定: 相槌 0.xx」の直後に出る）。前の相槌を喋り始めてから
     //    backchannelMinIntervalMs の間は部品が流す（action=skip-interval・ターミナルの 1 行だけ）。
@@ -2086,7 +2086,8 @@ export function createCockpitServer(options = {}) {
           return;
         }
         backchannelFirePending = true;
-        requestSelfFire("speak-now", { vision: false, instruction: SPEAK_NOW_BACKCHANNEL_INSTRUCTION, cause }).finally(() => {
+        // 相槌も画面を見る（2026-10-17 ユーザー判断: 常駐撮影で応答時間がほぼ変わらないため）。
+        requestSelfFire("speak-now", { vision: "preferred", instruction: SPEAK_NOW_BACKCHANNEL_INSTRUCTION, cause }).finally(() => {
           backchannelFirePending = false;
         });
       },
