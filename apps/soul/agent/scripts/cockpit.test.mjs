@@ -19,6 +19,7 @@ import {
   createChatSourceHooks,
   createSttEngineHooks,
   formatSttLatencyLine,
+  formatCaptureEventLine,
   createSpeakStartHooks,
   formatSpeakNowLine,
   createCommentBusyHooks,
@@ -1641,6 +1642,31 @@ test("formatSttLatencyLine: 数字だけの 1 行（物差しが無いときは 
   assert.equal(formatSttLatencyLine({ engine: "elevenlabs", latencyMs: 512.4 }), "[cockpit] stt latency: engine=elevenlabs ms=512\n");
   assert.equal(formatSttLatencyLine({ engine: "whisper", latencyMs: null }), "[cockpit] stt latency: engine=whisper ms=-\n");
   assert.equal(formatSttLatencyLine({ engine: "whisper", latencyMs: NaN }), "[cockpit] stt latency: engine=whisper ms=-\n");
+});
+
+// ── formatCaptureEventLine（画面キャプチャの撮る係・vision-capture-latency §4）────────
+
+test("formatCaptureEventLine: 撮影ごと・起動停止ごとに数字と種類だけの 1 行（タイトルは書かない）", { timeout: 5000 }, () => {
+  assert.equal(
+    formatCaptureEventLine({ type: "capture", via: "resident", elapsedMs: 48.6, ok: true, kind: null }),
+    "[cockpit] capture: via=resident ms=49 result=ok\n"
+  );
+  assert.equal(
+    formatCaptureEventLine({ type: "capture", via: "resident", elapsedMs: 2001, ok: false, kind: "timeout" }),
+    "[cockpit] capture: via=resident ms=2001 result=timeout\n"
+  );
+  assert.equal(
+    formatCaptureEventLine({ type: "capture", via: "spawn", elapsedMs: 612, ok: true, kind: null, fallbackReason: "starting" }),
+    "[cockpit] capture: via=spawn ms=612 result=ok fallback=starting\n"
+  );
+  assert.equal(formatCaptureEventLine({ type: "starting" }), "[cockpit] capture helper: starting\n");
+  assert.equal(formatCaptureEventLine({ type: "ready", startupMs: 448 }), "[cockpit] capture helper: ready ms=448\n");
+  assert.equal(
+    formatCaptureEventLine({ type: "exited", code: 1, willRestart: true, reason: "exited" }),
+    "[cockpit] capture helper: exited code=1 restart=yes reason=exited\n"
+  );
+  assert.match(formatCaptureEventLine({ type: "gaveUp", failures: 3 }), /^\[cockpit\] capture helper: gave up after 3 failed starts/);
+  assert.equal(formatCaptureEventLine({ type: "stopped" }), "[cockpit] capture helper: stopped\n");
 });
 
 // ── createSpeakStartHooks / formatSpeakNowLine（speak-now 合意 §5: 話し始めの切替の保存・判定ログ）────────

@@ -456,6 +456,11 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {(info: { engine: string; latencyMs: number | null }) => void} [options.onSttLatency]
  *   you の転写 1 件ごとの遅延（数字のみ・本文は渡さない）。cockpit.mjs が標準出力に 1 行書く
  *   （画面の行の横の遅延表示は出さない方針・合意 §4.2）。
+ * @param {() => void} [options.onEarsStarted]
+ *   耳の Start が成功したときに呼ぶ（画面キャプチャの撮る係を立ち上げる口・
+ *   discussion/ai-cohost/research/vision-capture-latency-2026-10.md §4 の 2）。待たない・失敗しても耳は止めない。
+ * @param {() => void} [options.onEarsStopped]
+ *   耳の Stop と close() のときに呼ぶ（撮る係を止める口）。冪等な実装を渡す前提（耳が起動していなくても呼ぶ）。
  * @param {"classic" | "speak-now"} [options.speakStartModeInitial="classic"]
  *   話し始めの方式（speak-now 合意 §5 の「話し始め: 従来 / speak-now」）の初期値。サーバ単体の既定は
  *   "classic"（従来・無退行）で、操縦席の初回既定 speak-now は呼び出し側（cockpit.mjs の settings 橋渡し）が
@@ -568,6 +573,18 @@ export function createCockpitServer(options = {}) {
   const elevenLabsApiKeyProvider =
     typeof options.elevenLabsApiKeyProvider === "function" ? options.elevenLabsApiKeyProvider : () => loadElevenLabsApiKey();
   const onSttLatency = typeof options.onSttLatency === "function" ? options.onSttLatency : null;
+  // 画面キャプチャの撮る係の寿命を耳の Start / Stop に合わせる口（vision-capture-latency §4 の 2）。
+  const onEarsStarted = typeof options.onEarsStarted === "function" ? options.onEarsStarted : null;
+  const onEarsStopped = typeof options.onEarsStopped === "function" ? options.onEarsStopped : null;
+  /** @param {(() => void) | null} hook */
+  const callEarsHook = (hook) => {
+    if (!hook) return;
+    try {
+      hook();
+    } catch {
+      // 撮る係の起動/停止の失敗で耳の操作を止めない（撮影は毎回起動に戻るだけ）。
+    }
+  };
   // speak-now（話し始めの判定・discussion/ai-cohost/decisions/speak-now/integration.md）: 方式の現在値・
   // 永続化フック・判定エンジン・判定ログの口。
   /** @type {"classic" | "speak-now"} */
@@ -1032,11 +1049,13 @@ export function createCockpitServer(options = {}) {
     health.ffmpeg = "up";
     health.ffmpegReason = null;
     broadcastState();
+    callEarsHook(onEarsStarted);
     return { ok: true, state: snapshot() };
   }
 
   /** @returns {Promise<object>} 停止後の状態。 */
   async function stopEars() {
+    callEarsHook(onEarsStopped);
     if (!pipeline) {
       earsState = "stopped";
       return snapshot();
@@ -2379,6 +2398,7 @@ export function createCockpitServer(options = {}) {
       }
       earsState = "stopped";
       startedAtMs = null;
+      callEarsHook(onEarsStopped);
       await new Promise((resolve) => {
         server.closeAllConnections?.();
         server.close(() => resolve(undefined));

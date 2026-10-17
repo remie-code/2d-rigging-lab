@@ -468,6 +468,67 @@ test("cockpit POST /api/ears/start: start 失敗は 500 + error・状態は stop
   }
 });
 
+test("cockpit 耳の Start / Stop / close で撮る係の口（onEarsStarted / onEarsStopped）を呼ぶ", async () => {
+  const fake = makeFakePipeline();
+  /** @type {string[]} */
+  const calls = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onEarsStarted: () => calls.push("started"),
+    onEarsStopped: () => calls.push("stopped")
+  });
+  try {
+    const url = await server.listen(0);
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.deepEqual(calls, ["started"]);
+    // 起動済みの Start（冪等）では二重に呼ばない。
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.deepEqual(calls, ["started"]);
+    await postJson(`${url}/api/ears/stop`, {});
+    assert.deepEqual(calls, ["started", "stopped"]);
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.deepEqual(calls, ["started", "stopped", "started"]);
+  } finally {
+    await server.close();
+  }
+  // 操縦席の終了（close）でも止める。
+  assert.deepEqual(calls, ["started", "stopped", "started", "stopped"]);
+});
+
+test("cockpit 耳の Start が失敗したら撮る係は立ち上げない・口が throw しても耳の操作は止まらない", async () => {
+  const fake = makeFakePipeline();
+  fake.record.startShouldThrow = new Error("failed to bring up ears");
+  /** @type {string[]} */
+  const calls = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onEarsStarted: () => {
+      calls.push("started");
+      throw new Error("boom");
+    },
+    onEarsStopped: () => {
+      calls.push("stopped");
+      throw new Error("boom");
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const failed = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(failed.status, 500);
+    assert.deepEqual(calls, []);
+    fake.record.startShouldThrow = null;
+    const ok = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.ears, "listening");
+    const stop = await postJson(`${url}/api/ears/stop`, {});
+    assert.equal(stop.status, 200);
+    assert.equal(stop.json.ears, "stopped");
+    assert.deepEqual(calls, ["started", "stopped"]);
+  } finally {
+    await server.close();
+  }
+});
+
 test("cockpit POST /api/ears/start: device 未指定なら settings の lastDevice にフォールバック", async () => {
   const fake = makeFakePipeline();
   const settings = createInMemorySettingsStore("Remembered Mic");

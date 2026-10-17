@@ -55,6 +55,7 @@ import {
   resolveConversationInstructionProfile
 } from "../src/mind/fire-orchestrator.mjs";
 import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
+import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
 import { createAudioPlayer } from "../src/voice/audio-player.mjs";
@@ -777,6 +778,37 @@ export function formatSttLatencyLine(info) {
 }
 
 /**
+ * 画面キャプチャの撮る係（常駐 PowerShell・src/eyes/resident-capture.mjs）の記録 1 行（操縦席の標準出力）。
+ * 数字と種類だけ（窓タイトル・画像は書かない）。撮影 1 回ごとの `capture:` 行の ms が撮影の待ち時間
+ * （via=resident が撮る係・via=spawn が毎回起動に戻った回。fallback= は戻った理由）。
+ * @param {import("../src/eyes/resident-capture.mjs").ResidentCaptureEvent} event
+ * @returns {string}
+ */
+export function formatCaptureEventLine(event) {
+  const ms = (/** @type {unknown} */ value) =>
+    typeof value === "number" && Number.isFinite(value) ? String(Math.round(value)) : "-";
+  switch (event.type) {
+    case "capture": {
+      const result = event.ok ? "ok" : (event.kind ?? "error");
+      const fallback = event.via === "spawn" && event.fallbackReason ? ` fallback=${event.fallbackReason}` : "";
+      return `[cockpit] capture: via=${event.via} ms=${ms(event.elapsedMs)} result=${result}${fallback}\n`;
+    }
+    case "starting":
+      return "[cockpit] capture helper: starting\n";
+    case "ready":
+      return `[cockpit] capture helper: ready ms=${ms(event.startupMs)}\n`;
+    case "exited":
+      return `[cockpit] capture helper: exited code=${event.code ?? "-"} restart=${event.willRestart ? "yes" : "no"} reason=${event.reason}\n`;
+    case "gaveUp":
+      return `[cockpit] capture helper: gave up after ${event.failures} failed starts (captures use one-shot powershell until next ears Start)\n`;
+    case "stopped":
+      return "[cockpit] capture helper: stopped\n";
+    default:
+      return "";
+  }
+}
+
+/**
  * settings の話し始めの方式（speakStartMode）を、cockpit-server の口（speakStartModeInitial/
  * onSetSpeakStartMode）へ橋渡しする（speak-now 合意 §5・createVerbosityHooks と同型の薄い配線層）。
  * 未記憶/未知値は defaultMode（**初回既定 "speak-now"**・合意 §5）。
@@ -1018,6 +1050,12 @@ async function main() {
   let channelRevision = 0;
   let appliedChannelRevision = 0;
   const fireDiagnostics = createFireDiagnostics();
+  // 画面キャプチャの撮る係（常駐 PowerShell）。耳の Start で立ち上げ、耳の Stop・操縦席の終了で止める
+  // （discussion/ai-cohost/research/vision-capture-latency-2026-10.md §4）。使えない間の撮影は今の
+  // captureWindow（毎回起動）に戻る。記録は標準出力へ 1 行（数字と種類だけ）。
+  const residentCapture = createResidentCapture({
+    onEvent: (event) => process.stdout.write(formatCaptureEventLine(event))
+  });
   const lazyChannel = createLazyChannel(initialUrl, {
     onTrace: (event, fields) => fireDiagnostics.record(event, fields)
   });
@@ -1361,9 +1399,10 @@ async function main() {
       player: /** @type {any} */ (playerProxy),
       progressivePlayback: true,
       acquireFireResources: acquireAcceptedFireResources,
-      // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。captureImpl は既定（Domain A の
-      // captureWindow）のまま差し替えない。
+      // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。撮影は常駐の撮る係に頼む
+      // （vision-capture-latency §4・使えない間は captureWindow＝毎回起動に戻る）。
       getVisionTarget: visionTargetHooks.getVisionTarget,
+      captureImpl: residentCapture.capture,
       speakDeps: productionSpeakDeps,
       ...(windowMs != null ? { windowMs } : {}),
       ...(maxChars != null ? { maxChars } : {})
@@ -1452,6 +1491,9 @@ async function main() {
     sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
     onSetSttEngine: sttEngineHooks.onSetSttEngine,
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
+    // 画面キャプチャの撮る係の寿命を耳に合わせる（vision-capture-latency §4 の 2）。close() でも止まる。
+    onEarsStarted: () => residentCapture.start(),
+    onEarsStopped: () => residentCapture.stop(),
     // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
     // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
     // （.env.decisions.local をコード内で直接読む）に任せる。
@@ -1529,6 +1571,8 @@ async function main() {
         }
       }
     } finally {
+      // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
+      residentCapture.stop();
       process.exit(0);
     }
   };
