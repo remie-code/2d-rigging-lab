@@ -1,6 +1,6 @@
 # 操縦席: 配信中に横目で見る画面への作り直し
 
-> Status: 体験の合意 Accepted(2026-10-16〜17)。context-check 済み(2026-10-17、§9)。実装は 2 回に分けて Gnome に委任: 1 回目 = データの通り道(着手)、2 回目 = 画面。
+> Status: 体験の合意 Accepted(2026-10-16〜17)。context-check 済み(2026-10-17、§9)。実装は 2 回に分けて Gnome に委任: 1 回目 = データの通り道(コミット済み c05e4c50)、2 回目 = 画面(実装済み・未コミット、`node --test` 1333/1333、ユーザーの実機確認待ち)。
 > 模型: Codex(GPT-6.1 Sol)の画像生成で 3 枚作り、3 枚目でユーザー合意。画像は `tmp/cockpit-mock/cockpit-mock-v3.png`(リポジトリ外)。
 
 ## 1. 使われ方(前提)
@@ -95,3 +95,9 @@
 - 1 回目の Gnome の決定(新しい SSE 4 本、警告に 4 種追加、Codex の読み直し 5 分)は了承。データの形は [cockpit-glance-data-contract.md](cockpit-glance-data-contract.md)。
 - 遅延の棒の残り(`otherMs`。Claude では最初の文字以降の生成時間を含む)は、棒の中に**灰色の区間「その他」**として出す。凡例は 8 つ(文字起こし・判定・画面・LLM 最初の文字・最初の文・TTS・声・その他)。棒の区間を足すと合計になる。
 - 「文字起こし」の区間が speak-now がきっかけのときだけ入るのはこのままでよい(今後はほとんど ElevenLabs を使う)。
+
+## 10. 2 回目(画面)の実装報告(Gnome、2026-10-17)
+
+- 新規: view-logic/glance-timeline.mjs(会話とコメントの表示行を描く直前に結び付ける。SSE の順が前後しても同じ結果)、view-logic/glance-meters.mjs(遅延の棒・残量・警告・ピル・運転設定・配信前の判定)、ui/conversation.mjs・comments.mjs・bottom-bar.mjs、テスト。変更: app.mjs(全体の結線、KILL、自動展開の削除)、header.mjs(上の帯 TopBar とログタブ用の健康 1 行)、control-bar.mjs(運転タブ DrivePanel へ)、settings-drawer.mjs(運転・ログのタブ、見出し「準備・設定」)、styles.mjs。SSE は 17 本。cockpit-server と scripts/cockpit.mjs は変更なし。
+- Gnome が決めた点: あふれた行は CSS の下寄せ + overflow:hidden で切り、端を淡くする(端の 1 行が半分見えることがある)。耳が止まっているときのピルは「止まってる」、起動中は「起動中」(配信前に「聞いてる」は嘘になるため)。警告は 3 件を超える分を「+N」。長い発言は 2 行で切る(全文はログ)。配信者の話者色は模型どおり金色。「画面」の区間は黄土色。KILL は確認なしの 1 クリック。旧ヘッダの健康表示はログのタブの上に残す。横 1200px 未満は想定外。
+- 見た目の確認: 偽物のデータのサーバ(tmp/cockpit-mock/fake/、リポジトリ外)を Edge のヘッドレスで撮影。`tmp/cockpit-mock/cockpit-v4-impl-*.png`(配信中・配信前・KILL 中・警告あり・残量少・横 1280・運転タブ・ログタブ)。
