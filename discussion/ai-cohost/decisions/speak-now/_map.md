@@ -25,6 +25,7 @@
 | Path | Content |
 |---|---|
 | [integration.md](integration.md) | 操縦席に組み込む合意(判定・動き・タイミング・既存発火との関係・見せ方)。context-check 済み、Gnome に委任予定 |
+| [backchannel.md](backchannel.md) | 判定が相槌のときも、画面なし・「相槌のタイミング」とだけ伝えて喋らせる。相槌どうし 8 秒の間隔、相槌のあとは再判定しない |
 | [experiments/01-archive-replay.md](experiments/01-archive-replay.md) | 実際の共演配信(約57分)をバッチで起こし直し、配信者の発言の区切り 732 か所で判定。話す 53 / 相槌 368 / 待つ 311 / 見送る 0 |
 | [experiments/02-persona-and-split-speak.md](experiments/02-persona-and-split-speak.md) | 最初の 6 分で、選択肢を待つ/相槌/応答/自発に変え、口数の性格(控えめ/ふつう/おしゃべり)を問いに入れて比較。自発は控えめ 0 → おしゃべり 54/81 |
 | [experiments/03-question-presupposition.md](experiments/03-question-presupposition.md) | おしゃべりで、問いから「ひと区切りついた」前提を外す(A)/途中かもしれないと明示(B)/途中なら待つの条件分岐(C・C′)。自発は元 54 → A 25 → C 10 → C′ 5 → B 2。C は途中の自発 0 |
