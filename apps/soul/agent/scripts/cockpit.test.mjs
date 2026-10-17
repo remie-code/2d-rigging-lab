@@ -1695,6 +1695,28 @@ test("createSpeakStartHooks: 初回（未記憶）・未知値は speak-now・�
   assert.doesNotThrow(() => failing.onSetSpeakStartMode("speak-now"));
 });
 
+test("createSpeakStartHooks: 相槌どうしの最小間隔は settings の秒 → ミリ秒・未設定/読めない/getter なしは undefined（= 既定 8 秒）", { timeout: 5000 }, () => {
+  /** @type {number | null} */
+  let sec = null;
+  const base = { getSpeakStartMode: () => null, setSpeakStartMode: () => {} };
+  const hooks = createSpeakStartHooks({ ...base, getBackchannelMinIntervalSec: () => sec });
+  assert.equal(hooks.resolveBackchannelMinIntervalMs(), undefined);
+  sec = 5;
+  assert.equal(hooks.resolveBackchannelMinIntervalMs(), 5_000);
+  sec = 0;
+  assert.equal(hooks.resolveBackchannelMinIntervalMs(), 0, "0 は歯止めなし");
+  sec = -3;
+  assert.equal(hooks.resolveBackchannelMinIntervalMs(), undefined);
+  assert.equal(createSpeakStartHooks(base).resolveBackchannelMinIntervalMs(), undefined, "getter なし");
+  const failing = createSpeakStartHooks({
+    ...base,
+    getBackchannelMinIntervalSec: () => {
+      throw new Error("broken");
+    }
+  });
+  assert.equal(failing.resolveBackchannelMinIntervalMs(), undefined);
+});
+
 test("formatSpeakNowLine: 遅延・選択・確率の 1 行（本文なし）・失敗は理由", { timeout: 5000 }, () => {
   assert.equal(
     formatSpeakNowLine({
@@ -1707,6 +1729,18 @@ test("formatSpeakNowLine: 遅延・選択・確率の 1 行（本文なし）・
       action: "fire"
     }),
     "[cockpit] speak-now: ms=812 choice=initiate p=0.45 action=fire trigger=transcript probs=wait:0.20,backchannel:0.15,respond:0.20,initiate:0.45\n"
+  );
+  assert.equal(
+    formatSpeakNowLine({
+      ok: true,
+      trigger: "transcript",
+      choice: "backchannel",
+      probability: 0.41,
+      probs: { wait: 0.3, backchannel: 0.41, respond: 0.2, initiate: 0.09 },
+      latencyMs: 640,
+      action: "skip-interval"
+    }),
+    "[cockpit] speak-now: ms=640 choice=backchannel p=0.41 action=skip-interval trigger=transcript probs=wait:0.30,backchannel:0.41,respond:0.20,initiate:0.09\n"
   );
   assert.equal(
     formatSpeakNowLine({ ok: false, trigger: "after-busy", error: "タイムアウト（3 秒）", latencyMs: 3000 }),

@@ -55,6 +55,10 @@
  *   getCommentHold(): あとで拾うの鮮度（秒）と件数（`{ maxAgeSec, maxCount }`・各 null = 既定）。操縦席に
  *     ツマミは置かず、このファイルのキー `commentHoldMaxAgeSec` / `commentHoldMaxCount` を手で書き換えて
  *     次回起動から効かせる（合意 §2「秒数と件数は設定で変えられるようにする」の最小の形）。
+ *   getBackchannelMinIntervalSec(): speak-now の相槌どうしの最小間隔（秒・null = 既定 8 秒）。getCommentHold と
+ *     同じく操縦席にツマミは置かず、このファイルのキー `backchannelMinIntervalSec` を手で書き換えて次回起動から
+ *     効かせる（discussion/ai-cohost/decisions/speak-now/backchannel.md §2「秒数は設定で変えられるようにする」）。
+ *     0 は「歯止めなし」として有効（間隔なので 0 も意味を持つ）。数でない・負は null。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -120,6 +124,7 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   getCommentBusyPolicy: () => string | null;
  *   setCommentBusyPolicy: (policy: string | null) => void;
  *   getCommentHold: () => { maxAgeSec: number | null; maxCount: number | null };
+ *   getBackchannelMinIntervalSec: () => number | null;
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -304,6 +309,10 @@ export function createFileSettingsStore(options = {}) {
       const all = readAll();
       const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
       return { maxAgeSec: num(all.commentHoldMaxAgeSec), maxCount: num(all.commentHoldMaxCount) };
+    },
+    getBackchannelMinIntervalSec() {
+      const v = readAll().backchannelMinIntervalSec;
+      return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

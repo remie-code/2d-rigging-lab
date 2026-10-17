@@ -54,7 +54,11 @@ import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
 import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-player.mjs";
 import { createBargeInGate } from "../mind/barge-in.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
-import { createSpeakNowController } from "../mind/speak-now.mjs";
+import {
+  createSpeakNowController,
+  SPEAK_NOW_BACKCHANNEL_INSTRUCTION,
+  SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS
+} from "../mind/speak-now.mjs";
 import { createDecisionsJudge, loadDecisionsApiKey } from "../mind/speak-now-decisions.mjs";
 import { createCommentGuard, COMMENT_JUDGE_TIMEOUT_MS } from "../mind/comment-guard.mjs";
 import {
@@ -479,6 +483,10 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {(info: object) => void} [options.onSpeakNowJudgment]
  *   判定ごとの記録（遅延・選択・確率・行き先 or 失敗理由。会話の本文は渡さない）。cockpit.mjs が標準出力に
  *   1 行書く（合意 §5）。
+ * @param {number} [options.backchannelMinIntervalMs=SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS]
+ *   相槌どうしの最小間隔（前の相槌を喋り始めてから次の相槌を喋らせない時間・既定 8 秒・
+ *   discussion/ai-cohost/decisions/speak-now/backchannel.md §2）。0 なら歯止めなし。cockpit.mjs が settings の
+ *   `backchannelMinIntervalSec` から渡す（commentHoldMaxAgeMs と同型）。
  * @param {(comment: { text: string; displayName: string | null; name: string }) =>
  *   (import("../mind/comment-guard.mjs").CommentGuardDecision | Promise<import("../mind/comment-guard.mjs").CommentGuardDecision>)} [options.commentGuard]
  *   コメントの弾く判定（discussion/ai-cohost/decisions/comment-react/integration.md §1-3）。既定は Decisions API
@@ -598,6 +606,12 @@ export function createCockpitServer(options = {}) {
             typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
         });
   const onSpeakNowJudgment = typeof options.onSpeakNowJudgment === "function" ? options.onSpeakNowJudgment : null;
+  const backchannelMinIntervalMs =
+    typeof options.backchannelMinIntervalMs === "number" &&
+    Number.isFinite(options.backchannelMinIntervalMs) &&
+    options.backchannelMinIntervalMs >= 0
+      ? options.backchannelMinIntervalMs
+      : SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS;
   // コメント判定（discussion/ai-cohost/decisions/comment-react/integration.md）: 弾く判定・反応する判定・
   // 忙しい間のコメントの扱い（あとで拾う / 見逃す）・判定ログの口。
   const commentGuard =
@@ -676,6 +690,11 @@ export function createCockpitServer(options = {}) {
   // （fireClaimed）から thinking に入るまで getState() が idle のままなので、speak-now の「忙しい」は
   // この数も見る（最小の安全側: 受理の窓も忙しいとみなす）。
   let fireInFlight = 0;
+  // speak-now の相槌の発火がまだ片付いていない間か（backchannel.md §2）。この間に orchestrator が speaking に
+  // なったら、それは相槌を喋り始めた時点 = 相槌どうしの歯止めの数え始め（speakNow.markBackchannelSpoken）。
+  // fire() は single-flight で、相槌の発火は「忙しくない」ときにしか要求しないので、この間の speaking は
+  // その相槌のもの。
+  let backchannelFirePending = false;
   // S7「視聴者が混ざる」チャット器官（cockpit-server 所有・POST 駆動遅延起動＝ear-pipeline の流儀）。
   // POST /api/chat/connect で chatClientFactory から生成し start()・onMessage/onStatus/onDiagnostic を
   // 取り込み経路（ingestChatMessage/broadcastChatStatus/broadcastChatDiagnostic）へ繋ぐ。POST
@@ -1747,6 +1766,9 @@ export function createCockpitServer(options = {}) {
       getBuffer: () => (pipeline ? pipeline.transcriptBuffer : null),
       onState: (state) => {
         broadcast("soul", { state });
+        // speak-now の相槌: 相槌の発火でチャッピーが喋り始めた時点を、相槌どうしの歯止めの数え始めにする
+        // （backchannel.md §2）。この忙しさが明けたときの after-busy の判定も止まる。
+        if (state === "speaking" && backchannelFirePending && speakNow) speakNow.markBackchannelSpoken();
         // speak-now: 喋り終わって手が空いたら、忙しい間の配信者の発言を 1 回判定する（合意 §3）。
         // fire() の Promise がまだ片付いていなければ、片付いた時点（trackFire）で改めて確かめる。
         if (state === "idle" && speakNow) speakNow.notifyIdle();
@@ -1853,6 +1875,10 @@ export function createCockpitServer(options = {}) {
     //  - 忙しい: orchestrator が idle でない、またはサーバが呼んだ fire() がまだ片付いていない。
     //  - 判定してよい: speak-now モード・自発 pill ON・KILL でない。
     //  - 応答・自発 → 通常の自発発火と同じ fire({vision:"preferred"})（LLM に区別は伝えない・合意 §2）。
+    //  - 相槌 → 同じ頭・同じセッションで fire({vision:false, instruction})（画面は撮らない・その 1 回だけ先頭に
+    //    「今は配信者の話に相槌を打つタイミング。」・backchannel.md §2）。発火結果は kind:"speak-now" で
+    //    応答・自発と同じ selfFire 行（判定行「判定: 相槌 0.xx」の直後に出る）。前の相槌を喋り始めてから
+    //    backchannelMinIntervalMs の間は部品が流す（action=skip-interval・ターミナルの 1 行だけ）。
     //  - 判定行（待つ以外）と失敗は selfFire SSE に相乗りしてフィードへ（合意 §5・新 SSE を足さない）。
     speakNow = createSpeakNowController({
       judge: speakNowJudge,
@@ -1863,7 +1889,17 @@ export function createCockpitServer(options = {}) {
       getName: () => currentSoulName(),
       getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
       nowImpl,
-      onFire: () => requestSelfFire("speak-now", { vision: "preferred" }),
+      backchannelMinIntervalMs,
+      onFire: ({ choice }) => {
+        if (choice !== "backchannel") {
+          requestSelfFire("speak-now", { vision: "preferred" });
+          return;
+        }
+        backchannelFirePending = true;
+        requestSelfFire("speak-now", { vision: false, instruction: SPEAK_NOW_BACKCHANNEL_INSTRUCTION }).finally(() => {
+          backchannelFirePending = false;
+        });
+      },
       onJudgment: (j) => {
         if (j.choice !== "wait") {
           broadcast("selfFire", {
@@ -1932,12 +1968,14 @@ export function createCockpitServer(options = {}) {
    * 失敗で常駐を殺さない）。結果（fired/reason）が判明してから broadcast する（同期 throw も非同期
    * rejection もどちらも "fired:false" として扱う）。
    * @param {string | undefined} kind
-   * @param {{ vision: true | "preferred"; instruction?: string }} fireOptions
+   * @param {{ vision: boolean | "preferred"; instruction?: string }} fireOptions  vision:false は画面を撮らない通常発火
+   *   （speak-now の相槌）。
    * @param {object} [extra]  selfFire SSE に足す付随情報（コメント反応の commentIds = どのコメントで発火したか）。
+   * @returns {Promise<void>}  発火の結果を放送し終えたら片付く（reject しない）。
    */
   function requestSelfFire(kind, fireOptions, extra = {}) {
     try {
-      trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
+      return trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
         .then((result) => {
           broadcast("selfFire", {
             kind,
@@ -1951,6 +1989,7 @@ export function createCockpitServer(options = {}) {
         });
     } catch (error) {
       broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error), ...extra });
+      return Promise.resolve();
     }
   }
 

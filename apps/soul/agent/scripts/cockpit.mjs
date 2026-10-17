@@ -811,13 +811,17 @@ export function formatCaptureEventLine(event) {
 /**
  * settings の話し始めの方式（speakStartMode）を、cockpit-server の口（speakStartModeInitial/
  * onSetSpeakStartMode）へ橋渡しする（speak-now 合意 §5・createVerbosityHooks と同型の薄い配線層）。
- * 未記憶/未知値は defaultMode（**初回既定 "speak-now"**・合意 §5）。
+ * 未記憶/未知値は defaultMode（**初回既定 "speak-now"**・合意 §5）。相槌どうしの最小間隔
+ * （settings の backchannelMinIntervalSec・backchannel.md §2）も cockpit-server の backchannelMinIntervalMs へ橋渡しする
+ * （createCommentBusyHooks の resolveCommentHold と同型）。
  *
- * @param {{ getSpeakStartMode: () => string | null; setSpeakStartMode: (mode: string | null) => void }} settings
+ * @param {{ getSpeakStartMode: () => string | null; setSpeakStartMode: (mode: string | null) => void;
+ *   getBackchannelMinIntervalSec?: () => number | null }} settings
  * @param {"classic" | "speak-now"} [defaultMode="speak-now"]
  * @returns {{
  *   resolveInitialSpeakStartMode: () => "classic" | "speak-now";
  *   onSetSpeakStartMode: (mode: string) => void;
+ *   resolveBackchannelMinIntervalMs: () => number | undefined;
  * }}
  */
 export function createSpeakStartHooks(settings, defaultMode = "speak-now") {
@@ -833,6 +837,16 @@ export function createSpeakStartHooks(settings, defaultMode = "speak-now") {
         settings.setSpeakStartMode(mode); // 次回起動で復元（file-backed・失敗寛容）。
       } catch {
         // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
+      }
+    },
+    /** 相槌どうしの最小間隔（秒 → ミリ秒）。未設定・読めなければ undefined（= cockpit-server の既定 8 秒）。 */
+    resolveBackchannelMinIntervalMs: () => {
+      try {
+        if (typeof settings.getBackchannelMinIntervalSec !== "function") return undefined;
+        const sec = settings.getBackchannelMinIntervalSec();
+        return typeof sec === "number" && Number.isFinite(sec) && sec >= 0 ? sec * 1000 : undefined;
+      } catch {
+        return undefined; // 読めなければ既定。
       }
     }
   };
@@ -917,7 +931,8 @@ function fmtProb(v) {
 
 /**
  * speak-now の判定ログ 1 行（操縦席の標準出力・合意 §5「遅延・選択・確率」。会話の本文は書かない）。
- * 成功: 遅延・選択・その確率・行き先（fire / drop-busy / drop-inactive / none）・きっかけ・全選択肢の確率。
+ * 成功: 遅延・選択・その確率・行き先（fire / drop-busy / drop-inactive / skip-interval / none）・きっかけ・全選択肢の確率。
+ * skip-interval は相槌どうしの歯止めで流した相槌（backchannel.md §2・フィードには判定行だけ）。
  * 失敗: 遅延（分かれば）・きっかけ・理由（キー欠落・タイムアウト等。キー値は judge 側で含めない）。
  * @param {any} info  cockpit-server の onSpeakNowJudgment が渡す記録。
  * @returns {string}
@@ -1500,6 +1515,8 @@ async function main() {
     speakStartModeInitial: speakStartHooks.resolveInitialSpeakStartMode(),
     onSetSpeakStartMode: speakStartHooks.onSetSpeakStartMode,
     onSpeakNowJudgment: (info) => process.stdout.write(formatSpeakNowLine(info)),
+    // 相槌どうしの最小間隔は settings ファイルの backchannelMinIntervalSec（無ければ 8 秒・backchannel.md §2）。
+    backchannelMinIntervalMs: speakStartHooks.resolveBackchannelMinIntervalMs(),
     // コメント判定（弾く判定は全モード・反応する判定は speak-now の間）: 忙しい間のコメントの扱いは settings から
     // 復元（既定 あとで拾う）・切替ごとに記憶。鮮度と件数は settings ファイルの値（無ければ 20 秒 / 3 件）。
     // 判定ごとに標準出力へ 1 行（コメント本文は書かない）。キーは speak-now と同じ既定の読み口。

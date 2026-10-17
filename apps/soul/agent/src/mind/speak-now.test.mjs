@@ -11,7 +11,9 @@ import {
   speakNowQuestion,
   speakNowPersonaLine,
   SPEAK_NOW_CONTEXT_MS,
-  SPEAK_NOW_CHOICE_LABELS
+  SPEAK_NOW_CHOICE_LABELS,
+  SPEAK_NOW_BACKCHANNEL_INSTRUCTION,
+  SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS
 } from "./speak-now.mjs";
 
 // speak-now 部品の機械テスト。judge は fake（実 API に繋がない）・バッファ/busy/identity も注入。
@@ -132,18 +134,22 @@ test("you の転写 1 件ごとに判定を呼ぶ（soul/viewer では呼ばな�
   assert.deepEqual(h.calls[0].request.choices, buildSpeakNowChoices("コーディ"));
 });
 
-test("応答・自発 → 発火（不応期・確率なし）／相槌・待つ → 発火しない・判定は毎回 onJudgment", async () => {
+test("応答・自発・相槌 → 発火（応答・自発に不応期・確率なし）／待つ → 発火しない・判定は毎回 onJudgment", async () => {
   const h = makeHarness();
   for (const choice of ["respond", "initiate", "backchannel", "wait", "respond"]) {
     h.say(`発言 ${choice}`);
     h.calls.at(-1)?.resolve(result(choice, 0.45, 700));
     await flush();
   }
-  assert.deepEqual(h.fires, [{ choice: "respond" }, { choice: "initiate" }, { choice: "respond" }], "連続しても毎回発火（不応期なし）");
+  assert.deepEqual(
+    h.fires,
+    [{ choice: "respond" }, { choice: "initiate" }, { choice: "backchannel" }, { choice: "respond" }],
+    "連続しても毎回発火（不応期なし）・相槌は choice で結線層が発火の仕方を分ける"
+  );
   assert.deepEqual(h.judgments.map((j) => [j.choice, j.action]), [
     ["respond", "fire"],
     ["initiate", "fire"],
-    ["backchannel", "none"],
+    ["backchannel", "fire"],
     ["wait", "none"],
     ["respond", "fire"]
   ]);
@@ -271,4 +277,149 @@ test("窓に会話が無ければ判定しない（材料なし）", () => {
   h.state.busy = false;
   h.ctl.notifyIdle();
   assert.equal(h.calls.length, 0);
+});
+
+// ── 相槌でも喋らせる（discussion/ai-cohost/decisions/speak-now/backchannel.md §2）──────────────────
+
+test("相槌の定数: 内部指示は「今は配信者の話に相槌を打つタイミング。」だけ・歯止めの既定は 8 秒", () => {
+  assert.equal(SPEAK_NOW_BACKCHANNEL_INSTRUCTION, "今は配信者の話に相槌を打つタイミング。");
+  assert.equal(SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS, 8_000);
+});
+
+/** 相槌の判定を 1 回返して流す。 */
+async function judgeOnce(h, choice, text = `発言 ${choice}`) {
+  h.say(text);
+  h.calls.at(-1)?.resolve(result(choice));
+  await flush();
+}
+
+test("相槌どうしの歯止め: 前の相槌を喋り始めてから 8 秒は次の相槌を流す（skip-interval）・8 秒で再び発火", async () => {
+  const h = makeHarness();
+  await judgeOnce(h, "backchannel");
+  assert.deepEqual(h.fires, [{ choice: "backchannel" }]);
+  h.state.now += 500; // 発火から喋り始めまで（考える時間）。
+  h.ctl.markBackchannelSpoken(); // 数え始め = 喋り始めた時点。
+  h.state.now += 7_999;
+  await judgeOnce(h, "backchannel");
+  assert.equal(h.fires.length, 1, "7.999 秒後の相槌は流す");
+  assert.equal(h.judgments.at(-1).action, "skip-interval");
+  assert.equal(h.judgments.at(-1).choice, "backchannel", "判定行の材料はそのまま");
+  h.state.now += 1;
+  await judgeOnce(h, "backchannel");
+  assert.equal(h.fires.length, 2, "ちょうど 8 秒で発火");
+  assert.equal(h.judgments.at(-1).action, "fire");
+});
+
+test("相槌の歯止めは相槌どうしだけ: 応答・自発は止めない・応答・自発の直後の相槌も止めない", async () => {
+  const h = makeHarness();
+  await judgeOnce(h, "respond");
+  await judgeOnce(h, "backchannel");
+  assert.deepEqual(h.fires.map((f) => f.choice), ["respond", "backchannel"], "応答の直後の相槌は止めない");
+  h.ctl.markBackchannelSpoken();
+  h.state.now += 1_000;
+  await judgeOnce(h, "respond");
+  await judgeOnce(h, "initiate");
+  assert.deepEqual(h.fires.map((f) => f.choice), ["respond", "backchannel", "respond", "initiate"], "相槌の直後の応答・自発は止めない");
+  await judgeOnce(h, "backchannel");
+  assert.equal(h.judgments.at(-1).action, "skip-interval", "応答・自発を挟んでも、前の相槌から 8 秒以内の相槌は流す");
+});
+
+test("相槌の歯止め: 喋り始めの知らせが無ければ数え始めない（発火しても喋らなかった相槌は数えない）", async () => {
+  const h = makeHarness();
+  await judgeOnce(h, "backchannel");
+  await judgeOnce(h, "backchannel");
+  assert.equal(h.fires.length, 2);
+});
+
+test("相槌の歯止め: 秒数は backchannelMinIntervalMs で変えられる（0 は歯止めなし・負や非数は既定 8 秒）", async () => {
+  const short = makeHarness({ backchannelMinIntervalMs: 2_000 });
+  await judgeOnce(short, "backchannel");
+  short.ctl.markBackchannelSpoken();
+  short.state.now += 2_000;
+  await judgeOnce(short, "backchannel");
+  assert.equal(short.fires.length, 2);
+
+  const off = makeHarness({ backchannelMinIntervalMs: 0 });
+  await judgeOnce(off, "backchannel");
+  off.ctl.markBackchannelSpoken();
+  await judgeOnce(off, "backchannel");
+  assert.equal(off.fires.length, 2, "0 は歯止めなし");
+
+  for (const bogus of [-1, Number.NaN, /** @type {any} */ ("8")]) {
+    const h = makeHarness({ backchannelMinIntervalMs: bogus });
+    await judgeOnce(h, "backchannel");
+    h.ctl.markBackchannelSpoken();
+    h.state.now += 7_999;
+    await judgeOnce(h, "backchannel");
+    assert.equal(h.judgments.at(-1).action, "skip-interval", `${String(bogus)} は既定 8 秒`);
+  }
+});
+
+test("相槌の判定でも、結果到着時に忙しい・OFF なら発火しない（drop-busy / drop-inactive が歯止めより先）", async () => {
+  const h = makeHarness();
+  h.say("一つ目");
+  h.state.busy = true;
+  h.calls[0].resolve(result("backchannel"));
+  await flush();
+  assert.equal(h.judgments.at(-1).action, "drop-busy");
+  h.state.busy = false;
+  h.say("二つ目");
+  h.state.active = false;
+  h.calls[1].resolve(result("backchannel"));
+  await flush();
+  assert.equal(h.judgments.at(-1).action, "drop-inactive");
+  assert.equal(h.fires.length, 0);
+});
+
+test("相槌を喋ったあとは after-busy の判定をしない（積み残しは捨てる）・次の忙しさでは従来どおり判定する", async () => {
+  const h = makeHarness();
+  await judgeOnce(h, "backchannel");
+  // 相槌の発火で忙しくなり、喋り始める。
+  h.state.busy = true;
+  h.ctl.markBackchannelSpoken();
+  h.say("相槌の間の一言");
+  assert.equal(h.ctl.pendingWhileBusy(), 1);
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, 1, "after-busy の判定をしない");
+  assert.equal(h.ctl.pendingWhileBusy(), 0, "積み残しは捨てる");
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, 1);
+  // 次の忙しさ（応答）では従来どおり after-busy を回す。
+  await judgeOnce(h, "respond");
+  h.state.busy = true;
+  h.say("応答の間の一言");
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, 3);
+  h.calls[2].resolve(result("wait"));
+  await flush();
+  assert.equal(h.judgments.at(-1).trigger, "after-busy");
+});
+
+test("相槌のあとの after-busy 止め: 忙しい間に発言が無くても、明けたときに止めは畳まれる（次の忙しさへ持ち越さない）", async () => {
+  const h = makeHarness();
+  await judgeOnce(h, "backchannel");
+  h.state.busy = true;
+  h.ctl.markBackchannelSpoken();
+  h.ctl.notifyIdle(); // まだ忙しい（orchestrator の idle 通知が fire() の片付けより先に来る）→ 何もしない。
+  h.state.busy = false;
+  h.ctl.notifyIdle(); // 片付いた → 止めを畳む（積み残しなし）。
+  await judgeOnce(h, "respond");
+  h.state.busy = true;
+  h.say("応答の間の一言");
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, 3, "応答のあとは after-busy を回す");
+});
+
+test("相槌のあとの after-busy 止め: reset（モード切替）で畳む", async () => {
+  const h = makeHarness();
+  h.ctl.markBackchannelSpoken();
+  h.ctl.reset();
+  h.state.busy = true;
+  h.say("積む");
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, 1, "reset 後の忙しさでは after-busy を回す");
 });

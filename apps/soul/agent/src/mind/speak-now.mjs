@@ -2,9 +2,9 @@
 /**
  * speak-now（話し始めの判定）— apps/soul/agent。
  *
- * 合意: discussion/ai-cohost/decisions/speak-now/integration.md。配信者（you）の転写が転写バッファに
- * 1 件積まれるたびに、判定エンジン（judge）に「今どう反応するのが自然か」を 4 択（待つ / 相槌 / 応答 /
- * 自発）で聞き、応答・自発なら通常の自発発火と同じ発火を要求する。fire-scheduler の**外の別部品**
+ * 合意: discussion/ai-cohost/decisions/speak-now/integration.md（相槌は backchannel.md で改めた）。配信者（you）の
+ * 転写が転写バッファに 1 件積まれるたびに、判定エンジン（judge）に「今どう反応するのが自然か」を 4 択（待つ /
+ * 相槌 / 応答 / 自発）で聞き、応答・自発・相槌なら発火を要求する。fire-scheduler の**外の別部品**
  * （合意 §4）。fire-scheduler には「speak-now の間は turn-end / call / interjection を止める」スイッチ
  * だけがあり、この部品は scheduler を知らない（結線は cockpit-server）。
  *
@@ -16,12 +16,19 @@
  *  - 結果は最大確率の選択（judge が返す choice）をそのまま使う（しきい値なし）。
  *
  * ── 動き（合意 §2）と タイミング（合意 §3）─────────────────────────────────────
- *  - 応答・自発 → onFire（結線層が通常の自発発火と同じ fire を呼ぶ）。相槌・待つ → 発火しない。
+ *  - 応答・自発 → onFire（結線層が通常の自発発火と同じ fire を呼ぶ）。待つ → 発火しない。
+ *  - 相槌 → onFire（choice:"backchannel"）。結線層は同じ頭・同じセッションで、画面を撮らず、その 1 回だけ
+ *    先頭に SPEAK_NOW_BACKCHANNEL_INSTRUCTION を付けて発火する（discussion/ai-cohost/decisions/speak-now/
+ *    backchannel.md §2。integration.md §2 の「相槌 → 何もしない」を改めたもの）。
+ *    歯止め: 前の相槌を喋り始めてから backchannelMinIntervalMs（既定 8 秒）の間は、判定が相槌でも発火せず流す
+ *    （action "skip-interval"）。相槌どうしにだけ効かせる（応答・自発は数え始めにも歯止めにも関わらない）。
+ *    数え始めは結線層が markBackchannelSpoken() で知らせる（相槌の発火でチャッピーが喋り始めた時点）。
+ *    相槌を喋ったあとは、その忙しさが明けても after-busy の判定をしない（積み残しは捨てる）。
  *  - 口数ごとの不応期・確率は掛けない（口数は性格の 1 文だけで効かせる）。
  *  - 忙しい間（isBusy）は判定を呼ばず、you の転写を数えておく。忙しさが明けたとき（notifyIdle）、
  *    その間に 1 件以上あれば 1 回だけ判定する。
  *  - 判定中に次の発言が来たら、前の判定を待たずに並行して呼ぶ。結果が返った時点で空いていて
- *    応答・自発なら発火する。忙しければ捨てる（判定行は出す）。
+ *    応答・自発・相槌なら発火する。忙しければ捨てる（判定行は出す）。
  *  - 判定を待つ間に配信者が喋り始めても判定は捨てない（VAD はこの部品に入れない）。
  *  - isActive が偽（speak-now モードでない・自発 pill OFF・KILL 中）の間は判定を呼ばない。
  *
@@ -43,8 +50,17 @@ export const SPEAK_NOW_CHOICE_LABELS = Object.freeze({
   initiate: "自発"
 });
 
-/** 発火する選択（合意 §2）。 */
-export const SPEAK_NOW_FIRE_CHOICES = Object.freeze(["respond", "initiate"]);
+/** 発火する選択（合意 §2・相槌は backchannel.md §2 で発火する側に入った）。 */
+export const SPEAK_NOW_FIRE_CHOICES = Object.freeze(["respond", "initiate", "backchannel"]);
+
+/**
+ * 相槌の発火で、その 1 回だけ ask の先頭に付ける内部指示（backchannel.md §2）。やり方（短く・一言で等）は
+ * 書かない（LLM の自主性を尊重する・手段を示すとそれに縛られるため）。
+ */
+export const SPEAK_NOW_BACKCHANNEL_INSTRUCTION = "今は配信者の話に相槌を打つタイミング。";
+
+/** 相槌どうしの最小間隔の既定（前の相槌を喋り始めてから 8 秒・backchannel.md §2）。 */
+export const SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS = 8_000;
 
 /**
  * 問い C（probe の QUESTIONS.c の「チャッピー」を {名前} にしたもの）。
@@ -134,7 +150,7 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
  *   probability: number | null;
  *   probs: Record<string, number>;
  *   latencyMs: number | null;
- *   action: "fire" | "drop-busy" | "drop-inactive" | "none";
+ *   action: "fire" | "drop-busy" | "drop-inactive" | "skip-interval" | "none";
  * }} SpeakNowJudgment
  * @typedef {{ trigger: SpeakNowTrigger; message: string; latencyMs: number | null }} SpeakNowJudgeFailure
  */
@@ -149,13 +165,18 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
  * @param {() => boolean} options.isActive  判定を呼んでよいか（speak-now モード・自発 ON・KILL でない）。
  * @param {() => string} options.getName  今の頭の名前（チャッピー / コーディ）。
  * @param {() => string | null | undefined} options.getVerbosity  口数モード（quiet / normal / chatty）。
- * @param {(request: { choice: string }) => void} options.onFire  応答・自発で発火を要求する。
+ * @param {(request: { choice: string }) => void} options.onFire  応答・自発・相槌で発火を要求する（choice で結線層が
+ *   発火の仕方を分ける: 相槌は画面なし + 内部指示）。
  * @param {(judgment: SpeakNowJudgment) => void} [options.onJudgment]  判定結果（待つも含め毎回）。
  * @param {(failure: SpeakNowJudgeFailure) => void} [options.onError]  判定の失敗（キー欠落・タイムアウト等）。
- * @param {() => number} [options.nowImpl=Date.now]  入力の窓の基準時刻（appendedAtMs と同じ時計）。
+ * @param {() => number} [options.nowImpl=Date.now]  入力の窓の基準時刻（appendedAtMs と同じ時計）。相槌の
+ *   間隔の数え始めと判定もこの時計で測る。
+ * @param {number} [options.backchannelMinIntervalMs=SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS]  相槌どうしの最小間隔
+ *   （前の相槌を喋り始めてから、次の相槌を喋らせない時間）。0 なら歯止めなし。負・非数は既定。
  * @returns {{
  *   handleTranscript: (entry: { speaker?: string } | null) => void;
  *   notifyIdle: () => void;
+ *   markBackchannelSpoken: () => void;
  *   reset: () => void;
  *   pendingWhileBusy: () => number;
  *   inFlight: () => number;
@@ -173,12 +194,23 @@ export function createSpeakNowController(options) {
   const onJudgment = typeof options.onJudgment === "function" ? options.onJudgment : () => {};
   const onError = typeof options.onError === "function" ? options.onError : () => {};
   const nowImpl = options.nowImpl ?? Date.now;
+  const backchannelMinIntervalMs =
+    typeof options.backchannelMinIntervalMs === "number" &&
+    Number.isFinite(options.backchannelMinIntervalMs) &&
+    options.backchannelMinIntervalMs >= 0
+      ? options.backchannelMinIntervalMs
+      : SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS;
 
   let disposed = false;
   /** 忙しい間に積まれた you の転写の数（明けたときに 1 回判定するかの材料）。 */
   let pending = 0;
   /** 返事待ちの判定の数（診断・テスト用）。 */
   let inFlight = 0;
+  /** 前の相槌を喋り始めた時刻（nowImpl の時計・まだ無ければ null）。相槌どうしの歯止めの数え始め。 */
+  /** @type {number | null} */
+  let lastBackchannelSpokenAtMs = null;
+  /** 相槌を喋った忙しさの間か（明けたときの after-busy の判定をしない・積み残しは捨てる）。 */
+  let skipAfterBusy = false;
 
   /** 通知先の throw で判定経路を壊さない。 */
   const safe = (/** @type {() => void} */ fn) => {
@@ -221,7 +253,14 @@ export function createSpeakNowController(options) {
           // 結果が返った時点で判断する（合意 §3）。忙しければ捨てる・モード外/OFF/KILL も捨てる。
           if (!isActive()) action = "drop-inactive";
           else if (isBusy()) action = "drop-busy";
-          else action = "fire";
+          else if (
+            choice === "backchannel" &&
+            lastBackchannelSpokenAtMs != null &&
+            nowImpl() - lastBackchannelSpokenAtMs < backchannelMinIntervalMs
+          ) {
+            // 相槌どうしの歯止め（backchannel.md §2）: 前の相槌を喋り始めてから間もないので流す。
+            action = "skip-interval";
+          } else action = "fire";
         }
         safe(() => onJudgment({ trigger, choice, probability, probs, latencyMs, action }));
         if (action === "fire") safe(() => onFire({ choice }));
@@ -256,14 +295,32 @@ export function createSpeakNowController(options) {
      * 本当に空いていて、忙しい間に you の転写が 1 件以上あったら 1 回だけ判定する。
      */
     notifyIdle() {
-      if (disposed || pending === 0 || isBusy()) return;
+      if (disposed || isBusy()) return;
+      if (skipAfterBusy) {
+        // 相槌のあとは after-busy の判定をしない（backchannel.md §2: 相槌は短く、配信者は話し続けているので
+        // 次の発言で判定が回る）。相槌を喋った忙しさの間の積み残しは捨てる。
+        skipAfterBusy = false;
+        pending = 0;
+        return;
+      }
+      if (pending === 0) return;
       pending = 0;
       if (!isActive()) return;
       runJudge("after-busy");
     },
+    /**
+     * 相槌の発火でチャッピーが喋り始めたことを知らせる（結線層が orchestrator の speaking で呼ぶ）。
+     * 相槌どうしの歯止めの数え始めになり、この忙しさが明けたときの after-busy の判定を止める。
+     */
+    markBackchannelSpoken() {
+      if (disposed) return;
+      lastBackchannelSpokenAtMs = nowImpl();
+      skipAfterBusy = true;
+    },
     /** 忙しい間の積み残しを捨てる（モード切替時）。 */
     reset() {
       pending = 0;
+      skipAfterBusy = false;
     },
     pendingWhileBusy: () => pending,
     inFlight: () => inFlight,
@@ -271,6 +328,7 @@ export function createSpeakNowController(options) {
     dispose() {
       disposed = true;
       pending = 0;
+      skipAfterBusy = false;
     }
   };
 }

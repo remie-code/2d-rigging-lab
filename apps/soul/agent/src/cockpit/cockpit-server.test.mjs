@@ -3844,20 +3844,191 @@ test("cockpit speak-now: 口数は問いの性格の 1 文にだけ効く（POST
   }
 });
 
-test("cockpit speak-now: 相槌は判定行だけ（発火しない）・待つは判定行も出さない", async () => {
+test("cockpit speak-now: 相槌は画面を撮らず内部指示付きで発火・判定行の直後に発火結果の行／待つは判定行も出さない", async () => {
   const h = await startSpeakNowServer();
   try {
     h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "いやー難しい" });
     h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "えーと" });
     h.fakeJudge.calls[0].resolve(judgeResult("backchannel", 0.5));
     h.fakeJudge.calls[1].resolve(judgeResult("wait", 0.7));
-    await h.sse.waitFor((e) => e.event === "selfFire" && e.data.choice === "backchannel");
+    await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "speak-now");
     await settle();
     await settle();
     const rows = h.sse.events.filter((e) => e.event === "selfFire");
-    assert.deepEqual(rows.map((e) => e.data.choice), ["backchannel"], "待つは出さない");
-    assert.equal(h.fakeOrch.record.fireCount, 0);
-    assert.deepEqual(h.logged.map((l) => [l.choice, l.action]), [["backchannel", "none"], ["wait", "none"]], "ターミナルには毎回");
+    assert.deepEqual(
+      rows.map((e) => e.data),
+      [
+        { kind: "speak-now-judgment", choice: "backchannel", probability: 0.5, latencyMs: 812 },
+        { kind: "speak-now", fired: true, reason: null }
+      ],
+      "判定: 相槌 → 発火結果の順・待つは出さない"
+    );
+    assert.equal(h.fakeOrch.record.fireCount, 1);
+    assert.deepEqual(h.fakeOrch.record.lastFireOptions, {
+      vision: false,
+      instruction: "今は配信者の話に相槌を打つタイミング。"
+    });
+    assert.deepEqual(h.logged.map((l) => [l.choice, l.action]), [["backchannel", "fire"], ["wait", "none"]], "ターミナルには毎回");
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+/** fire() のたびに thinking → speaking → idle を通す fake orchestrator（喋り始めの数え始めを確かめる用）。 */
+function makeSpeakingOrchestrator() {
+  return makeFakeOrchestrator({
+    fireResult: { fired: true },
+    drive: (hooks, record) => {
+      for (const s of ["thinking", "speaking", "idle"]) {
+        record.state = s;
+        hooks.onState(s);
+      }
+    }
+  });
+}
+
+test("cockpit speak-now: 相槌どうしの歯止め — 前の相槌を喋り始めてから 8 秒は流す（action=skip-interval・フィードは判定行だけ）", async () => {
+  const clock = { now: 1000 };
+  const h = await startSpeakNowServer({ fakeOrch: makeSpeakingOrchestrator(), options: { nowImpl: () => clock.now } });
+  try {
+    const say = async (text, choice) => {
+      h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text });
+      h.fakeJudge.calls.at(-1)?.resolve(judgeResult(choice, 0.4));
+      await settle();
+      await settle();
+    };
+    await say("一つ目", "backchannel");
+    assert.equal(h.fakeOrch.record.fireCount, 1);
+    clock.now += 7_999;
+    await say("二つ目", "backchannel");
+    assert.equal(h.fakeOrch.record.fireCount, 1, "8 秒以内の相槌は喋らせない");
+    assert.equal(h.logged.at(-1).action, "skip-interval");
+    const rows = h.sse.events.filter((e) => e.event === "selfFire").map((e) => e.data.kind);
+    assert.deepEqual(rows, ["speak-now-judgment", "speak-now", "speak-now-judgment"], "流した相槌は判定行だけ");
+    clock.now += 1;
+    await say("三つ目", "backchannel");
+    assert.equal(h.fakeOrch.record.fireCount, 2, "8 秒たてば再び喋らせる");
+    // 応答・自発は歯止めの外。応答の直後の相槌も止めない（応答は数え始めにしない）。
+    await say("四つ目", "respond");
+    assert.equal(h.fakeOrch.record.fireCount, 3, "相槌の直後の応答は止めない");
+    assert.deepEqual(h.fakeOrch.record.lastFireOptions, { vision: "preferred" }, "応答は従来どおり");
+    clock.now += 8_000;
+    await say("五つ目", "initiate");
+    await say("六つ目", "backchannel");
+    assert.equal(h.fakeOrch.record.fireCount, 5, "自発の直後の相槌は止めない");
+    assert.deepEqual(
+      h.logged.map((l) => l.action),
+      ["fire", "skip-interval", "fire", "fire", "fire", "fire"]
+    );
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit speak-now: 相槌の歯止めの秒数は backchannelMinIntervalMs で変えられる", async () => {
+  const clock = { now: 1000 };
+  const h = await startSpeakNowServer({
+    fakeOrch: makeSpeakingOrchestrator(),
+    options: { nowImpl: () => clock.now, backchannelMinIntervalMs: 2_000 }
+  });
+  try {
+    for (const [dt, text] of [[0, "一つ目"], [1_999, "二つ目"], [1, "三つ目"]]) {
+      clock.now += /** @type {number} */ (dt);
+      h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: /** @type {string} */ (text) });
+      h.fakeJudge.calls.at(-1)?.resolve(judgeResult("backchannel", 0.4));
+      await settle();
+      await settle();
+    }
+    assert.deepEqual(h.logged.map((l) => l.action), ["fire", "skip-interval", "fire"]);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+/** fire() を手で片付ける fake orchestrator（忙しい間の発言と after-busy を確かめる用）。 */
+function makeManualFireOrchestrator() {
+  const record = { /** @type {any} */ hooks: null, fireCount: 0, state: "idle", /** @type {any} */ lastFireOptions: undefined };
+  /** @type {Array<(r: any) => void>} */
+  const resolvers = [];
+  const factory = (/** @type {any} */ hooks) => {
+    record.hooks = hooks;
+    return {
+      fire(/** @type {any} */ fireOptions) {
+        record.fireCount += 1;
+        record.lastFireOptions = fireOptions;
+        return new Promise((r) => resolvers.push(r));
+      },
+      getState: () => record.state,
+      dispose() {}
+    };
+  };
+  const enter = (/** @type {string} */ s) => {
+    record.state = s;
+    record.hooks.onState(s);
+  };
+  return { factory, record, resolvers, enter };
+}
+
+test("cockpit speak-now: 相槌を喋ったあとは after-busy の判定をしない・応答のあとは従来どおり判定する", async () => {
+  const fakeOrch = makeManualFireOrchestrator();
+  const h = await startSpeakNowServer({ fakeOrch });
+  try {
+    // 相槌の発火 → 考える → 喋る（その間に配信者が話す）→ 喋り終わる → fire() が片付く。
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "このボスほんとに強くてさ" });
+    h.fakeJudge.calls[0].resolve(judgeResult("backchannel", 0.4));
+    await settle();
+    assert.equal(fakeOrch.record.fireCount, 1);
+    fakeOrch.enter("thinking");
+    fakeOrch.enter("speaking");
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "さっきも三回死んだ" });
+    fakeOrch.enter("idle");
+    fakeOrch.resolvers[0]({ fired: true });
+    await settle();
+    await settle();
+    assert.equal(h.fakeJudge.calls.length, 1, "相槌のあとは after-busy の判定をしない");
+
+    // 応答の発火では、喋っている間の発言を喋り終わった後に 1 回判定する（従来どおり）。
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "チャッピーどう思う？" });
+    h.fakeJudge.calls[1].resolve(judgeResult("respond", 0.9));
+    await settle();
+    assert.equal(fakeOrch.record.fireCount, 2);
+    fakeOrch.enter("thinking");
+    fakeOrch.enter("speaking");
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "なるほどね" });
+    fakeOrch.enter("idle");
+    fakeOrch.resolvers[1]({ fired: true });
+    await settle();
+    await settle();
+    assert.equal(h.fakeJudge.calls.length, 3, "応答のあとは after-busy の判定を回す");
+    h.fakeJudge.calls[2].resolve(judgeResult("wait", 0.9));
+    await settle();
+    assert.equal(h.logged.at(-1).trigger, "after-busy");
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit speak-now: 相槌の発火が喋らずに終わったら（空の返事など）数え始めず、after-busy も止めない", async () => {
+  const fakeOrch = makeManualFireOrchestrator();
+  const h = await startSpeakNowServer({ fakeOrch });
+  try {
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "うーん" });
+    h.fakeJudge.calls[0].resolve(judgeResult("backchannel", 0.4));
+    await settle();
+    fakeOrch.enter("thinking");
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "考え中の一言" });
+    fakeOrch.enter("idle");
+    fakeOrch.resolvers[0]({ fired: false, reason: "empty-reply" });
+    await settle();
+    await settle();
+    assert.equal(h.fakeJudge.calls.length, 2, "喋らなかった相槌のあとは after-busy を回す");
+    h.fakeJudge.calls[1].resolve(judgeResult("backchannel", 0.4));
+    await settle();
+    assert.equal(fakeOrch.record.fireCount, 2, "数え始めていないので次の相槌は止めない");
   } finally {
     h.sse.close();
     await h.server.close();

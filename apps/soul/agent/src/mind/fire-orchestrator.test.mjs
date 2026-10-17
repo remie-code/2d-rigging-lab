@@ -3299,3 +3299,31 @@ test("fire({vision:\"preferred\", instruction}): 画像付き ask でも最初�
   assert.ok(inputs[0][1].text.startsWith("[内部の指示: X]\n\n"));
   orch.dispose();
 });
+
+test("fire({vision:false, instruction}): 画面を撮らない通常発火の ask の先頭に付く（speak-now の相槌・backchannel.md §2）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("いやーこのボス強いんだよね");
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 8, height: 6, elapsedMs: 1 });
+  /** @type {any[]} */
+  const inputs = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(input) {
+        inputs.push(input);
+        return { replyText: "へー" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "ゲーム" // 視覚対象があっても vision:false なら撮らない。
+  });
+  const r = await orch.fire({ vision: false, instruction: "今は配信者の話に相槌を打つタイミング。" });
+  assert.equal(r.fired, true);
+  assert.equal(capture.calls.length, 0, "撮らない");
+  assert.equal(typeof inputs[0], "string", "画像なしの ask");
+  assert.ok(inputs[0].startsWith("今は配信者の話に相槌を打つタイミング。\n\n"));
+  assert.equal(JSON.stringify(buffer.all()).includes("相槌を打つタイミング"), false, "会話ログに残らない");
+  orch.dispose();
+});

@@ -954,3 +954,25 @@ test("settings store: 忙しい間のコメントの扱いは set→get roundtri
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: 相槌どうしの最小間隔はファイルのキー backchannelMinIntervalSec から読む（speak-now backchannel.md §2）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getBackchannelMinIntervalSec(), null, "未作成 = 既定（8 秒は呼び出し側）");
+    writeFileSync(path, JSON.stringify({ speakStartMode: "speak-now", backchannelMinIntervalSec: 12 }), "utf8");
+    assert.equal(store.getBackchannelMinIntervalSec(), 12);
+    assert.equal(store.getSpeakStartMode(), "speak-now", "他のキーと同居");
+    store.setSpeakStartMode("classic");
+    assert.equal(store.getBackchannelMinIntervalSec(), 12, "他のキーの set で消えない");
+    writeFileSync(path, JSON.stringify({ backchannelMinIntervalSec: 0 }), "utf8");
+    assert.equal(store.getBackchannelMinIntervalSec(), 0, "0 は歯止めなしとして有効");
+    for (const bad of ["8", -1, null]) {
+      writeFileSync(path, JSON.stringify({ backchannelMinIntervalSec: bad }), "utf8");
+      assert.equal(store.getBackchannelMinIntervalSec(), null, `${JSON.stringify(bad)} は既定`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
