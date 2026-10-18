@@ -96,6 +96,24 @@ export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
 export const DEFAULT_COCKPIT_PORT = 8181;
 /** 状態スナップショットに載せる直近転写の件数（タブ開き直し時の復元用）。 */
 export const DEFAULT_TRANSCRIPT_HISTORY = 200;
+/** 声の方式（POST /api/ears/start の body `ttsEngine`・設定キー `ttsEngine` と同じ語彙・声の差し替え Wave 3）。 */
+export const TTS_ENGINES = Object.freeze(["aivis", "elevenlabs"]);
+/** 声の engine の状態の語彙（VoiceEngine の status と同じ + まだ知らない unknown）。 */
+const VOICE_STATUSES = Object.freeze(["unknown", "connecting", "up", "reconnecting", "down"]);
+/** 声の状態の理由（警告 tts-reconnecting / tts-down の detail）の上限字数。キーの置き場所を示す Start 失敗の理由が収まる長さ。 */
+const VOICE_REASON_MAX_CHARS = 160;
+
+/**
+ * 声の状態の理由を表示用に整える（制御文字を除き・空なら null・長ければ切る）。
+ * @param {unknown} reason
+ * @returns {string | null}
+ */
+function clipVoiceReason(reason) {
+  if (typeof reason !== "string") return null;
+  const text = reason.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  if (text.length === 0) return null;
+  return text.length > VOICE_REASON_MAX_CHARS ? `${text.slice(0, VOICE_REASON_MAX_CHARS - 1)}…` : text;
+}
 
 /** loopback リテラルのみ許容（非 loopback は外部露出になるため拒否）。 */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -478,6 +496,17 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   ElevenLabs のキーを返す（既定 loadElevenLabsApiKey = `apps/soul/agent/.env.elevenlabs.local` を
  *   コード内で直接読む・process.env に入れない）。Start ごとに読む。キーは pipeline へ渡すだけで、
  *   state/SSE/ログ/エラーには載せない。
+ * @param {"aivis" | "elevenlabs"} [options.ttsEngineInitial="aivis"]
+ *   声の方式の初期選択（声の差し替え Wave 3 Domain E・voice-swap-wave-plan.md §3）。sttEngineInitial の写経:
+ *   起動時の値は cockpit.mjs が settings から読んで渡す（未知値は aivis）。選択は POST /api/ears/start の body
+ *   `ttsEngine` で受け、Start ごとに onSetTtsEngine で永続化する（効くのは次の Start から）。
+ * @param {(engine: string) => void | Promise<void>} [options.onSetTtsEngine]
+ *   声の方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ * @param {(engine: "aivis" | "elevenlabs") => ({ ok: boolean; reason?: string } | Promise<{ ok: boolean; reason?: string }>)} [options.onPrepareVoiceEngine]
+ *   耳の Start で声の engine を用意する口（cockpit.mjs が engine の作成・作り直し・ElevenLabs のキーの読み込みを
+ *   担う。**cockpit-server は engine の実体もキーも知らない**）。耳を開く前に呼び、`ok:false` なら Start を失敗に
+ *   する（理由は STT のキー切れと同じく Start の応答とエラー欄へ。理由にキーは含めない前提）。未注入なら呼ばない。
+ *   engine の状態は cockpit.mjs が `setVoiceEngineStatus` で知らせる。
  * @param {(info: { engine: string; latencyMs: number | null }) => void} [options.onSttLatency]
  *   you の転写 1 件ごとの遅延（数字のみ・本文は渡さない）。cockpit.mjs が標準出力に 1 行書く
  *   （画面の行の横の遅延表示は出さない方針・合意 §4.2）。
@@ -611,6 +640,19 @@ export function createCockpitServer(options = {}) {
   const elevenLabsApiKeyProvider =
     typeof options.elevenLabsApiKeyProvider === "function" ? options.elevenLabsApiKeyProvider : () => loadElevenLabsApiKey();
   const onSttLatency = typeof options.onSttLatency === "function" ? options.onSttLatency : null;
+  // 声の方式の選択（声の差し替え Wave 3 Domain E）: 現在の選択（Start のたびに更新）・永続化フック・engine を
+  // 用意する口。engine の状態（connecting / up / reconnecting / down）は cockpit.mjs から setVoiceEngineStatus で届く。
+  /** @type {"aivis" | "elevenlabs"} */
+  let ttsEngine = TTS_ENGINES.includes(/** @type {any} */ (options.ttsEngineInitial))
+    ? /** @type {"aivis" | "elevenlabs"} */ (options.ttsEngineInitial)
+    : "aivis";
+  const onSetTtsEngine = typeof options.onSetTtsEngine === "function" ? options.onSetTtsEngine : null;
+  const onPrepareVoiceEngine = typeof options.onPrepareVoiceEngine === "function" ? options.onPrepareVoiceEngine : null;
+  /**
+   * 今の声の engine の状態（engine = 状態を知らせた engine の種類・まだ無ければ null）。
+   * @type {{ engine: string | null; status: "unknown" | "connecting" | "up" | "reconnecting" | "down"; reason: string | null }}
+   */
+  const voice = { engine: null, status: "unknown", reason: null };
   // 画面キャプチャの撮る係の寿命を耳の Start / Stop に合わせる口（vision-capture-latency §4 の 2）。
   const onEarsStarted = typeof options.onEarsStarted === "function" ? options.onEarsStarted : null;
   const onEarsStopped = typeof options.onEarsStopped === "function" ? options.onEarsStopped : null;
@@ -823,6 +865,9 @@ export function createCockpitServer(options = {}) {
       // 操縦席の文字起こし選択: 方式（耳が動いている間は使用中、止まっている間は前回 Start の選択）と状態。
       // ヘッダの `stt: ElevenLabs up` 表示と、設定の選択肢の復元に使う（キーは載せない）。
       stt: { engine: sttEngine, status: health.stt, reason: health.sttReason },
+      // 声の方式（前回 Start の選択・起動直後は記憶の値）と、今の engine の状態（キーは載せない）。
+      // 設定の選択肢の復元と、ログのタブの健康 1 行の `tts:` に使う。
+      tts: { engine: ttsEngine, status: voice.status, reason: voice.reason },
       appended: bufStats.appended,
       discarded: bufStats.discarded,
       uptimeMs: earsState === "listening" && startedAtMs != null ? Math.max(0, nowImpl() - startedAtMs) : 0,
@@ -888,6 +933,17 @@ export function createCockpitServer(options = {}) {
         : health.stt === "reconnecting"
           ? { kind: "stt-reconnecting", severity: "warn", message: `文字起こしを繋ぎ直し中（${sttLabel}）`, detail: health.sttReason, source: sttEngine }
           : null
+    );
+    // 声（ElevenLabs のときだけ。AivisSpeech は状態で警告を出さない＝今どおり）。組み立ては文字起こしと同じ。
+    warningBoard.setCondition(
+      "tts",
+      voice.engine === "elevenlabs"
+        ? voice.status === "down"
+          ? { kind: "tts-down", severity: "alert", message: "声が止まっている（ElevenLabs）", detail: voice.reason, source: voice.engine }
+          : voice.status === "reconnecting"
+            ? { kind: "tts-reconnecting", severity: "warn", message: "声を繋ぎ直し中（ElevenLabs）", detail: voice.reason, source: voice.engine }
+            : null
+        : null
     );
     warningBoard.setCondition(
       "mic",
@@ -1026,9 +1082,10 @@ export function createCockpitServer(options = {}) {
   /**
    * @param {string | null} deviceRaw
    * @param {"whisper" | "elevenlabs"} [engineChoice]  文字起こしの方式（省略時は現在の選択）。
+   * @param {"aivis" | "elevenlabs"} [ttsChoice]  声の方式（省略時は現在の選択）。
    * @returns {Promise<{ ok: true; state: object } | { ok: false; error: string; state: object }>}
    */
-  async function startEars(deviceRaw, engineChoice) {
+  async function startEars(deviceRaw, engineChoice, ttsChoice) {
     if (pipeline && earsState !== "stopped") {
       // 既に起動中/起動済み。冪等に現状を返す（デバイス変更は Stop→Start）。
       return { ok: true, state: snapshot() };
@@ -1049,6 +1106,16 @@ export function createCockpitServer(options = {}) {
         await onSetSttEngine(engine);
       } catch {
         // 永続化失敗は起動を止めない（setLastDevice と同型）。
+      }
+    }
+    // 声の方式（文字起こしと同じく Start の前に選び、Start ごとに記憶する・失敗寛容）。
+    if (ttsChoice) ttsEngine = ttsChoice;
+    const voiceKind = ttsEngine;
+    if (onSetTtsEngine) {
+      try {
+        await onSetTtsEngine(voiceKind);
+      } catch {
+        // 永続化失敗は起動を止めない。
       }
     }
 
@@ -1084,6 +1151,30 @@ export function createCockpitServer(options = {}) {
         return { ok: false, error: reason, state: snapshot() };
       }
       elevenLabs = { engine: "elevenlabs", apiKey: key.apiKey };
+    }
+
+    // 声の engine を用意する（種類が変わっていれば cockpit.mjs が作り直す。ElevenLabs はここでキーを読んで繋ぎ始める）。
+    // 用意できなければ耳を開かずに Start を失敗にする（文字起こしのキー切れと同じ流儀・自動で AivisSpeech に戻さない）。
+    if (onPrepareVoiceEngine) {
+      /** @type {{ ok: boolean; reason?: string }} */
+      let prepared;
+      try {
+        prepared = await onPrepareVoiceEngine(voiceKind);
+      } catch (error) {
+        prepared = { ok: false, reason: `声の engine を用意できない（${errMessage(error)}）` };
+      }
+      if (!prepared || prepared.ok !== true) {
+        const reason = (prepared && typeof prepared.reason === "string" && prepared.reason) || "声の engine を用意できない";
+        earsState = "stopped";
+        startedAtMs = null;
+        health.stt = "unknown";
+        health.sttReason = null;
+        voice.engine = voiceKind;
+        voice.status = "down";
+        voice.reason = clipVoiceReason(reason);
+        broadcastState();
+        return { ok: false, error: reason, state: snapshot() };
+      }
     }
 
     const baseOptions = options.pipelineOptions ?? {};
@@ -1398,7 +1489,12 @@ export function createCockpitServer(options = {}) {
           sendJson(res, 400, { error: "invalid stt engine", state: snapshot() });
           return;
         }
-        const result = await startEars(deviceRaw ?? null, body.sttEngine ?? undefined);
+        // 声の方式（任意・省略時は現在の選択）。未知値は 400（sttEngine と同じ）。
+        if (body.ttsEngine !== undefined && body.ttsEngine !== null && !TTS_ENGINES.includes(body.ttsEngine)) {
+          sendJson(res, 400, { error: "invalid tts engine", state: snapshot() });
+          return;
+        }
+        const result = await startEars(deviceRaw ?? null, body.sttEngine ?? undefined, body.ttsEngine ?? undefined);
         sendJson(res, result.ok ? 200 : 500, result.ok ? result.state : { error: result.error, state: result.state });
       } finally {
         transitioning = false;
@@ -1933,7 +2029,8 @@ export function createCockpitServer(options = {}) {
       thresholds: latencyThresholds
     });
     const brain = typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null;
-    const payload = { ...record, vision: inFire?.vision === true, brain };
+    // voice = その返事を鳴らした声の engine の種類（遅延の TTS / 声の区間を engine ごとに見比べる材料・additive）。
+    const payload = { ...record, vision: inFire?.vision === true, brain, voice: voice.engine ?? ttsEngine };
     broadcast("latency", payload);
     if (onReplyLatency) {
       try {
@@ -2612,6 +2709,36 @@ export function createCockpitServer(options = {}) {
         userSpeaking: pipeline != null && userSpeaking,
         lastSpeechEndAtMs
       };
+    },
+    /**
+     * 声の engine の状態を知らせる口（cockpit.mjs が engine の onStatus を繋ぐ・additive な内部 JS API）。
+     * ElevenLabs の reconnecting / down は上の帯の警告になる（AivisSpeech は状態で警告を出さない）。reason に
+     * キーや会話の本文を入れない前提（切断などの短い理由・警告の detail）。表示側でも制御文字を除き
+     * VOICE_REASON_MAX_CHARS 字で切る。
+     * @param {{ engine: string; status: string; reason?: string | null }} info
+     */
+    setVoiceEngineStatus(info) {
+      if (closed || !info || typeof info.engine !== "string") return;
+      const status = VOICE_STATUSES.includes(/** @type {any} */ (info.status)) ? /** @type {any} */ (info.status) : "unknown";
+      const reason = clipVoiceReason(info.reason);
+      if (voice.engine === info.engine && voice.status === status && voice.reason === reason) return;
+      voice.engine = info.engine;
+      voice.status = status;
+      voice.reason = reason;
+      broadcastState();
+    },
+    /**
+     * 読みが取れず、口の時間割を簡易版にしたことを知らせる口（ElevenLabs engine の onReadingsFallback から）。
+     * 一回きりの警告（60 秒・続けば回数を数える）。detail は出さない（文の本文を警告に載せない）。
+     */
+    reportVoiceReadingsFallback() {
+      if (closed) return;
+      warningBoard.pushEvent("tts-readings-fallback", {
+        kind: "tts-readings-fallback",
+        severity: "warn",
+        message: "口の動きを簡易版にした（読みが取れない）",
+        source: "elevenlabs"
+      });
     },
     /**
      * 圧縮の開始・終了をログのタブへ 1 行（SSE "diagnostic" type:"contextCompaction"・メイン画面は使わない）。

@@ -8,6 +8,9 @@
  *    繋ぎ直し中、残量が少ない（残り 20% 未満・5% 未満は赤）、Codex の使用上限。直ったら消える。
  *  - 一回きりの出来事（lifetime "event"）: 判定のエラー、頭のエラー（fireError）、OpenAI の残高切れ（429
  *    credit_balance_exhausted）。60 秒で消える（同じ出来事が続けば消えるまでの時間を延ばし、回数を数える）。
+ *  - 声の差し替え Wave 3 で足した種類（組み立ては cockpit-server）: 状態 `tts-reconnecting`（warn）・`tts-down`
+ *    （alert）は ElevenLabs の engine のときだけ。出来事 `tts-readings-fallback`（warn）は読みが取れず簡易版の口に
+ *    なったとき。
  * 表示（文言の出し方・並べ方・色）は画面（2 回目）の領分。ここは「今出ている警告の一覧」を snapshot と SSE に
  * 載せられる形で持つだけ。文言は短い日本語（画面がそのまま使ってよい）、detail は補足（会話やコメントの本文は
  * 入れない。呼び出し側が伏せた文言だけを渡す）。

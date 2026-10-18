@@ -160,6 +160,11 @@ test("BottomBar: 運転設定の表示・遅延の凡例 8 つ・歯車「準備
   assert.ok(!/Ctrl|ホットキー/.test(text), "ホットキーの案内は消した（§7）");
   const swatches = collectElements(vnode).filter((n) => n.props && typeof n.props.class === "string" && n.props.class.startsWith("legend-swatch"));
   assert.equal(swatches.length, 8);
+  // 声の差し替え Wave 2 の定義を凡例の title に添える（TTS = 頼んでから最初の音・声 = 最初の音から鳴り始めるまで）。
+  const titles = collectElements(vnode)
+    .filter((n) => n.props && n.props.class === "legend-item" && typeof n.props.title === "string")
+    .map((n) => n.props.title);
+  assert.deepEqual(titles, ["声を頼んでから最初の音が届くまで", "最初の音が届いてから鳴り始めるまで"]);
   const gear = collectElements(vnode).find((n) => n.type === "button");
   assert.equal(gear.props.id, "cockpit-settings-trigger");
   gear.props.onClick();

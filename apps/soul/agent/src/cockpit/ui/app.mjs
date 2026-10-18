@@ -134,6 +134,8 @@ export function App(props) {
   const [health, setHealth] = useState(initialHealth);
   // 操縦席の文字起こし選択: 方式と状態（ヘッダの `stt:`・設定の選択肢の復元）と Start 時のマイク名（ヘッダの `mic:`）。
   const [stt, setStt] = useState(/** @type {any} */ (null));
+  // 声の方式と状態（設定の選択肢の復元・ログのタブの健康 1 行の `tts:`・声の差し替え Wave 3）。
+  const [tts, setTts] = useState(/** @type {any} */ (null));
   const [device, setDevice] = useState(/** @type {string | null} */ (null));
   const [discarded, setDiscarded] = useState(/** @type {number | string} */ (0));
   const [uptime, setUptime] = useState(() => ({ baseMs: 0, anchorMs: now() }));
@@ -155,6 +157,7 @@ export function App(props) {
     setEars(s.ears);
     setHealth((prev) => mergeHealth(prev, s.health));
     if (s.stt) setStt(s.stt); //                                  欠落は前値保持（health と同じ流儀）
+    if (s.tts) setTts(s.tts); //                                  同上（声の方式と状態）
     setDevice(typeof s.device === "string" ? s.device : null);
     setDiscarded(s.discarded);
     setUptime({ baseMs: s.uptimeMs || 0, anchorMs: now() }); // :276-277 再同期
@@ -333,6 +336,7 @@ export function App(props) {
         onClose=${() => setSettingsOpen(false)}
         settings=${settings}
         sttEngine=${stt ? stt.engine : null}
+        ttsEngine=${tts ? tts.engine : null}
         chatDisplay=${chatDisplay}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}
@@ -352,7 +356,7 @@ export function App(props) {
             fetchImpl=${props.fetchImpl}
           />`}
         logSlot=${(/** @type {boolean} */ active) => html`
-          <${HealthLine} ears=${ears} health=${health} audioDevice=${settings.audioDevice} stt=${stt} device=${device} />
+          <${HealthLine} ears=${ears} health=${health} audioDevice=${settings.audioDevice} stt=${stt} tts=${tts} device=${device} />
           <${Feed} rows=${feed.rows} usageNote=${usageNote} discarded=${discarded} uptimeText=${uptimeText} active=${active} />`}
       />
     </div>

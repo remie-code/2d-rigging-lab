@@ -267,6 +267,27 @@ export function sttEngineSelection(stt) {
 }
 
 /**
+ * 声の方式の選択肢（設定「入出力」タブの文字起こしの下・声の差し替え Wave 3 Domain E）。文字起こしと同じく
+ * Start の前に選び、効くのは次の Start から。value は POST /api/ears/start の body `ttsEngine`（サーバー側
+ * TTS_ENGINES と同じ語彙）。
+ * @type {ReadonlyArray<{ value: string; label: string }>}
+ */
+export const TTS_ENGINE_OPTIONS = Object.freeze([
+  Object.freeze({ value: "aivis", label: "AivisSpeech" }),
+  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" })
+]);
+
+/**
+ * state.tts.engine を選択肢の値へ（未知/欠落は null = 選択を変えない・sttEngineSelection と同型）。
+ * @param {{ engine?: string | null } | null | undefined} tts
+ * @returns {string | null}
+ */
+export function ttsEngineSelection(tts) {
+  const engine = tts && tts.engine;
+  return TTS_ENGINE_OPTIONS.some((o) => o.value === engine) ? /** @type {string} */ (engine) : null;
+}
+
+/**
  * POST /api/ears/start 応答 → 失敗文言（:740-742）。!ok（409 transitioning / 500 とも）は
  * "start failed: error"・成功は null（呼び出し側は snapshot を適用しエラー欄をクリア :743-745）。
  * @param {{ ok: boolean; j?: { error?: string | null } | null }} res

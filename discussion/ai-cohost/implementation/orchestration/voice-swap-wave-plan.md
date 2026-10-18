@@ -1,6 +1,6 @@
 # 声の差し替え(ElevenLabs TTS の流し込み)wave 計画
 
-> Status: ACTIVE(2026-10-18 ユーザー承認)。Wave 1 完了・コミット 0ea68aea(軽い突き合わせ合格 [../reviews/voice-swap/wave-1.md](../reviews/voice-swap/wave-1.md))。Wave 2 実装・軽い突き合わせ合格([../reviews/voice-swap/wave-2.md](../reviews/voice-swap/wave-2.md))、仕上げ修正中。根拠は [voice-swap-inventory.md](voice-swap-inventory.md)。
+> Status: ACTIVE(2026-10-18 ユーザー承認)。Wave 1 完了・コミット 0ea68aea(軽い突き合わせ合格 [../reviews/voice-swap/wave-1.md](../reviews/voice-swap/wave-1.md))。Wave 2 完了・コミット 6ac2814e(軽い突き合わせ合格 [../reviews/voice-swap/wave-2.md](../reviews/voice-swap/wave-2.md)、仕上げ [../waves/voice-swap/wave-2-fixes-report.md](../waves/voice-swap/wave-2-fixes-report.md))。Wave 3 完了(軽い突き合わせ合格 [../reviews/voice-swap/wave-3.md](../reviews/voice-swap/wave-3.md)、仕上げ [../waves/voice-swap/wave-3-fixes-report.md](../waves/voice-swap/wave-3-fixes-report.md))。機械ゲート PASS(soul 1469/1469・soul-zone・runtime-player 981)。**人間ゲート PENDING** → [../waves/voice-swap/human-gate.md](../waves/voice-swap/human-gate.md)。根拠は [voice-swap-inventory.md](voice-swap-inventory.md)。
 > レビューの粒度(ユーザー 2026-10-18): 「これまで Gnome 単独でやっていたくらい」。各ドメインは Gnome がテストまで含めて実装し、`node --test` と `check:soul-zone` で自分で確かめる。wave の終わりに Sylph が 1 回だけ、契約の食い違いを軽く突き合わせる(1 レーン、修正は Gnome)。
 
 ## 0. 形(全 wave 共通)
@@ -85,7 +85,7 @@
    - 1 本の WebSocket を共有するので、文ごとの `synthesize` は engine 内で直列にする(送信順 = 受信順)。
 2. `scripts/cockpit.mjs` の engine は一度作ったら使い回しで、種類は既定値に固定されている。Domain E は Start で `ttsEngine` を読み、種類が変わっていたら作り直す(古い engine は dispose)。
 3. 器の安全網があるので、alignment の到着が 2 秒以上空くと口が途中で閉じる。ElevenLabs は実時間の約 9 倍で届くため、通常は起きない。
-4. Wave 2 の裁定(Undine): 一括読み上げの上限は 4096(器へは 512 ずつ)。Claude 経路で鳴り始めた後に失敗したときは「鳴った分 + 中断注記」で正本化する。
+4. Wave 2 の裁定(Undine): 一括読み上げの上限は 4096(器へは 512 ずつ)。Claude 経路で鳴り始めた後に失敗したときは「鳴った分 + 中断注記」で正本化する。次の ask への継続注記は足さない(今の割り込みの流儀のまま)。preflight-tts の上限は据え置く(診断用)。
 
 ## 3. Wave 3(ElevenLabs と操縦席・並列 2 ドメイン)
 
@@ -106,6 +106,11 @@
   6. `alignmentLeadMs` を足す。
 - **料金の計器**: 既存の ElevenLabs 残量表示(quota)がそのまま効く。追加の計器は作らない。
 - テストは WebSocket を偽物にし、alignment の通し値化・区間化・割り付け・再接続・中止を固定する。本物の API は叩かない。
+
+- **D と E の接点(Undine 確定 2026-10-18)**: `createVoiceEngine("elevenlabs", deps)`。
+  - deps: `{ apiKey, voiceId?, modelId?, readingClient?, alignmentLeadMs?, onReadingsFallback?, WebSocketImpl?, ... }`。
+  - readingClient は AivisSpeech の `/accent_phrases` を呼ぶ口。既存の tts-client に足すのは D の担当。
+  - 登録は D が `VOICE_ENGINE_FACTORIES` に足す。キーの読み込み(`loadElevenLabsApiKey`)は E が Start で行い、`apiKey` として渡す。
 
 ### Domain E — 操縦席の切り替えと警告(apps/soul/agent/src/cockpit/、scripts/cockpit.mjs)
 

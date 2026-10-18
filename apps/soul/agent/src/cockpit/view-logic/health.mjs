@@ -33,6 +33,10 @@
  *  - STT_ENGINE_LABELS / sttStatusView → ヘッダの `stt: ElevenLabs up` / `stt: whisper up` /
  *    `stt: ElevenLabs reconnecting`（黄色）。既存の whisper 死活表示は残したまま足す。
  *  - micInputLabel → 耳が動いている（listening）間だけ出す使用中のマイク名。
+ *
+ * 声の差し替え Wave 3 Domain E 追加:
+ *  - TTS_ENGINE_LABELS / ttsStatusView → ログのタブの健康 1 行の `tts: ElevenLabs up` / `tts: AivisSpeech up` /
+ *    `tts: ElevenLabs reconnecting`（黄色）。sttStatusView と同じ形。まだ engine が無い（unknown）間は出さない。
  */
 
 /**
@@ -105,6 +109,32 @@ export function sttStatusView(stt) {
     text: label + " " + status + (status === "down" && stt.reason ? " — " + stt.reason : ""),
     className: "hstat " + status,
     title: stt.reason || ""
+  };
+}
+
+/**
+ * 声の方式 id → 表示名（選択肢の表示は view-logic/settings.mjs の TTS_ENGINE_OPTIONS）。
+ * @type {Readonly<Record<string, string>>}
+ */
+export const TTS_ENGINE_LABELS = Object.freeze({
+  aivis: "AivisSpeech",
+  elevenlabs: "ElevenLabs"
+});
+
+/**
+ * 健康 1 行の声の表示（`ElevenLabs up` 等）。state.tts（{ engine, status, reason }）を受ける。表示の形は
+ * sttStatusView と同じ（down は reason を併記・connecting / reconnecting は黄色）。tts が無い・まだ engine を
+ * 用意していない（status unknown）なら null（出さない）。
+ * @param {{ engine?: string | null; status?: string | null; reason?: string | null } | null | undefined} tts
+ * @returns {{ text: string; className: string; title: string } | null}
+ */
+export function ttsStatusView(tts) {
+  if (!tts || !tts.status || tts.status === "unknown") return null;
+  const label = (tts.engine && TTS_ENGINE_LABELS[tts.engine]) || "unknown";
+  return {
+    text: label + " " + tts.status + (tts.status === "down" && tts.reason ? " — " + tts.reason : ""),
+    className: "hstat " + tts.status,
+    title: tts.reason || ""
   };
 }
 

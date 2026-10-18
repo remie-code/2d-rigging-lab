@@ -50,4 +50,4 @@
 | [stream-memory-inventory.md](stream-memory-inventory.md) | **完了(2026-07-19)** | 配信間記憶の棚卸し。自動搭載3件、20分checkpoint/手動/SIGINT、OFF止水栓、視聴者名秘匿を裁定。 |
 | [stream-memory-wave-plan.md](stream-memory-wave-plan.md) | **実装済み・人間ゲート待ち(2026-07-19)** | `memory.mjs`/起動注入/チェックポイント/操縦席を実装。957/957緑・6レーンPASS。保存/次回搭載/OFF/手動記録の4点実射が未記録。 |
 | [voice-swap-inventory.md](voice-swap-inventory.md) | **完了(2026-10-18)** | 声の差し替えの棚卸し。ElevenLabs TTD WebSocket(v4_turbo・案3の声)を受け取りながら鳴らす、音は魂で鳴らす、器に流し込みの約束、落ちたら再接続のみ、を合意。 |
-| [voice-swap-wave-plan.md](voice-swap-wave-plan.md) | **ACTIVE — Wave 1 起動(2026-10-18)** | W1: 器の流し込みの約束 ∥ 流し込みプレイヤー → W2: 声の差し替え口 + AivisSpeech 載せ替え → W3: ElevenLabs engine ∥ 操縦席の切り替え・警告 → 人間ゲート6点。レビューは Gnome 単独 + wave 末の軽い突き合わせ。 |
+| [voice-swap-wave-plan.md](voice-swap-wave-plan.md) | **実装済み・人間ゲート待ち(2026-10-18)** | W1: 器の流し込みの約束 ∥ 流し込みプレイヤー → W2: 声の差し替え口 + AivisSpeech 載せ替え → W3: ElevenLabs engine ∥ 操縦席の切り替え・警告 → 人間ゲート6点。レビューは Gnome 単独 + wave 末の軽い突き合わせ。 |

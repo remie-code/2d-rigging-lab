@@ -21,7 +21,9 @@ import {
   memoryRecordPostErrorText,
   memoryStatusLabel,
   STT_ENGINE_OPTIONS,
-  sttEngineSelection
+  sttEngineSelection,
+  TTS_ENGINE_OPTIONS,
+  ttsEngineSelection
 } from "./settings.mjs";
 
 test("visionTargetLabel: title 無しは not configured（applyVisionTarget :317-322）", () => {
@@ -231,4 +233,19 @@ test("STT_ENGINE_OPTIONS / sttEngineSelection: 文字起こしの選択肢（whi
   assert.equal(sttEngineSelection({ engine: "whisper" }), "whisper");
   assert.equal(sttEngineSelection({ engine: "google" }), null);
   assert.equal(sttEngineSelection(null), null);
+});
+
+test("TTS_ENGINE_OPTIONS / ttsEngineSelection: 声の選択肢（AivisSpeech / ElevenLabs）と state.tts からの復元", () => {
+  assert.deepEqual(
+    TTS_ENGINE_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      ["aivis", "AivisSpeech"],
+      ["elevenlabs", "ElevenLabs"]
+    ]
+  );
+  assert.equal(ttsEngineSelection({ engine: "elevenlabs" }), "elevenlabs");
+  assert.equal(ttsEngineSelection({ engine: "aivis" }), "aivis");
+  assert.equal(ttsEngineSelection({ engine: "voicevox" }), null);
+  assert.equal(ttsEngineSelection({}), null);
+  assert.equal(ttsEngineSelection(null), null);
 });

@@ -40,10 +40,11 @@
 
 - 口パク(2026-10-18): 読みは AivisSpeech の `/accent_phrases`(合成なし)、時刻は ElevenLabs の文字時刻を区間に束ねて使い、句読点・タグで区切る。開き量は母音ごとの固定値のまま([research/lipsync-inputs-2026-10.md](research/lipsync-inputs-2026-10.md) §5)。
 
+- 声の差し替えを実装(2026-10-18): 操縦席で AivisSpeech / ElevenLabs を切り替え、ElevenLabs は TTD WebSocket で受け取りながら鳴らす。人間ゲート待ち([../implementation/orchestration/voice-swap-wave-plan.md](../implementation/orchestration/voice-swap-wave-plan.md))。
+
 ## 5. Unresolved Questions
 
 - 全体構想(何をどこまで差し替えるか)の合意。
 - STT の実測: 確定方式(VAD 既定・短縮 VAD・手動)ごとの、喋り終わりから確定までの時間(日本語、日本から)。
 - 再接続時の挙動(最初の約2秒のバッファが毎回乗るか、`previous_text` でどこまで繋がるか)。
 - 日本語のタグが効くか(英語タグは台詞の頭に付けると効く。experiments/02)。
-- 返事の繋ぎ方(文ごとか WebSocket か)と、TTS 差し替えの組み込み方。

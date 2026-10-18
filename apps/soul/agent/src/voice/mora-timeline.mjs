@@ -98,7 +98,7 @@ function normalizeVowel(rawVowel) {
  * @param {undefined | { vowelMap?: Record<string, number> }} sConfig
  * @returns {Record<"a"|"i"|"u"|"e"|"o", number>}
  */
-function resolveSByVowel(sConfig) {
+export function resolveSByVowel(sConfig) {
   const merged = { ...DEFAULT_S_BY_VOWEL };
   if (sConfig !== undefined && sConfig !== null) {
     if (typeof sConfig !== "object") {

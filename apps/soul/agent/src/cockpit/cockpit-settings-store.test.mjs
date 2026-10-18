@@ -900,6 +900,42 @@ test("settings store: stt engine は set→get roundtrip で永続化し・他�
   }
 });
 
+test("settings store: tts engine は set→get roundtrip で永続化し・sttEngine と同居する（声の差し替え Wave 3）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getTtsEngine(), null); // 未作成 = 記憶なし（既定 aivis は呼び出し側）。
+    store.setSttEngine("elevenlabs");
+    store.setTtsEngine("elevenlabs");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getTtsEngine(), "elevenlabs");
+    assert.equal(reopened.getSttEngine(), "elevenlabs"); // 片方の set が他方を消さない。
+    reopened.setTtsEngine("aivis");
+    assert.equal(store.getTtsEngine(), "aivis");
+    assert.equal(store.getSttEngine(), "elevenlabs");
+    store.setTtsEngine(null);
+    assert.equal(store.getTtsEngine(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getTtsEngine returns null・文字列でない値は null・unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(path, "{ not json", "utf8");
+    assert.equal(createFileSettingsStore({ path }).getTtsEngine(), null);
+    writeFileSync(path, JSON.stringify({ ttsEngine: 42 }), "utf8");
+    assert.equal(createFileSettingsStore({ path }).getTtsEngine(), null);
+    const unwritable = createFileSettingsStore({ path: join(dir, "settings.json", "nested", "x.json") });
+    assert.doesNotThrow(() => unwritable.setTtsEngine("elevenlabs"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("settings store: corrupt JSON → getSttEngine returns null・unwritable path は set を握って続行する", () => {
   const dir = tmpDir();
   const path = join(dir, "settings.json");

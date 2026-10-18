@@ -6,7 +6,9 @@
  * 現 cockpit.html の設定系セクションの移植先:
  *  - 接続: 器 Channel（:172-178 :753-770）/ YouTube Live chat（:182-189 :775-803）
  *  - 入出力: マイク + Start/Stop（:163-169 :697-750 :804-811）/ 文字起こし（whisper / ElevenLabs・
- *    cockpit-stt-selection.md §4.2: マイクの下・Start の前に選ぶ・Start で記憶）/ 声の出力先（:207-212 :654-695）/
+ *    cockpit-stt-selection.md §4.2: マイクの下・Start の前に選ぶ・Start で記憶）/ 声（AivisSpeech / ElevenLabs・
+ *    声の差し替え Wave 3: 文字起こしの下・同じく Start の前に選び次の Start から効く。Start の失敗理由は共用のエラー欄）/
+ *    声の出力先（:207-212 :654-695）/
  *    視界 = ゲーム窓（:192-199 :591-631）
  *  - 各区画のエラー欄: devices-error（:168）→ マイク行 / channel-error（:177）→ Channel 行 /
  *    chat-error（:188）→ chat 行 / vision-error（:198）→ 視界行 / conversation-error（:212）は
@@ -66,6 +68,8 @@ import {
   earsStartFailureText,
   STT_ENGINE_OPTIONS,
   sttEngineSelection,
+  TTS_ENGINE_OPTIONS,
+  ttsEngineSelection,
   requestErrorText,
   brainPostErrorText,
   memoryToggleView,
@@ -227,7 +231,7 @@ export function settingsModalFocusReturnTarget(previous, open) {
  * conversation editor is a page within this same dialog; it never creates a
  * nested dialog or changes existing immediate-setting endpoint handlers.
  *
- * @param {{ open?: boolean; onClose?: () => void; settings: any; sttEngine?: string | null; chatDisplay?: string | null;
+ * @param {{ open?: boolean; onClose?: () => void; settings: any; sttEngine?: string | null; ttsEngine?: string | null; chatDisplay?: string | null;
  *   applySnapshot: (s: any) => void; fetchImpl?: any; promptEditorSlot?: any;
  *   draftDirty?: boolean; dirty?: boolean; onDiscardDraft?: () => void; onContinueDraft?: () => void;
  *   closeRequestRef?: { current: (() => void) | null }; driveSlot?: any; logSlot?: any }} props
@@ -237,6 +241,7 @@ export function CockpitSettingsModal({
   onClose,
   settings,
   sttEngine = null,
+  ttsEngine = null,
   chatDisplay,
   applySnapshot,
   fetchImpl,
@@ -258,6 +263,10 @@ export function CockpitSettingsModal({
   //    復元（ユーザーが選び直したら上書きしない）。Start の body で送り、サーバー側で記憶される。──
   const [sttSelected, setSttSelected] = useState("whisper");
   const sttEditedRef = useRef(false);
+  // ── 声（AivisSpeech / ElevenLabs・声の差し替え Wave 3）: 文字起こしと同じく Start の前に選び、効くのは次の Start
+  //    から。前回の選択は state.tts.engine から復元（選び直したら上書きしない）。Start の body で送り、サーバー側で記憶。──
+  const [ttsSelected, setTtsSelected] = useState("aivis");
+  const ttsEditedRef = useRef(false);
   // ── 器 Channel（:172-178 :753-770）──
   const [channelUrl, setChannelUrl] = useState("");
   const [channelError, setChannelError] = useState(""); // channel-error :177
@@ -535,6 +544,11 @@ export function CockpitSettingsModal({
   useEffect(() => {
     if (sttRestored != null && !sttEditedRef.current) setSttSelected(sttRestored);
   }, [sttRestored]);
+  // 声の選択の復元（state.tts.engine・文字起こしと同型）。
+  const ttsRestored = ttsEngineSelection(ttsEngine ? { engine: ttsEngine } : null);
+  useEffect(() => {
+    if (ttsRestored != null && !ttsEditedRef.current) setTtsSelected(ttsRestored);
+  }, [ttsRestored]);
 
   // ── ハンドラ（すべて「POST → view-logic で文言 → snapshot 適用」の同型フロー）──
 
@@ -543,10 +557,11 @@ export function CockpitSettingsModal({
     const device = micSelected || null; // :731
     setMicBusy(true); //                    :732 setBusy(true)
     sttEditedRef.current = false; // Start 後はサーバーの記憶（state.stt.engine）に同期してよい。
+    ttsEditedRef.current = false; //  声も同じ（state.tts.engine）。
     doFetch("/api/ears/start", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ device, sttEngine: sttSelected || "whisper" })
+      body: JSON.stringify({ device, sttEngine: sttSelected || "whisper", ttsEngine: ttsSelected || "aivis" })
     })
       .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, j })))
       .then((/** @type {any} */ res) => {
@@ -847,6 +862,19 @@ export function CockpitSettingsModal({
             onChange=${(/** @type {any} */ ev) => {
               sttEditedRef.current = true;
               setSttSelected(ev && ev.target ? ev.target.value : "whisper");
+            }}
+          />
+        </div>
+        <div class="drawer-row">
+          <label for="tts-engine-select">声</label>
+          <${SettingsSelect}
+            id="tts-engine-select"
+            className="drawer-select tts-engine-select"
+            options=${TTS_ENGINE_OPTIONS}
+            value=${ttsSelected}
+            onChange=${(/** @type {any} */ ev) => {
+              ttsEditedRef.current = true;
+              setTtsSelected(ev && ev.target ? ev.target.value : "aivis");
             }}
           />
         </div>

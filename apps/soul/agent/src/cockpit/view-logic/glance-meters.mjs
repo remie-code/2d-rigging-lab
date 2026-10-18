@@ -24,6 +24,9 @@ export const DEFAULT_LATENCY_THRESHOLDS = Object.freeze({ warnSec: 4, alertSec: 
 /**
  * 遅延の区間（棒の並び順 = 凡例の並び順・§9.3 の 8 つ）。key は latency の segments のキー（その他は otherMs）。
  * className は色（styles.mjs の .lat-seg.<className> と凡例の .legend-swatch.<className>）。
+ * hint は凡例に添える区間の定義（声の差し替え Wave 2 で TTS / 声の区間が engine に依存しない定義になった:
+ * TTS = 声を頼んでから最初の音のかたまりが届くまで、声 = 最初の音のかたまりから実際に鳴り始める（STARTED）まで。
+ * 旧定義の「audio_query → synthesis 完了」「合成完了 → 再生開始」ではない）。
  */
 export const LATENCY_SEGMENTS = Object.freeze([
   Object.freeze({ key: "transcribeMs", label: "文字起こし", className: "seg-transcribe" }),
@@ -31,10 +34,13 @@ export const LATENCY_SEGMENTS = Object.freeze([
   Object.freeze({ key: "screenMs", label: "画面", className: "seg-screen" }),
   Object.freeze({ key: "llmFirstMs", label: "LLM 最初の文字", className: "seg-llm-first" }),
   Object.freeze({ key: "firstSentenceMs", label: "最初の文", className: "seg-first-sentence" }),
-  Object.freeze({ key: "ttsMs", label: "TTS", className: "seg-tts" }),
-  Object.freeze({ key: "voiceMs", label: "声", className: "seg-voice" }),
+  Object.freeze({ key: "ttsMs", label: "TTS", className: "seg-tts", hint: "声を頼んでから最初の音が届くまで" }),
+  Object.freeze({ key: "voiceMs", label: "声", className: "seg-voice", hint: "最初の音が届いてから鳴り始めるまで" }),
   Object.freeze({ key: "otherMs", label: "その他", className: "seg-other" })
 ]);
+
+/** 遅延の棒の title に添える声の engine の表示名（health.mjs の TTS_ENGINE_LABELS と同じ語彙）。 */
+const VOICE_ENGINE_TITLES = Object.freeze(/** @type {Record<string, string>} */ ({ aivis: "AivisSpeech", elevenlabs: "ElevenLabs" }));
 
 /** @param {unknown} v @returns {v is number} */
 function isNum(v) {
@@ -88,7 +94,10 @@ export function latencyBarView(rec, thresholds) {
     parts,
     totalText: secondsText(rec.totalMs),
     levelClassName: "lat-total" + (level === "warn" ? " warn" : level === "alert" ? " alert" : ""),
-    title: present.map((p) => p.label + " " + (p.ms / 1000).toFixed(2) + " 秒").join(" / ")
+    // 鳴らした声の engine（latency の voice・声の差し替え Wave 3）があれば添える（TTS / 声の区間を engine ごとに見比べる）。
+    title:
+      present.map((p) => p.label + " " + (p.ms / 1000).toFixed(2) + " 秒").join(" / ") +
+      (typeof rec.voice === "string" && rec.voice ? "（声: " + (VOICE_ENGINE_TITLES[rec.voice] ?? rec.voice) + "）" : "")
   };
 }
 

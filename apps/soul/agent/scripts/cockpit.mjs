@@ -26,6 +26,9 @@
  *    - それ以外（URL 未設定 / settings 復元 / 操縦席入力）は**初回 fire 時**に生成。
  *  声の差し替え Wave 2: 流し込みプレイヤー（起動に約 0.5 秒）と声の差し替え口は耳の Start のときに作る
  *  （最初の Fire に乗せない・申し送り 1）。Start より前の Fire は従来どおりその場で作る。
+ *  声の差し替え Wave 3: 声の方式（設定キー `ttsEngine`・AivisSpeech / ElevenLabs）は耳の Start で読み、
+ *  種類が前回と違えば engine を作り直す（createVoiceEngineManager）。ElevenLabs のキーは engine を作るときに読む
+ *  （種類が同じでも、落ちた（down の）ElevenLabs の engine は Start で作り直し、キーを読み直す）。
  *  URL 未設定のまま fire しても発話の送出前に session.ask で弾く（lazyChannel が URL 未設定を
  *  明示エラーにする前に、ここで no-URL を検出して spawn しない）。→ S2.5 ユーザーは何も spawn しない。
  *
@@ -71,7 +74,9 @@ import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
 import { createStreamPlayer } from "../src/voice/stream-player.mjs";
-import { createVoiceEngine, DEFAULT_VOICE_ENGINE_KIND } from "../src/voice/engines/voice-engine.mjs";
+import { createVoiceEngine } from "../src/voice/engines/voice-engine.mjs";
+import { createTtsClient } from "../src/voice/tts-client.mjs";
+import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import {
   generateDigest,
@@ -797,6 +802,243 @@ export function createSttEngineHooks(settings, defaultEngine = "whisper") {
   };
 }
 
+/** 声の方式（設定キー `ttsEngine`・cockpit-server の TTS_ENGINES と同じ語彙）。 */
+const TTS_ENGINE_CHOICES = Object.freeze(["aivis", "elevenlabs"]);
+
+/**
+ * settings の声の方式（ttsEngine）を、cockpit-server の口（ttsEngineInitial/onSetTtsEngine）へ橋渡しする
+ * （声の差し替え Wave 3 Domain E・createSttEngineHooks の写経）。未記憶/未知値は defaultEngine（既定 "aivis"）。
+ * 選択だけを記憶し、ElevenLabs のキーはここで扱わない（キーは createVoiceEngineManager が engine を作るときに読む）。
+ *
+ * @param {{ getTtsEngine: () => string | null; setTtsEngine: (engine: string | null) => void }} settings
+ * @param {"aivis" | "elevenlabs"} [defaultEngine="aivis"]
+ * @returns {{
+ *   resolveInitialTtsEngine: () => "aivis" | "elevenlabs";
+ *   onSetTtsEngine: (engine: string) => void;
+ * }}
+ */
+export function createTtsEngineHooks(settings, defaultEngine = "aivis") {
+  return {
+    /** 起動時の初期選択（未記憶/未知値は defaultEngine）。 */
+    resolveInitialTtsEngine: () => {
+      const remembered = settings.getTtsEngine();
+      return TTS_ENGINE_CHOICES.includes(/** @type {any} */ (remembered))
+        ? /** @type {"aivis" | "elevenlabs"} */ (remembered)
+        : defaultEngine;
+    },
+    /** cockpit-server の onSetTtsEngine（耳の Start ごとに呼ぶ）。 */
+    onSetTtsEngine: (engine) => {
+      try {
+        settings.setTtsEngine(engine); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は Start を止めない。
+      }
+    }
+  };
+}
+
+/** 声の警告の detail に載せる理由の上限（字数・cockpit-server 側でも切る）。 */
+const VOICE_REASON_MAX_CHARS = 80;
+
+/**
+ * ElevenLabs の声の engine の診断（onDiagnostic）から、警告の detail に載せる短い理由を作る
+ * （声の差し替え Wave 3 仕上げ・STT の `closed code=1006` と同じ流儀）。engine の reason は決まった語彙・close code・
+ * サーバーの error の識別子だけ（キー・本文は入らない・D がテストで固定）だが、ここでも制御文字を除き長さを切る。
+ * message は使わない。
+ *
+ * @param {unknown} diagnostic
+ * @returns {string | null | undefined}  理由（string）・繋がったので消す（null）・理由に関係しない診断（undefined）。
+ */
+export function voiceDiagnosticReason(diagnostic) {
+  if (!diagnostic || typeof diagnostic !== "object") return undefined;
+  const d = /** @type {{ type?: unknown; reason?: unknown }} */ (diagnostic);
+  const raw = typeof d.reason === "string" ? d.reason.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim() : "";
+  /** @param {string} text */
+  const clip = (text) => (text.length > VOICE_REASON_MAX_CHARS ? `${text.slice(0, VOICE_REASON_MAX_CHARS - 1)}…` : text);
+  switch (d.type) {
+    case "ttsDisconnected":
+      return clip(`closed ${raw || "code=?"}`);
+    case "ttsConnectFailed":
+      return clip(`接続できない（${raw || "?"}）`);
+    case "ttsServerError":
+      return clip(`サーバーのエラー（${raw || "unknown"}）`);
+    case "ttsConnected":
+    case "ttsReconnected":
+      return null;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * 声の engine の持ち主（声の差し替え Wave 3 Domain E・voice-swap-wave-plan.md §3「D と E の接点」・Wave 2 申し送り 2）。
+ * 耳の Start で `prepare(kind)` を呼ぶ。種類が前回と同じなら使い回し、違えば古い engine を dispose して
+ * `createVoiceEngine(kind, deps)` で作り直す。ただし ElevenLabs で status が `down` の engine は、種類が同じでも
+ * dispose して作り直す（キーを読み直す。無効なキーを直して Stop → Start したときに古いキーで繋ぎ直し続けないように）。
+ * ElevenLabs は作るときに `loadElevenLabsApiKey()` を読み、`apiKey` として渡す（process.env に入れない・キーは状態にも
+ * ログにも出さない）。engine の status は `onStatus` へ流す（今の engine の分だけ・作り直した古い engine の通知は捨てる）。
+ *
+ * ElevenLabs の engine には deps の `onDiagnostic` を渡し、切断・接続失敗・サーバーのエラーの理由を覚えておく
+ * （{@link voiceDiagnosticReason}・短い理由だけ。キーも会話の本文も入らない）。`reconnecting` / `down` を知らせる
+ * ときはその理由を `reason` に載せる（`tts-reconnecting` / `tts-down` の警告の detail・STT と同じ流儀）。繋がれば消す。
+ *
+ * 失敗（キーが無い・工場が投げた）は `{ ok:false, reason }` を返し、engine は持たない（自動で AivisSpeech に戻さない）。
+ * Start より前の Fire は `ensure(kind)` で同じ道を通り、失敗は reason の Error を投げる。
+ *
+ * @param {object} [options]
+ * @param {(kind: string, deps: any) => any} [options.createEngine=createVoiceEngine]  工場関数（テストは偽物）。
+ * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.loadApiKey=loadElevenLabsApiKey]
+ * @param {() => object} [options.aivisDeps]  AivisSpeech の deps（ttsBaseUrl / speaker）。
+ * @param {() => object} [options.elevenLabsDeps]  ElevenLabs の追加 deps（readingClient など・apiKey と onReadingsFallback と onDiagnostic はここで足す）。
+ * @param {(info: { engine: string; status: string; reason: string | null }) => void} [options.onStatus]
+ * @param {(info?: unknown) => void} [options.onReadingsFallback]  読みが取れず簡易版の口になったとき。
+ */
+export function createVoiceEngineManager(options = {}) {
+  const createEngine = options.createEngine ?? createVoiceEngine;
+  const loadApiKey = options.loadApiKey ?? (() => loadElevenLabsApiKey());
+  const aivisDeps = options.aivisDeps ?? (() => ({}));
+  const elevenLabsDeps = options.elevenLabsDeps ?? (() => ({}));
+  const onStatus = typeof options.onStatus === "function" ? options.onStatus : () => {};
+  const onReadingsFallback = typeof options.onReadingsFallback === "function" ? options.onReadingsFallback : () => {};
+  /** @type {any} */
+  let engine = null;
+  /** @type {string | null} */
+  let engineKind = null;
+  /** @type {(() => void) | null} */
+  let statusOff = null;
+  /** 今の engine の診断の受け口（作り直したら古い engine の診断は捨てる）。 @type {{ live: boolean; reason: string | null } | null} */
+  let diagSlot = null;
+
+  const report = (/** @type {string} */ kind, /** @type {string} */ status, /** @type {string | null} */ reason) => {
+    try {
+      onStatus({ engine: kind, status, reason });
+    } catch {
+      // 通知先の失敗で声を止めない。
+    }
+  };
+
+  const drop = () => {
+    const old = engine;
+    if (statusOff) {
+      try {
+        statusOff();
+      } catch {
+        // best-effort
+      }
+    }
+    statusOff = null;
+    if (diagSlot) diagSlot.live = false;
+    diagSlot = null;
+    engine = null;
+    engineKind = null;
+    if (old) {
+      try {
+        old.dispose();
+      } catch {
+        // best-effort（古い engine は使わない）。
+      }
+    }
+  };
+
+  /**
+   * @param {string} kind
+   * @returns {{ ok: true } | { ok: false; reason: string }}
+   */
+  const prepare = (kind) => {
+    if (engine != null && engineKind === kind) {
+      // 落ちた ElevenLabs の engine は使い回さない（下で dispose し、キーを読み直して作り直す）。
+      if (!(kind === "elevenlabs" && engine.status === "down")) return { ok: true };
+    }
+    drop();
+    /** @type {{ live: boolean; reason: string | null }} */
+    const slot = { live: true, reason: null };
+    /** reconnecting / down のときだけ覚えた理由を載せる（それ以外は null）。 @param {string} status */
+    const reasonFor = (status) => (status === "reconnecting" || status === "down" ? slot.reason : null);
+    /** @type {any} */
+    let made = null;
+    /** @type {any} */
+    let deps;
+    if (kind === "elevenlabs") {
+      /** @type {any} */
+      let key;
+      try {
+        key = loadApiKey();
+      } catch {
+        key = { ok: false };
+      }
+      if (!key || key.ok !== true || typeof key.apiKey !== "string" || key.apiKey.length === 0) {
+        const reason = (key && typeof key.reason === "string" && key.reason) || "ElevenLabs のキーが見つからない";
+        report(kind, "down", reason);
+        return { ok: false, reason };
+      }
+      deps = {
+        ...elevenLabsDeps(),
+        apiKey: key.apiKey,
+        onReadingsFallback: (/** @type {unknown} */ info) => {
+          try {
+            onReadingsFallback(info);
+          } catch {
+            // 警告の失敗で声を止めない。
+          }
+        },
+        // 切断などの理由を覚え、reconnecting / down の通知に載せる（engine は診断を出してから status を変える）。
+        onDiagnostic: (/** @type {unknown} */ diagnostic) => {
+          if (!slot.live) return;
+          const next = voiceDiagnosticReason(diagnostic);
+          if (next === undefined) return;
+          slot.reason = next;
+          // 状態はそのままで理由だけ変わったとき（繋ぎ直しの失敗が続くなど）も知らせ直す。
+          if (made != null && engine === made && typeof made.status === "string" && reasonFor(made.status) !== null) {
+            report(kind, made.status, reasonFor(made.status));
+          }
+        }
+      };
+    } else {
+      deps = { ...aivisDeps() };
+    }
+    try {
+      made = createEngine(kind, deps);
+    } catch (error) {
+      slot.live = false;
+      // 工場のエラー文言（キーは含まない）だけを理由にする。
+      const reason = `声の engine を作れない（${kind}: ${error instanceof Error ? error.message : String(error)}）`;
+      report(kind, "down", reason);
+      return { ok: false, reason };
+    }
+    engine = made;
+    engineKind = kind;
+    diagSlot = slot;
+    if (made && typeof made.onStatus === "function") {
+      statusOff = made.onStatus((/** @type {string} */ status) => {
+        if (engine === made) report(kind, status, reasonFor(status));
+      });
+    }
+    const initial = made && typeof made.status === "string" ? made.status : "unknown";
+    report(kind, initial, reasonFor(initial));
+    return { ok: true };
+  };
+
+  return {
+    prepare,
+    /**
+     * Start より前の Fire 用: 今の engine を返す（無ければ kind で作る）。用意できなければ理由の Error を投げる。
+     * @param {string} kind
+     */
+    ensure(kind) {
+      if (engine != null) return engine;
+      const result = prepare(kind);
+      if (!result.ok) throw new Error(result.reason);
+      return engine;
+    },
+    /** 今の engine（無ければ null）。 */
+    current: () => engine,
+    /** 今の engine の種類（無ければ null）。 */
+    currentKind: () => engineKind,
+    /** 畳む（終了時）。 */
+    dispose: drop
+  };
+}
+
 /**
  * 文字起こしの遅延ログ 1 行（操縦席の標準出力・数字だけ・文字起こし本文は書かない）。
  * 物差しは whisper が「speechEnd → 転写到着」、ElevenLabs が「直前の commit 以降で最後の speechEnd →
@@ -1077,6 +1319,7 @@ export function formatReplyLatencyLine(record) {
     `[cockpit] latency: fire=${record?.fireId ?? "-"} cause=${cause} total=${ms(record?.totalMs)} level=${record?.level ?? "-"} ` +
     `stt=${ms(seg.transcribeMs)} judge=${ms(seg.judgeMs)} screen=${ms(seg.screenMs)} llm=${ms(seg.llmFirstMs)} ` +
     `sentence=${ms(seg.firstSentenceMs)} tts=${ms(seg.ttsMs)} voice=${ms(seg.voiceMs)} other=${ms(record?.otherMs)}` +
+    `${typeof record?.voice === "string" ? ` voiceEngine=${record.voice}` : ""}` +
     `${record?.spoken === false ? " spoken=no" : ""}\n`
   );
 }
@@ -1125,6 +1368,8 @@ async function main() {
   const chatSourceHooks = createChatSourceHooks(settings);
   // 操縦席の文字起こし選択（whisper / ElevenLabs・既定 whisper・§createSttEngineHooks）。
   const sttEngineHooks = createSttEngineHooks(settings);
+  // 声の方式（AivisSpeech / ElevenLabs・既定 aivis・§createTtsEngineHooks）。
+  const ttsEngineHooks = createTtsEngineHooks(settings);
   // 話し始めの方式（従来 / speak-now・初回既定 speak-now・§createSpeakStartHooks）。
   const speakStartHooks = createSpeakStartHooks(settings);
   // 忙しい間のコメントの扱い（あとで拾う / 見逃す・既定 あとで拾う・§createCommentBusyHooks）。
@@ -1144,9 +1389,20 @@ async function main() {
   let player = null;
   let audioRevision = 0;
   let playerAudioRevision = null;
-  /** 声の差し替え口（既定 AivisSpeech・Start のときに作る）。 */
-  /** @type {ReturnType<typeof createVoiceEngine> | null} */
-  let voiceEngine = null;
+  // 声の差し替え口（Start のときに作る・種類が変われば作り直す）。desiredTtsEngine は最後に Start で選ばれた方式
+  // （起動直後は記憶の値）で、Start より前の Fire もこの方式で作る。
+  let desiredTtsEngine = ttsEngineHooks.resolveInitialTtsEngine();
+  const voiceEngines = createVoiceEngineManager({
+    aivisDeps: () => ({ ttsBaseUrl: args.ttsBaseUrl, speaker: args.speaker }),
+    // D と E の接点（voice-swap-wave-plan.md §3）: 読みは AivisSpeech の /accent_phrases（tts-client の口）から取る。
+    elevenLabsDeps: () => ({
+      readingClient: createTtsClient({ baseUrl: args.ttsBaseUrl, speaker: args.speaker }),
+      ttsBaseUrl: args.ttsBaseUrl,
+      speaker: args.speaker
+    }),
+    onStatus: (info) => server?.setVoiceEngineStatus(info),
+    onReadingsFallback: () => server?.reportVoiceReadingsFallback()
+  });
   // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。recordMemory が
   // ライブ転写取得（server.getTranscript）に使うための前方参照（let・sessionProxy が session を forward
   // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
@@ -1342,12 +1598,8 @@ async function main() {
       });
       playerAudioRevision = audioRevision;
     }
-    if (voiceEngine == null) {
-      voiceEngine = createVoiceEngine(DEFAULT_VOICE_ENGINE_KIND, {
-        ttsBaseUrl: args.ttsBaseUrl,
-        speaker: args.speaker
-      });
-    }
+    // 声の engine（Start で用意済みならそれ・Start より前の Fire は今の方式で作る。用意できなければ理由で投げる）。
+    voiceEngines.ensure(desiredTtsEngine);
   };
 
   const applyDesiredFireSettings = async () => {
@@ -1430,7 +1682,7 @@ async function main() {
     const acceptedSession = session;
     // 進行中の発話はこの player / engine を最後まで使う（デバイス変更の作り直しは次の Fire の境目）。
     const acceptedPlayer = player;
-    const acceptedEngine = voiceEngine;
+    const acceptedEngine = voiceEngines.current();
     return Object.freeze({
       session: acceptedSession,
       channel: lazyChannel,
@@ -1714,6 +1966,14 @@ async function main() {
     sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
     onSetSttEngine: sttEngineHooks.onSetSttEngine,
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
+    // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶し、耳を開く前に engine を用意する
+    // （種類が変われば作り直す・ElevenLabs のキーはここで読む）。用意できなければ Start は理由つきで失敗する。
+    ttsEngineInitial: desiredTtsEngine,
+    onSetTtsEngine: ttsEngineHooks.onSetTtsEngine,
+    onPrepareVoiceEngine: (kind) => {
+      desiredTtsEngine = kind;
+      return voiceEngines.prepare(kind);
+    },
     // 画面キャプチャの撮る係の寿命を耳に合わせる（vision-capture-latency §4 の 2）。close() でも止まる。
     // 声の差し替え Wave 2: 流し込みプレイヤーと声の差し替え口も Start のときに起こす（最初の Fire に乗せない）。
     onEarsStarted: () => {
@@ -1806,13 +2066,7 @@ async function main() {
           // best-effort
         }
       }
-      if (voiceEngine) {
-        try {
-          voiceEngine.dispose();
-        } catch {
-          // best-effort
-        }
-      }
+      voiceEngines.dispose();
       if (lazyChannel) {
         try {
           await lazyChannel.close();

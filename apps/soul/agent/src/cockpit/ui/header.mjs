@@ -15,7 +15,7 @@
  */
 
 import { html } from "../vendor/htm.preact.standalone.mjs";
-import { earsStatusView, healthStatusView, voiceOutputLabel, sttStatusView, micInputLabel } from "../view-logic/health.mjs";
+import { earsStatusView, healthStatusView, voiceOutputLabel, sttStatusView, ttsStatusView, micInputLabel } from "../view-logic/health.mjs";
 import { statusPillView, quotaGaugeView, warningsView } from "../view-logic/glance-meters.mjs";
 import { killSwitchView } from "../view-logic/control.mjs";
 
@@ -60,14 +60,15 @@ export function HealthStat({ label, view }) {
 
 /**
  * 旧ヘッダの一目の健康（ログのタブの上に置く・hooks 非使用）。
- * @param {{ ears?: string; health: { whisper: any; ffmpeg: any }; audioDevice?: any; stt?: any; device?: string | null }} props
+ * @param {{ ears?: string; health: { whisper: any; ffmpeg: any }; audioDevice?: any; stt?: any; tts?: any; device?: string | null }} props
  */
-export function HealthLine({ ears, health, audioDevice, stt = null, device = null }) {
+export function HealthLine({ ears, health, audioDevice, stt = null, tts = null, device = null }) {
   const earsView = earsStatusView(ears);
   // health は app.mjs 側で initialHealth() + mergeHealth（欠落は前値保持）を済ませた実値だけが来る。
   const whisperView = healthStatusView(health.whisper);
   const ffmpegView = healthStatusView(health.ffmpeg);
   const sttView = sttStatusView(stt);
+  const ttsView = ttsStatusView(tts);
   const micName = micInputLabel(ears, device);
   return html`
     <div class="health-line">
@@ -79,6 +80,7 @@ export function HealthLine({ ears, health, audioDevice, stt = null, device = nul
         <${HealthStat} label="whisper" view=${whisperView} />
         <${HealthStat} label="ffmpeg" view=${ffmpegView} />
         ${sttView ? html`<${HealthStat} label="stt" view=${sttView} />` : null}
+        ${ttsView ? html`<${HealthStat} label="tts" view=${ttsView} />` : null}
         ${micName != null ? html`<span class="mic-in" title=${micName}>mic: ${micName}</span>` : null}
         <span class="voice-out">voice: ${voiceOutputLabel(audioDevice)}</span>
       </div>

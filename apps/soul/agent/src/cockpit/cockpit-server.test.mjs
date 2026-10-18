@@ -3715,6 +3715,312 @@ test("cockpit 文字起こし選択: you の転写ごとに遅延（数字のみ
   }
 });
 
+// ── 声の方式の選択（AivisSpeech / ElevenLabs・声の差し替え Wave 3 Domain E）────────────────────
+//  engine の実体とキーは cockpit.mjs の領分。ここは「選択の受け取り・記憶・用意する口の呼び出し・状態と警告」を
+//  固定する（engine は作らない・ElevenLabs に繋がない）。
+
+test("cockpit 声の選択: 既定は aivis・Start の body の ttsEngine を記憶し・耳を開く前に用意する口を呼ぶ", async () => {
+  const fake = makeFakePipeline();
+  /** @type {string[]} */
+  const saved = [];
+  /** @type {Array<{ kind: string; pipelineMade: boolean }>} */
+  const prepared = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onSetTtsEngine: (e) => {
+      saved.push(e);
+    },
+    onPrepareVoiceEngine: (kind) => {
+      prepared.push({ kind, pipelineMade: fake.record.options != null });
+      return { ok: true };
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const initial = await getJson(`${url}/api/state`);
+    assert.deepEqual(initial.json.tts, { engine: "aivis", status: "unknown", reason: null });
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", ttsEngine: "elevenlabs" });
+    assert.equal(start.status, 200);
+    assert.equal(start.json.ears, "listening");
+    assert.equal(start.json.tts.engine, "elevenlabs");
+    assert.deepEqual(saved, ["elevenlabs"]);
+    assert.deepEqual(prepared, [{ kind: "elevenlabs", pipelineMade: false }], "耳を開く前に声を用意する");
+    // Stop → body 省略の Start は前回の選択（elevenlabs）のまま。
+    await postJson(`${url}/api/ears/stop`, {});
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.deepEqual(prepared.map((p) => p.kind), ["elevenlabs", "elevenlabs"]);
+    assert.deepEqual(saved, ["elevenlabs", "elevenlabs"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 声の選択: ttsEngineInitial で前回の選択を復元・未知の初期値は aivis", async () => {
+  const fake = makeFakePipeline();
+  /** @type {string[]} */
+  const prepared = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    ttsEngineInitial: "elevenlabs",
+    onPrepareVoiceEngine: (kind) => {
+      prepared.push(kind);
+      return { ok: true };
+    }
+  });
+  const bad = createCockpitServer({ ttsEngineInitial: /** @type {any} */ ("google") });
+  try {
+    const url = await server.listen(0);
+    assert.equal((await getJson(`${url}/api/state`)).json.tts.engine, "elevenlabs");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.deepEqual(prepared, ["elevenlabs"]);
+    const badUrl = await bad.listen(0);
+    assert.equal((await getJson(`${badUrl}/api/state`)).json.tts.engine, "aivis");
+  } finally {
+    await server.close();
+    await bad.close();
+  }
+});
+
+test("cockpit 声の選択: 未知の ttsEngine は 400（耳も声も用意しない）", async () => {
+  const fake = makeFakePipeline();
+  let prepareCalls = 0;
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onPrepareVoiceEngine: () => {
+      prepareCalls += 1;
+      return { ok: true };
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", ttsEngine: "voicevox" });
+    assert.equal(start.status, 400);
+    assert.equal(start.json.error, "invalid tts engine");
+    assert.equal(fake.record.options, null);
+    assert.equal(prepareCalls, 0);
+    assert.equal(server.earsStatus(), "stopped");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 声の選択: 用意できなければ Start 失敗（理由つき 500・耳を開かない・tts down と警告 tts-down）", async () => {
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onPrepareVoiceEngine: () => ({ ok: false, reason: "ElevenLabs のキーが見つからない（テスト）" })
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", ttsEngine: "elevenlabs" });
+    assert.equal(start.status, 500);
+    assert.equal(start.json.error, "ElevenLabs のキーが見つからない（テスト）");
+    assert.equal(start.json.state.ears, "stopped");
+    assert.deepEqual(start.json.state.tts, {
+      engine: "elevenlabs",
+      status: "down",
+      reason: "ElevenLabs のキーが見つからない（テスト）"
+    });
+    assert.deepEqual(start.json.state.stt, { engine: "whisper", status: "unknown", reason: null });
+    assert.equal(fake.record.options, null, "耳の pipeline は作らない");
+    const down = start.json.state.warnings.find((/** @type {any} */ w) => w.kind === "tts-down");
+    assert.deepEqual(
+      [down.severity, down.lifetime, down.detail, down.source],
+      ["alert", "state", "ElevenLabs のキーが見つからない（テスト）", "elevenlabs"]
+    );
+    await client.waitFor((e) => e.event === "warnings" && e.data.warnings.some((/** @type {any} */ w) => w.kind === "tts-down"));
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit 声の選択: 用意する口が投げても Start 失敗に畳む（耳を開かない）", async () => {
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onPrepareVoiceEngine: () => {
+      throw new Error("boom");
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(start.status, 500);
+    assert.match(start.json.error, /声の engine を用意できない（boom）/);
+    assert.equal(start.json.state.tts.status, "down");
+    assert.equal(fake.record.options, null);
+    // aivis の失敗は状態の警告にしない（status 由来の警告は ElevenLabs だけ）。
+    assert.equal(start.json.state.warnings.some((/** @type {any} */ w) => w.kind === "tts-down"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 声の選択: 文字起こしのキー切れが先なら声は用意しない", async () => {
+  const fake = makeFakePipeline();
+  let prepareCalls = 0;
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    elevenLabsApiKeyProvider: () => ({ ok: false, reason: "no key" }),
+    onPrepareVoiceEngine: () => {
+      prepareCalls += 1;
+      return { ok: true };
+    }
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "elevenlabs", ttsEngine: "elevenlabs" });
+    assert.equal(start.status, 500);
+    assert.equal(start.json.error, "no key");
+    assert.equal(prepareCalls, 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 声の警告: ElevenLabs の reconnecting は warn・down は alert（状態で出て直ったら消える）・aivis は状態で出さない", async () => {
+  const server = createCockpitServer({});
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    server.setVoiceEngineStatus({ engine: "elevenlabs", status: "connecting" });
+    const connecting = await client.waitFor((e) => e.event === "state" && e.data.tts.status === "connecting");
+    assert.deepEqual(connecting.data.warnings, [], "繋ぎ始めは警告にしない");
+
+    server.setVoiceEngineStatus({ engine: "elevenlabs", status: "reconnecting", reason: "closed code=1006" });
+    const w1 = await client.waitFor((e) => e.event === "warnings" && e.data.warnings.some((/** @type {any} */ x) => x.kind === "tts-reconnecting"));
+    const rec = w1.data.warnings.find((/** @type {any} */ x) => x.kind === "tts-reconnecting");
+    assert.deepEqual(
+      [rec.severity, rec.lifetime, rec.message, rec.detail, rec.source],
+      ["warn", "state", "声を繋ぎ直し中（ElevenLabs）", "closed code=1006", "elevenlabs"]
+    );
+    assert.deepEqual((await getJson(`${url}/api/state`)).json.tts, {
+      engine: "aivis",
+      status: "reconnecting",
+      reason: "closed code=1006"
+    });
+
+    let mark = client.events.length;
+    const after = (/** @type {any} */ e) => client.events.indexOf(e) >= mark;
+    server.setVoiceEngineStatus({ engine: "elevenlabs", status: "down" });
+    const w2 = await client.waitFor((e) => after(e) && e.event === "warnings" && e.data.warnings.some((/** @type {any} */ x) => x.kind === "tts-down"));
+    assert.equal(w2.data.warnings.find((/** @type {any} */ x) => x.kind === "tts-down").severity, "alert");
+    assert.equal(w2.data.warnings.some((/** @type {any} */ x) => x.kind === "tts-reconnecting"), false);
+
+    mark = client.events.length;
+    server.setVoiceEngineStatus({ engine: "elevenlabs", status: "up" });
+    await client.waitFor((e) => after(e) && e.event === "warnings" && e.data.warnings.length === 0);
+
+    // aivis の down（dispose など）は状態の警告にしない（今どおり）。
+    server.setVoiceEngineStatus({ engine: "aivis", status: "down" });
+    const s = await getJson(`${url}/api/state`);
+    assert.equal(s.json.tts.status, "down");
+    assert.deepEqual(s.json.warnings, []);
+    // 知らない状態は unknown に丸める。
+    server.setVoiceEngineStatus({ engine: "aivis", status: /** @type {any} */ ("weird") });
+    assert.equal((await getJson(`${url}/api/state`)).json.tts.status, "unknown");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit 声の警告: 理由は表示側でも整える（制御文字を除き・160 字で切る・空は null）", async () => {
+  const server = createCockpitServer({});
+  const url = await server.listen(0);
+  try {
+    server.setVoiceEngineStatus({ engine: "elevenlabs", status: "down", reason: `接続できない（closed\ncode=1006）${"x".repeat(300)}` });
+    let s = (await getJson(`${url}/api/state`)).json;
+    const detail = s.warnings.find((/** @type {any} */ w) => w.kind === "tts-down").detail;
+    assert.equal(detail.length, 160);
+    assert.ok(detail.startsWith("接続できない（closed code=1006）"), "改行は空白に");
+    assert.ok(detail.endsWith("…"));
+    assert.equal(s.tts.reason, detail);
+    server.setVoiceEngineStatus({ engine: "elevenlabs", status: "reconnecting", reason: " \n " });
+    s = (await getJson(`${url}/api/state`)).json;
+    assert.equal(s.tts.reason, null);
+    assert.equal(s.warnings.find((/** @type {any} */ w) => w.kind === "tts-reconnecting").detail, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit 声の警告: 読みが取れず簡易版の口になったら一回きりの warn（60 秒・続けば回数）・本文は載せない", async () => {
+  const server = createCockpitServer({ warningEventTtlMs: 40 });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    server.reportVoiceReadingsFallback();
+    server.reportVoiceReadingsFallback();
+    const w = await client.waitFor(
+      (e) => e.event === "warnings" && e.data.warnings.some((/** @type {any} */ x) => x.kind === "tts-readings-fallback" && x.count === 2)
+    );
+    const fb = w.data.warnings.find((/** @type {any} */ x) => x.kind === "tts-readings-fallback");
+    assert.deepEqual(
+      [fb.severity, fb.lifetime, fb.detail, fb.source, typeof fb.expiresAtMs],
+      ["warn", "event", null, "elevenlabs", "number"]
+    );
+    const mark = client.events.length;
+    await client.waitFor(
+      (e) => client.events.indexOf(e) >= mark && e.event === "warnings" && !e.data.warnings.some((/** @type {any} */ x) => x.kind === "tts-readings-fallback"),
+      2000
+    );
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit 声の選択: 遅延のレコードに鳴らした声の engine（voice）が載る", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  /** @type {any[]} */ const logged = [];
+  const fakeOrch = makeFakeOrchestrator({
+    fireResult: { fired: true, fireId: 3 },
+    drive: (hooks, record) => {
+      hooks.onLatency({
+        fireId: 3,
+        cause: record.lastFireOptions.cause,
+        vision: false,
+        spoken: true,
+        screenMs: null,
+        llmFirstMs: 500,
+        firstSentenceMs: 100,
+        ttsMs: 130,
+        voiceMs: 60,
+        inFireMs: 900,
+        otherMs: 110
+      });
+    }
+  });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    onPrepareVoiceEngine: () => ({ ok: true }),
+    onReplyLatency: (rec) => logged.push(rec)
+  });
+  try {
+    const url = await server.listen(0);
+    const sse = openSseClient(`${url}/api/events`);
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic", ttsEngine: "elevenlabs" });
+    server.setVoiceEngineStatus({ engine: "elevenlabs", status: "up" });
+    await postJson(`${url}/api/fire`, {});
+    const lat = await sse.waitFor((e) => e.event === "latency");
+    assert.equal(lat.data.voice, "elevenlabs");
+    assert.equal(lat.data.segments.ttsMs, 130);
+    assert.equal(lat.data.segments.voiceMs, 60);
+    assert.equal(logged[0].voice, "elevenlabs");
+    sse.close();
+  } finally {
+    await server.close();
+  }
+});
+
 // ── speak-now（話し始めの判定・discussion/ai-cohost/decisions/speak-now/integration.md）の結線 ─────────
 //
 //  判定・並行・忙しい間の積み残しの純ロジックは src/mind/speak-now.test.mjs で固定済み。ここは

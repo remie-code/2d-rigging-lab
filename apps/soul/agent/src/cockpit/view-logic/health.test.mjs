@@ -12,6 +12,8 @@ import {
   brainCredentialHealthLabel,
   STT_ENGINE_LABELS,
   sttStatusView,
+  TTS_ENGINE_LABELS,
+  ttsStatusView,
   micInputLabel
 } from "./health.mjs";
 
@@ -158,6 +160,24 @@ test("sttStatusView: `ElevenLabs up` / `whisper up` / reconnecting は黄色ク�
   assert.equal(sttStatusView({ engine: "elevenlabs", status: "unknown", reason: null })?.className, "hstat unknown");
   assert.equal(sttStatusView(null), null);
   assert.equal(sttStatusView({ engine: "bogus", status: null })?.text, "unknown unknown");
+});
+
+test("ttsStatusView: `ElevenLabs up` / `AivisSpeech up` / reconnecting は黄色クラス / down は reason 併記 / unknown は出さない", () => {
+  assert.deepEqual(TTS_ENGINE_LABELS, { aivis: "AivisSpeech", elevenlabs: "ElevenLabs" });
+  assert.deepEqual(ttsStatusView({ engine: "elevenlabs", status: "up", reason: null }), {
+    text: "ElevenLabs up",
+    className: "hstat up",
+    title: ""
+  });
+  assert.equal(ttsStatusView({ engine: "aivis", status: "up", reason: null })?.text, "AivisSpeech up");
+  assert.equal(ttsStatusView({ engine: "elevenlabs", status: "reconnecting", reason: null })?.className, "hstat reconnecting");
+  assert.equal(
+    ttsStatusView({ engine: "elevenlabs", status: "down", reason: "ElevenLabs のキーが見つからない" })?.text,
+    "ElevenLabs down — ElevenLabs のキーが見つからない"
+  );
+  assert.equal(ttsStatusView({ engine: "aivis", status: "unknown", reason: null }), null, "engine を用意する前は出さない");
+  assert.equal(ttsStatusView(null), null);
+  assert.equal(ttsStatusView({ engine: "bogus", status: "up" })?.text, "unknown up");
 });
 
 test("micInputLabel: 耳が listening の間だけマイク名（未指定は default）・それ以外は null", () => {

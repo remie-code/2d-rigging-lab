@@ -21,12 +21,13 @@
  *  - `kind`: engine の種類（"aivis" など。表示・診断用）。
  *
  * ── 工場関数 ─────────────────────────────────────────────────────────────
- *  `createVoiceEngine(kind, deps)`。今は "aivis" だけ。Wave 3 で "elevenlabs" を {@link VOICE_ENGINE_FACTORIES}
- *  に 1 行足して差し込む（操縦席の設定キー `ttsEngine` の値と同じ名前）。知らない kind は投げる
+ *  `createVoiceEngine(kind, deps)`。"aivis" と "elevenlabs"（Wave 3 Domain D）を {@link VOICE_ENGINE_FACTORIES}
+ *  に持つ（操縦席の設定キー `ttsEngine` の値と同じ名前）。知らない kind は投げる
  *  （設定値の正規化＝不明な値は aivis に戻す、は操縦席の設定層の領分）。
  */
 
 import { createAivisVoiceEngine } from "./aivis-voice-engine.mjs";
+import { createElevenLabsVoiceEngine } from "./elevenlabs-voice-engine.mjs";
 
 export { VOICE_ENGINE_STATUSES } from "./engine-status.mjs";
 
@@ -40,6 +41,25 @@ export { VOICE_ENGINE_STATUSES } from "./engine-status.mjs";
  */
 
 /**
+ * ElevenLabs engine の依存（「D と E の接点」Undine 確定 2026-10-18 の形）。apiKey は操縦席が Start で
+ * loadElevenLabsApiKey して渡す。readingClient 省略時は AivisSpeech（ttsBaseUrl / speaker）の `/accent_phrases`。
+ * 詳細は elevenlabs-voice-engine.mjs の createElevenLabsVoiceEngine。
+ * @typedef {{
+ *   apiKey: string;
+ *   voiceId?: string;
+ *   modelId?: string;
+ *   readingClient?: { accentPhrases: (text: string, options?: { signal?: AbortSignal }) => Promise<unknown> } | null;
+ *   alignmentLeadMs?: number;
+ *   onReadingsFallback?: () => void;
+ *   onDiagnostic?: (diag: { type: string; reason?: string | null; message?: string | null }) => void;
+ *   ttsBaseUrl?: string;
+ *   speaker?: number | string;
+ *   WebSocketImpl?: any;
+ *   [key: string]: unknown;
+ * }} ElevenLabsVoiceEngineDeps
+ */
+
+/**
  * @typedef {{
  *   kind: string;
  *   readonly status: import("./engine-status.mjs").VoiceEngineStatus;
@@ -49,10 +69,15 @@ export { VOICE_ENGINE_STATUSES } from "./engine-status.mjs";
  * }} VoiceEngine
  */
 
-/** engine の種類 → 作り方。Wave 3 で `elevenlabs` を足す。 */
+/** engine の種類 → 作り方（操縦席の設定キー `ttsEngine` の値と同じ名前）。 */
 export const VOICE_ENGINE_FACTORIES = Object.freeze({
   /** @param {any} deps */
-  aivis: (deps) => createAivisVoiceEngine(deps)
+  aivis: (deps) => createAivisVoiceEngine(deps),
+  /**
+   * TTD WebSocket（声の差し替え Wave 3 Domain D）。deps は {@link ElevenLabsVoiceEngineDeps}。
+   * @param {any} deps
+   */
+  elevenlabs: (deps) => createElevenLabsVoiceEngine(deps)
 });
 
 /** 作れる engine の種類（操縦席の既定は "aivis"）。 */
@@ -63,8 +88,9 @@ export const DEFAULT_VOICE_ENGINE_KIND = "aivis";
 
 /**
  * engine を作る。
- * @param {string} kind  "aivis"（Wave 3 で "elevenlabs"）。
- * @param {object} [deps]  engine ごとの依存（aivis: tts / ttsBaseUrl / speaker / sConfig）。
+ * @param {string} kind  "aivis" | "elevenlabs"。
+ * @param {object} [deps]  engine ごとの依存（aivis: tts / ttsBaseUrl / speaker / sConfig、
+ *   elevenlabs: {@link ElevenLabsVoiceEngineDeps}）。
  * @returns {VoiceEngine}
  * @throws {RangeError} 知らない kind。
  */

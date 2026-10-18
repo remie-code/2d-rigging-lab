@@ -44,6 +44,10 @@
  *     に委ねる（verbosityMode と同型の文字列キー・asStringOrNull）。キーそのものはここに置かない
  *     （キーは .env.elevenlabs.local・選択だけを記憶する）。
  *   setSttEngine(engine): 耳の Start 時に選んでいた方式を記憶（次回起動で復元）。
+ *   getTtsEngine(): 声の方式（aivis / elevenlabs）の初期値（声の差し替え Wave 3 Domain E・
+ *     voice-swap-wave-plan.md §3）。未記憶/未知値のフォールバック（既定 aivis）は呼び出し側（cockpit.mjs の
+ *     createTtsEngineHooks）に委ねる（sttEngine の写経・asStringOrNull）。キーはここに置かない。
+ *   setTtsEngine(engine): 耳の Start 時に選んでいた声の方式を記憶（次回起動で復元）。
  *   getSpeakStartMode(): 話し始めの方式（classic / speak-now）の初期値（speak-now 合意 §5）。未記憶/未知値の
  *     フォールバック（初回既定 speak-now）は呼び出し側（cockpit.mjs の createSpeakStartHooks）に委ねる
  *     （verbosityMode と同型の文字列キー・asStringOrNull）。
@@ -127,6 +131,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setMemoryEnabled: (enabled: boolean) => void;
  *   getSttEngine: () => string | null;
  *   setSttEngine: (engine: string | null) => void;
+ *   getTtsEngine: () => string | null;
+ *   setTtsEngine: (engine: string | null) => void;
  *   getSpeakStartMode: () => string | null;
  *   setSpeakStartMode: (mode: string | null) => void;
  *   getCommentBusyPolicy: () => string | null;
@@ -300,6 +306,13 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} engine */
     setSttEngine(engine) {
       writeMerged({ sttEngine: engine ?? null });
+    },
+    getTtsEngine() {
+      return asStringOrNull(readAll().ttsEngine);
+    },
+    /** @param {string | null} engine */
+    setTtsEngine(engine) {
+      writeMerged({ ttsEngine: engine ?? null });
     },
     getSpeakStartMode() {
       return asStringOrNull(readAll().speakStartMode);

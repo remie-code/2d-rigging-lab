@@ -7,6 +7,8 @@
  *
  *  - `POST /audio_query?text=<text>&speaker=<id>` → query JSON（moras + prePhonemeLength 等）。
  *  - `POST /synthesis?speaker=<id>`（body = query JSON）→ WAV バイト列（RIFF/WAVE PCM）。
+ *  - `POST /accent_phrases?text=<text>&speaker=<id>` → accent_phrases 配列（読みだけ・合成しない）。
+ *    ElevenLabs の声の口の時間割で読み（モーラの母音）を取る口（readingClient・声の差し替え Wave 3 Domain D）。
  *
  * ── 純関数部分（テスト可能に切り出し）─────────────────────────────────────
  *  `flattenMoras` / `parseAudioQuery` は audio_query JSON から写像の入力材料
@@ -102,6 +104,7 @@ export function parseAudioQuery(audioQuery) {
  *   speaker: number|string;
  *   audioQuery: (text: string) => Promise<any>;
  *   synthesis: (query: any) => Promise<Uint8Array>;
+ *   accentPhrases: (text: string, requestOptions?: { signal?: AbortSignal }) => Promise<any>;
  * }}
  */
 export function createTtsClient(options = {}) {
@@ -168,7 +171,35 @@ export function createTtsClient(options = {}) {
     return new Uint8Array(buffer);
   }
 
-  return { baseUrl, speaker, audioQuery, synthesis };
+  /**
+   * `POST /accent_phrases?text=..&speaker=..` → accent_phrases 配列（読みだけ。合成しない・実測 5〜16ms / 文）。
+   * @param {string} text  読みを取る一文。空文字は投げる。
+   * @param {{ signal?: AbortSignal }} [requestOptions]  中止の合図（fetch へそのまま渡す）。
+   * @returns {Promise<any>}
+   */
+  async function accentPhrases(text, requestOptions = {}) {
+    if (typeof text !== "string" || text.length === 0) {
+      throw new TypeError("accentPhrases(text): text must be a non-empty string.");
+    }
+    const url =
+      `${baseUrl}/accent_phrases?text=${encodeURIComponent(text)}` +
+      `&speaker=${encodeURIComponent(String(speaker))}`;
+    const response = await fetchImpl(url, {
+      method: "POST",
+      headers: { accept: "application/json" },
+      ...(requestOptions.signal ? { signal: requestOptions.signal } : {})
+    });
+    if (!response.ok) {
+      const body = await safeReadText(response);
+      throw new Error(
+        `AivisSpeech /accent_phrases failed: HTTP ${response.status} ${response.statusText}` +
+          (body ? ` — ${body}` : "")
+      );
+    }
+    return response.json();
+  }
+
+  return { baseUrl, speaker, audioQuery, synthesis, accentPhrases };
 }
 
 /**

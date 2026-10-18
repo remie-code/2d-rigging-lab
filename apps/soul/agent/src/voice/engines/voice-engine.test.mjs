@@ -12,12 +12,12 @@ import {
 import { createEngineStatusCell } from "./engine-status.mjs";
 
 test("createVoiceEngine: aivis を作れる（既定）・形を満たす・知らない kind は投げる", () => {
-  assert.deepEqual(VOICE_ENGINE_KINDS, ["aivis"]);
+  assert.deepEqual(VOICE_ENGINE_KINDS, ["aivis", "elevenlabs"]);
   assert.equal(DEFAULT_VOICE_ENGINE_KIND, "aivis");
   const engine = createVoiceEngine("aivis", { tts: { async audioQuery() { return {}; }, async synthesis() { return new Uint8Array(); } } });
   assert.equal(engine.kind, "aivis");
   assert.ok(isVoiceEngine(engine));
-  assert.throws(() => createVoiceEngine("elevenlabs"), RangeError);
+  assert.throws(() => createVoiceEngine("nope"), RangeError);
   assert.throws(() => createVoiceEngine("toString"), RangeError, "prototype の名前を kind と取り違えない");
   assert.equal(isVoiceEngine({}), false);
   engine.dispose();
@@ -40,4 +40,19 @@ test("engine の状態: STT と同じ語彙・同じ値は通知しない・購�
   assert.deepEqual(seen, ["up", "reconnecting"]);
   assert.throws(() => cell.set(/** @type {any} */ ("broken")), RangeError);
   assert.throws(() => createEngineStatusCell(/** @type {any} */ ("nope")), RangeError);
+});
+
+test("createVoiceEngine: elevenlabs を作れる（キーなしは down・繋がない）・形を満たす", () => {
+  let constructed = 0;
+  class NeverWebSocket {
+    constructor() {
+      constructed += 1;
+    }
+  }
+  const engine = createVoiceEngine("elevenlabs", { apiKey: "", readingClient: null, WebSocketImpl: NeverWebSocket });
+  assert.equal(engine.kind, "elevenlabs");
+  assert.ok(isVoiceEngine(engine));
+  assert.equal(engine.status, "down");
+  assert.equal(constructed, 0, "キーが無ければ接続を試みない");
+  engine.dispose();
 });

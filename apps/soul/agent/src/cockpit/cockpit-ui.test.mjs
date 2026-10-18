@@ -908,3 +908,42 @@ test("HealthLine（ログのタブ）: stt（方式と状態）を whisper 死�
 test("COCKPIT_CSS: 文字起こしの繋ぎ直し中（.hstat.reconnecting）は黄色（--speaking）", () => {
   assert.match(COCKPIT_CSS, /\.hstat\.reconnecting \{ color: var\(--speaking\)/);
 });
+
+test("HealthLine（ログのタブ）: tts（声の方式と状態）を stt の隣に出し・engine を用意する前（unknown）は出さない", () => {
+  const base = {
+    health: { whisper: { status: "unknown", reason: null }, ffmpeg: { status: "up", reason: null } },
+    audioDevice: { name: "MV7+" },
+    ears: "listening",
+    stt: { engine: "elevenlabs", status: "up", reason: null },
+    device: "Mic"
+  };
+  const up = collectText(HealthLine({ ...base, tts: { engine: "elevenlabs", status: "up", reason: null } })).join("");
+  assert.ok(up.includes("tts: ElevenLabs up"), up);
+  const rec = collectText(HealthLine({ ...base, tts: { engine: "elevenlabs", status: "reconnecting", reason: null } })).join("");
+  assert.ok(rec.includes("tts: ElevenLabs reconnecting"));
+  const aivis = collectText(HealthLine({ ...base, tts: { engine: "aivis", status: "up", reason: null } })).join("");
+  assert.ok(aivis.includes("tts: AivisSpeech up"));
+  const unknown = collectText(HealthLine({ ...base, tts: { engine: "aivis", status: "unknown", reason: null } })).join("");
+  assert.ok(!unknown.includes("tts:"));
+  assert.ok(!collectText(HealthLine(base)).join("").includes("tts:"), "tts が無ければ出さない");
+});
+
+test("設定の入出力タブ: 文字起こしの下に声の選択（AivisSpeech / ElevenLabs）・Start の body で ttsEngine を送り・state.tts から復元", () => {
+  const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
+  const stt = source.indexOf('id="stt-engine-select"');
+  const tts = source.indexOf('id="tts-engine-select"');
+  const micErr = source.indexOf("${micError}");
+  const audio = source.indexOf('id="audio-device-select"');
+  assert.ok(stt > 0 && tts > stt, "声の選択は文字起こしの下");
+  assert.ok(micErr > tts, "Start の失敗理由（共用のエラー欄）は声の選択の下");
+  assert.ok(audio > micErr, "声の出力先はその下（並びは変えない）");
+  assert.match(source, /<label for="tts-engine-select">声<\/label>/);
+  assert.match(source, /options=\$\{TTS_ENGINE_OPTIONS\}/);
+  assert.match(source, /JSON\.stringify\(\{ device, sttEngine: sttSelected \|\| "whisper", ttsEngine: ttsSelected \|\| "aivis" \}\)/);
+  assert.match(source, /ttsEngineSelection\(ttsEngine \? \{ engine: ttsEngine \} : null\)/);
+  assert.match(source, /if \(ttsRestored != null && !ttsEditedRef\.current\) setTtsSelected\(ttsRestored\)/);
+  const app = readFileSync(path.join(UI_DIR, "app.mjs"), "utf8");
+  assert.match(app, /ttsEngine=\$\{tts \? tts\.engine : null\}/);
+  assert.match(app, /if \(s\.tts\) setTts\(s\.tts\)/);
+  assert.match(app, /<\$\{HealthLine\}[^>]*tts=\$\{tts\}/);
+});

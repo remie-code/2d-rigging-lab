@@ -29,6 +29,10 @@ test("凡例は 8 つ（文字起こし・判定・画面・LLM 最初の文字�
     "transcribeMs", "judgeMs", "screenMs", "llmFirstMs", "firstSentenceMs", "ttsMs", "voiceMs", "otherMs"
   ]);
   assert.equal(new Set(LATENCY_SEGMENTS.map((s) => s.className)).size, 8, "色は 8 種");
+  // 声の差し替え Wave 2 の定義（engine に依存しない）: TTS = 頼んでから最初の音・声 = 最初の音から鳴り始めるまで。
+  const hints = Object.fromEntries(LATENCY_SEGMENTS.map((s) => [s.key, "hint" in s ? s.hint : null]));
+  assert.equal(hints.ttsMs, "声を頼んでから最初の音が届くまで");
+  assert.equal(hints.voiceMs, "最初の音が届いてから鳴り始めるまで");
 });
 
 test("latencyBarView: 区間は実測値の比（null・0 は出さない・その他は otherMs）・合計の数字", () => {
@@ -47,6 +51,11 @@ test("latencyBarView: 区間は実測値の比（null・0 は出さない・そ�
   assert.equal(view.totalText, "2.0 秒");
   assert.equal(view.levelClassName, "lat-total");
   assert.match(view.title, /文字起こし 0\.30 秒/);
+  assert.doesNotMatch(view.title, /声:/, "voice が無ければ engine を添えない");
+  // 鳴らした声の engine があれば title の末尾に添える（声の差し替え Wave 3）。
+  const withVoice = latencyBarView({ segments: { ttsMs: 130, voiceMs: 60 }, otherMs: null, totalMs: 900, level: "ok", voice: "elevenlabs" });
+  assert.equal(withVoice?.title, "TTS 0.13 秒 / 声 0.06 秒（声: ElevenLabs）");
+  assert.match(latencyBarView({ segments: { ttsMs: 100 }, totalMs: 900, level: "ok", voice: "aivis" })?.title ?? "", /（声: AivisSpeech）$/);
   // 鳴らなかった返事（totalMs null）は棒を出さない。
   assert.equal(latencyBarView({ fireId: 2, spoken: false, segments: {}, otherMs: null, totalMs: null, level: null }), null);
   assert.equal(latencyBarView(null), null);

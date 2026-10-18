@@ -18,6 +18,9 @@ import {
   createBrainHooks,
   createChatSourceHooks,
   createSttEngineHooks,
+  createTtsEngineHooks,
+  createVoiceEngineManager,
+  voiceDiagnosticReason,
   formatSttLatencyLine,
   formatCaptureEventLine,
   createSpeakStartHooks,
@@ -1892,6 +1895,11 @@ test("formatReplyLatencyLine: 数字ときっかけの種類だけの 1 行（�
     "[cockpit] latency: fire=3 cause=speak-now total=3224 level=ok stt=512 judge=812 screen=- llm=900 sentence=300 tts=400 voice=200 other=100\n"
   );
   assert.match(formatReplyLatencyLine({ fireId: 4, cause: null, spoken: false, segments: {}, totalMs: null, level: null }), /cause=- total=- level=- .* spoken=no\n$/);
+  // 声の差し替え Wave 3: 鳴らした声の engine（voice）があれば末尾に足す（TTS / 声の区間を engine ごとに見比べる）。
+  assert.match(
+    formatReplyLatencyLine({ fireId: 5, cause: null, spoken: true, segments: { ttsMs: 130, voiceMs: 60 }, totalMs: 900, level: "ok", voice: "elevenlabs" }),
+    /tts=130 voice=60 other=- voiceEngine=elevenlabs\n$/
+  );
 });
 
 test("resolveContextCompactionOptions: settings の compact* キー・未設定や読めなければ 0.66 / 3 秒 / 10 分", async () => {
@@ -1924,4 +1932,499 @@ test("formatContextCompactionLine: 圧縮の開始・終了・失敗をターミ
     formatContextCompactionLine({ type: "finished", ok: false, durationMs: 500, reason: "failed", message: "codex-session: compaction timed out." }),
     "[cockpit] context compaction failed: 0.5s reason=failed — codex-session: compaction timed out.\n"
   );
+});
+
+// ── createTtsEngineHooks / createVoiceEngineManager（声の差し替え Wave 3 Domain E）──────────────────
+//  engine の工場は偽物（ElevenLabs に繋がない・AivisSpeech も叩かない）。キーは偽物の読み口で渡し、
+//  作る・使い回す・作り直す・dispose・status の配線を固定する。
+
+const FAKE_TTS_KEY = "sk_fake_tts_key_do_not_leak";
+
+/** 偽物の VoiceEngine 工場（作った engine と渡された deps を記録する）。 */
+function makeFakeVoiceFactory({ throwFor = /** @type {string | null} */ (null) } = {}) {
+  /** @type {Array<{ kind: string; deps: any; engine: any }>} */
+  const made = [];
+  /** @param {string} kind @param {any} deps */
+  const createEngine = (kind, deps) => {
+    if (throwFor === kind) throw new RangeError(`unknown voice engine kind: ${kind} (known: aivis).`);
+    /** @type {Set<(s: string) => void>} */
+    const listeners = new Set();
+    const engine = {
+      kind,
+      status: kind === "elevenlabs" ? "connecting" : "up",
+      disposed: false,
+      /** @param {(s: string) => void} fn */
+      onStatus(fn) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      /** @param {string} s */
+      emit(s) {
+        engine.status = s;
+        for (const fn of [...listeners]) fn(s);
+      },
+      listenerCount: () => listeners.size,
+      synthesize() {
+        throw new Error("not used");
+      },
+      dispose() {
+        engine.disposed = true;
+      }
+    };
+    made.push({ kind, deps, engine });
+    return engine;
+  };
+  return { createEngine, made };
+}
+
+test("createTtsEngineHooks: 未記憶/未知値は aivis・記憶済みの既知値は復元・set は settings へ橋渡しし throw は握る", { timeout: 5000 }, () => {
+  /** @param {string | null} v */
+  const settingsWith = (v) => ({ getTtsEngine: () => v, setTtsEngine: () => {} });
+  assert.equal(createTtsEngineHooks(settingsWith(null)).resolveInitialTtsEngine(), "aivis");
+  assert.equal(createTtsEngineHooks(settingsWith("voicevox")).resolveInitialTtsEngine(), "aivis");
+  assert.equal(createTtsEngineHooks(settingsWith("elevenlabs")).resolveInitialTtsEngine(), "elevenlabs");
+  /** @type {string | null} */
+  let stored = null;
+  const hooks = createTtsEngineHooks({ getTtsEngine: () => stored, setTtsEngine: (e) => { stored = e; } });
+  hooks.onSetTtsEngine("elevenlabs");
+  assert.equal(hooks.resolveInitialTtsEngine(), "elevenlabs");
+  const throwing = createTtsEngineHooks({
+    getTtsEngine: () => null,
+    setTtsEngine: () => {
+      throw new Error("disk full");
+    }
+  });
+  assert.doesNotThrow(() => throwing.onSetTtsEngine("aivis"));
+});
+
+test("createVoiceEngineManager: aivis を作り・同じ種類の Start は使い回し・種類が変われば古い engine を dispose して作り直す", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  /** @type {any[]} */ const statuses = [];
+  let keyReads = 0;
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => {
+      keyReads += 1;
+      return { ok: true, apiKey: FAKE_TTS_KEY };
+    },
+    aivisDeps: () => ({ ttsBaseUrl: "http://aivis.test", speaker: 7 }),
+    elevenLabsDeps: () => ({ readingClient: { marker: "reading" } }),
+    onStatus: (info) => statuses.push(info)
+  });
+  assert.equal(mgr.current(), null);
+  assert.deepEqual(mgr.prepare("aivis"), { ok: true });
+  assert.equal(f.made.length, 1);
+  assert.deepEqual(f.made[0].deps, { ttsBaseUrl: "http://aivis.test", speaker: 7 });
+  assert.equal(keyReads, 0, "aivis はキーを読まない");
+  const aivis = f.made[0].engine;
+  assert.equal(mgr.current(), aivis);
+  assert.equal(mgr.currentKind(), "aivis");
+
+  // 同じ種類の Start は作り直さない（Wave 2 と同じく使い回し）。
+  assert.deepEqual(mgr.prepare("aivis"), { ok: true });
+  assert.equal(f.made.length, 1);
+
+  // 種類が変われば古い engine を dispose し、ElevenLabs のキーを読んで作り直す。
+  assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+  assert.equal(aivis.disposed, true);
+  assert.equal(aivis.listenerCount(), 0, "古い engine の status 購読も外す");
+  assert.equal(f.made.length, 2);
+  const el = f.made[1].engine;
+  assert.equal(f.made[1].kind, "elevenlabs");
+  assert.equal(f.made[1].deps.apiKey, FAKE_TTS_KEY);
+  assert.deepEqual(f.made[1].deps.readingClient, { marker: "reading" });
+  assert.equal(typeof f.made[1].deps.onReadingsFallback, "function");
+  assert.equal(keyReads, 1);
+  assert.equal(mgr.current(), el);
+
+  // 戻すとまた作り直す（ElevenLabs は dispose）。
+  assert.deepEqual(mgr.prepare("aivis"), { ok: true });
+  assert.equal(el.disposed, true);
+  assert.equal(f.made.length, 3);
+
+  // status の通知は「種類つき」で、作ったときの今の値も知らせる。
+  assert.deepEqual(statuses.slice(0, 2), [
+    { engine: "aivis", status: "up", reason: null },
+    { engine: "elevenlabs", status: "connecting", reason: null }
+  ]);
+  // 終了時に畳む。
+  mgr.dispose();
+  assert.equal(f.made[2].engine.disposed, true);
+  assert.equal(mgr.current(), null);
+  // キーは status の通知に載らない。
+  assert.equal(JSON.stringify(statuses).includes(FAKE_TTS_KEY), false);
+});
+
+test("createVoiceEngineManager: engine の onStatus を今の engine の分だけ流す（作り直した古い engine の通知は捨てる）", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  /** @type {any[]} */ const statuses = [];
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => ({ ok: true, apiKey: FAKE_TTS_KEY }),
+    onStatus: (info) => statuses.push(info)
+  });
+  mgr.prepare("elevenlabs");
+  const el = f.made[0].engine;
+  el.emit("up");
+  el.emit("reconnecting");
+  el.emit("up");
+  assert.deepEqual(
+    statuses.map((s) => s.status),
+    ["connecting", "up", "reconnecting", "up"]
+  );
+  mgr.prepare("aivis");
+  const n = statuses.length;
+  el.emit("down"); // dispose 後の古い engine の通知。
+  assert.equal(statuses.length, n);
+});
+
+test("createVoiceEngineManager: ElevenLabs のキーが無ければ作らず理由を返す（古い engine も持たない・自動で aivis に戻さない）", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  /** @type {any[]} */ const statuses = [];
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => ({ ok: false, reason: "ElevenLabs のキーが見つからない（テスト）" }),
+    onStatus: (info) => statuses.push(info)
+  });
+  mgr.prepare("aivis");
+  const aivis = f.made[0].engine;
+  assert.deepEqual(mgr.prepare("elevenlabs"), { ok: false, reason: "ElevenLabs のキーが見つからない（テスト）" });
+  assert.equal(f.made.length, 1, "工場は呼ばない");
+  assert.equal(aivis.disposed, true);
+  assert.equal(mgr.current(), null);
+  assert.deepEqual(statuses.at(-1), { engine: "elevenlabs", status: "down", reason: "ElevenLabs のキーが見つからない（テスト）" });
+  // Start より前の Fire と同じ道（ensure）は理由の Error を投げる。
+  assert.throws(() => mgr.ensure("elevenlabs"), /ElevenLabs のキーが見つからない（テスト）/);
+  // 読み口が投げても同じく失敗に畳む。
+  const throwing = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => {
+      throw new Error("io");
+    }
+  });
+  assert.deepEqual(throwing.prepare("elevenlabs"), { ok: false, reason: "ElevenLabs のキーが見つからない" });
+});
+
+test("createVoiceEngineManager: 工場が投げたら（elevenlabs が未登録など）理由を返す・キーは理由に入らない", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory({ throwFor: "elevenlabs" });
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => ({ ok: true, apiKey: FAKE_TTS_KEY })
+  });
+  const r = mgr.prepare("elevenlabs");
+  assert.equal(r.ok, false);
+  assert.match(/** @type {any} */ (r).reason, /^声の engine を作れない（elevenlabs: unknown voice engine kind: elevenlabs/);
+  assert.equal(/** @type {any} */ (r).reason.includes(FAKE_TTS_KEY), false);
+  assert.equal(mgr.current(), null);
+});
+
+test("createVoiceEngineManager: ensure は今の engine を返し・無ければその種類で作る（Start より前の Fire）", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  const mgr = createVoiceEngineManager({ createEngine: f.createEngine });
+  const a = mgr.ensure("aivis");
+  assert.equal(a, f.made[0].engine);
+  assert.equal(mgr.ensure("aivis"), a);
+  assert.equal(f.made.length, 1);
+});
+
+test("createVoiceEngineManager: onReadingsFallback は deps 経由で上へ届き・通知先の throw は握る", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  let fallbacks = 0;
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => ({ ok: true, apiKey: FAKE_TTS_KEY }),
+    onReadingsFallback: () => {
+      fallbacks += 1;
+      throw new Error("warn board down");
+    },
+    onStatus: () => {
+      throw new Error("status sink down");
+    }
+  });
+  assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+  assert.doesNotThrow(() => f.made[0].deps.onReadingsFallback({ reason: "x" }));
+  assert.equal(fallbacks, 1);
+  assert.doesNotThrow(() => f.made[0].engine.emit("reconnecting"));
+});
+
+test("voiceDiagnosticReason: 切断・接続失敗・サーバーのエラーを短い理由に・繋がれば null・他は undefined・制御文字を除き 80 字で切る", { timeout: 5000 }, () => {
+  assert.equal(voiceDiagnosticReason({ type: "ttsDisconnected", reason: "code=1006", message: null }), "closed code=1006");
+  assert.equal(voiceDiagnosticReason({ type: "ttsDisconnected", reason: null }), "closed code=?");
+  assert.equal(voiceDiagnosticReason({ type: "ttsConnectFailed", reason: "closed code=1008" }), "接続できない（closed code=1008）");
+  assert.equal(voiceDiagnosticReason({ type: "ttsConnectFailed", reason: "no open within 10000ms" }), "接続できない（no open within 10000ms）");
+  assert.equal(voiceDiagnosticReason({ type: "ttsServerError", reason: "input_timeout_exceeded" }), "サーバーのエラー（input_timeout_exceeded）");
+  assert.equal(voiceDiagnosticReason({ type: "ttsConnected", reason: null }), null);
+  assert.equal(voiceDiagnosticReason({ type: "ttsReconnected", reason: null }), null);
+  for (const other of [{ type: "ttsRestarted", reason: "abort" }, { type: "ttsMessageParseError" }, { type: "sttDisconnected", reason: "code=1006" }, null, "x"]) {
+    assert.equal(voiceDiagnosticReason(other), undefined);
+  }
+  // message は使わない（engine は常に null だが、来ても載せない）。
+  assert.equal(voiceDiagnosticReason({ type: "ttsDisconnected", reason: "code=1006", message: "本文やキー" }), "closed code=1006");
+  const long = /** @type {string} */ (voiceDiagnosticReason({ type: "ttsConnectFailed", reason: `a\nb\t${"z".repeat(200)}` }));
+  assert.equal(long.length, 80);
+  assert.ok(long.startsWith("接続できない（a b z"));
+  assert.ok(long.endsWith("…"));
+});
+
+test("createVoiceEngineManager: ElevenLabs の診断の理由を reconnecting / down の reason に載せ・繋がれば消し・古い engine の診断は捨てる", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  /** @type {any[]} */ const statuses = [];
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => ({ ok: true, apiKey: FAKE_TTS_KEY }),
+    onStatus: (info) => statuses.push(info)
+  });
+  mgr.prepare("elevenlabs");
+  const { engine: el, deps } = f.made[0];
+  assert.equal(typeof deps.onDiagnostic, "function", "ElevenLabs の deps に onDiagnostic を渡す");
+  deps.onDiagnostic({ type: "ttsConnected", reason: null, message: null });
+  el.emit("up");
+  // engine は診断を出してから status を変える（up のうちは知らせ直さない）。
+  deps.onDiagnostic({ type: "ttsDisconnected", reason: "code=1006", message: null });
+  assert.deepEqual(statuses.at(-1), { engine: "elevenlabs", status: "up", reason: null });
+  el.emit("reconnecting");
+  assert.deepEqual(statuses.at(-1), { engine: "elevenlabs", status: "reconnecting", reason: "closed code=1006" });
+  // 状態はそのままで理由だけ変わったら知らせ直す。
+  deps.onDiagnostic({ type: "ttsConnectFailed", reason: "closed code=1008", message: null });
+  assert.deepEqual(statuses.at(-1), { engine: "elevenlabs", status: "reconnecting", reason: "接続できない（closed code=1008）" });
+  // 理由に関係しない診断は何もしない。
+  const n = statuses.length;
+  deps.onDiagnostic({ type: "ttsRestarted", reason: "abort", message: null });
+  assert.equal(statuses.length, n);
+  // 繋がれば理由は消える。
+  deps.onDiagnostic({ type: "ttsReconnected", reason: null, message: null });
+  el.emit("up");
+  assert.deepEqual(statuses.at(-1), { engine: "elevenlabs", status: "up", reason: null });
+  // サーバーのエラー → down でもその理由。
+  deps.onDiagnostic({ type: "ttsServerError", reason: "protocol_violation", message: null });
+  el.emit("down");
+  assert.deepEqual(statuses.at(-1), { engine: "elevenlabs", status: "down", reason: "サーバーのエラー（protocol_violation）" });
+  // 作り直した後の古い engine の診断は捨てる。
+  mgr.prepare("aivis");
+  const m = statuses.length;
+  deps.onDiagnostic({ type: "ttsDisconnected", reason: "code=1006", message: null });
+  el.emit("reconnecting");
+  assert.equal(statuses.length, m);
+  // aivis の deps には onDiagnostic を足さない。
+  assert.equal("onDiagnostic" in f.made[1].deps, false);
+  assert.equal(JSON.stringify(statuses).includes(FAKE_TTS_KEY), false);
+});
+
+test("createVoiceEngineManager: 落ちた（down の）ElevenLabs は同じ種類でも Start で dispose して作り直し、キーを読み直す", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  let keyReads = 0;
+  let key = "sk_fake_old_key";
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => {
+      keyReads += 1;
+      return { ok: true, apiKey: key };
+    }
+  });
+  assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+  const first = f.made[0].engine;
+  assert.equal(f.made[0].deps.apiKey, "sk_fake_old_key");
+  // connecting / up / reconnecting のうちは使い回す（キーも読まない）。
+  for (const s of ["connecting", "up", "reconnecting"]) {
+    if (s !== "connecting") first.emit(s);
+    assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+    assert.equal(f.made.length, 1, `${s} は使い回し`);
+  }
+  assert.equal(keyReads, 1);
+  // 無効なキーで down → キーを直して Start → 古い engine を dispose し、新しいキーで作り直す。
+  first.emit("down");
+  key = "sk_fake_new_key";
+  assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+  assert.equal(first.disposed, true);
+  assert.equal(first.listenerCount(), 0);
+  assert.equal(keyReads, 2);
+  assert.equal(f.made.length, 2);
+  assert.equal(f.made[1].deps.apiKey, "sk_fake_new_key");
+  assert.equal(mgr.current(), f.made[1].engine);
+  // 作り直すときにキーが無くなっていたら Start 失敗（古い engine は dispose 済み・engine は持たない）。
+  let hasKey = true;
+  const noKey = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => (hasKey ? { ok: true, apiKey: FAKE_TTS_KEY } : { ok: false, reason: "キーなし（テスト）" })
+  });
+  assert.deepEqual(noKey.prepare("elevenlabs"), { ok: true });
+  const dead = f.made.at(-1)?.engine;
+  dead.emit("down");
+  hasKey = false;
+  assert.deepEqual(noKey.prepare("elevenlabs"), { ok: false, reason: "キーなし（テスト）" });
+  assert.equal(dead.disposed, true);
+  assert.equal(noKey.current(), null);
+  // aivis は down でも作り直さない（AivisSpeech の engine は状態を持たない・今どおり）。
+  const aivisMgr = createVoiceEngineManager({ createEngine: f.createEngine });
+  aivisMgr.prepare("aivis");
+  const aivis = f.made.at(-1)?.engine;
+  aivis.emit("down");
+  const count = f.made.length;
+  aivisMgr.prepare("aivis");
+  assert.equal(f.made.length, count);
+  mgr.dispose();
+});
+
+test("声の警告の理由の結線: 本物の ElevenLabs engine の切断・接続失敗が tts-reconnecting / tts-down の detail に出て・繋がれば消える", { timeout: 10000 }, async () => {
+  const { createCockpitServer } = await import("../src/cockpit/cockpit-server.mjs");
+  const { createVoiceEngine } = await import("../src/voice/engines/voice-engine.mjs");
+  const { createFakeWebSocketClass } = await import("../src/test-support/fake-websocket.mjs");
+  const { createFakeClock } = await import("../src/test-support/fake-clock.mjs");
+  const { FakeWebSocket, sockets } = createFakeWebSocketClass();
+  const clock = createFakeClock();
+  /** @type {any} */
+  let server;
+  const mgr = createVoiceEngineManager({
+    createEngine: (kind, deps) =>
+      createVoiceEngine(/** @type {any} */ (kind), {
+        ...deps,
+        readingClient: null,
+        WebSocketImpl: FakeWebSocket,
+        setTimeoutImpl: clock.setTimeoutImpl,
+        clearTimeoutImpl: clock.clearTimeoutImpl
+      }),
+    loadApiKey: () => ({ ok: true, apiKey: FAKE_TTS_KEY }),
+    onStatus: (info) => server?.setVoiceEngineStatus(info)
+  });
+  server = createCockpitServer({});
+  const url = await server.listen(0);
+  const state = async () => (await fetch(`${url}/api/state`)).json();
+  /** @param {any} s @param {string} kind */
+  const warning = (s, kind) => s.warnings.find((/** @type {any} */ w) => w.kind === kind);
+  try {
+    assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+    // 最初の接続に失敗 → down（理由つき）。
+    sockets[0].serverClose(1008, `bad key ${FAKE_TTS_KEY}`);
+    let s = await state();
+    assert.equal(s.tts.status, "down");
+    assert.equal(warning(s, "tts-down")?.detail, "接続できない（closed code=1008）");
+    // 裏の繋ぎ直しで繋がる → 警告は消え・理由も消える。
+    clock.advance(1000);
+    sockets[1].serverOpen();
+    s = await state();
+    assert.equal(s.tts.status, "up");
+    assert.equal(s.tts.reason, null);
+    assert.deepEqual(s.warnings, []);
+    // 繋がった後に切れる → reconnecting（closed code=1006）。
+    sockets[1].serverClose(1006, "closed with secret text");
+    s = await state();
+    assert.equal(s.tts.status, "reconnecting");
+    assert.equal(warning(s, "tts-reconnecting")?.detail, "closed code=1006");
+    // 繋ぎ直しも失敗 → 状態は reconnecting のまま、理由だけ変わる。
+    clock.advance(1000);
+    sockets[2].serverClose(1011);
+    s = await state();
+    assert.equal(warning(s, "tts-reconnecting")?.detail, "接続できない（closed code=1011）");
+    clock.advance(2000);
+    sockets[3].serverOpen();
+    s = await state();
+    assert.deepEqual(s.warnings, []);
+    const text = JSON.stringify(s);
+    assert.equal(text.includes(FAKE_TTS_KEY), false);
+    assert.equal(text.includes("secret"), false, "close の reason 文は載せない");
+  } finally {
+    mgr.dispose();
+    await server.close();
+  }
+});
+
+test("声の選択の結線: Start で ttsEngine の engine を用意し・作り直し・status が警告になり・キー切れは Start 失敗", { timeout: 10000 }, async () => {
+  const { createCockpitServer } = await import("../src/cockpit/cockpit-server.mjs");
+  const f = makeFakeVoiceFactory();
+  let keyOk = true;
+  /** @type {any} */
+  let server;
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => (keyOk ? { ok: true, apiKey: FAKE_TTS_KEY } : { ok: false, reason: "ElevenLabs のキーが見つからない（テスト）" }),
+    onStatus: (info) => server?.setVoiceEngineStatus(info),
+    onReadingsFallback: () => server?.reportVoiceReadingsFallback()
+  });
+  /** @type {string | null} */
+  let stored = null;
+  const hooks = createTtsEngineHooks({ getTtsEngine: () => stored, setTtsEngine: (e) => { stored = e; } });
+  const pipelineFactory = () => {
+    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+    return {
+      transcriptBuffer: buffer,
+      async start() {},
+      async dispose() {},
+      isDisposed: () => false,
+      streamMs: () => 0,
+      stats: () => ({})
+    };
+  };
+  server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (pipelineFactory),
+    ttsEngineInitial: hooks.resolveInitialTtsEngine(),
+    onSetTtsEngine: hooks.onSetTtsEngine,
+    onPrepareVoiceEngine: (kind) => mgr.prepare(kind)
+  });
+  const url = await server.listen(0);
+  /** @param {string} p @param {any} body */
+  const post = async (p, body) => {
+    const r = await fetch(`${url}${p}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return { status: r.status, json: await r.json() };
+  };
+  const state = async () => (await fetch(`${url}/api/state`)).json();
+  try {
+    // 既定 aivis で Start。
+    let r = await post("/api/ears/start", { device: "Mic" });
+    assert.equal(r.status, 200);
+    assert.equal(f.made.length, 1);
+    assert.equal(f.made[0].kind, "aivis");
+    assert.deepEqual(r.json.tts, { engine: "aivis", status: "up", reason: null });
+    assert.equal(stored, "aivis");
+    await post("/api/ears/stop", {});
+
+    // ElevenLabs に切り替えて Start → aivis を dispose して作り直し、繋ぎ始め。
+    r = await post("/api/ears/start", { device: "Mic", ttsEngine: "elevenlabs" });
+    assert.equal(r.status, 200);
+    assert.equal(f.made[0].engine.disposed, true);
+    assert.equal(f.made[1].kind, "elevenlabs");
+    assert.equal(r.json.tts.status, "connecting");
+    assert.equal(stored, "elevenlabs");
+
+    // engine の status が警告になる（reconnecting = warn → up で消える → down = alert）。
+    const el = f.made[1].engine;
+    el.emit("reconnecting");
+    let s = await state();
+    assert.equal(s.warnings.find((/** @type {any} */ w) => w.kind === "tts-reconnecting")?.severity, "warn");
+    el.emit("up");
+    s = await state();
+    assert.deepEqual(s.warnings, []);
+    el.emit("down");
+    s = await state();
+    assert.equal(s.warnings.find((/** @type {any} */ w) => w.kind === "tts-down")?.severity, "alert");
+    el.emit("up");
+
+    // 読みが取れない → 一回きりの warn。
+    f.made[1].deps.onReadingsFallback({});
+    s = await state();
+    assert.equal(s.warnings.find((/** @type {any} */ w) => w.kind === "tts-readings-fallback")?.lifetime, "event");
+
+    // 同じ種類の Start は使い回し（作り直さない）。
+    await post("/api/ears/stop", {});
+    r = await post("/api/ears/start", { device: "Mic" });
+    assert.equal(r.status, 200);
+    assert.equal(f.made.length, 2);
+
+    // aivis に戻してから、キーが無い状態で ElevenLabs を選ぶと Start 失敗（理由つき）・engine は持たない。
+    await post("/api/ears/stop", {});
+    await post("/api/ears/start", { device: "Mic", ttsEngine: "aivis" });
+    await post("/api/ears/stop", {});
+    keyOk = false;
+    r = await post("/api/ears/start", { device: "Mic", ttsEngine: "elevenlabs" });
+    assert.equal(r.status, 500);
+    assert.equal(r.json.error, "ElevenLabs のキーが見つからない（テスト）");
+    assert.equal(r.json.state.ears, "stopped");
+    assert.equal(r.json.state.tts.status, "down");
+    assert.equal(mgr.current(), null);
+    assert.equal(f.made[2].engine.disposed, true);
+    // キーは state のどこにも載らない。
+    assert.equal(JSON.stringify(await state()).includes(FAKE_TTS_KEY), false);
+  } finally {
+    await server.close();
+    mgr.dispose();
+  }
 });

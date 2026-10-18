@@ -27,7 +27,7 @@ export function BottomBar({ settings, settingsOpen = false, onOpenSettings }) {
       </div>
       <div class="lat-legend" aria-label="遅延の凡例">
         ${LATENCY_SEGMENTS.map((s) => html`
-          <span key=${s.key} class="legend-item"><span class=${"legend-swatch " + s.className}></span>${s.label}</span>
+          <span key=${s.key} class="legend-item" title=${"hint" in s ? s.hint : null}><span class=${"legend-swatch " + s.className}></span>${s.label}</span>
         `)}
       </div>
       <button id="cockpit-settings-trigger" class="settings-toggle" type="button"
