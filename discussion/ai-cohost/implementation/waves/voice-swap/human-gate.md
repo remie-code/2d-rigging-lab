@@ -1,6 +1,6 @@
 # 声の差し替え 人間ゲート
 
-> Status: PENDING(手順を用意 2026-10-18)。計画は [../../orchestration/voice-swap-wave-plan.md](../../orchestration/voice-swap-wave-plan.md) §6。
+> Status: 合格(2026-10-18)。1〜5 は問題なし。6 は未確認で、起きたときに考える(ユーザー判断)。計画は [../../orchestration/voice-swap-wave-plan.md](../../orchestration/voice-swap-wave-plan.md) §6。
 
 ## 0. 準備
 
@@ -28,6 +28,9 @@
 - 口と声のずれが気になるか。気になるなら、口を早める・遅らせる調整値 `alignmentLeadMs`(今は 0)を動かす。
 - 読みのずれ(英字・数字で口が合わない等)が目立つか。
 
-## 3. 記録
+## 3. 記録(2026-10-18)
 
-(ゲート後に追記)
+- 準備: 器を `build` と `pack` で作り直し、実行ファイル版(`apps/runtime-player/dist/win-unpacked/Runtime Player.exe`)で確認した。
+- 1〜5: 「一通り問題ないと思う」(ユーザー)。
+- 6(ElevenLabs が落ちたとき): 未確認。「起きたときに考える」(ユーザー)。警告の配線はテストで固定してある。
+- `alignmentLeadMs` は既定の 0 のまま。

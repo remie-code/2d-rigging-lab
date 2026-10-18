@@ -40,7 +40,7 @@
 
 - 口パク(2026-10-18): 読みは AivisSpeech の `/accent_phrases`(合成なし)、時刻は ElevenLabs の文字時刻を区間に束ねて使い、句読点・タグで区切る。開き量は母音ごとの固定値のまま([research/lipsync-inputs-2026-10.md](research/lipsync-inputs-2026-10.md) §5)。
 
-- 声の差し替えを実装(2026-10-18): 操縦席で AivisSpeech / ElevenLabs を切り替え、ElevenLabs は TTD WebSocket で受け取りながら鳴らす。人間ゲート待ち([../implementation/orchestration/voice-swap-wave-plan.md](../implementation/orchestration/voice-swap-wave-plan.md))。
+- 声の差し替えを実装(2026-10-18): 操縦席で AivisSpeech / ElevenLabs を切り替え、ElevenLabs は TTD WebSocket で受け取りながら鳴らす。人間ゲート合格(落ちたときの確認のみ未実施。[../implementation/orchestration/voice-swap-wave-plan.md](../implementation/orchestration/voice-swap-wave-plan.md))。
 
 ## 5. Unresolved Questions
 
