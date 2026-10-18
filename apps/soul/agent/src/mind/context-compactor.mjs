@@ -3,7 +3,7 @@
  * 隙間で手動の圧縮（Codex の頭のみ）— apps/soul/agent（長い配信の文脈・context-growth-2026-10.md §5・§6）。
  *
  * 長い配信で頭の会話（Codex の thread）が膨らむと応答が遅くなる。Codex の自動圧縮の設定には頼らず、
- * 「直近の ask の入力トークン（文脈の大きさ）が扱える最大量（modelContextWindow）の 66% を超え、かつ隙間に
+ * 「直近の ask の入力トークン（文脈の大きさ）が扱える最大量（modelContextWindow）の 42% を超え、かつ隙間に
  * いる」ときだけ、頭のセッションの `compact()`（thread/compact/start → 人格の指示の差し込み直し）を呼ぶ。
  *
  * 隙間（§6）: チャッピーが空いている・判定の待ちがない・配信者の喋り終わりから 3 秒以上・前の圧縮から
@@ -15,8 +15,12 @@
  * 本文は扱わない（数字と理由だけ）。
  */
 
-/** 文脈の大きさのしきい値（modelContextWindow に対する直近の入力トークンの割合・§6 の初期値）。 */
-export const DEFAULT_COMPACT_THRESHOLD_RATIO = 0.66;
+/**
+ * 文脈の大きさのしきい値（modelContextWindow に対する直近の入力トークンの割合）。gpt-6.1-sol（窓 475,000）で約 20 万。
+ * 2 時間の配信で約 23 万を超えたところから最初の文字が 5〜6 秒 → 11〜13 秒へ段差で遅くなったため、
+ * 段差の手前で隙間の圧縮が走るよう 0.66 から下げた（context-growth-2026-10.md §8）。
+ */
+export const DEFAULT_COMPACT_THRESHOLD_RATIO = 0.42;
 /** 配信者の喋り終わりから、この時間だけ黙っていたら隙間とみなす。 */
 export const DEFAULT_COMPACT_QUIET_MS = 3000;
 /** 前の圧縮（の試み）から、この時間が経つまでは次を試さない。 */

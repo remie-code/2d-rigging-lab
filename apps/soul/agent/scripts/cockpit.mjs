@@ -1267,7 +1267,7 @@ export function resolveLatencyThresholdsFromSettings(settings) {
 
 /**
  * settings の圧縮のしきい値（compactThresholdRatio / compactQuietSec / compactMinIntervalMin）→ 圧縮の部品の
- * options（未設定・読めなければ既定 0.66 / 3 秒 / 10 分・context-growth-2026-10.md §6）。
+ * options（未設定・読めなければ既定 0.42 / 3 秒 / 10 分・context-growth-2026-10.md §6）。
  * @param {{ getContextCompaction?: () => { thresholdRatio: number | null; quietSec: number | null; minIntervalMin: number | null } }} settings
  * @returns {{ thresholdRatio: number; quietMs: number; minIntervalMs: number }}
  */
@@ -1457,7 +1457,7 @@ async function main() {
   // 発火ごとの 1 行（Codex の頭のとき）と、圧縮の開始・終了を 1 行ずつ。
   const sessionUsageLog = createSessionUsageLog();
   // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6）。しきい値は settings ファイルのキー
-  // （無ければ 0.66 / 3 秒 / 10 分）。隙間の材料は cockpit-server、頭のセッションは今の session（Codex で、
+  // （無ければ 0.42 / 3 秒 / 10 分）。隙間の材料は cockpit-server、頭のセッションは今の session（Codex で、
   // 設定の変更で作り直し待ちになっていないときだけ）。見え方はターミナル 1 行・ログのタブ 1 行・記録 1 行。
   const contextCompactor = createContextCompactor({
     ...resolveContextCompactionOptions(settings),

@@ -1902,13 +1902,13 @@ test("formatReplyLatencyLine: 数字ときっかけの種類だけの 1 行（�
   );
 });
 
-test("resolveContextCompactionOptions: settings の compact* キー・未設定や読めなければ 0.66 / 3 秒 / 10 分", async () => {
+test("resolveContextCompactionOptions: settings の compact* キー・未設定や読めなければ 0.42 / 3 秒 / 10 分", async () => {
   const { resolveContextCompactionOptions } = await import("./cockpit.mjs");
   assert.deepEqual(
     resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdRatio: 0.8, quietSec: 5, minIntervalMin: 15 }) }),
     { thresholdRatio: 0.8, quietMs: 5000, minIntervalMs: 900_000 }
   );
-  const defaults = { thresholdRatio: 0.66, quietMs: 3000, minIntervalMs: 600_000 };
+  const defaults = { thresholdRatio: 0.42, quietMs: 3000, minIntervalMs: 600_000 };
   assert.deepEqual(resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdRatio: null, quietSec: null, minIntervalMin: null }) }), defaults);
   assert.deepEqual(resolveContextCompactionOptions({}), defaults);
   assert.deepEqual(resolveContextCompactionOptions({ getContextCompaction: () => { throw new Error("x"); } }), defaults);

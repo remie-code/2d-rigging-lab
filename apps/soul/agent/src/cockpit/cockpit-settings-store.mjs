@@ -68,7 +68,7 @@
  *     効かせる（discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.1「秒数は設定で変えられる」）。
  *     正の数でなければ null。
  *   getContextCompaction(): Codex の頭の隙間で手動の圧縮（context-growth-2026-10.md §6）のしきい値
- *     （`{ thresholdRatio, quietSec, minIntervalMin }`・各 null = 既定 0.66 / 3 秒 / 10 分）。操縦席にツマミは置かず、
+ *     （`{ thresholdRatio, quietSec, minIntervalMin }`・各 null = 既定 0.42 / 3 秒 / 10 分）。操縦席にツマミは置かず、
  *     このファイルのキー `compactThresholdRatio`（0 より大きく 1 以下）/ `compactQuietSec`（0 以上）/
  *     `compactMinIntervalMin`（0 以上）を手で書き換えて次回起動から効かせる。範囲外・数でない値は null。
  *

@@ -47,7 +47,7 @@ function makeTimers() {
 }
 
 test("既定値: しきい値 66%・隙間 3 秒・間隔 10 分・数秒おき", () => {
-  assert.equal(DEFAULT_COMPACT_THRESHOLD_RATIO, 0.66);
+  assert.equal(DEFAULT_COMPACT_THRESHOLD_RATIO, 0.42);
   assert.equal(DEFAULT_COMPACT_QUIET_MS, 3000);
   assert.equal(DEFAULT_COMPACT_MIN_INTERVAL_MS, 600_000);
   assert.ok(DEFAULT_COMPACT_CHECK_INTERVAL_MS >= 1000 && DEFAULT_COMPACT_CHECK_INTERVAL_MS <= 10_000);
