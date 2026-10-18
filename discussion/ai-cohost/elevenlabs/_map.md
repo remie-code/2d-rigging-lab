@@ -15,6 +15,7 @@
 | [research/tts-controls-2026-10.md](research/tts-controls-2026-10.md) | TTS で設定・制御できる要素(モデル、voice_settings、音声タグ、料金)。サブエージェント調査 |
 | [research/stt-plans-and-realtime-2026-10.md](research/stt-plans-and-realtime-2026-10.md) | STT のプラン差(Free から API で使える、差は同梱量・同時接続・優先度・商用可否)、リアルタイムの確定制御・接続維持・課金・再接続 |
 | [experiments/01-stt-behavior.md](experiments/01-stt-behavior.md) | 実マイクでリアルタイム STT を観測。partial は約1秒おき・言葉から0.5〜1.3秒遅れ。commit は喋り終わりから既定 VAD で≈1.6〜1.9秒、VAD 0.3秒指定(実効0.5秒)で≈0.9秒。無音中に「うん/はい」の partial が出る |
+| [experiments/02-tts-voice.md](experiments/02-tts-voice.md) | TTS の声選び(共有ボイス → Voice Design の「案3」に決定、Remix では超えず)と手触り(案3の印象が保たれるのは v4 / v4 Turbo。v4 Turbo は HTTP で鳴り始め≈0.2秒。日本語文の頭の英語タグが効く) |
 
 ## 3. Observations (第三者事例。画像はリポジトリに置かない)
 
@@ -34,9 +35,12 @@
 
 - 操縦席で whisper / ElevenLabs を選べるようにする(体験の合意 → [../implementation/screens/cockpit-stt-selection.md](../implementation/screens/cockpit-stt-selection.md))。合図(barge-in・区切り応答)は手元 VAD のまま、転写だけ ElevenLabs の commit にする。
 
+- TTS の声は Voice Design の「案3」(`Ona22sJYfzcps6cE1jVk`)。モデルは v4 系(v4 / v4 Turbo)が候補で、v3・Flash は声が変わるので外す(2026-10-18。[experiments/02-tts-voice.md](experiments/02-tts-voice.md))。乗り換えはまだ決めていない(手触りを試す段階)。
+
 ## 5. Unresolved Questions
 
 - 全体構想(何をどこまで差し替えるか)の合意。
 - STT の実測: 確定方式(VAD 既定・短縮 VAD・手動)ごとの、喋り終わりから確定までの時間(日本語、日本から)。
 - 再接続時の挙動(最初の約2秒のバッファが毎回乗るか、`previous_text` でどこまで繋がるか)。
-- 日本語文中で英語タグが効くか、日本語のタグが効くか(公式未記載。実機確認が要る)。
+- 日本語のタグが効くか(英語タグは台詞の頭に付けると効く。experiments/02)。
+- TTS の口の動き(文字ごとの時刻 → 口の形)と、返事の繋ぎ方(文ごとか WebSocket か)。
