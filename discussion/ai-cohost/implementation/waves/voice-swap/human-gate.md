@@ -7,7 +7,7 @@
 1. **器を作り直す**(必須)。器は新しい約束 `intent.speechStream` を知っていないと、接続で弾かれる。
    - いつもの起動方法に合わせて、どちらかで作り直す。
      - ビルド済みを使う場合: `pnpm --filter @private-2d-rigging-lab/runtime-player build`
-     - 実行ファイル(pack)を使う場合: `pnpm --filter @private-2d-rigging-lab/runtime-player pack`
+     - 実行ファイル(pack)を使う場合: `pnpm --filter @private-2d-rigging-lab/runtime-player run pack`(`run` を付けないと pnpm 本体の pack が動いて .tgz ができる)
    - 開発起動(`dev`)の場合は不要。
 2. AivisSpeech を起動しておく。ElevenLabs を選んだときも、読みを取るのに使う。
 3. 操縦席を管理者で起動する(`start-cockpit.cmd`、今までどおり)。器を開き、Channel が緑になること。
