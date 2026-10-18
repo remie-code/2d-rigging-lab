@@ -15,11 +15,11 @@
  *  - LLM 最初の文字: `llm.ask.started` → `llm.first_delta`（Codex 系）。delta が来ない頭（Claude）は
  *    llm-session が測った ttftMs（`noteTtft`）。
  *  - 最初の文: `llm.first_delta` → `progressive.first_safe_sentence`（Codex 系の文ごとの読み上げのみ）。
- *  - TTS: 最初の文の `tts.audio_query.started` → `tts.synthesis.completed`（文ごとの読み上げでは jobId が
- *    `…:sentence-1` のものだけを見る。一括の読み上げは jobId を持たない）。
- *  - 声: 最初の文の `tts.synthesis.completed` → 声が鳴り始めた（player の STARTED。文ごとの読み上げは
- *    `progressive.player.started`、一括の読み上げは orchestrator が player の出力を見て `markVoiceStarted`）。
- *    口形のタイムライン作り・WAV 書き出し・器への送信の往復を含む。
+ *  - TTS: 最初の文で声の差し替え口（engine）に頼んでから最初の音のかたまりまで
+ *    （`voice.synthesis.requested` → `voice.audio.first_chunk`・SpeechStreamer が出す engine に依存しない名前）。
+ *    文ごとの読み上げも一括の読み上げも jobId が `…:sentence-1` のものだけを見る（jobId の無いトレースも数える）。
+ *  - 声: 最初の音のかたまりから声が鳴り始めるまで（`voice.audio.first_chunk` → `voice.player.started`＝
+ *    流し込みプレイヤーの STARTED）。器への open の往復・プレイヤーの立ち上がりを含む。
  *  - inFireMs: fire() が呼ばれてから声が鳴り始めるまで（資源の取得・画面・LLM・TTS・声とその間の隙間すべて）。
  *  - otherMs: inFireMs のうち名前の付いた区間に入らない残り（Claude では「最初の文字」以降の生成の続きが主）。
  *
@@ -77,7 +77,7 @@ export function latencyLevel(totalMs, thresholds) {
 }
 
 /**
- * 文ごとの読み上げのトレースなら最初の文（jobId が `…:sentence-1`）か。jobId が無ければ一括の読み上げ（true）。
+ * 最初の文のトレースか（jobId が `…:sentence-1`）。jobId が無いトレースも最初の文として数える。
  * @param {Record<string, unknown> | undefined} fields
  */
 function isFirstSpeechJob(fields) {
@@ -97,8 +97,8 @@ export function createFireTiming(options) {
     askStartedAt: null,
     firstDeltaAt: null,
     firstSentenceAt: null,
-    ttsStartedAt: null,
-    ttsCompletedAt: null,
+    synthesisRequestedAt: null,
+    firstAudioAt: null,
     voiceStartedAt: null
   };
   /** @type {number | null} */
@@ -126,13 +126,13 @@ export function createFireTiming(options) {
         case "progressive.first_safe_sentence":
           markOnce("firstSentenceAt");
           return;
-        case "tts.audio_query.started":
-          if (isFirstSpeechJob(fields)) markOnce("ttsStartedAt");
+        case "voice.synthesis.requested":
+          if (isFirstSpeechJob(fields)) markOnce("synthesisRequestedAt");
           return;
-        case "tts.synthesis.completed":
-          if (isFirstSpeechJob(fields)) markOnce("ttsCompletedAt");
+        case "voice.audio.first_chunk":
+          if (isFirstSpeechJob(fields)) markOnce("firstAudioAt");
           return;
-        case "progressive.player.started":
+        case "voice.player.started":
           if (isFirstSpeechJob(fields)) markOnce("voiceStartedAt");
           return;
         case "vision.capture.completed":
@@ -146,15 +146,6 @@ export function createFireTiming(options) {
     noteTtft(/** @type {unknown} */ ms) {
       if (ttftMs == null && isNum(ms)) ttftMs = /** @type {number} */ (ms);
     },
-    /**
-     * 声が鳴り始めた（一括の読み上げの STARTED）。初回だけ true。
-     * @returns {boolean}
-     */
-    markVoiceStarted() {
-      if (marks.voiceStartedAt != null) return false;
-      marks.voiceStartedAt = nowImpl();
-      return true;
-    },
     hasVoiceStarted: () => marks.voiceStartedAt != null,
     hasAsked: () => marks.askStartedAt != null,
     /**
@@ -166,8 +157,8 @@ export function createFireTiming(options) {
         marks[from] != null && marks[to] != null ? /** @type {number} */ (marks[to]) - /** @type {number} */ (marks[from]) : null;
       const llmFirst = diff("askStartedAt", "firstDeltaAt") ?? ttftMs;
       const firstSentence = diff("firstDeltaAt", "firstSentenceAt");
-      const tts = diff("ttsStartedAt", "ttsCompletedAt");
-      const voice = diff("ttsCompletedAt", "voiceStartedAt");
+      const tts = diff("synthesisRequestedAt", "firstAudioAt");
+      const voice = diff("firstAudioAt", "voiceStartedAt");
       const inFire = marks.voiceStartedAt != null ? marks.voiceStartedAt - fireCalledAt : null;
       const named = [screenMs, llmFirst, firstSentence, tts, voice].reduce((sum, v) => sum + (v ?? 0), 0);
       return {

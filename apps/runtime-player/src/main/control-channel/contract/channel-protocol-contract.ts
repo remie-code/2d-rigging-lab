@@ -253,8 +253,14 @@ export type RuntimePlayerControlChannelSpeechMoraPayload = {
  *               must be after the previous append's last mora); at most 4096 moras per
  *               utterance. Item shape/domain is exactly `intent.speech`'s.
  *  - `end`    : no more moras. Until `end` the 器 holds the last vowel when the data runs
- *               out (no automatic close); after `end` the usual terminal (hold the last
- *               interval → release over 400ms) applies.
+ *               out; after `end` the usual terminal (hold the last interval → release
+ *               over 400ms) applies. Safety net (not a payload field; the 器's
+ *               `RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS`, voice swap Wave 2 / Domain
+ *               A2): once the data has run out (the later of the last mora's absolute
+ *               time and the acceptance instant of the slice that carried it), 2000ms
+ *               with neither a further `append` nor `end` makes the 器 treat the
+ *               utterance as ended at that instant (the same terminal as an `end`
+ *               accepted then); its later `append`/`end` are ignored.
  *
  * An `append`/`end` naming an utteranceId that is not the current open utterance (a
  * stale tail of a replaced/stopped one) is accepted and ignored. A malformed shape, a

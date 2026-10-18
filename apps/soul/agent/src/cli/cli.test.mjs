@@ -2,13 +2,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Readable, Writable } from "node:stream";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { runConversation } from "./cli.mjs";
-import { speak } from "../voice/speak.mjs";
 import { connectChannel } from "../channel/channel-client.mjs";
-import { createAudioPlayer } from "../voice/audio-player.mjs";
+import { createAivisVoiceEngine } from "../voice/engines/aivis-voice-engine.mjs";
+import { createFakeStreamPlayer } from "../test-support/fake-stream-player.mjs";
 import { createChannelServerDouble } from "../test-support/ws-double.mjs";
 import { MinimalWebSocket } from "../test-support/ws-client.mjs";
 import {
@@ -17,12 +15,9 @@ import {
   AIVIS_BYTE_RATE
 } from "../voice/fixtures.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const ECHO_PLAYER = path.join(here, "..", "test-support", "echo-player.mjs");
-
 // llm-session を実 SDK ではなくダブルに差し替え、Channel（ws-double + MinimalWebSocket）と
-// プレイヤー（echo-player）を実配線して CLI の会話ループ（一文 → ask → speak → 口 + 声 → 計測）を
-// 検証する。実 SDK・実器・実再生は一切使わない（人間ゲートの領分）。
+// 流し込みプレイヤー（無音の代役・ENDED まで自動）を実配線して CLI の会話ループ（一文 → ask →
+// speakOnce → 口 + 声 → 鳴り終わり → 計測）を検証する。実 SDK・実器・実再生は一切使わない。
 
 /** GOLDEN と整合する実機形 audio_query（11 モーラ・9 要素 timeline になる）。 */
 function goldenAudioQuery() {
@@ -79,7 +74,7 @@ function collectingWritable(sink) {
   });
 }
 
-test("cli.runConversation: 2 行を ask→speak して器へ intent.speech 送出・計測 JSON を出す・全 dispose", async () => {
+test("cli.runConversation: 2 行を ask→speakOnce して器へ intent.speechStream（open/append/end）を送り・鳴り終わりを待ち・計測 JSON を出す・全 dispose", async () => {
   const server = createChannelServerDouble();
   const url = await server.listen();
 
@@ -100,19 +95,14 @@ test("cli.runConversation: 2 行を ask→speak して器へ intent.speech 送�
     }
   };
 
-  const playedPaths = [];
   let playerDisposed = false;
-  const echoPlayer = createAudioPlayer({ command: process.execPath, args: [ECHO_PLAYER] });
-  const player = {
-    play(p) {
-      playedPaths.push(p); // 同期記録（決定的）。
-      echoPlayer.play(p); // echo-player の実往復も踏む（無音）。
-    },
-    dispose() {
-      playerDisposed = true;
-      echoPlayer.dispose();
-    }
+  const player = createFakeStreamPlayer({ autoStart: true, autoEnd: true });
+  const disposePlayer = player.dispose;
+  player.dispose = () => {
+    playerDisposed = true;
+    disposePlayer();
   };
+  let engineDisposed = false;
 
   const stdoutLines = [];
   const stderrLines = [];
@@ -123,8 +113,15 @@ test("cli.runConversation: 2 行を ask→speak して器へ intent.speech 送�
     createSession: () => session,
     connect: (u) => connectChannel(u, { WebSocketImpl: MinimalWebSocket }),
     createPlayer: () => player,
-    speakImpl: speak,
-    speakDeps: { tts: fakeTts, writeWav: () => "C:/tmp/cli-fake.wav" },
+    createEngine: () => {
+      const engine = createAivisVoiceEngine({ tts: fakeTts });
+      const dispose = engine.dispose;
+      engine.dispose = () => {
+        engineDisposed = true;
+        dispose();
+      };
+      return engine;
+    },
     stdin,
     stdout: collectingWritable(stdoutLines),
     stderr: collectingWritable(stderrLines)
@@ -133,12 +130,13 @@ test("cli.runConversation: 2 行を ask→speak して器へ intent.speech 送�
   try {
     // ask は 2 行に対して 2 回・入力文がそのまま渡る。
     assert.deepEqual(asks, ["こんにちは", "おやすみ"]);
-    // 応答文が speak を通り、器へ 2 本の intent.speech が届く。
-    const speeches = server.received.filter((m) => m.kind === "intent.speech");
-    assert.equal(speeches.length, 2);
-    assert.equal(speeches[0].payload.timeline.length, 9); // pau/N 脱落で 9 要素。
-    // 応答文で play が 2 回呼ばれる。
-    assert.deepEqual(playedPaths, ["C:/tmp/cli-fake.wav", "C:/tmp/cli-fake.wav"]);
+    // 応答文が speakOnce を通り、器へ 2 発話ぶんの open → append → end が届く（旧 intent.speech は使わない）。
+    const streams = server.received.filter((m) => m.kind === "intent.speechStream");
+    assert.deepEqual(streams.map((m) => m.payload.op), ["open", "append", "end", "open", "append", "end"]);
+    assert.equal(streams[1].payload.timeline.length, 9); // pau/N 脱落で 9 要素。
+    assert.equal(server.received.filter((m) => m.kind === "intent.speech").length, 0);
+    // 応答文ごとにプレイヤーを 1 回 open する（一時 WAV のパスは無い）。
+    assert.equal(player.opened.length, 2);
     // 計測 JSON が 2 行（usage/ttft/e2e/timeline_items を含む）。
     const utter = stderrLines
       .join("")
@@ -151,12 +149,14 @@ test("cli.runConversation: 2 行を ask→speak して器へ intent.speech 送�
       assert.deepEqual(u.usage, { input_tokens: 3, output_tokens: 2 });
       assert.equal(u.ttft_ms, 12.3);
       assert.equal(u.timeline_items, 9);
+      assert.equal(u.playback, "completed");
       assert.ok(typeof u.e2e_ms === "number" && u.e2e_ms >= 0);
     }
     // EOF で全 dispose（event loop に何も残さない）。
     assert.equal(result.utterances, 2);
     assert.equal(sessionDisposed, true);
     assert.equal(playerDisposed, true);
+    assert.equal(engineDisposed, true);
     // 応答テキストが stdout に出る。
     assert.match(stdoutLines.join(""), /AI:こんにちは/);
   } finally {
@@ -178,7 +178,7 @@ test("cli.runConversation: 空行はスキップ・EOF で正常終了（発話 
     }
   };
   let playerDisposed = false;
-  const player = { play() {}, dispose() { playerDisposed = true; } };
+  const player = { dispose() { playerDisposed = true; } };
 
   const stdin = Readable.from("   \n\n\t\n");
   const stderrLines = [];
@@ -187,8 +187,7 @@ test("cli.runConversation: 空行はスキップ・EOF で正常終了（発話 
     createSession: () => session,
     connect: (u) => connectChannel(u, { WebSocketImpl: MinimalWebSocket }),
     createPlayer: () => player,
-    speakImpl: speak,
-    speakDeps: { tts: fakeTts },
+    createEngine: () => createAivisVoiceEngine({ tts: fakeTts }),
     stdin,
     stdout: collectingWritable([]),
     stderr: collectingWritable(stderrLines)
@@ -196,7 +195,7 @@ test("cli.runConversation: 空行はスキップ・EOF で正常終了（発話 
 
   try {
     assert.equal(result.utterances, 0);
-    assert.equal(server.received.filter((m) => m.kind === "intent.speech").length, 0);
+    assert.equal(server.received.filter((m) => m.kind === "intent.speechStream").length, 0);
     assert.equal(sessionDisposed, true);
     assert.equal(playerDisposed, true);
   } finally {
@@ -210,7 +209,7 @@ test("cli.runConversation: signal abort で入力ループを閉じ dispose す�
 
   let sessionDisposed = false;
   const session = { async ask() { return { replyText: "x", usage: null, ttftMs: null, elapsedMs: 1 }; }, async dispose() { sessionDisposed = true; } };
-  const player = { play() {}, dispose() {} };
+  const player = { dispose() {} };
 
   // 終端しない stdin（PassThrough を書き込まず開けたまま）→ abort で閉じることを確認。
   const stdin = new Readable({ read() {} });
@@ -220,8 +219,7 @@ test("cli.runConversation: signal abort で入力ループを閉じ dispose す�
     createSession: () => session,
     connect: (u) => connectChannel(u, { WebSocketImpl: MinimalWebSocket }),
     createPlayer: () => player,
-    speakImpl: speak,
-    speakDeps: { tts: fakeTts },
+    createEngine: () => createAivisVoiceEngine({ tts: fakeTts }),
     stdin,
     stdout: collectingWritable([]),
     stderr: collectingWritable([]),

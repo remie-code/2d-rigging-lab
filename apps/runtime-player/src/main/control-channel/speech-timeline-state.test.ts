@@ -8,6 +8,7 @@ import {
   RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
   RUNTIME_PLAYER_SPEECH_ONSET_MS,
   RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+  RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS,
   RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS,
   sampleSpeechTimeline,
   type SpeechMora,
@@ -608,6 +609,99 @@ describe("sampleSpeechTimeline — streamed utterance (intent.speechStream, voic
         const { values } = sampleSpeechTimeline(state, now);
         expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
       }
+    }
+  });
+});
+
+describe("sampleSpeechTimeline — streamed utterance safety net (stallEndAtMs, voice swap Wave 2 / Domain A2)", () => {
+  const RELEASE_MS = 400;
+  const lastMora = REPRESENTATIVE[REPRESENTATIVE.length - 1]!;
+  const stallEndAtMs = lastMora.timeMs + RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS;
+
+  it("names the stall window 2000ms", () => {
+    expect(RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS).toBe(2000);
+  });
+
+  it("is EXACTLY an end accepted at stallEndAtMs, at every tick (hold until then, then 400ms close → done)", () => {
+    const stalled: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      awaitingEnd: true,
+      stallEndAtMs
+    };
+    const endedThen: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      endAtMs: stallEndAtMs
+    };
+    for (let now = 0; now <= stallEndAtMs + RELEASE_MS + 40; now += 4) {
+      expect(sampleSpeechTimeline(stalled, now)).toStrictEqual(
+        sampleSpeechTimeline(endedThen, now)
+      );
+    }
+    const held = lastMora.s * RUNTIME_PLAYER_SPEECH_OPEN_SCALE;
+    expect(mouthOpen(sampleSpeechTimeline(stalled, stallEndAtMs - 1).values)).toBeCloseTo(held, 9);
+    expect(mouthOpen(sampleSpeechTimeline(stalled, stallEndAtMs).values)).toBeCloseTo(held, 9);
+    const mid = mouthOpen(sampleSpeechTimeline(stalled, stallEndAtMs + RELEASE_MS / 2).values);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(held);
+    expect(sampleSpeechTimeline(stalled, stallEndAtMs + RELEASE_MS).done).toBe(true);
+  });
+
+  it("before the net it is the plain awaiting hold (never done)", () => {
+    const withNet: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      awaitingEnd: true,
+      stallEndAtMs
+    };
+    const withoutNet: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      awaitingEnd: true
+    };
+    for (let now = 0; now < stallEndAtMs; now += 4) {
+      expect(sampleSpeechTimeline(withNet, now)).toStrictEqual(
+        sampleSpeechTimeline(withoutNet, now)
+      );
+    }
+  });
+
+  it("is ignored once the utterance has ended (an end before the net keeps today's terminal)", () => {
+    const endedEarly: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      endAtMs: 1_500,
+      stallEndAtMs
+    };
+    const plainEnd: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      endAtMs: 1_500
+    };
+    for (let now = 0; now <= stallEndAtMs + RELEASE_MS + 40; now += 4) {
+      expect(sampleSpeechTimeline(endedEarly, now)).toStrictEqual(
+        sampleSpeechTimeline(plainEnd, now)
+      );
+    }
+  });
+
+  it("holds the convex identity at every tick through the net close", () => {
+    const stalled: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 120,
+      onsetFromOpen: 0.2,
+      awaitingEnd: true,
+      stallEndAtMs
+    };
+    for (let now = 0; now <= stallEndAtMs + RELEASE_MS + 40; now += 4) {
+      const { values } = sampleSpeechTimeline(stalled, now);
+      expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
     }
   });
 });

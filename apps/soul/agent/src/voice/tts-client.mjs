@@ -115,9 +115,10 @@ export function createTtsClient(options = {}) {
   /**
    * `POST /audio_query?text=..&speaker=..` → query JSON。
    * @param {string} text  合成する一文。空文字は投げる。
+   * @param {{ signal?: AbortSignal }} [requestOptions]  中止の合図（声の差し替え口の割り込み・fetch へそのまま渡す）。
    * @returns {Promise<any>}
    */
-  async function audioQuery(text) {
+  async function audioQuery(text, requestOptions = {}) {
     if (typeof text !== "string" || text.length === 0) {
       throw new TypeError("audioQuery(text): text must be a non-empty string.");
     }
@@ -126,7 +127,8 @@ export function createTtsClient(options = {}) {
       `&speaker=${encodeURIComponent(String(speaker))}`;
     const response = await fetchImpl(url, {
       method: "POST",
-      headers: { accept: "application/json" }
+      headers: { accept: "application/json" },
+      ...(requestOptions.signal ? { signal: requestOptions.signal } : {})
     });
     if (!response.ok) {
       const body = await safeReadText(response);
@@ -141,9 +143,10 @@ export function createTtsClient(options = {}) {
   /**
    * `POST /synthesis?speaker=..`（body = query JSON）→ WAV バイト列。
    * @param {any} query  audioQuery の返り（そのまま body に載せる）。
+   * @param {{ signal?: AbortSignal }} [requestOptions]  中止の合図（audioQuery と同じ）。
    * @returns {Promise<Uint8Array>}  RIFF/WAVE PCM のバイト列。
    */
-  async function synthesis(query) {
+  async function synthesis(query, requestOptions = {}) {
     if (query == null || typeof query !== "object") {
       throw new TypeError("synthesis(query): query must be the audio_query object.");
     }
@@ -151,7 +154,8 @@ export function createTtsClient(options = {}) {
     const response = await fetchImpl(url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "audio/wav" },
-      body: JSON.stringify(query)
+      body: JSON.stringify(query),
+      ...(requestOptions.signal ? { signal: requestOptions.signal } : {})
     });
     if (!response.ok) {
       const body = await safeReadText(response);

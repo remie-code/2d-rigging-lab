@@ -2230,7 +2230,7 @@ test("cockpit S7 chat Connect: 生成/start の想定外 throw は foldChatClien
 //
 //  GET /api/audio-devices・POST /api/audio-device・POST /api/self-fire は GET /api/windows・
 //  POST /api/vision-target の写経（domain-d.md §）。listAudioDevicesImpl は必ず fake 注入する
-//  （既定は実 PowerShell 起動＝Domain A audio-player.mjs の listAudioDevices・このテストファイルでは
+//  （既定は実 PowerShell 起動＝audio-devices.mjs の listAudioDevices・このテストファイルでは
 //  一度も実行しない）。
 
 test("cockpit GET /api/audio-devices: listAudioDevicesImpl の成功結果（.devices）を返す", async () => {
@@ -4616,31 +4616,24 @@ test("cockpit コメント判定: 判定できなかった理由に本文が混�
 test("cockpit 作り直しデータ: 手動 /api/fire → fire（fireId・cause:manual）・fireAsk（窓の seq）・soul 行の fireId・latency が同じ番号で届く", async () => {
   const fake = makeOnAppendPipeline();
   let t = 0;
-  const listeners = new Set();
-  const player = {
-    play() {},
-    subscribeOutput(/** @type {any} */ l) {
-      listeners.add(l);
-      return () => listeners.delete(l);
-    }
-  };
   const server = createCockpitServer({
     pipelineFactory: /** @type {any} */ (fake.factory),
     fireOrchestratorFactory: (hooks) =>
       createFireOrchestrator({
         ...hooks,
         session: { async ask() { t = 900; return { replyText: "はーい", ttftMs: 600 }; } },
+        // 声の差し替え Wave 2: 遅延の材料は engine に依存しない名前（SpeechStreamer が出す）。
         speakImpl: /** @type {any} */ (async (_text, deps) => {
           t = 1000;
-          deps.onTrace("tts.audio_query.started", {});
+          deps.onTrace("voice.synthesis.requested", { jobId: "fire-1:sentence-1" });
           t = 1300;
-          deps.onTrace("tts.synthesis.completed", {});
+          deps.onTrace("voice.audio.first_chunk", { jobId: "fire-1:sentence-1" });
           t = 1450;
-          for (const l of [...listeners]) l("STARTED\tx.wav");
-          return { timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "x.wav" };
+          deps.onTrace("voice.player.started", { jobId: "fire-1:sentence-1" });
+          return { timeline: [] };
         }),
-        channel: { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
-        player,
+        channel: { sendSet: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
+        player: {},
         nowImpl: () => 2000,
         monotonicNowImpl: () => t
       }),

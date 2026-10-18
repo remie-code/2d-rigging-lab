@@ -14,7 +14,8 @@
  *
  * ── S3: 発火（Fire）の本番結線 ─────────────────────────────────────────────
  *  fireOrchestratorFactory は**常に注入**する（実 createLlmSession（FIRE_SYSTEM_PROMPT・
- *  claude-opus-4-8 既定）+ connectChannel + createAudioPlayer + speak）。Channel URL は
+ *  claude-opus-4-8 既定）+ connectChannel + 流し込みプレイヤー（createStreamPlayer）+ 声の差し替え口
+ *  （createVoiceEngine・既定 AivisSpeech）+ SpeechStreamer）。Channel URL は
  *  `--channel <ws-url>`（後方互換の初期値）**または操縦席の URL 入力**（POST /api/channel）で渡せる。
  *
  *  ── S2.5 無退行【session/player の遅延生成】(S3 追撃 domain-c) ─────────────────
@@ -23,7 +24,9 @@
  *  session/player は `ensureFireResources()` で**遅延生成**する:
  *    - `--channel` 明示指定時のみ起動時に eager 生成（従来どおり TTFT 先払い・挙動不変）。
  *    - それ以外（URL 未設定 / settings 復元 / 操縦席入力）は**初回 fire 時**に生成。
- *  URL 未設定のまま fire しても sendSpeech 前に session.ask で弾く（lazyChannel が URL 未設定を
+ *  声の差し替え Wave 2: 流し込みプレイヤー（起動に約 0.5 秒）と声の差し替え口は耳の Start のときに作る
+ *  （最初の Fire に乗せない・申し送り 1）。Start より前の Fire は従来どおりその場で作る。
+ *  URL 未設定のまま fire しても発話の送出前に session.ask で弾く（lazyChannel が URL 未設定を
  *  明示エラーにする前に、ここで no-URL を検出して spawn しない）。→ S2.5 ユーザーは何も spawn しない。
  *
  *  ── Channel URL の記憶（settings）──────────────────────────────────────────
@@ -67,7 +70,8 @@ import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/
 import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
-import { createAudioPlayer } from "../src/voice/audio-player.mjs";
+import { createStreamPlayer } from "../src/voice/stream-player.mjs";
+import { createVoiceEngine, DEFAULT_VOICE_ENGINE_KIND } from "../src/voice/engines/voice-engine.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import {
   generateDigest,
@@ -177,6 +181,9 @@ export function openCockpitBrowser(url, execFileImpl = execFile, warn = (message
  * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace] passive diagnostics hook.
  * @returns {{
  *   sendSpeech: (timeline: unknown) => Promise<any>;
+ *   openSpeech: (utteranceId: string) => Promise<any>;
+ *   appendSpeech: (utteranceId: string, timeline: unknown) => Promise<any>;
+ *   endSpeech: (utteranceId: string) => Promise<any>;
  *   sendEnvelope: (intent: unknown) => Promise<any>;
  *   sendSet: (intent: unknown) => Promise<any>;
  *   setUrl: (next: string | null | undefined) => void;
@@ -239,11 +246,11 @@ export function createLazyChannel(url, options = {}) {
       .then((channel) => channel.close())
       .catch(() => {});
   };
-  const delegate = async (method, value) => {
+  const delegate = async (method, ...values) => {
     const pending = ensure();
     const channel = await pending;
     try {
-      return await channel[method](value);
+      return await channel[method](...values);
     } catch (error) {
       // Never retry an ambiguous request. Only retire the exact failed cached
       // generation; the next Fire/request is allowed to connect once afresh.
@@ -255,6 +262,22 @@ export function createLazyChannel(url, options = {}) {
   return {
     async sendSpeech(timeline) {
       return delegate("sendSpeech", timeline);
+    },
+    /**
+     * intent.speechStream（声の差し替え Wave 2・発話の流し込み）。sendSpeech と同型に ensure()→接続へ委譲。
+     * 同じ接続の上で呼んだ順に送られる（open → append… → end）。
+     * @param {string} utteranceId
+     */
+    async openSpeech(utteranceId) {
+      return delegate("openSpeech", utteranceId);
+    },
+    /** @param {string} utteranceId @param {unknown} timeline */
+    async appendSpeech(utteranceId, timeline) {
+      return delegate("appendSpeech", utteranceId, timeline);
+    },
+    /** @param {string} utteranceId */
+    async endSpeech(utteranceId) {
+      return delegate("endSpeech", utteranceId);
     },
     /**
      * intent.envelope を送る（S4 表情演出）。sendSpeech と同型に ensure()→接続へ委譲。
@@ -442,7 +465,7 @@ export function createVisionTargetHooks(settings) {
  * 橋渡しする（S6「会話が続く」・Domain D。visionTarget と同型の薄い配線層）。
  *
  * **常駐プレイヤーの再起動はここでは行わない**（settings の getter/setter に閉じた層のまま）。
- * main() が返り値の `onSetAudioDevice` をラップして常駐プレイヤーの再生成トリガに使う（§createAudioPlayer 呼び出し側）。
+ * main() が返り値の `onSetAudioDevice` をラップして常駐プレイヤーの再生成トリガに使う（§createStreamPlayer 呼び出し側）。
  *
  * @param {{ getAudioDevice: () => string | null; setAudioDevice: (name: string | null) => void }} settings
  * @returns {{
@@ -1117,11 +1140,13 @@ async function main() {
   let sessionInstructionRevision = null;
   let sessionContextRevision = 0;
   let sessionAcceptedContextRevision = null;
-  /** @type {ReturnType<typeof createAudioPlayer> | null} */
+  /** @type {ReturnType<typeof createStreamPlayer> | null} */
   let player = null;
   let audioRevision = 0;
   let playerAudioRevision = null;
-  const playerOutputListeners = new Set();
+  /** 声の差し替え口（既定 AivisSpeech・Start のときに作る）。 */
+  /** @type {ReturnType<typeof createVoiceEngine> | null} */
+  let voiceEngine = null;
   // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。recordMemory が
   // ライブ転写取得（server.getTranscript）に使うための前方参照（let・sessionProxy が session を forward
   // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
@@ -1235,8 +1260,8 @@ async function main() {
    * 冪等（既に生成済みなら何もしない）。env ガードは session 初回生成時に一度だけ通す。
    *
    * S6「会話が続く」: player は起動時（またはデバイス変更後の再生成時）に settings の出力デバイス名を
-   * env 経由で渡す（Domain A `createAudioPlayer({ deviceName })`）。未記憶なら deviceName 未指定 =
-   * 既定デバイス（S1〜S5 無退行）。
+   * env 経由で渡す（`createStreamPlayer({ deviceName })`）。未記憶なら deviceName 未指定 = 既定デバイス。
+   * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（耳の Start で先に作る）。
    */
   const ensureFireResources = () => {
     if (session == null) {
@@ -1285,24 +1310,43 @@ async function main() {
       sessionInstructionRevision = instructionRevision.getRevision();
       sessionAcceptedContextRevision = sessionContextRevision;
     }
+    ensureVoiceResources();
+  };
+
+  /**
+   * 流し込みプレイヤー（常駐 PowerShell + C#・起動に約 0.5 秒）と声の差し替え口を用意する（冪等）。
+   * 耳の Start のときに呼んで先に起こしておく（申し送り 1・最初の Fire に起動を乗せない）。常駐が
+   * 落ちていたら作り直す。出力デバイスの変更は applyDesiredFireSettings が次の Fire の境目で反映する
+   * （revision 方式・進行中の発話は accepted snapshot の player を最後まで使う）。
+   */
+  const ensureVoiceResources = () => {
+    if (player != null && !player.isAlive()) {
+      try {
+        player.dispose();
+      } catch {
+        // best-effort（落ちた常駐は使わない）。
+      }
+      player = null;
+      playerAudioRevision = null;
+    }
     if (player == null) {
       const deviceName = audioDeviceHooks.getAudioDevice() ?? undefined;
-      player = createAudioPlayer({
+      player = createStreamPlayer({
         ...(deviceName ? { deviceName } : {}),
+        // 診断は行の種類だけ（id や本文は残さない）。
         onOutput: (line) => {
           const marker = typeof line === "string" ? line.split("\t", 1)[0] : "unknown";
           fireDiagnostics.record("player.child", { marker });
-          for (const listener of [...playerOutputListeners]) {
-            try {
-              listener(line);
-            } catch {
-              // Marker observers never own the resident player.
-            }
-          }
         },
         onError: () => fireDiagnostics.record("player.child.error")
       });
       playerAudioRevision = audioRevision;
+    }
+    if (voiceEngine == null) {
+      voiceEngine = createVoiceEngine(DEFAULT_VOICE_ENGINE_KIND, {
+        ttsBaseUrl: args.ttsBaseUrl,
+        speaker: args.speaker
+      });
     }
   };
 
@@ -1348,21 +1392,29 @@ async function main() {
     getSession: () => session,
     ensureSessionCurrent: applyDesiredFireSettings
   });
+  // acquireFireResources が無い経路のための proxy（本番は accepted snapshot の player 実体を使う）。
   const playerProxy = {
-    /** @param {...any} playArgs */
-    play(...playArgs) {
+    /** @param {string} id @param {{ sampleRate: number; channels: number }} format */
+    open(id, format) {
       ensureFireResources();
-      return /** @type {any} */ (player).play(...playArgs);
+      return /** @type {any} */ (player).open(id, format);
     },
-    /** barge-in の声止め（S6）。play が走った後にしか呼ばれない = player は生成済み。best-effort。 */
+    /** @param {string} id @param {Uint8Array} pcm */
+    write(id, pcm) {
+      return player != null ? player.write(id, pcm) : false;
+    },
+    /** @param {string} id */
+    end(id) {
+      return player != null ? player.end(id) : false;
+    },
+    /** barge-in の声止め（S6）。open が走った後にしか呼ばれない = player は生成済み。best-effort。 */
     stop() {
-      if (player != null && typeof (/** @type {any} */ (player).stop) === "function") {
-        return /** @type {any} */ (player).stop();
-      }
+      if (player != null) player.stop();
     },
-    subscribeOutput(listener) {
-      playerOutputListeners.add(listener);
-      return () => playerOutputListeners.delete(listener);
+    /** @param {(event: any) => void} listener */
+    onEvent(listener) {
+      ensureVoiceResources();
+      return /** @type {any} */ (player).onEvent(listener);
     }
   };
   const productionSpeakDeps = Object.freeze({
@@ -1376,19 +1428,14 @@ async function main() {
     }
     ensureFireResources();
     const acceptedSession = session;
+    // 進行中の発話はこの player / engine を最後まで使う（デバイス変更の作り直しは次の Fire の境目）。
     const acceptedPlayer = player;
-    const acceptedPlayerFacade = Object.freeze({
-      play: (...playArgs) => acceptedPlayer.play(...playArgs),
-      stop: () => acceptedPlayer.stop?.(),
-      subscribeOutput(listener) {
-        playerOutputListeners.add(listener);
-        return () => playerOutputListeners.delete(listener);
-      }
-    });
+    const acceptedEngine = voiceEngine;
     return Object.freeze({
       session: acceptedSession,
       channel: lazyChannel,
-      player: acceptedPlayerFacade,
+      player: acceptedPlayer,
+      engine: acceptedEngine,
       speakDeps: productionSpeakDeps,
       configuration: Object.freeze({
         brain: currentBrain,
@@ -1668,7 +1715,17 @@ async function main() {
     onSetSttEngine: sttEngineHooks.onSetSttEngine,
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
     // 画面キャプチャの撮る係の寿命を耳に合わせる（vision-capture-latency §4 の 2）。close() でも止まる。
-    onEarsStarted: () => residentCapture.start(),
+    // 声の差し替え Wave 2: 流し込みプレイヤーと声の差し替え口も Start のときに起こす（最初の Fire に乗せない）。
+    onEarsStarted: () => {
+      residentCapture.start();
+      try {
+        ensureVoiceResources();
+      } catch (error) {
+        process.stderr.write(
+          `[cockpit] WARN: voice resources failed to start: ${error instanceof Error ? error.message : String(error)}\n`
+        );
+      }
+    },
     onEarsStopped: () => residentCapture.stop(),
     // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
     // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
@@ -1745,6 +1802,13 @@ async function main() {
       if (player) {
         try {
           player.dispose();
+        } catch {
+          // best-effort
+        }
+      }
+      if (voiceEngine) {
+        try {
+          voiceEngine.dispose();
         } catch {
           // best-effort
         }

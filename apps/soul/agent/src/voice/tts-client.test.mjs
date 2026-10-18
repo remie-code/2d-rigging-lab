@@ -192,3 +192,26 @@ test("synthesis は非 200 をメッセージ付きで throw", async () => {
   const client = createTtsClient({ fetchImpl });
   await assert.rejects(() => client.synthesis({ a: 1 }), /500.*engine down/s);
 });
+
+test("audioQuery/synthesis は中止の合図（signal）を fetch へそのまま渡す・渡さなければ付けない", async () => {
+  /** @type {any[]} */
+  const inits = [];
+  const fetchImpl = async (_url, init) => {
+    inits.push(init);
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      async json() { return { accent_phrases: [] }; },
+      async arrayBuffer() { return new Uint8Array([1]).buffer; }
+    };
+  };
+  const client = createTtsClient({ fetchImpl });
+  const controller = new AbortController();
+  await client.audioQuery("あ", { signal: controller.signal });
+  await client.synthesis({ accent_phrases: [] }, { signal: controller.signal });
+  await client.audioQuery("あ");
+  assert.equal(inits[0].signal, controller.signal);
+  assert.equal(inits[1].signal, controller.signal);
+  assert.equal("signal" in inits[2], false);
+});

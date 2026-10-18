@@ -1,6 +1,6 @@
 # 声の差し替え(ElevenLabs TTS の流し込み)wave 計画
 
-> Status: ACTIVE(2026-10-18 ユーザー承認)。Wave 1 起動。根拠は [voice-swap-inventory.md](voice-swap-inventory.md)。
+> Status: ACTIVE(2026-10-18 ユーザー承認)。Wave 1 完了・コミット 0ea68aea(軽い突き合わせ合格 [../reviews/voice-swap/wave-1.md](../reviews/voice-swap/wave-1.md))。Wave 2 実装・軽い突き合わせ合格([../reviews/voice-swap/wave-2.md](../reviews/voice-swap/wave-2.md))、仕上げ修正中。根拠は [voice-swap-inventory.md](voice-swap-inventory.md)。
 > レビューの粒度(ユーザー 2026-10-18): 「これまで Gnome 単独でやっていたくらい」。各ドメインは Gnome がテストまで含めて実装し、`node --test` と `check:soul-zone` で自分で確かめる。wave の終わりに Sylph が 1 回だけ、契約の食い違いを軽く突き合わせる(1 レーン、修正は Gnome)。
 
 ## 0. 形(全 wave 共通)
@@ -14,7 +14,7 @@
 ```
 
 - **VoiceEngine**(魂、`src/voice/engines/`):
-  - `synthesize(text, { signal })` が、非同期の列 `{type:"format", sampleRate} | {type:"audio", pcm} | {type:"timeline", entries:[{timeMs,vowel,s}]} | {type:"end"}` を返す。timeMs は発話の音声先頭からの通し値。
+  - `synthesize(text, { signal })` が、非同期の列 `{type:"format", sampleRate} | {type:"audio", pcm} | {type:"timeline", entries:[{timeMs,vowel,s}]} | {type:"end"}` を返す(audio と timeline の順は問わない。timeline を先に出せば器への append が音より先に届く。Wave 2 の Aivis はそうしている)。timeMs は発話の音声先頭からの通し値。
   - `status` / `onStatus`(`connecting|up|reconnecting|down`。STT と同じ語彙)を持ち、`dispose()` で畳む。
   - AivisSpeech は「1 回で全部届く流し込み」として、format → audio(WAV の PCM 部)→ timeline(今と同じ均等割り)→ end を一度に出す。
 - **SpeechStreamer**(魂): 文の列を受け取り、再生は FIFO で 1 本ずつ流す。
@@ -67,6 +67,25 @@
 - **遅延の計測**: ttsMs = 最初の文で engine に頼んでから最初の音のかたまりまで。voiceMs = 最初の音のかたまりから `STARTED` まで。イベント名は engine に依存しない名前にし、操縦席の表示と fire-latency を合わせる。
 - 一時 WAV と旧 `audio-player.mjs` を廃止する(%TEMP% 残留の解消)。
 - 操縦席の既定は AivisSpeech のまま。この wave の終わりで、今と同じに聞こえて動くこと。
+
+### Wave 1 からの申し送り(Wave 2 の完了条件に含める)
+
+1. プレイヤーは Start のときに作る(起動に約 0.5 秒。最初の Fire に乗せない)。
+2. 器への `open` は、その発話を鳴らす番が来てから送る。append は音声より先に送ってよい(データ切れによる口形の跳びを避ける)。
+3. 器は別 id や古い id の append / end にも accepted を返す。魂は accepted を「効いた」と読まず、自分の発話順だけを根拠にする。
+4. SpeechStreamer は、例外・中断・dispose のどの経路でも `endSpeech` か口の release(`mouth-open=0`)を送る(try/finally)。
+5. 器の安全網(Undine 裁定 2026-10-18): end が来ないまま、データが尽きてから 2000ms、続きも end も来なければ、end と同じに扱って閉じる。Wave 2 で器側の小修正として並行に入れる(Domain A2)。
+6. 実機確認の前に器を再ビルドする(`apps/runtime-player/out/` に旧 hello が焼かれていて、魂の必須 kind 4 種と食い違う)。
+
+### Wave 2 からの申し送り(Wave 3 の完了条件に含める)
+
+1. SpeechStreamer の `markTerminal` は、自然完了した文でも controller を abort する。barge-in では全 job を一斉に abort する。ElevenLabs engine はこう扱う。
+   - end 後の abort は無視する。
+   - 複数文の abort は、切断と再接続を 1 回にまとめる。
+   - 1 本の WebSocket を共有するので、文ごとの `synthesize` は engine 内で直列にする(送信順 = 受信順)。
+2. `scripts/cockpit.mjs` の engine は一度作ったら使い回しで、種類は既定値に固定されている。Domain E は Start で `ttsEngine` を読み、種類が変わっていたら作り直す(古い engine は dispose)。
+3. 器の安全網があるので、alignment の到着が 2 秒以上空くと口が途中で閉じる。ElevenLabs は実時間の約 9 倍で届くため、通常は起きない。
+4. Wave 2 の裁定(Undine): 一括読み上げの上限は 4096(器へは 512 ずつ)。Claude 経路で鳴り始めた後に失敗したときは「鳴った分 + 中断注記」で正本化する。
 
 ## 3. Wave 3(ElevenLabs と操縦席・並列 2 ドメイン)
 

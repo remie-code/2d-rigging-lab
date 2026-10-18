@@ -115,6 +115,18 @@ export const RUNTIME_PLAYER_SPEECH_DIP_MS = 40;
 export const RUNTIME_PLAYER_SPEECH_ONSET_MS = 60;
 
 /**
+ * Streamed-utterance safety net (voice swap Wave 2 / Domain A2, Undine 裁定 2026-10-18).
+ * Non-exposed universal const. When a streamed utterance (`intent.speechStream`) is still
+ * waiting for its `end` and its data has run out, this many ms with neither a further
+ * `append` nor `end` makes the store treat the utterance as ended AT that instant — the
+ * usual terminal follows (hold → release over the universal release), so a soul that never
+ * sends `end` cannot leave the mouth open forever. "Data ran out" = the later of the last
+ * mora's absolute time and the instant that last slice was accepted, so a late slice whose
+ * moras are already in the past still gets a full window. Not in the payload/contract.
+ */
+export const RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS = 2000;
+
+/**
  * The live speech timeline state the store holds (at most one — 一発話=一タイムライン,
  * 設計 §7 裁定4). `moras` is the validated mora列 (relative times), `startAtMs` the
  * acceptance instant (absolute wall clock; absolute mora time = startAtMs + timeMs).
@@ -143,7 +155,8 @@ export type SpeechTimelineState = {
    * Streamed utterance still waiting for its `end` (voice swap Wave 1, `intent.speechStream`).
    * While true, more moras may still be appended, so running out of data is NOT the end of
    * the utterance: the terminal hold has no release — the last vowel is kept until either
-   * more moras arrive or `end` lands. Absent/false = the utterance is complete (the
+   * more moras arrive or `end` lands (or the safety net `stallEndAtMs` is reached, Domain
+   * A2). Absent/false = the utterance is complete (the
    * `intent.speech` case), so the terminal hold→release applies exactly as before.
    */
   readonly awaitingEnd?: boolean;
@@ -155,6 +168,16 @@ export type SpeechTimelineState = {
    * `intent.speech` case, whose end coincides with its start).
    */
   readonly endAtMs?: number;
+  /**
+   * Safety-net end instant (absolute) of a streamed utterance still waiting for `end`
+   * (voice swap Wave 2 / Domain A2, {@link RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS}).
+   * The store sets it on every accepted slice to (data-ran-out instant + the stall window).
+   * While `awaitingEnd`, the evaluator treats the utterance as if `end` had been accepted at
+   * this instant once `nowMs` reaches it — the same terminal as a late `end` (release no
+   * earlier than this instant). A later slice moves it forward. Absent → no safety net (the
+   * last vowel is held until `end`), and it is ignored once the utterance has ended.
+   */
+  readonly stallEndAtMs?: number;
   /**
    * Absolute instant the onset ramp starts. Defaults to `startAtMs`. A streamed utterance's
    * first moras can land after its t=0 (`open` acceptance); anchoring the onset at the
@@ -261,8 +284,10 @@ function baseValuesRecord(baseFor: (slotId: string) => number): Record<string, n
  *  - streamed utterance (`intent.speechStream`, voice swap Wave 1): while `awaitingEnd`
  *    the terminal is a hold WITHOUT release (データが尽きても最後の母音を保つ); after `end`
  *    the same hold→release applies, starting no earlier than `endAtMs`. The onset ramp is
- *    anchored at `onsetAtMs` (the data's install instant) when given. All of these fold
- *    into the single `s`, so the convex identity is untouched.
+ *    anchored at `onsetAtMs` (the data's install instant) when given. Safety net (Domain
+ *    A2): an awaiting utterance whose `stallEndAtMs` is reached is treated as ended at that
+ *    instant (the same terminal as a late `end`). All of these fold into the single `s`,
+ *    so the convex identity is untouched.
  */
 export function sampleSpeechTimeline(
   speech: SpeechTimelineState,
@@ -361,17 +386,27 @@ export function sampleSpeechTimeline(
     // last vowel (term stays 1, no release, never done) until more moras or `end` arrive.
     // After `end`, the release never starts before the `end` instant (endAtMs), so a late
     // `end` closes from the held vowel instead of skipping into a past release.
+    //
+    // Safety net (Domain A2): while still awaiting `end`, reaching `stallEndAtMs` counts as
+    // an `end` accepted at that instant — exactly the late-`end` terminal above.
     const prev = moras[n - 2];
     const holdMs =
       prev !== undefined
         ? cur.timeMs - prev.timeMs
         : RUNTIME_PLAYER_SPEECH_ONSET_MS;
+    const stalledOut =
+      speech.awaitingEnd === true &&
+      speech.stallEndAtMs !== undefined &&
+      nowMs >= speech.stallEndAtMs;
+    const ended = speech.awaitingEnd !== true || stalledOut;
+    const endAtMs =
+      speech.awaitingEnd === true ? speech.stallEndAtMs : speech.endAtMs;
     const endRelMs =
-      speech.endAtMs !== undefined
-        ? speech.endAtMs - speech.startAtMs
+      endAtMs !== undefined
+        ? endAtMs - speech.startAtMs
         : Number.NEGATIVE_INFINITY;
     const releaseStartMs = Math.max(cur.timeMs + holdMs, endRelMs);
-    if (speech.awaitingEnd !== true && e >= releaseStartMs) {
+    if (ended && e >= releaseStartMs) {
       const rel = e - releaseStartMs;
       if (rel >= releaseMs) {
         return { values: baseValuesRecord(baseFor), done: true };

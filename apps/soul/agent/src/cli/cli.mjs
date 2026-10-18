@@ -2,21 +2,21 @@
 /**
  * 会話 CLI（S1 Domain C）— apps/soul/agent。一文が縦に貫通する本体。
  *
- * stdin から一文を読み、常駐 LLM セッション（llm-session）で応答を得て、Domain B の speak() で
+ * stdin から一文を読み、常駐 LLM セッション（llm-session）で応答を得て、SpeechStreamer の speakOnce で
  * 器の口 + スピーカーへ同期発話する。S1 の歩くスケルトンの縦串そのもの:
  *
- *   env-guard → LLM セッション常駐起動 → チャネル接続（channel-client）→ 常駐プレイヤー起動
- *   （audio-player）→ stdin 一文 → session.ask() → speak()（口 + 声）→ 次の入力待ち（ループ）。
- *   Ctrl+C / EOF で全 dispose（event loop に何も残さない）。
+ *   env-guard → LLM セッション常駐起動 → チャネル接続（channel-client）→ 流し込みプレイヤー起動
+ *   （stream-player）+ 声の差し替え口（既定 AivisSpeech）→ stdin 一文 → session.ask() → speakOnce()
+ *   （口 + 声）→ 鳴り終わり（ENDED）を待つ → 次の入力待ち（ループ）。Ctrl+C / EOF で全 dispose。
  *
  * ── 計測フック（計測記録の材料）─────────────────────────────────────────
- *  各発話で usage・ttft_ms・ask_ms・e2e_ms（stdin 確定 → player.play まで）を 1 行 JSON で
- *  stderr に出す。stdout は人向けの促し・応答テキスト。
+ *  各発話で usage・ttft_ms・ask_ms・e2e_ms（stdin 確定 → 器が open を受理して鳴らし始めるまで）を
+ *  1 行 JSON で stderr に出す。stdout は人向けの促し・応答テキスト。
  *
  * ── 実行（人間ゲート・Gnome は実行しない）───────────────────────────────
  *  node apps/soul/agent/src/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token>"
  *  実器接続・実再生を伴うため Gnome は動かさない。配線検証は llm-session をダブルに差し替えた
- *  node:test（cli.test.mjs・ws-double + echo-player 再利用）で行う。
+ *  node:test（cli.test.mjs・ws-double + 無音の流し込みプレイヤーの代役）で行う。
  */
 
 import { createInterface } from "node:readline";
@@ -26,8 +26,9 @@ import { pathToFileURL } from "node:url";
 import { assertSubscriptionAuthEnv } from "../mind/env-guard.mjs";
 import { createLlmSession } from "../mind/llm-session.mjs";
 import { connectChannel, redactToken } from "../channel/channel-client.mjs";
-import { createAudioPlayer, writeTempWav } from "../voice/audio-player.mjs";
-import { speak } from "../voice/speak.mjs";
+import { createStreamPlayer } from "../voice/stream-player.mjs";
+import { createVoiceEngine, DEFAULT_VOICE_ENGINE_KIND } from "../voice/engines/voice-engine.mjs";
+import { speakOnce } from "../voice/speech-streamer.mjs";
 
 /**
  * 会話ループ本体（依存注入で配線検証可能）。stdin の各行を 1 発話として処理する。
@@ -36,13 +37,14 @@ import { speak } from "../voice/speak.mjs";
  * @param {string} deps.url  Channel URL（`ws://127.0.0.1:<port>/channel?token=..`）。
  * @param {() => { ask: (t: string) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>; dispose: () => Promise<void> | void }} deps.createSession
  *   LLM セッションのファクトリ（本番 createLlmSession / テストはダブル）。
- * @param {(url: string) => Promise<{ sendSpeech: Function; close: () => Promise<void> }>} deps.connect
+ * @param {(url: string) => Promise<{ openSpeech: Function; appendSpeech: Function; endSpeech: Function; close: () => Promise<void> }>} deps.connect
  *   チャネル接続（本番 connectChannel / テストは ws-double + MinimalWebSocket）。
- * @param {() => { play: (p: string) => void; dispose: () => void }} deps.createPlayer
- *   プレイヤーのファクトリ（本番 createAudioPlayer / テストは echo-player 注入）。
- * @param {(text: string, sd: object) => Promise<{ timeline: any[]; rttMs: number; wavDurationSec: number }>} [deps.speakImpl]
- *   発話同期（既定 Domain B speak）。テストで fake tts を渡すため差し替え可能。
- * @param {object} [deps.speakDeps]  speakImpl へ渡す追加 deps（tts/ttsBaseUrl/speaker/sConfig 等）。
+ * @param {() => any} deps.createPlayer
+ *   流し込みプレイヤーのファクトリ（本番 createStreamPlayer / テストは無音の代役）。
+ * @param {() => import("../voice/engines/voice-engine.mjs").VoiceEngine} deps.createEngine
+ *   声の差し替え口のファクトリ（本番 AivisSpeech / テストは fake tts の AivisSpeech）。
+ * @param {typeof speakOnce} [deps.speakImpl]  一括の読み上げ（既定 speakOnce）。
+ * @param {object} [deps.speakDeps]  speakImpl へ渡す追加 deps。
  * @param {import("node:stream").Readable} deps.stdin  一文の入力元。
  * @param {import("node:stream").Writable} deps.stdout  人向け出力。
  * @param {import("node:stream").Writable} deps.stderr  計測 JSON 出力。
@@ -55,7 +57,8 @@ export async function runConversation(deps) {
     createSession,
     connect,
     createPlayer,
-    speakImpl = speak,
+    createEngine,
+    speakImpl = speakOnce,
     speakDeps = {},
     stdin,
     stdout,
@@ -64,9 +67,10 @@ export async function runConversation(deps) {
   } = deps;
 
   const session = createSession();
-  /** @type {{ sendSpeech: Function; close: () => Promise<void> }} */
+  /** @type {any} */
   const channel = await connect(url);
   const player = createPlayer();
+  const engine = createEngine();
 
   const rl = createInterface({ input: stdin, crlfDelay: Infinity });
   if (signal) {
@@ -95,8 +99,11 @@ export async function runConversation(deps) {
         continue;
       }
       stdout.write(`> ${replyText}\n`);
-      const spoken = await speakImpl(replyText, { channel, player, ...speakDeps });
+      const spoken = await speakImpl(replyText, { ...speakDeps, channel, player, engine });
       const e2eMs = performance.now() - t0;
+      // 次の一文は、この発話が鳴り終わってから（同じ常駐プレイヤーを奪い合わない）。
+      const ended = await spoken.ended;
+      const timelineItems = spoken.snapshot().timeline.length;
       utterances += 1;
       stderr.write(
         `${JSON.stringify({
@@ -105,15 +112,14 @@ export async function runConversation(deps) {
           ttft_ms: asked.ttftMs,
           ask_ms: Number(asked.elapsedMs.toFixed(1)),
           e2e_ms: Number(e2eMs.toFixed(1)),
-          channel_rtt_ms: Number((spoken.rttMs ?? 0).toFixed(1)),
-          timeline_items: Array.isArray(spoken.timeline) ? spoken.timeline.length : null,
-          wav_sec: spoken.wavDurationSec ?? null
+          timeline_items: timelineItems,
+          playback: ended.status
         })}\n`
       );
     }
   } finally {
     rl.close();
-    // 常駐リソースを確実に畳む（event loop に何も残さない）。順序: session → player → channel。
+    // 常駐リソースを確実に畳む（event loop に何も残さない）。順序: session → player → engine → channel。
     try {
       await session.dispose();
     } catch (error) {
@@ -123,6 +129,11 @@ export async function runConversation(deps) {
       player.dispose();
     } catch (error) {
       stderr.write(`${JSON.stringify({ event: "dispose_error", where: "player", message: String(error) })}\n`);
+    }
+    try {
+      engine.dispose();
+    } catch (error) {
+      stderr.write(`${JSON.stringify({ event: "dispose_error", where: "engine", message: String(error) })}\n`);
     }
     try {
       await channel.close();
@@ -192,12 +203,9 @@ async function main() {
             )
         }),
       connect: (url) => connectChannel(url),
-      createPlayer: () => createAudioPlayer(),
-      speakDeps: {
-        ttsBaseUrl: args.baseUrl,
-        speaker: args.speaker,
-        writeWav: writeTempWav
-      },
+      createPlayer: () => createStreamPlayer(),
+      createEngine: () =>
+        createVoiceEngine(DEFAULT_VOICE_ENGINE_KIND, { ttsBaseUrl: args.baseUrl, speaker: args.speaker }),
       stdin: process.stdin,
       stdout: process.stdout,
       stderr: process.stderr,

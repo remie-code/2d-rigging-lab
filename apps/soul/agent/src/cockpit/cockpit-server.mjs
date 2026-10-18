@@ -61,7 +61,7 @@ import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
-import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-player.mjs";
+import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-devices.mjs";
 import { createBargeInGate } from "../mind/barge-in.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
 import {

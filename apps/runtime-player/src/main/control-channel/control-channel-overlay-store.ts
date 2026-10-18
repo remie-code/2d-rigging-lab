@@ -44,6 +44,11 @@
  * "open + append + end at one instant" through the very same path. The forced releases
  * above (per-slot mouth intent / releaseAll / clearAll) also stop the open utterance, so
  * its later append/end are ignored.
+ *
+ * Voice swap Wave 2 (Domain A2) adds a safety net: an utterance whose data ran out and
+ * that then sees neither append nor end for {@link RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS}
+ * is treated as ended at that instant (usual terminal hold → release), and stops accepting
+ * append/end — so a soul that never sends `end` cannot leave the mouth open.
  */
 
 import {
@@ -58,6 +63,7 @@ import {
   isSpeechMouthGroupSlot,
   RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS,
   RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
+  RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS,
   sampleSpeechTimeline,
   type SpeechMora,
   type SpeechTimelineState
@@ -363,6 +369,8 @@ export class RuntimePlayerControlChannelOverlayStore {
     // Group timeline FIRST (lower merge priority): its 6 mouth-slot values are written
     // before the per-slot curves, so a per-slot curve on a shared mouth slot (only ever
     // present after a 後着置換 that forced-released the group) deterministically wins.
+    // The safety net is materialized first so the open utterance stops once it has fired.
+    this.#expireStalledStream(nowMs);
     if (this.#speech !== null) {
       const sample = sampleSpeechTimeline(this.#speech, nowMs, {
         releaseMs: this.#releaseMs,
@@ -446,6 +454,8 @@ export class RuntimePlayerControlChannelOverlayStore {
   /** Open a new utterance (string = wire utteranceId, symbol = the intent.speech sugar),
    * replacing the previous one. See {@link openSpeechStream}. */
   #openUtterance(key: SpeechStreamUtterance["key"], startAtMs: number): void {
+    // A previous utterance already past its safety net ended THEN, not at this open.
+    this.#expireStalledStream(startAtMs);
     this.#endLiveSpeech(startAtMs);
     this.#stream = {
       key,
@@ -462,6 +472,8 @@ export class RuntimePlayerControlChannelOverlayStore {
     moras: readonly SpeechMora[],
     nowMs: number
   ): boolean {
+    // A slice landing at/after the safety net is a tail of an already-ended utterance.
+    this.#expireStalledStream(nowMs);
     const stream = this.#stream;
     const first = moras[0];
     const last = moras[moras.length - 1];
@@ -495,7 +507,8 @@ export class RuntimePlayerControlChannelOverlayStore {
         startAtMs: stream.startAtMs,
         onsetFromOpen,
         onsetAtMs: nowMs,
-        awaitingEnd: true
+        awaitingEnd: true,
+        stallEndAtMs: this.#stallEndAtMs(stream.startAtMs, last, nowMs)
       };
     } else {
       const speech = this.#speech;
@@ -504,7 +517,11 @@ export class RuntimePlayerControlChannelOverlayStore {
         // never revive a released timeline.
         return false;
       }
-      this.#speech = { ...speech, moras: [...speech.moras, ...moras] };
+      this.#speech = {
+        ...speech,
+        moras: [...speech.moras, ...moras],
+        stallEndAtMs: this.#stallEndAtMs(stream.startAtMs, last, nowMs)
+      };
     }
 
     this.#stream = {
@@ -518,6 +535,8 @@ export class RuntimePlayerControlChannelOverlayStore {
 
   /** See {@link endSpeechStream}. */
   #endUtterance(key: SpeechStreamUtterance["key"], nowMs: number): boolean {
+    // An `end` after the safety net must not move the end instant later (no re-open).
+    this.#expireStalledStream(nowMs);
     const stream = this.#stream;
     if (stream === null || stream.key !== key) {
       return false;
@@ -536,6 +555,47 @@ export class RuntimePlayerControlChannelOverlayStore {
     const speech = this.#speech;
     if (speech !== null && speech.awaitingEnd === true) {
       this.#speech = { ...speech, awaitingEnd: false, endAtMs: nowMs };
+    }
+  }
+
+  /**
+   * The safety-net end instant for a slice whose last mora is `last`, accepted at `nowMs`
+   * (voice swap Wave 2 / Domain A2): the data runs out at the later of the last mora's
+   * absolute time and the acceptance instant, and the utterance counts as ended
+   * {@link RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS} after that unless more data or `end`
+   * arrives first. Every accepted slice moves it strictly later (continuity), so a slice
+   * accepted before the net always keeps the utterance going.
+   */
+  #stallEndAtMs(startAtMs: number, last: SpeechMora, nowMs: number): number {
+    return (
+      Math.max(startAtMs + last.timeMs, nowMs) +
+      RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS
+    );
+  }
+
+  /**
+   * Materialize the safety net (Domain A2): if the live timeline is still waiting for `end`
+   * and `nowMs` has reached its `stallEndAtMs`, mark it ended AT `stallEndAtMs` (exactly as
+   * if `end` had been accepted then) and stop the open utterance, so a later append/end for
+   * it is ignored like any tail after `end`. The evaluator already samples an awaiting
+   * timeline past its net this way, so materializing never changes an output — it only
+   * keeps a late `end`/`open` from moving the end instant later (which would re-open the
+   * closing mouth). Only the open, installed utterance's timeline can be awaiting.
+   */
+  #expireStalledStream(nowMs: number): void {
+    const speech = this.#speech;
+    if (
+      speech === null ||
+      speech.awaitingEnd !== true ||
+      speech.forcedReleaseAtMs !== undefined ||
+      speech.stallEndAtMs === undefined ||
+      nowMs < speech.stallEndAtMs
+    ) {
+      return;
+    }
+    this.#speech = { ...speech, awaitingEnd: false, endAtMs: speech.stallEndAtMs };
+    if (this.#stream?.installed === true) {
+      this.#stream = null;
     }
   }
 

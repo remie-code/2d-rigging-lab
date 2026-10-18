@@ -9,10 +9,13 @@ import { createFireDiagnostics } from "./fire-diagnostics.mjs";
 import { createFireOrchestrator } from "./fire-orchestrator.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { buildWavBytes } from "../voice/fixtures.mjs";
+import { MAX_UTTERANCE_TIMELINE_LENGTH } from "../voice/mora-timeline.mjs";
 import { connectChannel } from "../channel/channel-client.mjs";
 import { createChannelServerDouble } from "../test-support/ws-double.mjs";
 import { MinimalWebSocket } from "../test-support/ws-client.mjs";
 import { createLazyChannel } from "../../scripts/cockpit.mjs";
+import { createFakeStreamPlayer } from "../test-support/fake-stream-player.mjs";
+import { createFakeSpeechChannel } from "../test-support/fake-voice-engine.mjs";
 
 const fixtureDir = new URL("./fixtures/", import.meta.url);
 const loadFixture = (name) =>
@@ -102,32 +105,30 @@ test("Fire diagnostics: injected success reaches the parent playback proxy and p
   const diagnostics = createFireDiagnostics({ dir });
   const buffer = createTranscriptBuffer();
   buffer.append({ startMs: 0, endMs: 1, text: "trigger", speaker: "you" });
-  let played = 0;
+  const player = createFakeStreamPlayer({ autoStart: true, autoEnd: true });
   const success = createFireOrchestrator({
     getBuffer: () => buffer,
     session: { async ask() { return { replyText: "reply" }; } },
-    channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
-    player: { play() { played += 1; } },
+    channel: createFakeSpeechChannel(),
+    player,
     speakDeps: {
       tts: {
         async audioQuery() {
           return { accent_phrases: [{ moras: [{ text: "ア", vowel: "a" }], pause_mora: null }], prePhonemeLength: 0, postPhonemeLength: 0 };
         },
         async synthesis() { return buildWavBytes({ dataBytes: 48000 }); }
-      },
-      writeWav: () => "C:/tmp/fake.wav"
+      }
     },
-    setTimeoutImpl: (fn) => setTimeout(fn, 0),
     ...traceHooks(diagnostics)
   });
   assert.equal((await success.fire()).fired, true);
-  assert.equal(played, 1, "parent player.play proxy was reached");
+  assert.equal(player.opened.length, 1, "parent stream player was reached");
 
   const failure = createFireOrchestrator({
     getBuffer: () => buffer,
     session: { async ask() { return { replyText: "reply" }; } },
-    channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
-    player: { play() {} },
+    channel: createFakeSpeechChannel(),
+    player: createFakeStreamPlayer(),
     speakImpl: async (_text, deps) => {
       deps.onTrace("speech.timeline.built", { timelineCount: 110 });
       const error = new Error("closed without recording this text");
@@ -144,7 +145,7 @@ test("Fire diagnostics: injected success reaches the parent playback proxy and p
   assert.equal(logs.length, 2);
   const successLog = readFileSync(join(dir, logs[0]), "utf8");
   const failureLog = readFileSync(join(dir, logs[1]), "utf8");
-  assert.ok(successLog.includes("player.play.enqueued"));
+  assert.ok(successLog.includes("speech.playback.activated"));
   assert.ok(failureLog.includes("speech.timeline.built"));
   assert.ok(failureLog.includes("fire.failed"));
   assert.ok(!failureLog.includes("closed without recording this text"));
@@ -187,12 +188,14 @@ test("Fire diagnostics: writer ordering, failure recovery, and queue cap are bou
 });
 
 test("Fire diagnostics: production-shaped persisted failures retain every TTS/WAV/channel boundary", async () => {
+  // 声の差し替え Wave 2: 一時 WAV を書かなくなったので speech.wav.write の境界は無い。器への送り口は
+  // intent.speechStream（openSpeech の拒否・送信失敗・切断・時間切れが同じ stage / code で残る）。
   const query = (moras) => ({
     accent_phrases: [{ moras, pause_mora: null }],
     prePhonemeLength: 0,
     postPhonemeLength: 0
   });
-  const run = async ({ tts, channel, createChannel, writeWav, speakImpl } = {}) => {
+  const run = async ({ tts, channel, createChannel, speakImpl } = {}) => {
     const dir = mkdtempSync(join(tmpdir(), "soul-fire-boundary-"));
     const diagnostics = createFireDiagnostics({ dir });
     const effectiveChannel = typeof createChannel === "function" ? await createChannel(diagnostics) : channel;
@@ -202,9 +205,9 @@ test("Fire diagnostics: production-shaped persisted failures retain every TTS/WA
       getBuffer: () => buffer,
       session: { async ask() { return { replyText: "reply" }; } },
       channel: effectiveChannel,
-      player: { play() {} },
+      player: createFakeStreamPlayer({ autoStart: true, autoEnd: true }),
       ...(typeof speakImpl === "function" ? { speakImpl } : {}),
-      speakDeps: { tts, writeWav: writeWav ?? (() => "C:/tmp/fake.wav") },
+      speakDeps: { tts },
       ...traceHooks(diagnostics)
     });
     const result = await orchestrator.fire();
@@ -214,7 +217,7 @@ test("Fire diagnostics: production-shaped persisted failures retain every TTS/WA
     orchestrator.dispose();
     return { result, events, diagnostics, channel: effectiveChannel };
   };
-  const accepted = { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } };
+  const accepted = createFakeSpeechChannel();
 
   const audioQuery = await run({
     channel: accepted,
@@ -256,23 +259,10 @@ test("Fire diagnostics: production-shaped persisted failures retain every TTS/WA
   assert.ok(invalidWav.events.some((event) => event.event === "tts.synthesis.completed" && event.wavBytes === 3));
   assert.ok(invalidWav.events.some((event) => event.event === "speech.wav.inspect.failed" && event.failureCode === "speech_wav_invalid"));
 
-  const wavWrite = await run({
-    channel: accepted,
-    tts: {
-      async audioQuery() { return query([{ text: "ア", vowel: "a" }]); },
-      async synthesis() { return buildWavBytes({ dataBytes: 48000 }); }
-    },
-    writeWav() { throw new Error("private path failure"); }
-  });
-  assert.equal(wavWrite.events.at(-1).stage, "speech.wav.write");
-  assert.equal(wavWrite.events.at(-1).failure.code, "speech_wav_write_failed");
-  assert.ok(wavWrite.events.some((event) => event.event === "speech.timeline.built"));
-  assert.ok(wavWrite.events.some((event) => event.event === "speech.wav.write.failed" && event.failureCode === "speech_wav_write_failed"));
-
   const timeline = await run({
     channel: accepted,
     tts: {
-      async audioQuery() { return query(Array.from({ length: 513 }, () => ({ text: "ア", vowel: "a" }))); },
+      async audioQuery() { return query(Array.from({ length: MAX_UTTERANCE_TIMELINE_LENGTH + 1 }, () => ({ text: "ア", vowel: "a" }))); },
       async synthesis() { return buildWavBytes({ dataBytes: 48000 }); }
     }
   });
@@ -280,7 +270,9 @@ test("Fire diagnostics: production-shaped persisted failures retain every TTS/WA
   assert.equal(timeline.events.at(-1).failure.code, "timeline_build_failed");
 
   const rejected = await run({
-    channel: { async sendSpeech() { return { result: "rejected", error: { code: "rejectedByRuntime" }, rttMs: 1 }; } },
+    channel: createFakeSpeechChannel({
+      reply: (op) => (op === "open" ? { result: "rejected", error: { code: "rejectedByRuntime" }, rttMs: 1 } : undefined)
+    }),
     tts: {
       async audioQuery() { return query([{ text: "ア", vowel: "a" }]); },
       async synthesis() { return buildWavBytes({ dataBytes: 48000 }); }
@@ -298,7 +290,7 @@ test("Fire diagnostics: production-shaped persisted failures retain every TTS/WA
   assert.equal(unknownPostAsk.events.at(-1).failure.code, "fire_processing_unknown");
   assert.ok(!JSON.stringify(unknownPostAsk.events).includes("private post-ask processing detail"));
 
-  const closeServer = createChannelServerDouble({ onSpeech: () => ({ result: "drop" }) });
+  const closeServer = createChannelServerDouble({ onSpeechStream: () => ({ result: "drop" }) });
   await closeServer.listen();
   const close = await run({
     createChannel: (diagnostics) =>
@@ -329,7 +321,7 @@ test("Fire diagnostics: production-shaped persisted failures retain every TTS/WA
   await send.channel.close();
   await sendServer.close();
 
-  const timeoutServer = createChannelServerDouble({ onSpeech: () => ({ result: "pending" }) });
+  const timeoutServer = createChannelServerDouble({ onSpeechStream: () => ({ result: "pending" }) });
   await timeoutServer.listen();
   const timeout = await run({
     createChannel: (diagnostics) =>
@@ -347,7 +339,7 @@ test("Fire diagnostics: production-shaped persisted failures retain every TTS/WA
 });
 
 test("Fire diagnostic fixtures: real production hook chain enforces exact success event/field parity", async () => {
-  const server = createChannelServerDouble({ onSpeech: () => ({ result: "accepted" }) });
+  const server = createChannelServerDouble({ onSpeechStream: () => ({ result: "accepted" }) });
   await server.listen();
   const dir = mkdtempSync(join(tmpdir(), "soul-fire-fixture-parity-"));
   const diagnostics = createFireDiagnostics({ dir });
@@ -357,21 +349,25 @@ test("Fire diagnostic fixtures: real production hook chain enforces exact succes
   });
   const buffer = createTranscriptBuffer();
   buffer.append({ startMs: 0, endMs: 1, text: "trigger", speaker: "you" });
+  // 本番の操縦席は流し込みプレイヤーの stdout の行の種類を player.child として残す（行の解釈より先）。
+  const player = createFakeStreamPlayer({ autoStart: true, autoEnd: true });
+  player.onEvent((event) => {
+    if (event.type === "started") diagnostics.record("player.child", { marker: "STARTED" });
+    if (event.type === "ended") diagnostics.record("player.child", { marker: "ENDED" });
+  });
   const orchestrator = createFireOrchestrator({
     getBuffer: () => buffer,
     session: { async ask() { return { replyText: "12345678", elapsedMs: 120 }; } },
     channel,
-    player: { play() { queueMicrotask(() => diagnostics.record("player.child", { marker: "STARTED" })); } },
+    player,
     speakDeps: {
       tts: {
         async audioQuery() {
           return { accent_phrases: [{ moras: [{ text: "ア", vowel: "a" }, { text: "イ", vowel: "i" }], pause_mora: null }], prePhonemeLength: 0.1, postPhonemeLength: 0.1 };
         },
-        async synthesis() { return buildWavBytes({ dataBytes: 48000 }); }
-      },
-      writeWav: () => "C:/tmp/fake.wav"
+        async synthesis() { return buildWavBytes({ dataBytes: 48000, includeBody: true }); }
+      }
     },
-    setTimeoutImpl: (fn) => { queueMicrotask(fn); return null; },
     ...traceHooks(diagnostics)
   });
   assert.equal((await orchestrator.fire()).fired, true);
@@ -393,14 +389,19 @@ test("Fire diagnostic fixtures: production event shape exposes the dominant pre-
   const failure = loadFixture("fire-diagnostics.failure.jsonl");
   assert.ok(success.some((record) => record.event === "channel.request.send"));
   assert.equal(success.some((record) => record.event === "speech.timeline.built" && "serializedSpeechUtf8Bytes" in record), false);
-  const sent = success.find((record) => record.event === "channel.request.send");
+  // 声の差し替え Wave 2: 口の時間割は intent.speechStream の append で送る（open → append → end）。
+  const sent = success.find((record) => record.event === "channel.request.send" && record.op === "append");
   const timeline = [
-    { timeMs: 100, vowel: "a", s: 0.5 },
-    { timeMs: 300, vowel: "i", s: 0.6 }
+    { timeMs: 100, vowel: "a", s: 0.85 },
+    { timeMs: 272, vowel: "i", s: 0.5 }
   ];
+  const opened = success.find((record) => record.event === "speech.playback.activated");
   assert.equal(
     sent.serializedUtf8Bytes,
-    Buffer.byteLength(JSON.stringify({ v: 1, id: sent.requestId, kind: "intent.speech", payload: { timeline } }), "utf8")
+    Buffer.byteLength(
+      JSON.stringify({ v: 1, id: sent.requestId, kind: "intent.speechStream", payload: { op: "append", utteranceId: opened.playbackId, timeline } }),
+      "utf8"
+    )
   );
   const started = success.find((record) => record.event === "player.child" && record.marker === "STARTED");
   const prePlaybackStages = success.filter((record) => record.monotonicMs <= started.monotonicMs && typeof record.durationMs === "number");

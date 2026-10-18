@@ -236,7 +236,8 @@ function makeFakeChannel() {
 
 /**
  * fake speakImpl（実 AivisSpeech TTS は叩かない）。speechText の文字数から母音タイムラインと
- * wavDurationSec を合成して返す（barge-in の「途中で遮る」を実時間で再現できるだけの長さにする）。
+ * 鳴っている長さを合成して返す（barge-in の「途中で遮る」を実時間で再現できるだけの長さにする）。
+ * 声の差し替え Wave 2 から、鳴り終わりは返りの `ended`（本物は player の ENDED）で伝える。
  */
 async function fakeSpeakImpl(speechText, deps) {
   const player = deps && deps.player;
@@ -256,7 +257,8 @@ async function fakeSpeakImpl(speechText, deps) {
     wavDurationSec,
     wavPath,
     rttMs: 0,
-    playbackStartedAtMs: Date.now()
+    playbackStartedAtMs: Date.now(),
+    ended: new Promise((resolve) => setTimeout(() => resolve({ status: "completed", cause: "completed" }), wavDurationSec * 1000))
   };
 }
 

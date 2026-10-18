@@ -163,6 +163,30 @@ test("createLazyChannel: sendEnvelope も接続を張り委譲する・sendSpeec
   assert.deepEqual(envelopes, [intent]);
 });
 
+test("createLazyChannel: intent.speechStream（open/append/end）も同じ接続へ呼んだ順に委譲する（声の差し替え Wave 2）", { timeout: 5000 }, async () => {
+  let connects = 0;
+  /** @type {any[]} */
+  const calls = [];
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {
+    connectImpl: /** @type {any} */ (async () => {
+      connects += 1;
+      const accepted = async () => ({ result: "accepted", error: null, rttMs: 1 });
+      return {
+        openSpeech: async (/** @type {string} */ id) => { calls.push(["open", id]); return accepted(); },
+        appendSpeech: async (/** @type {string} */ id, /** @type {any} */ timeline) => { calls.push(["append", id, timeline]); return accepted(); },
+        endSpeech: async (/** @type {string} */ id) => { calls.push(["end", id]); return accepted(); },
+        close: async () => {}
+      };
+    })
+  });
+  const timeline = [{ timeMs: 0, vowel: "a", s: 0.5 }];
+  const pending = [lazy.openSpeech("u1"), lazy.appendSpeech("u1", timeline), lazy.endSpeech("u1")];
+  const replies = await Promise.all(pending);
+  assert.ok(replies.every((r) => r.result === "accepted"));
+  assert.equal(connects, 1);
+  assert.deepEqual(calls, [["open", "u1"], ["append", "u1", timeline], ["end", "u1"]]);
+});
+
 test("createLazyChannel: connect failure throws and is retried on the next call", { timeout: 5000 }, async () => {
   let connects = 0;
   const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=t", {

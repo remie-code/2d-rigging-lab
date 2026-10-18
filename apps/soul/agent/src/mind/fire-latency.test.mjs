@@ -44,7 +44,7 @@ test("latencyLevel: 4 秒「超」で warn、6 秒「超」で alert（ちょう
   assert.equal(latencyLevel(null, t), null);
 });
 
-test("createFireTiming: 最初の文の jobId だけを見る・同じ event の 2 回目は無視・知らない event は無視", () => {
+test("createFireTiming: TTS = engine に頼んだ→最初の音、声 = 最初の音→STARTED（engine に依存しない名前・最初の文だけ・2 回目は無視）", () => {
   let now = 100;
   const timing = createFireTiming({ nowImpl: () => now });
   now = 200;
@@ -56,17 +56,23 @@ test("createFireTiming: 最初の文の jobId だけを見る・同じ event の
   now = 700;
   timing.observe("progressive.first_safe_sentence");
   now = 720;
-  timing.observe("tts.audio_query.started", { jobId: "fire-1:sentence-2" }); // 2 文目は見ない。
+  timing.observe("voice.synthesis.requested", { jobId: "fire-1:sentence-2" }); // 2 文目は見ない。
   now = 750;
-  timing.observe("tts.audio_query.started", { jobId: "fire-1:sentence-1" });
+  timing.observe("voice.synthesis.requested", { jobId: "fire-1:sentence-1" });
   now = 1000;
+  timing.observe("voice.audio.first_chunk", { jobId: "fire-1:sentence-1" });
+  now = 1100;
+  timing.observe("voice.audio.first_chunk", { jobId: "fire-1:sentence-1" }); // 2 つ目のかたまりは無視。
+  // engine の内訳の名前（AivisSpeech の audio_query / synthesis）は遅延の区間に使わない。
+  timing.observe("tts.audio_query.started", { jobId: "fire-1:sentence-1" });
   timing.observe("tts.synthesis.completed", { jobId: "fire-1:sentence-1" });
   timing.observe("something.else", { elapsedMs: 9 });
   assert.equal(timing.hasVoiceStarted(), false);
   now = 1300;
-  timing.observe("progressive.player.started", { jobId: "fire-1:sentence-1" });
+  timing.observe("voice.player.started", { jobId: "fire-1:sentence-1" });
   assert.equal(timing.hasVoiceStarted(), true);
-  assert.equal(timing.markVoiceStarted(), false, "鳴り始めは 1 回だけ");
+  now = 1400;
+  timing.observe("voice.player.started", { jobId: "fire-1:sentence-1" }); // 鳴り始めは 1 回だけ。
   timing.noteTtft(9999); // first delta があればそちらが優先。
   assert.deepEqual(timing.segments(), {
     screenMs: null,

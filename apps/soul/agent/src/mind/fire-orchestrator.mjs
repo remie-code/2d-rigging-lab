@@ -33,15 +33,22 @@
  *
  *  **S6 で speaking 状態が実再生区間を覆うように変わった**（inventory §3-3 の回収）: 従来は
  *  speakImpl（play() 送出は非ブロッキング）が resolve した瞬間に soul を append して即 idle へ
- *  向かっていた＝実際の音声再生中はもう idle だった。S6 では speak() の戻り（timeline・
- *  wavDurationSec・playbackStartedAtMs）で **再生実区間を追跡**し、その間 speaking 状態を保つ。
+ *  向かっていた＝実際の音声再生中はもう idle だった。S6 では speak() の戻りで **再生実区間を追跡**し、
+ *  その間 speaking 状態を保つ。声の差し替え Wave 2 から、一括の読み上げも SpeechStreamer
+ *  （voice/speech-streamer.mjs の speakOnce）に載り、完了は WAV 長のタイマーではなく player の
+ *  ENDED（speakImpl の返りの `ended`）で判断する。`ended` を持たない返り（テストや計測の偽物）は
+ *  返った時点で鳴り終わったとみなす。
  *  soul 追記は **発話完了時（全文）または barge-in 中断時（声に出た接頭辞 + 中断注記）** の 1 回だけ
  *  行う（append-only 維持・裁定済みの意図変更）。この window に interrupt() が効く。
+ *  鳴らし始めた後（STARTED の後）に再生が失敗したときは、文ごとの読み上げと同じく「声に出た接頭辞 +
+ *  改行 + PROGRESSIVE_INTERRUPTION_NOTE」を 1 回追記し、{fired:false, reason:"speech-playback-failed"} を
+ *  返す（fireError にしない）。STARTED 前・声に出た分が 0 文字の失敗は今どおり fireError。
  *
  * ── S6「会話が続く」barge-in（Domain B）─────────────────────────────────────────
  *  外部（cockpit-server の onVadEvent → barge-in gate）が `interrupt()` を呼ぶと、再生中の魂発話を
  *  中断する: ① player.stop()（声を止める）② channel へ mouth-open intent.set(value=0・短 ttl) を
- *  送出（口を閉じる = speech タイムライン強制 release・inventory §2）③ モーラタイムライン × 再生経過で
+ *  送出（口を閉じる = speech タイムライン強制 release・inventory §2）。①② は SpeechStreamer の
+ *  stop が行い、合成中の engine にも signal で中止を伝える ③ 累積の口の時間割 × STARTED からの経過で
  *  切断点算出（barge-in.computeSpokenPrefix・過大評価しない）④ soul 行に「接頭辞 + 中断注記」を追記
  *  ⑤ onDiagnostic({type:"bargeIn",...})。stop 失敗・set rejected/throw は診断に握って落とさない
  *  （envelope 経路の作法に倣う）。interrupt() は speaking 中でなければ no-op（冪等・dispose 後も安全）。
@@ -136,8 +143,8 @@
  *  （かつての「soul は onTranscript を通らない」という記述は誤りだった。）
  */
 
-import { speak as defaultSpeak } from "../voice/speak.mjs";
-import { createProgressiveSpeechDelivery } from "../voice/progressive-speech-delivery.mjs";
+import { speakOnce as defaultSpeak, createSpeechStreamer } from "../voice/speech-streamer.mjs";
+import { createVoiceEngine, DEFAULT_VOICE_ENGINE_KIND } from "../voice/engines/voice-engine.mjs";
 import { formatFireInjection, formatFireInjectionSince, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { translateExpression } from "./expression-translator.mjs";
@@ -285,13 +292,18 @@ export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
  * @param {{ ask: (content: string | Array<any>) => Promise<{ replyText: string; usage?: any }> }} options.session
  *   常駐 LLM セッション（createLlmSession の返り）。ask のみ使う。ここでは作らない/変えない。
  *   S5: ask は文字列（通常 Fire）と content ブロック配列（視覚発火）の両方を受理する前提。
- * @param {typeof defaultSpeak} [options.speakImpl]  発話同期（既定 Domain B speak）。テスト差し替え可能。
- * @param {{ sendSpeech: Function; sendEnvelope?: Function }} [options.channel]  speak/演出送出へ渡す接続済みチャネル。
+ * @param {typeof defaultSpeak} [options.speakImpl]  一括の読み上げ（既定 speech-streamer の speakOnce）。テスト差し替え可能。
+ *   返りの `ended`（Promise）で鳴り終わりを、`snapshot()` で切断点の材料（時間割・STARTED 時刻）を、
+ *   `stop(cause)` で止め方を渡す。持たない返りは「返った時点で鳴り終わった」とみなす。
+ * @param {{ openSpeech?: Function; appendSpeech?: Function; endSpeech?: Function; sendEnvelope?: Function; sendSet?: Function }} [options.channel]
+ *   発話（intent.speechStream）・演出・口閉じの送出へ渡す接続済みチャネル。
  * @param {number} [options.expressionIntensity=1.0]  演出強さ係数（全 peak 一括スケール・表の外で適用）。
- * @param {{ play: Function }} [options.player]  speak へ渡す常駐プレイヤー。
- * @param {object} [options.speakDeps]  speak へ渡す追加 deps（tts/writeWav/sConfig 等）。
+ * @param {any} [options.player]  常駐の流し込みプレイヤー（stream-player.mjs・open/write/end/stop/onEvent）。
+ * @param {import("../voice/engines/voice-engine.mjs").VoiceEngine} [options.engine]  声の差し替え口。
+ *   未指定（かつ acquireFireResources も engine を渡さない）なら speakDeps から AivisSpeech の engine を作る。
+ * @param {object} [options.speakDeps]  既定の AivisSpeech engine へ渡す deps（tts/ttsBaseUrl/speaker/sConfig）。
  * @param {() => object | Promise<object>} [options.acquireFireResources]
- *   accepted 公開前に exact session/channel/player/TTS snapshot を取得する production seam。
+ *   accepted 公開前に exact session/channel/player/engine snapshot を取得する production seam。
  * @param {number} [options.windowMs=FIRE_WINDOW_MS]  注入窓幅。
  * @param {number} [options.maxChars=FIRE_MAX_CHARS]  注入文字数上限。
  * @param {() => number} [options.nowImpl=Date.now]  窓の起点となる壁時計（注入可）。
@@ -315,10 +327,10 @@ export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
  *   Codex delta から確定した safe sentence の同期 enqueue seam。C1 では playback を所有せず、
  *   production default（未注入）は既存の最終一括 speak を維持する。
  * @param {boolean} [options.progressivePlayback=false] production Cockpit enables the Wave 2 queue adapter.
- * @param {typeof createProgressiveSpeechDelivery} [options.progressiveDeliveryFactory]
+ * @param {typeof createSpeechStreamer} [options.speechStreamerFactory]  Codex の文ごとの読み上げの運び手（既定 createSpeechStreamer）。
  * @param {(outcome: object) => void} [options.onProgressiveTerminal] C3 projection seam.
- * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  再生完了タイマの注入（決定論テスト用）。
- * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  再生完了タイマの解除（注入）。
+ * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  発話の見張りタイマの注入（SpeechStreamer へ渡す）。
+ * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  見張りタイマの解除（注入）。
  * @param {(info: { fireId: number; windowFirstSeq: number | null; windowLastSeq: number | null; includedCount: number; vision: boolean; atMs: number }) => void} [options.onAsk]
  *   ask の直前の通知（推論に使った会話の窓の始まりと終わりの seq・全経路）。
  * @param {(info: import("./fire-latency.mjs").FireLatency) => void} [options.onLatency]
@@ -375,7 +387,9 @@ export function createFireOrchestrator(options) {
   } = options;
   const monotonicNowImpl = options.monotonicNowImpl ?? (() => performance.now());
   const progressivePlayback = options.progressivePlayback === true;
-  const progressiveDeliveryFactory = options.progressiveDeliveryFactory ?? createProgressiveSpeechDelivery;
+  const speechStreamerFactory = options.speechStreamerFactory ?? createSpeechStreamer;
+  /** speakDeps → 既定の AivisSpeech engine（engine を渡されなかったときだけ作る）。 */
+  const defaultEngines = new WeakMap();
 
   /** @type {FireState} */
   let state = "idle";
@@ -389,19 +403,21 @@ export function createFireOrchestrator(options) {
 
   /**
    * 再生実区間の追跡（S6）。speak() 後〜発話完了/中断まで有効。null = 現在発話中でない。
+   * spoken は speakImpl の返り（ended / snapshot / stop を持ちうる）。timeline / playbackStartedAtMs は
+   * snapshot を持たない返りのための材料。
    * @type {null | {
    *   buffer: { append: Function };
    *   speechText: string;
+   *   spoken: any;
    *   timeline: Array<any>;
-   *   playbackStartedAtMs: number;
+   *   playbackStartedAtMs: number | null;
    *   interrupted: boolean;
    *   appended: boolean;
-   *   timer: ReturnType<typeof setTimeout> | null;
-   *   resolve: (outcome: { interrupted: boolean; disposed?: boolean; elapsedMs?: number; charsSpoken?: number; prefix?: string }) => void;
+   *   resolve: (outcome: { interrupted: boolean; disposed?: boolean; failed?: boolean; error?: unknown; cause?: string | null; elapsedMs?: number; charsSpoken?: number; prefix?: string }) => void;
    * }}
    */
   let currentPlayback = null;
-  /** @type {ReturnType<typeof createProgressiveSpeechDelivery> | null} */
+  /** @type {ReturnType<typeof createSpeechStreamer> | null} */
   let currentProgressiveDelivery = null;
   let currentProgressiveBoundary = null;
   let currentFireResources = null;
@@ -453,12 +469,6 @@ export function createFireOrchestrator(options) {
     if (!fire || fire.latencyEmitted || fire.fireId == null || !fire.timing.hasAsked()) return;
     fire.latencyEmitted = true;
     emit(onLatency, { fireId: fire.fireId, cause: fire.cause, vision: fire.vision, spoken, ...fire.timing.segments() });
-  };
-  /** 声が鳴り始めた（一括の読み上げの STARTED）→ その場で遅延を通知する。 */
-  const noteVoiceStarted = () => {
-    if (!currentFire) return;
-    currentFire.timing.markVoiceStarted();
-    emitLatencyOnce(true);
   };
   /**
    * ask の直前に、その回の LLM に渡した会話の窓の範囲を通知する。
@@ -560,6 +570,7 @@ export function createFireOrchestrator(options) {
       session: supplied?.session ?? session,
       channel: supplied?.channel ?? channel,
       player: supplied?.player ?? player,
+      engine: supplied?.engine ?? options.engine ?? null,
       speakDeps: Object.freeze({ ...speakDeps, ...(supplied?.speakDeps ?? {}) }),
       configuration: Object.freeze({ ...(supplied?.configuration ?? {}) }),
       metadata: Object.freeze({ ...(supplied?.metadata ?? {}) })
@@ -617,6 +628,35 @@ export function createFireOrchestrator(options) {
     }
   };
 
+  /**
+   * この Fire の声の差し替え口。snapshot が engine を持てばそれ、無ければ speakDeps から AivisSpeech の engine
+   * を作る（同じ speakDeps には同じ engine）。
+   * @param {any} resources
+   */
+  const resolveEngine = (resources) => {
+    if (resources?.engine) return resources.engine;
+    const deps = resources?.speakDeps ?? speakDeps;
+    let engine = defaultEngines.get(deps);
+    if (!engine) {
+      engine = createVoiceEngine(DEFAULT_VOICE_ENGINE_KIND, deps);
+      defaultEngines.set(deps, engine);
+    }
+    return engine;
+  };
+
+  /**
+   * SpeechStreamer が中断・失敗のあとに呼ぶ口の release。barge-in / kill は従来と同じ診断名
+   * （bargeIn… / kill…）で握り、それ以外（失敗・dispose）は診断を増やさず静かに送る。
+   * @param {any} resources
+   */
+  const streamReleaseMouth = (resources) => async (/** @type {{ cause: string }} */ info) => {
+    if (info?.cause === "barge-in") return releaseMouth("bargeIn", resources);
+    if (info?.cause === "killed") return releaseMouth("kill", resources);
+    const ownedChannel = resources?.channel ?? channel;
+    if (!ownedChannel || typeof ownedChannel.sendSet !== "function") return;
+    await ownedChannel.sendSet({ slotId: MOUTH_CLOSE_SLOT_ID, value: 0, ttlMs: MOUTH_CLOSE_TTL_MS });
+  };
+
   /** Fire-local passive trace; values supplied below are deliberately content-free. */
   const trace = (/** @type {string} */ event, /** @type {Record<string, unknown>} */ fields = {}) => {
     if (currentFire) {
@@ -625,8 +665,8 @@ export function createFireOrchestrator(options) {
       } catch {
         // 遅延の計測で発火経路を壊さない。
       }
-      // 文ごとの読み上げは最初の文の STARTED（progressive.player.started）で声が鳴り始める。
-      if (event === "progressive.player.started" && currentFire.timing.hasVoiceStarted()) emitLatencyOnce(true);
+      // 声が鳴り始めた = 最初の文の STARTED（voice.player.started・文ごと/一括の両方・engine に依存しない名前）。
+      if (event === "voice.player.started" && currentFire.timing.hasVoiceStarted()) emitLatencyOnce(true);
     }
     emit(onTrace, { event, ...fields });
   };
@@ -748,13 +788,15 @@ export function createFireOrchestrator(options) {
     const configuredBrain = resources.configuration?.brain;
     const progressiveEligible = configuredBrain !== "claude" && configuredBrain !== "claude-opus-55";
     const delivery = progressivePlayback && progressiveEligible
-      ? progressiveDeliveryFactory({
+      ? speechStreamerFactory({
           generationId: `fire-${++nextProgressiveGeneration}`,
+          engine: resolveEngine(resources),
           channel: resources.channel,
           player: resources.player,
-          speakDeps: resources.speakDeps,
+          releaseMouth: streamReleaseMouth(resources),
           onTrace: (event, fields) => trace(event, fields),
           onPlaybackStarted: () => setState("speaking"),
+          nowImpl,
           setTimeoutImpl,
           clearTimeoutImpl
         })
@@ -779,12 +821,12 @@ export function createFireOrchestrator(options) {
       // A successful terminal result owns exactly one final remainder flush.
       boundary.flush();
       const progressive = boundary.snapshot();
-      const deliveryOutcome = delivery ? await delivery.finishLlm() : null;
+      const deliveryOutcome = delivery ? await delivery.finish() : null;
       return { asked, progressive, deliveryOutcome };
     } catch (error) {
       if (delivery) {
         delivery.abort("llm-failed");
-        const deliveryOutcome = await delivery.finishLlm();
+        const deliveryOutcome = await delivery.finish();
         if (error instanceof Error) /** @type {any} */ (error).progressiveDelivery = deliveryOutcome;
       }
       throw error;
@@ -1000,65 +1042,74 @@ export function createFireOrchestrator(options) {
       return { fired: false, reason: "expression-only", expressed: true, expressions, ...extra };
     }
 
-    // 発話あり → 口 + 声（speechText のみ）。speak の throw は呼び出し元の catch（fireError）へ。
-    // 遅延の「声」の終わり = player の STARTED（一括の読み上げ・"STARTED\t<path>"）を見る（見られる player だけ）。
-    const unsubscribeStarted = subscribePlayerStarted(resources.player, noteVoiceStarted);
-    let spoken;
-    try {
-      spoken = await speakImpl(speechText, {
-        ...resources.speakDeps,
-        channel: resources.channel,
-        player: resources.player,
-        onTrace: (event, fields) => trace(event, fields)
-      });
-    } catch (error) {
-      unsubscribeStarted();
-      throw error;
-    }
+    // 発話あり → 口 + 声（speechText のみ）。鳴らし始める前の失敗（合成・器の拒否・送信失敗）は
+    // speakImpl が投げ、呼び出し元の catch（fireError）へ。遅延の「声」の終わりは STARTED
+    // （voice.player.started のトレース・trace() が拾う）。
+    const spoken = await speakImpl(speechText, {
+      ...resources.speakDeps,
+      engine: resolveEngine(resources),
+      channel: resources.channel,
+      player: resources.player,
+      generationId: `fire-${++nextProgressiveGeneration}`,
+      releaseMouth: streamReleaseMouth(resources),
+      onTrace: (event, fields) => trace(event, fields),
+      nowImpl,
+      setTimeoutImpl,
+      clearTimeoutImpl
+    });
 
     // S6: 再生実区間を追跡し、その間 speaking を保つ。soul 追記は完了時 or 中断時の 1 回だけ。
-    // speak() の戻り（timeline・wavDurationSec・playbackStartedAtMs）で切断点算出材料と完了尺を得る。
+    // 完了は speakImpl の返りの ended（player の ENDED）。切断点の材料は snapshot()（累積の時間割と
+    // STARTED 時刻）、持たない返りは返りの timeline / playbackStartedAtMs。
     const timeline = spoken && Array.isArray(spoken.timeline) ? spoken.timeline : [];
-    const wavDurationSec =
-      spoken && typeof spoken.wavDurationSec === "number" && Number.isFinite(spoken.wavDurationSec)
-        ? spoken.wavDurationSec
-        : 0;
     const playbackStartedAtMs =
       spoken && typeof spoken.playbackStartedAtMs === "number" && Number.isFinite(spoken.playbackStartedAtMs)
         ? spoken.playbackStartedAtMs
         : nowImpl();
-    const durationMs = Math.max(0, wavDurationSec * 1000);
 
-    // 再生中は speaking のまま。natural 完了タイマ or interrupt() のどちらかで resolve する。
+    // 再生中は speaking のまま。ended（鳴り終わり/失敗）か interrupt()/kill()/dispose() のどちらかで resolve する。
     const completion = await new Promise((resolve) => {
       const pb = {
         buffer,
         speechText,
+        spoken,
         timeline,
         playbackStartedAtMs,
         interrupted: false,
         appended: false,
-        resolve,
-        /** @type {ReturnType<typeof setTimeout> | null} */
-        timer: null
+        resolve
       };
-      pb.timer = setTimeoutImpl(() => {
-        // 自然完了（この window に interrupt が来なかった）。
-        if (currentPlayback === pb && !pb.interrupted) {
-          resolve({ interrupted: false });
-        }
-      }, durationMs);
       currentPlayback = pb;
+      const ended = spoken && spoken.ended;
+      if (!ended || typeof ended.then !== "function") {
+        // ended を持たない返り = 返った時点で鳴り終わった（偽物・計測用）。
+        resolve({ interrupted: false });
+        return;
+      }
+      ended.then(
+        (/** @type {any} */ outcome) => {
+          if (currentPlayback !== pb || pb.interrupted) return;
+          if (outcome && typeof outcome.status === "string" && outcome.status !== "completed") {
+            resolve({
+              interrupted: false,
+              failed: true,
+              error: outcome.error,
+              cause: outcome.cause ?? null,
+              atMs: typeof outcome.atMs === "number" && Number.isFinite(outcome.atMs) ? outcome.atMs : nowImpl()
+            });
+            return;
+          }
+          resolve({ interrupted: false });
+        },
+        (/** @type {unknown} */ error) => {
+          if (currentPlayback !== pb || pb.interrupted) return;
+          resolve({ interrupted: false, failed: true, error, cause: "error", atMs: nowImpl() });
+        }
+      );
     });
 
-    // window を閉じる（タイマ解除・現在発話をクリア）。interrupt() 経由なら timer は既に解除済み。
-    unsubscribeStarted();
-    const pb = currentPlayback;
+    // window を閉じる（現在発話をクリア）。
     currentPlayback = null;
-    if (pb && pb.timer != null) {
-      clearTimeoutImpl(/** @type {any} */ (pb.timer));
-      pb.timer = null;
-    }
 
     // dispose 中断: soul 追記せず畳む（詰まりを残さない）。
     if (completion.disposed) {
@@ -1081,6 +1132,45 @@ export function createFireOrchestrator(options) {
       };
     }
 
+    // 鳴らし始めた後の失敗（player の ERROR・異常終了・見張りの時間切れ等）。口は SpeechStreamer が
+    // release 済み。文ごとの読み上げと同じく「鳴った分 + 中断注記」で soul に正本化する（Undine 裁定
+    // 2026-10-18）。鳴った分は止まる前の snapshot()（累積の時間割と STARTED 時刻）と失敗の時刻から
+    // computeSpokenPrefix で求める。STARTED 前・鳴った分が 0 文字なら、今どおり fireError へ（文ごとの
+    // 読み上げで 1 文も鳴り終わらずに失敗したときと同じ）。
+    if (completion.failed) {
+      const partial = spokenBeforeFailure(spoken, speechText, timeline, completion.atMs);
+      if (partial) {
+        const text = `${partial.prefix}
+${PROGRESSIVE_INTERRUPTION_NOTE}`;
+        const appended = buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul" });
+        if (appended && appended.appended && appended.entry) {
+          emit(onSoulTranscript, withFireId(appended.entry));
+        }
+        trace("speech.partial.projected", {
+          playedChars: partial.charsSpoken,
+          totalChars: speechText.length,
+          terminalCause: completion.cause ?? null
+        });
+        const expressions = await expressionPromise;
+        return {
+          fired: false,
+          reason: "speech-playback-failed",
+          charsSpoken: partial.charsSpoken,
+          elapsedMs: partial.elapsedMs,
+          expressions,
+          ...extra
+        };
+      }
+      await expressionPromise;
+      throw withDiagnostic(
+        completion.error instanceof Error
+          ? completion.error
+          : new Error(`speech playback failed (${completion.cause ?? "unknown"}).`),
+        "speech_playback_failed",
+        "speech.playback"
+      );
+    }
+
     // 自然完了 → 全文を soul 記録（**speechText のみ**・startMs/endMs=0）。broadcast は onSoulTranscript 経由。
     // S5: 視覚発火でも画像は一切積まない（会話ログの正本は speechText のみ・ディスク非保存の流儀）。
     const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
@@ -1099,46 +1189,64 @@ export function createFireOrchestrator(options) {
 
   /**
    * 再生中の魂発話を強制切断する共有ヘルパ（S6 interrupt / S8 kill 共通・DRY）。pb.interrupted=true →
-   * 自然完了タイマ解除 → ① player.stop()（**同期呼び・await の前**＝即効性）→ ② 器の口を閉じる
-   * （mouth-open intent.set value=0・短 ttl）→ ③ 切断点算出（computeSpokenPrefix）→ ④ soul へ
-   * 「接頭辞 + note」を 1 回追記 → ⑤ onDiagnostic({type: diagnosticType, ...}) → pb.resolve()（await 中の
-   * processAskedReply を解放）。stop/set の失敗は診断に握って落とさない。呼び出し元（interrupt/kill）が
-   * pb（currentPlayback の null/interrupted チェック済み）を渡す。診断 type は `${diagnosticType}...` で
-   * bargeIn/kill を区別する（bargeIn 呼び出しは既存の type 名と 1 ビットも変わらない＝無退行）。
+   * ① 声を止める（speakImpl の返りの stop(cause)＝SpeechStreamer が player.stop を**同期に**呼び、合成中の
+   * engine へ signal で中止を伝え、② 器の口を閉じる＝mouth-open intent.set value=0・短 ttl を送る。stop を
+   * 持たない返りでは、ここで player.stop() と口閉じを直接行う）→ ③ 切断点算出（computeSpokenPrefix・累積の
+   * 時間割 × STARTED からの経過）→ ④ soul へ「接頭辞 + note」を 1 回追記 → ⑤ onDiagnostic({type: diagnosticType, ...})
+   * → pb.resolve()（await 中の processAskedReply を解放）。stop/set の失敗は診断に握って落とさない。呼び出し元
+   * （interrupt/kill）が pb（currentPlayback の null/interrupted チェック済み）を渡す。診断 type は
+   * `${diagnosticType}...` で bargeIn/kill を区別する（bargeIn 呼び出しは既存の type 名と 1 ビットも変わらない）。
    * @param {object} pb  currentPlayback（呼び出し元チェック済み・null でない・interrupted でない）。
    * @param {string} note  soul 追記の末尾注記（BARGE_IN_NOTE または KILL_NOTE）。
    * @param {string} diagnosticType  onDiagnostic の最終 type（"bargeIn" または "kill"）。
-   * @param {number} [atMs]  切断時刻（既定 nowImpl()）。切断点は atMs − playbackStartedAtMs で算出。
+   * @param {number} [atMs]  切断時刻（既定 nowImpl()）。切断点は atMs − STARTED 時刻で算出（STARTED 前は 0）。
    * @returns {Promise<{ interrupted: true; elapsedMs: number; charsSpoken: number; prefix: string }>}
    */
   const severSpeaking = async (pb, note, diagnosticType, atMs) => {
     const resources = currentFireResources;
     pb.interrupted = true;
-    // 自然完了タイマを止める（この後 resolve するので二重 resolve しない）。
-    if (pb.timer != null) {
-      clearTimeoutImpl(/** @type {any} */ (pb.timer));
-      pb.timer = null;
-    }
+    const spoken = pb.spoken;
 
-    // ① 声を止める（player.stop・同期呼び）。失敗は診断に握る（落とさない）。
-    try {
-      if (resources?.player && typeof resources.player.stop === "function") {
-        resources.player.stop();
+    // 切断点の材料は止める前に読む（累積の時間割と STARTED 時刻）。
+    let timeline = pb.timeline;
+    /** @type {number | null} */
+    let startedAtMs = pb.playbackStartedAtMs;
+    if (spoken && typeof spoken.snapshot === "function") {
+      try {
+        const snap = spoken.snapshot();
+        timeline = snap && Array.isArray(snap.timeline) ? snap.timeline : timeline;
+        startedAtMs =
+          snap && typeof snap.startedAtMs === "number" && Number.isFinite(snap.startedAtMs) ? snap.startedAtMs : null;
+      } catch {
+        // 材料が読めなくても中断は続ける（保守側の 0 文字に倒れる）。
       }
-    } catch (err) {
-      emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
     }
 
-    // ② 器の口を閉じる（mouth-open へ intent.set value=0・短 ttl = speech タイムライン強制 release）。
-    //    rejected/throw/未対応はすべて診断に握る（口が閉じ切らなくても中断処理は続ける）。
-    await releaseMouth(diagnosticType, resources);
+    // ①② 声を止め、器の口を閉じる。失敗は診断に握る（落とさない）。
+    if (spoken && typeof spoken.stop === "function") {
+      try {
+        await spoken.stop(diagnosticType === "kill" ? "killed" : "barge-in");
+      } catch (err) {
+        emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
+      }
+    } else {
+      try {
+        if (resources?.player && typeof resources.player.stop === "function") {
+          resources.player.stop();
+        }
+      } catch (err) {
+        emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
+      }
+      //    rejected/throw/未対応はすべて診断に握る（口が閉じ切らなくても中断処理は続ける）。
+      await releaseMouth(diagnosticType, resources);
+    }
 
     // ③ 切断点算出（モーラタイムライン × 再生経過・過大評価しない純関数）。
     const severAtMs = typeof atMs === "number" && Number.isFinite(atMs) ? atMs : nowImpl();
-    const elapsedMs = severAtMs - pb.playbackStartedAtMs;
+    const elapsedMs = startedAtMs == null ? 0 : severAtMs - startedAtMs;
     const cut = computeSpokenPrefix({
       speechText: pb.speechText,
-      timeline: pb.timeline,
+      timeline,
       elapsedMs
     });
 
@@ -1182,7 +1290,8 @@ export function createFireOrchestrator(options) {
       const interrupted = progressive.bargeIn();
       if (!interrupted) return { interrupted: false, reason: "already-interrupted" };
       currentProgressiveBoundary?.stop();
-      if (before.activePlaybackId != null) await releaseMouth("bargeIn");
+      // 鳴っていた文は SpeechStreamer が player.stop → 口の release（bargeIn… の診断名）まで済ませる。
+      await progressive.whenSettled();
       const after = progressive.snapshot();
       emit(onDiagnostic, {
         type: "bargeIn",
@@ -1217,7 +1326,8 @@ export function createFireOrchestrator(options) {
       const before = progressive.snapshot();
       const changed = progressive.kill();
       if (changed) currentProgressiveBoundary?.stop();
-      if (changed && before.activePlaybackId != null) await releaseMouth("kill");
+      // 鳴っていた文は SpeechStreamer が player.stop → 口の release（kill… の診断名）まで済ませる。
+      if (changed) await progressive.whenSettled();
       const after = progressive.snapshot();
       emit(onDiagnostic, { type: "kill", charsSpoken: after.playedText.length, prefix: after.playedText });
       return {
@@ -1644,12 +1754,14 @@ export function createFireOrchestrator(options) {
       disposed = true;
       if (currentProgressiveDelivery?.dispose()) currentProgressiveBoundary?.stop();
       // 発話再生中に畳まれたら、await 中の processAskedReply を安全に解放する（詰まりを残さない）。
+      // 鳴っている一括の読み上げは止める（SpeechStreamer が player.stop → 口の release）。
       const pb = currentPlayback;
       if (pb && !pb.interrupted) {
         pb.interrupted = true;
-        if (pb.timer != null) {
-          clearTimeoutImpl(/** @type {any} */ (pb.timer));
-          pb.timer = null;
+        if (pb.spoken && typeof pb.spoken.stop === "function") {
+          Promise.resolve()
+            .then(() => pb.spoken.stop("disposed"))
+            .catch(() => {});
         }
         pb.resolve({ interrupted: false, disposed: true });
       }
@@ -1684,47 +1796,6 @@ ${block.text}` };
 }
 
 /**
- * 一括の読み上げで、player の STARTED（"STARTED\t<path>"・audio-player.mjs）を拾う。subscribeOutput を
- * 持たない player（テストの偽物など）は何もしない（声の区間は null になる）。返り値は購読の解除（冪等）。
- * @param {any} player  @param {() => void} onStarted
- * @returns {() => void}
- */
-function subscribePlayerStarted(player, onStarted) {
-  if (!player || typeof player.subscribeOutput !== "function") return () => {};
-  let done = false;
-  /** @type {(() => void) | null} */
-  let unsubscribe = null;
-  const off = () => {
-    done = true;
-    if (unsubscribe) {
-      const u = unsubscribe;
-      unsubscribe = null;
-      try {
-        u();
-      } catch {
-        // best-effort
-      }
-    }
-  };
-  try {
-    const u = player.subscribeOutput((/** @type {unknown} */ line) => {
-      if (done || typeof line !== "string") return;
-      if (line === "STARTED" || line.startsWith("STARTED\t")) {
-        try {
-          onStarted();
-        } catch {
-          // 計測の失敗で再生を壊さない。
-        }
-      }
-    });
-    unsubscribe = typeof u === "function" ? u : null;
-  } catch {
-    return () => {};
-  }
-  return off;
-}
-
-/**
  * 診断 type を expression 接頭辞に整える（"unknownTag" → "UnknownTag"）。
  * @param {string} s
  * @returns {string}
@@ -1735,6 +1806,34 @@ function capitalize(s) {
 }
 
 /** Keep public Fire results content-free while C3 receives the full internal outcome hook. */
+/**
+ * 一括の読み上げが鳴らし始めた後に失敗したとき、声に出た分を求める（純関数・過大評価しない）。
+ * 材料は speakImpl の返りの snapshot()（累積の時間割と STARTED 時刻）。読めなければ返りの timeline。
+ * STARTED 前（startedAtMs が無い）・0 文字なら null（呼び出し元は今どおり fireError にする）。
+ * @param {any} spoken  speakImpl の返り。
+ * @param {string} speechText
+ * @param {ReadonlyArray<{ timeMs: number }>} fallbackTimeline
+ * @param {number} failedAtMs  失敗の時刻（STARTED と同じ時計）。
+ * @returns {null | { prefix: string; charsSpoken: number; elapsedMs: number }}
+ */
+function spokenBeforeFailure(spoken, speechText, fallbackTimeline, failedAtMs) {
+  if (!spoken || typeof spoken.snapshot !== "function") return null;
+  /** @type {any} */
+  let snap = null;
+  try {
+    snap = spoken.snapshot();
+  } catch {
+    return null;
+  }
+  const startedAtMs = snap && typeof snap.startedAtMs === "number" && Number.isFinite(snap.startedAtMs) ? snap.startedAtMs : null;
+  if (startedAtMs == null || typeof failedAtMs !== "number" || !Number.isFinite(failedAtMs)) return null;
+  const timeline = snap && Array.isArray(snap.timeline) ? snap.timeline : fallbackTimeline;
+  const elapsedMs = Math.max(0, failedAtMs - startedAtMs);
+  const cut = computeSpokenPrefix({ speechText, timeline, elapsedMs });
+  if (!(cut.charsSpoken > 0) || cut.prefix.length === 0) return null;
+  return { prefix: cut.prefix, charsSpoken: cut.charsSpoken, elapsedMs };
+}
+
 function progressivePublicState(outcome) {
   return {
     generationId: outcome.generationId,

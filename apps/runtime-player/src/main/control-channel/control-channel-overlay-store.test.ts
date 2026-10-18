@@ -13,8 +13,11 @@ import {
   RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
   RUNTIME_PLAYER_SPEECH_ONSET_MS,
   RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+  RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS,
   RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS,
-  type SpeechMora
+  sampleSpeechTimeline,
+  type SpeechMora,
+  type SpeechTimelineState
 } from "./speech-timeline-state";
 
 /**
@@ -824,20 +827,21 @@ describe("RuntimePlayerControlChannelOverlayStore — streamed utterance (intent
     store.openSpeechStream("u-1", 0);
     store.appendSpeechStream("u-1", SLICE_A, 0);
 
-    // Far past where an ended timeline would have closed: still holding "i".
-    const held = store.snapshot(5_000);
+    // Far past where an ended timeline would have closed (yet inside the Domain A2 2000ms
+    // safety net): still holding "i".
+    const held = store.snapshot(1_500);
     expect(mouthOpenOf(held)).toBeCloseTo(0.8 * RUNTIME_PLAYER_SPEECH_OPEN_SCALE, 9);
     expect(held[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.i] ?? 0).toBeCloseTo(mouthOpenOf(held), 9);
 
-    store.endSpeechStream("u-1", 5_000);
-    expect(mouthOpenOf(store.snapshot(5_000))).toBeCloseTo(mouthOpenOf(held), 9);
+    store.endSpeechStream("u-1", 1_500);
+    expect(mouthOpenOf(store.snapshot(1_500))).toBeCloseTo(mouthOpenOf(held), 9);
     const closing = mouthOpenOf(
-      store.snapshot(5_000 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS / 2)
+      store.snapshot(1_500 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS / 2)
     );
     expect(closing).toBeGreaterThan(0);
     expect(closing).toBeLessThan(mouthOpenOf(held));
     expect(
-      store.snapshot(5_000 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 1)
+      store.snapshot(1_500 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 1)
     ).toStrictEqual({});
   });
 
@@ -1001,5 +1005,230 @@ describe("RuntimePlayerControlChannelOverlayStore — streamed utterance (intent
       prev = store.snapshot(now, {}, prev);
       expect(vowelSumOf(prev)).toBeCloseTo(mouthOpenOf(prev), 9);
     }
+  });
+});
+
+describe("RuntimePlayerControlChannelOverlayStore — streamed utterance safety net (voice swap Wave 2 / Domain A2)", () => {
+  const RELEASE_MS = RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS;
+  const SLICE_A: readonly SpeechMora[] = [
+    { timeMs: 0, vowel: "a", s: 0.6 },
+    { timeMs: 140, vowel: "i", s: 0.8 }
+  ];
+  // Data of SLICE_A runs out at 140ms (accepted at 0) → the net fires at 140 + 2000.
+  const NET_AT_MS = 140 + RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS;
+  const mouthOpenOf = (snap: Record<string, number>): number =>
+    snap[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0;
+
+  type Step = (store: RuntimePlayerControlChannelOverlayStore, now: number) => void;
+
+  /** Drive a fresh store over a tick列 (threading prevResolved as the heart does), running
+   * `steps[now]` just before the tick at `now`. Pure function of its input (決定論). */
+  function run(
+    steps: Readonly<Record<number, Step>>,
+    toMs: number,
+    stepMs = 4
+  ): Record<string, number>[] {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const out: Record<string, number>[] = [];
+    let prev: Record<string, number> = {};
+    for (let now = 0; now <= toMs; now += stepMs) {
+      steps[now]?.(store, now);
+      prev = store.snapshot(now, {}, prev);
+      out.push(prev);
+    }
+    return out;
+  }
+
+  const openAndAppendA: Step = (store, now) => {
+    store.openSpeechStream("u-1", now);
+    store.appendSpeechStream("u-1", SLICE_A, now);
+  };
+
+  it("closes on its own: no end for 2000ms after the data ran out = an end at that instant (hold → 400ms close)", () => {
+    const toMs = NET_AT_MS + RELEASE_MS + 200;
+    const netted = run({ 0: openAndAppendA }, toMs);
+    const endedThen = run(
+      { 0: openAndAppendA, [NET_AT_MS]: (store, now) => store.endSpeechStream("u-1", now) },
+      toMs
+    );
+    expect(netted).toStrictEqual(endedThen);
+
+    // Still holding "i" just before the net, closing after it, fully back at base after 400ms.
+    const tickAt = (ms: number): Record<string, number> => netted[ms / 4]!;
+    const held = 0.8 * RUNTIME_PLAYER_SPEECH_OPEN_SCALE;
+    expect(mouthOpenOf(tickAt(NET_AT_MS - 4))).toBeCloseTo(held, 9);
+    expect(mouthOpenOf(tickAt(NET_AT_MS))).toBeCloseTo(held, 9);
+    const closing = mouthOpenOf(tickAt(NET_AT_MS + RELEASE_MS / 2));
+    expect(closing).toBeGreaterThan(0);
+    expect(closing).toBeLessThan(held);
+    expect(tickAt(NET_AT_MS + RELEASE_MS)).toStrictEqual({});
+    for (const snap of netted) {
+      expect(vowelSumOf(snap)).toBeCloseTo(mouthOpenOf(snap), 9);
+    }
+  });
+
+  it("after the net the utterance is over: the cursor clears and a late append/end is ignored", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    openAndAppendA(store, 0);
+    store.snapshot(NET_AT_MS - 1);
+    expect(store.speechStreamCursor()).not.toBeNull();
+    store.snapshot(NET_AT_MS);
+    expect(store.speechStreamCursor()).toBeNull();
+    // A tail landing after the net cannot re-open the closing mouth.
+    expect(
+      store.appendSpeechStream("u-1", [{ timeMs: 3_000, vowel: "o", s: 0.9 }], NET_AT_MS + 10)
+    ).toBe(false);
+    expect(store.endSpeechStream("u-1", NET_AT_MS + 10)).toBe(false);
+    expect(store.snapshot(NET_AT_MS + RELEASE_MS)).toStrictEqual({});
+    expect(store.snapshot(3_000)).toStrictEqual({});
+  });
+
+  it("an append that lands before the net keeps the utterance going (the window restarts from the new data)", () => {
+    const sliceB: readonly SpeechMora[] = [
+      { timeMs: 2_100, vowel: "o", s: 0.6 },
+      { timeMs: 2_240, vowel: "e", s: 0.7 }
+    ];
+    // Accepted at 2000 (< NET_AT_MS); its data runs out at 2240 → new net at 4240.
+    const newNetAtMs = 2_240 + RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS;
+    const toMs = newNetAtMs + RELEASE_MS + 200;
+    const continued = run(
+      {
+        0: openAndAppendA,
+        2_000: (store, now) => {
+          expect(store.appendSpeechStream("u-1", sliceB, now)).toBe(true);
+        }
+      },
+      toMs
+    );
+    const tickAt = (ms: number): Record<string, number> => continued[ms / 4]!;
+    // Past the first net the mouth still speaks the new slice (o → e) and then holds "e"
+    // — never closing where the first net would have closed it.
+    expect(
+      tickAt(NET_AT_MS + 20)[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.o] ?? 0
+    ).toBeGreaterThan(0);
+    expect(mouthOpenOf(tickAt(NET_AT_MS + RELEASE_MS))).toBeCloseTo(
+      0.7 * RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+      9
+    );
+    expect(mouthOpenOf(tickAt(newNetAtMs - 4))).toBeCloseTo(
+      0.7 * RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+      9
+    );
+    // And it is an end at the NEW net instant, tick for tick.
+    const endedAtNewNet = run(
+      {
+        0: openAndAppendA,
+        2_000: (store, now) => {
+          store.appendSpeechStream("u-1", sliceB, now);
+        },
+        [newNetAtMs]: (store, now) => {
+          store.endSpeechStream("u-1", now);
+        }
+      },
+      toMs
+    );
+    expect(continued).toStrictEqual(endedAtNewNet);
+    expect(tickAt(newNetAtMs + RELEASE_MS)).toStrictEqual({});
+  });
+
+  it("a late slice whose moras are already in the past still gets a full window from its acceptance", () => {
+    const pastSlice: readonly SpeechMora[] = [{ timeMs: 300, vowel: "u", s: 0.5 }];
+    // Accepted at 2100 (< NET_AT_MS), data already behind playback → net at 2100 + 2000.
+    const newNetAtMs = 2_100 + RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS;
+    const toMs = newNetAtMs + RELEASE_MS + 200;
+    const continued = run(
+      {
+        0: openAndAppendA,
+        2_100: (store, now) => {
+          store.appendSpeechStream("u-1", pastSlice, now);
+        }
+      },
+      toMs
+    );
+    const endedAtNewNet = run(
+      {
+        0: openAndAppendA,
+        2_100: (store, now) => {
+          store.appendSpeechStream("u-1", pastSlice, now);
+        },
+        [newNetAtMs]: (store, now) => {
+          store.endSpeechStream("u-1", now);
+        }
+      },
+      toMs
+    );
+    expect(continued).toStrictEqual(endedAtNewNet);
+    expect(mouthOpenOf(continued[(newNetAtMs - 4) / 4]!)).toBeCloseTo(
+      0.5 * RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+      9
+    );
+  });
+
+  it("with an end before the net, the terminal is exactly today's (the net never shows)", () => {
+    const toMs = NET_AT_MS + RELEASE_MS + 200;
+    const withEnd = run(
+      {
+        0: openAndAppendA,
+        1_000: (store, now) => {
+          store.endSpeechStream("u-1", now);
+        }
+      },
+      toMs
+    );
+    // Today's terminal for a late end (Wave 1): hold until the end instant, then close.
+    const todays: SpeechTimelineState = {
+      moras: SLICE_A,
+      startAtMs: 0,
+      onsetFromOpen: 0,
+      onsetAtMs: 0,
+      endAtMs: 1_000
+    };
+    for (let i = 0; i < withEnd.length; i += 1) {
+      const sample = sampleSpeechTimeline(todays, i * 4);
+      expect(withEnd[i]).toStrictEqual(sample.done ? {} : sample.values);
+    }
+  });
+
+  it("is deterministic and tick-rate independent: sparse sampling, a late open or a late end never moves the net", () => {
+    const toMs = NET_AT_MS + RELEASE_MS + 200;
+    expect(run({ 0: openAndAppendA }, toMs)).toStrictEqual(run({ 0: openAndAppendA }, toMs));
+
+    const dense = run({ 0: openAndAppendA }, toMs, 4);
+    const midMs = NET_AT_MS + RELEASE_MS / 2;
+    // No tick between the append and mid-release: the net is still applied at NET_AT_MS.
+    const sparse = new RuntimePlayerControlChannelOverlayStore();
+    sparse.snapshot(0);
+    openAndAppendA(sparse, 0);
+    expect(sparse.snapshot(midMs)).toStrictEqual(dense[midMs / 4]);
+
+    // A late end (after the net, no tick in between) does not restart the close.
+    const lateEnd = new RuntimePlayerControlChannelOverlayStore();
+    lateEnd.snapshot(0);
+    openAndAppendA(lateEnd, 0);
+    expect(lateEnd.endSpeechStream("u-1", midMs)).toBe(false);
+    expect(lateEnd.snapshot(midMs)).toStrictEqual(dense[midMs / 4]);
+
+    // A late open of the next utterance (no tick in between) likewise keeps the close
+    // anchored at the net instead of re-ending the previous one at the open.
+    const lateOpen = new RuntimePlayerControlChannelOverlayStore();
+    lateOpen.snapshot(0);
+    openAndAppendA(lateOpen, 0);
+    lateOpen.openSpeechStream("u-2", midMs);
+    expect(lateOpen.snapshot(midMs)).toStrictEqual(dense[midMs / 4]);
+    expect(lateOpen.speechStreamCursor()).toStrictEqual({
+      utteranceId: "u-2",
+      lastTimeMs: undefined,
+      moraCount: 0
+    });
+  });
+
+  it("the intent.speech sugar is untouched by the net (it ends at once)", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.setSpeech(SLICE_A, 0);
+    const reference = sampleSpeechTimeline({ moras: SLICE_A, startAtMs: 0 }, 300);
+    expect(store.snapshot(300)).toStrictEqual(reference.values);
+    expect(store.snapshot(140 + 140 + RELEASE_MS)).toStrictEqual({});
   });
 });

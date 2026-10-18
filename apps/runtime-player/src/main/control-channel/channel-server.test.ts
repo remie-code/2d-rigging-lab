@@ -272,7 +272,8 @@ describe("RuntimePlayerControlChannelServer", () => {
       (mid["mouth-vowel-e"] ?? 0) +
       (mid["mouth-vowel-o"] ?? 0);
     expect(vowelSum).toBeCloseTo(midOpen, 9);
-    expect(store.snapshot(FIXED_NOW_MS + 5_000)["mouth-vowel-a"] ?? 0).toBeGreaterThan(0);
+    // (Domain A2: within the 2000ms safety net — past it the utterance would count as ended.)
+    expect(store.snapshot(FIXED_NOW_MS + 1_500)["mouth-vowel-a"] ?? 0).toBeGreaterThan(0);
 
     // The barge-in release: intent.set mouth-open=0 stops the streaming utterance, so the
     // next append for it is accepted but ignored (no further accepted event).
