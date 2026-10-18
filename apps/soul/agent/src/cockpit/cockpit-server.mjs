@@ -43,6 +43,11 @@
  *   - 遅延: SSE "latency"（1 返事 1 レコード・区間と合計と区分）。しきい値は snapshot の latencyThresholds。
  *   - 残量: snapshot の quota と SSE "quota"（Codex / ElevenLabs の残りの割合とリセット時刻・不明は null）。
  *   - 警告: snapshot の warnings と SSE "warnings"（状態で決まるもの・60 秒で消える出来事・./warnings.mjs）。
+ *   - 圧縮中: snapshot の compacting（頭の会話の圧縮の最中だけ true・状態のピルの「圧縮中」）。started で true、
+ *     finished / failed / 頭の作り直し（resetContextCompaction）で false。変わったら SSE "state" で押す。
+ *   - 圧縮の目安: snapshot の compaction（`{ thresholdTokens }` = 圧縮を始める大きさ・直近の入力トークン）。
+ *     POST /api/compact-threshold で変え（設定の「頭脳・会話」タブ）、onSetCompactThresholdTokens が保存と走っている
+ *     compactor の差し替えを担う（cockpit.mjs）。
  *
  * ── 既存コードは変更しない ────────────────────────────────────────────
  *  ear-pipeline / transcript-buffer / whisper-server / ffmpeg-capture は購読・呼び出しのみ。
@@ -89,6 +94,7 @@ import {
 } from "./warnings.mjs";
 import { resolveBrainIdentity } from "../mind/brains.mjs";
 import { resolveModelIdentity } from "../mind/model-identity.mjs";
+import { normalizeCompactThresholdTokens } from "../mind/context-compactor.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
 export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
@@ -485,6 +491,13 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   記憶の現況（`{ enabled: boolean, count: number, lastRecordAtMs: number | null }`）を返す。
  *   state snapshot の `memory` に載せる（brainStatus/audioDeviceStatus と同型）。未注入なら
  *   snapshot の memory:null。
+ * @param {(tokens: number) => void | Promise<void>} [options.onSetCompactThresholdTokens]
+ *   圧縮を始める大きさ（直近の入力トークン・整数で 5 万〜45 万）の変更フック（POST /api/compact-threshold が呼ぶ・
+ *   onSetMemoryEnabled と同型）。**cockpit-server は圧縮の実体を知らない**（実体は cockpit.mjs が settings 永続 +
+ *   走っている compactor の setThresholdTokens で担う＝次の確認から効く）。未注入なら POST /api/compact-threshold は 503。
+ * @param {() => ({ thresholdTokens: number } | null)} [options.contextCompactionStatus]
+ *   圧縮の目安の現況（`{ thresholdTokens }`）を返す。state snapshot の `compaction` に載せる（memoryStatus と同型・
+ *   未注入なら null）。
  * @param {"whisper" | "elevenlabs"} [options.sttEngineInitial="whisper"]
  *   文字起こしの方式の初期選択（操縦席の文字起こし選択・cockpit-stt-selection.md）。起動時の値は
  *   呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（selfFireInitialEnabled と同型）。
@@ -630,6 +643,10 @@ export function createCockpitServer(options = {}) {
   const onSetMemoryEnabled = options.onSetMemoryEnabled;
   const onMemoryRecord = options.onMemoryRecord;
   const memoryStatusImpl = options.memoryStatus;
+  // 圧縮の目安（圧縮を始める大きさ）: 変更フック + 現況（未注入ならそれぞれ 503/null・memory と同型）。
+  // 目安の正本は cockpit.mjs の compactor（サーバは二重に持たない）。
+  const onSetCompactThresholdTokens = options.onSetCompactThresholdTokens;
+  const contextCompactionStatusImpl = options.contextCompactionStatus;
   // 操縦席の文字起こし選択: 現在の選択（Start のたびに更新・耳が動いている間は使用中の方式）・
   // 永続化フック・ElevenLabs キーの読み口・遅延ログの口。
   /** @type {"whisper" | "elevenlabs"} */
@@ -740,6 +757,9 @@ export function createCockpitServer(options = {}) {
   // S8「キルスイッチ」: キル状態の正本（サーバ側に一つ）。POST /api/kill が設定・snapshot() に露出・
   // fireOrchestrator 生成時（initialKilled）+ 遷移時（kill()/revive()）の両方へ伝播する（domain-b.md §）。
   let killed = false;
+  // 頭の会話の圧縮の最中か（broadcastContextCompaction の started → finished / failed・resetContextCompaction で
+  // 戻す）。snapshot の compacting に載せ、開き直した操縦席にも「圧縮中」を出す。
+  let contextCompacting = false;
   let boundPort = 0;
   // S6「会話が続く」barge-in の機械弁（VAD → 確定 → orchestrator.interrupt）。fireOrchestrator が
   // interrupt を持つときだけ生成する（下の orchestrator 結線で代入・onVadEvent が handle を回す）。
@@ -906,8 +926,22 @@ export function createCockpitServer(options = {}) {
       // 操縦席の作り直し 1 回目（データ側・cockpit-glance-redesign.md §9）: 残量・警告・遅延のしきい値。
       quota: quotaSource ? quotaSnapshotSafe() : null,
       warnings: warningBoard.list(),
-      latencyThresholds: { ...latencyThresholds }
+      latencyThresholds: { ...latencyThresholds },
+      // 頭の会話の圧縮の最中か（状態のピルの「圧縮中」・既定 false・killed と同じく常に boolean）。
+      compacting: contextCompacting,
+      // 圧縮の目安（{ thresholdTokens }・設定の「頭脳・会話」タブ。未注入なら null・memory と同型）。
+      compaction: typeof contextCompactionStatusImpl === "function" ? (contextCompactionStatusImpl() ?? null) : null
     };
+  }
+
+  /**
+   * 圧縮の最中かを変える（変わったときだけ SSE "state" で押す）。
+   * @param {boolean} next
+   */
+  function setContextCompacting(next) {
+    if (closed || contextCompacting === next) return;
+    contextCompacting = next;
+    broadcastState();
   }
 
   /** 残量の今の値（読み口の throw は不明として扱う）。 */
@@ -1853,6 +1887,28 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/compact-threshold") {
+      // 圧縮を始める大きさの変更継ぎ目（POST /api/memory の写経）。保存 + 走っている compactor の差し替えは
+      // cockpit.mjs の onSetCompactThresholdTokens が担う。未注入なら 503。値は整数で 5 万〜45 万だけ受ける。
+      if (typeof onSetCompactThresholdTokens !== "function") {
+        sendJson(res, 503, { error: "compaction control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const tokens = normalizeCompactThresholdTokens(body.tokens);
+      if (tokens == null) {
+        sendJson(res, 400, { error: "tokens must be an integer from 50000 to 450000" });
+        return;
+      }
+      try {
+        await onSetCompactThresholdTokens(tokens);
+      } catch {
+        // 永続化 / 差し替えの失敗は操作を止めない（onSetMemoryEnabled と同型の失敗寛容）。
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/memory-record") {
       // 配信間記憶: 手動「今日を記録」継ぎ目。onMemoryRecord 未注入なら 503。
       if (typeof onMemoryRecord !== "function") {
@@ -2741,12 +2797,18 @@ export function createCockpitServer(options = {}) {
       });
     },
     /**
-     * 圧縮の開始・終了をログのタブへ 1 行（SSE "diagnostic" type:"contextCompaction"・メイン画面は使わない）。
-     * 数字と種類だけ（本文なし）。kind = "started" | "finished" | "failed"、elapsedMs = 所要時間。
-     * @param {{ phase: "started" | "finished" | "failed"; ratio?: number | null; durationMs?: number | null; reason?: string | null; personaInjected?: boolean }} info
+     * 圧縮の開始・終了をログのタブへ 1 行（SSE "diagnostic" type:"contextCompaction"）。
+     * 数字と種類だけ（本文なし）。kind = "started" | "finished" | "failed"、elapsedMs = 所要時間。started には
+     * inputTokens（直近の入力トークン）・thresholdTokens（そのときの目安）・ratio（窓に対する割合の参考）を載せる。
+     * あわせて圧縮の最中か（snapshot の compacting・状態のピルの「圧縮中」）を started で true、
+     * finished / failed で false にする（変わったら SSE "state"）。
+     * @param {{ phase: "started" | "finished" | "failed"; inputTokens?: number | null; thresholdTokens?: number | null; ratio?: number | null; durationMs?: number | null; reason?: string | null; personaInjected?: boolean }} info
      */
     broadcastContextCompaction(info) {
       if (closed) return;
+      const phase = info && typeof info.phase === "string" ? info.phase : null;
+      if (phase === "started") setContextCompacting(true);
+      else if (phase === "finished" || phase === "failed") setContextCompacting(false);
       broadcast("diagnostic", {
         type: "contextCompaction",
         message: null,
@@ -2754,14 +2816,23 @@ export function createCockpitServer(options = {}) {
         startMs: null,
         endMs: null,
         tag: null,
-        kind: info && typeof info.phase === "string" ? info.phase : null,
+        kind: phase,
         elapsedMs: info && typeof info.durationMs === "number" ? info.durationMs : null,
         charsSpoken: null,
         totalChars: null,
         prefix: null,
+        inputTokens: info && typeof info.inputTokens === "number" ? info.inputTokens : null,
+        thresholdTokens: info && typeof info.thresholdTokens === "number" ? info.thresholdTokens : null,
         ratio: info && typeof info.ratio === "number" ? info.ratio : null,
         personaInjected: info?.personaInjected === true
       });
+    },
+    /**
+     * 圧縮の最中の表示を戻す（頭のセッションを畳んで作り直すとき・cockpit.mjs）。畳んだセッションの圧縮は
+     * もう続かないので、finished / failed が届かなくても「圧縮中」を出しっぱなしにしない。冪等。
+     */
+    resetContextCompaction() {
+      setContextCompacting(false);
     },
     /**
      * 自発発火の ON/OFF を切り替える（S6・Domain D の永続トグルが呼ぶ継ぎ目）。scheduler 未生成

@@ -67,10 +67,14 @@
  *     操縦席にツマミは置かず、このファイルのキー `latencyWarnSec` / `latencyAlertSec` を手で書き換えて次回起動から
  *     効かせる（discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.1「秒数は設定で変えられる」）。
  *     正の数でなければ null。
- *   getContextCompaction(): Codex の頭の隙間で手動の圧縮（context-growth-2026-10.md §6）のしきい値
- *     （`{ thresholdRatio, quietSec, minIntervalMin }`・各 null = 既定 0.42 / 3 秒 / 10 分）。操縦席にツマミは置かず、
- *     このファイルのキー `compactThresholdRatio`（0 より大きく 1 以下）/ `compactQuietSec`（0 以上）/
- *     `compactMinIntervalMin`（0 以上）を手で書き換えて次回起動から効かせる。範囲外・数でない値は null。
+ *   getContextCompaction(): Codex の頭の隙間で手動の圧縮（context-growth-2026-10.md §6・§8）の目安
+ *     （`{ thresholdTokens, quietSec, minIntervalMin }`・各 null = 既定 20 万トークン / 3 秒 / 10 分）。
+ *     `compactThresholdTokens`（圧縮を始める大きさ = 直近の入力トークン・整数で 5 万〜45 万）は操縦席の設定
+ *     （頭脳・会話のタブ）から setCompactThresholdTokens で書き、起動時にも読む。`compactQuietSec`（0 以上）/
+ *     `compactMinIntervalMin`（0 以上）は操縦席にツマミを置かず、手で書き換えて次回起動から効かせる。
+ *     範囲外・数でない値は null。旧キー `compactThresholdRatio`（窓に対する割合）は廃止（読まない）。
+ *   setCompactThresholdTokens(tokens): 操縦席で圧縮を始める大きさを変えたときに記憶（次回起動で復元）。
+ *     範囲外は null（= 既定）として書く。あわせて旧キー `compactThresholdRatio` をファイルから消す。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -95,6 +99,7 @@ import {
   CONVERSATION_INSTRUCTION_BRAIN_IDS,
   resolveConversationInstructionProfile
 } from "../mind/fire-orchestrator.mjs";
+import { normalizeCompactThresholdTokens } from "../mind/context-compactor.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -140,7 +145,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   getCommentHold: () => { maxAgeSec: number | null; maxCount: number | null };
  *   getBackchannelMinIntervalSec: () => number | null;
  *   getLatencyThresholds: () => { warnSec: number | null; alertSec: number | null };
- *   getContextCompaction: () => { thresholdRatio: number | null; quietSec: number | null; minIntervalMin: number | null };
+ *   getContextCompaction: () => { thresholdTokens: number | null; quietSec: number | null; minIntervalMin: number | null };
+ *   setCompactThresholdTokens: (tokens: number | null) => void;
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -345,14 +351,18 @@ export function createFileSettingsStore(options = {}) {
     getContextCompaction() {
       const all = readAll();
       const finite = (/** @type {unknown} */ v) => typeof v === "number" && Number.isFinite(v);
-      const ratio = all.compactThresholdRatio;
       const quiet = all.compactQuietSec;
       const interval = all.compactMinIntervalMin;
       return {
-        thresholdRatio: finite(ratio) && ratio > 0 && ratio <= 1 ? ratio : null,
+        thresholdTokens: normalizeCompactThresholdTokens(all.compactThresholdTokens),
         quietSec: finite(quiet) && quiet >= 0 ? quiet : null,
         minIntervalMin: finite(interval) && interval >= 0 ? interval : null
       };
+    },
+    /** @param {number | null} tokens */
+    setCompactThresholdTokens(tokens) {
+      // 旧キー（割合）は undefined で書く = JSON から落ちる（量に置き換えたので残さない）。
+      writeMerged({ compactThresholdTokens: normalizeCompactThresholdTokens(tokens), compactThresholdRatio: undefined });
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

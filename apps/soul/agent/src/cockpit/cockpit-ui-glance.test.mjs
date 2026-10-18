@@ -148,6 +148,32 @@ test("TopBar: 名前・モデル名・状態のピル・異常時だけの警告
   assert.equal(collectText(unknown).join(""), "Codex 週 —");
 });
 
+test("TopBar: 圧縮の最中は状態のピルに「圧縮中」（考えてるより先・喋ってるより後・既定は出さない）", () => {
+  const base = { soul: "thinking", ears: "listening", nowMs: 0, onKill: () => {}, onRevive: () => {} };
+  const pillOf = (/** @type {any} */ vnode) =>
+    collectElements(vnode).find((n) => n.props && typeof n.props.class === "string" && n.props.class.startsWith("status-pill"));
+  const compacting = pillOf(TopBar({ ...base, compacting: true }));
+  assert.equal(compacting.props.class, "status-pill compacting");
+  assert.equal(collectText(compacting).join(""), "圧縮中");
+  assert.equal(pillOf(TopBar({ ...base, soul: "speaking", compacting: true })).props.class, "status-pill speaking");
+  assert.equal(pillOf(TopBar(base)).props.class, "status-pill thinking", "compacting の既定は false");
+});
+
+test("App の結線: snapshot の compacting を上の帯へ渡す（無い古いサーバでは前値のまま）", () => {
+  const app = readFileSync(new URL("./ui/app.mjs", import.meta.url), "utf8");
+  assert.match(app, /if \("compacting" in s\) setCompacting\(s\.compacting === true\)/);
+  assert.match(app, /<\$\{TopBar\}[^>]*compacting=\$\{compacting\}/);
+});
+
+test("COCKPIT_CSS: 状態のピルの「圧縮中」は専用の静かな紫（ほかの状態と別の色トークン）", () => {
+  assert.match(COCKPIT_CSS, /--compacting: #[0-9a-f]{6};/);
+  assert.ok(COCKPIT_CSS.includes(".status-pill.compacting { color: var(--compacting); }"));
+  for (const other of ["--up", "--speaking", "--teal"]) {
+    const value = (/** @type {string} */ name) => (COCKPIT_CSS.match(new RegExp(name + ": (#[0-9a-f]{6});")) || [])[1];
+    assert.notEqual(value("--compacting"), value(other), other);
+  }
+});
+
 test("BottomBar: 運転設定の表示・遅延の凡例 8 つ・歯車「準備・設定」（ホットキーの案内は置かない）", () => {
   let opened = 0;
   const vnode = BottomBar({

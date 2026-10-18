@@ -3164,6 +3164,74 @@ test("cockpit barge-in born-disabled: bargeInInitialEnabled 未指定は既定 O
 //  注入有無だけがゲート（onSetBrain/onSetChannelUrl と同型・POST /api/brain の写経）。cockpit.mjs 側の
 //  記憶生成・保存・ライブ転写取得は一切ここに関与しない（責務境界・fake フックのみで実 LLM/実 FS 消費ゼロ）。
 
+// ── POST /api/compact-threshold・snapshot.compaction（圧縮を始める大きさ・POST /api/memory の写経）──
+
+test("cockpit POST /api/compact-threshold: onSetCompactThresholdTokens 未注入なら 503・snapshot.compaction は null", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    assert.equal((await getJson(`${url}/api/state`)).json.compaction, null);
+    const r = await postJson(`${url}/api/compact-threshold`, { tokens: 200_000 });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /compaction control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/compact-threshold: 整数で 5 万〜45 万をフックへ渡し、snapshot.compaction（GET /api/state・SSE state）に載せる", async () => {
+  // 目安の正本は呼び出し側（cockpit.mjs の compactor）。テストは外側で正本を持つ最小 fake を組む。
+  let thresholdTokens = 200_000;
+  /** @type {number[]} */
+  const received = [];
+  const server = createCockpitServer({
+    onSetCompactThresholdTokens: (tokens) => {
+      received.push(tokens);
+      thresholdTokens = tokens;
+    },
+    contextCompactionStatus: () => ({ thresholdTokens })
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    assert.deepEqual((await client.waitFor((e) => e.event === "state")).data.compaction, { thresholdTokens: 200_000 });
+    assert.deepEqual((await getJson(`${url}/api/state`)).json.compaction, { thresholdTokens: 200_000 });
+
+    const r = await postJson(`${url}/api/compact-threshold`, { tokens: 150_000 });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.compaction, { thresholdTokens: 150_000 }, "応答は snapshot 全体");
+    await client.waitFor((e) => e.event === "state" && e.data.compaction?.thresholdTokens === 150_000);
+
+    for (const bad of [{ tokens: 49_999 }, { tokens: 450_001 }, { tokens: 200_000.5 }, { tokens: "200000" }, { tokens: 0.42 }, {}]) {
+      const res = await postJson(`${url}/api/compact-threshold`, bad);
+      assert.equal(res.status, 400, JSON.stringify(bad));
+    }
+    assert.equal((await postJson(`${url}/api/compact-threshold`, { tokens: 50_000 })).status, 200, "下限ちょうど");
+    assert.equal((await postJson(`${url}/api/compact-threshold`, { tokens: 450_000 })).status, 200, "上限ちょうど");
+    assert.deepEqual(received, [150_000, 50_000, 450_000], "400 はフックを呼ばない");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/compact-threshold: フックの throw は握って 200（操作を止めない）", async () => {
+  const server = createCockpitServer({
+    onSetCompactThresholdTokens: () => {
+      throw new Error("disk full");
+    },
+    contextCompactionStatus: () => ({ thresholdTokens: 200_000 })
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/compact-threshold`, { tokens: 300_000 });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.compaction, { thresholdTokens: 200_000 });
+  } finally {
+    await server.close();
+  }
+});
+
 test("cockpit POST /api/memory: onSetMemoryEnabled 未注入なら 503", async () => {
   const server = createCockpitServer({});
   try {
@@ -5228,16 +5296,74 @@ test("cockpit broadcastContextCompaction: SSE diagnostic type:contextCompaction�
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
-    server.broadcastContextCompaction({ phase: "started", ratio: 0.7 });
+    server.broadcastContextCompaction({ phase: "started", inputTokens: 201_234, thresholdTokens: 200_000, ratio: 0.42 });
     server.broadcastContextCompaction({ phase: "finished", durationMs: 12_000, personaInjected: true });
     const started = await client.waitFor((e) => e.event === "diagnostic" && e.data.kind === "started");
     assert.equal(started.data.type, "contextCompaction");
-    assert.equal(started.data.ratio, 0.7);
+    assert.equal(started.data.inputTokens, 201_234, "量（直近の入力トークン）");
+    assert.equal(started.data.thresholdTokens, 200_000, "そのときの目安");
+    assert.equal(started.data.ratio, 0.42, "窓に対する割合は参考");
     const finished = await client.waitFor((e) => e.event === "diagnostic" && e.data.kind === "finished");
     assert.equal(finished.data.elapsedMs, 12_000);
     assert.equal(finished.data.personaInjected, true);
+    assert.equal(finished.data.inputTokens, null);
+    assert.equal(finished.data.thresholdTokens, null);
   } finally {
     client.close();
     await server.close();
   }
+});
+
+test("cockpit snapshot.compacting: started で true（GET /api/state・SSE state・開き直した SSE にも）、finished / failed / resetContextCompaction で false", async () => {
+  const orchestrator = makeFakeOrchestrator();
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (orchestrator.factory) });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  /** @type {ReturnType<typeof openSseClient> | null} */
+  let reopened = null;
+  try {
+    const initial = await client.waitFor((e) => e.event === "state");
+    assert.equal(initial.data.compacting, false, "既定は false（常に boolean）");
+    assert.equal((await getJson(`${url}/api/state`)).json.compacting, false);
+
+    // started → 圧縮中。重ねて届いた started では state を押し直さない。
+    server.broadcastContextCompaction({ phase: "started", inputTokens: 210_000, thresholdTokens: 200_000, ratio: 0.5 });
+    server.broadcastContextCompaction({ phase: "started", inputTokens: 210_000, thresholdTokens: 200_000, ratio: 0.5 });
+    await client.waitFor((e) => e.event === "state" && e.data.compacting === true);
+    assert.equal((await getJson(`${url}/api/state`)).json.compacting, true, "GET /api/state にも載る");
+    // 操縦席を開き直しても（新しい SSE の最初の state）圧縮中が出る。
+    reopened = openSseClient(`${url}/api/events`);
+    assert.equal((await reopened.waitFor((e) => e.event === "state")).data.compacting, true);
+
+    // finished → 戻る（state は diagnostic より先に届く）。
+    server.broadcastContextCompaction({ phase: "finished", durationMs: 7000, personaInjected: true });
+    await client.waitFor((e) => e.event === "diagnostic" && e.data.kind === "finished");
+    assert.equal((await getJson(`${url}/api/state`)).json.compacting, false);
+
+    // failed → 戻る。
+    server.broadcastContextCompaction({ phase: "started", inputTokens: 210_000, thresholdTokens: 200_000, ratio: 0.5 });
+    server.broadcastContextCompaction({ phase: "failed", durationMs: 500, reason: "failed" });
+    await client.waitFor((e) => e.event === "diagnostic" && e.data.kind === "failed");
+    assert.equal((await getJson(`${url}/api/state`)).json.compacting, false);
+
+    // 頭の作り直し（resetContextCompaction）→ 戻る。冪等で、後から届いた finished でも state を押し直さない。
+    server.broadcastContextCompaction({ phase: "started", inputTokens: 210_000, thresholdTokens: 200_000, ratio: 0.5 });
+    server.resetContextCompaction();
+    assert.equal((await getJson(`${url}/api/state`)).json.compacting, false);
+    server.resetContextCompaction();
+    server.broadcastContextCompaction({ phase: "finished", durationMs: 100, reason: "disposed" });
+    // 種類の分からない phase では変えない。
+    server.broadcastContextCompaction(/** @type {any} */ ({ phase: "other" }));
+    await client.waitFor((e) => e.event === "diagnostic" && e.data.kind === "other");
+
+    const seen = client.events.filter((e) => e.event === "state").map((e) => e.data.compacting);
+    assert.deepEqual(seen, [false, true, false, true, false, true, false], "変わったときだけ SSE state");
+  } finally {
+    client.close();
+    reopened?.close();
+    await server.close();
+  }
+  // close 後は何もしない（throw しない）。
+  server.broadcastContextCompaction({ phase: "started", inputTokens: 210_000, thresholdTokens: 200_000, ratio: 0.5 });
+  server.resetContextCompaction();
 });

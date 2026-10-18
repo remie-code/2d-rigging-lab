@@ -119,6 +119,19 @@ test("statusPillView: 考えてる / 喋ってる / 聞いてる（耳が止ま�
   assert.deepEqual(statusPillView(null, "stopped"), { text: "止まってる", className: "status-pill stopped" });
 });
 
+test("statusPillView: 圧縮中（優先順位 喋ってる > 圧縮中 > 考えてる > 聞いてる > 起動中 > 止まってる）", () => {
+  const compacting = { text: "圧縮中", className: "status-pill compacting" };
+  assert.deepEqual(statusPillView("speaking", "listening", true), { text: "喋ってる", className: "status-pill speaking" }, "喋ってるが先");
+  assert.deepEqual(statusPillView("thinking", "listening", true), compacting, "圧縮の終わりを待っている発火は考えてるではなく圧縮中");
+  assert.deepEqual(statusPillView("idle", "listening", true), compacting);
+  assert.deepEqual(statusPillView("idle", "starting", true), compacting);
+  assert.deepEqual(statusPillView(null, "stopped", true), compacting, "耳が止まっていても圧縮の最中は出す");
+  // 圧縮中でなければ今までどおり（false / 欠落 / true 以外は圧縮中にしない）。
+  assert.deepEqual(statusPillView("thinking", "listening", false), { text: "考えてる", className: "status-pill thinking" });
+  assert.deepEqual(statusPillView("idle", "listening", undefined), { text: "聞いてる", className: "status-pill listening" });
+  assert.deepEqual(statusPillView("idle", "listening", /** @type {any} */ ("true")), { text: "聞いてる", className: "status-pill listening" });
+});
+
 test("isPreStream: 耳が止まっている間だけ（起動中は配信前に数えない）", () => {
   assert.equal(isPreStream("stopped"), true);
   assert.equal(isPreStream(null), true);

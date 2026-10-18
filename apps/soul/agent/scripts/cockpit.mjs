@@ -63,7 +63,8 @@ import {
 import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
 import {
   createContextCompactor,
-  DEFAULT_COMPACT_THRESHOLD_RATIO,
+  normalizeCompactThresholdTokens,
+  DEFAULT_COMPACT_THRESHOLD_TOKENS,
   DEFAULT_COMPACT_QUIET_MS,
   DEFAULT_COMPACT_MIN_INTERVAL_MS
 } from "../src/mind/context-compactor.mjs";
@@ -1266,10 +1267,10 @@ export function resolveLatencyThresholdsFromSettings(settings) {
 }
 
 /**
- * settings の圧縮のしきい値（compactThresholdRatio / compactQuietSec / compactMinIntervalMin）→ 圧縮の部品の
- * options（未設定・読めなければ既定 0.42 / 3 秒 / 10 分・context-growth-2026-10.md §6）。
- * @param {{ getContextCompaction?: () => { thresholdRatio: number | null; quietSec: number | null; minIntervalMin: number | null } }} settings
- * @returns {{ thresholdRatio: number; quietMs: number; minIntervalMs: number }}
+ * settings の圧縮の目安（compactThresholdTokens / compactQuietSec / compactMinIntervalMin）→ 圧縮の部品の
+ * options（未設定・読めなければ既定 20 万トークン / 3 秒 / 10 分・context-growth-2026-10.md §6・§8）。
+ * @param {{ getContextCompaction?: () => { thresholdTokens: number | null; quietSec: number | null; minIntervalMin: number | null } }} settings
+ * @returns {{ thresholdTokens: number; quietMs: number; minIntervalMs: number }}
  */
 export function resolveContextCompactionOptions(settings) {
   let raw = null;
@@ -1279,14 +1280,54 @@ export function resolveContextCompactionOptions(settings) {
     raw = null;
   }
   return {
-    thresholdRatio: raw?.thresholdRatio ?? DEFAULT_COMPACT_THRESHOLD_RATIO,
+    thresholdTokens: normalizeCompactThresholdTokens(raw?.thresholdTokens) ?? DEFAULT_COMPACT_THRESHOLD_TOKENS,
     quietMs: raw?.quietSec != null ? raw.quietSec * 1000 : DEFAULT_COMPACT_QUIET_MS,
     minIntervalMs: raw?.minIntervalMin != null ? raw.minIntervalMin * 60_000 : DEFAULT_COMPACT_MIN_INTERVAL_MS
   };
 }
 
 /**
- * 頭の会話の圧縮の開始・終了のターミナル 1 行（数字と理由だけ・本文は書かない）。
+ * 操縦席の設定（頭脳・会話のタブ）の「圧縮を始める大きさ」を、cockpit-server の口（onSetCompactThresholdTokens /
+ * contextCompactionStatus）へ橋渡しする（createMemoryHooks と同型の薄い配線層）。変えたら settings へ保存し
+ * （次回起動で復元）、走っている compactor の目安をその場で差し替える（次の確認 = 数秒以内から効く）。
+ * 目安の正本は compactor（サーバは二重に持たない）。
+ * @param {{ setCompactThresholdTokens?: (tokens: number | null) => void }} settings
+ * @param {{ getThresholdTokens: () => number; setThresholdTokens: (tokens: number) => number }} compactor
+ * @returns {{ onSetCompactThresholdTokens: (tokens: number) => void; contextCompactionStatus: () => { thresholdTokens: number } }}
+ */
+export function createContextCompactionHooks(settings, compactor) {
+  return {
+    /** cockpit-server の onSetCompactThresholdTokens（POST /api/compact-threshold が呼ぶ・値は検証済み）。 */
+    onSetCompactThresholdTokens: (tokens) => {
+      compactor.setThresholdTokens(tokens);
+      try {
+        if (typeof settings.setCompactThresholdTokens === "function") settings.setCompactThresholdTokens(tokens);
+      } catch {
+        // 永続化失敗は操作を止めない（走っている compactor には効いている）。
+      }
+    },
+    /** state snapshot の compaction。 */
+    contextCompactionStatus: () => ({ thresholdTokens: compactor.getThresholdTokens() })
+  };
+}
+
+/**
+ * 圧縮の開始・終了の記録 1 行（session-usage/）。compactionUsageRecord の形（ratio = 窓に対する割合・
+ * lastInputTokens・totalInputTokens・modelContextWindow）に、開始のときだけそのときの目安 thresholdTokens を足す
+ * （目安は操縦席から変えられるので、記録の行だけで「どの目安で走ったか」が読めるように・追加のキーだけ）。
+ * @param {any} event  context-compactor の onEvent。
+ * @param {string | null} brain
+ * @returns {Record<string, unknown>}
+ */
+export function contextCompactionUsageRecord(event, brain) {
+  const record = compactionUsageRecord(event, brain);
+  if (event?.type !== "started") return record;
+  return { ...record, thresholdTokens: typeof event.thresholdTokens === "number" ? event.thresholdTokens : null };
+}
+
+/**
+ * 頭の会話の圧縮の開始・終了のターミナル 1 行（数字と理由だけ・本文は書かない）。開始は量（直近の入力トークンと
+ * そのときの目安）を主に、窓に対する割合を参考で添える。
  * @param {any} event  context-compactor の onEvent。
  * @returns {string}
  */
@@ -1294,8 +1335,8 @@ export function formatContextCompactionLine(event) {
   if (event?.type === "started") {
     const pct = typeof event.ratio === "number" ? `${Math.round(event.ratio * 100)}%` : "-";
     return (
-      `[cockpit] context compaction started: ${pct} of window ` +
-      `(last input ${event.lastInputTokens ?? "-"} / ${event.modelContextWindow ?? "-"} tokens, total ${event.totalInputTokens ?? "-"})\n`
+      `[cockpit] context compaction started: last input ${event.lastInputTokens ?? "-"} tokens > threshold ${event.thresholdTokens ?? "-"} ` +
+      `(${pct} of window ${event.modelContextWindow ?? "-"}, total ${event.totalInputTokens ?? "-"})\n`
     );
   }
   const secs = typeof event?.durationMs === "number" ? `${(event.durationMs / 1000).toFixed(1)}s` : "-";
@@ -1456,9 +1497,11 @@ async function main() {
   // 頭の文脈の記録（起動ごと 1 ファイル・session-usage/・本文なし・context-growth-2026-10.md §6）。
   // 発火ごとの 1 行（Codex の頭のとき）と、圧縮の開始・終了を 1 行ずつ。
   const sessionUsageLog = createSessionUsageLog();
-  // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6）。しきい値は settings ファイルのキー
-  // （無ければ 0.42 / 3 秒 / 10 分）。隙間の材料は cockpit-server、頭のセッションは今の session（Codex で、
-  // 設定の変更で作り直し待ちになっていないときだけ）。見え方はターミナル 1 行・ログのタブ 1 行・記録 1 行。
+  // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6・§8）。目安は settings ファイルのキー
+  // （無ければ 20 万トークン / 3 秒 / 10 分）。圧縮を始める大きさは操縦席の設定（頭脳・会話のタブ）からも変えられ、
+  // contextCompactionHooks が保存と走っている compactor の差し替えを担う（次の確認から効く）。隙間の材料は
+  // cockpit-server、頭のセッションは今の session（Codex で、設定の変更で作り直し待ちになっていないときだけ）。見え方はターミナル 1 行・ログのタブ 1 行・記録 1 行と、
+  // 最中の間の上の帯の状態のピル「圧縮中」（broadcastContextCompaction が snapshot の compacting を切り替える）。
   const contextCompactor = createContextCompactor({
     ...resolveContextCompactionOptions(settings),
     getSession: () => {
@@ -1471,10 +1514,10 @@ async function main() {
     getQuietGap: () => (server ? server.getQuietGap() : null),
     onEvent: (event) => {
       process.stdout.write(formatContextCompactionLine(event));
-      sessionUsageLog.append(compactionUsageRecord(event, currentBrain));
+      sessionUsageLog.append(contextCompactionUsageRecord(event, currentBrain));
       server?.broadcastContextCompaction(
         event.type === "started"
-          ? { phase: "started", ratio: event.ratio }
+          ? { phase: "started", inputTokens: event.lastInputTokens, thresholdTokens: event.thresholdTokens, ratio: event.ratio }
           : {
               phase: event.ok ? "finished" : "failed",
               durationMs: event.durationMs,
@@ -1484,6 +1527,7 @@ async function main() {
       );
     }
   });
+  const contextCompactionHooks = createContextCompactionHooks(settings, contextCompactor);
   // 残量ゲージの材料（Codex は頭が Codex のときに App Server から・ElevenLabs は 10 分おき・cockpit-glance-redesign.md §9.2）。
   // 監視は listen の後に始め、終了時に止める。キーやアカウント情報は状態にもログにも載せない。
   const quotaMonitor = createQuotaMonitor({
@@ -1627,6 +1671,9 @@ async function main() {
       } catch {
         // Best effort; the stale session is never reused for the next Fire.
       }
+      // 畳んだ頭の圧縮はもう続かない（dispose が待っている compact() を失敗で返し、ふつうは failed が先に届く）。
+      // 届かなかったときも操縦席の「圧縮中」を出しっぱなしにしない（冪等）。
+      server?.resetContextCompaction();
       if (session === stale) {
         session = null;
         sessionInstructionRevision = null;
@@ -1961,6 +2008,9 @@ async function main() {
     onSetMemoryEnabled,
     onMemoryRecord,
     memoryStatus,
+    // 圧縮を始める大きさ（設定の「頭脳・会話」タブ）: 保存 + 走っている compactor の差し替え・snapshot の compaction。
+    onSetCompactThresholdTokens: contextCompactionHooks.onSetCompactThresholdTokens,
+    contextCompactionStatus: contextCompactionHooks.contextCompactionStatus,
     // 操縦席の文字起こし選択: 起動時に前回の選択を復元・Start ごとに記憶・遅延は標準出力へ 1 行（数字のみ）。
     // ElevenLabs のキーは cockpit-server の既定（.env.elevenlabs.local をコード内で直接読む）に任せる。
     sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),

@@ -2,7 +2,7 @@
 /**
  * ui: 上の細い帯（操縦席の作り直し・cockpit-glance-redesign.md §3・§4・§7・§8）と、ログのタブに残す一目の健康。
  *
- * 上の帯（TopBar）: 名前（チャッピー）・頭のモデル名・状態のピル 1 つ（聞いてる / 考えてる / 喋ってる）。
+ * 上の帯（TopBar）: 名前（チャッピー）・頭のモデル名・状態のピル 1 つ（聞いてる / 考えてる / 喋ってる / 圧縮中）。
  * 異常があるときだけ警告（warnings の一覧・alert が先）。右に残量ゲージ 2 本（Codex 週・ElevenLabs 月の「残り」）
  * と小さな KILL ボタン。KILL 中は帯を赤くし「KILL 中」と復帰ボタン（既存の POST /api/kill {killed:false}）。
  * 表示導出はすべて view-logic（glance-meters.mjs / control.mjs / health.mjs）経由。hooks は使わない
@@ -103,11 +103,12 @@ export function QuotaGauge({ view }) {
 
 /**
  * 上の細い帯（hooks 非使用・vnode 走査テスト対象）。
- * @param {{ identity?: unknown; modelText?: string; soul?: string; ears?: string; warnings?: any[]; quota?: any;
+ * compacting は snapshot の compacting（頭の会話の圧縮の最中・状態のピルの「圧縮中」）。
+ * @param {{ identity?: unknown; modelText?: string; soul?: string; ears?: string; compacting?: boolean; warnings?: any[]; quota?: any;
  *   killed?: boolean; killError?: string; nowMs: number; onKill?: () => void; onRevive?: () => void }} props
  */
-export function TopBar({ identity, modelText = "", soul, ears, warnings, quota, killed = false, killError = "", nowMs, onKill, onRevive }) {
-  const pill = statusPillView(soul, ears);
+export function TopBar({ identity, modelText = "", soul, ears, compacting = false, warnings, quota, killed = false, killError = "", nowMs, onKill, onRevive }) {
+  const pill = statusPillView(soul, ears, compacting);
   const warn = warningsView(warnings, nowMs);
   const killView = killSwitchView(killed);
   const codex = quotaGaugeView("Codex 週", quota && quota.codex);

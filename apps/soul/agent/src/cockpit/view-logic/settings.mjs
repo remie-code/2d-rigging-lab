@@ -41,6 +41,15 @@
  *  - memoryStatusLabel      → 「記憶 N 件を搭載（最新: HH:MM:SS）」の表示文言（count/lastRecordAtMs
  *    から導出・lastRecordAtMs はローカル時刻表示へ変換=Domain A 申し送り 3・format-time.mjs の
  *    formatClock を再利用）。
+ *
+ * 圧縮を始める大きさ（設定「頭脳・会話」タブ・context-growth-2026-10.md §8 の後の合意 2026-10-19）:
+ *  - COMPACT_THRESHOLD_*            → 既定 20 万・範囲 5 万〜45 万・1 万刻み（src/mind/context-compactor.mjs の定数と
+ *                                     同じ値。画面は src/mind を import できないので写しを持ち、テストで一致を固定する）。
+ *  - compactThresholdOptions        → select の選択肢（万トークン・既定に「（既定）」）。
+ *  - compactThresholdSelection      → state snapshot の compaction.thresholdTokens を選択肢の値へ。
+ *  - compactThresholdStatusLabel    → 「いま 20 万トークン（既定）」の表示文言。
+ *  - COMPACT_THRESHOLD_NOTE         → Codex の頭のときだけ効く旨の短い説明。
+ *  - compactThresholdPostErrorText  → POST /api/compact-threshold 応答の失敗文言（memoryPostErrorText の写経）。
  */
 
 import { formatClock } from "./format-time.mjs";
@@ -230,6 +239,89 @@ export function memoryStatusLabel(memory) {
   return `記憶 ${count} 件を搭載（最新: ${last}）`;
 }
 
+// ── 圧縮を始める大きさ（設定「頭脳・会話」タブ）──────────────────────────────
+
+/** 既定の目安（トークン・src/mind/context-compactor.mjs の DEFAULT_COMPACT_THRESHOLD_TOKENS と同じ値）。 */
+export const COMPACT_THRESHOLD_DEFAULT_TOKENS = 200_000;
+/** 選べる下限（COMPACT_THRESHOLD_TOKENS_MIN と同じ値）。 */
+export const COMPACT_THRESHOLD_MIN_TOKENS = 50_000;
+/** 選べる上限（COMPACT_THRESHOLD_TOKENS_MAX と同じ値）。 */
+export const COMPACT_THRESHOLD_MAX_TOKENS = 450_000;
+/** 選択肢の刻み（1 万トークン）。 */
+export const COMPACT_THRESHOLD_STEP_TOKENS = 10_000;
+/** Codex の頭のときだけ効く旨の短い説明（drawer-note に出す）。 */
+export const COMPACT_THRESHOLD_NOTE = "Codex の頭のときだけ効きます。直近の入力がこの大きさを超えたら、会話の隙間で圧縮します。";
+
+/**
+ * トークン数を「万」の数字へ（20 万 → "20"・手で書いた 230,097 → "23"・小数第 1 位まで）。
+ * @param {number} tokens
+ * @returns {string}
+ */
+function tokensInMan(tokens) {
+  return String(Math.round(tokens / 1000) / 10);
+}
+
+/**
+ * 有効な目安か（整数で下限〜上限・src/mind の normalizeCompactThresholdTokens と同じ判定）。
+ * @param {unknown} v
+ * @returns {v is number}
+ */
+function isValidCompactThreshold(v) {
+  return typeof v === "number" && Number.isInteger(v) && v >= COMPACT_THRESHOLD_MIN_TOKENS && v <= COMPACT_THRESHOLD_MAX_TOKENS;
+}
+
+/**
+ * 圧縮を始める大きさの select の選択肢（5 万〜45 万を 1 万刻み・value はトークン数の文字列・既定に「（既定）」）。
+ * 今の値が刻みに乗らない（設定ファイルを手で書いた）ときは、その値も並べに差し込む（選択が空にならないように）。
+ * @param {number | null | undefined} [currentTokens]
+ * @returns {Array<{ value: string; label: string }>}
+ */
+export function compactThresholdOptions(currentTokens) {
+  /** @type {number[]} */
+  const values = [];
+  for (let t = COMPACT_THRESHOLD_MIN_TOKENS; t <= COMPACT_THRESHOLD_MAX_TOKENS; t += COMPACT_THRESHOLD_STEP_TOKENS) values.push(t);
+  if (isValidCompactThreshold(currentTokens) && !values.includes(currentTokens)) {
+    values.push(currentTokens);
+    values.sort((a, b) => a - b);
+  }
+  return values.map((t) => ({
+    value: String(t),
+    label: tokensInMan(t) + " 万トークン" + (t === COMPACT_THRESHOLD_DEFAULT_TOKENS ? "（既定）" : "")
+  }));
+}
+
+/**
+ * state snapshot の compaction（{ thresholdTokens }）を選択肢の値へ（未注入・不正は null = 選択を変えない）。
+ * @param {{ thresholdTokens?: number | null } | null | undefined} compaction
+ * @returns {string | null}
+ */
+export function compactThresholdSelection(compaction) {
+  const t = compaction && compaction.thresholdTokens;
+  return isValidCompactThreshold(t) ? String(t) : null;
+}
+
+/**
+ * 今の目安の表示文言（「いま 20 万トークン（既定）」/「いま 25 万トークン（既定は 20 万）」）。未注入は "not available"。
+ * @param {{ thresholdTokens?: number | null } | null | undefined} compaction
+ * @returns {string}
+ */
+export function compactThresholdStatusLabel(compaction) {
+  const t = compaction && compaction.thresholdTokens;
+  if (typeof t !== "number" || !Number.isFinite(t)) return "not available";
+  const suffix =
+    t === COMPACT_THRESHOLD_DEFAULT_TOKENS ? "（既定）" : "（既定は " + tokensInMan(COMPACT_THRESHOLD_DEFAULT_TOKENS) + " 万）";
+  return "いま " + tokensInMan(t) + " 万トークン" + suffix;
+}
+
+/**
+ * POST /api/compact-threshold 応答 → エラー文言（memoryPostErrorText の写経）。成功は null。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function compactThresholdPostErrorText(res) {
+  return settingPostErrorText(res, "compaction control not available");
+}
+
 /**
  * POST /api/chat/connect 応答 → エラー文言（:787-791）。
  * 503 = chat 未結線・400 = invalid source・その他 !ok = connect failed。成功は null。
@@ -312,7 +404,8 @@ const REQUEST_ERROR_PREFIX = {
   chatDisconnect: "chat disconnect error", //        :802
   brain: "brain error", //  多頭化 Domain C（POST /api/brain・audioDevice の写経）
   memory: "memory error", //          配信間記憶（POST /api/memory・audioDevice の写経）
-  memoryRecord: "memory record error" // 配信間記憶（POST /api/memory-record・同型）
+  memoryRecord: "memory record error", // 配信間記憶（POST /api/memory-record・同型）
+  compactThreshold: "compaction threshold error" // 圧縮を始める大きさ（POST /api/compact-threshold・同型）
 };
 
 /**

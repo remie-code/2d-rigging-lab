@@ -23,8 +23,22 @@ import {
   STT_ENGINE_OPTIONS,
   sttEngineSelection,
   TTS_ENGINE_OPTIONS,
-  ttsEngineSelection
+  ttsEngineSelection,
+  COMPACT_THRESHOLD_DEFAULT_TOKENS,
+  COMPACT_THRESHOLD_MIN_TOKENS,
+  COMPACT_THRESHOLD_MAX_TOKENS,
+  COMPACT_THRESHOLD_STEP_TOKENS,
+  COMPACT_THRESHOLD_NOTE,
+  compactThresholdOptions,
+  compactThresholdSelection,
+  compactThresholdStatusLabel,
+  compactThresholdPostErrorText
 } from "./settings.mjs";
+import {
+  DEFAULT_COMPACT_THRESHOLD_TOKENS,
+  COMPACT_THRESHOLD_TOKENS_MIN,
+  COMPACT_THRESHOLD_TOKENS_MAX
+} from "../../mind/context-compactor.mjs";
 
 test("visionTargetLabel: title 無しは not configured（applyVisionTarget :317-322）", () => {
   assert.equal(visionTargetLabel({ title: "FooGame" }), "FooGame");
@@ -248,4 +262,52 @@ test("TTS_ENGINE_OPTIONS / ttsEngineSelection: 声の選択肢（AivisSpeech / E
   assert.equal(ttsEngineSelection({ engine: "voicevox" }), null);
   assert.equal(ttsEngineSelection({}), null);
   assert.equal(ttsEngineSelection(null), null);
+});
+
+// ── 圧縮を始める大きさ（設定「頭脳・会話」タブ）─────────────────────────────
+
+test("圧縮の目安の定数: 画面の写しは src/mind/context-compactor.mjs と同じ値（既定 20 万・5 万〜45 万・1 万刻み）", () => {
+  assert.equal(COMPACT_THRESHOLD_DEFAULT_TOKENS, DEFAULT_COMPACT_THRESHOLD_TOKENS);
+  assert.equal(COMPACT_THRESHOLD_MIN_TOKENS, COMPACT_THRESHOLD_TOKENS_MIN);
+  assert.equal(COMPACT_THRESHOLD_MAX_TOKENS, COMPACT_THRESHOLD_TOKENS_MAX);
+  assert.equal(COMPACT_THRESHOLD_STEP_TOKENS, 10_000);
+  assert.match(COMPACT_THRESHOLD_NOTE, /Codex の頭のときだけ/);
+});
+
+test("compactThresholdOptions: 5 万〜45 万を 1 万刻み・既定に（既定）・刻みに乗らない今の値は差し込む", () => {
+  const options = compactThresholdOptions(200_000);
+  assert.equal(options.length, 41);
+  assert.deepEqual(options[0], { value: "50000", label: "5 万トークン" });
+  assert.deepEqual(options.at(-1), { value: "450000", label: "45 万トークン" });
+  assert.deepEqual(options.find((o) => o.value === "200000"), { value: "200000", label: "20 万トークン（既定）" });
+  assert.equal(options.filter((o) => o.label.includes("既定")).length, 1);
+  assert.deepEqual(compactThresholdOptions(null), options, "今の値が無くても同じ並び");
+  const withOdd = compactThresholdOptions(235_000);
+  assert.equal(withOdd.length, 42);
+  const i = withOdd.findIndex((o) => o.value === "235000");
+  assert.deepEqual(withOdd[i], { value: "235000", label: "23.5 万トークン" });
+  assert.deepEqual([withOdd[i - 1].value, withOdd[i + 1].value], ["230000", "240000"], "昇順に差し込む");
+  assert.equal(compactThresholdOptions(10_000).length, 41, "範囲外の値は差し込まない");
+});
+
+test("compactThresholdSelection / compactThresholdStatusLabel: snapshot の compaction から選択と表示", () => {
+  assert.equal(compactThresholdSelection({ thresholdTokens: 200_000 }), "200000");
+  assert.equal(compactThresholdSelection({ thresholdTokens: 10_000 }), null);
+  assert.equal(compactThresholdSelection(null), null);
+  assert.equal(compactThresholdSelection(undefined), null);
+  assert.equal(compactThresholdStatusLabel({ thresholdTokens: 200_000 }), "いま 20 万トークン（既定）");
+  assert.equal(compactThresholdStatusLabel({ thresholdTokens: 250_000 }), "いま 25 万トークン（既定は 20 万）");
+  assert.equal(compactThresholdStatusLabel({ thresholdTokens: 230_097 }), "いま 23 万トークン（既定は 20 万）");
+  assert.equal(compactThresholdStatusLabel(null), "not available");
+  assert.equal(compactThresholdStatusLabel({}), "not available");
+});
+
+test("compactThresholdPostErrorText / requestErrorText: POST /api/compact-threshold の失敗文言", () => {
+  assert.equal(compactThresholdPostErrorText({ status: 200, ok: true, j: {} }), null);
+  assert.equal(compactThresholdPostErrorText({ status: 503, ok: false, j: {} }), "compaction control not available");
+  assert.equal(
+    compactThresholdPostErrorText({ status: 400, ok: false, j: { error: "tokens must be an integer from 50000 to 450000" } }),
+    "set failed: tokens must be an integer from 50000 to 450000"
+  );
+  assert.equal(requestErrorText("compactThreshold", new Error("net")), "compaction threshold error: Error: net");
 });

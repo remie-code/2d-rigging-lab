@@ -52,6 +52,7 @@ export const COCKPIT_CSS = `
   --marker-fire: #f0c14b;     /* 発火マーカー（現 cockpit.html:123 の黄を継承） */
   --marker-vision: #8fb7ff;   /* 視覚マーカー（現 cockpit.html:130 の淡青を継承） */
   --speaking: #f0c14b;        /* speaking 行（現 cockpit.html:19 を継承） */
+  --compacting: #a597d6;      /* 状態のピルの「圧縮中」（静かな紫・視聴者の紫や LLM の区間より彩度を落とす） */
   /* ── 死活（現 cockpit.html:17-18 を継承）── */
   --up: #57c7a3;
   --down: #ff5d5d;
@@ -124,6 +125,7 @@ html, body { overflow: hidden; }
 .status-pill.thinking { color: var(--speaking); }
 .status-pill.speaking { color: var(--teal); }
 .status-pill.speaking .pill-dot { box-shadow: 0 0 8px var(--teal); }
+.status-pill.compacting { color: var(--compacting); }
 .kill-status.killed {
   color: #fff;
   background: var(--down);
@@ -586,6 +588,8 @@ html, body { overflow: hidden; }
 .drawer-section { padding: 8px 0; }
 .drawer-section + .drawer-section { border-top: 1px solid var(--border); }
 .drawer-section h3 { font-size: 12px; margin: 0 0 8px; color: var(--teal); letter-spacing: 0.06em; }
+/* 同じ区画の中の 2 つ目の見出し（頭脳・会話の「会話の圧縮」）。 */
+.drawer-section h3.drawer-subhead { margin-top: 14px; }
 .drawer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 4px 0; }
 .drawer-row > label:not([class]) { flex: 0 0 9em; color: var(--muted); } /* ラベル幅揃え（§7）。 */
 /* 状態/エラーの補助行（ラベル幅ぶんインデントして入力列に揃える）。 */

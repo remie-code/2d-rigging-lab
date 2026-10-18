@@ -374,7 +374,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     commentBusy: null, // コメント反応の合意 §2: scheduler 未生成なら null（speakStart と同型）。
     killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
     brain: null, // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
-    memory: null // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
+    memory: null, // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
+    compaction: null // 圧縮の目安: memory と同型の null 許容（contextCompactionStatus 未注入なら null）。
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
@@ -388,9 +389,37 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     bargeIn: { enabled: false },
     killed: true,
     brain: { brain: "codex", credentialHealth: true },
-    memory: { enabled: true, count: 3, lastRecordAtMs: 1721234567890 }
+    memory: { enabled: true, count: 3, lastRecordAtMs: 1721234567890 },
+    compaction: { thresholdTokens: 200_000 }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
+});
+
+test("Settings modal「頭脳・会話」: 圧縮を始める大きさの select + Set を頭脳の区画に置き、POST /api/compact-threshold → snapshot 反映", () => {
+  const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
+  const brainPanel = source.slice(
+    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
+    source.indexOf('id="cockpit-settings-panel-memory"')
+  );
+  assert.ok(brainPanel.length > 0);
+  // 置き場所: 頭脳・会話のタブ（会話指示の編集ページではない側）。
+  const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
+  assert.match(listSide, /<h3 class="drawer-subhead">会話の圧縮<\/h3>/);
+  assert.match(listSide, /<label for="compact-threshold-select">圧縮を始める大きさ<\/label>/);
+  assert.match(listSide, /id="compact-threshold-select"[\s\S]*?options=\$\{compactThresholdOptions\(Number\(compactSelected\)\)\}/);
+  assert.match(listSide, /class="btn-compact-threshold-set"[^>]*onClick=\$\{onCompactThresholdSet\}/);
+  assert.match(listSide, /compactThresholdStatusLabel\(settings && settings\.compaction\)/, "既定であることが分かる表示");
+  assert.match(listSide, /\$\{COMPACT_THRESHOLD_NOTE\}/, "Codex の頭のときだけ効く旨");
+  assert.match(listSide, /\$\{compactError\}/);
+  // 配線: トークン数（数）で POST し、view-logic の文言で失敗を出し、成功は snapshot を適用する。
+  assert.match(
+    source,
+    /doFetch\("\/api\/compact-threshold", \{[\s\S]*?body: JSON\.stringify\(\{ tokens \}\)[\s\S]*?compactThresholdPostErrorText\(res\)[\s\S]*?applySnapshot\(res\.j\)[\s\S]*?requestErrorText\("compactThreshold", e\)/
+  );
+  assert.match(source, /const tokens = Number\(compactSelected\);/);
+  // 現況同期: snapshot.compaction.thresholdTokens が変わったら select へ。
+  assert.match(source, /compactThresholdSelection\(settings && settings\.compaction\)[\s\S]*?if \(compactCurrent != null\) setCompactSelected\(compactCurrent\)/);
+  assert.match(COCKPIT_CSS, /\.drawer-section h3\.drawer-subhead \{ margin-top: 14px; \}/);
 });
 
 test("initialHealth: 初期表示 unknown（現 cockpit.html :158-159 の初期値と同値）", () => {

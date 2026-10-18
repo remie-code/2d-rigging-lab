@@ -82,7 +82,11 @@ test("chatDiagnosticGhostLabel: 取得死分類のみ表示・観測補助は nu
 });
 
 test("diagnosticGhostLabel: 頭の会話の圧縮の開始・終了・失敗（ログのタブに 1 行ずつ・context-growth-2026-10.md §6）", () => {
-  assert.equal(diagnosticGhostLabel({ type: "contextCompaction", kind: "started", ratio: 0.684 }), "(圧縮: 開始 — 文脈 68%)");
+  assert.equal(
+    diagnosticGhostLabel({ type: "contextCompaction", kind: "started", inputTokens: 201_234, thresholdTokens: 200_000, ratio: 0.42 }),
+    "(圧縮: 開始 — 文脈 20.1 万（目安 20 万）)"
+  );
+  assert.equal(diagnosticGhostLabel({ type: "contextCompaction", kind: "started", inputTokens: 201_234 }), "(圧縮: 開始 — 文脈 20.1 万)");
   assert.equal(diagnosticGhostLabel({ type: "contextCompaction", kind: "finished", elapsedMs: 12_345 }), "(圧縮: 終了 12.3s)");
   assert.equal(
     diagnosticGhostLabel({ type: "contextCompaction", kind: "failed", elapsedMs: 500, reason: "failed" }),

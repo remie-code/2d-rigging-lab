@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 import {
   createContextCompactor,
   decideCompaction,
-  DEFAULT_COMPACT_THRESHOLD_RATIO,
+  normalizeCompactThresholdTokens,
+  DEFAULT_COMPACT_THRESHOLD_TOKENS,
+  COMPACT_THRESHOLD_TOKENS_MIN,
+  COMPACT_THRESHOLD_TOKENS_MAX,
   DEFAULT_COMPACT_QUIET_MS,
   DEFAULT_COMPACT_MIN_INTERVAL_MS,
   DEFAULT_COMPACT_CHECK_INTERVAL_MS
@@ -15,7 +18,7 @@ import {
 
 const quiet = () => ({ soulIdle: true, judging: false, userSpeaking: false, lastSpeechEndAtMs: null });
 
-function makeHead(lastInputTokens = 700, modelContextWindow = 1000, result = { compacted: true, durationMs: 1234, personaInjected: true, personaDeferred: false, compactionUsage: { last: { inputTokens: 710 } } }) {
+function makeHead(lastInputTokens = 210_000, modelContextWindow = 500_000, result = { compacted: true, durationMs: 1234, personaInjected: true, personaDeferred: false, compactionUsage: { last: { inputTokens: 710 } } }) {
   const head = {
     calls: 0,
     usage: /** @type {any} */ ({ lastInputTokens, modelContextWindow, totalInputTokens: 9000 }),
@@ -46,20 +49,33 @@ function makeTimers() {
   };
 }
 
-test("既定値: しきい値 66%・隙間 3 秒・間隔 10 分・数秒おき", () => {
-  assert.equal(DEFAULT_COMPACT_THRESHOLD_RATIO, 0.42);
+test("既定値: 目安 20 万トークン（設定の範囲 5 万〜45 万）・隙間 3 秒・間隔 10 分・数秒おき", () => {
+  assert.equal(DEFAULT_COMPACT_THRESHOLD_TOKENS, 200_000);
+  assert.equal(COMPACT_THRESHOLD_TOKENS_MIN, 50_000);
+  assert.equal(COMPACT_THRESHOLD_TOKENS_MAX, 450_000);
   assert.equal(DEFAULT_COMPACT_QUIET_MS, 3000);
   assert.equal(DEFAULT_COMPACT_MIN_INTERVAL_MS, 600_000);
   assert.ok(DEFAULT_COMPACT_CHECK_INTERVAL_MS >= 1000 && DEFAULT_COMPACT_CHECK_INTERVAL_MS <= 10_000);
 });
 
-test("decideCompaction: 文脈の大きさが最大量の割合を超え、隙間にいるときだけ ok", () => {
-  const base = { nowMs: 100_000, lastAttemptAtMs: null, thresholdRatio: 0.66, quietMs: 3000, minIntervalMs: 600_000 };
-  const usage = { lastInputTokens: 670, modelContextWindow: 1000 };
-  assert.deepEqual(decideCompaction({ ...base, usage, gap: quiet() }), { ok: true, ratio: 0.67 });
-  assert.equal(decideCompaction({ ...base, usage: { lastInputTokens: 660, modelContextWindow: 1000 }, gap: quiet() }).reason, "below-threshold", "ちょうど 66% は超えていない");
+test("decideCompaction: 直近の入力トークンが目安の量を超え、隙間にいるときだけ ok（割合は参考で添える）", () => {
+  const base = { nowMs: 100_000, lastAttemptAtMs: null, thresholdTokens: 200_000, quietMs: 3000, minIntervalMs: 600_000 };
+  const usage = { lastInputTokens: 237_500, modelContextWindow: 475_000 };
+  assert.deepEqual(decideCompaction({ ...base, usage, gap: quiet() }), { ok: true, inputTokens: 237_500, ratio: 0.5 });
+  assert.deepEqual(
+    decideCompaction({ ...base, usage: { lastInputTokens: 200_000, modelContextWindow: 475_000 }, gap: quiet() }),
+    { ok: false, reason: "below-threshold", inputTokens: 200_000, ratio: 200_000 / 475_000 },
+    "ちょうど目安は超えていない"
+  );
+  assert.equal(decideCompaction({ ...base, usage: { lastInputTokens: 200_001, modelContextWindow: 475_000 }, gap: quiet() }).ok, true);
+  // 窓の大きさに依らない（窓が違う頭でも同じ量で判定する・窓が分からなくても量だけで判定できる）。
+  assert.equal(decideCompaction({ ...base, usage: { lastInputTokens: 210_000, modelContextWindow: 1_000_000 }, gap: quiet() }).ok, true);
+  assert.deepEqual(
+    decideCompaction({ ...base, usage: { lastInputTokens: 210_000, modelContextWindow: null }, gap: quiet() }),
+    { ok: true, inputTokens: 210_000, ratio: null }
+  );
   assert.equal(decideCompaction({ ...base, usage: null, gap: quiet() }).reason, "no-usage");
-  assert.equal(decideCompaction({ ...base, usage: { lastInputTokens: 900, modelContextWindow: null }, gap: quiet() }).reason, "no-usage");
+  assert.equal(decideCompaction({ ...base, usage: { lastInputTokens: null, modelContextWindow: 475_000 }, gap: quiet() }).reason, "no-usage");
   assert.equal(decideCompaction({ ...base, usage, gap: { ...quiet(), soulIdle: false } }).reason, "soul-busy");
   assert.equal(decideCompaction({ ...base, usage, gap: { ...quiet(), judging: true } }).reason, "judging");
   assert.equal(decideCompaction({ ...base, usage, gap: { ...quiet(), userSpeaking: true } }).reason, "user-speaking");
@@ -83,7 +99,7 @@ test("compactor: 条件がそろうと compact を呼び、開始と終了を 1 
   assert.deepEqual(await compactor.check(), { started: true });
   assert.equal(head.calls, 1);
   assert.deepEqual(events, [
-    { type: "started", atMs: 1_000_000, ratio: 0.7, lastInputTokens: 700, totalInputTokens: 9000, modelContextWindow: 1000 },
+    { type: "started", atMs: 1_000_000, lastInputTokens: 210_000, thresholdTokens: 200_000, ratio: 0.42, totalInputTokens: 9000, modelContextWindow: 500_000 },
     { type: "finished", atMs: 1_000_000, ok: true, durationMs: 1234, reason: null, message: null, personaInjected: true, personaDeferred: false, compactionInputTokens: 710 }
   ]);
   // 前の圧縮から 10 分経つまでは呼ばない。
@@ -96,13 +112,14 @@ test("compactor: 条件がそろうと compact を呼び、開始と終了を 1 
 });
 
 test("compactor: しきい値（設定）より小さい・頭が無い（Claude）・隙間でないときは呼ばない", async () => {
-  const head = makeHead(700, 1000);
+  const head = makeHead(210_000, 500_000);
   /** @type {any} */
   let session = head;
   let gap = { ...quiet(), soulIdle: false };
-  const compactor = createContextCompactor({ getSession: () => session, getQuietGap: () => gap, thresholdRatio: 0.8 });
+  const compactor = createContextCompactor({ getSession: () => session, getQuietGap: () => gap, thresholdTokens: 300_000 });
+  assert.equal(compactor.getThresholdTokens(), 300_000);
   assert.equal((await compactor.check()).reason, "below-threshold");
-  head.usage = { lastInputTokens: 850, modelContextWindow: 1000 };
+  head.usage = { lastInputTokens: 310_000, modelContextWindow: 500_000 };
   assert.equal((await compactor.check()).reason, "soul-busy");
   gap = quiet();
   session = null;
@@ -157,4 +174,30 @@ test("compactor: 返事が終わるたび（次のタスクで）と数秒おき
   compactor.dispose();
   assert.equal(timers.intervals[0].cleared, true);
   assert.deepEqual(await compactor.check(), { started: false, reason: "disposed" });
+});
+
+test("compactor: setThresholdTokens で走っている部品の目安を差し替える（次の確認から効く・正の数でなければ変えない）", async () => {
+  const head = makeHead(210_000, 500_000);
+  const events = [];
+  const compactor = createContextCompactor({ getSession: () => head, getQuietGap: quiet, onEvent: (e) => events.push(e), thresholdTokens: 250_000 });
+  assert.equal((await compactor.check()).reason, "below-threshold");
+  assert.equal(compactor.setThresholdTokens(200_000), 200_000);
+  assert.equal(compactor.getThresholdTokens(), 200_000);
+  assert.deepEqual(await compactor.check(), { started: true }, "次の確認から新しい目安で判定する");
+  assert.equal(events[0].thresholdTokens, 200_000, "開始の通知に、そのときの目安を載せる");
+  assert.equal(compactor.setThresholdTokens(/** @type {any} */ (0)), 200_000);
+  assert.equal(compactor.setThresholdTokens(/** @type {any} */ ("300000")), 200_000);
+  assert.equal(compactor.setThresholdTokens(Number.NaN), 200_000);
+  assert.equal(createContextCompactor({ getSession: () => null, getQuietGap: quiet }).getThresholdTokens(), DEFAULT_COMPACT_THRESHOLD_TOKENS, "未指定は既定 20 万");
+  compactor.dispose();
+});
+
+test("normalizeCompactThresholdTokens: 整数で 5 万〜45 万だけ通す（範囲外・小数・数でない値は null）", () => {
+  assert.equal(normalizeCompactThresholdTokens(50_000), 50_000);
+  assert.equal(normalizeCompactThresholdTokens(200_000), 200_000);
+  assert.equal(normalizeCompactThresholdTokens(450_000), 450_000);
+  assert.equal(normalizeCompactThresholdTokens(230_097), 230_097, "1 万刻みでなくても整数なら通す（設定ファイルを手で書いた値）");
+  for (const bad of [49_999, 450_001, 0, -200_000, 200_000.5, 0.42, Number.NaN, Number.POSITIVE_INFINITY, "200000", null, undefined]) {
+    assert.equal(normalizeCompactThresholdTokens(bad), null, String(bad));
+  }
 });

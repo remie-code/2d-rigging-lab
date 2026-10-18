@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -1030,18 +1030,45 @@ test("settings store: 遅延の「遅い」しきい値はファイルのキー 
   }
 });
 
-test("settings store: 圧縮のしきい値はファイルのキー compactThresholdRatio / compactQuietSec / compactMinIntervalMin から読む（context-growth-2026-10.md §6）", () => {
+test("settings store: 圧縮の目安はファイルのキー compactThresholdTokens / compactQuietSec / compactMinIntervalMin から読む（context-growth-2026-10.md §6・§8）", () => {
   const dir = tmpDir();
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: null, quietSec: null, minIntervalMin: null }, "未作成 = 既定（呼び出し側）");
-    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 0.75, compactQuietSec: 5, compactMinIntervalMin: 0 }), "utf8");
-    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: 0.75, quietSec: 5, minIntervalMin: 0 });
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: null, quietSec: null, minIntervalMin: null }, "未作成 = 既定（呼び出し側）");
+    writeFileSync(path, JSON.stringify({ compactThresholdTokens: 250_000, compactQuietSec: 5, compactMinIntervalMin: 0 }), "utf8");
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: 250_000, quietSec: 5, minIntervalMin: 0 });
     store.setSpeakStartMode("classic");
-    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: 0.75, quietSec: 5, minIntervalMin: 0 }, "他のキーの set で消えない");
-    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 66, compactQuietSec: -1, compactMinIntervalMin: "10" }), "utf8");
-    assert.deepEqual(store.getContextCompaction(), { thresholdRatio: null, quietSec: null, minIntervalMin: null }, "範囲外・数でない値は既定");
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: 250_000, quietSec: 5, minIntervalMin: 0 }, "他のキーの set で消えない");
+    writeFileSync(path, JSON.stringify({ compactThresholdTokens: 460_000, compactQuietSec: -1, compactMinIntervalMin: "10" }), "utf8");
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: null, quietSec: null, minIntervalMin: null }, "範囲外・数でない値は既定");
+    for (const bad of [49_999, 200_000.5, "200000", 0.42]) {
+      writeFileSync(path, JSON.stringify({ compactThresholdTokens: bad }), "utf8");
+      assert.equal(store.getContextCompaction().thresholdTokens, null, `範囲外・小数・文字列は既定: ${bad}`);
+    }
+    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 0.42 }), "utf8");
+    assert.equal(store.getContextCompaction().thresholdTokens, null, "旧キー（割合）は読まない = 既定");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: setCompactThresholdTokens は compactThresholdTokens を記憶し（他のキーを消さない）、旧キー compactThresholdRatio を消す・範囲外は null", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 0.42, compactQuietSec: 5, brainChoice: "codex-61-sol" }), "utf8");
+    const store = createFileSettingsStore({ path });
+    store.setCompactThresholdTokens(150_000);
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(saved.compactThresholdTokens, 150_000);
+    assert.equal("compactThresholdRatio" in saved, false, "旧キーは消える");
+    assert.equal(saved.compactQuietSec, 5);
+    assert.equal(saved.brainChoice, "codex-61-sol");
+    assert.deepEqual(createFileSettingsStore({ path }).getContextCompaction(), { thresholdTokens: 150_000, quietSec: 5, minIntervalMin: null }, "次回起動で復元");
+    store.setCompactThresholdTokens(10_000);
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).compactThresholdTokens, null, "範囲外は null（= 既定）");
+    assert.equal(store.getContextCompaction().thresholdTokens, null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

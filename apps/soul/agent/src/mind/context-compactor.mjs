@@ -3,8 +3,10 @@
  * 隙間で手動の圧縮（Codex の頭のみ）— apps/soul/agent（長い配信の文脈・context-growth-2026-10.md §5・§6）。
  *
  * 長い配信で頭の会話（Codex の thread）が膨らむと応答が遅くなる。Codex の自動圧縮の設定には頼らず、
- * 「直近の ask の入力トークン（文脈の大きさ）が扱える最大量（modelContextWindow）の 42% を超え、かつ隙間に
- * いる」ときだけ、頭のセッションの `compact()`（thread/compact/start → 人格の指示の差し込み直し）を呼ぶ。
+ * 「直近の ask の入力トークン（文脈の大きさ）が目安の量（既定 20 万トークン）を超え、かつ隙間にいる」ときだけ、
+ * 頭のセッションの `compact()`（thread/compact/start → 人格の指示の差し込み直し）を呼ぶ。目安は量で持つ
+ * （遅さの段差は約 23 万トークンという量で出た・頭によって窓の大きさが違う・context-growth-2026-10.md §8）。
+ * 目安は操縦席の設定（頭脳・会話のタブ）から変えられ、setThresholdTokens で走っている部品にすぐ効く。
  *
  * 隙間（§6）: チャッピーが空いている・判定の待ちがない・配信者の喋り終わりから 3 秒以上・前の圧縮から
  * 10 分以上。返事が終わるたび（noteReplyFinished）と数秒おき（start の周期）に確かめる。
@@ -16,11 +18,14 @@
  */
 
 /**
- * 文脈の大きさのしきい値（modelContextWindow に対する直近の入力トークンの割合）。gpt-6.1-sol（窓 475,000）で約 20 万。
- * 2 時間の配信で約 23 万を超えたところから最初の文字が 5〜6 秒 → 11〜13 秒へ段差で遅くなったため、
- * 段差の手前で隙間の圧縮が走るよう 0.66 から下げた（context-growth-2026-10.md §8）。
+ * 圧縮を始める大きさの既定（直近の入力トークンがこれを超えたら）。2 時間の配信で約 23 万トークンを超えたところから
+ * 最初の文字が 5〜6 秒 → 11〜13 秒へ段差で遅くなったため、段差の手前の 20 万にした（context-growth-2026-10.md §8）。
  */
-export const DEFAULT_COMPACT_THRESHOLD_RATIO = 0.42;
+export const DEFAULT_COMPACT_THRESHOLD_TOKENS = 200_000;
+/** 設定で選べる目安の下限（5 万トークン）。設定ファイル・操縦席の API の範囲の検証に使う。 */
+export const COMPACT_THRESHOLD_TOKENS_MIN = 50_000;
+/** 設定で選べる目安の上限（45 万トークン）。 */
+export const COMPACT_THRESHOLD_TOKENS_MAX = 450_000;
 /** 配信者の喋り終わりから、この時間だけ黙っていたら隙間とみなす。 */
 export const DEFAULT_COMPACT_QUIET_MS = 3000;
 /** 前の圧縮（の試み）から、この時間が経つまでは次を試さない。 */
@@ -44,28 +49,45 @@ export const DEFAULT_COMPACT_CHECK_INTERVAL_MS = 5000;
  */
 
 /**
- * 圧縮を始めてよいかの判定（純関数）。
- * @param {{ usage: ContextUsage | null; gap: QuietGap | null; nowMs: number; lastAttemptAtMs: number | null; thresholdRatio: number; quietMs: number; minIntervalMs: number }} input
- * @returns {{ ok: true; ratio: number } | { ok: false; reason: string; ratio?: number }}
+ * 設定の目安（トークン数）を検証する。整数で COMPACT_THRESHOLD_TOKENS_MIN 以上 COMPACT_THRESHOLD_TOKENS_MAX 以下なら
+ * その値、それ以外（範囲外・小数・数でない）は null（= 呼び出し側で既定）。設定ファイルと操縦席の API が共有する。
+ * @param {unknown} v
+ * @returns {number | null}
  */
-export function decideCompaction(input) {
-  const { usage, gap, nowMs, lastAttemptAtMs, thresholdRatio, quietMs, minIntervalMs } = input;
-  const tokens = usage?.lastInputTokens;
-  const window = usage?.modelContextWindow;
-  if (typeof tokens !== "number" || typeof window !== "number" || !(window > 0)) return { ok: false, reason: "no-usage" };
-  const ratio = tokens / window;
-  if (!(ratio > thresholdRatio)) return { ok: false, reason: "below-threshold", ratio };
-  if (lastAttemptAtMs != null && nowMs - lastAttemptAtMs < minIntervalMs) return { ok: false, reason: "too-soon", ratio };
-  if (!gap) return { ok: false, reason: "no-gap-info", ratio };
-  if (!gap.soulIdle) return { ok: false, reason: "soul-busy", ratio };
-  if (gap.judging) return { ok: false, reason: "judging", ratio };
-  if (gap.userSpeaking) return { ok: false, reason: "user-speaking", ratio };
-  if (gap.lastSpeechEndAtMs != null && nowMs - gap.lastSpeechEndAtMs < quietMs) return { ok: false, reason: "user-recent", ratio };
-  return { ok: true, ratio };
+export function normalizeCompactThresholdTokens(v) {
+  return typeof v === "number" && Number.isInteger(v) && v >= COMPACT_THRESHOLD_TOKENS_MIN && v <= COMPACT_THRESHOLD_TOKENS_MAX
+    ? v
+    : null;
 }
 
 /**
- * @typedef {{ type: "started"; atMs: number; ratio: number; lastInputTokens: number; totalInputTokens: number | null; modelContextWindow: number }
+ * 圧縮を始めてよいかの判定（純関数）。目安は量（直近の入力トークンが thresholdTokens を超えたら・ちょうどは含めない）。
+ * inputTokens は判定に使った直近の入力トークン、ratio は窓（modelContextWindow）に対する割合の参考
+ * （窓が分からなければ null・判定には使わない）。
+ * @param {{ usage: ContextUsage | null; gap: QuietGap | null; nowMs: number; lastAttemptAtMs: number | null; thresholdTokens: number; quietMs: number; minIntervalMs: number }} input
+ * @returns {{ ok: true; inputTokens: number; ratio: number | null } | { ok: false; reason: string; inputTokens?: number; ratio?: number | null }}
+ */
+export function decideCompaction(input) {
+  const { usage, gap, nowMs, lastAttemptAtMs, thresholdTokens, quietMs, minIntervalMs } = input;
+  const inputTokens = usage?.lastInputTokens;
+  if (typeof inputTokens !== "number" || !Number.isFinite(inputTokens)) return { ok: false, reason: "no-usage" };
+  const window = usage?.modelContextWindow;
+  const ratio = typeof window === "number" && window > 0 ? inputTokens / window : null;
+  const seen = { inputTokens, ratio };
+  if (!(inputTokens > thresholdTokens)) return { ok: false, reason: "below-threshold", ...seen };
+  if (lastAttemptAtMs != null && nowMs - lastAttemptAtMs < minIntervalMs) return { ok: false, reason: "too-soon", ...seen };
+  if (!gap) return { ok: false, reason: "no-gap-info", ...seen };
+  if (!gap.soulIdle) return { ok: false, reason: "soul-busy", ...seen };
+  if (gap.judging) return { ok: false, reason: "judging", ...seen };
+  if (gap.userSpeaking) return { ok: false, reason: "user-speaking", ...seen };
+  if (gap.lastSpeechEndAtMs != null && nowMs - gap.lastSpeechEndAtMs < quietMs) return { ok: false, reason: "user-recent", ...seen };
+  return { ok: true, ...seen };
+}
+
+/**
+ * started の lastInputTokens は判定に使った直近の入力トークン、thresholdTokens はそのときの目安、ratio は窓に対する
+ * 割合の参考（窓が分からなければ null）。
+ * @typedef {{ type: "started"; atMs: number; lastInputTokens: number; thresholdTokens: number; ratio: number | null; totalInputTokens: number | null; modelContextWindow: number | null }
  *   | { type: "finished"; atMs: number; ok: boolean; durationMs: number | null; reason: string | null; message: string | null; personaInjected: boolean; personaDeferred: boolean; compactionInputTokens: number | null }} CompactionEvent
  */
 
@@ -75,7 +97,8 @@ export function decideCompaction(input) {
  *   今の頭のセッション（Codex のときだけ返す・それ以外は null）。
  * @param {() => QuietGap | null} options.getQuietGap  隙間の材料（cockpit-server）。
  * @param {(event: CompactionEvent) => void} [options.onEvent]  圧縮の開始と終了（本文なし）。
- * @param {number} [options.thresholdRatio]
+ * @param {number} [options.thresholdTokens]  圧縮を始める大きさ（直近の入力トークン・既定 20 万）。走っている間は
+ *   setThresholdTokens で差し替える（次の確認から効く）。
  * @param {number} [options.quietMs]
  * @param {number} [options.minIntervalMs]
  * @param {number} [options.checkIntervalMs]
@@ -89,7 +112,7 @@ export function createContextCompactor(options) {
   const getSession = options.getSession;
   const getQuietGap = options.getQuietGap;
   const onEvent = options.onEvent;
-  const thresholdRatio = positiveOr(options.thresholdRatio, DEFAULT_COMPACT_THRESHOLD_RATIO);
+  let thresholdTokens = positiveOr(options.thresholdTokens, DEFAULT_COMPACT_THRESHOLD_TOKENS);
   const quietMs = nonNegativeOr(options.quietMs, DEFAULT_COMPACT_QUIET_MS);
   const minIntervalMs = nonNegativeOr(options.minIntervalMs, DEFAULT_COMPACT_MIN_INTERVAL_MS);
   const checkIntervalMs = positiveOr(options.checkIntervalMs, DEFAULT_COMPACT_CHECK_INTERVAL_MS);
@@ -134,17 +157,18 @@ export function createContextCompactor(options) {
       return { started: false, reason: "unavailable" };
     }
     const nowMs = nowImpl();
-    const decision = decideCompaction({ usage, gap, nowMs, lastAttemptAtMs, thresholdRatio, quietMs, minIntervalMs });
+    const decision = decideCompaction({ usage, gap, nowMs, lastAttemptAtMs, thresholdTokens, quietMs, minIntervalMs });
     if (!decision.ok) return { started: false, reason: /** @type {{ reason: string }} */ (decision).reason };
     running = true;
     lastAttemptAtMs = nowMs;
     emit({
       type: "started",
       atMs: nowMs,
+      lastInputTokens: decision.inputTokens,
+      thresholdTokens,
       ratio: decision.ratio,
-      lastInputTokens: /** @type {number} */ (usage?.lastInputTokens),
       totalInputTokens: typeof usage?.totalInputTokens === "number" ? usage.totalInputTokens : null,
-      modelContextWindow: /** @type {number} */ (usage?.modelContextWindow)
+      modelContextWindow: typeof usage?.modelContextWindow === "number" ? usage.modelContextWindow : null
     });
     /** @type {any} */
     let result = null;
@@ -188,6 +212,18 @@ export function createContextCompactor(options) {
       if (timer && typeof timer.unref === "function") timer.unref();
     },
     isRunning: () => running,
+    /** 今の目安（圧縮を始める大きさ・トークン）。 */
+    getThresholdTokens: () => thresholdTokens,
+    /**
+     * 目安を差し替える（操縦席の設定から・次の確認から効く）。正の数でなければ変えない。返り値は差し替え後の目安。
+     * 範囲（5 万〜45 万）の検証は呼び出し側（設定ファイル・操縦席の API）が normalizeCompactThresholdTokens で行う。
+     * @param {number} tokens
+     * @returns {number}
+     */
+    setThresholdTokens(tokens) {
+      thresholdTokens = positiveOr(tokens, thresholdTokens);
+      return thresholdTokens;
+    },
     /** 畳む（以後は確かめない。進行中の圧縮は頭のセッションの dispose が畳む）。 */
     dispose() {
       disposed = true;

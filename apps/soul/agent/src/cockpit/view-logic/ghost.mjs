@@ -68,16 +68,19 @@ export function diagnosticGhostLabel(d) {
 
 /**
  * 頭の会話の圧縮（Codex の隙間で手動の圧縮・context-growth-2026-10.md §6）のログの行。
- * SSE diagnostic type:"contextCompaction"（kind = started / finished / failed・ratio = 文脈の大きさの割合・
- * elapsedMs = 所要時間・reason = 失敗の理由）。メイン画面には出さない（ログのタブだけ）。
- * @param {{ kind?: string | null; ratio?: number | null; elapsedMs?: number | null; reason?: string | null }} d
+ * SSE diagnostic type:"contextCompaction"（kind = started / finished / failed・inputTokens = 直近の入力トークン・
+ * thresholdTokens = そのときの目安・elapsedMs = 所要時間・reason = 失敗の理由）。開始は量（万トークン）で出す
+ * （ratio = 窓に対する割合は参考なので行には出さない）。メイン画面には出さない（ログのタブだけ）。
+ * @param {{ kind?: string | null; inputTokens?: number | null; thresholdTokens?: number | null; elapsedMs?: number | null; reason?: string | null }} d
  * @returns {string}
  */
 export function contextCompactionGhostLabel(d) {
   const kind = d && d.kind;
   if (kind === "started") {
-    const pct = d && typeof d.ratio === "number" ? " — 文脈 " + Math.round(d.ratio * 100) + "%" : "";
-    return "(圧縮: 開始" + pct + ")";
+    const man = (/** @type {number} */ t) => Math.round(t / 1000) / 10 + " 万";
+    const size = d && typeof d.inputTokens === "number" ? " — 文脈 " + man(d.inputTokens) : "";
+    const threshold = size && typeof d.thresholdTokens === "number" ? "（目安 " + man(d.thresholdTokens) + "）" : "";
+    return "(圧縮: 開始" + size + threshold + ")";
   }
   const secs = d && typeof d.elapsedMs === "number" ? " " + (d.elapsedMs / 1000).toFixed(1) + "s" : "";
   if (kind === "finished") return "(圧縮: 終了" + secs + ")";

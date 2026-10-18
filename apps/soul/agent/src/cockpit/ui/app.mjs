@@ -109,7 +109,10 @@ export function settingsFromSnapshot(s) {
     brain: (s && s.brain) ?? null,
     // 配信間記憶: 記憶の現況（{enabled, count, lastRecordAtMs}）。brain と同型の null 許容
     // （memoryStatus 未注入なら null）。
-    memory: (s && s.memory) ?? null
+    memory: (s && s.memory) ?? null,
+    // 圧縮の目安（{ thresholdTokens }・設定「頭脳・会話」タブの圧縮を始める大きさ）。memory と同型の null 許容
+    // （contextCompactionStatus 未注入なら null）。
+    compaction: (s && s.compaction) ?? null
   };
 }
 
@@ -129,6 +132,8 @@ export function App(props) {
   const [warnings, setWarnings] = useState(/** @type {any[]} */ ([]));
   const [latencyThresholds, setLatencyThresholds] = useState(/** @type {any} */ (DEFAULT_LATENCY_THRESHOLDS));
   const [killError, setKillError] = useState("");
+  // 頭の会話の圧縮の最中か（snapshot の compacting・状態のピルの「圧縮中」。開き直しても snapshot で戻る）。
+  const [compacting, setCompacting] = useState(false);
   // ── ヘッダ/計器（applyState :265-284 が更新する層） ──
   const [ears, setEars] = useState("stopped");
   const [health, setHealth] = useState(initialHealth);
@@ -168,6 +173,8 @@ export function App(props) {
     if ("quota" in s) setQuota(s.quota ?? null);
     if (Array.isArray(s.warnings)) setWarnings(s.warnings);
     if (s.latencyThresholds && typeof s.latencyThresholds === "object") setLatencyThresholds(s.latencyThresholds);
+    // 圧縮の最中か（無い古いサーバでは前値のまま・true のときだけ圧縮中）。
+    if ("compacting" in s) setCompacting(s.compacting === true);
   };
 
   // SSE の非タイムライン効果（タイムライン行は feedAfterSseEvent が単一経路で担う）。
@@ -317,6 +324,7 @@ export function App(props) {
         modelText=${modelText === "unknown" ? "" : modelText}
         soul=${soul}
         ears=${ears}
+        compacting=${compacting}
         warnings=${warnings}
         quota=${quota}
         killed=${settings.killed}

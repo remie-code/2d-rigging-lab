@@ -1902,14 +1902,19 @@ test("formatReplyLatencyLine: 数字ときっかけの種類だけの 1 行（�
   );
 });
 
-test("resolveContextCompactionOptions: settings の compact* キー・未設定や読めなければ 0.42 / 3 秒 / 10 分", async () => {
+test("resolveContextCompactionOptions: settings の compact* キー・未設定や読めなければ 20 万トークン / 3 秒 / 10 分", async () => {
   const { resolveContextCompactionOptions } = await import("./cockpit.mjs");
   assert.deepEqual(
-    resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdRatio: 0.8, quietSec: 5, minIntervalMin: 15 }) }),
-    { thresholdRatio: 0.8, quietMs: 5000, minIntervalMs: 900_000 }
+    resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdTokens: 250_000, quietSec: 5, minIntervalMin: 15 }) }),
+    { thresholdTokens: 250_000, quietMs: 5000, minIntervalMs: 900_000 }
   );
-  const defaults = { thresholdRatio: 0.42, quietMs: 3000, minIntervalMs: 600_000 };
-  assert.deepEqual(resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdRatio: null, quietSec: null, minIntervalMin: null }) }), defaults);
+  const defaults = { thresholdTokens: 200_000, quietMs: 3000, minIntervalMs: 600_000 };
+  assert.deepEqual(resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdTokens: null, quietSec: null, minIntervalMin: null }) }), defaults);
+  assert.deepEqual(
+    resolveContextCompactionOptions({ getContextCompaction: () => ({ thresholdTokens: /** @type {any} */ (10), quietSec: null, minIntervalMin: null }) }),
+    defaults,
+    "範囲外は既定"
+  );
   assert.deepEqual(resolveContextCompactionOptions({}), defaults);
   assert.deepEqual(resolveContextCompactionOptions({ getContextCompaction: () => { throw new Error("x"); } }), defaults);
 });
@@ -1917,8 +1922,13 @@ test("resolveContextCompactionOptions: settings の compact* キー・未設定�
 test("formatContextCompactionLine: 圧縮の開始・終了・失敗をターミナルに 1 行（数字と理由だけ）", async () => {
   const { formatContextCompactionLine } = await import("./cockpit.mjs");
   assert.equal(
-    formatContextCompactionLine({ type: "started", ratio: 0.684, lastInputTokens: 176_000, modelContextWindow: 258_400, totalInputTokens: 3_000_000 }),
-    "[cockpit] context compaction started: 68% of window (last input 176000 / 258400 tokens, total 3000000)\n"
+    formatContextCompactionLine({ type: "started", lastInputTokens: 201_234, thresholdTokens: 200_000, ratio: 0.4237, modelContextWindow: 475_000, totalInputTokens: 3_000_000 }),
+    "[cockpit] context compaction started: last input 201234 tokens > threshold 200000 (42% of window 475000, total 3000000)\n"
+  );
+  assert.equal(
+    formatContextCompactionLine({ type: "started", lastInputTokens: 201_234, thresholdTokens: 200_000, ratio: null, modelContextWindow: null, totalInputTokens: null }),
+    "[cockpit] context compaction started: last input 201234 tokens > threshold 200000 (- of window -, total -)\n",
+    "窓が分からなくても量で読める"
   );
   assert.equal(
     formatContextCompactionLine({ type: "finished", ok: true, durationMs: 12_345, personaInjected: true }),
@@ -1931,6 +1941,60 @@ test("formatContextCompactionLine: 圧縮の開始・終了・失敗をターミ
   assert.equal(
     formatContextCompactionLine({ type: "finished", ok: false, durationMs: 500, reason: "failed", message: "codex-session: compaction timed out." }),
     "[cockpit] context compaction failed: 0.5s reason=failed — codex-session: compaction timed out.\n"
+  );
+});
+
+test("createContextCompactionHooks: 設定画面で変えたら走っている compactor の目安を差し替え、settings に保存する（保存失敗でも効く）", async () => {
+  const { createContextCompactionHooks } = await import("./cockpit.mjs");
+  const { createContextCompactor } = await import("../src/mind/context-compactor.mjs");
+  const compactor = createContextCompactor({ getSession: () => null, getQuietGap: () => null, thresholdTokens: 200_000 });
+  /** @type {any[]} */
+  const saved = [];
+  const hooks = createContextCompactionHooks({ setCompactThresholdTokens: (t) => saved.push(t) }, compactor);
+  assert.deepEqual(hooks.contextCompactionStatus(), { thresholdTokens: 200_000 });
+  hooks.onSetCompactThresholdTokens(150_000);
+  assert.equal(compactor.getThresholdTokens(), 150_000, "その場で差し替わる（次の確認から効く）");
+  assert.deepEqual(saved, [150_000], "次回起動用に保存");
+  assert.deepEqual(hooks.contextCompactionStatus(), { thresholdTokens: 150_000 });
+  const failing = createContextCompactionHooks({ setCompactThresholdTokens: () => { throw new Error("disk"); } }, compactor);
+  failing.onSetCompactThresholdTokens(300_000);
+  assert.equal(compactor.getThresholdTokens(), 300_000, "保存に失敗しても走っている部品には効く");
+  createContextCompactionHooks({}, compactor).onSetCompactThresholdTokens(250_000);
+  assert.equal(compactor.getThresholdTokens(), 250_000, "setter の無い settings でも throw しない");
+  compactor.dispose();
+});
+
+test("contextCompactionUsageRecord: 開始の記録に、そのときの目安 thresholdTokens を足す（他のキーは compactionUsageRecord のまま）", async () => {
+  const { contextCompactionUsageRecord } = await import("./cockpit.mjs");
+  assert.deepEqual(
+    contextCompactionUsageRecord(
+      { type: "started", lastInputTokens: 201_234, thresholdTokens: 200_000, ratio: 0.42, totalInputTokens: 3_000_000, modelContextWindow: 475_000 },
+      "codex-61-sol"
+    ),
+    { type: "compactStarted", brain: "codex-61-sol", ratio: 0.42, lastInputTokens: 201_234, totalInputTokens: 3_000_000, modelContextWindow: 475_000, thresholdTokens: 200_000 }
+  );
+  const finished = contextCompactionUsageRecord({ type: "finished", ok: true, durationMs: 7000, personaInjected: true }, "codex-61-sol");
+  assert.equal(finished.type, "compactFinished");
+  assert.equal("thresholdTokens" in finished, false);
+});
+
+test("圧縮の目安の結線: 設定画面の口（onSetCompactThresholdTokens / contextCompactionStatus）を cockpit-server へ渡し、SSE に量を載せる", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
+  assert.match(source, /createContextCompactionHooks\(settings, contextCompactor\)/);
+  assert.match(source, /onSetCompactThresholdTokens: contextCompactionHooks\.onSetCompactThresholdTokens/);
+  assert.match(source, /contextCompactionStatus: contextCompactionHooks\.contextCompactionStatus/);
+  assert.match(source, /sessionUsageLog\.append\(contextCompactionUsageRecord\(event, currentBrain\)\)/);
+  assert.match(source, /phase: "started", inputTokens: event\.lastInputTokens, thresholdTokens: event\.thresholdTokens/);
+});
+
+test("頭の作り直しの結線: 古い頭を畳んだら操縦席の「圧縮中」を戻す（resetContextCompaction）", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /await stale\.dispose\(\);[\s\S]{0,400}?server\?\.resetContextCompaction\(\);[\s\S]{0,80}?if \(session === stale\)/,
+    "stale の dispose の後、session を null に戻す前に戻す"
   );
 });
 

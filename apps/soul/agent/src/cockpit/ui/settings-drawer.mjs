@@ -15,7 +15,9 @@
  *    IA 再配置で分割 —— 音声出力系はここ（声の出力先行）・自発トグル系は運転バー（control-bar.mjs）。
  *  - 頭脳・会話（Domain C）: technical brain の選択/Set に加え、同じダイアログ内で
  *    conversation-instruction editor へ切り替える。編集本文だけを dedicated API へ保存し、
- *    identity と memory structure は読み取り専用で表示する。
+ *    identity と memory structure は読み取り専用で表示する。頭脳の下に「圧縮を始める大きさ」（万トークンの select +
+ *    Set・POST /api/compact-threshold → 保存と走っている compactor の差し替え = 次の確認から効く・既定 20 万の表示と
+ *    Codex の頭のときだけ効く旨の説明。頭脳 select と同じ select + Set の流儀）。
  *  - 運転・ログ（操縦席の作り直し・cockpit-glance-redesign.md §5・§9.2）: 「運転」（自発・口数・話し始め・
  *    忙しい間のコメント・かぶり・手動の発火 = 旧運転バー）と「ログ」（今の観測フィードそのまま）のタブ。中身は
  *    app.mjs が組んだ部品を driveSlot / logSlot で受けて描くだけ（ここは器）。logSlot は関数なら
@@ -75,7 +77,13 @@ import {
   memoryToggleView,
   memoryPostErrorText,
   memoryRecordPostErrorText,
-  memoryStatusLabel
+  memoryStatusLabel,
+  compactThresholdOptions,
+  compactThresholdSelection,
+  compactThresholdStatusLabel,
+  compactThresholdPostErrorText,
+  COMPACT_THRESHOLD_DEFAULT_TOKENS,
+  COMPACT_THRESHOLD_NOTE
 } from "../view-logic/settings.mjs";
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
@@ -287,6 +295,9 @@ export function CockpitSettingsModal({
   // ── 頭脳（多頭化 Domain C・声の出力先行の写経）──
   const [brainSelected, setBrainSelected] = useState("claude");
   const [brainError, setBrainError] = useState("");
+  // ── 圧縮を始める大きさ（頭脳区画の写経・select の値はトークン数の文字列）──
+  const [compactSelected, setCompactSelected] = useState(String(COMPACT_THRESHOLD_DEFAULT_TOKENS));
+  const [compactError, setCompactError] = useState("");
   // ── 記憶（配信間記憶・頭脳区画の写経）──
   const [memoryError, setMemoryError] = useState("");
   const [recordBusy, setRecordBusy] = useState(false); // 「今日を記録」の連打防止（Fire ボタンの localBusy と同型）。
@@ -539,6 +550,13 @@ export function CockpitSettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brainCurrent]);
 
+  // 圧縮を始める大きさの現況同期（頭脳 select と同型）: snapshot.compaction.thresholdTokens（起動時の保存値 /
+  // POST /api/compact-threshold 後の反映）が変わったら select 表示へ反映する（未注入・不正は変えない）。
+  const compactCurrent = compactThresholdSelection(settings && settings.compaction);
+  useEffect(() => {
+    if (compactCurrent != null) setCompactSelected(compactCurrent);
+  }, [compactCurrent]);
+
   // 文字起こしの選択の復元（state.stt.engine・ユーザーが選び直した後は上書きしない）。
   const sttRestored = sttEngineSelection(sttEngine ? { engine: sttEngine } : null);
   useEffect(() => {
@@ -708,6 +726,27 @@ export function CockpitSettingsModal({
         applySnapshot(res.j); // snapshot（brain: {brain, credentialHealth}）で状態を更新。
       })
       .catch((/** @type {unknown} */ e) => setBrainError(requestErrorText("brain", e)));
+  };
+
+  /** 圧縮を始める大きさの Set（onBrainSet の写経）。POST /api/compact-threshold → 成功で snapshot 反映。 */
+  const onCompactThresholdSet = () => {
+    const tokens = Number(compactSelected);
+    setCompactError("");
+    doFetch("/api/compact-threshold", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tokens })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = compactThresholdPostErrorText(res);
+        if (err != null) {
+          setCompactError(err);
+          return;
+        }
+        applySnapshot(res.j); // snapshot（compaction: {thresholdTokens}）で状態を更新。
+      })
+      .catch((/** @type {unknown} */ e) => setCompactError(requestErrorText("compactThreshold", e)));
   };
 
   /**
@@ -959,6 +998,23 @@ export function CockpitSettingsModal({
           }}>
             会話指示を編集
           </button>
+          <h3 class="drawer-subhead">会話の圧縮</h3>
+          <div class="drawer-row">
+            <label for="compact-threshold-select">圧縮を始める大きさ</label>
+            <${SettingsSelect}
+              id="compact-threshold-select"
+              className="drawer-select compact-threshold-select"
+              options=${compactThresholdOptions(Number(compactSelected))}
+              value=${compactSelected}
+              onChange=${(/** @type {any} */ ev) => setCompactSelected(ev && ev.target ? ev.target.value : String(COMPACT_THRESHOLD_DEFAULT_TOKENS))}
+            />
+            <button class="btn-compact-threshold-set" type="button" onClick=${onCompactThresholdSet}>Set</button>
+          </div>
+          <div class="drawer-note">
+            <span class="compact-threshold-status">${compactThresholdStatusLabel(settings && settings.compaction)}</span>
+            <span class="compact-threshold-hint">${COMPACT_THRESHOLD_NOTE}</span>
+            <span class="err">${compactError}</span>
+          </div>
         `}
       </div>
       <div id="cockpit-settings-panel-memory" class="drawer-section" data-settings-category="memory" role="tabpanel" aria-labelledby="cockpit-settings-tab-memory" hidden=${activeCategory !== "memory"}>

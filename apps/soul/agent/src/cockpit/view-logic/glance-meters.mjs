@@ -8,7 +8,7 @@
  *    §9.3）。合計の数字は latencyThresholds で 4 秒超を琥珀・6 秒超を赤（§9.1）。
  *  - 残量のゲージ（quotaGaugeView）: 「残り」の割合（§8）。20% 未満で琥珀・5% 未満で赤・不明は「—」（§9.2）。
  *  - 上の帯の警告（warningsView）: 異常があるときだけ（warnings の一覧・alert が先）。
- *  - 状態のピル（statusPillView）: 聞いてる / 考えてる / 喋ってる。
+ *  - 状態のピル（statusPillView）: 聞いてる / 考えてる / 喋ってる / 圧縮中（頭の会話の圧縮の最中）。
  *  - 下の帯の運転設定の表示（driveSummaryView）: 自発・口数・話し始め・忙しい間のコメント。
  *  - 配信前（isPreStream）: 耳が止まっている間は会話の場所の中央に「準備・設定を開く」。
  */
@@ -161,14 +161,18 @@ export function warningsView(list, nowMs) {
 }
 
 /**
- * 状態のピル（聞いてる / 考えてる / 喋ってる）。耳が止まっている間に暇なら「止まってる」（配信前）。
+ * 状態のピル（聞いてる / 考えてる / 喋ってる / 圧縮中）。耳が止まっている間に暇なら「止まってる」（配信前）。
+ * 優先順位: 喋ってる > 圧縮中 > 考えてる > 聞いてる > 起動中 > 止まってる。圧縮中に届いた発火は圧縮の終わりまで
+ * （最大 60 秒）待たされるので、その間は「考えてる」ではなく「圧縮中」を見せる（2026-10-18 合意）。
  * @param {string | null | undefined} soul  SSE soul の state。
  * @param {string | null | undefined} ears  snapshot の ears。
+ * @param {boolean | null | undefined} [compacting]  snapshot の compacting（頭の会話の圧縮の最中か）。
  * @returns {{ text: string; className: string }}
  */
-export function statusPillView(soul, ears) {
-  if (soul === "thinking") return { text: "考えてる", className: "status-pill thinking" };
+export function statusPillView(soul, ears, compacting) {
   if (soul === "speaking") return { text: "喋ってる", className: "status-pill speaking" };
+  if (compacting === true) return { text: "圧縮中", className: "status-pill compacting" };
+  if (soul === "thinking") return { text: "考えてる", className: "status-pill thinking" };
   if (ears === "listening") return { text: "聞いてる", className: "status-pill listening" };
   if (ears === "starting") return { text: "起動中", className: "status-pill starting" };
   return { text: "止まってる", className: "status-pill stopped" };
