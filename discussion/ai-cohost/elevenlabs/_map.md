@@ -14,6 +14,7 @@
 |---|---|
 | [research/tts-controls-2026-10.md](research/tts-controls-2026-10.md) | TTS で設定・制御できる要素(モデル、voice_settings、音声タグ、料金)。サブエージェント調査 |
 | [research/stt-plans-and-realtime-2026-10.md](research/stt-plans-and-realtime-2026-10.md) | STT のプラン差(Free から API で使える、差は同梱量・同時接続・優先度・商用可否)、リアルタイムの確定制御・接続維持・課金・再接続 |
+| [research/lipsync-inputs-2026-10.md](research/lipsync-inputs-2026-10.md) | 口パクの入力を ElevenLabs でどう作るか。今の口パク(文を均等割り・母音だけ)、ElevenLabs の文字時刻(入力 1 文字に 1 組・80ms 刻み・タグも文字として入る)、読みの取り方の選択肢。読みは AivisSpeech、区間で区切って今より良く、開き量は今のまま(2026-10-18 合意) |
 | [experiments/01-stt-behavior.md](experiments/01-stt-behavior.md) | 実マイクでリアルタイム STT を観測。partial は約1秒おき・言葉から0.5〜1.3秒遅れ。commit は喋り終わりから既定 VAD で≈1.6〜1.9秒、VAD 0.3秒指定(実効0.5秒)で≈0.9秒。無音中に「うん/はい」の partial が出る |
 | [experiments/02-tts-voice.md](experiments/02-tts-voice.md) | TTS の声選び(共有ボイス → Voice Design の「案3」に決定、Remix では超えず)と手触り(案3の印象が保たれるのは v4 / v4 Turbo。v4 Turbo は HTTP で鳴り始め≈0.2秒。日本語文の頭の英語タグが効く) |
 
@@ -37,10 +38,12 @@
 
 - TTS の声は Voice Design の「案3」(`Ona22sJYfzcps6cE1jVk`)。モデルは v4 系(v4 / v4 Turbo)が候補で、v3・Flash は声が変わるので外す(2026-10-18。[experiments/02-tts-voice.md](experiments/02-tts-voice.md))。乗り換えはまだ決めていない(手触りを試す段階)。
 
+- 口パク(2026-10-18): 読みは AivisSpeech の `/accent_phrases`(合成なし)、時刻は ElevenLabs の文字時刻を区間に束ねて使い、句読点・タグで区切る。開き量は母音ごとの固定値のまま([research/lipsync-inputs-2026-10.md](research/lipsync-inputs-2026-10.md) §5)。
+
 ## 5. Unresolved Questions
 
 - 全体構想(何をどこまで差し替えるか)の合意。
 - STT の実測: 確定方式(VAD 既定・短縮 VAD・手動)ごとの、喋り終わりから確定までの時間(日本語、日本から)。
 - 再接続時の挙動(最初の約2秒のバッファが毎回乗るか、`previous_text` でどこまで繋がるか)。
 - 日本語のタグが効くか(英語タグは台詞の頭に付けると効く。experiments/02)。
-- TTS の口の動き(文字ごとの時刻 → 口の形)と、返事の繋ぎ方(文ごとか WebSocket か)。
+- 返事の繋ぎ方(文ごとか WebSocket か)と、TTS 差し替えの組み込み方。
