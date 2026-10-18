@@ -751,3 +751,255 @@ describe("RuntimePlayerControlChannelOverlayStore — speech timeline (C6 group)
     expect(shallow).toBeGreaterThan(deep);
   });
 });
+
+describe("RuntimePlayerControlChannelOverlayStore — streamed utterance (intent.speechStream, voice swap Wave 1)", () => {
+  const SLICE_A: readonly SpeechMora[] = [
+    { timeMs: 0, vowel: "a", s: 0.6 },
+    { timeMs: 140, vowel: "i", s: 0.8 }
+  ];
+  const SLICE_B: readonly SpeechMora[] = [
+    { timeMs: 280, vowel: "o", s: 0.6 },
+    { timeMs: 420, vowel: "e", s: 0.7 }
+  ];
+  const mouthOpenOf = (snap: Record<string, number>): number =>
+    snap[RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT] ?? 0;
+
+  /** Sample a store across a tick列, threading prevResolved as the heart does. */
+  function series(
+    store: RuntimePlayerControlChannelOverlayStore,
+    fromMs: number,
+    toMs: number,
+    stepMs = 4
+  ): Record<string, number>[] {
+    const out: Record<string, number>[] = [];
+    let prev: Record<string, number> = {};
+    for (let now = fromMs; now <= toMs; now += stepMs) {
+      prev = store.snapshot(now, {}, prev);
+      out.push(prev);
+    }
+    return out;
+  }
+
+  it("open + append + end at one instant is exactly intent.speech (the sugar shares the machine)", () => {
+    const moras = [...SLICE_A, ...SLICE_B];
+    const sugar = new RuntimePlayerControlChannelOverlayStore();
+    sugar.snapshot(0);
+    sugar.setSpeech(moras, 0);
+
+    const streamed = new RuntimePlayerControlChannelOverlayStore();
+    streamed.snapshot(0);
+    streamed.openSpeechStream("u-1", 0);
+    expect(streamed.appendSpeechStream("u-1", moras, 0)).toBe(true);
+    expect(streamed.endSpeechStream("u-1", 0)).toBe(true);
+
+    expect(series(streamed, 0, 1_400)).toStrictEqual(series(sugar, 0, 1_400));
+  });
+
+  it("appending ahead of playback is seamless: the slices play as one mora列", () => {
+    const whole = new RuntimePlayerControlChannelOverlayStore();
+    whole.snapshot(0);
+    whole.setSpeech([...SLICE_A, ...SLICE_B], 0);
+    const expected = series(whole, 0, 1_400);
+
+    const streamed = new RuntimePlayerControlChannelOverlayStore();
+    streamed.snapshot(0);
+    streamed.openSpeechStream("u-1", 0);
+    streamed.appendSpeechStream("u-1", SLICE_A, 0);
+    const actual: Record<string, number>[] = [];
+    let prev: Record<string, number> = {};
+    for (let now = 0; now <= 1_400; now += 4) {
+      // The second slice lands at 100ms (still inside the first slice), end at 200ms.
+      if (now === 100) streamed.appendSpeechStream("u-1", SLICE_B, now);
+      if (now === 200) streamed.endSpeechStream("u-1", now);
+      prev = streamed.snapshot(now, {}, prev);
+      actual.push(prev);
+    }
+
+    expect(actual).toStrictEqual(expected);
+  });
+
+  it("holds the last vowel until end arrives, then closes over the universal release", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.openSpeechStream("u-1", 0);
+    store.appendSpeechStream("u-1", SLICE_A, 0);
+
+    // Far past where an ended timeline would have closed: still holding "i".
+    const held = store.snapshot(5_000);
+    expect(mouthOpenOf(held)).toBeCloseTo(0.8 * RUNTIME_PLAYER_SPEECH_OPEN_SCALE, 9);
+    expect(held[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.i] ?? 0).toBeCloseTo(mouthOpenOf(held), 9);
+
+    store.endSpeechStream("u-1", 5_000);
+    expect(mouthOpenOf(store.snapshot(5_000))).toBeCloseTo(mouthOpenOf(held), 9);
+    const closing = mouthOpenOf(
+      store.snapshot(5_000 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS / 2)
+    );
+    expect(closing).toBeGreaterThan(0);
+    expect(closing).toBeLessThan(mouthOpenOf(held));
+    expect(
+      store.snapshot(5_000 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 1)
+    ).toStrictEqual({});
+  });
+
+  it("t=0 is the open: a later first append is placed relative to the open, and its onset still rises from the current openness", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(1_000);
+    store.openSpeechStream("u-1", 1_000);
+    // Nothing to show yet: the open alone does not drive the mouth.
+    expect(store.snapshot(1_050)).toStrictEqual({});
+
+    store.appendSpeechStream("u-1", [...SLICE_A, ...SLICE_B], 1_100);
+    // At the install instant the onset starts from the current openness (idle = 0).
+    expect(mouthOpenOf(store.snapshot(1_100))).toBeCloseTo(0, 9);
+    // After the onset ramp the mouth is where the t=0-relative timeline says, proving the
+    // moras are anchored at the open (not at the append).
+    const reference = new RuntimePlayerControlChannelOverlayStore();
+    reference.snapshot(1_000);
+    reference.setSpeech([...SLICE_A, ...SLICE_B], 1_000);
+    const at = 1_100 + RUNTIME_PLAYER_SPEECH_ONSET_MS + 140;
+    expect(store.snapshot(at)).toStrictEqual(reference.snapshot(at));
+  });
+
+  it("ignores append/end for an utterance that is not the open one (stale tail); open replaces the previous", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.openSpeechStream("u-1", 0);
+    store.appendSpeechStream("u-1", SLICE_A, 0);
+    store.openSpeechStream("u-2", 300);
+
+    expect(store.appendSpeechStream("u-1", SLICE_B, 310)).toBe(false);
+    expect(store.endSpeechStream("u-1", 310)).toBe(false);
+    expect(store.appendSpeechStream("nobody", SLICE_A, 310)).toBe(false);
+    expect(store.speechStreamCursor()).toStrictEqual({
+      utteranceId: "u-2",
+      lastTimeMs: undefined,
+      moraCount: 0
+    });
+
+    // u-1 was waiting for end; being replaced ended it at the open (300ms), so while u-2
+    // has no data yet u-1 closes naturally instead of holding forever.
+    expect(mouthOpenOf(store.snapshot(300))).toBeGreaterThan(0);
+    expect(
+      store.snapshot(300 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 1)
+    ).toStrictEqual({});
+  });
+
+  it("hands the mouth to the new utterance at its first append, continuously from the previous openness", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.openSpeechStream("u-1", 0);
+    store.appendSpeechStream("u-1", SLICE_A, 0);
+    let prev = store.snapshot(1_000, {}, {});
+    prev = store.snapshot(1_000, {}, prev);
+    const handOff = mouthOpenOf(prev);
+    expect(handOff).toBeGreaterThan(0);
+
+    store.openSpeechStream("u-2", 1_000);
+    store.appendSpeechStream(
+      "u-2",
+      [
+        { timeMs: 0, vowel: "u", s: 0.5 },
+        { timeMs: 140, vowel: "e", s: 0.5 }
+      ],
+      1_000
+    );
+    const first = store.snapshot(1_000, {}, prev);
+    // The onset starts AT the effective openness the previous utterance was showing (no
+    // snap), and the group is now u-2 (vowel u), identity intact.
+    expect(mouthOpenOf(first)).toBeCloseTo(handOff, 9);
+    expect(first[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.u] ?? 0).toBeCloseTo(mouthOpenOf(first), 9);
+  });
+
+  it("intent.set mouth-open=0 (the barge-in release) stops a streaming utterance: later appends cannot re-open the mouth", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.openSpeechStream("u-1", 0);
+    store.appendSpeechStream("u-1", SLICE_A, 0);
+    let prev = store.snapshot(70, {}, {});
+    prev = store.snapshot(70, {}, prev);
+
+    store.setOverlay(RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT, 0, 70 + 400);
+    expect(store.speechStreamCursor()).toBeNull();
+    expect(store.appendSpeechStream("u-1", SLICE_B, 80)).toBe(false);
+    expect(store.endSpeechStream("u-1", 80)).toBe(false);
+
+    // The never-applied SLICE_B (280..420, vowels o/e) does not drive the mouth, and once
+    // the forced release and the set's TTL are over everything is back at base.
+    const during = store.snapshot(300, {}, prev);
+    expect(during[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.o] ?? 0).toBe(0);
+    expect(during[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS.e] ?? 0).toBe(0);
+    expect(
+      store.snapshot(70 + 400 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 1)
+    ).toStrictEqual({});
+  });
+
+  it("a mouth release also stops an utterance that was opened but had no data yet", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.openSpeechStream("u-1", 0);
+    store.setOverlay(RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT, 0, 400);
+    expect(store.appendSpeechStream("u-1", SLICE_A, 10)).toBe(false);
+    expect(
+      store.snapshot(400 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 1)
+    ).toStrictEqual({});
+  });
+
+  it("releaseAll (disconnect) and clearAll stop the open utterance", () => {
+    const released = new RuntimePlayerControlChannelOverlayStore();
+    released.snapshot(0);
+    released.openSpeechStream("u-1", 0);
+    released.appendSpeechStream("u-1", SLICE_A, 0);
+    released.releaseAll(100);
+    expect(released.appendSpeechStream("u-1", SLICE_B, 110)).toBe(false);
+    expect(
+      released.snapshot(100 + RUNTIME_PLAYER_SLOT_CURVE_DEFAULT_RELEASE_MS + 1)
+    ).toStrictEqual({});
+
+    const cleared = new RuntimePlayerControlChannelOverlayStore();
+    cleared.snapshot(0);
+    cleared.openSpeechStream("u-1", 0);
+    cleared.appendSpeechStream("u-1", SLICE_A, 0);
+    cleared.clearAll();
+    expect(cleared.speechStreamCursor()).toBeNull();
+    expect(cleared.appendSpeechStream("u-1", SLICE_B, 10)).toBe(false);
+    expect(cleared.snapshot(10)).toStrictEqual({});
+  });
+
+  it("exposes the open utterance cursor (continuity + count), guards it itself, and clears it on end", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    expect(store.speechStreamCursor()).toBeNull();
+    store.openSpeechStream("u-1", 0);
+    store.appendSpeechStream("u-1", SLICE_A, 0);
+    expect(store.speechStreamCursor()).toStrictEqual({
+      utteranceId: "u-1",
+      lastTimeMs: 140,
+      moraCount: 2
+    });
+    // A non-continuing slice is refused by the store too (evaluator invariant guard).
+    expect(
+      store.appendSpeechStream("u-1", [{ timeMs: 140, vowel: "a", s: 0.5 }], 10)
+    ).toBe(false);
+    store.endSpeechStream("u-1", 20);
+    expect(store.speechStreamCursor()).toBeNull();
+
+    // The intent.speech sugar never exposes a cursor (no wire id, ends at once).
+    store.setSpeech(SLICE_A, 30);
+    expect(store.speechStreamCursor()).toBeNull();
+  });
+
+  it("keeps the convex identity at every tick across open → appends → late end", () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    store.snapshot(0);
+    store.openSpeechStream("u-1", 0);
+    const shiftedB = SLICE_B.map((mora) => ({ ...mora, timeMs: mora.timeMs + 400 }));
+    let prev: Record<string, number> = {};
+    for (let now = 0; now <= 2_000; now += 4) {
+      if (now === 40) store.appendSpeechStream("u-1", SLICE_A, now);
+      if (now === 600) store.appendSpeechStream("u-1", shiftedB, now);
+      if (now === 1_200) store.endSpeechStream("u-1", now);
+      prev = store.snapshot(now, {}, prev);
+      expect(vowelSumOf(prev)).toBeCloseTo(mouthOpenOf(prev), 9);
+    }
+  });
+});

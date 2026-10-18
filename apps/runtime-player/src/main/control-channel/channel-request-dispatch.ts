@@ -6,7 +6,9 @@ import {
 import {
   validateControlChannelIntentEnvelope,
   validateControlChannelIntentSet,
-  validateControlChannelIntentSpeech
+  validateControlChannelIntentSpeech,
+  validateControlChannelIntentSpeechStream,
+  type ControlChannelSpeechStreamCursor
 } from "./channel-intent-validation";
 import {
   createControlChannelAcceptedResponse,
@@ -60,6 +62,22 @@ export type ControlChannelSpeechWrite = {
   readonly moras: readonly SpeechMora[];
 };
 
+/**
+ * The streamed-utterance write for an accepted `intent.speechStream` (voice swap Wave 1).
+ * Like the speech write there is NO absolute instant: the server supplies the acceptance
+ * time (`openSpeechStream(id, nowMs())` = t=0, `appendSpeechStream(id, moras, nowMs())`,
+ * `endSpeechStream(id, nowMs())`). An append/end for a non-current utteranceId is still
+ * returned as a write — the store is the authority that ignores it.
+ */
+export type ControlChannelSpeechStreamWrite =
+  | { readonly op: "open"; readonly utteranceId: string }
+  | { readonly op: "end"; readonly utteranceId: string }
+  | {
+      readonly op: "append";
+      readonly utteranceId: string;
+      readonly moras: readonly SpeechMora[];
+    };
+
 export type ControlChannelRequestDispatch =
   | { readonly kind: "ignore" }
   | {
@@ -68,6 +86,7 @@ export type ControlChannelRequestDispatch =
       readonly overlay?: ControlChannelOverlayWrite;
       readonly envelope?: ControlChannelEnvelopeWrite;
       readonly speech?: ControlChannelSpeechWrite;
+      readonly speechStream?: ControlChannelSpeechStreamWrite;
     };
 
 export type DispatchControlChannelRequestInput = {
@@ -82,6 +101,11 @@ export type DispatchControlChannelRequestInput = {
   readonly receivedAtMs: number;
   /** Default TTL window applied when the intent omits `ttlMs` (C4 §4). */
   readonly defaultWindowMs: number;
+  /**
+   * The store's open streamed utterance (voice swap Wave 1) for the append continuity /
+   * whole-utterance cap check. Absent → treated as "no utterance open".
+   */
+  readonly getSpeechStreamCursor?: () => ControlChannelSpeechStreamCursor | null;
 };
 
 export function dispatchControlChannelRequest(
@@ -116,9 +140,13 @@ export function dispatchControlChannelRequest(
     };
   }
 
-  // Branch on the (now three) supported kinds. intent.set → overlay write (C4 path,
+  // Branch on the (now four) supported kinds. intent.set → overlay write (C4 path,
   // UNCHANGED); intent.envelope → envelope write into the per-slot curve machine;
-  // intent.speech → speech write into the Domain A group timeline evaluator.
+  // intent.speech → speech write into the Domain A group timeline evaluator;
+  // intent.speechStream → streamed-utterance write into the same evaluator.
+  if (envelope.kind === "intent.speechStream") {
+    return dispatchIntentSpeechStream(envelope.id, envelope.payload, input);
+  }
   if (envelope.kind === "intent.speech") {
     return dispatchIntentSpeech(envelope.id, envelope.payload, input);
   }
@@ -224,6 +252,46 @@ function dispatchIntentSpeech(
     speech: {
       moras: validation.moras
     }
+  };
+}
+
+function dispatchIntentSpeechStream(
+  id: string,
+  payload: unknown,
+  input: DispatchControlChannelRequestInput
+): ControlChannelRequestDispatch {
+  const validation = validateControlChannelIntentSpeechStream({
+    payload,
+    getCurrentSlots: input.getCurrentSlots,
+    ...(input.getSpeechStreamCursor !== undefined
+      ? { getSpeechStreamCursor: input.getSpeechStreamCursor }
+      : {})
+  });
+
+  if (!validation.ok) {
+    return {
+      kind: "reply",
+      reply: createControlChannelRejectedResponse({
+        replyTo: id,
+        code: validation.code,
+        message: validation.message
+      })
+    };
+  }
+
+  return {
+    kind: "reply",
+    reply: createControlChannelAcceptedResponse(id),
+    speechStream:
+      validation.op === "append"
+        ? {
+            op: "append",
+            utteranceId: validation.utteranceId,
+            moras: validation.moras
+          }
+        : validation.op === "open"
+          ? { op: "open", utteranceId: validation.utteranceId }
+          : { op: "end", utteranceId: validation.utteranceId }
   };
 }
 

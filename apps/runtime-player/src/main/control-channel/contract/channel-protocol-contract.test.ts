@@ -5,6 +5,8 @@ import {
   semanticSlotDefinitions,
   type SemanticSlotSourceKind
 } from "../../live-mapping/semantic-slot-definitions";
+import type { RuntimePlayerMappingSlot } from "../../../preload/model-mapping-bridge-contract";
+import { validateControlChannelIntentSpeechStream } from "../channel-intent-validation";
 import { semanticSlotNormalizedRange } from "../semantic-slot-normalized-range";
 import {
   createControlChannelAcceptedResponse,
@@ -16,6 +18,8 @@ import {
   runtimePlayerControlChannelProtocolVersion,
   runtimePlayerControlChannelRejectionCodes,
   runtimePlayerControlChannelSpeechMaxTimelineLength,
+  runtimePlayerControlChannelSpeechStreamMaxUtteranceLength,
+  runtimePlayerControlChannelSpeechStreamOps,
   runtimePlayerControlChannelSpeechVowels,
   runtimePlayerControlChannelSupportedKinds
 } from "./channel-protocol-contract";
@@ -23,6 +27,7 @@ import envelopeSchema from "./channel-envelope-schema.json";
 import intentSetPayloadSchema from "./channel-intent-set-payload-schema.json";
 import intentEnvelopePayloadSchema from "./channel-intent-envelope-payload-schema.json";
 import intentSpeechPayloadSchema from "./channel-intent-speech-payload-schema.json";
+import intentSpeechStreamPayloadSchema from "./channel-intent-speech-stream-payload-schema.json";
 import exchangeExamples from "./channel-exchange-examples.json";
 
 describe("Control Channel contract JSON ↔ TS sync", () => {
@@ -76,7 +81,47 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
     expect(intentSpeechPayloadSchema.properties.timeline.minItems).toBe(1);
   });
 
-  it("emits a server.hello that matches the schema and examples (announces all three kinds, C6 additive)", () => {
+  it("keeps the intent.speechStream payload schema's ops synced with the TS op vocabulary (voice swap additive)", () => {
+    expect(intentSpeechStreamPayloadSchema.ops).toStrictEqual([
+      ...runtimePlayerControlChannelSpeechStreamOps
+    ]);
+    const { $defs } = intentSpeechStreamPayloadSchema;
+    expect([
+      $defs.open.properties.op.const,
+      $defs.append.properties.op.const,
+      $defs.end.properties.op.const
+    ]).toStrictEqual([...runtimePlayerControlChannelSpeechStreamOps]);
+    expect(intentSpeechStreamPayloadSchema.oneOf).toStrictEqual(
+      runtimePlayerControlChannelSpeechStreamOps.map((op) => ({
+        $ref: `#/$defs/${op}`
+      }))
+    );
+  });
+
+  it("keeps the intent.speechStream append slice identical to the intent.speech mora列 (per-append 512, same item)", () => {
+    const appendTimeline =
+      intentSpeechStreamPayloadSchema.$defs.append.properties.timeline;
+    expect(appendTimeline.maxItems).toBe(
+      runtimePlayerControlChannelSpeechMaxTimelineLength
+    );
+    expect(appendTimeline.minItems).toBe(1);
+    // The mora item (timeMs / vowel / s, with their bounds and the vowel enum) is the SAME
+    // contract as intent.speech's — the stream is that mora列 delivered in slices.
+    expect(appendTimeline.items).toStrictEqual(
+      intentSpeechPayloadSchema.properties.timeline.items
+    );
+  });
+
+  it("keeps the intent.speechStream whole-utterance cap and mouth-vowel range synced (4096, 0..1)", () => {
+    expect(intentSpeechStreamPayloadSchema.maxUtteranceTimelineLength).toBe(
+      runtimePlayerControlChannelSpeechStreamMaxUtteranceLength
+    );
+    expect(intentSpeechStreamPayloadSchema.normalizedRanges).toStrictEqual({
+      "mouth-vowel": semanticSlotNormalizedRange("mouth-vowel")
+    });
+  });
+
+  it("emits a server.hello that matches the schema and examples (announces all four kinds, voice swap additive)", () => {
     const hello = createControlChannelServerHello();
 
     expect(hello).toStrictEqual({
@@ -84,7 +129,12 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
       kind: "server.hello",
       payload: {
         protocol: 1,
-        supportedKinds: ["intent.set", "intent.envelope", "intent.speech"]
+        supportedKinds: [
+          "intent.set",
+          "intent.envelope",
+          "intent.speech",
+          "intent.speechStream"
+        ]
       }
     });
     expect(exchangeExamples.happyPath.messages[0]?.message).toStrictEqual(hello);
@@ -99,6 +149,9 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
         .filter((entry) => entry.direction === "clientToServer")
         .map((entry) => entry.message),
       ...exchangeExamples.speechPath.messages
+        .filter((entry) => entry.direction === "clientToServer")
+        .map((entry) => entry.message),
+      ...exchangeExamples.speechStreamPath.messages
         .filter((entry) => entry.direction === "clientToServer")
         .map((entry) => entry.message),
       ...exchangeExamples.rejections.map((entry) => entry.request)
@@ -165,6 +218,86 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
     );
     expect(accepted?.message).toStrictEqual(
       createControlChannelAcceptedResponse("req-90")
+    );
+  });
+
+  it("carries a worked intent.speechStream exchange (open → append×2 → end, then a stale tail) that validates and whose replies match the builder", () => {
+    const messages = exchangeExamples.speechStreamPath.messages;
+    const requests = messages
+      .filter((entry) => entry.direction === "clientToServer")
+      .map((entry) => entry.message as unknown as {
+        id: string;
+        kind: string;
+        payload: {
+          op: string;
+          utteranceId: string;
+          timeline?: { timeMs: number; vowel: string; s: number }[];
+        };
+      });
+    expect(requests.map((request) => request.kind)).toStrictEqual(
+      requests.map(() => "intent.speechStream")
+    );
+    expect(
+      requests.map((request) => `${request.payload.op}:${request.payload.utteranceId}`)
+    ).toStrictEqual([
+      "open:u-1",
+      "append:u-1",
+      "append:u-1",
+      "end:u-1",
+      "open:u-2",
+      "append:u-1"
+    ]);
+
+    // Every request payload passes the 器's own validator (mouth group writable), and the
+    // u-1 appends continue strictly after each other (発話内で単調増加).
+    const mouthGroup = [
+      "mouth-open",
+      "mouth-vowel-a",
+      "mouth-vowel-i",
+      "mouth-vowel-u",
+      "mouth-vowel-e",
+      "mouth-vowel-o"
+    ] as const;
+    const writable = (): readonly RuntimePlayerMappingSlot[] =>
+      mouthGroup.map((slotId) => ({
+        slotId,
+        label: slotId,
+        group: "mouth",
+        target: {
+          parameterId: `param_${slotId}`,
+          displayName: slotId,
+          min: 0,
+          max: 1,
+          default: 0
+        },
+        enabled: true,
+        invert: false,
+        strength: 1,
+        status: "mapped",
+        warningMessages: []
+      }));
+    let previous = -Infinity;
+    for (const request of requests) {
+      expect(
+        validateControlChannelIntentSpeechStream({
+          payload: request.payload,
+          getCurrentSlots: writable
+        }).ok
+      ).toBe(true);
+      if (request.payload.op === "append" && request.id !== "req-125") {
+        for (const mora of request.payload.timeline ?? []) {
+          expect(mora.timeMs).toBeGreaterThan(previous);
+          previous = mora.timeMs;
+        }
+      }
+    }
+
+    // Each request gets an accepted reply correlated by replyTo (the stale tail too).
+    const replies = messages
+      .filter((entry) => entry.direction === "serverToClient")
+      .map((entry) => entry.message);
+    expect(replies).toStrictEqual(
+      requests.map((request) => createControlChannelAcceptedResponse(request.id))
     );
   });
 

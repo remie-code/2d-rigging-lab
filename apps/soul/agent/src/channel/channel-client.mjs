@@ -30,6 +30,15 @@
  *  足すだけ）。**既定 requiredKinds は変えない**（intent.set 非広告の相手でも接続は張れる＝口閉じは
  *  best-effort・S1〜S5 の接続契約に無影響）。
  *
+ * ── 声の差し替え Wave 1: intent.speechStream の追加（口の時間割の流し込み）──────────
+ *  openSpeech / appendSpeech / endSpeech を足す（payload `{ op:"open"|"append"|"end",
+ *  utteranceId, timeline? }`・replyTo 相関は sendSpeech と同型・返りも sendSpeech と同じ形）。
+ *  1 発話 = open → append×N → end。t=0 は器が open を受理した時刻、timeMs は発話内で単調増加、
+ *  append 1 回 512 要素・発話全体 4096 要素まで（器が invalidPayload で拒否）。別 utteranceId の
+ *  append/end は器が accepted のまま無視する（古い発話の残り）。口の強制 release（sendSet で
+ *  mouth-open=0）で流し込み中の発話も止まる。既定 requiredKinds に `intent.speechStream` を
+ *  加える（非対応の器には接続時に fail-fast）。append は intent.speech と同じ送信前サイズ上限を通す。
+ *
  * 契約の正は `apps/runtime-player/src/main/control-channel/contract/channel-exchange-examples.json`
  * の speechPath / envelopePath / server.hello / rejections。
  */
@@ -50,7 +59,8 @@ const SPEECH_ENVELOPE_UTF8_CAP = 64 * 1024;
  * @param {object} [options]
  * @param {typeof WebSocket} [options.WebSocketImpl]  WebSocket の差し替え（既定 globalThis.WebSocket）。
  * @param {string[]} [options.requiredKinds]  hello に必須の supportedKinds
- *   （既定 ["intent.speech", "intent.envelope"]＝発話 + 表情演出。器は C5 から両方を広告済み）。
+ *   （既定 ["intent.speech", "intent.envelope", "intent.speechStream"]＝発話 + 表情演出 + 口の
+ *   時間割の流し込み。器は声の差し替え Wave 1 から 3 つとも広告する）。
  * @param {number} [options.helloTimeoutMs]  hello 待ち（既定 4000）。
  * @param {number} [options.replyTimeoutMs]  応答待ち（既定 4000）。
  * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace]
@@ -60,6 +70,9 @@ const SPEECH_ENVELOPE_UTF8_CAP = 64 * 1024;
  *   sendSpeech: (timeline: unknown) => Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>;
  *   sendEnvelope: (intent: { slotId: string; peak: number; attackMs: number; sustainMs: number; decayMs: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   sendSet: (intent: { slotId: string; value: number; ttlMs?: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
+ *   openSpeech: (utteranceId: string) => Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>;
+ *   appendSpeech: (utteranceId: string, timeline: unknown) => Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>;
+ *   endSpeech: (utteranceId: string) => Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>;
  *   close: () => Promise<void>;
  *   consumeUnknownEventCount: () => number;
  *   supportedKinds: string[];
@@ -70,7 +83,7 @@ export async function connectChannel(url, options = {}) {
   if (typeof WebSocketImpl !== "function") {
     throw new TypeError("no WebSocket implementation available (pass options.WebSocketImpl).");
   }
-  const requiredKinds = options.requiredKinds ?? ["intent.speech", "intent.envelope"];
+  const requiredKinds = options.requiredKinds ?? ["intent.speech", "intent.envelope", "intent.speechStream"];
   const helloTimeoutMs = options.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
   const replyTimeoutMs = options.replyTimeoutMs ?? REPLY_TIMEOUT_MS;
   const onTrace = options.onTrace;
@@ -126,7 +139,7 @@ export async function connectChannel(url, options = {}) {
         result: message.result,
         error: message.error ?? null,
         rttMs: performance.now() - waiter.t0,
-        ...(waiter.kind === "intent.speech"
+        ...(isSpeechKind(waiter.kind)
           ? { requestId: message.replyTo, serializedUtf8Bytes: waiter.serializedUtf8Bytes }
           : {})
       };
@@ -184,9 +197,9 @@ export async function connectChannel(url, options = {}) {
     // Preflight the exact text that would be passed to socket.send().  Do this
     // before registering a pending reply: oversize is local, never reaches the
     // Runtime, and must not make this otherwise healthy connection unusable.
-    if (kind === "intent.speech" && serializedUtf8Bytes > SPEECH_ENVELOPE_UTF8_CAP) {
+    if (isSpeechKind(kind) && serializedUtf8Bytes > SPEECH_ENVELOPE_UTF8_CAP) {
       const failure = diagnosticError(
-        `intent.speech envelope is ${serializedUtf8Bytes} UTF-8 bytes; safety cap is ${SPEECH_ENVELOPE_UTF8_CAP}.`,
+        `${kind} envelope is ${serializedUtf8Bytes} UTF-8 bytes; safety cap is ${SPEECH_ENVELOPE_UTF8_CAP}.`,
         "speech_envelope_oversize",
         "control_channel.preflight"
       );
@@ -280,6 +293,42 @@ export async function connectChannel(url, options = {}) {
       }
       return sendRequest("intent.set", payload, `set reply for ${intent.slotId}`, { slotId: payload.slotId });
     },
+    /**
+     * intent.speechStream op=open を 1 本送る（声の差し替え Wave 1）。新しい発話を始め、前の発話を
+     * 置き換える。器が受理した時刻がこの発話の t=0。返りは sendSpeech と同じ形。
+     * @param {string} utteranceId  発話を名指す空でない文字列（魂が決める）。
+     * @returns {Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>}
+     */
+    async openSpeech(utteranceId) {
+      return sendRequest("intent.speechStream", { op: "open", utteranceId }, "speech stream open reply", {
+        op: "open"
+      });
+    },
+    /**
+     * intent.speechStream op=append を 1 本送る。timeline は intent.speech と同じ `{timeMs,vowel,s}[]`
+     * で、timeMs は発話の t=0 からの通し値（前の append の最後より後）。1 回 512 要素まで。
+     * @param {string} utteranceId
+     * @param {unknown} timeline
+     * @returns {Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>}
+     */
+    async appendSpeech(utteranceId, timeline) {
+      return sendRequest(
+        "intent.speechStream",
+        { op: "append", utteranceId, timeline },
+        "speech stream append reply",
+        { op: "append", timelineCount: Array.isArray(timeline) ? timeline.length : null }
+      );
+    },
+    /**
+     * intent.speechStream op=end を 1 本送る。もう続きはない（器は最後の間隔ぶん保持 → 閉口）。
+     * @param {string} utteranceId
+     * @returns {Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>}
+     */
+    async endSpeech(utteranceId) {
+      return sendRequest("intent.speechStream", { op: "end", utteranceId }, "speech stream end reply", {
+        op: "end"
+      });
+    },
     consumeUnknownEventCount() {
       const count = unknownEventCount;
       unknownEventCount = 0;
@@ -300,6 +349,11 @@ export async function connectChannel(url, options = {}) {
       await withTimeout(closed, replyTimeoutMs, "socket close", "channel_close_timeout", "control_channel.close_timeout");
     }
   };
+}
+
+/** 返りに requestId / serializedUtf8Bytes を載せ、送信前サイズ上限を通す kind（発話系）。 */
+function isSpeechKind(kind) {
+  return kind === "intent.speech" || kind === "intent.speechStream";
 }
 
 function waitForOpen(socket) {

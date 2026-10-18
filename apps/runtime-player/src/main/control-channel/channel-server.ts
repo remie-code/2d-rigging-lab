@@ -331,7 +331,8 @@ export class RuntimePlayerControlChannelServer {
       accepting: this.#server !== null,
       getCurrentSlots: this.#getCurrentSlots,
       receivedAtMs: this.#nowMs(),
-      defaultWindowMs: this.#defaultWindowMs
+      defaultWindowMs: this.#defaultWindowMs,
+      getSpeechStreamCursor: () => this.#overlayStore.speechStreamCursor()
     });
 
     if (dispatch.kind === "ignore") {
@@ -381,6 +382,30 @@ export class RuntimePlayerControlChannelServer {
         slotId: RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
         value: dispatch.speech.moras[0]?.s ?? 0
       });
+    } else if (dispatch.speechStream !== undefined) {
+      // intent.speechStream → the streamed utterance in the SAME group timeline machine.
+      // open: t=0 = the acceptance time (受理時刻). append/end for a non-current utterance
+      // are ignored by the store (stale tail). Only an append that actually landed surfaces
+      // an accepted event (mouth-open + its first mora's s, like intent.speech) — open/end
+      // carry no value to show, and an ignored tail changed nothing.
+      const write = dispatch.speechStream;
+      if (write.op === "open") {
+        this.#overlayStore.openSpeechStream(write.utteranceId, this.#nowMs());
+      } else if (write.op === "end") {
+        this.#overlayStore.endSpeechStream(write.utteranceId, this.#nowMs());
+      } else if (
+        this.#overlayStore.appendSpeechStream(
+          write.utteranceId,
+          write.moras,
+          this.#nowMs()
+        )
+      ) {
+        this.#emitEvent({
+          kind: "accepted",
+          slotId: RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
+          value: write.moras[0]?.s ?? 0
+        });
+      }
     } else if (dispatch.reply.result === "rejected") {
       this.#emitEvent({
         kind: "rejected",

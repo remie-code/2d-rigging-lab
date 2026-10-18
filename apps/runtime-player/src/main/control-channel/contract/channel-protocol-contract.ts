@@ -13,8 +13,9 @@ import type { RuntimePlayerMappingSlotId } from "../../../preload/model-mapping-
  * The outer envelope is an ADDITIVE EXTENSION基礎 (C4 §2): new `kind`s are added
  * by later closed problems (C5 envelope intents, C6 phoneme timelines) without
  * changing the envelope. v0 owned exactly one kind (`intent.set`); C5 adds
- * `intent.envelope` ADDITIVELY; C6 adds `intent.speech` ADDITIVELY — the earlier
- * shapes/validation/examples stay byte-identical, only the announced kind set grows.
+ * `intent.envelope` ADDITIVELY; C6 adds `intent.speech` ADDITIVELY; the voice swap adds
+ * `intent.speechStream` ADDITIVELY — the earlier shapes/validation/examples stay
+ * byte-identical, only the announced kind set grows.
  */
 
 /** Wire protocol version. v0 speaks version 1 only. */
@@ -25,7 +26,8 @@ export type RuntimePlayerControlChannelProtocolVersion =
 
 /**
  * The request kinds this server understands (advertised in `server.hello`).
- * v0 = `intent.set`; C5 adds `intent.envelope`; C6 adds `intent.speech`, all
+ * v0 = `intent.set`; C5 adds `intent.envelope`; C6 adds `intent.speech`; the voice
+ * swap adds `intent.speechStream` (the streamed form of the same mora列), all
  * additively. Growth is additive: older souls simply never send a kind they were
  * not told about, and a soul that only ever sends `intent.set` keeps working
  * unchanged (C4 §3.4/§3.5 寛容規則).
@@ -33,7 +35,8 @@ export type RuntimePlayerControlChannelProtocolVersion =
 export const runtimePlayerControlChannelSupportedKinds = [
   "intent.set",
   "intent.envelope",
-  "intent.speech"
+  "intent.speech",
+  "intent.speechStream"
 ] as const;
 
 export type RuntimePlayerControlChannelRequestKind =
@@ -201,3 +204,70 @@ export type RuntimePlayerControlChannelIntentSpeechPayload = {
     readonly s: number;
   }[];
 };
+
+/**
+ * The three operations of an `intent.speechStream` request (voice swap Wave 1 Domain A).
+ * `open` starts a new utterance (replacing the previous one; its acceptance instant is
+ * the utterance's t=0), `append` adds the next slice of the SAME mora列, `end` says no
+ * more slices follow. This const is the source of truth the speech stream payload
+ * schema's `op` consts are byte-synced against.
+ */
+export const runtimePlayerControlChannelSpeechStreamOps = [
+  "open",
+  "append",
+  "end"
+] as const;
+
+export type RuntimePlayerControlChannelSpeechStreamOp =
+  (typeof runtimePlayerControlChannelSpeechStreamOps)[number];
+
+/**
+ * The maximum total mora count ONE streamed utterance may accumulate across all of its
+ * `append`s (voice swap Wave 1 Domain A). Each `append` is still capped at
+ * {@link runtimePlayerControlChannelSpeechMaxTimelineLength} (512); this whole-utterance
+ * cap keeps the group evaluator's per-tick scan bounded the same way the 512 cap does for
+ * `intent.speech`. An `append` that would exceed it is refused with `invalidPayload`
+ * (拒否語彙の不増殖 — no new code, never truncated). Source of truth for the schema's
+ * `maxUtteranceTimelineLength`.
+ */
+export const runtimePlayerControlChannelSpeechStreamMaxUtteranceLength = 4096;
+
+/** One mora on the wire — the SAME item shape `intent.speech` carries. */
+export type RuntimePlayerControlChannelSpeechMoraPayload = {
+  readonly timeMs: number;
+  readonly vowel: RuntimePlayerControlChannelSpeechVowel;
+  readonly s: number;
+};
+
+/**
+ * Voice swap `intent.speechStream` payload — the STREAMED form of the `intent.speech`
+ * mora列, so the soul can hand the 器 the mouth timeline while the voice is still being
+ * synthesized. One utterance = `open` → `append`×N → `end`, all naming the same
+ * `utteranceId` (a non-empty soul-chosen string):
+ *
+ *  - `open`   : start the utterance. Replaces the previous utterance (whose later
+ *               `append`/`end` are then ignored). t=0 = the 器's acceptance instant of
+ *               this `open` (the same anchoring rule as `intent.speech`).
+ *  - `append` : the next 1..512 moras. `timeMs` is relative to the utterance's t=0 and
+ *               strictly increasing WITHIN the utterance (the first mora of an append
+ *               must be after the previous append's last mora); at most 4096 moras per
+ *               utterance. Item shape/domain is exactly `intent.speech`'s.
+ *  - `end`    : no more moras. Until `end` the 器 holds the last vowel when the data runs
+ *               out (no automatic close); after `end` the usual terminal (hold the last
+ *               interval → release over 400ms) applies.
+ *
+ * An `append`/`end` naming an utteranceId that is not the current open utterance (a
+ * stale tail of a replaced/stopped one) is accepted and ignored. A malformed shape, a
+ * non-monotonic continuation or an over-cap utterance is refused with `invalidPayload`;
+ * an out-of-domain `s` with `slotValueOutOfRange`; an unwritable mouth group (open /
+ * append) with `slotNotWritable` — NO new rejection code. Schema:
+ * channel-intent-speech-stream-payload-schema.json.
+ */
+export type RuntimePlayerControlChannelIntentSpeechStreamPayload =
+  | { readonly op: "open"; readonly utteranceId: string }
+  | {
+      readonly op: "append";
+      readonly utteranceId: string;
+      readonly timeline: readonly RuntimePlayerControlChannelSpeechMoraPayload[];
+    }
+  | { readonly op: "end"; readonly utteranceId: string };

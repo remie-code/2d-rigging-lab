@@ -139,6 +139,29 @@ export type SpeechTimelineState = {
    * is still read off the SINGLE `s`, the convex identity holds through the re-attack.
    */
   readonly onsetFromOpen?: number;
+  /**
+   * Streamed utterance still waiting for its `end` (voice swap Wave 1, `intent.speechStream`).
+   * While true, more moras may still be appended, so running out of data is NOT the end of
+   * the utterance: the terminal hold has no release — the last vowel is kept until either
+   * more moras arrive or `end` lands. Absent/false = the utterance is complete (the
+   * `intent.speech` case), so the terminal hold→release applies exactly as before.
+   */
+  readonly awaitingEnd?: boolean;
+  /**
+   * Absolute instant the streamed utterance's `end` was accepted. The terminal release
+   * never starts before it: when `end` arrives after the data already ran out (the mouth
+   * was holding the last vowel), the release begins at `end` instead of jumping to a
+   * release that "should" have started in the past. Absent → no constraint (the
+   * `intent.speech` case, whose end coincides with its start).
+   */
+  readonly endAtMs?: number;
+  /**
+   * Absolute instant the onset ramp starts. Defaults to `startAtMs`. A streamed utterance's
+   * first moras can land after its t=0 (`open` acceptance); anchoring the onset at the
+   * instant the data was installed keeps the "rise from the current openness, no snap"
+   * property even then. Mora times stay relative to `startAtMs` (the t=0 contract).
+   */
+  readonly onsetAtMs?: number;
 };
 
 export type SpeechTimelineSample = {
@@ -235,6 +258,11 @@ function baseValuesRecord(baseFor: (slotId: string) => number): Record<string, n
  *  - terminal (e ≥ last mora): hold the last vowel for `holdMs` (= the last mora interval
  *    for a multi-mora列, else ONSET_MS for a single mora), then a smoothstep release to 0
  *    over `releaseMs` — 発話後に口が自然に閉じる. `done` once fully closed → pruned.
+ *  - streamed utterance (`intent.speechStream`, voice swap Wave 1): while `awaitingEnd`
+ *    the terminal is a hold WITHOUT release (データが尽きても最後の母音を保つ); after `end`
+ *    the same hold→release applies, starting no earlier than `endAtMs`. The onset ramp is
+ *    anchored at `onsetAtMs` (the data's install instant) when given. All of these fold
+ *    into the single `s`, so the convex identity is untouched.
  */
 export function sampleSpeechTimeline(
   speech: SpeechTimelineState,
@@ -328,13 +356,22 @@ export function sampleSpeechTimeline(
     // 裁量: terminal hold = the last mora interval (derived, no magic number) for a
     // multi-mora列; ONSET_MS for a single mora (no interval to derive from). After the
     // hold, a smoothstep release closes the mouth to base over `releaseMs`.
+    //
+    // Streaming (awaitingEnd): the data ran out but the utterance is not over — keep the
+    // last vowel (term stays 1, no release, never done) until more moras or `end` arrive.
+    // After `end`, the release never starts before the `end` instant (endAtMs), so a late
+    // `end` closes from the held vowel instead of skipping into a past release.
     const prev = moras[n - 2];
     const holdMs =
       prev !== undefined
         ? cur.timeMs - prev.timeMs
         : RUNTIME_PLAYER_SPEECH_ONSET_MS;
-    const releaseStartMs = cur.timeMs + holdMs;
-    if (e >= releaseStartMs) {
+    const endRelMs =
+      speech.endAtMs !== undefined
+        ? speech.endAtMs - speech.startAtMs
+        : Number.NEGATIVE_INFINITY;
+    const releaseStartMs = Math.max(cur.timeMs + holdMs, endRelMs);
+    if (speech.awaitingEnd !== true && e >= releaseStartMs) {
       const rel = e - releaseStartMs;
       if (rel >= releaseMs) {
         return { values: baseValuesRecord(baseFor), done: true };
@@ -351,8 +388,14 @@ export function sampleSpeechTimeline(
     rightBoundaryMs !== undefined ? dipFactor(rightBoundaryMs - e, dipFloor) : 1;
   const dip = Math.min(dipLeft, dipRight);
 
-  // Onset: a global smoothstep 0→1 over ONSET_MS from timeline start (§4).
-  const onset = smoothstep(clamp01(e / RUNTIME_PLAYER_SPEECH_ONSET_MS));
+  // Onset: a global smoothstep 0→1 over ONSET_MS from timeline start (§4) — or, for a
+  // streamed utterance whose data landed after t=0, from the instant it was installed
+  // (`onsetAtMs`). With onsetAtMs absent this is exactly `e`, so the golden is unchanged.
+  const onsetElapsedMs =
+    speech.onsetAtMs !== undefined ? Math.max(0, nowMs - speech.onsetAtMs) : e;
+  const onset = smoothstep(
+    clamp01(onsetElapsedMs / RUNTIME_PLAYER_SPEECH_ONSET_MS)
+  );
 
   // The natural timeline opening strength (dip / terminal / scale applied, onset NOT yet).
   const sNatural = sRaw * dip * term * RUNTIME_PLAYER_SPEECH_OPEN_SCALE;

@@ -86,7 +86,12 @@ describe("RuntimePlayerControlChannelServer", () => {
         kind: "server.hello",
         payload: {
           protocol: 1,
-          supportedKinds: ["intent.set", "intent.envelope", "intent.speech"]
+          supportedKinds: [
+            "intent.set",
+            "intent.envelope",
+            "intent.speech",
+            "intent.speechStream"
+          ]
         }
       });
     await waitFor(() => server.getState().kind === "connected");
@@ -213,6 +218,83 @@ describe("RuntimePlayerControlChannelServer", () => {
       (frame["mouth-vowel-e"] ?? 0) +
       (frame["mouth-vowel-o"] ?? 0);
     expect(vowelSum).toBeCloseTo(mouthOpen, 9);
+
+    socket.close();
+  });
+
+  it("streams an utterance over intent.speechStream (open → append → end) into the same group evaluator, and intent.set mouth-open=0 stops it", async () => {
+    const store = new RuntimePlayerControlChannelOverlayStore();
+    const server = await startOpenServer({
+      store,
+      getCurrentSlots: () => MOUTH_GROUP_SLOTS.map((slotId) => writableSlot(slotId))
+    });
+    const events: string[] = [];
+    server.onEvent((event) => {
+      events.push(event.kind === "accepted" ? `accepted:${event.slotId}` : event.kind);
+    });
+    const socket = connect(server);
+    const messages = collectMessages(socket);
+    await waitForWebSocketOpen(socket);
+
+    const send = async (id: string, payload: unknown): Promise<unknown> => {
+      socket.send(JSON.stringify({ v: 1, id, kind: "intent.speechStream", payload }));
+      await waitFor(() => messages.some((message) => message.replyTo === id));
+      return messages.find((message) => message.replyTo === id);
+    };
+
+    expect(await send("req-open", { op: "open", utteranceId: "u-1" }))
+      .toStrictEqual({ v: 1, replyTo: "req-open", result: "accepted" });
+    expect(await send("req-append-1", {
+      op: "append",
+      utteranceId: "u-1",
+      timeline: [
+        { timeMs: 0, vowel: "o", s: 0.7 },
+        { timeMs: 120, vowel: "a", s: 0.8 }
+      ]
+    })).toStrictEqual({ v: 1, replyTo: "req-append-1", result: "accepted" });
+
+    // A non-continuing slice for the open utterance is refused (connection kept).
+    expect(await send("req-append-bad", {
+      op: "append",
+      utteranceId: "u-1",
+      timeline: [{ timeMs: 60, vowel: "i", s: 0.5 }]
+    })).toMatchObject({ result: "rejected", error: { code: "invalidPayload" } });
+
+    // The mouth is driven from t=0 = the open's acceptance (FIXED_NOW_MS), identity intact,
+    // and — awaiting end — it holds the last vowel long after the data ran out.
+    const mid = store.snapshot(FIXED_NOW_MS + 60);
+    const midOpen = mid["mouth-open"] ?? 0;
+    expect(midOpen).toBeGreaterThan(0);
+    const vowelSum =
+      (mid["mouth-vowel-a"] ?? 0) +
+      (mid["mouth-vowel-i"] ?? 0) +
+      (mid["mouth-vowel-u"] ?? 0) +
+      (mid["mouth-vowel-e"] ?? 0) +
+      (mid["mouth-vowel-o"] ?? 0);
+    expect(vowelSum).toBeCloseTo(midOpen, 9);
+    expect(store.snapshot(FIXED_NOW_MS + 5_000)["mouth-vowel-a"] ?? 0).toBeGreaterThan(0);
+
+    // The barge-in release: intent.set mouth-open=0 stops the streaming utterance, so the
+    // next append for it is accepted but ignored (no further accepted event).
+    socket.send(JSON.stringify({
+      v: 1,
+      id: "req-close-mouth",
+      kind: "intent.set",
+      payload: { slotId: "mouth-open", value: 0, ttlMs: 400 }
+    }));
+    await waitFor(() => messages.some((message) => message.replyTo === "req-close-mouth"));
+    expect(await send("req-append-late", {
+      op: "append",
+      utteranceId: "u-1",
+      timeline: [{ timeMs: 6_000, vowel: "e", s: 0.9 }]
+    })).toStrictEqual({ v: 1, replyTo: "req-append-late", result: "accepted" });
+    expect(await send("req-end", { op: "end", utteranceId: "u-1" }))
+      .toStrictEqual({ v: 1, replyTo: "req-end", result: "accepted" });
+    expect(store.snapshot(FIXED_NOW_MS + 6_100)["mouth-vowel-e"] ?? 0).toBe(0);
+
+    // Accepted mouth events: the append that landed + the intent.set. The ignored late
+    // append and open/end surface none.
+    expect(events.filter((event) => event === "accepted:mouth-open")).toHaveLength(2);
 
     socket.close();
   });

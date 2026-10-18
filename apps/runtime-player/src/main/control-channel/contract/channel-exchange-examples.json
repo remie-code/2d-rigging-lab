@@ -7,13 +7,18 @@
     "messages": [
       {
         "direction": "serverToClient",
-        "note": "Sent immediately on connect (C4 §3.4). C5 additively advertises intent.envelope; C6 additively advertises intent.speech, alongside intent.set.",
+        "note": "Sent immediately on connect (C4 §3.4). C5 additively advertises intent.envelope; C6 additively advertises intent.speech; the voice swap additively advertises intent.speechStream, alongside intent.set.",
         "message": {
           "v": 1,
           "kind": "server.hello",
           "payload": {
             "protocol": 1,
-            "supportedKinds": ["intent.set", "intent.envelope", "intent.speech"]
+            "supportedKinds": [
+              "intent.set",
+              "intent.envelope",
+              "intent.speech",
+              "intent.speechStream"
+            ]
           }
         }
       },
@@ -106,6 +111,118 @@
       {
         "direction": "serverToClient",
         "message": { "v": 1, "replyTo": "req-90", "result": "accepted" }
+      }
+    ]
+  },
+  "speechStreamPath": {
+    "description": "Voice swap intent.speechStream worked exchange (additive over intent.speech). The soul opens one utterance, appends the mouth timeline in slices while the voice is still being synthesized, then ends it. t=0 is the acceptance instant of the open; every timeMs is relative to it and strictly increasing across appends. Until end the 器 holds the last vowel when the data runs out; after end the usual terminal (hold the last interval, then release over 400ms) applies. The stale append after a newer open is accepted and ignored (an old utterance's tail). Every reply is accepted, correlated by replyTo. The intent.speech path above is unchanged (the 器 runs it as open + append + end internally).",
+    "messages": [
+      {
+        "direction": "clientToServer",
+        "note": "Open utterance u-1. Its acceptance instant becomes t=0.",
+        "message": {
+          "v": 1,
+          "id": "req-120",
+          "kind": "intent.speechStream",
+          "payload": { "op": "open", "utteranceId": "u-1" }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-120", "result": "accepted" }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "First slice of 「これじっさい」: o,e,i,a,i.",
+        "message": {
+          "v": 1,
+          "id": "req-121",
+          "kind": "intent.speechStream",
+          "payload": {
+            "op": "append",
+            "utteranceId": "u-1",
+            "timeline": [
+              { "timeMs": 0, "vowel": "o", "s": 0.6 },
+              { "timeMs": 120, "vowel": "e", "s": 0.7 },
+              { "timeMs": 250, "vowel": "i", "s": 0.5 },
+              { "timeMs": 380, "vowel": "a", "s": 0.85 },
+              { "timeMs": 510, "vowel": "i", "s": 0.55 }
+            ]
+          }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-121", "result": "accepted" }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "Next slice 「のところ」: continues after 510ms (strictly increasing within the utterance).",
+        "message": {
+          "v": 1,
+          "id": "req-122",
+          "kind": "intent.speechStream",
+          "payload": {
+            "op": "append",
+            "utteranceId": "u-1",
+            "timeline": [
+              { "timeMs": 630, "vowel": "o", "s": 0.7 },
+              { "timeMs": 740, "vowel": "o", "s": 0.65 },
+              { "timeMs": 850, "vowel": "o", "s": 0.7 },
+              { "timeMs": 960, "vowel": "o", "s": 0.65 }
+            ]
+          }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-122", "result": "accepted" }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "No more moras for u-1: the mouth now closes after the last mora (hold the last interval, then release).",
+        "message": {
+          "v": 1,
+          "id": "req-123",
+          "kind": "intent.speechStream",
+          "payload": { "op": "end", "utteranceId": "u-1" }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-123", "result": "accepted" }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "Open the next utterance u-2 (replaces u-1).",
+        "message": {
+          "v": 1,
+          "id": "req-124",
+          "kind": "intent.speechStream",
+          "payload": { "op": "open", "utteranceId": "u-2" }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-124", "result": "accepted" }
+      },
+      {
+        "direction": "clientToServer",
+        "note": "A late append for the replaced u-1: accepted and ignored (u-2 is unaffected).",
+        "message": {
+          "v": 1,
+          "id": "req-125",
+          "kind": "intent.speechStream",
+          "payload": {
+            "op": "append",
+            "utteranceId": "u-1",
+            "timeline": [{ "timeMs": 1070, "vowel": "o", "s": 0.7 }]
+          }
+        }
+      },
+      {
+        "direction": "serverToClient",
+        "message": { "v": 1, "replyTo": "req-125", "result": "accepted" }
       }
     ]
   },
