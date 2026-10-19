@@ -23,6 +23,7 @@
 | [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ、Wave107 母音/キャリブレーション調査) | 較正ログ Round 16 まで（**Fable 委任32代 reject 累計ゼロで1周目完了**）。player calibration / iFacialMocap / mapping-strength / variant の調査を収録 |
 | [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 11 枚（00-10）+ 不変量 20 種 + 周回指揮書（[_conductor.md](craft/_conductor.md)）**。回転射影の統一原理・2周目実施事項4件・遡及の物差しを焼き込み済み |
 | [reference-guided-rigging/](reference-guided-rigging/_map.md) | 参照生成・格子への変換・動作評価、および実験記録 | 方針合意、Face-X参照2候補の位置合わせ承認済み・隣接フロー試作へ |
+| [technique-catalog/](technique-catalog/_map.md) | 外部の玄人モデリング技法の収集・加工・実践（craft とは独立） | 2026-10-19 開設。フェーズ 1（集める）進行中 |
 
 ## Key Files
 

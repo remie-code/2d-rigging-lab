@@ -69,6 +69,9 @@ discussion/
       motion-review.md
       experiments/
         _map.md
+    technique-catalog/  # 外部の玄人モデリング技法の収集・加工・実践(2026-10-19合意)
+      _map.md
+      collection/       #   集めるフェーズの生メモ(原文用語、§7の過去調査扱い)
   mesh-generation/      # メッシュ自動生成の商用風改修(v7)。概念設計、現状調査、実装、品質評価、v6系整理
     _map.md
     *.md
