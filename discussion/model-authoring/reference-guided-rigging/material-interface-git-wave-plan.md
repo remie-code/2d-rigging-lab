@@ -1,6 +1,6 @@
 # 素材インターフェース git 前提化 実装計画
 
-状態: 実行中。2026-10-20 ユーザー承認。Wave 1 完了（Gnome 実装、Sylph 1 レーンで PASS with warnings、warning 1・3 と追加テストは Wave 1 内で対応済み、2・4 は Wave 2 の受け入れ条件へ）。ブランチ `authoring-host/material-interface-on-git`（master 4fa1cef0 から）。
+状態: Wave 1・2・3 完了（2026-10-20）。コミット d095bf6c（Wave 1）、9df53322（Wave 2）。レビューは Sylph 1 レーンで両 wave とも PASS with warnings、指摘は対応または残課題として記録。[completion](experiments/material-interface-git-completion.md)。
 Basis: [material-interface-git-redesign.md](material-interface-git-redesign.md)（判断）。棚卸しは 2026-10-20 の Sylph 調査 3 本（実装の地図、バイトの入り口、開発規約）。
 
 ## 進め方

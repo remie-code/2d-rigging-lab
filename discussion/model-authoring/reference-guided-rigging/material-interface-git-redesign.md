@@ -1,6 +1,6 @@
 # 素材インターフェースを git 前提に作り直す
 
-状態: Accepted（2026-10-20、ユーザー合意）。実装は未着手。計画は [material-interface-git-wave-plan.md](material-interface-git-wave-plan.md)。
+状態: Accepted（2026-10-20、ユーザー合意）。Wave 1・2 実装済み（[completion](experiments/material-interface-git-completion.md)）。計画は [material-interface-git-wave-plan.md](material-interface-git-wave-plan.md)。
 置き換える文書: [material-interface-wave-plan.md](material-interface-wave-plan.md)、[material-interface-contract.md](material-interface-contract.md)、[material-interface-wave-1-a.md](material-interface-wave-1-a.md)。用途の合意 [material-authoring-interface.md](material-authoring-interface.md) は維持する。
 
 ## 経緯（実験結果）
