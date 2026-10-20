@@ -12,7 +12,7 @@
 
 | Path | Role | Status |
 |---|---|---|
-| [research/](research/) | Decisions API の公式事実・課金境界(子トピック共有) | Created |
+| [research/](research/) | Decisions API の公式事実・課金境界(子トピック共有)。知人のトークアバターの判定の組み立て方(6 つの型・答えの使い方 4 つ)と、先読みをいったん置く判断([research/talk-avatar-patterns-2026-10.md](research/talk-avatar-patterns-2026-10.md)) | Created |
 | [gaze-target/](gaze-target/_map.md) | 画面のどこを見るか(視線注視先) | **一区切り(2026-10-12)**: 4x3 粒度で推定でき、発言で動かせる |
 | [reaction-trigger/](reaction-trigger/_map.md) | 反応すべきか(チャッピーの感情が大きく動くか) | 合意済み・未着手 |
 | `voice-direction/` | ElevenLabs の音声タグ選び | 未作成(必要になったら切る) |
