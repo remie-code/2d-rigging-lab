@@ -12,34 +12,33 @@ export const MaterialInsertionSchema = z.discriminatedUnion("position", [
   z.object({ position: z.literal("before"), sibling: StructuralSiblingSchema }).strict(),
   z.object({ position: z.literal("after"), sibling: StructuralSiblingSchema }).strict()
 ]);
-export const MaterialIntentSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("add"),
-    drawableId: DrawableIdSchema,
-    displayName: z.string().min(1),
-    parentPartId: PartIdSchema,
-    insertion: MaterialInsertionSchema,
-    // Explicit empty array means no motion membership or masks.
-    rigControlIds: z.array(RigControlIdSchema),
-    maskBindings: z.array(z.object({
-      maskRelationId: MaskRelationIdSchema,
-      role: z.enum(["maskSource", "target"])
-    }).strict()),
-    runtimeVisibility: z.boolean(),
-    defaultOpacity: z.number().finite().min(0).max(1)
+export const MaterialAddIntentSchema = z.object({
+  kind: z.literal("add"),
+  drawableId: DrawableIdSchema,
+  displayName: z.string().min(1),
+  parentPartId: PartIdSchema,
+  insertion: MaterialInsertionSchema,
+  // Explicit empty array means no motion membership or masks.
+  rigControlIds: z.array(RigControlIdSchema),
+  maskBindings: z.array(z.object({
+    maskRelationId: MaskRelationIdSchema,
+    role: z.enum(["maskSource", "target"])
+  }).strict()),
+  runtimeVisibility: z.boolean(),
+  defaultOpacity: z.number().finite().min(0).max(1)
+}).strict();
+export const MaterialReplaceIntentSchema = z.object({
+  kind: z.literal("replace"),
+  drawableId: DrawableIdSchema,
+  preserveLogicalDrawableId: z.literal(true),
+  geometryReset: z.object({
+    scope: z.literal("target-direct-geometry-keyforms"),
+    keyformSetIds: z.array(KeyformSetIdSchema)
   }).strict(),
-  z.object({
-    kind: z.literal("replace"),
-    drawableId: DrawableIdSchema,
-    preserveLogicalDrawableId: z.literal(true),
-    geometryReset: z.object({
-      scope: z.literal("target-direct-geometry-keyforms"),
-      keyformSetIds: z.array(KeyformSetIdSchema)
-    }).strict(),
-    preserveExistingDeformers: z.literal(true),
-    sharedControlPolicy: z.literal("reject-shared-control-key-parameter-deletion")
-  }).strict()
-]);
+  preserveExistingDeformers: z.literal(true),
+  sharedControlPolicy: z.literal("reject-shared-control-key-parameter-deletion")
+}).strict();
+export const MaterialIntentSchema = z.discriminatedUnion("kind", [MaterialAddIntentSchema, MaterialReplaceIntentSchema]);
 export const MaterialImpactSchema = z.object({
   drawableId: DrawableIdSchema,
   preserved: z.array(TargetRefSchema),
@@ -55,6 +54,8 @@ export const MaterialImpactSchema = z.object({
   existingDeformersChanged: z.literal(false)
 }).strict();
 export type MaterialIntent = z.infer<typeof MaterialIntentSchema>;
+export type MaterialAddIntent = z.infer<typeof MaterialAddIntentSchema>;
+export type MaterialReplaceIntent = z.infer<typeof MaterialReplaceIntentSchema>;
 export type MaterialImpact = z.infer<typeof MaterialImpactSchema>;
 
 

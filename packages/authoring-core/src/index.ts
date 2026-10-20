@@ -72,3 +72,5 @@ export * from "./to-runtime-graph.js";
 
 export * from "./material-candidate-build.js";
 export { analyzeMaterialImpact, guardMaterialCandidateOperation } from "./material-impact-analysis.js";
+export * from "./material-image-drawable.js";
+export { MATERIAL_RGBA_MEDIA_TYPE, planMaterialImageAssets, registerMaterialImageBytes, type MaterialImageAssetPlan, type MaterialImageSubject, type RegisterMaterialImageBytesInput } from "./material-image-assets.js";

@@ -1,5 +1,6 @@
 import type { MaterialIntent, DrawableId, KeyformSetId } from "@private-2d-rigging-lab/contracts";
 import type { AuthoringSession } from "./authoring-session.js";
+import { MaterialRejection } from "./material-validation.js";
 
 export const getMaterialDirectGeometryKeyformIds = (session: AuthoringSession, drawableId: DrawableId): KeyformSetId[] => {
   const drawable = session.graph.drawables.find((item) => item.drawableId === drawableId);
@@ -14,11 +15,12 @@ export const resetMaterialGeometry = (session: AuthoringSession, intent: Extract
   const actual = getMaterialDirectGeometryKeyformIds(session, intent.drawableId);
   const declared = intent.geometryReset.keyformSetIds;
   if (new Set(declared).size !== declared.length || actual.length !== declared.length || actual.some((id) => !declared.includes(id))) {
-    throw new Error(`Geometry reset must name exactly the direct geometry keyforms: ${actual.join(", ")}`);
+    throw new MaterialRejection("geometryResetMismatch", `Geometry reset must name exactly the direct geometry keyforms: ${actual.join(", ")}`,
+      { kind: "drawable", id: intent.drawableId });
   }
   const drawable = session.graph.drawables.find((item) => item.drawableId === intent.drawableId)!;
   if (session.graph.drawables.some((item) => item.drawableId !== intent.drawableId && item.meshId === drawable.meshId)) {
-    throw new Error("Cannot reset shared mesh geometry.");
+    throw new MaterialRejection("sharedMeshReset", "Cannot reset shared mesh geometry.", { kind: "mesh", id: drawable.meshId });
   }
   session.graph.keyformSets = session.graph.keyformSets.filter((key) => !actual.includes(key.keyformSetId));
   session.graph.stableOrder = session.graph.stableOrder.filter((id) => !actual.includes(id as KeyformSetId));

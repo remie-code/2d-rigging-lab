@@ -1,13 +1,13 @@
 # 素材インターフェース git 前提化 実装計画
 
-状態: Draft（ユーザー確認待ち）。2026-10-20。ブランチ `authoring-host/material-interface-on-git`（master 4fa1cef0 から）。
+状態: 実行中。2026-10-20 ユーザー承認。Wave 1 完了（Gnome 実装、Sylph 1 レーンで PASS with warnings、warning 1・3 と追加テストは Wave 1 内で対応済み、2・4 は Wave 2 の受け入れ条件へ）。ブランチ `authoring-host/material-interface-on-git`（master 4fa1cef0 から）。
 Basis: [material-interface-git-redesign.md](material-interface-git-redesign.md)（判断）。棚卸しは 2026-10-20 の Sylph 調査 3 本（実装の地図、バイトの入り口、開発規約）。
 
 ## 進め方
 
 - 軽量（判断 9）: wave ごとに Gnome 1 名がテスト込みで実装・自己検証する。wave の終わりに Sylph（sonnet）1 レーンで、計画・判断との突き合わせと差分レビューを行う。
 - Gnome はコミットしない。L0 が wave ごとにコミットする。`pnpm install`、新規依存、lockfile の変更は禁止。
-- Wave 1 と Wave 2 は同じファイルに触れない。Wave 2 は Wave 1 の公開 API に依存するため直列で進める。
+- Wave 2 は Wave 1 の公開 API に依存するため直列で進める。各 wave の終わりで全テストが通る状態を保つ（Wave 1 は足すだけ、撤去は Wave 2）。
 
 ## 名前（案）
 
@@ -18,23 +18,23 @@ Basis: [material-interface-git-redesign.md](material-interface-git-redesign.md)�
 | AI コマンド（読み取り専用） | `extractMaterialSource` | 現行のまま |
 | AI コマンド（読み取り専用） | `previewMaterialPlacement` | 候補なしで、画像パス・配置・足し方・viewport から置いてみる描画を返す |
 
-## Wave 1: パッケージ層（contracts / authoring-core / operation-core / validator-core）
+## Wave 1: パッケージ層に新しい経路を足す（contracts / authoring-core / operation-core / validator-core）
+
+2026-10-20 改定: 候補の型は ai-interface とホストが import しているため、Wave 1 で消すと Wave 2 の担当ファイルが壊れる。Wave 1 は**足すだけ**にして旧経路を動くまま残し、撤去はすべて Wave 2 で行う。
 
 **contracts**
-- `material-candidate.ts` と `material-operation-result.ts` を撤去する。
-- 残す契約が依存している restPose は、残すファイルへ移す。
-- 版は `{packageId, packageRevision}` だけにする（指紋なし）。
-- `material-artifacts.ts` の sidecar と sourceContext から、候補 ID・候補リビジョン・作業用パッケージ・指紋を外す。
-- `material-contract-fixtures.ts` から候補 fixture を外す。テストを追随させる。
+- 指紋を持たない版 `{packageId, packageRevision}` の schema を足す（Wave 2 で sidecar と sourceContext をこちらへ切り替える）。
+- 2 つの operation の payload が使う型（足し方・配置・画像の記述）は、既存の `material-intent.ts`、`material-coordinates.ts`、`material-image.ts` を再利用する。足りない分だけ追加する。
 
 **authoring-core**
-- `material-candidate-build.ts` を、候補を受け取らない 2 関数に置き換える（追加、差し替え）。
+- 候補を受け取らない 2 関数（追加、差し替え）を足す。
   - 入力: 正規化済み画像の記述子、配置、足し方、来歴メモ、ID の種（operationId 由来）。
   - 処理: ソース・来歴・権利・テクスチャの項目を作り、部品とメッシュを作るか差し替える。
-- ID の種は候補 ID から operationId へ変える（`material-source-mapping.ts`）。
-- 画像のバイトはこの層では登録しない。セッションに登録済みであることと、ハッシュが一致することを確認する。
-- `guardMaterialCandidateOperation` を撤去する。差し替えの共有キー検査と共有メッシュ拒否（`material-geometry-reset.ts`、到達性ヘルパー）は残す。
-- index.ts の export を更新する。
+- 既存の `buildMaterialCandidate` は、この 2 関数を呼ぶ形に寄せる（重複を作らない）。ID の種は呼び出し側から渡す（旧経路は候補 ID 由来、新経路は operationId 由来）。
+- 画像のバイトはこの層では登録しない。新しい 2 関数は、セッションに登録済みであることとハッシュの一致を確認する。
+- 差し替えの共有キー検査と共有メッシュ拒否（`material-geometry-reset.ts`、到達性ヘルパー）は新しい差し替え関数でも効かせる。
+- `guardMaterialCandidateOperation` は Wave 2 で撤去する（ホストが使っているため）。
+- index.ts の export を追加する。
 
 **operation-core**
 - 2 つの operation type、payload schema、同期 handler（dry-run / commit）を追加する。
@@ -42,7 +42,7 @@ Basis: [material-interface-git-redesign.md](material-interface-git-redesign.md)�
 - バイトがセッションに無い、またはハッシュが合わない場合は error で拒否する。
 
 **validator-core**
-- `material-candidate-integration.test.ts` を、新しい 2 関数の結果が通常の validator を通ることの確認に置き換える。
+- 新しい 2 関数の結果が通常の validator を通ることを確認するテストを足す。`material-candidate-integration.test.ts` の撤去は Wave 2。
 
 **完了条件**
 - `pnpm check`（typecheck、test:unit、check:deps、check:source、check:soul-zone）が通る。check:source に既知の担当外違反が残っていれば、その旨を記録する。
@@ -52,7 +52,12 @@ Basis: [material-interface-git-redesign.md](material-interface-git-redesign.md)�
   - バイトが無い場合、またはハッシュが不一致の場合に拒否されること。
   - dry-run が元のセッションを変えないこと。
 
-## Wave 2: ホスト層（apps/authoring-host / ai-interface）
+## Wave 2: ホストの取り込みと旧経路の撤去（apps/authoring-host / ai-interface / contracts / authoring-core / validator-core）
+
+**パッケージ層の撤去（Wave 1 から移したもの）**
+- contracts: `material-candidate.ts` と `material-operation-result.ts` を撤去する。残す契約が依存する restPose は残すファイルへ移す。`material-artifacts.ts` の sidecar と sourceContext は、Wave 1 で足した指紋なしの版へ切り替え、候補 ID・候補リビジョン・作業用パッケージを外す。候補 fixture を外す。
+- authoring-core: `buildMaterialCandidate`、`guardMaterialCandidateOperation`、候補用 fixture を撤去する。
+- validator-core: `material-candidate-integration.test.ts` を撤去する。
 
 **ロックとエラー型**
 - `withMaterialPackageLock` と `MaterialHostError` を、素材ではない中立なモジュール（例: `package-lock.ts`、`host-error.ts`）へ移す。全コマンドの挙動は変えない。
@@ -87,6 +92,12 @@ Basis: [material-interface-git-redesign.md](material-interface-git-redesign.md)�
 **文書と成果物**
 - `MATERIAL_COMMANDS.md` を書き直す: 読み取り専用 2 コマンドと、2 つの operation の dry-run / commit の使い方。git とコミットの扱いは書かない（呼び出し側の運用）。
 - `llm-workspace/material-interface-*` を削除する（gitignore 対象のローカル成果物）。
+
+**Wave 1 レビューからの申し送り（受け入れ条件に含める）**
+- ホストは、デコードした幅・高さが payload と一致すること、contentInset が 0 であること、同期で計算した RGBA SHA-256 が payload と一致することを検査する。operation-core は申告された digest と `w*h*4` しか見ない。
+- dry-run・拒否・失敗のときに、登録したバイトがセッションにもパッケージにも残らないこと。一時クローンで登録して検証するか、失敗時に登録を取り消す。
+- ID の種は operationId 由来（省略時は種別・部品・ハッシュ・basePackageRevision から決まる）。同じ operationId の再実行は idCollision で拒否される。`MATERIAL_COMMANDS.md` に書く。
+- ai-interface の AI 提案カタログ（`ai-codex-proposal-operation-catalog.ts`）に新 2 operation を載せるかを明示する。
 
 **完了条件**
 - `pnpm check`、`pnpm test:authoring-host`、`pnpm typecheck:authoring-host` が通る。
