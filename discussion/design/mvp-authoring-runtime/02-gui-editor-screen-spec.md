@@ -1,5 +1,7 @@
 # GUI Editor Screen Specification
 
+> Superseded（2026-10-20）: 操作の記録（operation log / `operations/log.jsonl`）はパッケージから撤去した。本書の operation log に関する記述（記録を必須・前提・証拠とする要件、`operations/log.jsonl#<id>` 参照、`operationLog` 種別、`getOperationLog`、transactionId を含む）はすべて無効。変更履歴は git、操作ごとの説明は operation result（modelDiff 等）と validation が担う。根拠: [drop-operation-log.md](../drop-operation-log.md)
+
 > 状態: Draft
 > 目的: GUI Editor MVP の画面領域、主要パネル、canvas、properties、parameter / keyform / rig control / mesh / texture / mask / draw order / diagnostics のUI責務、初心者導線、Editor-only state と runtime-visible state の分離、画面仕様の設計完了条件を固定する。
 

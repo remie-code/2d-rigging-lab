@@ -1,5 +1,7 @@
 # AI Agent Connection and Technology Stack Policy
 
+> Superseded（2026-10-20）: 操作の記録（operation log / `operations/log.jsonl`）はパッケージから撤去した。本書の operation log に関する記述（記録を必須・前提・証拠とする要件、`operations/log.jsonl#<id>` 参照、`operationLog` 種別、`getOperationLog`、transactionId を含む）はすべて無効。変更履歴は git、操作ごとの説明は operation result（modelDiff 等）と validation が担う。根拠: [drop-operation-log.md](drop-operation-log.md)
+
 > 状態: Draft / user-aligned direction  
 > 目的: Private 2D Rigging Lab / Prototype の技術スタックと AI Agent 接続方式に関する議論結果を、後続の `/goal` 設計指示で参照できる形に保存する。
 

@@ -1,6 +1,6 @@
 # 操作の記録（operations/log.jsonl）をやめる
 
-状態: Accepted（2026-10-20、ユーザー合意）。実装は未着手。計画は [../implementation/orchestration/drop-operation-log-plan.md](../implementation/orchestration/drop-operation-log-plan.md)。
+状態: Accepted（2026-10-20、ユーザー合意）。実装済み（[completion](../implementation/waves/drop-operation-log/completion.md)）。計画は [../implementation/orchestration/drop-operation-log-plan.md](../implementation/orchestration/drop-operation-log-plan.md)。
 
 ## 背景
 

@@ -1,6 +1,6 @@
 # 操作の記録をやめる 実装計画
 
-状態: Draft（ユーザー確認待ち）。2026-10-20。ブランチ `package-format/drop-operation-log`（master 9ddb5c1e から）。
+状態: Wave 1〜3 完了（2026-10-20）。コミット 277f041d（Wave 1）、a2267e91（Wave 2）。[completion](../waves/drop-operation-log/completion.md)、[レビュー](../reviews/drop-operation-log/_map.md)。ブランチ `package-format/drop-operation-log`（master 9ddb5c1e から）。
 Basis: [../../design/drop-operation-log.md](../../design/drop-operation-log.md)（判断）。棚卸し: 2026-10-20 の Sylph 調査 2 本（計測、参照箇所の地図）。
 
 ## 進め方

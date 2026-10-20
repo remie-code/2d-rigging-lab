@@ -1,5 +1,7 @@
 # P0 Fixture Manifest
 
+> Superseded（2026-10-20）: 操作の記録（operation log / `operations/log.jsonl`）はパッケージから撤去した。本書の operation log に関する記述（記録を必須・前提・証拠とする要件、`operations/log.jsonl#<id>` 参照、`operationLog` 種別、`getOperationLog`、transactionId を含む）はすべて無効。変更履歴は git、操作ごとの説明は operation result（modelDiff 等）と validation が担う。`evidence.guiOperationLogMissing` / `requiresGuiOperationLog` / `operationLogPresent` も撤去済みで、出荷前チェックの authoring workflow は GUI 証拠（guiEvidence）だけで判定し、無ければ not_evaluated とする。根拠: [drop-operation-log.md](../../design/drop-operation-log.md)
+
 > Status: Draft P0 test design artifact.
 > Scope: fixture classes, expected evidence, oracles, gates, and owner modules for the Private 2D Rigging Lab / Prototype baseline.
 > JSON mirror: [fixture-manifest.json](fixture-manifest.json)
