@@ -29,6 +29,7 @@
 |---|---|---|
 | [overview.md](overview.md) | フェーズ 1 の軽い全体像（部位をまたぐ考え方 17、系統 26、意見の割れ、穴、深掘りの入口） | Draft（ユーザー確認待ち） |
 | [collection/](collection/_map.md) | 集めるフェーズの生メモ（Web 6 ファイル、X 3 ファイル、見出し約 500） | Collected（第1巡） |
+| [practice/chin-underside-shadow.md](practice/chin-underside-shadow.md) | 実践: 顎下の影（首でクリッピング、上向きで出す）。v1〜v5 の経過と知見 | ユーザー採用（2026-10-20、r2159） |
 | [upper-body-fill-in-parts.md](upper-body-fill-in-parts.md) | 上半身の「描き足し」対象 43 部位（メモからの拾い出し。評価・実現性の判定なし） | Draft（2026-10-20） |
 
 ## 現在地（2026-10-20、議論の途中）
@@ -37,4 +38,5 @@
 - 「効く」の物差し（合意）: 無いときの違和感の大きさ / よく使う動きでの出やすさ / エージェントで用意できるか。
 - 対象モデル: `C:/workspace/remie/rigging/second-rigging-6-sol/workspace`（r2149、育てていくモデル。ディレクトリ名は名残）。
 - L0 の照合（未合意の見立て）: 顔 XYZ・斜め上・体 XZ・髪揺れ 4 種のスイープで見た限り、違和感がはっきり出るのは顎下だけ。耳・頭の側面・肩は長い髪に隠れて出ていない。腕を動かすパラメータは無い。顎下はメモでも影の形としてしか扱いが無く、手薄。
+- 顎下の影を実践し、ユーザーが採用（[practice/chin-underside-shadow.md](practice/chin-underside-shadow.md)）。途中で素材インターフェースの git 前提化と操作の記録の撤去を行った（`../reference-guided-rigging/material-interface-git-redesign.md`、`../../design/drop-operation-log.md`）。
 - 未決: 配信で他に違和感のある所の有無、まばたきで見える部分（まぶたの肌など）を対象に含めるか。
