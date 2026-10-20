@@ -1,6 +1,6 @@
 import { DiagnosticSchema } from "@private-2d-rigging-lab/contracts";
-import { MaterialHostError } from "./material-host-error.js";
-import { withMaterialPackageLock } from "./material-package-transaction.js";
+import { HostError } from "./host-error.js";
+import { withPackageLock } from "./package-lock.js";
 import { isMaterialCommand, runMaterialCommand } from "./run-material-command.js";
 import {
   AiCommandExecutor,
@@ -101,7 +101,8 @@ const runUnlockedAuthoringHostCommand = async (
     session: loaded.session,
     now,
     initialOperationLogEntries: loaded.operationLogEntries,
-    packageDocument: loaded.packageDocument
+    packageDocument: loaded.packageDocument,
+    packageDirectory: input.packageDirectory
   });
 
   const executor = new AiCommandExecutor({
@@ -252,13 +253,26 @@ const safeParseAiCommandRequest = (command: unknown): AiCommandRequest | undefin
   return command as AiCommandRequest;
 };
 
+/** Runs one command under the package-wide lock shared by every host command. */
 export const runAuthoringHostCommand = async (input: RunAuthoringHostCommandInput): Promise<AuthoringHostCommandResponse> => {
-  try { return await withMaterialPackageLock(input.packageDirectory, () => runUnlockedAuthoringHostCommand(input)); }
-  catch (error) {
-    if (!(error instanceof MaterialHostError) || error.code !== "package-busy") throw error;
-    const raw = input.command as { command?: unknown; commandId?: unknown } | null;
-    return { schemaVersion: "authoring-host-command-response-v1", outcome: "rejected", command: typeof raw?.command === "string" ? raw.command : "unknown",
-      ...(typeof raw?.commandId === "string" ? { commandId: raw.commandId } : {}), aiCommandStatus: "rejected", saved: false,
-      diagnostics: [DiagnosticSchema.parse({ checkId: "material.packageBusy", status: "fail", severity: "error", phase: "authoring-host", target: { kind: "operation", id: "op_authoring_lock" }, message: error.message })] };
+  try {
+    return await withPackageLock(input.packageDirectory, () => runUnlockedAuthoringHostCommand(input));
+  } catch (error) {
+    if (!(error instanceof HostError) || error.code !== "package-busy") throw error;
+    return createPackageBusyResponse(input.command, error.message);
   }
+};
+
+const createPackageBusyResponse = (command: unknown, message: string): AuthoringHostCommandResponse => {
+  const raw = command as { command?: unknown; commandId?: unknown } | null;
+  return {
+    schemaVersion: "authoring-host-command-response-v1",
+    outcome: "rejected",
+    command: typeof raw?.command === "string" ? raw.command : "unknown",
+    ...(typeof raw?.commandId === "string" ? { commandId: raw.commandId } : {}),
+    aiCommandStatus: "rejected",
+    saved: false,
+    diagnostics: [DiagnosticSchema.parse({ checkId: "authoringHost.packageBusy", status: "fail", severity: "error", phase: "authoring-host",
+      target: { kind: "operation", id: "op_authoring_lock" }, message })]
+  };
 };

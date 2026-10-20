@@ -27,7 +27,5 @@ export * from "./material-image.js";
 export * from "./material-image-file.js";
 export * from "./material-intent.js";
 export * from "./material-package-ref.js";
-export * from "./material-candidate.js";
 export * from "./material-artifacts.js";
-export * from "./material-operation-result.js";
 export * from "./material-contract-fixtures.js";

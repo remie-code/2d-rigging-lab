@@ -16,6 +16,7 @@ import type {
 } from "@private-2d-rigging-lab/ai-interface";
 import type { PackageDocumentDto } from "@private-2d-rigging-lab/package-format";
 
+import { isMaterialImageOperationRequest, prepareMaterialImageOperationSession } from "./material-image-operation-intake.js";
 import { measureEvaluatedGeometry } from "./perception/measurement-command.js";
 import { validatePackageDocument } from "./validate-package-document.js";
 
@@ -29,6 +30,8 @@ export interface AuthoringHostCommandHostOptions {
    * session graph and is what `validatePackage` validates.
    */
   readonly packageDocument: PackageDocumentDto;
+  /** The package directory on disk. Image operations refuse to overwrite a file already at their texture path. */
+  readonly packageDirectory?: string;
 }
 
 /**
@@ -41,6 +44,10 @@ export interface AuthoringHostCommandHostOptions {
  * session internally) and never advances the on-disk session, while
  * `commitOperation` advances the session revision and appends an operation-log entry.
  *
+ * addDrawableFromImage / replaceDrawableImage first read, check and register the PNG named by the payload
+ * (prepareMaterialImageOperationSession) on both dry-run and commit. The bytes live in a separate session that
+ * replaces the host session only when the commit succeeds, so a dry-run, rejection or failure leaves no bytes behind.
+ *
  * It also implements the read-side {@link AiReadCommandHost} contract for the read
  * commands the headless host supports today: `validatePackage` and
  * `inspectEvaluatedGeometry` (the measurement command — evaluated bounding boxes /
@@ -49,13 +56,15 @@ export interface AuthoringHostCommandHostOptions {
  * `not_implemented`.
  */
 export class AuthoringHostCommandHost implements AiOperationCommandHost, AiReadCommandHost {
-  readonly #session: AuthoringSession;
+  #session: AuthoringSession;
   readonly #operationCore: OperationCore;
   readonly #packageDocument: PackageDocumentDto;
+  readonly #packageDirectory: string | undefined;
 
   constructor(options: AuthoringHostCommandHostOptions) {
     this.#session = options.session;
     this.#packageDocument = options.packageDocument;
+    this.#packageDirectory = options.packageDirectory;
     this.#operationCore = createOperationCore({
       now: options.now,
       ...(options.initialOperationLogEntries === undefined
@@ -72,12 +81,20 @@ export class AuthoringHostCommandHost implements AiOperationCommandHost, AiReadC
     return this.#operationCore.operationLog.entries;
   }
 
-  dryRunOperation(request: OperationRequestDto): OperationResultDto {
-    return this.#operationCore.dryRunOperation(this.#session, request);
+  async dryRunOperation(request: OperationRequestDto): Promise<OperationResultDto> {
+    if (!isMaterialImageOperationRequest(request)) return this.#operationCore.dryRunOperation(this.#session, request);
+    const prepared = await prepareMaterialImageOperationSession(this.#session, request, this.#packageDirectory);
+    if (prepared.status === "rejected") return prepared.result;
+    return this.#operationCore.dryRunOperation(prepared.session, request);
   }
 
-  commitOperation(request: OperationRequestDto): OperationResultDto {
-    return this.#operationCore.commitOperation(this.#session, request).result;
+  async commitOperation(request: OperationRequestDto): Promise<OperationResultDto> {
+    if (!isMaterialImageOperationRequest(request)) return this.#operationCore.commitOperation(this.#session, request).result;
+    const prepared = await prepareMaterialImageOperationSession(this.#session, request, this.#packageDirectory);
+    if (prepared.status === "rejected") return prepared.result;
+    const outcome = this.#operationCore.commitOperation(prepared.session, request);
+    if (outcome.result.status === "committed") this.#session = prepared.session;
+    return outcome.result;
   }
 
   inspectEvaluatedGeometry(
