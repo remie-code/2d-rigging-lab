@@ -8,7 +8,7 @@ describe("source extraction",()=>{
     entry.dimensions={width:6,height:6,pixelFormat:"rgba8"};entry.contentInset={left:1,right:1,top:1,bottom:1};
     const binaryIndex=f.session.binaryAssets!.fileEntries.findIndex(b=>b.path===entry.binaryAssetRef!.packageRelativePath); const binary={...f.session.binaryAssets!.fileEntries[binaryIndex]!,bytes:new Uint8Array(6*6*4)}; f.session.binaryAssets!.fileEntries[binaryIndex]=binary;
     binary.bytes=new Uint8Array(6*6*4);for(let y=1;y<5;y++)for(let x=1;x<5;x++)binary.bytes.set([220,80,40,128],(y*6+x)*4);
-    const before=structuredClone(f.session),result=await extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId,packageVersion:f.candidate.basePackage});
+    const before=structuredClone(f.session),result=await extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId});
     const source=await readMaterialTestPng(result.sourceContext.sourceTexture.imageAbsolutePath);
     expect([...source.data]).toEqual([...binary.bytes]);expect(result.sourceContext.sourceImageToStage).toMatchObject({scale:0.5,translation:{x:11.5,y:11.5}});
     expect(result.sidecars[0]!.viewport.stageRect).toMatchObject({x:11.5,y:11.5,width:3,height:3});
@@ -17,10 +17,10 @@ describe("source extraction",()=>{
   });
   it("reports mask relations and rejects nonuniform mapping or inside-base artifacts",async()=>{
     const f=await createMaterialRenderFixture();
-    const result=await extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId,packageVersion:f.candidate.basePackage});expect(result.sourceContext.maskRelationIds).toHaveLength(1);
-    await expect(extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId,packageVersion:f.candidate.basePackage,artifactDirectory:f.basePackageDirectory})).rejects.toThrow("outside");
+    const result=await extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId});expect(result.sourceContext.maskRelationIds).toHaveLength(1);
+    await expect(extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId,artifactDirectory:f.packageDirectory})).rejects.toThrow("outside");
     const layer=f.session.graph.sourceAssets.flatMap(a=>a.layers).find(l=>l.mappedDrawableIds.some(id=>id===f.ids.eyeDrawableId))!;layer.bounds.width=3;
-    await expect(extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId,packageVersion:f.candidate.basePackage})).rejects.toThrow("nonuniform");
+    await expect(extractMaterialSource({...f,drawableId:f.ids.eyeDrawableId})).rejects.toThrow("nonuniform");
   });
 });
 

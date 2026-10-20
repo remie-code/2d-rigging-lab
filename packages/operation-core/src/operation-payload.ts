@@ -13,6 +13,10 @@ import {
 } from "./payloads/import-source.js";
 import { ImportPsdStructuralScaffoldPayloadSchema } from "./payloads/import-psd-structural-scaffold.js";
 import {
+  AddDrawableFromImagePayloadSchema,
+  ReplaceDrawableImagePayloadSchema
+} from "./payloads/material-image.js";
+import {
   AddKeyformGrid2dPayloadSchema,
   AddKeyformPayloadSchema,
   CreateDrawablePayloadSchema,
@@ -80,6 +84,8 @@ export const OperationPayloadSchema = z.discriminatedUnion("operationType", [
     payload: ImportPsdStructuralScaffoldPayloadSchema
   }),
   z.object({ operationType: z.literal("importSplitPngSourceAsset"), payload: SplitPngSourceAssetPayloadSchema }),
+  z.object({ operationType: z.literal("addDrawableFromImage"), payload: AddDrawableFromImagePayloadSchema }),
+  z.object({ operationType: z.literal("replaceDrawableImage"), payload: ReplaceDrawableImagePayloadSchema }),
   z.object({ operationType: z.literal("createDrawable"), payload: CreateDrawablePayloadSchema }),
   z.object({ operationType: z.literal("updateDrawable"), payload: UpdateDrawablePayloadSchema }),
   z.object({ operationType: z.literal("createPart"), payload: CreatePartPayloadSchema }),

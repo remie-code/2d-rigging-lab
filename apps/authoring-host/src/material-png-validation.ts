@@ -1,4 +1,4 @@
-import { MaterialHostError } from "./material-host-error.js";
+import { HostError } from "./host-error.js";
 
 const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const srgbChromaticities = [31270, 32900, 64000, 33000, 30000, 60000, 15000, 6000];
@@ -13,7 +13,7 @@ const crc32 = (bytes: Uint8Array): number => {
   for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 };
-const invalid = (message: string): never => { throw new MaterialHostError("invalid-png", message); };
+const invalid = (message: string): never => { throw new HostError("invalid-png", message); };
 
 /**
  * pngjs skips unknown ancillary chunks, including their CRCs. Validate every
@@ -45,7 +45,7 @@ export const validateMaterialPng = (bytes: Buffer): void => {
     } else if (seen.has("IDAT")) {
       idatEnded = true;
     }
-    if (type === "acTL") throw new MaterialHostError("animated-png", "Animated PNG is not a single rest material.");
+    if (type === "acTL") throw new HostError("animated-png", "Animated PNG is not a single rest material.");
     if (type === "IEND") {
       if (length !== 0 || !seen.has("IDAT")) invalid("PNG IEND must be empty and follow image data.");
       if (end !== bytes.length) invalid("Trailing PNG data.");
@@ -65,14 +65,14 @@ const validateColorChunk = (type: string, data: Buffer): void => {
     if (data.length !== 4 || data.readUInt32BE(0) === 0) invalid("PNG gAMA requires one positive uint32 gamma.");
     // Reject contradictory gAMA even with a valid sRGB chunk: never let one
     // declaration mask an unsupported transfer curve in another declaration.
-    if (data.readUInt32BE(0) !== 45455) throw new MaterialHostError("unsupported-color-profile", "PNG gamma is not sRGB.");
+    if (data.readUInt32BE(0) !== 45455) throw new HostError("unsupported-color-profile", "PNG gamma is not sRGB.");
     return;
   }
   if (type === "cHRM") {
     if (data.length !== 32) invalid("PNG cHRM requires eight uint32 chromaticities.");
-    if (srgbChromaticities.some((value, index) => data.readUInt32BE(index * 4) !== value)) throw new MaterialHostError("unsupported-color-profile", "PNG chromaticities are not sRGB.");
+    if (srgbChromaticities.some((value, index) => data.readUInt32BE(index * 4) !== value)) throw new HostError("unsupported-color-profile", "PNG chromaticities are not sRGB.");
     return;
   }
-  throw new MaterialHostError("unsupported-color-profile", `PNG ${type} color metadata requires color conversion before intake.`);
+  throw new HostError("unsupported-color-profile", `PNG ${type} color metadata requires color conversion before intake.`);
 };
 

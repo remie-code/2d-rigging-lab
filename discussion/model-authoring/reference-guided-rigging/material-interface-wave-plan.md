@@ -1,5 +1,7 @@
 # 素材追加・置換インターフェース実装計画
 
+> **Superseded（2026-10-20）**: 候補ストア・複製・指紋・承認・入れ替えを用いる方式は [material-interface-git-redesign.md](material-interface-git-redesign.md) で撤去を決定。実装は [material-interface-git-wave-plan.md](material-interface-git-wave-plan.md)。User Gate は判定せずに置き換え。
+
 2026-09-26。ユーザーがwave構成・責務分離・レビュー方針を了承し「計画を書いて起動」を指示。以下の範囲で開始する。基準HEAD a6bfc0429e642cd4c047f154d834cbd3c26ca72c。既存dirty変更は保持する。
 
 ## Basisと範囲

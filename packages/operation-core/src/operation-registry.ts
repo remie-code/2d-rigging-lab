@@ -24,6 +24,10 @@ import { importPsdSourceAssetOperationHandler } from "./operations/import-psd-so
 import { importPsdStructuralScaffoldOperationHandler } from "./operations/import-psd-structural-scaffold.js";
 import { importSplitPngSourceAssetOperationHandler } from "./operations/import-split-png-source-asset.js";
 import {
+  addDrawableFromImageOperationHandler,
+  replaceDrawableImageOperationHandler
+} from "./operations/material-image-drawable.js";
+import {
   addMeshTriangleOperationHandler,
   addMeshVertexOperationHandler,
   moveMeshUvPointOperationHandler,
@@ -108,6 +112,8 @@ export const operationHandlers: ReadonlyMap<OperationType, OperationHandler> = n
     importPsdStructuralScaffoldOperationHandler
   ],
   [importSplitPngSourceAssetOperationHandler.operationType, importSplitPngSourceAssetOperationHandler],
+  [addDrawableFromImageOperationHandler.operationType, addDrawableFromImageOperationHandler],
+  [replaceDrawableImageOperationHandler.operationType, replaceDrawableImageOperationHandler],
   [createDrawableOperationHandler.operationType, createDrawableOperationHandler],
   [updateDrawableOperationHandler.operationType, updateDrawableOperationHandler],
   [createPartOperationHandler.operationType, createPartOperationHandler],

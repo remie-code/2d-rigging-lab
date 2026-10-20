@@ -69,6 +69,7 @@ Face-Y上向き参照v5を承認後、独立したYデフォーマによるrig�
 
 [素材インターフェース Wave 1 A](experiments/material-interface-wave-1-a-completion.md) / [Wave 1 B](experiments/material-interface-wave-1-b-completion.md): 両domainの独立技術PASSをroot受領。Wave 2 C (/root/material_wave2) を起動し、AIコマンドから比較・候補編集・保存再読込まで統合中。実素材/User Gateは未実施。
 [素材インターフェース Wave 2 completion](experiments/material-interface-wave-2-completion.md): root受領済み。独立技術PASS（headless統合・保存互換）、156 tests。AI向け10コマンドと比較・候補編集・保存を統合。Editor本体storage reader再読込は確認済み、Editor UI/比較viewer実操作・実素材/User Gateは未実施。現在の残件はwave plan末尾を参照。
+[素材インターフェースの git 前提化](material-interface-git-redesign.md)（2026-10-20、Accepted）: 候補ストア・複製・指紋・承認・入れ替え・候補内範囲ガードを撤去し、追加・差し替えを普通の operation 2 つへ移す。取り出しと置いてみる描画は読み取り専用で残す。上の wave plan・契約・Wave 1 A は Superseded。実装計画 [material-interface-git-wave-plan.md](material-interface-git-wave-plan.md)。Wave 1・2 実装済み（ブランチ authoring-host/material-interface-on-git、master 未マージ）、[completion](experiments/material-interface-git-completion.md)。
 [首素材補完と参照Face-Xの制作](experiments/reference-face-x-material-completion.md): 実素材をroot自身が生成・配置・riggingし、別保存モデルrevision781と同位置比較を提示。ツール実装の技術PASSと区別し、外観のユーザー判断は未取得。比較はlocalhost:8770。
 
 - 2026-09-27: Face-Y mild-down-v2 / revision1218をユーザー承認。次工程はBody-X参照生成。既存SolのBody-Xデフォーマ構造は破棄して再制作可能。Face-X/Yは維持。候補と生成条件は second-rigging-6-sol/reference-generation/body-x/、同位置比較 http://127.0.0.1:8770/body-x/ 。Body-X参照v1は確認待ち、rig未着手。

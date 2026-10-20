@@ -1,5 +1,7 @@
 # 素材インターフェース Wave 1 A: host画像・座標・永続化
 
+> **Superseded（2026-10-20）**: 候補ストア・複製・指紋・承認・入れ替えを用いる方式は [material-interface-git-redesign.md](material-interface-git-redesign.md) で撤去を決定。実装は [material-interface-git-wave-plan.md](material-interface-git-wave-plan.md)。User Gate は判定せずに置き換え。
+
 状態: 独立Review 技術PASS（Loop 2）をOrchが受領。root受領待ち。User Gate未判定。
 Basis: material-interface-contract.md と material-interface-wave-plan.md。既存public registry、dispatcher、coreを変更しない。
 

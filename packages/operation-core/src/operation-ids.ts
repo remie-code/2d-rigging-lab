@@ -38,6 +38,13 @@ export const createTransactionId = (operationId: OperationId): TransactionId =>
 export const createProvenanceId = (operationId: OperationId): ProvenanceId =>
   ProvenanceIdSchema.parse(`prov_${stripIdPrefix(operationId, "op_")}`);
 
+/**
+ * ID seed for addDrawableFromImage / replaceDrawableImage. Every package ID the operation creates derives from it
+ * (src_/tex_/prov_/mesh_/bin_/layer_/preview_<seed>), and the host registers the image bytes for the same seed.
+ */
+export const createMaterialImageIdSeed = (operationId: OperationId): string =>
+  `material_${stripIdPrefix(operationId, "op_")}`;
+
 export const createParameterIdFromDisplayName = (displayName: string): ParameterId =>
   ParameterIdSchema.parse(`param_${sanitizeIdToken(displayName)}`);
 
@@ -222,6 +229,15 @@ const operationToken = (request: OperationRequestDto): string => {
     return `set_drawable_texture_${[
       stripIdPrefix(request.payload.drawableId, "draw_"),
       stripIdPrefix(request.payload.textureId, "tex_")
+    ].map(sanitizeIdToken).join("_")}`;
+  }
+
+  if (request.operationType === "addDrawableFromImage" || request.operationType === "replaceDrawableImage") {
+    return `${request.operationType === "addDrawableFromImage" ? "add_drawable_from_image" : "replace_drawable_image"}_${[
+      stripIdPrefix(request.payload.intent.drawableId, "draw_"),
+      // The base revision makes A -> B -> A on one drawable derive a fresh seed each time.
+      `r${request.basePackageRevision}`,
+      request.payload.image.rgbaSha256.slice(0, 16)
     ].map(sanitizeIdToken).join("_")}`;
   }
 

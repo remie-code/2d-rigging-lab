@@ -118,6 +118,16 @@ export const saveAuthoringPackageDirectory = async (
     { path: packageDocument.manifest.operationLog, text: input.operationLogText }
   ];
 
+  // JSON is written before binaries. Refuse before writing anything when a referenced binary cannot be saved,
+  // so a save never leaves JSON that points at a texture missing on disk.
+  for (const decision of savePlan.binaryDecisions) {
+    if (decision.action === "error") {
+      throw new PackageDirectoryIoError(
+        `Cannot save binary asset "${decision.candidate.packageRelativePath}": ${decision.message}`
+      );
+    }
+  }
+
   const writtenTextPaths: string[] = [];
   for (const entry of textEntries) {
     await writePackageFile(input.packageDirectory, entry.path, entry.text);
@@ -126,12 +136,6 @@ export const saveAuthoringPackageDirectory = async (
 
   const writtenBinaryPaths: string[] = [];
   for (const decision of savePlan.binaryDecisions) {
-    if (decision.action === "error") {
-      throw new PackageDirectoryIoError(
-        `Cannot save binary asset "${decision.candidate.packageRelativePath}": ${decision.message}`
-      );
-    }
-
     if (decision.action !== "write") {
       continue;
     }

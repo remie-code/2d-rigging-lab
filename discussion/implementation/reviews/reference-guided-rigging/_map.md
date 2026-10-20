@@ -20,3 +20,6 @@
 - [素材インターフェース Wave 1 A](material-interface-wave-1-a.md): Loop 2技術PASS。画像/座標/I/O、56 testsと実rendererの技術fixture。root受領済み。
 - [素材インターフェース Wave 1 B](material-interface-wave-1-b.md): 正式Loop 1技術PASS。モデル変更と共有参照guard、関連を含む101 tests。root受領済み。制作往復/User Gateとは別。
 - [素材インターフェース Wave 2](material-interface-wave-2.md): 正式Loop 1技術PASS（headless統合・保存互換）。独立156 tests、Editor storage reader再読込確認。UI操作未検証、User Gate未実施。root受領済み。
+
+- [素材インターフェース git 前提化 Wave 1](material-interface-git-wave-1.md): Sylph 1 レーン PASS with warnings（2026-10-20）。warning 1・3 と追加テストは Wave 1 内で対応、2・4 は Wave 2 で実装。
+- [素材インターフェース git 前提化 Wave 2](material-interface-git-wave-2.md): Sylph 1 レーン PASS with warnings（2026-10-20）。W2〜W4・S1 対応、W1 は既存失敗として残課題。

@@ -1,4 +1,3 @@
-import { MaterialCandidateSchema, MaterialPackageVersionSchema } from "./material-candidate.js";
 import { MaterialPlacementSchema } from "./material-coordinates.js";
 import { MaterialNormalizedImageSchema } from "./material-image.js";
 
@@ -31,21 +30,3 @@ export const createMaterialImageFixture = (variant: "compact" | "wide" = "compac
     expectedStageContent: { x: 11, y: 11, width: 4, height: 4 }
   };
 };
-export const createMaterialCandidateFixture = () => {
-  const fixture = createMaterialImageFixture();
-  return MaterialCandidateSchema.parse({
-    schemaVersion: "material-candidate-v1", candidateId: "material_fixture", candidateRevision: 0,
-    state: "registered",
-    basePackage: MaterialPackageVersionSchema.parse({
-      packageId: "pkg_fixture", packageRevision: 1, contentFingerprint: "a".repeat(64),
-      fingerprintVersion: "material-package-content-v1"
-    }),
-    image: fixture.image.descriptor, placement: fixture.placement,
-    restPose: { kind: "undeformed-rest", coordinateSystem: "canvas-y-down-v1", keyedDeformation: false, dynamics: false },
-    intent: { kind: "replace", drawableId: "draw_fixture", preserveLogicalDrawableId: true,
-      geometryReset: { scope: "target-direct-geometry-keyforms", keyformSetIds: [] },
-      preserveExistingDeformers: true, sharedControlPolicy: "reject-shared-control-key-parameter-deletion" },
-    provenance: { kind: "generated-material", note: "Synthetic RGBA test input, not a PNG decoder fixture." }
-  });
-};
-

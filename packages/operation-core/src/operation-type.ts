@@ -6,6 +6,8 @@ export const operationTypes = [
   "importPsdLayerMaterializationBatch",
   "importPsdStructuralScaffold",
   "importSplitPngSourceAsset",
+  "addDrawableFromImage",
+  "replaceDrawableImage",
   "createDrawable",
   "updateDrawable",
   "createPart",

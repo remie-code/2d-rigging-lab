@@ -63,6 +63,8 @@
 - [material-interface-wave-1-b-completion.md](material-interface-wave-1-b-completion.md): 素材追加/置換・再mesh・共有参照guard、独立技術PASS、関連を含む101 tests。root受領済み。Wave 2統合中、User Gate未実施。
 - [material-interface-wave-2-completion.md](material-interface-wave-2-completion.md): root受領済み。素材コマンド統合・保存互換の独立技術PASS、156 tests。Editor UI/比較viewer実操作・実素材/User Gateは未実施。
 
+- [material-interface-git-completion.md](material-interface-git-completion.md): 素材インターフェースの git 前提化（2026-10-20）。候補・複製・指紋・承認・入れ替えを撤去、追加/差し替えを普通の operation 2 つへ。Wave 1・2 実装済み、master 未マージ。
+
 - [首素材補完・参照Face-X](reference-face-x-material-completion.md): rootが素材生成、新APIで置換し、保存モデルの中間/最大キーを制作。31頭部姿勢＋7全身、同位置比較の実操作確認。ユーザー外観判断待ち、strict検査には残件あり。
 
 

@@ -1,5 +1,7 @@
 # 素材インターフェース共通契約
 
+> **Superseded（2026-10-20）**: 候補ストア・複製・指紋・承認・入れ替えを用いる方式は [material-interface-git-redesign.md](material-interface-git-redesign.md) で撤去を決定。実装は [material-interface-git-wave-plan.md](material-interface-git-wave-plan.md)。User Gate は判定せずに置き換え。
+
 状態: 技術独立Review PASS（Loop 3）、root受領待ち、User Gate未判定。2026-09-26。準備domainの技術契約。業務実装の完成・User Gate合格を意味しない。
 Basis: [wave plan](material-interface-wave-plan.md)、[合意した用途](material-authoring-interface.md)、[静的調査](material-ingestion-research.md)。
 変更範囲は contracts の追加schema/validator/fixture と本書・completion。A/B/C業務module、既存dispatcher、Editorは未実装。
