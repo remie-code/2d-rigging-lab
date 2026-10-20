@@ -46,7 +46,6 @@ import type {
 import {
   buildRuntimeEvidenceReport,
   buildValidationDiff,
-  CANONICAL_OPERATION_LOG_PATH,
   materializeValidationReportArtifact,
   ValidationReportSchema
 } from "../../validator-core/src/index.js";
@@ -90,7 +89,6 @@ describe("created-drawable-runtime-evidence contract fixture", () => {
     const session = createAuthoringSessionFromPackageDocument(loadBaselinePackageDocument());
     const capturedEvidence: CreatedDrawableEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date("2026-05-30T00:00:00.000Z"),
       evidenceProvider: (input) => collectCreatedDrawableEvidence(input, capturedEvidence)
     });
 
@@ -197,8 +195,6 @@ interface ValidationEvidenceSummary {
   readonly baselineReportId: ValidationReportId;
   readonly candidateReportId: ValidationReportId;
   readonly candidateStatus: string;
-  readonly operationLogPresent: boolean;
-  readonly operationLogPath?: string;
   readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
   readonly validationDiff: {
     readonly beforeReportId: ValidationReportId;
@@ -255,8 +251,6 @@ const collectCreatedDrawableEvidence = (
     packageId: runtimeEvidence.candidateSnapshot.packageId,
     packageRevision: runtimeEvidence.candidateSnapshot.packageRevision,
     packageHash,
-    operationLogPresent: true,
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
     runtimeSnapshotIds: runtimeEvidence.generatedRuntimeSnapshotIds
   });
   const validationDiff = buildValidationDiff({
@@ -332,10 +326,6 @@ const summarizeOperationEvidence = (
     baselineReportId: evidence.baselineReport.reportId,
     candidateReportId: evidence.candidateReport.reportId,
     candidateStatus: evidence.candidateReport.summary.status,
-    operationLogPresent: evidence.candidateReport.evidence.operationLogPresent,
-    ...(evidence.candidateReport.evidence.operationLogPath === undefined
-      ? {}
-      : { operationLogPath: evidence.candidateReport.evidence.operationLogPath }),
     runtimeSnapshotIds: evidence.candidateReport.evidence.runtimeSnapshotIds,
     validationDiff: {
       beforeReportId: evidence.validationDiff.beforeReportId,

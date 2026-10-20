@@ -11,7 +11,6 @@ import { z } from "zod";
 export const ValidationProfileConfigSchema = z.object({
   profile: ValidationProfileSchema,
   failSeverities: z.array(SeveritySchema),
-  requiresGuiOperationLog: z.boolean().default(false),
   description: z.string()
 });
 export type ValidationProfileConfigDto = z.infer<typeof ValidationProfileConfigSchema>;
@@ -20,31 +19,26 @@ export const DEFAULT_VALIDATION_PROFILES = [
   {
     profile: "editorIncremental",
     failSeverities: ["blocking"],
-    requiresGuiOperationLog: false,
     description: "Fast authoring feedback with only destructive blocking checks treated as failure."
   },
   {
     profile: "viewer",
     failSeverities: ["blocking"],
-    requiresGuiOperationLog: false,
     description: "Saved package load diagnostics for viewer-facing inspection."
   },
   {
     profile: "strict",
     failSeverities: ["error", "blocking"],
-    requiresGuiOperationLog: false,
     description: "Full package validation foundation that fails on error or blocking diagnostics."
   },
   {
     profile: "acceptance",
     failSeverities: ["error", "blocking"],
-    requiresGuiOperationLog: true,
     description: "MVP acceptance evidence profile."
   },
   {
     profile: "aiDryRun",
     failSeverities: ["error", "blocking"],
-    requiresGuiOperationLog: false,
     description: "AI proposed operation review profile."
   }
 ] satisfies readonly z.input<typeof ValidationProfileConfigSchema>[];

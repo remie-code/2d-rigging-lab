@@ -30,17 +30,13 @@ const INVALID_FIXTURE_ID = "invalid-rigControl-cycle";
 describe("rig control contract evidence fixtures", () => {
   it("validates parent-child-rigControl-diagonal with runtime hierarchy evidence", () => {
     const runtimeEvidence = buildParentFixtureRuntimeEvidence();
-    const report = withReportEvidence(
+    const report = withReportId(
       validatePackageRuntime({
         packageDocument: createParentCandidatePackage(),
         runtimeSnapshot: runtimeEvidence.candidateSnapshot,
         createdAt: CREATED_AT
       }),
-      {
-        reportId: "val_parent_child_rigcontrol_diagonal_candidate",
-        operationLogPresent: true,
-        operationLogPath: "operations/log.jsonl"
-      }
+      "val_parent_child_rigcontrol_diagonal_candidate"
     );
 
     expect(summarizeReport(report)).toEqual(
@@ -81,9 +77,7 @@ const summarizeReport = (report: ValidationReportDto) => ({
   highestSeverity: report.summary.highestSeverity,
   counts: report.summary.counts,
   checkIds: report.checks.map((check) => check.checkId),
-  runtimeSnapshotIds: report.evidence.runtimeSnapshotIds,
-  operationLogPresent: report.evidence.operationLogPresent,
-  ...(report.evidence.operationLogPath === undefined ? {} : { operationLogPath: report.evidence.operationLogPath })
+  runtimeSnapshotIds: report.evidence.runtimeSnapshotIds
 });
 
 const toDiagnosticSummary = (check: ValidationCheckResultDto) => ({
@@ -94,22 +88,13 @@ const toDiagnosticSummary = (check: ValidationCheckResultDto) => ({
   evidence: check.evidence
 });
 
-const withReportEvidence = (
+const withReportId = (
   report: ValidationReportDto,
-  evidence: {
-    readonly reportId: string;
-    readonly operationLogPresent: boolean;
-    readonly operationLogPath?: string;
-  }
+  reportId: string
 ): ValidationReportDto =>
   ValidationReportSchema.parse({
     ...report,
-    reportId: evidence.reportId,
-    evidence: {
-      ...report.evidence,
-      operationLogPresent: evidence.operationLogPresent,
-      ...(evidence.operationLogPath === undefined ? {} : { operationLogPath: evidence.operationLogPath })
-    }
+    reportId
   });
 
 const buildParentFixtureRuntimeEvidence = () => {

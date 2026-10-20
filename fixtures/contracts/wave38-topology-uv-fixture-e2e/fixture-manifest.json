@@ -53,7 +53,7 @@
   "invalidCases": [
     {
       "caseId": "referenced-vertex-remove-blocked",
-      "expectedBehavior": "UI action is disabled with a referenced-vertex reason and no operation-log entry is appended."
+      "expectedBehavior": "UI action is disabled with a referenced-vertex reason and the package is not changed."
     },
     {
       "caseId": "stale-topology-add-vertex-rejected",
@@ -68,7 +68,7 @@
     "imageDecode": false,
     "externalDependency": false
   },
-  "runtimeOracle": "semantic runtime, viewer, validator, operation log, and package JSON evidence only",
+  "runtimeOracle": "semantic runtime, viewer, validator, and package JSON evidence only",
   "editorPersistenceBoundary": "browser-local save/load reinspection; no archive or filesystem persistence claim",
   "updateRule": "requires-contract-review"
 }

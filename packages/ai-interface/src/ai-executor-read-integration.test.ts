@@ -39,7 +39,6 @@ const healthyReport = ValidationReportSchema.parse({
   checks: [],
   repairCandidates: [],
   evidence: {
-    operationLogPresent: false,
     runtimeSnapshotIds: [],
     supplementalGuiEvidenceRefs: []
   }
@@ -98,17 +97,6 @@ describe("AiCommandExecutor read-command integration", () => {
     );
 
     expect(response).toMatchObject({ status: "not_implemented", command: "getEditorState" });
-  });
-
-  it("returns not_implemented for getOperationLog when the host does not implement it", async () => {
-    const executor = new AiCommandExecutor({
-      host: new NoopOperationHost(),
-      readHost: validateOnlyReadHost
-    });
-
-    const response = await executor.execute(createReadRequest("getOperationLog", {}, ["read"]));
-
-    expect(response).toMatchObject({ status: "not_implemented", command: "getOperationLog" });
   });
 
   it("returns permission_denied when validatePackage lacks the validate capability", async () => {

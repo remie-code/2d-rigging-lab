@@ -9,8 +9,7 @@ import {
 } from "../../authoring-core/src/index.js";
 import {
   createOperationCore,
-  createTutorialMiniModelOperationRequests,
-  TUTORIAL_MINI_MODEL_RECIPE_TIMESTAMP
+  createTutorialMiniModelOperationRequests
 } from "../../operation-core/src/index.js";
 import { describe, expect, it } from "vitest";
 
@@ -84,9 +83,7 @@ const createTutorialRuntimeGraphsFromRecipe = (): {
   readonly finalGraph: NormalizedRuntimeGraph;
 } => {
   const seed = createTutorialMiniModelSeed();
-  const core = createOperationCore({
-    now: () => new Date(TUTORIAL_MINI_MODEL_RECIPE_TIMESTAMP)
-  });
+  const core = createOperationCore();
   let beforeMeshEditGraph: NormalizedRuntimeGraph | undefined;
 
   for (const request of createTutorialMiniModelOperationRequests()) {

@@ -304,7 +304,7 @@ function createValidReport() {
         evidenceKind: "guiEvidence",
         summary: "GUI authoring evidence has not been evaluated.",
         reason: "No GUI evidence artifact was supplied for this product preflight report.",
-        requiredEvidenceKinds: ["guiEvidence", "operationLog"],
+        requiredEvidenceKinds: ["guiEvidence"],
         actionId: "action_provideGuiEvidence"
       }),
       warnCategory(

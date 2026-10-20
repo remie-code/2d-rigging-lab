@@ -31,7 +31,7 @@
       "comparison": "semantic-json"
     },
     {
-      "kind": "operationLog",
+      "kind": "operationResult",
       "path": "expected/binary-operation-summary.json",
       "id": "binary-asset-package-local-reference-operation-summary",
       "comparison": "semantic-json"

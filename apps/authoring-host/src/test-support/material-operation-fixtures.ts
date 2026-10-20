@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
-import { createOperationCore, serializeOperationLogEntriesToJsonl } from "@private-2d-rigging-lab/operation-core";
+import { createOperationCore } from "@private-2d-rigging-lab/operation-core";
 import { encodeRgba8ToPng } from "@private-2d-rigging-lab/render-software";
 
 import { runAuthoringHostCli } from "../cli.js";
@@ -65,9 +65,10 @@ export const writeMaterialOperationFixture = async (): Promise<MaterialOperation
       for (const layer of asset.layers) if (layer.mappedDrawableIds.includes(drawable.drawableId)) layer.bounds = { ...bounds };
     }
   }
-  const core = createOperationCore({ now: () => new Date(MATERIAL_FIXTURE_NOW), initialOperationLogEntries: loaded.operationLogEntries });
+  const core = createOperationCore();
+  // Each commit advances the package revision, so the revision before it names the operation uniquely.
   const commit = (operationType: string, payload: unknown): void => {
-    const outcome = core.commitOperation(session, { schemaVersion: "operation-request-v1", operationId: `op_material_fixture_${core.operationLog.entries.length}`,
+    const outcome = core.commitOperation(session, { schemaVersion: "operation-request-v1", operationId: `op_material_fixture_${session.packageRevision}`,
       actor: "test", surface: "testFixture", dryRun: false, basePackageRevision: session.packageRevision, operationType, payload,
       trace: { relatedAC: [], relatedScenarios: [] } });
     if (outcome.result.status !== "committed") throw new Error(`${operationType}: ${JSON.stringify(outcome.result.diagnostics)}`);
@@ -83,7 +84,7 @@ export const writeMaterialOperationFixture = async (): Promise<MaterialOperation
   const keyOf = (kind: string, id: string, property: string) =>
     session.graph.keyformSets.find((key) => key.target.kind === kind && key.target.id === id && key.target.property === property)!.keyformSetId;
   await saveAuthoringPackageDirectory({ packageDirectory, session, baseDocument: loaded.packageDocument, workspaceMetadata: loaded.workspaceMetadata,
-    updatedAt: MATERIAL_FIXTURE_NOW, operationLogText: serializeOperationLogEntriesToJsonl(core.operationLog.entries) });
+    updatedAt: MATERIAL_FIXTURE_NOW });
   const target = session.graph.drawables.find((item) => item.drawableId === smoke.ids.eyeMaskDrawableId)!;
   return { root, packageDirectory, stateDirectory, imageDirectory, packageRevision: session.packageRevision, targetBounds: { ...meshOf(target.meshId).bounds },
     ids: { targetDrawableId: target.drawableId, targetMeshId: target.meshId, otherDrawableId: smoke.ids.eyeDrawableId, otherMeshId: smoke.ids.eyeMeshId,

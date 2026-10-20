@@ -31,8 +31,7 @@ import {
 import type {
   CommitOperationOutcome,
   OperationEvidenceProviderInput,
-  OperationEvidenceResultDto,
-  OperationLogEntryDto
+  OperationEvidenceResultDto
 } from "./index.js";
 import {
   buildRuntimeEvidence,
@@ -46,7 +45,6 @@ import type {
 import {
   buildRuntimeEvidenceReport,
   buildValidationDiff,
-  CANONICAL_OPERATION_LOG_PATH,
   materializeValidationReportArtifact,
   ValidationReportSchema
 } from "../../validator-core/src/index.js";
@@ -60,7 +58,6 @@ describe("drawable layer runtime evidence regression fixture", () => {
     const session = createLayerFixtureSession();
     const capturedEvidence: LayerOperationEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date("2026-05-30T01:00:00.000Z"),
       evidenceProvider: (input) => collectLayerOperationEvidence(input, capturedEvidence)
     });
 
@@ -90,7 +87,6 @@ describe("drawable layer runtime evidence regression fixture", () => {
 
     expect(summarizeLayerOperationEvidence({
       outcomes: [reorderOutcome, hideOutcome, showOutcome],
-      logEntries: core.operationLog.entries,
       evidence: capturedEvidence
     })).toEqual(loadFixtureJson("expected/drawable-layer-runtime-evidence-summary.json"));
   });
@@ -119,7 +115,6 @@ interface LayerOperationSummary {
   readonly operationType: string;
   readonly operationId: string;
   readonly resultStatus: string;
-  readonly targetIds: readonly string[];
   readonly modelDiffPaths: readonly string[];
   readonly runtimeSnapshots: {
     readonly baseline: LayerRuntimeSnapshotSummary;
@@ -133,8 +128,6 @@ interface LayerOperationSummary {
     readonly baselineReportId: ValidationReportId;
     readonly candidateReportId: ValidationReportId;
     readonly candidateStatus: string;
-    readonly operationLogPresent: boolean;
-    readonly operationLogPath?: string;
     readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
     readonly validationDiff: {
       readonly beforeReportId: ValidationReportId;
@@ -147,8 +140,6 @@ interface LayerOperationSummary {
   readonly operationEvidence: {
     readonly generatedRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
     readonly generatedValidationReportIds: readonly ValidationReportId[];
-    readonly logEntryRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
-    readonly logEntryValidationReportIds: readonly ValidationReportId[];
   };
 }
 
@@ -206,8 +197,6 @@ const collectLayerOperationEvidence = (
     packageId: runtimeEvidence.candidateSnapshot.packageId,
     packageRevision: runtimeEvidence.candidateSnapshot.packageRevision,
     packageHash,
-    operationLogPresent: true,
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
     runtimeSnapshotIds: runtimeEvidence.generatedRuntimeSnapshotIds
   });
   const validationDiff = buildValidationDiff({
@@ -246,7 +235,6 @@ const collectLayerOperationEvidence = (
 
 const summarizeLayerOperationEvidence = (input: {
   readonly outcomes: readonly CommitOperationOutcome[];
-  readonly logEntries: readonly OperationLogEntryDto[];
   readonly evidence: readonly LayerOperationEvidenceArtifacts[];
 }): LayerEvidenceSummary => ({
   schemaVersion: "drawable-layer-runtime-evidence-summary-v1",
@@ -256,25 +244,22 @@ const summarizeLayerOperationEvidence = (input: {
   },
   operations: input.evidence.map((evidence, index) => {
     const outcome = input.outcomes[index];
-    const logEntry = input.logEntries[index];
 
-    if (outcome === undefined || logEntry === undefined) {
-      throw new Error(`Missing operation outcome or log entry at index ${index}.`);
+    if (outcome === undefined) {
+      throw new Error(`Missing operation outcome at index ${index}.`);
     }
 
-    return summarizeLayerOperation(outcome, logEntry, evidence);
+    return summarizeLayerOperation(outcome, evidence);
   })
 });
 
 const summarizeLayerOperation = (
   outcome: CommitOperationOutcome,
-  logEntry: OperationLogEntryDto,
   evidence: LayerOperationEvidenceArtifacts
 ): LayerOperationSummary => ({
   operationType: evidence.operationType,
   operationId: outcome.result.operationId,
   resultStatus: outcome.result.status,
-  targetIds: logEntry.targetIds,
   modelDiffPaths: outcome.result.modelDiff?.changed.flatMap((change) =>
     change.fields.map((field) => field.path)
   ) ?? [],
@@ -290,10 +275,6 @@ const summarizeLayerOperation = (
     baselineReportId: evidence.baselineReport.reportId,
     candidateReportId: evidence.candidateReport.reportId,
     candidateStatus: evidence.candidateReport.summary.status,
-    operationLogPresent: evidence.candidateReport.evidence.operationLogPresent,
-    ...(evidence.candidateReport.evidence.operationLogPath === undefined
-      ? {}
-      : { operationLogPath: evidence.candidateReport.evidence.operationLogPath }),
     runtimeSnapshotIds: evidence.candidateReport.evidence.runtimeSnapshotIds,
     validationDiff: {
       beforeReportId: evidence.validationDiff.beforeReportId,
@@ -305,9 +286,7 @@ const summarizeLayerOperation = (
   },
   operationEvidence: {
     generatedRuntimeSnapshotIds: outcome.result.generatedRuntimeSnapshotIds,
-    generatedValidationReportIds: outcome.result.generatedValidationReportIds,
-    logEntryRuntimeSnapshotIds: logEntry.runtimeSnapshotIds,
-    logEntryValidationReportIds: logEntry.validationReportIds
+    generatedValidationReportIds: outcome.result.generatedValidationReportIds
   }
 });
 

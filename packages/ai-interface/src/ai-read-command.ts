@@ -1,4 +1,3 @@
-import type { OperationLogEntryDto } from "@private-2d-rigging-lab/operation-core";
 import { ValidationReportSchema } from "@private-2d-rigging-lab/validator-core";
 
 import type { GetEditorStatePayload } from "./ai-command-payload.js";
@@ -23,11 +22,6 @@ import {
   type InspectEvaluatedGeometryResult
 } from "./ai-measurement-command.js";
 import {
-  filterAiOperationLogEntries,
-  parseAiOperationLogQuery,
-  type AiOperationLogQuery
-} from "./ai-operation-log-query.js";
-import {
   ValidatePackageResultSchema,
   type ValidatePackagePayload,
   type ValidatePackageResult
@@ -47,9 +41,6 @@ export interface AiReadCommandHost {
     payload: InspectEvaluatedGeometryPayload
   ): InspectEvaluatedGeometryResult | Promise<InspectEvaluatedGeometryResult>;
   validatePackage?(payload: ValidatePackagePayload): ValidatePackageResult | Promise<ValidatePackageResult>;
-  getOperationLog?(
-    query: AiOperationLogQuery
-  ): readonly OperationLogEntryDto[] | Promise<readonly OperationLogEntryDto[]>;
 }
 
 type SupportedReadCommandName =
@@ -57,8 +48,7 @@ type SupportedReadCommandName =
   | "inspectModel"
   | "inspectTarget"
   | "inspectEvaluatedGeometry"
-  | "validatePackage"
-  | "getOperationLog";
+  | "validatePackage";
 type SupportedReadRequest = Extract<AiCommandRequest, { command: SupportedReadCommandName }>;
 
 const isSupportedReadCommand = (request: AiCommandRequest): request is SupportedReadRequest =>
@@ -66,8 +56,7 @@ const isSupportedReadCommand = (request: AiCommandRequest): request is Supported
   request.command === "inspectModel" ||
   request.command === "inspectTarget" ||
   request.command === "inspectEvaluatedGeometry" ||
-  request.command === "validatePackage" ||
-  request.command === "getOperationLog";
+  request.command === "validatePackage";
 
 const hasRequiredReadCapability = (request: SupportedReadRequest): boolean =>
   request.command === "validatePackage"
@@ -97,19 +86,7 @@ export const executeAiReadCommand = async (
   const request = AiCommandRequestSchema.parse(requestInput);
 
   if (!isSupportedReadCommand(request)) {
-    return recordReadResponse(
-      request,
-      AiCommandResponseSchema.parse({
-        schemaVersion: "ai-command-response-v1",
-        commandId: request.commandId,
-        status: "not_implemented",
-        command: "getOperationLog",
-        payload: {
-          entries: []
-        }
-      }),
-      transcript
-    );
+    throw new Error(`executeAiReadCommand only handles read commands, not ${request.command}.`);
   }
 
   if (!hasRequiredReadCapability(request)) {
@@ -200,32 +177,11 @@ export const executeAiReadCommand = async (
     );
   }
 
-  if (request.command === "validatePackage") {
-    if (host.validatePackage === undefined) {
-      return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
-    }
-
-    const result = ValidatePackageResultSchema.parse(await host.validatePackage(request.payload));
-
-    return recordReadResponse(
-      request,
-      AiCommandResponseSchema.parse({
-        schemaVersion: "ai-command-response-v1",
-        commandId: request.commandId,
-        status: "ok",
-        command: "validatePackage",
-        payload: result
-      }),
-      transcript
-    );
-  }
-
-  if (host.getOperationLog === undefined) {
+  if (host.validatePackage === undefined) {
     return recordReadResponse(request, readStatusResponse(request, "not_implemented"), transcript);
   }
 
-  const query = parseAiOperationLogQuery(request.payload);
-  const entries = filterAiOperationLogEntries(await host.getOperationLog(query), query);
+  const result = ValidatePackageResultSchema.parse(await host.validatePackage(request.payload));
 
   return recordReadResponse(
     request,
@@ -233,10 +189,8 @@ export const executeAiReadCommand = async (
       schemaVersion: "ai-command-response-v1",
       commandId: request.commandId,
       status: "ok",
-      command: "getOperationLog",
-      payload: {
-        entries
-      }
+      command: "validatePackage",
+      payload: result
     }),
     transcript
   );
@@ -298,13 +252,10 @@ const emptyPayloadForReadCommand = (request: SupportedReadRequest) => {
           checks: [],
           repairCandidates: [],
           evidence: {
-            operationLogPresent: false,
             runtimeSnapshotIds: [],
             supplementalGuiEvidenceRefs: []
           }
         })
       };
-    case "getOperationLog":
-      return { entries: [] };
   }
 };

@@ -440,8 +440,6 @@ const createValidationReport = (input: {
     relatedScenarios: ["SC-MVP-003"],
     checks: [...(input.checks ?? [])],
     evidence: {
-      operationLogPresent: true,
-      operationLogPath: "operations/log.jsonl",
       runtimeSnapshotIds: [SNAPSHOT_ID],
       supplementalGuiEvidenceRefs: []
     }
@@ -452,6 +450,16 @@ const createCompleteEvidenceRefs = (input: {
   readonly byteAvailabilityPath?: string;
   readonly byteAvailabilitySummary?: string;
 } = {}): ProductPreflightCategoryEvidenceRefsInput => ({
+  authoringWorkflowEvidence: [
+    createEvidenceRef(
+      "evidence_guiEvidence",
+      {
+        artifactKind: "guiEvidence",
+        path: "generated/gui-evidence/preflight.gui-evidence.json"
+      },
+      "GUI authoring evidence is supplied."
+    )
+  ],
   ...(input.includeByteAvailability === false
     ? {}
     : {

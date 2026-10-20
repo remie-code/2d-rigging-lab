@@ -209,35 +209,6 @@
           }
         }
       }
-    },
-    {
-      "stepId": "read-operation-log",
-      "kind": "command",
-      "request": {
-        "schemaVersion": "ai-command-request-v1",
-        "commandId": "cmd_ai_fixture_get_operation_log",
-        "session": {
-          "agentId": "agent_editor_ai_fixture",
-          "capabilities": [
-            "read"
-          ]
-        },
-        "basis": {
-          "packageRevision": 0,
-          "relatedAC": [
-            "AC-MVP-014"
-          ],
-          "relatedScenarios": [
-            "SC-AGENT-002"
-          ]
-        },
-        "command": "getOperationLog",
-        "payload": {
-          "operationIds": [
-            "op_ai_fixture_create_parameter_smile"
-          ]
-        }
-      }
     }
   ]
 }

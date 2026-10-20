@@ -10,7 +10,6 @@ import type {
   AiCommandRequest,
   AiCommandResponse
 } from "@private-2d-rigging-lab/ai-interface";
-import { serializeOperationLogEntriesToJsonl } from "@private-2d-rigging-lab/operation-core";
 import type { OperationRequestDto } from "@private-2d-rigging-lab/operation-core";
 
 import { AuthoringHostCommandHost } from "./authoring-host-command-host.js";
@@ -99,8 +98,6 @@ const runUnlockedAuthoringHostCommand = async (
 
   const host = new AuthoringHostCommandHost({
     session: loaded.session,
-    now,
-    initialOperationLogEntries: loaded.operationLogEntries,
     packageDocument: loaded.packageDocument,
     packageDirectory: input.packageDirectory
   });
@@ -206,14 +203,12 @@ const maybePersistPackage = async (input: MaybePersistPackageInput): Promise<boo
     return false;
   }
 
-  const operationLogText = serializeOperationLogEntriesToJsonl(input.host.operationLogEntries);
   await saveAuthoringPackageDirectory({
     packageDirectory: input.input.packageDirectory,
     session: input.host.session,
     baseDocument: input.loaded.packageDocument,
     workspaceMetadata: input.loaded.workspaceMetadata,
-    updatedAt: input.now().toISOString(),
-    operationLogText
+    updatedAt: input.now().toISOString()
   });
 
   return true;

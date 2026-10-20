@@ -147,10 +147,7 @@ export const executeAiPsdImportPlanCommand = async (
         result: parsed.result,
         operationResult,
         diagnostics: parsed.diagnostics,
-        evidenceRefs: parsed.evidenceRefs,
-        includeOperationLogRef:
-          request.command === "executePsdImportPlanIntake" &&
-          operationResult?.status === "committed"
+        evidenceRefs: parsed.evidenceRefs
       }),
       options.transcript
     );
@@ -256,7 +253,6 @@ const createPsdImportPlanResponse = (input: {
   readonly operationResult?: OperationResultDto | undefined;
   readonly diagnostics?: readonly DiagnosticDto[] | undefined;
   readonly evidenceRefs?: readonly string[] | undefined;
-  readonly includeOperationLogRef?: boolean | undefined;
 }): AiCommandResponse => {
   const result = AiPsdImportPlanCommandResultSchema.parse(input.result);
   const operationResult = input.operationResult === undefined
@@ -271,7 +267,7 @@ const createPsdImportPlanResponse = (input: {
     ...result.evidenceRefs,
     ...result.latestBatch.evidenceRefs,
     ...(input.evidenceRefs ?? []),
-    ...collectOperationEvidenceRefs(operationResult, input.includeOperationLogRef === true)
+    ...collectOperationEvidenceRefs(operationResult)
   ]);
 
   return AiCommandResponseSchema.parse({
@@ -327,8 +323,7 @@ const recordPsdImportPlanResponse = (
 };
 
 const collectOperationEvidenceRefs = (
-  operationResult: OperationResultDto | undefined,
-  includeOperationLogRef: boolean
+  operationResult: OperationResultDto | undefined
 ): readonly string[] => {
   if (operationResult === undefined) {
     return [];
@@ -390,10 +385,6 @@ const collectOperationEvidenceRefs = (
       )
     ])
   ];
-
-  if (includeOperationLogRef) {
-    refs.push(`operations/log.jsonl#${operationResult.operationId}`);
-  }
 
   return sortAndDedupeStrings(refs);
 };

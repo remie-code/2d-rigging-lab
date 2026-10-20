@@ -12,7 +12,5 @@
   "checkIds": [],
   "runtimeSnapshotIds": [
     "snap_parent_child_rigcontrol_diagonal_1"
-  ],
-  "operationLogPresent": true,
-  "operationLogPath": "operations/log.jsonl"
+  ]
 }

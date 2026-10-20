@@ -18,30 +18,6 @@ describe("validator runtime evidence reports", () => {
     });
 
     expect(report.evidence.runtimeSnapshotIds).toEqual(["snap_before", "snap_after"]);
-    expect(report.evidence.operationLogPresent).toBe(false);
-  });
-
-  it("reflects operation log presence and absence in report evidence", () => {
-    const absentReport = buildRuntimeEvidenceReport({
-      reportId: "val_operation_absent",
-      packageId: "pkg_operationEvidence",
-      packageRevision: 1,
-      createdAt: "2026-05-29T00:00:00.000Z",
-      operationLogPresent: false
-    });
-    const presentReport = buildRuntimeEvidenceReport({
-      reportId: "val_operation_present",
-      packageId: "pkg_operationEvidence",
-      packageRevision: 1,
-      createdAt: "2026-05-29T00:00:00.000Z",
-      operationLogPresent: true,
-      operationLogPath: "operations/log.jsonl"
-    });
-
-    expect(absentReport.evidence.operationLogPresent).toBe(false);
-    expect(absentReport.evidence.operationLogPath).toBeUndefined();
-    expect(presentReport.evidence.operationLogPresent).toBe(true);
-    expect(presentReport.evidence.operationLogPath).toBe("operations/log.jsonl");
   });
 });
 

@@ -9,9 +9,6 @@
       "checkedTargets": [
         "part:part_face"
       ],
-      "logEntryTargetIds": [
-        "part_face"
-      ],
       "changedTargets": [
         "package:pkg_wave28_part_texture_layer",
         "part:part_face"
@@ -22,8 +19,7 @@
         "/model/graph/parts/part_face"
       ],
       "packageRevisionAfter": 1,
-      "authoringRevisionAfter": 1,
-      "operationLogLength": 1
+      "authoringRevisionAfter": 1
     },
     {
       "operationId": "op_wave28_update_part_face",
@@ -33,10 +29,6 @@
       "checkedTargets": [
         "part:part_face",
         "part:part_root"
-      ],
-      "logEntryTargetIds": [
-        "part_face",
-        "part_root"
       ],
       "changedTargets": [
         "part:part_face",
@@ -49,8 +41,7 @@
         "/model/graph/parts/part_root/childPartIds"
       ],
       "packageRevisionAfter": 2,
-      "authoringRevisionAfter": 2,
-      "operationLogLength": 2
+      "authoringRevisionAfter": 2
     },
     {
       "operationId": "op_wave28_set_drawable_part",
@@ -61,11 +52,6 @@
         "drawable:draw_eye",
         "part:part_face",
         "part:part_root"
-      ],
-      "logEntryTargetIds": [
-        "draw_eye",
-        "part_face",
-        "part_root"
       ],
       "changedTargets": [
         "drawable:draw_eye",
@@ -80,8 +66,7 @@
         "/model/graph/parts/part_face/drawableIds"
       ],
       "packageRevisionAfter": 3,
-      "authoringRevisionAfter": 3,
-      "operationLogLength": 3
+      "authoringRevisionAfter": 3
     },
     {
       "operationId": "op_wave28_set_drawable_texture",
@@ -92,10 +77,6 @@
         "drawable:draw_eye",
         "texture:tex_eye_alt"
       ],
-      "logEntryTargetIds": [
-        "draw_eye",
-        "tex_eye_alt"
-      ],
       "changedTargets": [
         "drawable:draw_eye"
       ],
@@ -103,9 +84,7 @@
         "/model/drawables/draw_eye/textureId"
       ],
       "packageRevisionAfter": 4,
-      "authoringRevisionAfter": 4,
-      "operationLogLength": 4
+      "authoringRevisionAfter": 4
     }
-  ],
-  "finalOperationLogLength": 4
+  ]
 }

@@ -13,7 +13,6 @@ export * from "./ai-command-executor.js";
 export * from "./ai-editor-state.js";
 export * from "./ai-inspection-command.js";
 export * from "./ai-measurement-command.js";
-export * from "./ai-operation-log-query.js";
 export * from "./ai-read-command.js";
 export * from "./ai-render-view-command.js";
 export * from "./ai-validation-command.js";

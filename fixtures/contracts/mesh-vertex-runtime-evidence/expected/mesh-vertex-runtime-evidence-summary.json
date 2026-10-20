@@ -15,10 +15,6 @@
     "operationType": "moveMeshVertex",
     "operationId": "op_mesh_vertex_move",
     "resultStatus": "committed",
-    "targetIds": [
-      "mesh_mesh_vertex_oracle",
-      "vtx_mesh_vertex_oracle_1_1"
-    ],
     "modelDiffPaths": [
       "/model/meshes/mesh_mesh_vertex_oracle/vertices",
       "/model/meshes/mesh_mesh_vertex_oracle/vertices/3",
@@ -111,8 +107,6 @@
       "baselineReportId": "val_op_mesh_vertex_move_baseline",
       "candidateReportId": "val_op_mesh_vertex_move_candidate",
       "candidateStatus": "pass",
-      "operationLogPresent": true,
-      "operationLogPath": "operations/log.jsonl",
       "runtimeSnapshotIds": [
         "snap_minimal-valid-package_0",
         "snap_minimal-valid-package_1"
@@ -140,31 +134,6 @@
           "boundsChanged": true,
           "vertexHashBefore": "vhash_327bd044_4",
           "vertexHashAfter": "vhash_e5715a22_4"
-        }
-      ],
-      "logEntryRuntimeSnapshotIds": [
-        "snap_minimal-valid-package_0",
-        "snap_minimal-valid-package_1"
-      ],
-      "logEntryValidationReportIds": [
-        "val_op_mesh_vertex_move_baseline",
-        "val_op_mesh_vertex_move_candidate"
-      ],
-      "logEntryRuntimeDiffDrawableChanges": [
-        {
-          "drawableId": "draw_mesh_vertex_oracle",
-          "boundsChanged": true,
-          "vertexHashBefore": "vhash_327bd044_4",
-          "vertexHashAfter": "vhash_e5715a22_4"
-        }
-      ],
-      "logEntryPayloadVertexDeltas": [
-        {
-          "vertexId": "vtx_mesh_vertex_oracle_1_1",
-          "delta": {
-            "x": 4,
-            "y": 6
-          }
         }
       ],
       "finalRuntimeStateRef": "runtime/states/pkg_minimal-valid-package-r3-op_mesh_vertex_move-runtime-evidence-final-f1.runtime-state.json"

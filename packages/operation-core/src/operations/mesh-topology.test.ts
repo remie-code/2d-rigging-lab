@@ -41,9 +41,7 @@ describe("mesh topology and UV operation handlers", () => {
   it("commits topology and UV edits through package save/load and runtime graph evidence", () => {
     const session = createFixtureSession();
     const baseDocument = createBaseDocument(session);
-    const operationCore = createOperationCore({
-      now: () => new Date("2026-06-03T00:00:00.000Z")
-    });
+    const operationCore = createOperationCore();
 
     const addVertexOutcome = operationCore.commitOperation(
       session,
@@ -63,11 +61,6 @@ describe("mesh topology and UV operation handlers", () => {
     expect(moveUvOutcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(3);
     expect(session.authoringRevision).toBe(3);
-    expect(operationCore.operationLog.entries.map((entry) => entry.operationType)).toEqual([
-      "addMeshVertex",
-      "addMeshTriangle",
-      "moveMeshUvPoint"
-    ]);
 
     expect(addVertexOutcome.result.meshTopologyEvidence).toEqual([
       {
@@ -171,7 +164,6 @@ describe("mesh topology and UV operation handlers", () => {
     expect(stale.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toEqual([
       "operation.moveMeshUvPoint.topologyRevisionMismatch"
     ]);
-    expect(operationCore.operationLog.entries).toHaveLength(0);
     expect(session.graph.meshes[0]).toEqual(meshBefore);
 
     const referencedVertex = operationCore.commitOperation(
@@ -182,7 +174,6 @@ describe("mesh topology and UV operation handlers", () => {
     expect(referencedVertex.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toEqual([
       "operation.removeMeshVertex.referencedVertex"
     ]);
-    expect(operationCore.operationLog.entries).toHaveLength(0);
     expect(session.graph.meshes[0]).toEqual(meshBefore);
     expect(session.authoringRevision).toBe(0);
   });
@@ -372,7 +363,6 @@ const createBaseDocument = (session: AuthoringSession): Parameters<typeof toPack
         drawOrder: "model/draw-order.json"
       },
       assetIndex: "assets/sources/source-manifest.json",
-      operationLog: "operations/log.jsonl",
       rightsSummary: { status: "cleared" },
       provenanceSummary: { sourceAssetCount: 0 },
       packageStableOrderVersion: "stable-order-v1"

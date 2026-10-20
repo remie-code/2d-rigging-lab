@@ -50,7 +50,6 @@
       "val_wave27_composition_dry_run_baseline",
       "val_wave27_composition_dry_run_candidate"
     ],
-    "operationLogLength": 0,
     "packageRevisionAfter": 0,
     "authoringRevisionAfter": 0,
     "dirtyAfter": false
@@ -105,19 +104,8 @@
       "val_wave27_composition_commit_baseline",
       "val_wave27_composition_commit_candidate"
     ],
-    "operationLogLength": 1,
     "packageRevisionAfter": 1,
     "authoringRevisionAfter": 1,
-    "dirtyAfter": true,
-    "logEntry": {
-      "runtimeSnapshotIds": [
-        "snap_wave27_composition_contract_10",
-        "snap_wave27_composition_contract_11"
-      ],
-      "validationReportIds": [
-        "val_wave27_composition_commit_baseline",
-        "val_wave27_composition_commit_candidate"
-      ]
-    }
+    "dirtyAfter": true
   }
 }

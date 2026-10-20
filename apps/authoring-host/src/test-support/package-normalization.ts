@@ -7,7 +7,6 @@ import { join, relative, sep } from "node:path";
 //   - manifest.json: `updatedAt` (and `createdAt`, which the seed fixes but is normalized
 //     defensively) — wall-clock save timestamps.
 //   - workspace.json: `updatedAt` / `createdAt` — same wall-clock timestamps.
-//   - operations/log.jsonl: each entry's `timestamp` — commit wall-clock time.
 // Everything else (model graph, ids, revisions, diffs) is deterministic given a fixed
 // operation sequence.
 
@@ -18,9 +17,9 @@ export interface NormalizedPackageSnapshot {
 }
 
 /**
- * Reads every `.json` file plus `operations/log.jsonl` under a package directory and
- * returns a normalized snapshot keyed by POSIX package-relative path. Binary files are
- * summarized by byte length so texture round-trips are still compared.
+ * Reads every `.json` file under a package directory and returns a normalized snapshot
+ * keyed by POSIX package-relative path. Other files are summarized by byte length so
+ * texture round-trips are still compared.
  */
 export const readNormalizedPackageSnapshot = async (
   packageDirectory: string
@@ -36,11 +35,6 @@ export const readNormalizedPackageSnapshot = async (
         relativePath,
         JSON.parse(await readFile(absolutePath, "utf8")) as unknown
       );
-      continue;
-    }
-
-    if (relativePath === "operations/log.jsonl") {
-      files[relativePath] = normalizeOperationLog(await readFile(absolutePath, "utf8"));
       continue;
     }
 
@@ -93,12 +87,3 @@ const normalizeTimestampFields = (value: unknown): unknown => {
 
   return record;
 };
-
-const normalizeOperationLog = (jsonlText: string): readonly unknown[] =>
-  jsonlText
-    .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .map((line) => {
-      const entry = JSON.parse(line) as Record<string, unknown>;
-      return { ...entry, timestamp: NORMALIZED_TIMESTAMP };
-    });

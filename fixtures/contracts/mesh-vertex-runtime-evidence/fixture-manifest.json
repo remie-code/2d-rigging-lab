@@ -1,7 +1,7 @@
 {
   "schemaVersion": "contract-fixture-manifest-v1",
   "fixtureId": "mesh-vertex-runtime-evidence",
-  "description": "Compact generated mesh vertex move oracle for runtime, validation, operation result, and operation log evidence.",
+  "description": "Compact generated mesh vertex move oracle for runtime, validation, and operation result evidence.",
   "requestFiles": [
     "request/create-drawable-commit.request.json",
     "request/generate-mesh-commit.request.json",

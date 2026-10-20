@@ -18,7 +18,6 @@
       "val_fixture_dry_run_baseline",
       "val_fixture_dry_run_candidate"
     ],
-    "operationLogLength": 0,
     "originalAuthoringRevisionAfter": 0,
     "originalDirtyAfter": false
   },
@@ -40,18 +39,7 @@
       "val_fixture_commit_baseline",
       "val_fixture_commit_candidate"
     ],
-    "operationLogLength": 1,
     "authoringRevisionAfter": 1,
-    "dirtyAfter": true,
-    "logEntry": {
-      "runtimeSnapshotIds": [
-        "snap_minimal-valid-package_0",
-        "snap_minimal-valid-package_1"
-      ],
-      "validationReportIds": [
-        "val_fixture_commit_baseline",
-        "val_fixture_commit_candidate"
-      ]
-    }
+    "dirtyAfter": true
   }
 }

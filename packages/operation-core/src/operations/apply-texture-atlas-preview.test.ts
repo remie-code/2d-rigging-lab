@@ -72,7 +72,6 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
       "operation.applyTextureAtlasPreview.asyncLifecycleRequired"
     );
-    expect(outcome.operationLogLength).toBe(0);
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
@@ -83,20 +82,13 @@ describe("applyTextureAtlasPreview operation handler", () => {
     const preview = createReadyPreview(session);
     const drawablesBefore = structuredClone(session.graph.drawables);
     const meshesBefore = structuredClone(session.graph.meshes);
-    const core = createOperationCore({
-      now: () => new Date("2026-06-19T00:00:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = await core.commitOperationAsync(session, createApplyRequest(session, preview));
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.operationLogLength).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
-    expect(outcome.logEntry?.operationType).toBe("applyTextureAtlasPreview");
-    expect(outcome.logEntry?.payload.operationType).toBe("applyTextureAtlasPreview");
-    expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
-    expect(JSON.stringify(outcome.logEntry?.payload)).not.toContain("textureBytes");
-    expect(JSON.stringify(outcome.logEntry?.payload)).not.toContain("atlasBytes");
+    expect(JSON.stringify(outcome.result)).not.toContain("textureBytes");
+    expect(JSON.stringify(outcome.result)).not.toContain("atlasBytes");
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
     expect(session.dirty).toBe(true);
@@ -178,7 +170,6 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(session.dirty).toBe(false);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
     expect(getDrawableById(session.graph, DRAW_BODY)?.textureId).toBe(TEX_BODY);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
   it("replaces an existing atlas artifact through Operation Core without authoring texture or UV rewrites", async () => {
@@ -208,7 +199,6 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(secondOutcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(2);
     expect(session.authoringRevision).toBe(2);
-    expect(core.operationLog.entries).toHaveLength(2);
     expect(session.graph.textureAtlas?.layoutSummary?.settings).toMatchObject({
       pageWidth: 8,
       pageHeight: 8,
@@ -243,7 +233,6 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
       "operation.applyTextureAtlasPreview.layoutMismatch"
     );
-    expect(outcome.operationLogLength).toBe(0);
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
@@ -272,7 +261,6 @@ describe("applyTextureAtlasPreview operation handler", () => {
     expect(outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId)).toContain(
       "operation.applyTextureAtlasPreview.settingsMismatch"
     );
-    expect(outcome.operationLogLength).toBe(0);
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();
@@ -312,7 +300,6 @@ describe("applyTextureAtlasPreview operation handler", () => {
         "operation.applyTextureAtlasPreview.cannotFit"
       ])
     );
-    expect(outcome.operationLogLength).toBe(0);
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.graph.textureAtlas?.layoutSummary).toBeUndefined();

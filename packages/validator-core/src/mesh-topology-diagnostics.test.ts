@@ -673,7 +673,6 @@ const createPackageDocument = (): PackageDocumentDto => PackageDocumentSchema.pa
       editorState: "model/editor-state.json"
     },
     assetIndex: "assets/sources/source-manifest.json",
-    operationLog: "operations/log.jsonl",
     rightsSummary: {
       status: "cleared"
     },

@@ -400,7 +400,6 @@ describe("AI PSD import-plan command executor", () => {
         }
       }
     });
-    expect(response.evidenceRefs).toContain(`operations/log.jsonl#${operationId}`);
     expect(host.executeCalls).toEqual([
       expect.objectContaining({
         approvedPreflightCommandId: "cmd_preflight_psd_import_plan",
@@ -418,8 +417,7 @@ describe("AI PSD import-plan command executor", () => {
         commandId: "cmd_execute_psd_import_plan",
         command: "executePsdImportPlanIntake",
         status: "ok",
-        operationId,
-        evidenceRefs: expect.arrayContaining([`operations/log.jsonl#${operationId}`])
+        operationId
       })
     ]);
   });

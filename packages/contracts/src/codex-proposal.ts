@@ -213,11 +213,6 @@ export const CodexProposalArtifactRefDtoSchema = z.discriminatedUnion("artifactK
   z.object({
     artifactKind: z.literal("aiTranscript"),
     path: z.string().regex(/^generated\/ai-transcripts\/[A-Za-z0-9_.-]+\.json$/)
-  }).strict(),
-  z.object({
-    artifactKind: z.literal("operationLog"),
-    path: z.literal("operations/log.jsonl"),
-    operationId: OperationIdSchema.optional()
   }).strict()
 ]);
 export type CodexProposalArtifactRefDto = z.infer<
@@ -233,7 +228,6 @@ export const CodexProposalEvidenceKindDtoSchema = z.enum([
   "productPreflight",
   "approvalDecision",
   "commitResult",
-  "operationLog",
   "aiTranscript"
 ]);
 export type CodexProposalEvidenceKindDto = z.infer<

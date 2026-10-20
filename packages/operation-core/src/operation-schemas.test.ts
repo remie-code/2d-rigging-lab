@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  OperationLogEntrySchema,
   OperationPayloadSchema,
   OperationRequestSchema,
   OperationResultSchema,
@@ -540,39 +539,11 @@ describe("operation-core DTO schemas", () => {
     expect(request.payload.rigControlId).toBe("rig_face_warp");
   });
 
-  it("parses operation results and log entries with required fields", () => {
+  it("parses operation results with required fields", () => {
     const result = OperationResultSchema.parse(acceptedResult);
-    const logEntry = OperationLogEntrySchema.parse({
-      schemaVersion: "operation-log-entry-v1",
-      operationId: "op_create_eye_open",
-      transactionId: "txn_create_eye_open",
-      timestamp: "2026-05-29T00:00:00.000Z",
-      actor: "test",
-      surface: "testFixture",
-      operationType: "createParameter",
-      targetIds: ["param_eye_open"],
-      precondition: {
-        ok: true,
-        diagnostics: [],
-        checkedTargetRefs: [
-          {
-            kind: "parameter",
-            id: "param_eye_open"
-          }
-        ]
-      },
-      payload: {
-        operationType: "createParameter",
-        payload: dryRunCreateParameterRequest.payload
-      },
-      result,
-      provenanceId: "prov_test_fixture",
-      reversible: true
-    });
 
     expect(result.generatedRuntimeSnapshotIds).toEqual([]);
-    expect(logEntry.targetIds).toEqual(["param_eye_open"]);
-    expect(logEntry.validationReportIds).toEqual([]);
+    expect(result.generatedValidationReportIds).toEqual([]);
   });
 
   it("rejects invalid operation type and invalid ID prefixes", () => {

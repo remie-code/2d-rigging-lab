@@ -92,10 +92,9 @@ describe("wave32 warpLattice2d contract fixture", () => {
   it("pins create, bind, keyform, runtime, viewer, validator, and reload evidence", () => {
     const baselineSession = createFixtureSession();
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date(CREATED_AT)
-    });
-    const outcomes = loadOperationRequests().map((request) => core.commitOperation(session, request));
+    const core = createOperationCore();
+    const requests = loadOperationRequests();
+    const outcomes = requests.map((request) => core.commitOperation(session, request));
     const materializedPackage = toPackageDocument(session, loadBaselinePackageDocument(), {
       updatedAt: CREATED_AT
     });
@@ -113,7 +112,7 @@ describe("wave32 warpLattice2d contract fixture", () => {
       "val_wave32_warp_lattice2d_contract_final"
     );
 
-    expect(summarizeOperationChain(outcomes, session)).toEqual(
+    expect(summarizeOperationChain(requests, outcomes, session)).toEqual(
       loadFixtureJson("expected/operation-chain-summary.json")
     );
     expect(summarizePackageMaterialization(materializedPackage, reloadedSession)).toEqual(
@@ -147,7 +146,6 @@ interface OperationChainSummary {
   readonly fixtureId: typeof FIXTURE_ID;
   readonly packageRevisionAfter: number;
   readonly authoringRevisionAfter: number;
-  readonly operationLogTypes: readonly string[];
   readonly operations: readonly OperationSummary[];
 }
 
@@ -155,12 +153,12 @@ interface OperationSummary {
   readonly operationId: string;
   readonly operationType: string;
   readonly status: string;
-  readonly targetIds: readonly string[];
   readonly addedTargets: readonly string[];
   readonly changedTargets: readonly string[];
 }
 
 const summarizeOperationChain = (
+  requests: readonly OperationRequestDto[],
   outcomes: readonly CommitOperationOutcome[],
   session: AuthoringSession
 ): OperationChainSummary => ({
@@ -168,27 +166,22 @@ const summarizeOperationChain = (
   fixtureId: FIXTURE_ID,
   packageRevisionAfter: session.packageRevision,
   authoringRevisionAfter: session.authoringRevision,
-  operationLogTypes: outcomes.map((outcome) => requireLogEntry(outcome).operationType),
-  operations: outcomes.map((outcome) => {
-    const logEntry = requireLogEntry(outcome);
-
-    return {
-      operationId: outcome.result.operationId,
-      operationType: logEntry.operationType,
-      status: outcome.result.status,
-      targetIds: logEntry.targetIds,
-      addedTargets: summarizeTargets(outcome.result.modelDiff?.added),
-      changedTargets: summarizeChangedTargets(outcome.result.modelDiff)
-    };
-  })
+  operations: outcomes.map((outcome, index) => ({
+    operationId: outcome.result.operationId,
+    operationType: requireRequest(requests, index).operationType,
+    status: outcome.result.status,
+    addedTargets: summarizeTargets(outcome.result.modelDiff?.added),
+    changedTargets: summarizeChangedTargets(outcome.result.modelDiff)
+  }))
 });
 
-const requireLogEntry = (outcome: CommitOperationOutcome) => {
-  if (outcome.logEntry === undefined) {
-    throw new Error(`Expected committed operation ${outcome.result.operationId} to have a log entry.`);
+const requireRequest = (requests: readonly OperationRequestDto[], index: number): OperationRequestDto => {
+  const request = requests[index];
+  if (request === undefined) {
+    throw new Error(`Missing operation request at index ${index}.`);
   }
 
-  return outcome.logEntry;
+  return request;
 };
 
 const summarizePackageMaterialization = (
@@ -368,9 +361,7 @@ const summarizeValidationReport = (report: ValidationReportDto) => ({
   counts: report.summary.counts,
   checkIds: report.checks.map((check) => check.checkId),
   runtimeSnapshotIds: report.evidence.runtimeSnapshotIds,
-  viewerEvidenceSnapshotId: null,
-  operationLogPresent: true,
-  operationLogPath: "operations/log.jsonl"
+  viewerEvidenceSnapshotId: null
 });
 
 const pinReportId = (
@@ -379,12 +370,7 @@ const pinReportId = (
 ): ValidationReportDto =>
   ValidationReportSchema.parse({
     ...report,
-    reportId,
-    evidence: {
-      ...report.evidence,
-      operationLogPresent: true,
-      operationLogPath: "operations/log.jsonl"
-    }
+    reportId
   });
 
 const summarizeTargets = (targets: readonly TargetRefDto[] | undefined): readonly string[] =>

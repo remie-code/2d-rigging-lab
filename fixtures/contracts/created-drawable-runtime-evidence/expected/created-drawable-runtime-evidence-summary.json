@@ -82,8 +82,6 @@
         "baselineReportId": "val_createDrawable_baseline",
         "candidateReportId": "val_createDrawable_candidate",
         "candidateStatus": "pass",
-        "operationLogPresent": true,
-        "operationLogPath": "operations/log.jsonl",
         "runtimeSnapshotIds": [
           "snap_minimal-valid-package_0",
           "snap_minimal-valid-package_1"
@@ -178,8 +176,6 @@
         "baselineReportId": "val_generateMesh_baseline",
         "candidateReportId": "val_generateMesh_candidate",
         "candidateStatus": "pass",
-        "operationLogPresent": true,
-        "operationLogPath": "operations/log.jsonl",
         "runtimeSnapshotIds": [
           "snap_minimal-valid-package_0",
           "snap_minimal-valid-package_1"

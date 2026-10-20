@@ -8,7 +8,6 @@ import { AuthoringHostCommandHost } from "./authoring-host-command-host.js";
 import { loadAuthoringPackageDirectory } from "./package-directory-io.js";
 import {
   imageFileRef,
-  MATERIAL_FIXTURE_NOW,
   operationRequest,
   writeMaterialOperationFixture,
   writeMaterialTestPng,
@@ -25,8 +24,7 @@ const createHost = async () => {
   const f = await writeMaterialOperationFixture();
   roots.push(f.root);
   const loaded = await loadAuthoringPackageDirectory(f.packageDirectory);
-  const host = new AuthoringHostCommandHost({ session: loaded.session, now: () => new Date(MATERIAL_FIXTURE_NOW),
-    initialOperationLogEntries: loaded.operationLogEntries, packageDocument: loaded.packageDocument, packageDirectory: f.packageDirectory });
+  const host = new AuthoringHostCommandHost({ session: loaded.session, packageDocument: loaded.packageDocument, packageDirectory: f.packageDirectory });
   return { f, host };
 };
 
@@ -63,7 +61,6 @@ describe("AuthoringHostCommandHost image operations", () => {
     const operationRejected = await host.commitOperation(replaceRequest(f, image, false, []));
     expect(operationRejected.diagnostics.map((item) => item.checkId)).toEqual(["operation.replaceDrawableImage.geometryResetMismatch"]);
     expect(bytesState(host)).toEqual(initial);
-    expect(host.operationLogEntries.some((entry) => entry.operationId === "op_host_replace")).toBe(false);
 
     expect((await host.commitOperation(replaceRequest(f, image, false, [f.ids.targetGeometryKeyformSetId]))).status).toBe("committed");
     const committed = bytesState(host);

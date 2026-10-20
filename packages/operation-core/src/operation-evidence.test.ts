@@ -49,15 +49,13 @@ describe("operation evidence provider hook", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("adds commit evidence to the result and operation log entry", () => {
+  it("adds commit evidence to the result", () => {
     const session = createFixtureSession();
     const calls: OperationEvidenceProviderInput[] = [];
     const targetParameterId = ParameterIdSchema.parse("param_smile");
     const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:00:00.000Z"),
       evidenceProvider: {
         collectOperationEvidence(input) {
           calls.push(input);
@@ -82,16 +80,11 @@ describe("operation evidence provider hook", () => {
     expect(outcome.result.status).toBe("committed");
     expect(outcome.result.generatedRuntimeSnapshotIds).toEqual(["snap_candidate"]);
     expect(outcome.result.generatedValidationReportIds).toEqual(["val_candidate"]);
-    expect(outcome.logEntry?.result.generatedRuntimeSnapshotIds).toEqual(["snap_candidate"]);
-    expect(outcome.logEntry?.result.generatedValidationReportIds).toEqual(["val_candidate"]);
-    expect(outcome.logEntry?.runtimeSnapshotIds).toEqual(["snap_candidate"]);
-    expect(outcome.logEntry?.validationReportIds).toEqual(["val_candidate"]);
     expect(getParameterById(session.graph, targetParameterId)).toBeDefined();
     expect(session.packageRevision).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
   });
 
-  it("does not call the provider or mutate/log on duplicate parameter rejection", () => {
+  it("does not call the provider or mutate on duplicate parameter rejection", () => {
     const session = createFixtureSession();
     const calls: OperationEvidenceProviderInput[] = [];
     const core = createOperationCore({
@@ -104,7 +97,6 @@ describe("operation evidence provider hook", () => {
     core.commitOperation(session, createParameterRequest({ dryRun: false }));
     calls.length = 0;
     const revisionAfterFirstCommit = session.authoringRevision;
-    const logLengthAfterFirstCommit = core.operationLog.entries.length;
 
     const duplicate = core.commitOperation(
       session,
@@ -119,7 +111,6 @@ describe("operation evidence provider hook", () => {
     expect(calls).toHaveLength(0);
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(revisionAfterFirstCommit);
-    expect(core.operationLog.entries).toHaveLength(logLengthAfterFirstCommit);
   });
 });
 

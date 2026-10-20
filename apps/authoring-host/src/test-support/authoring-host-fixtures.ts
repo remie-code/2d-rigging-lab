@@ -7,11 +7,7 @@ import {
   TUTORIAL_MINI_MODEL_IDS,
   type AuthoringSession
 } from "@private-2d-rigging-lab/authoring-core";
-import {
-  createOperationCore,
-  serializeOperationLogEntriesToJsonl
-} from "@private-2d-rigging-lab/operation-core";
-import type { OperationLogEntryDto } from "@private-2d-rigging-lab/operation-core";
+import { createOperationCore } from "@private-2d-rigging-lab/operation-core";
 import {
   BinaryAssetReferenceSchema,
   createWorkspaceMetadataForPackageDocument,
@@ -29,7 +25,6 @@ import { saveAuthoringPackageDirectory } from "../package-directory-io.js";
 
 export const FIXTURE_CREATED_AT = "2026-06-02T00:00:00.000Z";
 export const FIXTURE_UPDATED_AT = "2026-06-02T00:00:00.000Z";
-export const FIXTURE_TIMESTAMP = "2026-07-02T00:00:00.000Z";
 
 const RAW_RGBA_MEDIA_TYPE = "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
 
@@ -61,7 +56,7 @@ export const writeEyeSmokeFixturePackage = async (
     createdAt: FIXTURE_CREATED_AT,
     updatedAt: FIXTURE_UPDATED_AT
   });
-  const core = createOperationCore({ now: () => new Date(FIXTURE_TIMESTAMP) });
+  const core = createOperationCore();
   const ids = TUTORIAL_MINI_MODEL_IDS;
   const setup = createSetupCommitter(core, seed.session);
 
@@ -105,8 +100,7 @@ export const writeEyeSmokeFixturePackage = async (
 
   await writeWorkspaceDirectory({
     packageDirectory,
-    session: seed.session,
-    operationLogEntries: core.operationLog.entries
+    session: seed.session
   });
 
   return {
@@ -136,8 +130,7 @@ export const writeSeedFixturePackage = async (
 
   await writeWorkspaceDirectory({
     packageDirectory,
-    session: seed.session,
-    operationLogEntries: []
+    session: seed.session
   });
 
   return { packageRevision: seed.session.packageRevision };
@@ -161,8 +154,7 @@ export const writeBinaryTextureFixturePackage = async (
 
   await writeWorkspaceDirectory({
     packageDirectory,
-    session: seed.session,
-    operationLogEntries: []
+    session: seed.session
   });
 
   return {
@@ -273,7 +265,6 @@ const requireDrawableByDisplayName = (
 interface WriteWorkspaceDirectoryInput {
   readonly packageDirectory: string;
   readonly session: AuthoringSession;
-  readonly operationLogEntries: readonly OperationLogEntryDto[];
 }
 
 const writeWorkspaceDirectory = async (input: WriteWorkspaceDirectoryInput): Promise<void> => {
@@ -285,8 +276,7 @@ const writeWorkspaceDirectory = async (input: WriteWorkspaceDirectoryInput): Pro
     session: input.session,
     baseDocument: buildFixtureBaseDocument(),
     workspaceMetadata: buildFixtureWorkspaceMetadata(),
-    updatedAt: FIXTURE_UPDATED_AT,
-    operationLogText: serializeOperationLogEntriesToJsonl(input.operationLogEntries)
+    updatedAt: FIXTURE_UPDATED_AT
   });
 };
 

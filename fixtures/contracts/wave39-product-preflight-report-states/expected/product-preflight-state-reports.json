@@ -66,17 +66,17 @@
             "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
             "evidenceRefs": [
               {
-                "evidenceId": "evidence_val_wave39Pass_operationLog",
+                "evidenceId": "evidence_wave39Pass_guiEvidence",
                 "artifactRef": {
-                  "artifactKind": "operationLog",
-                  "path": "operations/log.jsonl"
+                  "artifactKind": "guiEvidence",
+                  "path": "generated/gui-evidence/wave39-pass.gui-evidence.json"
                 },
                 "target": {
                   "kind": "package",
                   "id": "pkg_wave39ProductPreflight"
                 },
-                "summary": "Validation report val_wave39Pass records operation log evidence.",
-                "producer": "validatorCore"
+                "summary": "Semantic GUI authoring evidence is supplied.",
+                "producer": "fixture"
               }
             ],
             "diagnosticRefs": [],
@@ -366,17 +366,17 @@
             "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
             "evidenceRefs": [
               {
-                "evidenceId": "evidence_val_wave39Warn_operationLog",
+                "evidenceId": "evidence_wave39Warn_guiEvidence",
                 "artifactRef": {
-                  "artifactKind": "operationLog",
-                  "path": "operations/log.jsonl"
+                  "artifactKind": "guiEvidence",
+                  "path": "generated/gui-evidence/wave39-warn.gui-evidence.json"
                 },
                 "target": {
                   "kind": "package",
                   "id": "pkg_wave39ProductPreflight"
                 },
-                "summary": "Validation report val_wave39Warn records operation log evidence.",
-                "producer": "validatorCore"
+                "summary": "Semantic GUI authoring evidence is supplied.",
+                "producer": "fixture"
               }
             ],
             "diagnosticRefs": [],
@@ -693,17 +693,17 @@
             "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
             "evidenceRefs": [
               {
-                "evidenceId": "evidence_val_wave39Fail_operationLog",
+                "evidenceId": "evidence_wave39Fail_guiEvidence",
                 "artifactRef": {
-                  "artifactKind": "operationLog",
-                  "path": "operations/log.jsonl"
+                  "artifactKind": "guiEvidence",
+                  "path": "generated/gui-evidence/wave39-fail.gui-evidence.json"
                 },
                 "target": {
                   "kind": "package",
                   "id": "pkg_wave39ProductPreflight"
                 },
-                "summary": "Validation report val_wave39Fail records operation log evidence.",
-                "producer": "validatorCore"
+                "summary": "Semantic GUI authoring evidence is supplied.",
+                "producer": "fixture"
               }
             ],
             "diagnosticRefs": [],
@@ -1037,17 +1037,17 @@
             "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
             "evidenceRefs": [
               {
-                "evidenceId": "evidence_val_wave39NotSupported_operationLog",
+                "evidenceId": "evidence_wave39NotSupported_guiEvidence",
                 "artifactRef": {
-                  "artifactKind": "operationLog",
-                  "path": "operations/log.jsonl"
+                  "artifactKind": "guiEvidence",
+                  "path": "generated/gui-evidence/wave39-not-supported.gui-evidence.json"
                 },
                 "target": {
                   "kind": "package",
                   "id": "pkg_wave39ProductPreflight"
                 },
-                "summary": "Validation report val_wave39NotSupported records operation log evidence.",
-                "producer": "validatorCore"
+                "summary": "Semantic GUI authoring evidence is supplied.",
+                "producer": "fixture"
               }
             ],
             "diagnosticRefs": [],
@@ -1383,17 +1383,17 @@
             "summary": "Authoring workflow evidence has no blocking or warning diagnostics in supplied validator evidence.",
             "evidenceRefs": [
               {
-                "evidenceId": "evidence_val_wave39NotEvaluated_operationLog",
+                "evidenceId": "evidence_wave39NotEvaluated_guiEvidence",
                 "artifactRef": {
-                  "artifactKind": "operationLog",
-                  "path": "operations/log.jsonl"
+                  "artifactKind": "guiEvidence",
+                  "path": "generated/gui-evidence/wave39-not-evaluated.gui-evidence.json"
                 },
                 "target": {
                   "kind": "package",
                   "id": "pkg_wave39ProductPreflight"
                 },
-                "summary": "Validation report val_wave39NotEvaluated records operation log evidence.",
-                "producer": "validatorCore"
+                "summary": "Semantic GUI authoring evidence is supplied.",
+                "producer": "fixture"
               }
             ],
             "diagnosticRefs": [],

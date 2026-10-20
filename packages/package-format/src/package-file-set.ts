@@ -20,7 +20,6 @@ export interface PackageTextFileEntry {
 export type PackageFileSet = readonly PackageTextFileEntry[];
 
 export interface SerializePackageDocumentToFileSetOptions {
-  readonly operationLogText?: string;
   readonly generatedArtifacts?: readonly PackageTextFileEntry[];
 }
 
@@ -68,10 +67,6 @@ export function serializePackageDocumentToFileSet(
     createJsonFileEntry(PACKAGE_PROVENANCE_PATH, parsedDocument.assets.provenance),
     createJsonFileEntry(PACKAGE_RIGHTS_PATH, parsedDocument.assets.rights)
   );
-
-  if (options.operationLogText !== undefined) {
-    entries.push(createTextFileEntry(parsedDocument.manifest.operationLog, options.operationLogText));
-  }
 
   const generatedArtifacts = [...(options.generatedArtifacts ?? [])]
     .map((entry) => createTextFileEntry(entry.path, entry.text))

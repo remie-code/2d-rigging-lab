@@ -62,7 +62,6 @@ export const createPackageDocumentBaseFromAuthoringSession = (
         variants: VARIANTS_MODEL_FILE_PATH
       },
       assetIndex: "assets/sources/source-manifest.json",
-      operationLog: "operations/log.jsonl",
       rightsSummary: createRightsSummary(session),
       provenanceSummary: {
         sourceAssetCount: session.graph.sourceAssets.length

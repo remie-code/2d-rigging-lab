@@ -35,7 +35,6 @@ const minimalManifest = {
     drawOrder: "model/draw-order.json"
   },
   assetIndex: "assets/sources/source-manifest.json",
-  operationLog: "operations/log.jsonl",
   rightsSummary: {
     status: "cleared"
   },

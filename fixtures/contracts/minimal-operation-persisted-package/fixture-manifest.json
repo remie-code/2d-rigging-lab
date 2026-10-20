@@ -41,12 +41,6 @@
   ],
   "expectedArtifacts": [
     {
-      "kind": "operationLog",
-      "path": "expected/operation-log-jsonl-summary.json",
-      "id": "op_fixture_persist_create_parameter_smile",
-      "comparison": "semantic-json"
-    },
-    {
       "kind": "package",
       "path": "expected/package-file-set-summary.json",
       "comparison": "semantic-json"

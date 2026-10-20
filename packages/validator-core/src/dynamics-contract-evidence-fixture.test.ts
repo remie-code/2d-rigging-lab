@@ -41,28 +41,21 @@ const MESH_ID = "mesh_hair";
 describe("minimum-open-dynamics-v2-evidence validator contract fixture", () => {
   it("reports the fixture baseline failures and candidate pass deterministically", () => {
     const runtimeEvidence = buildFixtureRuntimeEvidence();
-    const baselineReport = withReportEvidence(
+    const baselineReport = withReportId(
       validatePackageRuntime({
         packageDocument: loadBaselinePackage(),
         runtimeSnapshot: runtimeEvidence.baselineSnapshot,
         createdAt: CREATED_AT
       }),
-      {
-        reportId: "val_minimum_open_dynamics_v1_baseline",
-        operationLogPresent: false
-      }
+      "val_minimum_open_dynamics_v1_baseline"
     );
-    const candidateReport = withReportEvidence(
+    const candidateReport = withReportId(
       validatePackageRuntime({
         packageDocument: createCandidatePackage(),
         runtimeSnapshot: runtimeEvidence.candidateSnapshot,
         createdAt: CREATED_AT
       }),
-      {
-        reportId: "val_minimum_open_dynamics_v1_candidate",
-        operationLogPresent: true,
-        operationLogPath: "operations/log.jsonl"
-      }
+      "val_minimum_open_dynamics_v1_candidate"
     );
     const validationDiff = buildValidationDiff({
       baseline: baselineReport,
@@ -156,9 +149,7 @@ const summarizeReport = (report: ValidationReportDto) => ({
   highestSeverity: report.summary.highestSeverity,
   counts: report.summary.counts,
   checkIds: report.checks.map((check) => check.checkId),
-  runtimeSnapshotIds: report.evidence.runtimeSnapshotIds,
-  operationLogPresent: report.evidence.operationLogPresent,
-  ...(report.evidence.operationLogPath === undefined ? {} : { operationLogPath: report.evidence.operationLogPath })
+  runtimeSnapshotIds: report.evidence.runtimeSnapshotIds
 });
 
 const summarizeCase = (
@@ -174,22 +165,13 @@ const summarizeCase = (
   }))
 });
 
-const withReportEvidence = (
+const withReportId = (
   report: ValidationReportDto,
-  evidence: {
-    readonly reportId: string;
-    readonly operationLogPresent: boolean;
-    readonly operationLogPath?: string;
-  }
+  reportId: string
 ): ValidationReportDto =>
   ValidationReportSchema.parse({
     ...report,
-    reportId: evidence.reportId,
-    evidence: {
-      ...report.evidence,
-      operationLogPresent: evidence.operationLogPresent,
-      ...(evidence.operationLogPath === undefined ? {} : { operationLogPath: evidence.operationLogPath })
-    }
+    reportId
   });
 
 const createCandidatePackage = () =>

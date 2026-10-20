@@ -1,5 +1,4 @@
 import { MaterialCommandPayloadOptions } from "./ai-material-command.js";
-import { OperationIdSchema, SurfaceSchema } from "@private-2d-rigging-lab/contracts";
 import { OperationRequestSchema } from "@private-2d-rigging-lab/operation-core";
 import { z } from "zod";
 
@@ -37,13 +36,6 @@ export const CommitOperationPayloadSchema = z.object({
 });
 export type CommitOperationPayload = z.infer<typeof CommitOperationPayloadSchema>;
 
-export const GetOperationLogPayloadSchema = z.object({
-  operationIds: z.array(OperationIdSchema).optional(),
-  targetIds: z.array(z.string().min(1)).optional(),
-  surface: SurfaceSchema.optional()
-});
-export type GetOperationLogPayload = z.infer<typeof GetOperationLogPayloadSchema>;
-
 export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
   ...MaterialCommandPayloadOptions,
   z.object({
@@ -73,10 +65,6 @@ export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
   z.object({
     command: z.literal("commitOperation"),
     payload: CommitOperationPayloadSchema
-  }),
-  z.object({
-    command: z.literal("getOperationLog"),
-    payload: GetOperationLogPayloadSchema
   }),
   z.object({
     command: z.literal("renderView"),

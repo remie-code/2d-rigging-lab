@@ -26,8 +26,7 @@ import {
 import type {
   CommitOperationOutcome,
   OperationEvidenceProviderInput,
-  OperationEvidenceResultDto,
-  OperationLogEntryDto
+  OperationEvidenceResultDto
 } from "./index.js";
 import {
   PackageDocumentSchema
@@ -47,7 +46,6 @@ import type {
 import {
   buildRuntimeEvidenceReport,
   buildValidationDiff,
-  CANONICAL_OPERATION_LOG_PATH,
   materializeValidationReportArtifact,
   ValidationReportSchema
 } from "../../validator-core/src/index.js";
@@ -57,7 +55,7 @@ import type {
 } from "../../validator-core/src/index.js";
 
 describe("mesh vertex runtime evidence regression fixture", () => {
-  it("keeps a generated mesh vertex edit visible through runtime, validation, result, and log evidence", () => {
+  it("keeps a generated mesh vertex edit visible through runtime, validation, and result evidence", () => {
     const createRequest = OperationRequestSchema.parse(loadFixtureJson("request/create-drawable-commit.request.json"));
     const generateRequest = OperationRequestSchema.parse(loadFixtureJson("request/generate-mesh-commit.request.json"));
     const moveRequest = OperationRequestSchema.parse(loadFixtureJson("request/move-mesh-vertex-commit.request.json"));
@@ -79,7 +77,6 @@ describe("mesh vertex runtime evidence regression fixture", () => {
     const session = createAuthoringSessionFromPackageDocument(loadBaselinePackageDocument());
     const capturedEvidence: MeshVertexOperationEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date("2026-05-30T02:00:00.000Z"),
       evidenceProvider: (input) => collectMeshVertexEvidence(input, capturedEvidence)
     });
 
@@ -87,7 +84,6 @@ describe("mesh vertex runtime evidence regression fixture", () => {
     const generateOutcome = core.commitOperation(session, generateRequest);
     const moveOutcome = core.commitOperation(session, moveRequest);
     const moveEvidence = expectEvidence(capturedEvidence, "moveMeshVertex");
-    const moveLogEntry = expectLogEntry(moveOutcome);
 
     expect(createOutcome.result.status).toBe("committed");
     expect(generateOutcome.result.status).toBe("committed");
@@ -132,12 +128,10 @@ describe("mesh vertex runtime evidence regression fixture", () => {
         vertexHashAfter: "vhash_e5715a22_4"
       }
     ]);
-    expect(moveLogEntry.result.runtimeDiff?.drawableChanges).toEqual(moveOutcome.result.runtimeDiff?.drawableChanges);
 
     expect(summarizeMeshVertexEvidence({
       sessionPackageRevision: session.packageRevision,
       outcomes: [createOutcome, generateOutcome, moveOutcome],
-      logEntry: moveLogEntry,
       evidence: capturedEvidence
     })).toEqual(loadFixtureJson("expected/mesh-vertex-runtime-evidence-summary.json"));
   });
@@ -166,7 +160,6 @@ interface MeshVertexRuntimeEvidenceSummary {
     readonly operationType: string;
     readonly operationId: string;
     readonly resultStatus: string;
-    readonly targetIds: readonly string[];
     readonly modelDiffPaths: readonly string[];
     readonly runtimeSnapshots: {
       readonly baseline: MeshVertexRuntimeSnapshotSummary;
@@ -208,8 +201,6 @@ interface MeshVertexValidationSummary {
   readonly baselineReportId: ValidationReportId;
   readonly candidateReportId: ValidationReportId;
   readonly candidateStatus: string;
-  readonly operationLogPresent: boolean;
-  readonly operationLogPath?: string;
   readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
   readonly validationDiff: {
     readonly beforeReportId: ValidationReportId;
@@ -224,16 +215,6 @@ interface MeshVertexOperationEvidenceSummary {
   readonly resultRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
   readonly resultValidationReportIds: readonly ValidationReportId[];
   readonly resultRuntimeDiffDrawableChanges: RuntimeDiffDto["drawableChanges"];
-  readonly logEntryRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
-  readonly logEntryValidationReportIds: readonly ValidationReportId[];
-  readonly logEntryRuntimeDiffDrawableChanges: RuntimeDiffDto["drawableChanges"];
-  readonly logEntryPayloadVertexDeltas: readonly {
-    readonly vertexId: string;
-    readonly delta: {
-      readonly x: number;
-      readonly y: number;
-    };
-  }[];
   readonly finalRuntimeStateRef: string;
 }
 
@@ -288,8 +269,6 @@ const collectMeshVertexEvidence = (
     packageId: runtimeEvidence.candidateSnapshot.packageId,
     packageRevision: runtimeEvidence.candidateSnapshot.packageRevision,
     packageHash,
-    operationLogPresent: true,
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
     runtimeSnapshotIds: runtimeEvidence.generatedRuntimeSnapshotIds
   });
   const validationDiff = buildValidationDiff({
@@ -329,7 +308,6 @@ const collectMeshVertexEvidence = (
 const summarizeMeshVertexEvidence = (input: {
   readonly sessionPackageRevision: number;
   readonly outcomes: readonly CommitOperationOutcome[];
-  readonly logEntry: OperationLogEntryDto;
   readonly evidence: readonly MeshVertexOperationEvidenceArtifacts[];
 }): MeshVertexRuntimeEvidenceSummary => {
   const moveOutcome = input.outcomes.find((outcome) => outcome.result.operationId === "op_mesh_vertex_move");
@@ -352,7 +330,6 @@ const summarizeMeshVertexEvidence = (input: {
       operationType: moveEvidence.operationType,
       operationId: moveOutcome.result.operationId,
       resultStatus: moveOutcome.result.status,
-      targetIds: input.logEntry.targetIds,
       modelDiffPaths: moveOutcome.result.modelDiff?.changed.flatMap((change) =>
         change.fields.map((field) => field.path)
       ) ?? [],
@@ -368,7 +345,7 @@ const summarizeMeshVertexEvidence = (input: {
         drawListChanges: moveEvidence.runtimeEvidence.runtimeDiff.drawListChanges
       },
       validation: summarizeValidationEvidence(moveEvidence),
-      operationEvidence: summarizeOperationEvidence(moveOutcome, input.logEntry)
+      operationEvidence: summarizeOperationEvidence(moveOutcome)
     }
   };
 };
@@ -401,10 +378,6 @@ const summarizeValidationEvidence = (
   baselineReportId: evidence.baselineReport.reportId,
   candidateReportId: evidence.candidateReport.reportId,
   candidateStatus: evidence.candidateReport.summary.status,
-  operationLogPresent: evidence.candidateReport.evidence.operationLogPresent,
-  ...(evidence.candidateReport.evidence.operationLogPath === undefined
-    ? {}
-    : { operationLogPath: evidence.candidateReport.evidence.operationLogPath }),
   runtimeSnapshotIds: evidence.candidateReport.evidence.runtimeSnapshotIds,
   validationDiff: {
     beforeReportId: evidence.validationDiff.beforeReportId,
@@ -416,24 +389,13 @@ const summarizeValidationEvidence = (
 });
 
 const summarizeOperationEvidence = (
-  outcome: CommitOperationOutcome,
-  logEntry: OperationLogEntryDto
-): MeshVertexOperationEvidenceSummary => {
-  if (logEntry.payload.operationType !== "moveMeshVertex") {
-    throw new Error(`Expected moveMeshVertex log entry payload, got ${logEntry.payload.operationType}.`);
-  }
-
-  return {
-    resultRuntimeSnapshotIds: outcome.result.generatedRuntimeSnapshotIds,
-    resultValidationReportIds: outcome.result.generatedValidationReportIds,
-    resultRuntimeDiffDrawableChanges: outcome.result.runtimeDiff?.drawableChanges ?? [],
-    logEntryRuntimeSnapshotIds: logEntry.runtimeSnapshotIds,
-    logEntryValidationReportIds: logEntry.validationReportIds,
-    logEntryRuntimeDiffDrawableChanges: logEntry.result.runtimeDiff?.drawableChanges ?? [],
-    logEntryPayloadVertexDeltas: logEntry.payload.payload.vertexDeltas,
-    finalRuntimeStateRef: outcome.result.finalRuntimeStateRef ?? ""
-  };
-};
+  outcome: CommitOperationOutcome
+): MeshVertexOperationEvidenceSummary => ({
+  resultRuntimeSnapshotIds: outcome.result.generatedRuntimeSnapshotIds,
+  resultValidationReportIds: outcome.result.generatedValidationReportIds,
+  resultRuntimeDiffDrawableChanges: outcome.result.runtimeDiff?.drawableChanges ?? [],
+  finalRuntimeStateRef: outcome.result.finalRuntimeStateRef ?? ""
+});
 
 const findFixtureDrawable = (
   snapshot: RuntimeEvidenceResult["candidateSnapshot"]
@@ -456,14 +418,6 @@ const expectEvidence = (
   }
 
   return found;
-};
-
-const expectLogEntry = (outcome: CommitOperationOutcome): OperationLogEntryDto => {
-  if (outcome.logEntry === undefined) {
-    throw new Error("Expected committed moveMeshVertex log entry.");
-  }
-
-  return outcome.logEntry;
 };
 
 const assertMaterializedRuntimeArtifactsParse = (

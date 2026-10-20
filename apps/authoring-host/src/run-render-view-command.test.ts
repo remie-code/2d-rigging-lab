@@ -48,8 +48,7 @@ const writeRenderablePackage = async (): Promise<{
     session: loaded.session,
     baseDocument: loaded.packageDocument,
     workspaceMetadata: loaded.workspaceMetadata,
-    updatedAt: "2026-07-02T00:00:00.000Z",
-    operationLogText: ""
+    updatedAt: "2026-07-02T00:00:00.000Z"
   });
 
   return { packageDirectory, stateDirectory };

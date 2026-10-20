@@ -52,9 +52,7 @@ describe("wave30 tutorial mini model validator contract fixture", () => {
       runtimeSnapshot: viewerResult.snapshot,
       viewerEvidence: viewerResult.evidence,
       reportId: "val_tutorial_mini_model_contract_ready",
-      createdAt: CREATED_AT,
-      operationLogPresent: true,
-      operationLogPath: "operations/log.jsonl"
+      createdAt: CREATED_AT
     });
 
     expect(summarizeValidationReadiness({
@@ -117,8 +115,6 @@ const summarizeReport = (report: ValidationReportDto) => ({
   status: report.summary.status,
   highestSeverity: report.summary.highestSeverity,
   counts: report.summary.counts,
-  operationLogPresent: report.evidence.operationLogPresent,
-  operationLogPath: report.evidence.operationLogPath,
   runtimeSnapshotIds: report.evidence.runtimeSnapshotIds,
   checks: summarizeChecks(report.checks)
 });

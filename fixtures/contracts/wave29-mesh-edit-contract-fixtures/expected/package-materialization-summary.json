@@ -84,19 +84,6 @@
       "draw_wave29_mesh"
     ]
   },
-  "operationLog": {
-    "operationIds": [
-      "op_wave29_create_drawable",
-      "op_wave29_generate_mesh",
-      "op_wave29_move_mesh_vertices"
-    ],
-    "operationTypes": [
-      "createDrawable",
-      "generateMesh",
-      "moveMeshVertex"
-    ],
-    "finalOperationLogLength": 3
-  },
   "rightsClean": {
     "realAssetBytes": false,
     "imageDecode": false,

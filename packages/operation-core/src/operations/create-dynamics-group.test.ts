@@ -23,7 +23,6 @@ describe("createDynamicsGroup operation", () => {
     const session = createDynamicsFixtureSession();
     const calls: OperationEvidenceProviderInput[] = [];
     const core = createOperationCore({
-      now: () => new Date("2026-05-31T00:00:00.000Z"),
       evidenceProvider: (input) => {
         calls.push(input);
         expect(input.targetIds).toEqual([
@@ -67,7 +66,6 @@ describe("createDynamicsGroup operation", () => {
         outputChanged: true
       }
     ]);
-    expect(outcome.logEntry?.runtimeSnapshotIds).toEqual(["snap_after_dynamics"]);
     expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toMatchObject({
       inputs: [{ parameterId: "param_face_yaw" }],
       outputs: [{ parameterId: "param_hair_sway" }]
@@ -93,7 +91,6 @@ describe("createDynamicsGroup operation", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.graph.dynamicsGroups).toEqual([]);
-    expect(outcome.operationLogLength).toBe(0);
   });
 
   it("updates existing dynamics group metadata without changing bindings", () => {
@@ -110,8 +107,6 @@ describe("createDynamicsGroup operation", () => {
       enabled: false,
       outputs: [{ parameterId: "param_hair_sway" }]
     });
-    expect(outcome.logEntry?.operationType).toBe("updateDynamicsGroup");
-    expect(outcome.logEntry?.targetIds).toEqual(["dyn_hair_sway"]);
   });
 
   it("allows authored scalar output parameters for additive dynamics", () => {
@@ -132,11 +127,6 @@ describe("createDynamicsGroup operation", () => {
 
     expect(creation.result.status).toBe("committed");
     expect(session.graph.parameters).toEqual([]);
-    expect(creation.logEntry?.targetIds).toEqual([
-      "dyn_preset_hair_sway",
-      PRESET_DRIVER_ID,
-      PRESET_OUTPUT_ID
-    ]);
     expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_preset_hair_sway")))
       .toMatchObject({
         inputs: [{ parameterId: PRESET_DRIVER_ID }],
@@ -147,11 +137,6 @@ describe("createDynamicsGroup operation", () => {
 
     expect(update.result.status).toBe("committed");
     expect(session.graph.parameters).toEqual([]);
-    expect(update.logEntry?.targetIds).toEqual([
-      "dyn_preset_hair_sway",
-      UPDATED_PRESET_DRIVER_ID,
-      UPDATED_PRESET_OUTPUT_ID
-    ]);
     expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_preset_hair_sway")))
       .toMatchObject({
         inputs: [{ parameterId: UPDATED_PRESET_DRIVER_ID }],

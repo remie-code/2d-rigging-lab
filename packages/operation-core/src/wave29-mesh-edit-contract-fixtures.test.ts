@@ -39,9 +39,7 @@ describe("wave29 mesh edit contract operation fixtures", () => {
   it("commits generated mesh creation and multi-vertex translate into package materialization", () => {
     const baselinePackage = loadBaselinePackageDocument();
     const session = createAuthoringSessionFromPackageDocument(baselinePackage);
-    const core = createOperationCore({
-      now: () => new Date(CREATED_AT)
-    });
+    const core = createOperationCore();
 
     const applied = loadOperationRequests().map((request) => {
       const outcome = core.commitOperation(session, request);
@@ -56,10 +54,10 @@ describe("wave29 mesh edit contract operation fixtures", () => {
       updatedAt: CREATED_AT
     });
 
-    expect(summarizeOperationChain(applied, core.operationLog.entries.length)).toEqual(
+    expect(summarizeOperationChain(applied)).toEqual(
       loadFixtureJson("expected/operation-chain-summary.json")
     );
-    expect(summarizePackageMaterialization(materializedPackage, core.operationLog.entries.length)).toEqual(
+    expect(summarizePackageMaterialization(materializedPackage)).toEqual(
       loadFixtureJson("expected/package-materialization-summary.json")
     );
     expect(summarizeEditorSelectionEvidence(materializedPackage)).toEqual(
@@ -76,8 +74,7 @@ interface AppliedOperation {
 }
 
 const summarizeOperationChain = (
-  applied: readonly AppliedOperation[],
-  operationLogLength: number
+  applied: readonly AppliedOperation[]
 ) => ({
   schemaVersion: "wave29-mesh-edit-operation-chain-summary-v1",
   operations: applied.map(({ request, outcome, packageRevisionAfter, authoringRevisionAfter }) => {
@@ -93,20 +90,16 @@ const summarizeOperationChain = (
       status: outcome.result.status,
       preconditionOk: outcome.result.precondition.ok,
       checkedTargets: outcome.result.precondition.checkedTargetRefs.map(toTargetRefKey),
-      logEntryTargetIds: outcome.logEntry?.targetIds ?? [],
       changedTargets: modelDiff.changed.map((change) => toTargetRefKey(change.target)),
       changedFieldPaths: modelDiff.changed.flatMap((change) => change.fields.map((field) => field.path)),
       packageRevisionAfter,
-      authoringRevisionAfter,
-      operationLogLength: outcome.operationLogLength
+      authoringRevisionAfter
     };
-  }),
-  finalOperationLogLength: operationLogLength
+  })
 });
 
 const summarizePackageMaterialization = (
-  packageDocument: PackageDocumentDto,
-  operationLogLength: number
+  packageDocument: PackageDocumentDto
 ) => {
   const drawable = expectOne(packageDocument.model.drawables.drawables, "drawable");
   const mesh = expectOne(packageDocument.model.meshes.meshes, "mesh");
@@ -141,11 +134,6 @@ const summarizePackageMaterialization = (
       sourceAssetId: sourceAsset.sourceAssetId,
       sourceLayerId: sourceLayer.sourceLayerId,
       mappedDrawableIds: sourceLayer.mappedDrawableIds
-    },
-    operationLog: {
-      operationIds: OPERATION_REQUEST_PATHS.map((path) => OperationRequestSchema.parse(loadFixtureJson(path)).operationId),
-      operationTypes: OPERATION_REQUEST_PATHS.map((path) => OperationRequestSchema.parse(loadFixtureJson(path)).operationType),
-      finalOperationLogLength: operationLogLength
     },
     rightsClean: {
       realAssetBytes: false,

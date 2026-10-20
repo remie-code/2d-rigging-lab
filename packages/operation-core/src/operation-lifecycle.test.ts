@@ -18,7 +18,6 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { createOperationCore } from "./index.js";
-import type { OperationLogEntryDto } from "./operation-log-entry.js";
 
 describe("operation lifecycle foundation", () => {
   it("dry-runs createParameter without mutating the original session", () => {
@@ -35,14 +34,11 @@ describe("operation lifecycle foundation", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits createParameter and appends an operation log entry", () => {
+  it("commits createParameter", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:00:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(session, createParameterRequest({ dryRun: false }));
 
@@ -51,19 +47,8 @@ describe("operation lifecycle foundation", () => {
     expect(session.authoringRevision).toBe(1);
     expect(session.dirty).toBe(true);
     expect(getParameterById(session.graph, ParameterIdSchema.parse("param_smile"))?.displayName).toBe("Smile");
-    expect(outcome.operationLogLength).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
-
-    const logEntry = outcome.logEntry;
-    expect(logEntry).toBeDefined();
-    expect(logEntry?.operationId).toBe("op_create_smile");
-    expect(logEntry?.transactionId).toBe("txn_create_smile");
-    expect(logEntry?.actor).toBe("test");
-    expect(logEntry?.surface).toBe("testFixture");
-    expect(logEntry?.payload.operationType).toBe("createParameter");
-    expect(logEntry?.result.status).toBe("committed");
-    expect(logEntry?.targetIds).toEqual(["param_smile"]);
-    expect(logEntry?.provenanceId).toBe("prov_create_smile");
+    expect(outcome.result.operationId).toBe("op_create_smile");
+    expect(outcome.result.modelDiff?.added).toEqual([{ kind: "parameter", id: "param_smile" }]);
   });
 
   it("dry-runs addKeyform through the registry without mutating the original session", () => {
@@ -80,14 +65,11 @@ describe("operation lifecycle foundation", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits addKeyform through the registry and logs keyform precondition refs", () => {
+  it("commits addKeyform through the registry and reports keyform precondition refs", () => {
     const session = createKeyformFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:02:00.000Z")
-    });
+    const core = createOperationCore();
     const keyformSetId = expectedLinearKeyformSetId();
 
     const outcome = core.commitOperation(session, createAddKeyformRequest({ dryRun: false }));
@@ -105,16 +87,7 @@ describe("operation lifecycle foundation", () => {
       },
       parameterId: "param_face_yaw"
     });
-    expect(outcome.operationLogLength).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
-    expect(outcome.logEntry?.operationType).toBe("addKeyform");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      keyformSetId,
-      "param_face_yaw",
-      "mesh_body"
-    ]);
-    expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "keyformSet", id: keyformSetId },
       { kind: "parameter", id: "param_face_yaw" },
       { kind: "mesh", id: "mesh_body" }
@@ -135,14 +108,11 @@ describe("operation lifecycle foundation", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits addKeyformGrid2d through the registry and does not record non-parameters as parameter refs", () => {
+  it("commits addKeyformGrid2d through the registry and does not report non-parameters as parameter refs", () => {
     const session = createKeyformFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:03:00.000Z")
-    });
+    const core = createOperationCore();
     const keyformSetId = expectedGridKeyformSetId();
 
     const outcome = core.commitOperation(session, createAddKeyformGrid2dRequest({ dryRun: false }));
@@ -161,17 +131,7 @@ describe("operation lifecycle foundation", () => {
       parameterX: "param_face_yaw",
       parameterY: "param_face_pitch"
     });
-    expect(outcome.operationLogLength).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
-    expect(outcome.logEntry?.operationType).toBe("addKeyformGrid2d");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      keyformSetId,
-      "mesh_body",
-      "param_face_yaw",
-      "param_face_pitch"
-    ]);
-    expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "keyformSet", id: keyformSetId },
       { kind: "parameter", id: "param_face_yaw" },
       { kind: "parameter", id: "param_face_pitch" },
@@ -179,27 +139,9 @@ describe("operation lifecycle foundation", () => {
     ]);
   });
 
-  it("hydrates initial operation log entries defensively", () => {
-    const initialEntry = createCommittedLogEntry();
-    const initialEntries = [initialEntry];
-    const core = createOperationCore({
-      initialOperationLogEntries: initialEntries
-    });
-
-    initialEntries.splice(0, initialEntries.length);
-    initialEntry.targetIds.push("param_mutated");
-
-    expect(core.operationLog.entries).toHaveLength(1);
-    expect(core.operationLog.entries[0]?.operationId).toBe("op_create_smile");
-    expect(core.operationLog.entries[0]?.targetIds).toEqual(["param_smile"]);
-  });
-
-  it("appends new commits after hydrated operation log entries", () => {
+  it("commits on a session whose package revision has already advanced", () => {
     const session = createFixtureSession({ packageRevision: 1 });
-    const core = createOperationCore({
-      initialOperationLogEntries: [createCommittedLogEntry()],
-      now: () => new Date("2026-05-29T00:01:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -213,22 +155,11 @@ describe("operation lifecycle foundation", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.operationLogLength).toBe(2);
-    expect(core.operationLog.entries.map((entry) => entry.operationId)).toEqual([
-      "op_create_smile",
-      "op_create_frown"
-    ]);
+    expect(outcome.result.operationId).toBe("op_create_frown");
+    expect(session.packageRevision).toBe(2);
   });
 
-  it("rejects invalid hydrated operation log entries", () => {
-    expect(() =>
-      createOperationCore({
-        initialOperationLogEntries: [{} as OperationLogEntryDto]
-      })
-    ).toThrow();
-  });
-
-  it("rejects a stale base package revision before mutation or log append", () => {
+  it("rejects a stale base package revision before mutation", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
@@ -243,18 +174,15 @@ describe("operation lifecycle foundation", () => {
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
     expect(getParameterById(session.graph, ParameterIdSchema.parse("param_smile"))).toBeUndefined();
-    expect(outcome.operationLogLength).toBe(0);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("rejects duplicate parameters without mutating or appending a log entry", () => {
+  it("rejects duplicate parameters without mutating", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
     core.commitOperation(session, createParameterRequest({ dryRun: false }));
     const packageRevisionAfterFirstCommit = session.packageRevision;
     const revisionAfterFirstCommit = session.authoringRevision;
-    const logLengthAfterFirstCommit = core.operationLog.entries.length;
     const duplicate = core.commitOperation(
       session,
       createParameterRequest({
@@ -268,10 +196,9 @@ describe("operation lifecycle foundation", () => {
     expect(duplicate.result.diagnostics[0]?.checkId).toBe("operation.createParameter.duplicateParameter");
     expect(session.packageRevision).toBe(packageRevisionAfterFirstCommit);
     expect(session.authoringRevision).toBe(revisionAfterFirstCommit);
-    expect(core.operationLog.entries).toHaveLength(logLengthAfterFirstCommit);
   });
 
-  it("rejects registered generateMesh precondition failures without mutation or log append", () => {
+  it("rejects registered generateMesh precondition failures without mutation", () => {
     const session = createFixtureSession();
     const core = createOperationCore();
 
@@ -282,15 +209,11 @@ describe("operation lifecycle foundation", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(rejected.operationLogLength).toBe(0);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits moveMeshVertex through the registry and appends an operation log entry", () => {
+  it("commits moveMeshVertex through the registry", () => {
     const session = createKeyformFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:04:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(session, createMoveMeshVertexRequest({ dryRun: false }));
 
@@ -302,11 +225,7 @@ describe("operation lifecycle foundation", () => {
       x: 3,
       y: -0.5
     });
-    expect(outcome.operationLogLength).toBe(1);
-    expect(outcome.logEntry?.operationType).toBe("moveMeshVertex");
-    expect(outcome.logEntry?.targetIds).toEqual(["mesh_body", "vtx_body_1"]);
-    expect(outcome.logEntry?.result.modelDiff).toEqual(outcome.result.modelDiff);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "mesh", id: "mesh_body" },
       { kind: "drawable", id: "draw_body" },
       { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices/1" }
@@ -332,15 +251,11 @@ describe("operation lifecycle foundation", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(outcome.operationLogLength).toBe(0);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits createDynamicsGroup through the registry and logs dynamics parameter refs", () => {
+  it("commits createDynamicsGroup through the registry and reports dynamics parameter refs", () => {
     const session = createDynamicsFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:05:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(session, createDynamicsGroupRequest({ dryRun: false }));
 
@@ -353,15 +268,7 @@ describe("operation lifecycle foundation", () => {
       inputs: [{ parameterId: "param_face_yaw" }],
       outputs: [{ parameterId: "param_hair_sway" }]
     });
-    expect(outcome.operationLogLength).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
-    expect(outcome.logEntry?.operationType).toBe("createDynamicsGroup");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "dyn_hair_sway",
-      "param_face_yaw",
-      "param_hair_sway"
-    ]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "dynamicsGroup", id: "dyn_hair_sway" },
       {
         kind: "parameter",
@@ -388,10 +295,9 @@ describe("operation lifecycle foundation", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits deleteDynamicsGroup through the registry and logs the removal", () => {
+  it("commits deleteDynamicsGroup through the registry", () => {
     const session = createDynamicsFixtureSession();
     const core = createOperationCore();
     core.commitOperation(session, createDynamicsGroupRequest({ dryRun: false }));
@@ -402,8 +308,7 @@ describe("operation lifecycle foundation", () => {
     expect(session.packageRevision).toBe(2);
     expect(session.authoringRevision).toBe(2);
     expect(getDynamicsGroupById(session.graph, DynamicsGroupIdSchema.parse("dyn_hair_sway"))).toBeUndefined();
-    expect(deletion.operationLogLength).toBe(2);
-    expect(core.operationLog.entries.at(-1)?.operationType).toBe("deleteDynamicsGroup");
+    expect(deletion.result.modelDiff?.removed).toEqual([{ kind: "dynamicsGroup", id: "dyn_hair_sway" }]);
   });
 });
 
@@ -431,20 +336,6 @@ const createParameterRequest = (options: {
     recommendedUiStep: 0.01
   }
 });
-
-const createCommittedLogEntry = (): OperationLogEntryDto => {
-  const session = createFixtureSession();
-  const core = createOperationCore({
-    now: () => new Date("2026-05-29T00:00:00.000Z")
-  });
-  const outcome = core.commitOperation(session, createParameterRequest({ dryRun: false }));
-
-  if (outcome.logEntry === undefined) {
-    throw new Error("Expected committed operation to produce a log entry.");
-  }
-
-  return outcome.logEntry;
-};
 
 const createGenerateMeshMissingDrawableRequest = () => ({
   schemaVersion: "operation-request-v1",

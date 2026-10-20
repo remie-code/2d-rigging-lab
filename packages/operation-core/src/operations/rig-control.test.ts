@@ -50,14 +50,11 @@ describe("rig control operation handlers", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits createRotation2dRigControl and appends target refs to the operation log", () => {
+  it("commits createRotation2dRigControl and reports checked target refs", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-01T00:00:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -79,12 +76,7 @@ describe("rig control operation handlers", () => {
     expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"))).not.toHaveProperty(
       "partId"
     );
-    expect(outcome.logEntry?.operationType).toBe("createRotation2dRigControl");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "rig_head_rotation",
-      "draw_body"
-    ]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "rigControl", id: "rig_head_rotation" },
       {
         kind: "drawable",
@@ -181,9 +173,7 @@ describe("rig control operation handlers", () => {
 
   it("commits createWarpLattice2dRigControl with deterministic rest control points", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-01T00:05:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -214,15 +204,10 @@ describe("rig control operation handlers", () => {
     expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_body_warp_lattice"))).not.toHaveProperty(
       "partId"
     );
-    expect(outcome.logEntry?.operationType).toBe("createWarpLattice2dRigControl");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "rig_body_warp_lattice",
-      "draw_body"
-    ]);
     expect(outcome.result.modelDiff?.added).toEqual([
       { kind: "rigControl", id: "rig_body_warp_lattice" }
     ]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "rigControl", id: "rig_body_warp_lattice" },
       {
         kind: "drawable",
@@ -278,9 +263,7 @@ describe("rig control operation handlers", () => {
 
   it("dry-runs and commits createWarpDeformer with transform and Bezier divisions", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-01T00:10:00.000Z")
-    });
+    const core = createOperationCore();
     core.commitOperation(session, createRotation2dRigControlRequest({ dryRun: false }));
 
     const dryRun = core.dryRunOperation(
@@ -297,7 +280,6 @@ describe("rig control operation handlers", () => {
     expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_warp_deformer"))).toBeUndefined();
     expect(session.packageRevision).toBe(1);
     expect(session.graph.rigControlRootIds).toEqual(["rig_head_rotation"]);
-    expect(core.operationLog.entries).toHaveLength(1);
 
     const outcome = core.commitOperation(
       session,
@@ -315,13 +297,6 @@ describe("rig control operation handlers", () => {
 
     expect(outcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(2);
-    expect(core.operationLog.entries).toHaveLength(2);
-    expect(outcome.logEntry?.operationType).toBe("createWarpDeformer");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "rig_head_warp_deformer",
-      "rig_head_rotation",
-      "draw_body"
-    ]);
     expect(rigControl).toMatchObject({
       kind: "warpLattice2d",
       parentId: "rig_head_rotation",
@@ -361,7 +336,7 @@ describe("rig control operation handlers", () => {
       childRigControlIds: ["rig_head_warp_deformer"]
     });
     expect(session.graph.rigControlRootIds).toEqual(["rig_head_rotation"]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "rigControl", id: "rig_head_warp_deformer" },
       {
         kind: "rigControl",
@@ -480,8 +455,7 @@ describe("rig control operation handlers", () => {
       expect(getRigControlById(session.graph, RigControlIdSchema.parse(rigControlId))).not.toHaveProperty("partId");
     }
     for (const outcome of [rotation, warpLattice, warpDeformer]) {
-      expect(outcome.logEntry?.targetIds).not.toContain("part_root");
-      expect(outcome.logEntry?.precondition.checkedTargetRefs).not.toEqual(
+      expect(outcome.result.precondition.checkedTargetRefs).not.toEqual(
         expect.arrayContaining([expect.objectContaining({ kind: "part", id: "part_root" })])
       );
     }
@@ -489,9 +463,7 @@ describe("rig control operation handlers", () => {
 
   it("inserts createWarpDeformer between an existing parent deformer and drawable child", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-01T00:15:00.000Z")
-    });
+    const core = createOperationCore();
     core.commitOperation(
       session,
       createRotation2dRigControlRequest({
@@ -662,7 +634,6 @@ describe("rig control operation handlers", () => {
       parentId: "rig_head_rotation"
     });
     expect(session.packageRevision).toBe(3);
-    expect(core.operationLog.entries).toHaveLength(3);
 
     const outcome = core.commitOperation(
       session,
@@ -739,12 +710,6 @@ describe("rig control operation handlers", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "rig_wrapped_rotation",
-      "rig_parent_rotation",
-      "draw_a",
-      "draw_b"
-    ]);
     expect(outcome.result.modelDiff?.added).toEqual([{ kind: "rigControl", id: "rig_wrapped_rotation" }]);
     expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_parent_rotation"))).toEqual({
       ...parentBefore,
@@ -927,12 +892,6 @@ describe("rig control operation handlers", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "rig_root_wrapper",
-      "rig_root_a",
-      "rig_root_b",
-      "draw_unbound"
-    ]);
     expect(outcome.result.modelDiff?.added).toEqual([{ kind: "rigControl", id: "rig_root_wrapper" }]);
     expect(session.graph.rigControlRootIds).toEqual(["rig_root_wrapper"]);
     expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_root_wrapper"))).toMatchObject({
@@ -1189,11 +1148,6 @@ describe("rig control operation handlers", () => {
     expect(session.graph.parts).toEqual(partsBefore);
     expect(session.graph.drawables).toEqual(drawablesBefore);
     expect(session.graph.drawOrder).toEqual(drawOrderBefore);
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "draw_body",
-      "rig_head_rotation",
-      "rig_target_rotation"
-    ]);
     expect(findChangedFieldPaths(outcome.result, "rig_head_rotation")).toEqual([
       "/model/rigControls/rigControls/rig_head_rotation/childDrawableIds"
     ]);
@@ -1300,7 +1254,6 @@ describe("rig control operation handlers", () => {
     expect(session.graph.rigControls).toEqual(beforeRejected);
     expect(session.packageRevision).toBe(5);
     expect(session.authoringRevision).toBe(5);
-    expect(rejected.operationLogLength).toBe(5);
 
     const rootOutcome = core.commitOperation(
       session,
@@ -1577,7 +1530,6 @@ describe("rig control operation handlers", () => {
     expect(session.packageRevision).toBe(beforePackageRevision);
     expect(session.authoringRevision).toBe(beforeAuthoringRevision);
     expect(session.dirty).toBe(beforeDirty);
-    expect(outcome.operationLogLength).toBe(1);
   });
 
   it("rejects keyform cardinality conflicts atomically when generic fields are present", () => {
@@ -1639,7 +1591,6 @@ describe("rig control operation handlers", () => {
     expect(session.packageRevision).toBe(beforePackageRevision);
     expect(session.authoringRevision).toBe(beforeAuthoringRevision);
     expect(session.dirty).toBe(beforeDirty);
-    expect(outcome.operationLogLength).toBe(1);
   });
 
   it("dry-runs and commits deleteRigControl with promoted children and removed target keyforms", () => {
@@ -1716,14 +1667,6 @@ describe("rig control operation handlers", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.logEntry?.operationType).toBe("deleteRigControl");
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "rig_delete_target",
-      "rig_head_rotation",
-      "rig_child_rotation",
-      "draw_body",
-      "keyset_delete_target_offsets"
-    ]);
     expect(outcome.result.modelDiff?.removed).toEqual([
       { kind: "rigControl", id: "rig_delete_target" },
       { kind: "keyformSet", id: "keyset_delete_target_offsets" }
@@ -1853,7 +1796,6 @@ describe("rig control operation handlers", () => {
     expect(session.packageRevision).toBe(packageRevisionBefore);
     expect(session.authoringRevision).toBe(authoringRevisionBefore);
     expect(session.dirty).toBe(dirtyBefore);
-    expect(rejected.operationLogLength).toBe(3);
   });
 
   it("commits bindRigControlChild for drawable children", () => {
@@ -1875,8 +1817,7 @@ describe("rig control operation handlers", () => {
     expect(getRigControlById(session.graph, RigControlIdSchema.parse("rig_head_rotation"))).toMatchObject({
       childDrawableIds: ["draw_body"]
     });
-    expect(outcome.logEntry?.targetIds).toEqual(["rig_head_rotation", "draw_body"]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "rigControl", id: "rig_head_rotation" },
       {
         kind: "drawable",
@@ -1962,7 +1903,6 @@ describe("rig control operation handlers", () => {
     );
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
-    expect(outcome.operationLogLength).toBe(1);
   });
 });
 

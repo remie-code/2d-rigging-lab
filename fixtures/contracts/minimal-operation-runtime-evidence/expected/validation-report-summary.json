@@ -5,7 +5,6 @@
     "candidateReportId": "val_fixture_dry_run_candidate",
     "status": "pass",
     "highestSeverity": "info",
-    "operationLogPresent": false,
     "runtimeSnapshotIds": [
       "snap_minimal-valid-package_0",
       "snap_minimal-valid-package_1"
@@ -16,8 +15,6 @@
     "candidateReportId": "val_fixture_commit_candidate",
     "status": "pass",
     "highestSeverity": "info",
-    "operationLogPresent": true,
-    "operationLogPath": "operations/log.jsonl",
     "runtimeSnapshotIds": [
       "snap_minimal-valid-package_0",
       "snap_minimal-valid-package_1"

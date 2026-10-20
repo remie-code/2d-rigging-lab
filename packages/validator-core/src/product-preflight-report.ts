@@ -77,7 +77,7 @@ const TUTORIAL_RELATED_SCENARIO_IDS = new Set([
 
 const REQUIRED_EVIDENCE_KINDS: Readonly<Record<ProductPreflightCategoryDto, readonly ProductPreflightArtifactKindDto[]>> = {
   modelStructure: ["packageManifest", "modelGraph", "validationReport"],
-  authoringWorkflowEvidence: ["operationLog", "guiEvidence"],
+  authoringWorkflowEvidence: ["guiEvidence"],
   runtimeViewerEvidence: ["runtimeSnapshot"],
   meshTopologyUv: ["validationReport"],
   composition: ["validationReport"],
@@ -461,7 +461,6 @@ const collectCategoryEvidenceRefs = (
   return dedupeEvidenceRefs([
     ...explicitEvidenceRefs,
     ...reportEvidenceRefs,
-    ...createOperationLogEvidenceRefs(category, context),
     ...createRuntimeSnapshotEvidenceRefs(category, context),
     ...createSourceMaterializationEvidenceRefs(category, context)
   ]).filter((evidenceRef) => isAllowedCategoryEvidenceRef(category, evidenceRef));
@@ -489,31 +488,6 @@ const shouldAttachValidationReportEvidence = (
   }
 
   return false;
-};
-
-const createOperationLogEvidenceRefs = (
-  category: ProductPreflightCategoryDto,
-  context: ProductPreflightBuildContext
-): ProductPreflightEvidenceRefDto[] => {
-  if (category !== "authoringWorkflowEvidence") {
-    return [];
-  }
-
-  return context.validationReports
-    .filter((report) => report.evidence.operationLogPresent)
-    .map((report) => ({
-      evidenceId: `evidence_${sanitizeToken(report.reportId)}_operationLog`,
-      artifactRef: {
-        artifactKind: "operationLog",
-        path: "operations/log.jsonl"
-      },
-      target: {
-        kind: "package",
-        id: report.packageId
-      },
-      summary: `Validation report ${report.reportId} records operation log evidence.`,
-      producer: "validatorCore"
-    }));
 };
 
 const createRuntimeSnapshotEvidenceRefs = (

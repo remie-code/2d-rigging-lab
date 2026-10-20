@@ -70,34 +70,6 @@ const committedOperationResult = {
   status: "committed"
 } as const;
 
-const operationLogEntry = {
-  schemaVersion: "operation-log-entry-v1",
-  operationId: "op_create_ai_parameter",
-  transactionId: "txn_create_ai_parameter",
-  timestamp: "2026-05-29T00:00:00.000Z",
-  actor: "ai",
-  surface: "structuredApi",
-  operationType: "createParameter",
-  targetIds: ["param_ai_parameter"],
-  precondition: {
-    ok: true,
-    diagnostics: [],
-    checkedTargetRefs: [
-      {
-        kind: "parameter",
-        id: "param_ai_parameter"
-      }
-    ]
-  },
-  payload: {
-    operationType: "createParameter",
-    payload: createParameterOperationRequest.payload
-  },
-  result: committedOperationResult,
-  provenanceId: "prov_ai_command",
-  reversible: true
-} as const;
-
 const validationReport = {
   schemaVersion: "validation-report-v1",
   reportId: "val_ai_read_contract",
@@ -120,7 +92,6 @@ const validationReport = {
   checks: [],
   repairCandidates: [],
   evidence: {
-    operationLogPresent: false,
     runtimeSnapshotIds: [],
     supplementalGuiEvidenceRefs: []
   }
@@ -256,23 +227,6 @@ describe("AI command schema foundation", () => {
         }
       }
     });
-    const operationLogRequest = AiCommandRequestSchema.parse({
-      schemaVersion: "ai-command-request-v1",
-      commandId: "cmd_get_operation_log",
-      session: {
-        agentId: "agent_test",
-        capabilities: ["read"]
-      },
-      basis: {
-        relatedAC: [],
-        relatedScenarios: []
-      },
-      command: "getOperationLog",
-      payload: {
-        operationIds: ["op_create_ai_parameter"],
-        surface: "structuredApi"
-      }
-    });
     const getPsdImportPlanRequest = AiCommandRequestSchema.parse({
       schemaVersion: "ai-command-request-v1",
       commandId: "cmd_get_psd_import_plan",
@@ -391,12 +345,6 @@ describe("AI command schema foundation", () => {
         }
       }
     });
-    expect(operationLogRequest).toMatchObject({
-      command: "getOperationLog",
-      payload: {
-        operationIds: ["op_create_ai_parameter"]
-      }
-    });
     expect(getPsdImportPlanRequest).toMatchObject({
       command: "getPsdImportPlanState",
       payload: {
@@ -494,19 +442,10 @@ describe("AI command schema foundation", () => {
       commandId: "cmd_commit_create_parameter",
       status: "ok",
       operationResult: committedOperationResult,
-      evidenceRefs: ["operations/log.jsonl#op_create_ai_parameter"],
+      evidenceRefs: ["runtime/snapshots/snap_ai_preview.runtime-snapshot.json"],
       command: "commitOperation",
       payload: {
         operationResult: committedOperationResult
-      }
-    });
-    const operationLogResponse = AiCommandResponseSchema.parse({
-      schemaVersion: "ai-command-response-v1",
-      commandId: "cmd_get_operation_log",
-      status: "ok",
-      command: "getOperationLog",
-      payload: {
-        entries: [operationLogEntry]
       }
     });
     const psdImportPlanStateResponse = AiCommandResponseSchema.parse({
@@ -658,15 +597,6 @@ describe("AI command schema foundation", () => {
         }
       }
     });
-    expect(operationLogResponse).toMatchObject({
-      payload: {
-        entries: [
-          {
-            operationType: "createParameter"
-          }
-        ]
-      }
-    });
     expect(psdImportPlanStateResponse).toMatchObject({
       payload: {
         result: {
@@ -757,6 +687,7 @@ describe("AI command schema foundation", () => {
     expect(AiCommandNameSchema.parse("preflightPsdImportPlanIntake")).toBe("preflightPsdImportPlanIntake");
     expect(AiCommandNameSchema.parse("executePsdImportPlanIntake")).toBe("executePsdImportPlanIntake");
     expect(AiCommandNameSchema.safeParse("getRuntimeSnapshot").success).toBe(false);
+    expect(AiCommandNameSchema.safeParse("getOperationLog").success).toBe(false);
     expect(
       AiCommandRequestSchema.safeParse({
         schemaVersion: "ai-command-request-v1",

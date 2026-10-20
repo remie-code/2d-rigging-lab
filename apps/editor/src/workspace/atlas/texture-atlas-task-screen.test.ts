@@ -419,9 +419,8 @@ describe("TextureAtlasTaskScreen", () => {
       throw new Error("Expected texture atlas apply to commit.");
     }
     expect(result.operationOutcome.result.status).toBe("committed");
-    expect(result.operationOutcome.logEntry?.operationType).toBe("applyTextureAtlasPreview");
-    expect(JSON.stringify(result.operationOutcome.logEntry?.payload)).not.toContain("textureBytes");
-    expect(JSON.stringify(result.operationOutcome.logEntry?.payload)).not.toContain("atlasBytes");
+    expect(JSON.stringify(result.operationOutcome.result)).not.toContain("textureBytes");
+    expect(JSON.stringify(result.operationOutcome.result)).not.toContain("atlasBytes");
     expect(result.session.packageRevision).toBe(1);
     expect(result.session).not.toBe(session);
     expect(result.session.graph.textureAtlas?.layoutSummary?.atlasTextureId)

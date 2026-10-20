@@ -11,8 +11,6 @@
       "error": 0,
       "blocking": 0
     },
-    "operationLogPresent": true,
-    "operationLogPath": "operations/log.jsonl",
     "runtimeSnapshotIds": [
       "snap_tutorial_mini_model_40",
       "snap_tutorial_mini_model_41"

@@ -173,7 +173,7 @@ Image problems reject the operation before it runs. Their check IDs are `operati
 | `imageDigestMismatch` | The RGBA SHA-256 differs from `rgbaSha256`. |
 | `idCollision` | The operationId was already used (see below). |
 
-The operation log stores the payload: the image path and hash, never the pixels.
+The operation payload carries only the image path and hash, never the pixels. The API response does not carry the pixels either.
 
 ### ID seed and operationId reuse
 

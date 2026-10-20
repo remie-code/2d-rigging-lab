@@ -16,7 +16,7 @@ import {
   createOperationCore,
   OperationRequestSchema,
   type CommitOperationOutcome,
-  type OperationLogEntryDto
+  type OperationRequestDto
 } from "./index.js";
 import {
   validatePackageRuntime,
@@ -35,7 +35,6 @@ describe("PSD import contract fixtures", () => {
       "request/create-drawable-commit.request.json",
       "request/generate-mesh-commit.request.json"
     ], {
-      logTimestamp: "2026-05-31T04:15:00.000Z",
       packageUpdatedAt: "2026-05-31T04:30:00.000Z",
       validationCreatedAt: "2026-05-31T04:30:00.000Z"
     });
@@ -61,7 +60,6 @@ describe("PSD import contract fixtures", () => {
     const run = runFixtureOperations("psd-unsupported-layer", [
       "request/import-psd-source-commit.request.json"
     ], {
-      logTimestamp: "2026-05-31T05:15:00.000Z",
       packageUpdatedAt: "2026-05-31T05:30:00.000Z",
       validationCreatedAt: "2026-05-31T05:30:00.000Z"
     });
@@ -81,15 +79,14 @@ describe("PSD import contract fixtures", () => {
 });
 
 interface FixtureRunOptions {
-  readonly logTimestamp: string;
   readonly packageUpdatedAt: string;
   readonly validationCreatedAt: string;
 }
 
 interface FixtureRun {
   readonly session: ReturnType<typeof createAuthoringSessionFromPackageDocument>;
+  readonly requests: readonly OperationRequestDto[];
   readonly outcomes: readonly CommitOperationOutcome[];
-  readonly logEntries: readonly OperationLogEntryDto[];
   readonly document: PackageDocumentDto;
   readonly validationReport: ValidationReportDto;
 }
@@ -107,15 +104,11 @@ const runFixtureOperations = (
     loadFixtureJson(fixtureId, "baseline-package.json")
   );
   const session = createAuthoringSessionFromPackageDocument(baseDocument);
-  const core = createOperationCore({
-    now: () => new Date(options.logTimestamp)
-  });
-  const outcomes = requestPaths.map((requestPath) =>
-    core.commitOperation(
-      session,
-      OperationRequestSchema.parse(loadFixtureJson(fixtureId, requestPath))
-    )
+  const core = createOperationCore();
+  const requests = requestPaths.map((requestPath) =>
+    OperationRequestSchema.parse(loadFixtureJson(fixtureId, requestPath))
   );
+  const outcomes = requests.map((request) => core.commitOperation(session, request));
   const document = toPackageDocument(session, baseDocument, {
     updatedAt: options.packageUpdatedAt
   });
@@ -126,8 +119,8 @@ const runFixtureOperations = (
 
   return {
     session,
+    requests,
     outcomes,
-    logEntries: core.operationLog.entries,
     document,
     validationReport
   };
@@ -140,13 +133,13 @@ const summarizePsdFixtureRun = (
   schemaVersion: "psd-import-contract-evidence-summary-v1",
   fixtureId,
   operations: run.outcomes.map((outcome, index) => {
-    const logEntry = run.logEntries[index];
+    const request = run.requests[index];
 
-    if (logEntry === undefined) {
-      throw new Error(`Missing operation log entry for fixture ${fixtureId} at index ${index}.`);
+    if (request === undefined) {
+      throw new Error(`Missing operation request for fixture ${fixtureId} at index ${index}.`);
     }
 
-    return summarizeOperation(outcome, logEntry);
+    return summarizeOperation(outcome, request);
   }),
   sourceManifest: summarizeSourceManifest(run.document),
   textureRelations: summarizeTextureRelations(run.document),
@@ -165,12 +158,11 @@ const summarizePsdFixtureRun = (
 
 const summarizeOperation = (
   outcome: CommitOperationOutcome,
-  logEntry: OperationLogEntryDto
+  request: OperationRequestDto
 ) => ({
-  operationType: logEntry.operationType,
+  operationType: request.operationType,
   operationId: outcome.result.operationId,
   resultStatus: outcome.result.status,
-  targetIds: logEntry.targetIds,
   diagnosticCheckIds: outcome.result.diagnostics.map((diagnostic) => diagnostic.checkId),
   diagnostics: outcome.result.diagnostics,
   modelDiffPaths: summarizeModelDiffPaths(outcome.result.modelDiff)

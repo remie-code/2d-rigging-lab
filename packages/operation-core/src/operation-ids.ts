@@ -9,8 +9,7 @@ import {
   PartIdSchema,
   ProvenanceIdSchema,
   RigControlIdSchema,
-  TextureIdSchema,
-  TransactionIdSchema
+  TextureIdSchema
 } from "@private-2d-rigging-lab/contracts";
 import type {
   DrawableId,
@@ -23,17 +22,13 @@ import type {
   PartId,
   ProvenanceId,
   RigControlId,
-  TextureId,
-  TransactionId
+  TextureId
 } from "@private-2d-rigging-lab/contracts";
 
 import type { OperationRequestDto } from "./operation-request.js";
 
 export const resolveOperationId = (request: OperationRequestDto): OperationId =>
   request.operationId ?? OperationIdSchema.parse(`op_${operationToken(request)}`);
-
-export const createTransactionId = (operationId: OperationId): TransactionId =>
-  TransactionIdSchema.parse(`txn_${stripIdPrefix(operationId, "op_")}`);
 
 export const createProvenanceId = (operationId: OperationId): ProvenanceId =>
   ProvenanceIdSchema.parse(`prov_${stripIdPrefix(operationId, "op_")}`);

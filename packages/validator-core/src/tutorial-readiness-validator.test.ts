@@ -162,9 +162,7 @@ describe("tutorial mini model readiness validator", () => {
       packageDocument,
       runtimeSnapshot: viewerResult.snapshot,
       viewerEvidence: viewerResult.evidence,
-      createdAt: CREATED_AT,
-      operationLogPresent: true,
-      operationLogPath: "operations/log.jsonl"
+      createdAt: CREATED_AT
     });
 
     expect(report.reportId).toBe("val_tutorial_readiness_tutorialReadiness");
@@ -184,10 +182,6 @@ describe("tutorial mini model readiness validator", () => {
       "draw_eye_mask",
       "draw_eye"
     ]);
-    expect(report.evidence).toMatchObject({
-      operationLogPresent: true,
-      operationLogPath: "operations/log.jsonl"
-    });
     expect(report.evidence.runtimeSnapshotIds).toEqual([
       viewerResult.baselineSnapshot.snapshotId,
       viewerResult.snapshot.snapshotId
@@ -664,7 +658,6 @@ const createTutorialPackageDocument = (): PackageDocumentDto => PackageDocumentS
       editorState: "model/editor-state.json"
     },
     assetIndex: "assets/sources/source-manifest.json",
-    operationLog: "operations/log.jsonl",
     rightsSummary: {
       status: "cleared"
     },

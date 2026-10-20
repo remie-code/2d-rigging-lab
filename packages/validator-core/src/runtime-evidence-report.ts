@@ -1,16 +1,13 @@
 import type { RuntimeSnapshotId } from "@private-2d-rigging-lab/contracts";
 
 import { buildValidationReport } from "./report-builder.js";
-import { createOperationLogEvidence } from "./operation-evidence-report.js";
-import type { OperationLogEvidenceInput } from "./operation-evidence-report.js";
 import type { ValidationReportBuildInput } from "./report-builder.js";
 import type { ValidationReportDto } from "./validation-report.js";
 import { ValidationReportEvidenceSchema } from "./validation-report.js";
 import { validateRuntimeSnapshotEvidence } from "./validators/runtime-evidence.js";
 
 export interface RuntimeEvidenceReportInput
-  extends Omit<ValidationReportBuildInput, "evidence">,
-    OperationLogEvidenceInput {
+  extends Omit<ValidationReportBuildInput, "evidence"> {
   readonly runtimeSnapshotIds?: readonly (RuntimeSnapshotId | string)[];
   readonly supplementalGuiEvidenceRefs?: readonly string[];
 }
@@ -23,9 +20,7 @@ export const buildRuntimeEvidenceReport = (
       ? {}
       : { runtimeSnapshotIds: input.runtimeSnapshotIds }
   );
-  const operationEvidence = createOperationLogEvidence(input);
   const evidence = ValidationReportEvidenceSchema.parse({
-    ...operationEvidence,
     runtimeSnapshotIds: runtimeEvidence.runtimeSnapshotIds,
     supplementalGuiEvidenceRefs: input.supplementalGuiEvidenceRefs ?? []
   });

@@ -136,10 +136,9 @@ describe("package file set serialization", () => {
     })).toThrow(/Duplicate package file path/);
   });
 
-  it("validates optional operation log and generated artifacts only as package text paths", () => {
+  it("validates generated artifacts only as package text paths", () => {
     const document = loadMinimalFixturePackageDocument();
     const fileSet = serializePackageDocumentToFileSet(document, {
-      operationLogText: "not json\n",
       generatedArtifacts: [
         {
           path: "runtime/snapshots/not-parsed.runtime-snapshot.json",
@@ -148,7 +147,6 @@ describe("package file set serialization", () => {
       ]
     });
 
-    expect(fileSet.some((entry) => entry.path === document.manifest.operationLog)).toBe(true);
     expect(parsePackageDocumentFromFileSet(fileSet)).toEqual(document);
   });
 

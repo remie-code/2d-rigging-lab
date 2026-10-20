@@ -64,7 +64,6 @@ describe("createDrawable operation handler", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.operationLogLength).toBe(1);
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
     expect(session.graph.parts[0]?.drawableIds).toEqual(["draw_body"]);
@@ -101,13 +100,6 @@ describe("createDrawable operation handler", () => {
       textureId: "tex_imported_body",
       partId: "part_root",
       sourceAssetId: "src_generated"
-    });
-    expect(outcome.logEntry?.payload).toMatchObject({
-      operationType: "createDrawable",
-      payload: {
-        textureId: "tex_imported_body",
-        partId: "part_root"
-      }
     });
   });
 

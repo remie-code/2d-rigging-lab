@@ -29,7 +29,7 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
   });
 
   it("dry-runs without touching the session, then commits a drawable with part position, order, deformer, mask and texture", () => {
-    const core = createOperationCore({ now: () => new Date("2026-10-20T00:00:00.000Z") });
+    const core = createOperationCore();
     const session = createRiggedSession(core);
     const intent = addIntent("draw_new", {
       displayName: "Neck shadow",
@@ -69,12 +69,8 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
       dimensions: { width: 4, height: 4, pixelFormat: "rgba8" }, contentInset: { left: 0, top: 0, right: 0, bottom: 0 } });
     expect(session.graph.rightsRecords.find((item) => item.assetId === "src_material_add_new")?.rightsStatus).toBe("needs_review");
     expect(session.graph.provenanceRecords.find((item) => item.provenanceId === "prov_material_add_new")?.transformHistory[0]).toBe("Synthetic shadow.");
-    // The operation log keeps the path and hash, never the bytes.
-    expect(commit.logEntry?.payload).toEqual({ operationType: "addDrawableFromImage", payload: {
-      image: { imagePath: IMAGE_PATH, rgbaSha256: fixture.image.descriptor.rgbaSha256, width: 4, height: 4,
-        contentInset: { left: 0, top: 0, right: 0, bottom: 0 } },
-      placement: fixture.placement, provenanceNote: "Synthetic shadow.", lockedTargetIds: [], intent } });
-    expect(JSON.stringify(commit.logEntry)).not.toMatch(/"0":\d+,"1":\d+/);
+    // The API result never carries the pixel bytes.
+    expect(JSON.stringify(commit.result)).not.toMatch(/"0":\d+,"1":\d+/);
   });
 
   it("puts the payload content inset on the texture entry", () => {
@@ -92,7 +88,7 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
     expect(session.graph.meshes[0]!.bounds).toEqual({ x: 11, y: 11, width: 4, height: 4 });
   });
 
-  it("rejects missing bytes and a registered digest that differs from the payload hash, without logging", () => {
+  it("rejects missing bytes and a registered digest that differs from the payload hash, without mutation", () => {
     const core = createOperationCore();
     const missing = createEmptySession();
     const missingSnapshot = structuredClone(missing);
@@ -111,7 +107,6 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
     const commit = core.commitOperation(mismatched, { ...request, dryRun: false });
     expect(commit.result.diagnostics.map((item) => item.checkId)).toEqual(["operation.addDrawableFromImage.imageDigestMismatch"]);
     expect(mismatched).toEqual(mismatchedSnapshot);
-    expect(core.operationLog.entries).toEqual([]);
   });
 
   it("derives distinct package IDs from distinct operation IDs and a payload-based ID when none is given", () => {
@@ -179,12 +174,10 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
       const request = replaceRequest("op_replace_a", "draw_a", ids, { dryRun: false, basePackageRevision: session.packageRevision });
       registerFor(session, request);
       const snapshot = structuredClone(session);
-      const logLength = core.operationLog.entries.length;
       const commit = core.commitOperation(session, request);
       expect(commit.result.status, name).toBe("rejected");
       expect(commit.result.diagnostics.map((item) => item.checkId), name).toEqual([checkId]);
       expect(session, name).toEqual(snapshot);
-      expect(core.operationLog.entries.length, name).toBe(logLength);
     }
   });
 
@@ -213,7 +206,7 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
     }
   });
 
-  it("rejects fully transparent registered bytes without logging", () => {
+  it("rejects fully transparent registered bytes without mutation", () => {
     const core = createOperationCore();
     const session = createEmptySession();
     const request = addRequest("op_transparent", addIntent("draw_x"), { dryRun: false });
@@ -223,10 +216,9 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
     const result = core.commitOperation(session, request).result;
     expect(result.diagnostics.map((item) => item.checkId)).toEqual(["operation.addDrawableFromImage.imageTransparent"]);
     expect(session).toEqual(snapshot);
-    expect(core.operationLog.entries).toEqual([]);
   });
 
-  it("rejects re-running the same operation ID as an ID collision without logging", () => {
+  it("rejects re-running the same operation ID as an ID collision without mutation", () => {
     const core = createOperationCore();
     const session = createEmptySession();
     const first = addRequest("op_reused", addIntent("draw_one"), { dryRun: false });
@@ -240,7 +232,6 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
     const reusedResult = core.commitOperation(session, reused).result;
     expect(reusedResult.diagnostics.map((item) => item.checkId)).toEqual(["operation.addDrawableFromImage.idCollision"]);
     expect(session).toEqual(snapshot);
-    expect(core.operationLog.entries).toHaveLength(1);
 
     // A derived operation ID repeats only for the same base revision, drawable and image.
     const anonymous = addRequest(undefined, addIntent("draw_three"), { dryRun: false, basePackageRevision: session.packageRevision });
@@ -251,7 +242,6 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
     const repeated = core.commitOperation(session, anonymous).result;
     expect(repeated.diagnostics.map((item) => item.checkId)).toEqual(["operation.addDrawableFromImage.idCollision"]);
     expect(session).toEqual(repeatedSnapshot);
-    expect(core.operationLog.entries).toHaveLength(2);
   });
 
   it("replaces A -> B -> A on one drawable with derived operation IDs", () => {
@@ -268,7 +258,6 @@ describe("addDrawableFromImage / replaceDrawableImage operations", () => {
       expect(session.graph.drawables.find((item) => item.drawableId === "draw_a")!.textureId)
         .toBe(`tex_material_replace_drawable_image_a_r${request.basePackageRevision}_${image.descriptor.rgbaSha256.slice(0, 16)}`);
     }
-    expect(core.operationLog.entries).toHaveLength(5);
   });
 });
 

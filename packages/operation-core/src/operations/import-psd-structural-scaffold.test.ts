@@ -43,9 +43,7 @@ describe("importPsdStructuralScaffold operation handler", () => {
 
   it("creates group part containers and materializes leaves under generated parents", () => {
     const session = createFixtureSession();
-    const outcome = createOperationCore({
-      now: () => new Date("2026-06-07T00:00:00.000Z")
-    }).commitOperation(session, createStructuralRequest());
+    const outcome = createOperationCore().commitOperation(session, createStructuralRequest());
 
     expect(outcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(1);
@@ -183,9 +181,7 @@ describe("importPsdStructuralScaffold operation handler", () => {
       plannedLeafScaffolds: [createParentHiddenVisibleLeafScaffold("previewReady")],
       approvedLeafScaffolds: [createParentHiddenVisibleLeafScaffold("approved")]
     });
-    const outcome = createOperationCore({
-      now: () => new Date("2026-06-07T00:00:00.000Z")
-    }).commitOperation(session, request);
+    const outcome = createOperationCore().commitOperation(session, request);
 
     expect(outcome.result.status).toBe("committed");
     expect(getDrawableById(session.graph, DrawableIdSchema.parse("draw_parent_hidden_child"))).toMatchObject({
@@ -254,9 +250,7 @@ describe("importPsdStructuralScaffold operation handler", () => {
       statusReasons: []
     } as const;
 
-    const outcome = createOperationCore({
-      now: () => new Date("2026-06-07T00:00:00.000Z")
-    }).commitOperation(
+    const outcome = createOperationCore().commitOperation(
       session,
       createStructuralRequest({
         plannedGroupPartScaffolds: [hiddenParentGroupPreview],

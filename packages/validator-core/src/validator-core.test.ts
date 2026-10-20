@@ -44,7 +44,7 @@ describe("validator-core foundation", () => {
     expect(catalog.has("runtime.drawListEmpty")).toBe(true);
     expect(catalog.has("dynamics.driverMissing")).toBe(true);
     expect(catalog.has("dynamics.runtimeEvidenceMismatch")).toBe(true);
-    expect(catalog.list("acceptance").map((definition) => definition.checkId)).toContain("evidence.guiOperationLogMissing");
+    expect(catalog.list("acceptance").map((definition) => definition.checkId)).toContain("tutorial.requiredPartMissing");
   });
 
   it("summarizes empty checks as pass", () => {
@@ -178,7 +178,6 @@ const createMinimalPackageDocument = () => ({
       drawOrder: "model/draw-order.json"
     },
     assetIndex: "assets/sources/source-manifest.json",
-    operationLog: "operations/log.jsonl",
     rightsSummary: {
       status: "cleared"
     },

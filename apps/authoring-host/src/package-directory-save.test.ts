@@ -23,7 +23,7 @@ describe("package save", () => {
     drawable.displayName = "Changed before a failing save";
 
     await expect(saveAuthoringPackageDirectory({ packageDirectory: f.packageDirectory, session: loaded.session, baseDocument: loaded.packageDocument,
-      workspaceMetadata: loaded.workspaceMetadata, updatedAt: "2026-10-20T00:00:00.000Z", operationLogText: "" })).rejects.toThrow("Cannot save binary asset");
+      workspaceMetadata: loaded.workspaceMetadata, updatedAt: "2026-10-20T00:00:00.000Z" })).rejects.toThrow("Cannot save binary asset");
     expect(await snapshotDirectory(f.packageDirectory)).toEqual(before);
   }, 60_000);
 });

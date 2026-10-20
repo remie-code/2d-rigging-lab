@@ -39,20 +39,16 @@ import type {
 import {
   createOperationCore,
   OperationEvidenceResultSchema,
-  OperationRequestSchema,
-  parseOperationLogEntriesFromJsonl,
-  serializeOperationLogEntriesToJsonl
+  OperationRequestSchema
 } from "./index.js";
 import type {
   OperationEvidenceProviderInput,
   OperationEvidenceResultDto,
-  OperationLogEntryDto,
   OperationResultDto
 } from "./index.js";
 
 const FIXTURE_ID = "rig-control-keyform-angle-operation";
 const PACKAGE_HASH = "sha256:rig-control-keyform-angle-operation-v1";
-const CREATED_AT = "2026-06-01T00:00:00.000Z";
 const UPDATED_AT = "2026-06-01T00:01:00.000Z";
 const KEYFORM_SET_ID = KeyformSetIdSchema.parse(
   "keyset_rigcontrol_rig_body_rotation_angledegrees_face_yaw_1"
@@ -126,23 +122,19 @@ describe("rig-control-keyform-angle-operation contract fixture", () => {
     );
   });
 
-  it("commits, logs, and materializes rigControl angle keyform evidence", () => {
+  it("commits and materializes rigControl angle keyform evidence", () => {
     const baseDocument = loadBaselinePackageDocument();
     const session = createAuthoringSessionFromPackageDocument(baseDocument);
     const capturedEvidence: RuntimeEvidenceArtifactsResult[] = [];
     const core = createOperationCore({
-      now: () => new Date(CREATED_AT),
       evidenceProvider: collectRigControlKeyformEvidence(capturedEvidence)
     });
 
     const outcome = core.commitOperation(session, loadFixtureJson("request/add-angle-keyform-commit.request.json"));
     const evidence = expectSingleRuntimeEvidence(capturedEvidence);
-    const operationLogText = serializeOperationLogEntriesToJsonl(core.operationLog.entries);
-    const parsedLogEntries = parseOperationLogEntriesFromJsonl(operationLogText);
     const savedDocument = toPackageDocument(session, baseDocument, { updatedAt: UPDATED_AT });
     const generatedArtifacts = toPackageFileEntries(evidence.artifacts);
     const fileSet = serializePackageDocumentToFileSet(savedDocument, {
-      operationLogText,
       generatedArtifacts
     });
     const reloadedDocument = parsePackageDocumentFromFileSet(fileSet);
@@ -150,8 +142,6 @@ describe("rig-control-keyform-angle-operation contract fixture", () => {
     expect(summarizePackageMaterialization({
       outcome,
       session,
-      operationLogText,
-      parsedLogEntries,
       savedDocument,
       reloadedDocument,
       fileSet,
@@ -169,7 +159,7 @@ describe("rig-control-keyform-angle-operation contract fixture", () => {
         const core = createOperationCore();
         const outcome = core.commitOperation(session, loadFixtureJson(requestPath));
 
-        return summarizeRejectedOutcome(requestPath, outcome.result, session, core.operationLog.entries.length);
+        return summarizeRejectedOutcome(requestPath, outcome.result, session);
       })
     ).toEqual(loadFixtureJson("expected/negative-diagnostics-summary.json"));
   });
@@ -257,18 +247,11 @@ const summarizeDryRunResult = (
 const summarizePackageMaterialization = (input: {
   readonly outcome: ReturnType<ReturnType<typeof createOperationCore>["commitOperation"]>;
   readonly session: AuthoringSession;
-  readonly operationLogText: string;
-  readonly parsedLogEntries: readonly OperationLogEntryDto[];
   readonly savedDocument: PackageDocumentDto;
   readonly reloadedDocument: PackageDocumentDto;
   readonly fileSet: readonly PackageTextFileEntry[];
   readonly runtimeArtifacts: readonly RuntimeEvidenceArtifact[];
 }) => {
-  const logEntry = input.outcome.logEntry;
-  if (logEntry === undefined) {
-    throw new Error("Committed rig control keyform fixture requires an operation log entry.");
-  }
-
   const keyformSet = getKeyformSetById(input.session.graph, KEYFORM_SET_ID);
   const materializedKeyforms = readPackageFile(input.fileSet, "model/keyforms.json") as {
     readonly keyformSets: readonly KeyformSetDto[];
@@ -278,33 +261,15 @@ const summarizePackageMaterialization = (input: {
     schemaVersion: "rig-control-keyform-angle-package-materialization-summary-v1",
     operationId: input.outcome.result.operationId,
     status: input.outcome.result.status,
-    operationLogLength: input.parsedLogEntries.length,
     packageRevisionAfter: input.session.packageRevision,
     authoringRevisionAfter: input.session.authoringRevision,
     committedKeyformSet: summarizeKeyformSet(expectKeyformSet(keyformSet)),
     modelDiff: summarizeModelDiff(input.outcome.result.modelDiff),
-    logEntry: {
-      operationType: logEntry.operationType,
-      targetIds: logEntry.targetIds,
-      checkedTargetRefs: logEntry.precondition.checkedTargetRefs.map(toTargetRefKey),
-      payloadTarget: logEntry.payload.operationType === "addKeyform"
-        ? {
-            ...logEntry.payload.payload.target,
-            targetProperty: logEntry.payload.payload.targetProperty
-          }
-        : undefined,
-      resultRuntimeDiff: summarizeRuntimeDiff(logEntry.result.runtimeDiff),
-      runtimeSnapshotIds: logEntry.runtimeSnapshotIds,
-      validationReportIds: logEntry.validationReportIds
-    },
     materializedPackage: {
       packageRevision: input.savedDocument.manifest.packageRevision,
       updatedAt: input.savedDocument.manifest.updatedAt,
       reloadedPackageRevision: input.reloadedDocument.manifest.packageRevision,
       keyformsFilePath: input.savedDocument.manifest.modelFiles.keyforms,
-      operationLogPath: input.savedDocument.manifest.operationLog,
-      operationLogTrailingNewline: input.operationLogText.endsWith("\n"),
-      operationLogEntryPresent: input.fileSet.some((entry) => entry.path === input.savedDocument.manifest.operationLog),
       fileSetEntryCount: input.fileSet.length,
       generatedArtifactPaths: input.runtimeArtifacts.map((artifact) => artifact.path),
       materializedKeyformSet: summarizeKeyformSet(expectKeyformSet(materializedKeyforms.keyformSets[0])),
@@ -316,14 +281,12 @@ const summarizePackageMaterialization = (input: {
 const summarizeRejectedOutcome = (
   requestPath: string,
   result: OperationResultDto,
-  session: AuthoringSession,
-  operationLogLength: number
+  session: AuthoringSession
 ) => ({
   requestPath,
   status: result.status,
   preconditionOk: result.precondition.ok,
   diagnostics: result.diagnostics.map(summarizeDiagnostic),
-  operationLogLength,
   packageRevisionAfter: session.packageRevision,
   authoringRevisionAfter: session.authoringRevision,
   keyformSetCountAfter: session.graph.keyformSets.length

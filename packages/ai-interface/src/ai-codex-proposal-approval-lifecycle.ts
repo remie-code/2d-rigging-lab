@@ -387,12 +387,6 @@ export const commitApprovedCodexProposal = async (
     nextBasePackageRevision += 1;
   }
 
-  const operationLogEvidenceRefs = operationResults.map((operationResult) =>
-    createOperationLogEvidenceRef({
-      proposal: parsed.proposal,
-      operationId: operationResult.result.operationId
-    })
-  );
   const committedEvidence = createCommitResultEvidenceRef({
     proposal: parsed.proposal,
     approvalRequestId,
@@ -407,8 +401,7 @@ export const commitApprovedCodexProposal = async (
     summary: `Codex proposal ${parsed.proposal.proposalId} committed ${operationResults.length} approved operation(s).`,
     evidenceRefs: [
       approvalDecisionEvidence,
-      committedEvidence,
-      ...operationLogEvidenceRefs
+      committedEvidence
     ]
   });
 
@@ -669,26 +662,6 @@ const createCommitResultEvidenceRef = (input: {
     target: createPackageTarget(input.proposal),
     summary: `Commit result for Codex proposal ${input.proposal.proposalId}: ${input.commitStatus}.`,
     producer: "aiInterface"
-  });
-
-const createOperationLogEvidenceRef = (input: {
-  readonly proposal: CodexRiggingEditProposalDto;
-  readonly operationId: string;
-}): CodexProposalEvidenceRefDto =>
-  CodexProposalEvidenceRefDtoSchema.parse({
-    evidenceId: `evidence_${sanitizeToken(input.proposal.proposalId)}_${sanitizeToken(input.operationId)}_operationLog`,
-    evidenceKind: "operationLog",
-    artifactRef: {
-      artifactKind: "operationLog",
-      path: "operations/log.jsonl",
-      operationId: input.operationId
-    },
-    target: {
-      kind: "operation",
-      id: input.operationId
-    },
-    summary: `Operation log entry for proposal operation ${input.operationId}.`,
-    producer: "operationCore"
   });
 
 const createCommitOperationRequest = (input: {

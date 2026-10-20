@@ -13,8 +13,6 @@ import type {
   AuthoringWorkspaceBinaryRegistrationTarget,
   AuthoringWorkspaceTextFileEntry
 } from "@private-2d-rigging-lab/authoring-core";
-import { parseOperationLogEntriesFromJsonl } from "@private-2d-rigging-lab/operation-core";
-import type { OperationLogEntryDto } from "@private-2d-rigging-lab/operation-core";
 import type {
   PackageBinaryFileEntry,
   PackageDocumentDto,
@@ -25,7 +23,6 @@ export interface LoadedAuthoringPackage {
   readonly session: AuthoringSession;
   readonly packageDocument: PackageDocumentDto;
   readonly workspaceMetadata: WorkspaceMetadataDto;
-  readonly operationLogEntries: readonly OperationLogEntryDto[];
 }
 
 export class PackageDirectoryIoError extends Error {
@@ -64,16 +61,10 @@ export const loadAuthoringPackageDirectory = async (
     binaryEntries
   });
 
-  const operationLogText = await readOperationLogText(
-    packageDirectory,
-    opened.packageDocument.manifest.operationLog
-  );
-
   return {
     session: opened.session,
     packageDocument: opened.packageDocument,
-    workspaceMetadata: opened.workspaceMetadata,
-    operationLogEntries: parseOperationLogEntriesFromJsonl(operationLogText)
+    workspaceMetadata: opened.workspaceMetadata
   };
 };
 
@@ -83,7 +74,6 @@ export interface SaveAuthoringPackageDirectoryInput {
   readonly baseDocument: PackageDocumentDto;
   readonly workspaceMetadata: WorkspaceMetadataDto;
   readonly updatedAt: string;
-  readonly operationLogText: string;
 }
 
 export interface SaveAuthoringPackageDirectoryResult {
@@ -94,8 +84,9 @@ export interface SaveAuthoringPackageDirectoryResult {
 
 /**
  * Serializes an AuthoringSession back to the package directory: the workspace text
- * file set (workspace metadata + manifest + model/asset JSON), the operation-log
- * JSONL, and any binary texture bytes whose on-disk copies are missing or stale.
+ * file set (workspace metadata + manifest + model/asset JSON) and any binary texture
+ * bytes whose on-disk copies are missing or stale. Files the package format does not
+ * describe are left untouched.
  */
 export const saveAuthoringPackageDirectory = async (
   input: SaveAuthoringPackageDirectoryInput
@@ -113,10 +104,7 @@ export const saveAuthoringPackageDirectory = async (
     existingWorkspaceBinaryFileEntries: existingBinaryFileEntries
   });
 
-  const textEntries = [
-    ...savePlan.workspaceTextFileSet,
-    { path: packageDocument.manifest.operationLog, text: input.operationLogText }
-  ];
+  const textEntries = savePlan.workspaceTextFileSet;
 
   // JSON is written before binaries. Refuse before writing anything when a referenced binary cannot be saved,
   // so a save never leaves JSON that points at a texture missing on disk.
@@ -242,23 +230,6 @@ const readExistingWorkspaceBinaryFileEntries = async (
   }
 
   return existingEntries;
-};
-
-const readOperationLogText = async (
-  packageDirectory: string,
-  operationLogRelativePath: string
-): Promise<string> => {
-  const absolutePath = join(packageDirectory, toNativePath(operationLogRelativePath));
-
-  try {
-    return await readFile(absolutePath, "utf8");
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error &&
-      (error as { readonly code?: string }).code === "ENOENT") {
-      return "";
-    }
-    throw error;
-  }
 };
 
 const tryReadBinaryFile = async (

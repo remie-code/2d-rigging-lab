@@ -28,9 +28,7 @@ import { PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE } from "../psd-layer-materializa
 describe("importPsdLayerMaterialization operation handler", () => {
   it("connects selected PSD layer materialization to an existing part, texture, and drawable", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-05T01:00:00.000Z")
-    });
+    const core = createOperationCore();
     const request = createImportMaterializationRequest({
       dryRun: false,
       destinationPart: {
@@ -159,7 +157,7 @@ describe("importPsdLayerMaterialization operation handler", () => {
         rendererPixelOracleClaim: "none"
       }
     });
-    expect(outcome.logEntry?.result.psdLayerMaterializationEvidence).toEqual(
+    expect(outcome.result.psdLayerMaterializationEvidence).toEqual(
       outcome.result.psdLayerMaterializationEvidence
     );
     expect(JSON.stringify(outcome.result.psdLayerMaterializationEvidence)).not.toContain("rawRgba");

@@ -8,8 +8,6 @@ import {
   applyTutorialMiniModelRecipe,
   createOperationCore,
   createTutorialMiniModelOperationRequests,
-  parseOperationLogEntriesFromJsonl,
-  serializeOperationLogEntriesToJsonl,
   TUTORIAL_MINI_MODEL_RECIPE_ID
 } from "./index.js";
 import {
@@ -101,28 +99,22 @@ describe("wave30 tutorial mini model recipe foundation", () => {
     expect(seed.session.packageRevision).toBe(0);
     expect(seed.session.authoringRevision).toBe(0);
     expect(seed.session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
 
     const commitOutcome = core.commitOperation(seed.session, firstRequest);
 
     expect(commitOutcome.result.status).toBe("committed");
     expect(seed.session.packageRevision).toBe(1);
     expect(seed.session.authoringRevision).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
   });
 
   it("commits the rights-clean tutorial recipe and materializes auditable package evidence", () => {
     const result = applyTutorialMiniModelRecipe();
     const document = PackageDocumentSchema.parse(result.materializedPackage);
-    const operationLogText = serializeOperationLogEntriesToJsonl(result.operationLogEntries);
-    const parsedLogEntries = parseOperationLogEntriesFromJsonl(operationLogText);
-    const fileSet = serializePackageDocumentToFileSet(document, { operationLogText });
+    const fileSet = serializePackageDocumentToFileSet(document);
 
     expect(result.recipeId).toBe(TUTORIAL_MINI_MODEL_RECIPE_ID);
     expect(result.appliedOperations).toHaveLength(result.operationRequests.length);
-    expect(result.operationLogEntries).toHaveLength(result.operationRequests.length);
     expect(result.session.packageRevision).toBe(result.operationRequests.length);
-    expect(parsedLogEntries).toEqual(result.operationLogEntries);
     expect(fileSet.map((entry) => entry.path)).toEqual(expect.arrayContaining([
       "manifest.json",
       "model/graph.json",
@@ -132,14 +124,12 @@ describe("wave30 tutorial mini model recipe foundation", () => {
       "model/rig-controls.json",
       "model/dynamics.json",
       "model/masks.json",
-      "assets/textures/texture-atlas.json",
-      "operations/log.jsonl"
+      "assets/textures/texture-atlas.json"
     ]));
     expect(summarizeOperationAudit(result.appliedOperations)).toEqual({
       schemaVersion: "wave30-tutorial-mini-model-operation-audit-v1",
       operationCount: 36,
       rejectedOperationCount: 0,
-      finalOperationLogLength: 36,
       operationIdsMatchModelDiff: true,
       changedTargetKinds: expect.arrayContaining([
         "drawable",
@@ -254,7 +244,6 @@ const summarizeOperationAudit = (appliedOperations: readonly AppliedOperation[])
     rejectedOperationCount: appliedOperations.filter(
       ({ outcome }) => outcome.result.status !== "committed"
     ).length,
-    finalOperationLogLength: appliedOperations.at(-1)?.outcome.operationLogLength ?? 0,
     operationIdsMatchModelDiff: appliedOperations.every(({ outcome }) =>
       outcome.result.modelDiff?.operationIds.includes(outcome.result.operationId) === true
     ),

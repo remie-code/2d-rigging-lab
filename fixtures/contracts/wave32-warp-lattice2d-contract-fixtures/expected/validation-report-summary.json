@@ -14,7 +14,5 @@
     "snap_wave32_warp_lattice2d_contract_20",
     "snap_wave32_warp_lattice2d_contract_21"
   ],
-  "viewerEvidenceSnapshotId": null,
-  "operationLogPresent": true,
-  "operationLogPath": "operations/log.jsonl"
+  "viewerEvidenceSnapshotId": null
 }

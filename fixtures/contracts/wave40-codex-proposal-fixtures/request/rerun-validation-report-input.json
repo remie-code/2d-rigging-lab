@@ -11,8 +11,6 @@
     "SC-AGENT-002"
   ],
   "evidence": {
-    "operationLogPresent": true,
-    "operationLogPath": "operations/log.jsonl",
     "runtimeSnapshotIds": [],
     "supplementalGuiEvidenceRefs": []
   },

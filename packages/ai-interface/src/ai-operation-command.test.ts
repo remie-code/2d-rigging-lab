@@ -1,10 +1,8 @@
 import type {
-  OperationLogEntryDto,
   OperationRequestDto,
   OperationResultDto
 } from "@private-2d-rigging-lab/operation-core";
 import {
-  OperationLogEntrySchema,
   OperationRequestSchema,
   OperationResultSchema
 } from "@private-2d-rigging-lab/operation-core";
@@ -23,7 +21,6 @@ const agentId = "agent_test";
 class FakeOperationCommandHost implements AiOperationCommandHost {
   readonly dryRunCalls: OperationRequestDto[] = [];
   readonly commitCalls: OperationRequestDto[] = [];
-  readonly operationLogEntries: OperationLogEntryDto[] = [];
 
   dryRunOperation(request: OperationRequestDto): OperationResultDto {
     this.dryRunCalls.push(request);
@@ -33,10 +30,7 @@ class FakeOperationCommandHost implements AiOperationCommandHost {
 
   commitOperation(request: OperationRequestDto): OperationResultDto {
     this.commitCalls.push(request);
-    const result = createOperationResult("committed", request);
-    this.operationLogEntries.push(createOperationLogEntry(request, result));
-
-    return result;
+    return createOperationResult("committed", request);
   }
 }
 
@@ -100,7 +94,7 @@ describe("AI operation command executor", () => {
     expect(host.commitCalls).toHaveLength(0);
   });
 
-  it("runs dry-run with dryRunEdit and leaves the fake operation log unchanged", async () => {
+  it("runs dry-run with dryRunEdit without committing through the host", async () => {
     const host = new FakeOperationCommandHost();
     const executor = createExecutor(host);
 
@@ -119,7 +113,6 @@ describe("AI operation command executor", () => {
     });
     expect(host.dryRunCalls).toHaveLength(1);
     expect(host.commitCalls).toHaveLength(0);
-    expect(host.operationLogEntries).toHaveLength(0);
   });
 
   it("denies commit without commitWithApproval capability", async () => {
@@ -184,7 +177,6 @@ describe("AI operation command executor", () => {
       }
     });
     expect(host.commitCalls).toHaveLength(1);
-    expect(host.operationLogEntries).toHaveLength(1);
   });
 
   it("rejects approved commit when the commit operation omits the approved operation ID", async () => {
@@ -363,10 +355,7 @@ describe("AI operation command executor", () => {
         },
         status: "ok",
         operationId,
-        evidenceRefs: [
-          "runtime/snapshots/snap_ai_preview.runtime-snapshot.json",
-          `operations/log.jsonl#${operationId}`
-        ]
+        evidenceRefs: ["runtime/snapshots/snap_ai_preview.runtime-snapshot.json"]
       })
     ]);
   });
@@ -485,37 +474,5 @@ const createOperationResult = (
       operationIds: [request.operationId ?? operationId]
     },
     generatedRuntimeSnapshotIds: ["snap_ai_preview"],
-    reversible: true
-  });
-
-const createOperationLogEntry = (
-  request: OperationRequestDto,
-  result: OperationResultDto
-): OperationLogEntryDto =>
-  OperationLogEntrySchema.parse({
-    schemaVersion: "operation-log-entry-v1",
-    operationId: result.operationId,
-    transactionId: "txn_create_ai_parameter",
-    timestamp: "2026-05-29T00:00:00.000Z",
-    actor: request.actor,
-    surface: request.surface,
-    operationType: request.operationType,
-    targetIds: ["param_ai_parameter"],
-    precondition: {
-      ok: true,
-      diagnostics: [],
-      checkedTargetRefs: [
-        {
-          kind: "parameter",
-          id: "param_ai_parameter"
-        }
-      ]
-    },
-    payload: {
-      operationType: request.operationType,
-      payload: request.payload
-    },
-    result,
-    provenanceId: "prov_ai_command",
     reversible: true
   });
