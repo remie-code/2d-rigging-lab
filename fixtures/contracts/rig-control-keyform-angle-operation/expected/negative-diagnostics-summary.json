@@ -10,7 +10,6 @@
         "message": "Keyform target does not exist: rigControl:rig_missing_rotation"
       }
     ],
-    "operationLogLength": 0,
     "packageRevisionAfter": 0,
     "authoringRevisionAfter": 0,
     "keyformSetCountAfter": 0
@@ -26,7 +25,6 @@
         "message": "Keyform target property is not supported: rigControl.opacity"
       }
     ],
-    "operationLogLength": 0,
     "packageRevisionAfter": 0,
     "authoringRevisionAfter": 0,
     "keyformSetCountAfter": 0

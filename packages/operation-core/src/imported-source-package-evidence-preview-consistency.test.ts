@@ -22,15 +22,12 @@ import { describe, expect, it } from "vitest";
 import {
   createOperationCore,
   OperationEvidenceResultSchema,
-  OperationRequestSchema,
-  parseOperationLogEntriesFromJsonl,
-  serializeOperationLogEntriesToJsonl
+  OperationRequestSchema
 } from "./index.js";
 import type {
   CommitOperationOutcome,
   OperationEvidenceProviderInput,
-  OperationEvidenceResultDto,
-  OperationLogEntryDto
+  OperationEvidenceResultDto
 } from "./index.js";
 import {
   PackageDocumentSchema,
@@ -58,7 +55,6 @@ import type {
 import {
   buildRuntimeEvidenceReport,
   buildValidationDiff,
-  CANONICAL_OPERATION_LOG_PATH,
   materializeValidationReportArtifact,
   validatePackageRuntime,
   ValidationReportSchema
@@ -115,12 +111,11 @@ describe("imported source package evidence and preview consistency fixture", () 
     });
   });
 
-  it("keeps imported source evidence observable through operation log, package file set, and SVG preview semantics", () => {
+  it("keeps imported source evidence observable through operation results, package file set, and SVG preview semantics", () => {
     const baseDocument = loadBaselinePackageDocument();
     const session = createAuthoringSessionFromPackageDocument(baseDocument);
     const capturedEvidence: ImportedSourceOperationEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date("2026-05-30T02:00:00.000Z"),
       evidenceProvider: (input) => collectImportedSourceEvidence(input, capturedEvidence)
     });
 
@@ -136,14 +131,11 @@ describe("imported source package evidence and preview consistency fixture", () 
       session,
       loadFixtureJson("request/generate-mesh-commit.request.json")
     );
-    const operationLogText = serializeOperationLogEntriesToJsonl(core.operationLog.entries);
-    const parsedLogEntries = parseOperationLogEntriesFromJsonl(operationLogText);
     const savedDocument = toPackageDocument(session, baseDocument, {
       updatedAt: "2026-05-30T02:30:00.000Z"
     });
     const generatedArtifacts = toUniquePackageFileEntries(capturedEvidence);
     const fileSet = serializePackageDocumentToFileSet(savedDocument, {
-      operationLogText,
       generatedArtifacts
     });
     const reloadedDocument = parsePackageDocumentFromFileSet(fileSet);
@@ -158,15 +150,13 @@ describe("imported source package evidence and preview consistency fixture", () 
     expect(generateOutcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(3);
     expect(capturedEvidence).toHaveLength(3);
-    expect(parsedLogEntries).toEqual(core.operationLog.entries);
     expect(PackageDocumentSchema.parse(reloadedDocument)).toEqual(reloadedDocument);
     expect(savedDocument.assets.textureAtlas).toEqual(baseDocument.assets.textureAtlas);
     expect(fileSet.map((entry) => entry.path)).toEqual(expect.arrayContaining([
       baseDocument.manifest.assetIndex,
       PACKAGE_TEXTURE_ATLAS_PATH,
       PACKAGE_PROVENANCE_PATH,
-      PACKAGE_RIGHTS_PATH,
-      CANONICAL_OPERATION_LOG_PATH
+      PACKAGE_RIGHTS_PATH
     ]));
     assertTexturePreviewMissingDiagnostic(finalValidationReport);
 
@@ -183,7 +173,6 @@ describe("imported source package evidence and preview consistency fixture", () 
 
     expect(summarizeImportedSourcePackageEvidence({
       outcomes: [importOutcome, createOutcome, generateOutcome],
-      logEntries: core.operationLog.entries,
       evidence: capturedEvidence,
       document: reloadedDocument,
       fileSet,
@@ -223,14 +212,11 @@ interface OperationEvidenceSummary {
   readonly operationType: string;
   readonly operationId: string;
   readonly resultStatus: string;
-  readonly targetIds: readonly string[];
   readonly modelDiffPaths: readonly string[];
   readonly sourceState: SourceStateSummary;
   readonly operationEvidence: {
     readonly generatedRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
     readonly generatedValidationReportIds: readonly ValidationReportId[];
-    readonly logEntryRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
-    readonly logEntryValidationReportIds: readonly ValidationReportId[];
     readonly validationDiff: {
       readonly beforeReportId: ValidationReportId;
       readonly afterReportId: ValidationReportId;
@@ -277,8 +263,6 @@ interface SourceStateSummary {
 interface PackageFileSetEvidenceSummary {
   readonly entryCount: number;
   readonly authoredPaths: readonly string[];
-  readonly operationLogPath: string;
-  readonly operationLogTypes: readonly string[];
   readonly generatedArtifactPaths: readonly string[];
   readonly sourceManifest: {
     readonly sourceAssetIds: readonly string[];
@@ -390,8 +374,6 @@ const collectImportedSourceEvidence = (
     packageId: runtimeEvidence.candidateSnapshot.packageId,
     packageRevision: runtimeEvidence.candidateSnapshot.packageRevision,
     packageHash,
-    operationLogPresent: true,
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
     runtimeSnapshotIds: runtimeEvidence.generatedRuntimeSnapshotIds
   });
   const validationDiff = buildValidationDiff({
@@ -431,7 +413,6 @@ const collectImportedSourceEvidence = (
 
 const summarizeImportedSourcePackageEvidence = (input: {
   readonly outcomes: readonly CommitOperationOutcome[];
-  readonly logEntries: readonly OperationLogEntryDto[];
   readonly evidence: readonly ImportedSourceOperationEvidenceArtifacts[];
   readonly document: PackageDocumentDto;
   readonly fileSet: readonly PackageTextFileEntry[];
@@ -441,13 +422,12 @@ const summarizeImportedSourcePackageEvidence = (input: {
   schemaVersion: "imported-source-package-evidence-preview-consistency-summary-v1",
   operations: input.evidence.map((evidence, index) => {
     const outcome = input.outcomes[index];
-    const logEntry = input.logEntries[index];
 
-    if (outcome === undefined || logEntry === undefined) {
+    if (outcome === undefined) {
       throw new Error(`Missing imported source operation evidence at index ${index}.`);
     }
 
-    return summarizeOperationEvidence(outcome, logEntry, evidence);
+    return summarizeOperationEvidence(outcome, evidence);
   }),
   packageFileSet: summarizePackageFileSet(input),
   runtimePreviewConsistency: {
@@ -471,13 +451,11 @@ const summarizeImportedSourcePackageEvidence = (input: {
 
 const summarizeOperationEvidence = (
   outcome: CommitOperationOutcome,
-  logEntry: OperationLogEntryDto,
   evidence: ImportedSourceOperationEvidenceArtifacts
 ): OperationEvidenceSummary => ({
   operationType: evidence.operationType,
   operationId: outcome.result.operationId,
   resultStatus: outcome.result.status,
-  targetIds: logEntry.targetIds,
   modelDiffPaths: outcome.result.modelDiff?.changed.flatMap((change) =>
     change.fields.map((field) => field.path)
   ) ?? [],
@@ -485,8 +463,6 @@ const summarizeOperationEvidence = (
   operationEvidence: {
     generatedRuntimeSnapshotIds: outcome.result.generatedRuntimeSnapshotIds,
     generatedValidationReportIds: outcome.result.generatedValidationReportIds,
-    logEntryRuntimeSnapshotIds: logEntry.runtimeSnapshotIds,
-    logEntryValidationReportIds: logEntry.validationReportIds,
     validationDiff: {
       beforeReportId: evidence.validationDiff.beforeReportId,
       afterReportId: evidence.validationDiff.afterReportId,
@@ -543,7 +519,6 @@ const summarizeProvenanceByAsset = (
     });
 
 const summarizePackageFileSet = (input: {
-  readonly logEntries: readonly OperationLogEntryDto[];
   readonly document: PackageDocumentDto;
   readonly fileSet: readonly PackageTextFileEntry[];
   readonly generatedArtifacts: readonly PackageTextFileEntry[];
@@ -556,9 +531,7 @@ const summarizePackageFileSet = (input: {
     entryCount: input.fileSet.length,
     authoredPaths: input.fileSet
       .map((entry) => entry.path)
-      .filter((path) => !generatedPaths.has(path) && path !== CANONICAL_OPERATION_LOG_PATH),
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
-    operationLogTypes: input.logEntries.map((entry) => entry.operationType),
+      .filter((path) => !generatedPaths.has(path)),
     generatedArtifactPaths: input.generatedArtifacts.map((entry) => entry.path),
     sourceManifest: {
       sourceAssetIds: sourceAssets.map((sourceAsset) => sourceAsset.sourceAssetId),

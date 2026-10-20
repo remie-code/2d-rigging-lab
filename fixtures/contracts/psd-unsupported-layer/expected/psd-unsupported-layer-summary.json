@@ -6,11 +6,6 @@
       "operationType": "importPsdSourceAsset",
       "operationId": "op_import_psd_unsupported_layer",
       "resultStatus": "committed",
-      "targetIds": [
-        "src_psd_unsupported_layer",
-        "group_reference",
-        "layer_smart_reference"
-      ],
       "diagnosticCheckIds": [
         "operation.importPsdSourceAsset.unsupportedFeature",
         "operation.importPsdSourceAsset.unsupportedFeature"

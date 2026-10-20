@@ -27,9 +27,7 @@ import { PSD_SELECTED_LAYER_RAW_RGBA_MEDIA_TYPE } from "../psd-layer-materializa
 describe("importPsdLayerMaterializationBatch operation handler", () => {
   it("connects multiple selected PSD layer materializations to generated part scaffold", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-06T00:00:00.000Z")
-    });
+    const core = createOperationCore();
     const request = createBatchRequest({
       entries: [
         createMaterializationEvidence(FACE_LAYER),
@@ -139,7 +137,7 @@ describe("importPsdLayerMaterializationBatch operation handler", () => {
         materializedLayerBytePersistence: "binaryAssetRefOnlyNoInlineBytes"
       }
     });
-    expect(outcome.logEntry?.result.psdLayerMaterializationBatchEvidence).toEqual(
+    expect(outcome.result.psdLayerMaterializationBatchEvidence).toEqual(
       outcome.result.psdLayerMaterializationBatchEvidence
     );
     expect(JSON.stringify(outcome.result.psdLayerMaterializationBatchEvidence)).not.toContain("rawRgba");

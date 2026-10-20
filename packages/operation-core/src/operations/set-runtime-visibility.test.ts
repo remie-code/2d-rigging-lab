@@ -73,7 +73,6 @@ describe("setRuntimeVisibility operation handler", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.operationLogLength).toBe(1);
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
     expect(session.graph.drawables[0]?.runtimeVisibility).toBe(false);

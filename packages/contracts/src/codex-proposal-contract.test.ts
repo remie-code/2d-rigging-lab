@@ -487,12 +487,11 @@ const createApprovalResponse = () => ({
       evidenceId: "evidence_commitResult",
       evidenceKind: "commitResult",
       artifactRef: {
-        artifactKind: "operationLog",
-        path: "operations/log.jsonl",
-        operationId: "op_createCodexParameter"
+        artifactKind: "approvalEvidence",
+        path: "generated/codex-proposals/wave40.approval-evidence.json"
       },
-      summary: "Operation log contains the committed proposal operation.",
-      producer: "operationCore"
+      summary: "The committed proposal operation was recorded with the approval evidence.",
+      producer: "aiInterface"
     }
   ]
 } as const);

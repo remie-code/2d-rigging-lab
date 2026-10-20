@@ -27,7 +27,7 @@
 |---|---|
 | `contracts` | モデルのデータ構造と各種スキーマ |
 | `package-format` | モデルパッケージ（保存形式）の読み書き |
-| `operation-core` | 編集操作と操作ログ |
+| `operation-core` | 編集操作（dry-run と commit） |
 | `authoring-core` | メッシュ自動生成などの制作処理 |
 | `runtime-core` | パラメータからモデルの変形を評価するランタイム |
 | `render-core` / `render-webgl2` / `render-software` | 描画（WebGL2 とソフトウェア描画） |

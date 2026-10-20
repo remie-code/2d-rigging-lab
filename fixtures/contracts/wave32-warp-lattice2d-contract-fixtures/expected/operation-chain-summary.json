@@ -3,19 +3,11 @@
   "fixtureId": "wave32-warp-lattice2d-contract-fixtures",
   "packageRevisionAfter": 3,
   "authoringRevisionAfter": 3,
-  "operationLogTypes": [
-    "createWarpLattice2dRigControl",
-    "bindRigControlChild",
-    "addKeyform"
-  ],
   "operations": [
     {
       "operationId": "op_wave32_create_warp_lattice2d",
       "operationType": "createWarpLattice2dRigControl",
       "status": "committed",
-      "targetIds": [
-        "rig_wave32_body_warp_lattice"
-      ],
       "addedTargets": [
         "rigControl:rig_wave32_body_warp_lattice"
       ],
@@ -29,10 +21,6 @@
       "operationId": "op_wave32_bind_warp_lattice2d_drawable",
       "operationType": "bindRigControlChild",
       "status": "committed",
-      "targetIds": [
-        "rig_wave32_body_warp_lattice",
-        "draw_wave32_body"
-      ],
       "addedTargets": [],
       "changedTargets": [
         "rigControl:rig_wave32_body_warp_lattice",
@@ -43,11 +31,6 @@
       "operationId": "op_wave32_add_control_point_offsets_keyform",
       "operationType": "addKeyform",
       "status": "committed",
-      "targetIds": [
-        "keyset_rigcontrol_rig_wave32_body_warp_lattice_controlpointoffsets_wave32_warp_x_1",
-        "param_wave32_warp_x",
-        "rig_wave32_body_warp_lattice"
-      ],
       "addedTargets": [
         "keyformSet:keyset_rigcontrol_rig_wave32_body_warp_lattice_controlpointoffsets_wave32_warp_x_1"
       ],

@@ -78,7 +78,6 @@ const summarizeOperationChain = (recipeResult: TutorialMiniModelRecipeResult) =>
     operationCount: recipeResult.operationRequests.length,
     finalPackageRevision: recipeResult.session.packageRevision,
     finalAuthoringRevision: recipeResult.session.authoringRevision,
-    operationLogLength: recipeResult.operationLogEntries.length,
     operationTypesByCount: countBy(recipeResult.operationRequests.map((request) => request.operationType)),
     changedTargetKinds,
     checkedTargetKinds,
@@ -92,9 +91,6 @@ const summarizeOperationChain = (recipeResult: TutorialMiniModelRecipeResult) =>
       request.operationId !== undefined &&
       outcome.result.modelDiff?.operationIds.includes(request.operationId) === true
     ),
-    operationLogOperationIdsMatchRequests:
-      recipeResult.operationLogEntries.map((entry) => entry.operationId ?? "").join("\n") ===
-      recipeResult.operationRequests.map((request) => request.operationId).join("\n"),
     noWholeModelOperation: !recipeResult.operationRequests
       .map((request) => String(request.operationType))
       .includes("createWholeModel")

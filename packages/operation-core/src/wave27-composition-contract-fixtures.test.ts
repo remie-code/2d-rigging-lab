@@ -92,7 +92,7 @@ describe("wave27-composition-contract-fixtures", () => {
     );
     const artifact = expectSingleArtifact(artifacts, "dry_run");
 
-    expect(summarizeOperationResult(result, session, core.operationLog.entries.length)).toEqual(
+    expect(summarizeOperationResult(result, session)).toEqual(
       loadOperationResultEvidenceSummary().dryRun
     );
     expect(summarizeValidationEvidence(artifact)).toEqual(loadValidationReportSummary().dryRun);
@@ -106,7 +106,6 @@ describe("wave27-composition-contract-fixtures", () => {
     const session = createFixtureSession();
     const artifacts: FixtureEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date(CREATED_AT),
       evidenceProvider: (input) => collectFixtureEvidence(input, artifacts)
     });
 
@@ -122,7 +121,7 @@ describe("wave27-composition-contract-fixtures", () => {
       targetIds: ["draw_wave27_body"]
     });
 
-    expect(summarizeOperationResult(outcome.result, session, outcome.operationLogLength, outcome.logEntry)).toEqual(
+    expect(summarizeOperationResult(outcome.result, session)).toEqual(
       loadOperationResultEvidenceSummary().commit
     );
     expect(summarizePackageMaterialization(artifact.materializedPackage)).toEqual(
@@ -167,12 +166,7 @@ interface FixtureEvidenceArtifacts {
 
 interface OperationResultEvidenceSummaryFixture {
   readonly dryRun: OperationResultEvidenceSummary;
-  readonly commit: OperationResultEvidenceSummary & {
-    readonly logEntry: {
-      readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
-      readonly validationReportIds: readonly ValidationReportId[];
-    };
-  };
+  readonly commit: OperationResultEvidenceSummary;
 }
 
 interface OperationResultEvidenceSummary {
@@ -186,7 +180,6 @@ interface OperationResultEvidenceSummary {
   readonly generatedRuntimeStateSequenceRefs: readonly string[];
   readonly finalRuntimeStateRef: string;
   readonly generatedValidationReportIds: readonly ValidationReportId[];
-  readonly operationLogLength: number;
   readonly packageRevisionAfter: number;
   readonly authoringRevisionAfter: number;
   readonly dirtyAfter: boolean;
@@ -360,9 +353,7 @@ const collectFixtureEvidence = (
 
 const summarizeOperationResult = (
   result: OperationResultDto,
-  session: AuthoringSession,
-  operationLogLength: number,
-  logEntry?: { readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[]; readonly validationReportIds: readonly ValidationReportId[] }
+  session: AuthoringSession
 ): OperationResultEvidenceSummary => ({
   operationId: result.operationId,
   status: result.status,
@@ -374,18 +365,9 @@ const summarizeOperationResult = (
   generatedRuntimeStateSequenceRefs: result.generatedRuntimeStateSequenceRefs,
   finalRuntimeStateRef: result.finalRuntimeStateRef ?? "",
   generatedValidationReportIds: result.generatedValidationReportIds,
-  operationLogLength,
   packageRevisionAfter: session.packageRevision,
   authoringRevisionAfter: session.authoringRevision,
-  dirtyAfter: session.dirty,
-  ...(logEntry === undefined
-    ? {}
-    : {
-        logEntry: {
-          runtimeSnapshotIds: logEntry.runtimeSnapshotIds,
-          validationReportIds: logEntry.validationReportIds
-        }
-      })
+  dirtyAfter: session.dirty
 });
 
 const summarizeModelDiff = (modelDiff: ModelDiffDto | undefined): ModelDiffSummary => {

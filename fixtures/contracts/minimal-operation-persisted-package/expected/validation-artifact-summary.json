@@ -13,8 +13,6 @@
     "packageRevision": 1,
     "status": "pass",
     "highestSeverity": "info",
-    "operationLogPresent": true,
-    "operationLogPath": "operations/log.jsonl",
     "runtimeSnapshotIds": [
       "snap_minimal-valid-package_0",
       "snap_minimal-valid-package_1"

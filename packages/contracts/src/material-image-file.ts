@@ -9,8 +9,8 @@ export const MaterialContentInsetSchema = z.object({
 
 /**
  * An image named by an operation payload. The host reads `imagePath`, normalizes it to straight-alpha RGBA8,
- * checks `rgbaSha256` and registers the bytes in the session before dry-run/commit. Operation logs keep only
- * this path and hash, never the bytes. `contentInset` is storage padding (not the alpha box); default none.
+ * checks `rgbaSha256` and registers the bytes in the session before dry-run/commit. The operation payload
+ * carries only this path and hash, never the bytes. `contentInset` is storage padding (not the alpha box); default none.
  */
 export const MaterialImageFileRefSchema = z.object({
   imagePath: MaterialAbsolutePathSchema,

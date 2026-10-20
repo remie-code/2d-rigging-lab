@@ -230,7 +230,7 @@ const createWarpFixture = (
   options: { readonly withOffsetKeyform?: boolean } = {}
 ): WarpFixture => {
   const seed = createTutorialMiniModelSeed();
-  const core = createOperationCore({ now: () => new Date("2026-07-02T00:00:00.000Z") });
+  const core = createOperationCore();
   const ids = TUTORIAL_MINI_MODEL_IDS;
   const domainBounds = { x: 0, y: 0, width: 100, height: 200 };
   let basePackageRevision = seed.session.packageRevision;

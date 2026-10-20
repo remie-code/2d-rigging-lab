@@ -60,7 +60,7 @@
       "comparison": "semantic-json"
     },
     {
-      "kind": "operationLog",
+      "kind": "operationResult",
       "path": "expected/operation-result-evidence-summary.json",
       "id": "op_fixture_create_runtime_evidence_smile",
       "comparison": "semantic-json"

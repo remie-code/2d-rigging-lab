@@ -16,9 +16,6 @@
       "operationType": "setDrawOrder",
       "operationId": "op_layer_reorder",
       "resultStatus": "committed",
-      "targetIds": [
-        "draw_back"
-      ],
       "modelDiffPaths": [
         "/model/drawOrder/entries",
         "/model/drawables/draw_back/baseDrawOrder",
@@ -124,8 +121,6 @@
         "baselineReportId": "val_op_layer_reorder_baseline",
         "candidateReportId": "val_op_layer_reorder_candidate",
         "candidateStatus": "pass",
-        "operationLogPresent": true,
-        "operationLogPath": "operations/log.jsonl",
         "runtimeSnapshotIds": [
           "snap_drawable_layer_runtime_evidence_0",
           "snap_drawable_layer_runtime_evidence_1"
@@ -146,14 +141,6 @@
         "generatedValidationReportIds": [
           "val_op_layer_reorder_baseline",
           "val_op_layer_reorder_candidate"
-        ],
-        "logEntryRuntimeSnapshotIds": [
-          "snap_drawable_layer_runtime_evidence_0",
-          "snap_drawable_layer_runtime_evidence_1"
-        ],
-        "logEntryValidationReportIds": [
-          "val_op_layer_reorder_baseline",
-          "val_op_layer_reorder_candidate"
         ]
       }
     },
@@ -161,9 +148,6 @@
       "operationType": "setRuntimeVisibility",
       "operationId": "op_layer_hide_front",
       "resultStatus": "committed",
-      "targetIds": [
-        "draw_front"
-      ],
       "modelDiffPaths": [
         "/model/drawables/draw_front/runtimeVisibility"
       ],
@@ -253,8 +237,6 @@
         "baselineReportId": "val_op_layer_hide_front_baseline",
         "candidateReportId": "val_op_layer_hide_front_candidate",
         "candidateStatus": "pass",
-        "operationLogPresent": true,
-        "operationLogPath": "operations/log.jsonl",
         "runtimeSnapshotIds": [
           "snap_drawable_layer_runtime_evidence_0",
           "snap_drawable_layer_runtime_evidence_1"
@@ -275,14 +257,6 @@
         "generatedValidationReportIds": [
           "val_op_layer_hide_front_baseline",
           "val_op_layer_hide_front_candidate"
-        ],
-        "logEntryRuntimeSnapshotIds": [
-          "snap_drawable_layer_runtime_evidence_0",
-          "snap_drawable_layer_runtime_evidence_1"
-        ],
-        "logEntryValidationReportIds": [
-          "val_op_layer_hide_front_baseline",
-          "val_op_layer_hide_front_candidate"
         ]
       }
     },
@@ -290,9 +264,6 @@
       "operationType": "setRuntimeVisibility",
       "operationId": "op_layer_show_front",
       "resultStatus": "committed",
-      "targetIds": [
-        "draw_front"
-      ],
       "modelDiffPaths": [
         "/model/drawables/draw_front/runtimeVisibility"
       ],
@@ -382,8 +353,6 @@
         "baselineReportId": "val_op_layer_show_front_baseline",
         "candidateReportId": "val_op_layer_show_front_candidate",
         "candidateStatus": "pass",
-        "operationLogPresent": true,
-        "operationLogPath": "operations/log.jsonl",
         "runtimeSnapshotIds": [
           "snap_drawable_layer_runtime_evidence_0",
           "snap_drawable_layer_runtime_evidence_1"
@@ -402,14 +371,6 @@
           "snap_drawable_layer_runtime_evidence_1"
         ],
         "generatedValidationReportIds": [
-          "val_op_layer_show_front_baseline",
-          "val_op_layer_show_front_candidate"
-        ],
-        "logEntryRuntimeSnapshotIds": [
-          "snap_drawable_layer_runtime_evidence_0",
-          "snap_drawable_layer_runtime_evidence_1"
-        ],
-        "logEntryValidationReportIds": [
           "val_op_layer_show_front_baseline",
           "val_op_layer_show_front_candidate"
         ]

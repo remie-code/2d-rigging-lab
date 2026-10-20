@@ -1737,14 +1737,6 @@ export const DEFAULT_CHECK_DEFINITIONS = [
     description: "Runtime load produced no visible drawables."
   },
   {
-    checkId: "evidence.guiOperationLogMissing",
-    phase: "acceptance_evidence",
-    defaultSeverity: "blocking",
-    profiles: ["acceptance"],
-    relatedAC: ["AC-MVP-001"],
-    description: "Acceptance evidence does not include a GUI operation log."
-  },
-  {
     checkId: "tutorial.requiredPartMissing",
     phase: "tutorial_readiness",
     defaultSeverity: "error",

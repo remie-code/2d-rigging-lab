@@ -34,8 +34,6 @@ describe("product preflight report aggregation", () => {
       profile: "acceptance",
       relatedScenarios: ["SC-MVP-003"],
       evidence: {
-        operationLogPresent: true,
-        operationLogPath: "operations/log.jsonl",
         runtimeSnapshotIds: [SNAPSHOT_ID],
         supplementalGuiEvidenceRefs: []
       }
@@ -46,6 +44,16 @@ describe("product preflight report aggregation", () => {
       createdAt: CREATED_AT,
       validationReports: [sourceReport],
       categoryEvidenceRefs: {
+        authoringWorkflowEvidence: [
+          createEvidenceRef(
+            "evidence_guiEvidence",
+            {
+              artifactKind: "guiEvidence",
+              path: "generated/gui-evidence/preflight.gui-evidence.json"
+            },
+            "GUI authoring evidence is supplied."
+          )
+        ],
         assetBytes: [
           createEvidenceRef(
             "evidence_byteAvailability",
@@ -142,7 +150,7 @@ describe("product preflight report aggregation", () => {
         .flatMap((category) => category.notEvaluatedClaims)
         .map((claim) => claim.requiredEvidenceKinds)
     ).toEqual([
-      ["operationLog", "guiEvidence"],
+      ["guiEvidence"],
       ["runtimeSnapshot"],
       ["byteAvailability", "sourceMaterialization"],
       ["transportCapability"],
@@ -166,12 +174,12 @@ describe("product preflight report aggregation", () => {
       categoryEvidenceRefs: {
         assetBytes: [
           createEvidenceRef(
-            "evidence_wrongKindOperationLog",
+            "evidence_wrongKindGuiEvidence",
             {
-              artifactKind: "operationLog",
-              path: "operations/log.jsonl"
+              artifactKind: "guiEvidence",
+              path: "generated/gui-evidence/preflight.gui-evidence.json"
             },
-            "Wrong-kind operation log evidence must not satisfy asset byte evidence."
+            "Wrong-kind GUI evidence must not satisfy asset byte evidence."
           )
         ]
       }

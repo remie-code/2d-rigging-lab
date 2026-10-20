@@ -38,7 +38,6 @@
       "resolvedFailureCount": 0,
       "severityChangeCount": 0
     },
-    "operationLogLength": 0,
     "originalPackageRevisionAfter": 0,
     "originalAuthoringRevisionAfter": 0,
     "originalDirtyAfter": false
@@ -81,26 +80,8 @@
       "resolvedFailureCount": 0,
       "severityChangeCount": 0
     },
-    "operationLogLength": 1,
     "packageRevisionAfter": 1,
     "authoringRevisionAfter": 1,
-    "dirtyAfter": true,
-    "logEntry": {
-      "operationId": "op_fixture_create_minimum_open_dynamics_v2",
-      "operationType": "createDynamicsGroup",
-      "targetIds": [
-        "dyn_hair_sway",
-        "param_face_yaw",
-        "param_hair_sway"
-      ],
-      "runtimeSnapshotIds": [
-        "snap_minimum_open_dynamics_v1_evidence_0",
-        "snap_minimum_open_dynamics_v1_evidence_1"
-      ],
-      "validationReportIds": [
-        "val_minimum_open_dynamics_v1_commit_baseline",
-        "val_minimum_open_dynamics_v1_commit_candidate"
-      ]
-    }
+    "dirtyAfter": true
   }
 }

@@ -54,12 +54,12 @@ export interface ValidatePackageDocumentInput {
  *   - drawable provenance references,
  *   - source-asset rights and provenance.
  *
- * Intentionally excluded: validators that require a runtime snapshot or GUI operation
- * log as input (runtime-load / runtime-evidence / viewer-evidence / part-runtime-evidence /
+ * Intentionally excluded: validators that require a runtime snapshot or GUI evidence
+ * as input (runtime-load / runtime-evidence / viewer-evidence / part-runtime-evidence /
  * package-runtime / binary-asset byte checks / PSD intake / product-preflight). Those need
  * evidence the headless validate path does not evaluate; the report's `evidence` block
- * records that no runtime snapshots or operation log backed this report so the coverage
- * gap is explicit rather than silently implied as "passed".
+ * records that no runtime snapshots backed this report so the coverage gap is explicit
+ * rather than silently implied as "passed".
  */
 export const validatePackageDocument = (
   input: ValidatePackageDocumentInput
@@ -95,7 +95,7 @@ export const validatePackageDocument = (
     profile: input.profile,
     ...(input.createdAt === undefined ? {} : { createdAt: input.createdAt }),
     checks,
-    // No runtime snapshot or operation log backs a document-only validate: record the
+    // No runtime snapshot backs a document-only validate: record the
     // coverage boundary explicitly instead of leaving it implied.
     evidence: createDefaultEvidence()
   });

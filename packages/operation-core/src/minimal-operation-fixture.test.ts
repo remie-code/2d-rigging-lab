@@ -72,14 +72,11 @@ describe("minimal-operation-create-parameter contract fixture", () => {
       dirty: expectedDryRun.sessionMutation.originalDirtyAfter
     });
     expect(getParameterById(session.graph, targetParameterId)).toBeUndefined();
-    expect(core.operationLog.entries).toHaveLength(expectedDryRun.operationLog.expectedLength);
   });
 
-  it("commits the fixture request and matches the expected log and diff summary", () => {
+  it("commits the fixture request and matches the expected result and diff summary", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:00:00.000Z")
-    });
+    const core = createOperationCore();
     const targetParameterId = ParameterIdSchema.parse("param_fixture_smile");
     const before = summarizeSession(session, targetParameterId);
 
@@ -102,10 +99,6 @@ describe("minimal-operation-create-parameter contract fixture", () => {
     expect(session.dirty).toBe(expectedCommit.sessionMutation.dirtyAfter);
     expect(committedParameter).toMatchObject(expectedCommit.sessionMutation.addedParameter);
     expect(session.graph.stableOrder).toContain(targetParameterId);
-    expect(outcome.operationLogLength).toBe(expectedCommit.operationLog.expectedLength);
-    expect(core.operationLog.entries).toHaveLength(expectedCommit.operationLog.expectedLength);
-    expect(outcome.logEntry).toMatchObject(expectedCommit.operationLog.entry);
-    expect(outcome.logEntry?.result.modelDiff).toEqual(expectedModelDiff.modelDiff);
   });
 });
 
@@ -145,9 +138,6 @@ interface DryRunSummaryFixture extends OperationSummaryFixture {
     readonly originalDirtyAfter: boolean;
     readonly parameterAbsentInOriginal: string;
   };
-  readonly operationLog: {
-    readonly expectedLength: number;
-  };
 }
 
 interface CommitSummaryFixture extends OperationSummaryFixture {
@@ -163,20 +153,6 @@ interface CommitSummaryFixture extends OperationSummaryFixture {
       readonly max: number;
       readonly default: number;
       readonly recommendedUiStep: number;
-    };
-  };
-  readonly operationLog: {
-    readonly expectedLength: number;
-    readonly entry: {
-      readonly operationId: string;
-      readonly transactionId: string;
-      readonly timestamp: string;
-      readonly actor: string;
-      readonly surface: string;
-      readonly operationType: string;
-      readonly targetIds: readonly string[];
-      readonly provenanceId: string;
-      readonly reversible: boolean;
     };
   };
 }

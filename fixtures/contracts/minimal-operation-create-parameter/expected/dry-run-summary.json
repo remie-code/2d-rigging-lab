@@ -11,8 +11,5 @@
     "originalDirtyAfter": false,
     "parameterAbsentInOriginal": "param_fixture_smile"
   },
-  "operationLog": {
-    "expectedLength": 0
-  },
   "modelDiffRef": "expected/model-diff-summary.json"
 }

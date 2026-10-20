@@ -43,9 +43,8 @@ describe("validatePackageDocument", () => {
     // Healthy package: no error / blocking diagnostics.
     expect(report.summary.counts.error).toBe(0);
     expect(report.summary.counts.blocking).toBe(0);
-    // The document-only path records that no runtime snapshot / operation log backed it.
+    // The document-only path records that no runtime snapshot backed it.
     expect(report.evidence.runtimeSnapshotIds).toEqual([]);
-    expect(report.evidence.operationLogPresent).toBe(false);
   });
 
   it("honors the payload profile and packageRevision override", async () => {

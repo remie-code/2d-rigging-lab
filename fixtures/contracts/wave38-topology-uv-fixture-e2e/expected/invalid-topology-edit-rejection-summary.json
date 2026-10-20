@@ -7,7 +7,6 @@
       "surface": "editor-ui",
       "attemptedOperationType": "removeMeshVertex",
       "blockedReason": "Selected vertex is referenced by a triangle",
-      "operationLogAppended": false,
       "meshStateCorrupted": false
     },
     {
@@ -16,7 +15,6 @@
       "attemptedOperationType": "addMeshVertex",
       "expectedCheckId": "operation.addMeshVertex.topologyRevisionMismatch",
       "status": "rejected",
-      "operationLogAppended": false,
       "meshStateCorrupted": false
     }
   ]

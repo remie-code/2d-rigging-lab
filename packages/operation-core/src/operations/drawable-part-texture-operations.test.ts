@@ -60,9 +60,7 @@ describe("drawable part and texture assignment operation handlers", () => {
 
   it("commits drawable texture assignment and materializes drawables plus texture atlas evidence", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-01T00:00:00.000Z")
-    });
+    const core = createOperationCore();
     const baseDocument = createBaseDocument(session);
 
     const outcome = core.commitOperation(
@@ -77,8 +75,7 @@ describe("drawable part and texture assignment operation handlers", () => {
     expect(outcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
-    expect(outcome.logEntry?.targetIds).toEqual(["draw_eye", "tex_eye_alt"]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "drawable", id: "draw_eye" },
       { kind: "texture", id: "tex_eye_alt" }
     ]);
@@ -315,7 +312,6 @@ const createBaseDocument = (session: AuthoringSession): Parameters<typeof toPack
         drawOrder: "model/draw-order.json"
       },
       assetIndex: "assets/sources/source-manifest.json",
-      operationLog: "operations/log.jsonl",
       rightsSummary: { status: "cleared" },
       provenanceSummary: { sourceAssetCount: 0 },
       packageStableOrderVersion: "stable-order-v1"

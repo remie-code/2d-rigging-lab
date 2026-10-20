@@ -75,7 +75,7 @@ const buildPerceptionFixture = (
   options: { readonly includeOpacityKeyform: boolean }
 ): PerceptionFixture => {
   const seed = createTutorialMiniModelSeed();
-  const core = createOperationCore({ now: () => new Date("2026-07-02T00:00:00.000Z") });
+  const core = createOperationCore();
   const ids = TUTORIAL_MINI_MODEL_IDS;
   const commit = createSetupCommitter(core, seed.session);
 

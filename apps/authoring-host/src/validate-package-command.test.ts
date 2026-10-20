@@ -60,7 +60,7 @@ describe("validatePackage through the headless host", () => {
         readonly schemaVersion: string;
         readonly profile: string;
         readonly summary: { readonly status: string; readonly counts: Record<string, number> };
-        readonly evidence: { readonly runtimeSnapshotIds: readonly string[]; readonly operationLogPresent: boolean };
+        readonly evidence: { readonly runtimeSnapshotIds: readonly string[] };
         readonly checks: readonly unknown[];
       };
     };
@@ -75,7 +75,6 @@ describe("validatePackage through the headless host", () => {
     expect(payload.report.summary.status).not.toBe("fail");
     // The document-only validate path records that no runtime snapshot backed the report.
     expect(payload.report.evidence.runtimeSnapshotIds).toEqual([]);
-    expect(payload.report.evidence.operationLogPresent).toBe(false);
   });
 
   it("validates without dry-running, committing, or writing to the package directory", async () => {

@@ -29,8 +29,9 @@ Project-defined model package は、少なくとも以下を表現または追�
 - rig control。
 - validation report。
 - runtime snapshot。
-- operation log。
 - AI向けの構造化情報。
+
+変更履歴: 2026-10-20、ユーザー合意により「operation log」を外した。パッケージの変更履歴は git が持ち、パッケージ自身は操作の記録を持たない。根拠は [../design/drop-operation-log.md](../design/drop-operation-log.md)。
 
 ## AC-ROOT-003: Private runtime core / viewer がモデルを評価・表示できること
 

@@ -13,8 +13,7 @@
     "checkIds": [],
     "runtimeSnapshotIds": [
       "snap_minimum_open_dynamics_v1_evidence_0"
-    ],
-    "operationLogPresent": false
+    ]
   },
   "candidate": {
     "reportId": "val_minimum_open_dynamics_v1_candidate",
@@ -29,9 +28,7 @@
     "checkIds": [],
     "runtimeSnapshotIds": [
       "snap_minimum_open_dynamics_v1_evidence_1"
-    ],
-    "operationLogPresent": true,
-    "operationLogPath": "operations/log.jsonl"
+    ]
   },
   "validationDiff": {
     "schemaVersion": "validation-diff-v1",

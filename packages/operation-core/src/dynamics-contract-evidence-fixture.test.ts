@@ -85,7 +85,7 @@ describe("minimum-open-dynamics-v2-evidence operation contract fixture", () => {
 
     expect(result.status).toBe("dry_run");
     expect(artifacts).toHaveLength(1);
-    expect(summarizeOperationResultEvidence(result, session, core.operationLog.entries.length)).toEqual(
+    expect(summarizeOperationResultEvidence(result, session)).toEqual(
       loadFixtureJson("expected/operation-result-evidence-summary.json").dryRun
     );
     expect(session.packageRevision).toBe(0);
@@ -93,11 +93,10 @@ describe("minimum-open-dynamics-v2-evidence operation contract fixture", () => {
     expect(session.dirty).toBe(false);
   });
 
-  it("commits the fixture mutation, appends operation log evidence, and carries expected IDs", () => {
+  it("commits the fixture mutation and carries expected IDs", () => {
     const session = createFixtureSession();
     const artifacts: FixtureEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date(CREATED_AT),
       evidenceProvider: (input) => collectFixtureEvidence(input, artifacts)
     });
 
@@ -108,16 +107,9 @@ describe("minimum-open-dynamics-v2-evidence operation contract fixture", () => {
 
     expect(outcome.result.status).toBe("committed");
     expect(artifacts).toHaveLength(1);
-    expect({
-      ...summarizeOperationResultEvidence(outcome.result, session, outcome.operationLogLength),
-      logEntry: {
-        operationId: outcome.logEntry?.operationId,
-        operationType: outcome.logEntry?.operationType,
-        targetIds: outcome.logEntry?.targetIds,
-        runtimeSnapshotIds: outcome.logEntry?.runtimeSnapshotIds,
-        validationReportIds: outcome.logEntry?.validationReportIds
-      }
-    }).toEqual(loadFixtureJson("expected/operation-result-evidence-summary.json").commit);
+    expect(summarizeOperationResultEvidence(outcome.result, session)).toEqual(
+      loadFixtureJson("expected/operation-result-evidence-summary.json").commit
+    );
   });
 });
 
@@ -154,7 +146,7 @@ const collectFixtureEvidence = (
     },
     artifactLabel: ARTIFACT_LABEL
   });
-  const baselineReport = withReportEvidence(
+  const baselineReport = withReportId(
     validatePackageRuntime({
       packageDocument: toPackageDocument(input.baselineSession, loadBaselinePackageDocument(), {
         updatedAt: CREATED_AT
@@ -162,12 +154,9 @@ const collectFixtureEvidence = (
       runtimeSnapshot: runtimeEvidence.baselineSnapshot,
       createdAt: CREATED_AT
     }),
-    {
-      reportId: `val_minimum_open_dynamics_v1_${input.lifecycle}_baseline`,
-      operationLogPresent: false
-    }
+    `val_minimum_open_dynamics_v1_${input.lifecycle}_baseline`
   );
-  const candidateReport = withReportEvidence(
+  const candidateReport = withReportId(
     validatePackageRuntime({
       packageDocument: toPackageDocument(input.candidateSession, loadBaselinePackageDocument(), {
         updatedAt: CREATED_AT
@@ -175,11 +164,7 @@ const collectFixtureEvidence = (
       runtimeSnapshot: runtimeEvidence.candidateSnapshot,
       createdAt: CREATED_AT
     }),
-    {
-      reportId: `val_minimum_open_dynamics_v1_${input.lifecycle}_candidate`,
-      operationLogPresent: input.lifecycle === "commit",
-      ...(input.lifecycle === "commit" ? { operationLogPath: "operations/log.jsonl" } : {})
-    }
+    `val_minimum_open_dynamics_v1_${input.lifecycle}_candidate`
   );
   const validationDiff = buildValidationDiff({
     baseline: baselineReport,
@@ -220,28 +205,18 @@ const createEvaluationInput = (frameIndex: number) => ({
   }
 });
 
-const withReportEvidence = (
+const withReportId = (
   report: ValidationReportDto,
-  evidence: {
-    readonly reportId: string;
-    readonly operationLogPresent: boolean;
-    readonly operationLogPath?: string;
-  }
+  reportId: string
 ): ValidationReportDto =>
   ValidationReportSchema.parse({
     ...report,
-    reportId: evidence.reportId,
-    evidence: {
-      ...report.evidence,
-      operationLogPresent: evidence.operationLogPresent,
-      ...(evidence.operationLogPath === undefined ? {} : { operationLogPath: evidence.operationLogPath })
-    }
+    reportId
   });
 
 const summarizeOperationResultEvidence = (
   result: OperationResultDto,
-  session: AuthoringSession,
-  operationLogLength: number
+  session: AuthoringSession
 ) => ({
   operationId: result.operationId,
   status: result.status,
@@ -254,7 +229,6 @@ const summarizeOperationResultEvidence = (
   finalRuntimeStateRef: result.finalRuntimeStateRef,
   generatedValidationReportIds: result.generatedValidationReportIds,
   validationDiff: summarizeValidationDiff(result.validationDiff),
-  operationLogLength,
   ...(result.status === "dry_run"
     ? {
         originalPackageRevisionAfter: session.packageRevision,

@@ -140,7 +140,6 @@ const createPackage = (overrides: {
       drawOrder: "model/draw-order.json"
     },
     assetIndex: "assets/sources/source-manifest.json",
-    operationLog: "operations/log.jsonl",
     rightsSummary: { status: "cleared" },
     provenanceSummary: { sourceAssetCount: 1 },
     packageStableOrderVersion: "stable-order-v1"

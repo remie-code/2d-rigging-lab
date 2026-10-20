@@ -17,7 +17,6 @@ import {
 
 import { buildRuntimeEvidenceReport } from "./runtime-evidence-report.js";
 import {
-  CANONICAL_OPERATION_LOG_PATH,
   createValidationReportArtifactPath,
   materializeValidationReportArtifact,
   serializeValidationReportArtifactContent
@@ -42,14 +41,6 @@ describe("validation report artifacts", () => {
     expect(parsedReport.summary.status).toBe("pass");
   });
 
-  it("preserves the canonical operation log evidence path when present", () => {
-    const artifact = materializeValidationReportArtifact(createReport());
-    const parsedReport = ValidationReportSchema.parse(JSON.parse(artifact.content));
-
-    expect(parsedReport.evidence.operationLogPresent).toBe(true);
-    expect(parsedReport.evidence.operationLogPath).toBe(CANONICAL_OPERATION_LOG_PATH);
-  });
-
   it("serializes validation report DTOs deterministically after schema parsing", () => {
     const report = createReport();
 
@@ -58,9 +49,7 @@ describe("validation report artifacts", () => {
         ...report,
         evidence: {
           supplementalGuiEvidenceRefs: [],
-          runtimeSnapshotIds: ["snap_materialized"],
-          operationLogPath: CANONICAL_OPERATION_LOG_PATH,
-          operationLogPresent: true
+          runtimeSnapshotIds: ["snap_materialized"]
         }
       })
     );
@@ -87,8 +76,6 @@ const createReport = () =>
     packageId: "pkg_materializer",
     packageRevision: 4,
     createdAt: "2026-05-29T00:00:00.000Z",
-    operationLogPresent: true,
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
     runtimeSnapshotIds: ["snap_materialized"]
   });
 

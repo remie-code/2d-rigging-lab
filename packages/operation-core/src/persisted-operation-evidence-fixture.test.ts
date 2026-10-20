@@ -24,14 +24,11 @@ import { describe, expect, it } from "vitest";
 import {
   createOperationCore,
   OperationEvidenceResultSchema,
-  OperationRequestSchema,
-  parseOperationLogEntriesFromJsonl,
-  serializeOperationLogEntriesToJsonl
+  OperationRequestSchema
 } from "./index.js";
 import type {
   OperationEvidenceProviderInput,
-  OperationEvidenceResultDto,
-  OperationLogEntryDto
+  OperationEvidenceResultDto
 } from "./index.js";
 import {
   PackageDocumentSchema,
@@ -54,7 +51,6 @@ import type {
 import {
   buildRuntimeEvidenceReport,
   buildValidationDiff,
-  CANONICAL_OPERATION_LOG_PATH,
   materializeValidationReportArtifact,
   ValidationReportSchema
 } from "../../validator-core/src/index.js";
@@ -69,7 +65,6 @@ describe("minimal-operation-persisted-package contract fixture", () => {
     const session = createAuthoringSessionFromPackageDocument(baseDocument);
     const capturedEvidence: PersistedEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:00:00.000Z"),
       evidenceProvider: (input) => collectPersistedEvidence(input, capturedEvidence)
     });
     const request = OperationRequestSchema.parse(
@@ -79,35 +74,25 @@ describe("minimal-operation-persisted-package contract fixture", () => {
 
     const outcome = core.commitOperation(session, request);
     const evidence = expectSingleEvidenceArtifact(capturedEvidence);
-    const operationLogText = serializeOperationLogEntriesToJsonl(core.operationLog.entries);
-    const parsedLogEntries = parseOperationLogEntriesFromJsonl(operationLogText);
     const savedDocument = toPackageDocument(session, baseDocument, {
       updatedAt: "2026-05-29T01:00:00.000Z"
     });
     const generatedArtifacts = toPackageFileEntries(evidence);
     const fileSet = serializePackageDocumentToFileSet(savedDocument, {
-      operationLogText,
       generatedArtifacts
     });
     const reloadedDocument = parsePackageDocumentFromFileSet(fileSet);
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.operationLogLength).toBe(1);
     expect(session.packageRevision).toBe(1);
     expect(getParameterById(session.graph, targetParameterId)).toBeDefined();
-    expect(parsedLogEntries).toEqual(core.operationLog.entries);
     expect(PackageDocumentSchema.parse(reloadedDocument)).toEqual(reloadedDocument);
     expect(reloadedDocument.manifest.packageRevision).toBe(1);
     expect(reloadedDocument.model.parameters.parameters).toHaveLength(1);
     expect(reloadedDocument.model.parameters.parameters[0]?.parameterId).toBe(targetParameterId);
-    expect(outcome.logEntry?.runtimeSnapshotIds).toEqual(outcome.result.generatedRuntimeSnapshotIds);
-    expect(outcome.logEntry?.validationReportIds).toEqual(outcome.result.generatedValidationReportIds);
     assertMaterializedRuntimeArtifactsParse(evidence.runtimeArtifacts);
     assertMaterializedValidationArtifactsParse(evidence.validationArtifacts);
 
-    expect(summarizeOperationLogJsonl(operationLogText, parsedLogEntries)).toEqual(
-      loadFixtureJson("expected/operation-log-jsonl-summary.json")
-    );
     expect(summarizePackageFileSet(fileSet, generatedArtifacts)).toEqual(
       loadFixtureJson("expected/package-file-set-summary.json")
     );
@@ -141,31 +126,10 @@ interface PersistedEvidenceArtifacts {
   readonly validationArtifacts: readonly ValidationReportArtifact[];
 }
 
-interface OperationLogJsonlSummary {
-  readonly schemaVersion: "operation-log-jsonl-summary-v1";
-  readonly path: typeof CANONICAL_OPERATION_LOG_PATH;
-  readonly lineCount: number;
-  readonly trailingNewline: boolean;
-  readonly operationIds: readonly string[];
-  readonly firstEntry: {
-    readonly operationId: string;
-    readonly operationType: string;
-    readonly targetIds: readonly string[];
-    readonly resultStatus: string;
-    readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
-    readonly validationReportIds: readonly ValidationReportId[];
-    readonly resultRuntimeSnapshotIds: readonly RuntimeSnapshotId[];
-    readonly resultValidationReportIds: readonly ValidationReportId[];
-    readonly finalRuntimeStateRef: string;
-  };
-}
-
 interface PackageFileSetSummary {
   readonly schemaVersion: "package-file-set-summary-v1";
   readonly entryCount: number;
   readonly authoredEntryCount: number;
-  readonly operationLogPath: typeof CANONICAL_OPERATION_LOG_PATH;
-  readonly operationLogEntryPresent: boolean;
   readonly generatedArtifactEntryCount: number;
   readonly generatedArtifactPaths: readonly string[];
   readonly uniqueGeneratedArtifactPathCount: number;
@@ -195,8 +159,6 @@ interface ValidationArtifactSummary {
     readonly packageRevision: number;
     readonly status: string;
     readonly highestSeverity: string;
-    readonly operationLogPresent: boolean;
-    readonly operationLogPath?: string;
     readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
   };
 }
@@ -206,7 +168,6 @@ interface ReloadSummary {
   readonly packageId: string;
   readonly packageRevision: number;
   readonly updatedAt: string;
-  readonly operationLogPath: typeof CANONICAL_OPERATION_LOG_PATH;
   readonly parameterIds: readonly string[];
   readonly committedParameter: NonNullable<PackageDocumentDto["model"]["parameters"]["parameters"][number]>;
   readonly stableOrder: readonly string[];
@@ -261,8 +222,6 @@ const collectPersistedEvidence = (
     packageId: runtimeEvidence.candidateSnapshot.packageId,
     packageRevision: runtimeEvidence.candidateSnapshot.packageRevision,
     packageHash: baseline.baselinePackage.packageHash,
-    operationLogPresent: true,
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
     runtimeSnapshotIds: runtimeEvidence.generatedRuntimeSnapshotIds
   });
   const validationDiff = buildValidationDiff({
@@ -298,35 +257,6 @@ const collectPersistedEvidence = (
   });
 };
 
-const summarizeOperationLogJsonl = (
-  operationLogText: string,
-  entries: readonly OperationLogEntryDto[]
-): OperationLogJsonlSummary => {
-  const firstEntry = entries[0];
-  if (firstEntry === undefined) {
-    throw new Error("Persisted operation fixture expects one operation log entry.");
-  }
-
-  return {
-    schemaVersion: "operation-log-jsonl-summary-v1",
-    path: CANONICAL_OPERATION_LOG_PATH,
-    lineCount: entries.length,
-    trailingNewline: operationLogText.endsWith("\n"),
-    operationIds: entries.map((entry) => entry.operationId),
-    firstEntry: {
-      operationId: firstEntry.operationId,
-      operationType: firstEntry.operationType,
-      targetIds: firstEntry.targetIds,
-      resultStatus: firstEntry.result.status,
-      runtimeSnapshotIds: firstEntry.runtimeSnapshotIds,
-      validationReportIds: firstEntry.validationReportIds,
-      resultRuntimeSnapshotIds: firstEntry.result.generatedRuntimeSnapshotIds,
-      resultValidationReportIds: firstEntry.result.generatedValidationReportIds,
-      finalRuntimeStateRef: firstEntry.result.finalRuntimeStateRef ?? ""
-    }
-  };
-};
-
 const summarizePackageFileSet = (
   fileSet: readonly PackageTextFileEntry[],
   generatedArtifacts: readonly PackageTextFileEntry[]
@@ -338,9 +268,7 @@ const summarizePackageFileSet = (
   return {
     schemaVersion: "package-file-set-summary-v1",
     entryCount: fileSet.length,
-    authoredEntryCount: fileSet.length - generatedArtifacts.length - 1,
-    operationLogPath: CANONICAL_OPERATION_LOG_PATH,
-    operationLogEntryPresent: paths.includes(CANONICAL_OPERATION_LOG_PATH),
+    authoredEntryCount: fileSet.length - generatedArtifacts.length,
     generatedArtifactEntryCount: generatedArtifactPaths.length,
     generatedArtifactPaths,
     uniqueGeneratedArtifactPathCount: new Set(generatedArtifactPaths).size
@@ -378,10 +306,6 @@ const summarizeValidationArtifacts = (
     packageRevision: artifacts.candidateReport.packageRevision,
     status: artifacts.candidateReport.summary.status,
     highestSeverity: artifacts.candidateReport.summary.highestSeverity,
-    operationLogPresent: artifacts.candidateReport.evidence.operationLogPresent,
-    ...(artifacts.candidateReport.evidence.operationLogPath === undefined
-      ? {}
-      : { operationLogPath: artifacts.candidateReport.evidence.operationLogPath }),
     runtimeSnapshotIds: artifacts.candidateReport.evidence.runtimeSnapshotIds
   }
 });
@@ -401,7 +325,6 @@ const summarizeReloadedDocument = (
     packageId: document.manifest.packageId,
     packageRevision: document.manifest.packageRevision,
     updatedAt: document.manifest.updatedAt,
-    operationLogPath: document.manifest.operationLog,
     parameterIds: document.model.parameters.parameters.map((parameter) => parameter.parameterId),
     committedParameter,
     stableOrder: document.model.graph.stableOrder

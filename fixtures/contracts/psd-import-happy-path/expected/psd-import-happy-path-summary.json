@@ -6,15 +6,6 @@
       "operationType": "importPsdSourceAsset",
       "operationId": "op_import_psd_happy_path",
       "resultStatus": "committed",
-      "targetIds": [
-        "src_psd_import_happy_path",
-        "group_root",
-        "group_head",
-        "layer_face_base",
-        "part_root",
-        "part_head",
-        "tex_psd_face_base"
-      ],
       "diagnosticCheckIds": [
         "operation.importPsdSourceAsset.adapterDiagnostic"
       ],
@@ -61,12 +52,6 @@
       "operationType": "createDrawable",
       "operationId": "op_create_psd_face_base",
       "resultStatus": "committed",
-      "targetIds": [
-        "draw_psd_face_base",
-        "mesh_psd_face_base",
-        "part_head",
-        "src_psd_import_happy_path"
-      ],
       "diagnosticCheckIds": [],
       "diagnostics": [],
       "modelDiffPaths": [
@@ -80,10 +65,6 @@
       "operationType": "generateMesh",
       "operationId": "op_generate_mesh_psd_face_base",
       "resultStatus": "committed",
-      "targetIds": [
-        "draw_psd_face_base",
-        "mesh_psd_face_base"
-      ],
       "diagnosticCheckIds": [],
       "diagnostics": [],
       "modelDiffPaths": [

@@ -10,7 +10,6 @@ export const AiCommandNameSchema = z.enum([
   "validatePackage",
   "dryRunOperation",
   "commitOperation",
-  "getOperationLog",
   "renderView",
   "getPsdImportPlanState",
   "setPsdImportPlanApproval",

@@ -115,11 +115,9 @@ describe("moveMeshVertex operation handler", () => {
     });
   });
 
-  it("commits vertex deltas through operation core and logs checked targets", () => {
+  it("commits vertex deltas through operation core and reports checked targets", () => {
     const session = createFixtureSession();
-    const operationCore = createOperationCore({
-      now: () => new Date("2026-05-30T00:00:00.000Z")
-    });
+    const operationCore = createOperationCore();
 
     const outcome = operationCore.commitOperation(
       session,
@@ -130,13 +128,10 @@ describe("moveMeshVertex operation handler", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.operationLogLength).toBe(1);
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
     expect(session.graph.meshes[0]?.vertices[2]).toEqual({ x: -1, y: 3 });
-    expect(outcome.logEntry?.operationType).toBe("moveMeshVertex");
-    expect(outcome.logEntry?.targetIds).toEqual(["mesh_body", "vtx_body_2"]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "mesh", id: "mesh_body" },
       { kind: "drawable", id: "draw_body" },
       { kind: "part", id: "part_root" },
@@ -152,9 +147,7 @@ describe("moveMeshVertex operation handler", () => {
   it("commits multi-vertex translate and materializes package mesh coordinates", () => {
     const session = createFixtureSession();
     const baseDocument = createBaseDocument(session);
-    const operationCore = createOperationCore({
-      now: () => new Date("2026-06-01T00:00:00.000Z")
-    });
+    const operationCore = createOperationCore();
 
     const outcome = operationCore.commitOperation(
       session,
@@ -168,13 +161,12 @@ describe("moveMeshVertex operation handler", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.logEntry?.targetIds).toEqual(["mesh_body", "vtx_body_1", "vtx_body_2"]);
     expect(outcome.result.modelDiff?.changed.map((change) => change.target)).toEqual([
       { kind: "mesh", id: "mesh_body" },
       { kind: "vertex", id: "vtx_body_1", path: "/model/meshes/mesh_body/vertices/1" },
       { kind: "vertex", id: "vtx_body_2", path: "/model/meshes/mesh_body/vertices/2" }
     ]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "mesh", id: "mesh_body" },
       { kind: "drawable", id: "draw_body" },
       { kind: "part", id: "part_root" },
@@ -255,7 +247,6 @@ describe("moveMeshVertex operation handler", () => {
     expect(emptyDeltas.diagnostics.map((diagnostic) => diagnostic.checkId)).toEqual([
       "operation.moveMeshVertex.emptyDelta"
     ]);
-    expect(operationCore.operationLog.entries).toHaveLength(0);
     expect(session.authoringRevision).toBe(0);
   });
 
@@ -286,7 +277,6 @@ describe("moveMeshVertex operation handler", () => {
         target: { kind: "part", id: "part_root" }
       }
     ]);
-    expect(locked.operationLogLength).toBe(0);
     expect(session.graph.meshes[0]?.vertices[1]).toEqual({ x: 2, y: 0 });
     expect(session.authoringRevision).toBe(0);
   });
@@ -467,7 +457,6 @@ const createBaseDocument = (session: AuthoringSession): Parameters<typeof toPack
         drawOrder: "model/draw-order.json"
       },
       assetIndex: "assets/sources/source-manifest.json",
-      operationLog: "operations/log.jsonl",
       rightsSummary: { status: "cleared" },
       provenanceSummary: { sourceAssetCount: 0 },
       packageStableOrderVersion: "stable-order-v1"

@@ -105,18 +105,17 @@ describe("minimal-operation-runtime-evidence contract fixture", () => {
     expect(summarizeValidationDiff(result.validationDiff)).toEqual(
       loadValidationDiffSummary().dryRun
     );
-    expect(summarizeOperationResultEvidence(result, core.operationLog.entries.length)).toEqual(
+    expect(summarizeOperationResultEvidence(result)).toEqual(
       expectedOperationResultEvidence.dryRun
     );
     expect(summarizeSession(session, targetParameterId)).toEqual(before);
     expect(getParameterById(session.graph, targetParameterId)).toBeUndefined();
   });
 
-  it("commits fixture mutation, appends log entry, and carries expected evidence summaries", () => {
+  it("commits fixture mutation and carries expected evidence summaries", () => {
     const session = createFixtureSession();
     const artifacts: FixtureEvidenceArtifacts[] = [];
     const core = createOperationCore({
-      now: () => new Date("2026-05-29T00:00:00.000Z"),
       evidenceProvider: (input) => collectFixtureEvidence(input, artifacts)
     });
     const targetParameterId = ParameterIdSchema.parse("param_fixture_smile");
@@ -141,8 +140,6 @@ describe("minimal-operation-runtime-evidence contract fixture", () => {
     expect(session.packageRevision).toBe(candidatePackageRevision);
     expect(session.authoringRevision).toBe(1);
     expect(session.dirty).toBe(true);
-    expect(outcome.operationLogLength).toBe(1);
-    expect(core.operationLog.entries).toHaveLength(1);
     expect(outcome.result.generatedRuntimeSnapshotIds).toEqual(
       expectedRuntimeSummary.generatedRuntimeSnapshotIds
     );
@@ -161,13 +158,7 @@ describe("minimal-operation-runtime-evidence contract fixture", () => {
     expect(summarizeValidationDiff(outcome.result.validationDiff)).toEqual(
       loadValidationDiffSummary().commit
     );
-    expect({
-      ...summarizeOperationResultEvidence(outcome.result, outcome.operationLogLength),
-      logEntry: {
-        runtimeSnapshotIds: outcome.logEntry?.runtimeSnapshotIds,
-        validationReportIds: outcome.logEntry?.validationReportIds
-      }
-    }).toEqual(expectedOperationResultEvidence.commit);
+    expect(summarizeOperationResultEvidence(outcome.result)).toEqual(expectedOperationResultEvidence.commit);
   });
 });
 
@@ -226,8 +217,6 @@ interface ValidationReportSummary {
   readonly candidateReportId: ValidationReportId;
   readonly status: string;
   readonly highestSeverity: string;
-  readonly operationLogPresent: boolean;
-  readonly operationLogPath?: string;
   readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
 }
 
@@ -247,12 +236,7 @@ interface ValidationDiffSummary {
 
 interface OperationResultEvidenceSummaryFixture {
   readonly dryRun: OperationResultEvidenceSummary;
-  readonly commit: OperationResultEvidenceSummary & {
-    readonly logEntry: {
-      readonly runtimeSnapshotIds: readonly RuntimeSnapshotId[];
-      readonly validationReportIds: readonly ValidationReportId[];
-    };
-  };
+  readonly commit: OperationResultEvidenceSummary;
 }
 
 interface OperationResultEvidenceSummary {
@@ -263,7 +247,6 @@ interface OperationResultEvidenceSummary {
   readonly generatedRuntimeStateSequenceRefs: readonly string[];
   readonly finalRuntimeStateRef: string;
   readonly generatedValidationReportIds: readonly ValidationReportId[];
-  readonly operationLogLength: number;
   readonly originalAuthoringRevisionAfter?: number;
   readonly originalDirtyAfter?: boolean;
   readonly authoringRevisionAfter?: number;
@@ -326,9 +309,7 @@ const collectFixtureEvidence = (
     packageId: runtimeEvidence.candidateSnapshot.packageId,
     packageRevision: runtimeEvidence.candidateSnapshot.packageRevision,
     packageHash: baseline.baselinePackage.packageHash,
-    runtimeSnapshotIds: runtimeEvidence.generatedRuntimeSnapshotIds,
-    operationLogPresent: input.lifecycle === "commit",
-    ...(input.lifecycle === "commit" ? { operationLogPath: "operations/log.jsonl" } : {})
+    runtimeSnapshotIds: runtimeEvidence.generatedRuntimeSnapshotIds
   });
   const validationDiff = buildValidationDiff({
     baseline: baselineReport,
@@ -419,10 +400,6 @@ const summarizeValidationReport = (
   candidateReportId: artifact.candidateReport.reportId,
   status: artifact.candidateReport.summary.status,
   highestSeverity: artifact.candidateReport.summary.highestSeverity,
-  operationLogPresent: artifact.candidateReport.evidence.operationLogPresent,
-  ...(artifact.candidateReport.evidence.operationLogPath === undefined
-    ? {}
-    : { operationLogPath: artifact.candidateReport.evidence.operationLogPath }),
   runtimeSnapshotIds:
     mode === "dryRun"
       ? artifact.candidateReport.evidence.runtimeSnapshotIds
@@ -450,8 +427,7 @@ const summarizeOperationResultEvidence = (
   result: OperationEvidenceResultDto & {
     readonly operationId: string;
     readonly status: string;
-  },
-  operationLogLength: number
+  }
 ): OperationResultEvidenceSummary => ({
   operationId: result.operationId,
   status: result.status,
@@ -460,7 +436,6 @@ const summarizeOperationResultEvidence = (
   generatedRuntimeStateSequenceRefs: result.generatedRuntimeStateSequenceRefs,
   finalRuntimeStateRef: result.finalRuntimeStateRef ?? "",
   generatedValidationReportIds: result.generatedValidationReportIds,
-  operationLogLength,
   ...(result.status === "dry_run"
     ? {
         originalAuthoringRevisionAfter: 0,
@@ -501,10 +476,7 @@ const withRuntimeArtifactRevision = (
 ): OperationResultEvidenceSummaryFixture => ({
   ...summary,
   dryRun: reviseOperationResultArtifactRefs(summary.dryRun, candidatePackageRevision),
-  commit: {
-    ...reviseOperationResultArtifactRefs(summary.commit, candidatePackageRevision),
-    logEntry: summary.commit.logEntry
-  }
+  commit: reviseOperationResultArtifactRefs(summary.commit, candidatePackageRevision)
 });
 
 const reviseOperationResultArtifactRefs = (

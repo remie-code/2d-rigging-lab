@@ -13,7 +13,7 @@ Basis: [判断](../material-interface-git-redesign.md)、[計画](../material-in
 
 ## 実装の要点（リポジトリ事実）
 
-- **2 つの operation**: payload には画像パス、RGBA SHA-256、幅・高さ、配置、足し方、来歴メモを持つ。operation log にはパスとハッシュだけが残る。
+- **2 つの operation**: payload には画像パス、RGBA SHA-256、幅・高さ、配置、足し方、来歴メモを持つ。operation log にはパスとハッシュだけが残る（2026-10-20 追記: 操作の記録はその後パッケージから撤去した。根拠: [drop-operation-log.md](../../../design/drop-operation-log.md)）。
 - **ID の種**: operationId から作る。operationId を省略した場合は、種別・部品・`r<basePackageRevision>`・ハッシュ先頭 16 桁から決まる。同じ operationId の再実行は `idCollision` で拒否される。
 - **ホストの取り込み**: dry-run と commit のたびに次を行う。
   1. PNG を読み、検査し、RGBA8 に正規化する。
@@ -51,6 +51,6 @@ Basis: [判断](../material-interface-git-redesign.md)、[計画](../material-in
 ## 残課題（未決事項）
 
 - `state-directory-guard.test.ts` の既存失敗。ロックより先に state dir を検査すれば直るが、全コマンドの処理順を変えることになる。
-- 実モデルの commit 約 33 秒の大半は、`operations/log.jsonl`（約 249MB）の再シリアライズと、全テクスチャの読み比べと推測している（プロファイルは未取得）。素材インターフェースとは別の既存の重さ。
+- 実モデルの commit 約 33 秒の大半は、`operations/log.jsonl`（約 249MB）の再シリアライズと、全テクスチャの読み比べと推測している（プロファイルは未取得）。素材インターフェースとは別の既存の重さ。（2026-10-20 追記: その後の計測で記録の読み書きが大半と確かめ、記録の撤去とテクスチャ判定の複製の解消で対処した。根拠: [drop-operation-log.md](../../../design/drop-operation-log.md)）
 - 判断文書にある対象外事項（使われなくなったテクスチャの掃除、padding 方針、operating-policies の「非バイナリ」の記述）。
 - `AiCommandRequestSchema` が intersection のため、payload の中の未知キーを拒否しない（以前からの挙動）。

@@ -5,10 +5,6 @@
       "operationType": "importSplitPngSourceAsset",
       "operationId": "op_import_split_body_evidence",
       "resultStatus": "committed",
-      "targetIds": [
-        "src_split_body",
-        "layer_body"
-      ],
       "sourceState": {
         "sourceAssets": [
           {
@@ -38,12 +34,6 @@
       "operationType": "createDrawable",
       "operationId": "op_create_body",
       "resultStatus": "committed",
-      "targetIds": [
-        "draw_body",
-        "mesh_body",
-        "part_root",
-        "src_split_body"
-      ],
       "sourceState": {
         "sourceAssets": [
           {
@@ -72,10 +62,6 @@
       "operationType": "generateMesh",
       "operationId": "op_generate_mesh_body",
       "resultStatus": "committed",
-      "targetIds": [
-        "draw_body",
-        "mesh_body"
-      ],
       "sourceState": {
         "sourceAssets": [
           {
@@ -102,13 +88,7 @@
     }
   ],
   "packageFileSet": {
-    "entryCount": 34,
-    "operationLogPath": "operations/log.jsonl",
-    "operationLogTypes": [
-      "importSplitPngSourceAsset",
-      "createDrawable",
-      "generateMesh"
-    ],
+    "entryCount": 33,
     "sourceManifest": {
       "sourceAssetIds": [
         "src_split_body"

@@ -73,9 +73,7 @@ describe("importSplitPngSourceAsset operation handler", () => {
 
   it("commits source manifest, provenance, and rights records through operation core", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-30T00:00:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(session, createImportSplitPngRequest({ dryRun: false }));
 
@@ -102,15 +100,11 @@ describe("importSplitPngSourceAsset operation handler", () => {
         redistributionAllowed: false
       }
     ]);
-    expect(outcome.logEntry?.operationType).toBe("importSplitPngSourceAsset");
-    expect(outcome.logEntry?.targetIds).toEqual(["src_split_body", "layer_body"]);
   });
 
   it("commits texture preview metadata when split PNG layer mapping is explicit", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-30T00:05:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -152,32 +146,11 @@ describe("importSplitPngSourceAsset operation handler", () => {
       "/assets/textureAtlas/textures/tex_body",
       "/assets/textureAtlas/previewAssets/preview_src_split_body_layer_body"
     ]));
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "src_split_body",
-      "layer_body",
-      "tex_body",
-      "part_root"
-    ]);
-    expect(outcome.logEntry?.payload).toMatchObject({
-      operationType: "importSplitPngSourceAsset",
-      payload: {
-        layers: [
-          expect.objectContaining({
-            sourceLayerId: "layer_body",
-            texturePreviewReference: "assets/textures/body.preview.png",
-            textureId: "tex_body",
-            targetPartId: "part_root"
-          })
-        ]
-      }
-    });
   });
 
   it("materializes split PNG source and texture binary refs as pending package-local metadata", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-30T00:05:30.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -239,9 +212,7 @@ describe("importSplitPngSourceAsset operation handler", () => {
 
   it("reports unsupported split PNG binary storage without treating bytes as verified", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-30T00:05:45.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -315,9 +286,7 @@ describe("importSplitPngSourceAsset operation handler", () => {
 
   it("commits deterministic data URL texture preview metadata as browser-renderable preview assets", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-30T00:06:00.000Z")
-    });
+    const core = createOperationCore();
     const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
 
     const outcome = core.commitOperation(
@@ -351,18 +320,6 @@ describe("importSplitPngSourceAsset operation handler", () => {
         rightsAssetId: "src_split_body"
       })
     ]);
-    expect(outcome.logEntry?.payload).toMatchObject({
-      operationType: "importSplitPngSourceAsset",
-      payload: {
-        layers: [
-          expect.objectContaining({
-            sourceLayerId: "layer_body",
-            texturePreviewReference: dataUrl,
-            textureId: "tex_body"
-          })
-        ]
-      }
-    });
   });
 
   it("rejects texture materialization when the texture ID already exists in the atlas", () => {

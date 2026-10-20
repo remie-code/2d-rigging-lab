@@ -67,8 +67,6 @@ export interface TutorialMiniModelReadinessInput {
 export interface TutorialMiniModelReadinessReportInput extends TutorialMiniModelReadinessInput {
   readonly reportId?: ValidationReportId | string;
   readonly createdAt?: string;
-  readonly operationLogPresent?: boolean;
-  readonly operationLogPath?: string;
 }
 
 const TUTORIAL_RELATED_AC = ["AC-MVP-004", "AC-MVP-005", "AC-MVP-007", "AC-MVP-009", "AC-MVP-010", "AC-MVP-012", "AC-MVP-013", "AC-MVP-016"];
@@ -102,7 +100,6 @@ export const buildTutorialMiniModelReadinessReport = (
     ...(input.createdAt === undefined ? {} : { createdAt: input.createdAt })
   });
   const tutorialChecks = validateTutorialMiniModelReadiness(input);
-  const operationLogPath = input.operationLogPath ?? packageRuntimeReport.evidence.operationLogPath;
 
   return buildValidationReport({
     reportId: input.reportId ?? createTutorialReadinessReportId(input.packageDocument),
@@ -116,8 +113,6 @@ export const buildTutorialMiniModelReadinessReport = (
       ...tutorialChecks
     ],
     evidence: {
-      operationLogPresent: input.operationLogPresent ?? packageRuntimeReport.evidence.operationLogPresent,
-      ...(operationLogPath === undefined ? {} : { operationLogPath }),
       runtimeSnapshotIds: [...packageRuntimeReport.evidence.runtimeSnapshotIds],
       supplementalGuiEvidenceRefs: [...packageRuntimeReport.evidence.supplementalGuiEvidenceRefs]
     }

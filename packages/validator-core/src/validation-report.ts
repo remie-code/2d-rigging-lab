@@ -54,8 +54,6 @@ export const RepairCandidateSchema = z.object({
 export type RepairCandidateDto = z.infer<typeof RepairCandidateSchema>;
 
 export const ValidationReportEvidenceSchema = z.object({
-  operationLogPresent: z.boolean(),
-  operationLogPath: z.string().optional(),
   runtimeSnapshotIds: z.array(RuntimeSnapshotIdSchema).default([]),
   supplementalGuiEvidenceRefs: z.array(z.string()).default([])
 });

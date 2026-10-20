@@ -4,11 +4,13 @@
 
 Accepted
 
+- 2026-10-20: 操作の記録（operation log / `operations/log.jsonl`）を持たない形に改めた（DEC-OP-004 を Superseded、関連する必須・禁止・表を修正）。根拠: [../design/drop-operation-log.md](../design/drop-operation-log.md)
+
 ## Purpose
 
 This policy defines the only allowed mutation path for model packages in the Private 2D Rigging Lab / Prototype. GUI actions, AI suggestions, validator repairs, tests, and acceptance workflows must route package-changing work through Operation Core.
 
-It prevents direct package JSON mutation, AI commits without human approval, unclear dry-run versus commit behavior, missing diffs, missing validation, and operation logs that cannot explain why a package changed.
+It prevents direct package JSON mutation, AI commits without human approval, unclear dry-run versus commit behavior, missing diffs, and missing validation. Package change history is owned by git; each operation is explained by its operation result (model diff and related diffs) and validation evidence.
 
 ## Scope
 
@@ -19,7 +21,7 @@ It prevents direct package JSON mutation, AI commits without human approval, unc
 - AI assistant proposed operations and dry-runs.
 - Validator repair suggestions when they are represented as operations.
 - Test fixtures and acceptance runner flows that mutate model packages.
-- Operation logs, model diffs, runtime diffs, validation diffs, approval evidence, and commit evidence.
+- Operation results, model diffs, runtime diffs, validation diffs, approval evidence, and commit evidence.
 
 ### Actors
 
@@ -33,7 +35,7 @@ It prevents direct package JSON mutation, AI commits without human approval, unc
 
 ### Does not apply to
 
-- Runtime-only evaluation that does not mutate a model package, except where Operation Core records evidence operations such as `runDynamicsPreviewSequence`.
+- Runtime-only evaluation that does not mutate a model package, except where Operation Core runs evidence operations such as `runDynamicsPreviewSequence`.
 - Post-MVP undo/redo behavior beyond the MVP decision recorded in this policy.
 - Cubism file import/export, Cubism SDK/Core behavior, Cubism Viewer consistency, Cubism Physics compatibility, or existing Cubism models as oracle sources.
 
@@ -88,17 +90,17 @@ All model package mutation must pass through Operation Core. GUI, AI, validator 
 
 #### Rationale
 
-A single mutation gateway makes diffs, validation, approval, operation logs, and review evidence consistent.
+A single mutation gateway makes diffs, validation, approval, operation results, and review evidence consistent.
 
 #### Alternatives considered
 
 - GUI-owned direct edits: rejected because they bypass Operation Core evidence.
 - AI direct patching: rejected because it bypasses approval and validation.
-- Validator direct repair: rejected because it bypasses operation logging.
+- Validator direct repair: rejected because it bypasses dry-run, model diff, and validation.
 
 #### Impact
 
-Every mutating workflow must produce an operation result with model diff, validation result or validation diff, and operation log entry.
+Every mutating workflow must produce an operation result with model diff and validation result or validation diff.
 
 ### DEC-OP-002: Dry-run and commit boundary
 
@@ -125,12 +127,11 @@ Commit output must include:
 - before and after revision.
 - model diff.
 - validation report.
-- operation log entry.
 - generated evidence refs.
 
 #### Rationale
 
-Dry-run output lets a human or test inspect the proposed change before mutation. Commit output proves what changed.
+Dry-run output lets a human or test inspect the proposed change before mutation. Commit output (the operation result) shows what changed; the package change history itself is owned by git.
 
 #### Alternatives considered
 
@@ -166,40 +167,7 @@ AI flows must produce AI dry-run evidence and approval evidence before commit.
 
 ### DEC-OP-004: Operation log
 
-#### Question
-
-What must operation logs contain?
-
-#### Decision
-
-Operation logs must include at least:
-
-- `operationId`
-- actor
-- surface
-- target
-- payload
-- `dryRun`
-- approval status
-- before revision
-- after revision for commit
-- generated evidence refs
-- model diff ref
-- runtime diff ref when applicable
-- validation report or validation diff ref
-
-#### Rationale
-
-Operation logs are the audit trail that lets Clean Context Review reconstruct why and how a package changed.
-
-#### Alternatives considered
-
-- Console-only logs: rejected because they are not durable evidence.
-- Commit message only: rejected because it lacks structured evidence refs.
-
-#### Impact
-
-Operation result artifacts and acceptance evidence must reference operation logs.
+> Superseded（2026-10-20）: 操作の記録は持たない。変更履歴は git、操作ごとの説明は operation result（modelDiff 等）と validation が担う。根拠は [../design/drop-operation-log.md](../design/drop-operation-log.md)
 
 ### DEC-OP-005: Runtime sequence operation
 
@@ -209,7 +177,7 @@ How are runtime/evidence operations that do not mutate packages handled?
 
 #### Decision
 
-Runtime/evidence operations such as `runDynamicsPreviewSequence` are non-mutating operations. They may be routed through Operation Core to produce operation logs, RuntimeState sequence artifacts, runtime diffs, and validation reports, but they must not change package revision.
+Runtime/evidence operations such as `runDynamicsPreviewSequence` are non-mutating operations. They may be routed through Operation Core to produce RuntimeState sequence artifacts, runtime diffs, and validation reports, but they must not change package revision.
 
 #### Rationale
 
@@ -232,7 +200,7 @@ Is undo/redo part of MVP operation semantics?
 
 #### Decision
 
-Undo/redo is Post-MVP unless a later accepted policy explicitly promotes it. MVP operation logs must still contain enough before/after revision information to support future undo/redo design.
+Undo/redo is Post-MVP unless a later accepted policy explicitly promotes it. MVP does not keep an operation record for future undo/redo design; the operation result (model diff and before/after revision) is sufficient input for that design, and package change history is owned by git.
 
 #### Rationale
 
@@ -244,7 +212,7 @@ MVP needs reliable mutation, diffs, validation, and evidence before adding histo
 
 #### Impact
 
-Tests must not require undo/redo for MVP acceptance. Reviewers may require durable before/after revision evidence.
+Tests must not require undo/redo for MVP acceptance. Reviewers may require the operation result's model diff and before/after revision.
 
 ## Required Diagrams
 
@@ -258,7 +226,6 @@ sequenceDiagram
   participant Validator as validator
   participant Runtime as runtimeCore
   participant Human as humanApprover
-  participant Log as operationLog
 
   GUI->>OpCore: requestOperation(operation)
   AI->>OpCore: proposeOperation(operation)
@@ -272,9 +239,9 @@ sequenceDiagram
   Human-->>OpCore: approveOrReject
   alt approved
     OpCore->>OpCore: commit(operation)
-    OpCore->>Log: appendCommittedOperation
+    OpCore-->>GUI: operationResult(modelDiff,validationReport)
   else rejected
-    OpCore->>Log: appendRejectedDryRun
+    OpCore-->>GUI: noPackageChange
   end
 ```
 
@@ -287,7 +254,6 @@ sequenceDiagram
   participant OpCore as operationCore
   participant Validator as validator
   participant Human as humanApprover
-  participant Log as operationLog
 
   User->>AI: aiRequest
   AI-->>OpCore: proposedOperation
@@ -299,10 +265,10 @@ sequenceDiagram
   alt commitApproved
     Human-->>OpCore: approve
     OpCore->>OpCore: commit(proposedOperation)
-    OpCore->>Log: appendCommittedOperation
+    OpCore-->>AI: operationResult(modelDiff,validationReport)
   else rejected
     Human-->>OpCore: reject
-    OpCore->>Log: appendRejectedDryRun
+    OpCore-->>AI: noPackageChange
   end
 ```
 
@@ -312,12 +278,12 @@ sequenceDiagram
 
 | Operation type | Mutates package? | Requires approval? | Evidence | Actor allowed |
 | --- | --- | --- | --- | --- |
-| `package.edit` | yes | yes for AI, conditional for GUI/test profiles | operation log, model diff, validation report | GUI, AI dry-run, test |
+| `package.edit` | yes | yes for AI, conditional for GUI/test profiles | model diff, validation report | GUI, AI dry-run, test |
 | `validator.repair.propose` | no | no | proposed operation, validation report | validator, AI, test |
-| `validator.repair.commit` | yes | yes | approval evidence, operation log, model diff, validation report | human-approved GUI/test flow |
-| `runDynamicsPreviewSequence` | no | no unless initiated from AI proposal requiring user confirmation | operation log, RuntimeState sequence artifact, runtime diff, validation report | GUI, AI dry-run, test, acceptance runner |
+| `validator.repair.commit` | yes | yes | approval evidence, model diff, validation report | human-approved GUI/test flow |
+| `runDynamicsPreviewSequence` | no | no unless initiated from AI proposal requiring user confirmation | RuntimeState sequence artifact, runtime diff, validation report | GUI, AI dry-run, test, acceptance runner |
 | `ai.proposeOperation` | no | no for proposal, yes before commit | AI dry-run response, diff bundle, validation report | AI |
-| `package.commitApprovedOperation` | yes | yes | approval evidence, operation log, before/after revision, model diff | Operation Core |
+| `package.commitApprovedOperation` | yes | yes | approval evidence, before/after revision, model diff | Operation Core |
 
 ### Actor Permission Table
 
@@ -335,14 +301,13 @@ sequenceDiagram
 
 | Artifact | Produced by | Required? | Used by |
 | --- | --- | --- | --- |
-| operation log | Operation Core | yes | Clean Context Review, acceptance runner, audit trail |
 | model diff | Operation Core | yes for mutating dry-run and commit | GUI, AI review, tests, reviewer |
 | runtime diff | Runtime Core via Operation Core | yes when runtime-visible behavior may change | runtime tests, reviewer, acceptance runner |
 | validation diff | Validator via Operation Core | yes for dry-run when validation result changes | GUI, AI review, reviewer |
 | validation report | Validator via Operation Core | yes for commit and runtime evidence operations | acceptance runner, reviewer |
 | AI dry-run response | AI and Operation Core | yes for AI proposed changes | human approver, reviewer |
-| approval evidence | GUI or approval surface via Operation Core | yes before AI-originated commit | operation log, reviewer |
-| before/after revision record | Operation Core | yes for commit | future undo/redo design, audit trail |
+| approval evidence | GUI or approval surface via Operation Core | yes before AI-originated commit | Operation Core commit, reviewer |
+| before/after revision (in the commit operation result) | Operation Core | yes for commit | reviewer, future undo/redo design |
 | RuntimeState sequence artifact | Runtime Core via Operation Core | yes for `runDynamicsPreviewSequence` | deterministic replay, runtime review |
 
 ## Rules
@@ -356,8 +321,8 @@ sequenceDiagram
 - Mutating dry-runs and commits must produce model diffs.
 - Runtime-visible operations must produce runtime diffs or an explicit evidence note explaining why runtime output is unchanged.
 - Dry-run must produce validation diff or validation report evidence.
-- Commit must append a durable operation log entry.
-- Non-mutating runtime/evidence operations must be logged when they are used as acceptance evidence.
+- Commit must return an operation result with model diff, validation report, and before/after revision. Commit does not write an operation record into the package; package change history is owned by git.
+- Non-mutating runtime/evidence operations must produce their operation result (RuntimeState sequence artifact, runtime diff, validation report) when they are used as acceptance evidence.
 - Machine-readable operation IDs, actor IDs, target kinds, fixture IDs, test IDs, and artifact IDs must contain no spaces.
 
 ## Forbidden
@@ -365,7 +330,6 @@ sequenceDiagram
 - Direct model package mutation by GUI, AI, validator, tests, or acceptance runner outside Operation Core.
 - AI commit without human approval.
 - Treating dry-run as commit.
-- Commit without operation log.
 - Commit without required validation evidence.
 - Mutating operation without model diff.
 - Runtime-visible operation without runtime diff or explicit unchanged-runtime evidence.
@@ -375,7 +339,6 @@ sequenceDiagram
 
 ## Required Evidence
 
-- operation log
 - model diff
 - runtime diff when runtime-visible behavior may change
 - validation diff for dry-run where applicable
@@ -384,7 +347,6 @@ sequenceDiagram
 - approval evidence before AI-originated commit
 - before and after revision for commit
 - RuntimeState sequence artifact for runtime sequence operations
-- rejection log for rejected dry-runs when evidence was presented for review
 
 ## Review Checklist
 
@@ -398,7 +360,7 @@ sequenceDiagram
 - [ ] Mutating operations produce model diffs.
 - [ ] Runtime-visible operations produce runtime diffs or explicit unchanged-runtime evidence.
 - [ ] Validation evidence is produced before commit.
-- [ ] Operation logs include actor, surface, target, payload, dry-run flag, approval status, revisions, and evidence refs.
+- [ ] Commit operation results include model diff, validation report, before/after revision, and evidence refs; no operation record is written into the package.
 - [ ] MVP does not include Cubism file operations, Cubism Physics compatibility, or `.physics3.json` import/export.
 - [ ] Machine-readable identifiers contain no spaces.
 
@@ -445,7 +407,7 @@ Known unresolved items for this policy:
 
 - Changes to this policy must preserve the common template sections.
 - Any new mutating actor must be added to the Actor Permission Table before implementation.
-- Any new mutating operation type must define approval, diff, validation, and operation log evidence before implementation.
+- Any new mutating operation type must define approval, diff, and validation evidence before implementation.
 - AI commit permissions cannot be expanded without explicit policy update and review.
 - Undo/redo cannot enter MVP by implementation inference; it requires an accepted policy change.
 - Any conflict discovered during implementation or review must be recorded before code or test behavior is changed.
@@ -458,7 +420,7 @@ Known unresolved items for this policy:
 - [ ] Operation Core is defined as the only mutation gateway.
 - [ ] Dry-run, commit, and approval boundaries are defined.
 - [ ] AI propose/dry-run/commit limits are explicit.
-- [ ] Model diff, runtime diff, validation diff/report, approval evidence, and operation log requirements are explicit.
+- [ ] Model diff, runtime diff, validation diff/report, and approval evidence requirements are explicit.
 - [ ] Non-mutating runtime sequence operations are covered.
 - [ ] MVP undo/redo status is defined.
 - [ ] Forbidden Cubism oracle and MVP operation constraints are explicit.

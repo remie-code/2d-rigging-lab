@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { RenderViewResultSchema } from "@private-2d-rigging-lab/ai-interface";
-import { createMaterialImageIdSeed, parseOperationLogEntriesFromJsonl } from "@private-2d-rigging-lab/operation-core";
+import { createMaterialImageIdSeed } from "@private-2d-rigging-lab/operation-core";
 
 import { loadAuthoringPackageDirectory } from "./package-directory-io.js";
 import { materialPixel, readMaterialTestPng } from "./material-test-fixtures.js";
@@ -106,12 +106,14 @@ describe("addDrawableFromImage through the CLI", () => {
     expect(new Uint8Array(await readFile(join(f.packageDirectory, "assets", "textures", `${seed}.rgba`)))).toEqual(image.rgbaBytes);
     expectColor(await renderPixel(f, addRect(f), "after"), GREEN);
 
-    const logText = await readFile(join(f.packageDirectory, reopened.packageDocument.manifest.operationLog), "utf8");
-    const entry = parseOperationLogEntriesFromJsonl(logText).find((item) => item.operationId === "op_material_add")!;
-    expect(JSON.stringify(entry)).toContain(image.imagePath.replaceAll("\\", "\\\\"));
-    expect(JSON.stringify(entry)).toContain(image.rgbaSha256);
-    expect(logText).not.toContain("rgbaBytes");
-    expect(logText.length).toBeLessThan(200_000);
+    // The commit writes only package files: no record of the operation is added next to them.
+    expect(Object.keys(await snapshotDirectory(f.packageDirectory)).filter((path) => !(path in before) && !path.startsWith("assets/"))).toEqual([]);
+    // The payload names the image only by path and hash; neither API response carries the pixels.
+    for (const response of [dryRun.response, commit.response]) {
+      const responseText = JSON.stringify(response);
+      expect(responseText).not.toContain("rgbaBytes");
+      expect(responseText.length).toBeLessThan(200_000);
+    }
     await expectNoCopiesOutsidePackage(f);
   }, 120_000);
 

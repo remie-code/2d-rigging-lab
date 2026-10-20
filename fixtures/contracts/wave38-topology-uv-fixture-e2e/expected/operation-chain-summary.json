@@ -14,19 +14,14 @@
       "operationType": "addMeshVertex",
       "status": "rejected",
       "expectedCheckId": "operation.addMeshVertex.topologyRevisionMismatch",
-      "operationLogAppended": false,
       "meshStateCorrupted": false
     }
   ],
-  "operationLogContract": {
-    "finalOperationLogLength": 6,
-    "rejectedOperationLogged": false,
-    "topologyOperationTypes": [
-      "addMeshVertex",
-      "addMeshTriangle",
-      "moveMeshUvPoint"
-    ]
-  },
+  "topologyOperationTypes": [
+    "addMeshVertex",
+    "addMeshTriangle",
+    "moveMeshUvPoint"
+  ],
   "nonClaims": {
     "automaticTriangulation": false,
     "atlasPacking": false,

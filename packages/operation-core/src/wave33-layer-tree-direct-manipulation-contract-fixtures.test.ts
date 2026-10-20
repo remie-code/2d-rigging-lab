@@ -137,9 +137,7 @@ describe("wave33 layer tree direct manipulation contract fixture", () => {
     const baselineSession = createFixtureSession();
     const baselinePackage = loadBaselinePackageDocument();
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date(CREATED_AT)
-    });
+    const core = createOperationCore();
     const applied = loadOperationRequests().map((request) => {
       const outcome = core.commitOperation(session, request);
 
@@ -212,7 +210,6 @@ describe("wave33 layer tree direct manipulation contract fixture", () => {
           "editor.layerTreeDirectDraft.drawablePartToPendingDelete"
         ],
         latestSessionPersistenceResult: null,
-        operationLogMutationAllowed: false,
         packageGraphMutationAllowed: false,
         draftStatePreserved: true
       },
@@ -242,16 +239,13 @@ const summarizeOperationChain = (
   fixtureId: FIXTURE_ID,
   packageRevisionAfter: session.packageRevision,
   authoringRevisionAfter: session.authoringRevision,
-  operationLogTypes: applied.map(({ outcome }) => requireLogEntry(outcome).operationType),
   operations: applied.map(({ request, outcome, packageRevisionAfter, authoringRevisionAfter }) => {
     const modelDiff = requireModelDiff(outcome);
-    const logEntry = requireLogEntry(outcome);
 
     return {
       operationId: outcome.result.operationId,
       operationType: request.operationType,
       status: outcome.result.status,
-      targetIds: logEntry.targetIds,
       changedTargets: summarizeChangedTargets(modelDiff),
       removedTargets: summarizeTargets(modelDiff.removed),
       changedFieldPaths: summarizeChangedFieldPaths(modelDiff),
@@ -263,7 +257,6 @@ const summarizeOperationChain = (
     operationId: rejectedNonEmptyDelete.result.operationId,
     operationType: loadRejectedDeleteRequest().operationType,
     status: rejectedNonEmptyDelete.result.status,
-    operationLogLengthAfter: rejectedNonEmptyDelete.operationLogLength,
     diagnostics: rejectedNonEmptyDelete.result.precondition.diagnostics.map((diagnostic) => ({
       checkId: diagnostic.checkId,
       severity: diagnostic.severity,
@@ -511,9 +504,7 @@ const summarizeValidationReport = (report: ValidationReportDto) => ({
   highestSeverity: report.summary.highestSeverity,
   counts: report.summary.counts,
   checkIds: report.checks.map((check) => check.checkId),
-  runtimeSnapshotIds: report.evidence.runtimeSnapshotIds,
-  operationLogPresent: report.evidence.operationLogPresent,
-  operationLogPath: report.evidence.operationLogPath ?? null
+  runtimeSnapshotIds: report.evidence.runtimeSnapshotIds
 });
 
 const pinReportId = (
@@ -522,21 +513,8 @@ const pinReportId = (
 ): ValidationReportDto =>
   ValidationReportSchema.parse({
     ...report,
-    reportId,
-    evidence: {
-      ...report.evidence,
-      operationLogPresent: true,
-      operationLogPath: "operations/log.jsonl"
-    }
+    reportId
   });
-
-const requireLogEntry = (outcome: CommitOperationOutcome) => {
-  if (outcome.logEntry === undefined) {
-    throw new Error(`Expected committed operation ${outcome.result.operationId} to have a log entry.`);
-  }
-
-  return outcome.logEntry;
-};
 
 const requireModelDiff = (outcome: CommitOperationOutcome): ModelDiffDto => {
   if (outcome.result.modelDiff === undefined) {

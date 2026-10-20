@@ -28,7 +28,6 @@ import type {
   OperationResultDto
 } from "./index.js";
 
-const CREATED_AT = "2026-06-01T00:00:00.000Z";
 const BASELINE_SNAPSHOT_ID = "snap_parent_child_rigcontrol_diagonal_0";
 const CANDIDATE_SNAPSHOT_ID = "snap_parent_child_rigcontrol_diagonal_1";
 const CANDIDATE_REPORT_ID = "val_parent_child_rigcontrol_diagonal_candidate";
@@ -67,12 +66,11 @@ describe("parent-child-rigControl-diagonal operation contract fixture", () => {
   it("commits create/bind sequence and attaches final runtime and validator evidence refs", () => {
     const session = createFixtureSession();
     const core = createOperationCore({
-      now: () => new Date(CREATED_AT),
       evidenceProvider: collectFixtureEvidence
     });
     const outcomes = loadCommitRequests().map((request) => core.commitOperation(session, request));
 
-    expect(summarizeCommitSequence(outcomes.map((outcome) => outcome.result), session, core.operationLog.entries.length)).toEqual(
+    expect(summarizeCommitSequence(outcomes.map((outcome) => outcome.result), session)).toEqual(
       loadFixtureJson("expected/operation-result-evidence-summary.json").commitSequence
     );
   });
@@ -152,8 +150,7 @@ const summarizeDryRunResult = (
 
 const summarizeCommitSequence = (
   results: readonly OperationResultDto[],
-  session: AuthoringSession,
-  operationLogLength: number
+  session: AuthoringSession
 ) => {
   const finalResult = results.at(-1);
   if (finalResult === undefined) {
@@ -163,7 +160,6 @@ const summarizeCommitSequence = (
   return {
     operationIds: results.map((result) => result.operationId),
     statuses: results.map((result) => result.status),
-    operationLogLength,
     packageRevisionAfter: session.packageRevision,
     authoringRevisionAfter: session.authoringRevision,
     rigControlRootIds: session.graph.rigControlRootIds,

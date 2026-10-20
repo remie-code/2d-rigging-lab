@@ -20,7 +20,6 @@
   "checks": [],
   "repairCandidates": [],
   "evidence": {
-    "operationLogPresent": false,
     "runtimeSnapshotIds": [
       "snap_minimal-valid-package_0"
     ],

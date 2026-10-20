@@ -15,7 +15,6 @@ import type {
 
 export const VALIDATION_REPORT_ARTIFACT_DIRECTORY = "validation/reports";
 export const VALIDATION_REPORT_ARTIFACT_EXTENSION = ".validation.json";
-export const CANONICAL_OPERATION_LOG_PATH = "operations/log.jsonl";
 
 export type ValidationReportArtifactPath = `${typeof VALIDATION_REPORT_ARTIFACT_DIRECTORY}/${string}${typeof VALIDATION_REPORT_ARTIFACT_EXTENSION}`;
 

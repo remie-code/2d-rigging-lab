@@ -150,7 +150,7 @@ describe("Codex proposal approval lifecycle transcript bridge", () => {
       commitStatus: "committed"
     });
     expect(committed.response.evidenceRefs.map((evidenceRef) => evidenceRef.evidenceKind)).toEqual(
-      expect.arrayContaining(["approvalDecision", "commitResult", "operationLog"])
+      ["approvalDecision", "commitResult"]
     );
     expect(host.commitOperation).toHaveBeenCalledTimes(1);
     expect(host.commitOperation.mock.calls[0]?.[0]).toMatchObject({
@@ -175,8 +175,7 @@ describe("Codex proposal approval lifecycle transcript bridge", () => {
         operationId: "op_createCodexAiParameter",
         evidenceRefs: expect.arrayContaining([
           "evidence_proposal_wave40Ai_approval_wave40Ai_approvalDecision",
-          "evidence_proposal_wave40Ai_approval_wave40Ai_committed_commitResult",
-          "evidence_proposal_wave40Ai_op_createCodexAiParameter_operationLog"
+          "evidence_proposal_wave40Ai_approval_wave40Ai_committed_commitResult"
         ])
       })
     ]);

@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { indexPackageInMemoryFileSet } from "./package-binary-file-index.js";
 import {
   BinaryAssetReferenceSchema,
   PackageDocumentSchema,
@@ -11,6 +13,7 @@ import {
   createPackageBinaryFileEntry,
   createWorkspaceSavePlan,
   type BinaryAssetReferenceDto,
+  type PackageBinaryFileEntry,
   type PackageDocumentDto
 } from "./index.js";
 
@@ -19,6 +22,20 @@ const CORRUPT_BYTES = new Uint8Array([0x61, 0x62, 0x64]);
 const TEST_BYTES_SHA256_HEX =
   "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 const RAW_RGBA_MEDIA_TYPE = "application/vnd.ai-native-live2d.raw-rgba; pixelFormat=rgba8";
+
+// Pass-through spy so a test can count how often a plan indexes (checks) its entry sets.
+vi.mock("./package-binary-file-index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./package-binary-file-index.js")>();
+
+  return {
+    ...actual,
+    indexPackageInMemoryFileSet: vi.fn(actual.indexPackageInMemoryFileSet)
+  };
+});
+
+beforeEach(() => {
+  vi.mocked(indexPackageInMemoryFileSet).mockClear();
+});
 
 describe("workspace save plan binary decisions", () => {
   it("skips an existing verified binary", async () => {
@@ -170,6 +187,212 @@ describe("workspace save plan binary decisions", () => {
       .toEqual(["assets/textures/generated_atlas_page_0.raw-rgba"]);
     expect(getOnlyDecision(committedPlan.binaryDecisions).action).toBe("write");
   });
+
+  it("copies texture bytes a constant number of times per candidate, never the whole set per candidate", async () => {
+    // Scope of this test: the number of large byte copies grows linearly with the candidate count.
+    // It counts byte copies only; how often the entry sets are indexed (checked) is covered by
+    // "indexes each supplied entry set once per plan" below.
+    // Before this was fixed, every candidate decision re-normalized and copied the whole entry set
+    // (O(candidates x total bytes)); a real 133-texture save spent about 5 seconds there.
+    // That implementation makes at least candidateCount^2 large copies here.
+    const candidateCount = 12;
+    const textures = Array.from({ length: candidateCount }, (_, index) => {
+      const bytes = new Uint8Array(LARGE_COPY_THRESHOLD).fill(index + 1);
+
+      return {
+        bytes,
+        ref: createTextureBinaryAssetReference({
+          binaryAssetId: `bin_texture_${index}_rgba`,
+          packageRelativePath: `assets/textures/texture_${index}.raw-rgba`,
+          digest: { algorithm: "sha256", hex: createHash("sha256").update(bytes).digest("hex") },
+          byteLength: bytes.byteLength
+        })
+      };
+    });
+    const document = withTextureBinaryRefs(
+      loadMinimalFixturePackageDocument(),
+      textures.map((texture) => texture.ref)
+    );
+    const entries = textures.map((texture) => createBinaryEntry(texture.ref, texture.bytes));
+    const counterProbe = await countLargeByteCopies(async () => createBinaryEntry(
+      textures[0]?.ref ?? createTextureBinaryAssetReference(),
+      textures[0]?.bytes ?? TEST_BYTES
+    ));
+
+    // The counter sees package-format's byte copies (one copy for one created entry).
+    expect(counterProbe.copies).toBe(1);
+
+    const skip = await countLargeByteCopies(() => createWorkspaceSavePlan({
+      packageDocument: document,
+      existingWorkspaceBinaryFileEntries: entries
+    }));
+    const write = await countLargeByteCopies(() => createWorkspaceSavePlan({
+      packageDocument: document,
+      currentSessionBinaryFileEntries: entries
+    }));
+
+    expect(skip.result.binaryDecisions.map((decision) => decision.action))
+      .toEqual(Array.from({ length: candidateCount }, () => "skip"));
+    expect(write.result.binaryDecisions.map((decision) => decision.action))
+      .toEqual(Array.from({ length: candidateCount }, () => "write"));
+    // skip: one digest copy per candidate (existing bytes are not copied).
+    // write: one session copy per entry when the plan starts, plus one digest copy per candidate.
+    expect(skip.copies).toBeLessThanOrEqual(candidateCount);
+    expect(write.copies).toBeLessThanOrEqual(2 * candidateCount);
+  });
+
+  it("still rejects duplicate or unsafe supplied entry paths before deciding", async () => {
+    const binaryAssetRef = createTextureBinaryAssetReference();
+    const document = withTextureBinaryRef(loadMinimalFixturePackageDocument(), binaryAssetRef);
+    const entry = createBinaryEntry(binaryAssetRef, TEST_BYTES);
+
+    await expect(createWorkspaceSavePlan({
+      packageDocument: document,
+      existingWorkspaceBinaryFileEntries: [entry, entry]
+    })).rejects.toThrow(/Duplicate package file path/);
+    await expect(createWorkspaceSavePlan({
+      packageDocument: document,
+      currentSessionBinaryFileEntries: [entry, { ...entry, path: "../escape.raw-rgba" }]
+    })).rejects.toThrow();
+  });
+
+  it("hands out write bytes isolated from the supplied session entry", async () => {
+    const binaryAssetRef = createTextureBinaryAssetReference();
+    const document = withTextureBinaryRef(loadMinimalFixturePackageDocument(), binaryAssetRef);
+    const sessionBytes = new Uint8Array(TEST_BYTES);
+    const plan = await createWorkspaceSavePlan({
+      packageDocument: document,
+      currentSessionBinaryFileEntries: [{
+        path: binaryAssetRef.packageRelativePath,
+        bytes: sessionBytes,
+        mediaType: binaryAssetRef.mediaType,
+        binaryAssetId: binaryAssetRef.binaryAssetId
+      }]
+    });
+    const decision = getOnlyDecision(plan.binaryDecisions);
+
+    if (decision.action !== "write") {
+      throw new Error("Expected write decision.");
+    }
+    expect(decision.binaryEntry.bytes).not.toBe(sessionBytes);
+    sessionBytes[0] = 0x00;
+    expect(Array.from(decision.binaryEntry.bytes)).toEqual(Array.from(TEST_BYTES));
+  });
+
+  it("decides against the session bytes as of the plan's start and writes the verified copy", async () => {
+    const binaryAssetRef = createTextureBinaryAssetReference();
+    const document = withTextureBinaryRef(loadMinimalFixturePackageDocument(), binaryAssetRef);
+    const sessionBytes = new Uint8Array(TEST_BYTES);
+    const pendingPlan = createWorkspaceSavePlan({
+      packageDocument: document,
+      currentSessionBinaryFileEntries: [createBinaryEntryWithoutCopy(binaryAssetRef, sessionBytes)]
+    });
+
+    // Mutating after the call returned (while the plan awaits digests) must not change the plan.
+    sessionBytes.fill(0x00);
+    const decision = getOnlyDecision((await pendingPlan).binaryDecisions);
+
+    if (decision.action !== "write") {
+      throw new Error("Expected write decision.");
+    }
+    expect(decision.sessionVerificationReport.status).toBe("pass");
+    expect(Array.from(decision.binaryEntry.bytes)).toEqual(Array.from(TEST_BYTES));
+  });
+
+  it("indexes each supplied entry set once per plan, whatever the candidate count", async () => {
+    const indexSpy = vi.mocked(indexPackageInMemoryFileSet);
+    const callsPerPlan: number[] = [];
+
+    for (const candidateCount of [1, 12]) {
+      const refs = Array.from({ length: candidateCount }, (_, index) => createTextureBinaryAssetReference({
+        binaryAssetId: `bin_texture_${index}_rgba`,
+        packageRelativePath: `assets/textures/texture_${index}.raw-rgba`
+      }));
+      const entries = refs.map((ref) => createBinaryEntry(ref, TEST_BYTES));
+
+      indexSpy.mockClear();
+      const plan = await createWorkspaceSavePlan({
+        packageDocument: withTextureBinaryRefs(loadMinimalFixturePackageDocument(), refs),
+        existingWorkspaceBinaryFileEntries: [],
+        currentSessionBinaryFileEntries: entries
+      });
+
+      expect(plan.binaryDecisions.map((decision) => decision.action))
+        .toEqual(Array.from({ length: candidateCount }, () => "write"));
+      callsPerPlan.push(indexSpy.mock.calls.length);
+    }
+
+    // One index for the existing entries and one for the session entries.
+    expect(callsPerPlan).toEqual([2, 2]);
+  });
+});
+
+/** A session entry that holds `bytes` by reference (createPackageBinaryFileEntry would copy them). */
+const createBinaryEntryWithoutCopy = (
+  binaryAssetRef: BinaryAssetReferenceDto,
+  bytes: Uint8Array
+): PackageBinaryFileEntry => ({
+  path: binaryAssetRef.packageRelativePath,
+  bytes,
+  mediaType: binaryAssetRef.mediaType,
+  binaryAssetId: binaryAssetRef.binaryAssetId
+});
+
+const LARGE_COPY_THRESHOLD = 4096;
+
+/**
+ * Counts `new Uint8Array(source)` calls whose source is at least LARGE_COPY_THRESHOLD bytes
+ * (package-format copies bytes that way) while `run` executes.
+ */
+const countLargeByteCopies = async <TResult>(
+  run: () => Promise<TResult>
+): Promise<{ readonly result: TResult; readonly copies: number }> => {
+  const OriginalUint8Array = globalThis.Uint8Array;
+  let copies = 0;
+  const countingUint8Array: Uint8ArrayConstructor = new Proxy(OriginalUint8Array, {
+    construct(target, args, newTarget): object {
+      const source: unknown = args[0];
+      const isLargeByteSource = (ArrayBuffer.isView(source) || source instanceof ArrayBuffer) &&
+        source.byteLength >= LARGE_COPY_THRESHOLD;
+
+      if (isLargeByteSource) {
+        copies += 1;
+      }
+
+      return Reflect.construct(target, args, newTarget === countingUint8Array ? target : newTarget);
+    }
+  });
+
+  globalThis.Uint8Array = countingUint8Array;
+
+  try {
+    const result = await run();
+    return { result, copies };
+  } finally {
+    globalThis.Uint8Array = OriginalUint8Array;
+  }
+};
+
+const withTextureBinaryRefs = (
+  document: PackageDocumentDto,
+  binaryAssetRefs: readonly BinaryAssetReferenceDto[]
+): PackageDocumentDto => PackageDocumentSchema.parse({
+  ...document,
+  assets: {
+    ...document.assets,
+    textureAtlas: {
+      schemaVersion: "texture-atlas-v1",
+      textures: binaryAssetRefs.map((binaryAssetRef, index) => ({
+        textureId: `tex_body_${index}`,
+        filePath: binaryAssetRef.packageRelativePath,
+        contentHash: `sha256:${binaryAssetRef.digest.hex}`,
+        sourceAssetId: "src_generated",
+        sourceLayerId: `layer_body_${index}`,
+        provenanceId: binaryAssetRef.provenanceId,
+        binaryAssetRef
+      }))
+    }
+  }
 });
 
 const getOnlyDecision = <TDecision>(decisions: readonly TDecision[]): TDecision => {

@@ -36,14 +36,11 @@ describe("variant operations", () => {
     expect(session.packageRevision).toBe(0);
     expect(session.authoringRevision).toBe(0);
     expect(session.dirty).toBe(false);
-    expect(core.operationLog.entries).toHaveLength(0);
   });
 
-  it("commits create, rename, and delete Variant Group operations through lifecycle logging", () => {
+  it("commits create, rename, and delete Variant Group operations through the lifecycle", () => {
     const session = createVariantOperationFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-24T00:00:00.000Z")
-    });
+    const core = createOperationCore();
 
     const creation = core.commitOperation(session, createVariantGroupRequest({ dryRun: false }));
     const update = core.commitOperation(session, createUpdateVariantGroupRequest());
@@ -56,15 +53,6 @@ describe("variant operations", () => {
     expect(session.authoringRevision).toBe(3);
     expect(session.dirty).toBe(true);
     expect(session.graph.variantGroups).toEqual([]);
-    expect(core.operationLog.entries.map((entry) => entry.operationType)).toEqual([
-      "createVariantGroup",
-      "updateVariantGroup",
-      "deleteVariantGroup"
-    ]);
-    expect(core.operationLog.entries[0]?.targetIds).toEqual(["vgrp_expression"]);
-    expect(core.operationLog.entries[0]?.result.modelDiff?.changed[0]?.fields[0]).toMatchObject({
-      path: "/model/variants/variantGroups"
-    });
   });
 
   it("adds and removes target drawables while enforcing single group ownership", () => {

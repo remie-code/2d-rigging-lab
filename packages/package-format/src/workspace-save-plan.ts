@@ -3,11 +3,17 @@ import type {
   BinaryAssetRoleDto
 } from "./binary-asset.js";
 import {
-  createPackageInMemoryFileSet,
-  readPackageBinaryFileEntry,
-  verifyPackageBinaryAssetBytes,
-  type PackageBinaryAssetVerificationReport,
-  type PackageBinaryFileEntry
+  getBinaryAssetExpectedMetadata,
+  verifyIndexedPackageBinaryAssetBytes,
+  verifyPackageBinaryFileEntryAgainstExpected
+} from "./package-binary-asset-verification.js";
+import {
+  indexPackageInMemoryFileSet,
+  type PackageInMemoryFileIndex
+} from "./package-binary-file-index.js";
+import type {
+  PackageBinaryAssetVerificationReport,
+  PackageBinaryFileEntry
 } from "./package-binary-file-set.js";
 import { PackageDocumentSchema, type PackageDocumentDto } from "./package-document.js";
 import { assertUniquePackageFilePaths } from "./package-file-paths.js";
@@ -89,7 +95,16 @@ export type WorkspaceBinarySaveDecision =
 export interface CreateWorkspaceSavePlanInput {
   readonly packageDocument: PackageDocumentDto;
   readonly workspaceMetadata?: WorkspaceMetadataDto;
+  /**
+   * Bytes already in the workspace (typically just read from disk). They are only read for
+   * verification and are not copied, so callers must not modify these bytes while
+   * createWorkspaceSavePlan is running.
+   */
   readonly existingWorkspaceBinaryFileEntries?: readonly PackageBinaryFileEntry[];
+  /**
+   * Current session bytes. All of them are copied once when the plan starts, so the whole plan is
+   * decided against the session bytes as of that moment, and write decisions hand out those copies.
+   */
   readonly currentSessionBinaryFileEntries?: readonly PackageBinaryFileEntry[];
 }
 
@@ -162,19 +177,23 @@ export async function createWorkspaceSavePlan(
     ...(input.workspaceMetadata === undefined ? {} : { workspaceMetadata: input.workspaceMetadata })
   });
   const binaryCollection = collectWorkspaceBinaryAssetCandidates(packageDocument);
-  const existingFileSet = createPackageInMemoryFileSet([
+  // Each entry set is checked once (path safety, duplicates) and indexed by path; the per-candidate
+  // decisions below look entries up instead of re-checking and copying the whole set every time.
+  // Existing bytes are only read, so they are shared (see CreateWorkspaceSavePlanInput). Session
+  // bytes are copied once here, so every decision sees the session bytes as of the plan's start.
+  const existingFileIndex = indexPackageInMemoryFileSet([
     ...(input.existingWorkspaceBinaryFileEntries ?? [])
-  ]);
-  const sessionFileSet = createPackageInMemoryFileSet([
+  ], "share");
+  const sessionFileIndex = indexPackageInMemoryFileSet([
     ...(input.currentSessionBinaryFileEntries ?? [])
-  ]);
+  ], "copy");
   const binaryDecisions: WorkspaceBinarySaveDecision[] = [];
 
   for (const candidate of binaryCollection.candidates) {
     binaryDecisions.push(await decideWorkspaceBinarySaveAction({
       candidate,
-      existingFileSet,
-      sessionFileSet
+      existingFileIndex,
+      sessionFileIndex
     }));
   }
 
@@ -190,12 +209,13 @@ export async function createWorkspaceSavePlan(
 
 async function decideWorkspaceBinarySaveAction(input: {
   readonly candidate: WorkspaceBinaryAssetCandidate;
-  readonly existingFileSet: ReturnType<typeof createPackageInMemoryFileSet>;
-  readonly sessionFileSet: ReturnType<typeof createPackageInMemoryFileSet>;
+  readonly existingFileIndex: PackageInMemoryFileIndex;
+  readonly sessionFileIndex: PackageInMemoryFileIndex;
 }): Promise<WorkspaceBinarySaveDecision> {
-  const existingVerificationReport = await verifyPackageBinaryAssetBytes(
-    input.existingFileSet,
-    input.candidate.binaryAssetRef
+  const expected = getBinaryAssetExpectedMetadata(input.candidate.binaryAssetRef);
+  const existingVerificationReport = await verifyIndexedPackageBinaryAssetBytes(
+    input.existingFileIndex,
+    expected
   );
 
   if (existingVerificationReport.status === "pass") {
@@ -216,9 +236,12 @@ async function decideWorkspaceBinarySaveAction(input: {
     };
   }
 
-  const sessionVerificationReport = await verifyPackageBinaryAssetBytes(
-    input.sessionFileSet,
-    input.candidate.binaryAssetRef
+  // The session index owns a private copy taken at the plan's start. That copy is verified and is
+  // the very entry handed out for writing, so the written bytes are exactly the verified bytes.
+  const binaryEntry = input.sessionFileIndex.binaryEntriesByPath.get(expected.packageRelativePath);
+  const sessionVerificationReport = await verifyPackageBinaryFileEntryAgainstExpected(
+    binaryEntry,
+    expected
   );
 
   if (sessionVerificationReport.status !== "pass") {
@@ -231,11 +254,6 @@ async function decideWorkspaceBinarySaveAction(input: {
       message: `Current session bytes do not match binary reference "${input.candidate.packageRelativePath}".`
     };
   }
-
-  const binaryEntry = readPackageBinaryFileEntry(
-    input.sessionFileSet,
-    input.candidate.binaryAssetRef
-  );
 
   if (binaryEntry === undefined) {
     return {

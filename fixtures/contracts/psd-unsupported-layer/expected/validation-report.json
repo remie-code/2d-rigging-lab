@@ -135,7 +135,6 @@
   ],
   "repairCandidates": [],
   "evidence": {
-    "operationLogPresent": false,
     "runtimeSnapshotIds": [],
     "supplementalGuiEvidenceRefs": []
   }

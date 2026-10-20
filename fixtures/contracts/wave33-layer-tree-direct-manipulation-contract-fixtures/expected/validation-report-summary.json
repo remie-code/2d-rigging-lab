@@ -13,7 +13,5 @@
   "runtimeSnapshotIds": [
     "snap_wave33_layer_tree_direct_manipulation_20",
     "snap_wave33_layer_tree_direct_manipulation_21"
-  ],
-  "operationLogPresent": true,
-  "operationLogPath": "operations/log.jsonl"
+  ]
 }

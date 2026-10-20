@@ -99,14 +99,14 @@ describe("workspace package file set", () => {
     ]);
   });
 
-  it("does not allow operation logs through workspace derived metadata entries", () => {
+  it("does not allow arbitrary files through workspace derived metadata entries", () => {
     const document = loadMinimalFixturePackageDocument();
 
     expect(() => serializeWorkspacePackageFileSet({
       packageDocument: document,
       derivedMetadataEntries: [
         {
-          path: "operations/log.jsonl",
+          path: "notes/history.txt",
           text: ""
         }
       ]

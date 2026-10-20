@@ -67,7 +67,6 @@ export const createDefaultEvidence = (
   runtimeSnapshotIds: readonly RuntimeSnapshotId[] = []
 ): ReturnType<typeof ValidationReportEvidenceSchema.parse> =>
   ValidationReportEvidenceSchema.parse({
-    operationLogPresent: false,
     runtimeSnapshotIds,
     supplementalGuiEvidenceRefs: []
   });

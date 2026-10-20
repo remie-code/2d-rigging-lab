@@ -93,11 +93,9 @@ describe("setMaskRelation operation handler", () => {
     ]);
   });
 
-  it("commits mask relation creation through operation core and appends operation log evidence", () => {
+  it("commits mask relation creation through operation core", () => {
     const session = createFixtureSession();
-    const operationCore = createOperationCore({
-      now: () => new Date("2026-06-01T00:00:00.000Z")
-    });
+    const operationCore = createOperationCore();
 
     const outcome = operationCore.commitOperation(
       session,
@@ -111,24 +109,6 @@ describe("setMaskRelation operation handler", () => {
     );
 
     expect(outcome.result.status).toBe("committed");
-    expect(outcome.operationLogLength).toBe(1);
-    expect(outcome.logEntry).toMatchObject({
-      operationId: "op_set_mask_relation",
-      operationType: "setMaskRelation",
-      targetIds: ["maskrel_body_clip", "draw_mask", "draw_body"],
-      precondition: {
-        ok: true,
-        checkedTargetRefs: [
-          {
-            kind: "maskRelation",
-            id: "maskrel_body_clip",
-            path: "/model/masks/maskrel_body_clip"
-          },
-          { kind: "drawable", id: "draw_mask" },
-          { kind: "drawable", id: "draw_body" }
-        ]
-      }
-    });
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
     expect(session.graph.masks).toEqual([

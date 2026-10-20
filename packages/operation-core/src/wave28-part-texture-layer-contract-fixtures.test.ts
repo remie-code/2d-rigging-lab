@@ -68,9 +68,7 @@ describe("wave28 part, texture, and layer contract fixtures", () => {
   it("commits the part create/update, drawable reassignment, and texture assignment chain", () => {
     const baselinePackage = loadBaselinePackageDocument();
     const session = createAuthoringSessionFromPackageDocument(baselinePackage);
-    const core = createOperationCore({
-      now: () => new Date(CREATED_AT)
-    });
+    const core = createOperationCore();
 
     const applied = loadOperationRequests().map((request) => {
       const outcome = core.commitOperation(session, request);
@@ -80,7 +78,7 @@ describe("wave28 part, texture, and layer contract fixtures", () => {
       updatedAt: CREATED_AT
     });
 
-    expect(summarizeOperationChain(applied, core.operationLog.entries.length)).toEqual(
+    expect(summarizeOperationChain(applied)).toEqual(
       loadFixtureJson("expected/operation-chain-summary.json")
     );
     expect(summarizePackageMaterialization(materializedPackage)).toEqual(
@@ -102,8 +100,7 @@ interface AppliedOperation {
 }
 
 const summarizeOperationChain = (
-  applied: readonly AppliedOperation[],
-  operationLogLength: number
+  applied: readonly AppliedOperation[]
 ) => ({
   schemaVersion: "wave28-part-texture-layer-operation-chain-summary-v1",
   operations: applied.map(({ request, outcome, packageRevisionAfter, authoringRevisionAfter }) => {
@@ -119,15 +116,12 @@ const summarizeOperationChain = (
       status: outcome.result.status,
       preconditionOk: outcome.result.precondition.ok,
       checkedTargets: outcome.result.precondition.checkedTargetRefs.map(toTargetRefKey),
-      logEntryTargetIds: outcome.logEntry?.targetIds ?? [],
       changedTargets: modelDiff.changed.map((change) => toTargetRefKey(change.target)),
       changedFieldPaths: modelDiff.changed.flatMap((change) => change.fields.map((field) => field.path)),
       packageRevisionAfter,
-      authoringRevisionAfter,
-      operationLogLength: outcome.operationLogLength
+      authoringRevisionAfter
     };
-  }),
-  finalOperationLogLength: operationLogLength
+  })
 });
 
 const summarizePackageMaterialization = (packageDocument: PackageDocumentInput) => ({

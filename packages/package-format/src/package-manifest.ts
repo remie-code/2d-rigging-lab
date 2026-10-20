@@ -47,7 +47,6 @@ export const PackageManifestSchema = z.object({
   evaluatorVersions: z.record(z.string(), z.string()),
   modelFiles: RequiredModelFilesSchema,
   assetIndex: z.literal("assets/sources/source-manifest.json"),
-  operationLog: z.literal("operations/log.jsonl"),
   rightsSummary: PackageRightsSummarySchema,
   provenanceSummary: PackageProvenanceSummarySchema,
   packageStableOrderVersion: PackageStableOrderVersionSchema

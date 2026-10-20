@@ -4,7 +4,6 @@
   "operationCount": 36,
   "finalPackageRevision": 36,
   "finalAuthoringRevision": 36,
-  "operationLogLength": 36,
   "operationTypesByCount": {
     "addKeyform": 3,
     "createDrawable": 8,
@@ -47,6 +46,5 @@
   "allCommitted": true,
   "allPreconditionsOk": true,
   "modelDiffOperationIdsMatch": true,
-  "operationLogOperationIdsMatchRequests": true,
   "noWholeModelOperation": true
 }

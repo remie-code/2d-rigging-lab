@@ -37,8 +37,7 @@ type DispatchableReadCommandRequest = Extract<
       | "inspectModel"
       | "inspectTarget"
       | "inspectEvaluatedGeometry"
-      | "validatePackage"
-      | "getOperationLog";
+      | "validatePackage";
   }
 >;
 type UnsupportedReadCommandRequest = Extract<
@@ -50,7 +49,6 @@ type UnsupportedReadCommandRequest = Extract<
       | "inspectTarget"
       | "inspectEvaluatedGeometry"
       | "validatePackage"
-      | "getOperationLog"
       | "renderView"
       | "getPsdImportPlanState"
       | "setPsdImportPlanApproval"
@@ -67,7 +65,7 @@ export interface AiCommandExecutorOptions {
   /**
    * Optional read-command host. When provided, the five read commands supported by
    * {@link executeAiReadCommand} (getEditorState / inspectModel / inspectTarget /
-   * validatePackage / getOperationLog) are dispatched through it with the executor's
+   * inspectEvaluatedGeometry / validatePackage) are dispatched through it with the executor's
    * own transcript, so capability checks, permission_denied / not_implemented / ok
    * resolution, and transcript recording all flow through the shared read mechanism.
    * When absent, those commands fall back to the legacy not_implemented behavior.
@@ -120,7 +118,6 @@ export class AiCommandExecutor {
       case "inspectTarget":
       case "inspectEvaluatedGeometry":
       case "validatePackage":
-      case "getOperationLog":
         return this.#executeReadCommand(request);
       case "renderView":
         return this.#executeRenderView(request);
@@ -243,8 +240,7 @@ export class AiCommandExecutor {
     return this.#operationResponse({
       request,
       status: operationResult.status === "rejected" ? "rejected" : "ok",
-      operationResult,
-      includeOperationLogRef: operationResult.status === "committed"
+      operationResult
     });
   }
 
@@ -271,9 +267,8 @@ export class AiCommandExecutor {
     readonly request: DryRunCommandRequest | CommitCommandRequest;
     readonly status: AiCommandStatus;
     readonly operationResult: OperationResultDto;
-    readonly includeOperationLogRef?: boolean;
   }): AiCommandResponse {
-    const evidenceRefs = collectOperationEvidenceRefs(input.operationResult, input.includeOperationLogRef === true);
+    const evidenceRefs = collectOperationEvidenceRefs(input.operationResult);
     const response = AiCommandResponseSchema.parse({
       schemaVersion: "ai-command-response-v1",
       commandId: input.request.commandId,
@@ -379,14 +374,11 @@ const unsupportedReadPayload = (request: UnsupportedReadCommandRequest) => {
           checks: [],
           repairCandidates: [],
           evidence: {
-            operationLogPresent: false,
             runtimeSnapshotIds: [],
             supplementalGuiEvidenceRefs: []
           }
         })
       };
-    case "getOperationLog":
-      return { entries: [] };
     case "renderView":
       return renderViewNotImplementedPayload(request);
     case "getPsdImportPlanState":
@@ -494,24 +486,13 @@ const createRejectedOperationResult = (input: {
 const createSyntheticOperationId = (commandId: string): string =>
   `op_ai_${commandId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
-const collectOperationEvidenceRefs = (
-  operationResult: OperationResultDto,
-  includeOperationLogRef: boolean
-): string[] => {
-  const refs = [
-    ...operationResult.generatedRuntimeStateRefs,
-    ...operationResult.generatedRuntimeStateSequenceRefs,
-    ...operationResult.generatedRuntimeSnapshotIds.map(
-      (snapshotId) => `runtime/snapshots/${snapshotId}.runtime-snapshot.json`
-    ),
-    ...operationResult.generatedValidationReportIds.map(
-      (reportId) => `validation/reports/${reportId}.validation-report.json`
-    )
-  ];
-
-  if (includeOperationLogRef) {
-    refs.push(`operations/log.jsonl#${operationResult.operationId}`);
-  }
-
-  return refs;
-};
+const collectOperationEvidenceRefs = (operationResult: OperationResultDto): string[] => [
+  ...operationResult.generatedRuntimeStateRefs,
+  ...operationResult.generatedRuntimeStateSequenceRefs,
+  ...operationResult.generatedRuntimeSnapshotIds.map(
+    (snapshotId) => `runtime/snapshots/${snapshotId}.runtime-snapshot.json`
+  ),
+  ...operationResult.generatedValidationReportIds.map(
+    (reportId) => `validation/reports/${reportId}.validation-report.json`
+  )
+];

@@ -151,6 +151,70 @@ describe("package binary in-memory file set", () => {
       })
     ])).toThrow(/Duplicate package file path/);
   });
+
+  it("still checks every entry of an unnormalized array when reading, verifying, or extracting", async () => {
+    const binaryAssetRef = createBinaryAssetReference();
+    const rawBinaryEntry = {
+      path: "assets/sources/generated-fixture.bin",
+      bytes: TEST_BYTES,
+      mediaType: "application/octet-stream",
+      binaryAssetId: "bin_generated_fixture"
+    };
+    const duplicateEntries = [rawBinaryEntry, { ...rawBinaryEntry, bytes: new Uint8Array([1]) }];
+    const unsafeEntries = [rawBinaryEntry, { path: "../escape.json", text: "{}" }];
+    const textAndBinaryEntries = [
+      rawBinaryEntry,
+      { path: "assets/sources/other.bin", text: "{}", bytes: TEST_BYTES, mediaType: "application/octet-stream" }
+    ];
+    const invalidMediaTypeEntries = [
+      rawBinaryEntry,
+      { path: "assets/sources/other.bin", bytes: TEST_BYTES, mediaType: "" }
+    ];
+
+    expect(() => readPackageBinaryFileEntry(duplicateEntries, binaryAssetRef))
+      .toThrow(/Duplicate package file path "assets\/sources\/generated-fixture.bin"/);
+    await expect(verifyPackageBinaryAssetBytes(duplicateEntries, binaryAssetRef))
+      .rejects.toThrow(/Duplicate package file path/);
+    expect(() => extractPackageTextFileSet(duplicateEntries)).toThrow(/Duplicate package file path/);
+
+    expect(() => readPackageBinaryFileEntry(unsafeEntries, binaryAssetRef))
+      .toThrow(/Unsafe package file path "..\/escape.json"/);
+    await expect(verifyPackageBinaryAssetBytes(unsafeEntries, binaryAssetRef))
+      .rejects.toThrow(/Unsafe package file path/);
+    expect(() => extractPackageTextFileSet(unsafeEntries)).toThrow(/Unsafe package file path/);
+
+    expect(() => readPackageBinaryFileEntry(textAndBinaryEntries, binaryAssetRef))
+      .toThrow(/cannot be both text and binary/);
+    await expect(verifyPackageBinaryAssetBytes(textAndBinaryEntries, binaryAssetRef))
+      .rejects.toThrow(/cannot be both text and binary/);
+
+    expect(() => readPackageBinaryFileEntry(invalidMediaTypeEntries, binaryAssetRef)).toThrow();
+    await expect(verifyPackageBinaryAssetBytes(invalidMediaTypeEntries, binaryAssetRef)).rejects.toThrow();
+  });
+
+  it("returns read bytes isolated from the source array in both directions", () => {
+    const sourceBytes = new Uint8Array([0x61, 0x62, 0x63]);
+    const fileSet = [{
+      path: "assets/sources/generated-fixture.bin",
+      bytes: sourceBytes,
+      mediaType: "application/octet-stream"
+    }];
+    const firstRead = readPackageBinaryFileEntry(fileSet, "assets/sources/generated-fixture.bin");
+
+    if (firstRead === undefined) {
+      throw new Error("Expected binary entry.");
+    }
+    expect(firstRead.bytes).not.toBe(sourceBytes);
+
+    firstRead.bytes[0] = 0x00;
+    expect(Array.from(sourceBytes)).toEqual([0x61, 0x62, 0x63]);
+
+    sourceBytes[1] = 0x00;
+    expect(Array.from(firstRead.bytes)).toEqual([0x00, 0x62, 0x63]);
+    expect(Array.from(
+      readPackageBinaryFileEntry(fileSet, "assets/sources/generated-fixture.bin")?.bytes ?? []
+    )).toEqual([0x61, 0x00, 0x63]);
+  });
 });
 
 const createBinaryAssetReference = (

@@ -114,9 +114,7 @@ describe("part operation handlers", () => {
 
   it("commits part update and materializes the package graph", () => {
     const session = createPartReparentFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-01T00:00:00.000Z")
-    });
+    const core = createOperationCore();
     const baseDocument = createBaseDocument(session);
 
     const outcome = core.commitOperation(
@@ -132,8 +130,6 @@ describe("part operation handlers", () => {
     expect(outcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
-    expect(outcome.logEntry?.operationType).toBe("updatePart");
-    expect(outcome.logEntry?.targetIds).toEqual(["part_face", "part_root", "part_head"]);
     expect(outcome.result.modelDiff?.changed.map((change) => change.target)).toEqual([
       { kind: "part", id: "part_face" },
       { kind: "part", id: "part_root" },
@@ -151,11 +147,9 @@ describe("part operation handlers", () => {
     ]);
   });
 
-  it("commits empty leaf part deletion with operation log, model diff, and package materialization", () => {
+  it("commits empty leaf part deletion with model diff and package materialization", () => {
     const session = createSessionWithEmptyLeafPart();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-01T00:00:00.000Z")
-    });
+    const core = createOperationCore();
     const baseDocument = createBaseDocument(session);
 
     const outcome = core.commitOperation(
@@ -169,10 +163,7 @@ describe("part operation handlers", () => {
     expect(outcome.result.status).toBe("committed");
     expect(session.packageRevision).toBe(1);
     expect(session.authoringRevision).toBe(1);
-    expect(outcome.operationLogLength).toBe(1);
-    expect(outcome.logEntry?.operationType).toBe("deletePart");
-    expect(outcome.logEntry?.targetIds).toEqual(["part_empty", "part_root"]);
-    expect(outcome.logEntry?.precondition.checkedTargetRefs).toEqual([
+    expect(outcome.result.precondition.checkedTargetRefs).toEqual([
       { kind: "part", id: "part_empty" },
       { kind: "part", id: "part_root" }
     ]);
@@ -566,7 +557,6 @@ const createBaseDocument = (session: AuthoringSession): Parameters<typeof toPack
         drawOrder: "model/draw-order.json"
       },
       assetIndex: "assets/sources/source-manifest.json",
-      operationLog: "operations/log.jsonl",
       rightsSummary: { status: "cleared" },
       provenanceSummary: { sourceAssetCount: 0 },
       packageStableOrderVersion: "stable-order-v1"

@@ -1,5 +1,5 @@
 import { MaterialCommandResponseOptions } from "./ai-material-command.js";
-import { OperationLogEntrySchema, OperationResultSchema } from "@private-2d-rigging-lab/operation-core";
+import { OperationResultSchema } from "@private-2d-rigging-lab/operation-core";
 import { z } from "zod";
 
 import {
@@ -53,12 +53,6 @@ export const AiCommandResponsePayloadSchema = z.discriminatedUnion("command", [
     command: z.literal("commitOperation"),
     payload: z.object({
       operationResult: OperationResultSchema
-    })
-  }),
-  z.object({
-    command: z.literal("getOperationLog"),
-    payload: z.object({
-      entries: z.array(OperationLogEntrySchema)
     })
   }),
   z.object({

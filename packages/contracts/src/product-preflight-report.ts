@@ -91,7 +91,6 @@ export const ProductPreflightArtifactKindDtoSchema = z.enum([
   "modelFile",
   "sourceManifest",
   "rightsProvenance",
-  "operationLog",
   "validationReport",
   "runtimeSnapshot",
   "runtimeState",
@@ -162,10 +161,6 @@ export const ProductPreflightArtifactRefDtoSchema = z.discriminatedUnion("artifa
   z.object({
     artifactKind: z.literal("rightsProvenance"),
     path: z.enum(["assets/provenance.json", "assets/rights.json"])
-  }).strict(),
-  z.object({
-    artifactKind: z.literal("operationLog"),
-    path: z.literal("operations/log.jsonl")
   }).strict(),
   z.object({
     artifactKind: z.literal("validationReport"),

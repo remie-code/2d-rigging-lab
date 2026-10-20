@@ -3,7 +3,6 @@
   "packageId": "pkg_minimal-valid-package",
   "packageRevision": 1,
   "updatedAt": "2026-05-29T01:00:00.000Z",
-  "operationLogPath": "operations/log.jsonl",
   "parameterIds": [
     "param_persisted_smile"
   ],

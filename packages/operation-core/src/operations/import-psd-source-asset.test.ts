@@ -125,9 +125,7 @@ describe("importPsdSourceAsset operation handler", () => {
 
   it("commits source manifest, texture preview, rights, and provenance records through operation core", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-31T00:00:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(session, createImportPsdRequest({ dryRun: false }));
 
@@ -182,20 +180,11 @@ describe("importPsdSourceAsset operation handler", () => {
       "/assets/textureAtlas/textures/tex_face",
       "/assets/textureAtlas/previewAssets/preview_src_psd_character_layer_face"
     ]));
-    expect(outcome.logEntry?.targetIds).toEqual([
-      "src_psd_character",
-      "group_head",
-      "layer_face",
-      "part_root",
-      "tex_face"
-    ]);
   });
 
   it("materializes PSD source and texture binary refs as pending package-local metadata", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-31T00:10:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -258,9 +247,7 @@ describe("importPsdSourceAsset operation handler", () => {
 
   it("preserves real PSD parse and selected layer materialization evidence as parser-free profile metadata", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-05-31T00:20:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -360,9 +347,7 @@ describe("importPsdSourceAsset operation handler", () => {
 
   it("bridges browser-origin parser-free PSD evidence into operation and package summaries", () => {
     const session = createFixtureSession();
-    const core = createOperationCore({
-      now: () => new Date("2026-06-05T00:20:00.000Z")
-    });
+    const core = createOperationCore();
 
     const outcome = core.commitOperation(
       session,
@@ -433,7 +418,6 @@ describe("importPsdSourceAsset operation handler", () => {
       }
     });
     expect(evidence?.materializationEvidence[0]).not.toHaveProperty("binaryAssetRef");
-    expect(outcome.logEntry?.result.psdImportEvidence).toEqual(outcome.result.psdImportEvidence);
     expect(sourceDiagnostics).toEqual(expect.arrayContaining([
       expect.stringMatching(/^psd\.parserEvidence:/),
       expect.stringMatching(/^psd\.layerTreeEvidence:/),

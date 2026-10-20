@@ -1,7 +1,6 @@
 import { createOperationCore } from "@private-2d-rigging-lab/operation-core";
 import type {
   OperationCore,
-  OperationLogEntryDto,
   OperationRequestDto,
   OperationResultDto
 } from "@private-2d-rigging-lab/operation-core";
@@ -22,8 +21,6 @@ import { validatePackageDocument } from "./validate-package-document.js";
 
 export interface AuthoringHostCommandHostOptions {
   readonly session: AuthoringSession;
-  readonly now: () => Date;
-  readonly initialOperationLogEntries?: readonly OperationLogEntryDto[];
   /**
    * The package document obtained at load time. In the one-shot CLI a validate request
    * does not dry-run or commit, so the loaded document is identical to the current
@@ -42,7 +39,7 @@ export interface AuthoringHostCommandHostOptions {
  * Session handling matches the operation-core contract: `dryRunOperation` evaluates
  * against a cloned candidate session (operation-core's dry-run handlers clone the
  * session internally) and never advances the on-disk session, while
- * `commitOperation` advances the session revision and appends an operation-log entry.
+ * `commitOperation` advances the session revision.
  *
  * addDrawableFromImage / replaceDrawableImage first read, check and register the PNG named by the payload
  * (prepareMaterialImageOperationSession) on both dry-run and commit. The bytes live in a separate session that
@@ -65,20 +62,11 @@ export class AuthoringHostCommandHost implements AiOperationCommandHost, AiReadC
     this.#session = options.session;
     this.#packageDocument = options.packageDocument;
     this.#packageDirectory = options.packageDirectory;
-    this.#operationCore = createOperationCore({
-      now: options.now,
-      ...(options.initialOperationLogEntries === undefined
-        ? {}
-        : { initialOperationLogEntries: options.initialOperationLogEntries })
-    });
+    this.#operationCore = createOperationCore();
   }
 
   get session(): AuthoringSession {
     return this.#session;
-  }
-
-  get operationLogEntries(): readonly OperationLogEntryDto[] {
-    return this.#operationCore.operationLog.entries;
   }
 
   async dryRunOperation(request: OperationRequestDto): Promise<OperationResultDto> {

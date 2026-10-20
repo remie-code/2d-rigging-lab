@@ -1,5 +1,7 @@
 # Package File Format Contract
 
+> Superseded（2026-10-20）: 操作の記録（operation log / `operations/log.jsonl`）はパッケージから撤去した。本書の operation log に関する記述（記録を必須・前提・証拠とする要件、`operations/log.jsonl#<id>` 参照、`operationLog` 種別、`getOperationLog`、transactionId を含む）はすべて無効。変更履歴は git、操作ごとの説明は operation result（modelDiff 等）と validation が担う。根拠: [drop-operation-log.md](../drop-operation-log.md)
+
 > 状態: Draft / Review ready
 > 出力先: discussion/design/module-contracts/package-file-format-contract.md
 > 主な読者: package-format implementer / import implementer / validator implementer

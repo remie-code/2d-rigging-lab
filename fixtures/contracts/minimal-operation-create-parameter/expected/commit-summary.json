@@ -20,21 +20,5 @@
       "recommendedUiStep": 0.01
     }
   },
-  "operationLog": {
-    "expectedLength": 1,
-    "entry": {
-      "operationId": "op_fixture_create_smile",
-      "transactionId": "txn_fixture_create_smile",
-      "timestamp": "2026-05-29T00:00:00.000Z",
-      "actor": "test",
-      "surface": "testFixture",
-      "operationType": "createParameter",
-      "targetIds": [
-        "param_fixture_smile"
-      ],
-      "provenanceId": "prov_fixture_create_smile",
-      "reversible": true
-    }
-  },
   "modelDiffRef": "expected/model-diff-summary.json"
 }

@@ -15,8 +15,6 @@
           "SC-MVP-003"
         ],
         "evidence": {
-          "operationLogPresent": true,
-          "operationLogPath": "operations/log.jsonl",
           "runtimeSnapshotIds": [
             "snap_wave39Pass"
           ],
@@ -25,6 +23,21 @@
         "checks": []
       },
       "categoryEvidenceRefs": {
+        "authoringWorkflowEvidence": [
+          {
+            "evidenceId": "evidence_wave39Pass_guiEvidence",
+            "artifactRef": {
+              "artifactKind": "guiEvidence",
+              "path": "generated/gui-evidence/wave39-pass.gui-evidence.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic GUI authoring evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
         "assetBytes": [
           {
             "evidenceId": "evidence_wave39Pass_byteAvailability",
@@ -82,8 +95,6 @@
           "SC-MVP-003"
         ],
         "evidence": {
-          "operationLogPresent": true,
-          "operationLogPath": "operations/log.jsonl",
           "runtimeSnapshotIds": [
             "snap_wave39Warn"
           ],
@@ -108,6 +119,21 @@
         ]
       },
       "categoryEvidenceRefs": {
+        "authoringWorkflowEvidence": [
+          {
+            "evidenceId": "evidence_wave39Warn_guiEvidence",
+            "artifactRef": {
+              "artifactKind": "guiEvidence",
+              "path": "generated/gui-evidence/wave39-warn.gui-evidence.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic GUI authoring evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
         "assetBytes": [
           {
             "evidenceId": "evidence_wave39Warn_byteAvailability",
@@ -165,8 +191,6 @@
           "SC-MVP-003"
         ],
         "evidence": {
-          "operationLogPresent": true,
-          "operationLogPath": "operations/log.jsonl",
           "runtimeSnapshotIds": [
             "snap_wave39Fail"
           ],
@@ -191,6 +215,21 @@
         ]
       },
       "categoryEvidenceRefs": {
+        "authoringWorkflowEvidence": [
+          {
+            "evidenceId": "evidence_wave39Fail_guiEvidence",
+            "artifactRef": {
+              "artifactKind": "guiEvidence",
+              "path": "generated/gui-evidence/wave39-fail.gui-evidence.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic GUI authoring evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
         "assetBytes": [
           {
             "evidenceId": "evidence_wave39Fail_byteAvailability",
@@ -248,8 +287,6 @@
           "SC-MVP-003"
         ],
         "evidence": {
-          "operationLogPresent": true,
-          "operationLogPath": "operations/log.jsonl",
           "runtimeSnapshotIds": [
             "snap_wave39NotSupported"
           ],
@@ -275,6 +312,21 @@
         ]
       },
       "categoryEvidenceRefs": {
+        "authoringWorkflowEvidence": [
+          {
+            "evidenceId": "evidence_wave39NotSupported_guiEvidence",
+            "artifactRef": {
+              "artifactKind": "guiEvidence",
+              "path": "generated/gui-evidence/wave39-not-supported.gui-evidence.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic GUI authoring evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
         "assetBytes": [
           {
             "evidenceId": "evidence_wave39NotSupported_byteAvailability",
@@ -332,14 +384,27 @@
           "SC-MVP-003"
         ],
         "evidence": {
-          "operationLogPresent": true,
-          "operationLogPath": "operations/log.jsonl",
           "runtimeSnapshotIds": [],
           "supplementalGuiEvidenceRefs": []
         },
         "checks": []
       },
       "categoryEvidenceRefs": {
+        "authoringWorkflowEvidence": [
+          {
+            "evidenceId": "evidence_wave39NotEvaluated_guiEvidence",
+            "artifactRef": {
+              "artifactKind": "guiEvidence",
+              "path": "generated/gui-evidence/wave39-not-evaluated.gui-evidence.json"
+            },
+            "target": {
+              "kind": "package",
+              "id": "pkg_wave39ProductPreflight"
+            },
+            "summary": "Semantic GUI authoring evidence is supplied.",
+            "producer": "fixture"
+          }
+        ],
         "assetBytes": [
           {
             "evidenceId": "evidence_wave39NotEvaluated_byteAvailability",

@@ -14,11 +14,9 @@ import type { OperationCore } from "./operation-core.js";
 import type { CommitOperationOutcome } from "./lifecycle/commit.js";
 import { OperationRequestSchema } from "./operation-request.js";
 import type { OperationRequestDto } from "./operation-request.js";
-import type { OperationLogEntryDto } from "./operation-log-entry.js";
 import type { OperationType } from "./operation-type.js";
 
 export const TUTORIAL_MINI_MODEL_RECIPE_ID = "tutorial-mini-model-recipe-v1";
-export const TUTORIAL_MINI_MODEL_RECIPE_TIMESTAMP = "2026-06-02T00:00:00.000Z";
 
 export interface TutorialMiniModelAppliedOperation {
   readonly request: OperationRequestDto;
@@ -33,7 +31,6 @@ export interface TutorialMiniModelRecipeResult {
   readonly session: AuthoringSession;
   readonly operationRequests: readonly OperationRequestDto[];
   readonly appliedOperations: readonly TutorialMiniModelAppliedOperation[];
-  readonly operationLogEntries: readonly OperationLogEntryDto[];
   readonly materializedPackage: ReturnType<typeof toPackageDocument>;
 }
 
@@ -85,11 +82,7 @@ export const applyTutorialMiniModelRecipe = (
   options: ApplyTutorialMiniModelRecipeOptions = {}
 ): TutorialMiniModelRecipeResult => {
   const seed = options.seed ?? createTutorialMiniModelSeed();
-  const core =
-    options.operationCore ??
-    createOperationCore({
-      now: () => new Date(TUTORIAL_MINI_MODEL_RECIPE_TIMESTAMP)
-    });
+  const core = options.operationCore ?? createOperationCore();
   const operationRequests = createTutorialMiniModelOperationRequests();
   const appliedOperations = operationRequests.map((request) => {
     const outcome = core.commitOperation(seed.session, request);
@@ -117,7 +110,6 @@ export const applyTutorialMiniModelRecipe = (
     session: seed.session,
     operationRequests,
     appliedOperations,
-    operationLogEntries: core.operationLog.entries,
     materializedPackage: toPackageDocument(seed.session, seed.packageDocument, {
       updatedAt: options.updatedAt ?? TUTORIAL_MINI_MODEL_UPDATED_AT
     })

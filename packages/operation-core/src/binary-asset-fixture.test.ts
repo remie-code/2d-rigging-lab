@@ -55,9 +55,7 @@ describe("binary asset operation contract fixture", () => {
     const baselineDocument = loadBaselinePackageDocument();
     const expectedDocument = loadExpectedPackageDocument();
     const session = createAuthoringSessionFromPackageDocument(baselineDocument);
-    const core = createOperationCore({
-      now: () => new Date("2026-05-31T01:00:00.000Z")
-    });
+    const core = createOperationCore();
     const outcome = core.commitOperation(
       session,
       loadFixtureJson("request/import-split-png-source-commit.request.json")

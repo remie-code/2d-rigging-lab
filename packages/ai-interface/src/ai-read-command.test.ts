@@ -1,59 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { OperationLogEntrySchema } from "@private-2d-rigging-lab/operation-core";
 import { ValidationReportSchema } from "@private-2d-rigging-lab/validator-core";
 
 import { executeAiReadCommand, type AiReadCommandHost } from "./ai-read-command.js";
 import { InMemoryAiCommandTranscript } from "./ai-command-transcript.js";
 import type { AiEditorState } from "./ai-editor-state.js";
-import type { AiOperationLogQuery } from "./ai-operation-log-query.js";
-
-const operationResult = {
-  schemaVersion: "operation-result-v1",
-  operationId: "op_create_ai_parameter",
-  status: "committed",
-  precondition: {
-    ok: true,
-    diagnostics: []
-  },
-  reversible: true
-} as const;
-
-const createOperationLogEntry = (operationId: string, targetIds: string[], surface = "structuredApi") =>
-  OperationLogEntrySchema.parse({
-    schemaVersion: "operation-log-entry-v1",
-    operationId,
-    transactionId: `txn_${operationId}`,
-    timestamp: "2026-05-29T00:00:00.000Z",
-    actor: "ai",
-    surface,
-    operationType: "createParameter",
-    targetIds,
-    precondition: {
-      ok: true,
-      diagnostics: []
-    },
-    payload: {
-      operationType: "createParameter",
-      payload: {
-        parameterId: targetIds[0] ?? "param_ai",
-        displayName: "AI Parameter",
-        semanticRole: "custom",
-        min: 0,
-        max: 1,
-        default: 0.5,
-        recommendedUiStep: 0.01
-      }
-    },
-    result: {
-      ...operationResult,
-      operationId
-    },
-    provenanceId: `prov_${operationId}`,
-    validationReportIds: [],
-    runtimeSnapshotIds: [],
-    reversible: true
-  });
 
 const validationReport = ValidationReportSchema.parse({
   schemaVersion: "validation-report-v1",
@@ -77,7 +28,6 @@ const validationReport = ValidationReportSchema.parse({
   checks: [],
   repairCandidates: [],
   evidence: {
-    operationLogPresent: false,
     runtimeSnapshotIds: [],
     supplementalGuiEvidenceRefs: []
   }
@@ -88,7 +38,6 @@ const createReadHost = (overrides: Partial<AiReadCommandHost> = {}): AiReadComma
   inspectModel: () => ({ targets: [], editableTargets: [] }),
   inspectTarget: (payload) => ({ target: payload.target, references: [] }),
   validatePackage: () => ({ reportId: validationReport.reportId, report: validationReport }),
-  getOperationLog: () => [],
   ...overrides
 });
 
@@ -128,65 +77,6 @@ describe("AI read command execution", () => {
           schemaVersion: "editor-semantic-state-v1",
           packageRevision: 7
         }
-      }
-    });
-  });
-
-  it("filters getOperationLog results by operation ID", async () => {
-    const entries = [
-      createOperationLogEntry("op_create_ai_parameter", ["param_ai_parameter"]),
-      createOperationLogEntry("op_other_parameter", ["param_other"])
-    ];
-    const observedQueries: AiOperationLogQuery[] = [];
-    const host = createReadHost({
-      getOperationLog: (query) => {
-        observedQueries.push(query);
-        return entries;
-      }
-    });
-
-    const response = await executeAiReadCommand(
-      createReadRequest("getOperationLog", { operationIds: ["op_create_ai_parameter"] }),
-      host
-    );
-
-    expect(observedQueries).toEqual([{ operationIds: ["op_create_ai_parameter"] }]);
-    expect(response).toMatchObject({
-      status: "ok",
-      command: "getOperationLog",
-      payload: {
-        entries: [
-          {
-            operationId: "op_create_ai_parameter"
-          }
-        ]
-      }
-    });
-  });
-
-  it("returns getOperationLog entries when no filter is supplied", async () => {
-    const entries = [
-      createOperationLogEntry("op_create_ai_parameter", ["param_ai_parameter"]),
-      createOperationLogEntry("op_other_parameter", ["param_other"])
-    ];
-    const host = createReadHost({
-      getOperationLog: () => entries
-    });
-
-    const response = await executeAiReadCommand(createReadRequest("getOperationLog", {}), host);
-
-    expect(response).toMatchObject({
-      status: "ok",
-      command: "getOperationLog",
-      payload: {
-        entries: [
-          {
-            operationId: "op_create_ai_parameter"
-          },
-          {
-            operationId: "op_other_parameter"
-          }
-        ]
       }
     });
   });
@@ -299,10 +189,14 @@ describe("AI read command execution", () => {
     });
   });
 
+  it("refuses a command that is not a read command", async () => {
+    await expect(executeAiReadCommand(createReadRequest("getPsdImportPlanState", {}), createReadHost()))
+      .rejects.toThrow("executeAiReadCommand only handles read commands, not getPsdImportPlanState.");
+  });
+
   it("returns not_implemented when a supported read command has no host method yet", async () => {
     const host: AiReadCommandHost = {
-      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 0 }),
-      getOperationLog: () => []
+      getEditorState: () => ({ schemaVersion: "editor-semantic-state-v1", packageRevision: 0 })
     };
 
     const response = await executeAiReadCommand(
@@ -328,7 +222,7 @@ describe("AI read command execution", () => {
 
     await executeAiReadCommand(createReadRequest("getEditorState", {}), host, transcript);
     await executeAiReadCommand(
-      createReadRequest("getOperationLog", {}, ["dryRunEdit"]),
+      createReadRequest("inspectModel", {}, ["dryRunEdit"]),
       host,
       transcript
     );
@@ -348,9 +242,9 @@ describe("AI read command execution", () => {
       },
       {
         entryType: "command",
-        commandId: "cmd_getOperationLog",
+        commandId: "cmd_inspectModel",
         agentId: "agent_test",
-        command: "getOperationLog",
+        command: "inspectModel",
         capabilities: ["dryRunEdit"],
         basis: {
           relatedAC: [],
