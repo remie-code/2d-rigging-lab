@@ -36,6 +36,19 @@
  * (per-slot then wins that slot; the group's other slots ease to base). In the merge,
  * per-slot curves are written AFTER the group so a per-slot curve deterministically
  * overrides the group on any shared slot.
+ *
+ * Voice swap Wave 1 (Domain A) adds the STREAMED form of the same timeline
+ * (`intent.speechStream`: open → append×N → end, keyed by an utteranceId). There is still
+ * ONE group timeline machine: the store additionally tracks the single open utterance
+ * (`#stream`) that may still grow, and `setSpeech` (`intent.speech`) is now the sugar
+ * "open + append + end at one instant" through the very same path. The forced releases
+ * above (per-slot mouth intent / releaseAll / clearAll) also stop the open utterance, so
+ * its later append/end are ignored.
+ *
+ * Voice swap Wave 2 (Domain A2) adds a safety net: an utterance whose data ran out and
+ * that then sees neither append nor end for {@link RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS}
+ * is treated as ended at that instant (usual terminal hold → release), and stops accepting
+ * append/end — so a soul that never sends `end` cannot leave the mouth open.
  */
 
 import {
@@ -45,10 +58,12 @@ import {
   slotCurveDriveEndMs,
   type SlotCurveState
 } from "./slot-curve-state";
+import { runtimePlayerControlChannelSpeechStreamMaxUtteranceLength } from "./contract/channel-protocol-contract";
 import {
   isSpeechMouthGroupSlot,
   RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS,
   RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
+  RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS,
   sampleSpeechTimeline,
   type SpeechMora,
   type SpeechTimelineState
@@ -93,10 +108,41 @@ export type RuntimePlayerControlChannelOverlayStoreOptions = {
   readonly dipFloorProvider?: () => number | undefined;
 };
 
+/**
+ * The current open streamed utterance as the dispatch layer sees it (voice swap Wave 1),
+ * so an `append` can be checked for continuity (`timeMs` strictly after `lastTimeMs`) and
+ * the whole-utterance cap (`moraCount`) before it is accepted. A pure read; null when no
+ * utterance is open.
+ */
+export type RuntimePlayerControlChannelSpeechStreamCursor = {
+  readonly utteranceId: string;
+  readonly lastTimeMs: number | undefined;
+  readonly moraCount: number;
+};
+
+/** Internal utterance key of the `intent.speech` sugar (it has no wire id, so a symbol
+ * can never collide with a soul-chosen utteranceId string). */
+const SPEECH_SUGAR_UTTERANCE: unique symbol = Symbol("intent.speech");
+
+/**
+ * The single OPEN utterance (still accepting append/end). `installed` flips once its first
+ * moras became the live `#speech` timeline — until then the previous timeline (if any)
+ * keeps the mouth, so the hand-off happens with data in hand and onsets continuously.
+ */
+type SpeechStreamUtterance = {
+  readonly key: string | typeof SPEECH_SUGAR_UTTERANCE;
+  readonly startAtMs: number;
+  readonly installed: boolean;
+  readonly lastTimeMs: number | undefined;
+  readonly moraCount: number;
+};
+
 export class RuntimePlayerControlChannelOverlayStore {
   readonly #curves = new Map<string, SlotCurveState>();
   /** The single live speech timeline (C6, 一発話=一タイムライン §7 裁定4), or null. */
   #speech: SpeechTimelineState | null = null;
+  /** The single open streamed utterance (voice swap Wave 1), or null. */
+  #stream: SpeechStreamUtterance | null = null;
   readonly #releaseMs: number;
   /** Re-articulation dip floor provider (§13, read per snapshot), or null. */
   readonly #dipFloorProvider: (() => number | undefined) | null;
@@ -193,17 +239,73 @@ export class RuntimePlayerControlChannelOverlayStore {
    * Control Channel request is its sole ordering input. Soul must therefore send
    * the next timeline only when its FIFO playback boundary has reached that job;
    * duplicate/late audio callbacks never call this method on their own.
+   *
+   * Voice swap Wave 1: this is the sugar "open + append + end at `startAtMs`" through the
+   * same streamed-utterance path ({@link openSpeechStream} / {@link appendSpeechStream} /
+   * {@link endSpeechStream}), so both kinds share one state machine. The resulting
+   * timeline is evaluated exactly as before (end at t=0 never delays the terminal; the
+   * onset anchor equals `startAtMs`).
    */
   setSpeech(moras: readonly SpeechMora[], startAtMs: number): void {
-    // Capture the current effective mouth-open (案B) BEFORE dropping the per-slot curves, so
-    // the group onset re-attacks from what the mouth is actually showing (no snap).
-    const onsetFromOpen = this.#effectiveStart(
-      RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT
-    );
-    for (const slotId of RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS) {
-      this.#curves.delete(slotId);
+    this.#openUtterance(SPEECH_SUGAR_UTTERANCE, startAtMs);
+    this.#appendUtterance(SPEECH_SUGAR_UTTERANCE, moras, startAtMs);
+    this.#endUtterance(SPEECH_SUGAR_UTTERANCE, startAtMs);
+  }
+
+  /**
+   * `intent.speechStream` op=open (voice swap Wave 1). Starts utterance `utteranceId` with
+   * t=0 = `startAtMs` (the acceptance instant). It REPLACES the previous utterance: that
+   * one stops accepting append/end (a late tail is ignored), and if its timeline is still
+   * the live mouth and was waiting for `end`, it is ended now so it closes naturally
+   * (hold → release) rather than holding forever. The new utterance takes the mouth over
+   * at its first append (with data in hand, onset from the current openness).
+   */
+  openSpeechStream(utteranceId: string, startAtMs: number): void {
+    this.#openUtterance(utteranceId, startAtMs);
+  }
+
+  /**
+   * `intent.speechStream` op=append. Adds `moras` (relative to the utterance's t=0) to the
+   * open utterance `utteranceId` at acceptance instant `nowMs`. Returns false (no effect)
+   * when `utteranceId` is not the open utterance — a stale tail of a replaced/stopped
+   * utterance — or when the slice would break continuity / the 4096 cap (the dispatch
+   * layer refuses those first; this is the store's own guard of the evaluator invariant).
+   *
+   * The FIRST append installs the utterance as the live group timeline, like
+   * {@link setSpeech} always did: the per-slot curves on the 6 mouth slots are dropped
+   * (exclusive ownership, 後着置換) and the onset re-attacks from the current effective
+   * mouth-open (案B), anchored at `nowMs`. Later appends only extend the mora列.
+   */
+  appendSpeechStream(
+    utteranceId: string,
+    moras: readonly SpeechMora[],
+    nowMs: number
+  ): boolean {
+    return this.#appendUtterance(utteranceId, moras, nowMs);
+  }
+
+  /**
+   * `intent.speechStream` op=end. No more moras follow for `utteranceId`: its timeline
+   * switches from "hold the last vowel when the data runs out" to the usual terminal
+   * (hold the last interval → release), never starting the release before `nowMs`.
+   * Returns false (no effect) when `utteranceId` is not the open utterance.
+   */
+  endSpeechStream(utteranceId: string, nowMs: number): boolean {
+    return this.#endUtterance(utteranceId, nowMs);
+  }
+
+  /** The open streamed utterance for the dispatch layer's continuity/cap check, or null
+   * (also null while only the internal `intent.speech` sugar is in flight). */
+  speechStreamCursor(): RuntimePlayerControlChannelSpeechStreamCursor | null {
+    const stream = this.#stream;
+    if (stream === null || typeof stream.key !== "string") {
+      return null;
     }
-    this.#speech = { moras: [...moras], startAtMs, onsetFromOpen };
+    return {
+      utteranceId: stream.key,
+      lastTimeMs: stream.lastTimeMs,
+      moraCount: stream.moraCount
+    };
   }
 
   /**
@@ -214,6 +316,7 @@ export class RuntimePlayerControlChannelOverlayStore {
   clearAll(): void {
     this.#curves.clear();
     this.#speech = null;
+    this.#stream = null;
   }
 
   /**
@@ -222,7 +325,7 @@ export class RuntimePlayerControlChannelOverlayStore {
    * a forced release from its CURRENT effective value; a curve already fully returned
    * is dropped. No immediate snap (that was C4). The speech timeline (if any) is
    * forced-released the same way — the 6 mouth slots ease from their current values to
-   * base (口がすっと閉じる, §2.8).
+   * base (口がすっと閉じる, §2.8). An open streamed utterance is stopped with it.
    */
   releaseAll(nowMs: number): void {
     this.#lastNowMs = nowMs;
@@ -238,6 +341,7 @@ export class RuntimePlayerControlChannelOverlayStore {
         forcedReleaseFromValue: sample.value
       });
     }
+    this.#stream = null;
     this.#forceReleaseSpeech(nowMs);
   }
 
@@ -265,6 +369,8 @@ export class RuntimePlayerControlChannelOverlayStore {
     // Group timeline FIRST (lower merge priority): its 6 mouth-slot values are written
     // before the per-slot curves, so a per-slot curve on a shared mouth slot (only ever
     // present after a 後着置換 that forced-released the group) deterministically wins.
+    // The safety net is materialized first so the open utterance stops once it has fired.
+    this.#expireStalledStream(nowMs);
     if (this.#speech !== null) {
       const sample = sampleSpeechTimeline(this.#speech, nowMs, {
         releaseMs: this.#releaseMs,
@@ -329,10 +435,167 @@ export class RuntimePlayerControlChannelOverlayStore {
    * five slots ease to base; the targeted slot is driven by the incoming per-slot curve,
    * which re-attacks from the current effective value (案B) for continuity. This is the
    * single point where a per-slot drive overrides the group.
+   *
+   * Voice swap Wave 1: this is also the STOP of a streamed utterance (the soul's barge-in
+   * sends `intent.set mouth-open=0`). The open utterance — installed or still waiting for
+   * its first append — is dropped, so its in-flight append/end are ignored and cannot
+   * re-open the mouth after the stop.
    */
   #yieldSpeechForSlot(slotId: string, nowMs: number): void {
-    if (this.#speech !== null && isSpeechMouthGroupSlot(slotId)) {
+    if (!isSpeechMouthGroupSlot(slotId)) {
+      return;
+    }
+    this.#stream = null;
+    if (this.#speech !== null) {
       this.#forceReleaseSpeech(nowMs);
+    }
+  }
+
+  /** Open a new utterance (string = wire utteranceId, symbol = the intent.speech sugar),
+   * replacing the previous one. See {@link openSpeechStream}. */
+  #openUtterance(key: SpeechStreamUtterance["key"], startAtMs: number): void {
+    // A previous utterance already past its safety net ended THEN, not at this open.
+    this.#expireStalledStream(startAtMs);
+    this.#endLiveSpeech(startAtMs);
+    this.#stream = {
+      key,
+      startAtMs,
+      installed: false,
+      lastTimeMs: undefined,
+      moraCount: 0
+    };
+  }
+
+  /** See {@link appendSpeechStream}. */
+  #appendUtterance(
+    key: SpeechStreamUtterance["key"],
+    moras: readonly SpeechMora[],
+    nowMs: number
+  ): boolean {
+    // A slice landing at/after the safety net is a tail of an already-ended utterance.
+    this.#expireStalledStream(nowMs);
+    const stream = this.#stream;
+    const first = moras[0];
+    const last = moras[moras.length - 1];
+    if (
+      stream === null ||
+      stream.key !== key ||
+      first === undefined ||
+      last === undefined
+    ) {
+      return false;
+    }
+    if (
+      (stream.lastTimeMs !== undefined && first.timeMs <= stream.lastTimeMs) ||
+      stream.moraCount + moras.length >
+        runtimePlayerControlChannelSpeechStreamMaxUtteranceLength
+    ) {
+      return false;
+    }
+
+    if (!stream.installed) {
+      // Capture the current effective mouth-open (案B) BEFORE dropping the per-slot curves,
+      // so the group onset re-attacks from what the mouth is actually showing (no snap).
+      const onsetFromOpen = this.#effectiveStart(
+        RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT
+      );
+      for (const slotId of RUNTIME_PLAYER_SPEECH_MOUTH_GROUP_SLOTS) {
+        this.#curves.delete(slotId);
+      }
+      this.#speech = {
+        moras: [...moras],
+        startAtMs: stream.startAtMs,
+        onsetFromOpen,
+        onsetAtMs: nowMs,
+        awaitingEnd: true,
+        stallEndAtMs: this.#stallEndAtMs(stream.startAtMs, last, nowMs)
+      };
+    } else {
+      const speech = this.#speech;
+      if (speech === null || speech.forcedReleaseAtMs !== undefined) {
+        // Unreachable while the stream is open (a forced release drops the stream), but
+        // never revive a released timeline.
+        return false;
+      }
+      this.#speech = {
+        ...speech,
+        moras: [...speech.moras, ...moras],
+        stallEndAtMs: this.#stallEndAtMs(stream.startAtMs, last, nowMs)
+      };
+    }
+
+    this.#stream = {
+      ...stream,
+      installed: true,
+      lastTimeMs: last.timeMs,
+      moraCount: stream.moraCount + moras.length
+    };
+    return true;
+  }
+
+  /** See {@link endSpeechStream}. */
+  #endUtterance(key: SpeechStreamUtterance["key"], nowMs: number): boolean {
+    // An `end` after the safety net must not move the end instant later (no re-open).
+    this.#expireStalledStream(nowMs);
+    const stream = this.#stream;
+    if (stream === null || stream.key !== key) {
+      return false;
+    }
+    this.#stream = null;
+    if (stream.installed) {
+      this.#endLiveSpeech(nowMs);
+    }
+    return true;
+  }
+
+  /** Mark the live timeline (if it is still waiting for `end`) as ended at `nowMs`, so it
+   * closes through the usual terminal hold → release from here on. Only the open,
+   * installed utterance's timeline can be waiting, so this never touches another one. */
+  #endLiveSpeech(nowMs: number): void {
+    const speech = this.#speech;
+    if (speech !== null && speech.awaitingEnd === true) {
+      this.#speech = { ...speech, awaitingEnd: false, endAtMs: nowMs };
+    }
+  }
+
+  /**
+   * The safety-net end instant for a slice whose last mora is `last`, accepted at `nowMs`
+   * (voice swap Wave 2 / Domain A2): the data runs out at the later of the last mora's
+   * absolute time and the acceptance instant, and the utterance counts as ended
+   * {@link RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS} after that unless more data or `end`
+   * arrives first. Every accepted slice moves it strictly later (continuity), so a slice
+   * accepted before the net always keeps the utterance going.
+   */
+  #stallEndAtMs(startAtMs: number, last: SpeechMora, nowMs: number): number {
+    return (
+      Math.max(startAtMs + last.timeMs, nowMs) +
+      RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS
+    );
+  }
+
+  /**
+   * Materialize the safety net (Domain A2): if the live timeline is still waiting for `end`
+   * and `nowMs` has reached its `stallEndAtMs`, mark it ended AT `stallEndAtMs` (exactly as
+   * if `end` had been accepted then) and stop the open utterance, so a later append/end for
+   * it is ignored like any tail after `end`. The evaluator already samples an awaiting
+   * timeline past its net this way, so materializing never changes an output — it only
+   * keeps a late `end`/`open` from moving the end instant later (which would re-open the
+   * closing mouth). Only the open, installed utterance's timeline can be awaiting.
+   */
+  #expireStalledStream(nowMs: number): void {
+    const speech = this.#speech;
+    if (
+      speech === null ||
+      speech.awaitingEnd !== true ||
+      speech.forcedReleaseAtMs !== undefined ||
+      speech.stallEndAtMs === undefined ||
+      nowMs < speech.stallEndAtMs
+    ) {
+      return;
+    }
+    this.#speech = { ...speech, awaitingEnd: false, endAtMs: speech.stallEndAtMs };
+    if (this.#stream?.installed === true) {
+      this.#stream = null;
     }
   }
 

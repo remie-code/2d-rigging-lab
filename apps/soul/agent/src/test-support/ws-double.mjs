@@ -28,7 +28,8 @@ const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B39";
 /**
  * Control Channel サーバのテストダブルを作る。
  * @param {object} [options]
- * @param {string[]} [options.supportedKinds]  server.hello で広告する kinds（既定 3 種）。
+ * @param {string[]} [options.supportedKinds]  server.hello で広告する kinds（既定 4 種＝実器と同じ。
+ *   声の差し替え Wave 1 で intent.speechStream を足した）。
  * @param {number} [options.protocol]  server.hello の protocol（既定 1）。
  * @param {boolean} [options.sendHello]  接続時に server.hello を送るか（既定 true）。false で hello 不着を再現。
  * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onSpeech]
@@ -39,6 +40,9 @@ const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B39";
  *   intent.envelope を受けたときの返答判断（既定 accepted・S4）。onSpeech と同じ判定インタフェース。
  * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onSet]
  *   intent.set を受けたときの返答判断（既定 accepted・S6 barge-in の口閉じ）。onSpeech と同じ判定インタフェース。
+ * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onSpeechStream]
+ *   intent.speechStream（open/append/end）を受けたときの返答判断（既定 accepted・声の差し替え Wave 1）。
+ *   onSpeech と同じ判定インタフェース。器の状態機械（utteranceId の照合等）は再現しない。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -54,13 +58,15 @@ export function createChannelServerDouble(options = {}) {
   const supportedKinds = options.supportedKinds ?? [
     "intent.set",
     "intent.envelope",
-    "intent.speech"
+    "intent.speech",
+    "intent.speechStream"
   ];
   const protocol = options.protocol ?? 1;
   const sendHello = options.sendHello ?? true;
   const onSpeech = options.onSpeech ?? (() => ({ result: "accepted" }));
   const onEnvelope = options.onEnvelope ?? (() => ({ result: "accepted" }));
   const onSet = options.onSet ?? (() => ({ result: "accepted" }));
+  const onSpeechStream = options.onSpeechStream ?? (() => ({ result: "accepted" }));
 
   /** @type {any[]} */
   const received = [];
@@ -153,14 +159,17 @@ export function createChannelServerDouble(options = {}) {
     if (
       message.kind === "intent.speech" ||
       message.kind === "intent.envelope" ||
-      message.kind === "intent.set"
+      message.kind === "intent.set" ||
+      message.kind === "intent.speechStream"
     ) {
       const verdict =
         message.kind === "intent.speech"
           ? onSpeech(message.payload, message)
           : message.kind === "intent.envelope"
             ? onEnvelope(message.payload, message)
-            : onSet(message.payload, message);
+            : message.kind === "intent.speechStream"
+              ? onSpeechStream(message.payload, message)
+              : onSet(message.payload, message);
       if (verdict.result === "drop") {
         // 応答せず接続を落とす（channel-client の pending が closedError で reject される経路）。
         socket.destroy();

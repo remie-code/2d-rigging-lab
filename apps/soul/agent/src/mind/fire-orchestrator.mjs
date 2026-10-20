@@ -33,15 +33,22 @@
  *
  *  **S6 で speaking 状態が実再生区間を覆うように変わった**（inventory §3-3 の回収）: 従来は
  *  speakImpl（play() 送出は非ブロッキング）が resolve した瞬間に soul を append して即 idle へ
- *  向かっていた＝実際の音声再生中はもう idle だった。S6 では speak() の戻り（timeline・
- *  wavDurationSec・playbackStartedAtMs）で **再生実区間を追跡**し、その間 speaking 状態を保つ。
+ *  向かっていた＝実際の音声再生中はもう idle だった。S6 では speak() の戻りで **再生実区間を追跡**し、
+ *  その間 speaking 状態を保つ。声の差し替え Wave 2 から、一括の読み上げも SpeechStreamer
+ *  （voice/speech-streamer.mjs の speakOnce）に載り、完了は WAV 長のタイマーではなく player の
+ *  ENDED（speakImpl の返りの `ended`）で判断する。`ended` を持たない返り（テストや計測の偽物）は
+ *  返った時点で鳴り終わったとみなす。
  *  soul 追記は **発話完了時（全文）または barge-in 中断時（声に出た接頭辞 + 中断注記）** の 1 回だけ
  *  行う（append-only 維持・裁定済みの意図変更）。この window に interrupt() が効く。
+ *  鳴らし始めた後（STARTED の後）に再生が失敗したときは、文ごとの読み上げと同じく「声に出た接頭辞 +
+ *  改行 + PROGRESSIVE_INTERRUPTION_NOTE」を 1 回追記し、{fired:false, reason:"speech-playback-failed"} を
+ *  返す（fireError にしない）。STARTED 前・声に出た分が 0 文字の失敗は今どおり fireError。
  *
  * ── S6「会話が続く」barge-in（Domain B）─────────────────────────────────────────
  *  外部（cockpit-server の onVadEvent → barge-in gate）が `interrupt()` を呼ぶと、再生中の魂発話を
  *  中断する: ① player.stop()（声を止める）② channel へ mouth-open intent.set(value=0・短 ttl) を
- *  送出（口を閉じる = speech タイムライン強制 release・inventory §2）③ モーラタイムライン × 再生経過で
+ *  送出（口を閉じる = speech タイムライン強制 release・inventory §2）。①② は SpeechStreamer の
+ *  stop が行い、合成中の engine にも signal で中止を伝える ③ 累積の口の時間割 × STARTED からの経過で
  *  切断点算出（barge-in.computeSpokenPrefix・過大評価しない）④ soul 行に「接頭辞 + 中断注記」を追記
  *  ⑤ onDiagnostic({type:"bargeIn",...})。stop 失敗・set rejected/throw は診断に握って落とさない
  *  （envelope 経路の作法に倣う）。interrupt() は speaking 中でなければ no-op（冪等・dispose 後も安全）。
@@ -106,6 +113,25 @@
  *  `containsNgWord("")` は false ゆえ、発話なし（expression-only・空応答）はこの検査を素通りする
  *  （NG 検査は「声になるもの」だけを向く）。非命中は挙動完全不変（無退行）。
  *
+ * ── 発火番号・きっかけ・推論の範囲・遅延（操縦席の作り直し 1 回目・cockpit-glance-redesign.md §9）────────
+ *  受理した発火ごとに番号（fireId・1 から増える整数）を振り、受理（onFire）・ask（onAsk）・soul の追記
+ *  （onSoulTranscript の entry）・遅延（onLatency）・fire() の戻り値に同じ番号を載せる。`fire({ cause })` の
+ *  cause（きっかけ・結線層が作る本文なしの小さなオブジェクト）は受理・棄却と遅延にそのまま載せる（ここでは解釈しない）。
+ *  onAsk はその回の LLM に渡した会話の窓の始まりと終わりの seq（formatFireInjection の firstSeq / lastSeq）を
+ *  ask の直前に通知する（通常・画面あり・画面優先の全経路）。遅延は ./fire-latency.mjs の createFireTiming に
+ *  既存のトレースを食わせて測り、声が鳴り始めた時点（鳴らなかった返事は発火の終わり）で 1 回だけ通知する。
+ *
+ * ── 増えた分だけ渡す（長い配信の文脈・context-growth-2026-10.md §5・§6）───────────────────────
+ *  頭のセッションが conversationKey()（今の会話 = Codex の thread の識別子・次の ask が新しい会話なら null）を
+ *  持つときだけ、前回の ask で渡した最後の seq より後ろの行だけを渡す（formatFireInjectionSince・チャッピーの
+ *  実際に聞こえた分の soul 行も含む・新しい行が無ければ「（前回から新しい発言はなし）」・窓と 4000 字の上限は
+ *  そのまま）。会話が新しく始まったとき・頭のセッションが替わったとき・Codex が内部で thread を作り直したとき
+ *  （turn の失敗・接続の作り直し）は key が変わるので、従来どおり直近 5 分を全部渡す。conversationKey を
+ *  持たない頭（Claude）は従来のまま（毎回直近 5 分）。空窓（直近 5 分に 1 行も無い）の判定は従来どおり全体で行う。
+ *  onAsk・onFire（受理）の範囲と行数・文字数は実際に渡した分をそのまま出す。
+ *  ask が返るたびに onAskRecord（発火番号・頭・渡した行数と文字数・usage・tokenUsage・最初の文字までの時間。
+ *  本文なし）を通知する（結線層が起動ごとの記録ファイルへ 1 行書く）。
+ *
  * ── soul 記録の broadcast 経路 ───────────────────────────────────────────────
  *  soul を buffer.append した直後に onSoulTranscript(entry) フックで結線層（cockpit）へ通知し、
  *  cockpit が既存 transcript イベント（speaker:"soul"）として SSE broadcast する（domain-a.md
@@ -117,9 +143,9 @@
  *  （かつての「soul は onTranscript を通らない」という記述は誤りだった。）
  */
 
-import { speak as defaultSpeak } from "../voice/speak.mjs";
-import { createProgressiveSpeechDelivery } from "../voice/progressive-speech-delivery.mjs";
-import { formatFireInjection, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
+import { speakOnce as defaultSpeak, createSpeechStreamer } from "../voice/speech-streamer.mjs";
+import { createVoiceEngine, DEFAULT_VOICE_ENGINE_KIND } from "../voice/engines/voice-engine.mjs";
+import { formatFireInjection, formatFireInjectionSince, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { translateExpression } from "./expression-translator.mjs";
 import { captureWindow as defaultCaptureWindow } from "../eyes/window-capture.mjs";
@@ -133,6 +159,7 @@ import {
 import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
 import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
+import { createFireTiming } from "./fire-latency.mjs";
 import { performance } from "node:perf_hooks";
 
 /** 視覚発火の最小指示文（wave 計画 §2 裁定・人格の作り込みはしない＝persona の領分）。 */
@@ -191,10 +218,11 @@ export const DEFAULT_CONVERSATION_INSTRUCTION = DEFAULT_CONVERSATION_INSTRUCTION
 /** The only technical brain ids that may carry a conversation override. */
 export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
   "claude",
+  "claude-opus-55",
   "codex",
-  "codex-55",
   "codex-56-sol",
-  "codex-astra"
+  "codex-astra",
+  "codex-61-sol"
 ]);
 
 /** @param {unknown} value */
@@ -264,13 +292,18 @@ export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
  * @param {{ ask: (content: string | Array<any>) => Promise<{ replyText: string; usage?: any }> }} options.session
  *   常駐 LLM セッション（createLlmSession の返り）。ask のみ使う。ここでは作らない/変えない。
  *   S5: ask は文字列（通常 Fire）と content ブロック配列（視覚発火）の両方を受理する前提。
- * @param {typeof defaultSpeak} [options.speakImpl]  発話同期（既定 Domain B speak）。テスト差し替え可能。
- * @param {{ sendSpeech: Function; sendEnvelope?: Function }} [options.channel]  speak/演出送出へ渡す接続済みチャネル。
+ * @param {typeof defaultSpeak} [options.speakImpl]  一括の読み上げ（既定 speech-streamer の speakOnce）。テスト差し替え可能。
+ *   返りの `ended`（Promise）で鳴り終わりを、`snapshot()` で切断点の材料（時間割・STARTED 時刻）を、
+ *   `stop(cause)` で止め方を渡す。持たない返りは「返った時点で鳴り終わった」とみなす。
+ * @param {{ openSpeech?: Function; appendSpeech?: Function; endSpeech?: Function; sendEnvelope?: Function; sendSet?: Function }} [options.channel]
+ *   発話（intent.speechStream）・演出・口閉じの送出へ渡す接続済みチャネル。
  * @param {number} [options.expressionIntensity=1.0]  演出強さ係数（全 peak 一括スケール・表の外で適用）。
- * @param {{ play: Function }} [options.player]  speak へ渡す常駐プレイヤー。
- * @param {object} [options.speakDeps]  speak へ渡す追加 deps（tts/writeWav/sConfig 等）。
+ * @param {any} [options.player]  常駐の流し込みプレイヤー（stream-player.mjs・open/write/end/stop/onEvent）。
+ * @param {import("../voice/engines/voice-engine.mjs").VoiceEngine} [options.engine]  声の差し替え口。
+ *   未指定（かつ acquireFireResources も engine を渡さない）なら speakDeps から AivisSpeech の engine を作る。
+ * @param {object} [options.speakDeps]  既定の AivisSpeech engine へ渡す deps（tts/ttsBaseUrl/speaker/sConfig）。
  * @param {() => object | Promise<object>} [options.acquireFireResources]
- *   accepted 公開前に exact session/channel/player/TTS snapshot を取得する production seam。
+ *   accepted 公開前に exact session/channel/player/engine snapshot を取得する production seam。
  * @param {number} [options.windowMs=FIRE_WINDOW_MS]  注入窓幅。
  * @param {number} [options.maxChars=FIRE_MAX_CHARS]  注入文字数上限。
  * @param {() => number} [options.nowImpl=Date.now]  窓の起点となる壁時計（注入可）。
@@ -294,14 +327,22 @@ export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
  *   Codex delta から確定した safe sentence の同期 enqueue seam。C1 では playback を所有せず、
  *   production default（未注入）は既存の最終一括 speak を維持する。
  * @param {boolean} [options.progressivePlayback=false] production Cockpit enables the Wave 2 queue adapter.
- * @param {typeof createProgressiveSpeechDelivery} [options.progressiveDeliveryFactory]
+ * @param {typeof createSpeechStreamer} [options.speechStreamerFactory]  Codex の文ごとの読み上げの運び手（既定 createSpeechStreamer）。
  * @param {(outcome: object) => void} [options.onProgressiveTerminal] C3 projection seam.
- * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  再生完了タイマの注入（決定論テスト用）。
- * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  再生完了タイマの解除（注入）。
+ * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  発話の見張りタイマの注入（SpeechStreamer へ渡す）。
+ * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  見張りタイマの解除（注入）。
+ * @param {(info: { fireId: number; windowFirstSeq: number | null; windowLastSeq: number | null; includedCount: number; vision: boolean; atMs: number }) => void} [options.onAsk]
+ *   ask の直前の通知（推論に使った会話の窓の始まりと終わりの seq・全経路）。
+ * @param {(info: import("./fire-latency.mjs").FireLatency) => void} [options.onLatency]
+ *   1 返事 1 回の遅延の通知（発火の中の区間）。声が鳴り始めた時点、鳴らなかったときは発火の終わり（ask した回だけ）。
+ * @param {() => number} [options.monotonicNowImpl]  遅延を測る単調時計（既定 performance.now・テスト注入）。
+ * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; atMs: number }) => void} [options.onAskRecord]
+ *   ask が返るたびの記録（本文なし・数字と種類だけ）。windowMode は渡した会話の窓の種類
+ *   （legacy = 会話の世代を持たない頭の従来の窓 / full = 新しい会話なので直近 5 分の全部 / delta = 増えた分だけ）。
  * @param {boolean} [options.initialKilled=false]  キル状態の初期値（S8）。キル状態の正本はサーバ側
  *   （Domain B）にあるため、orchestrator 生成時にサーバの現況を渡し「キル中に生まれる orchestrator は
  *   キル済みで生まれる」不変を成立させる（born-killed）。
- * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred" }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; kill: (atMs?: number) => Promise<object>; revive: () => void; getKilled: () => boolean; getState: () => FireState; dispose: () => void }}
+ * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred"; instruction?: string; cause?: object }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; kill: (atMs?: number) => Promise<object>; revive: () => void; getKilled: () => boolean; getState: () => FireState; dispose: () => void }}
  */
 export function createFireOrchestrator(options) {
   if (options == null || typeof options !== "object") {
@@ -339,10 +380,16 @@ export function createFireOrchestrator(options) {
     onUsage,
     onTrace,
     onProgressiveSentence,
-    onProgressiveTerminal
+    onProgressiveTerminal,
+    onAsk,
+    onLatency,
+    onAskRecord
   } = options;
+  const monotonicNowImpl = options.monotonicNowImpl ?? (() => performance.now());
   const progressivePlayback = options.progressivePlayback === true;
-  const progressiveDeliveryFactory = options.progressiveDeliveryFactory ?? createProgressiveSpeechDelivery;
+  const speechStreamerFactory = options.speechStreamerFactory ?? createSpeechStreamer;
+  /** speakDeps → 既定の AivisSpeech engine（engine を渡されなかったときだけ作る）。 */
+  const defaultEngines = new WeakMap();
 
   /** @type {FireState} */
   let state = "idle";
@@ -356,19 +403,21 @@ export function createFireOrchestrator(options) {
 
   /**
    * 再生実区間の追跡（S6）。speak() 後〜発話完了/中断まで有効。null = 現在発話中でない。
+   * spoken は speakImpl の返り（ended / snapshot / stop を持ちうる）。timeline / playbackStartedAtMs は
+   * snapshot を持たない返りのための材料。
    * @type {null | {
    *   buffer: { append: Function };
    *   speechText: string;
+   *   spoken: any;
    *   timeline: Array<any>;
-   *   playbackStartedAtMs: number;
+   *   playbackStartedAtMs: number | null;
    *   interrupted: boolean;
    *   appended: boolean;
-   *   timer: ReturnType<typeof setTimeout> | null;
-   *   resolve: (outcome: { interrupted: boolean; disposed?: boolean; elapsedMs?: number; charsSpoken?: number; prefix?: string }) => void;
+   *   resolve: (outcome: { interrupted: boolean; disposed?: boolean; failed?: boolean; error?: unknown; cause?: string | null; elapsedMs?: number; charsSpoken?: number; prefix?: string }) => void;
    * }}
    */
   let currentPlayback = null;
-  /** @type {ReturnType<typeof createProgressiveSpeechDelivery> | null} */
+  /** @type {ReturnType<typeof createSpeechStreamer> | null} */
   let currentProgressiveDelivery = null;
   let currentProgressiveBoundary = null;
   let currentFireResources = null;
@@ -378,6 +427,141 @@ export function createFireOrchestrator(options) {
   const progressiveProjectionOwners = new Map();
   /** Latest unconsumed partial; single-flight Fire makes one pending slot sufficient. */
   let pendingProgressiveCorrection = null;
+  /**
+   * 受理した 1 発だけに付く内部指示（`fire({ instruction })`・コメント反応でどのコメントかを明示する・
+   * discussion/ai-cohost/decisions/comment-react/integration.md §1-7）。ask の先頭に付けるだけで、会話ログ
+   * （転写バッファ）には残らない（progressive correction と同じ作り）。fire() の finally で必ず畳む。
+   * @type {string | null}
+   */
+  let currentFireInstruction = null;
+  /** 受理した発火に振る番号（1 から）。 */
+  let nextFireId = 0;
+  /**
+   * 今の 1 発（fire() の claim から finally まで）。fireId は受理した時点で振る（受理しなかった発火は null）。
+   * single-flight なので 1 つで足りる。
+   * @type {null | { fireId: number | null; cause: object | null; vision: boolean; timing: ReturnType<typeof createFireTiming>; latencyEmitted: boolean }}
+   */
+  let currentFire = null;
+
+  /**
+   * 増えた分だけ渡すための目印: 前回 ask が返った会話（session と conversationKey）と、そこまでに渡した最後の seq。
+   * 会話が替わったら使わない（直近 5 分を全部渡す）。
+   * @type {null | { session: any; key: string; lastSeq: number | null }}
+   */
+  let conversationCursor = null;
+
+  /** 受理した発火に番号を振る（冪等・劣化フォールバックで二重に振らない）。 */
+  const acceptFireId = () => {
+    if (!currentFire) return null;
+    if (currentFire.fireId == null) currentFire.fireId = ++nextFireId;
+    return currentFire.fireId;
+  };
+  /** 受理の通知に載せる番号ときっかけ。 */
+  const acceptedTags = () => ({ fireId: acceptFireId(), cause: currentFire ? currentFire.cause : null });
+  /** soul の追記 entry に今の発火番号を載せる（正本の frozen entry は変えずコピー）。 */
+  const withFireId = (/** @type {any} */ entry, /** @type {number | null | undefined} */ fireId = currentFire?.fireId) => ({
+    ...entry,
+    fireId: fireId ?? null
+  });
+  /** 遅延を 1 返事 1 回だけ通知する（声が鳴り始めた時点 or 発火の終わり）。 */
+  const emitLatencyOnce = (/** @type {boolean} */ spoken) => {
+    const fire = currentFire;
+    if (!fire || fire.latencyEmitted || fire.fireId == null || !fire.timing.hasAsked()) return;
+    fire.latencyEmitted = true;
+    emit(onLatency, { fireId: fire.fireId, cause: fire.cause, vision: fire.vision, spoken, ...fire.timing.segments() });
+  };
+  /**
+   * ask の直前に、その回の LLM に渡した会話の窓の範囲を通知する。
+   * @param {{ firstSeq: number | null; lastSeq: number | null; includedCount: number }} injection @param {boolean} vision
+   */
+  const emitAsk = (injection, vision) => {
+    if (currentFire) currentFire.vision = vision;
+    emit(onAsk, {
+      fireId: currentFire?.fireId ?? null,
+      windowFirstSeq: injection.firstSeq ?? null,
+      windowLastSeq: injection.lastSeq ?? null,
+      includedCount: injection.includedCount,
+      vision,
+      atMs: nowImpl()
+    });
+  };
+
+  /**
+   * 頭のセッションの今の会話の識別子。口を持たない頭（Claude）は undefined、次の ask が新しい会話なら null。
+   * @param {any} target
+   * @returns {string | null | undefined}
+   */
+  const conversationKeyOf = (target) => {
+    if (!target || typeof target.conversationKey !== "function") return undefined;
+    try {
+      const key = target.conversationKey();
+      return typeof key === "string" && key.length > 0 ? key : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * この ask に渡す会話の窓を作る。同じ会話が続いていれば前回より後ろの行だけ、そうでなければ従来の窓。
+   * fullWindow を渡されたら（通常の発火の空窓判定で作ったもの）従来の窓としてそれを使う（同じ時刻で作り直さない）。
+   * @param {{ all: Function }} buffer  @param {any} resources  @param {number} nowMs
+   * @param {ReturnType<typeof formatFireInjection>} [fullWindow]
+   */
+  const buildInjection = (buffer, resources, nowMs, fullWindow) => {
+    const target = resources?.session;
+    const key = conversationKeyOf(target);
+    const cursor = conversationCursor;
+    if (typeof key === "string" && cursor && cursor.session === target && cursor.key === key) {
+      return {
+        injection: formatFireInjectionSince(buffer.all(), { nowMs, windowMs, maxChars, afterSeq: cursor.lastSeq }),
+        windowMode: /** @type {"delta"} */ ("delta")
+      };
+    }
+    return {
+      injection: fullWindow ?? formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars }),
+      windowMode: key === undefined ? /** @type {"legacy"} */ ("legacy") : /** @type {"full"} */ ("full")
+    };
+  };
+
+  /**
+   * ask が返った後に目印を進める（その会話へ渡した最後の seq）。会話の世代を持たない頭・会話が無くなった頭では消す。
+   * @param {any} resources  @param {{ lastSeq: number | null }} injection  @param {string} windowMode
+   */
+  const commitInjection = (resources, injection, windowMode) => {
+    const target = resources?.session;
+    const key = conversationKeyOf(target);
+    if (typeof key !== "string") {
+      conversationCursor = null;
+      return;
+    }
+    const cursor = conversationCursor;
+    const sameConversation = windowMode === "delta" && cursor && cursor.session === target && cursor.key === key;
+    const previous = sameConversation ? cursor.lastSeq : null;
+    conversationCursor = { session: target, key, lastSeq: injection.lastSeq ?? previous };
+  };
+
+  /**
+   * ask が返るたびの記録（本文なし）。
+   * @param {any} asked  @param {any} resources  @param {boolean} vision  @param {string} windowMode
+   * @param {{ includedCount: number; charCount: number }} injection  @param {number} injectedChars
+   */
+  const emitAskRecord = (asked, resources, vision, windowMode, injection, injectedChars) => {
+    if (typeof onAskRecord !== "function") return;
+    const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    emit(onAskRecord, {
+      fireId: currentFire?.fireId ?? null,
+      brain: typeof resources?.configuration?.brain === "string" ? resources.configuration.brain : null,
+      vision,
+      windowMode,
+      includedCount: injection.includedCount,
+      injectedChars,
+      usage: asked && asked.usage != null ? asked.usage : null,
+      tokenUsage: asked && asked.tokenUsage != null ? asked.tokenUsage : null,
+      ttftMs: num(asked?.ttftMs),
+      elapsedMs: num(asked?.elapsedMs),
+      atMs: nowImpl()
+    });
+  };
 
   const acquireResources = async () => {
     const supplied =
@@ -386,6 +570,7 @@ export function createFireOrchestrator(options) {
       session: supplied?.session ?? session,
       channel: supplied?.channel ?? channel,
       player: supplied?.player ?? player,
+      engine: supplied?.engine ?? options.engine ?? null,
       speakDeps: Object.freeze({ ...speakDeps, ...(supplied?.speakDeps ?? {}) }),
       configuration: Object.freeze({ ...(supplied?.configuration ?? {}) }),
       metadata: Object.freeze({ ...(supplied?.metadata ?? {}) })
@@ -443,8 +628,46 @@ export function createFireOrchestrator(options) {
     }
   };
 
+  /**
+   * この Fire の声の差し替え口。snapshot が engine を持てばそれ、無ければ speakDeps から AivisSpeech の engine
+   * を作る（同じ speakDeps には同じ engine）。
+   * @param {any} resources
+   */
+  const resolveEngine = (resources) => {
+    if (resources?.engine) return resources.engine;
+    const deps = resources?.speakDeps ?? speakDeps;
+    let engine = defaultEngines.get(deps);
+    if (!engine) {
+      engine = createVoiceEngine(DEFAULT_VOICE_ENGINE_KIND, deps);
+      defaultEngines.set(deps, engine);
+    }
+    return engine;
+  };
+
+  /**
+   * SpeechStreamer が中断・失敗のあとに呼ぶ口の release。barge-in / kill は従来と同じ診断名
+   * （bargeIn… / kill…）で握り、それ以外（失敗・dispose）は診断を増やさず静かに送る。
+   * @param {any} resources
+   */
+  const streamReleaseMouth = (resources) => async (/** @type {{ cause: string }} */ info) => {
+    if (info?.cause === "barge-in") return releaseMouth("bargeIn", resources);
+    if (info?.cause === "killed") return releaseMouth("kill", resources);
+    const ownedChannel = resources?.channel ?? channel;
+    if (!ownedChannel || typeof ownedChannel.sendSet !== "function") return;
+    await ownedChannel.sendSet({ slotId: MOUTH_CLOSE_SLOT_ID, value: 0, ttlMs: MOUTH_CLOSE_TTL_MS });
+  };
+
   /** Fire-local passive trace; values supplied below are deliberately content-free. */
   const trace = (/** @type {string} */ event, /** @type {Record<string, unknown>} */ fields = {}) => {
+    if (currentFire) {
+      try {
+        currentFire.timing.observe(event, fields);
+      } catch {
+        // 遅延の計測で発火経路を壊さない。
+      }
+      // 声が鳴り始めた = 最初の文の STARTED（voice.player.started・文ごと/一括の両方・engine に依存しない名前）。
+      if (event === "voice.player.started" && currentFire.timing.hasVoiceStarted()) emitLatencyOnce(true);
+    }
     emit(onTrace, { event, ...fields });
   };
 
@@ -463,7 +686,7 @@ export function createFireOrchestrator(options) {
       const text = `${outcome.playedText}\n${PROGRESSIVE_INTERRUPTION_NOTE}`;
       const appended = owner.buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul" });
       if (appended && appended.appended && appended.entry) {
-        emit(onSoulTranscript, appended.entry);
+        emit(onSoulTranscript, withFireId(appended.entry, owner.fireId));
         // Commit only after the canonical visible projection exists. The next
         // actual ask consumes this once; pre-ask capture/resource failures do not.
         pendingProgressiveCorrection = Object.freeze({ sourceGenerationId: outcome.generationId });
@@ -485,18 +708,7 @@ export function createFireOrchestrator(options) {
     trace("progressive.continuity.consumed", {
       sourceGenerationId: correction.sourceGenerationId
     });
-    if (typeof content === "string") {
-      return `${PROGRESSIVE_CONTINUITY_INSTRUCTION}\n\n${content}`;
-    }
-    if (Array.isArray(content)) {
-      let applied = false;
-      return content.map((block) => {
-        if (applied || block?.type !== "text" || typeof block.text !== "string") return block;
-        applied = true;
-        return { ...block, text: `${PROGRESSIVE_CONTINUITY_INSTRUCTION}\n\n${block.text}` };
-      });
-    }
-    return content;
+    return prependInstruction(content, PROGRESSIVE_CONTINUITY_INSTRUCTION);
   };
 
   /**
@@ -565,28 +777,33 @@ export function createFireOrchestrator(options) {
   /**
    * Shared normal/vision ask seam. Passing options is additive for Claude (its
    * one-argument implementation ignores them) and reaches App Server through
-   * Cockpit's transparent session proxy for the three Codex brains.
+   * Cockpit's transparent session proxy for the Codex brains.
    * @param {string | Array<any>} content
    */
   const askIncrementally = async (content, resources, buffer) => {
     // Production snapshots identify Claude explicitly. Its full-result session
-    // keeps the legacy one-shot path; the three Codex brains own delta delivery.
-    const progressiveEligible = resources.configuration?.brain !== "claude";
+    // keeps the legacy one-shot path; the Codex brains own delta delivery.
+    // 2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session（onTextDelta を受けない）なので
+    // Claude 既定と同じ one-shot 経路に倒す。
+    const configuredBrain = resources.configuration?.brain;
+    const progressiveEligible = configuredBrain !== "claude" && configuredBrain !== "claude-opus-55";
     const delivery = progressivePlayback && progressiveEligible
-      ? progressiveDeliveryFactory({
+      ? speechStreamerFactory({
           generationId: `fire-${++nextProgressiveGeneration}`,
+          engine: resolveEngine(resources),
           channel: resources.channel,
           player: resources.player,
-          speakDeps: resources.speakDeps,
+          releaseMouth: streamReleaseMouth(resources),
           onTrace: (event, fields) => trace(event, fields),
           onPlaybackStarted: () => setState("speaking"),
+          nowImpl,
           setTimeoutImpl,
           clearTimeoutImpl
         })
       : null;
     currentProgressiveDelivery = delivery;
     if (delivery) {
-      progressiveProjectionOwners.set(delivery.snapshot().generationId, { buffer });
+      progressiveProjectionOwners.set(delivery.snapshot().generationId, { buffer, fireId: currentFire?.fireId ?? null });
     }
     if (delivery && typeof delivery.whenSettled === "function") {
       void delivery.whenSettled().then(emitProgressiveTerminalOnce);
@@ -594,17 +811,22 @@ export function createFireOrchestrator(options) {
     const boundary = createProgressiveBoundary(delivery);
     currentProgressiveBoundary = boundary;
     try {
-      const askContent = consumeProgressiveCorrection(content);
+      // 先頭から: progressive correction → この 1 発の内部指示（コメント反応）→ 会話窓（+ 画像）。
+      const askContent = consumeProgressiveCorrection(
+        currentFireInstruction ? prependInstruction(content, currentFireInstruction) : content
+      );
       const asked = await resources.session.ask(askContent, { onTextDelta: (delta) => boundary.append(delta) });
+      // delta を出さない頭（Claude）の「LLM 最初の文字」は session が測った ttftMs を使う（fire-latency.mjs）。
+      if (currentFire && asked && typeof asked === "object") currentFire.timing.noteTtft(/** @type {any} */ (asked).ttftMs);
       // A successful terminal result owns exactly one final remainder flush.
       boundary.flush();
       const progressive = boundary.snapshot();
-      const deliveryOutcome = delivery ? await delivery.finishLlm() : null;
+      const deliveryOutcome = delivery ? await delivery.finish() : null;
       return { asked, progressive, deliveryOutcome };
     } catch (error) {
       if (delivery) {
         delivery.abort("llm-failed");
-        const deliveryOutcome = await delivery.finishLlm();
+        const deliveryOutcome = await delivery.finish();
         if (error instanceof Error) /** @type {any} */ (error).progressiveDelivery = deliveryOutcome;
       }
       throw error;
@@ -738,7 +960,7 @@ export function createFireOrchestrator(options) {
       }
       const appended = buffer.append({ startMs: 0, endMs: 0, text: NG_BLOCKED_NOTE, speaker: "soul" });
       if (appended && appended.appended && appended.entry) {
-        emit(onSoulTranscript, appended.entry);
+        emit(onSoulTranscript, withFireId(appended.entry));
       }
       emit(onDiagnostic, { type: "ngBlocked" });
       return { fired: false, reason: "ng-blocked", ...extra };
@@ -799,7 +1021,7 @@ export function createFireOrchestrator(options) {
       const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
       if (appended && appended.appended && appended.entry) {
         const latencyMs = asked && typeof asked.elapsedMs === "number" ? asked.elapsedMs : null;
-        emit(onSoulTranscript, { ...appended.entry, latencyMs });
+        emit(onSoulTranscript, { ...withFireId(appended.entry), latencyMs });
       }
       return {
         fired: true,
@@ -820,56 +1042,74 @@ export function createFireOrchestrator(options) {
       return { fired: false, reason: "expression-only", expressed: true, expressions, ...extra };
     }
 
-    // 発話あり → 口 + 声（speechText のみ）。speak の throw は呼び出し元の catch（fireError）へ。
+    // 発話あり → 口 + 声（speechText のみ）。鳴らし始める前の失敗（合成・器の拒否・送信失敗）は
+    // speakImpl が投げ、呼び出し元の catch（fireError）へ。遅延の「声」の終わりは STARTED
+    // （voice.player.started のトレース・trace() が拾う）。
     const spoken = await speakImpl(speechText, {
       ...resources.speakDeps,
+      engine: resolveEngine(resources),
       channel: resources.channel,
       player: resources.player,
-      onTrace: (event, fields) => trace(event, fields)
+      generationId: `fire-${++nextProgressiveGeneration}`,
+      releaseMouth: streamReleaseMouth(resources),
+      onTrace: (event, fields) => trace(event, fields),
+      nowImpl,
+      setTimeoutImpl,
+      clearTimeoutImpl
     });
 
     // S6: 再生実区間を追跡し、その間 speaking を保つ。soul 追記は完了時 or 中断時の 1 回だけ。
-    // speak() の戻り（timeline・wavDurationSec・playbackStartedAtMs）で切断点算出材料と完了尺を得る。
+    // 完了は speakImpl の返りの ended（player の ENDED）。切断点の材料は snapshot()（累積の時間割と
+    // STARTED 時刻）、持たない返りは返りの timeline / playbackStartedAtMs。
     const timeline = spoken && Array.isArray(spoken.timeline) ? spoken.timeline : [];
-    const wavDurationSec =
-      spoken && typeof spoken.wavDurationSec === "number" && Number.isFinite(spoken.wavDurationSec)
-        ? spoken.wavDurationSec
-        : 0;
     const playbackStartedAtMs =
       spoken && typeof spoken.playbackStartedAtMs === "number" && Number.isFinite(spoken.playbackStartedAtMs)
         ? spoken.playbackStartedAtMs
         : nowImpl();
-    const durationMs = Math.max(0, wavDurationSec * 1000);
 
-    // 再生中は speaking のまま。natural 完了タイマ or interrupt() のどちらかで resolve する。
+    // 再生中は speaking のまま。ended（鳴り終わり/失敗）か interrupt()/kill()/dispose() のどちらかで resolve する。
     const completion = await new Promise((resolve) => {
       const pb = {
         buffer,
         speechText,
+        spoken,
         timeline,
         playbackStartedAtMs,
         interrupted: false,
         appended: false,
-        resolve,
-        /** @type {ReturnType<typeof setTimeout> | null} */
-        timer: null
+        resolve
       };
-      pb.timer = setTimeoutImpl(() => {
-        // 自然完了（この window に interrupt が来なかった）。
-        if (currentPlayback === pb && !pb.interrupted) {
-          resolve({ interrupted: false });
-        }
-      }, durationMs);
       currentPlayback = pb;
+      const ended = spoken && spoken.ended;
+      if (!ended || typeof ended.then !== "function") {
+        // ended を持たない返り = 返った時点で鳴り終わった（偽物・計測用）。
+        resolve({ interrupted: false });
+        return;
+      }
+      ended.then(
+        (/** @type {any} */ outcome) => {
+          if (currentPlayback !== pb || pb.interrupted) return;
+          if (outcome && typeof outcome.status === "string" && outcome.status !== "completed") {
+            resolve({
+              interrupted: false,
+              failed: true,
+              error: outcome.error,
+              cause: outcome.cause ?? null,
+              atMs: typeof outcome.atMs === "number" && Number.isFinite(outcome.atMs) ? outcome.atMs : nowImpl()
+            });
+            return;
+          }
+          resolve({ interrupted: false });
+        },
+        (/** @type {unknown} */ error) => {
+          if (currentPlayback !== pb || pb.interrupted) return;
+          resolve({ interrupted: false, failed: true, error, cause: "error", atMs: nowImpl() });
+        }
+      );
     });
 
-    // window を閉じる（タイマ解除・現在発話をクリア）。interrupt() 経由なら timer は既に解除済み。
-    const pb = currentPlayback;
+    // window を閉じる（現在発話をクリア）。
     currentPlayback = null;
-    if (pb && pb.timer != null) {
-      clearTimeoutImpl(/** @type {any} */ (pb.timer));
-      pb.timer = null;
-    }
 
     // dispose 中断: soul 追記せず畳む（詰まりを残さない）。
     if (completion.disposed) {
@@ -892,6 +1132,45 @@ export function createFireOrchestrator(options) {
       };
     }
 
+    // 鳴らし始めた後の失敗（player の ERROR・異常終了・見張りの時間切れ等）。口は SpeechStreamer が
+    // release 済み。文ごとの読み上げと同じく「鳴った分 + 中断注記」で soul に正本化する（Undine 裁定
+    // 2026-10-18）。鳴った分は止まる前の snapshot()（累積の時間割と STARTED 時刻）と失敗の時刻から
+    // computeSpokenPrefix で求める。STARTED 前・鳴った分が 0 文字なら、今どおり fireError へ（文ごとの
+    // 読み上げで 1 文も鳴り終わらずに失敗したときと同じ）。
+    if (completion.failed) {
+      const partial = spokenBeforeFailure(spoken, speechText, timeline, completion.atMs);
+      if (partial) {
+        const text = `${partial.prefix}
+${PROGRESSIVE_INTERRUPTION_NOTE}`;
+        const appended = buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul" });
+        if (appended && appended.appended && appended.entry) {
+          emit(onSoulTranscript, withFireId(appended.entry));
+        }
+        trace("speech.partial.projected", {
+          playedChars: partial.charsSpoken,
+          totalChars: speechText.length,
+          terminalCause: completion.cause ?? null
+        });
+        const expressions = await expressionPromise;
+        return {
+          fired: false,
+          reason: "speech-playback-failed",
+          charsSpoken: partial.charsSpoken,
+          elapsedMs: partial.elapsedMs,
+          expressions,
+          ...extra
+        };
+      }
+      await expressionPromise;
+      throw withDiagnostic(
+        completion.error instanceof Error
+          ? completion.error
+          : new Error(`speech playback failed (${completion.cause ?? "unknown"}).`),
+        "speech_playback_failed",
+        "speech.playback"
+      );
+    }
+
     // 自然完了 → 全文を soul 記録（**speechText のみ**・startMs/endMs=0）。broadcast は onSoulTranscript 経由。
     // S5: 視覚発火でも画像は一切積まない（会話ログの正本は speechText のみ・ディスク非保存の流儀）。
     const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
@@ -901,7 +1180,7 @@ export function createFireOrchestrator(options) {
       // asked.elapsedMs（知性契約 MindSessionAskResult・brains.mjs）を entry のコピーへ乗せて通知する
       // （transcriptBuffer 正本の Object.freeze entry は直接変更しない・スプレッドで新規オブジェクト化）。
       const latencyMs = asked && typeof asked.elapsedMs === "number" ? asked.elapsedMs : null;
-      emit(onSoulTranscript, { ...appended.entry, latencyMs });
+      emit(onSoulTranscript, { ...withFireId(appended.entry), latencyMs });
     }
 
     const expressions = await expressionPromise;
@@ -910,46 +1189,64 @@ export function createFireOrchestrator(options) {
 
   /**
    * 再生中の魂発話を強制切断する共有ヘルパ（S6 interrupt / S8 kill 共通・DRY）。pb.interrupted=true →
-   * 自然完了タイマ解除 → ① player.stop()（**同期呼び・await の前**＝即効性）→ ② 器の口を閉じる
-   * （mouth-open intent.set value=0・短 ttl）→ ③ 切断点算出（computeSpokenPrefix）→ ④ soul へ
-   * 「接頭辞 + note」を 1 回追記 → ⑤ onDiagnostic({type: diagnosticType, ...}) → pb.resolve()（await 中の
-   * processAskedReply を解放）。stop/set の失敗は診断に握って落とさない。呼び出し元（interrupt/kill）が
-   * pb（currentPlayback の null/interrupted チェック済み）を渡す。診断 type は `${diagnosticType}...` で
-   * bargeIn/kill を区別する（bargeIn 呼び出しは既存の type 名と 1 ビットも変わらない＝無退行）。
+   * ① 声を止める（speakImpl の返りの stop(cause)＝SpeechStreamer が player.stop を**同期に**呼び、合成中の
+   * engine へ signal で中止を伝え、② 器の口を閉じる＝mouth-open intent.set value=0・短 ttl を送る。stop を
+   * 持たない返りでは、ここで player.stop() と口閉じを直接行う）→ ③ 切断点算出（computeSpokenPrefix・累積の
+   * 時間割 × STARTED からの経過）→ ④ soul へ「接頭辞 + note」を 1 回追記 → ⑤ onDiagnostic({type: diagnosticType, ...})
+   * → pb.resolve()（await 中の processAskedReply を解放）。stop/set の失敗は診断に握って落とさない。呼び出し元
+   * （interrupt/kill）が pb（currentPlayback の null/interrupted チェック済み）を渡す。診断 type は
+   * `${diagnosticType}...` で bargeIn/kill を区別する（bargeIn 呼び出しは既存の type 名と 1 ビットも変わらない）。
    * @param {object} pb  currentPlayback（呼び出し元チェック済み・null でない・interrupted でない）。
    * @param {string} note  soul 追記の末尾注記（BARGE_IN_NOTE または KILL_NOTE）。
    * @param {string} diagnosticType  onDiagnostic の最終 type（"bargeIn" または "kill"）。
-   * @param {number} [atMs]  切断時刻（既定 nowImpl()）。切断点は atMs − playbackStartedAtMs で算出。
+   * @param {number} [atMs]  切断時刻（既定 nowImpl()）。切断点は atMs − STARTED 時刻で算出（STARTED 前は 0）。
    * @returns {Promise<{ interrupted: true; elapsedMs: number; charsSpoken: number; prefix: string }>}
    */
   const severSpeaking = async (pb, note, diagnosticType, atMs) => {
     const resources = currentFireResources;
     pb.interrupted = true;
-    // 自然完了タイマを止める（この後 resolve するので二重 resolve しない）。
-    if (pb.timer != null) {
-      clearTimeoutImpl(/** @type {any} */ (pb.timer));
-      pb.timer = null;
-    }
+    const spoken = pb.spoken;
 
-    // ① 声を止める（player.stop・同期呼び）。失敗は診断に握る（落とさない）。
-    try {
-      if (resources?.player && typeof resources.player.stop === "function") {
-        resources.player.stop();
+    // 切断点の材料は止める前に読む（累積の時間割と STARTED 時刻）。
+    let timeline = pb.timeline;
+    /** @type {number | null} */
+    let startedAtMs = pb.playbackStartedAtMs;
+    if (spoken && typeof spoken.snapshot === "function") {
+      try {
+        const snap = spoken.snapshot();
+        timeline = snap && Array.isArray(snap.timeline) ? snap.timeline : timeline;
+        startedAtMs =
+          snap && typeof snap.startedAtMs === "number" && Number.isFinite(snap.startedAtMs) ? snap.startedAtMs : null;
+      } catch {
+        // 材料が読めなくても中断は続ける（保守側の 0 文字に倒れる）。
       }
-    } catch (err) {
-      emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
     }
 
-    // ② 器の口を閉じる（mouth-open へ intent.set value=0・短 ttl = speech タイムライン強制 release）。
-    //    rejected/throw/未対応はすべて診断に握る（口が閉じ切らなくても中断処理は続ける）。
-    await releaseMouth(diagnosticType, resources);
+    // ①② 声を止め、器の口を閉じる。失敗は診断に握る（落とさない）。
+    if (spoken && typeof spoken.stop === "function") {
+      try {
+        await spoken.stop(diagnosticType === "kill" ? "killed" : "barge-in");
+      } catch (err) {
+        emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
+      }
+    } else {
+      try {
+        if (resources?.player && typeof resources.player.stop === "function") {
+          resources.player.stop();
+        }
+      } catch (err) {
+        emit(onDiagnostic, { type: `${diagnosticType}StopError`, message: errMessage(err) });
+      }
+      //    rejected/throw/未対応はすべて診断に握る（口が閉じ切らなくても中断処理は続ける）。
+      await releaseMouth(diagnosticType, resources);
+    }
 
     // ③ 切断点算出（モーラタイムライン × 再生経過・過大評価しない純関数）。
     const severAtMs = typeof atMs === "number" && Number.isFinite(atMs) ? atMs : nowImpl();
-    const elapsedMs = severAtMs - pb.playbackStartedAtMs;
+    const elapsedMs = startedAtMs == null ? 0 : severAtMs - startedAtMs;
     const cut = computeSpokenPrefix({
       speechText: pb.speechText,
-      timeline: pb.timeline,
+      timeline,
       elapsedMs
     });
 
@@ -958,7 +1255,7 @@ export function createFireOrchestrator(options) {
     const appended = pb.buffer.append({ startMs: 0, endMs: 0, text: soulText, speaker: "soul" });
     pb.appended = true;
     if (appended && appended.appended && appended.entry) {
-      emit(onSoulTranscript, appended.entry);
+      emit(onSoulTranscript, withFireId(appended.entry));
     }
 
     // ⑤ 診断（切断発生・切断点・声に出た文字数）。
@@ -993,7 +1290,8 @@ export function createFireOrchestrator(options) {
       const interrupted = progressive.bargeIn();
       if (!interrupted) return { interrupted: false, reason: "already-interrupted" };
       currentProgressiveBoundary?.stop();
-      if (before.activePlaybackId != null) await releaseMouth("bargeIn");
+      // 鳴っていた文は SpeechStreamer が player.stop → 口の release（bargeIn… の診断名）まで済ませる。
+      await progressive.whenSettled();
       const after = progressive.snapshot();
       emit(onDiagnostic, {
         type: "bargeIn",
@@ -1028,7 +1326,8 @@ export function createFireOrchestrator(options) {
       const before = progressive.snapshot();
       const changed = progressive.kill();
       if (changed) currentProgressiveBoundary?.stop();
-      if (changed && before.activePlaybackId != null) await releaseMouth("kill");
+      // 鳴っていた文は SpeechStreamer が player.stop → 口の release（kill… の診断名）まで済ませる。
+      if (changed) await progressive.whenSettled();
       const after = progressive.snapshot();
       emit(onDiagnostic, { type: "kill", charsSpoken: after.playedText.length, prefix: after.playedText });
       return {
@@ -1079,7 +1378,7 @@ export function createFireOrchestrator(options) {
 
     // 会話窓 + 視覚指示テキストと画像ブロックを content 配列（**画像先行**）にして注入。
     const nowMs = nowImpl();
-    const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
+    const { injection, windowMode } = buildInjection(buffer, resources, nowMs);
     const injectedText = injection.text;
     const injectedChars = injection.charCount;
     const includedCount = injection.includedCount;
@@ -1091,6 +1390,7 @@ export function createFireOrchestrator(options) {
     ];
 
     // 以降は従来経路と完全共通（パーサ→speak→soul記録→演出）。
+    emitAsk(injection, true);
     const askStartedAt = performance.now();
     trace("llm.ask.started", { vision: true, injectedChars, includedCount });
     let asked;
@@ -1101,6 +1401,8 @@ export function createFireOrchestrator(options) {
     } catch (error) {
       throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
     }
+    commitInjection(resources, injection, windowMode);
+    emitAskRecord(asked, resources, true, windowMode, injection, injectedChars);
     trace("llm.ask.completed", {
       vision: true,
       modelOutputChars: typeof asked?.replyText === "string" ? asked.replyText.length : 0,
@@ -1137,16 +1439,14 @@ export function createFireOrchestrator(options) {
   const fireNormalCore = async (buffer, { alreadyAccepted, resources: acceptedResources }) => {
     // 3. 直近窓を収集。空窓なら ask を無駄撃ちしない。
     const nowMs = nowImpl();
-    const injection = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
-    if (injection.includedCount === 0) {
+    // 空窓の判定は従来どおり直近 5 分の全体で行う（増えた分が 0 でも、窓に行があれば発火する）。
+    const fullWindow = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
+    if (fullWindow.includedCount === 0) {
       if (!alreadyAccepted) {
-        emit(onFire, { accepted: false, reason: "empty-window" });
+        emit(onFire, { accepted: false, reason: "empty-window", ...(currentFire?.cause != null ? { cause: currentFire.cause } : {}) });
       }
       return { fired: false, reason: "empty-window" };
     }
-    const injectedText = injection.text;
-    const injectedChars = injection.charCount;
-    const includedCount = injection.includedCount;
 
     let resources = acceptedResources;
     if (!alreadyAccepted) {
@@ -1160,14 +1460,21 @@ export function createFireOrchestrator(options) {
       currentFireResources = resources;
     }
 
+    // 実際に渡す窓（同じ会話が続いていれば増えた分だけ・頭のセッションが決まってから作る）。
+    const { injection, windowMode } = buildInjection(buffer, resources, nowMs, fullWindow);
+    const injectedText = injection.text;
+    const injectedChars = injection.charCount;
+    const includedCount = injection.includedCount;
+
     // 4. Snapshot acquired → thinking → accepted publication.
     if (!alreadyAccepted) {
       setState("thinking");
-      emit(onFire, { accepted: true, injectedChars, includedCount, atMs: nowMs });
+      emit(onFire, { accepted: true, injectedChars, includedCount, atMs: nowMs, ...acceptedTags() });
       trace("fire.accepted.context", { injectedChars, includedCount, vision: false, ...resources.metadata });
     }
 
     try {
+      emitAsk(injection, false);
       const askStartedAt = performance.now();
       trace("llm.ask.started", { vision: false, injectedChars, includedCount });
       let asked;
@@ -1178,6 +1485,8 @@ export function createFireOrchestrator(options) {
       } catch (error) {
         throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
       }
+      commitInjection(resources, injection, windowMode);
+      emitAskRecord(asked, resources, false, windowMode, injection, injectedChars);
       trace("llm.ask.completed", {
         vision: false,
         modelOutputChars: typeof asked?.replyText === "string" ? asked.replyText.length : 0,
@@ -1230,7 +1539,12 @@ export function createFireOrchestrator(options) {
       title = null; // 解決関数の throw も「対象未設定」として正直に扱う（盲目のまま撃たない）。
     }
     if (typeof title !== "string" || title.length === 0) {
-      emit(onFire, { accepted: false, reason: "vision-no-target", vision: true });
+      emit(onFire, {
+        accepted: false,
+        reason: "vision-no-target",
+        vision: true,
+        ...(currentFire?.cause != null ? { cause: currentFire.cause } : {})
+      });
       emit(onDiagnostic, {
         type: "fireVisionError",
         kind: "no-target",
@@ -1244,7 +1558,7 @@ export function createFireOrchestrator(options) {
       resources = await acquireResources();
       currentFireResources = resources;
       setState("thinking");
-      emit(onFire, { accepted: true, vision: true, atMs: nowImpl() });
+      emit(onFire, { accepted: true, vision: true, atMs: nowImpl(), ...acceptedTags() });
       trace("fire.accepted.context", { vision: true, ...resources.metadata });
       // キャプチャ。失敗（{error}）なら session.ask を呼ばずに正直に中止する（成功を捏造しない）。
       trace("vision.capture.started");
@@ -1303,7 +1617,7 @@ export function createFireOrchestrator(options) {
       resources = await acquireResources();
       currentFireResources = resources;
       setState("thinking");
-      emit(onFire, { accepted: true, vision: true, atMs: nowImpl() });
+      emit(onFire, { accepted: true, vision: true, atMs: nowImpl(), ...acceptedTags() });
       trace("fire.accepted.context", { vision: true, preferred: true, ...resources.metadata });
       trace("vision.capture.started", { preferred: true });
       const captured = await captureImpl(title);
@@ -1342,7 +1656,10 @@ export function createFireOrchestrator(options) {
   return {
     /**
      * Fire 1 発を処理する（Promise を返す・テストが await 可能）。
-     * @param {{ vision?: boolean | "preferred" }} [fireOptions]  省略/未指定時は従来どおり通常 Fire（完全不変）。
+     * @param {{ vision?: boolean | "preferred"; instruction?: string; cause?: object }} [fireOptions]  省略/未指定時は従来どおり通常 Fire（完全不変）。
+     *   `cause` はきっかけ（結線層が作る本文なしの小さなオブジェクト・受理・棄却・遅延の通知にそのまま載る）。
+     *   `instruction` はこの 1 発だけ ask の先頭に付ける内部指示（コメント反応でどのコメントかを明示する・
+     *   会話ログには残らない）。vision の各モードと併用できる。
      *   `{ vision: true }` で視覚発火（S5・見えなければ中止）。`{ vision: "preferred" }` で視覚優先発火
      *   （S6 追撃・自発 call/turn-end 用・対象あれば画像付き・無/失敗なら画像なしの通常 Fire へ劣化）。
      * @returns {Promise<object>}
@@ -1351,41 +1668,65 @@ export function createFireOrchestrator(options) {
       if (disposed) {
         return { fired: false, reason: "disposed", state };
       }
+      // きっかけ（結線層が作る小さなオブジェクト・ここでは解釈しない）。棄却の通知にも載せる（無ければ従来の形）。
+      const cause =
+        fireOptions != null && fireOptions.cause != null && typeof fireOptions.cause === "object" ? fireOptions.cause : null;
+      const rejectTags = cause != null ? { cause } : {};
       // S8: キル中は全発火経路を閉じる（manual・視覚・自発 preferred すべてがこの合流点を通る）。
       if (killed) {
-        emit(onFire, { accepted: false, reason: "killed" });
+        emit(onFire, { accepted: false, reason: "killed", ...rejectTags });
         return { fired: false, reason: "killed", state };
       }
       // 1. busy 中の Fire は無視（重ね発火は S4/S6 の領分・視覚発火も同一判定を共有）。
       if (state !== "idle" || fireClaimed) {
-        emit(onFire, { accepted: false, reason: "busy" });
+        emit(onFire, { accepted: false, reason: "busy", ...rejectTags });
         return { fired: false, reason: "busy", state };
       }
       // 2. 耳未起動（会話ログが無い）。視覚発火も会話窓の注入に buffer を要するため共有。
       const buffer = getBuffer();
       if (buffer == null) {
-        emit(onFire, { accepted: false, reason: "ears-not-running" });
+        emit(onFire, { accepted: false, reason: "ears-not-running", ...rejectTags });
         return { fired: false, reason: "ears-not-running" };
       }
 
       fireClaimed = true;
+      const fire = {
+        fireId: /** @type {number | null} */ (null),
+        cause,
+        vision: false,
+        timing: createFireTiming({ nowImpl: monotonicNowImpl }),
+        latencyEmitted: false
+      };
+      currentFire = fire;
+      // コメント反応: この 1 発だけの内部指示（空・非文字列は無し = 従来と同じ ask）。
+      currentFireInstruction =
+        fireOptions != null && typeof fireOptions.instruction === "string" && fireOptions.instruction.trim().length > 0
+          ? fireOptions.instruction
+          : null;
       try {
         // S5/S6: 視覚系は別フローへ振り分ける。通常 fire()（fireOptions 省略 = vision undefined）の挙動は
         // 完全不変（無退行・fireNormalCore へ抽出しただけ）。
         //  - vision:true      → 手動視覚 Fire・自発 silence（見えなければ中止）。
         //  - vision:"preferred" → 自発 call/turn-end（対象あれば画像付き・無/失敗なら画像なし通常発火へ劣化）。
         const visionMode = fireOptions != null ? fireOptions.vision : undefined;
+        /** @type {any} */
+        let result;
         if (visionMode === true) {
-          return await fireVision(buffer);
+          result = await fireVision(buffer);
+        } else if (visionMode === "preferred") {
+          result = await firePreferred(buffer);
+        } else {
+          // 3./4. 通常 Fire（画像なし）: 元インライン実装をコア関数へ抽出（挙動不変）。
+          result = await fireNormalCore(buffer, { alreadyAccepted: false });
         }
-        if (visionMode === "preferred") {
-          return await firePreferred(buffer);
-        }
-
-        // 3./4. 通常 Fire（画像なし）: 元インライン実装をコア関数へ抽出（挙動不変）。
-        return await fireNormalCore(buffer, { alreadyAccepted: false });
+        // 声が鳴らないまま終わった返事（空・NG・キル・失敗・表情だけ）も、ask した回は遅延を 1 回通知する。
+        emitLatencyOnce(!!(result && result.fired === true));
+        // 受理した発火の戻り値には番号を載せる（結線層の selfFire 結果と結ぶ）。
+        return fire.fireId != null && result && typeof result === "object" ? { ...result, fireId: fire.fireId } : result;
       } finally {
         fireClaimed = false;
+        currentFireInstruction = null;
+        if (currentFire === fire) currentFire = null;
       }
     },
 
@@ -1413,17 +1754,45 @@ export function createFireOrchestrator(options) {
       disposed = true;
       if (currentProgressiveDelivery?.dispose()) currentProgressiveBoundary?.stop();
       // 発話再生中に畳まれたら、await 中の processAskedReply を安全に解放する（詰まりを残さない）。
+      // 鳴っている一括の読み上げは止める（SpeechStreamer が player.stop → 口の release）。
       const pb = currentPlayback;
       if (pb && !pb.interrupted) {
         pb.interrupted = true;
-        if (pb.timer != null) {
-          clearTimeoutImpl(/** @type {any} */ (pb.timer));
-          pb.timer = null;
+        if (pb.spoken && typeof pb.spoken.stop === "function") {
+          Promise.resolve()
+            .then(() => pb.spoken.stop("disposed"))
+            .catch(() => {});
         }
         pb.resolve({ interrupted: false, disposed: true });
       }
     }
   };
+}
+
+/**
+ * ask の内容の先頭に内部指示を付ける（文字列はそのまま前置・content 配列は最初の text ブロックに前置）。
+ * progressive correction とコメント反応の指示が共有する。
+ * @param {string | Array<any>} content
+ * @param {string} instruction
+ * @returns {string | Array<any>}
+ */
+function prependInstruction(content, instruction) {
+  if (typeof content === "string") {
+    return `${instruction}
+
+${content}`;
+  }
+  if (Array.isArray(content)) {
+    let applied = false;
+    return content.map((block) => {
+      if (applied || block?.type !== "text" || typeof block.text !== "string") return block;
+      applied = true;
+      return { ...block, text: `${instruction}
+
+${block.text}` };
+    });
+  }
+  return content;
 }
 
 /**
@@ -1437,6 +1806,34 @@ function capitalize(s) {
 }
 
 /** Keep public Fire results content-free while C3 receives the full internal outcome hook. */
+/**
+ * 一括の読み上げが鳴らし始めた後に失敗したとき、声に出た分を求める（純関数・過大評価しない）。
+ * 材料は speakImpl の返りの snapshot()（累積の時間割と STARTED 時刻）。読めなければ返りの timeline。
+ * STARTED 前（startedAtMs が無い）・0 文字なら null（呼び出し元は今どおり fireError にする）。
+ * @param {any} spoken  speakImpl の返り。
+ * @param {string} speechText
+ * @param {ReadonlyArray<{ timeMs: number }>} fallbackTimeline
+ * @param {number} failedAtMs  失敗の時刻（STARTED と同じ時計）。
+ * @returns {null | { prefix: string; charsSpoken: number; elapsedMs: number }}
+ */
+function spokenBeforeFailure(spoken, speechText, fallbackTimeline, failedAtMs) {
+  if (!spoken || typeof spoken.snapshot !== "function") return null;
+  /** @type {any} */
+  let snap = null;
+  try {
+    snap = spoken.snapshot();
+  } catch {
+    return null;
+  }
+  const startedAtMs = snap && typeof snap.startedAtMs === "number" && Number.isFinite(snap.startedAtMs) ? snap.startedAtMs : null;
+  if (startedAtMs == null || typeof failedAtMs !== "number" || !Number.isFinite(failedAtMs)) return null;
+  const timeline = snap && Array.isArray(snap.timeline) ? snap.timeline : fallbackTimeline;
+  const elapsedMs = Math.max(0, failedAtMs - startedAtMs);
+  const cut = computeSpokenPrefix({ speechText, timeline, elapsedMs });
+  if (!(cut.charsSpoken > 0) || cut.prefix.length === 0) return null;
+  return { prefix: cut.prefix, charsSpoken: cut.charsSpoken, elapsedMs };
+}
+
 function progressivePublicState(outcome) {
   return {
     generationId: outcome.generationId,

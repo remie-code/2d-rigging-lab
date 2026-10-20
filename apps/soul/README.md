@@ -400,7 +400,8 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
 `discussion/ai-cohost/soul/brain-swap.md`。
 
 - **頭の選び方**: 配信前に操縦席（⚙ 設定引き出し）の「頭脳」区画で選ぶ（`Claude (Opus 4.8)` /
-  `Codex (GPT-5.6 Terra)` / `Codex (GPT-5.5)` / `Codex (GPT-5.6 Sol)` の 4 頭・`POST /api/brain`）。
+  `Claude (Opus 5.5)` / `Codex (GPT-5.6 Terra)` / `Codex (GPT-5.6 Sol)` / `GPT-6 Astra` / `GPT-6.1 Sol`
+  の 6 頭・`POST /api/brain`。GPT-5.5 は 2026-10-16 に削除し、保存済みの選択は既定の Claude へ倒れる）。
   **配信前選択が本線**——「魂を起動し、
   LLM を選び、動作確認をして、配信を開始する」の正のフローどおり、配信中の差し替えは運用外。
 - **頭の表**（`src/mind/brains.mjs`）: `BRAINS` registry が唯一の宣言箇所（id・表示札・create・

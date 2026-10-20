@@ -3,9 +3,10 @@
  * モーラ写像純関数（S1 Domain A・裁定2）— apps/soul/agent の中核。
  *
  * AivisSpeech `/audio_query` の moras 列（種類の並び）と合成 WAV の実長から、器へ送る
- * intent.speech payload の timeline（`{timeMs, vowel, s}[]`）を組む。依存ゼロ（node 組み込み
- * のみ）・純関数（同じ入力→同じ出力、副作用なし）。契約の正は
- * `apps/runtime-player/src/main/control-channel/contract/channel-intent-speech-payload-schema.json`。
+ * 口の時間割（`{timeMs, vowel, s}[]`）を組む。依存ゼロ（node 組み込み
+ * のみ）・純関数（同じ入力→同じ出力、副作用なし）。要素の形の正は
+ * `apps/runtime-player/src/main/control-channel/contract/channel-intent-speech-payload-schema.json`、
+ * 発話全体の上限の正は同じ場所の `channel-intent-speech-stream-payload-schema.json`。
  *
  * ── 時間材料の事実（実機実測・裁定2の前提）─────────────────────────────
  *  audio_query の各モーラの consonant_length / vowel_length は AivisSpeech 実機で全零
@@ -31,14 +32,29 @@
  *  6. s 値: 母音ラベル→s を決定論的に与える（sConfig で母音別マップを差し替え可能）。既定は
  *     参照ドライバ（reference-driver.mjs speechTimelineMoras / 手書き 0.5〜0.9）の流儀を踏襲した
  *     母音別マップ。s は必ず 0..1 域内（sConfig が域外値を含めば throw）。
- *  7. 512 上限: 出力 timeline 要素数 > 512 は throw（切詰めず。文分割は S4 以降の前提）。
+ *  7. 上限: 出力 timeline 要素数 > {@link MAX_UTTERANCE_TIMELINE_LENGTH}（4096）は throw（切詰めず）。
+ *     器へは intent.speechStream で 1 発話として送り、1 回の append は 512 要素以下に分ける
+ *     （speech-streamer.mjs の SPEECH_STREAM_APPEND_MAX_ITEMS）。上限は発話全体の約束
+ *     （channel-intent-speech-stream-payload-schema.json の maxUtteranceTimelineLength）に揃える
+ *     （声の差し替え Wave 2 の仕上げ・Undine 裁定 2026-10-18。旧は intent.speech 1 回の maxItems 512）。
  */
 
 /** 出力に残り得る母音ラベル（契約 enum と一致）。 */
 const VOWEL_LABELS = new Set(["a", "i", "u", "e", "o"]);
 
-/** 器契約 timeline の maxItems（裁定4）。超過は throw。 */
+/**
+ * 器の intent.speech 1 回の timeline の maxItems（裁定4）。buildSpeechTimeline の上限ではない
+ * （intent.speech で送る道具が自分で検査するための値。preflight-tts が使う）。
+ */
 export const MAX_TIMELINE_ITEMS = 512;
+
+/**
+ * 器の intent.speechStream で 1 発話が持てる要素数の上限（契約
+ * `channel-intent-speech-stream-payload-schema.json` の `maxUtteranceTimelineLength` と同じ名前・値。
+ * 器側は `runtimePlayerControlChannelSpeechStreamMaxUtteranceLength`）。buildSpeechTimeline はこれを
+ * 超えたら throw する（切詰めない）。
+ */
+export const MAX_UTTERANCE_TIMELINE_LENGTH = 4096;
 
 /**
  * 既定の母音別 s（PRE-scale の開き強度 0..1）。参照ドライバの手書き値（0.5〜0.9）の
@@ -82,7 +98,7 @@ function normalizeVowel(rawVowel) {
  * @param {undefined | { vowelMap?: Record<string, number> }} sConfig
  * @returns {Record<"a"|"i"|"u"|"e"|"o", number>}
  */
-function resolveSByVowel(sConfig) {
+export function resolveSByVowel(sConfig) {
   const merged = { ...DEFAULT_S_BY_VOWEL };
   if (sConfig !== undefined && sConfig !== null) {
     if (typeof sConfig !== "object") {
@@ -122,7 +138,7 @@ function resolveSByVowel(sConfig) {
  * @param {undefined | { vowelMap?: Record<string, number> }} [sConfig]
  *   母音別 s の差し替え設定（省略時 DEFAULT_S_BY_VOWEL）。
  * @returns {{ timeline: Array<{ timeMs: number; vowel: "a"|"i"|"u"|"e"|"o"; s: number }> }}
- * @throws {TypeError|RangeError} 入力不正・発話尺が非正・生成 0 要素・512 超過・s 域外設定。
+ * @throws {TypeError|RangeError} 入力不正・発話尺が非正・生成 0 要素・4096 超過・s 域外設定。
  */
 export function buildSpeechTimeline(
   moras,
@@ -187,10 +203,10 @@ export function buildSpeechTimeline(
       "no voiced moras (a/i/u/e/o) after normalization; timeline would be empty (contract minItems=1)."
     );
   }
-  if (timeline.length > MAX_TIMELINE_ITEMS) {
+  if (timeline.length > MAX_UTTERANCE_TIMELINE_LENGTH) {
     throw new RangeError(
-      `timeline has ${timeline.length} items, exceeding the contract maxItems ${MAX_TIMELINE_ITEMS} ` +
-        "(裁定4). Sentence splitting is an S4+ concern; do not truncate."
+      `timeline has ${timeline.length} items, exceeding the contract maxUtteranceTimelineLength ` +
+        `${MAX_UTTERANCE_TIMELINE_LENGTH} (intent.speechStream). Do not truncate.`
     );
   }
 

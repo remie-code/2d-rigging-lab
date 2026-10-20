@@ -101,7 +101,8 @@ export function createFireDiagnostics(options = {}) {
       monotonicMs,
       ...fields
     };
-    if (event === "player.play.enqueued") active.playbackEnqueuedAtMonotonicMs = monotonicMs;
+    // 器が open を受理して player.open した時点（声の差し替え Wave 2・旧 player.play.enqueued）から STARTED までを測る。
+    if (event === "speech.playback.activated") active.playbackEnqueuedAtMonotonicMs = monotonicMs;
     if (event === "player.child" && fields.marker === "STARTED") {
       record.sincePlaybackEnqueueMs =
         active.playbackEnqueuedAtMonotonicMs == null ? null : monotonicMs - active.playbackEnqueuedAtMonotonicMs;

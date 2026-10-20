@@ -39,6 +39,42 @@
  *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる（bool の
  *     有無を区別するため asStringOrNull は使わない・getBargeInEnabled と同型）。
  *   setMemoryEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
+ *   getSttEngine(): 文字起こしの方式（whisper / elevenlabs）の初期値（操縦席の文字起こし選択・
+ *     cockpit-stt-selection.md）。未記憶/未知値のフォールバック（既定 whisper）は呼び出し側（cockpit.mjs）
+ *     に委ねる（verbosityMode と同型の文字列キー・asStringOrNull）。キーそのものはここに置かない
+ *     （キーは .env.elevenlabs.local・選択だけを記憶する）。
+ *   setSttEngine(engine): 耳の Start 時に選んでいた方式を記憶（次回起動で復元）。
+ *   getTtsEngine(): 声の方式（aivis / elevenlabs）の初期値（声の差し替え Wave 3 Domain E・
+ *     voice-swap-wave-plan.md §3）。未記憶/未知値のフォールバック（既定 aivis）は呼び出し側（cockpit.mjs の
+ *     createTtsEngineHooks）に委ねる（sttEngine の写経・asStringOrNull）。キーはここに置かない。
+ *   setTtsEngine(engine): 耳の Start 時に選んでいた声の方式を記憶（次回起動で復元）。
+ *   getSpeakStartMode(): 話し始めの方式（classic / speak-now）の初期値（speak-now 合意 §5）。未記憶/未知値の
+ *     フォールバック（初回既定 speak-now）は呼び出し側（cockpit.mjs の createSpeakStartHooks）に委ねる
+ *     （verbosityMode と同型の文字列キー・asStringOrNull）。
+ *   setSpeakStartMode(mode): 操縦席で話し始めの方式を切替えたときに記憶（次回起動で復元）。
+ *   getCommentBusyPolicy(): 忙しい間に届いたコメントの扱い（hold = あとで拾う / drop = 見逃す）の初期値
+ *     （コメント反応の合意 discussion/ai-cohost/decisions/comment-react/integration.md §2）。未記憶/未知値の
+ *     フォールバック（既定 hold）は呼び出し側（cockpit.mjs の createCommentBusyHooks）に委ねる。
+ *   setCommentBusyPolicy(policy): 操縦席で切替えたときに記憶（次回起動で復元）。
+ *   getCommentHold(): あとで拾うの鮮度（秒）と件数（`{ maxAgeSec, maxCount }`・各 null = 既定）。操縦席に
+ *     ツマミは置かず、このファイルのキー `commentHoldMaxAgeSec` / `commentHoldMaxCount` を手で書き換えて
+ *     次回起動から効かせる（合意 §2「秒数と件数は設定で変えられるようにする」の最小の形）。
+ *   getBackchannelMinIntervalSec(): speak-now の相槌どうしの最小間隔（秒・null = 既定 8 秒）。getCommentHold と
+ *     同じく操縦席にツマミは置かず、このファイルのキー `backchannelMinIntervalSec` を手で書き換えて次回起動から
+ *     効かせる（discussion/ai-cohost/decisions/speak-now/backchannel.md §2「秒数は設定で変えられるようにする」）。
+ *     0 は「歯止めなし」として有効（間隔なので 0 も意味を持つ）。数でない・負は null。
+ *   getLatencyThresholds(): 返事の遅延の合計の「遅い」しきい値（秒・`{ warnSec, alertSec }`・各 null = 既定 4 / 6 秒）。
+ *     操縦席にツマミは置かず、このファイルのキー `latencyWarnSec` / `latencyAlertSec` を手で書き換えて次回起動から
+ *     効かせる（discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.1「秒数は設定で変えられる」）。
+ *     正の数でなければ null。
+ *   getContextCompaction(): Codex の頭の隙間で手動の圧縮（context-growth-2026-10.md §6・§8）の目安
+ *     （`{ thresholdTokens, quietSec, minIntervalMin }`・各 null = 既定 20 万トークン / 3 秒 / 10 分）。
+ *     `compactThresholdTokens`（圧縮を始める大きさ = 直近の入力トークン・整数で 5 万〜45 万）は操縦席の設定
+ *     （頭脳・会話のタブ）から setCompactThresholdTokens で書き、起動時にも読む。`compactQuietSec`（0 以上）/
+ *     `compactMinIntervalMin`（0 以上）は操縦席にツマミを置かず、手で書き換えて次回起動から効かせる。
+ *     範囲外・数でない値は null。旧キー `compactThresholdRatio`（窓に対する割合）は廃止（読まない）。
+ *   setCompactThresholdTokens(tokens): 操縦席で圧縮を始める大きさを変えたときに記憶（次回起動で復元）。
+ *     範囲外は null（= 既定）として書く。あわせて旧キー `compactThresholdRatio` をファイルから消す。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
  *    S7 で chatSource も同居）───
@@ -63,6 +99,7 @@ import {
   CONVERSATION_INSTRUCTION_BRAIN_IDS,
   resolveConversationInstructionProfile
 } from "../mind/fire-orchestrator.mjs";
+import { normalizeCompactThresholdTokens } from "../mind/context-compactor.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -97,6 +134,19 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setBrainChoice: (choice: string | null) => void;
  *   getMemoryEnabled: () => boolean | null;
  *   setMemoryEnabled: (enabled: boolean) => void;
+ *   getSttEngine: () => string | null;
+ *   setSttEngine: (engine: string | null) => void;
+ *   getTtsEngine: () => string | null;
+ *   setTtsEngine: (engine: string | null) => void;
+ *   getSpeakStartMode: () => string | null;
+ *   setSpeakStartMode: (mode: string | null) => void;
+ *   getCommentBusyPolicy: () => string | null;
+ *   setCommentBusyPolicy: (policy: string | null) => void;
+ *   getCommentHold: () => { maxAgeSec: number | null; maxCount: number | null };
+ *   getBackchannelMinIntervalSec: () => number | null;
+ *   getLatencyThresholds: () => { warnSec: number | null; alertSec: number | null };
+ *   getContextCompaction: () => { thresholdTokens: number | null; quietSec: number | null; minIntervalMin: number | null };
+ *   setCompactThresholdTokens: (tokens: number | null) => void;
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -255,6 +305,64 @@ export function createFileSettingsStore(options = {}) {
     /** @param {boolean} enabled */
     setMemoryEnabled(enabled) {
       writeMerged({ memoryEnabled: enabled === true });
+    },
+    getSttEngine() {
+      return asStringOrNull(readAll().sttEngine);
+    },
+    /** @param {string | null} engine */
+    setSttEngine(engine) {
+      writeMerged({ sttEngine: engine ?? null });
+    },
+    getTtsEngine() {
+      return asStringOrNull(readAll().ttsEngine);
+    },
+    /** @param {string | null} engine */
+    setTtsEngine(engine) {
+      writeMerged({ ttsEngine: engine ?? null });
+    },
+    getSpeakStartMode() {
+      return asStringOrNull(readAll().speakStartMode);
+    },
+    /** @param {string | null} mode */
+    setSpeakStartMode(mode) {
+      writeMerged({ speakStartMode: mode ?? null });
+    },
+    getCommentBusyPolicy() {
+      return asStringOrNull(readAll().commentBusyPolicy);
+    },
+    /** @param {string | null} policy */
+    setCommentBusyPolicy(policy) {
+      writeMerged({ commentBusyPolicy: policy ?? null });
+    },
+    getCommentHold() {
+      const all = readAll();
+      const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+      return { maxAgeSec: num(all.commentHoldMaxAgeSec), maxCount: num(all.commentHoldMaxCount) };
+    },
+    getBackchannelMinIntervalSec() {
+      const v = readAll().backchannelMinIntervalSec;
+      return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+    },
+    getLatencyThresholds() {
+      const all = readAll();
+      const num = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+      return { warnSec: num(all.latencyWarnSec), alertSec: num(all.latencyAlertSec) };
+    },
+    getContextCompaction() {
+      const all = readAll();
+      const finite = (/** @type {unknown} */ v) => typeof v === "number" && Number.isFinite(v);
+      const quiet = all.compactQuietSec;
+      const interval = all.compactMinIntervalMin;
+      return {
+        thresholdTokens: normalizeCompactThresholdTokens(all.compactThresholdTokens),
+        quietSec: finite(quiet) && quiet >= 0 ? quiet : null,
+        minIntervalMin: finite(interval) && interval >= 0 ? interval : null
+      };
+    },
+    /** @param {number | null} tokens */
+    setCompactThresholdTokens(tokens) {
+      // 旧キー（割合）は undefined で書く = JSON から落ちる（量に置き換えたので残さない）。
+      writeMerged({ compactThresholdTokens: normalizeCompactThresholdTokens(tokens), compactThresholdRatio: undefined });
     },
     getConversationInstructionOverrides() {
       return { ...readConversationInstructionOverrides() };

@@ -7,9 +7,13 @@ import type {
 import {
   validateControlChannelIntentEnvelope,
   validateControlChannelIntentSet,
-  validateControlChannelIntentSpeech
+  validateControlChannelIntentSpeech,
+  validateControlChannelIntentSpeechStream
 } from "./channel-intent-validation";
-import { runtimePlayerControlChannelSpeechMaxTimelineLength } from "./contract/channel-protocol-contract";
+import {
+  runtimePlayerControlChannelSpeechMaxTimelineLength,
+  runtimePlayerControlChannelSpeechStreamMaxUtteranceLength
+} from "./contract/channel-protocol-contract";
 
 function writableSlot(
   slotId: RuntimePlayerMappingSlotId
@@ -566,5 +570,206 @@ describe("validateControlChannelIntentSpeech", () => {
         getCurrentSlots: mouthGroupWritable
       })
     ).toMatchObject({ ok: false, code: "invalidPayload" });
+  });
+});
+
+describe("validateControlChannelIntentSpeechStream (voice swap Wave 1)", () => {
+  const MOUTH_GROUP_SLOTS: readonly RuntimePlayerMappingSlotId[] = [
+    "mouth-open",
+    "mouth-vowel-a",
+    "mouth-vowel-i",
+    "mouth-vowel-u",
+    "mouth-vowel-e",
+    "mouth-vowel-o"
+  ];
+  const mouthGroupWritable = (): readonly RuntimePlayerMappingSlot[] =>
+    MOUTH_GROUP_SLOTS.map((slotId) => writableSlot(slotId));
+
+  const slice = [
+    { timeMs: 0, vowel: "o", s: 0.6 },
+    { timeMs: 120, vowel: "e", s: 0.7 }
+  ];
+
+  it("accepts open / end with just an utteranceId", () => {
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: { op: "open", utteranceId: "u-1" },
+        getCurrentSlots: mouthGroupWritable
+      })
+    ).toStrictEqual({ ok: true, op: "open", utteranceId: "u-1" });
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: { op: "end", utteranceId: "u-1" },
+        getCurrentSlots: mouthGroupWritable
+      })
+    ).toStrictEqual({ ok: true, op: "end", utteranceId: "u-1" });
+  });
+
+  it("accepts an append slice and returns its validated moras", () => {
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: { op: "append", utteranceId: "u-1", timeline: slice },
+        getCurrentSlots: mouthGroupWritable
+      })
+    ).toStrictEqual({ ok: true, op: "append", utteranceId: "u-1", moras: slice });
+  });
+
+  it("rejects a malformed envelope (non-record / unknown op / missing or empty utteranceId) with invalidPayload", () => {
+    for (const payload of [
+      null,
+      "open",
+      { op: "start", utteranceId: "u-1" },
+      { op: "open" },
+      { op: "open", utteranceId: "" },
+      { op: "end", utteranceId: 7 }
+    ]) {
+      expect(
+        validateControlChannelIntentSpeechStream({
+          payload,
+          getCurrentSlots: mouthGroupWritable
+        })
+      ).toMatchObject({ ok: false, code: "invalidPayload" });
+    }
+  });
+
+  it("applies intent.speech's mora列 rules to an append slice (shape → invalidPayload, s domain → slotValueOutOfRange)", () => {
+    const tooLong = Array.from(
+      { length: runtimePlayerControlChannelSpeechMaxTimelineLength + 1 },
+      (_, index) => ({ timeMs: index * 10, vowel: "a", s: 0.5 })
+    );
+    for (const timeline of [
+      undefined,
+      [],
+      tooLong,
+      [{ timeMs: 0, vowel: "x", s: 0.5 }],
+      [
+        { timeMs: 100, vowel: "a", s: 0.5 },
+        { timeMs: 100, vowel: "i", s: 0.5 }
+      ]
+    ]) {
+      expect(
+        validateControlChannelIntentSpeechStream({
+          payload: { op: "append", utteranceId: "u-1", timeline },
+          getCurrentSlots: mouthGroupWritable
+        })
+      ).toMatchObject({ ok: false, code: "invalidPayload" });
+    }
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: {
+          op: "append",
+          utteranceId: "u-1",
+          timeline: [{ timeMs: 0, vowel: "a", s: 1.2 }]
+        },
+        getCurrentSlots: mouthGroupWritable
+      })
+    ).toMatchObject({ ok: false, code: "slotValueOutOfRange" });
+  });
+
+  it("gates open and append on the mouth group being writable, but not end", () => {
+    const noModel = (): null => null;
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: { op: "open", utteranceId: "u-1" },
+        getCurrentSlots: noModel
+      })
+    ).toMatchObject({ ok: false, code: "slotNotWritable" });
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: { op: "append", utteranceId: "u-1", timeline: slice },
+        getCurrentSlots: noModel
+      })
+    ).toMatchObject({ ok: false, code: "slotNotWritable" });
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: { op: "end", utteranceId: "u-1" },
+        getCurrentSlots: noModel
+      })
+    ).toStrictEqual({ ok: true, op: "end", utteranceId: "u-1" });
+  });
+
+  it("rejects an append to the open utterance that does not continue after its last timeMs (発話内で単調増加)", () => {
+    const cursor = { utteranceId: "u-1", lastTimeMs: 120, moraCount: 2 };
+    for (const firstTimeMs of [0, 120]) {
+      expect(
+        validateControlChannelIntentSpeechStream({
+          payload: {
+            op: "append",
+            utteranceId: "u-1",
+            timeline: [{ timeMs: firstTimeMs, vowel: "a", s: 0.5 }]
+          },
+          getCurrentSlots: mouthGroupWritable,
+          getSpeechStreamCursor: () => cursor
+        })
+      ).toMatchObject({ ok: false, code: "invalidPayload" });
+    }
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: {
+          op: "append",
+          utteranceId: "u-1",
+          timeline: [{ timeMs: 121, vowel: "a", s: 0.5 }]
+        },
+        getCurrentSlots: mouthGroupWritable,
+        getSpeechStreamCursor: () => cursor
+      })
+    ).toMatchObject({ ok: true, op: "append" });
+  });
+
+  it("accepts an utterance exactly AT the 4096 total but rejects an append that would go OVER it (no truncation)", () => {
+    const max = runtimePlayerControlChannelSpeechStreamMaxUtteranceLength;
+    const atCap = validateControlChannelIntentSpeechStream({
+      payload: {
+        op: "append",
+        utteranceId: "u-1",
+        timeline: [
+          { timeMs: 100_000, vowel: "a", s: 0.5 },
+          { timeMs: 100_100, vowel: "i", s: 0.5 }
+        ]
+      },
+      getCurrentSlots: mouthGroupWritable,
+      getSpeechStreamCursor: () => ({
+        utteranceId: "u-1",
+        lastTimeMs: 99_000,
+        moraCount: max - 2
+      })
+    });
+    expect(atCap).toMatchObject({ ok: true, op: "append" });
+
+    const overCap = validateControlChannelIntentSpeechStream({
+      payload: {
+        op: "append",
+        utteranceId: "u-1",
+        timeline: [
+          { timeMs: 100_000, vowel: "a", s: 0.5 },
+          { timeMs: 100_100, vowel: "i", s: 0.5 }
+        ]
+      },
+      getCurrentSlots: mouthGroupWritable,
+      getSpeechStreamCursor: () => ({
+        utteranceId: "u-1",
+        lastTimeMs: 99_000,
+        moraCount: max - 1
+      })
+    });
+    expect(overCap).toMatchObject({ ok: false, code: "invalidPayload" });
+  });
+
+  it("does not check a stale utterance's append against the open utterance's cursor (the store ignores it)", () => {
+    expect(
+      validateControlChannelIntentSpeechStream({
+        payload: {
+          op: "append",
+          utteranceId: "u-old",
+          timeline: [{ timeMs: 0, vowel: "a", s: 0.5 }]
+        },
+        getCurrentSlots: mouthGroupWritable,
+        getSpeechStreamCursor: () => ({
+          utteranceId: "u-new",
+          lastTimeMs: 500,
+          moraCount: 4000
+        })
+      })
+    ).toMatchObject({ ok: true, op: "append", utteranceId: "u-old" });
   });
 });

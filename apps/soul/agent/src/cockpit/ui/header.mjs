@@ -1,26 +1,23 @@
 // @ts-check
 /**
- * ui: ヘッダ（cockpit-redesign.md §7: 名前 + Listening ランプ（発光ドット）+ 一目の健康
- * （耳の死活 whisper/ffmpeg・声の出力先）+ 右端に ⚙）。
+ * ui: 上の細い帯（操縦席の作り直し・cockpit-glance-redesign.md §3・§4・§7・§8）と、ログのタブに残す一目の健康。
  *
- * 現 cockpit.html の <header>（:149-161）+ applyState の ears 表示（:267-270）+
- * applyHealth（:360-366）+ applyAudioDevice の文言（:344・ヘッダへ昇格）の移植先。
- * 表示導出はすべて view-logic/health.mjs 経由（ここで再実装しない・L0 裁定）。
+ * 上の帯（TopBar）: 名前（チャッピー）・頭のモデル名・状態のピル 1 つ（聞いてる / 考えてる / 喋ってる / 圧縮中）。
+ * 異常があるときだけ警告（warnings の一覧・alert が先）。右に残量ゲージ 2 本（Codex 週・ElevenLabs 月の「残り」）
+ * と小さな KILL ボタン。KILL 中は帯を赤くし「KILL 中」と復帰ボタン（既存の POST /api/kill {killed:false}）。
+ * 表示導出はすべて view-logic（glance-meters.mjs / control.mjs / health.mjs）経由。hooks は使わない
+ * （KILL の POST は app.mjs が持ち、onKill / onRevive で受ける）。
  *
- * props 契約:
- *  - ears:             string        state スナップショット/SSE state の s.ears（生値）。
- *  - health:           { whisper, ffmpeg }  各々 { status, reason }（app.mjs が mergeHealth で
- *                       「欠落は前値保持」を済ませた後の値・初期 { status:"unknown", reason:null }）。
- *  - audioDevice:      { name } | null  s.audioDevice（生値・声の出力先表示に使う）。
- *  - identity:         { id, displayName } | null  state.brain.identity（サーバー提供の生値）。
- *  - onToggleSettings: () => void    ⚙ クリック（設定引き出しの開閉フック・**引き出し本体は
- *                       Domain C**——ここは開閉のフックだけを用意する）。
+ * HealthLine: 旧ヘッダの「一目の健康」（耳・whisper/ffmpeg・文字起こし・マイク・声の出力先）。メイン画面からは
+ * 外し（§5: 異常は上の帯の警告へ）、準備・設定の「ログ」タブの上に残す。
  *
  * トップレベル副作用ゼロ（export function のみ）。
  */
 
 import { html } from "../vendor/htm.preact.standalone.mjs";
-import { earsStatusView, healthStatusView, voiceOutputLabel } from "../view-logic/health.mjs";
+import { earsStatusView, healthStatusView, voiceOutputLabel, sttStatusView, ttsStatusView, micInputLabel } from "../view-logic/health.mjs";
+import { statusPillView, quotaGaugeView, warningsView } from "../view-logic/glance-meters.mjs";
+import { killSwitchView } from "../view-logic/control.mjs";
 
 /**
  * Current public identity is supplied by the server. The UI validates the
@@ -62,20 +59,19 @@ export function HealthStat({ label, view }) {
 }
 
 /**
- * ヘッダ本体。
- * @param {{ ears?: string; health: { whisper: any; ffmpeg: any }; audioDevice?: any; identity?: unknown; onToggleSettings?: () => void }} props
+ * 旧ヘッダの一目の健康（ログのタブの上に置く・hooks 非使用）。
+ * @param {{ ears?: string; health: { whisper: any; ffmpeg: any }; audioDevice?: any; stt?: any; tts?: any; device?: string | null }} props
  */
-export function Header({ ears, health, audioDevice, identity, settingsOpen = false, onToggleSettings }) {
+export function HealthLine({ ears, health, audioDevice, stt = null, tts = null, device = null }) {
   const earsView = earsStatusView(ears);
-  const currentDisplayName = identityDisplayName(identity);
-  // health は app.mjs 側で initialHealth() + mergeHealth（欠落は前値保持）を済ませた実値だけが来る
-  // = healthStatusView が null を返す経路は無い（旧フォールバック構造体は実到達しないデッドコード
-  // だったため Domain D で削除・design レビュー non-blocking 1。view-logic 外の表示リテラルゼロ）。
+  // health は app.mjs 側で initialHealth() + mergeHealth（欠落は前値保持）を済ませた実値だけが来る。
   const whisperView = healthStatusView(health.whisper);
   const ffmpegView = healthStatusView(health.ffmpeg);
+  const sttView = sttStatusView(stt);
+  const ttsView = ttsStatusView(tts);
+  const micName = micInputLabel(ears, device);
   return html`
-    <header class="cockpit-header">
-      <h1>${currentDisplayName}</h1>
+    <div class="health-line">
       <div class="ears">
         <span class=${earsView.dotClassName}></span>
         <span class="ears-status">${earsView.text}</span>
@@ -83,11 +79,57 @@ export function Header({ ears, health, audioDevice, identity, settingsOpen = fal
       <div class="health">
         <${HealthStat} label="whisper" view=${whisperView} />
         <${HealthStat} label="ffmpeg" view=${ffmpegView} />
+        ${sttView ? html`<${HealthStat} label="stt" view=${sttView} />` : null}
+        ${ttsView ? html`<${HealthStat} label="tts" view=${ttsView} />` : null}
+        ${micName != null ? html`<span class="mic-in" title=${micName}>mic: ${micName}</span>` : null}
         <span class="voice-out">voice: ${voiceOutputLabel(audioDevice)}</span>
       </div>
-      <button id="cockpit-settings-trigger" class="settings-toggle" type="button"
-        aria-label="Open Cockpit Settings" aria-expanded=${!!settingsOpen}
-        aria-controls="cockpit-settings-dialog" onClick=${onToggleSettings}>⚙</button>
+    </div>
+  `;
+}
+
+/**
+ * 残量のゲージ 1 本（「残り」の割合・不明は「—」・hooks 非使用）。
+ * @param {{ view: { label: string; valueText: string; percent: number | null; className: string; title: string } }} props
+ */
+export function QuotaGauge({ view }) {
+  return html`
+    <span class=${view.className} title=${view.title}>
+      <span class="gauge-label">${view.label} ${view.valueText}</span>
+      <span class="gauge-track"><span class="gauge-fill" style=${"width:" + (view.percent ?? 0) + "%"}></span></span>
+    </span>
+  `;
+}
+
+/**
+ * 上の細い帯（hooks 非使用・vnode 走査テスト対象）。
+ * compacting は snapshot の compacting（頭の会話の圧縮の最中・状態のピルの「圧縮中」）。
+ * @param {{ identity?: unknown; modelText?: string; soul?: string; ears?: string; compacting?: boolean; warnings?: any[]; quota?: any;
+ *   killed?: boolean; killError?: string; nowMs: number; onKill?: () => void; onRevive?: () => void }} props
+ */
+export function TopBar({ identity, modelText = "", soul, ears, compacting = false, warnings, quota, killed = false, killError = "", nowMs, onKill, onRevive }) {
+  const pill = statusPillView(soul, ears, compacting);
+  const warn = warningsView(warnings, nowMs);
+  const killView = killSwitchView(killed);
+  const codex = quotaGaugeView("Codex 週", quota && quota.codex);
+  const eleven = quotaGaugeView("ElevenLabs 月", quota && quota.elevenlabs);
+  return html`
+    <header class=${"top-bar" + (killView.killed ? " killing" : "")}>
+      <h1 class="top-name">${identityDisplayName(identity)}</h1>
+      ${modelText ? html`<span class="top-model">${modelText}</span>` : null}
+      <span class=${pill.className}><span class="pill-dot"></span>${pill.text}</span>
+      ${killView.killed ? html`<span class=${killView.statusClassName}>${killView.statusText}</span>` : null}
+      <div class="top-warnings" role="status" aria-live="polite">
+        ${warn.items.map((w) => html`<span key=${w.key} class=${w.className} title=${w.title}>${w.text}</span>`)}
+        ${warn.moreText ? html`<span class="warn-chip more" title=${warn.moreTitle}>${warn.moreText}</span>` : null}
+      </div>
+      <div class="top-right">
+        ${killError ? html`<span class="err kill-error">${killError}</span>` : null}
+        <${QuotaGauge} view=${codex} />
+        <${QuotaGauge} view=${eleven} />
+        <button class=${killView.className} type="button"
+          onClick=${killView.killed ? onRevive : onKill}>${killView.label}</button>
+      </div>
     </header>
   `;
 }

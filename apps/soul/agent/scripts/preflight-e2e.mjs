@@ -2,8 +2,9 @@
 /**
  * 人間ゲート用 E2E preflight（S1 Domain B）— apps/soul/agent。**実再生を伴う**。
  *
- * TTS → timeline → 実器の Control Channel へ intent.speech 送出 → accepted → **実スピーカー再生**
- * まで一気通貫で通す。C 系列の教訓「配線の存在 ≠ 疎通」を実器で 1 回果たすためのスクリプト。
+ * TTS（声の差し替え口・既定 AivisSpeech）→ 実器の Control Channel へ intent.speechStream（open → accepted →
+ * append → end）→ 流し込みプレイヤーで **実スピーカー再生** → ENDED まで一気通貫で通す（声の差し替え
+ * Wave 2 から本番と同じ SpeechStreamer 経路。一時 WAV は作らない）。C 系列の教訓「配線の存在 ≠ 疎通」を実器で 1 回果たすためのスクリプト。
  * ws-double テストは配線の存在を検証するが、実器の channel-server が同じ返信をするか・口が
  * 実際に動くか・声と口が同期して見えるかは、実器を起動してここを通すまで確定しない。
  *
@@ -25,8 +26,9 @@ import { createTtsClient, parseAudioQuery } from "../src/voice/tts-client.mjs";
 import { wavDurationSec } from "../src/voice/wav-duration.mjs";
 import { buildSpeechTimeline } from "../src/voice/mora-timeline.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
-import { createAudioPlayer, writeTempWav } from "../src/voice/audio-player.mjs";
-import { speak } from "../src/voice/speak.mjs";
+import { createStreamPlayer } from "../src/voice/stream-player.mjs";
+import { createVoiceEngine, DEFAULT_VOICE_ENGINE_KIND } from "../src/voice/engines/voice-engine.mjs";
+import { speakOnce } from "../src/voice/speech-streamer.mjs";
 
 function parseArgs(argv) {
   const flags = argv.filter((a) => a.startsWith("--"));
@@ -77,25 +79,23 @@ async function runE2E(args) {
     `[preflight-e2e] connecting ${redactToken(args.url)} — will PLAY audio on accept\n`
   );
   const channel = await connectChannel(args.url);
-  const player = createAudioPlayer();
+  const player = createStreamPlayer();
+  const engine = createVoiceEngine(DEFAULT_VOICE_ENGINE_KIND, { ttsBaseUrl: args.baseUrl, speaker: args.speaker });
   try {
-    const result = await speak(args.text, {
-      channel,
-      player,
-      ttsBaseUrl: args.baseUrl,
-      speaker: args.speaker,
-      writeWav: writeTempWav
-    });
+    await player.whenReady(); // 常駐の起動（約 0.5 秒）を先に済ませる（本番は Start のとき）。
+    const t0 = Date.now();
+    const spoken = await speakOnce(args.text, { channel, player, engine });
     process.stdout.write(
-      `[preflight-e2e] accepted (rtt=${result.rttMs.toFixed(1)}ms), playing ${result.wavPath}\n` +
-        `[preflight-e2e] timeline=${result.timeline.length} items, wav=${result.wavDurationSec.toFixed(4)}s\n` +
+      `[preflight-e2e] accepted, playing (${Date.now() - t0}ms after request)\n` +
+        `[preflight-e2e] timeline=${spoken.snapshot().timeline.length} items\n` +
         "[preflight-e2e] 一目一聴: 声が鳴り、器の口が同期して動けば合格。\n"
     );
-    // 発話が鳴り終わる尺だけ待ってから畳む（timeline 末尾 + WAV 末尾無音余裕）。
-    const spanMs = (result.timeline.at(-1)?.timeMs ?? 0) + 800;
-    await new Promise((resolve) => setTimeout(resolve, spanMs));
+    // 鳴り終わり（ENDED）まで待ってから畳む。
+    const ended = await spoken.ended;
+    process.stdout.write(`[preflight-e2e] playback ${ended.status} (${ended.cause ?? "-"})\n`);
   } finally {
     player.dispose();
+    engine.dispose();
     await channel.close();
   }
   process.exit(0);

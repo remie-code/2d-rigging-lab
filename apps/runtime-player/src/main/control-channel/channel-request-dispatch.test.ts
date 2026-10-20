@@ -317,3 +317,103 @@ describe("dispatchControlChannelRequest", () => {
     });
   });
 });
+
+describe("dispatchControlChannelRequest — intent.speechStream (voice swap Wave 1)", () => {
+  const mouthGroupSlots: readonly RuntimePlayerMappingSlotId[] = [
+    "mouth-open",
+    "mouth-vowel-a",
+    "mouth-vowel-i",
+    "mouth-vowel-u",
+    "mouth-vowel-e",
+    "mouth-vowel-o"
+  ];
+  const mouthGroupWritable = (): readonly RuntimePlayerMappingSlot[] =>
+    mouthGroupSlots.map((slotId) => writableSlot(slotId));
+
+  it("accepts open / append / end and returns a speechStream write (no other write field)", () => {
+    const open = dispatchControlChannelRequest({
+      ...baseInput,
+      getCurrentSlots: mouthGroupWritable,
+      text: request("req-30", "intent.speechStream", { op: "open", utteranceId: "u-1" })
+    });
+    expect(open).toStrictEqual({
+      kind: "reply",
+      reply: { v: 1, replyTo: "req-30", result: "accepted" },
+      speechStream: { op: "open", utteranceId: "u-1" }
+    });
+
+    const timeline = [
+      { timeMs: 0, vowel: "o", s: 0.6 },
+      { timeMs: 120, vowel: "e", s: 0.7 }
+    ];
+    const append = dispatchControlChannelRequest({
+      ...baseInput,
+      getCurrentSlots: mouthGroupWritable,
+      getSpeechStreamCursor: () => ({ utteranceId: "u-1", lastTimeMs: undefined, moraCount: 0 }),
+      text: request("req-31", "intent.speechStream", {
+        op: "append",
+        utteranceId: "u-1",
+        timeline
+      })
+    });
+    expect(append).toStrictEqual({
+      kind: "reply",
+      reply: { v: 1, replyTo: "req-31", result: "accepted" },
+      speechStream: { op: "append", utteranceId: "u-1", moras: timeline }
+    });
+    expect(append.kind === "reply" && append.speech).toBeUndefined();
+
+    const end = dispatchControlChannelRequest({
+      ...baseInput,
+      getCurrentSlots: mouthGroupWritable,
+      text: request("req-32", "intent.speechStream", { op: "end", utteranceId: "u-1" })
+    });
+    expect(end).toStrictEqual({
+      kind: "reply",
+      reply: { v: 1, replyTo: "req-32", result: "accepted" },
+      speechStream: { op: "end", utteranceId: "u-1" }
+    });
+  });
+
+  it("rejects a non-continuing append to the open utterance with invalidPayload and no write", () => {
+    const dispatch = dispatchControlChannelRequest({
+      ...baseInput,
+      getCurrentSlots: mouthGroupWritable,
+      getSpeechStreamCursor: () => ({ utteranceId: "u-1", lastTimeMs: 500, moraCount: 4 }),
+      text: request("req-33", "intent.speechStream", {
+        op: "append",
+        utteranceId: "u-1",
+        timeline: [{ timeMs: 400, vowel: "a", s: 0.5 }]
+      })
+    });
+    expect(dispatch).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-33", error: { code: "invalidPayload" } }
+    });
+    expect(dispatch.kind === "reply" && dispatch.speechStream).toBeUndefined();
+  });
+
+  it("surfaces slotNotWritable for an open when the mouth group is not writable", () => {
+    const dispatch = dispatchControlChannelRequest({
+      ...baseInput,
+      text: request("req-34", "intent.speechStream", { op: "open", utteranceId: "u-1" })
+    });
+    expect(dispatch).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-34", error: { code: "slotNotWritable" } }
+    });
+  });
+
+  it("still rejects intent.speechStream with channelClosed when not accepting (kind-agnostic gate)", () => {
+    const dispatch = dispatchControlChannelRequest({
+      ...baseInput,
+      accepting: false,
+      getCurrentSlots: mouthGroupWritable,
+      text: request("req-35", "intent.speechStream", { op: "open", utteranceId: "u-1" })
+    });
+    expect(dispatch).toMatchObject({
+      kind: "reply",
+      reply: { replyTo: "req-35", error: { code: "channelClosed" } }
+    });
+  });
+});

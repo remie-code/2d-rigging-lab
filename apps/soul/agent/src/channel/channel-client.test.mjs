@@ -420,3 +420,122 @@ test("redactToken は token を伏せる（URL は保つ）", () => {
   assert.ok(!out.includes("secret123"));
   assert.match(out, /127\.0\.0\.1:17310/);
 });
+
+test("connectChannel: openSpeech → appendSpeech → endSpeech が intent.speechStream の契約形で往復する（声の差し替え Wave 1）", async () => {
+  const server = createChannelServerDouble();
+  const url = await server.listen();
+  /** @type {Array<{ event: string; fields: any }>} */
+  const traces = [];
+  const channel = await connectChannel(url, {
+    WebSocketImpl: WS,
+    onTrace: (event, fields) => traces.push({ event, fields })
+  });
+  try {
+    assert.equal(channel.supportedKinds.includes("intent.speechStream"), true);
+    const opened = await channel.openSpeech("u-1");
+    const appended = await channel.appendSpeech("u-1", SPEECH_TIMELINE);
+    const ended = await channel.endSpeech("u-1");
+    for (const outcome of [opened, appended, ended]) {
+      assert.equal(outcome.result, "accepted");
+      assert.equal(outcome.error, null);
+      assert.ok(outcome.rttMs >= 0);
+      // sendSpeech と同じ返りの形（requestId / serializedUtf8Bytes 付き）。
+      assert.match(outcome.requestId, /^req-\d+$/);
+      assert.equal(typeof outcome.serializedUtf8Bytes, "number");
+    }
+
+    // サーバが受けた payload が契約形（op ごとのフィールドだけ）である。
+    const streamMessages = server.received.filter((m) => m.kind === "intent.speechStream");
+    assert.deepEqual(
+      streamMessages.map((m) => m.payload),
+      [
+        { op: "open", utteranceId: "u-1" },
+        { op: "append", utteranceId: "u-1", timeline: SPEECH_TIMELINE },
+        { op: "end", utteranceId: "u-1" }
+      ]
+    );
+    assert.deepEqual(
+      streamMessages.map((m) => m.id),
+      [opened.requestId, appended.requestId, ended.requestId]
+    );
+    const sent = traces.filter((entry) => entry.event === "channel.request.send" && entry.fields.kind === "intent.speechStream");
+    assert.deepEqual(sent.map((entry) => entry.fields.op), ["open", "append", "end"]);
+    assert.equal(sent[1].fields.timelineCount, SPEECH_TIMELINE.length);
+    assert.equal(
+      sent[1].fields.serializedUtf8Bytes,
+      Buffer.byteLength(
+        JSON.stringify({
+          v: 1,
+          id: appended.requestId,
+          kind: "intent.speechStream",
+          payload: { op: "append", utteranceId: "u-1", timeline: SPEECH_TIMELINE }
+        }),
+        "utf8"
+      )
+    );
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel: intent.speechStream の rejected は result/error を返し接続は維持", async () => {
+  const server = createChannelServerDouble({
+    onSpeechStream: (payload) =>
+      payload.op === "append"
+        ? { result: "rejected", error: { code: "invalidPayload", message: "intent.speechStream payload is malformed." } }
+        : { result: "accepted" }
+  });
+  const url = await server.listen();
+  const channel = await connectChannel(url, { WebSocketImpl: WS });
+  try {
+    assert.equal((await channel.openSpeech("u-1")).result, "accepted");
+    const rejected = await channel.appendSpeech("u-1", SPEECH_TIMELINE);
+    assert.equal(rejected.result, "rejected");
+    assert.equal(rejected.error.code, "invalidPayload");
+    assert.equal((await channel.endSpeech("u-1")).result, "accepted");
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel: appendSpeech も intent.speech と同じ送信前サイズ上限で止め、接続は使い続けられる", async () => {
+  const server = createChannelServerDouble();
+  const url = await server.listen();
+  const channel = await connectChannel(url, { WebSocketImpl: WS });
+  try {
+    const oversizeTimeline = Array.from({ length: 2500 }, (_v, i) => ({
+      timeMs: i * 10,
+      vowel: ["a", "i", "u", "e", "o"][i % 5],
+      s: 0.5
+    }));
+    await assert.rejects(() => channel.appendSpeech("u-1", oversizeTimeline), (error) => {
+      assert.equal(error.code, "speech_envelope_oversize");
+      assert.equal(error.diagnosticStage, "control_channel.preflight");
+      assert.match(error.message, /intent\.speechStream envelope/);
+      return true;
+    });
+    assert.equal(server.received.filter((m) => m.kind === "intent.speechStream").length, 0);
+    assert.equal((await channel.appendSpeech("u-1", SPEECH_TIMELINE)).result, "accepted");
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
+test("connectChannel: 既定 requiredKinds に intent.speechStream が無ければ throw（声の差し替え Wave 1 fail-fast）", async () => {
+  // 流し込み非対応の古い器（3 種しか広告しない）には接続時に大声で失敗する。
+  const server = createChannelServerDouble({
+    supportedKinds: ["intent.set", "intent.envelope", "intent.speech"]
+  });
+  const url = await server.listen();
+  try {
+    await assert.rejects(
+      () => connectChannel(url, { WebSocketImpl: WS, helloTimeoutMs: 2000 }),
+      /missing required supportedKinds: intent\.speechStream/
+    );
+  } finally {
+    await server.close();
+  }
+});

@@ -11,6 +11,9 @@
 | [c4-channel-diagnostics.md](c4-channel-diagnostics.md) | Accepted(2026-07-11) | `Channel` ページ(開閉スイッチ・Copy URL・Active overlays+TTL・イベントログ)、自律ホスト版Overview(カード3枚、サブシステム有無data方式)、degradedページ解消(Input/Mapping空状態・Motion Safety誘導・Header Drive表示) |
 | [soul-cockpit.md](soul-cockpit.md) | Accepted(2026-07-12)。S2.5実装のsource of truth | 魂のローカルWeb操縦席。S3以降のFire/Channel/タイムライン拡張と、C4/S7までの運用面を索引する。 |
 | [cockpit-redesign.md](cockpit-redesign.md) | モック承認・実装反映(2026-07-14)。本文のDraft表記は設計履歴 | 観測/運転/設定の三層IA、常駐運転バー、畳める設定引き出し。preact+htm standaloneの現在UI source。 |
+| [cockpit-stt-selection.md](cockpit-stt-selection.md) | 実装済み・ユーザー確認合格(2026-10-16) | 文字起こしの選択(whisper / ElevenLabs)。入出力タブで Start 前に選ぶ、ヘッダ `stt:` 表示、commit ごとの行・partial なし。範囲に取り込み 50ms と起動中表示の修正を含む |
+| [cockpit-glance-redesign.md](cockpit-glance-redesign.md) | 体験の合意 Accepted(2026-10-16)。実装はコメント判定の実験の後 | 配信中に横目で見る表示専用の画面へ作り直す。会話が主役(判定札・遅延の積み上げ棒・反射の薄い行を行に付ける)、コメントは右、上下は細い帯、操作は準備・設定とホットキーへ |
+| [cockpit-glance-data-contract.md](cockpit-glance-data-contract.md) | 1 回目の成果(2026-10-17) | 作り直しの画面が受け取るデータの形(新 SSE 4 本・snapshot・cause・残量・警告・遅延の区間の定義) |
 
 C1〜C4のUX定義が揃った(閉問題分解§5の指定3枚+C4は自律Control整備を含む)。
 

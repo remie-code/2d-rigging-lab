@@ -26,6 +26,11 @@
  *                                 selfFirePostErrorText の写経・wave 計画「口数配線」§2 裁定 A）
  *  - verbosityRequestErrorText → POST /api/verbosity の fetch catch（"verbosity error: e"・
  *                                 selfFireRequestErrorText の写経）
+ *  - speakStartPostErrorText   → POST /api/speak-start 応答（503 / invalid mode / set failed・成功は null・
+ *                                 verbosityPostErrorText の写経・speak-now 合意 §5）
+ *  - speakStartRequestErrorText → POST /api/speak-start の fetch catch（"speak-start error: e"）
+ *  - commentBusyPostErrorText / commentBusyRequestErrorText → POST /api/comment-busy（忙しい間のコメントの
+ *                                 扱い・コメント反応の合意 §2）の応答 / fetch catch（speakStart の写経）
  *  - killSwitchView            → S8「キルスイッチ」: snapshot の `killed` から KILL ボタン / 復帰ボタンの
  *                                 表示構造体を導出（selfFireToggleView の様式踏襲）。通常時は「■ KILL」・
  *                                 キル中は「殺し中」+ 復帰ラベル。
@@ -151,12 +156,54 @@ export function verbosityRequestErrorText(e) {
   return "verbosity error: " + e;
 }
 
+/**
+ * POST /api/speak-start 応答 → エラー文言（verbosityPostErrorText の写経・speak-now 合意 §5）。
+ * 成功（200）は **null = エラーなし**（呼び出し側は snapshot 応答を適用する）。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function speakStartPostErrorText(res) {
+  if (res.status === 503) return "speak-start control not available";
+  if (!res.ok) return "set failed: " + ((res.j && res.j.error) || "error");
+  return null;
+}
+
+/**
+ * POST /api/speak-start の fetch 失敗 → エラー文言（verbosityRequestErrorText の写経）。
+ * @param {unknown} e
+ * @returns {string}
+ */
+export function speakStartRequestErrorText(e) {
+  return "speak-start error: " + e;
+}
+
+/**
+ * POST /api/comment-busy 応答 → エラー文言（成功は null・speakStartPostErrorText の写経・コメント反応の合意 §2）。
+ * @param {{ status: number; ok: boolean; j: any }} res
+ * @returns {string | null}
+ */
+export function commentBusyPostErrorText(res) {
+  if (res.status === 503) return "comment-busy control not available";
+  if (!res.ok) return "set failed: " + ((res.j && res.j.error) || "error");
+  return null;
+}
+
+/**
+ * POST /api/comment-busy の fetch 失敗 → エラー文言（speakStartRequestErrorText の写経）。
+ * @param {unknown} e
+ * @returns {string}
+ */
+export function commentBusyRequestErrorText(e) {
+  return "comment-busy error: " + e;
+}
+
 // ── S8「キルスイッチ」: KILL ボタン / 復帰ボタンの表示導出（selfFireToggleView の様式踏襲）───────
 
 /**
- * KILL スイッチの表示導出（S8）。killed=false（通常時）は「■ KILL」ボタン（押すと POST /api/kill
- * {killed:true}）。killed=true（キル中）はバー全体が「殺し中」と分かる表示 + 一クリック復帰ボタン
- * （押すと POST /api/kill {killed:false}）。selfFireToggleView と異なり「not available」の disable
+ * KILL スイッチの表示導出（S8）。killed=false（通常時）は「KILL」ボタン（押すと POST /api/kill
+ * {killed:true}）。killed=true（キル中）は上の帯を赤くして「KILL 中」+ 一クリック復帰ボタン
+ * （押すと POST /api/kill {killed:false}）。操縦席の作り直し（cockpit-glance-redesign.md §4・§7）で
+ * 置き場所が運転バーから上の帯へ移り、文言を「KILL」「KILL 中」「復帰」にした。selfFireToggleView と異なり「not available」の disable
  * 概念は持たない（orchestrator 未注入かどうかは snapshot からは分からず、押下時の 503 応答で正直に
  * 表す＝killPostErrorText の責務）。
  * @param {boolean | null | undefined} killed  state snapshot の killed（既定 false 扱い）。
@@ -166,9 +213,9 @@ export function killSwitchView(killed) {
   const on = killed === true;
   return {
     killed: on,
-    label: on ? "◆ 復帰" : "■ KILL",
+    label: on ? "復帰" : "KILL",
     className: "kill-switch" + (on ? " killed" : ""),
-    statusText: on ? "殺し中" : "",
+    statusText: on ? "KILL 中" : "",
     statusClassName: "kill-status" + (on ? " killed" : "")
   };
 }

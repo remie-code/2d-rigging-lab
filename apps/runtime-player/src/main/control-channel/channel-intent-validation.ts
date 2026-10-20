@@ -6,8 +6,11 @@ import {
 import { findSemanticSlotDefinition } from "../live-mapping/semantic-slot-definitions";
 import {
   runtimePlayerControlChannelSpeechMaxTimelineLength,
+  runtimePlayerControlChannelSpeechStreamMaxUtteranceLength,
+  runtimePlayerControlChannelSpeechStreamOps,
   runtimePlayerControlChannelSpeechVowels,
-  type RuntimePlayerControlChannelRejectionCode
+  type RuntimePlayerControlChannelRejectionCode,
+  type RuntimePlayerControlChannelSpeechStreamOp
 } from "./contract/channel-protocol-contract";
 import { semanticSlotNormalizedRange } from "./semantic-slot-normalized-range";
 import {
@@ -438,6 +441,160 @@ function parseIntentSpeechTimeline(
     moras.push({ timeMs, vowel, s });
   }
   return moras;
+}
+
+/**
+ * intent.speechStream validation (voice swap Wave 1 Domain A). The STREAMED form of the
+ * intent.speech mora列 — `{ op: "open" | "append" | "end", utteranceId, timeline? }`. The
+ * SAME pre-gate discipline and the EXISTING enumeration only (拒否語彙の不増殖):
+ *
+ *  1. envelope shape → invalidPayload
+ *       - non-record, `op` not open/append/end, `utteranceId` missing/empty/non-string
+ *       - append: `timeline` fails the intent.speech mora列 parse (non-array, empty,
+ *         > 512 per append, malformed mora / non-monotonic within the slice)
+ *  2. append: s domain (mouth-vowel 0..1, NO clamp) → slotValueOutOfRange
+ *  3. open / append: the 6 mouth-group slots all writable → slotNotWritable
+ *     (end drives nothing, so it is not gated on writability)
+ *  4. append to the CURRENT open utterance (per the store's cursor):
+ *       - first timeMs ≤ the utterance's previous last timeMs (発話内で単調増加) →
+ *         invalidPayload
+ *       - utterance total > 4096 moras → invalidPayload (never truncated)
+ *     An append naming any OTHER utteranceId is a stale tail the store ignores, so it is
+ *     not checked against the cursor (it is still shape/domain validated).
+ */
+export type ControlChannelIntentSpeechStreamValidation =
+  | {
+      readonly ok: true;
+      readonly op: "open" | "end";
+      readonly utteranceId: string;
+    }
+  | {
+      readonly ok: true;
+      readonly op: "append";
+      readonly utteranceId: string;
+      readonly moras: readonly SpeechMora[];
+    }
+  | {
+      readonly ok: false;
+      readonly code: RuntimePlayerControlChannelRejectionCode;
+      readonly message: string;
+    };
+
+export type ValidateControlChannelIntentSpeechStreamInput = {
+  readonly payload: unknown;
+  readonly getCurrentSlots: () => readonly RuntimePlayerMappingSlot[] | null;
+  /** The store's open-utterance cursor (continuity / whole-utterance cap). Absent or
+   * null → no utterance is open, so there is nothing to continue from. */
+  readonly getSpeechStreamCursor?: () => ControlChannelSpeechStreamCursor | null;
+};
+
+/** The dispatch-side view of the open streamed utterance (structurally the overlay
+ * store's `RuntimePlayerControlChannelSpeechStreamCursor`). */
+export type ControlChannelSpeechStreamCursor = {
+  readonly utteranceId: string;
+  readonly lastTimeMs: number | undefined;
+  readonly moraCount: number;
+};
+
+export function validateControlChannelIntentSpeechStream(
+  input: ValidateControlChannelIntentSpeechStreamInput
+): ControlChannelIntentSpeechStreamValidation {
+  const malformed = {
+    ok: false,
+    code: "invalidPayload",
+    message: "intent.speechStream payload is malformed."
+  } as const;
+
+  const { payload } = input;
+  if (!isRecord(payload)) {
+    return malformed;
+  }
+  const { op, utteranceId } = payload;
+  if (typeof utteranceId !== "string" || utteranceId.length === 0) {
+    return malformed;
+  }
+  if (!isSpeechStreamOp(op)) {
+    return malformed;
+  }
+
+  if (op === "end") {
+    return { ok: true, op, utteranceId };
+  }
+
+  if (op === "open") {
+    if (!speechMouthGroupWritable(input.getCurrentSlots())) {
+      return speechMouthGroupNotWritable();
+    }
+    return { ok: true, op, utteranceId };
+  }
+
+  // append: the slice is an intent.speech mora列 in shape and domain.
+  const moras = parseIntentSpeechTimeline(payload);
+  if (moras === null) {
+    return malformed;
+  }
+  const range = semanticSlotNormalizedRange("mouth-vowel");
+  for (const mora of moras) {
+    if (mora.s < range.min || mora.s > range.max) {
+      return {
+        ok: false,
+        code: "slotValueOutOfRange",
+        message: `mora s ${mora.s} is outside the ${range.min}..${range.max} mouth-vowel range.`
+      };
+    }
+  }
+  if (!speechMouthGroupWritable(input.getCurrentSlots())) {
+    return speechMouthGroupNotWritable();
+  }
+
+  const cursor = input.getSpeechStreamCursor?.() ?? null;
+  if (cursor !== null && cursor.utteranceId === utteranceId) {
+    const firstTimeMs = moras[0]?.timeMs;
+    if (
+      cursor.lastTimeMs !== undefined &&
+      firstTimeMs !== undefined &&
+      firstTimeMs <= cursor.lastTimeMs
+    ) {
+      return {
+        ok: false,
+        code: "invalidPayload",
+        message: `intent.speechStream append for ${utteranceId} does not continue after timeMs ${cursor.lastTimeMs}.`
+      };
+    }
+    if (
+      cursor.moraCount + moras.length >
+      runtimePlayerControlChannelSpeechStreamMaxUtteranceLength
+    ) {
+      return {
+        ok: false,
+        code: "invalidPayload",
+        message: `intent.speechStream utterance ${utteranceId} would exceed ${runtimePlayerControlChannelSpeechStreamMaxUtteranceLength} moras.`
+      };
+    }
+  }
+
+  return { ok: true, op, utteranceId, moras };
+}
+
+function isSpeechStreamOp(
+  value: unknown
+): value is RuntimePlayerControlChannelSpeechStreamOp {
+  return (
+    typeof value === "string" &&
+    (runtimePlayerControlChannelSpeechStreamOps as readonly string[]).includes(value)
+  );
+}
+
+function speechMouthGroupNotWritable(): {
+  readonly ok: false;
+  readonly code: "slotNotWritable";
+  readonly message: string;
+} {
+  return {
+    ok: false,
+    code: "slotNotWritable",
+    message: "The mouth group (mouth-open + mouth-vowel-*) is not writable on the loaded model."
+  };
 }
 
 function isSpeechVowel(value: unknown): value is SpeechVowel {

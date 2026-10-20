@@ -14,7 +14,8 @@
  *
  * ── S3: 発火（Fire）の本番結線 ─────────────────────────────────────────────
  *  fireOrchestratorFactory は**常に注入**する（実 createLlmSession（FIRE_SYSTEM_PROMPT・
- *  claude-opus-4-8 既定）+ connectChannel + createAudioPlayer + speak）。Channel URL は
+ *  claude-opus-4-8 既定）+ connectChannel + 流し込みプレイヤー（createStreamPlayer）+ 声の差し替え口
+ *  （createVoiceEngine・既定 AivisSpeech）+ SpeechStreamer）。Channel URL は
  *  `--channel <ws-url>`（後方互換の初期値）**または操縦席の URL 入力**（POST /api/channel）で渡せる。
  *
  *  ── S2.5 無退行【session/player の遅延生成】(S3 追撃 domain-c) ─────────────────
@@ -23,7 +24,12 @@
  *  session/player は `ensureFireResources()` で**遅延生成**する:
  *    - `--channel` 明示指定時のみ起動時に eager 生成（従来どおり TTFT 先払い・挙動不変）。
  *    - それ以外（URL 未設定 / settings 復元 / 操縦席入力）は**初回 fire 時**に生成。
- *  URL 未設定のまま fire しても sendSpeech 前に session.ask で弾く（lazyChannel が URL 未設定を
+ *  声の差し替え Wave 2: 流し込みプレイヤー（起動に約 0.5 秒）と声の差し替え口は耳の Start のときに作る
+ *  （最初の Fire に乗せない・申し送り 1）。Start より前の Fire は従来どおりその場で作る。
+ *  声の差し替え Wave 3: 声の方式（設定キー `ttsEngine`・AivisSpeech / ElevenLabs）は耳の Start で読み、
+ *  種類が前回と違えば engine を作り直す（createVoiceEngineManager）。ElevenLabs のキーは engine を作るときに読む
+ *  （種類が同じでも、落ちた（down の）ElevenLabs の engine は Start で作り直し、キーを読み直す）。
+ *  URL 未設定のまま fire しても発話の送出前に session.ask で弾く（lazyChannel が URL 未設定を
  *  明示エラーにする前に、ここで no-URL を検出して spawn しない）。→ S2.5 ユーザーは何も spawn しない。
  *
  *  ── Channel URL の記憶（settings）──────────────────────────────────────────
@@ -55,9 +61,23 @@ import {
   resolveConversationInstructionProfile
 } from "../src/mind/fire-orchestrator.mjs";
 import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
+import {
+  createContextCompactor,
+  normalizeCompactThresholdTokens,
+  DEFAULT_COMPACT_THRESHOLD_TOKENS,
+  DEFAULT_COMPACT_QUIET_MS,
+  DEFAULT_COMPACT_MIN_INTERVAL_MS
+} from "../src/mind/context-compactor.mjs";
+import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord } from "../src/mind/session-usage-log.mjs";
+import { resolveLatencyThresholds } from "../src/mind/fire-latency.mjs";
+import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/quota.mjs";
+import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../src/mind/fire-injection.mjs";
 import { connectChannel, redactToken } from "../src/channel/channel-client.mjs";
-import { createAudioPlayer } from "../src/voice/audio-player.mjs";
+import { createStreamPlayer } from "../src/voice/stream-player.mjs";
+import { createVoiceEngine } from "../src/voice/engines/voice-engine.mjs";
+import { createTtsClient } from "../src/voice/tts-client.mjs";
+import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import {
   generateDigest,
@@ -167,6 +187,9 @@ export function openCockpitBrowser(url, execFileImpl = execFile, warn = (message
  * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace] passive diagnostics hook.
  * @returns {{
  *   sendSpeech: (timeline: unknown) => Promise<any>;
+ *   openSpeech: (utteranceId: string) => Promise<any>;
+ *   appendSpeech: (utteranceId: string, timeline: unknown) => Promise<any>;
+ *   endSpeech: (utteranceId: string) => Promise<any>;
  *   sendEnvelope: (intent: unknown) => Promise<any>;
  *   sendSet: (intent: unknown) => Promise<any>;
  *   setUrl: (next: string | null | undefined) => void;
@@ -229,11 +252,11 @@ export function createLazyChannel(url, options = {}) {
       .then((channel) => channel.close())
       .catch(() => {});
   };
-  const delegate = async (method, value) => {
+  const delegate = async (method, ...values) => {
     const pending = ensure();
     const channel = await pending;
     try {
-      return await channel[method](value);
+      return await channel[method](...values);
     } catch (error) {
       // Never retry an ambiguous request. Only retire the exact failed cached
       // generation; the next Fire/request is allowed to connect once afresh.
@@ -245,6 +268,22 @@ export function createLazyChannel(url, options = {}) {
   return {
     async sendSpeech(timeline) {
       return delegate("sendSpeech", timeline);
+    },
+    /**
+     * intent.speechStream（声の差し替え Wave 2・発話の流し込み）。sendSpeech と同型に ensure()→接続へ委譲。
+     * 同じ接続の上で呼んだ順に送られる（open → append… → end）。
+     * @param {string} utteranceId
+     */
+    async openSpeech(utteranceId) {
+      return delegate("openSpeech", utteranceId);
+    },
+    /** @param {string} utteranceId @param {unknown} timeline */
+    async appendSpeech(utteranceId, timeline) {
+      return delegate("appendSpeech", utteranceId, timeline);
+    },
+    /** @param {string} utteranceId */
+    async endSpeech(utteranceId) {
+      return delegate("endSpeech", utteranceId);
     },
     /**
      * intent.envelope を送る（S4 表情演出）。sendSpeech と同型に ensure()→接続へ委譲。
@@ -432,7 +471,7 @@ export function createVisionTargetHooks(settings) {
  * 橋渡しする（S6「会話が続く」・Domain D。visionTarget と同型の薄い配線層）。
  *
  * **常駐プレイヤーの再起動はここでは行わない**（settings の getter/setter に閉じた層のまま）。
- * main() が返り値の `onSetAudioDevice` をラップして常駐プレイヤーの再生成トリガに使う（§createAudioPlayer 呼び出し側）。
+ * main() が返り値の `onSetAudioDevice` をラップして常駐プレイヤーの再生成トリガに使う（§createStreamPlayer 呼び出し側）。
  *
  * @param {{ getAudioDevice: () => string | null; setAudioDevice: (name: string | null) => void }} settings
  * @returns {{
@@ -733,6 +772,599 @@ export function createChatSourceHooks(settings) {
   };
 }
 
+/**
+ * settings の文字起こしの方式（sttEngine）を、cockpit-server の口（sttEngineInitial/onSetSttEngine）へ
+ * 橋渡しする（操縦席の文字起こし選択・cockpit-stt-selection.md・createVerbosityHooks と同型の薄い配線層）。
+ * 未記憶/未知値は defaultEngine（既定 "whisper"）。選択だけを記憶し、ElevenLabs のキーはここで扱わない
+ * （キーは cockpit-server が Start ごとに .env.elevenlabs.local から直接読む）。
+ *
+ * @param {{ getSttEngine: () => string | null; setSttEngine: (engine: string | null) => void }} settings
+ * @param {"whisper" | "elevenlabs"} [defaultEngine="whisper"]
+ * @returns {{
+ *   resolveInitialSttEngine: () => "whisper" | "elevenlabs";
+ *   onSetSttEngine: (engine: string) => void;
+ * }}
+ */
+export function createSttEngineHooks(settings, defaultEngine = "whisper") {
+  return {
+    /** 起動時の初期選択（未記憶/未知値は defaultEngine）。 */
+    resolveInitialSttEngine: () => {
+      const remembered = settings.getSttEngine();
+      return remembered === "whisper" || remembered === "elevenlabs" ? remembered : defaultEngine;
+    },
+    /** cockpit-server の onSetSttEngine（耳の Start ごとに呼ぶ）。 */
+    onSetSttEngine: (engine) => {
+      try {
+        settings.setSttEngine(engine); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は Start を止めない（onSetVerbosity と同型の失敗寛容）。
+      }
+    }
+  };
+}
+
+/** 声の方式（設定キー `ttsEngine`・cockpit-server の TTS_ENGINES と同じ語彙）。 */
+const TTS_ENGINE_CHOICES = Object.freeze(["aivis", "elevenlabs"]);
+
+/**
+ * settings の声の方式（ttsEngine）を、cockpit-server の口（ttsEngineInitial/onSetTtsEngine）へ橋渡しする
+ * （声の差し替え Wave 3 Domain E・createSttEngineHooks の写経）。未記憶/未知値は defaultEngine（既定 "aivis"）。
+ * 選択だけを記憶し、ElevenLabs のキーはここで扱わない（キーは createVoiceEngineManager が engine を作るときに読む）。
+ *
+ * @param {{ getTtsEngine: () => string | null; setTtsEngine: (engine: string | null) => void }} settings
+ * @param {"aivis" | "elevenlabs"} [defaultEngine="aivis"]
+ * @returns {{
+ *   resolveInitialTtsEngine: () => "aivis" | "elevenlabs";
+ *   onSetTtsEngine: (engine: string) => void;
+ * }}
+ */
+export function createTtsEngineHooks(settings, defaultEngine = "aivis") {
+  return {
+    /** 起動時の初期選択（未記憶/未知値は defaultEngine）。 */
+    resolveInitialTtsEngine: () => {
+      const remembered = settings.getTtsEngine();
+      return TTS_ENGINE_CHOICES.includes(/** @type {any} */ (remembered))
+        ? /** @type {"aivis" | "elevenlabs"} */ (remembered)
+        : defaultEngine;
+    },
+    /** cockpit-server の onSetTtsEngine（耳の Start ごとに呼ぶ）。 */
+    onSetTtsEngine: (engine) => {
+      try {
+        settings.setTtsEngine(engine); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は Start を止めない。
+      }
+    }
+  };
+}
+
+/** 声の警告の detail に載せる理由の上限（字数・cockpit-server 側でも切る）。 */
+const VOICE_REASON_MAX_CHARS = 80;
+
+/**
+ * ElevenLabs の声の engine の診断（onDiagnostic）から、警告の detail に載せる短い理由を作る
+ * （声の差し替え Wave 3 仕上げ・STT の `closed code=1006` と同じ流儀）。engine の reason は決まった語彙・close code・
+ * サーバーの error の識別子だけ（キー・本文は入らない・D がテストで固定）だが、ここでも制御文字を除き長さを切る。
+ * message は使わない。
+ *
+ * @param {unknown} diagnostic
+ * @returns {string | null | undefined}  理由（string）・繋がったので消す（null）・理由に関係しない診断（undefined）。
+ */
+export function voiceDiagnosticReason(diagnostic) {
+  if (!diagnostic || typeof diagnostic !== "object") return undefined;
+  const d = /** @type {{ type?: unknown; reason?: unknown }} */ (diagnostic);
+  const raw = typeof d.reason === "string" ? d.reason.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim() : "";
+  /** @param {string} text */
+  const clip = (text) => (text.length > VOICE_REASON_MAX_CHARS ? `${text.slice(0, VOICE_REASON_MAX_CHARS - 1)}…` : text);
+  switch (d.type) {
+    case "ttsDisconnected":
+      return clip(`closed ${raw || "code=?"}`);
+    case "ttsConnectFailed":
+      return clip(`接続できない（${raw || "?"}）`);
+    case "ttsServerError":
+      return clip(`サーバーのエラー（${raw || "unknown"}）`);
+    case "ttsConnected":
+    case "ttsReconnected":
+      return null;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * 声の engine の持ち主（声の差し替え Wave 3 Domain E・voice-swap-wave-plan.md §3「D と E の接点」・Wave 2 申し送り 2）。
+ * 耳の Start で `prepare(kind)` を呼ぶ。種類が前回と同じなら使い回し、違えば古い engine を dispose して
+ * `createVoiceEngine(kind, deps)` で作り直す。ただし ElevenLabs で status が `down` の engine は、種類が同じでも
+ * dispose して作り直す（キーを読み直す。無効なキーを直して Stop → Start したときに古いキーで繋ぎ直し続けないように）。
+ * ElevenLabs は作るときに `loadElevenLabsApiKey()` を読み、`apiKey` として渡す（process.env に入れない・キーは状態にも
+ * ログにも出さない）。engine の status は `onStatus` へ流す（今の engine の分だけ・作り直した古い engine の通知は捨てる）。
+ *
+ * ElevenLabs の engine には deps の `onDiagnostic` を渡し、切断・接続失敗・サーバーのエラーの理由を覚えておく
+ * （{@link voiceDiagnosticReason}・短い理由だけ。キーも会話の本文も入らない）。`reconnecting` / `down` を知らせる
+ * ときはその理由を `reason` に載せる（`tts-reconnecting` / `tts-down` の警告の detail・STT と同じ流儀）。繋がれば消す。
+ *
+ * 失敗（キーが無い・工場が投げた）は `{ ok:false, reason }` を返し、engine は持たない（自動で AivisSpeech に戻さない）。
+ * Start より前の Fire は `ensure(kind)` で同じ道を通り、失敗は reason の Error を投げる。
+ *
+ * @param {object} [options]
+ * @param {(kind: string, deps: any) => any} [options.createEngine=createVoiceEngine]  工場関数（テストは偽物）。
+ * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.loadApiKey=loadElevenLabsApiKey]
+ * @param {() => object} [options.aivisDeps]  AivisSpeech の deps（ttsBaseUrl / speaker）。
+ * @param {() => object} [options.elevenLabsDeps]  ElevenLabs の追加 deps（readingClient など・apiKey と onReadingsFallback と onDiagnostic はここで足す）。
+ * @param {(info: { engine: string; status: string; reason: string | null }) => void} [options.onStatus]
+ * @param {(info?: unknown) => void} [options.onReadingsFallback]  読みが取れず簡易版の口になったとき。
+ */
+export function createVoiceEngineManager(options = {}) {
+  const createEngine = options.createEngine ?? createVoiceEngine;
+  const loadApiKey = options.loadApiKey ?? (() => loadElevenLabsApiKey());
+  const aivisDeps = options.aivisDeps ?? (() => ({}));
+  const elevenLabsDeps = options.elevenLabsDeps ?? (() => ({}));
+  const onStatus = typeof options.onStatus === "function" ? options.onStatus : () => {};
+  const onReadingsFallback = typeof options.onReadingsFallback === "function" ? options.onReadingsFallback : () => {};
+  /** @type {any} */
+  let engine = null;
+  /** @type {string | null} */
+  let engineKind = null;
+  /** @type {(() => void) | null} */
+  let statusOff = null;
+  /** 今の engine の診断の受け口（作り直したら古い engine の診断は捨てる）。 @type {{ live: boolean; reason: string | null } | null} */
+  let diagSlot = null;
+
+  const report = (/** @type {string} */ kind, /** @type {string} */ status, /** @type {string | null} */ reason) => {
+    try {
+      onStatus({ engine: kind, status, reason });
+    } catch {
+      // 通知先の失敗で声を止めない。
+    }
+  };
+
+  const drop = () => {
+    const old = engine;
+    if (statusOff) {
+      try {
+        statusOff();
+      } catch {
+        // best-effort
+      }
+    }
+    statusOff = null;
+    if (diagSlot) diagSlot.live = false;
+    diagSlot = null;
+    engine = null;
+    engineKind = null;
+    if (old) {
+      try {
+        old.dispose();
+      } catch {
+        // best-effort（古い engine は使わない）。
+      }
+    }
+  };
+
+  /**
+   * @param {string} kind
+   * @returns {{ ok: true } | { ok: false; reason: string }}
+   */
+  const prepare = (kind) => {
+    if (engine != null && engineKind === kind) {
+      // 落ちた ElevenLabs の engine は使い回さない（下で dispose し、キーを読み直して作り直す）。
+      if (!(kind === "elevenlabs" && engine.status === "down")) return { ok: true };
+    }
+    drop();
+    /** @type {{ live: boolean; reason: string | null }} */
+    const slot = { live: true, reason: null };
+    /** reconnecting / down のときだけ覚えた理由を載せる（それ以外は null）。 @param {string} status */
+    const reasonFor = (status) => (status === "reconnecting" || status === "down" ? slot.reason : null);
+    /** @type {any} */
+    let made = null;
+    /** @type {any} */
+    let deps;
+    if (kind === "elevenlabs") {
+      /** @type {any} */
+      let key;
+      try {
+        key = loadApiKey();
+      } catch {
+        key = { ok: false };
+      }
+      if (!key || key.ok !== true || typeof key.apiKey !== "string" || key.apiKey.length === 0) {
+        const reason = (key && typeof key.reason === "string" && key.reason) || "ElevenLabs のキーが見つからない";
+        report(kind, "down", reason);
+        return { ok: false, reason };
+      }
+      deps = {
+        ...elevenLabsDeps(),
+        apiKey: key.apiKey,
+        onReadingsFallback: (/** @type {unknown} */ info) => {
+          try {
+            onReadingsFallback(info);
+          } catch {
+            // 警告の失敗で声を止めない。
+          }
+        },
+        // 切断などの理由を覚え、reconnecting / down の通知に載せる（engine は診断を出してから status を変える）。
+        onDiagnostic: (/** @type {unknown} */ diagnostic) => {
+          if (!slot.live) return;
+          const next = voiceDiagnosticReason(diagnostic);
+          if (next === undefined) return;
+          slot.reason = next;
+          // 状態はそのままで理由だけ変わったとき（繋ぎ直しの失敗が続くなど）も知らせ直す。
+          if (made != null && engine === made && typeof made.status === "string" && reasonFor(made.status) !== null) {
+            report(kind, made.status, reasonFor(made.status));
+          }
+        }
+      };
+    } else {
+      deps = { ...aivisDeps() };
+    }
+    try {
+      made = createEngine(kind, deps);
+    } catch (error) {
+      slot.live = false;
+      // 工場のエラー文言（キーは含まない）だけを理由にする。
+      const reason = `声の engine を作れない（${kind}: ${error instanceof Error ? error.message : String(error)}）`;
+      report(kind, "down", reason);
+      return { ok: false, reason };
+    }
+    engine = made;
+    engineKind = kind;
+    diagSlot = slot;
+    if (made && typeof made.onStatus === "function") {
+      statusOff = made.onStatus((/** @type {string} */ status) => {
+        if (engine === made) report(kind, status, reasonFor(status));
+      });
+    }
+    const initial = made && typeof made.status === "string" ? made.status : "unknown";
+    report(kind, initial, reasonFor(initial));
+    return { ok: true };
+  };
+
+  return {
+    prepare,
+    /**
+     * Start より前の Fire 用: 今の engine を返す（無ければ kind で作る）。用意できなければ理由の Error を投げる。
+     * @param {string} kind
+     */
+    ensure(kind) {
+      if (engine != null) return engine;
+      const result = prepare(kind);
+      if (!result.ok) throw new Error(result.reason);
+      return engine;
+    },
+    /** 今の engine（無ければ null）。 */
+    current: () => engine,
+    /** 今の engine の種類（無ければ null）。 */
+    currentKind: () => engineKind,
+    /** 畳む（終了時）。 */
+    dispose: drop
+  };
+}
+
+/**
+ * 文字起こしの遅延ログ 1 行（操縦席の標準出力・数字だけ・文字起こし本文は書かない）。
+ * 物差しは whisper が「speechEnd → 転写到着」、ElevenLabs が「直前の commit 以降で最後の speechEnd →
+ * commit 到着」（ear-pipeline.mjs）。物差しが無い commit（直前の commit 以降に speechEnd が無い）は "-"。
+ * @param {{ engine: string; latencyMs: number | null }} info
+ * @returns {string}
+ */
+export function formatSttLatencyLine(info) {
+  const ms = typeof info.latencyMs === "number" && Number.isFinite(info.latencyMs) ? String(Math.round(info.latencyMs)) : "-";
+  return `[cockpit] stt latency: engine=${info.engine} ms=${ms}\n`;
+}
+
+/**
+ * 画面キャプチャの撮る係（常駐 PowerShell・src/eyes/resident-capture.mjs）の記録 1 行（操縦席の標準出力）。
+ * 数字と種類だけ（窓タイトル・画像は書かない）。撮影 1 回ごとの `capture:` 行の ms が撮影の待ち時間
+ * （via=resident が撮る係・via=spawn が毎回起動に戻った回。fallback= は戻った理由）。
+ * @param {import("../src/eyes/resident-capture.mjs").ResidentCaptureEvent} event
+ * @returns {string}
+ */
+export function formatCaptureEventLine(event) {
+  const ms = (/** @type {unknown} */ value) =>
+    typeof value === "number" && Number.isFinite(value) ? String(Math.round(value)) : "-";
+  switch (event.type) {
+    case "capture": {
+      const result = event.ok ? "ok" : (event.kind ?? "error");
+      const fallback = event.via === "spawn" && event.fallbackReason ? ` fallback=${event.fallbackReason}` : "";
+      return `[cockpit] capture: via=${event.via} ms=${ms(event.elapsedMs)} result=${result}${fallback}\n`;
+    }
+    case "starting":
+      return "[cockpit] capture helper: starting\n";
+    case "ready":
+      return `[cockpit] capture helper: ready ms=${ms(event.startupMs)}\n`;
+    case "exited":
+      return `[cockpit] capture helper: exited code=${event.code ?? "-"} restart=${event.willRestart ? "yes" : "no"} reason=${event.reason}\n`;
+    case "gaveUp":
+      return `[cockpit] capture helper: gave up after ${event.failures} failed starts (captures use one-shot powershell until next ears Start)\n`;
+    case "stopped":
+      return "[cockpit] capture helper: stopped\n";
+    default:
+      return "";
+  }
+}
+
+/**
+ * settings の話し始めの方式（speakStartMode）を、cockpit-server の口（speakStartModeInitial/
+ * onSetSpeakStartMode）へ橋渡しする（speak-now 合意 §5・createVerbosityHooks と同型の薄い配線層）。
+ * 未記憶/未知値は defaultMode（**初回既定 "speak-now"**・合意 §5）。相槌どうしの最小間隔
+ * （settings の backchannelMinIntervalSec・backchannel.md §2）も cockpit-server の backchannelMinIntervalMs へ橋渡しする
+ * （createCommentBusyHooks の resolveCommentHold と同型）。
+ *
+ * @param {{ getSpeakStartMode: () => string | null; setSpeakStartMode: (mode: string | null) => void;
+ *   getBackchannelMinIntervalSec?: () => number | null }} settings
+ * @param {"classic" | "speak-now"} [defaultMode="speak-now"]
+ * @returns {{
+ *   resolveInitialSpeakStartMode: () => "classic" | "speak-now";
+ *   onSetSpeakStartMode: (mode: string) => void;
+ *   resolveBackchannelMinIntervalMs: () => number | undefined;
+ * }}
+ */
+export function createSpeakStartHooks(settings, defaultMode = "speak-now") {
+  return {
+    /** 起動時の話し始めの方式（未記憶/未知値は defaultMode）。 */
+    resolveInitialSpeakStartMode: () => {
+      const remembered = settings.getSpeakStartMode();
+      return remembered === "classic" || remembered === "speak-now" ? remembered : defaultMode;
+    },
+    /** cockpit-server の onSetSpeakStartMode（POST /api/speak-start が呼ぶ）。 */
+    onSetSpeakStartMode: (mode) => {
+      try {
+        settings.setSpeakStartMode(mode); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
+      }
+    },
+    /** 相槌どうしの最小間隔（秒 → ミリ秒）。未設定・読めなければ undefined（= cockpit-server の既定 8 秒）。 */
+    resolveBackchannelMinIntervalMs: () => {
+      try {
+        if (typeof settings.getBackchannelMinIntervalSec !== "function") return undefined;
+        const sec = settings.getBackchannelMinIntervalSec();
+        return typeof sec === "number" && Number.isFinite(sec) && sec >= 0 ? sec * 1000 : undefined;
+      } catch {
+        return undefined; // 読めなければ既定。
+      }
+    }
+  };
+}
+
+/**
+ * settings の忙しい間のコメントの扱い（commentBusyPolicy）とあとで拾うの鮮度・件数を、cockpit-server の口
+ * （commentBusyPolicyInitial / onSetCommentBusyPolicy / commentHoldMaxAgeMs / commentHoldMaxCount）へ橋渡しする
+ * （コメント反応の合意 §2・createSpeakStartHooks と同型の薄い配線層）。未記憶/未知値は "hold"（あとで拾う・既定）。
+ *
+ * @param {{ getCommentBusyPolicy: () => string | null; setCommentBusyPolicy: (policy: string | null) => void;
+ *   getCommentHold?: () => { maxAgeSec: number | null; maxCount: number | null } }} settings
+ * @returns {{
+ *   resolveInitialCommentBusyPolicy: () => "hold" | "drop";
+ *   onSetCommentBusyPolicy: (policy: string) => void;
+ *   resolveCommentHold: () => { maxAgeMs: number | undefined; maxCount: number | undefined };
+ * }}
+ */
+export function createCommentBusyHooks(settings) {
+  return {
+    /** 起動時の扱い（未記憶/未知値は hold）。 */
+    resolveInitialCommentBusyPolicy: () => {
+      const remembered = settings.getCommentBusyPolicy();
+      return remembered === "drop" ? "drop" : "hold";
+    },
+    /** cockpit-server の onSetCommentBusyPolicy（POST /api/comment-busy が呼ぶ）。 */
+    onSetCommentBusyPolicy: (policy) => {
+      try {
+        settings.setCommentBusyPolicy(policy); // 次回起動で復元（file-backed・失敗寛容）。
+      } catch {
+        // 永続化失敗は操作を止めない（onSetSpeakStartMode と同型の失敗寛容）。
+      }
+    },
+    /** 鮮度（秒 → ミリ秒）と件数。未設定は undefined（= cockpit-server の既定 20 秒 / 3 件）。 */
+    resolveCommentHold: () => {
+      let hold = { maxAgeSec: null, maxCount: null };
+      try {
+        if (typeof settings.getCommentHold === "function") hold = settings.getCommentHold() ?? hold;
+      } catch {
+        // 読めなければ既定。
+      }
+      return {
+        maxAgeMs: typeof hold.maxAgeSec === "number" ? hold.maxAgeSec * 1000 : undefined,
+        maxCount: typeof hold.maxCount === "number" ? hold.maxCount : undefined
+      };
+    }
+  };
+}
+
+/**
+ * コメント判定のログ 1 行（操縦席の標準出力・コメント反応の合意 §3「遅延・判定結果」。コメント本文は書かない）。
+ * 弾く判定（stage:"guard"）: 遅延・ID・通した/弾いた（種類）・4 択の選択・乗っ取りの確率・判定できなかった理由。
+ * 反応する判定（stage:"react"）: 遅延・ID・選択・確率・行き先・きっかけ。判定しなかったコメントは行き先だけ。
+ * @param {any} info  cockpit-server の onCommentJudgment が渡す記録。
+ * @returns {string}
+ */
+export function formatCommentJudgmentLine(info) {
+  const ms = typeof info?.latencyMs === "number" && Number.isFinite(info.latencyMs) ? String(Math.round(info.latencyMs)) : "-";
+  const id = info?.commentId ?? "-";
+  if (info?.stage === "guard") {
+    const action = info.pass ? "pass" : `reject:${info.kind ?? "error"}`;
+    const reason = info.pass || !info.error ? "" : ` reason=${info.error}`;
+    return (
+      `[cockpit] comment-guard: ms=${ms} id=${id} action=${action} verdict=${info.verdict ?? "-"} ` +
+      `hijack=${fmtProb(info.hijackProbability)}${reason}\n`
+    );
+  }
+  if (info?.skipped) return `[cockpit] comment-react: id=${id} action=${info.action ?? "-"}\n`;
+  if (!info || info.ok !== true) {
+    return `[cockpit] comment-react: error ms=${ms} id=${id} trigger=${info?.trigger ?? "-"} reason=${info?.error ?? "unknown"}\n`;
+  }
+  return (
+    `[cockpit] comment-react: ms=${ms} id=${id} choice=${info.choice} p=${fmtProb(info.probability)} ` +
+    `action=${info.action ?? "-"} trigger=${info.trigger ?? "-"}\n`
+  );
+}
+
+/** @param {unknown} v */
+function fmtProb(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v.toFixed(2) : "-";
+}
+
+/**
+ * speak-now の判定ログ 1 行（操縦席の標準出力・合意 §5「遅延・選択・確率」。会話の本文は書かない）。
+ * 成功: 遅延・選択・その確率・行き先（fire / drop-busy / drop-inactive / skip-interval / none）・きっかけ・全選択肢の確率。
+ * skip-interval は相槌どうしの歯止めで流した相槌（backchannel.md §2・フィードには判定行だけ）。
+ * 失敗: 遅延（分かれば）・きっかけ・理由（キー欠落・タイムアウト等。キー値は judge 側で含めない）。
+ * @param {any} info  cockpit-server の onSpeakNowJudgment が渡す記録。
+ * @returns {string}
+ */
+export function formatSpeakNowLine(info) {
+  const ms = typeof info?.latencyMs === "number" && Number.isFinite(info.latencyMs) ? String(Math.round(info.latencyMs)) : "-";
+  const trigger = info?.trigger ?? "-";
+  if (!info || info.ok !== true) {
+    return `[cockpit] speak-now: error ms=${ms} trigger=${trigger} reason=${info?.error ?? "unknown"}\n`;
+  }
+  const probs = info.probs && typeof info.probs === "object" ? info.probs : {};
+  const all = ["wait", "backchannel", "respond", "initiate"].map((k) => `${k}:${fmtProb(probs[k])}`).join(",");
+  return (
+    `[cockpit] speak-now: ms=${ms} choice=${info.choice} p=${fmtProb(info.probability)} ` +
+    `action=${info.action ?? "-"} trigger=${trigger} probs=${all}\n`
+  );
+}
+
+/**
+ * 頭が Codex 系か（Codex の残量ゲージは頭が Codex のときだけ・cockpit-glance-redesign.md §9.2）。
+ * @param {unknown} brainId
+ */
+export function isCodexBrainId(brainId) {
+  return typeof brainId === "string" && (brainId === "codex" || brainId.startsWith("codex-"));
+}
+
+/**
+ * Codex の使用率の読み口（残量の監視が呼ぶ）。頭が Codex で、今のセッションが App Server を持つ
+ * （readRateLimits がある）ときだけ読む。それ以外は null（不明）。セッションは起動していなければ自分で null を返す
+ * （読むためだけに App Server を起こさない）。
+ * @param {{ getBrain: () => string; getSession: () => any }} deps
+ * @returns {() => Promise<any | null>}
+ */
+export function createCodexQuotaReader(deps) {
+  return async () => {
+    if (!isCodexBrainId(deps.getBrain())) return null;
+    const session = deps.getSession();
+    if (!session || typeof session.readRateLimits !== "function") return null;
+    return session.readRateLimits();
+  };
+}
+
+/**
+ * settings の遅延の「遅い」しきい値（latencyWarnSec / latencyAlertSec）→ cockpit-server の latencyThresholds
+ * （未設定・読めなければ既定 4 / 6 秒）。
+ * @param {{ getLatencyThresholds?: () => { warnSec: number | null; alertSec: number | null } }} settings
+ * @returns {{ warnSec: number; alertSec: number }}
+ */
+export function resolveLatencyThresholdsFromSettings(settings) {
+  let raw = null;
+  try {
+    raw = typeof settings.getLatencyThresholds === "function" ? settings.getLatencyThresholds() : null;
+  } catch {
+    raw = null;
+  }
+  return resolveLatencyThresholds({ warnSec: raw?.warnSec ?? undefined, alertSec: raw?.alertSec ?? undefined });
+}
+
+/**
+ * settings の圧縮の目安（compactThresholdTokens / compactQuietSec / compactMinIntervalMin）→ 圧縮の部品の
+ * options（未設定・読めなければ既定 20 万トークン / 3 秒 / 10 分・context-growth-2026-10.md §6・§8）。
+ * @param {{ getContextCompaction?: () => { thresholdTokens: number | null; quietSec: number | null; minIntervalMin: number | null } }} settings
+ * @returns {{ thresholdTokens: number; quietMs: number; minIntervalMs: number }}
+ */
+export function resolveContextCompactionOptions(settings) {
+  let raw = null;
+  try {
+    raw = typeof settings.getContextCompaction === "function" ? settings.getContextCompaction() : null;
+  } catch {
+    raw = null;
+  }
+  return {
+    thresholdTokens: normalizeCompactThresholdTokens(raw?.thresholdTokens) ?? DEFAULT_COMPACT_THRESHOLD_TOKENS,
+    quietMs: raw?.quietSec != null ? raw.quietSec * 1000 : DEFAULT_COMPACT_QUIET_MS,
+    minIntervalMs: raw?.minIntervalMin != null ? raw.minIntervalMin * 60_000 : DEFAULT_COMPACT_MIN_INTERVAL_MS
+  };
+}
+
+/**
+ * 操縦席の設定（頭脳・会話のタブ）の「圧縮を始める大きさ」を、cockpit-server の口（onSetCompactThresholdTokens /
+ * contextCompactionStatus）へ橋渡しする（createMemoryHooks と同型の薄い配線層）。変えたら settings へ保存し
+ * （次回起動で復元）、走っている compactor の目安をその場で差し替える（次の確認 = 数秒以内から効く）。
+ * 目安の正本は compactor（サーバは二重に持たない）。
+ * @param {{ setCompactThresholdTokens?: (tokens: number | null) => void }} settings
+ * @param {{ getThresholdTokens: () => number; setThresholdTokens: (tokens: number) => number }} compactor
+ * @returns {{ onSetCompactThresholdTokens: (tokens: number) => void; contextCompactionStatus: () => { thresholdTokens: number } }}
+ */
+export function createContextCompactionHooks(settings, compactor) {
+  return {
+    /** cockpit-server の onSetCompactThresholdTokens（POST /api/compact-threshold が呼ぶ・値は検証済み）。 */
+    onSetCompactThresholdTokens: (tokens) => {
+      compactor.setThresholdTokens(tokens);
+      try {
+        if (typeof settings.setCompactThresholdTokens === "function") settings.setCompactThresholdTokens(tokens);
+      } catch {
+        // 永続化失敗は操作を止めない（走っている compactor には効いている）。
+      }
+    },
+    /** state snapshot の compaction。 */
+    contextCompactionStatus: () => ({ thresholdTokens: compactor.getThresholdTokens() })
+  };
+}
+
+/**
+ * 圧縮の開始・終了の記録 1 行（session-usage/）。compactionUsageRecord の形（ratio = 窓に対する割合・
+ * lastInputTokens・totalInputTokens・modelContextWindow）に、開始のときだけそのときの目安 thresholdTokens を足す
+ * （目安は操縦席から変えられるので、記録の行だけで「どの目安で走ったか」が読めるように・追加のキーだけ）。
+ * @param {any} event  context-compactor の onEvent。
+ * @param {string | null} brain
+ * @returns {Record<string, unknown>}
+ */
+export function contextCompactionUsageRecord(event, brain) {
+  const record = compactionUsageRecord(event, brain);
+  if (event?.type !== "started") return record;
+  return { ...record, thresholdTokens: typeof event.thresholdTokens === "number" ? event.thresholdTokens : null };
+}
+
+/**
+ * 頭の会話の圧縮の開始・終了のターミナル 1 行（数字と理由だけ・本文は書かない）。開始は量（直近の入力トークンと
+ * そのときの目安）を主に、窓に対する割合を参考で添える。
+ * @param {any} event  context-compactor の onEvent。
+ * @returns {string}
+ */
+export function formatContextCompactionLine(event) {
+  if (event?.type === "started") {
+    const pct = typeof event.ratio === "number" ? `${Math.round(event.ratio * 100)}%` : "-";
+    return (
+      `[cockpit] context compaction started: last input ${event.lastInputTokens ?? "-"} tokens > threshold ${event.thresholdTokens ?? "-"} ` +
+      `(${pct} of window ${event.modelContextWindow ?? "-"}, total ${event.totalInputTokens ?? "-"})\n`
+    );
+  }
+  const secs = typeof event?.durationMs === "number" ? `${(event.durationMs / 1000).toFixed(1)}s` : "-";
+  if (event?.ok === true) {
+    const persona = event.personaInjected ? "persona re-injected" : event.personaDeferred ? "persona deferred to next turn" : "persona not injected";
+    return `[cockpit] context compaction finished: ${secs} (${persona})\n`;
+  }
+  return `[cockpit] context compaction failed: ${secs} reason=${event?.reason ?? "unknown"}${event?.message ? ` — ${event.message}` : ""}\n`;
+}
+
+/**
+ * 返事の遅延のログ 1 行（操縦席の標準出力・数字ときっかけの種類だけ・本文は書かない）。
+ * @param {any} record  cockpit-server の onReplyLatency が渡すレコード。
+ * @returns {string}
+ */
+export function formatReplyLatencyLine(record) {
+  const ms = (/** @type {unknown} */ v) => (typeof v === "number" && Number.isFinite(v) ? String(Math.round(v)) : "-");
+  const seg = record && record.segments ? record.segments : {};
+  const cause = record && record.cause && typeof record.cause.type === "string" ? record.cause.type : "-";
+  return (
+    `[cockpit] latency: fire=${record?.fireId ?? "-"} cause=${cause} total=${ms(record?.totalMs)} level=${record?.level ?? "-"} ` +
+    `stt=${ms(seg.transcribeMs)} judge=${ms(seg.judgeMs)} screen=${ms(seg.screenMs)} llm=${ms(seg.llmFirstMs)} ` +
+    `sentence=${ms(seg.firstSentenceMs)} tts=${ms(seg.ttsMs)} voice=${ms(seg.voiceMs)} other=${ms(record?.otherMs)}` +
+    `${typeof record?.voice === "string" ? ` voiceEngine=${record.voice}` : ""}` +
+    `${record?.spoken === false ? " spoken=no" : ""}\n`
+  );
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --open                待受け完了後に既定ブラウザを開く（Windows）
@@ -775,6 +1407,15 @@ async function main() {
   // S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化（Channel URL と同型の薄い橋渡し・
   // §createChatSourceHooks）。実チャット器官の Connect/停止は cockpit-server 所有（POST 駆動）。
   const chatSourceHooks = createChatSourceHooks(settings);
+  // 操縦席の文字起こし選択（whisper / ElevenLabs・既定 whisper・§createSttEngineHooks）。
+  const sttEngineHooks = createSttEngineHooks(settings);
+  // 声の方式（AivisSpeech / ElevenLabs・既定 aivis・§createTtsEngineHooks）。
+  const ttsEngineHooks = createTtsEngineHooks(settings);
+  // 話し始めの方式（従来 / speak-now・初回既定 speak-now・§createSpeakStartHooks）。
+  const speakStartHooks = createSpeakStartHooks(settings);
+  // 忙しい間のコメントの扱い（あとで拾う / 見逃す・既定 あとで拾う・§createCommentBusyHooks）。
+  const commentBusyHooks = createCommentBusyHooks(settings);
+  const commentHold = commentBusyHooks.resolveCommentHold();
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -785,11 +1426,24 @@ async function main() {
   let sessionInstructionRevision = null;
   let sessionContextRevision = 0;
   let sessionAcceptedContextRevision = null;
-  /** @type {ReturnType<typeof createAudioPlayer> | null} */
+  /** @type {ReturnType<typeof createStreamPlayer> | null} */
   let player = null;
   let audioRevision = 0;
   let playerAudioRevision = null;
-  const playerOutputListeners = new Set();
+  // 声の差し替え口（Start のときに作る・種類が変われば作り直す）。desiredTtsEngine は最後に Start で選ばれた方式
+  // （起動直後は記憶の値）で、Start より前の Fire もこの方式で作る。
+  let desiredTtsEngine = ttsEngineHooks.resolveInitialTtsEngine();
+  const voiceEngines = createVoiceEngineManager({
+    aivisDeps: () => ({ ttsBaseUrl: args.ttsBaseUrl, speaker: args.speaker }),
+    // D と E の接点（voice-swap-wave-plan.md §3）: 読みは AivisSpeech の /accent_phrases（tts-client の口）から取る。
+    elevenLabsDeps: () => ({
+      readingClient: createTtsClient({ baseUrl: args.ttsBaseUrl, speaker: args.speaker }),
+      ttsBaseUrl: args.ttsBaseUrl,
+      speaker: args.speaker
+    }),
+    onStatus: (info) => server?.setVoiceEngineStatus(info),
+    onReadingsFallback: () => server?.reportVoiceReadingsFallback()
+  });
   // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。recordMemory が
   // ライブ転写取得（server.getTranscript）に使うための前方参照（let・sessionProxy が session を forward
   // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
@@ -840,6 +1494,52 @@ async function main() {
   let channelRevision = 0;
   let appliedChannelRevision = 0;
   const fireDiagnostics = createFireDiagnostics();
+  // 頭の文脈の記録（起動ごと 1 ファイル・session-usage/・本文なし・context-growth-2026-10.md §6）。
+  // 発火ごとの 1 行（Codex の頭のとき）と、圧縮の開始・終了を 1 行ずつ。
+  const sessionUsageLog = createSessionUsageLog();
+  // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6・§8）。目安は settings ファイルのキー
+  // （無ければ 20 万トークン / 3 秒 / 10 分）。圧縮を始める大きさは操縦席の設定（頭脳・会話のタブ）からも変えられ、
+  // contextCompactionHooks が保存と走っている compactor の差し替えを担う（次の確認から効く）。隙間の材料は
+  // cockpit-server、頭のセッションは今の session（Codex で、設定の変更で作り直し待ちになっていないときだけ）。見え方はターミナル 1 行・ログのタブ 1 行・記録 1 行と、
+  // 最中の間の上の帯の状態のピル「圧縮中」（broadcastContextCompaction が snapshot の compacting を切り替える）。
+  const contextCompactor = createContextCompactor({
+    ...resolveContextCompactionOptions(settings),
+    getSession: () => {
+      if (!isCodexBrainId(currentBrain) || session == null) return null;
+      const stale =
+        sessionInstructionRevision !== instructionRevision.getRevision() ||
+        sessionAcceptedContextRevision !== sessionContextRevision;
+      return stale ? null : /** @type {any} */ (session);
+    },
+    getQuietGap: () => (server ? server.getQuietGap() : null),
+    onEvent: (event) => {
+      process.stdout.write(formatContextCompactionLine(event));
+      sessionUsageLog.append(contextCompactionUsageRecord(event, currentBrain));
+      server?.broadcastContextCompaction(
+        event.type === "started"
+          ? { phase: "started", inputTokens: event.lastInputTokens, thresholdTokens: event.thresholdTokens, ratio: event.ratio }
+          : {
+              phase: event.ok ? "finished" : "failed",
+              durationMs: event.durationMs,
+              reason: event.reason,
+              personaInjected: event.personaInjected
+            }
+      );
+    }
+  });
+  const contextCompactionHooks = createContextCompactionHooks(settings, contextCompactor);
+  // 残量ゲージの材料（Codex は頭が Codex のときに App Server から・ElevenLabs は 10 分おき・cockpit-glance-redesign.md §9.2）。
+  // 監視は listen の後に始め、終了時に止める。キーやアカウント情報は状態にもログにも載せない。
+  const quotaMonitor = createQuotaMonitor({
+    readCodex: createCodexQuotaReader({ getBrain: () => currentBrain, getSession: () => session }),
+    readElevenLabs: () => fetchElevenLabsSubscription()
+  });
+  // 画面キャプチャの撮る係（常駐 PowerShell）。耳の Start で立ち上げ、耳の Stop・操縦席の終了で止める
+  // （discussion/ai-cohost/research/vision-capture-latency-2026-10.md §4）。使えない間の撮影は今の
+  // captureWindow（毎回起動）に戻る。記録は標準出力へ 1 行（数字と種類だけ）。
+  const residentCapture = createResidentCapture({
+    onEvent: (event) => process.stdout.write(formatCaptureEventLine(event))
+  });
   const lazyChannel = createLazyChannel(initialUrl, {
     onTrace: (event, fields) => fireDiagnostics.record(event, fields)
   });
@@ -860,8 +1560,8 @@ async function main() {
    * 冪等（既に生成済みなら何もしない）。env ガードは session 初回生成時に一度だけ通す。
    *
    * S6「会話が続く」: player は起動時（またはデバイス変更後の再生成時）に settings の出力デバイス名を
-   * env 経由で渡す（Domain A `createAudioPlayer({ deviceName })`）。未記憶なら deviceName 未指定 =
-   * 既定デバイス（S1〜S5 無退行）。
+   * env 経由で渡す（`createStreamPlayer({ deviceName })`）。未記憶なら deviceName 未指定 = 既定デバイス。
+   * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（耳の Start で先に作る）。
    */
   const ensureFireResources = () => {
     if (session == null) {
@@ -878,7 +1578,8 @@ async function main() {
       //  Codex 経路では codex-session が内部で OpenAI 版ガード（assertSubscriptionAuthEnvOpenAI）を
       //  onWarning 経由で走らせるため、ここで Anthropic ガードは呼ばない（別 provider へ Anthropic ガードを
       //  当てると誤った拒否/検査になる）。
-      if (currentBrain === "claude") {
+      //  2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session 経路なので同じガードを通す。
+      if (currentBrain === "claude" || currentBrain === "claude-opus-55") {
         const { warnings } = assertSubscriptionAuthEnv(process.env);
         for (const warning of warnings) {
           process.stderr.write(`[cockpit] WARN: ${warning}\n`);
@@ -897,6 +1598,10 @@ async function main() {
           memoryEnabled ? memoryText : ""
         ),
         onWarning: (w) => process.stderr.write(`[cockpit] WARN: ${w}\n`),
+        // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
+        onRateLimits: (/** @type {any} */ rateLimits) => {
+          if (isCodexBrainId(currentBrain)) quotaMonitor.mergeCodexUpdate(rateLimits);
+        },
         onInit: (init) =>
           process.stderr.write(
             `${JSON.stringify({ event: "session_init", model: init.model, apiKeySource: init.apiKeySource, tools: init.tools })}\n`
@@ -905,25 +1610,40 @@ async function main() {
       sessionInstructionRevision = instructionRevision.getRevision();
       sessionAcceptedContextRevision = sessionContextRevision;
     }
+    ensureVoiceResources();
+  };
+
+  /**
+   * 流し込みプレイヤー（常駐 PowerShell + C#・起動に約 0.5 秒）と声の差し替え口を用意する（冪等）。
+   * 耳の Start のときに呼んで先に起こしておく（申し送り 1・最初の Fire に起動を乗せない）。常駐が
+   * 落ちていたら作り直す。出力デバイスの変更は applyDesiredFireSettings が次の Fire の境目で反映する
+   * （revision 方式・進行中の発話は accepted snapshot の player を最後まで使う）。
+   */
+  const ensureVoiceResources = () => {
+    if (player != null && !player.isAlive()) {
+      try {
+        player.dispose();
+      } catch {
+        // best-effort（落ちた常駐は使わない）。
+      }
+      player = null;
+      playerAudioRevision = null;
+    }
     if (player == null) {
       const deviceName = audioDeviceHooks.getAudioDevice() ?? undefined;
-      player = createAudioPlayer({
+      player = createStreamPlayer({
         ...(deviceName ? { deviceName } : {}),
+        // 診断は行の種類だけ（id や本文は残さない）。
         onOutput: (line) => {
           const marker = typeof line === "string" ? line.split("\t", 1)[0] : "unknown";
           fireDiagnostics.record("player.child", { marker });
-          for (const listener of [...playerOutputListeners]) {
-            try {
-              listener(line);
-            } catch {
-              // Marker observers never own the resident player.
-            }
-          }
         },
         onError: () => fireDiagnostics.record("player.child.error")
       });
       playerAudioRevision = audioRevision;
     }
+    // 声の engine（Start で用意済みならそれ・Start より前の Fire は今の方式で作る。用意できなければ理由で投げる）。
+    voiceEngines.ensure(desiredTtsEngine);
   };
 
   const applyDesiredFireSettings = async () => {
@@ -951,6 +1671,9 @@ async function main() {
       } catch {
         // Best effort; the stale session is never reused for the next Fire.
       }
+      // 畳んだ頭の圧縮はもう続かない（dispose が待っている compact() を失敗で返し、ふつうは failed が先に届く）。
+      // 届かなかったときも操縦席の「圧縮中」を出しっぱなしにしない（冪等）。
+      server?.resetContextCompaction();
       if (session === stale) {
         session = null;
         sessionInstructionRevision = null;
@@ -968,21 +1691,29 @@ async function main() {
     getSession: () => session,
     ensureSessionCurrent: applyDesiredFireSettings
   });
+  // acquireFireResources が無い経路のための proxy（本番は accepted snapshot の player 実体を使う）。
   const playerProxy = {
-    /** @param {...any} playArgs */
-    play(...playArgs) {
+    /** @param {string} id @param {{ sampleRate: number; channels: number }} format */
+    open(id, format) {
       ensureFireResources();
-      return /** @type {any} */ (player).play(...playArgs);
+      return /** @type {any} */ (player).open(id, format);
     },
-    /** barge-in の声止め（S6）。play が走った後にしか呼ばれない = player は生成済み。best-effort。 */
+    /** @param {string} id @param {Uint8Array} pcm */
+    write(id, pcm) {
+      return player != null ? player.write(id, pcm) : false;
+    },
+    /** @param {string} id */
+    end(id) {
+      return player != null ? player.end(id) : false;
+    },
+    /** barge-in の声止め（S6）。open が走った後にしか呼ばれない = player は生成済み。best-effort。 */
     stop() {
-      if (player != null && typeof (/** @type {any} */ (player).stop) === "function") {
-        return /** @type {any} */ (player).stop();
-      }
+      if (player != null) player.stop();
     },
-    subscribeOutput(listener) {
-      playerOutputListeners.add(listener);
-      return () => playerOutputListeners.delete(listener);
+    /** @param {(event: any) => void} listener */
+    onEvent(listener) {
+      ensureVoiceResources();
+      return /** @type {any} */ (player).onEvent(listener);
     }
   };
   const productionSpeakDeps = Object.freeze({
@@ -996,19 +1727,14 @@ async function main() {
     }
     ensureFireResources();
     const acceptedSession = session;
+    // 進行中の発話はこの player / engine を最後まで使う（デバイス変更の作り直しは次の Fire の境目）。
     const acceptedPlayer = player;
-    const acceptedPlayerFacade = Object.freeze({
-      play: (...playArgs) => acceptedPlayer.play(...playArgs),
-      stop: () => acceptedPlayer.stop?.(),
-      subscribeOutput(listener) {
-        playerOutputListeners.add(listener);
-        return () => playerOutputListeners.delete(listener);
-      }
-    });
+    const acceptedEngine = voiceEngines.current();
     return Object.freeze({
       session: acceptedSession,
       channel: lazyChannel,
-      player: acceptedPlayerFacade,
+      player: acceptedPlayer,
+      engine: acceptedEngine,
       speakDeps: productionSpeakDeps,
       configuration: Object.freeze({
         brain: currentBrain,
@@ -1060,6 +1786,8 @@ async function main() {
     brainHooks.onSetBrain(choice); // 次回起動でも復元（file-backed・失敗寛容）。
     currentBrain = choice;
     sessionContextRevision += 1;
+    // Codex の残量は頭が Codex のときだけ（Codex でなくなったら不明に戻す・Codex 同士の切替は同じアカウントなので保つ）。
+    if (!isCodexBrainId(choice)) quotaMonitor.clearCodex();
     process.stdout.write(`[cockpit] brain set: ${choice}\n`);
   };
 
@@ -1148,7 +1876,10 @@ async function main() {
           fireDiagnostics.begin({
             injectedChars: typeof info.injectedChars === "number" ? info.injectedChars : null,
             includedCount: typeof info.includedCount === "number" ? info.includedCount : null,
-            vision: info.vision === true
+            vision: info.vision === true,
+            // 操縦席の発火番号ときっかけの種類（本文なし）で、診断の JSONL と画面のデータを結べるようにする。
+            fireNo: typeof info.fireId === "number" ? info.fireId : null,
+            causeType: info.cause && typeof info.cause.type === "string" ? info.cause.type : null
           });
         }
         hooks.onFire?.(info);
@@ -1160,7 +1891,15 @@ async function main() {
         });
         hooks.onDiagnostic?.(diagnostic);
       },
+      // 頭の文脈の記録: ask が返るたびに 1 行（Codex の頭のときだけ・本文なし）。
+      onAskRecord: (info) => {
+        if (isCodexBrainId(info?.brain ?? currentBrain)) sessionUsageLog.append(fireUsageRecord(info));
+      },
       onTrace: (trace) => {
+        // 発火のたびに Codex の使用率を読む（ask が済んだ直後・失敗したとき。App Server の起動後にしか読めない）。
+        if (trace?.event === "llm.ask.completed" || trace?.event === "fire.failed") void quotaMonitor.refreshCodex();
+        // 返事が終わるたびに、隙間で圧縮してよいかを確かめる（発火の後始末が済んでから）。
+        if (trace?.event === "fire.completed" || trace?.event === "fire.failed") contextCompactor.noteReplyFinished();
         if (trace?.event === "fire.completed") {
           fireDiagnostics.finish({ fired: trace.fired === true, reason: trace.reason ?? null });
           return;
@@ -1182,9 +1921,10 @@ async function main() {
       player: /** @type {any} */ (playerProxy),
       progressivePlayback: true,
       acquireFireResources: acquireAcceptedFireResources,
-      // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。captureImpl は既定（Domain A の
-      // captureWindow）のまま差し替えない。
+      // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。撮影は常駐の撮る係に頼む
+      // （vision-capture-latency §4・使えない間は captureWindow＝毎回起動に戻る）。
       getVisionTarget: visionTargetHooks.getVisionTarget,
+      captureImpl: residentCapture.capture,
       speakDeps: productionSpeakDeps,
       ...(windowMs != null ? { windowMs } : {}),
       ...(maxChars != null ? { maxChars } : {})
@@ -1267,10 +2007,62 @@ async function main() {
     // 配信間記憶: 記憶 ON/OFF の永続トグル + 手動「今日を記録」+ 現況(additive・POST +2・snapshot +1)。
     onSetMemoryEnabled,
     onMemoryRecord,
-    memoryStatus
+    memoryStatus,
+    // 圧縮を始める大きさ（設定の「頭脳・会話」タブ）: 保存 + 走っている compactor の差し替え・snapshot の compaction。
+    onSetCompactThresholdTokens: contextCompactionHooks.onSetCompactThresholdTokens,
+    contextCompactionStatus: contextCompactionHooks.contextCompactionStatus,
+    // 操縦席の文字起こし選択: 起動時に前回の選択を復元・Start ごとに記憶・遅延は標準出力へ 1 行（数字のみ）。
+    // ElevenLabs のキーは cockpit-server の既定（.env.elevenlabs.local をコード内で直接読む）に任せる。
+    sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
+    onSetSttEngine: sttEngineHooks.onSetSttEngine,
+    onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
+    // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶し、耳を開く前に engine を用意する
+    // （種類が変われば作り直す・ElevenLabs のキーはここで読む）。用意できなければ Start は理由つきで失敗する。
+    ttsEngineInitial: desiredTtsEngine,
+    onSetTtsEngine: ttsEngineHooks.onSetTtsEngine,
+    onPrepareVoiceEngine: (kind) => {
+      desiredTtsEngine = kind;
+      return voiceEngines.prepare(kind);
+    },
+    // 画面キャプチャの撮る係の寿命を耳に合わせる（vision-capture-latency §4 の 2）。close() でも止まる。
+    // 声の差し替え Wave 2: 流し込みプレイヤーと声の差し替え口も Start のときに起こす（最初の Fire に乗せない）。
+    onEarsStarted: () => {
+      residentCapture.start();
+      try {
+        ensureVoiceResources();
+      } catch (error) {
+        process.stderr.write(
+          `[cockpit] WARN: voice resources failed to start: ${error instanceof Error ? error.message : String(error)}\n`
+        );
+      }
+    },
+    onEarsStopped: () => residentCapture.stop(),
+    // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
+    // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
+    // （.env.decisions.local をコード内で直接読む）に任せる。
+    speakStartModeInitial: speakStartHooks.resolveInitialSpeakStartMode(),
+    onSetSpeakStartMode: speakStartHooks.onSetSpeakStartMode,
+    onSpeakNowJudgment: (info) => process.stdout.write(formatSpeakNowLine(info)),
+    // 相槌どうしの最小間隔は settings ファイルの backchannelMinIntervalSec（無ければ 8 秒・backchannel.md §2）。
+    backchannelMinIntervalMs: speakStartHooks.resolveBackchannelMinIntervalMs(),
+    // コメント判定（弾く判定は全モード・反応する判定は speak-now の間）: 忙しい間のコメントの扱いは settings から
+    // 復元（既定 あとで拾う）・切替ごとに記憶。鮮度と件数は settings ファイルの値（無ければ 20 秒 / 3 件）。
+    // 判定ごとに標準出力へ 1 行（コメント本文は書かない）。キーは speak-now と同じ既定の読み口。
+    commentBusyPolicyInitial: commentBusyHooks.resolveInitialCommentBusyPolicy(),
+    onSetCommentBusyPolicy: commentBusyHooks.onSetCommentBusyPolicy,
+    commentHoldMaxAgeMs: commentHold.maxAgeMs,
+    commentHoldMaxCount: commentHold.maxCount,
+    onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info)),
+    // 操縦席の作り直し 1 回目（データ側）: 残量・遅延のしきい値（settings の latencyWarnSec / latencyAlertSec・既定 4 / 6 秒）・
+    // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
+    quotaSource: quotaMonitor,
+    latencyThresholds: resolveLatencyThresholdsFromSettings(settings),
+    onReplyLatency: (record) => process.stdout.write(formatReplyLatencyLine(record))
   });
 
   const url = await server.listen();
+  quotaMonitor.start();
+  contextCompactor.start();
   process.stdout.write(`[cockpit] listening on ${url} (loopback only)\n`);
   process.stdout.write(`[cockpit] open  ${url}/  in your browser — pick a mic, press Start, speak.\n`);
   const startupUrl = lazyChannel.getUrl();
@@ -1296,6 +2088,7 @@ async function main() {
     if (closing) return;
     closing = true;
     process.stdout.write("\n[cockpit] closing…\n");
+    contextCompactor.dispose();
     // 配信間記憶: 引き金③(SIGINT 最終版)。★重要な配管事実: 転写バッファは pipeline 所有(cockpit-server
     // 内)で、server.close() は pipeline を dispose して null に戻す(cockpit-server.mjs の close 契約)。
     // よって転写のスナップショットは close() より前に確保する(close 後には転写が取れない)。
@@ -1323,6 +2116,7 @@ async function main() {
           // best-effort
         }
       }
+      voiceEngines.dispose();
       if (lazyChannel) {
         try {
           await lazyChannel.close();
@@ -1331,6 +2125,11 @@ async function main() {
         }
       }
     } finally {
+      // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
+      residentCapture.stop();
+      quotaMonitor.stop();
+      // 記録の書き残しを少しだけ待つ（固まらないよう上限つき）。
+      await Promise.race([sessionUsageLog.flush(), new Promise((resolve) => setTimeout(resolve, 1000))]);
       process.exit(0);
     }
   };

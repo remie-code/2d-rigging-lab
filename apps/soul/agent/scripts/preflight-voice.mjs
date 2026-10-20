@@ -1,67 +1,51 @@
 // @ts-check
 /**
- * 声の器官 実機疎通 preflight（S6 Domain A・機械テストではない）— apps/soul/agent。
- * **自分で合成した短い小音量 WAV だけを鳴らす**（鉄の規律: 実マイク音声・録音物は使わない）。
+ * 声の器官 実機疎通 preflight（S6 Domain A → 声の差し替え Wave 2 で流し込みプレイヤーへ）— apps/soul/agent。
+ * 機械テストではない。**自分で合成した短い小音量サイン波だけを鳴らす**（鉄の規律: 実マイク音声・録音物は使わない）。
  *
- *   小音量サイン波 WAV を temp に合成（数百ms・振幅≈8%）
- *     → createAudioPlayer()（既定デバイス・実 WinRT MediaPlayer 常駐 PowerShell）
- *     → ① 既定デバイス再生: PLAY → STARTED → 自然完了 ENDED を観測（再生実区間の追跡）
- *     → ② STOP による途中停止: 長め WAV を PLAY → 再生途中で STOP → STOPPED（誤 ENDED なし）・isPlaying false
+ *   小音量サイン波の PCM をメモリ上で合成（数百ms・振幅≈8%・ファイルには書かない）
+ *     → createStreamPlayer()（既定デバイス・常駐 PowerShell + C# の WASAPI 再生器）
+ *     → ① 既定デバイス再生: OPEN → DATA → END → STARTED → 自然完了 ENDED を観測
+ *     → ② STOP による途中停止: 長めの PCM を流し、再生途中で STOP → STOPPED（誤 ENDED なし）
  *     → ③ listAudioDevices(): アクティブな出力デバイスを列挙（{ id, name }）
- *     → プレイヤー dispose・合成 WAV を必ず削除（temp ディレクトリごと rm）
+ *     → プレイヤー dispose
  *
- * **音は短く小さく**（振幅≈8%・300ms/800ms）。合成 WAV は temp のみ・終了時に必ず消す。実 SDK は使わない。
+ * **音は短く小さく**（振幅≈8%・300ms/800ms）。実 SDK は使わない。
  *
  * 使い方: node apps/soul/agent/scripts/preflight-voice.mjs
  *   exit 0 = PASS / exit 1 = 失敗。標準出力に RESULT: PASS / EXIT=0 を出す。
  *
- * 注意: 実 WinRT MediaPlayer を叩くため実際にスピーカーから小さく音が鳴る。既定デバイスに向く
- * （env SOUL_AUDIO_DEVICE_NAME 未指定＝S1 挙動）。デバイス指定経路そのものは列挙（③）で疎通を確認する。
+ * 注意: 実 WASAPI を叩くため実際にスピーカーから小さく音が鳴る。既定デバイスに向く
+ * （env SOUL_AUDIO_DEVICE_NAME 未指定）。デバイス指定経路そのものは列挙（③）で疎通を確認する。
  */
 
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-
-import { createAudioPlayer, listAudioDevices } from "../src/voice/audio-player.mjs";
+import { createStreamPlayer } from "../src/voice/stream-player.mjs";
+import { listAudioDevices } from "../src/voice/audio-devices.mjs";
 
 const log = (msg) => process.stdout.write(`[preflight-voice] ${msg}\n`);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const SAMPLE_RATE = 24000;
 
-/** 小音量サイン波 WAV（44100Hz mono 16bit）を組む。amp は 16bit フルスケールの ≈8%。 */
-function buildSineWav(ms, { sampleRate = 44100, freq = 440, amp = 2600 } = {}) {
+/** 小音量サイン波の PCM16LE（mono）を組む。amp は 16bit フルスケールの ≈8%。 */
+function buildSinePcm(ms, { sampleRate = SAMPLE_RATE, freq = 440, amp = 2600 } = {}) {
   const n = Math.round((sampleRate * ms) / 1000);
   const data = Buffer.alloc(n * 2);
   for (let i = 0; i < n; i += 1) {
     const s = Math.round(amp * Math.sin((2 * Math.PI * freq * i) / sampleRate));
     data.writeInt16LE(s, i * 2);
   }
-  const buf = Buffer.alloc(44 + data.length);
-  buf.write("RIFF", 0);
-  buf.writeUInt32LE(36 + data.length, 4);
-  buf.write("WAVE", 8);
-  buf.write("fmt ", 12);
-  buf.writeUInt32LE(16, 16);
-  buf.writeUInt16LE(1, 20);
-  buf.writeUInt16LE(1, 22);
-  buf.writeUInt32LE(sampleRate, 24);
-  buf.writeUInt32LE(sampleRate * 2, 28);
-  buf.writeUInt16LE(2, 32);
-  buf.writeUInt16LE(16, 34);
-  buf.write("data", 36);
-  buf.writeUInt32LE(data.length, 40);
-  data.copy(buf, 44);
-  return buf;
+  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
 }
 
-/** onOutput 行が cond を満たすまで待つ（実プロセス往復の非同期を吸収・有界）。 */
-function waitForLine(lines, cond, timeoutMs, label) {
+/** 事象が cond を満たすまで待つ（実プロセス往復の非同期を吸収・有界）。 */
+function waitForEvent(events, cond, timeoutMs, label) {
   const start = Date.now();
   return new Promise((resolve, reject) => {
     const tick = () => {
-      if (cond(lines)) return resolve(undefined);
+      const hit = events.find(cond);
+      if (hit) return resolve(hit);
       if (Date.now() - start > timeoutMs) {
-        return reject(new Error(`timed out waiting for ${label}; got ${JSON.stringify(lines)}`));
+        return reject(new Error(`timed out waiting for ${label}; got ${JSON.stringify(events.map((e) => e.type))}`));
       }
       setTimeout(tick, 20);
     };
@@ -76,52 +60,50 @@ async function main() {
     failed = true;
   };
 
-  const dir = mkdtempSync(path.join(tmpdir(), "voice-preflight-"));
-  const shortWav = path.join(dir, "short.wav");
-  const longWav = path.join(dir, "long.wav");
-  writeFileSync(shortWav, buildSineWav(300));
-  writeFileSync(longWav, buildSineWav(800));
-
-  /** @type {ReturnType<typeof createAudioPlayer> | null} */
+  /** @type {ReturnType<typeof createStreamPlayer> | null} */
   let player = null;
-  const outLines = [];
+  /** @type {any[]} */
+  const events = [];
   const errLines = [];
 
   try {
-    player = createAudioPlayer({
-      onOutput: (line) => outLines.push(line),
+    const t0 = Date.now();
+    player = createStreamPlayer({
+      onEvent: (event) => events.push(event),
       onError: (line) => errLines.push(line)
     });
+    const ready = await player.whenReady();
+    if (!ready) throw new Error("stream player did not become ready");
+    log(`READY（spawn + C# コンパイル込み ${Date.now() - t0}ms）`);
 
     // ── ① 既定デバイス再生 → STARTED → 自然完了 ENDED ────────────────────────
-    log("① 既定デバイス再生（短 WAV 300ms）");
+    log("① 既定デバイス再生（300ms）");
+    events.length = 0;
     const t1 = Date.now();
-    player.play(shortWav);
-    await waitForLine(outLines, (ls) => ls.some((l) => l.startsWith("STARTED")), 8000, "STARTED(short)");
-    log(`  STARTED 観測 (spawn+WinRT ロード込み ${Date.now() - t1}ms)`);
+    player.open("preflight-short", { sampleRate: SAMPLE_RATE, channels: 1 });
+    player.write("preflight-short", buildSinePcm(300));
+    player.end("preflight-short");
+    await waitForEvent(events, (e) => e.type === "started", 8000, "STARTED(short)");
+    log(`  STARTED 観測（OPEN から ${Date.now() - t1}ms）`);
     const t2 = Date.now();
-    await waitForLine(outLines, (ls) => ls.some((l) => l.startsWith("ENDED")), 8000, "ENDED(short)");
-    const endedMs = Date.now() - t2;
-    log(`  ENDED 観測（自然完了検出・STARTED から ${endedMs}ms）isPlaying=${player.isPlaying()}`);
-    if (player.isPlaying() !== false) fail("自然完了後 isPlaying が false でない");
+    await waitForEvent(events, (e) => e.type === "ended", 8000, "ENDED(short)");
+    log(`  ENDED 観測（STARTED から ${Date.now() - t2}ms）current=${JSON.stringify(player.current())}`);
+    if (player.current() !== null) fail("自然完了後も今の発話が残っている");
 
-    // ── ② STOP による途中停止（長 WAV を再生途中で止める）─────────────────────
-    log("② STOP 途中停止（長 WAV 800ms・250ms で STOP）");
-    outLines.length = 0;
-    player.play(longWav);
-    await waitForLine(outLines, (ls) => ls.some((l) => l.startsWith("STARTED")), 8000, "STARTED(long)");
+    // ── ② STOP による途中停止（長い音を再生途中で止める）─────────────────────
+    log("② STOP 途中停止（800ms・250ms で STOP）");
+    events.length = 0;
+    player.open("preflight-long", { sampleRate: SAMPLE_RATE, channels: 1 });
+    player.write("preflight-long", buildSinePcm(800));
+    player.end("preflight-long");
+    await waitForEvent(events, (e) => e.type === "started", 8000, "STARTED(long)");
     await sleep(250); // 800ms の再生途中。
-    const midPlaying = player.isPlaying();
     player.stop();
-    await waitForLine(outLines, (ls) => ls.some((l) => l.startsWith("STOPPED")), 8000, "STOPPED(long)");
+    await waitForEvent(events, (e) => e.type === "stopped", 8000, "STOPPED(long)");
     await sleep(300); // STOP 後に誤 ENDED が来ないことを確認する猶予。
-    const sawEnded = outLines.some((l) => l.startsWith("ENDED"));
-    log(
-      `  停止応答: ${JSON.stringify(outLines)} midPlaying=${midPlaying} 誤ENDED=${sawEnded} isPlaying=${player.isPlaying()}`
-    );
-    if (midPlaying !== true) fail("STOP 前に isPlaying が true でない（再生していない？）");
+    const sawEnded = events.some((e) => e.type === "ended");
+    log(`  停止応答: ${JSON.stringify(events.map((e) => e.type))} 誤ENDED=${sawEnded}`);
     if (sawEnded) fail("STOP で止めたのに ENDED（自然完了）が誤発火した");
-    if (player.isPlaying() !== false) fail("STOP 後 isPlaying が false でない");
 
     // ── ③ listAudioDevices（列挙）──────────────────────────────────────────
     log("③ listAudioDevices() 列挙");
@@ -150,13 +132,6 @@ async function main() {
       player?.dispose();
     } catch {
       // best-effort
-    }
-    // 合成 WAV を temp ディレクトリごと必ず削除（検証音をディスクに残さない）。
-    try {
-      rmSync(dir, { recursive: true, force: true });
-      log("合成 WAV を削除（temp ディレクトリごと rm）");
-    } catch (rmError) {
-      log(`WARN: WAV 削除に失敗: ${rmError instanceof Error ? rmError.message : String(rmError)}`);
     }
   }
   log(`EXIT=${failed ? 1 : 0}`);

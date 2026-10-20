@@ -5,8 +5,9 @@
  * 操縦席 UI 改定 Domain C の追加抽出。現 cockpit.html の設定系ハンドラ（loadDevices / loadWindows /
  * loadAudioDevices の一覧構築・各 POST の失敗文言・視界の現況表示）から DOM 構築 / fetch 配線を
  * 剥がして「応答 JSON → 表示構造体 / 文字列」の導出だけを取り出す。機能同値（fixture で固定）。
- * 加えて導線（cockpit-redesign.md §4）の「初回 = 設定空なら引き出しを自動展開」の判定式
- * `shouldAutoOpenSettings` をここで固定する（stateLoaded ガードは app.mjs 側・fixture 固定）。
+ * （旧導線の「初回 = 設定空なら引き出しを自動展開」の判定式 shouldAutoOpenSettings は、操縦席の作り直しで
+ * 初回の自動展開をやめた（cockpit-glance-redesign.md §7・§9.2）ため削除した。配信前は会話の場所の中央の
+ * 「準備・設定を開く」が入口。）
  *
  * 様式統一（全 view-logic 共通・L0 裁定）: 行テキスト=文字列・状態導出={text, className, …}構造体・
  * **非表示（エラーなし）= null**。
@@ -40,6 +41,15 @@
  *  - memoryStatusLabel      → 「記憶 N 件を搭載（最新: HH:MM:SS）」の表示文言（count/lastRecordAtMs
  *    から導出・lastRecordAtMs はローカル時刻表示へ変換=Domain A 申し送り 3・format-time.mjs の
  *    formatClock を再利用）。
+ *
+ * 圧縮を始める大きさ（設定「頭脳・会話」タブ・context-growth-2026-10.md §8 の後の合意 2026-10-19）:
+ *  - COMPACT_THRESHOLD_*            → 既定 20 万・範囲 5 万〜45 万・1 万刻み（src/mind/context-compactor.mjs の定数と
+ *                                     同じ値。画面は src/mind を import できないので写しを持ち、テストで一致を固定する）。
+ *  - compactThresholdOptions        → select の選択肢（万トークン・既定に「（既定）」）。
+ *  - compactThresholdSelection      → state snapshot の compaction.thresholdTokens を選択肢の値へ。
+ *  - compactThresholdStatusLabel    → 「いま 20 万トークン（既定）」の表示文言。
+ *  - COMPACT_THRESHOLD_NOTE         → Codex の頭のときだけ効く旨の短い説明。
+ *  - compactThresholdPostErrorText  → POST /api/compact-threshold 応答の失敗文言（memoryPostErrorText の写経）。
  */
 
 import { formatClock } from "./format-time.mjs";
@@ -229,6 +239,89 @@ export function memoryStatusLabel(memory) {
   return `記憶 ${count} 件を搭載（最新: ${last}）`;
 }
 
+// ── 圧縮を始める大きさ（設定「頭脳・会話」タブ）──────────────────────────────
+
+/** 既定の目安（トークン・src/mind/context-compactor.mjs の DEFAULT_COMPACT_THRESHOLD_TOKENS と同じ値）。 */
+export const COMPACT_THRESHOLD_DEFAULT_TOKENS = 200_000;
+/** 選べる下限（COMPACT_THRESHOLD_TOKENS_MIN と同じ値）。 */
+export const COMPACT_THRESHOLD_MIN_TOKENS = 50_000;
+/** 選べる上限（COMPACT_THRESHOLD_TOKENS_MAX と同じ値）。 */
+export const COMPACT_THRESHOLD_MAX_TOKENS = 450_000;
+/** 選択肢の刻み（1 万トークン）。 */
+export const COMPACT_THRESHOLD_STEP_TOKENS = 10_000;
+/** Codex の頭のときだけ効く旨の短い説明（drawer-note に出す）。 */
+export const COMPACT_THRESHOLD_NOTE = "Codex の頭のときだけ効きます。直近の入力がこの大きさを超えたら、会話の隙間で圧縮します。";
+
+/**
+ * トークン数を「万」の数字へ（20 万 → "20"・手で書いた 230,097 → "23"・小数第 1 位まで）。
+ * @param {number} tokens
+ * @returns {string}
+ */
+function tokensInMan(tokens) {
+  return String(Math.round(tokens / 1000) / 10);
+}
+
+/**
+ * 有効な目安か（整数で下限〜上限・src/mind の normalizeCompactThresholdTokens と同じ判定）。
+ * @param {unknown} v
+ * @returns {v is number}
+ */
+function isValidCompactThreshold(v) {
+  return typeof v === "number" && Number.isInteger(v) && v >= COMPACT_THRESHOLD_MIN_TOKENS && v <= COMPACT_THRESHOLD_MAX_TOKENS;
+}
+
+/**
+ * 圧縮を始める大きさの select の選択肢（5 万〜45 万を 1 万刻み・value はトークン数の文字列・既定に「（既定）」）。
+ * 今の値が刻みに乗らない（設定ファイルを手で書いた）ときは、その値も並べに差し込む（選択が空にならないように）。
+ * @param {number | null | undefined} [currentTokens]
+ * @returns {Array<{ value: string; label: string }>}
+ */
+export function compactThresholdOptions(currentTokens) {
+  /** @type {number[]} */
+  const values = [];
+  for (let t = COMPACT_THRESHOLD_MIN_TOKENS; t <= COMPACT_THRESHOLD_MAX_TOKENS; t += COMPACT_THRESHOLD_STEP_TOKENS) values.push(t);
+  if (isValidCompactThreshold(currentTokens) && !values.includes(currentTokens)) {
+    values.push(currentTokens);
+    values.sort((a, b) => a - b);
+  }
+  return values.map((t) => ({
+    value: String(t),
+    label: tokensInMan(t) + " 万トークン" + (t === COMPACT_THRESHOLD_DEFAULT_TOKENS ? "（既定）" : "")
+  }));
+}
+
+/**
+ * state snapshot の compaction（{ thresholdTokens }）を選択肢の値へ（未注入・不正は null = 選択を変えない）。
+ * @param {{ thresholdTokens?: number | null } | null | undefined} compaction
+ * @returns {string | null}
+ */
+export function compactThresholdSelection(compaction) {
+  const t = compaction && compaction.thresholdTokens;
+  return isValidCompactThreshold(t) ? String(t) : null;
+}
+
+/**
+ * 今の目安の表示文言（「いま 20 万トークン（既定）」/「いま 25 万トークン（既定は 20 万）」）。未注入は "not available"。
+ * @param {{ thresholdTokens?: number | null } | null | undefined} compaction
+ * @returns {string}
+ */
+export function compactThresholdStatusLabel(compaction) {
+  const t = compaction && compaction.thresholdTokens;
+  if (typeof t !== "number" || !Number.isFinite(t)) return "not available";
+  const suffix =
+    t === COMPACT_THRESHOLD_DEFAULT_TOKENS ? "（既定）" : "（既定は " + tokensInMan(COMPACT_THRESHOLD_DEFAULT_TOKENS) + " 万）";
+  return "いま " + tokensInMan(t) + " 万トークン" + suffix;
+}
+
+/**
+ * POST /api/compact-threshold 応答 → エラー文言（memoryPostErrorText の写経）。成功は null。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function compactThresholdPostErrorText(res) {
+  return settingPostErrorText(res, "compaction control not available");
+}
+
 /**
  * POST /api/chat/connect 応答 → エラー文言（:787-791）。
  * 503 = chat 未結線・400 = invalid source・その他 !ok = connect failed。成功は null。
@@ -244,6 +337,47 @@ export function chatConnectErrorText(res) {
 
 /** 空 source で Connect を押した時の文言（:779）。 */
 export const CHAT_EMPTY_SOURCE_ERROR = "enter a stream URL / video ID first";
+
+/**
+ * 文字起こしの方式の選択肢（設定「入出力」タブのマイクの下・cockpit-stt-selection.md §4.2）。
+ * value は POST /api/ears/start の body `sttEngine`（サーバー側 STT_ENGINES と同じ語彙）。
+ * @type {ReadonlyArray<{ value: string; label: string }>}
+ */
+export const STT_ENGINE_OPTIONS = Object.freeze([
+  Object.freeze({ value: "whisper", label: "ローカル（whisper）" }),
+  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" })
+]);
+
+/**
+ * state.stt.engine を選択肢の値へ（未知/欠落は null = 選択を変えない）。
+ * @param {{ engine?: string | null } | null | undefined} stt
+ * @returns {string | null}
+ */
+export function sttEngineSelection(stt) {
+  const engine = stt && stt.engine;
+  return STT_ENGINE_OPTIONS.some((o) => o.value === engine) ? /** @type {string} */ (engine) : null;
+}
+
+/**
+ * 声の方式の選択肢（設定「入出力」タブの文字起こしの下・声の差し替え Wave 3 Domain E）。文字起こしと同じく
+ * Start の前に選び、効くのは次の Start から。value は POST /api/ears/start の body `ttsEngine`（サーバー側
+ * TTS_ENGINES と同じ語彙）。
+ * @type {ReadonlyArray<{ value: string; label: string }>}
+ */
+export const TTS_ENGINE_OPTIONS = Object.freeze([
+  Object.freeze({ value: "aivis", label: "AivisSpeech" }),
+  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" })
+]);
+
+/**
+ * state.tts.engine を選択肢の値へ（未知/欠落は null = 選択を変えない・sttEngineSelection と同型）。
+ * @param {{ engine?: string | null } | null | undefined} tts
+ * @returns {string | null}
+ */
+export function ttsEngineSelection(tts) {
+  const engine = tts && tts.engine;
+  return TTS_ENGINE_OPTIONS.some((o) => o.value === engine) ? /** @type {string} */ (engine) : null;
+}
 
 /**
  * POST /api/ears/start 応答 → 失敗文言（:740-742）。!ok（409 transitioning / 500 とも）は
@@ -270,7 +404,8 @@ const REQUEST_ERROR_PREFIX = {
   chatDisconnect: "chat disconnect error", //        :802
   brain: "brain error", //  多頭化 Domain C（POST /api/brain・audioDevice の写経）
   memory: "memory error", //          配信間記憶（POST /api/memory・audioDevice の写経）
-  memoryRecord: "memory record error" // 配信間記憶（POST /api/memory-record・同型）
+  memoryRecord: "memory record error", // 配信間記憶（POST /api/memory-record・同型）
+  compactThreshold: "compaction threshold error" // 圧縮を始める大きさ（POST /api/compact-threshold・同型）
 };
 
 /**
@@ -281,34 +416,4 @@ const REQUEST_ERROR_PREFIX = {
  */
 export function requestErrorText(kind, e) {
   return REQUEST_ERROR_PREFIX[kind] + ": " + e;
-}
-
-/**
- * 導線（cockpit-redesign.md §4）: 初回（設定が空）は設定引き出しを自動展開・二回目以降
- * （何か記憶済み）は観測フィードへ直行、の判定式。
- *
- * 入力は **GET /api/state の成功応答 snapshot**（呼び出し側 = app.mjs が「取得完了
- * （stateLoaded=true）後に一度だけ」呼ぶ・fetch 完了前/失敗時の誤展開はそのガードで防ぐ）。
- *
- * 「設定済み（= 二回目以降）」とみなす材料（6 設定キーのうち snapshot に「未設定」と区別可能な
- * 形で載るもの + 稼働状態）:
- *  - channel.configured     … 器 Channel URL 記憶済み
- *  - visionTarget.title     … 視界（ゲーム窓）記憶済み
- *  - audioDevice.name       … 声の出力先記憶済み
- *  - chat.source            … YouTube 配信 source 記憶済み
- *  - device                 … 耳が現デバイスで稼働中（タブ開き直し = 観測直行が正）
- * ※ lastDevice（マイク記憶）は snapshot に載らず（GET /api/devices 応答のみ）判定に使わない。
- * ※ selfFire は {enabled} | null（scheduler 有無）で「未記憶」と「明示 false」が snapshot 上
- *   区別できないため判定に使わない。
- * @param {any} s  GET /api/state の snapshot。
- * @returns {boolean}  true = 設定が空（初回）→ 自動展開。
- */
-export function shouldAutoOpenSettings(s) {
-  if (!s) return false; // snapshot 欠落では開かない（誤展開防止・観測直行が既定）。
-  if (s.channel && s.channel.configured) return false;
-  if (s.visionTarget && s.visionTarget.title) return false;
-  if (s.audioDevice && s.audioDevice.name) return false;
-  if (s.chat && s.chat.source) return false;
-  if (s.device) return false;
-  return true;
 }

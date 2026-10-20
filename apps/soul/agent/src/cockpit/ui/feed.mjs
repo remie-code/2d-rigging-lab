@@ -1,6 +1,7 @@
 // @ts-check
 /**
- * ui: 観測フィード（主役・cockpit-redesign.md §2/§7）。
+ * ui: 観測フィード（操縦席の作り直しで準備・設定の「ログ」タブへ移した・cockpit-glance-redesign.md §5・§9.2。
+ * 中身は今のフィードそのまま: 全行・マーカー・ゴースト行・usage・discarded・uptime）。
  *
  * rows.mjs が構築した行レコードを**機械的に描くだけ**の層（表示文字列の導出はここに無い・
  * すべて view-logic → rows.mjs で済んでいる・L0 裁定）。現 cockpit.html の #timeline
@@ -17,6 +18,8 @@
  *  - usageNote:  string  usage 表示（view-logic usageNoteText 導出済み・初期 ""）。
  *  - discarded:  number|string  破棄カウンタ（SSE discard / state スナップショット由来）。
  *  - uptimeText: string  formatHms 導出済みの uptime（初期 "00:00:00"）。
+ *  - active:     boolean  ログのタブが見えているか（隠れている間は高さが 0 で末尾追従が効かないため、
+ *                見えた時点で追従中なら末尾へ寄せ直す）。省略時は true（常に見えている扱い）。
  *
  * トップレベル副作用ゼロ（export function のみ）。
  */
@@ -75,6 +78,7 @@ export function FeedRow({ row }) {
     case "fire-marker":
     case "barge-in-marker":
     case "self-fire-marker":
+    case "judgment-marker":
       // addFireMarkerRow :448-461 / addBargeInMarkerRow :512-525 / addSelfFireMarkerRow :531-543 同値。
       return html`<div class=${"row " + row.kind}>
         <span class="time">${row.timeText}</span><span class="who">${row.whoText}</span>
@@ -87,9 +91,9 @@ export function FeedRow({ row }) {
 
 /**
  * 観測フィード本体（スクロール領域 + メタ計器 + 「最新へ ↓」）。
- * @param {{ rows: any[]; usageNote?: string; discarded?: number | string; uptimeText?: string }} props
+ * @param {{ rows: any[]; usageNote?: string; discarded?: number | string; uptimeText?: string; active?: boolean }} props
  */
-export function Feed({ rows, usageNote, discarded, uptimeText }) {
+export function Feed({ rows, usageNote, discarded, uptimeText, active = true }) {
   const scrollRef = useRef(/** @type {HTMLElement | null} */ (null));
   const stuckRef = useRef(true); // 追従状態の即時参照（effect と onScroll の間で 1 render 遅れない）。
   const [stuck, setStuck] = useState(true);
@@ -98,7 +102,7 @@ export function Feed({ rows, usageNote, discarded, uptimeText }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (el && stuckRef.current) el.scrollTop = el.scrollHeight;
-  }, [rows]);
+  }, [rows, active]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;

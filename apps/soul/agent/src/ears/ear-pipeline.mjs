@@ -50,8 +50,20 @@
  *  必ず通る。you のみを転写経路として扱いたい購読者（cockpit の SSE transcript 放送など）は、
  *  受け側で speaker:"soul" を除外すること（soul の正経路は orchestrator の onSoulTranscript）。
  *
+ * ── 文字起こしの分岐（whisper / ElevenLabs・操縦席の文字起こし選択）──────────────
+ *  合意: discussion/ai-cohost/implementation/screens/cockpit-stt-selection.md §3・§8。
+ *  ffmpeg → フレーマ → VAD → セグメンタ（speechStart/End/Cancel の合図）は engine に関わらず同じ。
+ *  分岐するのは転写だけ:
+ *   - "whisper"（既定・従来どおり）: speechEnd ごとにリングを切り出して whisper-server へ。
+ *   - "elevenlabs": whisper-server を起動しない。マイクの PCM をそのまま ElevenLabs リアルタイム
+ *     STT（elevenlabs-stt.mjs）へ流し続け、**commit 1 件を転写 1 件**として転写バッファへ積む
+ *     （partial は積まない）。speechEnd は転写のきっかけにはならず、遅延の物差しの起点にだけ使う
+ *     （「直前の commit 以降で最後の speechEnd → commit 到着」）。転写の startMs/endMs は commit
+ *     到着時点のストリーム時刻（start = end。本番でこの値を読む処理は無い）。空の commit は
+ *     転写バッファの既存の規則どおり discarded として数える。
+ *
  * ── クリーンシャットダウン ─────────────────────────────────────────
- *  dispose() 一発で ffmpeg・VAD セッション・whisper-server・キュー・タイマが全部畳まれる。
+ *  dispose() 一発で ffmpeg・VAD セッション・whisper-server（または ElevenLabs 接続）・キュー・タイマが全部畳まれる。
  *  見張りタイマは各発話処理の finally で必ず clear（unref しない規律は S2 §6.1 の教訓）。
  */
 
@@ -64,6 +76,10 @@ import { encodeWav } from "../voice/wav-encode.mjs";
 import { createWhisperServer } from "./whisper-server.mjs";
 import { createWhisperInference, computeAudioCtx } from "./whisper-inference.mjs";
 import { createTranscriptBuffer } from "./transcript-buffer.mjs";
+import { createElevenLabsRealtimeStt } from "./elevenlabs-stt.mjs";
+
+/** 文字起こしの方式（操縦席の選択肢）。既定は whisper（従来どおり）。 */
+export const STT_ENGINES = Object.freeze(["whisper", "elevenlabs"]);
 
 /** 常駐の既定（根拠は上記ヘッダと experiments/s2-ears.md）。 */
 export const EAR_DEFAULTS = Object.freeze({
@@ -92,9 +108,15 @@ export const EAR_DEFAULTS = Object.freeze({
  * @param {object} [options.asr]      { queueMax=4, utteranceTimeoutMs=45000, timeoutMs=30000,
  *   dynamicAudioCtx=true, audioCtxOptions }。
  * @param {number} [options.ringMs=40000]  PCM リングバッファ保持長。
+ * @param {{ engine?: "whisper" | "elevenlabs"; apiKey?: string; elevenLabs?: object }} [options.stt]
+ *   文字起こしの方式（既定 whisper）。elevenlabs のときは apiKey が要り（呼び出し側が env ファイルから
+ *   読んで渡す）、elevenLabs は createElevenLabsRealtimeStt への追加設定（WebSocketImpl 等）。
+ * @param {(status: string, info: { reason: string | null }) => void} [options.onSttStatus]
+ *   ElevenLabs 接続の状態遷移（connecting / up / reconnecting / down）。whisper では呼ばれない。
  * @param {(event: object) => void} [options.onVadEvent]     speechStart/End/Cancel（全部）。
- * @param {(entry: object, meta: { latencyMs: number; audioCtx: number | null }) => void} [options.onTranscript]
- *   転写がバッファに積まれた（正経路）。
+ * @param {(entry: object, meta: { latencyMs: number | null; audioCtx: number | null }) => void} [options.onTranscript]
+ *   転写がバッファに積まれた（正経路）。latencyMs は whisper が「speechEnd → 転写」、ElevenLabs が
+ *   「直前の commit 以降で最後の speechEnd → commit 到着」（その間に speechEnd が無ければ null）。
  * @param {(diag: object) => void} [options.onDiagnostic]    落とした発話・死・破棄などの診断。
  * @param {() => number} [options.nowImpl]  壁時計（レイテンシ計測用）。既定 Date.now。
  * @param {typeof setTimeout} [options.setTimeoutImpl]
@@ -102,6 +124,7 @@ export const EAR_DEFAULTS = Object.freeze({
  * @param {typeof createFfmpegCapture} [options.captureFactory]   テスト注入。
  * @param {typeof createSileroVad} [options.vadFactory]           テスト注入。
  * @param {typeof createWhisperServer} [options.serverFactory]    テスト注入。
+ * @param {typeof createElevenLabsRealtimeStt} [options.sttFactory]  テスト注入（既定 createElevenLabsRealtimeStt）。
  * @param {(wavBytes: Uint8Array, opts?: { audioCtx?: number }) => Promise<{ text: string; rawText: string }>} [options.transcribeImpl]
  *   転写呼び出しの差し替え（テスト注入。既定は whisper-inference を server.baseUrl で構築）。
  * @returns {{
@@ -136,6 +159,13 @@ export function createEarPipeline(options = {}) {
   const captureFactory = options.captureFactory ?? createFfmpegCapture;
   const vadFactory = options.vadFactory ?? createSileroVad;
   const serverFactory = options.serverFactory ?? createWhisperServer;
+  const sttFactory = options.sttFactory ?? createElevenLabsRealtimeStt;
+  const sttEngine = options.stt?.engine ?? "whisper";
+  if (!STT_ENGINES.includes(sttEngine)) {
+    throw new RangeError(`createEarPipeline: unknown stt engine ${JSON.stringify(sttEngine)}.`);
+  }
+  const useElevenLabs = sttEngine === "elevenlabs";
+  const onSttStatus = options.onSttStatus ?? (() => {});
 
   const onVadEvent = options.onVadEvent ?? (() => {});
   const onTranscript = options.onTranscript ?? (() => {});
@@ -154,6 +184,11 @@ export function createEarPipeline(options = {}) {
   let server = null;
   /** @type {ReturnType<typeof createFfmpegCapture> | null} */
   let capture = null;
+  /** @type {ReturnType<typeof createElevenLabsRealtimeStt> | null} */
+  let stt = null;
+  /** ElevenLabs: 直前の commit 以降で最後の speechEnd の壁時計（遅延の物差しの起点）。 */
+  /** @type {number | null} */
+  let lastSpeechEndWallMs = null;
   /** @type {(wavBytes: Uint8Array, opts?: { audioCtx?: number }) => Promise<{ text: string; rawText: string }>} */
   let transcribe = options.transcribeImpl ?? (() => Promise.reject(new Error("not started")));
 
@@ -173,7 +208,8 @@ export function createEarPipeline(options = {}) {
     asrFailed: 0,
     asrDropped: 0,
     asrSkipped: 0,
-    vadErrors: 0
+    vadErrors: 0,
+    sttCommits: 0
   };
 
   /** 現在処理中ジョブのメタ（ワーカーは直列なので 1 個で足りる）。 */
@@ -199,6 +235,11 @@ export function createEarPipeline(options = {}) {
 
   /** speechEnd → リング切り出し（clamp）→ WAV → ASR キュー。 */
   function handleSpeechEnd(event) {
+    if (useElevenLabs) {
+      // ElevenLabs では転写は commit が担う。speechEnd は遅延の物差しの起点だけ（whisper の endWallMs と同じ壁時計）。
+      lastSpeechEndWallMs = nowImpl();
+      return;
+    }
     // [0, 実データ末尾] への clamp はリングバッファの契約（flush 時 pad 超過・maxSpeech 分割の
     // 2×pad 重なり・容量超過破棄のどれが来ても安全）。
     const cut = ring.slice({ startMs: event.startMs, endMs: event.endMs });
@@ -309,9 +350,40 @@ export function createEarPipeline(options = {}) {
     }
   }
 
-  /** ffmpeg からの PCM チャンク → フレーム化 → リング書き込み + VAD 直列チェーン。 */
+  /**
+   * ElevenLabs の commit 1 件 → 転写バッファへ 1 件（空は既存規則どおり discarded）。
+   * @param {{ text: string }} commit
+   */
+  function handleCommit(commit) {
+    if (disposed) return;
+    counters.sttCommits += 1;
+    const tMs = ring.totalMs(); // commit 到着時点のストリーム時刻（start = end・合意 §8）。
+    const latencyMs = lastSpeechEndWallMs != null ? nowImpl() - lastSpeechEndWallMs : null;
+    lastSpeechEndWallMs = null; // 物差しは「直前の commit 以降で最後の speechEnd」。
+    currentMeta = { latencyMs: /** @type {any} */ (latencyMs), audioCtx: null };
+    try {
+      const result = buffer.append({ startMs: tMs, endMs: tMs, text: typeof commit.text === "string" ? commit.text : "" });
+      if (!result.appended) {
+        onDiagnostic({ type: "transcriptDiscarded", reason: result.reason, startMs: tMs, endMs: tMs, latencyMs });
+      }
+    } catch (error) {
+      // 外部購読者の listener 契約違反（whisper 経路の transcribeAndAppend と同じ扱い）。
+      onDiagnostic({
+        type: "listenerError",
+        message: error instanceof Error ? error.message : String(error),
+        startMs: tMs,
+        endMs: tMs
+      });
+    } finally {
+      currentMeta = null;
+    }
+  }
+
+  /** ffmpeg からの PCM チャンク → フレーム化 → リング書き込み + VAD 直列チェーン（+ ElevenLabs へ送信）。 */
   function handlePcm(chunk) {
     if (disposed) return;
+    // ElevenLabs へは取り込みのバイト列をそのまま流す（繋ぎ直し中は stt 側で捨てる）。
+    if (stt) stt.sendPcm(chunk);
     const frames = framer.push(chunk);
     for (const frame of frames) {
       const tMs = ring.totalMs(); // このフレームの開始時刻 = 書き込み前のストリーム末尾。
@@ -369,6 +441,40 @@ export function createEarPipeline(options = {}) {
       if (disposed) throw new Error("earPipeline.start: already disposed.");
       started = true;
 
+      if (useElevenLabs) {
+        // ElevenLabs: whisper-server は起動しない。VAD 準備 → 接続（session_started）→ マイクを開く。
+        vad = vadFactory(options.vad ?? {});
+        stt = sttFactory({
+          ...(/** @type {any} */ (options.stt?.elevenLabs) ?? {}),
+          apiKey: /** @type {string} */ (options.stt?.apiKey),
+          setTimeoutImpl,
+          clearTimeoutImpl,
+          onCommit: handleCommit,
+          onStatus: (status, info) => onSttStatus(status, info),
+          onDiagnostic: (d) => onDiagnostic(d)
+        });
+        try {
+          await vad.init();
+          await stt.connect();
+        } catch (error) {
+          await this.dispose();
+          throw new Error(
+            `earPipeline.start: failed to bring up ears (${error instanceof Error ? error.message : String(error)})`,
+            { cause: error }
+          );
+        }
+        if (disposed) return;
+        capture = captureFactory({
+          ...(options.capture ?? {}),
+          sampleRate,
+          channels: 1,
+          onPcm: handlePcm,
+          onError: (line) => onDiagnostic({ type: "ffmpegStderr", line }),
+          onExit: handleCaptureExit
+        });
+        return;
+      }
+
       vad = vadFactory(options.vad ?? {});
       server = serverFactory({
         ...whisperOptions,
@@ -410,7 +516,7 @@ export function createEarPipeline(options = {}) {
     streamMs: () => ring.totalMs(),
 
     stats() {
-      return { ...counters, asrQueue: asrQueue.length, asrDown, buffer: buffer.stats() };
+      return { ...counters, sttEngine, asrQueue: asrQueue.length, asrDown, buffer: buffer.stats() };
     },
 
     /**
@@ -429,6 +535,7 @@ export function createEarPipeline(options = {}) {
         // best-effort
       }
       server?.dispose();
+      stt?.dispose();
     }
   };
 }

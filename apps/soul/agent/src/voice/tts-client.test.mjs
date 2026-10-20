@@ -192,3 +192,52 @@ test("synthesis は非 200 をメッセージ付きで throw", async () => {
   const client = createTtsClient({ fetchImpl });
   await assert.rejects(() => client.synthesis({ a: 1 }), /500.*engine down/s);
 });
+
+test("audioQuery/synthesis は中止の合図（signal）を fetch へそのまま渡す・渡さなければ付けない", async () => {
+  /** @type {any[]} */
+  const inits = [];
+  const fetchImpl = async (_url, init) => {
+    inits.push(init);
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      async json() { return { accent_phrases: [] }; },
+      async arrayBuffer() { return new Uint8Array([1]).buffer; }
+    };
+  };
+  const client = createTtsClient({ fetchImpl });
+  const controller = new AbortController();
+  await client.audioQuery("あ", { signal: controller.signal });
+  await client.synthesis({ accent_phrases: [] }, { signal: controller.signal });
+  await client.audioQuery("あ");
+  assert.equal(inits[0].signal, controller.signal);
+  assert.equal(inits[1].signal, controller.signal);
+  assert.equal("signal" in inits[2], false);
+});
+
+test("accentPhrases（読みだけの口）: /accent_phrases を POST で叩き配列を返す・signal を渡す・空文字と非 200 は投げる", async () => {
+  /** @type {any[]} */
+  const calls = [];
+  const phrases = [{ moras: [{ text: "ア", vowel: "a" }], pause_mora: null }];
+  const fetchImpl = async (/** @type {string} */ url, /** @type {any} */ init) => {
+    calls.push({ url, init });
+    if (url.includes("speaker=7")) {
+      return { ok: false, status: 500, statusText: "Internal Server Error", async text() { return "down"; } };
+    }
+    return { ok: true, status: 200, statusText: "OK", async json() { return phrases; } };
+  };
+  const client = createTtsClient({ baseUrl: "http://127.0.0.1:10101", speaker: 888753760, fetchImpl });
+  const controller = new AbortController();
+  const result = await client.accentPhrases("あいう", { signal: controller.signal });
+  assert.deepEqual(result, phrases);
+  assert.equal(calls[0].init.method, "POST");
+  assert.match(calls[0].url, /^http:\/\/127\.0\.0\.1:10101\/accent_phrases\?text=/);
+  assert.match(calls[0].url, /speaker=888753760/);
+  assert.ok(!calls[0].url.includes("あいう"), "本文は URL エンコードされる");
+  assert.equal(calls[0].init.signal, controller.signal);
+  await assert.rejects(() => client.accentPhrases(""), TypeError);
+  assert.equal(calls.length, 1, "空文字は叩かない");
+  const failing = createTtsClient({ speaker: 7, fetchImpl });
+  await assert.rejects(() => failing.accentPhrases("x"), /accent_phrases failed: HTTP 500.*down/s);
+});

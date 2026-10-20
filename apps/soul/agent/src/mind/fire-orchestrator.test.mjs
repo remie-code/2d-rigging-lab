@@ -16,7 +16,9 @@ import { MODEL_IDENTITIES } from "./model-identity.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { createBargeInGate, BARGE_IN_GRACE_MS, BARGE_IN_NOTE, KILL_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
 import { NG_WORDS, NG_BLOCKED_NOTE } from "./ng-words.mjs";
-import { createProgressiveSpeechDelivery } from "../voice/progressive-speech-delivery.mjs";
+import { createSpeechStreamer } from "../voice/speech-streamer.mjs";
+import { createFakeStreamPlayer } from "../test-support/fake-stream-player.mjs";
+import { createFakeVoiceEngine, defaultFakeChunks } from "../test-support/fake-voice-engine.mjs";
 import { formatTranscriptForDigest } from "./memory.mjs";
 
 // 発火オーケストレータの縦貫通テスト（S3 Domain A）。実 SDK・実 TTS・実器は一切使わない
@@ -66,40 +68,55 @@ function deferred() {
   };
 }
 
+/**
+ * 文ごとの読み上げの流し込みプレイヤーの代役（声の差し替え Wave 2）。`plays` は open された発話 id（順）。
+ * STARTED/ENDED/ERROR は emitProgressiveOwned で手で流す。
+ */
 function makeProgressivePlayer() {
-  const listeners = new Set();
-  const plays = [];
-  const playbackIds = [];
-  let stops = 0;
-  return {
-    plays,
-    playbackIds,
-    get stops() { return stops; },
-    play(path, playbackId) { plays.push(path); playbackIds.push(playbackId); },
-    stop() { stops += 1; },
-    subscribeOutput(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    emit(line) {
-      for (const listener of [...listeners]) listener(line);
-    }
-  };
+  const player = createFakeStreamPlayer();
+  return Object.assign(player, {
+    get plays() { return player.opened; }
+  });
 }
 
 function emitProgressiveOwned(player, type, index = player.plays.length - 1) {
-  player.emit(`${type}\t${player.playbackIds[index]}\t${player.plays[index]}`);
+  player.emitFor(type.toLowerCase(), index);
 }
 
+/** 旧 prepareSpeech の代役（文 → 何か・throw で合成失敗）。中身は捨て、決まった音と時間割を返す。 */
 function progressiveArtifact(text) {
+  return { text };
+}
+
+/** prepare（旧 prepareSpeechImpl 相当）を待ってから既定のかたまりを返す声の差し替え口。 */
+function makeProgressiveEngine(prepare = progressiveArtifact) {
+  return createFakeVoiceEngine({
+    synthesizeImpl: (text) =>
+      (async function* () {
+        await prepare(text);
+        yield* defaultFakeChunks(text);
+      })()
+  });
+}
+
+/**
+ * 旧 sendSpeech だけを持つ偽物の channel を intent.speechStream の形に寄せる（文ごとの open = 旧 sendSpeech）。
+ * append / end は accepted、口閉じ（sendSet）は元の channel のものを使う。
+ */
+function streamChannel(channel) {
+  const accepted = async () => ({ result: "accepted", error: null, rttMs: 1 });
   return {
-    wavPath: `${text.charCodeAt(0)}.wav`,
-    timeline: [{ timeMs: 0, vowel: "a", s: 0.5 }],
-    wavDurationSec: 0.1,
-    rawMoraCount: 1,
-    wavBytes: 100,
-    speechChars: text.length
+    ...channel,
+    openSpeech: channel.openSpeech ?? (channel.sendSpeech ? (...args) => channel.sendSpeech(...args) : accepted),
+    appendSpeech: channel.appendSpeech ?? accepted,
+    endSpeech: channel.endSpeech ?? accepted
   };
+}
+
+/** 文ごとの読み上げの運び手（本物）を、代役の engine と channel で作る。 */
+function progressiveStreamer(prepare) {
+  return (options) =>
+    createSpeechStreamer({ ...options, engine: makeProgressiveEngine(prepare), channel: streamChannel(options.channel) });
 }
 
 test("FIRE_SYSTEM_PROMPT: 最小仮面が export される", () => {
@@ -129,19 +146,23 @@ test("buildFireSystemPrompt: unknown/absent identity は Cody 既定へ戻る", 
   assert.equal(buildFireSystemPrompt({ id: "unknown" }), FIRE_SYSTEM_PROMPT);
 });
 
-test("conversation instruction profile: five technical brain ids resolve independently and preserve default bytes", () => {
-  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]);
+test("conversation instruction profile: six technical brain ids resolve independently and preserve default bytes", () => {
+  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
   const baseline = resolveConversationInstructionProfile("claude");
   assert.equal(baseline.body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
   assert.equal(buildFireSystemPrompt(MODEL_IDENTITIES.cody), FIRE_SYSTEM_PROMPT);
-  const override = resolveConversationInstructionProfile("codex-55", {
-    "codex-55": "Use a short custom response."
+  const override = resolveConversationInstructionProfile("codex-61-sol", {
+    "codex-61-sol": "Use a short custom response."
   });
   assert.equal(override.hasOverride, true);
   assert.equal(override.body, "Use a short custom response.");
   assert.equal(resolveConversationInstructionProfile("codex").hasOverride, false);
   const unknown = resolveConversationInstructionProfile("unknown", { claude: "must-not-leak", unknown: "bad" });
   assert.equal(unknown.brainId, "claude");
+  // 削除済みの GPT-5.5（2026-10-16）は未知 id として既定へ倒れ、保存済み上書きも引き継がない。
+  const removed = resolveConversationInstructionProfile("codex-55", { "codex-55": "stale override" });
+  assert.equal(removed.brainId, "claude");
+  assert.equal(removed.hasOverride, false);
   assert.equal(unknown.body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
   assert.equal(resolveConversationInstructionProfile("codex", { codex: "   " }).body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
   const customPrompt = buildFireSystemPrompt(MODEL_IDENTITIES.chappy, override.body);
@@ -1264,14 +1285,24 @@ const BARGE_TIMELINE = [
   { timeMs: 500, vowel: "a", s: 0.85 }
 ];
 
-/** timeline・wavDurationSec・playbackStartedAtMs を返す fake speak（barge-in 材料込み）。 */
+/**
+ * timeline・playbackStartedAtMs と鳴り終わりの `ended` を返す fake speak（barge-in 材料込み）。
+ * 声の差し替え Wave 2: 自然完了は WAV 長のタイマーではなく ended（本物は player の ENDED）。finish() で鳴り終わらせる。
+ * stop / snapshot を持たないので、中断の stop と口閉じは orchestrator が player / channel へ直接送る。
+ */
 function makeBargeSpeak({ timeline = BARGE_TIMELINE, wavDurationSec = 2, playbackStartedAtMs = 1000 } = {}) {
   const spoken = [];
+  /** @type {Array<(v: any) => void>} */
+  const enders = [];
   return {
     spoken,
+    finish() {
+      for (const end of enders.splice(0)) end({ status: "completed", cause: "completed" });
+    },
     speakImpl: async (text, deps) => {
       spoken.push({ text, deps });
-      return { timeline, rttMs: 0, wavDurationSec, wavPath: "C:/tmp/fake.wav", playbackStartedAtMs };
+      const ended = new Promise((resolve) => enders.push(resolve));
+      return { timeline, rttMs: 0, wavDurationSec, wavPath: "C:/tmp/fake.wav", playbackStartedAtMs, ended };
     }
   };
 }
@@ -1429,8 +1460,8 @@ test("interrupt なし: 自然完了で全文を soul 追記（完了時タイ�
   // 完了前は soul 未追記（タイミング変更の要）。
   assert.equal(buffer.all().length, 1);
 
-  // 再生尺 2000ms 経過 → 自然完了。
-  timers.advance(2000);
+  // 鳴り終わり（ENDED）→ 自然完了。
+  speak.finish();
   const result = await p;
   assert.equal(result.fired, true);
   assert.equal(result.interrupted, undefined);
@@ -1605,8 +1636,8 @@ test("結線: 窓内 speechCancel は interrupt を呼ばず自然完了する�
   assert.equal(interruptCount, 0);
   assert.equal(pl.calls.stop, 0); // 声は止まっていない。
 
-  // 自然完了で全文が積まれる。
-  orchTimers.advance(3000);
+  // 自然完了（ENDED）で全文が積まれる。
+  speak.finish();
   const result = await p;
   assert.equal(result.fired, true);
   assert.equal(result.interrupted, undefined);
@@ -1783,7 +1814,7 @@ test("revive: 再生中キル後に revive すると次の fire() が普通に�
   const second = orch.fire();
   await flushMicrotasks();
   assert.equal(orch.getState(), "speaking"); // busy 固着していない証拠（thinking→speaking に進めた）。
-  timers.advance(2000); // 自然完了。
+  speak.finish(); // 自然完了（ENDED）。
   const result = await second;
   assert.equal(result.fired, true);
   assert.equal(result.interrupted, undefined); // interrupted 汚染なし。
@@ -2107,11 +2138,7 @@ test("C2: Codex delta/TTS/playback を overlapし、LLM完了後もmatching ENDE
     channel,
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: async (text) => progressiveArtifact(text),
-      cleanupArtifact: () => {}
-    }),
+    speechStreamerFactory: progressiveStreamer(async (text) => progressiveArtifact(text)),
     onState: (state) => states.push(state),
     onProgressiveTerminal: (outcome) => terminals.push(outcome),
     onTrace: (entry) => traces.push(entry)
@@ -2120,13 +2147,14 @@ test("C2: Codex delta/TTS/playback を overlapし、LLM完了後もmatching ENDE
   const firePromise = orch.fire();
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(player.plays, ["19968.wav"], "first sentence starts while LLM turn is still open");
+  assert.equal(player.plays.length, 1, "first sentence starts while LLM turn is still open");
   emitProgressiveOwned(player, "STARTED", 0);
   emitProgressiveOwned(player, "ENDED", 0);
   finishAsk.resolve();
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(player.plays, ["19968.wav", "20108.wav"]);
+  assert.equal(player.plays.length, 2);
+  assert.notEqual(player.plays[0], player.plays[1], "each sentence is its own utterance id");
   let fireSettled = false;
   firePromise.then(() => { fireSettled = true; });
   await Promise.resolve();
@@ -2149,7 +2177,7 @@ test("C2: Codex delta/TTS/playback を overlapし、LLM完了後もmatching ENDE
   assert.ok(
     traces.some(
       (entry) =>
-        entry.event === "progressive.playback.activated" &&
+        entry.event === "speech.playback.activated" &&
         typeof entry.jobId === "string" &&
         typeof entry.playbackId === "string" &&
         entry.requestId === "req-1" &&
@@ -2159,7 +2187,9 @@ test("C2: Codex delta/TTS/playback を overlapし、LLM完了後もmatching ENDE
   orch.dispose();
 });
 
-test("C2: progressive productionでもClaude/full-result snapshotはlegacy one-shotをexact once維持する", async () => {
+// 2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session（full-result）なので同じ one-shot 経路。
+for (const claudeBrain of ["claude", "claude-opus-55"]) {
+test(`C2: progressive productionでもClaude/full-result snapshot（${claudeBrain}）はlegacy one-shotをexact once維持する`, async () => {
   const buffer = bufferWithYou("Claude fallback");
   const fakeSpeak = makeFakeSpeak();
   let askCount = 0;
@@ -2181,7 +2211,7 @@ test("C2: progressive productionでもClaude/full-result snapshotはlegacy one-s
       session,
       channel: fakeChannel,
       player: fakePlayer,
-      configuration: { brain: "claude" }
+      configuration: { brain: claudeBrain }
     }),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
@@ -2193,6 +2223,7 @@ test("C2: progressive productionでもClaude/full-result snapshotはlegacy one-s
   assert.deepEqual(terminals, [], "Claude does not create a progressive delivery generation");
   orch.dispose();
 });
+}
 
 test("C2 barge gate: ask開始後first delta前のinterruptはnot-speakingでsame Fireが正常完了する", { timeout: 5000 }, async () => {
   const buffer = bufferWithYou("delta前 race");
@@ -2211,11 +2242,7 @@ test("C2 barge gate: ask開始後first delta前のinterruptはnot-speakingでsam
     channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: () => progressiveArtifact("正常。"),
-      cleanupArtifact: () => {}
-    }),
+    speechStreamerFactory: progressiveStreamer(() => progressiveArtifact("正常。")),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
 
@@ -2254,11 +2281,7 @@ test("C2 barge gate: PLAY issuedでもmatching STARTED前のinterruptはno-opで
     channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: () => progressiveArtifact("待機。"),
-      cleanupArtifact: () => {}
-    }),
+    speechStreamerFactory: progressiveStreamer(() => progressiveArtifact("待機。")),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
 
@@ -2308,11 +2331,7 @@ test("C2 barge gate: audible prefix後のinter-sentence gapはbarge可能でlate
     channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: (text) => progressiveArtifact(text),
-      cleanupArtifact: () => {}
-    }),
+    speechStreamerFactory: progressiveStreamer((text) => progressiveArtifact(text)),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
 
@@ -2391,11 +2410,7 @@ test("C2: progressive kill clears active/queued generation, late marker cannot c
     channel,
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: async (text) => progressiveArtifact(text),
-      cleanupArtifact: () => {}
-    }),
+    speechStreamerFactory: progressiveStreamer(async (text) => progressiveArtifact(text)),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
 
@@ -2417,7 +2432,8 @@ test("C2: progressive kill clears active/queued generation, late marker cannot c
   const freshFire = orch.fire();
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(player.plays.at(-1), "26032.wav");
+  assert.equal(player.plays.length, 2, "fresh generation opens a fresh utterance");
+  assert.match(player.plays.at(-1), /^fire-2:/);
   // Repeat the old marker after fresh activation; exact path ownership rejects it.
   emitProgressiveOwned(player, "ENDED", 0);
   emitProgressiveOwned(player, "STARTED", 1);
@@ -2455,12 +2471,7 @@ test("C2/C3: safe prefix ENDED後のcross-delta NG abortをexact once渡しparti
     },
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) =>
-      createProgressiveSpeechDelivery({
-        ...options,
-        prepareSpeechImpl: () => progressiveArtifact("安全。"),
-        cleanupArtifact: () => {}
-      }),
+    speechStreamerFactory: progressiveStreamer(() => progressiveArtifact("安全。")),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
 
@@ -2504,12 +2515,7 @@ test("C2/C3: played prefix followed by LLM rejection reports exactly once and co
     },
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) =>
-      createProgressiveSpeechDelivery({
-        ...options,
-        prepareSpeechImpl: () => progressiveArtifact("聞こえた。"),
-        cleanupArtifact: () => {}
-      }),
+    speechStreamerFactory: progressiveStreamer(() => progressiveArtifact("聞こえた。")),
     onProgressiveTerminal: (outcome) => terminals.push(outcome)
   });
 
@@ -2554,12 +2560,7 @@ test("C2 private outcome: channel activation failure settles hook exactly once a
     },
     player: makeProgressivePlayer(),
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) =>
-      createProgressiveSpeechDelivery({
-        ...options,
-        prepareSpeechImpl: () => progressiveArtifact("送信失敗。"),
-        cleanupArtifact: () => {}
-      }),
+    speechStreamerFactory: progressiveStreamer(() => progressiveArtifact("送信失敗。")),
     onProgressiveTerminal: (outcome) => terminals.push(outcome),
     onDiagnostic: (diag) => diags.push(diag)
   });
@@ -2608,11 +2609,7 @@ test("C3: prefix completion後のchannel/marker failureは発話済みprefix+固
       },
       player,
       progressivePlayback: true,
-      progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-        ...options,
-        prepareSpeechImpl: (text) => progressiveArtifact(text),
-        cleanupArtifact: () => {}
-      }),
+      speechStreamerFactory: progressiveStreamer((text) => progressiveArtifact(text)),
       onProgressiveTerminal: (outcome) => terminals.push(outcome),
       onSoulTranscript: (entry) => visible.push(entry)
     });
@@ -2676,14 +2673,10 @@ test("C3: zero-completed channel/prepare failureはnormal fireErrorだけをexac
       },
       player,
       progressivePlayback: true,
-      progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-        ...options,
-        prepareSpeechImpl: (text) => {
+      speechStreamerFactory: progressiveStreamer((text) => {
           if (failure === "prepare" && fireNumber === 1) throw new Error("prepare failed before playback");
           return progressiveArtifact(text);
-        },
-        cleanupArtifact: () => {}
-      }),
+        }),
       onDiagnostic: (diag) => diags.push(diag),
       onProgressiveTerminal: (outcome) => terminals.push(outcome)
     });
@@ -2740,11 +2733,7 @@ test("C3: continuityはpartial直後のnext askでexact once消費し、そのas
     channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: (text) => progressiveArtifact(text),
-      cleanupArtifact: () => {}
-    }),
+    speechStreamerFactory: progressiveStreamer((text) => progressiveArtifact(text)),
     onProgressiveTerminal: (outcome) => terminals.push(outcome),
     onSoulTranscript: (entry) => visible.push(entry)
   });
@@ -2800,11 +2789,7 @@ test("C3: completed prefix後のkill/disposeはlate suffixを正本化せず同�
       channel: { async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; } },
       player,
       progressivePlayback: true,
-      progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-        ...options,
-        prepareSpeechImpl: (text) => progressiveArtifact(text),
-        cleanupArtifact: () => {}
-      }),
+      speechStreamerFactory: progressiveStreamer((text) => progressiveArtifact(text)),
       onSoulTranscript: (entry) => visible.push(entry),
       onProgressiveTerminal: (outcome) => terminals.push(outcome)
     });
@@ -2862,11 +2847,7 @@ test("C3: resource snapshot待ちのoverlap Fireはbusyとなりpending correcti
       acquireCount += 1;
       return acquireCount === 1 ? resources : await acquireNext.promise;
     },
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: (text) => progressiveArtifact(text),
-      cleanupArtifact: () => {}
-    })
+    speechStreamerFactory: progressiveStreamer((text) => progressiveArtifact(text))
   });
 
   const partial = orch.fire();
@@ -2924,11 +2905,7 @@ test("C3: pre-ask vision capture failureはcorrectionを保持し、次のvision
     channel: fakeChannel,
     player,
     progressivePlayback: true,
-    progressiveDeliveryFactory: (options) => createProgressiveSpeechDelivery({
-      ...options,
-      prepareSpeechImpl: (text) => progressiveArtifact(text),
-      cleanupArtifact: () => {}
-    })
+    speechStreamerFactory: progressiveStreamer((text) => progressiveArtifact(text))
   });
 
   const partial = orch.fire();
@@ -3231,5 +3208,763 @@ test("onSoulTranscript: NG ブロック時の entry には latencyMs フィー�
   // 自然完了パスのみに限定＝検問所（containsNgWord 判定）そのものは 1 行も変更していない）。
   assert.equal(Object.prototype.hasOwnProperty.call(souls[0], "latencyMs"), false);
 
+  orch.dispose();
+});
+
+// ── コメント反応の内部指示（fire({ instruction })・discussion/ai-cohost/decisions/comment-react/integration.md §1-7）──
+
+test("fire({instruction}): この 1 発の ask の先頭にだけ付く・会話ログには残らない・次の fire には付かない", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("このボス強い");
+  buffer.append({ startMs: 0, endMs: 0, text: "その武器なに？", speaker: "viewer", displayName: "taro" });
+  const fakeSpeak = makeFakeSpeak();
+  /** @type {any[]} */
+  const inputs = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(input) {
+        inputs.push(input);
+        return { replyText: "それは大剣だよ" };
+      }
+    },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer
+  });
+  const instruction = "[内部の指示: 視聴者のコメントに反応してください。\n視聴者(taro): 「その武器なに？」]";
+  const r = await orch.fire({ instruction });
+  assert.equal(r.fired, true);
+  assert.ok(inputs[0].startsWith(`${instruction}\n\n`), "先頭に付く");
+  assert.match(inputs[0], /viewer\(taro\): その武器なに？/, "会話窓はそのまま続く");
+  assert.equal(JSON.stringify(buffer.all()).includes("内部の指示"), false, "会話ログに残らない");
+  await orch.fire();
+  assert.equal(inputs[1].includes("内部の指示"), false, "次の fire には付かない");
+  await orch.fire({ instruction: "   " });
+  assert.equal(inputs[2].includes("内部の指示"), false, "空の指示は無し扱い");
+  orch.dispose();
+});
+
+test("fire({vision:\"preferred\", instruction}): 画像付き ask でも最初の text ブロックの先頭に付く", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("見て");
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 8, height: 6, elapsedMs: 1 });
+  /** @type {any[]} */
+  const inputs = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(input) {
+        inputs.push(input);
+        return { replyText: "うん" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "ゲーム"
+  });
+  await orch.fire({ vision: "preferred", instruction: "[内部の指示: X]" });
+  assert.ok(Array.isArray(inputs[0]));
+  assert.equal(inputs[0][0].type, "image");
+  assert.ok(inputs[0][1].text.startsWith("[内部の指示: X]\n\n"));
+  orch.dispose();
+});
+
+test("fire({vision:false, instruction}): 画面を撮らない通常発火の ask の先頭に付く（speak-now の相槌・backchannel.md §2）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("いやーこのボス強いんだよね");
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 8, height: 6, elapsedMs: 1 });
+  /** @type {any[]} */
+  const inputs = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(input) {
+        inputs.push(input);
+        return { replyText: "へー" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "ゲーム" // 視覚対象があっても vision:false なら撮らない。
+  });
+  const r = await orch.fire({ vision: false, instruction: "今は配信者の話に相槌を打つタイミング。" });
+  assert.equal(r.fired, true);
+  assert.equal(capture.calls.length, 0, "撮らない");
+  assert.equal(typeof inputs[0], "string", "画像なしの ask");
+  assert.ok(inputs[0].startsWith("今は配信者の話に相槌を打つタイミング。\n\n"));
+  assert.equal(JSON.stringify(buffer.all()).includes("相槌を打つタイミング"), false, "会話ログに残らない");
+  orch.dispose();
+});
+
+// ── 操縦席の作り直し 1 回目（データの通り道）: 発火番号・きっかけ・推論の範囲・遅延 ─────────────────
+//  discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9。
+
+/** 手で進める単調時計（遅延の区間を決定論で測る）。 */
+function makeClock(start = 0) {
+  let t = start;
+  return { now: () => t, set: (v) => { t = v; }, add: (d) => { t += d; } };
+}
+
+test("発火番号: 受理ごとに 1 から振り、受理・ask・soul 追記・遅延・戻り値に同じ番号ときっかけが載る", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const fires = [];
+  const asks = [];
+  const souls = [];
+  const latencies = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "うん", ttftMs: 321 }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onFire: (f) => fires.push(f),
+    onAsk: (a) => asks.push(a),
+    onSoulTranscript: (e) => souls.push(e),
+    onLatency: (l) => latencies.push(l)
+  });
+  const cause = { type: "speak-now", choice: "respond", probability: 0.72, triggerSeq: 0 };
+  const r1 = await orch.fire({ cause });
+  assert.equal(r1.fireId, 1);
+  assert.equal(fires[0].fireId, 1);
+  assert.deepEqual(fires[0].cause, cause);
+  assert.equal(asks.length, 1);
+  assert.deepEqual(
+    { fireId: asks[0].fireId, first: asks[0].windowFirstSeq, last: asks[0].windowLastSeq, n: asks[0].includedCount, vision: asks[0].vision },
+    { fireId: 1, first: 0, last: 0, n: 1, vision: false }
+  );
+  assert.equal(souls[0].fireId, 1);
+  assert.equal(souls[0].speaker, "soul");
+  assert.equal(latencies.length, 1, "1 返事 1 回");
+  assert.equal(latencies[0].fireId, 1);
+  assert.deepEqual(latencies[0].cause, cause);
+  assert.equal(latencies[0].llmFirstMs, 321, "delta の無い頭は session の ttftMs");
+  assert.equal(latencies[0].spoken, true);
+  assert.equal(latencies[0].voiceMs, null, "STARTED を見られない player では声の区間は測れない");
+
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  const r2 = await orch.fire();
+  assert.equal(r2.fireId, 2);
+  assert.equal(fires[1].cause, null, "cause 無しの手動は null");
+  assert.deepEqual([asks[1].windowFirstSeq, asks[1].windowLastSeq], [0, 2], "窓は末尾から連続（you, soul, you）");
+  orch.dispose();
+});
+
+test("発火番号: 受理しなかった発火（耳未起動・空窓）は番号を振らず、cause は棄却の通知にも載る", { timeout: 5000 }, async () => {
+  const fires = [];
+  /** @type {any} */
+  let buffer = null;
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "うん" }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onFire: (f) => fires.push(f)
+  });
+  const cause = { type: "manual", vision: false };
+  const r = await orch.fire({ cause });
+  assert.equal(r.reason, "ears-not-running");
+  assert.equal(r.fireId, undefined);
+  assert.deepEqual(fires[0], { accepted: false, reason: "ears-not-running", cause });
+  buffer = createTranscriptBuffer();
+  const empty = await orch.fire({ cause });
+  assert.equal(empty.reason, "empty-window");
+  assert.deepEqual(fires[1], { accepted: false, reason: "empty-window", cause });
+  buffer.append({ startMs: 0, endMs: 1, text: "やあ" });
+  const ok = await orch.fire({ cause });
+  assert.equal(ok.fireId, 1, "棄却は番号を消費しない");
+  orch.dispose();
+});
+
+test("推論の範囲: 画面ありの発火も ask の時点で窓の始まりと終わりの seq を通知する（受理はキャプチャ前）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("画面見て");
+  buffer.append({ startMs: 0, endMs: 0, text: "ほら", speaker: "you" });
+  const asks = [];
+  const fires = [];
+  const latencies = [];
+  const clock = makeClock(1000);
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => { clock.add(200); return { replyText: "見えた", ttftMs: 150 }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "テストゲーム",
+    captureImpl: async () => { clock.add(600); return { jpegBase64: "AAAA", width: 10, height: 10, elapsedMs: 580 }; },
+    monotonicNowImpl: clock.now,
+    onFire: (f) => fires.push(f),
+    onAsk: (a) => asks.push(a),
+    onLatency: (l) => latencies.push(l)
+  });
+  const r = await orch.fire({ vision: true, cause: { type: "manual", vision: true } });
+  assert.equal(r.fired, true);
+  assert.equal(fires[0].accepted, true);
+  assert.equal(fires[0].fireId, 1);
+  assert.equal(fires[0].includedCount, undefined, "画面ありの受理は撮影前なので窓をまだ持たない（範囲は onAsk）");
+  assert.deepEqual(
+    [asks[0].fireId, asks[0].windowFirstSeq, asks[0].windowLastSeq, asks[0].vision],
+    [1, 0, 1, true]
+  );
+  assert.equal(latencies[0].screenMs, 580, "画面 = キャプチャの elapsedMs");
+  assert.equal(latencies[0].vision, true);
+  orch.dispose();
+});
+
+test("推論の範囲: 画面優先（preferred）の劣化フォールバックでも ask の時点で範囲を通知する", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("呼んだ？");
+  const asks = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "うん" }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "テストゲーム",
+    captureImpl: /** @type {any} */ (async () => ({ error: { kind: "not-found", message: "x" } })),
+    onAsk: (a) => asks.push(a)
+  });
+  const r = await orch.fire({ vision: "preferred" });
+  assert.equal(r.fired, true);
+  assert.equal(asks.length, 1);
+  assert.deepEqual([asks[0].windowFirstSeq, asks[0].windowLastSeq, asks[0].vision], [0, 0, false]);
+  orch.dispose();
+});
+
+test("遅延（一括の読み上げ）: TTS = engine に頼んだ→最初の音、声 = 最初の音→STARTED（engine に依存しない名前）、声が鳴った時点で 1 回だけ通知", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("Claude 経路");
+  const clock = makeClock(0);
+  const latencies = [];
+  /** @type {number | null} */
+  let latencyAtStart = null;
+  const speakImpl = async (_text, deps) => {
+    clock.set(1500);
+    deps.onTrace("voice.synthesis.requested", { jobId: "fire-1:sentence-1", speechChars: 3 });
+    clock.set(1900);
+    deps.onTrace("voice.audio.first_chunk", { jobId: "fire-1:sentence-1", pcmBytes: 10 });
+    // engine の内訳の名前は遅延の区間に使わない。
+    deps.onTrace("tts.synthesis.completed", { wavBytes: 10 });
+    clock.set(2100);
+    deps.onTrace("voice.player.started", { jobId: "fire-1:sentence-1" });
+    latencyAtStart = latencies.length;
+    return { timeline: [] };
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => { clock.set(1300); return { replyText: "はい", ttftMs: 700 }; } },
+    speakImpl: /** @type {any} */ (speakImpl),
+    channel: fakeChannel,
+    player: fakePlayer,
+    monotonicNowImpl: clock.now,
+    onLatency: (l) => latencies.push(l)
+  });
+  const r = await orch.fire();
+  assert.equal(r.fired, true);
+  assert.equal(latencyAtStart, 1, "STARTED を見た時点で通知（喋り終わりを待たない）");
+  assert.equal(latencies.length, 1);
+  const l = latencies[0];
+  assert.equal(l.llmFirstMs, 700);
+  assert.equal(l.firstSentenceMs, null, "一括の読み上げには最初の文の区間がない");
+  assert.equal(l.ttsMs, 400);
+  assert.equal(l.voiceMs, 200);
+  assert.equal(l.screenMs, null);
+  assert.equal(l.inFireMs, 2100, "fire() 呼び出し→声が鳴り始めるまで");
+  assert.equal(l.otherMs, 2100 - 700 - 400 - 200, "名前の付いた区間の残り（Claude は最初の文字以降の生成が主）");
+  orch.dispose();
+});
+
+test("遅延（文ごとの読み上げ）: LLM 最初の文字 = ask→first delta、最初の文 = first delta→最初の安全な文、TTS = engine に頼んだ→最初の音、声 = 最初の音→STARTED", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("二文で");
+  const clock = makeClock(0);
+  const player = makeProgressivePlayer();
+  const latencies = [];
+  const channel = {
+    async sendSpeech() { return { result: "accepted", error: null, rttMs: 1 }; },
+    async sendSet() { return { result: "accepted", error: null, rttMs: 1 }; }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(_input, askOptions) {
+        clock.set(800);
+        askOptions.onTextDelta("一");
+        clock.set(1000);
+        askOptions.onTextDelta("。");
+        return { replyText: "一。", elapsedMs: 55, ttftMs: 999 };
+      }
+    },
+    speakImpl: /** @type {any} */ (async () => {}),
+    channel,
+    player,
+    progressivePlayback: true,
+    // TTS = 最初の文で engine に頼んだ（delta「。」で文が確定した 1000）→ 最初の音のかたまり（1400）。
+    speechStreamerFactory: progressiveStreamer(async (text) => {
+      clock.set(1400);
+      return progressiveArtifact(text);
+    }),
+    monotonicNowImpl: clock.now,
+    onLatency: (l) => latencies.push(l)
+  });
+  const firePromise = orch.fire();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  clock.set(1600);
+  emitProgressiveOwned(player, "STARTED", 0);
+  assert.equal(latencies.length, 1, "最初の文の STARTED で通知");
+  emitProgressiveOwned(player, "ENDED", 0);
+  const r = await firePromise;
+  assert.equal(r.fired, true);
+  assert.equal(latencies.length, 1);
+  const l = latencies[0];
+  assert.equal(l.llmFirstMs, 800, "orchestrator が測った first delta を session の ttftMs より優先");
+  assert.equal(l.firstSentenceMs, 200);
+  assert.equal(l.ttsMs, 400);
+  assert.equal(l.voiceMs, 200, "声 = 最初の音のかたまり→STARTED");
+  assert.equal(l.inFireMs, 1600);
+  orch.dispose();
+});
+
+test("遅延: 声が鳴らずに終わった返事（空応答）も ask した回は spoken:false で 1 回だけ通知・ask 前に止まった発火は通知しない", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("空で返して");
+  const latencies = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async () => ({ replyText: "" }) },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => null,
+    onLatency: (l) => latencies.push(l)
+  });
+  const r = await orch.fire();
+  assert.equal(r.reason, "empty-reply");
+  assert.equal(latencies.length, 1);
+  assert.equal(latencies[0].spoken, false);
+  assert.equal(latencies[0].inFireMs, null);
+  await orch.fire({ vision: true }); // 対象未設定 = ask しない。
+  assert.equal(latencies.length, 1);
+  orch.dispose();
+});
+
+// ── 増えた分だけ渡す（長い配信の文脈・context-growth-2026-10.md §5・§6）───────────────────────
+
+/** conversationKey を持つ偽物の Codex 頭（ask に渡された内容を記録・key は外から替えられる）。 */
+function makeConversationSession(replyText = "うん") {
+  const inputs = [];
+  const state = { key: /** @type {string | null} */ ("thread-a"), nextKeyOnAsk: /** @type {string | null} */ (null) };
+  return {
+    inputs,
+    state,
+    session: {
+      conversationKey: () => state.key,
+      ask: async (content) => {
+        inputs.push(content);
+        if (state.key === null) state.key = state.nextKeyOnAsk ?? "thread-new";
+        return {
+          replyText,
+          usage: { input_tokens: 10 },
+          tokenUsage: { last: { inputTokens: 10 }, total: { inputTokens: 30 }, modelContextWindow: 1000 },
+          ttftMs: 42,
+          elapsedMs: 80
+        };
+      }
+    }
+  };
+}
+
+test("増えた分だけ: 同じ会話の 2 回目以降は前回渡した最後の seq より後ろの行だけ（チャッピーの行も含む）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const head = makeConversationSession("はいよ");
+  const asks = [];
+  const fires = [];
+  const records = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onAsk: (a) => asks.push(a),
+    onFire: (f) => fires.push(f),
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  assert.equal(head.inputs[0], "you: 一つ目", "最初は直近の窓の全部");
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  await orch.fire();
+  assert.equal(head.inputs[1], "soul: はいよ\nyou: 二つ目", "前回より後ろだけ（実際に聞こえた soul 行を含む）");
+  assert.deepEqual([asks[1].windowFirstSeq, asks[1].windowLastSeq, asks[1].includedCount], [1, 2, 2], "範囲は実際に渡した分");
+  assert.deepEqual([fires[1].includedCount, fires[1].injectedChars], [2, head.inputs[1].length], "受理の行数・文字数も実際に渡した分");
+  assert.deepEqual(records.map((r) => r.windowMode), ["full", "delta"]);
+  assert.deepEqual(
+    { ...records[1], atMs: null },
+    {
+      fireId: 2,
+      brain: null,
+      vision: false,
+      windowMode: "delta",
+      includedCount: 2,
+      injectedChars: head.inputs[1].length,
+      usage: { input_tokens: 10 },
+      tokenUsage: { last: { inputTokens: 10 }, total: { inputTokens: 30 }, modelContextWindow: 1000 },
+      ttftMs: 42,
+      elapsedMs: 80,
+      atMs: null
+    }
+  );
+  orch.dispose();
+});
+
+test("増えた分だけ: 新しい行が無い発火は「（前回から新しい発言はなし）」（画面ありは指示の前に置く）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("見て");
+  const head = makeConversationSession("");
+  const asks = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    getVisionTarget: () => "ゲーム",
+    captureImpl: async () => ({ jpegBase64: "AAAA", width: 1, height: 1, elapsedMs: 1 }),
+    onAsk: (a) => asks.push(a)
+  });
+  await orch.fire(); // 空の返事（soul 行は増えない）
+  await orch.fire();
+  assert.equal(head.inputs[1], "（前回から新しい発言はなし）");
+  assert.deepEqual([asks[1].windowFirstSeq, asks[1].windowLastSeq, asks[1].includedCount], [null, null, 0]);
+  await orch.fire({ vision: true });
+  const blocks = /** @type {any[]} */ (head.inputs[2]);
+  assert.equal(blocks[0].type, "image");
+  assert.equal(blocks[1].text, "（前回から新しい発言はなし）\n今の画面を見て、直近の会話と合わせて自然に反応してください。");
+  orch.dispose();
+});
+
+test("増えた分だけ: 会話の世代が変わったら（thread の作り直し・頭のセッションの差し替え）直近の窓を全部渡す", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const head = makeConversationSession("");
+  const other = makeConversationSession("");
+  let current = head.session;
+  const records = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    acquireFireResources: () => ({ session: current, configuration: { brain: "codex-61-sol" } }),
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  head.state.key = null; // Codex が内部で thread を捨てた（次の ask が新しい thread）
+  await orch.fire();
+  assert.equal(head.inputs[1], "you: 一つ目\nyou: 二つ目", "新しい会話には直近の窓の全部");
+  buffer.append({ startMs: 0, endMs: 0, text: "三つ目" });
+  await orch.fire();
+  assert.equal(head.inputs[2], "you: 三つ目", "新しい会話の 2 回目からはまた増えた分だけ");
+  current = other.session; // 頭のセッションの差し替え（同じ key でも別の会話）
+  buffer.append({ startMs: 0, endMs: 0, text: "四つ目" });
+  await orch.fire();
+  assert.equal(other.inputs[0], "you: 一つ目\nyou: 二つ目\nyou: 三つ目\nyou: 四つ目");
+  assert.deepEqual(records.map((r) => r.windowMode), ["full", "full", "delta", "full"]);
+  assert.equal(records[3].brain, "codex-61-sol");
+  orch.dispose();
+});
+
+test("増えた分だけ: ask が失敗したら目印を進めない（次の ask で同じ行をもう一度渡す）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const head = makeConversationSession("");
+  let fail = false;
+  const session = {
+    conversationKey: head.session.conversationKey,
+    ask: async (content) => {
+      if (fail) {
+        head.inputs.push(content);
+        throw new Error("transient");
+      }
+      return head.session.ask(content);
+    }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer
+  });
+  await orch.fire();
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  fail = true;
+  const failed = await orch.fire();
+  assert.equal(failed.reason, "error");
+  fail = false;
+  await orch.fire();
+  assert.equal(head.inputs[1], "you: 二つ目");
+  assert.equal(head.inputs[2], "you: 二つ目");
+  orch.dispose();
+});
+
+test("増えた分だけ: conversationKey を持たない頭（Claude）は従来どおり毎回直近の窓の全部・記録は legacy", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("一つ目");
+  const inputs = [];
+  const records = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { ask: async (content) => { inputs.push(content); return { replyText: "" }; } },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  buffer.append({ startMs: 0, endMs: 0, text: "二つ目" });
+  await orch.fire();
+  assert.deepEqual(inputs, ["you: 一つ目", "you: 一つ目\nyou: 二つ目"]);
+  assert.deepEqual(records.map((r) => [r.windowMode, r.usage, r.tokenUsage, r.ttftMs]), [["legacy", null, null, null], ["legacy", null, null, null]]);
+  orch.dispose();
+});
+
+// ── 声の差し替え Wave 2: 一括の読み上げ（Claude 経路）も本物の SpeechStreamer（speakOnce）に載る ──────────
+//  完了は WAV 長のタイマーではなく player の ENDED。切断点は累積の時間割と STARTED 時刻（今と同じ結果）。
+
+function makeOneShotRig({ timeline = BARGE_TIMELINE } = {}) {
+  const engine = createFakeVoiceEngine({
+    chunksFor: () => [
+      { type: "format", sampleRate: 24000, channels: 1 },
+      { type: "timeline", entries: timeline },
+      { type: "audio", pcm: new Uint8Array(480) },
+      { type: "end" }
+    ]
+  });
+  const player = createFakeStreamPlayer();
+  /** @type {any[]} */
+  const sent = [];
+  const accepted = async () => ({ result: "accepted", error: null, rttMs: 1 });
+  const channel = {
+    openSpeech: async (/** @type {string} */ id) => { sent.push({ op: "open", id }); return accepted(); },
+    appendSpeech: async (/** @type {string} */ id, /** @type {any} */ t) => { sent.push({ op: "append", id, count: t.length }); return accepted(); },
+    endSpeech: async (/** @type {string} */ id) => { sent.push({ op: "end", id }); return accepted(); },
+    sendSet: async (/** @type {any} */ intent) => { sent.push({ op: "set", intent }); return accepted(); },
+    sendEnvelope: accepted
+  };
+  return { engine, player, channel, sent };
+}
+
+test("一括の読み上げ（本物の speakOnce）: open→append→end を送り、完了は ENDED（それまで speaking・soul 未追記）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const rig = makeOneShotRig();
+  const states = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    engine: rig.engine,
+    channel: rig.channel,
+    player: rig.player,
+    onState: (s) => states.push(s)
+  });
+  const p = orch.fire();
+  await flushMicrotasks(200);
+  assert.equal(rig.player.opened.length, 1);
+  assert.deepEqual(rig.sent.map((e) => e.op), ["open", "append", "end"]);
+  assert.equal(rig.sent[1].count, 5);
+  rig.player.emitFor("started", 0);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(orch.getState(), "speaking", "タイマーでは終わらない（ENDED まで speaking）");
+  assert.equal(buffer.all().length, 1);
+  rig.player.emitFor("ended", 0);
+  const result = await p;
+  assert.equal(result.fired, true);
+  assert.equal(result.replyText, "こんにちは");
+  assert.equal(buffer.all()[1].text, "こんにちは");
+  assert.equal(rig.sent.some((e) => e.op === "set"), false, "自然完了は endSpeech（release しない）");
+  assert.deepEqual(states, ["thinking", "speaking", "idle"]);
+  orch.dispose();
+});
+
+test("一括の読み上げ（本物の speakOnce）: barge-in の切断点は累積の時間割 × STARTED からの経過（旧と同じ結果）・stop → 口閉じ・合成に中止", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ねえ、聞いてる？");
+  const rig = makeOneShotRig();
+  const diags = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    engine: rig.engine,
+    channel: rig.channel,
+    player: rig.player,
+    onDiagnostic: (d) => diags.push(d)
+  });
+  const p = orch.fire();
+  await flushMicrotasks(200);
+  rig.player.emit("started", rig.player.opened[0], { atMs: 1000 });
+  const info = await orch.interrupt(1350);
+  assert.equal(info.interrupted, true);
+  assert.equal(info.prefix, "こんに");
+  assert.equal(info.charsSpoken, 3);
+  const result = await p;
+  assert.equal(result.interrupted, true);
+  assert.equal(rig.player.stops, 1);
+  assert.deepEqual(rig.sent.filter((e) => e.op === "set").map((e) => e.intent), [{ slotId: "mouth-open", value: 0, ttlMs: MOUTH_CLOSE_TTL_MS }]);
+  assert.equal(rig.engine.requests[0].signal?.aborted, true);
+  assert.equal(buffer.all()[1].text, "こんに" + BARGE_IN_NOTE);
+  const bi = diags.find((d) => d.type === "bargeIn");
+  assert.equal(bi.elapsedMs, 350);
+  assert.equal(bi.totalChars, 5);
+  orch.dispose();
+});
+
+test("一括の読み上げ（本物の speakOnce）: STARTED 前の barge-in は 0 文字・kill も同じ経路で止める", { timeout: 5000 }, async () => {
+  for (const action of ["interrupt", "kill"]) {
+    const buffer = bufferWithYou();
+    const rig = makeOneShotRig();
+    const orch = createFireOrchestrator({
+      getBuffer: () => buffer,
+      session: { async ask() { return { replyText: "こんにちは" }; } },
+      engine: rig.engine,
+      channel: rig.channel,
+      player: rig.player
+    });
+    const p = orch.fire();
+    await flushMicrotasks(200);
+    const info = action === "interrupt" ? await orch.interrupt(5000) : await orch.kill(5000);
+    assert.equal(info.prefix, "", `${action}: まだ鳴っていない`);
+    await p;
+    assert.equal(rig.player.stops, 1, action);
+    assert.equal(rig.sent.filter((e) => e.op === "set").length, 1, action);
+    assert.equal(buffer.all()[1].text, action === "interrupt" ? BARGE_IN_NOTE : KILL_NOTE);
+    orch.dispose();
+  }
+});
+
+test("一括の読み上げ（本物の speakOnce）: 鳴らし始めた後の player の ERROR は「鳴った分 + 中断注記」で soul に正本化・fireError にしない・口を release", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const rig = makeOneShotRig();
+  const diags = [];
+  const traces = [];
+  const visible = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    engine: rig.engine,
+    channel: rig.channel,
+    player: rig.player,
+    onDiagnostic: (d) => diags.push(d),
+    onTrace: (t) => traces.push(t),
+    onSoulTranscript: (entry) => visible.push(entry)
+  });
+  const p = orch.fire();
+  await flushMicrotasks(200);
+  // 切断点の材料は barge-in と同じ（累積の時間割 × STARTED からの経過）。350ms 鳴って失敗 → 「こんに」。
+  rig.player.emit("started", rig.player.opened[0], { atMs: 1000 });
+  rig.player.emit("error", rig.player.opened[0], { atMs: 1350 });
+  const result = await p;
+  const canonical = `こんに
+${PROGRESSIVE_INTERRUPTION_NOTE}`;
+  assert.equal(result.fired, false);
+  assert.equal(result.reason, "speech-playback-failed");
+  assert.equal(result.charsSpoken, 3);
+  assert.equal(result.elapsedMs, 350);
+  assert.equal(diags.some((d) => d.type === "fireError"), false, "鳴った分を正本化したら fireError にしない");
+  assert.equal(buffer.all().length, 2);
+  assert.equal(buffer.all()[1].text, canonical);
+  assert.equal(buffer.all()[1].speaker, "soul");
+  assert.deepEqual(visible.map((entry) => entry.text), [canonical]);
+  assert.equal(rig.sent.filter((e) => e.op === "set").length, 1, "口は SpeechStreamer が 1 回 release");
+  const projected = traces.find((t) => t.event === "speech.partial.projected");
+  assert.deepEqual(
+    { playedChars: projected.playedChars, totalChars: projected.totalChars, terminalCause: projected.terminalCause },
+    { playedChars: 3, totalChars: 5, terminalCause: "error" }
+  );
+  assert.ok(traces.every((t) => !JSON.stringify(t).includes("こんに")), "診断に本文を載せない");
+  assert.equal(orch.getState(), "idle");
+  orch.dispose();
+});
+
+test("一括の読み上げ（本物の speakOnce）: 鳴らし始めた後でも鳴った分が 0 文字・STARTED 前の失敗は今どおり fireError・soul に積まない", { timeout: 5000 }, async () => {
+  for (const when of ["zero-chars", "before-started"]) {
+    const buffer = bufferWithYou();
+    const rig = makeOneShotRig();
+    const diags = [];
+    const orch = createFireOrchestrator({
+      getBuffer: () => buffer,
+      session: { async ask() { return { replyText: "こんにちは" }; } },
+      engine: rig.engine,
+      channel: rig.channel,
+      player: rig.player,
+      onDiagnostic: (d) => diags.push(d)
+    });
+    const p = orch.fire();
+    await flushMicrotasks(200);
+    if (when === "zero-chars") {
+      // 最初のモーラ（timeMs 0）をまだ過ぎていない（経過 0ms）→ 0 文字。
+      rig.player.emit("started", rig.player.opened[0], { atMs: 1000 });
+      rig.player.emit("error", rig.player.opened[0], { atMs: 1000 });
+    } else {
+      rig.player.emit("error", rig.player.opened[0], { atMs: 1350 });
+    }
+    const result = await p;
+    assert.equal(result.fired, false, when);
+    assert.equal(result.reason, "error", when);
+    assert.equal(diags.filter((d) => d.type === "fireError").length, 1, when);
+    assert.equal(rig.sent.filter((e) => e.op === "set").length, 1, when);
+    assert.equal(buffer.all().length, 1, `${when}: soul に積まない`);
+    assert.equal(orch.getState(), "idle", when);
+    orch.dispose();
+  }
+});
+
+test("一括の読み上げ（本物の speakOnce）: 鳴らし始めた後の見張りの時間切れも鳴った分を正本化する（失敗の時刻は時計）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const rig = makeOneShotRig();
+  let clock = 1000;
+  /** @type {Array<() => void>} */
+  const timers = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    engine: rig.engine,
+    channel: rig.channel,
+    player: rig.player,
+    nowImpl: () => clock,
+    setTimeoutImpl: /** @type {any} */ ((/** @type {() => void} */ fn) => {
+      timers.push(fn);
+      return timers.length;
+    }),
+    clearTimeoutImpl: /** @type {any} */ (() => {})
+  });
+  const p = orch.fire();
+  await flushMicrotasks(200);
+  rig.player.emit("started", rig.player.opened[0], { atMs: 1000 });
+  await flushMicrotasks(20);
+  // ENDED が来ないまま見張りが切れる（時計は 1350ms）。
+  clock = 1350;
+  for (const fn of timers.splice(0)) fn();
+  const result = await p;
+  assert.equal(result.reason, "speech-playback-failed");
+  assert.equal(buffer.all()[1].text, `こんに
+${PROGRESSIVE_INTERRUPTION_NOTE}`);
+  orch.dispose();
+});
+
+test("一括の読み上げ（本物の speakOnce）: 器が open を拒否したら鳴らさず fireError（code speech_rejected）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const rig = makeOneShotRig();
+  rig.channel.openSpeech = async () => ({ result: "rejected", error: { code: "slotNotWritable", message: "x" }, rttMs: 1 });
+  const traces = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    engine: rig.engine,
+    channel: rig.channel,
+    player: rig.player,
+    onTrace: (t) => traces.push(t)
+  });
+  const result = await orch.fire();
+  assert.equal(result.reason, "error");
+  assert.equal(rig.player.opened.length, 0);
+  const failed = traces.find((t) => t.event === "fire.failed");
+  assert.equal(failed.stage, "control_channel.rejection");
+  assert.equal(failed.failureCode, "speech_rejected");
   orch.dispose();
 });

@@ -15,13 +15,30 @@ import {
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
   requestErrorText,
-  shouldAutoOpenSettings,
   brainPostErrorText,
   memoryToggleView,
   memoryPostErrorText,
   memoryRecordPostErrorText,
-  memoryStatusLabel
+  memoryStatusLabel,
+  STT_ENGINE_OPTIONS,
+  sttEngineSelection,
+  TTS_ENGINE_OPTIONS,
+  ttsEngineSelection,
+  COMPACT_THRESHOLD_DEFAULT_TOKENS,
+  COMPACT_THRESHOLD_MIN_TOKENS,
+  COMPACT_THRESHOLD_MAX_TOKENS,
+  COMPACT_THRESHOLD_STEP_TOKENS,
+  COMPACT_THRESHOLD_NOTE,
+  compactThresholdOptions,
+  compactThresholdSelection,
+  compactThresholdStatusLabel,
+  compactThresholdPostErrorText
 } from "./settings.mjs";
+import {
+  DEFAULT_COMPACT_THRESHOLD_TOKENS,
+  COMPACT_THRESHOLD_TOKENS_MIN,
+  COMPACT_THRESHOLD_TOKENS_MAX
+} from "../../mind/context-compactor.mjs";
 
 test("visionTargetLabel: title 無しは not configured（applyVisionTarget :317-322）", () => {
   assert.equal(visionTargetLabel({ title: "FooGame" }), "FooGame");
@@ -150,50 +167,6 @@ test("requestErrorText: 各 fetch catch の prefix（現 cockpit.html の catch 
   assert.equal(requestErrorText("brain", e), "brain error: Error: net"); // 多頭化 Domain C。
 });
 
-test("shouldAutoOpenSettings: 設定が全て空のときだけ true（導線 §4・初回自動展開）", () => {
-  // 初回（設定空）: channel 未設定・視界/出力先/chat source 未記憶・耳停止 → 自動展開。
-  assert.equal(
-    shouldAutoOpenSettings({
-      ears: "stopped",
-      device: null,
-      channel: null,
-      visionTarget: null,
-      audioDevice: null,
-      chat: { source: null, connected: false, state: null }
-    }),
-    true
-  );
-  // channel の { configured:false } / visionTarget・audioDevice の値 null 形も「空」扱い。
-  assert.equal(
-    shouldAutoOpenSettings({
-      device: null,
-      channel: { configured: false },
-      visionTarget: { title: null },
-      audioDevice: { name: null },
-      chat: { source: null }
-    }),
-    true
-  );
-});
-
-test("shouldAutoOpenSettings: どれか 1 つでも記憶済み/稼働中なら false（二回目以降は観測直行）", () => {
-  const empty = {
-    device: null,
-    channel: null,
-    visionTarget: null,
-    audioDevice: null,
-    chat: { source: null }
-  };
-  assert.equal(shouldAutoOpenSettings({ ...empty, channel: { configured: true, url: "ws://x" } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, visionTarget: { title: "FooGame" } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, audioDevice: { name: "MV7+" } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, chat: { source: "vid1", connected: false } }), false);
-  assert.equal(shouldAutoOpenSettings({ ...empty, device: "MV7+" }), false); // 耳が稼働中（開き直し）。
-  // snapshot 欠落（取得失敗系）は開かない = 誤展開防止。
-  assert.equal(shouldAutoOpenSettings(null), false);
-  assert.equal(shouldAutoOpenSettings(undefined), false);
-});
-
 // ── 配信間記憶: 記憶 ON/OFF トグル + 「今日を記録」の表示導出（settings-drawer「記憶」区画） ─────
 
 test("memoryToggleView: memory が null/undefined は disable + not available（bargeInToggleView の写経）", () => {
@@ -260,4 +233,81 @@ test("memoryStatusLabel: count/lastRecordAtMs から「記憶 N 件を搭載（�
   assert.equal(memoryStatusLabel({ enabled: true, count: 2, lastRecordAtMs: epochMs }), "記憶 2 件を搭載（最新: 21:05:09）");
   // count 欠落は 0 扱い。
   assert.equal(memoryStatusLabel({ enabled: false, lastRecordAtMs: null }), "記憶 0 件を搭載（最新: まだ記録なし）");
+});
+
+test("STT_ENGINE_OPTIONS / sttEngineSelection: 文字起こしの選択肢（whisper / ElevenLabs）と state.stt からの復元", () => {
+  assert.deepEqual(
+    STT_ENGINE_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      ["whisper", "ローカル（whisper）"],
+      ["elevenlabs", "ElevenLabs"]
+    ]
+  );
+  assert.equal(sttEngineSelection({ engine: "elevenlabs" }), "elevenlabs");
+  assert.equal(sttEngineSelection({ engine: "whisper" }), "whisper");
+  assert.equal(sttEngineSelection({ engine: "google" }), null);
+  assert.equal(sttEngineSelection(null), null);
+});
+
+test("TTS_ENGINE_OPTIONS / ttsEngineSelection: 声の選択肢（AivisSpeech / ElevenLabs）と state.tts からの復元", () => {
+  assert.deepEqual(
+    TTS_ENGINE_OPTIONS.map((o) => [o.value, o.label]),
+    [
+      ["aivis", "AivisSpeech"],
+      ["elevenlabs", "ElevenLabs"]
+    ]
+  );
+  assert.equal(ttsEngineSelection({ engine: "elevenlabs" }), "elevenlabs");
+  assert.equal(ttsEngineSelection({ engine: "aivis" }), "aivis");
+  assert.equal(ttsEngineSelection({ engine: "voicevox" }), null);
+  assert.equal(ttsEngineSelection({}), null);
+  assert.equal(ttsEngineSelection(null), null);
+});
+
+// ── 圧縮を始める大きさ（設定「頭脳・会話」タブ）─────────────────────────────
+
+test("圧縮の目安の定数: 画面の写しは src/mind/context-compactor.mjs と同じ値（既定 20 万・5 万〜45 万・1 万刻み）", () => {
+  assert.equal(COMPACT_THRESHOLD_DEFAULT_TOKENS, DEFAULT_COMPACT_THRESHOLD_TOKENS);
+  assert.equal(COMPACT_THRESHOLD_MIN_TOKENS, COMPACT_THRESHOLD_TOKENS_MIN);
+  assert.equal(COMPACT_THRESHOLD_MAX_TOKENS, COMPACT_THRESHOLD_TOKENS_MAX);
+  assert.equal(COMPACT_THRESHOLD_STEP_TOKENS, 10_000);
+  assert.match(COMPACT_THRESHOLD_NOTE, /Codex の頭のときだけ/);
+});
+
+test("compactThresholdOptions: 5 万〜45 万を 1 万刻み・既定に（既定）・刻みに乗らない今の値は差し込む", () => {
+  const options = compactThresholdOptions(200_000);
+  assert.equal(options.length, 41);
+  assert.deepEqual(options[0], { value: "50000", label: "5 万トークン" });
+  assert.deepEqual(options.at(-1), { value: "450000", label: "45 万トークン" });
+  assert.deepEqual(options.find((o) => o.value === "200000"), { value: "200000", label: "20 万トークン（既定）" });
+  assert.equal(options.filter((o) => o.label.includes("既定")).length, 1);
+  assert.deepEqual(compactThresholdOptions(null), options, "今の値が無くても同じ並び");
+  const withOdd = compactThresholdOptions(235_000);
+  assert.equal(withOdd.length, 42);
+  const i = withOdd.findIndex((o) => o.value === "235000");
+  assert.deepEqual(withOdd[i], { value: "235000", label: "23.5 万トークン" });
+  assert.deepEqual([withOdd[i - 1].value, withOdd[i + 1].value], ["230000", "240000"], "昇順に差し込む");
+  assert.equal(compactThresholdOptions(10_000).length, 41, "範囲外の値は差し込まない");
+});
+
+test("compactThresholdSelection / compactThresholdStatusLabel: snapshot の compaction から選択と表示", () => {
+  assert.equal(compactThresholdSelection({ thresholdTokens: 200_000 }), "200000");
+  assert.equal(compactThresholdSelection({ thresholdTokens: 10_000 }), null);
+  assert.equal(compactThresholdSelection(null), null);
+  assert.equal(compactThresholdSelection(undefined), null);
+  assert.equal(compactThresholdStatusLabel({ thresholdTokens: 200_000 }), "いま 20 万トークン（既定）");
+  assert.equal(compactThresholdStatusLabel({ thresholdTokens: 250_000 }), "いま 25 万トークン（既定は 20 万）");
+  assert.equal(compactThresholdStatusLabel({ thresholdTokens: 230_097 }), "いま 23 万トークン（既定は 20 万）");
+  assert.equal(compactThresholdStatusLabel(null), "not available");
+  assert.equal(compactThresholdStatusLabel({}), "not available");
+});
+
+test("compactThresholdPostErrorText / requestErrorText: POST /api/compact-threshold の失敗文言", () => {
+  assert.equal(compactThresholdPostErrorText({ status: 200, ok: true, j: {} }), null);
+  assert.equal(compactThresholdPostErrorText({ status: 503, ok: false, j: {} }), "compaction control not available");
+  assert.equal(
+    compactThresholdPostErrorText({ status: 400, ok: false, j: { error: "tokens must be an integer from 50000 to 450000" } }),
+    "set failed: tokens must be an integer from 50000 to 450000"
+  );
+  assert.equal(requestErrorText("compactThreshold", new Error("net")), "compaction threshold error: Error: net");
 });

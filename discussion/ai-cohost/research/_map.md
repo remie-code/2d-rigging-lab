@@ -16,6 +16,10 @@
 | [codex-text-streaming-official-options-2026-08.md](codex-text-streaming-official-options-2026-08.md) | OpenAI公式資料: Codex SDK/App Server、Responses、Agents、Realtimeのtext delta・vision・会話継続・Sol・認証の比較 | Recorded(2026-08-30)。App Server実経路は [experiment](../experiments/codex-app-server-streaming-probe.md) で成立確認済み |
 | [app-server-transport-integration-inventory.md](app-server-transport-integration-inventory.md) | リポジトリ事実: Codex SDK→App Server transport差し替え境界、session/settings/vision/cleanup/effort-low/test影響 | Recorded(2026-08-30)。設計判断前inventory |
 | [streaming-speech-pipeline-inventory.md](streaming-speech-pipeline-inventory.md) | リポジトリ事実: Fire→TTS→timeline→audioの現行確定点、chunk queue seam、割り込み・部分成功・診断・test影響 | Recorded(2026-08-30)。partial-success意味論はuser decision待ち |
+| [ears-capture-buffer-2026-10.md](ears-capture-buffer-2026-10.md) | 実測+リポジトリ事実: 耳の dshow 取り込みが既定で 500ms ずつ届き、speechStart/End が 0〜500ms 遅れる。50ms で解消 | Recorded(2026-10-16)。既定 50ms への修正は ElevenLabs 調査の一段落後に別セッションで |
+| [quota-sources-2026-10.md](quota-sources-2026-10.md) | 各サービス(Codex / Claude / OpenAI API / ElevenLabs)の残量を割合で取る手段。OpenAI は残高 API なし、ElevenLabs は user_read が要る | Recorded(2026-10-17) |
+| [vision-capture-latency-2026-10.md](vision-capture-latency-2026-10.md) | 画面キャプチャ約 0.6 秒の内訳(PowerShell 起動 330ms + 毎回のコンパイル 110ms)、代替方式。OBS 窓タイトルの完全一致で撮影が全部失敗していた疑い | Recorded(2026-10-17) |
+| [context-growth-2026-10.md](context-growth-2026-10.md) | 長い配信で応答が遅くなる件: 会話の窓の重複・画像の残留・圧縮手段(Codex thread/compact/start、Claude /compact)・ユーザーの方針 | Recorded(2026-10-17) |
 
 ## 注意
 

@@ -1,16 +1,24 @@
 // @ts-check
 /**
- * 発火スケジューラ（S6 Domain C・「いつ喋るか」を機械信号だけで決める心臓）— apps/soul/agent。
+ * 発火スケジューラ（S6 Domain C・従来モードで「いつ喋るか」を機械信号で決める心臓）— apps/soul/agent。
  *
  * 「こーでぃー」と呼ばれたら返す（呼びかけ）／実況の区切りでたまに拾う（区切り応答）／しばらく無言なら
  * そのうち画面を見て一言（沈黙）——この自発 3 種を、**LLM を一切使わず**機械信号（VAD イベント時刻・
  * タイマ・文字列照合・注入 RNG）だけで判定する純ロジック。判定結果は発火「要求」として onFireRequest で
  * 結線層へ通知し、結線層が対応する fire を呼ぶ（call/turn-end → 通常 Fire・silence → 視覚発火）。
  *
- * ── この Domain の絶対原則（wave 計画 §2 原則・§4 blocking 基準 3）──────────────────
- *  **「いつ喋るか」は機械信号のみ。LLM は「何を言うか」だけ。判断のための ask は打たない。**
- *  このモジュールは依存ゼロ（import 文が 1 つも無い）＝LLM/SDK/session への到達経路が構造的に存在しない。
- *  発火要求を出すだけで、実際の ask/発話は結線層の fire-orchestrator が担う（スケジューラは ask しない）。
+ * ── この Domain の原則（wave 計画 §2 原則・§4 blocking 基準 3 を speak-now 合意で改訂）────────────
+ *  **「いつ喋るか」は、リアルタイムの判定 API を使うモード（speak-now）ではそれに任せ、そうでない
+ *  （従来の）モードでは機械信号で決める。LLM は「何を言うか」だけ。**
+ *  （旧原則「機械信号のみ・判断のための ask は打たない」は、リアルタイムの判定 API が無かった時代の
+ *  判断で前提が崩れたため改訂した・discussion/ai-cohost/decisions/speak-now/integration.md §4。）
+ *  このモジュールは従来モードの機械信号側を担い、判定 API にも LLM にも触れない——依存ゼロ（import 文が
+ *  1 つも無い）＝LLM/SDK/session/判定 API への到達経路が構造的に存在しない。speak-now の判定は別部品
+ *  （speak-now.mjs）が担い、ここには「speak-now の間は区切り応答・呼びかけ・合いの手を止める」スイッチ
+ *  （setSpeakNowMode）だけを置く。沈黙は speak-now の間も動く。コメント系（comment / comment-call）は
+ *  speak-now の間は止める（コメントへの反応は判定 API の別部品 comment-react.mjs が担う・
+ *  discussion/ai-cohost/decisions/comment-react/integration.md §1-6）。
+ *  発火要求を出すだけで、実際の発話は結線層の fire-orchestrator が担う。
  *  fake clock（nowImpl）+ 注入 setTimeout/clearTimeout + 注入 RNG で全分岐を決定論的にテストできる。
  *
  * ── 自発の判定規則（wave 計画 §3 Domain C・inventory §1 裁定 4 / S7 §3 Domain B・裁定 5）─────────
@@ -60,6 +68,12 @@
  *  busy 中（isBusy() 真・orchestrator が thinking/speaking）・自発 OFF 中は発火要求を出さない。busy 無視は
  *  既存状態機械（fire-orchestrator）も担うが、無駄な発火要求を減らすためスケジューラ側でも出さない。
  *  自発 OFF（setEnabled(false)）で 3 種とも黙り、タイマも畳む（手動 Fire はスケジューラ非経由 = 影響なし）。
+ *
+ * ── speak-now モード（speak-now 合意 §4）──────────────────────────────────────
+ *  setSpeakNowMode(true)（既定 false = 従来どおり）の間は、区切り応答（turn-end）・呼びかけ（call）・
+ *  合いの手（interjection）を出さない（タイマも張らない・切替時に pending/run は畳む）。you 発話・VAD は
+ *  活動として沈黙タイマの再武装にだけ使う。沈黙（silence）は残す。コメント応答（comment / comment-call）は
+ *  止める（コメント反応の合意 §1-6）——通ったコメントは活動として沈黙タイマの再武装にだけ使う。
  *
  * ── 直近発火の基点（lastFireAtMs）─────────────────────────────────────────────
  *  不応期の基点は「直近発火からの経過」。スケジューラが発火要求を出したとき（call/turn-end/silence）に
@@ -415,12 +429,17 @@ function isValidVerbosityMode(mode) {
  *   interjectionBaseMs/interjectionJitterMs/interjectionRefractoryMs の既定値を
  *   VERBOSITY_BUNDLES[mode] から解決する（上記オプションを明示指定すればそちらが優先
  *   される = 既存テストの明示 options は従来どおり効く・無退行の鍵）。
+ * @param {boolean} [options.speakNowMode=false]  speak-now モードの初期値（true の間は turn-end / call /
+ *   interjection を出さない・speak-now 合意 §4。comment / comment-call も出さない・コメント反応の合意 §1-6）。
+ *   既定 false = 従来どおり。
  * @returns {{
  *   handleVadEvent: (event: { type: string }) => void;
  *   handleTranscript: (entry: { text?: string; speaker?: string }) => void;
  *   handleChatMessage: (msg: { text?: string; displayName?: string }) => void;
  *   setEnabled: (enabled: boolean) => void;
  *   isEnabled: () => boolean;
+ *   setSpeakNowMode: (on: boolean) => void;
+ *   isSpeakNowMode: () => boolean;
  *   setVerbosity: (mode: string) => void;
  *   getVerbosity: () => "quiet" | "normal" | "chatty";
  *   silenceBudgetRemaining: () => number;
@@ -486,6 +505,8 @@ export function createFireScheduler(options) {
   let interjectionRefractoryMs = numberOr(options.interjectionRefractoryMs, initialBundle.interjectionRefractoryMs);
 
   let enabled = options.enabled === true;
+  /** speak-now モード中か（true の間は turn-end / call / interjection を出さない・speak-now 合意 §4）。 */
+  let speakNowMode = options.speakNowMode === true;
   let disposed = false;
   /** 直近発火の時刻（不応期の基点）。初期は -Infinity = 最初の不応期は必ず通過。 */
   let lastFireAtMs = -Infinity;
@@ -597,7 +618,7 @@ export function createFireScheduler(options) {
   /** speechStart 到着時の run 処理: 間隙タイマーが動いていれば取消（run 継続・合いの手タイマーは
    *  張り替えない = そのまま走り続ける）。動いていなければ run 未開始の場合のみ新規開始する。 */
   const onSpeechStartForInterjection = () => {
-    if (disposed || !enabled) return;
+    if (disposed || !enabled || speakNowMode) return; // speak-now 中は合いの手 run を始めない。
     if (interjectionGapTimer != null) {
       clearInterjectionGapTimer(); // run 継続。
       return;
@@ -688,7 +709,8 @@ export function createFireScheduler(options) {
       // armed 中に新たな speechEnd が来た場合は据え置く（裁量・二重 arm や確率の二重消費を避ける）:
       // 既に armed（前の発話の転写待ち）なら新しい VAD タイマーは起動しない。armed 解除（転写到着 /
       // タイムアウト）後の次の speechEnd から新たに測り直す。
-      if (enabled && !turnEndArmed) {
+      // speak-now 中は区切り応答の無音待ちを張らない（判定は speak-now 部品が担う）。
+      if (enabled && !turnEndArmed && !speakNowMode) {
         turnEndTimer = setTimeoutImpl(onTurnEndTimer, turnEndSilenceMs);
       }
       // 合いの手 run: 進行中なら間隙タイマー（turnEndSilenceMs 共用）を起動する（満了で run 終了）。
@@ -728,6 +750,8 @@ export function createFireScheduler(options) {
     }
     // you（既定）: 活動 → 沈黙タイマ再武装。
     armSilence();
+    // speak-now 中は呼びかけ照合も区切り応答のゲート発火もしない（活動の反映だけ・speak-now 合意 §4）。
+    if (speakNowMode) return;
     // 呼びかけ照合（命中即発火・不応期/確率は掛けない = 裁定 4）。OFF/busy 中は出さない。
     let calledOut = false;
     if (enabled && !isBusy() && typeof entry.text === "string" && entry.text.length > 0) {
@@ -764,6 +788,9 @@ export function createFireScheduler(options) {
     if (disposed || msg == null || typeof msg !== "object") return;
     // 活動 → 沈黙タイマ再武装（armSilence は enabled/disposed/予算を自己ガード）。
     armSilence();
+    // speak-now 中はコメントの機械的な発火（comment / comment-call）を止める（活動の反映だけ・コメント反応の
+    // 合意 §1-6。反応するかは comment-react.mjs の判定が決める）。
+    if (speakNowMode) return;
     if (!enabled || isBusy()) return;
     if (typeof msg.text !== "string" || msg.text.length === 0) return;
     const now = nowImpl();
@@ -849,6 +876,24 @@ export function createFireScheduler(options) {
     if (enabled) armSilence(); // 新しい silence 基礎/ジッター/予算を即座に反映。
   };
 
+  /**
+   * speak-now モードの切替（speak-now 合意 §4）。ON で turn-end / call / interjection を止め、進行中の
+   * 無音待ち・pending turn-end・合いの手 run を畳む（再 OFF でも復活しない = 次の VAD/転写から測り直す）。
+   * 沈黙・自発 ON/OFF・口数には触らない。コメント系は ON の間 handleChatMessage が活動の反映だけで抜ける
+   * （止めるのは入口だけ・畳むタイマは無い）。
+   * @param {boolean} on
+   */
+  const setSpeakNowMode = (on) => {
+    const value = on === true;
+    if (value === speakNowMode) return;
+    speakNowMode = value;
+    if (speakNowMode) {
+      clearTurnEnd();
+      disarmTurnEnd();
+      endInterjectionRun();
+    }
+  };
+
   // 有効化状態で構築されたら沈黙カウントを開始する（活動が無くてもいずれ「画面を見て一言」に至る）。
   if (enabled) armSilence();
 
@@ -858,6 +903,9 @@ export function createFireScheduler(options) {
     handleChatMessage,
     setEnabled,
     isEnabled: () => enabled,
+    setSpeakNowMode,
+    /** speak-now モード中か（既定 false）。 */
+    isSpeakNowMode: () => speakNowMode,
     setVerbosity,
     /** 現在の口数モード（quiet/normal/chatty・既定 "normal"）。 */
     getVerbosity: () => currentVerbosity,

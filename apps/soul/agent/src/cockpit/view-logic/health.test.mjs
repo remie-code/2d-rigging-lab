@@ -9,7 +9,12 @@ import {
   voiceOutputLabel,
   BRAIN_LABELS,
   brainLabel,
-  brainCredentialHealthLabel
+  brainCredentialHealthLabel,
+  STT_ENGINE_LABELS,
+  sttStatusView,
+  TTS_ENGINE_LABELS,
+  ttsStatusView,
+  micInputLabel
 } from "./health.mjs";
 
 test("earsStatusView: listening/starting/stopped の文言 + ランプクラス（cockpit.html:267-270 同値）", () => {
@@ -99,19 +104,22 @@ test("voiceOutputLabel: name があれば name・なければ default（applyAud
 
 // ── 多頭化 Domain C: 設定引き出し「頭脳」区画の表示導出（brain-swap-wave-plan.md §3）──────────
 
-test("BRAIN_LABELS: 既存4頭 + Astra の 5 項目（BRAINS[*].label 相当）", () => {
-  assert.deepEqual(Object.keys(BRAIN_LABELS), ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]);
+test("BRAIN_LABELS: Claude 2 頭 + Codex 4 頭の 6 項目（BRAINS[*].label 相当・GPT-5.5 は削除済み）", () => {
+  assert.deepEqual(Object.keys(BRAIN_LABELS), ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
   assert.equal(BRAIN_LABELS.claude, "Claude (Opus 4.8)");
+  assert.equal(BRAIN_LABELS["claude-opus-55"], "Claude (Opus 5.5)");
   assert.equal(BRAIN_LABELS.codex, "Codex (GPT-5.6 Terra)");
-  assert.equal(BRAIN_LABELS["codex-55"], "Codex (GPT-5.5)");
   assert.equal(BRAIN_LABELS["codex-56-sol"], "Codex (GPT-5.6 Sol)");
   assert.equal(BRAIN_LABELS["codex-astra"], "GPT-6 Astra");
+  assert.equal(BRAIN_LABELS["codex-61-sol"], "GPT-6.1 Sol");
 });
 
 test("brainLabel: 既知 id は表示ラベル・未知 id/未指定は unknown", () => {
   assert.equal(brainLabel({ brain: "claude" }), "Claude (Opus 4.8)");
   assert.equal(brainLabel({ brain: "codex" }), "Codex (GPT-5.6 Terra)");
-  assert.equal(brainLabel({ brain: "codex-55" }), "Codex (GPT-5.5)");
+  assert.equal(brainLabel({ brain: "claude-opus-55" }), "Claude (Opus 5.5)");
+  assert.equal(brainLabel({ brain: "codex-61-sol" }), "GPT-6.1 Sol");
+  assert.equal(brainLabel({ brain: "codex-55" }), "unknown"); // 削除済み（2026-10-16）。
   assert.equal(brainLabel({ brain: "codex-56-sol" }), "Codex (GPT-5.6 Sol)");
   assert.equal(brainLabel({ brain: "codex-astra" }), "GPT-6 Astra");
   assert.equal(brainLabel({ brain: "gpt" }), "unknown"); // 未知 id。
@@ -128,4 +136,54 @@ test("brainCredentialHealthLabel: 健康/未検出/未指定の3分岐（credent
   assert.equal(brainCredentialHealthLabel(undefined), "unknown");
   assert.equal(brainCredentialHealthLabel({}), "unknown");
   assert.equal(brainCredentialHealthLabel({ credentialHealth: /** @type {any} */ ("true") }), "unknown"); // 非 boolean は unknown。
+});
+
+// ── 操縦席の文字起こし選択（cockpit-stt-selection.md §4.2・§8）──
+
+test("sttStatusView: `ElevenLabs up` / `whisper up` / reconnecting は黄色クラス / down は reason 併記", () => {
+  assert.deepEqual(STT_ENGINE_LABELS, { whisper: "whisper", elevenlabs: "ElevenLabs" });
+  assert.deepEqual(sttStatusView({ engine: "elevenlabs", status: "up", reason: null }), {
+    text: "ElevenLabs up",
+    className: "hstat up",
+    title: ""
+  });
+  assert.equal(sttStatusView({ engine: "whisper", status: "up", reason: null })?.text, "whisper up");
+  assert.deepEqual(sttStatusView({ engine: "elevenlabs", status: "reconnecting", reason: "closed code=1006" }), {
+    text: "ElevenLabs reconnecting",
+    className: "hstat reconnecting",
+    title: "closed code=1006"
+  });
+  assert.equal(
+    sttStatusView({ engine: "elevenlabs", status: "down", reason: "ElevenLabs のキーが見つからない" })?.text,
+    "ElevenLabs down — ElevenLabs のキーが見つからない"
+  );
+  assert.equal(sttStatusView({ engine: "elevenlabs", status: "unknown", reason: null })?.className, "hstat unknown");
+  assert.equal(sttStatusView(null), null);
+  assert.equal(sttStatusView({ engine: "bogus", status: null })?.text, "unknown unknown");
+});
+
+test("ttsStatusView: `ElevenLabs up` / `AivisSpeech up` / reconnecting は黄色クラス / down は reason 併記 / unknown は出さない", () => {
+  assert.deepEqual(TTS_ENGINE_LABELS, { aivis: "AivisSpeech", elevenlabs: "ElevenLabs" });
+  assert.deepEqual(ttsStatusView({ engine: "elevenlabs", status: "up", reason: null }), {
+    text: "ElevenLabs up",
+    className: "hstat up",
+    title: ""
+  });
+  assert.equal(ttsStatusView({ engine: "aivis", status: "up", reason: null })?.text, "AivisSpeech up");
+  assert.equal(ttsStatusView({ engine: "elevenlabs", status: "reconnecting", reason: null })?.className, "hstat reconnecting");
+  assert.equal(
+    ttsStatusView({ engine: "elevenlabs", status: "down", reason: "ElevenLabs のキーが見つからない" })?.text,
+    "ElevenLabs down — ElevenLabs のキーが見つからない"
+  );
+  assert.equal(ttsStatusView({ engine: "aivis", status: "unknown", reason: null }), null, "engine を用意する前は出さない");
+  assert.equal(ttsStatusView(null), null);
+  assert.equal(ttsStatusView({ engine: "bogus", status: "up" })?.text, "unknown up");
+});
+
+test("micInputLabel: 耳が listening の間だけマイク名（未指定は default）・それ以外は null", () => {
+  assert.equal(micInputLabel("listening", "マイク (2- Shure MV7+)"), "マイク (2- Shure MV7+)");
+  assert.equal(micInputLabel("listening", null), "default");
+  assert.equal(micInputLabel("starting", "Mic"), null);
+  assert.equal(micInputLabel("stopped", "Mic"), null);
+  assert.equal(micInputLabel(undefined, "Mic"), null);
 });

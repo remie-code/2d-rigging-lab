@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -83,12 +83,12 @@ test("settings store: default path is the gitignored file inside apps/soul/agent
   assert.match(DEFAULT_SETTINGS_PATH.replace(/\\/g, "/"), /apps\/soul\/agent\/cockpit-settings\.local\.json$/);
 });
 
-test("conversation instruction settings: five brain overrides round-trip with the versioned additive key", () => {
+test("conversation instruction settings: six brain overrides round-trip with the versioned additive key", () => {
   const dir = tmpDir();
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    for (const id of ["claude", "codex", "codex-55", "codex-56-sol", "codex-astra"]) {
+    for (const id of ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]) {
       assert.equal(store.getConversationInstruction(id), null);
       assert.equal(store.setConversationInstruction(id, `custom:${id}`), true);
       assert.equal(store.getConversationInstruction(id), `custom:${id}`);
@@ -96,12 +96,14 @@ test("conversation instruction settings: five brain overrides round-trip with th
     const reopened = createFileSettingsStore({ path });
     assert.deepEqual(reopened.getConversationInstructionOverrides(), {
       claude: "custom:claude",
+      "claude-opus-55": "custom:claude-opus-55",
       codex: "custom:codex",
-      "codex-55": "custom:codex-55",
       "codex-56-sol": "custom:codex-56-sol",
-      "codex-astra": "custom:codex-astra"
+      "codex-astra": "custom:codex-astra",
+      "codex-61-sol": "custom:codex-61-sol"
     });
-    assert.equal(reopened.getConversationInstructionProfile("codex-55").body, "custom:codex-55");
+    assert.equal(reopened.getConversationInstructionProfile("codex-61-sol").body, "custom:codex-61-sol");
+    assert.equal(reopened.getConversationInstructionProfile("claude-opus-55").body, "custom:claude-opus-55");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -112,7 +114,7 @@ test("conversation instruction settings: Astra is additive and its choice persis
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    const existing = ["claude", "codex", "codex-55", "codex-56-sol"];
+    const existing = ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-61-sol"];
     store.setBrainChoice("codex-56-sol");
     for (const id of existing) store.setConversationInstruction(id, `keep:${id}`);
     const defaultBody = store.getConversationInstructionProfile("codex-astra").body;
@@ -141,7 +143,9 @@ test("conversation instruction settings: direct-map and malformed/unknown values
           codex: "legacy direct-map value",
           unknown: "must be ignored",
           claude: "   ",
-          "codex-55": 42
+          "codex-56-sol": 42,
+          // 2026-10-16 に削除した GPT-5.5 の保存済み上書きは未知 id として無視される。
+          "codex-55": "removed GPT-5.5 override must be ignored"
         }
       }),
       "utf8"
@@ -203,7 +207,7 @@ test("conversation instruction settings: reset removes only selected override", 
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    const ids = ["codex-astra", "claude", "codex", "codex-55", "codex-56-sol"];
+    const ids = ["codex-astra", "claude", "codex", "codex-61-sol", "codex-56-sol", "claude-opus-55"];
     for (const id of ids) store.setConversationInstruction(id, `${id} custom`);
     for (const [index, id] of ids.entries()) {
       assert.equal(store.resetConversationInstruction(id), true);
@@ -871,6 +875,200 @@ test("settings store: memory enabled 用の unwritable path は set を握って
     const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
     assert.doesNotThrow(() => store.setMemoryEnabled(true));
     assert.equal(store.getMemoryEnabled(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: stt engine は set→get roundtrip で永続化し・他のキーと同居する（操縦席の文字起こし選択）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getSttEngine(), null); // 未作成 = 記憶なし（既定 whisper は呼び出し側）。
+    store.setLastDevice("Mic A");
+    store.setSttEngine("elevenlabs");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getSttEngine(), "elevenlabs");
+    assert.equal(reopened.getLastDevice(), "Mic A");
+    reopened.setSttEngine("whisper");
+    assert.equal(store.getSttEngine(), "whisper");
+    store.setSttEngine(null);
+    assert.equal(store.getSttEngine(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: tts engine は set→get roundtrip で永続化し・sttEngine と同居する（声の差し替え Wave 3）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getTtsEngine(), null); // 未作成 = 記憶なし（既定 aivis は呼び出し側）。
+    store.setSttEngine("elevenlabs");
+    store.setTtsEngine("elevenlabs");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getTtsEngine(), "elevenlabs");
+    assert.equal(reopened.getSttEngine(), "elevenlabs"); // 片方の set が他方を消さない。
+    reopened.setTtsEngine("aivis");
+    assert.equal(store.getTtsEngine(), "aivis");
+    assert.equal(store.getSttEngine(), "elevenlabs");
+    store.setTtsEngine(null);
+    assert.equal(store.getTtsEngine(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getTtsEngine returns null・文字列でない値は null・unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(path, "{ not json", "utf8");
+    assert.equal(createFileSettingsStore({ path }).getTtsEngine(), null);
+    writeFileSync(path, JSON.stringify({ ttsEngine: 42 }), "utf8");
+    assert.equal(createFileSettingsStore({ path }).getTtsEngine(), null);
+    const unwritable = createFileSettingsStore({ path: join(dir, "settings.json", "nested", "x.json") });
+    assert.doesNotThrow(() => unwritable.setTtsEngine("elevenlabs"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: corrupt JSON → getSttEngine returns null・unwritable path は set を握って続行する", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(path, "{ not json", "utf8");
+    assert.equal(createFileSettingsStore({ path }).getSttEngine(), null);
+    const unwritable = createFileSettingsStore({ path: join(dir, "settings.json", "nested", "x.json") });
+    assert.doesNotThrow(() => unwritable.setSttEngine("elevenlabs"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: speak-start mode は set→get roundtrip で永続化し・他のキーと同居する（speak-now 合意 §5）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getSpeakStartMode(), null); // 未作成 = 記憶なし（初回既定 speak-now は呼び出し側）。
+    store.setVerbosityMode("quiet");
+    store.setSpeakStartMode("classic");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getSpeakStartMode(), "classic");
+    assert.equal(reopened.getVerbosityMode(), "quiet");
+    reopened.setSpeakStartMode("speak-now");
+    assert.equal(store.getSpeakStartMode(), "speak-now");
+    store.setSpeakStartMode(null);
+    assert.equal(store.getSpeakStartMode(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: 忙しい間のコメントの扱いは set→get roundtrip・鮮度と件数はファイルのキーから読む（コメント反応の合意 §2）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getCommentBusyPolicy(), null); // 未作成 = 記憶なし（既定 hold は呼び出し側）。
+    assert.deepEqual(store.getCommentHold(), { maxAgeSec: null, maxCount: null });
+    store.setSpeakStartMode("speak-now");
+    store.setCommentBusyPolicy("drop");
+    const reopened = createFileSettingsStore({ path });
+    assert.equal(reopened.getCommentBusyPolicy(), "drop");
+    assert.equal(reopened.getSpeakStartMode(), "speak-now", "他のキーと同居");
+    writeFileSync(path, JSON.stringify({ commentBusyPolicy: "hold", commentHoldMaxAgeSec: 30, commentHoldMaxCount: 5 }), "utf8");
+    assert.equal(store.getCommentBusyPolicy(), "hold");
+    assert.deepEqual(store.getCommentHold(), { maxAgeSec: 30, maxCount: 5 });
+    writeFileSync(path, JSON.stringify({ commentHoldMaxAgeSec: "30", commentHoldMaxCount: -1 }), "utf8");
+    assert.deepEqual(store.getCommentHold(), { maxAgeSec: null, maxCount: null }, "数でない・正でない値は既定");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: 相槌どうしの最小間隔はファイルのキー backchannelMinIntervalSec から読む（speak-now backchannel.md §2）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getBackchannelMinIntervalSec(), null, "未作成 = 既定（8 秒は呼び出し側）");
+    writeFileSync(path, JSON.stringify({ speakStartMode: "speak-now", backchannelMinIntervalSec: 12 }), "utf8");
+    assert.equal(store.getBackchannelMinIntervalSec(), 12);
+    assert.equal(store.getSpeakStartMode(), "speak-now", "他のキーと同居");
+    store.setSpeakStartMode("classic");
+    assert.equal(store.getBackchannelMinIntervalSec(), 12, "他のキーの set で消えない");
+    writeFileSync(path, JSON.stringify({ backchannelMinIntervalSec: 0 }), "utf8");
+    assert.equal(store.getBackchannelMinIntervalSec(), 0, "0 は歯止めなしとして有効");
+    for (const bad of ["8", -1, null]) {
+      writeFileSync(path, JSON.stringify({ backchannelMinIntervalSec: bad }), "utf8");
+      assert.equal(store.getBackchannelMinIntervalSec(), null, `${JSON.stringify(bad)} は既定`);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: 遅延の「遅い」しきい値はファイルのキー latencyWarnSec / latencyAlertSec から読む（cockpit-glance-redesign.md §9.1）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: null, alertSec: null }, "未作成 = 既定（4 / 6 秒は呼び出し側）");
+    writeFileSync(path, JSON.stringify({ latencyWarnSec: 3.5, latencyAlertSec: 5 }), "utf8");
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: 3.5, alertSec: 5 });
+    store.setSpeakStartMode("classic");
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: 3.5, alertSec: 5 }, "他のキーの set で消えない");
+    writeFileSync(path, JSON.stringify({ latencyWarnSec: "4", latencyAlertSec: 0 }), "utf8");
+    assert.deepEqual(store.getLatencyThresholds(), { warnSec: null, alertSec: null }, "数でない・正でない値は既定");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: 圧縮の目安はファイルのキー compactThresholdTokens / compactQuietSec / compactMinIntervalMin から読む（context-growth-2026-10.md §6・§8）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: null, quietSec: null, minIntervalMin: null }, "未作成 = 既定（呼び出し側）");
+    writeFileSync(path, JSON.stringify({ compactThresholdTokens: 250_000, compactQuietSec: 5, compactMinIntervalMin: 0 }), "utf8");
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: 250_000, quietSec: 5, minIntervalMin: 0 });
+    store.setSpeakStartMode("classic");
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: 250_000, quietSec: 5, minIntervalMin: 0 }, "他のキーの set で消えない");
+    writeFileSync(path, JSON.stringify({ compactThresholdTokens: 460_000, compactQuietSec: -1, compactMinIntervalMin: "10" }), "utf8");
+    assert.deepEqual(store.getContextCompaction(), { thresholdTokens: null, quietSec: null, minIntervalMin: null }, "範囲外・数でない値は既定");
+    for (const bad of [49_999, 200_000.5, "200000", 0.42]) {
+      writeFileSync(path, JSON.stringify({ compactThresholdTokens: bad }), "utf8");
+      assert.equal(store.getContextCompaction().thresholdTokens, null, `範囲外・小数・文字列は既定: ${bad}`);
+    }
+    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 0.42 }), "utf8");
+    assert.equal(store.getContextCompaction().thresholdTokens, null, "旧キー（割合）は読まない = 既定");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: setCompactThresholdTokens は compactThresholdTokens を記憶し（他のキーを消さない）、旧キー compactThresholdRatio を消す・範囲外は null", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(path, JSON.stringify({ compactThresholdRatio: 0.42, compactQuietSec: 5, brainChoice: "codex-61-sol" }), "utf8");
+    const store = createFileSettingsStore({ path });
+    store.setCompactThresholdTokens(150_000);
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(saved.compactThresholdTokens, 150_000);
+    assert.equal("compactThresholdRatio" in saved, false, "旧キーは消える");
+    assert.equal(saved.compactQuietSec, 5);
+    assert.equal(saved.brainChoice, "codex-61-sol");
+    assert.deepEqual(createFileSettingsStore({ path }).getContextCompaction(), { thresholdTokens: 150_000, quietSec: 5, minIntervalMin: null }, "次回起動で復元");
+    store.setCompactThresholdTokens(10_000);
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).compactThresholdTokens, null, "範囲外は null（= 既定）");
+    assert.equal(store.getContextCompaction().thresholdTokens, null);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

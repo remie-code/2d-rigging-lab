@@ -23,10 +23,20 @@
  *  - BRAIN_LABELS / brainLabel → 頭 id → 表示ラベル（`BRAINS[*].label` 相当を UI 層で直書き。
  *    cockpit-server.mjs が「頭 id 2 値を直書きする」のと同じ責務境界規律——settings-drawer.mjs は
  *    src/mind/brains.mjs を import しない。「二人目の客が来た時」に選択肢を増やす場所はここ 1 箇所。
- *    2026-07-17 追撃で実際に三人目・四人目（Codex GPT-5.5 / GPT-5.6 Sol）がここへ 2 項目追加された）。
+ *    2026-07-17 追撃で実際に三人目・四人目（Codex GPT-5.5 / GPT-5.6 Sol）がここへ 2 項目追加された。
+ *    2026-10-16 に GPT-5.5 を削除し、GPT-6.1 Sol / Claude Opus 5.5 を追加）。
  *  - brainCredentialHealthLabel → `cockpit.mjs` の `brainStatus()` が返す `credentialHealth`
  *    （資格情報ファイルの**存在確認 boolean のみ**・中身は扱わない・blocking #4）を文言化する。
  *    操縦席は資格情報そのものを扱わない（brain-swap.md §2 UX 裁定）。
+ *
+ * 操縦席の文字起こし選択（cockpit-stt-selection.md §4.2・§8）追加:
+ *  - STT_ENGINE_LABELS / sttStatusView → ヘッダの `stt: ElevenLabs up` / `stt: whisper up` /
+ *    `stt: ElevenLabs reconnecting`（黄色）。既存の whisper 死活表示は残したまま足す。
+ *  - micInputLabel → 耳が動いている（listening）間だけ出す使用中のマイク名。
+ *
+ * 声の差し替え Wave 3 Domain E 追加:
+ *  - TTS_ENGINE_LABELS / ttsStatusView → ログのタブの健康 1 行の `tts: ElevenLabs up` / `tts: AivisSpeech up` /
+ *    `tts: ElevenLabs reconnecting`（黄色）。sttStatusView と同じ形。まだ engine が無い（unknown）間は出さない。
  */
 
 /**
@@ -76,6 +86,71 @@ export function mergeHealth(prev, next) {
 }
 
 /**
+ * 文字起こしの方式 id → ヘッダ表示名（選択肢の表示は view-logic/settings.mjs の STT_ENGINE_OPTIONS）。
+ * @type {Readonly<Record<string, string>>}
+ */
+export const STT_ENGINE_LABELS = Object.freeze({
+  whisper: "whisper",
+  elevenlabs: "ElevenLabs"
+});
+
+/**
+ * ヘッダの文字起こし表示（`ElevenLabs up` 等）。state.stt（{ engine, status, reason }）を受ける。
+ * down は reason を em-dash で併記（healthStatusView と同じ流儀）。connecting / reconnecting は
+ * 黄色のクラス（styles.mjs の .hstat.reconnecting / .hstat.connecting）。stt が無ければ null（出さない）。
+ * @param {{ engine?: string | null; status?: string | null; reason?: string | null } | null | undefined} stt
+ * @returns {{ text: string; className: string; title: string } | null}
+ */
+export function sttStatusView(stt) {
+  if (!stt) return null;
+  const label = (stt.engine && STT_ENGINE_LABELS[stt.engine]) || "unknown";
+  const status = stt.status || "unknown";
+  return {
+    text: label + " " + status + (status === "down" && stt.reason ? " — " + stt.reason : ""),
+    className: "hstat " + status,
+    title: stt.reason || ""
+  };
+}
+
+/**
+ * 声の方式 id → 表示名（選択肢の表示は view-logic/settings.mjs の TTS_ENGINE_OPTIONS）。
+ * @type {Readonly<Record<string, string>>}
+ */
+export const TTS_ENGINE_LABELS = Object.freeze({
+  aivis: "AivisSpeech",
+  elevenlabs: "ElevenLabs"
+});
+
+/**
+ * 健康 1 行の声の表示（`ElevenLabs up` 等）。state.tts（{ engine, status, reason }）を受ける。表示の形は
+ * sttStatusView と同じ（down は reason を併記・connecting / reconnecting は黄色）。tts が無い・まだ engine を
+ * 用意していない（status unknown）なら null（出さない）。
+ * @param {{ engine?: string | null; status?: string | null; reason?: string | null } | null | undefined} tts
+ * @returns {{ text: string; className: string; title: string } | null}
+ */
+export function ttsStatusView(tts) {
+  if (!tts || !tts.status || tts.status === "unknown") return null;
+  const label = (tts.engine && TTS_ENGINE_LABELS[tts.engine]) || "unknown";
+  return {
+    text: label + " " + tts.status + (tts.status === "down" && tts.reason ? " — " + tts.reason : ""),
+    className: "hstat " + tts.status,
+    title: tts.reason || ""
+  };
+}
+
+/**
+ * ヘッダに出す使用中のマイク名（耳が listening の間だけ・それ以外は null = 出さない）。
+ * state.device は Start 時の生のデバイス名（未指定 = 既定入力は "default"）。
+ * @param {string | null | undefined} ears
+ * @param {string | null | undefined} device
+ * @returns {string | null}
+ */
+export function micInputLabel(ears, device) {
+  if (ears !== "listening") return null;
+  return device ? device : "default";
+}
+
+/**
  * 声の出力先の表示文言（未設定は "default"）。原実装 applyAudioDevice の
  * `ad && ad.name ? ad.name : "default"`（:344）と同値。ヘッダの「一目の健康」と
  * 設定引き出し（Domain C）の両方がこの単一導出を使う。
@@ -93,10 +168,11 @@ export function voiceOutputLabel(ad) {
  */
 export const BRAIN_LABELS = Object.freeze({
   claude: "Claude (Opus 4.8)",
+  "claude-opus-55": "Claude (Opus 5.5)",
   codex: "Codex (GPT-5.6 Terra)",
-  "codex-55": "Codex (GPT-5.5)",
   "codex-56-sol": "Codex (GPT-5.6 Sol)",
-  "codex-astra": "GPT-6 Astra"
+  "codex-astra": "GPT-6 Astra",
+  "codex-61-sol": "GPT-6.1 Sol"
 });
 
 /**

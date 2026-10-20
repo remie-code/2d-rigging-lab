@@ -17,6 +17,8 @@
  *  - vision-marker:    { id, kind:"vision-marker", timeText, whoText:"vision", markerText:"*", text, thumbSrc: string|null }
  *  - barge-in-marker:  { id, kind:"barge-in-marker", timeText, whoText:"barge-in", markerText:"!!", text }
  *  - self-fire-marker: { id, kind:"self-fire-marker", timeText, whoText:"self", markerText:"~", text }
+ *  - judgment-marker:  { id, kind:"judgment-marker", timeText, whoText:"judge", markerText:"?", text }
+ *                      （speak-now の判定行「判定: 自発 0.45」・speak-now 合意 §5）
  *
  * speaking 行の規律（現 cockpit.html と機能同値）:
  *  - transcript / ghost の追加は speaking 行を**除去してから**積む（:387 :418 removeSpeakingRow）。
@@ -25,6 +27,7 @@
  */
 
 import {
+  resolveSpeaker,
   speakerLabel,
   speakerRowClass,
   latencyLabel
@@ -34,13 +37,17 @@ import {
   expressionRowText,
   visionMarkerText,
   bargeInMarkerText,
-  selfFireMarkerText
+  selfFireMarkerText,
+  speakNowJudgmentText,
+  commentJudgmentText
 } from "../view-logic/markers.mjs";
 import {
   discardGhostLabel,
   diagnosticGhostLabel,
   selfFireGhostLabel,
-  chatDiagnosticGhostLabel
+  chatDiagnosticGhostLabel,
+  speakNowErrorGhostLabel,
+  commentJudgmentErrorGhostLabel
 } from "../view-logic/ghost.mjs";
 import { formatClock } from "../view-logic/format-time.mjs";
 
@@ -65,6 +72,8 @@ function rowsWithoutSpeaking(rows) {
  * 転写行を積む（addTranscriptRow :386-408 同値・speaking 行は除去してから）。
  * 時刻は d.appendedAtMs 優先（:392 `fmtClock(d.appendedAtMs || Date.now())`）。
  * レイテンシは live 行のみ（latencyLabel が null なら描かない・履歴行は契約上載らない）。
+ * **you の行（文字起こし）には遅延を出さない**（whisper / ElevenLabs とも・操縦席の文字起こし選択
+ * cockpit-stt-selection.md §4.2。値は SSE には残り、操縦席の標準出力に 1 行ずつ書かれる）。
  * @param {FeedState} feed  @param {any} d  SSE transcript ペイロード。  @param {number} nowMs
  */
 export function feedWithTranscript(feed, d, nowMs) {
@@ -77,7 +86,7 @@ export function feedWithTranscript(feed, d, nowMs) {
     text: d && d.text,
     // 多頭化 Domain C: brain 札を additive で latencyLabel へ渡す（d.brain 未搭載の you/viewer 行や
     // brain 未注入時の soul 行は undefined のまま＝従来どおり (Ns) のみ）。
-    latText: latencyLabel(d && d.latencyMs, d && d.brain)
+    latText: resolveSpeaker(d) === "you" ? null : latencyLabel(d && d.latencyMs, d && d.brain)
   });
 }
 
@@ -165,6 +174,23 @@ export function feedWithSelfFireMarker(feed, d, nowMs) {
 }
 
 /**
+ * speak-now の判定行を積む（speak-now 合意 §5・SSE selfFire kind:"speak-now-judgment" の成功分）。
+ * マーカー行の一種（speaking 行は除去しない＝自発マーカーと同じ規律）。
+ * コメント反応の判定行（「コメント判定: 反応 0.92」）も同じ行種で描く（text を渡す）。
+ * @param {FeedState} feed  @param {any} d  SSE selfFire（kind:"speak-now-judgment"・choice/probability）。  @param {number} nowMs
+ * @param {string} [text]  行の文字列（省略時は speak-now の判定行）。
+ */
+export function feedWithJudgmentMarker(feed, d, nowMs, text) {
+  return appended(feed, {
+    kind: "judgment-marker",
+    timeText: formatClock(nowMs),
+    whoText: "judge",
+    markerText: "?",
+    text: text ?? speakNowJudgmentText(d)
+  });
+}
+
+/**
  * speaking 行の出現/消滅（showSpeakingRow :374-384 / removeSpeakingRow :370-373 同値）。
  * visible=true: 既にあれば同一 feed（:375 `if (speakingRow) return;`）・なければ末尾に追加。
  * visible=false: あれば除去・なければ同一 feed。
@@ -208,7 +234,12 @@ export function feedFromHistory(transcripts, nowMs) {
  *  - fire（:860-864）: accepted:true のみマーカー行（fire-note は app.mjs）。
  *  - visionCaptured（:866）: 視覚マーカー行。
  *  - selfFire（:874-878）: fired:true はマーカー行 / fired:false はゴースト行。
+ *    kind:"speak-now-judgment"（speak-now の判定・相乗り）は先に分流: error ありはゴースト行
+ *    「(判定エラー: …)」・それ以外は判定行「判定: 自発 0.45」。
+ *    kind:"comment-judgment"（コメント反応の判定・相乗り）も同様: error ありは「(コメント判定エラー: …)」・
+ *    それ以外は判定行「コメント判定: 反応 0.92」。発火結果（kind:"comment-react"）は従来の自発マーカー。
  *  - chatDiagnostic（:888-897）: chatDiagnosticGhostLabel 経由（観測補助 4 種は null = 非表示）。
+ *    kind:"commentRejected"（弾いたコメント）は「(弾いた: 乗っ取り)」。
  *
  * @param {FeedState} feed  @param {string} eventName  @param {any} d  @param {number} nowMs
  * @returns {FeedState}
@@ -235,6 +266,17 @@ export function feedAfterSseEvent(feed, eventName, d, nowMs) {
     case "visionCaptured":
       return feedWithVisionMarker(feed, d, nowMs);
     case "selfFire":
+      if (d && d.kind === "speak-now-judgment") {
+        return d.error != null
+          ? feedWithGhost(feed, speakNowErrorGhostLabel(d), nowMs)
+          : feedWithJudgmentMarker(feed, d, nowMs);
+      }
+      if (d && d.kind === "comment-judgment") {
+        // コメント反応の判定（反応する のときだけサーバが流す）/ 判定エラー（コメント反応の合意 §3）。
+        return d.error != null
+          ? feedWithGhost(feed, commentJudgmentErrorGhostLabel(d), nowMs)
+          : feedWithJudgmentMarker(feed, d, nowMs, commentJudgmentText(d));
+      }
       return d && d.fired
         ? feedWithSelfFireMarker(feed, d, nowMs)
         : feedWithGhost(feed, selfFireGhostLabel(d), nowMs);

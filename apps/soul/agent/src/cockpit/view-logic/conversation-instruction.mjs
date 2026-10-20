@@ -13,10 +13,11 @@ import { BRAIN_LABELS } from "./health.mjs";
 /** @type {ReadonlyArray<string>} */
 export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
   "claude",
+  "claude-opus-55",
   "codex",
-  "codex-55",
   "codex-56-sol",
-  "codex-astra"
+  "codex-astra",
+  "codex-61-sol"
 ]);
 
 /** @type {ReadonlyArray<{ value: string; label: string }>} */

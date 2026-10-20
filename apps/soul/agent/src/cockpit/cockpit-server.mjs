@@ -34,6 +34,21 @@
  *  で生存接続を即断）。デバイス列挙の spawn タイマは unref。リークするタイマ/ハンドル/子プロセスを
  *  残さない（node:test が自然終了する型）。
  *
+ * ── 操縦席の作り直し 1 回目: 画面へ届けるデータ（cockpit-glance-redesign.md §9）──────────────────
+ *  画面そのものは 2 回目。ここでは画面が使うデータを SSE / snapshot まで届ける（既存の SSE と画面は壊さない）:
+ *   - 発火番号ときっかけ: 発火ごとに `fire({ cause })` できっかけを渡し、orchestrator が振る fireId を
+ *     SSE "fire"（受理）・"fireAsk"・"transcript"（soul 行）・"latency"・"selfFire"（発火結果）に載せる。
+ *     判定の行（selfFire の speak-now-judgment / comment-judgment）には、きっかけの seq と行き先（action）を載せる。
+ *   - 推論の範囲: SSE "fireAsk"（ask の時点の会話の窓の始まりと終わりの seq・復元しない）。
+ *   - 遅延: SSE "latency"（1 返事 1 レコード・区間と合計と区分）。しきい値は snapshot の latencyThresholds。
+ *   - 残量: snapshot の quota と SSE "quota"（Codex / ElevenLabs の残りの割合とリセット時刻・不明は null）。
+ *   - 警告: snapshot の warnings と SSE "warnings"（状態で決まるもの・60 秒で消える出来事・./warnings.mjs）。
+ *   - 圧縮中: snapshot の compacting（頭の会話の圧縮の最中だけ true・状態のピルの「圧縮中」）。started で true、
+ *     finished / failed / 頭の作り直し（resetContextCompaction）で false。変わったら SSE "state" で押す。
+ *   - 圧縮の目安: snapshot の compaction（`{ thresholdTokens }` = 圧縮を始める大きさ・直近の入力トークン）。
+ *     POST /api/compact-threshold で変え（設定の「頭脳・会話」タブ）、onSetCompactThresholdTokens が保存と走っている
+ *     compactor の差し替えを担う（cockpit.mjs）。
+ *
  * ── 既存コードは変更しない ────────────────────────────────────────────
  *  ear-pipeline / transcript-buffer / whisper-server / ffmpeg-capture は購読・呼び出しのみ。
  *  結線に必要なフックは全て既存 API（onVadEvent/onTranscript/onDiagnostic・transcriptBuffer.onDiscard・
@@ -46,16 +61,40 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createEarPipeline } from "../ears/ear-pipeline.mjs";
+import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
+import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
-import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-player.mjs";
+import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-devices.mjs";
 import { createBargeInGate } from "../mind/barge-in.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
+import {
+  createSpeakNowController,
+  SPEAK_NOW_BACKCHANNEL_INSTRUCTION,
+  SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS
+} from "../mind/speak-now.mjs";
+import { createDecisionsJudge, loadDecisionsApiKey } from "../mind/speak-now-decisions.mjs";
+import { createCommentGuard, COMMENT_JUDGE_TIMEOUT_MS } from "../mind/comment-guard.mjs";
+import {
+  createCommentReactController,
+  buildCommentReactFireInstruction,
+  COMMENT_BUSY_POLICIES,
+  DEFAULT_COMMENT_BUSY_POLICY,
+  COMMENT_HOLD_MAX_AGE_MS,
+  COMMENT_HOLD_MAX_COUNT
+} from "../mind/comment-react.mjs";
 import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
+import { composeReplyLatency, resolveLatencyThresholds } from "../mind/fire-latency.mjs";
+import {
+  createWarningBoard,
+  isCreditExhaustedError,
+  quotaLowWarning,
+  WARNING_EVENT_TTL_MS
+} from "./warnings.mjs";
 import { resolveBrainIdentity } from "../mind/brains.mjs";
 import { resolveModelIdentity } from "../mind/model-identity.mjs";
+import { normalizeCompactThresholdTokens } from "../mind/context-compactor.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
 export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
@@ -63,6 +102,24 @@ export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
 export const DEFAULT_COCKPIT_PORT = 8181;
 /** 状態スナップショットに載せる直近転写の件数（タブ開き直し時の復元用）。 */
 export const DEFAULT_TRANSCRIPT_HISTORY = 200;
+/** 声の方式（POST /api/ears/start の body `ttsEngine`・設定キー `ttsEngine` と同じ語彙・声の差し替え Wave 3）。 */
+export const TTS_ENGINES = Object.freeze(["aivis", "elevenlabs"]);
+/** 声の engine の状態の語彙（VoiceEngine の status と同じ + まだ知らない unknown）。 */
+const VOICE_STATUSES = Object.freeze(["unknown", "connecting", "up", "reconnecting", "down"]);
+/** 声の状態の理由（警告 tts-reconnecting / tts-down の detail）の上限字数。キーの置き場所を示す Start 失敗の理由が収まる長さ。 */
+const VOICE_REASON_MAX_CHARS = 160;
+
+/**
+ * 声の状態の理由を表示用に整える（制御文字を除き・空なら null・長ければ切る）。
+ * @param {unknown} reason
+ * @returns {string | null}
+ */
+function clipVoiceReason(reason) {
+  if (typeof reason !== "string") return null;
+  const text = reason.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  if (text.length === 0) return null;
+  return text.length > VOICE_REASON_MAX_CHARS ? `${text.slice(0, VOICE_REASON_MAX_CHARS - 1)}…` : text;
+}
 
 /** loopback リテラルのみ許容（非 loopback は外部露出になるため拒否）。 */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -328,6 +385,8 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   onExpression: (info: object) => void;
  *   onVisionCaptured: (info: object) => void;
  *   onUsage: (info: object) => void;
+ *   onAsk: (info: object) => void;
+ *   onLatency: (info: object) => void;
  *   initialKilled: boolean;
  * }) => { fire: (fireOptions?: object) => Promise<object>; getState: () => string; dispose: () => void;
  *   kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean }} [options.fireOrchestratorFactory]
@@ -341,6 +400,8 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   経由（diagnostic イベントに kind フィールドが乗る）。**S8**: initialKilled はサーバのキル状態正本
  *   （born-killed・下の `killed` 変数）を生成時に渡す。orchestrator が kill/revive/getKilled を持てば
  *   POST /api/kill がそれらを呼ぶ（未対応でも 503 にはならない・fireOrchestrator 自体の有無だけがゲート）。
+ *   **操縦席の作り直し 1 回目**: onAsk（推論の範囲）は SSE "fireAsk"、onLatency（発火の中の遅延）は文字起こし・判定の
+ *   区間を足して SSE "latency" へ。fire() には `{ cause }`（きっかけ）を渡す。
  *   本番は Domain B が session/speak/channel/player を結線した createFireOrchestrator を返す。
  * @param {boolean} [options.selfFireInitialEnabled=false]
  *   S6「会話が続く」自発発火（呼びかけ/区切り/沈黙）の初期 ON/OFF。既定 OFF。orchestrator 注入時のみ
@@ -430,6 +491,93 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   記憶の現況（`{ enabled: boolean, count: number, lastRecordAtMs: number | null }`）を返す。
  *   state snapshot の `memory` に載せる（brainStatus/audioDeviceStatus と同型）。未注入なら
  *   snapshot の memory:null。
+ * @param {(tokens: number) => void | Promise<void>} [options.onSetCompactThresholdTokens]
+ *   圧縮を始める大きさ（直近の入力トークン・整数で 5 万〜45 万）の変更フック（POST /api/compact-threshold が呼ぶ・
+ *   onSetMemoryEnabled と同型）。**cockpit-server は圧縮の実体を知らない**（実体は cockpit.mjs が settings 永続 +
+ *   走っている compactor の setThresholdTokens で担う＝次の確認から効く）。未注入なら POST /api/compact-threshold は 503。
+ * @param {() => ({ thresholdTokens: number } | null)} [options.contextCompactionStatus]
+ *   圧縮の目安の現況（`{ thresholdTokens }`）を返す。state snapshot の `compaction` に載せる（memoryStatus と同型・
+ *   未注入なら null）。
+ * @param {"whisper" | "elevenlabs"} [options.sttEngineInitial="whisper"]
+ *   文字起こしの方式の初期選択（操縦席の文字起こし選択・cockpit-stt-selection.md）。起動時の値は
+ *   呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（selfFireInitialEnabled と同型）。
+ *   選択は POST /api/ears/start の body `sttEngine` で受け、Start ごとに onSetSttEngine で永続化する
+ *   （マイクと同じく [Start] の前に選ぶ・動作中に変えるなら Stop→Start）。
+ * @param {(engine: string) => void | Promise<void>} [options.onSetSttEngine]
+ *   文字起こしの方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.elevenLabsApiKeyProvider]
+ *   ElevenLabs のキーを返す（既定 loadElevenLabsApiKey = `apps/soul/agent/.env.elevenlabs.local` を
+ *   コード内で直接読む・process.env に入れない）。Start ごとに読む。キーは pipeline へ渡すだけで、
+ *   state/SSE/ログ/エラーには載せない。
+ * @param {"aivis" | "elevenlabs"} [options.ttsEngineInitial="aivis"]
+ *   声の方式の初期選択（声の差し替え Wave 3 Domain E・voice-swap-wave-plan.md §3）。sttEngineInitial の写経:
+ *   起動時の値は cockpit.mjs が settings から読んで渡す（未知値は aivis）。選択は POST /api/ears/start の body
+ *   `ttsEngine` で受け、Start ごとに onSetTtsEngine で永続化する（効くのは次の Start から）。
+ * @param {(engine: string) => void | Promise<void>} [options.onSetTtsEngine]
+ *   声の方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ * @param {(engine: "aivis" | "elevenlabs") => ({ ok: boolean; reason?: string } | Promise<{ ok: boolean; reason?: string }>)} [options.onPrepareVoiceEngine]
+ *   耳の Start で声の engine を用意する口（cockpit.mjs が engine の作成・作り直し・ElevenLabs のキーの読み込みを
+ *   担う。**cockpit-server は engine の実体もキーも知らない**）。耳を開く前に呼び、`ok:false` なら Start を失敗に
+ *   する（理由は STT のキー切れと同じく Start の応答とエラー欄へ。理由にキーは含めない前提）。未注入なら呼ばない。
+ *   engine の状態は cockpit.mjs が `setVoiceEngineStatus` で知らせる。
+ * @param {(info: { engine: string; latencyMs: number | null }) => void} [options.onSttLatency]
+ *   you の転写 1 件ごとの遅延（数字のみ・本文は渡さない）。cockpit.mjs が標準出力に 1 行書く
+ *   （画面の行の横の遅延表示は出さない方針・合意 §4.2）。
+ * @param {() => void} [options.onEarsStarted]
+ *   耳の Start が成功したときに呼ぶ（画面キャプチャの撮る係を立ち上げる口・
+ *   discussion/ai-cohost/research/vision-capture-latency-2026-10.md §4 の 2）。待たない・失敗しても耳は止めない。
+ * @param {() => void} [options.onEarsStopped]
+ *   耳の Stop と close() のときに呼ぶ（撮る係を止める口）。冪等な実装を渡す前提（耳が起動していなくても呼ぶ）。
+ * @param {"classic" | "speak-now"} [options.speakStartModeInitial="classic"]
+ *   話し始めの方式（speak-now 合意 §5 の「話し始め: 従来 / speak-now」）の初期値。サーバ単体の既定は
+ *   "classic"（従来・無退行）で、操縦席の初回既定 speak-now は呼び出し側（cockpit.mjs の settings 橋渡し）が
+ *   決める（selfFireInitialEnabled と同型）。"speak-now" の間は fireScheduler の turn-end / call /
+ *   interjection を止め、you の転写ごとに speak-now の判定を回す（src/mind/speak-now.mjs）。
+ *   scheduler が無ければ意味を持たない。
+ * @param {(mode: string) => void | Promise<void>} [options.onSetSpeakStartMode]
+ *   話し始めの方式の永続化フック（POST /api/speak-start が呼ぶ・onSetVerbosity と同型の失敗寛容）。
+ * @param {(request: { input: string; instructions: string; choices: ReadonlyArray<{ value: string; description: string }> }) =>
+ *   Promise<{ choice: string; probs?: Record<string, number>; latencyMs?: number }>} [options.speakNowJudge]
+ *   speak-now の判定エンジン（テスト注入用）。既定は Decisions API 実装（createDecisionsJudge・キーは
+ *   decisionsApiKeyProvider で判定ごとに読む・タイムアウト 3 秒）。
+ * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.decisionsApiKeyProvider]
+ *   Decisions API のキーの読み口（既定 loadDecisionsApiKey = `.env.decisions.local` を直接読む・
+ *   process.env に入れない）。キーは state/SSE/ログ/エラーに載せない。
+ * @param {(info: object) => void} [options.onSpeakNowJudgment]
+ *   判定ごとの記録（遅延・選択・確率・行き先 or 失敗理由。会話の本文は渡さない）。cockpit.mjs が標準出力に
+ *   1 行書く（合意 §5）。
+ * @param {number} [options.backchannelMinIntervalMs=SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS]
+ *   相槌どうしの最小間隔（前の相槌を喋り始めてから次の相槌を喋らせない時間・既定 8 秒・
+ *   discussion/ai-cohost/decisions/speak-now/backchannel.md §2）。0 なら歯止めなし。cockpit.mjs が settings の
+ *   `backchannelMinIntervalSec` から渡す（commentHoldMaxAgeMs と同型）。
+ * @param {(comment: { text: string; displayName: string | null; name: string }) =>
+ *   (import("../mind/comment-guard.mjs").CommentGuardDecision | Promise<import("../mind/comment-guard.mjs").CommentGuardDecision>)} [options.commentGuard]
+ *   コメントの弾く判定（discussion/ai-cohost/decisions/comment-react/integration.md §1-3）。既定は Decisions API
+ *   実装（createCommentGuard・タイムアウト 5 秒・キーは decisionsApiKeyProvider で判定ごとに読む）。**全モード**
+ *   （KILL 中・自発 OFF・従来モードも）で、通ったコメントだけを転写バッファに積む。テスト注入用に同期で
+ *   `{ pass, kind }` を返してもよい（そのときは従来どおり同期で追記・放送する）。
+ * @param {(request: { input: string; instructions: string; choices: ReadonlyArray<{ value: string; description: string }> }) =>
+ *   Promise<{ choice: string; probs?: Record<string, number>; latencyMs?: number }>} [options.commentReactJudge]
+ *   コメントの反応する判定（合意 §1-6・speak-now モードの間だけ）。既定は Decisions API 実装（createDecisionsJudge・
+ *   タイムアウト 5 秒）。
+ * @param {"hold" | "drop"} [options.commentBusyPolicyInitial="hold"]
+ *   忙しい間に届いたコメントの扱い（"hold" = あとで拾う・既定 / "drop" = 見逃す・合意 §2）の初期値。
+ * @param {(policy: string) => void | Promise<void>} [options.onSetCommentBusyPolicy]
+ *   その永続化フック（POST /api/comment-busy が呼ぶ・onSetSpeakStartMode と同型の失敗寛容）。
+ * @param {number} [options.commentHoldMaxAgeMs=COMMENT_HOLD_MAX_AGE_MS]  あとで拾う: 届いてから捨てるまで（約 20 秒）。
+ * @param {number} [options.commentHoldMaxCount=COMMENT_HOLD_MAX_COUNT]  あとで拾う: まとめる件数（新しい方から 3 件）。
+ * @param {(info: object) => void} [options.onCommentJudgment]
+ *   コメント判定ごとの記録（弾く判定・反応する判定。遅延・結果・コメント ID。コメント本文は渡さない）。
+ *   cockpit.mjs が標準出力に 1 行書く（合意 §3）。
+ * @param {{ warnSec?: number; alertSec?: number }} [options.latencyThresholds]
+ *   返事の遅延の合計の「遅い」しきい値（秒・既定 4 / 6・cockpit-glance-redesign.md §9.1）。cockpit.mjs が settings の
+ *   `latencyWarnSec` / `latencyAlertSec` から渡す。snapshot の latencyThresholds に載せ、latency の level に使う。
+ * @param {{ snapshot: () => any; onChange: (fn: (snapshot: any) => void) => (() => void) }} [options.quotaSource]
+ *   残量の正本（./quota.mjs の createQuotaMonitor）。snapshot の quota に載せ、変わったら SSE "quota" と警告を更新する。
+ *   未注入なら quota:null。
+ * @param {(record: object) => void} [options.onReplyLatency]  1 返事の遅延レコード（数字ときっかけの種類だけ・本文なし）。
+ *   cockpit.mjs が標準出力に 1 行書く。
+ * @param {number} [options.warningEventTtlMs=WARNING_EVENT_TTL_MS]  一回きりの警告が消えるまで（テスト注入用）。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -440,7 +588,7 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   setSelfFireEnabled: (enabled: boolean) => boolean;
  *   selfFireStatus: () => { enabled: boolean } | null;
  *   bargeInStatus: () => { enabled: boolean } | null;
- *   ingestChatMessage: (msg: { text?: string; displayName?: string } | null) => void;
+ *   ingestChatMessage: (msg: { text?: string; displayName?: string; messageId?: string | null } | null) => void;
  *   broadcastChatStatus: (status: string) => void;
  *   broadcastChatDiagnostic: (info: any) => void;
  *   getTranscript: () => Array<any>;
@@ -495,6 +643,97 @@ export function createCockpitServer(options = {}) {
   const onSetMemoryEnabled = options.onSetMemoryEnabled;
   const onMemoryRecord = options.onMemoryRecord;
   const memoryStatusImpl = options.memoryStatus;
+  // 圧縮の目安（圧縮を始める大きさ）: 変更フック + 現況（未注入ならそれぞれ 503/null・memory と同型）。
+  // 目安の正本は cockpit.mjs の compactor（サーバは二重に持たない）。
+  const onSetCompactThresholdTokens = options.onSetCompactThresholdTokens;
+  const contextCompactionStatusImpl = options.contextCompactionStatus;
+  // 操縦席の文字起こし選択: 現在の選択（Start のたびに更新・耳が動いている間は使用中の方式）・
+  // 永続化フック・ElevenLabs キーの読み口・遅延ログの口。
+  /** @type {"whisper" | "elevenlabs"} */
+  let sttEngine = STT_ENGINES.includes(/** @type {any} */ (options.sttEngineInitial))
+    ? /** @type {"whisper" | "elevenlabs"} */ (options.sttEngineInitial)
+    : "whisper";
+  const onSetSttEngine = typeof options.onSetSttEngine === "function" ? options.onSetSttEngine : null;
+  const elevenLabsApiKeyProvider =
+    typeof options.elevenLabsApiKeyProvider === "function" ? options.elevenLabsApiKeyProvider : () => loadElevenLabsApiKey();
+  const onSttLatency = typeof options.onSttLatency === "function" ? options.onSttLatency : null;
+  // 声の方式の選択（声の差し替え Wave 3 Domain E）: 現在の選択（Start のたびに更新）・永続化フック・engine を
+  // 用意する口。engine の状態（connecting / up / reconnecting / down）は cockpit.mjs から setVoiceEngineStatus で届く。
+  /** @type {"aivis" | "elevenlabs"} */
+  let ttsEngine = TTS_ENGINES.includes(/** @type {any} */ (options.ttsEngineInitial))
+    ? /** @type {"aivis" | "elevenlabs"} */ (options.ttsEngineInitial)
+    : "aivis";
+  const onSetTtsEngine = typeof options.onSetTtsEngine === "function" ? options.onSetTtsEngine : null;
+  const onPrepareVoiceEngine = typeof options.onPrepareVoiceEngine === "function" ? options.onPrepareVoiceEngine : null;
+  /**
+   * 今の声の engine の状態（engine = 状態を知らせた engine の種類・まだ無ければ null）。
+   * @type {{ engine: string | null; status: "unknown" | "connecting" | "up" | "reconnecting" | "down"; reason: string | null }}
+   */
+  const voice = { engine: null, status: "unknown", reason: null };
+  // 画面キャプチャの撮る係の寿命を耳の Start / Stop に合わせる口（vision-capture-latency §4 の 2）。
+  const onEarsStarted = typeof options.onEarsStarted === "function" ? options.onEarsStarted : null;
+  const onEarsStopped = typeof options.onEarsStopped === "function" ? options.onEarsStopped : null;
+  /** @param {(() => void) | null} hook */
+  const callEarsHook = (hook) => {
+    if (!hook) return;
+    try {
+      hook();
+    } catch {
+      // 撮る係の起動/停止の失敗で耳の操作を止めない（撮影は毎回起動に戻るだけ）。
+    }
+  };
+  // speak-now（話し始めの判定・discussion/ai-cohost/decisions/speak-now/integration.md）: 方式の現在値・
+  // 永続化フック・判定エンジン・判定ログの口。
+  /** @type {"classic" | "speak-now"} */
+  let speakStartMode = options.speakStartModeInitial === "speak-now" ? "speak-now" : "classic";
+  const onSetSpeakStartMode = typeof options.onSetSpeakStartMode === "function" ? options.onSetSpeakStartMode : null;
+  const speakNowJudge =
+    typeof options.speakNowJudge === "function"
+      ? options.speakNowJudge
+      : createDecisionsJudge({
+          apiKeyProvider:
+            typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
+        });
+  const onSpeakNowJudgment = typeof options.onSpeakNowJudgment === "function" ? options.onSpeakNowJudgment : null;
+  const backchannelMinIntervalMs =
+    typeof options.backchannelMinIntervalMs === "number" &&
+    Number.isFinite(options.backchannelMinIntervalMs) &&
+    options.backchannelMinIntervalMs >= 0
+      ? options.backchannelMinIntervalMs
+      : SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS;
+  // コメント判定（discussion/ai-cohost/decisions/comment-react/integration.md）: 弾く判定・反応する判定・
+  // 忙しい間のコメントの扱い（あとで拾う / 見逃す）・判定ログの口。
+  const commentGuard =
+    typeof options.commentGuard === "function"
+      ? options.commentGuard
+      : createCommentGuard(
+          typeof options.decisionsApiKeyProvider === "function" ? { apiKeyProvider: options.decisionsApiKeyProvider } : {}
+        );
+  const commentReactJudge =
+    typeof options.commentReactJudge === "function"
+      ? options.commentReactJudge
+      : createDecisionsJudge({
+          timeoutMs: COMMENT_JUDGE_TIMEOUT_MS,
+          apiKeyProvider:
+            typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
+        });
+  /** @type {"hold" | "drop"} */
+  let commentBusyPolicy = COMMENT_BUSY_POLICIES.includes(/** @type {any} */ (options.commentBusyPolicyInitial))
+    ? /** @type {"hold" | "drop"} */ (options.commentBusyPolicyInitial)
+    : /** @type {"hold"} */ (DEFAULT_COMMENT_BUSY_POLICY);
+  const onSetCommentBusyPolicy = typeof options.onSetCommentBusyPolicy === "function" ? options.onSetCommentBusyPolicy : null;
+  const commentHoldMaxAgeMs =
+    typeof options.commentHoldMaxAgeMs === "number" && options.commentHoldMaxAgeMs > 0 ? options.commentHoldMaxAgeMs : COMMENT_HOLD_MAX_AGE_MS;
+  const commentHoldMaxCount =
+    typeof options.commentHoldMaxCount === "number" && options.commentHoldMaxCount >= 1
+      ? Math.floor(options.commentHoldMaxCount)
+      : COMMENT_HOLD_MAX_COUNT;
+  const onCommentJudgment = typeof options.onCommentJudgment === "function" ? options.onCommentJudgment : null;
+  // 操縦席の作り直し 1 回目（データ側）: 遅延のしきい値・残量の正本・遅延ログの口。
+  const latencyThresholds = resolveLatencyThresholds(options.latencyThresholds);
+  const quotaSource =
+    options.quotaSource && typeof options.quotaSource.snapshot === "function" ? options.quotaSource : null;
+  const onReplyLatency = typeof options.onReplyLatency === "function" ? options.onReplyLatency : null;
   // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
   // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
   // scripts/cockpit.mjs は無改変で動く）。
@@ -518,6 +757,9 @@ export function createCockpitServer(options = {}) {
   // S8「キルスイッチ」: キル状態の正本（サーバ側に一つ）。POST /api/kill が設定・snapshot() に露出・
   // fireOrchestrator 生成時（initialKilled）+ 遷移時（kill()/revive()）の両方へ伝播する（domain-b.md §）。
   let killed = false;
+  // 頭の会話の圧縮の最中か（broadcastContextCompaction の started → finished / failed・resetContextCompaction で
+  // 戻す）。snapshot の compacting に載せ、開き直した操縦席にも「圧縮中」を出す。
+  let contextCompacting = false;
   let boundPort = 0;
   // S6「会話が続く」barge-in の機械弁（VAD → 確定 → orchestrator.interrupt）。fireOrchestrator が
   // interrupt を持つときだけ生成する（下の orchestrator 結線で代入・onVadEvent が handle を回す）。
@@ -529,6 +771,32 @@ export function createCockpitServer(options = {}) {
   // 側で fake clock/注入 RNG により全分岐テスト済み（domain-c.md）。
   /** @type {ReturnType<typeof createFireScheduler> | null} */
   let fireScheduler = null;
+  // speak-now の判定部品（fireScheduler と同じく orchestrator が fire/getState を持つときだけ生成する）。
+  /** @type {ReturnType<typeof createSpeakNowController> | null} */
+  let speakNow = null;
+  // コメント反応の判定部品（speakNow と同じく orchestrator が fire/getState を持つときだけ生成する）。
+  /** @type {ReturnType<typeof createCommentReactController> | null} */
+  let commentReact = null;
+  // 弾く判定の待ち行列。判定は並行に走らせるが、転写バッファへは届いた順に積む（先のコメントの判定完了を
+  // 待つ・合意 §1-5）。decision が付いた先頭から順に取り出す。
+  /** @type {Array<{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }>} */
+  let guardQueue = [];
+  // チャット器官が ID を持たないコメント（テスト・旧器官）に振る操縦席内の ID。
+  let localCommentSeq = 0;
+  // サーバが呼んだ fire() のうち、まだ Promise が片付いていない数。orchestrator は fire() の受理直後
+  // （fireClaimed）から thinking に入るまで getState() が idle のままなので、speak-now の「忙しい」は
+  // この数も見る（最小の安全側: 受理の窓も忙しいとみなす）。
+  let fireInFlight = 0;
+  // speak-now の相槌の発火がまだ片付いていない間か（backchannel.md §2）。この間に orchestrator が speaking に
+  // なったら、それは相槌を喋り始めた時点 = 相槌どうしの歯止めの数え始め（speakNow.markBackchannelSpoken）。
+  // fire() は single-flight で、相槌の発火は「忙しくない」ときにしか要求しないので、この間の speaking は
+  // その相槌のもの。
+  let backchannelFirePending = false;
+  // 隙間で手動の圧縮（context-growth-2026-10.md §6）の材料: 配信者が今喋っているか（VAD の speechStart から
+  // speechEnd / speechCancel まで）と、喋り終わりの時刻（壁時計）。getQuietGap() が読む。
+  let userSpeaking = false;
+  /** @type {number | null} */
+  let lastSpeechEndAtMs = null;
   // S7「視聴者が混ざる」チャット器官（cockpit-server 所有・POST 駆動遅延起動＝ear-pipeline の流儀）。
   // POST /api/chat/connect で chatClientFactory から生成し start()・onMessage/onStatus/onDiagnostic を
   // 取り込み経路（ingestChatMessage/broadcastChatStatus/broadcastChatDiagnostic）へ繋ぐ。POST
@@ -537,12 +805,34 @@ export function createCockpitServer(options = {}) {
   let chatClient = null;
   /** @type {Array<() => void>} チャット器官フックの購読解除（破棄時に全撤去）。 */
   let chatUnsubs = [];
+  /** チャット器官が最後に知らせた状態（connect / 畳むときに戻す・警告の材料）。 */
+  /** @type {string | null} */
+  let lastChatStatus = null;
+  /**
+   * 配信者の行の文字起こしの遅延（seq → ms・遅延の「文字起こし」区間の材料）。直近だけ持つ。
+   * @type {Map<number, number | null>}
+   */
+  const sttLatencyBySeq = new Map();
+  const STT_LATENCY_KEEP = 500;
+  // 上の帯の警告（状態で決まるもの・一回きりの出来事）。変わったら SSE "warnings" で一覧ごと流す。
+  const warningBoard = createWarningBoard({
+    nowImpl,
+    eventTtlMs:
+      typeof options.warningEventTtlMs === "number" && options.warningEventTtlMs > 0 ? options.warningEventTtlMs : WARNING_EVENT_TTL_MS,
+    onChange: (list) => broadcast("warnings", { warnings: list })
+  });
+  /** @type {(() => void) | null} */
+  let quotaUnsub = null;
 
   const health = {
     /** @type {"up" | "down" | "unknown"} */ whisper: "unknown",
     /** @type {string | null} */ whisperReason: null,
     /** @type {"up" | "down" | "unknown"} */ ffmpeg: "unknown",
-    /** @type {string | null} */ ffmpegReason: null
+    /** @type {string | null} */ ffmpegReason: null,
+    // 文字起こし（engine は sttEngine）の状態。whisper は whisper の死活に連動、ElevenLabs は接続状態
+    // （connecting / up / reconnecting / down）。耳が止まっている間は unknown。
+    /** @type {"up" | "down" | "unknown" | "connecting" | "reconnecting"} */ stt: "unknown",
+    /** @type {string | null} */ sttReason: null
   };
 
   // ── 状態スナップショット ───────────────────────────────────────────
@@ -592,6 +882,12 @@ export function createCockpitServer(options = {}) {
         whisper: { status: health.whisper, reason: health.whisperReason },
         ffmpeg: { status: health.ffmpeg, reason: health.ffmpegReason }
       },
+      // 操縦席の文字起こし選択: 方式（耳が動いている間は使用中、止まっている間は前回 Start の選択）と状態。
+      // ヘッダの `stt: ElevenLabs up` 表示と、設定の選択肢の復元に使う（キーは載せない）。
+      stt: { engine: sttEngine, status: health.stt, reason: health.sttReason },
+      // 声の方式（前回 Start の選択・起動直後は記憶の値）と、今の engine の状態（キーは載せない）。
+      // 設定の選択肢の復元と、ログのタブの健康 1 行の `tts:` に使う。
+      tts: { engine: ttsEngine, status: voice.status, reason: voice.reason },
       appended: bufStats.appended,
       discarded: bufStats.discarded,
       uptimeMs: earsState === "listening" && startedAtMs != null ? Math.max(0, nowImpl() - startedAtMs) : 0,
@@ -607,6 +903,11 @@ export function createCockpitServer(options = {}) {
       bargeIn: bargeInGate ? { enabled: bargeInGate.isEnabled() } : null,
       // 口数モードの現況（scheduler 未生成 = orchestrator 未注入なら null・selfFire と同型）。
       verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
+      // 話し始めの方式（"classic" | "speak-now"・scheduler 未生成なら null・verbosity と同型）。
+      speakStart: fireScheduler ? speakStartMode : null,
+      // 忙しい間に届いたコメントの扱い（"hold" = あとで拾う / "drop" = 見逃す・scheduler 未生成なら null・
+      // コメント反応の合意 §2）。
+      commentBusy: fireScheduler ? commentBusyPolicy : null,
       // S8「キルスイッチ」: キル状態の正本（サーバ側 boolean をそのまま載せる・既定 false・additive）。
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
@@ -621,8 +922,110 @@ export function createCockpitServer(options = {}) {
         source: typeof chatSourceStatusImpl === "function" ? (chatSourceStatusImpl()?.source ?? null) : null,
         connected: chatClient != null,
         state: chatClient ? chatClient.getState() : null
-      }
+      },
+      // 操縦席の作り直し 1 回目（データ側・cockpit-glance-redesign.md §9）: 残量・警告・遅延のしきい値。
+      quota: quotaSource ? quotaSnapshotSafe() : null,
+      warnings: warningBoard.list(),
+      latencyThresholds: { ...latencyThresholds },
+      // 頭の会話の圧縮の最中か（状態のピルの「圧縮中」・既定 false・killed と同じく常に boolean）。
+      compacting: contextCompacting,
+      // 圧縮の目安（{ thresholdTokens }・設定の「頭脳・会話」タブ。未注入なら null・memory と同型）。
+      compaction: typeof contextCompactionStatusImpl === "function" ? (contextCompactionStatusImpl() ?? null) : null
     };
+  }
+
+  /**
+   * 圧縮の最中かを変える（変わったときだけ SSE "state" で押す）。
+   * @param {boolean} next
+   */
+  function setContextCompacting(next) {
+    if (closed || contextCompacting === next) return;
+    contextCompacting = next;
+    broadcastState();
+  }
+
+  /** 残量の今の値（読み口の throw は不明として扱う）。 */
+  function quotaSnapshotSafe() {
+    try {
+      return /** @type {any} */ (quotaSource).snapshot() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 状態で決まる警告を今の状態から決め直す（死活・チャット・残量が変わるたびに呼ぶ）。直ったものは消える。
+   */
+  function refreshStateWarnings() {
+    if (closed) return;
+    // 文字起こし（耳を止めている間は unknown = 警告なし）。
+    const sttLabel = sttEngine === "elevenlabs" ? "ElevenLabs" : "whisper";
+    warningBoard.setCondition(
+      "stt",
+      health.stt === "down"
+        ? { kind: "stt-down", severity: "alert", message: "文字起こしが止まっている", detail: health.sttReason, source: sttEngine }
+        : health.stt === "reconnecting"
+          ? { kind: "stt-reconnecting", severity: "warn", message: `文字起こしを繋ぎ直し中（${sttLabel}）`, detail: health.sttReason, source: sttEngine }
+          : null
+    );
+    // 声（ElevenLabs のときだけ。AivisSpeech は状態で警告を出さない＝今どおり）。組み立ては文字起こしと同じ。
+    warningBoard.setCondition(
+      "tts",
+      voice.engine === "elevenlabs"
+        ? voice.status === "down"
+          ? { kind: "tts-down", severity: "alert", message: "声が止まっている（ElevenLabs）", detail: voice.reason, source: voice.engine }
+          : voice.status === "reconnecting"
+            ? { kind: "tts-reconnecting", severity: "warn", message: "声を繋ぎ直し中（ElevenLabs）", detail: voice.reason, source: voice.engine }
+            : null
+        : null
+    );
+    warningBoard.setCondition(
+      "mic",
+      health.ffmpeg === "down"
+        ? { kind: "mic-down", severity: "alert", message: "マイクの取り込みが止まっている", detail: health.ffmpegReason }
+        : null
+    );
+    // チャット（繋いでいる間だけ。自分で切ったら警告なし）。
+    const chatState = chatClient ? (lastChatStatus ?? chatClient.getState()) : null;
+    warningBoard.setCondition(
+      "chat",
+      chatState === "dead"
+        ? { kind: "chat-disconnected", severity: "warn", message: "チャットが切れている" }
+        : chatState === "retrying"
+          ? { kind: "chat-reconnecting", severity: "warn", message: "チャットを繋ぎ直し中" }
+          : null
+    );
+    // 残量（残り 20% 未満・5% 未満は赤）と Codex の使用上限。
+    const quota = quotaSource ? quotaSnapshotSafe() : null;
+    warningBoard.setCondition("quota-low:codex", quotaLowWarning("Codex", quota?.codex));
+    warningBoard.setCondition("quota-low:elevenlabs", quotaLowWarning("ElevenLabs", quota?.elevenlabs));
+    warningBoard.setCondition(
+      "codex-limited",
+      quota?.codex?.limited ? { kind: "codex-limited", severity: "alert", message: "Codex の使用上限に達した", detail: quota.codex.reachedType ?? null } : null
+    );
+  }
+
+  /**
+   * 判定のエラーを一回きりの警告にする（OpenAI の残高切れは別の警告）。detail は本文を含まない文言だけを渡す。
+   * @param {"speak-now" | "comment-react" | "comment-guard"} source  @param {string | null | undefined} message
+   */
+  function warnJudgeError(source, message) {
+    if (isCreditExhaustedError(message)) {
+      warningBoard.pushEvent("openai-credit", {
+        kind: "openai-credit",
+        severity: "alert",
+        message: "OpenAI の残高切れ（判定が止まる）",
+        source
+      });
+      return;
+    }
+    warningBoard.pushEvent(`judge-error:${source}`, {
+      kind: "judge-error",
+      severity: "warn",
+      message: "判定のエラー",
+      detail: typeof message === "string" ? message : null,
+      source
+    });
   }
 
   // ── SSE ライブチャネル ─────────────────────────────────────────────
@@ -643,23 +1046,24 @@ export function createCockpitServer(options = {}) {
     }
   }
 
-  /** 現在状態を丸ごと push（ヘッダ/フッタの権威スナップショット）。 */
+  /** 現在状態を丸ごと push（ヘッダ/フッタの権威スナップショット）。状態で決まる警告もここで決め直す。 */
   function broadcastState() {
+    refreshStateWarnings();
     broadcast("state", snapshot());
   }
 
   // ── 死活の反映 ─────────────────────────────────────────────────────
 
   /**
-   * @param {"whisper" | "ffmpeg"} which
-   * @param {"up" | "down" | "unknown"} status
+   * @param {"whisper" | "ffmpeg" | "stt"} which
+   * @param {"up" | "down" | "unknown" | "connecting" | "reconnecting"} status
    * @param {string | null} reason
    */
   function setHealth(which, status, reason) {
     const statusKey = which;
-    const reasonKey = /** @type {"whisperReason" | "ffmpegReason"} */ (`${which}Reason`);
+    const reasonKey = /** @type {"whisperReason" | "ffmpegReason" | "sttReason"} */ (`${which}Reason`);
     if (health[statusKey] === status && health[reasonKey] === reason) return;
-    health[statusKey] = status;
+    /** @type {any} */ (health)[statusKey] = status;
     health[reasonKey] = reason;
     broadcastState();
   }
@@ -667,15 +1071,23 @@ export function createCockpitServer(options = {}) {
   /** @param {any} d  pipeline の診断イベント。 */
   function handleDiagnostic(d) {
     if (d && d.type === "whisperDown") {
-      setHealth(
-        "whisper",
-        "down",
-        `whisper-server down (${d.phase ?? "runtime"}; code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`
-      );
+      const reason = `whisper-server down (${d.phase ?? "runtime"}; code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`;
+      setHealth("whisper", "down", reason);
+      // whisper で文字起こし中なら stt も down（ヘッダの `stt: whisper down`）。
+      if (sttEngine === "whisper" && earsState !== "stopped") setHealth("stt", "down", reason);
     } else if (d && d.type === "ffmpegExit" && d.willRestart === false) {
       // willRestart=false = 再起動予算切れ/恒久死（capture の再起動耐性が尽きた）。
       // willRestart=true は capture が自己回復するため up のまま（transient blip）。
       setHealth("ffmpeg", "down", `ffmpeg exited (code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`);
+    }
+    // 頭のエラー（発火の失敗）は一回きりの警告にも出す（cockpit-glance-redesign.md §9.2）。
+    if (d && d.type === "fireError") {
+      warningBoard.pushEvent("brain-error", {
+        kind: "brain-error",
+        severity: "alert",
+        message: "頭のエラー",
+        detail: typeof d.message === "string" ? d.message : null
+      });
     }
     // 診断そのものも流す（B が任意で表示できる。健康以外は状態を変えない）。
     // startMs/endMs はゴースト行の対象 span（asrFailure が持つ・S2.5 追撃 domain-f）。
@@ -703,9 +1115,11 @@ export function createCockpitServer(options = {}) {
 
   /**
    * @param {string | null} deviceRaw
+   * @param {"whisper" | "elevenlabs"} [engineChoice]  文字起こしの方式（省略時は現在の選択）。
+   * @param {"aivis" | "elevenlabs"} [ttsChoice]  声の方式（省略時は現在の選択）。
    * @returns {Promise<{ ok: true; state: object } | { ok: false; error: string; state: object }>}
    */
-  async function startEars(deviceRaw) {
+  async function startEars(deviceRaw, engineChoice, ttsChoice) {
     if (pipeline && earsState !== "stopped") {
       // 既に起動中/起動済み。冪等に現状を返す（デバイス変更は Stop→Start）。
       return { ok: true, state: snapshot() };
@@ -718,11 +1132,84 @@ export function createCockpitServer(options = {}) {
       // 永続化失敗は起動を止めない（B の file-backed 実体の I/O 失敗を握る）。
     }
 
+    // 文字起こしの方式（マイクと同じく Start の前に選ぶ）。Start ごとに記憶する（失敗寛容）。
+    if (engineChoice) sttEngine = engineChoice;
+    const engine = sttEngine;
+    if (onSetSttEngine) {
+      try {
+        await onSetSttEngine(engine);
+      } catch {
+        // 永続化失敗は起動を止めない（setLastDevice と同型）。
+      }
+    }
+    // 声の方式（文字起こしと同じく Start の前に選び、Start ごとに記憶する・失敗寛容）。
+    if (ttsChoice) ttsEngine = ttsChoice;
+    const voiceKind = ttsEngine;
+    if (onSetTtsEngine) {
+      try {
+        await onSetTtsEngine(voiceKind);
+      } catch {
+        // 永続化失敗は起動を止めない。
+      }
+    }
+
     earsState = "starting";
     health.whisper = "unknown";
     health.whisperReason = null;
     health.ffmpeg = "unknown";
     health.ffmpegReason = null;
+    health.stt = engine === "elevenlabs" ? "connecting" : "unknown";
+    health.sttReason = null;
+    // Start 押下直後からヘッダを「Starting」にする（whisper のモデル読み込み待ち等の間も Stopped のまま
+    // にならないように・合意 §2 範囲 3）。
+    broadcastState();
+
+    /** @type {{ engine: "elevenlabs"; apiKey: string } | null} */
+    let elevenLabs = null;
+    if (engine === "elevenlabs") {
+      // キーは Start ごとにコード内で読む（process.env に入れない）。無ければ Start 失敗（理由はキーを含まない）。
+      /** @type {{ ok: boolean; apiKey?: string; reason?: string }} */
+      let key;
+      try {
+        key = elevenLabsApiKeyProvider();
+      } catch {
+        key = { ok: false };
+      }
+      if (!key || !key.ok || typeof key.apiKey !== "string" || key.apiKey.length === 0) {
+        const reason = (key && key.reason) || "ElevenLabs のキーが見つからない";
+        earsState = "stopped";
+        startedAtMs = null;
+        health.stt = "down";
+        health.sttReason = reason;
+        broadcastState();
+        return { ok: false, error: reason, state: snapshot() };
+      }
+      elevenLabs = { engine: "elevenlabs", apiKey: key.apiKey };
+    }
+
+    // 声の engine を用意する（種類が変わっていれば cockpit.mjs が作り直す。ElevenLabs はここでキーを読んで繋ぎ始める）。
+    // 用意できなければ耳を開かずに Start を失敗にする（文字起こしのキー切れと同じ流儀・自動で AivisSpeech に戻さない）。
+    if (onPrepareVoiceEngine) {
+      /** @type {{ ok: boolean; reason?: string }} */
+      let prepared;
+      try {
+        prepared = await onPrepareVoiceEngine(voiceKind);
+      } catch (error) {
+        prepared = { ok: false, reason: `声の engine を用意できない（${errMessage(error)}）` };
+      }
+      if (!prepared || prepared.ok !== true) {
+        const reason = (prepared && typeof prepared.reason === "string" && prepared.reason) || "声の engine を用意できない";
+        earsState = "stopped";
+        startedAtMs = null;
+        health.stt = "unknown";
+        health.sttReason = null;
+        voice.engine = voiceKind;
+        voice.status = "down";
+        voice.reason = clipVoiceReason(reason);
+        broadcastState();
+        return { ok: false, error: reason, state: snapshot() };
+      }
+    }
 
     const baseOptions = options.pipelineOptions ?? {};
     // Resolve the Whisper lexical-bias prompt at request time. The injected
@@ -740,12 +1227,23 @@ export function createCockpitServer(options = {}) {
     const p = pipelineFactory({
       ...baseOptions,
       whisper: whisperOptions,
+      // ElevenLabs のときだけ stt を渡す（whisper は pipeline の既定＝従来と同じ options 形）。
+      ...(elevenLabs ? { stt: { ...(/** @type {any} */ (baseOptions).stt ?? {}), ...elevenLabs } } : {}),
+      onSttStatus: (status, info) => {
+        if (pipeline !== p) return; // 畳んだ後・別の Start の通知は無視。
+        setHealth("stt", /** @type {any} */ (status), info && info.reason ? info.reason : null);
+      },
       capture: {
         ...(/** @type {any} */ (baseOptions).capture ?? {}),
         ...(device != null ? { device } : {}),
         ...(inputFormat ? { inputFormat } : {})
       },
       onVadEvent: (e) => {
+        if (e && e.type === "speechStart") userSpeaking = true;
+        else if (e && (e.type === "speechEnd" || e.type === "speechCancel")) {
+          userSpeaking = false;
+          lastSpeechEndAtMs = nowImpl();
+        }
         broadcast("vad", {
           type: e.type,
           tMs: e.tMs,
@@ -765,6 +1263,8 @@ export function createCockpitServer(options = {}) {
         // viewer = handleTranscript 内で no-op ★二重発火の断ち）。**soul 除外の前**に回す（scheduler は
         // soul 発話を不応期の基点に使うため you/soul 両方を要る。viewer は scheduler 内で無視される）。
         if (fireScheduler) fireScheduler.handleTranscript(entry);
+        // speak-now: you の転写 1 件ごとに判定（soul/viewer は部品内で無視・モード外/OFF/KILL も部品内で無視）。
+        if (speakNow) speakNow.handleTranscript(entry);
         // soul の発話行はここ（耳の onTranscript 経路）では放送しない。soul も you と同じ
         // transcriptBuffer に append されるため onAppend→onTranscript を必ず通るが、soul の正経路は
         // orchestrator の onSoulTranscript → broadcastSoulTranscript の 1 本。ここで除外しないと
@@ -772,6 +1272,21 @@ export function createCockpitServer(options = {}) {
         // ★ S7: viewer コメントも同じ transcriptBuffer へ append されるため onTranscript を通るが、
         // viewer 行の放送は取り込み経路（ingestChatMessage）が 1 本で担う。ここで除外しないと二重放送。
         if (/** @type {any} */ (entry).speaker === "soul" || /** @type {any} */ (entry).speaker === "viewer") return;
+        // 文字起こしの遅延は画面に出さず（合意 §4.2）、数字だけをログの口へ（本文は渡さない）。
+        if (onSttLatency) {
+          const latency = meta && typeof meta.latencyMs === "number" && Number.isFinite(meta.latencyMs) ? meta.latencyMs : null;
+          try {
+            onSttLatency({ engine, latencyMs: latency });
+          } catch {
+            // ログの失敗で耳を止めない。
+          }
+        }
+        // 遅延の「文字起こし」区間の材料（この行がきっかけで喋ったときに使う・直近だけ持つ）。
+        if (typeof (/** @type {any} */ (entry).seq) === "number") {
+          const ms = meta && typeof meta.latencyMs === "number" && Number.isFinite(meta.latencyMs) ? meta.latencyMs : null;
+          sttLatencyBySeq.set(/** @type {any} */ (entry).seq, ms);
+          if (sttLatencyBySeq.size > STT_LATENCY_KEEP) sttLatencyBySeq.delete(sttLatencyBySeq.keys().next().value);
+        }
         const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
         broadcast("transcript", {
           ...toWireEntry(entry),
@@ -808,24 +1323,39 @@ export function createCockpitServer(options = {}) {
       pipeline = null;
       earsState = "stopped";
       startedAtMs = null;
-      setHealth("whisper", "down", `ears failed to start: ${errMessage(error)}`);
+      const reason = `ears failed to start: ${errMessage(error)}`;
+      if (engine === "whisper") {
+        health.stt = "down";
+        health.sttReason = reason;
+        setHealth("whisper", "down", reason);
+      } else {
+        // ElevenLabs は whisper を起動していない（whisper の死活は unknown のまま）。
+        setHealth("stt", "down", reason);
+      }
       earsState = "stopped"; // setHealth の broadcast 後も stopped を確定。
       return { ok: false, error: errMessage(error), state: snapshot() };
     }
 
     earsState = "listening";
     startedAtMs = nowImpl();
-    // start 成功 = whisper ready・ffmpeg spawn 済み（楽観的 up。以後の死は診断で down に落ちる）。
-    health.whisper = "up";
-    health.whisperReason = null;
+    // start 成功 = (whisper ready または ElevenLabs session_started)・ffmpeg spawn 済み
+    // （楽観的 up。以後の死は診断で down に落ちる）。
+    if (engine === "whisper") {
+      health.whisper = "up";
+      health.whisperReason = null;
+    }
+    health.stt = "up";
+    health.sttReason = null;
     health.ffmpeg = "up";
     health.ffmpegReason = null;
     broadcastState();
+    callEarsHook(onEarsStarted);
     return { ok: true, state: snapshot() };
   }
 
   /** @returns {Promise<object>} 停止後の状態。 */
   async function stopEars() {
+    callEarsHook(onEarsStopped);
     if (!pipeline) {
       earsState = "stopped";
       return snapshot();
@@ -847,6 +1377,8 @@ export function createCockpitServer(options = {}) {
     health.whisperReason = null;
     health.ffmpeg = "unknown";
     health.ffmpegReason = null;
+    health.stt = "unknown";
+    health.sttReason = null;
     broadcastState();
     return snapshot();
   }
@@ -986,7 +1518,17 @@ export function createCockpitServer(options = {}) {
       try {
         const body = await readJsonBody(req);
         const deviceRaw = body.device ?? url.searchParams.get("device") ?? (await resolveLastDevice());
-        const result = await startEars(deviceRaw ?? null);
+        // 文字起こしの方式（任意・省略時は現在の選択）。未知値は 400（誤 POST を早期に弾く）。
+        if (body.sttEngine !== undefined && body.sttEngine !== null && !STT_ENGINES.includes(body.sttEngine)) {
+          sendJson(res, 400, { error: "invalid stt engine", state: snapshot() });
+          return;
+        }
+        // 声の方式（任意・省略時は現在の選択）。未知値は 400（sttEngine と同じ）。
+        if (body.ttsEngine !== undefined && body.ttsEngine !== null && !TTS_ENGINES.includes(body.ttsEngine)) {
+          sendJson(res, 400, { error: "invalid tts engine", state: snapshot() });
+          return;
+        }
+        const result = await startEars(deviceRaw ?? null, body.sttEngine ?? undefined, body.ttsEngine ?? undefined);
         sendJson(res, result.ok ? 200 : 500, result.ok ? result.state : { error: result.error, state: result.state });
       } finally {
         transitioning = false;
@@ -1014,7 +1556,8 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
-      const result = await fireOrchestrator.fire();
+      // きっかけ = 手動（操縦席のボタン・AHK のホットキー）。
+      const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ cause: { type: "manual", vision: false } }));
       // accepted（発火成功）は 202・busy/empty/ears-not-running/error は 200 に {fired:false,...}。
       const status = /** @type {any} */ (result).fired ? 202 : 200;
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
@@ -1054,7 +1597,9 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
-      const result = await fireOrchestrator.fire({ vision: true });
+      const result = await trackFire(() =>
+        /** @type {any} */ (fireOrchestrator).fire({ vision: true, cause: { type: "manual", vision: true } })
+      );
       // accepted（発火成功）は 202・busy/no-target/capture-failed/empty/error は 200 に {fired:false,...}。
       const status = /** @type {any} */ (result).fired ? 202 : 200;
       sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
@@ -1156,6 +1701,58 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/speak-start") {
+      // 話し始めの方式（従来 / speak-now）の切替継ぎ目（speak-now 合意 §5・POST /api/verbosity の写経）。
+      // scheduler 未生成（orchestrator 未注入）なら 503。
+      if (!fireScheduler) {
+        sendJson(res, 503, { error: "speak-start control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const mode = body.mode;
+      if (mode !== "classic" && mode !== "speak-now") {
+        sendJson(res, 400, { error: "invalid speak-start mode" });
+        return;
+      }
+      applySpeakStartMode(mode);
+      if (onSetSpeakStartMode) {
+        try {
+          await onSetSpeakStartMode(speakStartMode);
+        } catch {
+          // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && pathname === "/api/comment-busy") {
+      // 忙しい間に届いたコメントの扱い（あとで拾う / 見逃す）の切替継ぎ目（コメント反応の合意 §2・
+      // POST /api/speak-start の写経）。scheduler 未生成（orchestrator 未注入）なら 503。
+      if (!fireScheduler) {
+        sendJson(res, 503, { error: "comment-busy control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const policy = body.policy;
+      if (!COMMENT_BUSY_POLICIES.includes(policy)) {
+        sendJson(res, 400, { error: "invalid comment-busy policy" });
+        return;
+      }
+      commentBusyPolicy = policy;
+      // 見逃すへ切り替えたら、取っておいたコメントも捨てる（以後は忙しい間のコメントを判定しない）。
+      if (commentBusyPolicy === "drop" && commentReact) commentReact.reset();
+      if (onSetCommentBusyPolicy) {
+        try {
+          await onSetCommentBusyPolicy(commentBusyPolicy);
+        } catch {
+          // 永続化失敗は操作を止めない（onSetSpeakStartMode と同型の失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/kill") {
       // S8「キルスイッチ」: 全発火 OFF + 声の即切断（POST /api/fire の :798 と同型のゲート・orchestrator が
       // 要る）。キル状態の正本はサーバ側（この関数を囲む `killed` 変数）にあり、ここが唯一の書き手。
@@ -1196,17 +1793,19 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
-      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 4 値は
+      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 6 値は
       // ここに直書きする（API の受理値/技術札は従来のワイヤ検証を保持する）。
       // `resolveBrainIdentity` の import はこの検証表を置き換えるためではなく、下流の current public
       // projection だけを canonical resolver から導出するための additive read-path である。2026-07-17
-      // 追撃で Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）がここへ追加された既存契約は変えない。
+      // 追撃で Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）がここへ追加された既存契約は変えない。2026-10-16 に
+      // GPT-5.5（"codex-55"）を外し、GPT-6.1 Sol / Claude Opus 5.5 を追加（brains.mjs と同じ値を保つ）。
       if (
         body.brain !== "claude" &&
+        body.brain !== "claude-opus-55" &&
         body.brain !== "codex" &&
-        body.brain !== "codex-55" &&
         body.brain !== "codex-56-sol" &&
-        body.brain !== "codex-astra"
+        body.brain !== "codex-astra" &&
+        body.brain !== "codex-61-sol"
       ) {
         sendJson(res, 400, { error: "invalid brain" });
         return;
@@ -1283,6 +1882,28 @@ export function createCockpitServer(options = {}) {
         await onSetMemoryEnabled(enabled);
       } catch {
         // 永続化/ホットスワップ失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && pathname === "/api/compact-threshold") {
+      // 圧縮を始める大きさの変更継ぎ目（POST /api/memory の写経）。保存 + 走っている compactor の差し替えは
+      // cockpit.mjs の onSetCompactThresholdTokens が担う。未注入なら 503。値は整数で 5 万〜45 万だけ受ける。
+      if (typeof onSetCompactThresholdTokens !== "function") {
+        sendJson(res, 503, { error: "compaction control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const tokens = normalizeCompactThresholdTokens(body.tokens);
+      if (tokens == null) {
+        sendJson(res, 400, { error: "tokens must be an integer from 50000 to 450000" });
+        return;
+      }
+      try {
+        await onSetCompactThresholdTokens(tokens);
+      } catch {
+        // 永続化 / 差し替えの失敗は操作を止めない（onSetMemoryEnabled と同型の失敗寛容）。
       }
       broadcastState();
       sendJson(res, 200, snapshot());
@@ -1445,8 +2066,35 @@ export function createCockpitServer(options = {}) {
       audioCtx: null,
       appended: stats.appended,
       discarded: stats.discarded,
-      brain
+      brain,
+      // その返事を出した発火の番号（受理・推論の範囲・遅延と結ぶ・cockpit-glance-redesign.md §9）。
+      fireId: entry && typeof (/** @type {any} */ (entry).fireId) === "number" ? /** @type {any} */ (entry).fireId : null
     });
+  }
+
+  /**
+   * 1 返事の遅延（orchestrator の発火の中の区間）に、文字起こし（きっかけの配信者の行）と判定の区間を足して流す。
+   * @param {any} inFire
+   */
+  function broadcastReplyLatency(inFire) {
+    const cause = inFire && inFire.cause && typeof inFire.cause === "object" ? inFire.cause : null;
+    const triggerSeq = cause && typeof cause.triggerSeq === "number" ? cause.triggerSeq : null;
+    const record = composeReplyLatency(inFire, {
+      transcribeMs: triggerSeq != null ? sttLatencyBySeq.get(triggerSeq) ?? null : null,
+      judgeMs: cause && typeof cause.judgeLatencyMs === "number" ? cause.judgeLatencyMs : null,
+      thresholds: latencyThresholds
+    });
+    const brain = typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null;
+    // voice = その返事を鳴らした声の engine の種類（遅延の TTS / 声の区間を engine ごとに見比べる材料・additive）。
+    const payload = { ...record, vision: inFire?.vision === true, brain, voice: voice.engine ?? ttsEngine };
+    broadcast("latency", payload);
+    if (onReplyLatency) {
+      try {
+        onReplyLatency(payload);
+      } catch {
+        // ログの失敗で発火を止めない。
+      }
+    }
   }
 
   /** @type {{ fire: () => Promise<object>; interrupt?: (atMs?: number) => Promise<object>; getState: () => string; dispose: () => void } | null} */
@@ -1454,10 +2102,24 @@ export function createCockpitServer(options = {}) {
   if (typeof options.fireOrchestratorFactory === "function") {
     fireOrchestrator = options.fireOrchestratorFactory({
       getBuffer: () => (pipeline ? pipeline.transcriptBuffer : null),
-      onState: (state) => broadcast("soul", { state }),
+      onState: (state) => {
+        broadcast("soul", { state });
+        // speak-now の相槌: 相槌の発火でチャッピーが喋り始めた時点を、相槌どうしの歯止めの数え始めにする
+        // （backchannel.md §2）。この忙しさが明けたときの after-busy の判定も止まる。
+        if (state === "speaking" && backchannelFirePending && speakNow) speakNow.markBackchannelSpoken();
+        // speak-now: 喋り終わって手が空いたら、忙しい間の配信者の発言を 1 回判定する（合意 §3）。
+        // fire() の Promise がまだ片付いていなければ、片付いた時点（trackFire）で改めて確かめる。
+        if (state === "idle" && speakNow) speakNow.notifyIdle();
+        // コメント反応: 忙しい間に取っておいたコメントを、手が空いたらまとめて判定する（合意 §2）。
+        if (state === "idle" && commentReact) commentReact.notifyIdle();
+      },
       onFire: (info) => broadcast("fire", info),
       onDiagnostic: (diag) => handleDiagnostic(diag),
       onSoulTranscript: (entry) => broadcastSoulTranscript(entry),
+      // 推論の範囲: ask の時点の会話の窓の始まりと終わりの seq（全経路・SSE "fireAsk"）。
+      onAsk: (info) => broadcast("fireAsk", info),
+      // 遅延: 1 返事 1 レコード（SSE "latency"）。
+      onLatency: (info) => broadcastReplyLatency(info),
       // S4「表情が乗る」: 演出適用の語ごとの通知（{word, args?, applied, rejected}）を
       // SSE "expression" として broadcast する（onFire→broadcast("fire") と同型）。ページは
       // fire マーカーと同型の演出イベント行に描く。orchestrator の onExpression ワイヤ契約は
@@ -1541,36 +2203,254 @@ export function createCockpitServer(options = {}) {
             }
           }
         : {}),
+      speakNowMode: speakStartMode === "speak-now",
       onFireRequest: (req) => {
-        // S6 Domain D: 発火要求の kind（call/turn-end/silence）を SSE "selfFire" で結線層外へ通知する
-        // （操縦席のタイムラインが自発発火マーカー行/スケジューラ診断のゴースト行を描く材料・domain-d.md §）。
-        // fire() 自体は best-effort（throw は握る・自発発火の失敗で常駐を殺さない）。結果（fired/reason）が
-        // 判明してから broadcast する（同期 throw も非同期 rejection もどちらも "fired:false" として扱う）。
+        // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end および
+        // S7 の comment/comment-call は視覚優先（対象あれば画像付き・無/失敗なら画像なしの通常発火へ
+        // 劣化）。手動 Fire は scheduler 非経由で無関係。
         const kind = req && req.kind;
-        try {
-          // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end および
-          // S7 の comment/comment-call は視覚優先（対象あれば画像付き・無/失敗なら画像なしの通常発火へ
-          // 劣化）。手動 Fire は scheduler 非経由で無関係。
-          const firePromise =
-            req && req.kind === "silence"
-              ? /** @type {any} */ (fireOrchestrator).fire({ vision: true })
-              : /** @type {any} */ (fireOrchestrator).fire({ vision: "preferred" });
-          Promise.resolve(firePromise)
-            .then((result) => {
-              broadcast("selfFire", {
-                kind,
-                fired: !!(result && /** @type {any} */ (result).fired),
-                reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null
-              });
-            })
-            .catch((error) => {
-              broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
-            });
-        } catch (error) {
-          broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error) });
-        }
+        // きっかけ = スケジューラの語彙（silence = 沈黙・call / turn-end / interjection / comment / comment-call）。
+        const cause = { type: typeof kind === "string" ? kind : "unknown" };
+        requestSelfFire(kind, req && req.kind === "silence" ? { vision: true, cause } : { vision: "preferred", cause });
       }
     });
+
+    // speak-now（話し始めの判定・合意 §1〜§3）の部品。fire-scheduler の外に置き、結線だけをここで張る。
+    //  - 忙しい: orchestrator が idle でない、またはサーバが呼んだ fire() がまだ片付いていない。
+    //  - 判定してよい: speak-now モード・自発 pill ON・KILL でない。
+    //  - 応答・自発 → 通常の自発発火と同じ fire({vision:"preferred"})（LLM に区別は伝えない・合意 §2）。
+    //  - 相槌 → 同じ頭・同じセッションで fire({vision:"preferred", instruction})（画面も見る・2026-10-17 改め。その 1 回だけ先頭に
+    //    「今は配信者の話に相槌を打つタイミング。」・backchannel.md §2）。発火結果は kind:"speak-now" で
+    //    応答・自発と同じ selfFire 行（判定行「判定: 相槌 0.xx」の直後に出る）。前の相槌を喋り始めてから
+    //    backchannelMinIntervalMs の間は部品が流す（action=skip-interval・ターミナルの 1 行だけ）。
+    //  - 判定行（待つ以外）と失敗は selfFire SSE に相乗りしてフィードへ（合意 §5・新 SSE を足さない）。
+    speakNow = createSpeakNowController({
+      judge: speakNowJudge,
+      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      isActive: () =>
+        speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
+      getName: () => currentSoulName(),
+      getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
+      nowImpl,
+      backchannelMinIntervalMs,
+      onFire: ({ choice, probability, trigger, triggerSeq, latencyMs }) => {
+        // きっかけ = 判定（応答 / 自発 / 相槌 + 確率 + きっかけの配信者の行の seq + 判定の遅延）。
+        const cause = {
+          type: "speak-now",
+          choice,
+          probability: probability ?? null,
+          trigger: trigger ?? null,
+          triggerSeq: triggerSeq ?? null,
+          judgeLatencyMs: latencyMs ?? null
+        };
+        if (choice !== "backchannel") {
+          requestSelfFire("speak-now", { vision: "preferred", cause });
+          return;
+        }
+        backchannelFirePending = true;
+        // 相槌も画面を見る（2026-10-17 ユーザー判断: 常駐撮影で応答時間がほぼ変わらないため）。
+        requestSelfFire("speak-now", { vision: "preferred", instruction: SPEAK_NOW_BACKCHANNEL_INSTRUCTION, cause }).finally(() => {
+          backchannelFirePending = false;
+        });
+      },
+      onJudgment: (j) => {
+        if (j.choice !== "wait") {
+          // 判定の行: きっかけの seq と行き先（fire / drop-busy / drop-inactive / skip-interval）も載せる（§9）。
+          broadcast("selfFire", {
+            kind: "speak-now-judgment",
+            choice: j.choice,
+            probability: j.probability,
+            latencyMs: j.latencyMs,
+            action: j.action,
+            trigger: j.trigger,
+            triggerSeq: j.triggerSeq ?? null
+          });
+        }
+        reportSpeakNow({ ok: true, ...j });
+      },
+      onError: (e) => {
+        broadcast("selfFire", {
+          kind: "speak-now-judgment",
+          error: e.message,
+          latencyMs: e.latencyMs,
+          trigger: e.trigger,
+          triggerSeq: e.triggerSeq ?? null
+        });
+        reportSpeakNow({ ok: false, trigger: e.trigger, error: e.message, latencyMs: e.latencyMs });
+        warnJudgeError("speak-now", e.message);
+      }
+    });
+
+    // コメント反応（反応する判定・コメント反応の合意 §1-6〜§2）の部品。speak-now と同じ置き方・同じ「忙しい」と
+    // 「判定してよい」（speak-now モード・自発 ON・KILL でない）。従来モードでは呼ばない（今の comment /
+    // comment-call のまま）。
+    //  - 反応する → 通常の自発発火と同じ fire({vision:"preferred"}) に、どのコメントかを明示する内部指示を
+    //    付ける（コメント本文は視聴者の発言として括る・返事は短め）。speak-now の発火とは先に出た方が勝つ
+    //    （後から返った方は忙しいので、あとで拾う / 捨てる）。
+    //  - 判定行（反応する のときだけ）と失敗は selfFire SSE に相乗りしてフィードへ（新 SSE を足さない）。
+    commentReact = createCommentReactController({
+      judge: commentReactJudge,
+      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      isActive: () =>
+        speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
+      getName: () => currentSoulName(),
+      getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
+      getBusyPolicy: () => commentBusyPolicy,
+      getHoldLimits: () => ({ maxAgeMs: commentHoldMaxAgeMs, maxCount: commentHoldMaxCount }),
+      nowImpl,
+      onFire: ({ comments, probabilities, latencyMs }) =>
+        requestSelfFire(
+          "comment-react",
+          {
+            vision: "preferred",
+            instruction: buildCommentReactFireInstruction(comments, currentSoulName()),
+            // きっかけ = コメント反応（どのコメントか: ID と転写の seq・反応するの確率・判定の遅延）。
+            cause: {
+              type: "comment-react",
+              commentIds: comments.map((c) => c.id),
+              commentSeqs: comments.map((c) => (typeof c.seq === "number" ? c.seq : null)),
+              probabilities: Array.isArray(probabilities) ? probabilities : comments.map(() => null),
+              judgeLatencyMs: typeof latencyMs === "number" ? latencyMs : null
+            }
+          },
+          { commentIds: comments.map((c) => c.id) }
+        ),
+      onJudgment: (j) => {
+        if (j.choice === "react") {
+          broadcast("selfFire", {
+            kind: "comment-judgment",
+            choice: j.choice,
+            probability: j.probability,
+            latencyMs: j.latencyMs,
+            commentId: j.commentId,
+            // 行き先（fire / hold-busy / drop-busy / drop-inactive）ときっかけ（comment / after-busy）。
+            action: j.action,
+            trigger: j.trigger
+          });
+        }
+        reportComment({ stage: "react", ok: true, ...j });
+      },
+      onError: (e) => {
+        broadcast("selfFire", { kind: "comment-judgment", error: e.message, latencyMs: e.latencyMs, commentId: e.commentId, trigger: e.trigger });
+        reportComment({ stage: "react", ok: false, trigger: e.trigger, commentId: e.commentId, error: e.message, latencyMs: e.latencyMs });
+        warnJudgeError("comment-react", e.message);
+      },
+      onSkip: (s) => reportComment({ stage: "react", ok: true, skipped: true, commentId: s.commentId, action: s.action })
+    });
+  }
+
+  /**
+   * 自発の発火要求を fire() へ渡し、結果を SSE "selfFire" で結線層外へ通知する（S6 Domain D・
+   * 操縦席のタイムラインが自発発火マーカー行/ゴースト行を描く材料・domain-d.md §）。scheduler の
+   * onFireRequest と speak-now の発火が共有する。fire() 自体は best-effort（throw は握る・自発発火の
+   * 失敗で常駐を殺さない）。結果（fired/reason）が判明してから broadcast する（同期 throw も非同期
+   * rejection もどちらも "fired:false" として扱う）。
+   * @param {string | undefined} kind
+   * @param {{ vision: boolean | "preferred"; instruction?: string; cause?: object }} fireOptions  vision:false は画面を撮らない通常発火
+   *   （speak-now の相槌）。cause はきっかけ（orchestrator が受理・遅延に載せる）。
+   * @param {object} [extra]  selfFire SSE に足す付随情報（コメント反応の commentIds = どのコメントで発火したか）。
+   * @returns {Promise<void>}  発火の結果を放送し終えたら片付く（reject しない）。
+   */
+  function requestSelfFire(kind, fireOptions, extra = {}) {
+    try {
+      return trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
+        .then((result) => {
+          const fireId = result && typeof (/** @type {any} */ (result).fireId) === "number" ? /** @type {any} */ (result).fireId : null;
+          broadcast("selfFire", {
+            kind,
+            fired: !!(result && /** @type {any} */ (result).fired),
+            reason: result && /** @type {any} */ (result).reason != null ? /** @type {any} */ (result).reason : null,
+            ...extra,
+            // 受理した発火の番号（受理・返事・遅延と結ぶ）。受理しなかった発火には付けない。
+            ...(fireId != null ? { fireId } : {})
+          });
+        })
+        .catch((error) => {
+          broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error), ...extra });
+        });
+    } catch (error) {
+      broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error), ...extra });
+      return Promise.resolve();
+    }
+  }
+
+  /**
+   * fire() を呼び、Promise が片付くまでを fireInFlight に数える（speak-now の「忙しい」用）。片付いたら
+   * speak-now に「手が空いたかも」を知らせる。同期 throw は数を戻してそのまま投げ直す（呼び出し側の
+   * 既存の握り方を変えない）。
+   * @param {() => any} start
+   * @returns {Promise<any>}
+   */
+  function trackFire(start) {
+    fireInFlight += 1;
+    /** @type {Promise<any>} */
+    let p;
+    try {
+      p = Promise.resolve(start());
+    } catch (error) {
+      fireInFlight -= 1;
+      throw error;
+    }
+    return p.finally(() => {
+      fireInFlight -= 1;
+      if (speakNow) speakNow.notifyIdle();
+      if (commentReact) commentReact.notifyIdle();
+    });
+  }
+
+  // 残量: 変わったら SSE "quota" で流し、残量の警告を決め直す（cockpit-glance-redesign.md §9.2）。
+  if (quotaSource && typeof quotaSource.onChange === "function") {
+    try {
+      quotaUnsub = quotaSource.onChange((q) => {
+        if (closed) return;
+        broadcast("quota", q ?? null);
+        refreshStateWarnings();
+      });
+    } catch {
+      quotaUnsub = null;
+    }
+  }
+
+  /**
+   * 話し始めの方式を切り替える（POST /api/speak-start の実体）。scheduler の turn-end / call /
+   * interjection のスイッチを合わせ、speak-now の積み残しを捨てる。
+   * @param {"classic" | "speak-now"} mode
+   */
+  function applySpeakStartMode(mode) {
+    speakStartMode = mode;
+    if (fireScheduler) fireScheduler.setSpeakNowMode(mode === "speak-now");
+    if (speakNow) speakNow.reset();
+    if (commentReact) commentReact.reset();
+  }
+
+  /** 今の頭の名前（判定の問いと会話のラベル用・snapshot の identity と同じ解決）。 */
+  function currentSoulName() {
+    if (currentBrainIdentityImpl) return resolveModelIdentity(currentBrainIdentityImpl()?.id).canonicalName;
+    const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
+    return resolveBrainIdentity(rawBrain && typeof rawBrain === "object" ? /** @type {any} */ (rawBrain).brain : undefined)
+      .canonicalName;
+  }
+
+  /** 判定ごとの記録を呼び出し側（cockpit.mjs のターミナル 1 行）へ渡す（本文は含めない・失敗寛容）。 */
+  function reportSpeakNow(/** @type {object} */ info) {
+    if (!onSpeakNowJudgment) return;
+    try {
+      onSpeakNowJudgment(info);
+    } catch {
+      // ログの失敗で判定を止めない。
+    }
+  }
+
+  /** コメント判定ごとの記録を呼び出し側（cockpit.mjs のターミナル 1 行）へ渡す（本文は含めない・失敗寛容）。 */
+  function reportComment(/** @type {object} */ info) {
+    if (!onCommentJudgment) return;
+    try {
+      onCommentJudgment(info);
+    } catch {
+      // ログの失敗で判定を止めない。
+    }
   }
 
   // ── チャット器官（S7「視聴者が混ざる」）の取り込み経路（プラミング + attach 点）─────────────
@@ -1594,10 +2474,21 @@ export function createCockpitServer(options = {}) {
   //  なるため scheduler も回さない）。バッファ所有権の巻き上げ（耳非依存化）は S1〜S6 挙動・器不変を
   //  脅かしうる構造変更ゆえ v0 では実装せず domain-b.md §質問で escalate する。
 
+  //  ── コメント判定（discussion/ai-cohost/decisions/comment-react/integration.md §1）──────────────
+  //  (a) の前に**弾く判定**（commentGuard）を挟む。全モード（KILL 中・自発 OFF・従来モードも）で動く。
+  //   - 弾いたら: 積まない（LLM・記憶・履歴のどれにも入らない）・発火判定にも渡さない・場の活動にも数えない。
+  //     フィードには chatDiagnostic kind:"commentRejected"（種類だけ・本文は送らない）。
+  //   - 通ったら: (a)(b)(c) を今と同じく行い、speak-now モードなら (d) 反応する判定（commentReact）へ回す。
+  //   - 判定は並行に走らせるが、積むのは届いた順（guardQueue の先頭から、判定が付いたものだけ取り出す）。
+  //   - 判定がテスト注入の同期値なら、その場で (a)(b)(c) まで終える（従来の同期の追記と放送を保つ）。
+  //  コメント ID（チャット器官の messageId・無ければ操縦席内の連番）を viewer 行・弾いた行・判定行・発火結果に
+  //  載せ、どのコメントで判定して発火したかを結べるようにする（合意 §3）。
+
   /**
    * チャット器官の 1 コメントを取り込む（Domain C の onMessage フックから呼ぶ attach 点）。best-effort
-   * （throw は握って診断に落とす・器官の常駐を殺さない）。
-   * @param {{ text?: string; displayName?: string } | null} msg
+   * （throw は握って診断に落とす・器官の常駐を殺さない）。フックは戻り値を見ないので、非同期の判定の
+   * 失敗もここで握る（settleGuard へ「判定できず」として渡す）。
+   * @param {{ text?: string; displayName?: string; messageId?: string | null } | null} msg
    */
   function ingestChatMessage(msg) {
     if (closed) return;
@@ -1607,7 +2498,7 @@ export function createCockpitServer(options = {}) {
       if (text.trim().length === 0) return; // 空コメントは捨てる（バッファも捨てる・二度手間を避ける）。
       const buffer = pipeline ? pipeline.transcriptBuffer : null;
       if (!buffer) {
-        // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、append/scheduler はスキップ。
+        // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、判定・append/scheduler はスキップ。
         handleDiagnostic({
           type: "chatBufferAbsent",
           message: "ears not running; viewer comment cannot merge into transcript buffer (no fire).",
@@ -1615,21 +2506,129 @@ export function createCockpitServer(options = {}) {
         });
         return;
       }
-      const result = buffer.append({ startMs: 0, endMs: 0, text, speaker: "viewer", displayName });
-      if (!result.appended || !result.entry) return; // blank discard 等。
-      // (b) viewer 行を放送（耳の onTranscript は viewer を除外＝ここが唯一の放送元）。
-      const stats = buffer.stats();
-      broadcast("transcript", {
-        ...toWireEntry(result.entry),
-        latencyMs: null,
-        audioCtx: null,
-        appended: stats.appended,
-        discarded: stats.discarded
-      });
-      // (c) 発火スケジューラへ（comment / comment-call 判定）。scheduler 未生成なら活動反映もスキップ。
-      if (fireScheduler) fireScheduler.handleChatMessage({ text, displayName });
+      const id =
+        msg && typeof msg.messageId === "string" && msg.messageId.length > 0 ? msg.messageId : `local-${++localCommentSeq}`;
+      const slot = { id, text, displayName, arrivedAtMs: nowImpl(), decision: null };
+      guardQueue.push(slot);
+      /** @type {any} */
+      let out;
+      try {
+        out = commentGuard({ text, displayName: displayName ?? null, name: currentSoulName() });
+      } catch (error) {
+        out = { pass: false, kind: "error", error: errMessage(error), latencyMs: null };
+      }
+      if (out != null && typeof out.then === "function") {
+        Promise.resolve(out).then(
+          (decision) => settleGuard(slot, decision),
+          (error) => settleGuard(slot, { pass: false, kind: "error", error: errMessage(error), latencyMs: null })
+        );
+      } else {
+        settleGuard(slot, out);
+      }
     } catch (error) {
       handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
+    }
+  }
+
+  /**
+   * 弾く判定の結果を付け、届いた順に取り出せる分を処理する。
+   * @param {{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }} slot
+   * @param {any} decision
+   */
+  function settleGuard(slot, decision) {
+    if (closed) return;
+    const pass = !!(decision && decision.pass === true);
+    slot.decision = {
+      pass,
+      kind: pass ? "ok" : decision && typeof decision.kind === "string" && decision.kind !== "ok" ? decision.kind : "error",
+      verdict: decision && typeof decision.verdict === "string" ? decision.verdict : null,
+      hijackProbability: decision && typeof decision.hijackProbability === "number" ? decision.hijackProbability : null,
+      latencyMs: decision && typeof decision.latencyMs === "number" ? decision.latencyMs : null,
+      // 判定できなかった理由に本文が混ざっていたら（サーバの文言が入力を引用した等）理由ごと伏せる（フィードにも
+      // ターミナルにも本文を出さない）。
+      error: decision && typeof decision.error === "string" ? scrubCommentText(decision.error, slot.text) : null
+    };
+    while (guardQueue.length > 0 && guardQueue[0].decision != null) {
+      const head = /** @type {any} */ (guardQueue.shift());
+      try {
+        reportComment({
+          stage: "guard",
+          commentId: head.id,
+          pass: head.decision.pass,
+          kind: head.decision.kind,
+          verdict: head.decision.verdict,
+          hijackProbability: head.decision.hijackProbability,
+          latencyMs: head.decision.latencyMs,
+          error: head.decision.error
+        });
+        if (head.decision.pass) commitComment(head);
+        else rejectComment(head);
+        // 判定できずに弾いた（キー欠落・タイムアウト等）は判定のエラーの警告にも出す（理由は本文を伏せた文言）。
+        if (!head.decision.pass && head.decision.kind === "error") warnJudgeError("comment-guard", head.decision.error);
+      } catch (error) {
+        handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
+      }
+    }
+  }
+
+  /**
+   * 弾いたコメントをフィードに 1 行だけ知らせる（種類と ID・本文と名前は送らない）。
+   * @param {{ id: string; text: string; decision: any }} slot
+   */
+  function rejectComment(slot) {
+    broadcast("chatDiagnostic", {
+      kind: "commentRejected",
+      message: null,
+      atMs: nowImpl(),
+      delayMs: null,
+      attempt: null,
+      commentId: slot.id,
+      reject: slot.decision.kind,
+      error: slot.decision.error,
+      latencyMs: slot.decision.latencyMs
+    });
+  }
+
+  /**
+   * 通ったコメントを今と同じく積んで放送し、発火判定へ回す（(a)(b)(c)）。speak-now モードなら反応する判定へ（(d)）。
+   * @param {{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number }} slot
+   */
+  function commitComment(slot) {
+    const { text, displayName } = slot;
+    const buffer = pipeline ? pipeline.transcriptBuffer : null;
+    if (!buffer) {
+      // 判定を待つ間に耳が止まった = 合流先が無い（取り込み時と同じ扱い）。
+      handleDiagnostic({
+        type: "chatBufferAbsent",
+        message: "ears not running; viewer comment cannot merge into transcript buffer (no fire).",
+        reason: displayName ?? null
+      });
+      return;
+    }
+    const result = buffer.append({ startMs: 0, endMs: 0, text, speaker: "viewer", displayName });
+    if (!result.appended || !result.entry) return; // blank discard 等。
+    // (b) viewer 行を放送（耳の onTranscript は viewer を除外＝ここが唯一の放送元）。commentId は追加フィールド。
+    const stats = buffer.stats();
+    broadcast("transcript", {
+      ...toWireEntry(result.entry),
+      latencyMs: null,
+      audioCtx: null,
+      appended: stats.appended,
+      discarded: stats.discarded,
+      commentId: slot.id
+    });
+    // (c) 発火スケジューラへ（従来モードは comment / comment-call 判定・speak-now モードは活動の反映だけ）。
+    // scheduler 未生成なら活動反映もスキップ。
+    if (fireScheduler) fireScheduler.handleChatMessage({ text, displayName });
+    // (d) 反応する判定（speak-now モード・自発 ON・KILL でないときだけ・部品内で判定）。
+    if (commentReact) {
+      commentReact.handleComment({
+        id: slot.id,
+        seq: result.entry.seq,
+        text,
+        displayName: displayName ?? null,
+        arrivedAtMs: slot.arrivedAtMs
+      });
     }
   }
 
@@ -1640,7 +2639,9 @@ export function createCockpitServer(options = {}) {
    */
   function broadcastChatStatus(status) {
     if (closed) return;
-    broadcast("chatStatus", { status: typeof status === "string" ? status : String(status) });
+    lastChatStatus = typeof status === "string" ? status : String(status);
+    broadcast("chatStatus", { status: lastChatStatus });
+    refreshStateWarnings();
   }
 
   /**
@@ -1673,6 +2674,7 @@ export function createCockpitServer(options = {}) {
       }
     }
     chatUnsubs = [];
+    lastChatStatus = null;
     if (chatClient) {
       const c = chatClient;
       chatClient = null;
@@ -1701,7 +2703,12 @@ export function createCockpitServer(options = {}) {
     // フックを取り込み経路へ結線（購読解除は畳み時に全撤去）。器官のフック throw は器官側が握る（Domain A）。
     chatUnsubs.push(
       client.onMessage((/** @type {any} */ msg) =>
-        ingestChatMessage({ text: msg && msg.text, displayName: msg && msg.displayName })
+        ingestChatMessage({
+          text: msg && msg.text,
+          displayName: msg && msg.displayName,
+          // コメント ID（器官の messageId）を操縦席まで通す（判定と発火の結び付け・コメント反応の合意 §3）。
+          messageId: msg && typeof msg.messageId === "string" ? msg.messageId : null
+        })
       )
     );
     chatUnsubs.push(client.onStatus((/** @type {any} */ state) => broadcastChatStatus(state)));
@@ -1739,6 +2746,94 @@ export function createCockpitServer(options = {}) {
     earsStatus: () => earsState,
     /** 発火状態（idle/thinking/speaking）。orchestrator 未注入なら null。 */
     fireState: () => (fireOrchestrator ? fireOrchestrator.getState() : null),
+    /**
+     * 隙間で手動の圧縮（context-growth-2026-10.md §6）の材料（additive な内部 JS API・HTTP/SSE の契約ではない）。
+     * soulIdle = orchestrator が idle で、サーバが呼んだ fire() も片付いている。judging = 話し始め・コメント反応の
+     * 判定が進行中か積み残しがある、または弾く判定の待ち行列がある。userSpeaking / lastSpeechEndAtMs = 配信者の
+     * VAD（耳が止まっていれば喋っていない扱い）。orchestrator 未注入なら null（圧縮しない）。
+     * @returns {{ soulIdle: boolean; judging: boolean; userSpeaking: boolean; lastSpeechEndAtMs: number | null } | null}
+     */
+    getQuietGap() {
+      if (!fireOrchestrator) return null;
+      const judging =
+        (speakNow != null && (speakNow.inFlight() > 0 || speakNow.pendingWhileBusy() > 0)) ||
+        (commentReact != null && (commentReact.inFlight() > 0 || commentReact.heldCount() > 0)) ||
+        guardQueue.length > 0;
+      return {
+        soulIdle: fireInFlight === 0 && fireOrchestrator.getState() === "idle",
+        judging,
+        userSpeaking: pipeline != null && userSpeaking,
+        lastSpeechEndAtMs
+      };
+    },
+    /**
+     * 声の engine の状態を知らせる口（cockpit.mjs が engine の onStatus を繋ぐ・additive な内部 JS API）。
+     * ElevenLabs の reconnecting / down は上の帯の警告になる（AivisSpeech は状態で警告を出さない）。reason に
+     * キーや会話の本文を入れない前提（切断などの短い理由・警告の detail）。表示側でも制御文字を除き
+     * VOICE_REASON_MAX_CHARS 字で切る。
+     * @param {{ engine: string; status: string; reason?: string | null }} info
+     */
+    setVoiceEngineStatus(info) {
+      if (closed || !info || typeof info.engine !== "string") return;
+      const status = VOICE_STATUSES.includes(/** @type {any} */ (info.status)) ? /** @type {any} */ (info.status) : "unknown";
+      const reason = clipVoiceReason(info.reason);
+      if (voice.engine === info.engine && voice.status === status && voice.reason === reason) return;
+      voice.engine = info.engine;
+      voice.status = status;
+      voice.reason = reason;
+      broadcastState();
+    },
+    /**
+     * 読みが取れず、口の時間割を簡易版にしたことを知らせる口（ElevenLabs engine の onReadingsFallback から）。
+     * 一回きりの警告（60 秒・続けば回数を数える）。detail は出さない（文の本文を警告に載せない）。
+     */
+    reportVoiceReadingsFallback() {
+      if (closed) return;
+      warningBoard.pushEvent("tts-readings-fallback", {
+        kind: "tts-readings-fallback",
+        severity: "warn",
+        message: "口の動きを簡易版にした（読みが取れない）",
+        source: "elevenlabs"
+      });
+    },
+    /**
+     * 圧縮の開始・終了をログのタブへ 1 行（SSE "diagnostic" type:"contextCompaction"）。
+     * 数字と種類だけ（本文なし）。kind = "started" | "finished" | "failed"、elapsedMs = 所要時間。started には
+     * inputTokens（直近の入力トークン）・thresholdTokens（そのときの目安）・ratio（窓に対する割合の参考）を載せる。
+     * あわせて圧縮の最中か（snapshot の compacting・状態のピルの「圧縮中」）を started で true、
+     * finished / failed で false にする（変わったら SSE "state"）。
+     * @param {{ phase: "started" | "finished" | "failed"; inputTokens?: number | null; thresholdTokens?: number | null; ratio?: number | null; durationMs?: number | null; reason?: string | null; personaInjected?: boolean }} info
+     */
+    broadcastContextCompaction(info) {
+      if (closed) return;
+      const phase = info && typeof info.phase === "string" ? info.phase : null;
+      if (phase === "started") setContextCompacting(true);
+      else if (phase === "finished" || phase === "failed") setContextCompacting(false);
+      broadcast("diagnostic", {
+        type: "contextCompaction",
+        message: null,
+        reason: info && typeof info.reason === "string" ? info.reason : null,
+        startMs: null,
+        endMs: null,
+        tag: null,
+        kind: phase,
+        elapsedMs: info && typeof info.durationMs === "number" ? info.durationMs : null,
+        charsSpoken: null,
+        totalChars: null,
+        prefix: null,
+        inputTokens: info && typeof info.inputTokens === "number" ? info.inputTokens : null,
+        thresholdTokens: info && typeof info.thresholdTokens === "number" ? info.thresholdTokens : null,
+        ratio: info && typeof info.ratio === "number" ? info.ratio : null,
+        personaInjected: info?.personaInjected === true
+      });
+    },
+    /**
+     * 圧縮の最中の表示を戻す（頭のセッションを畳んで作り直すとき・cockpit.mjs）。畳んだセッションの圧縮は
+     * もう続かないので、finished / failed が届かなくても「圧縮中」を出しっぱなしにしない。冪等。
+     */
+    resetContextCompaction() {
+      setContextCompacting(false);
+    },
     /**
      * 自発発火の ON/OFF を切り替える（S6・Domain D の永続トグルが呼ぶ継ぎ目）。scheduler 未生成
      * （orchestrator 未注入）なら no-op。返り値は反映後の enabled（scheduler 無しは false）。
@@ -1792,6 +2887,24 @@ export function createCockpitServer(options = {}) {
         }
         fireScheduler = null;
       }
+      if (speakNow) {
+        speakNow.dispose(); // 返事待ちの判定が後から返っても無視する（タイマは judge 側で畳まれる）。
+        speakNow = null;
+      }
+      if (commentReact) {
+        commentReact.dispose(); // speakNow と同じ（取っておいたコメントも捨てる）。
+        commentReact = null;
+      }
+      guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が closed で無視する。
+      warningBoard.dispose(); // 一回きりの警告の消えるタイマを残さない。
+      if (quotaUnsub) {
+        try {
+          quotaUnsub();
+        } catch {
+          // best-effort
+        }
+        quotaUnsub = null;
+      }
       if (fireOrchestrator) {
         try {
           fireOrchestrator.dispose();
@@ -1822,6 +2935,7 @@ export function createCockpitServer(options = {}) {
       }
       earsState = "stopped";
       startedAtMs = null;
+      callEarsHook(onEarsStopped);
       await new Promise((resolve) => {
         server.closeAllConnections?.();
         server.close(() => resolve(undefined));
@@ -1933,6 +3047,15 @@ function readJsonBodyStrict(req) {
     });
     req.on("error", fail);
   });
+}
+
+/**
+ * 判定の失敗理由にコメント本文が混ざっていたら理由ごと伏せる（本文はサーバから送らない・ログにも書かない）。
+ * @param {string} message  @param {string} text
+ */
+function scrubCommentText(message, text) {
+  const t = String(text).trim();
+  return t.length > 0 && message.includes(t) ? "理由は伏せた（本文を含むため）" : message;
 }
 
 /** @param {unknown} err */

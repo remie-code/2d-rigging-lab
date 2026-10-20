@@ -5,14 +5,24 @@
  *
  * 現 cockpit.html の設定系セクションの移植先:
  *  - 接続: 器 Channel（:172-178 :753-770）/ YouTube Live chat（:182-189 :775-803）
- *  - 入出力: マイク + Start/Stop（:163-169 :697-750 :804-811）/ 声の出力先（:207-212 :654-695）/
+ *  - 入出力: マイク + Start/Stop（:163-169 :697-750 :804-811）/ 文字起こし（whisper / ElevenLabs・
+ *    cockpit-stt-selection.md §4.2: マイクの下・Start の前に選ぶ・Start で記憶）/ 声（AivisSpeech / ElevenLabs・
+ *    声の差し替え Wave 3: 文字起こしの下・同じく Start の前に選び次の Start から効く。Start の失敗理由は共用のエラー欄）/
+ *    声の出力先（:207-212 :654-695）/
  *    視界 = ゲーム窓（:192-199 :591-631）
  *  - 各区画のエラー欄: devices-error（:168）→ マイク行 / channel-error（:177）→ Channel 行 /
  *    chat-error（:188）→ chat 行 / vision-error（:198）→ 視界行 / conversation-error（:212）は
  *    IA 再配置で分割 —— 音声出力系はここ（声の出力先行）・自発トグル系は運転バー（control-bar.mjs）。
  *  - 頭脳・会話（Domain C）: technical brain の選択/Set に加え、同じダイアログ内で
  *    conversation-instruction editor へ切り替える。編集本文だけを dedicated API へ保存し、
- *    identity と memory structure は読み取り専用で表示する。
+ *    identity と memory structure は読み取り専用で表示する。頭脳の下に「圧縮を始める大きさ」（万トークンの select +
+ *    Set・POST /api/compact-threshold → 保存と走っている compactor の差し替え = 次の確認から効く・既定 20 万の表示と
+ *    Codex の頭のときだけ効く旨の説明。頭脳 select と同じ select + Set の流儀）。
+ *  - 運転・ログ（操縦席の作り直し・cockpit-glance-redesign.md §5・§9.2）: 「運転」（自発・口数・話し始め・
+ *    忙しい間のコメント・かぶり・手動の発火 = 旧運転バー）と「ログ」（今の観測フィードそのまま）のタブ。中身は
+ *    app.mjs が組んだ部品を driveSlot / logSlot で受けて描くだけ（ここは器）。logSlot は関数なら
+ *    「ログのタブが見えているか」を渡して呼ぶ（フィードの末尾追従の寄せ直しに使う）。
+ *    画面上の名前は「準備・設定」（メイン画面の歯車・配信前の「準備・設定を開く」から開く）。
  *  - 記憶（配信間記憶・stream-memory-wave-plan.md §3 Domain B）: 頭脳区画の写経で新区画を追加。
  *    ON/OFF トグル（memoryToggleView・POST /api/memory・controlled component=selfFire/bargeIn pill と
  *    同型の一方向データフロー）+「今日を記録」ボタン（POST /api/memory-record）+ drawer-note に
@@ -58,12 +68,22 @@ import {
   chatConnectErrorText,
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
+  STT_ENGINE_OPTIONS,
+  sttEngineSelection,
+  TTS_ENGINE_OPTIONS,
+  ttsEngineSelection,
   requestErrorText,
   brainPostErrorText,
   memoryToggleView,
   memoryPostErrorText,
   memoryRecordPostErrorText,
-  memoryStatusLabel
+  memoryStatusLabel,
+  compactThresholdOptions,
+  compactThresholdSelection,
+  compactThresholdStatusLabel,
+  compactThresholdPostErrorText,
+  COMPACT_THRESHOLD_DEFAULT_TOKENS,
+  COMPACT_THRESHOLD_NOTE
 } from "../view-logic/settings.mjs";
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
@@ -116,7 +136,9 @@ export const SETTINGS_CATEGORIES = Object.freeze([
   Object.freeze({ id: "connections", label: "接続" }),
   Object.freeze({ id: "input-output", label: "入出力" }),
   Object.freeze({ id: "brain-conversation", label: "頭脳・会話" }),
-  Object.freeze({ id: "memory", label: "記憶" })
+  Object.freeze({ id: "memory", label: "記憶" }),
+  Object.freeze({ id: "drive", label: "運転" }),
+  Object.freeze({ id: "log", label: "ログ" })
 ]);
 
 /** @param {string} currentId @param {string} key @returns {string} */
@@ -217,15 +239,17 @@ export function settingsModalFocusReturnTarget(previous, open) {
  * conversation editor is a page within this same dialog; it never creates a
  * nested dialog or changes existing immediate-setting endpoint handlers.
  *
- * @param {{ open?: boolean; onClose?: () => void; settings: any; chatDisplay?: string | null;
+ * @param {{ open?: boolean; onClose?: () => void; settings: any; sttEngine?: string | null; ttsEngine?: string | null; chatDisplay?: string | null;
  *   applySnapshot: (s: any) => void; fetchImpl?: any; promptEditorSlot?: any;
  *   draftDirty?: boolean; dirty?: boolean; onDiscardDraft?: () => void; onContinueDraft?: () => void;
- *   closeRequestRef?: { current: (() => void) | null } }} props
+ *   closeRequestRef?: { current: (() => void) | null }; driveSlot?: any; logSlot?: any }} props
  */
 export function CockpitSettingsModal({
   open,
   onClose,
   settings,
+  sttEngine = null,
+  ttsEngine = null,
   chatDisplay,
   applySnapshot,
   fetchImpl,
@@ -234,13 +258,23 @@ export function CockpitSettingsModal({
   dirty = false,
   onDiscardDraft,
   onContinueDraft,
-  closeRequestRef
+  closeRequestRef,
+  driveSlot = null,
+  logSlot = null
 }) {
   // ── マイク（:163-169 :697-750）──
   const [micOptions, setMicOptions] = useState(/** @type {Array<{value:string;label:string}>} */ ([]));
   const [micSelected, setMicSelected] = useState("");
   const [micBusy, setMicBusy] = useState(false); // setBusy :729（Start/Stop 両 disable）。
   const [micError, setMicError] = useState(""); //  devices-error :168（一覧/start/stop の共用欄）。
+  // ── 文字起こし（whisper / ElevenLabs）: マイクと同じく Start の前に選ぶ。前回の選択は state.stt.engine から
+  //    復元（ユーザーが選び直したら上書きしない）。Start の body で送り、サーバー側で記憶される。──
+  const [sttSelected, setSttSelected] = useState("whisper");
+  const sttEditedRef = useRef(false);
+  // ── 声（AivisSpeech / ElevenLabs・声の差し替え Wave 3）: 文字起こしと同じく Start の前に選び、効くのは次の Start
+  //    から。前回の選択は state.tts.engine から復元（選び直したら上書きしない）。Start の body で送り、サーバー側で記憶。──
+  const [ttsSelected, setTtsSelected] = useState("aivis");
+  const ttsEditedRef = useRef(false);
   // ── 器 Channel（:172-178 :753-770）──
   const [channelUrl, setChannelUrl] = useState("");
   const [channelError, setChannelError] = useState(""); // channel-error :177
@@ -261,6 +295,9 @@ export function CockpitSettingsModal({
   // ── 頭脳（多頭化 Domain C・声の出力先行の写経）──
   const [brainSelected, setBrainSelected] = useState("claude");
   const [brainError, setBrainError] = useState("");
+  // ── 圧縮を始める大きさ（頭脳区画の写経・select の値はトークン数の文字列）──
+  const [compactSelected, setCompactSelected] = useState(String(COMPACT_THRESHOLD_DEFAULT_TOKENS));
+  const [compactError, setCompactError] = useState("");
   // ── 記憶（配信間記憶・頭脳区画の写経）──
   const [memoryError, setMemoryError] = useState("");
   const [recordBusy, setRecordBusy] = useState(false); // 「今日を記録」の連打防止（Fire ボタンの localBusy と同型）。
@@ -502,7 +539,7 @@ export function CockpitSettingsModal({
   }, [settings]);
 
   // 頭脳 select の現況同期（多頭化 Domain C）: snapshot.brain.brain（起動時の現況 / POST /api/brain 後の
-  // 反映）が既知 4 値（2026-07-17 追撃で claude/codex の 2 値から Codex 側 2 頭を追加）なら select 表示へ
+  // 反映）が既知値（2026-07-17 追撃で claude/codex の 2 値から Codex 側 2 頭を追加・2026-10-16 時点で 6 値）なら select 表示へ
   // 反映する。マイク/視界/出力先と違い一覧取得 API を持たない固定選択肢のため、select の初期値・以後の
   // 現況表示はこの effect が担う（未知値/欠落は変更しない）。既知値の集合は BRAIN_OPTIONS（health.mjs の
   // BRAIN_LABELS 由来）と同じ語彙——ここも「頭 id を直書きする」責務境界規律に合わせ、BRAIN_OPTIONS の
@@ -513,13 +550,37 @@ export function CockpitSettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brainCurrent]);
 
+  // 圧縮を始める大きさの現況同期（頭脳 select と同型）: snapshot.compaction.thresholdTokens（起動時の保存値 /
+  // POST /api/compact-threshold 後の反映）が変わったら select 表示へ反映する（未注入・不正は変えない）。
+  const compactCurrent = compactThresholdSelection(settings && settings.compaction);
+  useEffect(() => {
+    if (compactCurrent != null) setCompactSelected(compactCurrent);
+  }, [compactCurrent]);
+
+  // 文字起こしの選択の復元（state.stt.engine・ユーザーが選び直した後は上書きしない）。
+  const sttRestored = sttEngineSelection(sttEngine ? { engine: sttEngine } : null);
+  useEffect(() => {
+    if (sttRestored != null && !sttEditedRef.current) setSttSelected(sttRestored);
+  }, [sttRestored]);
+  // 声の選択の復元（state.tts.engine・文字起こしと同型）。
+  const ttsRestored = ttsEngineSelection(ttsEngine ? { engine: ttsEngine } : null);
+  useEffect(() => {
+    if (ttsRestored != null && !ttsEditedRef.current) setTtsSelected(ttsRestored);
+  }, [ttsRestored]);
+
   // ── ハンドラ（すべて「POST → view-logic で文言 → snapshot 適用」の同型フロー）──
 
   /** Start（:730-750）。 */
   const onStart = () => {
     const device = micSelected || null; // :731
     setMicBusy(true); //                    :732 setBusy(true)
-    doFetch("/api/ears/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device }) })
+    sttEditedRef.current = false; // Start 後はサーバーの記憶（state.stt.engine）に同期してよい。
+    ttsEditedRef.current = false; //  声も同じ（state.tts.engine）。
+    doFetch("/api/ears/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ device, sttEngine: sttSelected || "whisper", ttsEngine: ttsSelected || "aivis" })
+    })
       .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, j })))
       .then((/** @type {any} */ res) => {
         const err = earsStartFailureText(res);
@@ -667,6 +728,27 @@ export function CockpitSettingsModal({
       .catch((/** @type {unknown} */ e) => setBrainError(requestErrorText("brain", e)));
   };
 
+  /** 圧縮を始める大きさの Set（onBrainSet の写経）。POST /api/compact-threshold → 成功で snapshot 反映。 */
+  const onCompactThresholdSet = () => {
+    const tokens = Number(compactSelected);
+    setCompactError("");
+    doFetch("/api/compact-threshold", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tokens })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = compactThresholdPostErrorText(res);
+        if (err != null) {
+          setCompactError(err);
+          return;
+        }
+        applySnapshot(res.j); // snapshot（compaction: {thresholdTokens}）で状態を更新。
+      })
+      .catch((/** @type {unknown} */ e) => setCompactError(requestErrorText("compactThreshold", e)));
+  };
+
   /**
    * 記憶 ON/OFF トグル（selfFire/bargeIn pill と同型の controlled component・onToggleSelfFire の写経）。
    * change はユーザー操作でのみ発火する（programmatic な checked 反映は change を発火しない）。
@@ -720,7 +802,7 @@ export function CockpitSettingsModal({
       class=${"cockpit-settings-modal" + (open ? " open" : "")}
       role="dialog" aria-modal="true" aria-labelledby="cockpit-settings-title" tabIndex="-1">
       <div class="drawer-head cockpit-settings-head">
-        <h2 id="cockpit-settings-title">Cockpit Settings</h2>
+        <h2 id="cockpit-settings-title">準備・設定</h2>
         <button class="cockpit-settings-close" type="button" aria-label="Close settings" data-cockpit-settings-focus="true" onClick=${requestClose}>Close</button>
       </div>
       <nav class="cockpit-settings-tabs" aria-label="Settings categories" role="tablist">
@@ -809,6 +891,32 @@ export function CockpitSettingsModal({
           <button class="btn-start" type="button" disabled=${micBusy} onClick=${onStart}>Start</button>
           <button class="btn-stop" type="button" disabled=${micBusy} onClick=${onStop}>Stop</button>
         </div>
+        <div class="drawer-row">
+          <label for="stt-engine-select">文字起こし</label>
+          <${SettingsSelect}
+            id="stt-engine-select"
+            className="drawer-select stt-engine-select"
+            options=${STT_ENGINE_OPTIONS}
+            value=${sttSelected}
+            onChange=${(/** @type {any} */ ev) => {
+              sttEditedRef.current = true;
+              setSttSelected(ev && ev.target ? ev.target.value : "whisper");
+            }}
+          />
+        </div>
+        <div class="drawer-row">
+          <label for="tts-engine-select">声</label>
+          <${SettingsSelect}
+            id="tts-engine-select"
+            className="drawer-select tts-engine-select"
+            options=${TTS_ENGINE_OPTIONS}
+            value=${ttsSelected}
+            onChange=${(/** @type {any} */ ev) => {
+              ttsEditedRef.current = true;
+              setTtsSelected(ev && ev.target ? ev.target.value : "aivis");
+            }}
+          />
+        </div>
         <div class="drawer-note">
           <span class="err">${micError}</span>
         </div>
@@ -890,6 +998,23 @@ export function CockpitSettingsModal({
           }}>
             会話指示を編集
           </button>
+          <h3 class="drawer-subhead">会話の圧縮</h3>
+          <div class="drawer-row">
+            <label for="compact-threshold-select">圧縮を始める大きさ</label>
+            <${SettingsSelect}
+              id="compact-threshold-select"
+              className="drawer-select compact-threshold-select"
+              options=${compactThresholdOptions(Number(compactSelected))}
+              value=${compactSelected}
+              onChange=${(/** @type {any} */ ev) => setCompactSelected(ev && ev.target ? ev.target.value : String(COMPACT_THRESHOLD_DEFAULT_TOKENS))}
+            />
+            <button class="btn-compact-threshold-set" type="button" onClick=${onCompactThresholdSet}>Set</button>
+          </div>
+          <div class="drawer-note">
+            <span class="compact-threshold-status">${compactThresholdStatusLabel(settings && settings.compaction)}</span>
+            <span class="compact-threshold-hint">${COMPACT_THRESHOLD_NOTE}</span>
+            <span class="err">${compactError}</span>
+          </div>
         `}
       </div>
       <div id="cockpit-settings-panel-memory" class="drawer-section" data-settings-category="memory" role="tabpanel" aria-labelledby="cockpit-settings-tab-memory" hidden=${activeCategory !== "memory"}>
@@ -913,6 +1038,13 @@ export function CockpitSettingsModal({
           <span class="memory-status-label">${memoryStatusLabel(settings && settings.memory)}</span>
           <span class="err">${memoryError}</span>
         </div>
+      </div>
+      <div id="cockpit-settings-panel-drive" class="drawer-section" data-settings-category="drive" role="tabpanel" aria-labelledby="cockpit-settings-tab-drive" hidden=${activeCategory !== "drive"}>
+        <h3>運転</h3>
+        ${driveSlot}
+      </div>
+      <div id="cockpit-settings-panel-log" class="drawer-section log-section" data-settings-category="log" role="tabpanel" aria-labelledby="cockpit-settings-tab-log" hidden=${activeCategory !== "log"}>
+        ${typeof logSlot === "function" ? logSlot(!!open && activeCategory === "log") : logSlot}
       </div>
     </section>
     </div>

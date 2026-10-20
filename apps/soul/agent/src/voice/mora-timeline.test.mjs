@@ -1,11 +1,13 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   buildSpeechTimeline,
   DEFAULT_S_BY_VOWEL,
-  MAX_TIMELINE_ITEMS
+  MAX_TIMELINE_ITEMS,
+  MAX_UTTERANCE_TIMELINE_LENGTH
 } from "./mora-timeline.mjs";
 import {
   GOLDEN_MORAS_KONNICHIWA,
@@ -170,24 +172,44 @@ test("整数化単調: 尺が短く四捨五入が衝突しても最小 1ms 間�
   );
 });
 
-test("512 上限: 512 要素は許容、513 要素は throw（切詰めない）", () => {
-  const ok = Array.from({ length: MAX_TIMELINE_ITEMS }, () => ({ vowel: "a" }));
-  const { timeline } = buildSpeechTimeline(ok, 600, 0, 0);
-  assert.equal(timeline.length, MAX_TIMELINE_ITEMS);
-
-  const over = Array.from({ length: MAX_TIMELINE_ITEMS + 1 }, () => ({ vowel: "a" }));
-  assert.throws(() => buildSpeechTimeline(over, 600, 0, 0), /exceeding the contract maxItems/);
+test("上限の値は器の契約と同じ: MAX_UTTERANCE_TIMELINE_LENGTH = maxUtteranceTimelineLength = 4096", () => {
+  assert.equal(MAX_UTTERANCE_TIMELINE_LENGTH, 4096);
+  // 契約は読むだけ（readFileSync・import ではない。特区方向ルールと両立）。名前と値の両方を固定する。
+  const schema = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../../runtime-player/src/main/control-channel/contract/channel-intent-speech-stream-payload-schema.json",
+        import.meta.url
+      ),
+      "utf8"
+    )
+  );
+  assert.equal(schema.maxUtteranceTimelineLength, MAX_UTTERANCE_TIMELINE_LENGTH);
+  // intent.speech 1 回の maxItems（512）は別の値として残る（buildSpeechTimeline の上限ではない）。
+  assert.equal(MAX_TIMELINE_ITEMS, 512);
 });
 
-test("512 上限は「出力要素数」で判定: 脱落込み 600 生要素でも母音 512 まで許容", () => {
-  // 生 1024 要素の半分が pau（脱落）→ 出力 512。許容されるべき。
+test("上限: 512 を超えても 1 発話の上限 4096 までは通す・4097 要素は throw（切詰めない）", () => {
+  const overSpeech = Array.from({ length: MAX_TIMELINE_ITEMS + 1 }, () => ({ vowel: "a" }));
+  assert.equal(buildSpeechTimeline(overSpeech, 600, 0, 0).timeline.length, MAX_TIMELINE_ITEMS + 1);
+
+  const ok = Array.from({ length: MAX_UTTERANCE_TIMELINE_LENGTH }, () => ({ vowel: "a" }));
+  const { timeline } = buildSpeechTimeline(ok, 600, 0, 0);
+  assert.equal(timeline.length, MAX_UTTERANCE_TIMELINE_LENGTH);
+
+  const over = Array.from({ length: MAX_UTTERANCE_TIMELINE_LENGTH + 1 }, () => ({ vowel: "a" }));
+  assert.throws(() => buildSpeechTimeline(over, 600, 0, 0), /exceeding the contract maxUtteranceTimelineLength 4096/);
+});
+
+test("上限は「出力要素数」で判定: 脱落込み 8192 生要素でも母音 4096 まで許容", () => {
+  // 生 8192 要素の半分が pau（脱落）→ 出力 4096。許容されるべき。
   const moras = [];
-  for (let i = 0; i < MAX_TIMELINE_ITEMS; i += 1) {
+  for (let i = 0; i < MAX_UTTERANCE_TIMELINE_LENGTH; i += 1) {
     moras.push({ vowel: "a" });
     moras.push({ vowel: "pau" });
   }
   const { timeline } = buildSpeechTimeline(moras, 1200, 0, 0);
-  assert.equal(timeline.length, MAX_TIMELINE_ITEMS);
+  assert.equal(timeline.length, MAX_UTTERANCE_TIMELINE_LENGTH);
 });
 
 test("エッジ: 母音が 1 つも無ければ throw（contract minItems=1）", () => {
@@ -225,24 +247,24 @@ test("決定論: 同じ入力は同じ出力（純関数）", () => {
 
 // ── Domain A 補強（Domain B レビュー指摘・厳密単調と脱落先頭の縁）───────────────
 
-test("512 + 極小 body: 1ms 押し出しが 512 連鎖しても厳密単調・整数・512 判定が緑", () => {
-  // 512 母音を body 0.001s に詰める → slot ≈ 0.00000195s → 生 timeMs は全て ~0ms。
-  // round では全 0 に潰れるが、最小 1ms 押し出しが 512 回連鎖して 0..511 になる。
-  const moras = Array.from({ length: MAX_TIMELINE_ITEMS }, () => ({ vowel: "a" }));
+test("4096 + 極小 body: 1ms 押し出しが 4096 連鎖しても厳密単調・整数・上限判定が緑", () => {
+  // 4096 母音を body 0.001s に詰める → slot ≈ 0.00000024s → 生 timeMs は全て ~0ms。
+  // round では全 0 に潰れるが、最小 1ms 押し出しが 4096 回連鎖して 0..4095 になる。
+  const moras = Array.from({ length: MAX_UTTERANCE_TIMELINE_LENGTH }, () => ({ vowel: "a" }));
   const { timeline } = buildSpeechTimeline(moras, 0.001, 0, 0);
-  assert.equal(timeline.length, MAX_TIMELINE_ITEMS); // 512 は許容（throw しない）
-  // 押し出しで 0,1,2,...,511 に整列（厳密単調・整数・非負・最後は 511）。
+  assert.equal(timeline.length, MAX_UTTERANCE_TIMELINE_LENGTH); // 4096 は許容（throw しない）
+  // 押し出しで 0,1,2,...,4095 に整列（厳密単調・整数・非負・最後は 4095）。
   let prev = -1;
   for (let i = 0; i < timeline.length; i += 1) {
     assert.equal(timeline[i].timeMs, i); // 連鎖の帰結を厳密に固定
     assert.ok(Number.isInteger(timeline[i].timeMs) && timeline[i].timeMs > prev);
     prev = timeline[i].timeMs;
   }
-  assert.equal(timeline.at(-1).timeMs, MAX_TIMELINE_ITEMS - 1);
+  assert.equal(timeline.at(-1).timeMs, MAX_UTTERANCE_TIMELINE_LENGTH - 1);
 
-  // 513 で同じ極小 body なら 512 判定側（出力要素数 513 > 512）で throw する。
-  const over = Array.from({ length: MAX_TIMELINE_ITEMS + 1 }, () => ({ vowel: "a" }));
-  assert.throws(() => buildSpeechTimeline(over, 0.001, 0, 0), /exceeding the contract maxItems/);
+  // 4097 で同じ極小 body なら上限判定側（出力要素数 4097 > 4096）で throw する。
+  const over = Array.from({ length: MAX_UTTERANCE_TIMELINE_LENGTH + 1 }, () => ({ vowel: "a" }));
+  assert.throws(() => buildSpeechTimeline(over, 0.001, 0, 0), /exceeding the contract maxUtteranceTimelineLength/);
 });
 
 test("脱落先頭: 先頭モーラが enum 外なら第一出力は prev=-1 から非ゼロ raw を取る", () => {

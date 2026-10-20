@@ -8,6 +8,7 @@ import {
   RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT,
   RUNTIME_PLAYER_SPEECH_ONSET_MS,
   RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+  RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS,
   RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS,
   sampleSpeechTimeline,
   type SpeechMora,
@@ -466,6 +467,241 @@ describe("sampleSpeechTimeline — group re-attack (onsetFromOpen, §12項目2 �
         expect(Math.abs(open - previousOpen)).toBeLessThanOrEqual(boundPerTick);
       }
       previousOpen = open;
+    }
+  });
+});
+
+describe("sampleSpeechTimeline — streamed utterance (intent.speechStream, voice swap Wave 1)", () => {
+  const RELEASE_MS = 400;
+  const lastMora = REPRESENTATIVE[REPRESENTATIVE.length - 1]!;
+
+  it("keeps the golden: end at t=0 + onset anchored at t=0 (the intent.speech sugar) is the plain timeline at EVERY tick", () => {
+    const plain = timeline(REPRESENTATIVE);
+    const sugar: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      endAtMs: 0,
+      awaitingEnd: false
+    };
+    for (let now = 0; now <= lastMora.timeMs + 800; now += 4) {
+      expect(sampleSpeechTimeline(sugar, now)).toStrictEqual(
+        sampleSpeechTimeline(plain, now)
+      );
+    }
+  });
+
+  it("holds the last vowel while awaiting end — no automatic close, never done (データが尽きても最後の母音を保つ)", () => {
+    const streaming: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      awaitingEnd: true
+    };
+    // Long past where the plain timeline would have fully closed.
+    for (const now of [lastMora.timeMs + 200, lastMora.timeMs + 2_000, 60_000]) {
+      const { values, done } = sampleSpeechTimeline(streaming, now);
+      expect(done).toBe(false);
+      expect(mouthOpen(values)).toBeCloseTo(
+        lastMora.s * RUNTIME_PLAYER_SPEECH_OPEN_SCALE,
+        9
+      );
+      expect(values[RUNTIME_PLAYER_SPEECH_VOWEL_SLOTS[lastMora.vowel]]).toBeCloseTo(
+        mouthOpen(values),
+        9
+      );
+      expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
+    }
+  });
+
+  it("is the plain timeline before the data runs out (awaiting end only changes the terminal)", () => {
+    const plain = timeline(REPRESENTATIVE);
+    const streaming: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      awaitingEnd: true
+    };
+    for (let now = 0; now <= lastMora.timeMs; now += 4) {
+      expect(sampleSpeechTimeline(streaming, now)).toStrictEqual(
+        sampleSpeechTimeline(plain, now)
+      );
+    }
+  });
+
+  it("an end that lands BEFORE the data runs out keeps today's terminal (hold the last interval → 400ms close)", () => {
+    const plain = timeline(REPRESENTATIVE);
+    const endedEarly: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      endAtMs: 500,
+      onsetAtMs: 0
+    };
+    for (let now = 0; now <= lastMora.timeMs + 800; now += 4) {
+      expect(sampleSpeechTimeline(endedEarly, now)).toStrictEqual(
+        sampleSpeechTimeline(plain, now)
+      );
+    }
+  });
+
+  it("a LATE end (after the data ran out) closes from the held vowel starting at the end instant, without a snap", () => {
+    const endAtMs = 3_000;
+    const ended: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      endAtMs
+    };
+    const held = lastMora.s * RUNTIME_PLAYER_SPEECH_OPEN_SCALE;
+    // Up to the end instant the vowel is still held (release has not started).
+    expect(mouthOpen(sampleSpeechTimeline(ended, endAtMs).values)).toBeCloseTo(held, 9);
+    // Mid-release: strictly between held and closed.
+    const mid = mouthOpen(sampleSpeechTimeline(ended, endAtMs + RELEASE_MS / 2).values);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(held);
+    // Fully closed after the universal release → done (pruned by the store).
+    expect(sampleSpeechTimeline(ended, endAtMs + RELEASE_MS).done).toBe(true);
+    // Continuity across the release start: adjacent 1ms ticks stay within the derived
+    // smoothstep slope bound (held · maxSlope / releaseMs per ms).
+    const bound = (held * RUNTIME_PLAYER_SMOOTHSTEP_MAX_SLOPE) / RELEASE_MS + 1e-9;
+    let previous = mouthOpen(sampleSpeechTimeline(ended, endAtMs - 50).values);
+    for (let now = endAtMs - 49; now <= endAtMs + RELEASE_MS; now += 1) {
+      const { values } = sampleSpeechTimeline(ended, now);
+      expect(Math.abs(mouthOpen(values) - previous)).toBeLessThanOrEqual(bound);
+      expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
+      previous = mouthOpen(values);
+    }
+  });
+
+  it("anchors the onset at onsetAtMs: data installed after t=0 still rises from the captured openness (no snap)", () => {
+    const installedAtMs = 200;
+    const late: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: installedAtMs,
+      awaitingEnd: true
+    };
+    // At the install instant the mouth is still at the onset origin (0 here, idle).
+    expect(mouthOpen(sampleSpeechTimeline(late, installedAtMs).values)).toBeCloseTo(0, 9);
+    // Mid-ramp: partially open; after ONSET_MS: the natural (t=0-relative) value.
+    const midRamp = mouthOpen(
+      sampleSpeechTimeline(late, installedAtMs + RUNTIME_PLAYER_SPEECH_ONSET_MS / 2).values
+    );
+    const natural = mouthOpen(
+      sampleSpeechTimeline(
+        timeline(REPRESENTATIVE),
+        installedAtMs + RUNTIME_PLAYER_SPEECH_ONSET_MS / 2
+      ).values
+    );
+    expect(midRamp).toBeGreaterThan(0);
+    expect(midRamp).toBeLessThan(natural);
+    const afterRamp = installedAtMs + RUNTIME_PLAYER_SPEECH_ONSET_MS + 10;
+    expect(sampleSpeechTimeline(late, afterRamp)).toStrictEqual(
+      sampleSpeechTimeline(timeline(REPRESENTATIVE), afterRamp)
+    );
+  });
+
+  it("holds the convex identity at EVERY tick while awaiting end, with a late onset, and after a late end", () => {
+    const states: readonly SpeechTimelineState[] = [
+      { moras: REPRESENTATIVE, startAtMs: 0, awaitingEnd: true, onsetAtMs: 150 },
+      { moras: REPRESENTATIVE, startAtMs: 0, endAtMs: 2_000, onsetAtMs: 150, onsetFromOpen: 0.3 },
+      { moras: [{ timeMs: 0, vowel: "e", s: 0.7 }], startAtMs: 0, awaitingEnd: true }
+    ];
+    for (const state of states) {
+      for (let now = 0; now <= 2_600; now += 4) {
+        const { values } = sampleSpeechTimeline(state, now);
+        expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
+      }
+    }
+  });
+});
+
+describe("sampleSpeechTimeline — streamed utterance safety net (stallEndAtMs, voice swap Wave 2 / Domain A2)", () => {
+  const RELEASE_MS = 400;
+  const lastMora = REPRESENTATIVE[REPRESENTATIVE.length - 1]!;
+  const stallEndAtMs = lastMora.timeMs + RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS;
+
+  it("names the stall window 2000ms", () => {
+    expect(RUNTIME_PLAYER_SPEECH_STREAM_STALL_END_MS).toBe(2000);
+  });
+
+  it("is EXACTLY an end accepted at stallEndAtMs, at every tick (hold until then, then 400ms close → done)", () => {
+    const stalled: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      awaitingEnd: true,
+      stallEndAtMs
+    };
+    const endedThen: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      endAtMs: stallEndAtMs
+    };
+    for (let now = 0; now <= stallEndAtMs + RELEASE_MS + 40; now += 4) {
+      expect(sampleSpeechTimeline(stalled, now)).toStrictEqual(
+        sampleSpeechTimeline(endedThen, now)
+      );
+    }
+    const held = lastMora.s * RUNTIME_PLAYER_SPEECH_OPEN_SCALE;
+    expect(mouthOpen(sampleSpeechTimeline(stalled, stallEndAtMs - 1).values)).toBeCloseTo(held, 9);
+    expect(mouthOpen(sampleSpeechTimeline(stalled, stallEndAtMs).values)).toBeCloseTo(held, 9);
+    const mid = mouthOpen(sampleSpeechTimeline(stalled, stallEndAtMs + RELEASE_MS / 2).values);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(held);
+    expect(sampleSpeechTimeline(stalled, stallEndAtMs + RELEASE_MS).done).toBe(true);
+  });
+
+  it("before the net it is the plain awaiting hold (never done)", () => {
+    const withNet: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      awaitingEnd: true,
+      stallEndAtMs
+    };
+    const withoutNet: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      awaitingEnd: true
+    };
+    for (let now = 0; now < stallEndAtMs; now += 4) {
+      expect(sampleSpeechTimeline(withNet, now)).toStrictEqual(
+        sampleSpeechTimeline(withoutNet, now)
+      );
+    }
+  });
+
+  it("is ignored once the utterance has ended (an end before the net keeps today's terminal)", () => {
+    const endedEarly: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      endAtMs: 1_500,
+      stallEndAtMs
+    };
+    const plainEnd: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 0,
+      endAtMs: 1_500
+    };
+    for (let now = 0; now <= stallEndAtMs + RELEASE_MS + 40; now += 4) {
+      expect(sampleSpeechTimeline(endedEarly, now)).toStrictEqual(
+        sampleSpeechTimeline(plainEnd, now)
+      );
+    }
+  });
+
+  it("holds the convex identity at every tick through the net close", () => {
+    const stalled: SpeechTimelineState = {
+      moras: REPRESENTATIVE,
+      startAtMs: 0,
+      onsetAtMs: 120,
+      onsetFromOpen: 0.2,
+      awaitingEnd: true,
+      stallEndAtMs
+    };
+    for (let now = 0; now <= stallEndAtMs + RELEASE_MS + 40; now += 4) {
+      const { values } = sampleSpeechTimeline(stalled, now);
+      expect(vowelSum(values)).toBeCloseTo(mouthOpen(values), 9);
     }
   });
 });

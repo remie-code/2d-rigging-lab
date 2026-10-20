@@ -6,6 +6,7 @@ import { createEarPipeline, EAR_DEFAULTS } from "./ear-pipeline.mjs";
 import { sinePcm, silencePcm, concatInt16, int16ToBytesLE } from "./fixtures-audio.mjs";
 import { wavDurationSec } from "../voice/wav-duration.mjs";
 import { DEFAULT_WHISPER_PROMPT } from "./whisper-inference.mjs";
+import { createFakeWebSocketClass } from "../test-support/fake-websocket.mjs";
 
 // 耳パイプライン結線の機械テスト（S2 Domain C）。全部品を注入し、実マイク・実 ONNX・
 // 実 whisper-server・実ネットワークを一切使わずに縦貫通とライフサイクルを固定する。
@@ -506,4 +507,137 @@ test("ear-pipeline: 常駐既定（maxSpeechMs=20000 / threads=6）が部品へ�
   } finally {
     await h.pipeline.dispose();
   }
+});
+
+// ── 文字起こしの分岐: ElevenLabs（操縦席の文字起こし選択・cockpit-stt-selection.md §3/§8）────────
+//  WebSocket は fake（test-support/fake-websocket.mjs）を注入し、実 ElevenLabs には繋がない。
+
+/** ElevenLabs engine のハーネス（既存 makeHarness に stt と fake WebSocket を足すだけ）。 */
+function makeElevenLabsHarness({ nowImpl } = {}) {
+  const wsClass = createFakeWebSocketClass();
+  /** @type {Array<{ status: string; reason: string | null }>} */
+  const sttStatuses = [];
+  const h = makeHarness({
+    pipelineOptions: {
+      stt: { engine: "elevenlabs", apiKey: "sk_fake", elevenLabs: { WebSocketImpl: wsClass.FakeWebSocket } },
+      onSttStatus: (status, info) => sttStatuses.push({ status, reason: info.reason }),
+      ...(nowImpl ? { nowImpl } : {})
+    }
+  });
+  /** start → fake の session_started まで。 */
+  const startConnected = async () => {
+    const p = h.pipeline.start();
+    await until(() => wsClass.sockets.length === 1, 3000, "websocket created");
+    wsClass.last().serverSessionStarted();
+    await p;
+  };
+  return { ...h, wsClass, sttStatuses, startConnected };
+}
+
+test("ear-pipeline(elevenlabs): whisper-server を起動せず・接続（session_started）後にマイクを開く", async () => {
+  const h = makeElevenLabsHarness();
+  const p = h.pipeline.start();
+  await until(() => h.wsClass.sockets.length === 1, 3000, "websocket created");
+  assert.equal(h.record.captureOptions, null, "接続前はマイクを開かない");
+  h.wsClass.last().serverSessionStarted();
+  await p;
+  try {
+    assert.equal(h.record.serverOptions, null, "whisper-server は作らない");
+    assert.notEqual(h.record.captureOptions, null);
+    assert.equal(h.wsClass.last().headers["xi-api-key"], "sk_fake");
+    assert.deepEqual(h.sttStatuses.map((s) => s.status), ["connecting", "up"]);
+    assert.equal(h.pipeline.stats().sttEngine, "elevenlabs");
+  } finally {
+    await h.pipeline.dispose();
+  }
+  assert.equal(h.wsClass.last().closedByClientCode, 1000, "dispose で接続を閉じる");
+  assert.equal(h.record.disposed.server, false);
+});
+
+test("ear-pipeline(elevenlabs): 接続失敗は start の reject（理由付き）・マイクは開かず畳む", async () => {
+  const h = makeElevenLabsHarness();
+  const p = h.pipeline.start();
+  await until(() => h.wsClass.sockets.length === 1, 3000, "websocket created");
+  h.wsClass.last().serverOpen();
+  h.wsClass.last().serverSend({ message_type: "auth_error", error: "You must be authenticated to use this endpoint." });
+  await assert.rejects(p, /failed to bring up ears \(ElevenLabs に接続できない（auth_error/);
+  assert.equal(h.record.captureOptions, null);
+  assert.equal(h.pipeline.isDisposed(), true);
+  assert.equal(h.record.disposed.vad, true);
+  assert.equal(h.sttStatuses.at(-1)?.status, "down");
+});
+
+test("ear-pipeline(elevenlabs): マイクの PCM を流し・手元 VAD の合図は今まで通り・commit 1 件 = 転写 1 件", async () => {
+  let clock = 50_000;
+  const h = makeElevenLabsHarness({ nowImpl: () => clock });
+  await h.startConnected();
+  try {
+    h.feedUtterance(480);
+    await until(() => h.record.vadEvents.some((e) => e.type === "speechEnd"), 3000, "speechEnd");
+    assert.deepEqual(h.record.vadEvents.map((e) => e.type), ["speechStart", "speechEnd"]);
+    // whisper には投げない。
+    assert.equal(h.record.transcribeCalls.length, 0);
+    // PCM は 100ms 単位で送られている（96+480+160ms ≈ 736ms → 7 本）。
+    const chunks = h.wsClass.last().sentChunks();
+    assert.equal(chunks.length, 7);
+    assert.ok(chunks.every((c) => c.message_type === "input_audio_chunk" && c.commit === false));
+
+    // commit が届くと転写 1 件（start = end = commit 到着時点のストリーム時刻）。
+    clock += 480; // speechEnd から 480ms 後に commit 到着
+    h.wsClass.last().serverCommit("こんにちは");
+    assert.equal(h.pipeline.transcriptBuffer.size(), 1);
+    const entry = h.pipeline.transcriptBuffer.all()[0];
+    assert.equal(entry.text, "こんにちは");
+    assert.equal(entry.speaker, "you");
+    assert.equal(entry.startMs, entry.endMs);
+    assert.equal(entry.endMs, h.pipeline.streamMs());
+    assert.equal(h.record.transcripts.length, 1);
+    assert.deepEqual(h.record.transcripts[0].meta, { latencyMs: 480, audioCtx: null });
+
+    // 直前の commit 以降に speechEnd が無い commit は遅延なし（null）。
+    clock += 300;
+    h.wsClass.last().serverCommit("だから-");
+    assert.equal(h.pipeline.transcriptBuffer.size(), 2);
+    assert.equal(h.record.transcripts[1].meta.latencyMs, null);
+    assert.equal(h.pipeline.stats().sttCommits, 2);
+  } finally {
+    await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(elevenlabs): 空の commit は既存と同じく discarded として数える", async () => {
+  const h = makeElevenLabsHarness();
+  await h.startConnected();
+  try {
+    h.wsClass.last().serverCommit("   ");
+    assert.equal(h.pipeline.transcriptBuffer.size(), 0);
+    assert.equal(h.pipeline.transcriptBuffer.stats().discarded, 1);
+    assert.equal(h.record.transcripts.length, 0);
+    assert.ok(h.record.diagnostics.some((d) => d.type === "transcriptDiscarded" && d.reason === "blank"));
+  } finally {
+    await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(elevenlabs): 切断は reconnecting を通知し・繋ぎ直し中の音は送らない（whisper へは切り替えない）", async () => {
+  const h = makeElevenLabsHarness();
+  await h.startConnected();
+  try {
+    const ws = h.wsClass.last();
+    ws.serverClose(1006, "network");
+    assert.equal(h.sttStatuses.at(-1)?.status, "reconnecting");
+    const sentBefore = ws.sent.length;
+    h.feedUtterance(200);
+    await until(() => h.record.vadEvents.some((e) => e.type === "speechEnd"), 3000, "speechEnd");
+    assert.equal(ws.sent.length, sentBefore, "繋ぎ直し中の音は捨てる");
+    assert.equal(h.wsClass.sockets.length, 1, "再接続は待ち時間の後");
+    assert.equal(h.record.serverOptions, null);
+    assert.equal(h.record.transcribeCalls.length, 0);
+  } finally {
+    await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline: 未知の stt engine は生成時に throw", () => {
+  assert.throws(() => createEarPipeline({ stt: { engine: /** @type {any} */ ("bogus") } }), /unknown stt engine/);
 });
