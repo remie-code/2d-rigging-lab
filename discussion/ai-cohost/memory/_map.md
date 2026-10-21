@@ -17,7 +17,7 @@
 | [../implementation/orchestration/stream-memory-wave-plan.md](../implementation/orchestration/stream-memory-wave-plan.md) | 今の配信間記憶の実装計画。人間ゲート 4 点は記録上「未確認」 |
 | [../implementation/waves/stream-memory/followup.md](../implementation/waves/stream-memory/followup.md) | 持ち越し(日記への合本、記憶の個別選択 UI など) |
 | [../decisions/research/talk-avatar-patterns-2026-10.md](../decisions/research/talk-avatar-patterns-2026-10.md) | 知人のトークアバターの判定の組み立て方(参考) |
-| [recall-flow.md](recall-flow.md) | 思い出す流れ: 思い出す役を別に立て、チャッピーは頼むときと結果が来たときの 2 回しゃべる。頼むきっかけは返事の中の目印。合意の途中経過 |
+| [recall-flow.md](recall-flow.md) | 記憶の役(①チャッピー・②書き出し役・③整理役・④思い出し役)、置き場、思い出す流れ、直近の範囲、git 管理と目印の書式。context-check 前の合意 |
 | [research/associative-recall-literature-2026-10.md](research/associative-recall-literature-2026-10.md) | 文献調査: 人間はなぜ話題をまたいで思い出せるか(手がかり・表面と構造の類似・きっかけ)と、LLM エージェントの記憶設計の事例 |
 | [research/brain-tools-2026-10.md](research/brain-tools-2026-10.md) | 棚卸し: 頭のツール制限(Codex は read-only + never、Claude は tools:[])と、独自ツールを足す手段(Claude SDK の in-process MCP、Codex の dynamicTools) |
 
@@ -44,8 +44,7 @@
 
 ## 5. Next Actions
 
-1. 思い出す流れの細部を詰める([recall-flow.md](recall-flow.md) §4)。
-2. 記憶の構造(トピックごとの目次・本体・索引の形)を議論する。
+1. context-check を経て、[recall-flow.md](recall-flow.md) §5 の範囲を実装する。
 
 ## 6. Unresolved Questions
 
