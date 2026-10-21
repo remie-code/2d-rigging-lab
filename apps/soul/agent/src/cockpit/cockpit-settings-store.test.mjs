@@ -806,75 +806,19 @@ test("settings store: brain choice 用の unwritable path は set を握って�
   }
 });
 
-// ── memoryEnabled トグルの永続化（配信間記憶・getBargeInEnabled の写経・既定 ON は
-//    呼び出し側 cockpit.mjs の createMemoryHooks が担う。store 自体は bargeInEnabled と同型）───
+// ── memoryEnabled の撤去（記憶の作り直し Wave 2: 記憶の ON/OFF はなくし、全部残す）───────────────
 
-test("settings store: memory enabled set→get roundtrip persists across instances (bool)", () => {
+test("settings store: 記憶の ON/OFF の口は無い・古いファイルに memoryEnabled が残っていても他のキーは読める", () => {
   const dir = tmpDir();
   const path = join(dir, "settings.json");
   try {
-    const store = createFileSettingsStore({ path });
-    assert.equal(store.getMemoryEnabled(), null); // 未作成 = 記憶なし（bool の有無を区別）。
-    store.setMemoryEnabled(true);
-    assert.equal(store.getMemoryEnabled(), true);
-    const reopened = createFileSettingsStore({ path });
-    assert.equal(reopened.getMemoryEnabled(), true);
-    store.setMemoryEnabled(false);
-    assert.equal(createFileSettingsStore({ path }).getMemoryEnabled(), false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("settings store: memory enabled は他のキー（device/channel/vision/audio/self-fire/barge-in/brain）と同居する", () => {
-  const dir = tmpDir();
-  const path = join(dir, "settings.json");
-  try {
-    const store = createFileSettingsStore({ path });
-    store.setLastDevice("PicoStreamingMicrophone");
-    store.setVisionTarget("Sample Game");
-    store.setAudioDevice("ヘッドホン (2- Shure MV7+)");
-    store.setSelfFireEnabled(true);
-    store.setBargeInEnabled(false);
-    store.setBrainChoice("codex");
-    store.setMemoryEnabled(false);
-    const reopened = createFileSettingsStore({ path });
-    assert.equal(reopened.getLastDevice(), "PicoStreamingMicrophone");
-    assert.equal(reopened.getVisionTarget(), "Sample Game");
-    assert.equal(reopened.getAudioDevice(), "ヘッドホン (2- Shure MV7+)");
-    assert.equal(reopened.getSelfFireEnabled(), true);
-    assert.equal(reopened.getBargeInEnabled(), false);
-    assert.equal(reopened.getBrainChoice(), "codex");
-    assert.equal(reopened.getMemoryEnabled(), false);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("settings store: corrupt / 非 bool JSON → getMemoryEnabled returns null (failure-tolerant)", () => {
-  const dir = tmpDir();
-  try {
-    const badPath = join(dir, "bad.json");
-    writeFileSync(badPath, "{ not json", "utf8");
-    const bad = createFileSettingsStore({ path: badPath });
-    assert.equal(bad.getMemoryEnabled(), null);
-    // 非 bool shape → null（"true" 文字列や数値は bool ではない）。
-    const oddPath = join(dir, "odd.json");
-    writeFileSync(oddPath, JSON.stringify({ memoryEnabled: "true" }), "utf8");
-    assert.equal(createFileSettingsStore({ path: oddPath }).getMemoryEnabled(), null);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("settings store: memory enabled 用の unwritable path は set を握って続行する", () => {
-  const dir = tmpDir();
-  try {
-    const fileAsParent = join(dir, "afile");
-    writeFileSync(fileAsParent, "x", "utf8");
-    const store = createFileSettingsStore({ path: join(fileAsParent, "child", "settings.json") });
-    assert.doesNotThrow(() => store.setMemoryEnabled(true));
-    assert.equal(store.getMemoryEnabled(), null);
+    writeFileSync(path, JSON.stringify({ memoryEnabled: false, brainChoice: "codex" }), "utf8");
+    const store = /** @type {any} */ (createFileSettingsStore({ path }));
+    assert.equal(store.getMemoryEnabled, undefined);
+    assert.equal(store.setMemoryEnabled, undefined);
+    assert.equal(store.getBrainChoice(), "codex");
+    store.setBrainChoice("claude");
+    assert.equal(createFileSettingsStore({ path }).getBrainChoice(), "claude");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

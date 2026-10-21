@@ -477,23 +477,22 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {() => ({ source: string | null } | null)} [options.chatSourceStatus]
  *   記憶済みの配信 source（`{ source }`）を返す。state snapshot の `chat.source`（入力欄の既定復元用・
  *   Connect 前/切断後も残る）に載せる。未注入なら chat.source:null。
- * @param {(enabled: boolean) => void | Promise<void>} [options.onSetMemoryEnabled]
- *   配信間記憶 ON/OFF の永続化フック（POST /api/memory が呼ぶ・onSetBargeInEnabled と同型）。
- *   **cockpit-server は記憶の実体（注入テキスト・生成・保存）を知らない**（責務境界: 実体は
- *   cockpit.mjs が settings 永続 + memoryText 差し替え + 現 session の dispose→null で担う）。
- *   未注入なら POST /api/memory は 503。
  * @param {() => (Promise<void> | void)} [options.onMemoryRecord]
- *   手動「今日を記録」フック（POST /api/memory-record が呼ぶ）。**cockpit-server は記憶の生成/保存を
- *   知らない**（実体は cockpit.mjs の recordMemory・ライブ転写取得含め呼び出し側の責務）。フックの
+ *   手動「今日を記録」フック（POST /api/memory-record が呼ぶ）。**cockpit-server は記憶の書き出し/保存を
+ *   知らない**（実体は cockpit.mjs の保存の係・ライブ転写取得含め呼び出し側の責務）。フックの
  *   throw は 500 にせず握って続行する（記録失敗で操作を止めない・failure-tolerant）。未注入なら
- *   POST /api/memory-record は 503。
+ *   POST /api/memory-record は 503。記憶の ON/OFF（POST /api/memory）は撤去した（記憶の作り直し Wave 2・全部残す）。
  * @param {() => (object | null)} [options.memoryStatus]
- *   記憶の現況（`{ enabled: boolean, count: number, lastRecordAtMs: number | null }`）を返す。
+ *   記憶の現況（`{ lastRecordAtMs: number | null, recording: boolean }`）を返す。
  *   state snapshot の `memory` に載せる（brainStatus/audioDeviceStatus と同型）。未注入なら
- *   snapshot の memory:null。
+ *   snapshot の memory:null。変わったら呼び出し側が `memoryStatusChanged()` で知らせる。
+ * @param {(transcript: Array<any>) => void} [options.onEarsStopping]
+ *   耳の Stop で、pipeline を畳む**前**に、その時点の全量転写（transcriptBuffer.all() のコピー）を渡す口
+ *   （記憶の作り直し Wave 2: 耳の Stop でも記録する）。待たない・throw は握る。耳が起動していなければ呼ばない。
+ *   close() 経由では呼ばない（Ctrl+C の最後の保存は cockpit.mjs が close の前に転写を取る）。
  * @param {(tokens: number) => void | Promise<void>} [options.onSetCompactThresholdTokens]
  *   圧縮を始める大きさ（直近の入力トークン・整数で 5 万〜45 万）の変更フック（POST /api/compact-threshold が呼ぶ・
- *   onSetMemoryEnabled と同型）。**cockpit-server は圧縮の実体を知らない**（実体は cockpit.mjs が settings 永続 +
+ *   onSetBargeInEnabled と同型）。**cockpit-server は圧縮の実体を知らない**（実体は cockpit.mjs が settings 永続 +
  *   走っている compactor の setThresholdTokens で担う＝次の確認から効く）。未注入なら POST /api/compact-threshold は 503。
  * @param {() => ({ thresholdTokens: number } | null)} [options.contextCompactionStatus]
  *   圧縮の目安の現況（`{ thresholdTokens }`）を返す。state snapshot の `compaction` に載せる（memoryStatus と同型・
@@ -640,7 +639,6 @@ export function createCockpitServer(options = {}) {
   const conversationInstructionHooks = options.conversationInstructionHooks ?? null;
   // 配信間記憶: ON/OFF の永続化フック + 手動「今日を記録」フック + 現況(未注入ならそれぞれ 503/null・
   // onSetBrain/brainStatus と同型)。
-  const onSetMemoryEnabled = options.onSetMemoryEnabled;
   const onMemoryRecord = options.onMemoryRecord;
   const memoryStatusImpl = options.memoryStatus;
   // 圧縮の目安（圧縮を始める大きさ）: 変更フック + 現況（未注入ならそれぞれ 503/null・memory と同型）。
@@ -673,6 +671,8 @@ export function createCockpitServer(options = {}) {
   // 画面キャプチャの撮る係の寿命を耳の Start / Stop に合わせる口（vision-capture-latency §4 の 2）。
   const onEarsStarted = typeof options.onEarsStarted === "function" ? options.onEarsStarted : null;
   const onEarsStopped = typeof options.onEarsStopped === "function" ? options.onEarsStopped : null;
+  // 耳の Stop で pipeline を畳む前の転写を渡す口（記憶の作り直し Wave 2・耳の Stop でも記録する）。
+  const onEarsStopping = typeof options.onEarsStopping === "function" ? options.onEarsStopping : null;
   /** @param {(() => void) | null} hook */
   const callEarsHook = (hook) => {
     if (!hook) return;
@@ -912,7 +912,7 @@ export function createCockpitServer(options = {}) {
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
       brain: publicBrain,
-      // 配信間記憶: 記憶の現況（{enabled, count, lastRecordAtMs}・未注入なら null・brain と同型）。
+      // 配信間記憶: 記憶の現況（{lastRecordAtMs, recording}・未注入なら null・brain と同型）。
       memory: typeof memoryStatusImpl === "function" ? (memoryStatusImpl() ?? null) : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
       audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null,
@@ -1361,6 +1361,14 @@ export function createCockpitServer(options = {}) {
       return snapshot();
     }
     const p = pipeline;
+    // 記憶: 転写は pipeline が持つので、畳む前に渡す（close 経由の onEarsStopped では、もう空になっている）。
+    if (onEarsStopping) {
+      try {
+        onEarsStopping(p.transcriptBuffer.all());
+      } catch {
+        // 記録の失敗で耳の Stop を止めない。
+      }
+    }
     pipeline = null;
     if (discardUnsub) {
       discardUnsub();
@@ -1869,26 +1877,8 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
-    if (method === "POST" && pathname === "/api/memory") {
-      // 配信間記憶: 記憶 ON/OFF の永続トグル継ぎ目（POST /api/self-fire・POST /api/barge-in の写経）。
-      // 未注入（Domain B 未配線・単体起動等）なら 503（onSetBrain と同型の未注入ゲート）。
-      if (typeof onSetMemoryEnabled !== "function") {
-        sendJson(res, 503, { error: "memory control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      const enabled = body.enabled === true;
-      try {
-        await onSetMemoryEnabled(enabled);
-      } catch {
-        // 永続化/ホットスワップ失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
     if (method === "POST" && pathname === "/api/compact-threshold") {
-      // 圧縮を始める大きさの変更継ぎ目（POST /api/memory の写経）。保存 + 走っている compactor の差し替えは
+      // 圧縮を始める大きさの変更継ぎ目（POST /api/barge-in の写経）。保存 + 走っている compactor の差し替えは
       // cockpit.mjs の onSetCompactThresholdTokens が担う。未注入なら 503。値は整数で 5 万〜45 万だけ受ける。
       if (typeof onSetCompactThresholdTokens !== "function") {
         sendJson(res, 503, { error: "compaction control not available" });
@@ -1903,7 +1893,7 @@ export function createCockpitServer(options = {}) {
       try {
         await onSetCompactThresholdTokens(tokens);
       } catch {
-        // 永続化 / 差し替えの失敗は操作を止めない（onSetMemoryEnabled と同型の失敗寛容）。
+        // 永続化 / 差し替えの失敗は操作を止めない（onSetBargeInEnabled と同型の失敗寛容）。
       }
       broadcastState();
       sendJson(res, 200, snapshot());
@@ -1918,7 +1908,7 @@ export function createCockpitServer(options = {}) {
       try {
         await onMemoryRecord();
       } catch {
-        // 記録失敗（generateDigest/saveDigest の throw 含む）は 500 にせず握って続行する
+        // 記録失敗（②書き出し役・コミットの失敗を含む）は 500 にせず握って続行する
         // （手動記録が失敗しても操縦席の他の操作を止めない・failure-tolerant）。
       }
       broadcastState();
@@ -2795,6 +2785,25 @@ export function createCockpitServer(options = {}) {
         message: "口の動きを簡易版にした（読みが取れない）",
         source: "elevenlabs"
       });
+    },
+    /**
+     * 頭（Codex）の MCP の名前の読み取り（config/read）に失敗したことを知らせる口（記憶の作り直し Wave 2・
+     * ユーザー決定 2026-10-21）。会話は続けるが、ユーザーの MCP サーバーが起動しうるので、上の帯に alert の
+     * 一回きりの出来事として出す（60 秒・続けば回数を数える）。detail は出さない（設定の中身を警告に載せない）。
+     */
+    reportMcpConfigReadFailed() {
+      if (closed) return;
+      warningBoard.pushEvent("mcp-config-read", {
+        kind: "mcp-config-read",
+        severity: "alert",
+        message: "MCP の一覧を読めなかった（ユーザーの MCP が起動しうる）",
+        source: "codex"
+      });
+    },
+    /** 記憶の現況（memoryStatus）が変わったことを知らせる口（記録中の始まり・終わり）。SSE "state" で押す。 */
+    memoryStatusChanged() {
+      if (closed) return;
+      broadcastState();
     },
     /**
      * 圧縮の開始・終了をログのタブへ 1 行（SSE "diagnostic" type:"contextCompaction"）。

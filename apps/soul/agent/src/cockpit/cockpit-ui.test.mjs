@@ -389,7 +389,7 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     bargeIn: { enabled: false },
     killed: true,
     brain: { brain: "codex", credentialHealth: true },
-    memory: { enabled: true, count: 3, lastRecordAtMs: 1721234567890 },
+    memory: { lastRecordAtMs: 1721234567890, recording: false },
     compaction: { thresholdTokens: 200_000 }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
@@ -693,14 +693,13 @@ test("conversation identity seam: six editor brains consume only matching canoni
   assert.doesNotMatch(source, /CONVERSATION_BRAIN_IDENTITY_PROJECTIONS/);
 });
 
-test("conversation instruction editor vnode: six brain choices, editable body, readonly identity/memory, and no dialog nesting", () => {
+test("conversation instruction editor vnode: six brain choices, editable body, readonly identity, no memory structure, and no dialog nesting", () => {
   const seen = { back: false, edit: false, save: false, reset: false, brain: false };
   const vnode = ConversationInstructionEditor({
     brainId: "codex",
     brainLabel: "Codex (GPT-5.6 Terra)",
     identity: { id: "chappy", displayName: "チャッピー" },
     activeBrainId: "codex",
-    memory: { enabled: true, count: 2, lastRecordAtMs: null },
     state: { draft: "custom", status: "saved", dirty: false, isOverride: true, revision: 1 },
     onBack: () => { seen.back = true; },
     onEdit: () => { seen.edit = true; },
@@ -721,7 +720,8 @@ test("conversation instruction editor vnode: six brain choices, editable body, r
   const managed = elements.find((node) => node.props && node.props.class === "conversation-instruction-managed");
   assert.ok(managed);
   assert.match(collectText(vnode).join(""), /チャッピー/);
-  assert.match(collectText(vnode).join(""), /記憶 2 件を搭載/);
+  // 記憶の作り直し Wave 2: 起動時に記憶を載せないので、「記憶 N 件を搭載」の記憶構造の行は無い。
+  assert.doesNotMatch(collectText(vnode).join(""), /記憶|件を搭載/);
   assert.match(collectText(vnode).join(""), /次のFireから反映/);
   assert.match(collectText(vnode).join(""), /revision 1/);
   assert.match(collectText(vnode).join(""), /読み取り専用/);

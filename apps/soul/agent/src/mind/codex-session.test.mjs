@@ -868,7 +868,7 @@ function toolTurn(api, request, { commentary = "読みます。", answer = "答�
   api.notification("turn/completed", { threadId, turn: { id: turnId, status: "completed", items: [] } });
 }
 
-test("codex-session: 起動引数でプラグインとアプリを止め、既定の thread/turn は今と同じ（一時フォルダ・read-only・never）", async () => {
+test("codex-session: 起動引数でプラグインとアプリと notify フックを止め、既定の thread/turn は今と同じ（一時フォルダ・read-only・never）", async () => {
   await withScratch(async (scratch) => {
     const harness = makeSpawnHarness();
     const warnings = [];
@@ -876,7 +876,9 @@ test("codex-session: 起動引数でプラグインとアプリを止め、既�
     await session.ask("q");
     assert.deepEqual(harness.spawnCalls[0].args, [
       "app-server", "--stdio", "-c", 'forced_login_method="chatgpt"', "-c", 'web_search="disabled"',
-      "-c", "features.plugins=false", "-c", "features.apps=false"
+      "-c", "features.plugins=false", "-c", "features.apps=false",
+      // ユーザー設定の notify フックを引き継がない（記憶の作り直し Wave 2・ユーザー決定）。
+      "-c", "notify=[]"
     ]);
     assert.deepEqual(harness.spawnCalls[0].args, [...APP_SERVER_ARGS]);
     const spawnCwd = harness.spawnCalls[0].options.cwd;

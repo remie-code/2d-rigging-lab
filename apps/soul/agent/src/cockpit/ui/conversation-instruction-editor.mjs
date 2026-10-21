@@ -7,7 +7,6 @@ import {
   conversationBrainIdentity,
   conversationInstructionStatusView
 } from "../view-logic/conversation-instruction.mjs";
-import { memoryStatusLabel } from "../view-logic/settings.mjs";
 
 /** @param {any} identity @returns {string} */
 export function conversationIdentityDisplay(identity, active = true) {
@@ -16,13 +15,8 @@ export function conversationIdentityDisplay(identity, active = true) {
     : (active ? "未取得" : "非アクティブ（identity は表示しません）");
 }
 
-/** @param {any} memory @returns {string} */
-export function conversationMemoryStructureLabel(memory) {
-  return memory ? memoryStatusLabel(memory) : "記憶の状態は未取得";
-}
-
 /**
- * @param {{ brainId: string; brainLabel: string; identity?: any; activeBrainId?: string | null; memory?: any; state: any;
+ * @param {{ brainId: string; brainLabel: string; identity?: any; activeBrainId?: string | null; state: any;
  *   onBrainChange?: (ev: any) => void; onBack?: () => void; onEdit?: (ev: any) => void;
  *   onSave?: () => void; onReset?: () => void }} props
  */
@@ -31,7 +25,6 @@ export function ConversationInstructionEditor({
   brainLabel,
   identity,
   activeBrainId,
-  memory,
   state,
   onBrainChange,
   onBack,
@@ -73,12 +66,8 @@ export function ConversationInstructionEditor({
           <dt>システム管理の識別</dt>
           <dd>${conversationIdentityDisplay(selectedIdentity, identityIsActive)}</dd>
         </div>
-        <div>
-          <dt>システム管理の記憶構造</dt>
-          <dd>${conversationMemoryStructureLabel(memory)}</dd>
-        </div>
       </dl>
-      <p class="conversation-instruction-readonly-note">識別名と記憶構造はシステム管理（読み取り専用）です。記憶本文は表示しません。</p>
+      <p class="conversation-instruction-readonly-note">識別名はシステム管理（読み取り専用）です。</p>
       <p class="conversation-instruction-revision" aria-label="会話指示の適用状態">
         適用状態: ${currentState.isOverride ? "この頭脳の保存済み上書き" : "既定"}（${revisionText}）
       </p>

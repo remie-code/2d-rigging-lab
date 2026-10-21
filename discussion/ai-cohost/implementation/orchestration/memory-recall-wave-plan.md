@@ -1,6 +1,6 @@
 # 記憶の作り直し(構造化・オンデマンドの思い出し)wave 計画
 
-> Status: ACTIVE(2026-10-21 ユーザー承認)。Wave 1 完了(軽い突き合わせ合格 [../reviews/memory-recall/wave-1.md](../reviews/memory-recall/wave-1.md))。Wave 2 待ち。**Wave 2 が済むまで操縦席を起動しない**(旧 loadRecentDigests が `_map.md` と `_conventions.md` を記憶として①に載せてしまう)。
+> Status: ACTIVE(2026-10-21 ユーザー承認)。Wave 1 完了(軽い突き合わせ合格 [../reviews/memory-recall/wave-1.md](../reviews/memory-recall/wave-1.md))。Wave 2 完了(突き合わせ合格 [../reviews/memory-recall/wave-2.md](../reviews/memory-recall/wave-2.md)、仕上げ [../waves/memory-recall/wave-2-fixes-report.md](../waves/memory-recall/wave-2-fixes-report.md))。Wave 3 起動。
 > 根拠:
 > - 合意: [../../memory/recall-flow.md](../../memory/recall-flow.md)
 > - 置き場の決まり: [../../memory/conventions-draft.md](../../memory/conventions-draft.md)
@@ -76,6 +76,12 @@
   - 「N 件を搭載」の表示
   - 操縦席の記憶の欄は「最後に記録した時刻」と「今日を記録」だけ残す(どう見せるかは報告する)。
 - 期待値の変わる既存テストは、仕様変更に伴うものだけ直し、一覧を報告する。
+
+### Wave 2 からの申し送り(Wave 3 の完了条件に含める)
+
+1. ④は②と同じ `create` の形で作る(read-only、cwd = 記憶のフォルダ、finalAnswerOnly)。頭の決め方は②の `resolveWriterBrainDef` を流用し、当面 Codex に固定する。警告は `onBrainWarning` に通す。
+2. config/read 失敗の判定を、文言の一致から決まった値(定数)に直す。
+3. ②が書いている最中に④が書きかけを読むことは許容する(Undine 裁定)。④は読むだけで、重なるのはまれ。重なっても、その 1 回の思い出しが少し不正確になる程度。
 
 ## 3. Wave 3(思い出す流れ・1 ドメイン)
 

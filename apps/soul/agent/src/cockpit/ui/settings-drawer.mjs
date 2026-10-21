@@ -15,7 +15,7 @@
  *    IA 再配置で分割 —— 音声出力系はここ（声の出力先行）・自発トグル系は運転バー（control-bar.mjs）。
  *  - 頭脳・会話（Domain C）: technical brain の選択/Set に加え、同じダイアログ内で
  *    conversation-instruction editor へ切り替える。編集本文だけを dedicated API へ保存し、
- *    identity と memory structure は読み取り専用で表示する。頭脳の下に「圧縮を始める大きさ」（万トークンの select +
+ *    identity は読み取り専用で表示する（記憶の構造の表示は記憶の作り直し Wave 2 で撤去）。頭脳の下に「圧縮を始める大きさ」（万トークンの select +
  *    Set・POST /api/compact-threshold → 保存と走っている compactor の差し替え = 次の確認から効く・既定 20 万の表示と
  *    Codex の頭のときだけ効く旨の説明。頭脳 select と同じ select + Set の流儀）。
  *  - 運転・ログ（操縦席の作り直し・cockpit-glance-redesign.md §5・§9.2）: 「運転」（自発・口数・話し始め・
@@ -23,10 +23,9 @@
  *    app.mjs が組んだ部品を driveSlot / logSlot で受けて描くだけ（ここは器）。logSlot は関数なら
  *    「ログのタブが見えているか」を渡して呼ぶ（フィードの末尾追従の寄せ直しに使う）。
  *    画面上の名前は「準備・設定」（メイン画面の歯車・配信前の「準備・設定を開く」から開く）。
- *  - 記憶（配信間記憶・stream-memory-wave-plan.md §3 Domain B）: 頭脳区画の写経で新区画を追加。
- *    ON/OFF トグル（memoryToggleView・POST /api/memory・controlled component=selfFire/bargeIn pill と
- *    同型の一方向データフロー）+「今日を記録」ボタン（POST /api/memory-record）+ drawer-note に
- *    「記憶 N 件を搭載（最新: ...）」（memoryStatusLabel）。
+ *  - 記憶（配信間記憶）: 「今日を記録」ボタン（POST /api/memory-record）と、drawer-note に「最後に記録: ...」
+ *    （記録中は「（記録中…）」・memoryStatusLabel）。記憶の ON/OFF と「N 件を搭載」は記憶の作り直し Wave 2 で撤去
+ *    （全部残す・起動時に載せない）。
  *
  * 表示文字列・状態導出はすべて view-logic 経由（settings.mjs / status.mjs / health.mjs・L0 裁定）。
  * 挙動の保存点:
@@ -74,8 +73,6 @@ import {
   ttsEngineSelection,
   requestErrorText,
   brainPostErrorText,
-  memoryToggleView,
-  memoryPostErrorText,
   memoryRecordPostErrorText,
   memoryStatusLabel,
   compactThresholdOptions,
@@ -749,30 +746,6 @@ export function CockpitSettingsModal({
       .catch((/** @type {unknown} */ e) => setCompactError(requestErrorText("compactThreshold", e)));
   };
 
-  /**
-   * 記憶 ON/OFF トグル（selfFire/bargeIn pill と同型の controlled component・onToggleSelfFire の写経）。
-   * change はユーザー操作でのみ発火する（programmatic な checked 反映は change を発火しない）。
-   */
-  const onToggleMemory = (/** @type {any} */ ev) => {
-    const enabled = !!(ev && ev.target && ev.target.checked);
-    setMemoryError("");
-    doFetch("/api/memory", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enabled })
-    })
-      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
-      .then((/** @type {any} */ res) => {
-        const err = memoryPostErrorText(res);
-        if (err != null) {
-          setMemoryError(err);
-          return;
-        }
-        applySnapshot(res.j); // 200 応答は snapshot 全体（selfFire/bargeIn 経路と同源）。
-      })
-      .catch((/** @type {unknown} */ e) => setMemoryError(requestErrorText("memory", e)));
-  };
-
   /** 「今日を記録」（onAudioSet の写経・手動記録・POST /api/memory-record）。 */
   const onMemoryRecord = () => {
     setMemoryError("");
@@ -793,7 +766,6 @@ export function CockpitSettingsModal({
 
   const channelView = channelStatusView(settings && settings.channel);
   const chatView = chatStatusView(chatDisplay);
-  const memoryView = memoryToggleView(settings && settings.memory);
 
   return html`
     <div class="cockpit-settings-backdrop" data-open=${open ? "true" : "false"} hidden=${!open}
@@ -964,7 +936,6 @@ export function CockpitSettingsModal({
                 brainLabel=${BRAIN_LABELS[brainSelected] || "unknown"}
                 identity=${settings && settings.brain ? settings.brain.identity : null}
                 activeBrainId=${currentSnapshotBrain || null}
-                memory=${settings && settings.memory}
                 state=${conversationEditorState}
                 onBrainChange=${requestEditorBrain}
                 onBack=${requestEditorBack}
@@ -1020,16 +991,6 @@ export function CockpitSettingsModal({
       <div id="cockpit-settings-panel-memory" class="drawer-section" data-settings-category="memory" role="tabpanel" aria-labelledby="cockpit-settings-tab-memory" hidden=${activeCategory !== "memory"}>
         <h3>記憶</h3>
         <div class="drawer-row">
-          <label for="memory-toggle">記憶</label>
-          <input
-            id="memory-toggle"
-            type="checkbox"
-            class="memory-toggle"
-            disabled=${memoryView.disabled}
-            checked=${memoryView.checked}
-            onChange=${onToggleMemory}
-          />
-          <span class=${memoryView.statusClassName}>${memoryView.statusText}</span>
           <button class="btn-memory-record" type="button" disabled=${recordBusy} onClick=${onMemoryRecord}>
             今日を記録
           </button>

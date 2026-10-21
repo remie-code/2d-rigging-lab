@@ -63,13 +63,16 @@ export const SANDBOX_MODES = Object.freeze(["read-only", "workspace-write"]);
 /**
  * App Server の起動引数。ユーザー設定のプラグインとアプリ（コネクタ）を止める（MCP の切り離しの半分・
  * 残りは thread/start の config で `[mcp_servers]` を 1 つずつ止める）。
+ * `notify=[]` は、ユーザー設定の notify フック（turn が終わるたびに動く通知プログラム）を引き継がないため
+ * （記憶の作り直し Wave 2・ユーザー決定 2026-10-21。空の配列なら何も起動しない・実機確認は domain-c-report.md）。
  */
 export const APP_SERVER_ARGS = Object.freeze([
   "app-server", "--stdio",
   "-c", 'forced_login_method="chatgpt"',
   "-c", 'web_search="disabled"',
   "-c", "features.plugins=false",
-  "-c", "features.apps=false"
+  "-c", "features.apps=false",
+  "-c", "notify=[]"
 ]);
 
 /**
