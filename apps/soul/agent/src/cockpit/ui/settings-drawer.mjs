@@ -937,6 +937,7 @@ export function CockpitSettingsModal({
                 identity=${settings && settings.brain ? settings.brain.identity : null}
                 activeBrainId=${currentSnapshotBrain || null}
                 state=${conversationEditorState}
+                soulSkills=${conversationEditor.getSoulSkills()}
                 onBrainChange=${requestEditorBrain}
                 onBack=${requestEditorBack}
                 onEdit=${(/** @type {any} */ ev) => conversationEditor.edit(brainSelected, ev && ev.target ? ev.target.value : "")}

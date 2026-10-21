@@ -57,6 +57,13 @@ const ROLLOUT_FILENAME_RE = /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.
 export const DEFAULT_MODEL = "gpt-5.6-terra";
 export const DEFAULT_EFFORT = "none";
 
+/**
+ * `config/read`（ユーザー設定の MCP の名前の読み取り）に失敗したときの警告。onWarning にこの値そのものを渡す。
+ * 呼び出し側（scripts/cockpit.mjs）は文言の一部ではなく、この定数との一致で判定する（記憶の作り直し Wave 2 からの
+ * 申し送り 2）。
+ */
+export const MCP_CONFIG_READ_FAILED_WARNING = "codex-session: could not read the MCP server list; user MCP servers may start.";
+
 /** 頭のセッションに許す sandbox（thread/start の SandboxMode）。既定は read-only。 */
 export const SANDBOX_MODES = Object.freeze(["read-only", "workspace-write"]);
 
@@ -860,7 +867,7 @@ export function createCodexSession(options = {}) {
         (result) => mcpServerDisableOverrides(result),
         () => {
           if (live.closed || live.closing) return null; // 接続ごと落ちた。thread/start 側の失敗に任せる。
-          try { options.onWarning?.("codex-session: could not read the MCP server list; user MCP servers may start."); } catch {}
+          try { options.onWarning?.(MCP_CONFIG_READ_FAILED_WARNING); } catch {}
           return null;
         }
       );

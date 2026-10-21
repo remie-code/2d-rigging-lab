@@ -83,6 +83,46 @@ export function parseConversationInstructionResponse(body, brainId) {
   };
 }
 
+/**
+ * 魂がいつも足す教えの表示名（記憶の作り直し Wave 3 仕上げ・UI は mind を import しない）。未知の名前は「教え「名前」」。
+ */
+export const SOUL_SKILL_LABELS = Object.freeze({
+  recall: "思い出す教え"
+});
+
+/**
+ * API の応答の soulSkills（魂が①の固定の指示にいつも足す教え）を読む。配列でなければ null（応答に無い）。
+ * 形の違う要素・本文が空の要素は落とす。
+ * @param {unknown} value
+ * @returns {Array<{ name: string; path: string; body: string }> | null}
+ */
+export function parseSoulSkills(value) {
+  if (!Array.isArray(value)) return null;
+  return value
+    .filter(
+      (skill) =>
+        skill &&
+        typeof skill === "object" &&
+        typeof skill.name === "string" &&
+        typeof skill.path === "string" &&
+        typeof skill.body === "string" &&
+        skill.body.trim().length > 0
+    )
+    .map((skill) => ({ name: skill.name, path: skill.path, body: skill.body }));
+}
+
+/**
+ * 教え 1 つの案内文（「このほかに、思い出す教え（skills/recall.md）がいつも足されています」）。
+ * @param {{ name: string; path: string }} skill
+ * @returns {string}
+ */
+export function soulSkillNoticeText(skill) {
+  const name = skill && typeof skill.name === "string" ? skill.name : "";
+  const label = /** @type {Record<string, string>} */ (SOUL_SKILL_LABELS)[name] ?? "教え「" + name + "」";
+  const path = skill && typeof skill.path === "string" && skill.path.length > 0 ? "（" + skill.path + "）" : "";
+  return "このほかに、" + label + path + "がいつも足されています";
+}
+
 /** @param {string} instruction @returns {string | null} */
 export function conversationInstructionInputError(instruction) {
   return typeof instruction !== "string" || instruction.trim().length === 0
@@ -148,6 +188,16 @@ export function createConversationInstructionController(options = {}) {
   const onChange = typeof options.onChange === "function" ? options.onChange : () => {};
   /** @type {Map<string, any>} */
   const entries = new Map();
+  /**
+   * 魂がいつも足す教え（頭に関係なく同じ・最後に受け取った応答の値）。応答に無ければ前の値のまま。
+   * @type {Array<{ name: string; path: string; body: string }>}
+   */
+  let soulSkills = [];
+  /** @param {any} body */
+  const takeSoulSkills = (body) => {
+    const parsed = parseSoulSkills(body && typeof body === "object" ? body.soulSkills : undefined);
+    if (parsed) soulSkills = parsed;
+  };
 
   const entryFor = (brainId) => {
     if (!entries.has(brainId)) entries.set(brainId, emptyEntry());
@@ -183,6 +233,7 @@ export function createConversationInstructionController(options = {}) {
         return { ok: false, error: entry.error };
       }
       const editedDuringLoad = entry.dirty;
+      takeSoulSkills(body);
       entry.loaded = true;
       entry.saved = parsed.instruction;
       entry.isOverride = parsed.isOverride;
@@ -249,6 +300,7 @@ export function createConversationInstructionController(options = {}) {
         notify();
         return { ok: false, error: entry.error };
       }
+      takeSoulSkills(body);
       entry.loaded = true;
       entry.saved = parsed.instruction;
       entry.isOverride = parsed.isOverride;
@@ -290,6 +342,7 @@ export function createConversationInstructionController(options = {}) {
         notify();
         return { ok: false, error: entry.error };
       }
+      takeSoulSkills(body);
       entry.loaded = true;
       entry.saved = parsed.instruction;
       entry.isOverride = parsed.isOverride;
@@ -335,6 +388,10 @@ export function createConversationInstructionController(options = {}) {
     },
     isDirty(brainId) {
       return valid(brainId) ? !!entryFor(brainId).dirty : false;
+    },
+    /** 魂がいつも足す教え（読むだけの表示用・編集の口は無い）。 */
+    getSoulSkills() {
+      return soulSkills.map((skill) => ({ ...skill }));
     }
   });
 }

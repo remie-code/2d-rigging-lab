@@ -6,9 +6,14 @@
  * 完結した文と完結した tag を出力する。既存 expression parser と同じ tag grammar
  * だけを control syntax と見なし、その未完形は保持する。壊れた angle bracket は
  * parser と同様に bracket だけを剥ぎ、非 tag 本文を落とさない。
+ *
+ * 記憶の作り直し Wave 3 Domain D: 思い出しの目印 `<recall 頼みごと>` も parser と同じ関数（recall-tag.mjs の
+ * scanRecallTag）で読む。完結した目印は tags に出し、その `recalls`（頼みごと）を載せる。目印の終わり（同じ行の
+ * 最後の `>`）が決まるまでは未完として待たせ、閉じていない目印は声に出さずに捨てる（parser と同じ speechText）。
  */
 
 import { parseExpressionTags } from "./expression-parser.mjs";
+import { scanRecallTag } from "./recall-tag.mjs";
 
 const SENTENCE_END = new Set(["。", "！", "？", "!", "?"]);
 const TAG_WORD_START = /^[A-Za-z]$/;
@@ -20,6 +25,7 @@ const TAG_WORD_CHAR = /^[\w-]$/;
  *   position: number;
  *   events: Array<{ word: string; args?: string; position: number }>;
  *   diagnostics: Array<{ type: string; [k: string]: unknown }>;
+ *   recalls: Array<{ request: string; position: number }>;
  * }} CompletedExpressionTag
  */
 
@@ -64,7 +70,8 @@ export function createIncrementalSentenceTagBuffer() {
       raw,
       position,
       events: parsed.events.map((event) => ({ ...event, position: position + event.position })),
-      diagnostics: parsed.diagnostics
+      diagnostics: parsed.diagnostics,
+      recalls: parsed.recalls.map((recall) => ({ ...recall, position: position + recall.position }))
     });
   };
 
@@ -86,6 +93,23 @@ export function createIncrementalSentenceTagBuffer() {
         // Established parser contract: a stray closing bracket is never speech.
         cursor = tagStart + 1;
         continue;
+      }
+      // 思い出しの目印は parser と同じ読み方（引数に `<` `>` が混ざっても声に出さない）。
+      const recall = scanRecallTag(source, tagStart, final);
+      if (recall && recall.kind === "valid") {
+        appendTag(source.slice(tagStart, recall.end + 1), sourceStart + tagStart, out);
+        cursor = recall.end + 1;
+        continue;
+      }
+      if (recall && recall.kind === "unclosed") {
+        // 閉じていない目印: 頼みにせず、声にも出さない（parser は brokenTag に数える）。
+        appendTag(source.slice(tagStart, recall.end), sourceStart + tagStart, out);
+        cursor = recall.end;
+        continue;
+      }
+      if (recall && recall.kind === "incomplete") {
+        cursor = tagStart;
+        break;
       }
       const candidate = classifyTag(source, tagStart);
       if (candidate.kind === "valid") {

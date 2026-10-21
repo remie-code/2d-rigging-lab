@@ -11,7 +11,10 @@ import {
   conversationInstructionStatusView,
   conversationBrainIdentity,
   createConversationInstructionController,
-  parseConversationInstructionResponse
+  parseConversationInstructionResponse,
+  parseSoulSkills,
+  soulSkillNoticeText,
+  SOUL_SKILL_LABELS
 } from "./conversation-instruction.mjs";
 
 function response(body, { ok = true, status = 200 } = {}) {
@@ -252,4 +255,48 @@ test("conversation instruction controller: local empty rejection does not call A
   assert.equal(calls, 1);
   assert.equal(controller.getState("claude").dirty, true);
   assert.equal(conversationInstructionStatusView(controller.getState("claude")).live, "assertive");
+});
+
+// ── 魂がいつも足す教え（記憶の作り直し Wave 3 仕上げ・読むだけの表示）──
+
+test("soul skills: 応答の soulSkills を読み、案内文を作る（配列でなければ null・形の違う要素は落とす）", () => {
+  assert.equal(parseSoulSkills(undefined), null);
+  assert.equal(parseSoulSkills("x"), null);
+  assert.deepEqual(
+    parseSoulSkills([
+      { name: "recall", path: "skills/recall.md", body: "本文", extra: 1 },
+      { name: "empty", path: "skills/empty.md", body: "  " },
+      { name: 1, path: "x", body: "y" },
+      null
+    ]),
+    [{ name: "recall", path: "skills/recall.md", body: "本文" }]
+  );
+  assert.equal(SOUL_SKILL_LABELS.recall, "思い出す教え");
+  assert.equal(
+    soulSkillNoticeText({ name: "recall", path: "skills/recall.md" }),
+    "このほかに、思い出す教え（skills/recall.md）がいつも足されています"
+  );
+  assert.equal(soulSkillNoticeText({ name: "other", path: "skills/other.md" }), "このほかに、教え「other」（skills/other.md）がいつも足されています");
+});
+
+test("conversation instruction controller: soulSkills は頭に関係なく共有し、応答に無ければ前の値のまま（編集の口は無い）", async () => {
+  const skills = [{ name: "recall", path: "skills/recall.md", body: "教えの本文" }];
+  let withSkills = true;
+  const fetchImpl = async (path, init) => {
+    const brainId = path.endsWith("codex") ? "codex" : "claude";
+    const body = payload(brainId, brainId + " default", init && init.method === "PUT", 1);
+    return response(withSkills ? { ...body, soulSkills: skills } : body);
+  };
+  const controller = createConversationInstructionController({ fetchImpl });
+  assert.deepEqual(controller.getSoulSkills(), []);
+  await controller.load("claude");
+  assert.deepEqual(controller.getSoulSkills(), skills);
+  withSkills = false;
+  await controller.load("codex");
+  assert.deepEqual(controller.getSoulSkills(), skills, "応答に無ければ前の値のまま");
+  const copy = controller.getSoulSkills();
+  copy[0].body = "書き換え";
+  assert.equal(controller.getSoulSkills()[0].body, "教えの本文", "外から書き換えられない");
+  assert.equal(typeof (/** @type {any} */ (controller)).setSoulSkills, "undefined");
+  assert.equal("soulSkills" in controller.getState("claude"), false, "頭ごとの状態には混ぜない");
 });

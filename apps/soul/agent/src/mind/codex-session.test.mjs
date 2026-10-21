@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { APP_SERVER_ARGS, createCodexSession, mcpServerDisableOverrides } from "./codex-session.mjs";
+import { APP_SERVER_ARGS, MCP_CONFIG_READ_FAILED_WARNING, createCodexSession, mcpServerDisableOverrides } from "./codex-session.mjs";
 
 class FakeChild extends EventEmitter {
   constructor(onMessage) {
@@ -967,6 +967,8 @@ test("codex-session: config/read が失敗しても会話は続け、警告を 1
     await session.ask("q2");
     assert.deepEqual(harness.threadRequests[0].params.config, { forced_login_method: "chatgpt", web_search: "disabled" });
     assert.deepEqual(warnings, ["codex-session: could not read the MCP server list; user MCP servers may start."]);
+    // 呼び出し側が一致で判定できる決まった値（記憶の作り直し Wave 2 からの申し送り 2）。
+    assert.equal(warnings[0], MCP_CONFIG_READ_FAILED_WARNING);
     await session.dispose();
   });
 });

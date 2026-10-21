@@ -495,6 +495,7 @@ html, body { overflow: hidden; }
 .row.self-fire-marker, .row.self-fire-marker .who, .row.self-fire-marker .text { color: var(--marker-self); }
 /* speak-now の判定行（「判定: 自発 0.45」・speak-now 合意 §5）。小さく淡く。 */
 .row.judgment-marker, .row.judgment-marker .who, .row.judgment-marker .text { color: var(--muted); font-size: 12px; }
+.row.recall-marker, .row.recall-marker .who, .row.recall-marker .text { color: var(--marker-self); font-size: 12px; }
 
 /* ── 準備・設定の「運転」タブ（旧運転バーの部品・cockpit-glance-redesign.md §5・§9.2）── */
 .drive-panel { padding: 2px 0; }
@@ -740,6 +741,12 @@ html, body { overflow: hidden; }
 .conversation-instruction-status.saved,
 .conversation-instruction-status.default { color: var(--up); }
 .conversation-instruction-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.conversation-instruction-soul-skills { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+.conversation-instruction-soul-skill-note { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
+.conversation-instruction-soul-skill-body {
+  margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 220px; overflow: auto;
+}
 `;
 
 /**

@@ -19,7 +19,7 @@
 | [../decisions/research/talk-avatar-patterns-2026-10.md](../decisions/research/talk-avatar-patterns-2026-10.md) | 知人のトークアバターの判定の組み立て方(参考) |
 | [recall-flow.md](recall-flow.md) | 記憶の役(①チャッピー・②書き出し役・③整理役・④思い出し役)、置き場、思い出す流れ、直近の範囲、git 管理と目印の書式。context-check 前の合意 |
 | [conventions-draft.md](conventions-draft.md) | 記憶の置き場の決まり(`memories/_conventions.md`)の本文。ユーザー確認済み |
-| [../implementation/orchestration/memory-recall-wave-plan.md](../implementation/orchestration/memory-recall-wave-plan.md) | 実装の wave 計画(案) |
+| [../implementation/orchestration/memory-recall-wave-plan.md](../implementation/orchestration/memory-recall-wave-plan.md) | 実装の wave 計画(実装済み・人間ゲート待ち) |
 | [research/associative-recall-literature-2026-10.md](research/associative-recall-literature-2026-10.md) | 文献調査: 人間はなぜ話題をまたいで思い出せるか(手がかり・表面と構造の類似・きっかけ)と、LLM エージェントの記憶設計の事例 |
 | [research/brain-tools-2026-10.md](research/brain-tools-2026-10.md) | 棚卸し: 頭のツール制限(Codex は read-only + never、Claude は tools:[])と、独自ツールを足す手段(Claude SDK の in-process MCP、Codex の dynamicTools) |
 
@@ -46,7 +46,7 @@
 
 ## 5. Next Actions
 
-1. wave 計画の承認を得て、実装を始める。
+1. 人間ゲート([../implementation/waves/memory-recall/human-gate.md](../implementation/waves/memory-recall/human-gate.md))。実装は 3 wave とも済み(2026-10-21)。
 
 ## 6. Unresolved Questions
 

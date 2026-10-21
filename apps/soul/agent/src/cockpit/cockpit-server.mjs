@@ -49,6 +49,17 @@
  *     POST /api/compact-threshold で変え（設定の「頭脳・会話」タブ）、onSetCompactThresholdTokens が保存と走っている
  *     compactor の差し替えを担う（cockpit.mjs）。
  *
+ * ── 思い出す流れ（記憶の作り直し Wave 3 Domain D）──────────────────────────────────
+ *  orchestrator の onRecallRequest（①の返事の中の `<recall 頼みごと>`）を思い出しの係（../mind/recall-desk.mjs）へ
+ *  渡す。係は④（options.recallRunner・cockpit.mjs が Codex の使い捨てセッションで走らせる）→「避けるか」判定
+ *  （options.recallJudge・既定は Decisions API）→ ①の発火（selfFire kind:"recall"）/ 黙って前置き（orchestrator の
+ *  deferInstruction）を受け持つ。係の出来事は SSE "selfFire" の kind:"recall-step"（{ phase, request, … }・頼みごとは
+ *  画面のログにだけ出す）と
+ *  onRecallEvent（cockpit.mjs のターミナル 1 行・頼みごとは渡さない）へ。判定の失敗は judge-error の警告（source
+ *  "recall"）、④の失敗は recall-error の警告（一回きりの出来事）で、そのうえ「見つからなかった」と同じ扱いで①へ届ける。
+ *  自発の発火が OFF のときは結果をしゃべらせず黙って前置きで渡す（Wave 3 仕上げ）。recallRunner が無ければ係は作らない
+ *  （目印は捨てる）。
+ *
  * ── 既存コードは変更しない ────────────────────────────────────────────
  *  ear-pipeline / transcript-buffer / whisper-server / ffmpeg-capture は購読・呼び出しのみ。
  *  結線に必要なフックは全て既存 API（onVadEvent/onTranscript/onDiagnostic・transcriptBuffer.onDiscard・
@@ -74,7 +85,7 @@ import {
   SPEAK_NOW_BACKCHANNEL_INSTRUCTION,
   SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS
 } from "../mind/speak-now.mjs";
-import { createDecisionsJudge, loadDecisionsApiKey } from "../mind/speak-now-decisions.mjs";
+import { createDecisionsJudge, createDecisionsQuestionsJudge, loadDecisionsApiKey } from "../mind/speak-now-decisions.mjs";
 import { createCommentGuard, COMMENT_JUDGE_TIMEOUT_MS } from "../mind/comment-guard.mjs";
 import {
   createCommentReactController,
@@ -85,6 +96,8 @@ import {
   COMMENT_HOLD_MAX_COUNT
 } from "../mind/comment-react.mjs";
 import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
+import { createRecallDesk } from "../mind/recall-desk.mjs";
+import { RECALL_JUDGE_TIMEOUT_MS } from "../mind/recall.mjs";
 import { composeReplyLatency, resolveLatencyThresholds } from "../mind/fire-latency.mjs";
 import {
   createWarningBoard,
@@ -387,9 +400,11 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   onUsage: (info: object) => void;
  *   onAsk: (info: object) => void;
  *   onLatency: (info: object) => void;
+ *   onRecallRequest: (info: { request: string; fireId: number | null }) => void;
  *   initialKilled: boolean;
  * }) => { fire: (fireOptions?: object) => Promise<object>; getState: () => string; dispose: () => void;
- *   kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean }} [options.fireOrchestratorFactory]
+ *   kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean;
+ *   deferInstruction?: (text: string) => boolean }} [options.fireOrchestratorFactory]
  *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire・/api/vision-fire
  *   が 503）。cockpit が握る getBuffer（=pipeline?.transcriptBuffer ?? null）と broadcast フックを渡し、
  *   返った orchestrator の fire()/fire({vision:true}) を POST /api/fire・POST /api/vision-fire で await
@@ -459,10 +474,13 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   save: (brainId: string, instruction: string) => boolean | Promise<boolean>;
  *   reset: (brainId: string) => boolean | Promise<boolean>;
  *   getRevision: () => number;
+ *   getSoulSkills?: () => ReadonlyArray<{ name: string; path: string; body: string }>;
  * }} [options.conversationInstructionHooks]
  *   Dedicated local API hooks for the effective per-brain conversation-instruction body. The hook owns
  *   durable persistence and increments its revision only after a successful write; the server exposes the
  *   body only through /api/conversation-instructions/:brainId.
+ *   getSoulSkills（任意・記憶の作り直し Wave 3 仕上げ）: 魂が①の固定の指示にいつも足す教え（skills/）の名前・置き場・
+ *   本文。同じ API の応答に soulSkills として載せ、会話指示の編集画面が読むだけで見せる（編集の口は無い）。
  * @param {(opts: { source: string }) => { start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string; onMessage: (fn: (msg: any) => void) => () => void; onStatus: (fn: (state: string) => void) => () => void; onDiagnostic: (fn: (info: any) => void) => () => void }} [options.chatClientFactory]
  *   S7「視聴者が混ざる」チャット器官のファクトリ（本番は Domain C の `createLiveChatClient`・テストは
  *   fake 器官 factory を注入して実ネットに出さない）。POST /api/chat/connect で `factory({ source })` を
@@ -577,6 +595,14 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {(record: object) => void} [options.onReplyLatency]  1 返事の遅延レコード（数字ときっかけの種類だけ・本文なし）。
  *   cockpit.mjs が標準出力に 1 行書く。
  * @param {number} [options.warningEventTtlMs=WARNING_EVENT_TTL_MS]  一回きりの警告が消えるまで（テスト注入用）。
+ * @param {(job: { request: string; entries: ReadonlyArray<any>; nowMs: number }) => Promise<{ found: boolean; summary: string }>} [options.recallRunner]
+ *   ④思い出し役を 1 回走らせる口（記憶の作り直し Wave 3・cockpit.mjs が recall.mjs の runRecall を Codex の頭で渡す）。
+ *   未注入なら思い出しの係を作らない（①の目印は捨てる）。
+ * @param {(request: { input: string; questions: ReadonlyArray<any> }) => Promise<{ answers: Record<string, any>; latencyMs?: number }>} [options.recallJudge]
+ *   「避けるか」判定（テスト注入用）。既定は Decisions API（createDecisionsQuestionsJudge・タイムアウト 5 秒・キーは
+ *   decisionsApiKeyProvider で判定ごとに読む）。
+ * @param {(event: { phase: string; atMs: number; avoidProbability?: number | null; judgeFailed?: boolean; reason?: string | null; silent?: boolean; failed?: boolean }) => void} [options.onRecallEvent]
+ *   思い出しの係の出来事（頼みごとは含めない）。cockpit.mjs がターミナルに 1 行書く。
  * @returns {{
  *   listen: (port?: number) => Promise<string>;
  *   url: () => string;
@@ -729,6 +755,17 @@ export function createCockpitServer(options = {}) {
       ? Math.floor(options.commentHoldMaxCount)
       : COMMENT_HOLD_MAX_COUNT;
   const onCommentJudgment = typeof options.onCommentJudgment === "function" ? options.onCommentJudgment : null;
+  // 思い出す流れ（記憶の作り直し Wave 3）: ④を走らせる口・「避けるか」判定・出来事のターミナルの口。
+  const recallRunner = typeof options.recallRunner === "function" ? options.recallRunner : null;
+  const recallJudge =
+    typeof options.recallJudge === "function"
+      ? options.recallJudge
+      : createDecisionsQuestionsJudge({
+          timeoutMs: RECALL_JUDGE_TIMEOUT_MS,
+          apiKeyProvider:
+            typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
+        });
+  const onRecallEvent = typeof options.onRecallEvent === "function" ? options.onRecallEvent : null;
   // 操縦席の作り直し 1 回目（データ側）: 遅延のしきい値・残量の正本・遅延ログの口。
   const latencyThresholds = resolveLatencyThresholds(options.latencyThresholds);
   const quotaSource =
@@ -777,6 +814,9 @@ export function createCockpitServer(options = {}) {
   // コメント反応の判定部品（speakNow と同じく orchestrator が fire/getState を持つときだけ生成する）。
   /** @type {ReturnType<typeof createCommentReactController> | null} */
   let commentReact = null;
+  // 思い出しの係（記憶の作り直し Wave 3・orchestrator が fire/getState を持ち、recallRunner があるときだけ生成する）。
+  /** @type {ReturnType<typeof createRecallDesk> | null} */
+  let recallDesk = null;
   // 弾く判定の待ち行列。判定は並行に走らせるが、転写バッファへは届いた順に積む（先のコメントの判定完了を
   // 待つ・合意 §1-5）。decision が付いた先頭から順に取り出す。
   /** @type {Array<{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }>} */
@@ -1007,7 +1047,7 @@ export function createCockpitServer(options = {}) {
 
   /**
    * 判定のエラーを一回きりの警告にする（OpenAI の残高切れは別の警告）。detail は本文を含まない文言だけを渡す。
-   * @param {"speak-now" | "comment-react" | "comment-guard"} source  @param {string | null | undefined} message
+   * @param {"speak-now" | "comment-react" | "comment-guard" | "recall"} source  @param {string | null | undefined} message
    */
   function warnJudgeError(source, message) {
     if (isCreditExhaustedError(message)) {
@@ -1409,8 +1449,32 @@ export function createCockpitServer(options = {}) {
       brainId,
       instruction: profile.body,
       isOverride: profile.hasOverride,
-      revision
+      revision,
+      ...(typeof conversationInstructionHooks.getSoulSkills === "function" ? { soulSkills: readSoulSkills() } : {})
     };
+  }
+
+  /**
+   * 魂が足す教えの一覧（読むだけの表示用）。読めない・形が違うものは落とす（会話指示の読み書きは止めない）。
+   * @returns {Array<{ name: string; path: string; body: string }>}
+   */
+  function readSoulSkills() {
+    try {
+      const list = /** @type {any} */ (conversationInstructionHooks).getSoulSkills();
+      if (!Array.isArray(list)) return [];
+      return list
+        .filter(
+          (skill) =>
+            skill &&
+            typeof skill.name === "string" &&
+            typeof skill.path === "string" &&
+            typeof skill.body === "string" &&
+            skill.body.trim().length > 0
+        )
+        .map((skill) => ({ name: skill.name, path: skill.path, body: skill.body }));
+    } catch {
+      return [];
+    }
   }
 
   // ── HTTP ルーティング ─────────────────────────────────────────────
@@ -2102,6 +2166,8 @@ export function createCockpitServer(options = {}) {
         if (state === "idle" && speakNow) speakNow.notifyIdle();
         // コメント反応: 忙しい間に取っておいたコメントを、手が空いたらまとめて判定する（合意 §2）。
         if (state === "idle" && commentReact) commentReact.notifyIdle();
+        // 思い出しの係: 喋り終わって手が空いたら、届ける結果を片付ける（recall-flow.md §4）。
+        if (state === "idle" && recallDesk) recallDesk.notifyIdle();
       },
       onFire: (info) => broadcast("fire", info),
       onDiagnostic: (diag) => handleDiagnostic(diag),
@@ -2122,6 +2188,10 @@ export function createCockpitServer(options = {}) {
       // 多頭化 Domain C: brain 札を additive で乗せる（broadcastSoulTranscript と同じ brainStatusImpl()
       // 読み取り・in-flight 切替時の近似は同節の注記のとおり）。
       onUsage: (info) => broadcast("usage", { ...info, brain: typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null }),
+      // 記憶の作り直し Wave 3: 返事の中の思い出しの目印（返事が終わったあとに 1 つずつ）を思い出しの係へ。
+      onRecallRequest: (info) => {
+        if (recallDesk && info && typeof info.request === "string") recallDesk.request(info.request);
+      },
       // S8「キルスイッチ」born-killed: orchestrator 生成時にサーバの現況キル状態を渡す。killed 変数は
       // 上（:435 付近）で宣言済みゆえここより前に存在する。「キル中に生まれる orchestrator はキル済みで
       // 生まれる」不変の下地（cockpit.mjs の factory は ...hooks を spread するため自動で届く）。
@@ -2331,6 +2401,59 @@ export function createCockpitServer(options = {}) {
     });
   }
 
+  // 思い出しの係（記憶の作り直し Wave 3 Domain D・recall-flow.md §4・§7）。speak-now / コメント反応とは違い、話し始めの
+  // 方式や自発の ON/OFF に関係なく④は動く（①が自分で頼んだことの続き）。KILL 中は発火せず黙って前置きで渡す。
+  // 自発の発火が OFF（scheduler の isEnabled が偽・①が自分からしゃべらない設定）のときは、結果をしゃべらせず、
+  // 見つかった・見つからなかった・失敗のいずれも次の ask の先頭へ 1 回だけ黙って前置きする（Wave 3 仕上げ・
+  // ユーザー決定 2026-10-21。ON/OFF は snapshot の selfFire.enabled と同じ fireScheduler.isEnabled() で見る）。
+  if (
+    recallRunner &&
+    fireOrchestrator &&
+    typeof (/** @type {any} */ (fireOrchestrator).fire) === "function" &&
+    typeof (/** @type {any} */ (fireOrchestrator).getState) === "function"
+  ) {
+    recallDesk = createRecallDesk({
+      runRecall: recallRunner,
+      judge: recallJudge,
+      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      isKilled: () => killed,
+      isSelfFireOn: () => fireScheduler != null && fireScheduler.isEnabled(),
+      getName: () => currentSoulName(),
+      nowImpl,
+      // 避けない・見つからなかった・④の失敗（見つからなかったと同じ扱い）: 括った指示で①を発火させる（結果は selfFire kind:"recall" でフィードへ）。
+      fire: (fireOptions) => requestSelfFire("recall", fireOptions),
+      // 避けた・発火できなかった・自発 OFF: 次の ask の先頭に 1 回だけ黙って前置きする。
+      defer: (text) => {
+        const target = /** @type {any} */ (fireOrchestrator);
+        return typeof target.deferInstruction === "function" ? target.deferInstruction(text) : false;
+      },
+      onEvent: (event) => {
+        // 画面のログには頼みごとを出してよい（記憶の中身は係が載せない）。ターミナルには頼みごとを渡さない。
+        // 新しい SSE は足さず、selfFire に kind:"recall-step" で相乗りする（判定行と同じ流儀）。
+        broadcast("selfFire", { kind: "recall-step", ...event });
+        if (onRecallEvent) {
+          const { request: _request, ...rest } = event;
+          try {
+            onRecallEvent(rest);
+          } catch {
+            // ログの失敗で係を止めない。
+          }
+        }
+      },
+      onJudgeError: (message) => warnJudgeError("recall", message),
+      onRecallError: (message) => {
+        warningBoard.pushEvent("recall-error", {
+          kind: "recall-error",
+          severity: "warn",
+          message: "思い出しの失敗",
+          detail: typeof message === "string" ? message.slice(0, 200) : null,
+          source: "recall"
+        });
+      }
+    });
+  }
+
   /**
    * 自発の発火要求を fire() へ渡し、結果を SSE "selfFire" で結線層外へ通知する（S6 Domain D・
    * 操縦席のタイムラインが自発発火マーカー行/ゴースト行を描く材料・domain-d.md §）。scheduler の
@@ -2338,10 +2461,11 @@ export function createCockpitServer(options = {}) {
    * 失敗で常駐を殺さない）。結果（fired/reason）が判明してから broadcast する（同期 throw も非同期
    * rejection もどちらも "fired:false" として扱う）。
    * @param {string | undefined} kind
-   * @param {{ vision: boolean | "preferred"; instruction?: string; cause?: object }} fireOptions  vision:false は画面を撮らない通常発火
+   * @param {{ vision?: boolean | "preferred"; instruction?: string; cause?: object }} fireOptions  vision:false（と省略）は画面を撮らない通常発火
    *   （speak-now の相槌）。cause はきっかけ（orchestrator が受理・遅延に載せる）。
    * @param {object} [extra]  selfFire SSE に足す付随情報（コメント反応の commentIds = どのコメントで発火したか）。
-   * @returns {Promise<void>}  発火の結果を放送し終えたら片付く（reject しない）。
+   * @returns {Promise<any>}  発火の結果を放送し終えたら、その結果で片付く（reject しない・失敗は
+   *   `{ fired:false, reason:"error" }`）。思い出しの係が「忙しかったか・受理されたか」を見る。
    */
   function requestSelfFire(kind, fireOptions, extra = {}) {
     try {
@@ -2356,13 +2480,15 @@ export function createCockpitServer(options = {}) {
             // 受理した発火の番号（受理・返事・遅延と結ぶ）。受理しなかった発火には付けない。
             ...(fireId != null ? { fireId } : {})
           });
+          return result;
         })
         .catch((error) => {
           broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error), ...extra });
+          return { fired: false, reason: "error" };
         });
     } catch (error) {
       broadcast("selfFire", { kind, fired: false, reason: "error", message: errMessage(error), ...extra });
-      return Promise.resolve();
+      return Promise.resolve({ fired: false, reason: "error" });
     }
   }
 
@@ -2387,6 +2513,7 @@ export function createCockpitServer(options = {}) {
       fireInFlight -= 1;
       if (speakNow) speakNow.notifyIdle();
       if (commentReact) commentReact.notifyIdle();
+      if (recallDesk) recallDesk.notifyIdle();
     });
   }
 
@@ -2903,6 +3030,10 @@ export function createCockpitServer(options = {}) {
       if (commentReact) {
         commentReact.dispose(); // speakNow と同じ（取っておいたコメントも捨てる）。
         commentReact = null;
+      }
+      if (recallDesk) {
+        recallDesk.dispose(); // 走っている④の結果が後から返っても無視する（届ける列も捨てる）。
+        recallDesk = null;
       }
       guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が closed で無視する。
       warningBoard.dispose(); // 一回きりの警告の消えるタイマを残さない。

@@ -81,6 +81,9 @@ import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
 import { DEFAULT_MEMORY_DIR, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
+import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
+import { runRecall } from "../src/mind/recall.mjs";
+import { appendSoulSkills, listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
 
 /**
  * 配信間記憶: 定期保存の間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
@@ -107,16 +110,18 @@ export const SHUTDOWN_MEMORY_TIMEOUT_MS = 90_000;
  * starting a session.
  *
  * 記憶の作り直し Wave 2: 起動時に直近の記録を載せる仕組みは撤去した（①は配信の最初に記憶を持たない・
- * recall-flow.md §7）。人格の指示は「名前 + 会話指示」だけ。
+ * recall-flow.md §7）。人格の指示は「名前 + 会話指示」に、Wave 3 で魂の教え（skills/ の `<recall>` の使い方・
+ * soul-skills.mjs）を足した。教えは名前の一文と同じく魂が足す固定の部分で、会話指示を書き換えても消えない。
  *
  * @param {unknown} brainId
  * @param {Record<string, string>} [instructionOverrides]
+ * @param {string} [skillsText]  足す教え（既定は skills/ から読む）。
  * @returns {string}
  */
-export function buildBrainSessionSystemPrompt(brainId, instructionOverrides = undefined) {
+export function buildBrainSessionSystemPrompt(brainId, instructionOverrides = undefined, skillsText = undefined) {
   const identity = resolveBrainIdentity(brainId);
   const profile = resolveConversationInstructionProfile(brainId, instructionOverrides);
-  return buildFireSystemPrompt(identity, profile.body);
+  return appendSoulSkills(buildFireSystemPrompt(identity, profile.body), skillsText ?? loadSoulSkills());
 }
 
 /** @param {string[]} argv */
@@ -397,11 +402,20 @@ export function createInstructionRevisionController(initialRevision = 0) {
  * surface. Persistence owns validation and durable writes; this thin seam is
  * responsible only for incrementing the effective revision after success.
  *
+ * Wave 3 仕上げ（記憶の作り直し）: 魂が①の固定の指示にいつも足す教え（skills/）を、会話指示の編集画面に読むだけで
+ * 見せるため、getSoulSkills で名前・置き場・本文を返す（①に足すものと同じ listSoulSkills から読む・編集はできない）。
+ *
  * @param {object} settings
  * @param {() => string} getBrainId
  * @param {ReturnType<typeof createInstructionRevisionController>} [revision]
+ * @param {() => Array<{ name: string; path: string; body: string }>} [getSoulSkills]  テスト注入（既定 listSoulSkills）。
  */
-export function createConversationInstructionHooks(settings, getBrainId, revision = createInstructionRevisionController()) {
+export function createConversationInstructionHooks(
+  settings,
+  getBrainId,
+  revision = createInstructionRevisionController(),
+  getSoulSkills = () => listSoulSkills()
+) {
   const store = /** @type {any} */ (settings);
   const currentId = () => getBrainId();
   return {
@@ -423,6 +437,9 @@ export function createConversationInstructionHooks(settings, getBrainId, revisio
     },
     getRevision() {
       return revision.getRevision();
+    },
+    getSoulSkills() {
+      return getSoulSkills();
     }
   };
 }
@@ -566,8 +583,9 @@ export function shouldSkipMemoryCheckpoint(currentSeq, lastRecordedSeq) {
 }
 
 /**
- * ②書き出し役の頭（申し送り 1: Codex に固定）。今の頭が Codex 系ならその頭（①と同じ頭・recall-flow.md §6）、
- * Claude 系なら既定の Codex（Claude の頭は cwd / sandbox / finalAnswerOnly を黙って無視するため使わない）。
+ * ②書き出し役・④思い出し役の頭（申し送り 1: Codex に固定）。今の頭が Codex 系ならその頭（①と同じ頭・
+ * recall-flow.md §6）、Claude 系なら既定の Codex（Claude の頭は cwd / sandbox / finalAnswerOnly を黙って無視するため
+ * 使わない）。④も同じ決め方（記憶の作り直し Wave 2 からの申し送り 1）。
  * @param {unknown} currentBrain
  * @param {Record<string, { create: Function }>} [brains=BRAINS]
  * @returns {{ id?: string; create: Function }}
@@ -684,12 +702,31 @@ export function createMemoryRecorder(deps) {
 
 /**
  * Codex の頭の警告が「MCP の名前の読み取り（config/read）に失敗した」ものか（codex-session.mjs の
- * mcpOverridesFor が出す文言）。操縦席の上の帯に alert として出す（ユーザー決定 2026-10-21: 続けるが目立たせる）。
+ * MCP_CONFIG_READ_FAILED_WARNING との一致で判定する・文言の一部の一致はやめた＝Wave 2 からの申し送り 2）。
+ * 操縦席の上の帯に alert として出す（ユーザー決定 2026-10-21: 続けるが目立たせる）。
  * @param {unknown} warning
  * @returns {boolean}
  */
 export function isMcpConfigReadFailureWarning(warning) {
-  return typeof warning === "string" && warning.includes("could not read the MCP server list");
+  return warning === MCP_CONFIG_READ_FAILED_WARNING;
+}
+
+/**
+ * 思い出しの係の出来事のターミナル 1 行（記憶の作り直し Wave 3・頼みごと・記憶の中身は書かない）。
+ * @param {{ phase?: string; avoidProbability?: number | null; judgeFailed?: boolean; reason?: string | null; silent?: boolean; failed?: boolean }} event
+ * @returns {string}
+ */
+export function formatRecallEventLine(event) {
+  const parts = [`[cockpit] recall: ${typeof event?.phase === "string" ? event.phase : "?"}`];
+  if (typeof event?.avoidProbability === "number" && Number.isFinite(event.avoidProbability)) {
+    parts.push(`avoid=${event.avoidProbability.toFixed(2)}`);
+  }
+  if (event?.judgeFailed === true) parts.push("judge=error");
+  if (typeof event?.reason === "string" && event.reason.length > 0) parts.push(`reason=${event.reason}`);
+  // Wave 3 仕上げ: 自発 OFF で黙って渡した（silent）・④の失敗を届けた（failed）。
+  if (event?.silent === true) parts.push("silent");
+  if (event?.failed === true) parts.push("failed");
+  return `${parts.join(" ")}\n`;
 }
 
 /**
@@ -1625,10 +1662,11 @@ async function main() {
       // onInit は createCodexSession では余剰プロパティとして単に無視される（JS の余剰プロパティ・
       // Domain A 確認済み）。createLlmSession は従来どおり onInit/onWarning を使う。
       session = brainDef.create({
-        // 人格の指示は「名前 + 会話指示」だけ（起動時の記憶の搭載は撤去・記憶の作り直し Wave 2）。
-        systemPrompt: buildFireSystemPrompt(
-          sessionIdentity,
-          conversationInstructionHooks.getProfile(currentBrain).body
+        // 人格の指示は「名前 + 会話指示」+ 魂の教え（`<recall>` の使い方・skills/）。起動時の記憶の搭載は撤去
+        // （記憶の作り直し Wave 2）。教えは会話指示とは別の固定の部分で、会話指示を書き換えても消えない（Wave 3）。
+        systemPrompt: appendSoulSkills(
+          buildFireSystemPrompt(sessionIdentity, conversationInstructionHooks.getProfile(currentBrain).body),
+          loadSoulSkills({ onWarning: onBrainWarning })
         ),
         onWarning: onBrainWarning,
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
@@ -1883,6 +1921,21 @@ async function main() {
     memoryRecorder.record(transcript).catch(() => {});
   };
 
+  /**
+   * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
+   * 同じ決め方）を cwd = 記憶のフォルダ・read-only・最後の答えだけで作る。警告は①②と同じ onBrainWarning へ。
+   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number }} job
+   */
+  const recallRunner = (job) =>
+    runRecall({
+      create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
+      request: job.request,
+      entries: job.entries,
+      nowMs: job.nowMs,
+      dir: DEFAULT_MEMORY_DIR,
+      onWarning: onBrainWarning
+    });
+
   /** state snapshot に載せる記憶の現況（最後に記録した時刻と、今記録中か）。 */
   const memoryStatus = () => ({ lastRecordAtMs, recording: memoryRecorder.isRecording() });
 
@@ -2073,6 +2126,10 @@ async function main() {
     commentHoldMaxAgeMs: commentHold.maxAgeMs,
     commentHoldMaxCount: commentHold.maxCount,
     onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info)),
+    // 記憶の作り直し Wave 3: 思い出しの係（④は使い捨ての Codex・「避けるか」判定は cockpit-server の既定の Decisions API）。
+    // 係の出来事は標準出力へ 1 行（頼みごと・記憶の中身は書かない）。
+    recallRunner,
+    onRecallEvent: (event) => process.stdout.write(formatRecallEventLine(event)),
     // 操縦席の作り直し 1 回目（データ側）: 残量・遅延のしきい値（settings の latencyWarnSec / latencyAlertSec・既定 4 / 6 秒）・
     // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
     quotaSource: quotaMonitor,

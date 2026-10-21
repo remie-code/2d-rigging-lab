@@ -31,12 +31,15 @@ import {
   createMemoryRecorder,
   resolveWriterBrainDef,
   isMcpConfigReadFailureWarning,
+  formatRecallEventLine,
   raceMemoryRecordWithTimeout,
   MEMORY_CHECKPOINT_INTERVAL_MS,
   SHUTDOWN_MEMORY_TIMEOUT_MS
 } from "./cockpit.mjs";
 import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
 import { createFireOrchestrator, resolveConversationInstructionProfile } from "../src/mind/fire-orchestrator.mjs";
+import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
+import { listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
 // 実 SDK / 実 TTS / 実器 / 実マイクは使わない（fake connectImpl のみ）。
@@ -833,12 +836,32 @@ test("isMcpConfigReadFailureWarning: codex-session の config/read 失敗の警�
   assert.equal(isMcpConfigReadFailureWarning(undefined), false);
 });
 
-test("isMcpConfigReadFailureWarning: codex-session.mjs が実際に出す文言と一致している（文言が変わったら気づく）", { timeout: 5000 }, async () => {
-  const { readFileSync } = await import("node:fs");
-  const source = readFileSync(new URL("../src/mind/codex-session.mjs", import.meta.url), "utf8");
-  const match = /onWarning\?\.\("(codex-session: could not read the MCP server list[^"]*)"\)/.exec(source);
-  assert.ok(match, "codex-session.mjs に config/read 失敗の警告がある");
-  assert.equal(isMcpConfigReadFailureWarning(match[1]), true);
+test("isMcpConfigReadFailureWarning: codex-session の定数との一致で判定し、文言の一部だけでは拾わない（Wave 2 からの申し送り 2）", { timeout: 5000 }, () => {
+  assert.equal(isMcpConfigReadFailureWarning(MCP_CONFIG_READ_FAILED_WARNING), true);
+  assert.equal(isMcpConfigReadFailureWarning(`[x] ${MCP_CONFIG_READ_FAILED_WARNING}`), false);
+  assert.equal(isMcpConfigReadFailureWarning("codex-session: could not read the MCP server list"), false);
+});
+
+test("formatRecallEventLine: 思い出しの係の出来事の 1 行（頼みごと・記憶の中身は書かない）", { timeout: 5000 }, () => {
+  assert.equal(formatRecallEventLine({ phase: "started" }), "[cockpit] recall: started\n");
+  assert.equal(
+    formatRecallEventLine({ phase: "found", avoidProbability: 0.234, judgeFailed: false }),
+    "[cockpit] recall: found avoid=0.23\n"
+  );
+  assert.equal(formatRecallEventLine({ phase: "found", avoidProbability: null, judgeFailed: true }), "[cockpit] recall: found judge=error\n");
+  assert.equal(formatRecallEventLine({ phase: "deferred", reason: "killed" }), "[cockpit] recall: deferred reason=killed\n");
+  assert.equal(
+    formatRecallEventLine(/** @type {any} */ ({ phase: "started", request: "前回どこまで" })),
+    "[cockpit] recall: started\n",
+    "頼みごとが渡っても書かない"
+  );
+});
+
+test("formatRecallEventLine（Wave 3 仕上げ）: 自発 OFF で黙って渡した（silent）・④の失敗を届けた（failed）を添える", { timeout: 5000 }, () => {
+  assert.equal(formatRecallEventLine({ phase: "found", silent: true }), "[cockpit] recall: found silent\n");
+  assert.equal(formatRecallEventLine({ phase: "not-found", failed: true }), "[cockpit] recall: not-found failed\n");
+  assert.equal(formatRecallEventLine({ phase: "not-found", silent: true, failed: true }), "[cockpit] recall: not-found silent failed\n");
+  assert.equal(formatRecallEventLine({ phase: "failed", reason: "recall-error" }), "[cockpit] recall: failed reason=recall-error\n");
 });
 
 // ── createMemoryRecorder（保存の係: 定期/手動/耳の Stop/Ctrl+C が共有・直列）───────────────────
@@ -1308,8 +1331,26 @@ test("buildBrainSessionSystemPrompt: override follows identity, and no memory is
   });
   assert.ok(prompt.indexOf("あなたの名前はチャッピー（Chappy）です。") >= 0);
   assert.ok(prompt.indexOf("あなたの名前はチャッピー（Chappy）です。") < prompt.indexOf("custom conversation body"));
-  assert.ok(prompt.endsWith("custom conversation body"), "会話指示の後ろに記憶の節を足さない");
+  // 会話指示の後ろには魂の教え（`<recall>` の使い方・Wave 3）だけが続き、記憶の節は足さない。
+  assert.ok(prompt.endsWith(`custom conversation body
+
+${loadSoulSkills()}`), "会話指示の後ろは魂の教えだけ");
   assert.doesNotMatch(prompt, /これまでの配信で起きたことの記憶/);
+  // 教えを渡さなければ、会話指示で終わる（名前 + 会話指示）。
+  assert.ok(buildBrainSessionSystemPrompt("codex-56-sol", { "codex-56-sol": "custom conversation body" }, "").endsWith("custom conversation body"));
+});
+
+test("buildBrainSessionSystemPrompt: 6 つの頭すべてに魂の教え（<recall> の使い方）が固定の部分として付き、会話指示を上書きしても消えない（記憶の作り直し Wave 3）", { timeout: 5000 }, () => {
+  const teaching = loadSoulSkills();
+  assert.match(teaching, /<recall 頼みごと>/);
+  for (const brainId of ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]) {
+    const plain = buildBrainSessionSystemPrompt(brainId);
+    assert.ok(plain.endsWith(teaching), `${brainId}: 既定の会話指示`);
+    const overridden = buildBrainSessionSystemPrompt(brainId, { [brainId]: "まったく別の会話指示" });
+    assert.ok(overridden.includes("まったく別の会話指示"), `${brainId}: 上書きが効く`);
+    assert.ok(overridden.endsWith(teaching), `${brainId}: 上書きしても教えは残る`);
+    assert.ok(overridden.startsWith("あなたの名前は"), `${brainId}: 名前の一文が先頭`);
+  }
 });
 
 // ── 頭の切替 × in-flight（不変条件の固定・brain-swap.md §9 (a')）──────────────────────────────
@@ -1682,6 +1723,21 @@ test("instruction revision/hooks: revision advances only after a successful dura
   settings.setConversationInstruction = () => false;
   assert.equal(hooks.save("claude", "not persisted"), false);
   assert.equal(hooks.getRevision(), 2);
+});
+
+test("createConversationInstructionHooks: getSoulSkills は①に足す教えと同じ一覧を返す（読むだけの表示用・Wave 3 仕上げ）", () => {
+  const settings = {
+    getConversationInstructionProfile: () => ({ body: "default", hasOverride: false }),
+    setConversationInstruction: () => true,
+    resetConversationInstruction: () => true
+  };
+  const hooks = createConversationInstructionHooks(settings, () => "claude");
+  const skills = hooks.getSoulSkills();
+  assert.deepEqual(skills, listSoulSkills());
+  assert.deepEqual(skills.map((s) => [s.name, s.path]), [["recall", "skills/recall.md"]]);
+  assert.equal(skills.map((s) => s.body).join("\n\n"), loadSoulSkills(), "①に足す本文と同じ");
+  const injected = createConversationInstructionHooks(settings, () => "claude", undefined, () => [{ name: "x", path: "skills/x.md", body: "b" }]);
+  assert.deepEqual(injected.getSoulSkills(), [{ name: "x", path: "skills/x.md", body: "b" }]);
 });
 
 // ── createSttEngineHooks / formatSttLatencyLine（操縦席の文字起こし選択・cockpit-stt-selection.md）────────

@@ -627,6 +627,46 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
   }
 });
 
+test("conversation instruction API: 魂がいつも足す教え（soulSkills）を GET/PUT/DELETE の応答に読むだけで載せる（Wave 3 仕上げ）", async () => {
+  const hooks = /** @type {any} */ (makeFakeConversationInstructionHooks());
+  let calls = 0;
+  hooks.getSoulSkills = () => {
+    calls += 1;
+    return [
+      { name: "recall", path: "skills/recall.md", body: "教えの本文", extra: "落とす" },
+      { name: "empty", path: "skills/empty.md", body: "  " }
+    ];
+  };
+  const server = createCockpitServer({ conversationInstructionHooks: hooks });
+  try {
+    const url = await server.listen(0);
+    const expected = [{ name: "recall", path: "skills/recall.md", body: "教えの本文" }];
+    const got = await getJson(`${url}/api/conversation-instructions/codex`);
+    assert.equal(got.status, 200);
+    assert.deepEqual(got.json.soulSkills, expected);
+    assert.equal(got.json.instruction, "default:codex", "会話指示の本文は教えと混ぜない");
+    const saved = await putJson(`${url}/api/conversation-instructions/codex`, { instruction: "custom" });
+    assert.deepEqual(saved.json.soulSkills, expected);
+    assert.equal(saved.json.instruction, "custom", "保存しても教えは会話指示に入らない");
+    const reset = await deleteJson(`${url}/api/conversation-instructions/codex`);
+    assert.deepEqual(reset.json.soulSkills, expected);
+    assert.equal(calls, 3);
+    // 教えを読めなくても会話指示の読み書きは止めない（空の一覧）。
+    hooks.getSoulSkills = () => {
+      throw new Error("read failed");
+    };
+    const failed = await getJson(`${url}/api/conversation-instructions/codex`);
+    assert.equal(failed.status, 200);
+    assert.deepEqual(failed.json.soulSkills, []);
+    // 教えを編集する口は無い（PUT の soulSkills は無視する）。
+    hooks.getSoulSkills = () => expected;
+    const ignored = await putJson(`${url}/api/conversation-instructions/codex`, { instruction: "x", soulSkills: [{ name: "recall", path: "p", body: "書き換え" }] });
+    assert.deepEqual(ignored.json.soulSkills, expected);
+  } finally {
+    await server.close();
+  }
+});
+
 test("conversation instruction API: Astra save/load/reset preserves existing overrides", async () => {
   const server = createCockpitServer({ conversationInstructionHooks: makeFakeConversationInstructionHooks() });
   try {
@@ -5365,4 +5405,306 @@ test("cockpit snapshot.compacting: started で true（GET /api/state・SSE state
   // close 後は何もしない（throw しない）。
   server.broadcastContextCompaction({ phase: "started", inputTokens: 210_000, thresholdTokens: 200_000, ratio: 0.5 });
   server.resetContextCompaction();
+});
+
+// ── 思い出す流れ（記憶の作り直し Wave 3 Domain D）────────────────────────────────────────
+//  orchestrator の onRecallRequest → 思い出しの係 → ④（偽物の recallRunner）→「避けるか」判定（偽物の recallJudge）→
+//  ①の発火 / 黙って前置き。本物の頭・本物の Decisions API は使わない。
+
+/** 思い出しの結線を確かめる偽物の orchestrator（fire は結果をすぐ返す・状態は手で動かす・前置きを記録する）。 */
+function makeRecallOrchestrator(fireResult = { fired: true, fireId: 7 }) {
+  const record = {
+    /** @type {any} */ hooks: null,
+    state: "idle",
+    /** @type {any[]} */ fires: [],
+    /** @type {string[]} */ defers: []
+  };
+  const factory = (/** @type {any} */ hooks) => {
+    record.hooks = hooks;
+    return {
+      async fire(/** @type {any} */ fireOptions) {
+        record.fires.push(fireOptions);
+        return fireResult;
+      },
+      getState: () => record.state,
+      deferInstruction(/** @type {string} */ text) {
+        record.defers.push(text);
+        return true;
+      },
+      dispose() {}
+    };
+  };
+  const enter = (/** @type {string} */ s) => {
+    record.state = s;
+    record.hooks.onState(s);
+  };
+  return { factory, record, enter };
+}
+
+const avoidAnswer = (/** @type {number} */ p) => ({ answers: { avoid: { type: "predicate", probability: p } }, latencyMs: 200 });
+
+/** @param {{ orch?: ReturnType<typeof makeRecallOrchestrator>; recallRunner?: any; recallJudge?: any; options?: object }} [over] */
+async function startRecallServer(over = {}) {
+  const orch = over.orch ?? makeRecallOrchestrator();
+  /** @type {any[]} */ const runs = [];
+  /** @type {any[]} */ const terminal = [];
+  const server = createCockpitServer({
+    fireOrchestratorFactory: /** @type {any} */ (orch.factory),
+    recallRunner:
+      over.recallRunner ??
+      (async (/** @type {any} */ job) => {
+        runs.push(job);
+        return { found: true, summary: "火山館まで進んだ" };
+      }),
+    recallJudge: over.recallJudge ?? (async () => avoidAnswer(0.2)),
+    onRecallEvent: (/** @type {any} */ e) => terminal.push(e),
+    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    nowImpl: () => 1000,
+    // Wave 3 仕上げ: 自発の発火が OFF だと結果はしゃべらせず黙って渡すので、発火の経路を見るテストは ON で始める。
+    selfFireInitialEnabled: true,
+    ...(over.options ?? {})
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  await sse.waitFor((e) => e.event === "state");
+  return { server, url, sse, orch, runs, terminal };
+}
+
+const recallStep = (/** @type {string} */ phase) => (/** @type {any} */ e) =>
+  e.event === "selfFire" && e.data.kind === "recall-step" && e.data.phase === phase;
+
+test("cockpit 思い出し: 目印 → ④ → 判定（避けない）→ 括った指示で発火・ログの行（思い出し中 / 思い出した）・ターミナルに頼みごとを渡さない", async () => {
+  const h = await startRecallServer();
+  try {
+    h.orch.record.hooks.onRecallRequest({ request: "エルデンリング 前回どこまで", fireId: 1 });
+    const started = await h.sse.waitFor(recallStep("started"));
+    assert.equal(started.data.request, "エルデンリング 前回どこまで");
+    const found = await h.sse.waitFor(recallStep("found"));
+    assert.equal(found.data.request, "エルデンリング 前回どこまで");
+    assert.equal(found.data.avoidProbability, 0.2);
+    const fired = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "recall");
+    assert.equal(fired.data.fired, true);
+    assert.equal(fired.data.fireId, 7);
+    assert.equal(h.runs.length, 1);
+    assert.equal(h.runs[0].request, "エルデンリング 前回どこまで");
+    assert.equal(h.orch.record.fires.length, 1);
+    assert.match(h.orch.record.fires[0].instruction, /記録から読んだ内容/);
+    assert.match(h.orch.record.fires[0].instruction, /火山館まで進んだ/);
+    assert.deepEqual(h.orch.record.fires[0].cause, { type: "recall", found: true });
+    assert.deepEqual(h.orch.record.defers, []);
+    assert.ok(!JSON.stringify(h.sse.events).includes("火山館"), "記憶の中身は画面のログにも流さない");
+    assert.deepEqual(h.terminal.map((e) => e.phase), ["started", "found"]);
+    assert.ok(h.terminal.every((e) => !("request" in e)), "ターミナルには頼みごとを渡さない");
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: 避ける → 発火せず次の ask の前置きで黙って渡す（ログは「避けた」）", async () => {
+  const h = await startRecallServer({ recallJudge: async () => avoidAnswer(0.95) });
+  try {
+    h.orch.record.hooks.onRecallRequest({ request: "前回のボス", fireId: 1 });
+    await h.sse.waitFor(recallStep("avoided"));
+    assert.equal(h.orch.record.fires.length, 0);
+    assert.equal(h.orch.record.defers.length, 1);
+    assert.match(h.orch.record.defers[0], /火山館まで進んだ/);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: 判定の失敗は言う側に倒し、judge-error の警告（source recall）に載せる", async () => {
+  const h = await startRecallServer({
+    recallJudge: async () => {
+      throw new Error("タイムアウト（5 秒）");
+    }
+  });
+  try {
+    h.orch.record.hooks.onRecallRequest({ request: "前回のボス", fireId: 1 });
+    const found = await h.sse.waitFor(recallStep("found"));
+    assert.equal(found.data.judgeFailed, true);
+    assert.equal(h.orch.record.fires.length, 1);
+    const w = await h.sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((/** @type {any} */ x) => x.kind === "judge-error"));
+    const je = w.data.warnings.find((/** @type {any} */ x) => x.kind === "judge-error");
+    assert.deepEqual([je.source, je.detail, je.lifetime], ["recall", "タイムアウト（5 秒）", "event"]);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: 見つからなかった → 判定せずに伝えて発火（ログは「見つからなかった」）", async () => {
+  let judged = 0;
+  const h = await startRecallServer({
+    recallRunner: async () => ({ found: false, summary: "" }),
+    recallJudge: async () => {
+      judged += 1;
+      return avoidAnswer(0.1);
+    }
+  });
+  try {
+    h.orch.record.hooks.onRecallRequest({ request: "知らない話", fireId: 1 });
+    await h.sse.waitFor(recallStep("not-found"));
+    assert.equal(judged, 0);
+    assert.equal(h.orch.record.fires.length, 1);
+    assert.match(h.orch.record.fires[0].instruction, /見つかりませんでした/);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: ①が忙しい間は待ち、idle になったら届ける", async () => {
+  const orch = makeRecallOrchestrator();
+  const h = await startRecallServer({ orch });
+  try {
+    orch.enter("thinking");
+    orch.record.hooks.onRecallRequest({ request: "前回のボス", fireId: 1 });
+    await h.sse.waitFor(recallStep("started"));
+    await settle();
+    await settle();
+    assert.equal(orch.record.fires.length, 0, "しゃべっている間は届けない");
+    orch.enter("speaking");
+    orch.enter("idle");
+    await h.sse.waitFor(recallStep("found"));
+    assert.equal(orch.record.fires.length, 1);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: ④の失敗は recall-error の警告とログの行を出し、「見つからなかった」と同じ扱いで①に伝えて発火する（Wave 3 仕上げ）", async () => {
+  let judged = 0;
+  const h = await startRecallServer({
+    recallRunner: async () => {
+      throw new Error("recall timed out (120 s)");
+    },
+    recallJudge: async () => {
+      judged += 1;
+      return avoidAnswer(0.1);
+    }
+  });
+  try {
+    h.orch.record.hooks.onRecallRequest({ request: "前回のボス", fireId: 1 });
+    await h.sse.waitFor(recallStep("failed"));
+    const w = await h.sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((/** @type {any} */ x) => x.kind === "recall-error"));
+    const re = w.data.warnings.find((/** @type {any} */ x) => x.kind === "recall-error");
+    assert.deepEqual([re.severity, re.lifetime, re.detail, re.source], ["warn", "event", "recall timed out (120 s)", "recall"]);
+    const told = await h.sse.waitFor(recallStep("not-found"));
+    assert.equal(told.data.failed, true);
+    assert.equal(judged, 0, "判定にはかけない");
+    assert.equal(h.orch.record.fires.length, 1);
+    assert.match(h.orch.record.fires[0].instruction, /思い出そうとしましたが思い出せませんでした/);
+    assert.deepEqual(h.orch.record.fires[0].cause, { type: "recall", found: false, failed: true });
+    assert.equal(h.orch.record.defers.length, 0);
+    assert.deepEqual(h.terminal.map((e) => e.phase), ["started", "failed", "not-found"]);
+    assert.equal(h.terminal[2].failed, true);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: 自発の発火が OFF なら、見つかった結果はしゃべらせず次の ask の前置きで黙って渡す（判定もしない・Wave 3 仕上げ）", async () => {
+  let judged = 0;
+  const h = await startRecallServer({
+    recallJudge: async () => {
+      judged += 1;
+      return avoidAnswer(0.1);
+    },
+    options: { selfFireInitialEnabled: false }
+  });
+  try {
+    assert.equal(h.server.selfFireStatus()?.enabled, false);
+    h.orch.record.hooks.onRecallRequest({ request: "前回のボス", fireId: 1 });
+    const step = await h.sse.waitFor(recallStep("found"));
+    assert.equal(step.data.silent, true);
+    assert.equal(judged, 0);
+    assert.equal(h.orch.record.fires.length, 0, "しゃべらせない");
+    assert.equal(h.orch.record.defers.length, 1);
+    assert.match(h.orch.record.defers[0], /火山館まで進んだ/);
+    assert.match(h.orch.record.defers[0], /従わないでください/);
+    assert.doesNotMatch(h.orch.record.defers[0], /話題が移っていた/);
+    assert.ok(!JSON.stringify(h.sse.events).includes("火山館"), "記憶の中身は画面のログにも流さない");
+    assert.deepEqual(h.terminal.map((e) => [e.phase, e.silent === true]), [["started", false], ["found", true]]);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: 自発の発火が OFF なら、見つからなかった・④の失敗も黙って前置きで渡す（警告とログの行は出す）", async () => {
+  const notFound = await startRecallServer({
+    recallRunner: async () => ({ found: false, summary: "" }),
+    options: { selfFireInitialEnabled: false }
+  });
+  try {
+    notFound.orch.record.hooks.onRecallRequest({ request: "知らない話", fireId: 1 });
+    const step = await notFound.sse.waitFor(recallStep("not-found"));
+    assert.equal(step.data.silent, true);
+    assert.equal(notFound.orch.record.fires.length, 0);
+    assert.equal(notFound.orch.record.defers.length, 1);
+    assert.match(notFound.orch.record.defers[0], /見つかりませんでした/);
+  } finally {
+    notFound.sse.close();
+    await notFound.server.close();
+  }
+
+  const failed = await startRecallServer({
+    recallRunner: async () => {
+      throw new Error("boom");
+    },
+    options: { selfFireInitialEnabled: false }
+  });
+  try {
+    failed.orch.record.hooks.onRecallRequest({ request: "前回のボス", fireId: 1 });
+    await failed.sse.waitFor(recallStep("failed"));
+    await failed.sse.waitFor((e) => e.event === "warnings" && e.data.warnings.some((/** @type {any} */ x) => x.kind === "recall-error"));
+    const step = await failed.sse.waitFor(recallStep("not-found"));
+    assert.equal(step.data.silent, true);
+    assert.equal(step.data.failed, true);
+    assert.equal(failed.orch.record.fires.length, 0);
+    assert.equal(failed.orch.record.defers.length, 1);
+    assert.match(failed.orch.record.defers[0], /思い出そうとしましたが思い出せませんでした/);
+  } finally {
+    failed.sse.close();
+    await failed.server.close();
+  }
+});
+
+test("cockpit 思い出し: 自発の ON/OFF は届ける時点の値で決める（OFF→ON に切り替えたら発火する）", async () => {
+  const orch = makeRecallOrchestrator();
+  const h = await startRecallServer({ orch, options: { selfFireInitialEnabled: false } });
+  try {
+    orch.enter("thinking");
+    orch.record.hooks.onRecallRequest({ request: "前回のボス", fireId: 1 });
+    await h.sse.waitFor(recallStep("started"));
+    await settle();
+    const toggled = await postJson(`${h.url}/api/self-fire`, { enabled: true });
+    assert.equal(toggled.status, 200);
+    orch.enter("idle");
+    const step = await h.sse.waitFor(recallStep("found"));
+    assert.notEqual(step.data.silent, true);
+    assert.equal(orch.record.fires.length, 1);
+    assert.equal(orch.record.defers.length, 0);
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
+test("cockpit 思い出し: recallRunner が無ければ係を作らず、目印は捨てる（throw しない）", async () => {
+  const orch = makeRecallOrchestrator();
+  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (orch.factory) });
+  try {
+    await server.listen(0);
+    assert.doesNotThrow(() => orch.record.hooks.onRecallRequest({ request: "前回", fireId: 1 }));
+    await settle();
+    assert.equal(orch.record.fires.length, 0);
+  } finally {
+    await server.close();
+  }
 });

@@ -730,6 +730,38 @@ test("conversation instruction editor vnode: six brain choices, editable body, r
   assert.deepEqual(seen, { back: false, edit: false, save: false, reset: false, brain: false });
 });
 
+test("conversation instruction editor vnode: 魂がいつも足す教えを案内し、本文を読むだけで見せる（編集の口は無い・Wave 3 仕上げ）", () => {
+  const base = {
+    brainId: "codex",
+    brainLabel: "Codex (GPT-5.6 Terra)",
+    identity: null,
+    activeBrainId: "codex",
+    state: { draft: "custom", status: "saved", dirty: false, isOverride: true, revision: 1 },
+    onEdit: () => {}
+  };
+  const withSkills = ConversationInstructionEditor({
+    ...base,
+    soulSkills: [{ name: "recall", path: "skills/recall.md", body: "過去の配信の記録を思い出したいときは <recall 頼みごと> を書けます。" }]
+  });
+  const text = collectText(withSkills).join("");
+  assert.match(text, /このほかに、思い出す教え（skills\/recall\.md）がいつも足されています/);
+  assert.match(text, /<recall 頼みごと> を書けます/);
+  const elements = collectElements(withSkills);
+  const section = elements.find((node) => node.props && node.props.class === "conversation-instruction-soul-skills");
+  assert.ok(section, "教えの欄がある");
+  const body = elements.find((node) => node.type === "pre" && node.props.class === "conversation-instruction-soul-skill-body");
+  assert.ok(body, "本文は pre（読むだけ）");
+  assert.equal(elements.filter((node) => node.type === "textarea").length, 1, "編集できるのは会話指示本文だけ");
+  assert.equal(elements.filter((node) => node.props && typeof node.props.onInput === "function").length, 1);
+
+  const without = ConversationInstructionEditor({ ...base });
+  assert.equal(
+    collectElements(without).some((node) => node.props && node.props.class === "conversation-instruction-soul-skills"),
+    false,
+    "教えが無ければ欄を出さない"
+  );
+});
+
 test("FireButtons vnode: busy（soul 由来 / ローカル連打防止）で両ボタン disable・idle で有効", () => {
   // soul busy（applySoulState :439-440 の二重の防波堤）。
   let buttons = collectElements(
