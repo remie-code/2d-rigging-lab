@@ -23,6 +23,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [experiments/](experiments/) | 魂の実測(枠消費・レイテンシ・会話品質)。S系列の常設計器 | **Created(2026-07-12、S1 Domain C)**。初回=[experiments/s1-first-light.md](experiments/s1-first-light.md)(tools:[]無効実証・apiKeySource=none・常駐初期化≈1.9s・warm ask~3.2s・synthesis~1s) |
 | [decisions/](decisions/_map.md) | 子トピック群: OpenAI Decisions API 等で知覚・演出を判定する(視線注視先・反応判定・音声タグ選び) | **Created(2026-10-12)**。gaze-target は一区切り(4x3粒度で推定可)、reaction-trigger は合意済み・未着手 |
 | [elevenlabs/](elevenlabs/_map.md) | 子トピック: ElevenLabs 一式(STT/TTS)への差し替え評価。発端は STT 確定遅延の短縮 | **Created(2026-10-12)**。TTS 調査のみ。STT 調査と全体構想の合意は後日 |
+| [memory/](memory/_map.md) | 子トピック: 配信をまたぐ記憶(構造化・オンデマンドの思い出し・きっかけで思い出す・記憶の整理) | **Created(2026-10-21)**。直近は構造化とオンデマンド化。文献調査と頭のツール制限の棚卸し中 |
 
 AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
