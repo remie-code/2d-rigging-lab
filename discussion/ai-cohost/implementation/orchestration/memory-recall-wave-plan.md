@@ -1,6 +1,6 @@
 # 記憶の作り直し(構造化・オンデマンドの思い出し)wave 計画
 
-> Status: ACTIVE(2026-10-21 ユーザー承認)。Wave 1 起動。
+> Status: ACTIVE(2026-10-21 ユーザー承認)。Wave 1 完了(軽い突き合わせ合格 [../reviews/memory-recall/wave-1.md](../reviews/memory-recall/wave-1.md))。Wave 2 待ち。**Wave 2 が済むまで操縦席を起動しない**(旧 loadRecentDigests が `_map.md` と `_conventions.md` を記憶として①に載せてしまう)。
 > 根拠:
 > - 合意: [../../memory/recall-flow.md](../../memory/recall-flow.md)
 > - 置き場の決まり: [../../memory/conventions-draft.md](../../memory/conventions-draft.md)
@@ -51,6 +51,14 @@
   3. 2 回目のコミットにする。
   - 視聴者の名前が残っていないかも確かめる。中身の要約や引用は報告に書かない(件数・トピック名・日付だけ)。
 - テストは一時フォルダで git を実際に動かす(ネット不要)。
+
+### Wave 1 からの申し送り(Wave 2 の完了条件に含める)
+
+1. ②の頭は Codex に固定する。Claude の頭は cwd・sandbox・finalAnswerOnly を無視する。Claude での②④は後回しの合意どおり。
+2. 本体のファイル名(日付と `-n`)は、魂がその配信の最初に一度だけ決めて持ち回る。決めずにいると、保存のたびに `-2`・`-3` ができる。
+3. 保存の経路(定期・手動・耳の Stop・Ctrl+C)は直列にする。git の index.lock の衝突を避けるため。
+4. 旧 `loadRecentDigests` / `saveDigest` は記憶のフォルダの直下を扱う。撤去するまで実機で起動しない。
+5. MCP の切り離しは、`features.plugins/apps=false` と、config/read で読んだ名前ごとの `enabled=false` の 2 段(Wave 1 A)。notify フックの扱いと、config/read が失敗したときの扱いはユーザー判断待ち。
 
 ## 2. Wave 2(書き出し役・1 ドメイン)
 
