@@ -641,3 +641,253 @@ test("ear-pipeline(elevenlabs): 切断は reconnecting を通知し・繋ぎ直�
 test("ear-pipeline: 未知の stt engine は生成時に throw", () => {
   assert.throws(() => createEarPipeline({ stt: { engine: /** @type {any} */ ("bogus") } }), /unknown stt engine/);
 });
+
+// ── ローカルの文字起こし（parakeet / zipformer・local-stt-wave-plan.md §1）──────────────────────
+//  子プロセスの係は偽物（localSttFactory）。本物の fork・sherpa は使わない（local-stt-client.test.mjs の領分）。
+
+/** 偽物のローカル文字起こしの係（ready を解決・転写を記録・dispose を記録）。 */
+function makeFakeLocalStt({ readyError = /** @type {Error | null} */ (null) } = {}) {
+  const rec = {
+    /** @type {any} */ options: null,
+    /** @type {Uint8Array[]} */ wavs: [],
+    disposed: false
+  };
+  const factory = (/** @type {any} */ opts) => {
+    rec.options = opts;
+    const info = { loadMs: 10, decodingMethod: "greedy_search", hotwordsUsed: ["チャッピー"], hotwordsDropped: [] };
+    const ready = readyError ? Promise.reject(readyError) : Promise.resolve(info);
+    ready.catch(() => {});
+    if (!readyError) opts.onReady?.(info);
+    return {
+      ready,
+      async transcribe(/** @type {Uint8Array} */ wav) {
+        rec.wavs.push(wav);
+        return { text: `ローカル${rec.wavs.length}`, rawText: `ローカル${rec.wavs.length}`, ms: 5 };
+      },
+      hasExited: () => false,
+      isDisposed: () => rec.disposed,
+      pending: () => 0,
+      dispose() {
+        rec.disposed = true;
+      }
+    };
+  };
+  return { factory: /** @type {any} */ (factory), rec };
+}
+
+/** 前に 400ms の無音 → 正弦波 480ms → 無音 160ms（前の余白 200ms が本物の音から取れる長さ）。 */
+const longLeadPcm = () =>
+  concatInt16(silencePcm({ durationMs: 400 }), sinePcm({ freq: 440, durationMs: 480 }), silencePcm({ durationMs: 160 }));
+
+/** WAV（44 byte ヘッダの canonical 形）→ Int16Array。 */
+const wavSamples = (/** @type {Uint8Array} */ wav) => {
+  const body = wav.slice(44);
+  return new Int16Array(body.buffer, body.byteOffset, body.byteLength / 2);
+};
+
+test("ear-pipeline(local): whisper-server を起動せず・子プロセスの ready の後にマイクを開く・設定が子へ渡る", async () => {
+  const local = makeFakeLocalStt();
+  const h = makeHarness({
+    pipelineOptions: {
+      stt: { engine: "zipformer", local: { threads: 3, hotwords: ["チャッピー"], hotwordsScore: 2.5, modelsDir: "/m", client: { workerArgs: ["x"] } } },
+      localSttFactory: local.factory
+    }
+  });
+  await h.pipeline.start();
+  try {
+    assert.equal(h.record.serverOptions, null, "whisper-server は作らない");
+    assert.notEqual(h.record.captureOptions, null);
+    assert.equal(local.rec.options.engine, "zipformer");
+    assert.equal(local.rec.options.threads, 3);
+    assert.deepEqual(local.rec.options.hotwords, ["チャッピー"]);
+    assert.equal(local.rec.options.hotwordsScore, 2.5);
+    assert.equal(local.rec.options.modelsDir, "/m");
+    assert.deepEqual(local.rec.options.workerArgs, ["x"]);
+    assert.equal(h.pipeline.stats().sttEngine, "zipformer");
+    const ready = h.record.diagnostics.find((d) => d.type === "localSttReady");
+    assert.equal(ready.loadMs, 10);
+    assert.equal(ready.hotwordsUsed, 1);
+  } finally {
+    await h.pipeline.dispose();
+  }
+  assert.equal(local.rec.disposed, true, "dispose で子プロセスを畳む");
+});
+
+test("ear-pipeline(local): 余白 = 本物の音を前に 200ms + 作り物の無音を前後に 300ms（転写の範囲はセグメンタのまま・audio_ctx なし）", async () => {
+  const local = makeFakeLocalStt();
+  const h = makeHarness({ pipelineOptions: { stt: { engine: "parakeet" }, localSttFactory: local.factory } });
+  await h.pipeline.start();
+  try {
+    h.feed(longLeadPcm());
+    await until(() => h.pipeline.transcriptBuffer.size() === 1, 3000, "transcript appended");
+    const end = h.record.vadEvents.find((e) => e.type === "speechEnd");
+    const call = h.record.transcribeCalls[0];
+    assert.equal(call.opts, undefined, "audio_ctx は whisper だけ");
+    const samples = wavSamples(call.wav);
+    const expectMs = end.endMs - end.startMs + 200 + 2 * 300;
+    assert.equal(samples.length, Math.round((expectMs / 1000) * 16000));
+    // 前後 300ms は作り物の無音。
+    const pad = 300 * 16;
+    assert.ok(samples.subarray(0, pad).every((v) => v === 0));
+    assert.ok(samples.subarray(samples.length - pad).every((v) => v === 0));
+    // 前の余白 200ms のあとに発話の音が続く（余白の分だけ後ろにずれている）。
+    assert.ok(samples.subarray(pad + 200 * 16, pad + 200 * 16 + 512).some((v) => v !== 0));
+    // 転写の範囲はセグメンタの範囲（余白を含めない）。
+    const entry = h.record.transcripts[0].entry;
+    assert.equal(entry.startMs, end.startMs);
+    assert.equal(entry.endMs, end.endMs);
+  } finally {
+    await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(local): 余白は設定で変えられる（0 / 0 なら whisper と同じ長さ）・範囲外は既定", async () => {
+  const local = makeFakeLocalStt();
+  const h = makeHarness({
+    pipelineOptions: { stt: { engine: "zipformer", local: { preRollMs: 0, silencePadMs: 0 } }, localSttFactory: local.factory }
+  });
+  await h.pipeline.start();
+  try {
+    h.feed(longLeadPcm());
+    await until(() => h.pipeline.transcriptBuffer.size() === 1, 3000, "transcript appended");
+    const end = h.record.vadEvents.find((e) => e.type === "speechEnd");
+    assert.equal(Math.round(wavDurationSec(h.record.transcribeCalls[0].wav) * 1000), end.endMs - end.startMs);
+  } finally {
+    await h.pipeline.dispose();
+  }
+
+  const local2 = makeFakeLocalStt();
+  const h2 = makeHarness({
+    pipelineOptions: { stt: { engine: "zipformer", local: { preRollMs: 5000, silencePadMs: -1 } }, localSttFactory: local2.factory }
+  });
+  await h2.pipeline.start();
+  try {
+    h2.feed(longLeadPcm());
+    await until(() => h2.pipeline.transcriptBuffer.size() === 1, 3000, "transcript appended");
+    const end = h2.record.vadEvents.find((e) => e.type === "speechEnd");
+    const ms = Math.round(wavDurationSec(h2.record.transcribeCalls[0].wav) * 1000);
+    assert.equal(ms, end.endMs - end.startMs + 200 + 600, "範囲外は既定（200 / 300）");
+  } finally {
+    await h2.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(local): 前の余白はストリームの先頭で切れる（無い音は作らない）", async () => {
+  const local = makeFakeLocalStt();
+  const h = makeHarness({ pipelineOptions: { stt: { engine: "zipformer" }, localSttFactory: local.factory } });
+  await h.pipeline.start();
+  try {
+    h.feedUtterance(480); // 前の無音は 96ms だけ
+    await until(() => h.pipeline.transcriptBuffer.size() === 1, 3000, "transcript appended");
+    const end = h.record.vadEvents.find((e) => e.type === "speechEnd");
+    assert.ok(end.startMs < 200);
+    const ms = Math.round(wavDurationSec(h.record.transcribeCalls[0].wav) * 1000);
+    assert.equal(ms, end.endMs + 600, "前の余白はストリームの先頭（0ms）まで");
+    assert.equal(h.record.transcripts[0].entry.startMs, end.startMs);
+  } finally {
+    await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(whisper): ローカルの余白の設定は whisper には効かない（今のまま）", async () => {
+  const h = makeHarness({ pipelineOptions: { stt: { engine: "whisper", local: { preRollMs: 500, silencePadMs: 500 } } } });
+  await h.pipeline.start();
+  try {
+    h.feed(longLeadPcm());
+    await until(() => h.pipeline.transcriptBuffer.size() === 1, 3000, "transcript appended");
+    const end = h.record.vadEvents.find((e) => e.type === "speechEnd");
+    assert.equal(Math.round(wavDurationSec(h.record.transcribeCalls[0].wav) * 1000), end.endMs - end.startMs);
+    assert.equal(typeof h.record.transcribeCalls[0].opts.audioCtx, "number");
+  } finally {
+    await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(local): VAD の合図（speechStart / speechEnd の時刻）はエンジンによらず同じ", async () => {
+  /** @param {any} pipelineOptions */
+  const run = async (pipelineOptions) => {
+    const h = makeHarness({ pipelineOptions });
+    await h.pipeline.start();
+    try {
+      h.feed(longLeadPcm());
+      await until(() => h.pipeline.transcriptBuffer.size() === 1, 3000, "transcript appended");
+      return h.record.vadEvents.map((e) => ({ type: e.type, tMs: e.tMs, startMs: e.startMs, endMs: e.endMs }));
+    } finally {
+      await h.pipeline.dispose();
+    }
+  };
+  const whisper = await run({});
+  const local = await run({ stt: { engine: "zipformer" }, localSttFactory: makeFakeLocalStt().factory });
+  assert.deepEqual(local, whisper);
+});
+
+test("ear-pipeline(local): transcribeImpl 未指定なら子プロセスの係の transcribe を使う（遅延の物差しは whisper の経路のまま）", async () => {
+  const local = makeFakeLocalStt();
+  const record = { /** @type {any} */ captureOptions: null };
+  /** @type {any[]} */
+  const transcripts = [];
+  const pipeline = createEarPipeline({
+    segmenter: { minSpeechMs: 100, minSilenceMs: 64, speechPadMs: 0 },
+    stt: { engine: "zipformer" },
+    localSttFactory: local.factory,
+    captureFactory: /** @type {any} */ (
+      (/** @type {any} */ o) => {
+        record.captureOptions = o;
+        return { dispose() {} };
+      }
+    ),
+    vadFactory: /** @type {any} */ (
+      () => ({
+        async init() {},
+        async process(/** @type {Float32Array} */ f) {
+          let s = 0;
+          for (let i = 0; i < f.length; i += 1) s += f[i] * f[i];
+          return Math.sqrt(s / f.length) > 0.1 ? 0.9 : 0.05;
+        },
+        reset() {},
+        async dispose() {}
+      })
+    ),
+    onTranscript: (entry, meta) => transcripts.push({ entry, meta })
+  });
+  await pipeline.start();
+  try {
+    record.captureOptions.onPcm(int16ToBytesLE(longLeadPcm()));
+    await until(() => transcripts.length === 1, 3000, "transcript");
+    assert.equal(local.rec.wavs.length, 1);
+    assert.equal(transcripts[0].entry.text, "ローカル1");
+    assert.equal(typeof transcripts[0].meta.latencyMs, "number");
+    assert.equal(transcripts[0].meta.audioCtx, null);
+  } finally {
+    await pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(local): 子プロセスの runtime 死 → localSttDown + 以後の発話は skip・VAD イベントは生き続ける", async () => {
+  const local = makeFakeLocalStt();
+  const h = makeHarness({ pipelineOptions: { stt: { engine: "zipformer" }, localSttFactory: local.factory } });
+  await h.pipeline.start();
+  try {
+    local.rec.options.onExit({ code: 3221225477, signal: null });
+    const down = h.record.diagnostics.find((d) => d.type === "localSttDown");
+    assert.deepEqual(down, { type: "localSttDown", phase: "runtime", engine: "zipformer", code: 3221225477, signal: null });
+    h.feedUtterance(200);
+    await until(() => h.record.diagnostics.some((d) => d.type === "asrSkipped"), 3000, "asrSkipped diag");
+    assert.equal(h.record.diagnostics.find((d) => d.type === "asrSkipped").reason, "localSttDown");
+    assert.ok(h.record.vadEvents.some((e) => e.type === "speechStart"));
+    assert.equal(h.record.transcribeCalls.length, 0);
+    assert.equal(h.pipeline.stats().asrDown, true);
+  } finally {
+    await h.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(local): ready の失敗（モデル読み込みの失敗）は start の reject・マイクは開かず畳む", async () => {
+  const local = makeFakeLocalStt({ readyError: new Error("local STT (zipformer) failed to load: bad model") });
+  const h = makeHarness({ pipelineOptions: { stt: { engine: "zipformer" }, localSttFactory: local.factory } });
+  await assert.rejects(() => h.pipeline.start(), /failed to bring up ears.*bad model/);
+  assert.equal(h.pipeline.isDisposed(), true);
+  assert.equal(h.record.captureOptions, null);
+  assert.equal(h.record.disposed.vad, true);
+  assert.equal(local.rec.disposed, true);
+});

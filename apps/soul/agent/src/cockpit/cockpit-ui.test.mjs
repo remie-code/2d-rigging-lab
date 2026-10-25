@@ -950,7 +950,7 @@ test("HealthLine（ログのタブ）: stt（方式と状態）を whisper 死�
     })
   ).join("");
   assert.ok(listening.includes("stt: ElevenLabs up"), listening);
-  assert.ok(listening.includes("whisper: unknown"), "既存の whisper 死活は残す");
+  assert.ok(!listening.includes("whisper:"), "ElevenLabs のときは whisper の死活を出さない（whisper のときだけ）");
   assert.ok(listening.includes("mic: マイク (2- Shure MV7+)"));
   const reconnecting = collectText(
     HealthLine({ ...base, ears: "listening", stt: { engine: "elevenlabs", status: "reconnecting", reason: null }, device: "Mic" })
@@ -964,6 +964,24 @@ test("HealthLine（ログのタブ）: stt（方式と状態）を whisper 死�
   const stopped = collectText(HealthLine({ ...base, ears: "stopped", stt: null, device: "Mic" })).join("");
   assert.ok(!stopped.includes("mic:"));
   assert.ok(!stopped.includes("stt:"), "stt が無ければ出さない");
+  assert.ok(stopped.includes("whisper:"), "stt が無ければ whisper の死活は今どおり出す");
+});
+
+test("HealthLine（ログのタブ）: whisper 以外（Zipformer / Parakeet / ElevenLabs）のときは whisper の死活を出さない", () => {
+  const base = {
+    health: { whisper: { status: "unknown", reason: null }, ffmpeg: { status: "up", reason: null } },
+    audioDevice: { name: "MV7+" },
+    ears: "listening",
+    device: "Mic"
+  };
+  for (const [engine, label] of [["zipformer", "Zipformer"], ["parakeet", "Parakeet"], ["elevenlabs", "ElevenLabs"]]) {
+    const text = collectText(HealthLine({ ...base, stt: { engine, status: "up", reason: null } })).join("");
+    assert.ok(!text.includes("whisper:"), `${engine}: whisper の項目は出さない`);
+    assert.ok(text.includes("ffmpeg:"), "ffmpeg は残す");
+    assert.ok(text.includes(`stt: ${label} up`), text);
+  }
+  const whisper = collectText(HealthLine({ ...base, stt: { engine: "whisper", status: "up", reason: null } })).join("");
+  assert.ok(whisper.includes("whisper:"));
 });
 
 test("COCKPIT_CSS: 文字起こしの繋ぎ直し中（.hstat.reconnecting）は黄色（--speaking）", () => {

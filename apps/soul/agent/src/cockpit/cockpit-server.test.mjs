@@ -3768,6 +3768,140 @@ test("cockpit 文字起こし選択: 未知の sttEngine は 400（耳を起動�
   }
 });
 
+// ── ローカルの文字起こし（Parakeet / Zipformer・local-stt-wave-plan.md §1 の 4〜6）──────────────
+
+test("cockpit ローカル文字起こし: Zipformer を選ぶと engine と設定を pipeline に渡し・選択を記憶・whisper は起動扱いにしない", async () => {
+  const fake = makeFakePipeline();
+  /** @type {string[]} */
+  const saved = [];
+  let settingsReads = 0;
+  /** @type {string[]} */
+  const checked = [];
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    onSetSttEngine: (e) => {
+      saved.push(e);
+    },
+    localSttModelCheck: (engine) => {
+      checked.push(engine);
+      return { ok: true };
+    },
+    localSttSettings: () => {
+      settingsReads += 1;
+      return { threads: 4, preRollMs: 150, silencePadMs: 250, hotwords: ["チャッピー"] };
+    },
+    pipelineOptions: { stt: { local: { modelsDir: "/models" } } }
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "zipformer" });
+    assert.equal(start.status, 200);
+    assert.equal(start.json.ears, "listening");
+    assert.deepEqual(fake.record.options.stt, {
+      engine: "zipformer",
+      local: { modelsDir: "/models", threads: 4, preRollMs: 150, silencePadMs: 250, hotwords: ["チャッピー"] }
+    });
+    assert.deepEqual(start.json.stt, { engine: "zipformer", status: "up", reason: null });
+    assert.equal(start.json.health.whisper.status, "unknown", "whisper-server は起動していない");
+    assert.deepEqual(saved, ["zipformer"]);
+    assert.deepEqual(checked, ["zipformer"]);
+    assert.equal(settingsReads, 1);
+    // 次の Start でも読み直す（設定ファイルの書き換えは次の Start から効く）。Parakeet に切り替え。
+    await postJson(`${url}/api/ears/stop`, {});
+    const again = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "parakeet" });
+    assert.equal(again.status, 200);
+    assert.equal(fake.record.options.stt.engine, "parakeet");
+    assert.equal(settingsReads, 2);
+    assert.deepEqual(checked, ["zipformer", "parakeet"]);
+    // whisper に戻すと engine を足さない（pipelineOptions の stt がそのまま渡るだけ＝従来どおり）。
+    await postJson(`${url}/api/ears/stop`, {});
+    await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "whisper" });
+    assert.deepEqual(fake.record.options.stt, { local: { modelsDir: "/models" } });
+    assert.deepEqual(saved, ["zipformer", "parakeet", "whisper"]);
+    assert.deepEqual(checked, ["zipformer", "parakeet"], "whisper ではモデルの確認をしない");
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit ローカル文字起こし: モデルが無ければ Start 失敗（理由つき 500・pipeline を作らない・stt down）", async () => {
+  let factoryCalls = 0;
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (
+      (/** @type {any} */ o) => {
+        factoryCalls += 1;
+        return fake.factory(o);
+      }
+    ),
+    localSttModelCheck: () => ({ ok: false, reason: "Zipformer のモデルが見つからない（テスト）" })
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "zipformer" });
+    assert.equal(start.status, 500);
+    assert.equal(start.json.error, "Zipformer のモデルが見つからない（テスト）");
+    assert.equal(start.json.state.ears, "stopped");
+    assert.deepEqual(start.json.state.stt, { engine: "zipformer", status: "down", reason: "Zipformer のモデルが見つからない（テスト）" });
+    assert.equal(factoryCalls, 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit ローカル文字起こし: 子プロセスが落ちたら stt down + 上の帯に alert（whisperDown と同格）・ラベルつき", async () => {
+  const fake = makeFakePipeline();
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    localSttModelCheck: () => ({ ok: true }),
+    sttEngineInitial: "zipformer"
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    await client.waitFor((e) => e.event === "state");
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(start.json.stt.engine, "zipformer");
+    assert.equal(start.json.warnings.some((/** @type {any} */ w) => w.kind === "stt-down"), false);
+    fake.record.options.onDiagnostic({ type: "localSttDown", phase: "runtime", engine: "zipformer", code: 3221225477, signal: null });
+    const state = await getJson(`${url}/api/state`);
+    assert.equal(state.json.stt.status, "down");
+    assert.match(state.json.stt.reason, /^Zipformer の文字起こしの子プロセスが落ちた \(code=3221225477/);
+    const w = state.json.warnings.find((/** @type {any} */ x) => x.kind === "stt-down");
+    assert.ok(w, "stt-down の警告");
+    assert.equal(w.severity, "alert");
+    assert.equal(w.source, "zipformer");
+    await client.waitFor((e) => e.event === "warnings" && e.data.warnings.some((/** @type {any} */ x) => x.kind === "stt-down"));
+    // whisper の死の診断はローカルの stt を down にしない（whisper の死活だけ）。
+    const stop = await postJson(`${url}/api/ears/stop`, {});
+    assert.equal(stop.json.stt.status, "unknown");
+    assert.equal(stop.json.warnings.some((/** @type {any} */ x) => x.kind === "stt-down"), false, "Stop で警告は消える");
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit ローカル文字起こし: 子プロセスの読み込み失敗は Start 失敗（stt down・whisper は unknown のまま）", async () => {
+  const fake = makeFakePipeline();
+  fake.record.startShouldThrow = new Error("earPipeline.start: failed to bring up ears (local STT (parakeet) failed to load: x)");
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fake.factory),
+    localSttModelCheck: () => ({ ok: true })
+  });
+  try {
+    const url = await server.listen(0);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic", sttEngine: "parakeet" });
+    assert.equal(start.status, 500);
+    assert.match(start.json.error, /failed to load/);
+    assert.equal(start.json.state.stt.status, "down");
+    assert.equal(start.json.state.health.whisper.status, "unknown");
+    assert.equal(start.json.state.ears, "stopped");
+  } finally {
+    await server.close();
+  }
+});
+
 test("cockpit 文字起こし選択: whisper の死は stt も down にする", async () => {
   const fake = makeFakePipeline();
   const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (fake.factory) });

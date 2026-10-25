@@ -15,7 +15,15 @@
  */
 
 import { html } from "../vendor/htm.preact.standalone.mjs";
-import { earsStatusView, healthStatusView, voiceOutputLabel, sttStatusView, ttsStatusView, micInputLabel } from "../view-logic/health.mjs";
+import {
+  earsStatusView,
+  healthStatusView,
+  voiceOutputLabel,
+  sttStatusView,
+  ttsStatusView,
+  micInputLabel,
+  whisperHealthVisible
+} from "../view-logic/health.mjs";
 import { statusPillView, quotaGaugeView, warningsView } from "../view-logic/glance-meters.mjs";
 import { killSwitchView } from "../view-logic/control.mjs";
 
@@ -77,7 +85,7 @@ export function HealthLine({ ears, health, audioDevice, stt = null, tts = null, 
         <span class="ears-status">${earsView.text}</span>
       </div>
       <div class="health">
-        <${HealthStat} label="whisper" view=${whisperView} />
+        ${whisperHealthVisible(stt) ? html`<${HealthStat} label="whisper" view=${whisperView} />` : null}
         <${HealthStat} label="ffmpeg" view=${ffmpegView} />
         ${sttView ? html`<${HealthStat} label="stt" view=${sttView} />` : null}
         ${ttsView ? html`<${HealthStat} label="tts" view=${ttsView} />` : null}

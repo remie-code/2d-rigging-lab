@@ -78,6 +78,7 @@ import { createStreamPlayer } from "../src/voice/stream-player.mjs";
 import { createVoiceEngine } from "../src/voice/engines/voice-engine.mjs";
 import { createTtsClient } from "../src/voice/tts-client.mjs";
 import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
+import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
 import { DEFAULT_MEMORY_DIR, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
@@ -856,10 +857,12 @@ export function createChatSourceHooks(settings) {
  * 未記憶/未知値は defaultEngine（既定 "whisper"）。選択だけを記憶し、ElevenLabs のキーはここで扱わない
  * （キーは cockpit-server が Start ごとに .env.elevenlabs.local から直接読む）。
  *
+ * 既知値は ear-pipeline の STT_ENGINES（whisper / elevenlabs / parakeet / zipformer）。
+ *
  * @param {{ getSttEngine: () => string | null; setSttEngine: (engine: string | null) => void }} settings
- * @param {"whisper" | "elevenlabs"} [defaultEngine="whisper"]
+ * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [defaultEngine="whisper"]
  * @returns {{
- *   resolveInitialSttEngine: () => "whisper" | "elevenlabs";
+ *   resolveInitialSttEngine: () => "whisper" | "elevenlabs" | "parakeet" | "zipformer";
  *   onSetSttEngine: (engine: string) => void;
  * }}
  */
@@ -868,7 +871,9 @@ export function createSttEngineHooks(settings, defaultEngine = "whisper") {
     /** 起動時の初期選択（未記憶/未知値は defaultEngine）。 */
     resolveInitialSttEngine: () => {
       const remembered = settings.getSttEngine();
-      return remembered === "whisper" || remembered === "elevenlabs" ? remembered : defaultEngine;
+      return remembered != null && STT_ENGINES.includes(remembered)
+        ? /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */ (remembered)
+        : defaultEngine;
     },
     /** cockpit-server の onSetSttEngine（耳の Start ごとに呼ぶ）。 */
     onSetSttEngine: (engine) => {
@@ -2086,6 +2091,9 @@ async function main() {
     // ElevenLabs のキーは cockpit-server の既定（.env.elevenlabs.local をコード内で直接読む）に任せる。
     sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
     onSetSttEngine: sttEngineHooks.onSetSttEngine,
+    // ローカルの文字起こし（Parakeet / Zipformer）の設定（画面なし・設定ファイルのキー）。Start ごとに読む。
+    // モデルの存在確認は cockpit-server の既定（vendor/models）に任せる。
+    localSttSettings: () => settings.getLocalStt(),
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
     // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶し、耳を開く前に engine を用意する
     // （種類が変われば作り直す・ElevenLabs のキーはここで読む）。用意できなければ Start は理由つきで失敗する。

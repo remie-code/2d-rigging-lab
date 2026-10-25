@@ -308,7 +308,10 @@ export const CHAT_EMPTY_SOURCE_ERROR = "enter a stream URL / video ID first";
  */
 export const STT_ENGINE_OPTIONS = Object.freeze([
   Object.freeze({ value: "whisper", label: "ローカル（whisper）" }),
-  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" })
+  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" }),
+  // ローカルの文字起こし（子プロセスの sherpa-onnx・local-stt-wave-plan.md §1 の 4）。本命は Zipformer（速さ）。
+  Object.freeze({ value: "zipformer", label: "Zipformer（ローカル）" }),
+  Object.freeze({ value: "parakeet", label: "Parakeet（ローカル）" })
 ]);
 
 /**

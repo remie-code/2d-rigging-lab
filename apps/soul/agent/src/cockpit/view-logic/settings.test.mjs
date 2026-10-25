@@ -207,11 +207,15 @@ test("STT_ENGINE_OPTIONS / sttEngineSelection: 文字起こしの選択肢（whi
     STT_ENGINE_OPTIONS.map((o) => [o.value, o.label]),
     [
       ["whisper", "ローカル（whisper）"],
-      ["elevenlabs", "ElevenLabs"]
+      ["elevenlabs", "ElevenLabs"],
+      ["zipformer", "Zipformer（ローカル）"],
+      ["parakeet", "Parakeet（ローカル）"]
     ]
   );
   assert.equal(sttEngineSelection({ engine: "elevenlabs" }), "elevenlabs");
   assert.equal(sttEngineSelection({ engine: "whisper" }), "whisper");
+  assert.equal(sttEngineSelection({ engine: "zipformer" }), "zipformer");
+  assert.equal(sttEngineSelection({ engine: "parakeet" }), "parakeet");
   assert.equal(sttEngineSelection({ engine: "google" }), null);
   assert.equal(sttEngineSelection(null), null);
 });

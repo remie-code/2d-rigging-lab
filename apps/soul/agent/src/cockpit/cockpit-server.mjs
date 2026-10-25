@@ -74,6 +74,8 @@ import { fileURLToPath } from "node:url";
 
 import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
 import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
+// ローカルの文字起こしの語彙とモデルの存在確認だけ（sherpa-onnx-node は子プロセスだけが読む）。
+import { isLocalSttEngine, checkLocalSttModel, LOCAL_STT_ENGINE_TITLES } from "../ears/local-stt/local-stt-engines.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
@@ -515,7 +517,13 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {() => ({ thresholdTokens: number } | null)} [options.contextCompactionStatus]
  *   圧縮の目安の現況（`{ thresholdTokens }`）を返す。state snapshot の `compaction` に載せる（memoryStatus と同型・
  *   未注入なら null）。
- * @param {"whisper" | "elevenlabs"} [options.sttEngineInitial="whisper"]
+ * @param {(engine: "parakeet" | "zipformer") => ({ ok: true } | { ok: false; reason: string })} [options.localSttModelCheck]
+ *   ローカルの文字起こし（parakeet / zipformer）のモデルが揃っているか（既定 checkLocalSttModel = vendor/models を
+ *   見る）。Start ごとに呼び、揃っていなければ耳を開かずに Start を失敗にする（ElevenLabs のキー切れと同じ流儀）。
+ * @param {(() => object | null) | object} [options.localSttSettings]
+ *   ローカルの文字起こしの設定（{ threads, preRollMs, silencePadMs, hotwords, hotwordsScore }・範囲外は既定）。関数なら Start ごとに
+ *   読む（設定ファイルの書き換えが次の Start から効く）。pipeline の stt.local へそのまま渡す。
+ * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [options.sttEngineInitial="whisper"]
  *   文字起こしの方式の初期選択（操縦席の文字起こし選択・cockpit-stt-selection.md）。起動時の値は
  *   呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（selfFireInitialEnabled と同型）。
  *   選択は POST /api/ears/start の body `sttEngine` で受け、Start ごとに onSetSttEngine で永続化する
@@ -673,10 +681,16 @@ export function createCockpitServer(options = {}) {
   const contextCompactionStatusImpl = options.contextCompactionStatus;
   // 操縦席の文字起こし選択: 現在の選択（Start のたびに更新・耳が動いている間は使用中の方式）・
   // 永続化フック・ElevenLabs キーの読み口・遅延ログの口。
-  /** @type {"whisper" | "elevenlabs"} */
+  /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */
   let sttEngine = STT_ENGINES.includes(/** @type {any} */ (options.sttEngineInitial))
-    ? /** @type {"whisper" | "elevenlabs"} */ (options.sttEngineInitial)
+    ? /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */ (options.sttEngineInitial)
     : "whisper";
+  const localSttModelCheck =
+    typeof options.localSttModelCheck === "function" ? options.localSttModelCheck : (engine) => checkLocalSttModel(engine);
+  const localSttSettingsProvider =
+    typeof options.localSttSettings === "function"
+      ? options.localSttSettings
+      : () => (options.localSttSettings && typeof options.localSttSettings === "object" ? options.localSttSettings : null);
   const onSetSttEngine = typeof options.onSetSttEngine === "function" ? options.onSetSttEngine : null;
   const elevenLabsApiKeyProvider =
     typeof options.elevenLabsApiKeyProvider === "function" ? options.elevenLabsApiKeyProvider : () => loadElevenLabsApiKey();
@@ -999,7 +1013,7 @@ export function createCockpitServer(options = {}) {
   function refreshStateWarnings() {
     if (closed) return;
     // 文字起こし（耳を止めている間は unknown = 警告なし）。
-    const sttLabel = sttEngine === "elevenlabs" ? "ElevenLabs" : "whisper";
+    const sttLabel = sttEngine === "elevenlabs" ? "ElevenLabs" : LOCAL_STT_ENGINE_TITLES[sttEngine] ?? "whisper";
     warningBoard.setCondition(
       "stt",
       health.stt === "down"
@@ -1115,6 +1129,11 @@ export function createCockpitServer(options = {}) {
       setHealth("whisper", "down", reason);
       // whisper で文字起こし中なら stt も down（ヘッダの `stt: whisper down`）。
       if (sttEngine === "whisper" && earsState !== "stopped") setHealth("stt", "down", reason);
+    } else if (d && d.type === "localSttDown") {
+      // ローカルの文字起こしの子プロセスが落ちた（whisperDown と同格: stt down = 上の帯の alert「文字起こしが止まっている」）。
+      const title = LOCAL_STT_ENGINE_TITLES[d.engine] ?? String(d.engine ?? "local");
+      const reason = `${title} の文字起こしの子プロセスが落ちた (code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`;
+      if (isLocalSttEngine(sttEngine) && earsState !== "stopped") setHealth("stt", "down", reason);
     } else if (d && d.type === "ffmpegExit" && d.willRestart === false) {
       // willRestart=false = 再起動予算切れ/恒久死（capture の再起動耐性が尽きた）。
       // willRestart=true は capture が自己回復するため up のまま（transient blip）。
@@ -1155,7 +1174,7 @@ export function createCockpitServer(options = {}) {
 
   /**
    * @param {string | null} deviceRaw
-   * @param {"whisper" | "elevenlabs"} [engineChoice]  文字起こしの方式（省略時は現在の選択）。
+   * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [engineChoice]  文字起こしの方式（省略時は現在の選択）。
    * @param {"aivis" | "elevenlabs"} [ttsChoice]  声の方式（省略時は現在の選択）。
    * @returns {Promise<{ ok: true; state: object } | { ok: false; error: string; state: object }>}
    */
@@ -1227,6 +1246,37 @@ export function createCockpitServer(options = {}) {
       elevenLabs = { engine: "elevenlabs", apiKey: key.apiKey };
     }
 
+    // ローカルの文字起こし（parakeet / zipformer）: モデルが揃っていなければ Start 失敗（キー切れと同じ流儀・
+    // 勝手に取得しない）。設定（スレッド数・余白・hotwords）は Start ごとに読む（次の Start から効く）。
+    /** @type {{ engine: "parakeet" | "zipformer"; local: object | null } | null} */
+    let localStt = null;
+    if (isLocalSttEngine(engine)) {
+      /** @type {{ ok: boolean; reason?: string }} */
+      let check;
+      try {
+        check = localSttModelCheck(engine);
+      } catch (error) {
+        check = { ok: false, reason: `モデルを確かめられない（${errMessage(error)}）` };
+      }
+      if (!check || check.ok !== true) {
+        const reason = (check && typeof check.reason === "string" && check.reason) || `${LOCAL_STT_ENGINE_TITLES[engine]} のモデルが見つからない`;
+        earsState = "stopped";
+        startedAtMs = null;
+        health.stt = "down";
+        health.sttReason = reason;
+        broadcastState();
+        return { ok: false, error: reason, state: snapshot() };
+      }
+      /** @type {object | null} */
+      let local = null;
+      try {
+        local = localSttSettingsProvider() ?? null;
+      } catch {
+        local = null; // 読めなければ既定（pipeline 側で正規化）。
+      }
+      localStt = { engine, local };
+    }
+
     // 声の engine を用意する（種類が変わっていれば cockpit.mjs が作り直す。ElevenLabs はここでキーを読んで繋ぎ始める）。
     // 用意できなければ耳を開かずに Start を失敗にする（文字起こしのキー切れと同じ流儀・自動で AivisSpeech に戻さない）。
     if (onPrepareVoiceEngine) {
@@ -1269,6 +1319,16 @@ export function createCockpitServer(options = {}) {
       whisper: whisperOptions,
       // ElevenLabs のときだけ stt を渡す（whisper は pipeline の既定＝従来と同じ options 形）。
       ...(elevenLabs ? { stt: { ...(/** @type {any} */ (baseOptions).stt ?? {}), ...elevenLabs } } : {}),
+      // ローカルのときは engine と設定（stt.local）を渡す（pipelineOptions.stt.local があればその上に重ねる）。
+      ...(localStt
+        ? {
+            stt: {
+              ...(/** @type {any} */ (baseOptions).stt ?? {}),
+              engine: localStt.engine,
+              local: { ...(/** @type {any} */ (baseOptions).stt?.local ?? {}), ...(localStt.local ?? {}) }
+            }
+          }
+        : {}),
       onSttStatus: (status, info) => {
         if (pipeline !== p) return; // 畳んだ後・別の Start の通知は無視。
         setHealth("stt", /** @type {any} */ (status), info && info.reason ? info.reason : null);

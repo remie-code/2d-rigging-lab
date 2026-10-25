@@ -1749,6 +1749,9 @@ test("createSttEngineHooks: 未記憶/未知値は whisper・記憶済みの既�
   assert.equal(createSttEngineHooks(settingsWith("google")).resolveInitialSttEngine(), "whisper");
   assert.equal(createSttEngineHooks(settingsWith("elevenlabs")).resolveInitialSttEngine(), "elevenlabs");
   assert.equal(createSttEngineHooks(settingsWith("whisper"), "elevenlabs").resolveInitialSttEngine(), "whisper");
+  // ローカルの文字起こし（Parakeet / Zipformer）も既知値として復元する。
+  assert.equal(createSttEngineHooks(settingsWith("zipformer")).resolveInitialSttEngine(), "zipformer");
+  assert.equal(createSttEngineHooks(settingsWith("parakeet")).resolveInitialSttEngine(), "parakeet");
 });
 
 test("createSttEngineHooks: onSetSttEngine は settings へ橋渡しし・throw は握る", { timeout: 5000 }, () => {

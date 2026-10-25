@@ -1017,3 +1017,28 @@ test("settings store: setCompactThresholdTokens は compactThresholdTokens を�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: getLocalStt はローカルの文字起こしの設定（未作成は既定・範囲外は既定・他のキーの set で消えない）", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.deepEqual(store.getLocalStt(), { threads: 2, preRollMs: 200, silencePadMs: 300, hotwords: ["チャッピー", "コーディ"], hotwordsScore: 1.5 });
+    writeFileSync(
+      path,
+      JSON.stringify({ localSttThreads: 4, localSttPreRollMs: 100, localSttSilencePadMs: 0, localSttHotwords: ["ラビ"], localSttHotwordsScore: 3 }),
+      "utf8"
+    );
+    assert.deepEqual(store.getLocalStt(), { threads: 4, preRollMs: 100, silencePadMs: 0, hotwords: ["ラビ"], hotwordsScore: 3 });
+    store.setSttEngine("zipformer");
+    assert.equal(store.getLocalStt().threads, 4, "他のキーの set で消えない");
+    writeFileSync(
+      path,
+      JSON.stringify({ localSttThreads: 99, localSttPreRollMs: "200", localSttSilencePadMs: 5000, localSttHotwords: [], localSttHotwordsScore: 50 }),
+      "utf8"
+    );
+    assert.deepEqual(store.getLocalStt(), { threads: 2, preRollMs: 200, silencePadMs: 300, hotwords: [], hotwordsScore: 1.5 });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

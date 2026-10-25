@@ -87,6 +87,26 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
 
 - **バイナリ/モデルは非コミット**（`vendor/` は .gitignore 済み）: whisper 一式 +
   `ggml-kotoba-whisper-v2.0-q5_0.bin` + `silero_vad.onnx` をユーザーが配置する。
+- **ローカルの文字起こし（Parakeet / Zipformer・操縦席の「文字起こし」で選ぶ）のモデル**も `vendor/models/` に置く
+  （非コミット）。取得のコマンド（公式の配布元から取って置く・揃っていれば何もしない・`--dry-run` で確認だけ）:
+
+  ```
+  node apps/soul/agent/scripts/fetch-local-stt-models.mjs            # 足りないものだけ
+  node apps/soul/agent/scripts/fetch-local-stt-models.mjs --only zipformer
+  ```
+
+  - `vendor/models/parakeet-tdt_ctc-0.6b-ja-int8/`（`model.int8.onnx` ≈650MB・`tokens.txt`）
+    ← Hugging Face `csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8`（CC-BY-4.0）
+  - `vendor/models/zipformer-ja-reazonspeech-2024-08-01-int8/`（int8 の encoder / decoder / joiner・`tokens.txt`）
+    ← k2-fsa/sherpa-onnx の GitHub Releases（`asr-models`）の `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2`
+    から取り出す（Apache-2.0・展開に OS の tar を使う）。
+
+  モデルが無いまま Parakeet / Zipformer で Start すると、理由つきで Start が失敗する（勝手に取得しない）。推論は
+  `sherpa-onnx-node` を**子プロセス**（`src/ears/local-stt/`）で動かす（耳の Silero VAD の onnxruntime と同じ
+  プロセスでは DLL の版がぶつかるため）。設定は `cockpit-settings.local.json` のキー（画面なし・次の Start から効く）:
+  `localSttThreads`（既定 2）/ `localSttPreRollMs`（本物の音を前に含める長さ・既定 200）/ `localSttSilencePadMs`
+  （前後に足す無音・既定 300）/ `localSttHotwords`（Zipformer のみ・既定 `["チャッピー", "コーディ"]`）/ `localSttHotwordsScore`（hotwords の強さ・
+  0.1〜10・既定 1.5）。
 - **レイテンシ既定**（実測根拠は `discussion/ai-cohost/experiments/s2-ears.md`）:
   whisper-server 6 スレッド + **発話長比例の動的 `audio_ctx`**（`src/ears/whisper-inference.mjs`）で
   発話終了→転写 ≈1.5〜2s（全窓のままだと ≈6.6〜9.5s）。
