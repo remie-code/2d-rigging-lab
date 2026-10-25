@@ -51,3 +51,26 @@
 3. sherpa-onnx の hotwords が日本語の Zipformer で効くか。
 4. whisper.cpp の parakeet 変換が日本語版で通るか。
 5. GPU で推論したときのゲームへの影響。
+
+## 5. CPU 実測(2026-10-25、ゲームなし。Sylph)
+
+- 材料: 共演配信の音声から、配信者の発話を 80 個切り出した(合計 324 秒、1〜10 秒)。参照は ElevenLabs の文字起こし。
+- 1 発話の推論時間の中央値(2 スレッド): Zipformer 0.12 秒、Parakeet 0.36 秒。今の whisper.cpp(CPU、6 スレッド)は約 2 秒。
+- 喋り終わり→確定の見込み(VAD の無音 0.4 秒 + 取り込み + 推論): Zipformer 約 0.6〜0.75 秒、Parakeet 約 0.9〜1.3 秒(4 スレッドなら 0.75〜1.0 秒)、whisper 約 2.4 秒。
+- 精度の目安(ElevenLabs との CER の中央値。表記の揺れを含む): Parakeet 0.09、Zipformer 0.205(前後に無音を足すと 0.125)、whisper 0.24。
+  - Zipformer は文頭の 1 語を落としやすい。
+  - whisper は 20 発話中 3 件で同じ文を繰り返した。
+  - 「チャッピー」は 2 件とも両モデルで書けた。
+- メモリ: Parakeet 約 0.9GB、Zipformer 約 0.5GB。
+- 使ったモデル:
+  - Parakeet は `csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8`(Hugging Face)。
+  - Zipformer は sherpa-onnx の GitHub Releases にある `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01`(int8)。
+
+## 6. 同じプロセスで動かせない問題と、VAD の統一の検討(2026-10-25)
+
+- `sherpa-onnx-node` と、耳の Silero VAD を動かす `onnxruntime-node`(1.27.0)は、どちらも `onnxruntime.dll` を名前で読み込む。版が違う(sherpa 側は 1.27.20260615)ため、同じプロセスでは後から読み込んだ方が落ちる(実測)。worker_threads でも同じプロセスなので避けられない。
+- **VAD も sherpa に統一できるか**を確かめた。
+  - モデル: 今の `vendor/models/silero_vad.onnx` を sherpa がそのまま読めた。32ms ごとの判定は 99% 一致した。
+  - ただし sherpa-onnx-node の Vad は、フレームごとの確率を返さない(返すのは on/off と切り出し済みの区間だけ)。そのため、今の自前のセグメンタ(しゃべり始め・終わり・割り込みの合図を作る部分)につなげない。
+  - sherpa 自身の区切りに任せると、しゃべり始めの合図が中央値で約 0.29 秒(最大 1.2 秒)遅れた。区切り方も変わり、5 分の音声で大きくずれた区間が 2〜7 個出た。
+- **判断(ユーザー 2026-10-25): (A) ローカルの文字起こしを子プロセスに分ける。** 耳の VAD とセグメンタは今のまま(間合いに触らない)。
