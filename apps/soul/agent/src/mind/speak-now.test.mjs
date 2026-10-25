@@ -70,16 +70,18 @@ function makeHarness(over = {}) {
 
 // ── 問い・選択肢・入力（合意 §1）────────────────────────────────────────────
 
-test("問い・性格・選択肢は probe（問い C・PERSONAS・CHOICES_V2）の「チャッピー」を名前に差し替えたもの", () => {
+test("問い・性格・選択肢は probe（問い C・PERSONAS・CHOICES_V2）の「チャッピー」を名前に差し替えたもの + 後ろに画面を見る", () => {
   const probe = readFileSync(new URL("../../scripts/probe-decisions-speak-now.mjs", import.meta.url), "utf8");
   assert.ok(probe.includes(speakNowQuestion("チャッピー")), "問い C");
   for (const mode of ["quiet", "normal", "chatty"]) {
     assert.ok(probe.includes(speakNowPersonaLine(mode, "チャッピー")), `PERSONAS.${mode}`);
   }
-  for (const c of buildSpeakNowChoices("チャッピー")) {
+  // v2 の 4 つは probe のまま。画面を見る（look）は experiments/04-look-request.md の e2 で後ろに足した（probe には無い）。
+  for (const c of buildSpeakNowChoices("チャッピー").slice(0, 4)) {
     assert.ok(probe.includes(c.description), `CHOICES_V2 ${c.value}`);
   }
-  assert.deepEqual(buildSpeakNowChoices("コーディ").map((c) => c.value), ["wait", "backchannel", "respond", "initiate"]);
+  assert.deepEqual(buildSpeakNowChoices("コーディ").map((c) => c.value), ["wait", "backchannel", "respond", "initiate", "look"]);
+  assert.deepEqual(buildSpeakNowChoices("コーディ")[4], { value: "look", description: "画面を見る: 今の画面を見てから反応する。" });
   assert.match(buildSpeakNowChoices("コーディ")[0].description, /コーディに向けた発言ではない/);
 });
 
@@ -114,8 +116,11 @@ test("buildSpeakNowInput: 直近 3 分の you/soul を「配信者: …」「{�
   assert.equal(buildSpeakNowInput([], { nowMs: now, soulName: "X" }), "");
 });
 
-test("SPEAK_NOW_CHOICE_LABELS: 表示名（待つ/相槌/応答/自発）", () => {
-  assert.deepEqual({ ...SPEAK_NOW_CHOICE_LABELS }, { wait: "待つ", backchannel: "相槌", respond: "応答", initiate: "自発" });
+test("SPEAK_NOW_CHOICE_LABELS: 表示名（待つ/相槌/応答/自発/画面を見る）", () => {
+  assert.deepEqual(
+    { ...SPEAK_NOW_CHOICE_LABELS },
+    { wait: "待つ", backchannel: "相槌", respond: "応答", initiate: "自発", look: "画面を見る" }
+  );
 });
 
 // ── 判定と発火（合意 §1〜§3）─────────────────────────────────────────────
@@ -277,6 +282,49 @@ test("窓に会話が無ければ判定しない（材料なし）", () => {
   h.state.busy = false;
   h.ctl.notifyIdle();
   assert.equal(h.calls.length, 0);
+});
+
+// ── 画面を見る（discussion/ai-cohost/decisions/speak-now/experiments/04-look-request.md）──────────────
+
+test("画面を見る（look）→ 応答と同じく発火を要求する（choice:\"look\"・確率ときっかけと遅延も載る）", async () => {
+  const h = makeHarness();
+  h.say("チャッピー、画面見て。"); // seq 0
+  h.calls[0].resolve(result("look", 0.58, 610));
+  await flush();
+  assert.deepEqual(h.judgments.map((j) => [j.choice, j.action]), [["look", "fire"]]);
+  assert.deepEqual(h.fires, [{ choice: "look", probability: 0.58, trigger: "transcript", triggerSeq: 0, latencyMs: 610 }]);
+});
+
+test("画面を見るは応答と同じ扱い: 忙しい・OFF なら捨てる・相槌の歯止めに関わらない・あとで after-busy を回す", async () => {
+  const h = makeHarness();
+  h.say("一つ目");
+  h.state.busy = true;
+  h.calls[0].resolve(result("look"));
+  await flush();
+  assert.equal(h.judgments.at(-1).action, "drop-busy");
+  h.state.busy = false;
+  h.say("二つ目");
+  h.state.active = false;
+  h.calls[1].resolve(result("look"));
+  await flush();
+  assert.equal(h.judgments.at(-1).action, "drop-inactive");
+  h.state.active = true;
+  // 相槌を喋り始めた直後でも止めない（歯止めは相槌どうしだけ）。
+  await judgeOnce(h, "backchannel");
+  h.ctl.markBackchannelSpoken();
+  h.ctl.notifyIdle(); // 相槌のあとの after-busy 止めを畳む（積み残しなし）。
+  await judgeOnce(h, "look");
+  assert.deepEqual(h.fires.map((f) => f.choice), ["backchannel", "look"]);
+  // 画面を見た忙しさの間の発言は、明けたら after-busy で判定する（応答と同じ・相槌のような止めはない）。
+  const before = h.calls.length;
+  h.state.busy = true;
+  h.say("見てる間の一言");
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, before + 1);
+  h.calls.at(-1)?.resolve(result("wait"));
+  await flush();
+  assert.equal(h.judgments.at(-1).trigger, "after-busy");
 });
 
 // ── 相槌でも喋らせる（discussion/ai-cohost/decisions/speak-now/backchannel.md §2）──────────────────

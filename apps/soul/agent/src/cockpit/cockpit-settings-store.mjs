@@ -35,10 +35,7 @@
  *     未記憶/未知値のフォールバックは呼び出し側（cockpit.mjs の createBrainHooks）に委ねる
  *     （verbosityMode と同型の文字列キー・asStringOrNull）。
  *   setBrainChoice(choice): 操縦席で頭脳を切替えたときに記憶（次回起動で復元）。
- *   getMemoryEnabled(): 配信間記憶 ON/OFF の初期値（既定 ON・stream-memory.md 裁定 1）。
- *     未記憶（null）は「既定値にフォールバック」を呼び出し側（cockpit.mjs）に委ねる（bool の
- *     有無を区別するため asStringOrNull は使わない・getBargeInEnabled と同型）。
- *   setMemoryEnabled(enabled): 操縦席でトグルしたときに記憶（次回起動で復元）。
+ *   （配信間記憶の ON/OFF（memoryEnabled）は記憶の作り直し Wave 2 で撤去。古いファイルにキーが残っていても読まない。）
  *   getSttEngine(): 文字起こしの方式（whisper / elevenlabs）の初期値（操縦席の文字起こし選択・
  *     cockpit-stt-selection.md）。未記憶/未知値のフォールバック（既定 whisper）は呼び出し側（cockpit.mjs）
  *     に委ねる（verbosityMode と同型の文字列キー・asStringOrNull）。キーそのものはここに置かない
@@ -132,8 +129,6 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setVerbosityMode: (mode: string | null) => void;
  *   getBrainChoice: () => string | null;
  *   setBrainChoice: (choice: string | null) => void;
- *   getMemoryEnabled: () => boolean | null;
- *   setMemoryEnabled: (enabled: boolean) => void;
  *   getSttEngine: () => string | null;
  *   setSttEngine: (engine: string | null) => void;
  *   getTtsEngine: () => string | null;
@@ -297,14 +292,6 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} choice */
     setBrainChoice(choice) {
       writeMerged({ brainChoice: choice ?? null });
-    },
-    getMemoryEnabled() {
-      const v = readAll().memoryEnabled;
-      return typeof v === "boolean" ? v : null;
-    },
-    /** @param {boolean} enabled */
-    setMemoryEnabled(enabled) {
-      writeMerged({ memoryEnabled: enabled === true });
     },
     getSttEngine() {
       return asStringOrNull(readAll().sttEngine);

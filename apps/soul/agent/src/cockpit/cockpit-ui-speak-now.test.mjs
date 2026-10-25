@@ -48,6 +48,7 @@ test("speakNowJudgmentText: 「判定: 自発 0.45」・表示名は mind 側と
   assert.equal(speakNowJudgmentText({ choice: "initiate", probability: 0.4512 }), "判定: 自発 0.45");
   assert.equal(speakNowJudgmentText({ choice: "respond", probability: 0.8 }), "判定: 応答 0.80");
   assert.equal(speakNowJudgmentText({ choice: "backchannel", probability: null }), "判定: 相槌 ?");
+  assert.equal(speakNowJudgmentText({ choice: "look", probability: 0.58 }), "判定: 画面を見る 0.58");
   assert.equal(speakNowJudgmentText({ choice: "mystery", probability: 0.1 }), "判定: mystery 0.10");
 });
 

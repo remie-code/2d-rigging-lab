@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createCodexSession } from "./codex-session.mjs";
+import { APP_SERVER_ARGS, MCP_CONFIG_READ_FAILED_WARNING, createCodexSession, mcpServerDisableOverrides } from "./codex-session.mjs";
 
 class FakeChild extends EventEmitter {
   constructor(onMessage) {
@@ -130,6 +130,9 @@ function makeSpawnHarness(specForProcess = () => ({})) {
       } else if (message.method === "thread/inject_items") {
         if (spec.onInject) spec.onInject(message, api, child);
         else api.response(message, {});
+      } else if (message.method === "config/read") {
+        if (spec.onConfigRead) spec.onConfigRead(message, api, child);
+        else api.response(message, { config: spec.effectiveConfig ?? {}, origins: {}, layers: null });
       } else if (message.method === "turn/interrupt" || message.method === "thread/delete") {
         if (spec.onCleanup) spec.onCleanup(message, api, child);
         else api.response(message, {});
@@ -835,5 +838,238 @@ test("codex-session: ask の最中は compact しない（busy）・dispose は�
     const result = await compacting;
     assert.equal(result.compacted, false);
     assert.match(result.message, /disposed/);
+  });
+});
+
+// ── 記憶の作り直し Wave 1 Domain A: MCP の切り離し・役ごとの設定・最後の答えだけの組み立て ──────────────
+
+/** ツールを使う turn（実機の流れ: 前置きの agentMessage → commandExecution → fileChange → 答えの agentMessage）。 */
+function toolTurn(api, request, { commentary = "読みます。", answer = "答え。", phases = ["commentary", "final_answer"] } = {}) {
+  const threadId = request.params.threadId;
+  const turnId = `tool-turn-${request.id}`;
+  api.response(request, { turn: { id: turnId, status: "inProgress", items: [] } });
+  api.notification("turn/started", { threadId, turn: { id: turnId, status: "inProgress", items: [] } });
+  const agent = (id, text, phase) => {
+    api.notification("item/started", { threadId, turnId, item: { id, type: "agentMessage", text: "", phase: null } });
+    for (const delta of [...text]) api.notification("item/agentMessage/delta", { threadId, turnId, itemId: id, delta });
+    api.notification("item/completed", { threadId, turnId, item: { id, type: "agentMessage", text, phase } });
+  };
+  agent("a1", commentary, phases[0]);
+  api.notification("item/started", { threadId, turnId, item: { id: "c1", type: "commandExecution", status: "inProgress", command: "Get-Content x" } });
+  api.notification("item/commandExecution/outputDelta", { threadId, turnId, itemId: "c1", delta: "out" });
+  api.notification("item/completed", { threadId, turnId, item: { id: "c1", type: "commandExecution", status: "completed", exitCode: 0 } });
+  api.notification("item/started", { threadId, turnId, item: { id: "f1", type: "fileChange", status: "inProgress", changes: [] } });
+  api.notification("item/fileChange/patchUpdated", { threadId, turnId, itemId: "f1" });
+  api.notification("item/completed", { threadId, turnId, item: { id: "f1", type: "fileChange", status: "completed", changes: [] } });
+  api.notification("turn/diff/updated", { threadId, turnId, diff: "" });
+  api.notification("turn/plan/updated", { threadId, turnId, plan: [] });
+  api.notification("serverRequest/resolved", { threadId, requestId: 1 });
+  agent("a2", answer, phases[1]);
+  api.notification("turn/completed", { threadId, turn: { id: turnId, status: "completed", items: [] } });
+}
+
+test("codex-session: 起動引数でプラグインとアプリと notify フックを止め、既定の thread/turn は今と同じ（一時フォルダ・read-only・never）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness();
+    const warnings = [];
+    const session = createTestSession(harness, scratch, { onWarning: (w) => warnings.push(w) });
+    await session.ask("q");
+    assert.deepEqual(harness.spawnCalls[0].args, [
+      "app-server", "--stdio", "-c", 'forced_login_method="chatgpt"', "-c", 'web_search="disabled"',
+      "-c", "features.plugins=false", "-c", "features.apps=false",
+      // ユーザー設定の notify フックを引き継がない（記憶の作り直し Wave 2・ユーザー決定）。
+      "-c", "notify=[]"
+    ]);
+    assert.deepEqual(harness.spawnCalls[0].args, [...APP_SERVER_ARGS]);
+    const spawnCwd = harness.spawnCalls[0].options.cwd;
+    assert.equal(path.dirname(spawnCwd), path.resolve(os.tmpdir()));
+    assert.match(path.basename(spawnCwd), /^codex-app-server-session-/);
+    const thread = harness.threadRequests[0].params;
+    assert.equal(thread.cwd, spawnCwd);
+    assert.equal(thread.sandbox, "read-only");
+    assert.equal(thread.approvalPolicy, "never");
+    // MCP サーバーが設定に無ければ、thread/start の config は今までと同じ。
+    assert.deepEqual(thread.config, { forced_login_method: "chatgpt", web_search: "disabled" });
+    const turn = harness.turnRequests[0].params;
+    assert.equal(turn.cwd, spawnCwd);
+    assert.equal(turn.approvalPolicy, "never");
+    assert.deepEqual(turn.sandboxPolicy, { type: "readOnly", networkAccess: false });
+    const configRead = harness.children[0].messages.find((m) => m.method === "config/read");
+    assert.deepEqual(configRead.params, { includeLayers: false, cwd: spawnCwd });
+    assert.deepEqual(warnings, []);
+    await session.dispose();
+    assert.equal(existsSync(spawnCwd), false);
+  });
+});
+
+test("codex-session: ユーザー設定の [mcp_servers] は名前だけ読んで thread/start で 1 つずつ止める（config/read は接続ごとに 1 回）", async () => {
+  await withScratch(async (scratch) => {
+    let turns = 0;
+    const harness = makeSpawnHarness(() => ({
+      effectiveConfig: { mcp_servers: { node_repl: { command: "secret-cmd", env: { TOKEN: "x" } }, blender: { command: "b" } } },
+      onTurn(request, api) {
+        turns += 1;
+        if (turns === 1) {
+          api.response(request, { turn: { id: "bad", status: "inProgress", items: [] } });
+          api.notification("turn/completed", { threadId: request.params.threadId, turn: { id: "bad", status: "failed", error: { message: "boom" } } });
+        } else successfulTurn(api, request, "ok");
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    await session.initialize();
+    const messages = harness.children[0].messages;
+    assert.equal(messages.filter((m) => m.method === "config/read").length, 1, "initialize で先に読む");
+    await assert.rejects(() => session.ask("one"), /boom/);
+    await session.ask("two");
+    await session.ask("three");
+    assert.equal(harness.threadRequests.length, 2, "turn の失敗で thread を作り直す");
+    for (const request of harness.threadRequests) {
+      assert.deepEqual(request.params.config, {
+        forced_login_method: "chatgpt", web_search: "disabled",
+        mcp_servers: { node_repl: { enabled: false }, blender: { enabled: false } }
+      });
+    }
+    assert.equal(messages.filter((m) => m.method === "config/read").length, 1, "同じ接続では読み直さない");
+    const configIndex = messages.findIndex((m) => m.method === "config/read");
+    const threadIndex = messages.findIndex((m) => m.method === "thread/start");
+    assert.ok(configIndex < threadIndex);
+    await session.dispose();
+  });
+});
+
+test("codex-session: 接続を作り直したら config/read も読み直す", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness((processIndex) => ({
+      effectiveConfig: { mcp_servers: { [`server${processIndex}`]: {} } },
+      onTurn(request, api, child) {
+        if (processIndex === 0) {
+          api.response(request, { turn: { id: "t", status: "inProgress", items: [] } });
+          child.exit(1);
+        } else successfulTurn(api, request, "ok");
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    await assert.rejects(() => session.ask("one"));
+    await session.ask("two");
+    assert.equal(harness.children.length, 2);
+    assert.deepEqual(harness.threadRequests[1].params.config.mcp_servers, { server1: { enabled: false } });
+    assert.equal(harness.children[1].messages.filter((m) => m.method === "config/read").length, 1);
+    await session.dispose();
+  });
+});
+
+test("codex-session: config/read が失敗しても会話は続け、警告を 1 回出す（中身は出さない）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ onConfigRead: (request, api) => api.rpcError(request, "unknown method") }));
+    const warnings = [];
+    const session = createTestSession(harness, scratch, { onWarning: (w) => warnings.push(w) });
+    assert.equal((await session.ask("q")).replyText, "はい。");
+    await session.ask("q2");
+    assert.deepEqual(harness.threadRequests[0].params.config, { forced_login_method: "chatgpt", web_search: "disabled" });
+    assert.deepEqual(warnings, ["codex-session: could not read the MCP server list; user MCP servers may start."]);
+    // 呼び出し側が一致で判定できる決まった値（記憶の作り直し Wave 2 からの申し送り 2）。
+    assert.equal(warnings[0], MCP_CONFIG_READ_FAILED_WARNING);
+    await session.dispose();
+  });
+});
+
+test("codex-session: mcpServerDisableOverrides は名前だけを写し、無い・形が違えば null", () => {
+  assert.deepEqual(mcpServerDisableOverrides({ config: { mcp_servers: { a: { command: "x" }, b: {} } } }), { a: { enabled: false }, b: { enabled: false } });
+  assert.equal(mcpServerDisableOverrides({ config: { mcp_servers: {} } }), null);
+  assert.equal(mcpServerDisableOverrides({ config: {} }), null);
+  assert.equal(mcpServerDisableOverrides({ config: { mcp_servers: [] } }), null);
+  assert.equal(mcpServerDisableOverrides(null), null);
+});
+
+test("codex-session: 役の cwd と workspace-write を thread/start・turn/start の両方に揃えて渡し、役の cwd は消さない", async () => {
+  await withScratch(async (scratch) => {
+    const roleCwd = mkdtempSync(path.join(scratch.homeDir, "role-"));
+    let imagePath = null;
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        imagePath = request.params.input.find((item) => item.type === "localImage")?.path ?? imagePath;
+        successfulTurn(api, request, "ok");
+      }
+    }));
+    const session = createTestSession(harness, scratch, { cwd: roleCwd, sandbox: "workspace-write" });
+    await session.ask([{ type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" } }, { type: "text", text: "q" }]);
+    await session.ask("q2");
+    const thread = harness.threadRequests[0].params;
+    assert.equal(thread.cwd, roleCwd);
+    assert.equal(thread.sandbox, "workspace-write");
+    assert.equal(thread.approvalPolicy, "never");
+    for (const request of harness.turnRequests) {
+      assert.equal(request.params.cwd, roleCwd);
+      assert.equal(request.params.approvalPolicy, "never");
+      assert.deepEqual(request.params.sandboxPolicy, {
+        type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false
+      });
+    }
+    const configRead = harness.children[0].messages.find((m) => m.method === "config/read");
+    assert.equal(configRead.params.cwd, roleCwd, "役の cwd から見た実効の設定で MCP を読む");
+    // 画像の一時ファイルとプロセスの cwd は、役の cwd（記憶のフォルダ）を汚さない。
+    const spawnCwd = harness.spawnCalls[0].options.cwd;
+    assert.notEqual(spawnCwd, roleCwd);
+    assert.equal(path.dirname(imagePath), spawnCwd);
+    await session.dispose();
+    assert.equal(existsSync(roleCwd), true);
+    assert.equal(existsSync(spawnCwd), false);
+  });
+});
+
+test("codex-session: 役の cwd だけを指定すると sandbox は read-only のまま", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness();
+    const session = createTestSession(harness, scratch, { cwd: scratch.homeDir });
+    await session.ask("q");
+    assert.equal(harness.threadRequests[0].params.cwd, scratch.homeDir);
+    assert.equal(harness.threadRequests[0].params.sandbox, "read-only");
+    assert.deepEqual(harness.turnRequests[0].params.sandboxPolicy, { type: "readOnly", networkAccess: false });
+    await session.dispose();
+  });
+});
+
+test("codex-session: 役の設定の誤りは起動前に TypeError（プロセスを起こさない）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness();
+    assert.throws(() => createTestSession(harness, scratch, { sandbox: "danger-full-access" }), TypeError);
+    assert.throws(() => createTestSession(harness, scratch, { sandbox: "workspaceWrite" }), TypeError);
+    assert.throws(() => createTestSession(harness, scratch, { cwd: "relative/dir" }), TypeError);
+    assert.throws(() => createTestSession(harness, scratch, { cwd: 42 }), TypeError);
+    assert.equal(harness.spawnCalls.length, 0);
+  });
+});
+
+test("codex-session: finalAnswerOnly は phase=final_answer だけを返し、ツールの通知は警告にしない（delta は全部流す）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ onTurn: (request, api) => toolTurn(api, request) }));
+    const warnings = [];
+    const deltas = [];
+    const session = createTestSession(harness, scratch, { finalAnswerOnly: true, onWarning: (w) => warnings.push(w) });
+    const result = await session.ask("q", { onTextDelta: (delta) => deltas.push(delta) });
+    assert.equal(result.replyText, "答え。");
+    assert.equal(deltas.join(""), "読みます。答え。");
+    assert.deepEqual(warnings, []);
+    await session.dispose();
+  });
+});
+
+test("codex-session: finalAnswerOnly で phase が無ければ最後の agentMessage を答えにする", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ onTurn: (request, api) => toolTurn(api, request, { phases: [null, null] }) }));
+    const session = createTestSession(harness, scratch, { finalAnswerOnly: true });
+    assert.equal((await session.ask("q")).replyText, "答え。");
+    await session.dispose();
+  });
+});
+
+test("codex-session: 既定（finalAnswerOnly なし）は今までどおり agentMessage を全部つなげる・ツールの通知は警告にしない", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ onTurn: (request, api) => toolTurn(api, request) }));
+    const warnings = [];
+    const session = createTestSession(harness, scratch, { onWarning: (w) => warnings.push(w) });
+    assert.equal((await session.ask("q")).replyText, "読みます。答え。");
+    assert.deepEqual(warnings, []);
+    await session.dispose();
   });
 });

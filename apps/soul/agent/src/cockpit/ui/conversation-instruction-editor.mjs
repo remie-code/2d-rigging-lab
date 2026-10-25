@@ -5,9 +5,9 @@ import { html } from "../vendor/htm.preact.standalone.mjs";
 import {
   CONVERSATION_INSTRUCTION_BRAIN_OPTIONS,
   conversationBrainIdentity,
-  conversationInstructionStatusView
+  conversationInstructionStatusView,
+  soulSkillNoticeText
 } from "../view-logic/conversation-instruction.mjs";
-import { memoryStatusLabel } from "../view-logic/settings.mjs";
 
 /** @param {any} identity @returns {string} */
 export function conversationIdentityDisplay(identity, active = true) {
@@ -16,13 +16,11 @@ export function conversationIdentityDisplay(identity, active = true) {
     : (active ? "未取得" : "非アクティブ（identity は表示しません）");
 }
 
-/** @param {any} memory @returns {string} */
-export function conversationMemoryStructureLabel(memory) {
-  return memory ? memoryStatusLabel(memory) : "記憶の状態は未取得";
-}
-
 /**
- * @param {{ brainId: string; brainLabel: string; identity?: any; activeBrainId?: string | null; memory?: any; state: any;
+ * soulSkills（記憶の作り直し Wave 3 仕上げ）: 魂が①の固定の指示にいつも足す教え（skills/）。会話指示とは別に足される
+ * ことを案内し、本文を読むだけで見せる（pre・編集の口は無い）。空なら何も出さない。
+ * @param {{ brainId: string; brainLabel: string; identity?: any; activeBrainId?: string | null; state: any;
+ *   soulSkills?: ReadonlyArray<{ name: string; path: string; body: string }>;
  *   onBrainChange?: (ev: any) => void; onBack?: () => void; onEdit?: (ev: any) => void;
  *   onSave?: () => void; onReset?: () => void }} props
  */
@@ -31,8 +29,8 @@ export function ConversationInstructionEditor({
   brainLabel,
   identity,
   activeBrainId,
-  memory,
   state,
+  soulSkills,
   onBrainChange,
   onBack,
   onEdit,
@@ -45,6 +43,7 @@ export function ConversationInstructionEditor({
   const revisionText = typeof currentState.revision === "number" ? `revision ${currentState.revision}` : "revision 未取得";
   const selectedIdentity = conversationBrainIdentity({ brainId, activeBrainId, activeIdentity: identity });
   const identityIsActive = brainId === activeBrainId;
+  const skills = Array.isArray(soulSkills) ? soulSkills : [];
   return html`
     <div class="conversation-instruction-editor" data-conversation-instruction-editor>
       <div class="conversation-instruction-editor-head">
@@ -73,12 +72,8 @@ export function ConversationInstructionEditor({
           <dt>システム管理の識別</dt>
           <dd>${conversationIdentityDisplay(selectedIdentity, identityIsActive)}</dd>
         </div>
-        <div>
-          <dt>システム管理の記憶構造</dt>
-          <dd>${conversationMemoryStructureLabel(memory)}</dd>
-        </div>
       </dl>
-      <p class="conversation-instruction-readonly-note">識別名と記憶構造はシステム管理（読み取り専用）です。記憶本文は表示しません。</p>
+      <p class="conversation-instruction-readonly-note">識別名はシステム管理（読み取り専用）です。</p>
       <p class="conversation-instruction-revision" aria-label="会話指示の適用状態">
         適用状態: ${currentState.isOverride ? "この頭脳の保存済み上書き" : "既定"}（${revisionText}）
       </p>
@@ -102,6 +97,19 @@ export function ConversationInstructionEditor({
           保存して次のFireから反映
         </button>
       </div>
+      ${skills.length > 0
+        ? html`
+            <section class="conversation-instruction-soul-skills" aria-label="魂がいつも足す教え（読み取り専用）">
+              ${skills.map((skill) => html`
+                <div key=${skill.name} class="conversation-instruction-soul-skill" data-soul-skill=${skill.name}>
+                  <p class="conversation-instruction-soul-skill-note">${soulSkillNoticeText(skill)}</p>
+                  <pre class="conversation-instruction-soul-skill-body" aria-label=${skill.path + " の本文（読み取り専用）"}>${skill.body}</pre>
+                </div>
+              `)}
+              <p class="conversation-instruction-readonly-note">教えは会話指示とは別に魂が足します（ここでは編集できません）。</p>
+            </section>
+          `
+        : null}
     </div>
   `;
 }

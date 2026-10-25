@@ -107,7 +107,7 @@ export function settingsFromSnapshot(s) {
     // 多頭化 Domain C: 頭脳の現況（{brain, credentialHealth}）。audioDevice/channel と同型の null 許容
     // （brainStatus 未注入なら null）。
     brain: (s && s.brain) ?? null,
-    // 配信間記憶: 記憶の現況（{enabled, count, lastRecordAtMs}）。brain と同型の null 許容
+    // 配信間記憶: 記憶の現況（{lastRecordAtMs, recording}）。brain と同型の null 許容
     // （memoryStatus 未注入なら null）。
     memory: (s && s.memory) ?? null,
     // 圧縮の目安（{ thresholdTokens }・設定「頭脳・会話」タブの圧縮を始める大きさ）。memory と同型の null 許容

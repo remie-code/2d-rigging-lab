@@ -19,6 +19,8 @@
  *  - self-fire-marker: { id, kind:"self-fire-marker", timeText, whoText:"self", markerText:"~", text }
  *  - judgment-marker:  { id, kind:"judgment-marker", timeText, whoText:"judge", markerText:"?", text }
  *                      （speak-now の判定行「判定: 自発 0.45」・speak-now 合意 §5）
+ *  - recall-marker:    { id, kind:"recall-marker", timeText, whoText:"recall", markerText:"@", text }
+ *                      （思い出しの係の行「思い出し中: 「…」」・記憶の作り直し Wave 3）
  *
  * speaking 行の規律（現 cockpit.html と機能同値）:
  *  - transcript / ghost の追加は speaking 行を**除去してから**積む（:387 :418 removeSpeakingRow）。
@@ -39,7 +41,8 @@ import {
   bargeInMarkerText,
   selfFireMarkerText,
   speakNowJudgmentText,
-  commentJudgmentText
+  commentJudgmentText,
+  recallStepText
 } from "../view-logic/markers.mjs";
 import {
   discardGhostLabel,
@@ -191,6 +194,21 @@ export function feedWithJudgmentMarker(feed, d, nowMs, text) {
 }
 
 /**
+ * 思い出しの係の行を積む（記憶の作り直し Wave 3・SSE selfFire kind:"recall-step"）。マーカー行の一種
+ * （speaking 行は除去しない）。
+ * @param {FeedState} feed  @param {any} d  SSE selfFire（kind:"recall-step"・phase/request）。  @param {number} nowMs
+ */
+export function feedWithRecallMarker(feed, d, nowMs) {
+  return appended(feed, {
+    kind: "recall-marker",
+    timeText: formatClock((d && d.atMs) || nowMs),
+    whoText: "recall",
+    markerText: "@",
+    text: recallStepText(d)
+  });
+}
+
+/**
  * speaking 行の出現/消滅（showSpeakingRow :374-384 / removeSpeakingRow :370-373 同値）。
  * visible=true: 既にあれば同一 feed（:375 `if (speakingRow) return;`）・なければ末尾に追加。
  * visible=false: あれば除去・なければ同一 feed。
@@ -238,6 +256,8 @@ export function feedFromHistory(transcripts, nowMs) {
  *    「(判定エラー: …)」・それ以外は判定行「判定: 自発 0.45」。
  *    kind:"comment-judgment"（コメント反応の判定・相乗り）も同様: error ありは「(コメント判定エラー: …)」・
  *    それ以外は判定行「コメント判定: 反応 0.92」。発火結果（kind:"comment-react"）は従来の自発マーカー。
+ *    kind:"recall-step"（思い出しの係の出来事・相乗り）は思い出しの行「思い出し中: 「…」」。思い出した結果を
+ *    言わせた発火（kind:"recall"）は従来の自発マーカー。
  *  - chatDiagnostic（:888-897）: chatDiagnosticGhostLabel 経由（観測補助 4 種は null = 非表示）。
  *    kind:"commentRejected"（弾いたコメント）は「(弾いた: 乗っ取り)」。
  *
@@ -271,6 +291,7 @@ export function feedAfterSseEvent(feed, eventName, d, nowMs) {
           ? feedWithGhost(feed, speakNowErrorGhostLabel(d), nowMs)
           : feedWithJudgmentMarker(feed, d, nowMs);
       }
+      if (d && d.kind === "recall-step") return feedWithRecallMarker(feed, d, nowMs);
       if (d && d.kind === "comment-judgment") {
         // コメント反応の判定（反応する のときだけサーバが流す）/ 判定エラー（コメント反応の合意 §3）。
         return d.error != null

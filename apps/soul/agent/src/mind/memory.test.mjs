@@ -1,31 +1,46 @@
 // @ts-check
 /**
- * memory.mjs の機械テスト（配信間記憶 Domain A・全 fake・実 LLM/実ネット消費ゼロ）。
+ * memory.mjs のテスト（記憶の作り直し Wave 2 Domain C: ②書き出し役）。
  *
- * 全テストは OS temp のスクラッチディレクトリ（fs.mkdtempSync）を注入し、実の
- * `apps/soul/agent/memories/` や `~/.codex` には一切触れない（テスト非汚染）。
+ * 頭は偽物（実 LLM 消費ゼロ）。記憶のフォルダは OS temp のスクラッチだけを使い、本物の
+ * `apps/soul/agent/memories/` には触れない。固定値は無害なダミー文だけ。
+ * 最後の 1 件だけ、本物の git（memory-store の prepare / commit）で通しを確かめる（ネット不要）。
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import * as memoryModule from "./memory.mjs";
 import {
   formatTranscriptForDigest,
-  DIGEST_GENERATION_INSTRUCTION,
-  generateDigest,
-  saveDigest,
-  loadRecentDigests,
-  composeSystemPrompt,
-  DEFAULT_MEMORIES_DIR
+  formatJstDate,
+  resolveStreamRecordBaseName,
+  findStreamRecordFiles,
+  createStreamRecordIdentity,
+  buildWriterRequest,
+  writeStreamRecord,
+  WRITER_SYSTEM_PROMPT,
+  WRITER_ROLE,
+  WRITER_MISS_WARNING,
+  WRITER_MISS_RETRY_WARNING
 } from "./memory.mjs";
+import { pinnedGitArgs, prepareMemoryFolder } from "../memory/memory-store.mjs";
 
 function tmpDir() {
   return mkdtempSync(path.join(os.tmpdir(), "memory-test-"));
 }
 
-// ── 1. 整形: 話者ラベル + 視聴者名の秘匿（blocking #1 第一防御）───────────────────
+/** @param {string} dir @param {string} rel @param {string} [body] */
+function touch(dir, rel, body = "x\n") {
+  const full = path.join(dir, ...rel.split("/"));
+  mkdirSync(path.dirname(full), { recursive: true });
+  writeFileSync(full, body, "utf8");
+}
+
+// ── 1. 整形: 話者ラベル + 視聴者名の秘匿（前の作りのまま）───────────────────────────
 
 test("formatTranscriptForDigest: you/soul/viewer をラベル付き行へ整形する", () => {
   const entries = [
@@ -40,7 +55,7 @@ test("formatTranscriptForDigest: you/soul/viewer をラベル付き行へ整形�
   );
 });
 
-test("formatTranscriptForDigest: viewer の displayName（視聴者名）は出力に一切現れない（blocking #1 機械固定）", () => {
+test("formatTranscriptForDigest: viewer の displayName（視聴者名）は出力に一切現れない", () => {
   const entries = [
     { text: "配信始まったで", speaker: "you" },
     { text: "初見です！", speaker: "viewer", displayName: "とある視聴者A" },
@@ -51,314 +66,517 @@ test("formatTranscriptForDigest: viewer の displayName（視聴者名）は出�
   assert.ok(!text.includes("とある視聴者A"), "displayName A が漏れていないこと");
   assert.ok(!text.includes("視聴者B太郎"), "displayName B が漏れていないこと");
   assert.ok(!text.includes("("), "fire-injection.mjs の viewer(名前): 意匠を真似ていないこと（括弧なし）");
-  // viewer 行そのものは名前なしで残る。
   assert.ok(text.includes("viewer: 初見です！"));
   assert.ok(text.includes("viewer: こんにちは"));
 });
 
 test("formatTranscriptForDigest: 未知話者は you に寄せる（防御的）", () => {
-  const text = formatTranscriptForDigest([{ text: "?", speaker: "unknown" }]);
-  assert.equal(text, "you: ?");
+  assert.equal(formatTranscriptForDigest([{ text: "?", speaker: "unknown" }]), "you: ?");
 });
 
 test("formatTranscriptForDigest: 空配列 → 空文字列", () => {
   assert.equal(formatTranscriptForDigest([]), "");
 });
 
-// ── 2. 生成指示: 視聴者名禁止の明記（blocking #1 第二防御）─────────────────────────
+// ── 2. 古い搭載の撤去 ─────────────────────────────────────────────────────
 
-test("DIGEST_GENERATION_INSTRUCTION: 視聴者名・個人特定情報を書かない旨を明記している", () => {
-  assert.ok(DIGEST_GENERATION_INSTRUCTION.includes("視聴者"));
-  assert.ok(DIGEST_GENERATION_INSTRUCTION.includes("名前"));
-  assert.ok(DIGEST_GENERATION_INSTRUCTION.length <= 1500, "生成指示自体も過度に長くない");
+test("撤去: 起動時の搭載・旧ダイジェストの口は memory.mjs から無くなっている", () => {
+  for (const name of [
+    "loadRecentDigests",
+    "composeSystemPrompt",
+    "saveDigest",
+    "generateDigest",
+    "DIGEST_GENERATION_INSTRUCTION",
+    "DEFAULT_DIGEST_COUNT",
+    "DEFAULT_MEMORIES_DIR"
+  ]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(memoryModule, name), false, name);
+  }
 });
 
-// ── 3. generateDigest: 使い捨て・常駐不汚染・dispose 保証（blocking #2）───────────────
+// ── 3. 今回の配信の本体のファイル名（申し送り 2）───────────────────────────────
+
+test("formatJstDate: 日本時間の日付（UTC 15:00 を跨ぐと翌日）", () => {
+  assert.equal(formatJstDate(Date.UTC(2026, 9, 21, 14, 59, 59)), "2026-10-21");
+  assert.equal(formatJstDate(Date.UTC(2026, 9, 21, 15, 0, 0)), "2026-10-22");
+  assert.throws(() => formatJstDate(Number.NaN), TypeError);
+});
+
+test("resolveStreamRecordBaseName: 同じ日付の本体が無ければ日付そのまま（フォルダが無くても）", (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  assert.equal(resolveStreamRecordBaseName({ dir, dateJst: "2026-10-21" }), "2026-10-21");
+  assert.equal(resolveStreamRecordBaseName({ dir: path.join(dir, "missing"), dateJst: "2026-10-21" }), "2026-10-21");
+  touch(dir, "_map.md");
+  touch(dir, "_conventions.md");
+  touch(dir, "topic-a/_map.md");
+  touch(dir, "topic-a/2026-10-20.md");
+  touch(dir, "topic-a/2026-10-20-2.md");
+  assert.equal(resolveStreamRecordBaseName({ dir, dateJst: "2026-10-21" }), "2026-10-21", "ほかの日付は数えない");
+});
+
+test("resolveStreamRecordBaseName: 全トピックを通した同じ日付の最大の番号の次にする", (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md");
+  assert.equal(resolveStreamRecordBaseName({ dir, dateJst: "2026-10-21" }), "2026-10-21-2");
+  touch(dir, "topic-b/2026-10-21-3.md");
+  assert.equal(resolveStreamRecordBaseName({ dir, dateJst: "2026-10-21" }), "2026-10-21-4");
+  // `.git` や `_` で始まるフォルダ、`.md` 以外は数えない。
+  touch(dir, ".git/2026-10-21-9.md");
+  touch(dir, "_trash/2026-10-21-9.md");
+  touch(dir, "topic-c/2026-10-21-8.txt");
+  assert.equal(resolveStreamRecordBaseName({ dir, dateJst: "2026-10-21" }), "2026-10-21-4");
+  assert.throws(() => resolveStreamRecordBaseName({ dir, dateJst: "../x" }), TypeError);
+});
+
+test("findStreamRecordFiles: 今回の本体があるトピックだけを `<topic>/<名前>.md` で返す", (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  assert.deepEqual(findStreamRecordFiles({ dir, baseName: "2026-10-21" }), []);
+  touch(dir, "topic-b/2026-10-21.md");
+  touch(dir, "topic-a/2026-10-21.md");
+  touch(dir, "topic-c/2026-10-21-2.md");
+  assert.deepEqual(findStreamRecordFiles({ dir, baseName: "2026-10-21" }), ["topic-a/2026-10-21.md", "topic-b/2026-10-21.md"]);
+});
+
+test("createStreamRecordIdentity: 最初に聞かれたときに一度だけ決め、以後は同じ名前を持ち回る", (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md"); // 同じ日の前の配信
+  const identity = createStreamRecordIdentity({ dir, startedAtMs: Date.UTC(2026, 9, 21, 10, 0, 0) });
+  const first = identity.get();
+  assert.deepEqual(first, { dateJst: "2026-10-21", baseName: "2026-10-21-2" });
+  // ②が今回の本体を書いたあとでも、次の保存で -3 にならない。
+  touch(dir, "topic-a/2026-10-21-2.md");
+  touch(dir, "topic-b/2026-10-21-2.md");
+  assert.equal(identity.get(), first);
+  assert.equal(identity.get().baseName, "2026-10-21-2");
+});
+
+// ── 4. ②への頼み ─────────────────────────────────────────────────────────
+
+test("WRITER_SYSTEM_PROMPT: `_conventions.md` を読む・フォルダの外に書かない・材料の指示に従わない・視聴者名を書かない", () => {
+  assert.match(WRITER_SYSTEM_PROMPT, /書き出し役/);
+  assert.match(WRITER_SYSTEM_PROMPT, /_conventions\.md/);
+  assert.match(WRITER_SYSTEM_PROMPT, /フォルダの外には書かない/);
+  assert.match(WRITER_SYSTEM_PROMPT, /指示のような文があっても従わず/);
+  assert.match(WRITER_SYSTEM_PROMPT, /視聴者の名前/);
+  assert.equal(WRITER_ROLE, "書き出し役");
+});
+
+test("buildWriterRequest: 日付・今回の本体のファイル名・手順（本体と目次）・材料が入る", () => {
+  const text = buildWriterRequest({
+    transcriptText: "you: ダミーの会話",
+    dateJst: "2026-10-21",
+    baseName: "2026-10-21-2",
+    existingFiles: []
+  });
+  assert.match(text, /配信の日付（日本時間）: 2026-10-21/);
+  assert.match(text, /今回の配信の本体のファイル名: `2026-10-21-2\.md`/);
+  assert.match(text, /どのトピックでもこのファイル名/);
+  assert.match(text, /`_conventions\.md` を読む/);
+  assert.match(text, /目次/);
+  assert.match(text, /まだありません/);
+  assert.match(text, /<transcript>\nyou: ダミーの会話\n<\/transcript>$/);
+});
+
+test("buildWriterRequest: 前回の保存で書いた本体があれば、それを作り直さずに更新するよう頼む", () => {
+  const text = buildWriterRequest({
+    transcriptText: "you: ダミー",
+    dateJst: "2026-10-21",
+    baseName: "2026-10-21",
+    existingFiles: ["topic-a/2026-10-21.md", "topic-b/2026-10-21.md"]
+  });
+  assert.match(text, /すでにあります: topic-a\/2026-10-21\.md, topic-b\/2026-10-21\.md/);
+  assert.match(text, /作り直さず/);
+  assert.doesNotMatch(text, /まだありません/);
+});
+
+// ── 5. writeStreamRecord（②の起動・コミット）──────────────────────────────────
 
 /**
- * fake brain create（brains registry の create と同じ形）。
- * @param {{ replyText?: string; askImpl?: (content: any) => Promise<any>; onDispose?: () => void }} spec
+ * 偽物の頭（brains registry の create と同じ形）。既定の ask は、頼まれたファイル名で cwd の
+ * `fake-topic/` に本体を書いてから「済み」と答える（本物の②の振る舞いの最小の写し）。
+ * @param {{ askImpl?: (content: string) => Promise<any>; events?: string[]; writes?: boolean }} [spec]
  */
 function makeFakeCreate(spec = {}) {
-  const calls = { create: 0, ask: [], dispose: 0 };
-  const create = (options) => {
+  const events = spec.events ?? [];
+  /** @type {{ create: number; createOptions: any; ask: string[]; dispose: number }} */
+  const calls = { create: 0, createOptions: null, ask: [], dispose: 0 };
+  const create = (/** @type {any} */ options) => {
     calls.create += 1;
     calls.createOptions = options;
+    events.push("create");
     return {
-      async ask(content) {
+      async ask(/** @type {string} */ content) {
         calls.ask.push(content);
-        if (spec.askImpl) {
-          return spec.askImpl(content);
+        events.push("ask");
+        if (spec.askImpl) return spec.askImpl(content);
+        const name = /本体のファイル名: `([^`]+)`/.exec(content);
+        if (spec.writes !== false && name && options && typeof options.cwd === "string") {
+          touch(options.cwd, `fake-topic/${name[1]}`, "ダミーの本体\n");
         }
-        return { replyText: spec.replyText ?? "ダイジェスト本文", usage: {} };
+        return { replyText: "済み" };
       },
       async dispose() {
         calls.dispose += 1;
-        if (spec.onDispose) spec.onDispose();
+        events.push("dispose");
       }
     };
   };
-  return { create, calls };
+  return { create, calls, events };
 }
 
-test("generateDigest: create→ask 一発→dispose を実行し replyText を返す（fake・実 LLM 消費ゼロ）", async () => {
-  const { create, calls } = makeFakeCreate({ replyText: "今日はアークナイツを配信した。" });
-  const entries = [
-    { text: "今日はアークナイツやるで", speaker: "you" },
-    { text: "楽しみです", speaker: "soul" }
-  ];
-  const digest = await generateDigest({ createImpl: create, entries });
-  assert.equal(digest, "今日はアークナイツを配信した。");
-  assert.equal(calls.create, 1, "create は 1 回だけ（使い捨て）");
-  assert.equal(calls.ask.length, 1, "ask は一発だけ");
-  assert.equal(calls.dispose, 1, "dispose は 1 回だけ呼ばれる");
-  // ask には整形済み転写（formatTranscriptForDigest の出力）が渡っている。
-  assert.equal(calls.ask[0], "you: 今日はアークナイツやるで\nsoul: 楽しみです");
-  // systemPrompt には DIGEST_GENERATION_INSTRUCTION が渡っている（常駐の systemPrompt とは別物）。
-  assert.equal(calls.createOptions.systemPrompt, DIGEST_GENERATION_INSTRUCTION);
-});
+/**
+ * @param {string[]} events
+ * @param {any} [result]  配列なら呼ばれた順に返す（尽きたら最後のものを返し続ける）。
+ */
+function makeFakeCommit(events, result = { ok: true, committed: true, commit: "abc1234" }) {
+  /** @type {any[]} */
+  const calls = [];
+  const commitImpl = async (/** @type {any} */ options) => {
+    calls.push(options);
+    events.push("commit");
+    if (Array.isArray(result)) return result[Math.min(calls.length, result.length) - 1];
+    return result;
+  };
+  return { commitImpl, calls };
+}
 
-test("generateDigest: brainDef.create 経由でも動く（createImpl 未指定時のフォールバック）", async () => {
-  const { create, calls } = makeFakeCreate({ replyText: "ok" });
-  const brainDef = { create };
-  const digest = await generateDigest({ brainDef, entries: [{ text: "hi", speaker: "you" }] });
-  assert.equal(digest, "ok");
+const RECORD = Object.freeze({ dateJst: "2026-10-21", baseName: "2026-10-21" });
+
+test("writeStreamRecord: ②を cwd=記憶のフォルダ・workspace-write・最後の答えだけで作り、ask→dispose→commit の順", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { create, calls, events } = makeFakeCreate();
+  const commit = makeFakeCommit(events);
+  const result = await writeStreamRecord({
+    create,
+    entries: [
+      { text: "ダミーの話", speaker: "you" },
+      { text: "ダミーのコメント", speaker: "viewer", displayName: "ダミー視聴者名" }
+    ],
+    record: { dateJst: "2026-10-21", baseName: "2026-10-21-2" },
+    dir,
+    commitImpl: commit.commitImpl
+  });
+  assert.deepEqual(result, { written: true, commit: { ok: true, committed: true, commit: "abc1234" } });
+  assert.deepEqual(events, ["create", "ask", "dispose", "commit"]);
   assert.equal(calls.create, 1);
+  assert.equal(calls.createOptions.cwd, dir);
+  assert.equal(calls.createOptions.sandbox, "workspace-write");
+  assert.equal(calls.createOptions.finalAnswerOnly, true);
+  assert.equal(calls.createOptions.systemPrompt, WRITER_SYSTEM_PROMPT);
+  // 頼む内容に今回の配信の識別（日付とファイル名）が入り、視聴者名は入らない。
+  assert.equal(calls.ask.length, 1);
+  assert.match(calls.ask[0], /2026-10-21-2\.md/);
+  assert.match(calls.ask[0], /配信の日付（日本時間）: 2026-10-21/);
+  assert.match(calls.ask[0], /viewer: ダミーのコメント/);
+  assert.ok(!calls.ask[0].includes("ダミー視聴者名"));
+  // コミットは記憶のフォルダに、役名「書き出し役」で。
+  assert.deepEqual(commit.calls, [{ dir, role: "書き出し役" }]);
 });
 
-test("generateDigest: ask が throw しても dispose は必ず呼ばれる（try/finally 固定）", async () => {
-  const { create, calls } = makeFakeCreate({
+test("writeStreamRecord: 2 回目の保存では、前回書いた今回の本体を頼む内容に載せる", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md");
+  const { create, calls, events } = makeFakeCreate();
+  const commit = makeFakeCommit(events);
+  await writeStreamRecord({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir, commitImpl: commit.commitImpl });
+  assert.match(calls.ask[0], /すでにあります: topic-a\/2026-10-21\.md/);
+});
+
+test("writeStreamRecord: 空転写なら②を作らず、コミットもしない", async () => {
+  const { create, calls, events } = makeFakeCreate();
+  const commit = makeFakeCommit(events);
+  const result = await writeStreamRecord({ create, entries: [], record: RECORD, dir: os.tmpdir(), commitImpl: commit.commitImpl });
+  assert.deepEqual(result, { written: false });
+  assert.equal(calls.create, 0);
+  assert.equal(commit.calls.length, 0);
+});
+
+test("writeStreamRecord: ask が失敗しても dispose とコミット（書きかけを残す）をしてから throw する", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { create, calls, events } = makeFakeCreate({
     askImpl: async () => {
       throw new Error("ask failed (fake)");
     }
   });
+  const commit = makeFakeCommit(events);
   await assert.rejects(
-    () => generateDigest({ createImpl: create, entries: [{ text: "hi", speaker: "you" }] }),
+    () => writeStreamRecord({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir, commitImpl: commit.commitImpl }),
     /ask failed \(fake\)/
   );
-  assert.equal(calls.dispose, 1, "ask が throw しても dispose は呼ばれる");
+  assert.equal(calls.dispose, 1);
+  assert.deepEqual(events, ["create", "ask", "dispose", "commit"]);
 });
 
-test("generateDigest: 常駐セッションには一切触れない（渡された session/常駐オブジェクトを参照しない）", async () => {
-  const residentSession = {
-    ask: () => {
-      throw new Error("常駐セッションの ask が呼ばれてはならない");
-    },
-    dispose: () => {
-      throw new Error("常駐セッションの dispose が呼ばれてはならない");
-    }
-  };
-  const { create } = makeFakeCreate({ replyText: "ok" });
-  // generateDigest のオプションには常駐 session を渡す口が無い（createImpl/brainDef のみ）ことを
-  // 契約として固定する。誤って参照されていないことを、別オブジェクトとして生成し確認する。
-  const digest = await generateDigest({ createImpl: create, entries: [{ text: "hi", speaker: "you" }] });
-  assert.equal(digest, "ok");
-  assert.doesNotThrow(() => {
-    // residentSession は generateDigest に一切渡していないため、呼ばれていないはず。
-    void residentSession;
+test("writeStreamRecord: コミットの失敗は throw せず、警告で知らせる（中身は書かない）", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { create, events } = makeFakeCreate();
+  const commit = makeFakeCommit(events, { ok: false, error: "git commit: exited 1" });
+  /** @type {string[]} */
+  const warnings = [];
+  const result = await writeStreamRecord({
+    create,
+    entries: [{ text: "秘密っぽいダミー本文", speaker: "you" }],
+    record: RECORD,
+    dir,
+    commitImpl: commit.commitImpl,
+    onWarning: (w) => warnings.push(w)
   });
+  assert.equal(result.written, true);
+  assert.deepEqual(warnings, ["memory: commit failed (git commit: exited 1)"]);
 });
 
-test("generateDigest: 空転写（整形結果が空）なら create を呼ばず null を返す（ask を無駄撃ちしない）", async () => {
-  const { create, calls } = makeFakeCreate({ replyText: "should not happen" });
-  const digest = await generateDigest({ createImpl: create, entries: [] });
-  assert.equal(digest, null);
-  assert.equal(calls.create, 0, "空転写では create を呼ばない");
+test("writeStreamRecord: onWarning は②のセッションにも渡る（config/read の失敗などを拾うため）", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { create, calls, events } = makeFakeCreate();
+  const commit = makeFakeCommit(events);
+  const onWarning = () => {};
+  await writeStreamRecord({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir, commitImpl: commit.commitImpl, onWarning });
+  assert.equal(calls.createOptions.onWarning, onWarning);
 });
 
-test("generateDigest: createImpl も brainDef.create も無ければ throw する", async () => {
+test("writeStreamRecord: 1 回目の保存で②が本体を書かずに答え、やり直しでも書かなければ written:false（missing）で警告する（やり直しは 1 回だけ・毎回コミットはする）", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "fake-topic/2026-10-20.md"); // ほかの日の本体は数えない。
+  const { create, calls, events } = makeFakeCreate({ writes: false });
+  const commit = makeFakeCommit(events, { ok: true, committed: false });
+  /** @type {string[]} */
+  const warnings = [];
+  const result = await writeStreamRecord({
+    create,
+    entries: [{ text: "x", speaker: "you" }],
+    record: RECORD,
+    dir,
+    commitImpl: commit.commitImpl,
+    onWarning: (w) => warnings.push(w)
+  });
+  assert.deepEqual(result, { written: false, missing: true, commit: { ok: true, committed: false } });
+  assert.deepEqual(events, ["create", "ask", "dispose", "commit", "create", "ask", "dispose", "commit"]);
+  assert.equal(calls.create, 2);
+  assert.equal(calls.dispose, 2);
+  assert.deepEqual(warnings, [WRITER_MISS_RETRY_WARNING, WRITER_MISS_WARNING]);
+  assert.equal(WRITER_MISS_WARNING, "memory: the writer finished without writing this stream's record");
+});
+
+test("writeStreamRecord: 1 回目の保存で②が書かずに答えたら、同じ材料で新しいセッションを作って 1 回だけやり直し、書けたら written:true", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  let asks = 0;
+  const { create, calls, events } = makeFakeCreate({
+    askImpl: async () => {
+      asks += 1;
+      if (asks === 2) touch(dir, "fake-topic/2026-10-21.md", "ダミーの本体\n");
+      return { replyText: "済み" };
+    }
+  });
+  const commit = makeFakeCommit(events, [
+    { ok: true, committed: false },
+    { ok: true, committed: true, commit: "def5678" }
+  ]);
+  /** @type {string[]} */
+  const warnings = [];
+  const result = await writeStreamRecord({
+    create,
+    entries: [{ text: "x", speaker: "you" }],
+    record: RECORD,
+    dir,
+    commitImpl: commit.commitImpl,
+    onWarning: (w) => warnings.push(w)
+  });
+  assert.deepEqual(result, { written: true, commit: { ok: true, committed: true, commit: "def5678" } });
+  assert.equal(calls.create, 2);
+  assert.equal(calls.ask.length, 2);
+  assert.equal(calls.ask[1], calls.ask[0]); // 同じ材料・同じ頼み。
+  assert.deepEqual(commit.calls, [
+    { dir, role: "書き出し役" },
+    { dir, role: "書き出し役" }
+  ]);
+  assert.deepEqual(warnings, [WRITER_MISS_RETRY_WARNING]);
+});
+
+test("writeStreamRecord: 1 回目の保存で目次だけ書いて本体を書かなくても（コミットはある）、本体が無いのでやり直す", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { create, calls, events } = makeFakeCreate({ writes: false });
+  const commit = makeFakeCommit(events, { ok: true, committed: true, commit: "abc1234" });
+  const result = await writeStreamRecord({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir, commitImpl: commit.commitImpl });
+  assert.equal(result.written, false);
+  assert.equal(calls.create, 2);
+});
+
+test("writeStreamRecord: 2 回目以降の保存で、コミットが変更なしなら書き損じとみなして 1 回だけやり直す", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md"); // 前回の保存で書いた今回の本体。
+  const { create, calls, events } = makeFakeCreate({ writes: false });
+  const commit = makeFakeCommit(events, [
+    { ok: true, committed: false },
+    { ok: true, committed: true, commit: "def5678" }
+  ]);
+  /** @type {string[]} */
+  const warnings = [];
+  const result = await writeStreamRecord({
+    create,
+    entries: [{ text: "x", speaker: "you" }],
+    record: RECORD,
+    dir,
+    commitImpl: commit.commitImpl,
+    onWarning: (w) => warnings.push(w)
+  });
+  assert.deepEqual(result, { written: true, commit: { ok: true, committed: true, commit: "def5678" } });
+  assert.equal(calls.create, 2);
+  assert.equal(calls.ask[1], calls.ask[0]);
+  assert.match(calls.ask[1], /すでにあります: topic-a\/2026-10-21\.md/);
+  assert.deepEqual(warnings, [WRITER_MISS_RETRY_WARNING]);
+});
+
+test("writeStreamRecord: 2 回目以降の保存で、やり直しも変更なしなら written:false（記録できなかった扱い）", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md");
+  const { create, calls, events } = makeFakeCreate({ writes: false });
+  const commit = makeFakeCommit(events, { ok: true, committed: false });
+  /** @type {string[]} */
+  const warnings = [];
+  const result = await writeStreamRecord({
+    create,
+    entries: [{ text: "x", speaker: "you" }],
+    record: RECORD,
+    dir,
+    commitImpl: commit.commitImpl,
+    onWarning: (w) => warnings.push(w)
+  });
+  assert.deepEqual(result, { written: false, missing: true, commit: { ok: true, committed: false } });
+  assert.equal(calls.create, 2);
+  assert.deepEqual(warnings, [WRITER_MISS_RETRY_WARNING, WRITER_MISS_WARNING]);
+});
+
+test("writeStreamRecord: 2 回目以降の保存で、コミットに変更があればやり直さない", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md");
+  const { create, calls, events } = makeFakeCreate({ writes: false });
+  const commit = makeFakeCommit(events);
+  const result = await writeStreamRecord({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir, commitImpl: commit.commitImpl });
+  assert.equal(result.written, true);
+  assert.equal(calls.create, 1);
+});
+
+test("writeStreamRecord: 2 回目以降の保存でコミットに失敗したときは判断できないので、やり直さない（失敗は警告済み）", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md");
+  const { create, calls, events } = makeFakeCreate({ writes: false });
+  const commit = makeFakeCommit(events, { ok: false, error: "git commit: exited 1" });
+  /** @type {string[]} */
+  const warnings = [];
+  const result = await writeStreamRecord({
+    create,
+    entries: [{ text: "x", speaker: "you" }],
+    record: RECORD,
+    dir,
+    commitImpl: commit.commitImpl,
+    onWarning: (w) => warnings.push(w)
+  });
+  assert.equal(result.written, true);
+  assert.equal(calls.create, 1);
+  assert.deepEqual(warnings, ["memory: commit failed (git commit: exited 1)"]);
+});
+
+test("writeStreamRecord: ask の失敗はやり直さない（コミットしてから throw）", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  touch(dir, "topic-a/2026-10-21.md");
+  const { create, calls, events } = makeFakeCreate({
+    askImpl: async () => {
+      throw new Error("ask failed (fake)");
+    }
+  });
+  const commit = makeFakeCommit(events, { ok: true, committed: false });
   await assert.rejects(
-    () => generateDigest({ entries: [{ text: "hi", speaker: "you" }] }),
+    () => writeStreamRecord({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir, commitImpl: commit.commitImpl }),
+    /ask failed \(fake\)/
+  );
+  assert.equal(calls.create, 1);
+  assert.equal(commit.calls.length, 1);
+});
+
+test("writeStreamRecord: やり直しの ask が失敗したら、コミットしてから throw する", async (t) => {
+  const dir = tmpDir();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  let asks = 0;
+  const { create, calls, events } = makeFakeCreate({
+    askImpl: async () => {
+      asks += 1;
+      if (asks === 2) throw new Error("retry ask failed (fake)");
+      return { replyText: "済み" };
+    }
+  });
+  const commit = makeFakeCommit(events, { ok: true, committed: false });
+  await assert.rejects(
+    () => writeStreamRecord({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir, commitImpl: commit.commitImpl }),
+    /retry ask failed \(fake\)/
+  );
+  assert.equal(calls.create, 2);
+  assert.equal(calls.dispose, 2);
+  assert.equal(commit.calls.length, 2);
+});
+
+test("writeStreamRecord: create と record が無ければ TypeError", async () => {
+  await assert.rejects(() => writeStreamRecord(/** @type {any} */ ({ entries: [{ text: "x" }], record: RECORD })), TypeError);
+  await assert.rejects(
+    () => writeStreamRecord(/** @type {any} */ ({ create: () => ({}), entries: [{ text: "x" }] })),
     TypeError
   );
 });
 
-// ── 4. saveDigest: 上書き・ディレクトリ自動作成（blocking #6）────────────────────────
+test("writeStreamRecord: 本物の git の通し（試験用の記憶のフォルダに偽物の②が書き、書き出し役のコミットが 1 つ積まれる）", async (t) => {
+  const root = tmpDir();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, "memories");
+  const prepared = await prepareMemoryFolder({ dir });
+  assert.equal(prepared.ok, true);
+  const git = (/** @type {string[]} */ args) => execFileSync("git", pinnedGitArgs(dir, args), { cwd: dir, encoding: "utf8" });
+  // 準備ではコミットしない（_conventions.md は未コミットのまま、最初の書き出しで入る）。
+  const writerCreate = (/** @type {any} */ options) => ({
+    async ask() {
+      touch(options.cwd, "dummy-topic/2026-10-21.md", "ダミーの本体\n");
+      touch(options.cwd, "dummy-topic/_map.md", "- ダミー\n");
+      touch(options.cwd, "_map.md", "- dummy-topic\n");
+      return { replyText: "済み" };
+    },
+    async dispose() {}
+  });
+  const result = await writeStreamRecord({ create: writerCreate, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir });
+  assert.equal(result.written, true);
+  assert.equal(/** @type {any} */ (result).commit.committed, true);
+  assert.equal(git(["log", "--format=%s"]).trim().split("\n").length, 1);
+  assert.match(git(["log", "-1", "--format=%s"]), /^書き出し役 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+09:00/);
+  assert.equal(git(["status", "--porcelain"]).trim(), "");
+  assert.equal(readFileSync(path.join(dir, "dummy-topic", "2026-10-21.md"), "utf8"), "ダミーの本体\n");
 
-test("saveDigest: 同一 startedAtMs で 2 回保存すると同一ファイルが上書きされる（ファイルは 1 個）", () => {
-  const dir = tmpDir();
-  try {
-    const startedAtMs = Date.parse("2026-07-19T14:30:00.000Z");
-    const path1 = saveDigest("最初のダイジェスト", { dir, startedAtMs });
-    const path2 = saveDigest("更新後のダイジェスト", { dir, startedAtMs });
-    assert.equal(path1, path2, "同一 startedAtMs は同一ファイルパスを導く");
-    const files = readdirSync(dir);
-    assert.equal(files.length, 1, "ファイルは 1 個のまま（上書き）");
-    const { text, count } = loadRecentDigests({ dir, n: 1 });
-    assert.equal(count, 1);
-    assert.equal(text, "更新後のダイジェスト", "内容は最後に書いたもので上書きされている");
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("saveDigest: ディレクトリが未作成でも自動作成する", () => {
-  const parent = tmpDir();
-  try {
-    const dir = path.join(parent, "nested", "memories");
-    const startedAtMs = Date.now();
-    const filePath = saveDigest("x", { dir, startedAtMs });
-    assert.equal(readdirSync(dir).length, 1);
-    assert.ok(filePath.startsWith(dir));
-  } finally {
-    rmSync(parent, { recursive: true, force: true });
-  }
-});
-
-test("saveDigest: ファイル名はファイルシステム安全（コロンを含まない）で拡張子 .md", () => {
-  const dir = tmpDir();
-  try {
-    const startedAtMs = Date.parse("2026-07-19T14:30:05.000Z");
-    const filePath = saveDigest("x", { dir, startedAtMs });
-    const fileName = path.basename(filePath);
-    assert.ok(!fileName.includes(":"), `fileName must not contain ':'; got ${fileName}`);
-    assert.ok(fileName.endsWith(".md"), fileName);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("saveDigest: ファイル名は辞書順 = 時系列昇順になる（loadRecentDigests の降順ソートの前提）", () => {
-  const dir = tmpDir();
-  try {
-    const earlier = saveDigest("older", { dir, startedAtMs: Date.parse("2026-07-19T10:00:00.000Z") });
-    const later = saveDigest("newer", { dir, startedAtMs: Date.parse("2026-07-19T20:00:00.000Z") });
-    const earlierName = path.basename(earlier);
-    const laterName = path.basename(later);
-    assert.ok(earlierName < laterName, `${earlierName} should sort before ${laterName}`);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("DEFAULT_MEMORIES_DIR: apps/soul/agent/memories 配下を指す", () => {
-  assert.match(DEFAULT_MEMORIES_DIR.replace(/\\/g, "/"), /apps\/soul\/agent\/memories$/);
-});
-
-// ── 5. loadRecentDigests: N 件・合計上限・欠損耐性 ─────────────────────────────
-
-test("loadRecentDigests: N 件超の存在から新しい順に N 件だけ読む", () => {
-  const dir = tmpDir();
-  try {
-    saveDigest("day1", { dir, startedAtMs: Date.parse("2026-07-17T10:00:00.000Z") });
-    saveDigest("day2", { dir, startedAtMs: Date.parse("2026-07-18T10:00:00.000Z") });
-    saveDigest("day3", { dir, startedAtMs: Date.parse("2026-07-19T10:00:00.000Z") });
-    const { text, count } = loadRecentDigests({ dir, n: 2 });
-    assert.equal(count, 2);
-    // 新しい順（day3 が先・day1 は含まれない）。
-    assert.ok(text.indexOf("day3") < text.indexOf("day2"));
-    assert.ok(!text.includes("day1"));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("loadRecentDigests: 既定 n=3 は裁定どおり", () => {
-  const dir = tmpDir();
-  try {
-    for (let i = 0; i < 5; i += 1) {
-      saveDigest(`digest-${i}`, { dir, startedAtMs: Date.parse(`2026-07-1${i}T10:00:00.000Z`) });
-    }
-    const { count } = loadRecentDigests({ dir });
-    assert.equal(count, 3);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("loadRecentDigests: 合計サイズ上限 maxChars を超えると切れる", () => {
-  const dir = tmpDir();
-  try {
-    saveDigest("a".repeat(50), { dir, startedAtMs: Date.parse("2026-07-18T10:00:00.000Z") });
-    saveDigest("b".repeat(50), { dir, startedAtMs: Date.parse("2026-07-19T10:00:00.000Z") });
-    const { text, count } = loadRecentDigests({ dir, n: 2, maxChars: 60 });
-    assert.ok(text.length <= 60, `text.length=${text.length} should be <= 60`);
-    assert.equal(count, 1, "上限に収まる最初の 1 件（新しい方=b）だけが搭載される");
-    assert.ok(text.includes("b"));
-    assert.ok(!text.includes("a"));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("loadRecentDigests: dir 不在 → 空を返す（欠損耐性）", () => {
-  const parent = tmpDir();
-  try {
-    const missingDir = path.join(parent, "does-not-exist");
-    const { text, count } = loadRecentDigests({ dir: missingDir });
-    assert.equal(text, "");
-    assert.equal(count, 0);
-  } finally {
-    rmSync(parent, { recursive: true, force: true });
-  }
-});
-
-test("loadRecentDigests: 空ディレクトリ → 空を返す", () => {
-  const dir = tmpDir();
-  try {
-    const { text, count } = loadRecentDigests({ dir });
-    assert.equal(text, "");
-    assert.equal(count, 0);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("loadRecentDigests: .md 以外のファイルは読まない", () => {
-  const dir = tmpDir();
-  try {
-    saveDigest("real digest", { dir, startedAtMs: Date.parse("2026-07-19T10:00:00.000Z") });
-    writeFileSync(path.join(dir, "notes.txt"), "should not be read", "utf8");
-    writeFileSync(path.join(dir, "zzz-not-markdown"), "should not be read either", "utf8");
-    const { text, count } = loadRecentDigests({ dir, n: 10 });
-    assert.equal(count, 1);
-    assert.ok(text.includes("real digest"));
-    assert.ok(!text.includes("should not be read"));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("loadRecentDigests: 壊れた/読めないファイルは握って続行する", () => {
-  const dir = tmpDir();
-  try {
-    saveDigest("good digest", { dir, startedAtMs: Date.parse("2026-07-19T10:00:00.000Z") });
-    // ディレクトリを .md 拡張子で作る → readFileSync が確実に失敗する（EISDIR）。
-    const path2 = path.join(dir, "2026-07-20T10-00-00.md");
-    mkdirSync(path2);
-    assert.doesNotThrow(() => {
-      const { text, count } = loadRecentDigests({ dir, n: 10 });
-      assert.equal(count, 1, "壊れたエントリはスキップされ、正常な 1 件だけ数えられる");
-      assert.ok(text.includes("good digest"));
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// ── 6. composeSystemPrompt: 記憶の ON/OFF（blocking #4 注入側）───────────────────
-
-test("composeSystemPrompt: memoryText が空でない場合は仮面 + 記憶を合成する", () => {
-  const masque = "あなたはコーディです。";
-  const memoryText = "前回はアークナイツを配信した。";
-  const composed = composeSystemPrompt(masque, memoryText);
-  assert.ok(composed.includes(masque));
-  assert.ok(composed.includes(memoryText));
-  assert.ok(composed.length > masque.length + memoryText.length, "見出し等が付与されている");
-});
-
-test("composeSystemPrompt: memoryText が空文字列なら素の仮面をそのまま返す（OFF 相当）", () => {
-  const masque = "あなたはコーディです。";
-  assert.equal(composeSystemPrompt(masque, ""), masque);
-});
-
-test("composeSystemPrompt: memoryText が undefined/null なら素の仮面をそのまま返す", () => {
-  const masque = "あなたはコーディです。";
-  assert.equal(composeSystemPrompt(masque, undefined), masque);
-  assert.equal(composeSystemPrompt(masque, null), masque);
-});
-
-test("composeSystemPrompt: memoryText が空白のみなら素の仮面をそのまま返す", () => {
-  const masque = "あなたはコーディです。";
-  assert.equal(composeSystemPrompt(masque, "   \n  "), masque);
+  // 2 回目の保存で②が何も書かずに答えると、本物の git でも「変更なし」になり、1 回だけやり直してから
+  // 記録できなかった扱いになる（コミットは増えない・作業ツリーは clean のまま）。
+  let idleAsks = 0;
+  const idleCreate = () => ({
+    async ask() {
+      idleAsks += 1;
+      return { replyText: "済み" };
+    },
+    async dispose() {}
+  });
+  const second = await writeStreamRecord({ create: idleCreate, entries: [{ text: "x", speaker: "you" }], record: RECORD, dir });
+  assert.equal(second.written, false);
+  assert.equal(idleAsks, 2);
+  assert.equal(git(["log", "--format=%s"]).trim().split("\n").length, 1);
+  assert.equal(git(["status", "--porcelain"]).trim(), "");
 });

@@ -16,6 +16,25 @@
  *    待ってから、最初の turn と同じ人格の指示を `thread/inject_items` で 1 回だけ差し込み直す。圧縮の処理中に
  *    来た ask は終わるまで待ち、`compactionWaitMs`（既定 60 秒）を超えたら待つのをやめて turn を始める。
  *    Codex の自動圧縮の設定は使わない。
+ *
+ * ── ユーザー設定の MCP を引き継がない（記憶の作り直し Wave 1 Domain A・2026-10-21 実機確認 0.163.0）──────
+ *  App Server はユーザーの `~/.codex/config.toml` を読む。そこから来る MCP サーバーを 1 つも起動しないよう、
+ *  - 起動時に `-c features.plugins=false` と `-c features.apps=false`（プラグイン由来の cua_repl 等と、
+ *    ChatGPT のコネクタ codex_apps を止める）を渡す。
+ *  - `[mcp_servers]` に書かれたものは、`-c mcp_servers={}` では消えない（`-c` は表に混ぜるだけ・表以外の値は
+ *    起動エラー）。そこで接続ごとに 1 回 `config/read`（thread の cwd から見た実効の設定）で名前を読み、
+ *    thread/start の config で `mcp_servers.<名前>.enabled=false` にする。
+ *  実機では、この 2 つで `mcpServer/startupStatus/updated` が 0 件になった（何もしないと 4 サーバー・8 件）。
+ *  `config/read` が失敗したら警告を出して会話は続ける（MCP が起動しうる）。
+ *
+ * ── 役ごとの設定（同上）─────────────────────────────────────────────────────────────
+ *  - `cwd`: thread/start と turn/start の作業フォルダ。既定は使い捨ての一時フォルダ（今までどおり）。指定した
+ *    フォルダは消さない。画像の一時ファイルと App Server のプロセスの cwd は、指定があっても一時フォルダのまま。
+ *  - `sandbox`: "read-only"（既定）か "workspace-write"。thread/start の `sandbox` と turn/start の
+ *    `sandboxPolicy` を揃える。approval は常に never。
+ *  - `finalAnswerOnly`: ツールを使う turn では、前置き（phase=commentary）の agentMessage も来る。true のとき
+ *    replyText は phase=final_answer の agentMessage だけをつなげる（無ければ最後の agentMessage）。既定 false
+ *    （全部つなげる今までの組み立て）。onTextDelta には前置きも含めて全部流れる。
  */
 
 import { spawn as defaultSpawn } from "node:child_process";
@@ -37,6 +56,70 @@ const ROLLOUT_FILENAME_RE = /^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(.+)\.
 
 export const DEFAULT_MODEL = "gpt-5.6-terra";
 export const DEFAULT_EFFORT = "none";
+
+/**
+ * `config/read`（ユーザー設定の MCP の名前の読み取り）に失敗したときの警告。onWarning にこの値そのものを渡す。
+ * 呼び出し側（scripts/cockpit.mjs）は文言の一部ではなく、この定数との一致で判定する（記憶の作り直し Wave 2 からの
+ * 申し送り 2）。
+ */
+export const MCP_CONFIG_READ_FAILED_WARNING = "codex-session: could not read the MCP server list; user MCP servers may start.";
+
+/** 頭のセッションに許す sandbox（thread/start の SandboxMode）。既定は read-only。 */
+export const SANDBOX_MODES = Object.freeze(["read-only", "workspace-write"]);
+
+/**
+ * App Server の起動引数。ユーザー設定のプラグインとアプリ（コネクタ）を止める（MCP の切り離しの半分・
+ * 残りは thread/start の config で `[mcp_servers]` を 1 つずつ止める）。
+ * `notify=[]` は、ユーザー設定の notify フック（turn が終わるたびに動く通知プログラム）を引き継がないため
+ * （記憶の作り直し Wave 2・ユーザー決定 2026-10-21。空の配列なら何も起動しない・実機確認は domain-c-report.md）。
+ */
+export const APP_SERVER_ARGS = Object.freeze([
+  "app-server", "--stdio",
+  "-c", 'forced_login_method="chatgpt"',
+  "-c", 'web_search="disabled"',
+  "-c", "features.plugins=false",
+  "-c", "features.apps=false",
+  "-c", "notify=[]"
+]);
+
+/**
+ * ツールを使う turn で来るが、魂は使わない通知。「未対応の通知」の警告を出さずに捨てる
+ * （役のセッションで警告が溢れないように）。commandExecution / fileChange の item/started・item/completed は
+ * もとから turn の通知として受けて、agentMessage 以外は黙って捨てている。
+ */
+const QUIET_TOOL_NOTIFICATIONS = new Set([
+  "turn/diff/updated",
+  "turn/plan/updated",
+  "item/plan/delta",
+  "item/commandExecution/outputDelta",
+  "item/commandExecution/terminalInteraction",
+  "item/fileChange/outputDelta",
+  "item/fileChange/patchUpdated",
+  "item/mcpToolCall/progress",
+  "serverRequest/resolved"
+]);
+
+/** turn/start の sandboxPolicy（thread/start の sandbox と揃える・実機の thread/start 応答の実効値と同じ形）。 */
+function turnSandboxPolicy(sandbox) {
+  if (sandbox === "workspace-write") {
+    return { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
+  }
+  return { type: "readOnly", networkAccess: false };
+}
+
+/**
+ * `config/read` の実効の設定から、止める MCP サーバーの上書き（thread/start の config.mcp_servers）を作る。
+ * 名前だけを使い、中身（コマンドや環境変数）は読まない。無ければ null。
+ * @param {any} configReadResult
+ * @returns {Record<string, { enabled: false }> | null}
+ */
+export function mcpServerDisableOverrides(configReadResult) {
+  const servers = configReadResult?.config?.mcp_servers;
+  if (!servers || typeof servers !== "object" || Array.isArray(servers)) return null;
+  const names = Object.keys(servers);
+  if (names.length === 0) return null;
+  return Object.fromEntries(names.map((name) => [name, { enabled: false }]));
+}
 
 const TARGET_BY_PLATFORM = Object.freeze({
   "linux:x64": ["@openai/codex-linux-x64", "x86_64-unknown-linux-musl", "codex"],
@@ -255,6 +338,8 @@ class AppServerConnection {
     this.closePromise = null;
     this.initialized = false;
     this.fatalError = null;
+    /** @type {Promise<Record<string, { enabled: false }> | null> | null} 止める MCP サーバーの上書き（接続ごとに 1 回読む）。 */
+    this.mcpOverrides = null;
   }
 
   async start() {
@@ -468,11 +553,25 @@ function turnIdFromNotification(message) {
  * @param {number} [options.compactionWaitMs=60000]  圧縮の処理中に来た ask が待つ上限（超えたら待つのをやめて
  *   turn を始める・context-growth-2026-10.md §6）。
  * @param {number} [options.compactionTimeoutMs=300000]  圧縮の turn の完了を待つ上限（超えたら失敗として畳む）。
+ * @param {string} [options.cwd]  役のセッションの作業フォルダ（絶対パス）。thread/start・turn/start に渡す。
+ *   既定は使い捨ての一時フォルダ。指定したフォルダは dispose で消さない。
+ * @param {"read-only" | "workspace-write"} [options.sandbox="read-only"]  thread/start の sandbox と turn/start の
+ *   sandboxPolicy を揃えて指定する。approval は常に never。
+ * @param {boolean} [options.finalAnswerOnly=false]  true なら replyText を phase=final_answer の agentMessage だけで
+ *   組み立てる（無ければ最後の agentMessage）。ツールを使う turn の前置きを返事に混ぜないため。
  */
 export function createCodexSession(options = {}) {
   const systemPrompt = `${options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT}`;
   const model = `${options.model ?? DEFAULT_MODEL}`;
   const effort = `${options.effort ?? DEFAULT_EFFORT}`;
+  const sandbox = options.sandbox ?? "read-only";
+  if (!SANDBOX_MODES.includes(sandbox)) {
+    throw new TypeError(`codex-session: sandbox must be one of ${SANDBOX_MODES.join(", ")}.`);
+  }
+  if (options.cwd !== undefined && (typeof options.cwd !== "string" || !path.isAbsolute(options.cwd))) {
+    throw new TypeError("codex-session: cwd must be an absolute path.");
+  }
+  const finalAnswerOnly = options.finalAnswerOnly === true;
   const env = options.env ?? process.env;
   const spawnImpl = options.spawnImpl ?? defaultSpawn;
   const homeDir = options.homeDir ?? os.homedir();
@@ -488,6 +587,8 @@ export function createCodexSession(options = {}) {
   }
   sweepLedger(homeDir, ledgerPath);
   const workingDirectory = mkdtempSync(path.join(os.tmpdir(), "codex-app-server-session-"));
+  // thread/turn の作業フォルダ。役の指定が無ければ使い捨ての一時フォルダ（今までどおり）。
+  const threadCwd = options.cwd ?? workingDirectory;
   const threadIds = [];
   let disposed = false;
   let connection = null;
@@ -623,6 +724,7 @@ export function createCodexSession(options = {}) {
       return;
     }
     if (routeCompactionNotification(generation, message)) return;
+    if (QUIET_TOOL_NOTIFICATIONS.has(method)) return;
     const turnScoped = method === "turn/started" || method === "turn/completed" || method === "item/started" ||
       method === "item/completed" || method === "item/agentMessage/delta" ||
       method === "thread/tokenUsage/updated" || method === "error";
@@ -652,7 +754,7 @@ export function createCodexSession(options = {}) {
         if (item?.type !== "agentMessage") return;
         if (typeof item.id !== "string") throw protocolError("agent item/started is missing item identity");
         if (active.items.has(item.id)) throw protocolError("duplicate agent item start");
-        active.items.set(item.id, { deltaText: "", finalText: null, completed: false });
+        active.items.set(item.id, { deltaText: "", finalText: null, completed: false, phase: null });
         active.itemOrder.push(item.id);
         return;
       }
@@ -676,6 +778,7 @@ export function createCodexSession(options = {}) {
         if (!state || state.completed) throw protocolError("agent item completed outside its lifetime");
         state.completed = true;
         state.finalText = item.text;
+        state.phase = typeof item.phase === "string" ? item.phase : null;
         if (state.deltaText !== item.text) throw turnError("agent delta accumulation does not match the completed item");
         return;
       }
@@ -697,11 +800,20 @@ export function createCodexSession(options = {}) {
         if (typeof status !== "string") throw protocolError("turn/completed is missing status");
         if (status !== "completed") throw turnError(message.params?.turn?.error?.message ?? status);
         if (active.itemOrder.length === 0) throw turnError("completed turn has no agent message");
-        const replyText = active.itemOrder.map((id) => active.items.get(id)).map((item) => {
+        const completedItems = active.itemOrder.map((id) => active.items.get(id)).map((item) => {
           if (!item?.completed || typeof item.finalText !== "string") throw turnError("completed turn has an incomplete agent item");
-          return item.finalText;
-        }).join("");
-        if (active.deltaText !== replyText) throw turnError("agent delta accumulation does not match final reply");
+          return item;
+        });
+        const allText = completedItems.map((item) => item.finalText).join("");
+        if (active.deltaText !== allText) throw turnError("agent delta accumulation does not match final reply");
+        let replyText = allText;
+        if (finalAnswerOnly) {
+          // 前置き（commentary）を落とす。phase を出さない頭では最後の agentMessage を答えとみなす。
+          const finals = completedItems.filter((item) => item.phase === "final_answer");
+          replyText = finals.length > 0
+            ? finals.map((item) => item.finalText).join("")
+            : completedItems[completedItems.length - 1].finalText;
+        }
         active.settled = true;
         active.onTextDelta = null;
         active.resolve({ replyText, usage: active.usage, tokenUsage: active.tokenUsage, ttftMs: active.ttftMs });
@@ -719,7 +831,7 @@ export function createCodexSession(options = {}) {
       const fresh = new AppServerConnection({
         spawnImpl,
         command: codexPath,
-        args: ["app-server", "--stdio", "-c", 'forced_login_method="chatgpt"', "-c", 'web_search="disabled"'],
+        args: [...APP_SERVER_ARGS],
         spawnOptions: { cwd: workingDirectory, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
         rpcTimeoutMs,
         shutdownTimeoutMs,
@@ -743,13 +855,34 @@ export function createCodexSession(options = {}) {
     }
   };
 
+  /**
+   * ユーザー設定の `[mcp_servers]` を止める上書き（接続ごとに 1 回だけ `config/read` で名前を読む）。
+   * 読めなければ警告して null（会話は止めない）。
+   * @param {AppServerConnection} live
+   * @returns {Promise<Record<string, { enabled: false }> | null>}
+   */
+  const mcpOverridesFor = (live) => {
+    if (!live.mcpOverrides) {
+      live.mcpOverrides = live.request("config/read", { includeLayers: false, cwd: threadCwd }).then(
+        (result) => mcpServerDisableOverrides(result),
+        () => {
+          if (live.closed || live.closing) return null; // 接続ごと落ちた。thread/start 側の失敗に任せる。
+          try { options.onWarning?.(MCP_CONFIG_READ_FAILED_WARNING); } catch {}
+          return null;
+        }
+      );
+    }
+    return live.mcpOverrides;
+  };
+
   const ensureThread = async () => {
     if (connection && threadId) return { connection, threadId, generation: connectionGeneration };
     const ready = await ensureConnection();
     try {
+      const mcpOverrides = await mcpOverridesFor(ready.connection);
       const result = await ready.connection.request("thread/start", {
-        model, cwd: workingDirectory, approvalPolicy: "never", sandbox: "read-only",
-        config: { forced_login_method: "chatgpt", web_search: "disabled" }
+        model, cwd: threadCwd, approvalPolicy: "never", sandbox,
+        config: { forced_login_method: "chatgpt", web_search: "disabled", ...(mcpOverrides ? { mcp_servers: mcpOverrides } : {}) }
       });
       const id = result?.thread?.id;
       if (typeof id !== "string" || id.length === 0) throw protocolError("thread/start response is missing thread.id");
@@ -779,9 +912,11 @@ export function createCodexSession(options = {}) {
   };
 
   return {
-    /** Start and initialize the bundled App Server without creating a thread or turn. */
+    /** Start and initialize the bundled App Server (and read the MCP server list) without creating a thread or turn. */
     async initialize() {
-      await ensureConnection();
+      const ready = await ensureConnection();
+      // MCP を止める上書きも先に読んでおく（最初の ask で待たない）。
+      await mcpOverridesFor(ready.connection);
     },
 
     /**
@@ -842,8 +977,8 @@ export function createCodexSession(options = {}) {
         let startResult;
         try {
           startResult = await ready.connection.request("turn/start", {
-            threadId: ready.threadId, input, model, effort, cwd: workingDirectory, approvalPolicy: "never",
-            sandboxPolicy: { type: "readOnly", networkAccess: false }
+            threadId: ready.threadId, input, model, effort, cwd: threadCwd, approvalPolicy: "never",
+            sandboxPolicy: turnSandboxPolicy(sandbox)
           });
         } catch (error) {
           failTurn(error instanceof Error ? error : turnError("turn/start failed"));

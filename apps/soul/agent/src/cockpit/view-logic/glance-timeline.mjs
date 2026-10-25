@@ -48,7 +48,9 @@ export const CAUSE_KIND_LABELS = Object.freeze({
   "turn-end": "区切り",
   interjection: "合いの手",
   comment: "コメント",
-  "comment-call": "コメント呼びかけ"
+  "comment-call": "コメント呼びかけ",
+  // 記憶の作り直し Wave 3: 思い出した結果（見つかった / 見つからなかった）を①に言わせた発火。
+  recall: "思い出し"
 });
 
 /**

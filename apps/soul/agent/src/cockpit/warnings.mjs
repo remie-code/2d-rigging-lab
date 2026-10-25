@@ -11,6 +11,8 @@
  *  - 声の差し替え Wave 3 で足した種類（組み立ては cockpit-server）: 状態 `tts-reconnecting`（warn）・`tts-down`
  *    （alert）は ElevenLabs の engine のときだけ。出来事 `tts-readings-fallback`（warn）は読みが取れず簡易版の口に
  *    なったとき。
+ *  - 記憶の作り直し Wave 2 で足した種類（組み立ては cockpit-server）: 出来事 `mcp-config-read`（alert）は、頭（Codex）の
+ *    MCP の名前の読み取り（config/read）に失敗したとき（会話は続くが、ユーザーの MCP サーバーが起動しうる）。
  * 表示（文言の出し方・並べ方・色）は画面（2 回目）の領分。ここは「今出ている警告の一覧」を snapshot と SSE に
  * 載せられる形で持つだけ。文言は短い日本語（画面がそのまま使ってよい）、detail は補足（会話やコメントの本文は
  * 入れない。呼び出し側が伏せた文言だけを渡す）。

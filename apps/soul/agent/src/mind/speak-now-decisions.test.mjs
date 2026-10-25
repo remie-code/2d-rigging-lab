@@ -124,7 +124,7 @@ test("judge: POST /v1/decisions に gpt-6-luna・choice 1 問・Bearer キーで
   assert.equal(calls[0].body.questions.length, 1);
   assert.equal(calls[0].body.questions[0].type, "choice");
   assert.equal(calls[0].body.questions[0].name, "reaction");
-  assert.deepEqual(calls[0].body.questions[0].choices.map((c) => c.value), ["wait", "backchannel", "respond", "initiate"]);
+  assert.deepEqual(calls[0].body.questions[0].choices.map((c) => c.value), ["wait", "backchannel", "respond", "initiate", "look"]);
   assert.equal(timers.pending(), 0, "成功時はタイムアウトのタイマを畳む");
 });
 

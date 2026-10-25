@@ -79,36 +79,27 @@ import { createVoiceEngine } from "../src/voice/engines/voice-engine.mjs";
 import { createTtsClient } from "../src/voice/tts-client.mjs";
 import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
-import {
-  generateDigest,
-  saveDigest,
-  loadRecentDigests,
-  composeSystemPrompt,
-  DEFAULT_MEMORIES_DIR,
-  DEFAULT_DIGEST_COUNT
-} from "../src/mind/memory.mjs";
+import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
+import { DEFAULT_MEMORY_DIR, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
+import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
+import { runRecall } from "../src/mind/recall.mjs";
+import { appendSoulSkills, listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
 
 /**
- * 配信間記憶: 定期チェックポイントの間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
+ * 配信間記憶: 定期保存の間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
  */
 export const MEMORY_CHECKPOINT_INTERVAL_MS = 20 * 60 * 1000;
 
 /**
- * 配信間記憶: 起動時に注入する記憶テキストの合計文字数上限（loadRecentDigests の maxChars）。
- * DIGEST_GENERATION_INSTRUCTION の分量目安（≤1500 字/件・memory.mjs）× DEFAULT_DIGEST_COUNT（3 件）
- * = 4500。Domain A は既定 Infinity（無制限）のまま出荷したため、Domain B（呼び出し側）が具体値を
- * 決め打つ（申し送り 1）。仮面 + 記憶 + 当日の Fire 注入窓（FIRE_MAX_CHARS=4000・fire-injection.mjs）を
- * 合わせても常識的なプロンプト長に収まる値として、ダイジェスト自身の目安の総和をそのまま採用した。
+ * 配信間記憶: Ctrl+C の最後の保存を待つ上限（best-effort・shutdown が固まらない）。
+ * ②書き出し役は使い捨ての Codex のセッションを起こし、`_conventions.md`・目次・本体をツールで読み書きする。
+ * 実機の参考は、書き出しの turn だけで約 21 秒、セッションの起動から後片付けまでで約 41 秒（短いダミーの材料・
+ * memory-recall-inventory.md §6・Wave 1 Domain A 報告 §2.2）。配信 1 本分の材料ではもう少し延びうるうえ、
+ * Ctrl+C の時点で定期保存などが走っていれば、その終わりを待ってから最後の 1 回が走る（保存は直列）。
+ * そこで 1 回分の約 2 倍の 90 秒にする。待っている間にもう一度 Ctrl+C を押せば待たずに終わる。
+ * ②が書かずに答えたときの 1 回だけのやり直し（writeStreamRecord）もこの枠の中で走り、収まらなければ打ち切りが優先する。
  */
-export const MEMORY_INJECT_MAX_CHARS = 4500;
-
-/**
- * 配信間記憶: shutdown 最終生成（SIGINT）の best-effort タイムアウト（blocking #3・shutdown が
- * 固まらない）。inventory §1 の実測「短命 ask ≈5s（初期化 1.9s + ask 3.2s・s1-first-light）」の
- * 3 倍のマージンを取る——digest 生成は通常 Fire よりも遥かに大きい入力（配信全体の転写）を渡すため
- * ask 自体がより長くかかりうる一方、Ctrl+C からの体感待ち時間を無限に伸ばすわけにはいかない。
- */
-export const SHUTDOWN_MEMORY_TIMEOUT_MS = 15000;
+export const SHUTDOWN_MEMORY_TIMEOUT_MS = 90_000;
 
 /**
  * Compose the system prompt for one newly-created brain session.
@@ -118,14 +109,19 @@ export const SHUTDOWN_MEMORY_TIMEOUT_MS = 15000;
  * provider directly; this pure helper keeps the mapping testable without
  * starting a session.
  *
+ * 記憶の作り直し Wave 2: 起動時に直近の記録を載せる仕組みは撤去した（①は配信の最初に記憶を持たない・
+ * recall-flow.md §7）。人格の指示は「名前 + 会話指示」に、Wave 3 で魂の教え（skills/ の `<recall>` の使い方・
+ * soul-skills.mjs）を足した。教えは名前の一文と同じく魂が足す固定の部分で、会話指示を書き換えても消えない。
+ *
  * @param {unknown} brainId
- * @param {string} [memoryText]
+ * @param {Record<string, string>} [instructionOverrides]
+ * @param {string} [skillsText]  足す教え（既定は skills/ から読む）。
  * @returns {string}
  */
-export function buildBrainSessionSystemPrompt(brainId, memoryText = "", instructionOverrides = undefined) {
+export function buildBrainSessionSystemPrompt(brainId, instructionOverrides = undefined, skillsText = undefined) {
   const identity = resolveBrainIdentity(brainId);
   const profile = resolveConversationInstructionProfile(brainId, instructionOverrides);
-  return composeSystemPrompt(buildFireSystemPrompt(identity, profile.body), memoryText);
+  return appendSoulSkills(buildFireSystemPrompt(identity, profile.body), skillsText ?? loadSoulSkills());
 }
 
 /** @param {string[]} argv */
@@ -406,11 +402,20 @@ export function createInstructionRevisionController(initialRevision = 0) {
  * surface. Persistence owns validation and durable writes; this thin seam is
  * responsible only for incrementing the effective revision after success.
  *
+ * Wave 3 仕上げ（記憶の作り直し）: 魂が①の固定の指示にいつも足す教え（skills/）を、会話指示の編集画面に読むだけで
+ * 見せるため、getSoulSkills で名前・置き場・本文を返す（①に足すものと同じ listSoulSkills から読む・編集はできない）。
+ *
  * @param {object} settings
  * @param {() => string} getBrainId
  * @param {ReturnType<typeof createInstructionRevisionController>} [revision]
+ * @param {() => Array<{ name: string; path: string; body: string }>} [getSoulSkills]  テスト注入（既定 listSoulSkills）。
  */
-export function createConversationInstructionHooks(settings, getBrainId, revision = createInstructionRevisionController()) {
+export function createConversationInstructionHooks(
+  settings,
+  getBrainId,
+  revision = createInstructionRevisionController(),
+  getSoulSkills = () => listSoulSkills()
+) {
   const store = /** @type {any} */ (settings);
   const currentId = () => getBrainId();
   return {
@@ -432,6 +437,9 @@ export function createConversationInstructionHooks(settings, getBrainId, revisio
     },
     getRevision() {
       return revision.getRevision();
+    },
+    getSoulSkills() {
+      return getSoulSkills();
     }
   };
 }
@@ -562,47 +570,10 @@ export function createBargeInHooks(settings, defaultEnabled = true) {
 }
 
 /**
- * settings の記憶 ON/OFF トグル（memoryEnabled）を、cockpit-server の口（onSetMemoryEnabled）へ
- * 橋渡しする（配信間記憶・stream-memory-wave-plan.md §3 Domain B・createBargeInHooks の完全写経）。
- * **既定は defaultEnabled=true**（stream-memory.md 裁定 1「起動時に自動搭載・OFF が例外」・
- * createBargeInHooks と同じ既定 ON の非対称）。起動時の初期値解決（`resolveInitialEnabled`）は
- * 既定値へのフォールバックを担う——bool の「未記憶」（null）と「明示 false」を区別する settings 契約を、
- * 呼び出し側が意識せずに使えるようにする（createBargeInHooks/createSelfFireHooks と同じ規律）。
- *
- * ここは「永続化」だけを担う純関数の配線層。OFF 切替時の memoryText クリア・現 session の
- * dispose→null によるホットスワップは main() の effectful な onSetMemoryEnabled が担う
- * （createBrainHooks と onSetBrain の関係と同型）。
- *
- * @param {{ getMemoryEnabled: () => boolean | null; setMemoryEnabled: (enabled: boolean) => void }} settings
- * @param {boolean} [defaultEnabled=true]  未記憶時のフォールバック（既定 ON・stream-memory.md 裁定 1）。
- * @returns {{
- *   resolveInitialEnabled: () => boolean;
- *   onSetMemoryEnabled: (enabled: boolean) => void;
- * }}
- */
-export function createMemoryHooks(settings, defaultEnabled = true) {
-  return {
-    /** 起動時の初期 ON/OFF（未記憶なら defaultEnabled）。 */
-    resolveInitialEnabled: () => {
-      const remembered = settings.getMemoryEnabled();
-      return typeof remembered === "boolean" ? remembered : defaultEnabled;
-    },
-    /** cockpit-server の onSetMemoryEnabled（POST /api/memory が呼ぶ）。 */
-    onSetMemoryEnabled: (enabled) => {
-      try {
-        settings.setMemoryEnabled(enabled === true); // 次回起動で復元（file-backed・失敗寛容）。
-      } catch {
-        // 永続化失敗は操作を止めない（onSetBargeInEnabled と同型の失敗寛容）。
-      }
-    }
-  };
-}
-
-/**
- * 配信間記憶: チェックポイントを空回りさせない判定（inventory §2-4「転写が前回生成から変化しとらん時は
+ * 配信間記憶: 定期保存を空回りさせない判定（inventory §2-4「転写が前回生成から変化しとらん時は
  * スキップ」）。転写件数（=seq・transcriptBuffer.all().length）が前回記録時から不変ならスキップする
- * （true=スキップ）。純関数（I/O ゼロ）——20 分ごとに同じ会話を LLM へ焼き直してトークンを燃やさない
- * 防波堤。手動「今日を記録」/ shutdown 最終版はこの判定を経由しない（明示操作・最終版は必ず試みる）。
+ * （true=スキップ）。純関数（I/O ゼロ）——20 分ごとに同じ会話を②へ渡してトークンを燃やさない
+ * 防波堤。手動「今日を記録」/ 耳の Stop / Ctrl+C はこの判定を経由しない（明示操作・最後の版は必ず試みる）。
  * @param {number} currentSeq  現在の転写件数。
  * @param {number} lastRecordedSeq  直近に記録が成立した時点の転写件数。
  * @returns {boolean}
@@ -612,43 +583,150 @@ export function shouldSkipMemoryCheckpoint(currentSeq, lastRecordedSeq) {
 }
 
 /**
- * 配信間記憶: 一つの記録動作を作る（裁定4「一つの操作・三つの引き金」の共通実体・チェックポイント/
- * 手動「今日を記録」/ shutdown 最終版のいずれもこれを呼ぶ）。main() から依存を注入する薄いファクトリ
- * （createSessionProxy と同型のパターン）——fake 注入で実 LLM/実 FS を消費せずに「OFF は即 return
- * （blocking #4）・空転写は保存しない・generateDigest/saveDigest の throw を握って続行する
- * （Domain A 申し送り 2・記録失敗で呼び出し元を巻き込まない）」を検証できる。
+ * ②書き出し役・④思い出し役の頭（申し送り 1: Codex に固定）。今の頭が Codex 系ならその頭（①と同じ頭・
+ * recall-flow.md §6）、Claude 系なら既定の Codex（Claude の頭は cwd / sandbox / finalAnswerOnly を黙って無視するため
+ * 使わない）。④も同じ決め方（記憶の作り直し Wave 2 からの申し送り 1）。
+ * @param {unknown} currentBrain
+ * @param {Record<string, { create: Function }>} [brains=BRAINS]
+ * @returns {{ id?: string; create: Function }}
+ */
+export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
+  if (isCodexBrainId(currentBrain) && typeof currentBrain === "string" && brains[currentBrain]) {
+    return brains[currentBrain];
+  }
+  return brains.codex;
+}
+
+/**
+ * 配信間記憶: 保存の係（定期・手動「今日を記録」・耳の Stop・Ctrl+C のどれもこれを通る）。
+ *
+ * **直列にする**（申し送り 3・記憶のフォルダの git の index.lock がぶつからないように）:
+ *  - 何も走っていなければ、すぐ 1 回走らせる。
+ *  - 走っている間に次の保存が来たら、1 件だけ待たせ、今のが終わってから 1 回だけ走らせる。待っている間に
+ *    さらに来たら、待っている 1 件の材料を新しい方に差し替える（件数が減る差し替えはしない。耳の Stop の
+ *    あとはライブの転写が空になるため、Stop のときに取った転写を後から来た空や短い転写で上書きしない）。
+ *  - 材料（転写）は保存を頼んだ時点で取る（耳の Stop では pipeline を畳む前に取ったものが渡る）。
+ *  - 空の転写は走らせない。
+ * 1 回の保存（writeImpl）の失敗は握って onError に渡す（どの呼び出し元も巻き込まない）。
  *
  * @param {object} deps
- * @param {() => boolean} deps.isEnabled  記憶 ON/OFF の現在値（main() の memoryEnabled）。
- * @param {() => ReadonlyArray<any>} deps.getLiveEntries  entriesOverride 省略時に使うライブ転写取得
- *   （cockpit-server の getTranscript）。
- * @param {() => { create: Function }} deps.getBrainDef  現在の頭（brains registry の 1 エントリ）。
- * @param {typeof generateDigest} deps.generateDigestImpl  差し替え口（本番は generateDigest そのもの）。
- * @param {typeof saveDigest} deps.saveDigestImpl  差し替え口（本番は saveDigest そのもの）。
- * @param {string} deps.dir  保存先（本番は DEFAULT_MEMORIES_DIR）。
- * @param {() => number} deps.getStartedAtMs  このプロセスのファイル名の元（同一セッション=同一ファイル上書き）。
- * @param {(info: { atMs: number; entriesLength: number }) => void} [deps.onSaved]
- *   保存成功後に呼ばれる（main() 側がここで lastRecordAtMs/lastRecordedSeq を更新する）。
- * @param {(error: unknown) => void} [deps.onError]  generateDigest/saveDigest の throw を受け取る。
- * @returns {(entriesOverride?: ReadonlyArray<any>) => Promise<void>}
+ * @param {() => ReadonlyArray<any>} deps.getLiveEntries  材料の省略時に使うライブの転写（cockpit-server の getTranscript）。
+ * @param {(entries: ReadonlyArray<any>) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
+ *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。
+ * @param {(info: { atMs: number; entriesLength: number; commit?: any }) => void} [deps.onSaved]
+ *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。
+ * @param {(error: unknown) => void} [deps.onError]
+ * @param {(recording: boolean) => void} [deps.onRecordingChange]  走り始めと全部終わったとき（操縦席の「記録中」）。
+ * @param {() => number} [deps.nowImpl=Date.now]
+ * @returns {{
+ *   record: (entriesOverride?: ReadonlyArray<any>) => Promise<void>;
+ *   isRecording: () => boolean;
+ *   whenIdle: () => Promise<void>;
+ * }}
+ *   record の戻りは、その頼みを受け持った 1 回の保存が終わったら解決する（失敗しても reject しない）。
  */
 export function createMemoryRecorder(deps) {
-  return async function recordMemory(entriesOverride) {
-    if (!deps.isEnabled()) return; // OFF: 生成しない（blocking #4 OFF の完全性）。
-    const entries = entriesOverride ?? deps.getLiveEntries();
+  const nowImpl = deps.nowImpl ?? Date.now;
+  /** @type {Promise<void> | null} 走っている保存の一続き（待たせた分まで含む）。 */
+  let chain = null;
+  /** @type {{ entries: ReadonlyArray<any>; promise: Promise<void>; resolve: () => void } | null} */
+  let queued = null;
+
+  const callSafely = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
+    if (typeof fn !== "function") return;
     try {
-      const digest = await deps.generateDigestImpl({ brainDef: deps.getBrainDef(), entries });
-      if (digest == null) return; // 空転写（generateDigest 自身が create を呼ばずに null を返す）。
-      deps.saveDigestImpl(digest, { dir: deps.dir, startedAtMs: deps.getStartedAtMs() });
-      if (typeof deps.onSaved === "function") {
-        deps.onSaved({ atMs: Date.now(), entriesLength: entries.length });
-      }
-    } catch (error) {
-      // generateDigest/saveDigest は throw する契約（Domain A 申し送り 2）— ここで握って続行する
-      // （チェックポイント/手動/shutdown のどの呼び出し元も記録失敗で巻き込まれない）。
-      if (typeof deps.onError === "function") deps.onError(error);
+      fn(arg);
+    } catch {
+      // 通知先の失敗で保存の係を止めない。
     }
   };
+
+  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries) => {
+    try {
+      const result = await deps.writeImpl(entries);
+      if (result && result.written) {
+        callSafely(deps.onSaved, { atMs: nowImpl(), entriesLength: entries.length, commit: result.commit });
+      }
+    } catch (error) {
+      callSafely(deps.onError, error);
+    }
+  };
+
+  const start = (/** @type {ReadonlyArray<any>} */ entries) => {
+    /** @type {() => void} */
+    let resolveOwn = () => {};
+    const own = new Promise((resolve) => {
+      resolveOwn = () => resolve(undefined);
+    });
+    callSafely(deps.onRecordingChange, true);
+    chain = (async () => {
+      try {
+        await runOnce(entries);
+        resolveOwn();
+        while (queued) {
+          const next = queued;
+          queued = null;
+          await runOnce(next.entries);
+          next.resolve();
+        }
+      } finally {
+        resolveOwn();
+        chain = null;
+        callSafely(deps.onRecordingChange, false);
+      }
+    })();
+    return own;
+  };
+
+  return {
+    record(entriesOverride) {
+      const entries = entriesOverride ?? deps.getLiveEntries();
+      if (!Array.isArray(entries) || entries.length === 0) return Promise.resolve();
+      if (!chain) return start(entries);
+      if (queued) {
+        if (entries.length >= queued.entries.length) queued.entries = entries;
+        return queued.promise;
+      }
+      /** @type {() => void} */
+      let resolve = () => {};
+      const promise = new Promise((r) => {
+        resolve = () => r(undefined);
+      });
+      queued = { entries, promise, resolve };
+      return promise;
+    },
+    isRecording: () => chain != null,
+    whenIdle: () => chain ?? Promise.resolve()
+  };
+}
+
+/**
+ * Codex の頭の警告が「MCP の名前の読み取り（config/read）に失敗した」ものか（codex-session.mjs の
+ * MCP_CONFIG_READ_FAILED_WARNING との一致で判定する・文言の一部の一致はやめた＝Wave 2 からの申し送り 2）。
+ * 操縦席の上の帯に alert として出す（ユーザー決定 2026-10-21: 続けるが目立たせる）。
+ * @param {unknown} warning
+ * @returns {boolean}
+ */
+export function isMcpConfigReadFailureWarning(warning) {
+  return warning === MCP_CONFIG_READ_FAILED_WARNING;
+}
+
+/**
+ * 思い出しの係の出来事のターミナル 1 行（記憶の作り直し Wave 3・頼みごと・記憶の中身は書かない）。
+ * @param {{ phase?: string; avoidProbability?: number | null; judgeFailed?: boolean; reason?: string | null; silent?: boolean; failed?: boolean }} event
+ * @returns {string}
+ */
+export function formatRecallEventLine(event) {
+  const parts = [`[cockpit] recall: ${typeof event?.phase === "string" ? event.phase : "?"}`];
+  if (typeof event?.avoidProbability === "number" && Number.isFinite(event.avoidProbability)) {
+    parts.push(`avoid=${event.avoidProbability.toFixed(2)}`);
+  }
+  if (event?.judgeFailed === true) parts.push("judge=error");
+  if (typeof event?.reason === "string" && event.reason.length > 0) parts.push(`reason=${event.reason}`);
+  // Wave 3 仕上げ: 自発 OFF で黙って渡した（silent）・④の失敗を届けた（failed）。
+  if (event?.silent === true) parts.push("silent");
+  if (event?.failed === true) parts.push("failed");
+  return `${parts.join(" ")}\n`;
 }
 
 /**
@@ -1219,7 +1297,7 @@ export function formatSpeakNowLine(info) {
     return `[cockpit] speak-now: error ms=${ms} trigger=${trigger} reason=${info?.error ?? "unknown"}\n`;
   }
   const probs = info.probs && typeof info.probs === "object" ? info.probs : {};
-  const all = ["wait", "backchannel", "respond", "initiate"].map((k) => `${k}:${fmtProb(probs[k])}`).join(",");
+  const all = ["wait", "backchannel", "respond", "initiate", "look"].map((k) => `${k}:${fmtProb(probs[k])}`).join(",");
   return (
     `[cockpit] speak-now: ms=${ms} choice=${info.choice} p=${fmtProb(info.probability)} ` +
     `action=${info.action ?? "-"} trigger=${trigger} probs=${all}\n`
@@ -1288,7 +1366,7 @@ export function resolveContextCompactionOptions(settings) {
 
 /**
  * 操縦席の設定（頭脳・会話のタブ）の「圧縮を始める大きさ」を、cockpit-server の口（onSetCompactThresholdTokens /
- * contextCompactionStatus）へ橋渡しする（createMemoryHooks と同型の薄い配線層）。変えたら settings へ保存し
+ * contextCompactionStatus）へ橋渡しする（createBargeInHooks と同じ流儀の薄い配線層）。変えたら settings へ保存し
  * （次回起動で復元）、走っている compactor の目安をその場で差し替える（次の確認 = 数秒以内から効く）。
  * 目安の正本は compactor（サーバは二重に持たない）。
  * @param {{ setCompactThresholdTokens?: (tokens: number | null) => void }} settings
@@ -1397,8 +1475,6 @@ async function main() {
   const selfFireHooks = createSelfFireHooks(settings, false);
   // 「朗読と合いの手」: barge-in ON/OFF の永続トグル（既定 ON・裁定 1・§createBargeInHooks）。
   const bargeInHooks = createBargeInHooks(settings, true);
-  // 配信間記憶: 記憶 ON/OFF の永続トグル（既定 ON・stream-memory.md 裁定 1・§createMemoryHooks）。
-  const memoryHooks = createMemoryHooks(settings, true);
   // 口数モード（quiet/normal/chatty・既定 "normal"・§createVerbosityHooks）。
   const verbosityHooks = createVerbosityHooks(settings);
   // 多頭化 Domain B: 頭脳選択（claude/codex・既定 "claude"・§createBrainHooks）。永続化の薄い橋渡し
@@ -1444,7 +1520,7 @@ async function main() {
     onStatus: (info) => server?.setVoiceEngineStatus(info),
     onReadingsFallback: () => server?.reportVoiceReadingsFallback()
   });
-  // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。recordMemory が
+  // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。保存の係が
   // ライブ転写取得（server.getTranscript）に使うための前方参照（let・sessionProxy が session を forward
   // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
   /** @type {ReturnType<typeof createCockpitServer> | undefined} */
@@ -1464,24 +1540,22 @@ async function main() {
   // appropriate lifecycle boundary; no surface keeps its own brain/name map.
   const getCurrentBrainIdentity = () => resolveBrainIdentity(currentBrain);
 
-  // 配信間記憶: 記憶 ON/OFF の現在値（起動時は settings から復元・既定 ON）。
-  let memoryEnabled = memoryHooks.resolveInitialEnabled();
-  // このプロセスの記憶ファイル名の元（裁定 4「同一セッションは同一ファイル上書き」・saveDigest 契約）。
+  // 配信間記憶（記憶の作り直し Wave 2）: 起動時に記憶を①へ載せることはしない（①は思い出したいときに頼む・
+  // recall-flow.md §7）。記憶のフォルダを準備し（無ければ作る・git init・`_conventions.md` の種）、
+  // 今回の配信の本体のファイル名を最初の保存で一度だけ決めて持ち回る（申し送り 2）。
   const memoryStartedAtMs = Date.now();
-  // 起動時に直近 DEFAULT_DIGEST_COUNT 件のダイジェストを読み、仮面へ合成する材料にする
-  // （OFF なら読まない = blocking #4 注入の完全停止）。maxChars は MEMORY_INJECT_MAX_CHARS
-  // （申し送り 1・Domain A は既定 Infinity のまま出荷したため呼び出し側で具体値を決め打つ）。
-  let memoryText = "";
-  let memoryCount = 0;
-  if (memoryEnabled) {
-    const loadedMemory = loadRecentDigests({
-      dir: DEFAULT_MEMORIES_DIR,
-      n: DEFAULT_DIGEST_COUNT,
-      maxChars: MEMORY_INJECT_MAX_CHARS
-    });
-    memoryText = loadedMemory.text;
-    memoryCount = loadedMemory.count;
+  const memoryPrepared = await prepareMemoryFolder({ dir: DEFAULT_MEMORY_DIR });
+  if (!memoryPrepared.ok) {
+    // 記録できないだけで配信は止めない（保存のたびにコミットが失敗として警告に出る）。
+    process.stderr.write(`[cockpit] WARN: memory folder is not ready (${memoryPrepared.error})\n`);
   }
+  const streamRecord = createStreamRecordIdentity({ dir: DEFAULT_MEMORY_DIR, startedAtMs: memoryStartedAtMs });
+  // 頭のセッション（①・②）の警告はターミナルへ 1 行。MCP の名前の読み取り（config/read）の失敗は、ユーザーの
+  // MCP が起動しうるので操縦席の上の帯にも alert で出す（ユーザー決定 2026-10-21・続けるのは同じ）。
+  const onBrainWarning = (/** @type {string} */ w) => {
+    process.stderr.write(`[cockpit] WARN: ${w}\n`);
+    if (isMcpConfigReadFailureWarning(w)) server?.reportMcpConfigReadFailed();
+  };
   // 最新の記録時刻（state snapshot の memory.lastRecordAtMs）。このプロセス内で記録が成立するまでは
   // null（前回起動の記録時刻を跨いで持ち越さない設計判断・裁量判断は完了報告に記載）。
   let lastRecordAtMs = /** @type {number | null} */ (null);
@@ -1588,16 +1662,13 @@ async function main() {
       // onInit は createCodexSession では余剰プロパティとして単に無視される（JS の余剰プロパティ・
       // Domain A 確認済み）。createLlmSession は従来どおり onInit/onWarning を使う。
       session = brainDef.create({
-        // 配信間記憶: 仮面 + 記憶テキストを合成する（composeSystemPrompt・stream-memory.md 裁定 6
-        // 「注入点は一箇所」・OFF or 記憶ゼロ件は素の仮面のまま=blocking #4 注入側）。
-        systemPrompt: composeSystemPrompt(
-          buildFireSystemPrompt(
-            sessionIdentity,
-            conversationInstructionHooks.getProfile(currentBrain).body
-          ),
-          memoryEnabled ? memoryText : ""
+        // 人格の指示は「名前 + 会話指示」+ 魂の教え（`<recall>` の使い方・skills/）。起動時の記憶の搭載は撤去
+        // （記憶の作り直し Wave 2）。教えは会話指示とは別の固定の部分で、会話指示を書き換えても消えない（Wave 3）。
+        systemPrompt: appendSoulSkills(
+          buildFireSystemPrompt(sessionIdentity, conversationInstructionHooks.getProfile(currentBrain).body),
+          loadSoulSkills({ onWarning: onBrainWarning })
         ),
-        onWarning: (w) => process.stderr.write(`[cockpit] WARN: ${w}\n`),
+        onWarning: onBrainWarning,
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
         onRateLimits: (/** @type {any} */ rateLimits) => {
           if (isCodexBrainId(currentBrain)) quotaMonitor.mergeCodexUpdate(rateLimits);
@@ -1740,7 +1811,6 @@ async function main() {
         brain: currentBrain,
         sessionContextRevision,
         instructionRevision: instructionRevision.getRevision(),
-        memoryEnabled,
         audioDevice: audioDeviceHooks.getAudioDevice(),
         audioRevision,
         channelUrl: lazyChannel.getUrl(),
@@ -1800,72 +1870,74 @@ async function main() {
     return { brain: currentBrain, credentialHealth: existsSync(def.credentialPath) };
   };
 
-  // ── 配信間記憶: 一つの記録動作(裁定4「一つの操作・三つの引き金」) ──────────────────────────
-  //  entries は server.getTranscript()(cockpit-server が additive に足す転写スナップショット getter)。
+  // ── 配信間記憶: 保存の係（定期・手動「今日を記録」・耳の Stop・Ctrl+C のどれもここを通る・直列）──────────
+  //  1 回の保存 = ②書き出し役（使い捨ての Codex・cwd = 記憶のフォルダ・workspace-write）が本体と目次を書き、
+  //  魂が記憶のフォルダの git にコミットする（writeStreamRecord）。②の頭は Codex に固定（resolveWriterBrainDef）。
   //  server は下方の createCockpitServer(...) で代入される前方参照(sessionProxy の getSession と同型)。
-  const recordMemory = createMemoryRecorder({
-    isEnabled: () => memoryEnabled,
+  const memoryRecorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
-    getBrainDef: () => BRAINS[currentBrain] ?? BRAINS.claude,
-    generateDigestImpl: generateDigest,
-    saveDigestImpl: saveDigest,
-    dir: DEFAULT_MEMORIES_DIR,
-    getStartedAtMs: () => memoryStartedAtMs,
-    onSaved: ({ atMs, entriesLength }) => {
+    writeImpl: (entries) =>
+      writeStreamRecord({
+        create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
+        entries,
+        record: streamRecord.get(),
+        dir: DEFAULT_MEMORY_DIR,
+        onWarning: onBrainWarning
+      }),
+    onSaved: ({ atMs, entriesLength, commit }) => {
       lastRecordAtMs = atMs;
       lastRecordedSeq = entriesLength;
+      // 本文・トピック名は出さない（コミットの有無だけ）。
+      const what = commit && commit.ok ? (commit.committed ? `commit ${String(commit.commit).slice(0, 7)}` : "no changes") : "commit failed";
+      process.stdout.write(`[cockpit] memory recorded (${what})\n`);
     },
     onError: (error) => {
       process.stderr.write(
         `[cockpit] WARN: memory record failed: ${error instanceof Error ? error.message : String(error)}\n`
       );
-    }
+    },
+    // 「記録中」の表示を操縦席へ（走り始めと全部終わったとき）。
+    onRecordingChange: () => server?.memoryStatusChanged()
   });
 
-  // 引き金①: 定期チェックポイント(20 分毎・転写が前回記録から不変ならスキップ=inventory §2-4)。
-  // unref() でプロセス生存に寄与させない(ears-cli 等の既存タイマ規律・常駐タイマーの前例なしゆえ新設)。
+  // 引き金①: 定期保存(20 分毎・転写が前回記録から不変ならスキップ=inventory §2-4)。
+  // unref() でプロセス生存に寄与させない(ears-cli 等の既存タイマ規律)。
   const memoryCheckpointTimer = setInterval(() => {
-    if (!memoryEnabled) return; // OFF: チェックポイント自体も止める(blocking #4)。
     const entries = server ? server.getTranscript() : [];
     if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return; // 空回しでトークンを燃やさない。
-    recordMemory(entries).catch(() => {});
+    memoryRecorder.record(entries).catch(() => {});
   }, MEMORY_CHECKPOINT_INTERVAL_MS);
   memoryCheckpointTimer.unref();
 
+  /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(保存の係の薄いラッパ)。 */
+  const onMemoryRecord = () => memoryRecorder.record();
+
   /**
-   * 操縦席(POST /api/memory)から記憶 ON/OFF を設定/切替する(onSetBrain の型)。
-   *
-   * OFF = 注入も生成もチェックポイントも全停止(blocking #4「OFF の完全性」): OFF にすると memoryText を
-   * 空にし(念のための二重防御・注入自体は composeSystemPrompt 側でも空文字列は素の仮面を返す)、
-   * チェックポイントタイマーは isEnabled()/memoryEnabled のガードで空回りする。ON に切り替わったら
-   * memoryText/memoryCount を loadRecentDigests で(再)取得する(起動時と同じ経路・申し送り 4「count は
-   * 実際に搭載した件数」)。切替は desired context revision を進め、進行中 Fire の session は保持したまま
-   * 次 accepted Fire から新 systemPrompt を効かせる。
-   * @param {boolean} enabled
+   * 引き金③: 耳の Stop（cockpit-server が pipeline を畳む前の転写を渡す）。Stop の応答は待たせない。
+   * 前の保存から転写が増えていなければ書かない（「今日を記録」の直後の Stop で②を空回りさせない）。
    */
-  const onSetMemoryEnabled = async (enabled) => {
-    memoryHooks.onSetMemoryEnabled(enabled); // 次回起動でも復元(file-backed・失敗寛容)。
-    memoryEnabled = enabled === true;
-    if (memoryEnabled) {
-      const loadedMemory = loadRecentDigests({
-        dir: DEFAULT_MEMORIES_DIR,
-        n: DEFAULT_DIGEST_COUNT,
-        maxChars: MEMORY_INJECT_MAX_CHARS
-      });
-      memoryText = loadedMemory.text;
-      memoryCount = loadedMemory.count;
-    } else {
-      memoryText = ""; // OFF: 注入テキストを空にする(念のため・composeSystemPrompt 側でも二重防御)。
-    }
-    sessionContextRevision += 1;
-    process.stdout.write(`[cockpit] memory ${memoryEnabled ? "enabled" : "disabled"}\n`);
+  const onEarsStopping = (/** @type {ReadonlyArray<any>} */ transcript) => {
+    if (shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq)) return;
+    memoryRecorder.record(transcript).catch(() => {});
   };
 
-  /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(recordMemory の薄いラッパ)。 */
-  const onMemoryRecord = () => recordMemory();
+  /**
+   * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
+   * 同じ決め方）を cwd = 記憶のフォルダ・read-only・最後の答えだけで作る。警告は①②と同じ onBrainWarning へ。
+   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number }} job
+   */
+  const recallRunner = (job) =>
+    runRecall({
+      create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
+      request: job.request,
+      entries: job.entries,
+      nowMs: job.nowMs,
+      dir: DEFAULT_MEMORY_DIR,
+      onWarning: onBrainWarning
+    });
 
-  /** state snapshot に載せる記憶の現況(brainStatus と同型)。 */
-  const memoryStatus = () => ({ enabled: memoryEnabled, count: memoryCount, lastRecordAtMs });
+  /** state snapshot に載せる記憶の現況（最後に記録した時刻と、今記録中か）。 */
+  const memoryStatus = () => ({ lastRecordAtMs, recording: memoryRecorder.isRecording() });
 
   /** fireOrchestratorFactory は常に注入する（Channel URL 未設定でも fire は「使えないが結線済み」）。 */
   const fireOrchestratorFactory = (/** @type {any} */ hooks) =>
@@ -2004,8 +2076,7 @@ async function main() {
     chatClientFactory: createLiveChatClient,
     onSetChatSource: chatSourceHooks.onSetChatSource,
     chatSourceStatus: chatSourceHooks.chatSourceStatus,
-    // 配信間記憶: 記憶 ON/OFF の永続トグル + 手動「今日を記録」+ 現況(additive・POST +2・snapshot +1)。
-    onSetMemoryEnabled,
+    // 配信間記憶: 手動「今日を記録」+ 現況（最後に記録した時刻・記録中か）。記憶の ON/OFF は撤去（Wave 2）。
     onMemoryRecord,
     memoryStatus,
     // 圧縮を始める大きさ（設定の「頭脳・会話」タブ）: 保存 + 走っている compactor の差し替え・snapshot の compaction。
@@ -2037,6 +2108,8 @@ async function main() {
       }
     },
     onEarsStopped: () => residentCapture.stop(),
+    // 配信間記憶: 耳の Stop で、pipeline を畳む前の転写を保存の係へ渡す（close 経由では呼ばれない＝Ctrl+C は下の shutdown）。
+    onEarsStopping,
     // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
     // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
     // （.env.decisions.local をコード内で直接読む）に任せる。
@@ -2053,6 +2126,10 @@ async function main() {
     commentHoldMaxAgeMs: commentHold.maxAgeMs,
     commentHoldMaxCount: commentHold.maxCount,
     onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info)),
+    // 記憶の作り直し Wave 3: 思い出しの係（④は使い捨ての Codex・「避けるか」判定は cockpit-server の既定の Decisions API）。
+    // 係の出来事は標準出力へ 1 行（頼みごと・記憶の中身は書かない）。
+    recallRunner,
+    onRecallEvent: (event) => process.stdout.write(formatRecallEventLine(event)),
     // 操縦席の作り直し 1 回目（データ側）: 残量・遅延のしきい値（settings の latencyWarnSec / latencyAlertSec・既定 4 / 6 秒）・
     // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
     quotaSource: quotaMonitor,
@@ -2084,22 +2161,43 @@ async function main() {
   process.stdout.write("[cockpit] Ctrl+C / EOF で終了します（魂は close で畳みます）。\n");
 
   let closing = false;
+  /** 記録の書き出しを待っている間だけ入る「待たずに終える」口（もう一度 Ctrl+C で呼ぶ）。 @type {(() => void) | null} */
+  let skipMemoryWait = null;
   const shutdown = async () => {
-    if (closing) return;
+    if (closing) {
+      if (skipMemoryWait) {
+        process.stdout.write("[cockpit] 記録の書き出しを待たずに終了します。\n");
+        skipMemoryWait();
+      }
+      return;
+    }
     closing = true;
     process.stdout.write("\n[cockpit] closing…\n");
     contextCompactor.dispose();
-    // 配信間記憶: 引き金③(SIGINT 最終版)。★重要な配管事実: 転写バッファは pipeline 所有(cockpit-server
+    // 配信間記憶: 引き金④(Ctrl+C の最後の保存)。★重要な配管事実: 転写バッファは pipeline 所有(cockpit-server
     // 内)で、server.close() は pipeline を dispose して null に戻す(cockpit-server.mjs の close 契約)。
     // よって転写のスナップショットは close() より前に確保する(close 後には転写が取れない)。
-    const finalMemoryEntries = memoryEnabled ? server.getTranscript() : [];
+    // 前の保存から転写が増えていなければ、もう一度は書かない（耳の Stop や「今日を記録」の直後の終了で②を空回りさせない）。
+    const liveEntries = server.getTranscript();
+    const finalMemoryEntries = shouldSkipMemoryCheckpoint(liveEntries.length, lastRecordedSeq) ? [] : liveEntries;
     try {
       await server.close(); // orchestrator.dispose を含む（cockpit-server の close 契約）。
-      // 配信間記憶: 最終生成は close() 直後・常駐 dispose の前(inventory §2-3・L0 設計判断 3)。
-      // best-effort + timeout(blocking #3・shutdown が固まらない): 失敗/timeout のどちらでも下の
+      // 配信間記憶: 最後の保存は close() 直後・常駐 dispose の前(inventory §2-3・L0 設計判断 3)。走っている保存
+      // （耳の Stop・定期など）があれば、その終わりも待つ（保存は直列・②を途中で切らない）。
+      // best-effort + timeout(shutdown が固まらない): 失敗/timeout/もう一度の Ctrl+C のどれでも下の
       // session/player/lazyChannel dispose は必ず走る(race 自体は例外を投げない=普通に処理が進む)。
-      if (memoryEnabled) {
-        await raceMemoryRecordWithTimeout(recordMemory(finalMemoryEntries), SHUTDOWN_MEMORY_TIMEOUT_MS);
+      const memoryDone = Promise.all([memoryRecorder.record(finalMemoryEntries), memoryRecorder.whenIdle()]);
+      if (memoryRecorder.isRecording()) {
+        process.stdout.write(
+          `[cockpit] 記録を書き出し中…（最大 ${SHUTDOWN_MEMORY_TIMEOUT_MS / 1000} 秒・もう一度 Ctrl+C で待たずに終了）\n`
+        );
+        await Promise.race([
+          raceMemoryRecordWithTimeout(memoryDone, SHUTDOWN_MEMORY_TIMEOUT_MS),
+          new Promise((resolve) => {
+            skipMemoryWait = () => resolve(undefined);
+          })
+        ]);
+        skipMemoryWait = null;
       }
       // S3: fire 結線の常駐リソースも確実に畳む（リーク禁止・cli.mjs の dispose 順の型）。
       if (session) {

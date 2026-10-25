@@ -15,6 +15,8 @@
  *                           speak-now 合意 §5。待つはサーバが流さない）
  *  - commentJudgmentText  → コメント反応の判定行（SSE selfFire kind:"comment-judgment"・"コメント判定: 反応 0.92"・
  *                           コメント反応の合意 §3。反応しないはサーバが流さない）
+ *  - recallStepText       → 思い出しの係の行（SSE selfFire kind:"recall-step"・「思い出し中: 「頼みごと」」・
+ *                           記憶の作り直し Wave 3。記憶の中身はサーバが流さない）
  */
 
 /**
@@ -79,7 +81,8 @@ export const SPEAK_NOW_CHOICE_LABELS = Object.freeze({
   wait: "待つ",
   backchannel: "相槌",
   respond: "応答",
-  initiate: "自発"
+  initiate: "自発",
+  look: "画面を見る"
 });
 
 /**
@@ -108,4 +111,42 @@ export function commentJudgmentText(d) {
   const label = /** @type {Record<string, string>} */ (COMMENT_REACT_CHOICE_LABELS)[choice] ?? choice;
   const p = d && typeof d.probability === "number" && Number.isFinite(d.probability) ? d.probability.toFixed(2) : "?";
   return "コメント判定: " + label + " " + p;
+}
+
+/**
+ * 思い出しの係の出来事の表示名（src/mind/recall-desk.mjs の phase。UI は mind を import しない）。
+ */
+export const RECALL_STEP_LABELS = Object.freeze({
+  started: "思い出し中",
+  queued: "思い出し待ち",
+  dropped: "思い出しを見送った（重なり）",
+  found: "思い出した",
+  "not-found": "見つからなかった",
+  avoided: "避けた",
+  deferred: "言えなかったので次の返事に渡した",
+  failed: "思い出せなかった（失敗）"
+});
+
+/**
+ * 思い出しの係の行の文字列（「思い出し中: 「エルデンリング 前回どこまで」」・記憶の作り直し Wave 3）。
+ * 判定の失敗で言う側に倒したときは末尾に「（判定エラー）」。未知の phase は値をそのまま。
+ * Wave 3 仕上げ: 自発 OFF で黙って渡したとき（silent）は「思い出した（黙って渡した）」、④の失敗を「見つからなかった」と
+ * 同じ扱いで届けたとき（failed・phase not-found）は「見つからなかった（失敗）」のように表示名の直後に括弧で添える。
+ * @param {{ phase?: string | null; request?: string | null; judgeFailed?: boolean | null; silent?: boolean | null; failed?: boolean | null }} d
+ * @returns {string}
+ */
+export function recallStepText(d) {
+  const phase = (d && d.phase) || "?";
+  const label = /** @type {Record<string, string>} */ (RECALL_STEP_LABELS)[phase] ?? phase;
+  const request = d && typeof d.request === "string" && d.request.length > 0 ? "「" + d.request + "」" : "";
+  /** @type {string[]} */
+  const notes = [];
+  if (d && d.failed === true && phase === "not-found") notes.push("失敗");
+  if (d && d.silent === true) notes.push("黙って渡した");
+  return (
+    label +
+    (notes.length > 0 ? "（" + notes.join("・") + "）" : "") +
+    (request ? ": " + request : "") +
+    (d && d.judgeFailed === true ? "（判定エラー）" : "")
+  );
 }
