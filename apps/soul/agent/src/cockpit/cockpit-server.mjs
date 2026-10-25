@@ -2279,6 +2279,8 @@ export function createCockpitServer(options = {}) {
     //  - 忙しい: orchestrator が idle でない、またはサーバが呼んだ fire() がまだ片付いていない。
     //  - 判定してよい: speak-now モード・自発 pill ON・KILL でない。
     //  - 応答・自発 → 通常の自発発火と同じ fire({vision:"preferred"})（LLM に区別は伝えない・合意 §2）。
+    //  - 画面を見る（look）→ 応答と同じ fire({vision:"preferred"})（追加の指示なし・撮れなかったときの特別扱いもなし・
+    //    experiments/04-look-request.md）。cause.choice に "look" が載る。
     //  - 相槌 → 同じ頭・同じセッションで fire({vision:"preferred", instruction})（画面も見る・2026-10-17 改め。その 1 回だけ先頭に
     //    「今は配信者の話に相槌を打つタイミング。」・backchannel.md §2）。発火結果は kind:"speak-now" で
     //    応答・自発と同じ selfFire 行（判定行「判定: 相槌 0.xx」の直後に出る）。前の相槌を喋り始めてから
@@ -2295,7 +2297,7 @@ export function createCockpitServer(options = {}) {
       nowImpl,
       backchannelMinIntervalMs,
       onFire: ({ choice, probability, trigger, triggerSeq, latencyMs }) => {
-        // きっかけ = 判定（応答 / 自発 / 相槌 + 確率 + きっかけの配信者の行の seq + 判定の遅延）。
+        // きっかけ = 判定（応答 / 自発 / 相槌 / 画面を見る + 確率 + きっかけの配信者の行の seq + 判定の遅延）。
         const cause = {
           type: "speak-now",
           choice,
@@ -2305,6 +2307,7 @@ export function createCockpitServer(options = {}) {
           judgeLatencyMs: latencyMs ?? null
         };
         if (choice !== "backchannel") {
+          // 応答・自発・画面を見る（look）は同じ発火（画面付き・指示なし）。
           requestSelfFire("speak-now", { vision: "preferred", cause });
           return;
         }
@@ -2462,7 +2465,8 @@ export function createCockpitServer(options = {}) {
    * rejection もどちらも "fired:false" として扱う）。
    * @param {string | undefined} kind
    * @param {{ vision?: boolean | "preferred"; instruction?: string; cause?: object }} fireOptions  vision:false（と省略）は画面を撮らない通常発火
-   *   （speak-now の相槌）。cause はきっかけ（orchestrator が受理・遅延に載せる）。
+   *   （思い出しの係）。speak-now は相槌も含めて画面を見る "preferred"（相槌は 2026-10-17 改め）。instruction はその 1 回だけ
+   *   先頭に付ける内部指示（相槌・コメント反応・思い出し）。cause はきっかけ（orchestrator が受理・遅延に載せる）。
    * @param {object} [extra]  selfFire SSE に足す付随情報（コメント反応の commentIds = どのコメントで発火したか）。
    * @returns {Promise<any>}  発火の結果を放送し終えたら、その結果で片付く（reject しない・失敗は
    *   `{ fired:false, reason:"error" }`）。思い出しの係が「忙しかったか・受理されたか」を見る。

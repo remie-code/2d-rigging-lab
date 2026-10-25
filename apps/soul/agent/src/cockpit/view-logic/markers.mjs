@@ -81,7 +81,8 @@ export const SPEAK_NOW_CHOICE_LABELS = Object.freeze({
   wait: "待つ",
   backchannel: "相槌",
   respond: "応答",
-  initiate: "自発"
+  initiate: "自発",
+  look: "画面を見る"
 });
 
 /**

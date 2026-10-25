@@ -219,5 +219,20 @@ test("持つ件数には上限がある（会話・コメント）・行の key 
 test("judgmentChipText: 選択の表示名 + 確率 2 桁・欠落は ?", () => {
   assert.equal(judgmentChipText("respond", 0.7249), "応答 0.72");
   assert.equal(judgmentChipText("backchannel", 0.44), "相槌 0.44");
+  assert.equal(judgmentChipText("look", 0.58), "画面を見る 0.58");
   assert.equal(judgmentChipText(null, null), "? ?");
+});
+
+test("画面を見る（look）の発火: きっかけの行があればその行に札、無ければチャッピーの行に「画面を見る 0.58」", () => {
+  const g = run([
+    you(1, "チャッピー、画面見て。"),
+    ["selfFire", { kind: "speak-now-judgment", choice: "look", probability: 0.58, action: "fire", trigger: "transcript", triggerSeq: 1 }],
+    ["fire", { accepted: true, fireId: 1, cause: { type: "speak-now", choice: "look", probability: 0.58, triggerSeq: 1 } }],
+    soul(2, 1, "a"),
+    ["fire", { accepted: true, fireId: 2, cause: { type: "speak-now", choice: "look", probability: 0.58, triggerSeq: 999 } }],
+    soul(3, 2, "b")
+  ]);
+  const rows = conversationRowsView(g);
+  assert.equal(rows[0].chipText, "画面を見る 0.58");
+  assert.deepEqual(rows.filter((r) => r.kind === "soul").map((r) => r.kindText), [null, "画面を見る 0.58"]);
 });

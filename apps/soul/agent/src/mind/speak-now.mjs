@@ -3,23 +3,29 @@
  * speak-now（話し始めの判定）— apps/soul/agent。
  *
  * 合意: discussion/ai-cohost/decisions/speak-now/integration.md（相槌は backchannel.md で改めた）。配信者（you）の
- * 転写が転写バッファに 1 件積まれるたびに、判定エンジン（judge）に「今どう反応するのが自然か」を 4 択（待つ /
- * 相槌 / 応答 / 自発）で聞き、応答・自発・相槌なら発火を要求する。fire-scheduler の**外の別部品**
+ * 転写が転写バッファに 1 件積まれるたびに、判定エンジン（judge）に「今どう反応するのが自然か」を 5 択（待つ /
+ * 相槌 / 応答 / 自発 / 画面を見る）で聞き、待つ以外なら発火を要求する。fire-scheduler の**外の別部品**
  * （合意 §4）。fire-scheduler には「speak-now の間は turn-end / call / interjection を止める」スイッチ
  * だけがあり、この部品は scheduler を知らない（結線は cockpit-server）。
  *
  * ── 判定（合意 §1）────────────────────────────────────────────────────────
  *  - 問い C（scripts/probe-decisions-speak-now.mjs の `QUESTIONS.c`）の頭に、口数モードに対応した
  *    性格の 1 文（同 `PERSONAS`）を付ける。{名前} は今の頭の identity（チャッピー / コーディ）。
- *  - 選択肢 v2（同 `CHOICES_V2`）。名前は identity に合わせて差し込む。
+ *  - 選択肢 v2（同 `CHOICES_V2`）。名前は identity に合わせて差し込む。その後ろに「画面を見る」（look）を足す
+ *    （discussion/ai-cohost/decisions/speak-now/experiments/04-look-request.md・e2・2026-10-22 採用）。チャッピーの目は
+ *    発火したときにだけ画面を撮るので、「画面見て」に応えるには発火が要る。説明は「今の画面を見てから反応する。」
+ *    だけで、事情の一文やキーワードのルールは足さない。
  *  - 入力: 直近 3 分の会話（「配信者: …」「{名前}: …」）。行数の上限なし。視聴者コメントは入れない。
  *  - 結果は最大確率の選択（judge が返す choice）をそのまま使う（しきい値なし）。
  *
  * ── 動き（合意 §2）と タイミング（合意 §3）─────────────────────────────────────
  *  - 応答・自発 → onFire（結線層が通常の自発発火と同じ fire を呼ぶ）。待つ → 発火しない。
- *  - 相槌 → onFire（choice:"backchannel"）。結線層は同じ頭・同じセッションで、画面を撮らず、その 1 回だけ
- *    先頭に SPEAK_NOW_BACKCHANNEL_INSTRUCTION を付けて発火する（discussion/ai-cohost/decisions/speak-now/
- *    backchannel.md §2。integration.md §2 の「相槌 → 何もしない」を改めたもの）。
+ *  - 画面を見る → onFire（choice:"look"）。結線層は応答と同じく画面付き（vision:"preferred"）で発火する。追加の
+ *    指示は付けず、撮れなかったときの特別扱いもしない（04-look-request.md）。after-busy・歯止めも応答と同じ扱い。
+ *  - 相槌 → onFire（choice:"backchannel"）。結線層は同じ頭・同じセッションで、応答と同じく画面も見て
+ *    （vision:"preferred"・2026-10-17 改め）、その 1 回だけ先頭に SPEAK_NOW_BACKCHANNEL_INSTRUCTION を付けて
+ *    発火する（discussion/ai-cohost/decisions/speak-now/backchannel.md §2・§4。integration.md §2 の
+ *    「相槌 → 何もしない」を改めたもの）。
  *    歯止め: 前の相槌を喋り始めてから backchannelMinIntervalMs（既定 8 秒）の間は、判定が相槌でも発火せず流す
  *    （action "skip-interval"）。相槌どうしにだけ効かせる（応答・自発は数え始めにも歯止めにも関わらない）。
  *    数え始めは結線層が markBackchannelSpoken() で知らせる（相槌の発火でチャッピーが喋り始めた時点）。
@@ -28,7 +34,7 @@
  *  - 忙しい間（isBusy）は判定を呼ばず、you の転写を数えておく。忙しさが明けたとき（notifyIdle）、
  *    その間に 1 件以上あれば 1 回だけ判定する。
  *  - 判定中に次の発言が来たら、前の判定を待たずに並行して呼ぶ。結果が返った時点で空いていて
- *    応答・自発・相槌なら発火する。忙しければ捨てる（判定行は出す）。
+ *    応答・自発・相槌・画面を見るなら発火する。忙しければ捨てる（判定行は出す）。
  *  - 判定を待つ間に配信者が喋り始めても判定は捨てない（VAD はこの部品に入れない）。
  *  - isActive が偽（speak-now モードでない・自発 pill OFF・KILL 中）の間は判定を呼ばない。
  *
@@ -52,11 +58,12 @@ export const SPEAK_NOW_CHOICE_LABELS = Object.freeze({
   wait: "待つ",
   backchannel: "相槌",
   respond: "応答",
-  initiate: "自発"
+  initiate: "自発",
+  look: "画面を見る"
 });
 
-/** 発火する選択（合意 §2・相槌は backchannel.md §2 で発火する側に入った）。 */
-export const SPEAK_NOW_FIRE_CHOICES = Object.freeze(["respond", "initiate", "backchannel"]);
+/** 発火する選択（合意 §2・相槌は backchannel.md §2、画面を見るは 04-look-request.md で発火する側に入った）。 */
+export const SPEAK_NOW_FIRE_CHOICES = Object.freeze(["respond", "initiate", "backchannel", "look"]);
 
 /**
  * 相槌の発火で、その 1 回だけ ask の先頭に付ける内部指示（backchannel.md §2）。やり方（短く・一言で等）は
@@ -101,9 +108,9 @@ export function buildSpeakNowInstructions({ name, verbosity }) {
 }
 
 /**
- * 選択肢 v2（probe の CHOICES_V2 の「チャッピー」を {名前} にしたもの）。
+ * 選択肢 v2（probe の CHOICES_V2 の「チャッピー」を {名前} にしたもの）+ 後ろに「画面を見る」（04-look-request.md の e2）。
  * @param {string} name
- * @returns {Array<{ value: "wait" | "backchannel" | "respond" | "initiate"; description: string }>}
+ * @returns {Array<{ value: "wait" | "backchannel" | "respond" | "initiate" | "look"; description: string }>}
  */
 export function buildSpeakNowChoices(name) {
   return [
@@ -119,7 +126,8 @@ export function buildSpeakNowChoices(name) {
     {
       value: "initiate",
       description: "自発的に話す: 答える必要はないが、自分から言いたいことがある（感想・ツッコミ・補足・話題）ので話し始める。"
-    }
+    },
+    { value: "look", description: "画面を見る: 今の画面を見てから反応する。" }
   ];
 }
 
@@ -185,8 +193,8 @@ function lastHostSeq(entries) {
  * @param {() => boolean} options.isActive  判定を呼んでよいか（speak-now モード・自発 ON・KILL でない）。
  * @param {() => string} options.getName  今の頭の名前（チャッピー / コーディ）。
  * @param {() => string | null | undefined} options.getVerbosity  口数モード（quiet / normal / chatty）。
- * @param {(request: SpeakNowFireRequest) => void} options.onFire  応答・自発・相槌で発火を要求する（choice で結線層が
- *   発火の仕方を分ける: 相槌は画面なし + 内部指示）。確率・きっかけの seq・判定の遅延も載る。
+ * @param {(request: SpeakNowFireRequest) => void} options.onFire  応答・自発・相槌・画面を見るで発火を要求する（choice で
+ *   結線層が発火の仕方を分ける: 相槌は内部指示付き・ほかは指示なし。どれも画面付き）。確率・きっかけの seq・判定の遅延も載る。
  * @param {(judgment: SpeakNowJudgment) => void} [options.onJudgment]  判定結果（待つも含め毎回）。
  * @param {(failure: SpeakNowJudgeFailure) => void} [options.onError]  判定の失敗（キー欠落・タイムアウト等）。
  * @param {() => number} [options.nowImpl=Date.now]  入力の窓の基準時刻（appendedAtMs と同じ時計）。相槌の

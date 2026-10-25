@@ -1852,11 +1852,24 @@ test("formatSpeakNowLine: 遅延・選択・確率の 1 行（本文なし）・
       trigger: "transcript",
       choice: "initiate",
       probability: 0.4512,
-      probs: { wait: 0.2, backchannel: 0.15, respond: 0.2, initiate: 0.4512 },
+      probs: { wait: 0.2, backchannel: 0.15, respond: 0.18, initiate: 0.4512, look: 0.02 },
       latencyMs: 812.4,
       action: "fire"
     }),
-    "[cockpit] speak-now: ms=812 choice=initiate p=0.45 action=fire trigger=transcript probs=wait:0.20,backchannel:0.15,respond:0.20,initiate:0.45\n"
+    "[cockpit] speak-now: ms=812 choice=initiate p=0.45 action=fire trigger=transcript probs=wait:0.20,backchannel:0.15,respond:0.18,initiate:0.45,look:0.02\n"
+  );
+  // 画面を見る（look・experiments/04-look-request.md）も同じ 1 行。
+  assert.equal(
+    formatSpeakNowLine({
+      ok: true,
+      trigger: "transcript",
+      choice: "look",
+      probability: 0.58,
+      probs: { wait: 0.11, backchannel: 0.05, respond: 0.21, initiate: 0.05, look: 0.58 },
+      latencyMs: 610,
+      action: "fire"
+    }),
+    "[cockpit] speak-now: ms=610 choice=look p=0.58 action=fire trigger=transcript probs=wait:0.11,backchannel:0.05,respond:0.21,initiate:0.05,look:0.58\n"
   );
   assert.equal(
     formatSpeakNowLine({
@@ -1868,7 +1881,7 @@ test("formatSpeakNowLine: 遅延・選択・確率の 1 行（本文なし）・
       latencyMs: 640,
       action: "skip-interval"
     }),
-    "[cockpit] speak-now: ms=640 choice=backchannel p=0.41 action=skip-interval trigger=transcript probs=wait:0.30,backchannel:0.41,respond:0.20,initiate:0.09\n"
+    "[cockpit] speak-now: ms=640 choice=backchannel p=0.41 action=skip-interval trigger=transcript probs=wait:0.30,backchannel:0.41,respond:0.20,initiate:0.09,look:-\n"
   );
   assert.equal(
     formatSpeakNowLine({ ok: false, trigger: "after-busy", error: "タイムアウト（3 秒）", latencyMs: 3000 }),

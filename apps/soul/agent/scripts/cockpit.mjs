@@ -1297,7 +1297,7 @@ export function formatSpeakNowLine(info) {
     return `[cockpit] speak-now: error ms=${ms} trigger=${trigger} reason=${info?.error ?? "unknown"}\n`;
   }
   const probs = info.probs && typeof info.probs === "object" ? info.probs : {};
-  const all = ["wait", "backchannel", "respond", "initiate"].map((k) => `${k}:${fmtProb(probs[k])}`).join(",");
+  const all = ["wait", "backchannel", "respond", "initiate", "look"].map((k) => `${k}:${fmtProb(probs[k])}`).join(",");
   return (
     `[cockpit] speak-now: ms=${ms} choice=${info.choice} p=${fmtProb(info.probability)} ` +
     `action=${info.action ?? "-"} trigger=${trigger} probs=${all}\n`

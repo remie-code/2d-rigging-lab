@@ -46,7 +46,7 @@
 
 ## 5. Next Actions
 
-1. 人間ゲート([../implementation/waves/memory-recall/human-gate.md](../implementation/waves/memory-recall/human-gate.md))。実装は 3 wave とも済み(2026-10-21)。
+1. 実装は 3 wave とも済み、思い出す流れは人間ゲート合格(2026-10-25、[../implementation/waves/memory-recall/human-gate.md](../implementation/waves/memory-recall/human-gate.md))。次は長い目でやる③整理役と、きっかけで思い出すこと。
 
 ## 6. Unresolved Questions
 

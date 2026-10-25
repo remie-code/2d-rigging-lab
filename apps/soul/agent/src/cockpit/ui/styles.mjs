@@ -71,7 +71,7 @@ export const COCKPIT_CSS = `
   --kill-bg: #3b1215;
   --who-streamer: #e9c46a;     /* 会話の話者「配信者」（模型の金色） */
   --viewer-name: #e7eaee;
-  --chip: #5fc4e8;             /* 判定の札（応答 / 自発 / 相槌 + 確率） */
+  --chip: #5fc4e8;             /* 判定の札（応答 / 自発 / 相槌 / 画面を見る + 確率） */
   --range: #3fb4cf;            /* 推論に使った範囲の縦線 */
   --latest-bg: rgba(86, 212, 176, 0.09);
   --linked-bg: rgba(86, 212, 176, 0.05);

@@ -1,6 +1,6 @@
 # 記憶の作り直し 人間ゲート
 
-> Status: PENDING(手順を用意 2026-10-21)。計画は [../../orchestration/memory-recall-wave-plan.md](../../orchestration/memory-recall-wave-plan.md) §6。
+> Status: 思い出す流れは合格(2026-10-25、ユーザー「思い出すは完璧に機能した」)。ほかの項目の個別の記録はなし。計画は [../../orchestration/memory-recall-wave-plan.md](../../orchestration/memory-recall-wave-plan.md) §6。
 
 ## 0. 準備
 
@@ -25,6 +25,8 @@
 - 思い出しに約 30 秒かかる間の体感。
 - 会話指示の編集画面に、思い出す教えが「いつも足される内容」として読める形で出ているか。
 
-## 3. 記録
+## 3. 記録(2026-10-25)
 
-(ゲート後に追記)
+- 思い出す流れ: 「思い出すは完璧に機能したね」(ユーザー)。
+- 1(MCP・通知)、4(避ける)、5(保存の 4 経路と記憶の git)、6(移し替えた記録)は、個別の結果を聞いていない。問題の報告もない。
+- 同じ時期に、話し始めの判定へ「画面を見る」の選択肢を足した([../../../decisions/speak-now/experiments/04-look-request.md](../../../decisions/speak-now/experiments/04-look-request.md))。実配信での効き方は未確認。

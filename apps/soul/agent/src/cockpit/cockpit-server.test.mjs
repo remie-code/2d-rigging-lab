@@ -4268,6 +4268,51 @@ test("cockpit speak-now: 口数は問いの性格の 1 文にだけ効く（POST
   }
 });
 
+test("cockpit speak-now: 画面を見る（look）は応答と同じ発火（preferred・指示なし・cause.choice:look）・判定行が載る・喋り終えたら after-busy を回す", async () => {
+  const fakeOrch = makeManualFireOrchestrator();
+  const h = await startSpeakNowServer({ fakeOrch });
+  try {
+    // 選択肢の後ろに「画面を見る」が載る（experiments/04-look-request.md の e2）。
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "チャッピー、画面見て。" });
+    assert.deepEqual(
+      h.fakeJudge.calls[0].request.choices.map((/** @type {any} */ c) => c.value),
+      ["wait", "backchannel", "respond", "initiate", "look"]
+    );
+    h.fakeJudge.calls[0].resolve(judgeResult("look", 0.58));
+    const row = await h.sse.waitFor((e) => e.event === "selfFire" && e.data.kind === "speak-now-judgment");
+    assert.deepEqual(row.data, {
+      kind: "speak-now-judgment",
+      choice: "look",
+      probability: 0.58,
+      latencyMs: 812,
+      action: "fire",
+      trigger: "transcript",
+      triggerSeq: 0
+    });
+    await settle();
+    assert.equal(fakeOrch.record.fireCount, 1);
+    assert.deepEqual(fakeOrch.record.lastFireOptions, {
+      vision: "preferred",
+      cause: { type: "speak-now", choice: "look", probability: 0.58, trigger: "transcript", triggerSeq: 0, judgeLatencyMs: 812 }
+    });
+    // 画面を見て喋っている間の発言は、喋り終わった後に 1 回判定する（応答と同じ・相槌のような止めはない）。
+    fakeOrch.enter("thinking");
+    fakeOrch.enter("speaking");
+    h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "そうそれ" });
+    fakeOrch.enter("idle");
+    fakeOrch.resolvers[0]({ fired: true });
+    await settle();
+    await settle();
+    assert.equal(h.fakeJudge.calls.length, 2, "画面を見たあとは after-busy の判定を回す");
+    h.fakeJudge.calls[1].resolve(judgeResult("wait", 0.9));
+    await settle();
+    assert.equal(h.logged.at(-1).trigger, "after-busy");
+  } finally {
+    h.sse.close();
+    await h.server.close();
+  }
+});
+
 test("cockpit speak-now: 相槌も画面を見て（preferred）内部指示付きで発火・判定行の直後に発火結果の行／待つは判定行も出さない", async () => {
   const h = await startSpeakNowServer();
   try {

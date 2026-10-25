@@ -1,6 +1,6 @@
 # 記憶の作り直し(構造化・オンデマンドの思い出し)wave 計画
 
-> Status: ACTIVE(2026-10-21 ユーザー承認)。Wave 1 完了(軽い突き合わせ合格 [../reviews/memory-recall/wave-1.md](../reviews/memory-recall/wave-1.md))。Wave 2 完了(突き合わせ合格 [../reviews/memory-recall/wave-2.md](../reviews/memory-recall/wave-2.md)、仕上げ [../waves/memory-recall/wave-2-fixes-report.md](../waves/memory-recall/wave-2-fixes-report.md))。Wave 3 完了(突き合わせ合格 [../reviews/memory-recall/wave-3.md](../reviews/memory-recall/wave-3.md)、仕上げ [../waves/memory-recall/wave-3-fixes-report.md](../waves/memory-recall/wave-3-fixes-report.md))。機械ゲート PASS(soul 1596/1596・soul-zone)。**人間ゲート PENDING** → [../waves/memory-recall/human-gate.md](../waves/memory-recall/human-gate.md)。
+> Status: ACTIVE(2026-10-21 ユーザー承認)。Wave 1 完了(軽い突き合わせ合格 [../reviews/memory-recall/wave-1.md](../reviews/memory-recall/wave-1.md))。Wave 2 完了(突き合わせ合格 [../reviews/memory-recall/wave-2.md](../reviews/memory-recall/wave-2.md)、仕上げ [../waves/memory-recall/wave-2-fixes-report.md](../waves/memory-recall/wave-2-fixes-report.md))。Wave 3 完了(突き合わせ合格 [../reviews/memory-recall/wave-3.md](../reviews/memory-recall/wave-3.md)、仕上げ [../waves/memory-recall/wave-3-fixes-report.md](../waves/memory-recall/wave-3-fixes-report.md))。機械ゲート PASS(soul 1596/1596・soul-zone)。**人間ゲート: 思い出す流れは合格(2026-10-25)** → [../waves/memory-recall/human-gate.md](../waves/memory-recall/human-gate.md)。
 > 根拠:
 > - 合意: [../../memory/recall-flow.md](../../memory/recall-flow.md)
 > - 置き場の決まり: [../../memory/conventions-draft.md](../../memory/conventions-draft.md)
