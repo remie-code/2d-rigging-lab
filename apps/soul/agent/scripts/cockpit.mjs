@@ -68,7 +68,7 @@ import {
   DEFAULT_COMPACT_QUIET_MS,
   DEFAULT_COMPACT_MIN_INTERVAL_MS
 } from "../src/mind/context-compactor.mjs";
-import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord } from "../src/mind/session-usage-log.mjs";
+import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord, replyLatencyUsageRecord } from "../src/mind/session-usage-log.mjs";
 import { resolveLatencyThresholds } from "../src/mind/fire-latency.mjs";
 import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/quota.mjs";
 import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
@@ -78,10 +78,11 @@ import { createStreamPlayer } from "../src/voice/stream-player.mjs";
 import { createVoiceEngine } from "../src/voice/engines/voice-engine.mjs";
 import { createTtsClient } from "../src/voice/tts-client.mjs";
 import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
+import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
 import { DEFAULT_MEMORY_DIR, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
-import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
+import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
 import { appendSoulSkills, listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
 
@@ -856,10 +857,12 @@ export function createChatSourceHooks(settings) {
  * 未記憶/未知値は defaultEngine（既定 "whisper"）。選択だけを記憶し、ElevenLabs のキーはここで扱わない
  * （キーは cockpit-server が Start ごとに .env.elevenlabs.local から直接読む）。
  *
+ * 既知値は ear-pipeline の STT_ENGINES（whisper / elevenlabs / parakeet / zipformer）。
+ *
  * @param {{ getSttEngine: () => string | null; setSttEngine: (engine: string | null) => void }} settings
- * @param {"whisper" | "elevenlabs"} [defaultEngine="whisper"]
+ * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [defaultEngine="whisper"]
  * @returns {{
- *   resolveInitialSttEngine: () => "whisper" | "elevenlabs";
+ *   resolveInitialSttEngine: () => "whisper" | "elevenlabs" | "parakeet" | "zipformer";
  *   onSetSttEngine: (engine: string) => void;
  * }}
  */
@@ -868,7 +871,9 @@ export function createSttEngineHooks(settings, defaultEngine = "whisper") {
     /** 起動時の初期選択（未記憶/未知値は defaultEngine）。 */
     resolveInitialSttEngine: () => {
       const remembered = settings.getSttEngine();
-      return remembered === "whisper" || remembered === "elevenlabs" ? remembered : defaultEngine;
+      return remembered != null && STT_ENGINES.includes(remembered)
+        ? /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */ (remembered)
+        : defaultEngine;
     },
     /** cockpit-server の onSetSttEngine（耳の Start ごとに呼ぶ）。 */
     onSetSttEngine: (engine) => {
@@ -1390,6 +1395,74 @@ export function createContextCompactionHooks(settings, compactor) {
 }
 
 /**
+ * ①チャッピーの返事の turn/start に送る速さの段（service tier）。Codex の頭なら fast の ON で "priority"・OFF で
+ * "default"（OFF に戻したとき同じ thread を通常へ戻すため、OFF でも明示して送る）。Claude の頭は null（送らない）。
+ * @param {unknown} brainId
+ * @param {boolean} fastEnabled
+ * @returns {"priority" | "default" | null}
+ */
+export function resolveCodexServiceTier(brainId, fastEnabled) {
+  if (!isCodexBrainId(brainId)) return null;
+  return fastEnabled === true ? "priority" : "default";
+}
+
+/**
+ * 操縦席の設定（頭脳・会話のタブ）の「Codex の fast」（①チャッピーの Codex の頭だけ・service tier "priority"・
+ * 2026-10-27 合意）を、cockpit-server の口（onSetCodexFastMode / codexFastStatus）へ橋渡しする
+ * （createBargeInHooks と同じ流儀の薄い配線層）。設定の正本はここ（ON/OFF）で、次の受理の configuration に
+ * serviceTierFor の値を載せる＝次の返事から効く（セッションは作り直さない）。②書き出し役・④思い出し役は通らない。
+ * モデルが priority を持つかは、codex-session が model/list で読んだ結果（noteServiceTiers）を頭ごとに覚える。
+ * @param {{ getCodexFastMode?: () => boolean | null; setCodexFastMode?: (enabled: boolean) => void }} settings
+ * @param {boolean} [defaultEnabled=false]  未記憶時のフォールバック（既定 OFF）。
+ */
+export function createCodexFastHooks(settings, defaultEnabled = false) {
+  let enabled = defaultEnabled;
+  try {
+    const remembered = typeof settings.getCodexFastMode === "function" ? settings.getCodexFastMode() : null;
+    if (typeof remembered === "boolean") enabled = remembered;
+  } catch {
+    // 読めなければ既定。
+  }
+  /** @type {Map<string, boolean | null>} 頭 → そのモデルが priority を持つか（読めなければ null）。 */
+  const support = new Map();
+  return {
+    isEnabled: () => enabled,
+    /** cockpit-server の onSetCodexFastMode（POST /api/codex-fast が呼ぶ・値は検証済みの boolean）。 */
+    onSetCodexFastMode: (/** @type {boolean} */ next) => {
+      enabled = next === true;
+      try {
+        if (typeof settings.setCodexFastMode === "function") settings.setCodexFastMode(enabled);
+      } catch {
+        // 永続化失敗は操作を止めない（次の返事には効いている）。
+      }
+    },
+    /** 次の受理で①へ渡す段（resolveCodexServiceTier）。 */
+    serviceTierFor: (/** @type {unknown} */ brainId) => resolveCodexServiceTier(brainId, enabled),
+    /**
+     * codex-session の onServiceTiers（model/list で読んだ今のモデルの段）を覚える。変わったら true。
+     * @param {string} brainId
+     * @param {unknown} serviceTiers
+     */
+    noteServiceTiers: (brainId, serviceTiers) => {
+      const value = Array.isArray(serviceTiers) ? serviceTiers.includes("priority") : null;
+      const changed = !support.has(brainId) || support.get(brainId) !== value;
+      support.set(brainId, value);
+      return changed;
+    },
+    /**
+     * state snapshot の codexFast（enabled = 設定・applicable = 今の頭が Codex か・supported = priority を持つか
+     * （まだ確かめていない・Claude の頭なら null））。
+     * @param {unknown} brainId
+     */
+    codexFastStatus: (brainId) => {
+      const applicable = isCodexBrainId(brainId);
+      const supported = applicable && typeof brainId === "string" && support.has(brainId) ? support.get(brainId) ?? null : null;
+      return { enabled, applicable, supported };
+    }
+  };
+}
+
+/**
  * 圧縮の開始・終了の記録 1 行（session-usage/）。compactionUsageRecord の形（ratio = 窓に対する割合・
  * lastInputTokens・totalInputTokens・modelContextWindow）に、開始のときだけそのときの目安 thresholdTokens を足す
  * （目安は操縦席から変えられるので、記録の行だけで「どの目安で走ったか」が読めるように・追加のキーだけ）。
@@ -1465,6 +1538,13 @@ async function main() {
     return;
   }
 
+  // 前回の起動で取り残した Codex の記録ファイル（台帳 codex-rollouts.local.json の分）を、起動時に 1 回だけ消す。
+  // 以後のセッション（①・②書き出し役・④思い出し役）を作っても掃除は走らない（応答の遅れの直し・latency-fix-plan.md §2-1）。
+  try {
+    sweepCodexRollouts();
+  } catch {
+    // 掃除は best effort（起動を止めない）。
+  }
   // ── S3 追撃 domain-c: fire は常時結線・session/player は遅延生成・Channel URL は後入力可 ──────
   const settings = createFileSettingsStore();
   // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
@@ -1492,6 +1572,9 @@ async function main() {
   // 忙しい間のコメントの扱い（あとで拾う / 見逃す・既定 あとで拾う・§createCommentBusyHooks）。
   const commentBusyHooks = createCommentBusyHooks(settings);
   const commentHold = commentBusyHooks.resolveCommentHold();
+  // ①チャッピーの Codex の頭の fast（service tier "priority"・既定 OFF・§createCodexFastHooks）。次の受理の
+  // configuration に段を載せる＝次の返事から効く（セッションは作り直さない・②④は通らない）。
+  const codexFastHooks = createCodexFastHooks(settings, false);
 
   /** @type {ReturnType<typeof createLlmSession> | null} */
   let session = null;
@@ -1644,6 +1727,8 @@ async function main() {
       // Resolve once for this newly-created session. A later brain selection
       // disposes this session; the next Fire resolves the new identity again.
       const sessionIdentity = getCurrentBrainIdentity();
+      // このセッションの頭（fast の対応の有無をどの頭のものとして覚えるか）。
+      const sessionBrain = currentBrain;
       // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
       //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
       //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
@@ -1672,6 +1757,11 @@ async function main() {
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
         onRateLimits: (/** @type {any} */ rateLimits) => {
           if (isCodexBrainId(currentBrain)) quotaMonitor.mergeCodexUpdate(rateLimits);
+        },
+        // 今のモデルが fast（priority）を持つか（codex-session が model/list で読んだ段）。操縦席の
+        // 「このモデルは fast 非対応」の表示に使う。Claude のセッションは無視する。
+        onServiceTiers: (/** @type {any} */ info) => {
+          if (codexFastHooks.noteServiceTiers(sessionBrain, info?.serviceTiers)) server?.codexFastStatusChanged();
         },
         onInit: (init) =>
           process.stderr.write(
@@ -1814,7 +1904,9 @@ async function main() {
         audioDevice: audioDeviceHooks.getAudioDevice(),
         audioRevision,
         channelUrl: lazyChannel.getUrl(),
-        channelRevision
+        channelRevision,
+        // ①の turn/start に送る速さの段（Codex の頭のときだけ・受理の時点の fast の設定・Claude は null）。
+        serviceTier: codexFastHooks.serviceTierFor(currentBrain)
       }),
       metadata: Object.freeze({
         sessionContextRevision,
@@ -1859,6 +1951,16 @@ async function main() {
     // Codex の残量は頭が Codex のときだけ（Codex でなくなったら不明に戻す・Codex 同士の切替は同じアカウントなので保つ）。
     if (!isCodexBrainId(choice)) quotaMonitor.clearCodex();
     process.stdout.write(`[cockpit] brain set: ${choice}\n`);
+  };
+
+  /**
+   * 操縦席（POST /api/codex-fast）から①の Codex の頭の fast を切り替える。保存して、次の受理の configuration から
+   * 効かせる（進行中の返事・セッションは触らない）。
+   * @param {boolean} enabled
+   */
+  const onSetCodexFastMode = (enabled) => {
+    codexFastHooks.onSetCodexFastMode(enabled);
+    process.stdout.write(`[cockpit] codex fast: ${codexFastHooks.isEnabled() ? "on" : "off"} (from the next reply)\n`);
   };
 
   /**
@@ -2082,10 +2184,16 @@ async function main() {
     // 圧縮を始める大きさ（設定の「頭脳・会話」タブ）: 保存 + 走っている compactor の差し替え・snapshot の compaction。
     onSetCompactThresholdTokens: contextCompactionHooks.onSetCompactThresholdTokens,
     contextCompactionStatus: contextCompactionHooks.contextCompactionStatus,
+    // ①の Codex の頭の fast（設定の「頭脳・会話」タブ・POST /api/codex-fast と snapshot の codexFast）。
+    onSetCodexFastMode,
+    codexFastStatus: () => codexFastHooks.codexFastStatus(currentBrain),
     // 操縦席の文字起こし選択: 起動時に前回の選択を復元・Start ごとに記憶・遅延は標準出力へ 1 行（数字のみ）。
     // ElevenLabs のキーは cockpit-server の既定（.env.elevenlabs.local をコード内で直接読む）に任せる。
     sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
     onSetSttEngine: sttEngineHooks.onSetSttEngine,
+    // ローカルの文字起こし（Parakeet / Zipformer）の設定（画面なし・設定ファイルのキー）。Start ごとに読む。
+    // モデルの存在確認は cockpit-server の既定（vendor/models）に任せる。
+    localSttSettings: () => settings.getLocalStt(),
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
     // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶し、耳を開く前に engine を用意する
     // （種類が変われば作り直す・ElevenLabs のキーはここで読む）。用意できなければ Start は理由つきで失敗する。
@@ -2134,7 +2242,11 @@ async function main() {
     // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
     quotaSource: quotaMonitor,
     latencyThresholds: resolveLatencyThresholdsFromSettings(settings),
-    onReplyLatency: (record) => process.stdout.write(formatReplyLatencyLine(record))
+    onReplyLatency: (record) => {
+      process.stdout.write(formatReplyLatencyLine(record));
+      // 返事ごとの遅延の内訳を起動ごとの記録（session-usage/）にも 1 行（SSE "latency" と同じ値・本文なし・全部の頭）。
+      sessionUsageLog.append(replyLatencyUsageRecord(record));
+    }
   });
 
   const url = await server.listen();

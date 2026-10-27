@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { APP_SERVER_ARGS, MCP_CONFIG_READ_FAILED_WARNING, createCodexSession, mcpServerDisableOverrides } from "./codex-session.mjs";
+import { APP_SERVER_ARGS, MCP_CONFIG_READ_FAILED_WARNING, MODEL_LIST_FAILED_WARNING, SERVICE_TIERS, createCodexSession, mcpServerDisableOverrides, serviceTiersFromModelList, sweepCodexRollouts } from "./codex-session.mjs";
 
 class FakeChild extends EventEmitter {
   constructor(onMessage) {
@@ -133,6 +133,14 @@ function makeSpawnHarness(specForProcess = () => ({})) {
       } else if (message.method === "config/read") {
         if (spec.onConfigRead) spec.onConfigRead(message, api, child);
         else api.response(message, { config: spec.effectiveConfig ?? {}, origins: {}, layers: null });
+      } else if (message.method === "model/list") {
+        if (spec.onModelList) spec.onModelList(message, api, child);
+        else {
+          api.response(message, {
+            data: spec.models ?? [{ id: "gpt-5.6-terra", model: "gpt-5.6-terra", serviceTiers: [{ id: "priority", name: "Fast", description: "2x" }], defaultServiceTier: null }],
+            nextCursor: null
+          });
+        }
       } else if (message.method === "turn/interrupt" || message.method === "thread/delete") {
         if (spec.onCleanup) spec.onCleanup(message, api, child);
         else api.response(message, {});
@@ -1070,6 +1078,330 @@ test("codex-session: 既定（finalAnswerOnly なし）は今までどおり age
     const session = createTestSession(harness, scratch, { onWarning: (w) => warnings.push(w) });
     assert.equal((await session.ask("q")).replyText, "読みます。答え。");
     assert.deepEqual(warnings, []);
+    await session.dispose();
+  });
+});
+
+// ── 応答の遅れの直し（latency-fix-plan.md §2-1・§2-2）────────────────────────────────────────
+
+/** テスト用の記録ファイル（~/.codex/sessions/ の下）を置く。 */
+function seedRollout(homeDir, threadId) {
+  const dir = path.join(homeDir, ".codex", "sessions", "2026", "10", "27");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `rollout-2026-10-27T19-10-00-${threadId}.jsonl`);
+  writeFileSync(file, "{}\n");
+  return file;
+}
+
+test("codex-session: 使い捨て（書き出し役・思い出し役）を作っても、生きているチャッピーの記録ファイルは消えない（sweep-repro の形）", async () => {
+  await withScratch(async (scratch) => {
+    const cohostId = "lf-cohost-0001";
+    const cohostHarness = makeSpawnHarness(() => ({ threadId: cohostId, replyText: "そうだね。" }));
+    const cohost = createTestSession(cohostHarness, scratch);
+    await cohost.ask("やあ");
+    // Codex が書いた①の記録（ここではテストが置く）と台帳。
+    const rollout = seedRollout(scratch.homeDir, cohostId);
+    assert.deepEqual(JSON.parse(readFileSync(scratch.ledgerPath, "utf8")).threadIds, [cohostId]);
+
+    // ②書き出し役・④思い出し役（使い捨て）を作り、走らせて片付ける。
+    for (const sandbox of ["workspace-write", "read-only"]) {
+      const writerHarness = makeSpawnHarness(() => ({
+        onThread: (request, api) => api.response(request, { thread: { id: `lf-writer-${sandbox}`, ephemeral: true } }),
+        replyText: "済み"
+      }));
+      const writer = createTestSession(writerHarness, scratch, { ephemeral: true, sandbox, finalAnswerOnly: true });
+      assert.equal(existsSync(rollout), true, "使い捨てを作っても消えない");
+      await writer.ask("書いて");
+      assert.equal(writerHarness.threadRequests[0].params.ephemeral, true, "thread/start に ephemeral: true");
+      await writer.dispose();
+      assert.equal(
+        writerHarness.children[0].messages.some((m) => m.method === "thread/delete"),
+        false,
+        "記録の無い thread は thread/delete しない（not persisted で失敗するため）"
+      );
+      assert.equal(existsSync(rollout), true, "使い捨てを片付けても消えない");
+      assert.deepEqual(JSON.parse(readFileSync(scratch.ledgerPath, "utf8")).threadIds, [cohostId], "使い捨ては台帳に載らない");
+    }
+
+    // 使い捨てでない 2 つ目のセッション（頭の作り直し等）を作っても、掃除は 1 回だけなので消えない。
+    const secondHarness = makeSpawnHarness(() => ({ threadId: "lf-second-0001" }));
+    const second = createTestSession(secondHarness, scratch);
+    assert.equal(existsSync(rollout), true, "2 つ目の常駐のセッションを作っても消えない");
+    assert.equal(secondHarness.threadRequests.length, 0);
+    await second.dispose();
+
+    assert.equal((await cohost.ask("続き")).replyText, "そうだね。");
+    assert.equal(existsSync(rollout), true);
+    await cohost.dispose();
+    assert.equal(existsSync(rollout), false, "①を片付けたら自分の記録は消す（今までどおり）");
+    assert.deepEqual(JSON.parse(readFileSync(scratch.ledgerPath, "utf8")).threadIds, []);
+  });
+});
+
+test("codex-session: sweepCodexRollouts は 1 台帳につき 1 回だけ・生きている thread の記録は残す", async () => {
+  await withScratch(async (scratch) => {
+    const liveId = "lf-live-0002";
+    const harness = makeSpawnHarness(() => ({ threadId: liveId }));
+    const session = createTestSession(harness, scratch);
+    await session.ask("x");
+    const liveRollout = seedRollout(scratch.homeDir, liveId);
+    const staleRollout = seedRollout(scratch.homeDir, "lf-stale-0002");
+    // 別の台帳（前回の起動の取り残し + 今生きている thread）を掃除する。
+    const otherLedger = path.join(scratch.homeDir, "other-ledger.json");
+    writeFileSync(otherLedger, JSON.stringify({ threadIds: [liveId, "lf-stale-0002"] }));
+    assert.deepEqual(sweepCodexRollouts({ homeDir: scratch.homeDir, ledgerPath: otherLedger }), { swept: true, deleted: 1, kept: 1 });
+    assert.equal(existsSync(liveRollout), true, "生きている thread の記録は消さない");
+    assert.equal(existsSync(staleRollout), false, "取り残しは消す");
+    assert.deepEqual(JSON.parse(readFileSync(otherLedger, "utf8")).threadIds, [liveId], "生きている thread は台帳に残す");
+    // 2 回目は何もしない（起動時に 1 回だけ）。
+    const laterStale = seedRollout(scratch.homeDir, "lf-later-0002");
+    writeFileSync(otherLedger, JSON.stringify({ threadIds: ["lf-later-0002"] }));
+    assert.deepEqual(sweepCodexRollouts({ homeDir: scratch.homeDir, ledgerPath: otherLedger }), { swept: false, deleted: 0, kept: 0 });
+    assert.equal(existsSync(laterStale), true);
+    // createCodexSession が最初に作られたときに済ませた台帳も、2 回目は走らない。
+    assert.equal(sweepCodexRollouts({ homeDir: scratch.homeDir, ledgerPath: scratch.ledgerPath }).swept, false);
+    await session.dispose();
+  });
+});
+
+test("codex-session: ephemeral を頼んでも応答の thread が ephemeral でなければ、今までどおり台帳に載せて片付ける", async () => {
+  await withScratch(async (scratch) => {
+    const id = "lf-not-ephemeral-0003";
+    const harness = makeSpawnHarness(() => ({ threadId: id }));
+    const session = createTestSession(harness, scratch, { ephemeral: true });
+    await session.ask("x");
+    assert.equal(harness.threadRequests[0].params.ephemeral, true);
+    assert.deepEqual(JSON.parse(readFileSync(scratch.ledgerPath, "utf8")).threadIds, [id]);
+    const rollout = seedRollout(scratch.homeDir, id);
+    await session.dispose();
+    assert.equal(harness.children[0].messages.some((m) => m.method === "thread/delete"), true);
+    assert.equal(existsSync(rollout), false);
+    assert.deepEqual(JSON.parse(readFileSync(scratch.ledgerPath, "utf8")).threadIds, []);
+  });
+});
+
+test("codex-session: 既定（使い捨てでない）の thread/start は ephemeral を送らない", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ threadId: "lf-default-0004" }));
+    const session = createTestSession(harness, scratch);
+    await session.ask("x");
+    assert.equal(Object.hasOwn(harness.threadRequests[0].params, "ephemeral"), false);
+    await session.dispose();
+  });
+});
+
+test("codex-session: onTextDone は本文が揃った agentMessage の item/completed で 1 回・turn/completed より前に呼ぶ（本文は渡さない）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ threadId: "lf-done-0005", replyText: "そうだね。" }));
+    const session = createTestSession(harness, scratch);
+    /** @type {Array<any>} */
+    const events = [];
+    const result = await session.ask("q", {
+      onTextDelta: (delta) => events.push({ delta }),
+      onTextDone: (meta) => events.push({ done: meta })
+    });
+    events.push("resolved");
+    const doneIndexes = events.flatMap((e, i) => (e && typeof e === "object" && "done" in e ? [i] : []));
+    assert.equal(doneIndexes.length, 1);
+    assert.equal(doneIndexes[0], events.length - 2, "全部の delta の後・ask が返る前");
+    assert.equal(events.slice(0, doneIndexes[0]).map((e) => e.delta).join(""), result.replyText);
+    const meta = events[doneIndexes[0]].done;
+    assert.equal(meta.phase, null, "phase の無い agentMessage も締めの合図を出す");
+    assert.equal(typeof meta.itemId, "string");
+    assert.equal(Object.hasOwn(meta, "text"), false);
+    assert.ok(meta.elapsedMs >= 0);
+    await session.dispose();
+  });
+});
+
+test("codex-session: onTextDone は前置き（commentary）では呼ばず、final_answer で呼ぶ", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ threadId: "lf-done-0006", onTurn: (request, api) => toolTurn(api, request) }));
+    const session = createTestSession(harness, scratch, { finalAnswerOnly: true });
+    /** @type {Array<string | null>} */
+    const done = [];
+    await session.ask("q", { onTextDone: (meta) => done.push(meta.phase) });
+    assert.deepEqual(done, ["final_answer"]);
+    await session.dispose();
+  });
+});
+
+test("codex-session: delta の累積と item の text が合わなければ onTextDone を呼ばずに turn を失敗にする", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({
+      threadId: "lf-done-0007",
+      onTurn: (request, api) => {
+        const threadId = request.params.threadId;
+        const turnId = `t-${request.id}`;
+        api.response(request, { turn: { id: turnId, status: "inProgress", items: [] } });
+        api.notification("item/started", { threadId, turnId, item: { id: "a", type: "agentMessage", text: "" } });
+        api.notification("item/agentMessage/delta", { threadId, turnId, itemId: "a", delta: "そう" });
+        api.notification("item/completed", { threadId, turnId, item: { id: "a", type: "agentMessage", text: "そうだね。" } });
+        api.notification("turn/completed", { threadId, turn: { id: turnId, status: "completed", items: [] } });
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    let called = 0;
+    await assert.rejects(() => session.ask("q", { onTextDone: () => { called += 1; } }), /does not match/);
+    assert.equal(called, 0);
+    await session.dispose();
+  });
+});
+
+// ── 速さの段（service tier・操縦席の fast の切り替え・2026-10-27 実機確認 0.163.0）──────────────────────
+
+const modelListRequests = (child) => child.messages.filter((m) => m.method === "model/list");
+
+test("serviceTiersFromModelList: id か model が一致するモデルの段の id だけ・見つからなければ undefined", () => {
+  const page = {
+    data: [
+      { id: "gpt-6.1-sol", model: "gpt-6.1-sol", serviceTiers: [{ id: "priority", name: "Fast" }], defaultServiceTier: null },
+      { id: "x", model: "gpt-old", serviceTiers: [] },
+      { id: "broken", serviceTiers: [{ name: "no id" }, null] }
+    ]
+  };
+  assert.deepEqual(serviceTiersFromModelList(page, "gpt-6.1-sol"), ["priority"]);
+  assert.deepEqual(serviceTiersFromModelList(page, "gpt-old"), []);
+  assert.deepEqual(serviceTiersFromModelList(page, "broken"), []);
+  assert.equal(serviceTiersFromModelList(page, "gpt-none"), undefined);
+  assert.equal(serviceTiersFromModelList(null, "gpt-6.1-sol"), undefined);
+  assert.deepEqual(SERVICE_TIERS, ["default", "priority"]);
+});
+
+test("codex-session: serviceTier を渡すと turn/start に送り、同じ thread のまま priority → default → priority と切り替わる（作り直さない）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ threadId: "tier-0001" }));
+    /** @type {any[]} */
+    const tierInfos = [];
+    const warnings = [];
+    const session = createTestSession(harness, scratch, {
+      onServiceTiers: (info) => tierInfos.push(info),
+      onWarning: (w) => warnings.push(w)
+    });
+    /** @type {any[]} */
+    const started = [];
+    const a = await session.ask("q1", { serviceTier: "priority", onTurnStarted: (meta) => started.push(meta) });
+    const b = await session.ask("q2", { serviceTier: "default", onTurnStarted: (meta) => started.push(meta) });
+    const c = await session.ask("q3", { serviceTier: "priority" });
+    const d = await session.ask("q4");
+    assert.deepEqual(harness.turnRequests.map((r) => r.params.serviceTier), ["priority", "default", "priority", undefined], "指定しなければ送らない");
+    assert.deepEqual([a.serviceTier, b.serviceTier, c.serviceTier, d.serviceTier], ["priority", "default", "priority", null]);
+    assert.equal(harness.threadRequests.length, 1, "thread は作り直さない");
+    assert.equal(harness.children.length, 1);
+    assert.equal("serviceTier" in harness.threadRequests[0].params, false, "thread/start には渡さない（turn/start で切り替える）");
+    assert.equal(modelListRequests(harness.children[0]).length, 1, "model/list は接続ごとに 1 回");
+    assert.deepEqual(modelListRequests(harness.children[0])[0].params, { includeHidden: true });
+    assert.deepEqual(tierInfos, [{ model: "gpt-5.6-terra", serviceTiers: ["priority"] }]);
+    assert.deepEqual(started.map((m) => [m.threadId, m.serviceTier]), [["tier-0001", "priority"], ["tier-0001", "default"]]);
+    assert.ok(started.every((m) => typeof m.turnId === "string"));
+    assert.deepEqual(warnings, []);
+    await session.dispose();
+  });
+});
+
+test("codex-session: thread/settings/updated は黙って受ける（未対応の通知の警告を出さない）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({
+      threadId: "tier-0002",
+      onTurn: (request, api) => {
+        api.notification("thread/settings/updated", {
+          threadId: request.params.threadId,
+          threadSettings: { serviceTier: request.params.serviceTier ?? null, model: "gpt-5.6-terra" }
+        });
+        successfulTurn(api, request, "はい。");
+      }
+    }));
+    const warnings = [];
+    const session = createTestSession(harness, scratch, { onWarning: (w) => warnings.push(w) });
+    const result = await session.ask("q", { serviceTier: "priority" });
+    assert.equal(result.replyText, "はい。");
+    assert.deepEqual(warnings, []);
+    await session.dispose();
+  });
+});
+
+test("codex-session: モデルが priority を持たない・一覧に無いなら priority を求めても default を送る（400 で turn を落とさない）", async () => {
+  await withScratch(async (scratch) => {
+    for (const models of [
+      [{ id: "gpt-5.6-terra", model: "gpt-5.6-terra", serviceTiers: [] }],
+      [{ id: "other", model: "other", serviceTiers: [{ id: "priority" }] }]
+    ]) {
+      const harness = makeSpawnHarness(() => ({ models }));
+      /** @type {any[]} */
+      const tierInfos = [];
+      const session = createTestSession(harness, scratch, { onServiceTiers: (info) => tierInfos.push(info) });
+      const result = await session.ask("q", { serviceTier: "priority" });
+      assert.equal(harness.turnRequests[0].params.serviceTier, "default");
+      assert.equal(result.serviceTier, "default");
+      assert.deepEqual(tierInfos, [{ model: "gpt-5.6-terra", serviceTiers: [] }]);
+      await session.dispose();
+    }
+  });
+});
+
+test("codex-session: model/list はページを辿ってモデルを探す", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({
+      onModelList: (request, api) => {
+        if (!request.params.cursor) api.response(request, { data: [{ id: "a", model: "a", serviceTiers: [] }], nextCursor: "p2" });
+        else api.response(request, { data: [{ id: "gpt-5.6-terra", model: "gpt-5.6-terra", serviceTiers: [{ id: "priority" }] }], nextCursor: null });
+      }
+    }));
+    const session = createTestSession(harness, scratch);
+    const result = await session.ask("q", { serviceTier: "priority" });
+    assert.equal(result.serviceTier, "priority");
+    assert.deepEqual(modelListRequests(harness.children[0]).map((m) => m.params.cursor ?? null), [null, "p2"]);
+    await session.dispose();
+  });
+});
+
+test("codex-session: model/list が読めなければ警告を 1 回出し、この接続では default を送る（会話は続ける）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({ onModelList: (request, api) => api.rpcError(request, "nope") }));
+    const warnings = [];
+    /** @type {any[]} */
+    const tierInfos = [];
+    const session = createTestSession(harness, scratch, { onWarning: (w) => warnings.push(w), onServiceTiers: (info) => tierInfos.push(info) });
+    const first = await session.ask("q1", { serviceTier: "priority" });
+    const second = await session.ask("q2", { serviceTier: "priority" });
+    assert.equal(first.replyText, "はい。");
+    assert.deepEqual([first.serviceTier, second.serviceTier], ["default", "default"]);
+    assert.deepEqual(warnings, [MODEL_LIST_FAILED_WARNING]);
+    assert.deepEqual(tierInfos, [{ model: "gpt-5.6-terra", serviceTiers: null }]);
+    assert.equal(modelListRequests(harness.children[0]).length, 1, "失敗も接続ごとに 1 回だけ");
+    await session.dispose();
+  });
+});
+
+test("codex-session: default だけを求めるときは model/list を待たずに送る（対応の有無は裏で読んで知らせる）", async () => {
+  await withScratch(async (scratch) => {
+    /** @type {any} */
+    let pendingList = null;
+    const harness = makeSpawnHarness(() => ({ onModelList: (request, api) => { pendingList = { request, api }; } }));
+    /** @type {any[]} */
+    const tierInfos = [];
+    const session = createTestSession(harness, scratch, { rpcTimeoutMs: 1_000, onServiceTiers: (info) => tierInfos.push(info) });
+    const result = await session.ask("q", { serviceTier: "default" });
+    assert.equal(result.serviceTier, "default");
+    assert.equal(harness.turnRequests[0].params.serviceTier, "default");
+    assert.ok(pendingList, "model/list は出ている");
+    assert.deepEqual(tierInfos, []);
+    pendingList.api.response(pendingList.request, { data: [{ id: "gpt-5.6-terra", serviceTiers: [{ id: "priority" }] }], nextCursor: null });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(tierInfos, [{ model: "gpt-5.6-terra", serviceTiers: ["priority"] }]);
+    await session.dispose();
+  });
+});
+
+test("codex-session: serviceTier は default / priority だけ（それ以外は turn を始めずに TypeError・次の ask は通る）", async () => {
+  await withScratch(async (scratch) => {
+    const harness = makeSpawnHarness(() => ({}));
+    const session = createTestSession(harness, scratch);
+    await assert.rejects(() => session.ask("q", { serviceTier: /** @type {any} */ ("flex") }), TypeError);
+    assert.equal(harness.turnRequests.length, 0);
+    const ok = await session.ask("q", { serviceTier: null });
+    assert.equal(ok.serviceTier, null);
+    assert.equal("serviceTier" in harness.turnRequests[0].params, false);
     await session.dispose();
   });
 });

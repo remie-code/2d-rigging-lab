@@ -187,7 +187,9 @@ export function createFireTiming(options) {
  *   voiceMs: number | null;
  *   inFireMs: number | null;
  *   otherMs: number | null;
- * }} FireLatency  orchestrator の onLatency が渡す発火の中の区間。
+ *   serviceTier?: string | null;
+ * }} FireLatency  orchestrator の onLatency が渡す発火の中の区間。serviceTier はその返事の turn/start に送った
+ *   Codex の速さの段（"priority" = fast / "default"・送っていない頭は null・操縦席の fast の切り替え）。
  */
 
 /**

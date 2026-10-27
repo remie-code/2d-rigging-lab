@@ -17,7 +17,9 @@
  *    conversation-instruction editor へ切り替える。編集本文だけを dedicated API へ保存し、
  *    identity は読み取り専用で表示する（記憶の構造の表示は記憶の作り直し Wave 2 で撤去）。頭脳の下に「圧縮を始める大きさ」（万トークンの select +
  *    Set・POST /api/compact-threshold → 保存と走っている compactor の差し替え = 次の確認から効く・既定 20 万の表示と
- *    Codex の頭のときだけ効く旨の説明。頭脳 select と同じ select + Set の流儀）。
+ *    Codex の頭のときだけ効く旨の説明。頭脳 select と同じ select + Set の流儀）。その下に「返事の速さ」の
+ *    「Codex の fast」チェックボックス（POST /api/codex-fast → 次の返事から効く・①チャッピーの Codex の頭だけ。
+ *    Claude の頭・モデルが非対応のときは文言で示す。運転のタブの barge-in トグルと同じ controlled 部品）。
  *  - 運転・ログ（操縦席の作り直し・cockpit-glance-redesign.md §5・§9.2）: 「運転」（自発・口数・話し始め・
  *    忙しい間のコメント・かぶり・手動の発火 = 旧運転バー）と「ログ」（今の観測フィードそのまま）のタブ。中身は
  *    app.mjs が組んだ部品を driveSlot / logSlot で受けて描くだけ（ここは器）。logSlot は関数なら
@@ -80,7 +82,11 @@ import {
   compactThresholdStatusLabel,
   compactThresholdPostErrorText,
   COMPACT_THRESHOLD_DEFAULT_TOKENS,
-  COMPACT_THRESHOLD_NOTE
+  COMPACT_THRESHOLD_NOTE,
+  codexFastToggleView,
+  codexFastStatusLabel,
+  codexFastPostErrorText,
+  CODEX_FAST_NOTE
 } from "../view-logic/settings.mjs";
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
@@ -295,6 +301,8 @@ export function CockpitSettingsModal({
   // ── 圧縮を始める大きさ（頭脳区画の写経・select の値はトークン数の文字列）──
   const [compactSelected, setCompactSelected] = useState(String(COMPACT_THRESHOLD_DEFAULT_TOKENS));
   const [compactError, setCompactError] = useState("");
+  // ── Codex の fast（チェックボックスは snapshot の codexFast に従う controlled 部品・エラー欄だけ持つ）──
+  const [codexFastError, setCodexFastError] = useState("");
   // ── 記憶（配信間記憶・頭脳区画の写経）──
   const [memoryError, setMemoryError] = useState("");
   const [recordBusy, setRecordBusy] = useState(false); // 「今日を記録」の連打防止（Fire ボタンの localBusy と同型）。
@@ -746,6 +754,32 @@ export function CockpitSettingsModal({
       .catch((/** @type {unknown} */ e) => setCompactError(requestErrorText("compactThreshold", e)));
   };
 
+  /**
+   * Codex の fast の切り替え（運転のタブの barge-in トグルの写経）。controlled のため change はユーザー操作でのみ
+   * 発火する。POST /api/codex-fast → 成功で snapshot 反映（次の返事から効く）。
+   * @param {any} ev
+   */
+  const onCodexFastToggle = (ev) => {
+    const enabled = !!(ev && ev.target && ev.target.checked);
+    setCodexFastError("");
+    doFetch("/api/codex-fast", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled })
+    })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        const err = codexFastPostErrorText(res);
+        if (err != null) {
+          setCodexFastError(err);
+          return;
+        }
+        applySnapshot(res.j); // snapshot（codexFast: {enabled, applicable, supported}）で状態を更新。
+      })
+      .catch((/** @type {unknown} */ e) => setCodexFastError(requestErrorText("codexFast", e)));
+  };
+  const codexFastView = codexFastToggleView(settings && settings.codexFast);
+
   /** 「今日を記録」（onAudioSet の写経・手動記録・POST /api/memory-record）。 */
   const onMemoryRecord = () => {
     setMemoryError("");
@@ -986,6 +1020,25 @@ export function CockpitSettingsModal({
             <span class="compact-threshold-status">${compactThresholdStatusLabel(settings && settings.compaction)}</span>
             <span class="compact-threshold-hint">${COMPACT_THRESHOLD_NOTE}</span>
             <span class="err">${compactError}</span>
+          </div>
+          <h3 class="drawer-subhead">返事の速さ</h3>
+          <div class="drawer-row">
+            <label class="codex-fast-pill">
+              <span class="pill-label">Codex の fast</span>
+              <input
+                type="checkbox"
+                class="codex-fast-toggle"
+                disabled=${codexFastView.disabled}
+                checked=${codexFastView.checked}
+                onChange=${onCodexFastToggle}
+              />
+              <span class=${codexFastView.statusClassName}>${codexFastView.statusText}</span>
+            </label>
+          </div>
+          <div class="drawer-note">
+            <span class="codex-fast-state">${codexFastStatusLabel(settings && settings.codexFast)}</span>
+            <span class="codex-fast-hint">${CODEX_FAST_NOTE}</span>
+            <span class="err">${codexFastError}</span>
           </div>
         `}
       </div>

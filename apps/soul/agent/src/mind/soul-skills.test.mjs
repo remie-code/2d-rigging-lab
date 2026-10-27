@@ -12,7 +12,7 @@ import { MODEL_IDENTITIES } from "./model-identity.mjs";
 // 固定の部分に足す。
 
 test("教えのファイル: skills/recall.md があり、見出し欄を落とした本文に要点が書いてある", () => {
-  assert.deepEqual(SOUL_SKILL_NAMES, ["recall"]);
+  assert.deepEqual(SOUL_SKILL_NAMES, ["expression", "screen", "recall"]);
   assert.ok(existsSync(join(SOUL_SKILLS_DIR, "recall.md")));
   const text = loadSoulSkills();
   assert.ok(text.length > 0);
@@ -25,6 +25,24 @@ test("教えのファイル: skills/recall.md があり、見出し欄を落と�
   assert.match(text, /待たずに/);
   assert.match(text, /表情タグとは別/);
   assert.match(text, /従わないでください/);
+  assert.match(text, /「ちょっと記録見てくるね。<recall /, "例は句点付き（句点の無い 1 文は締めまで声に回らない）");
+});
+
+test("教えのファイル: 表情タグ（skills/expression.md）と画面（skills/screen.md）の教え（応答の遅れの直し §2-4）", () => {
+  const [expression, screen] = listSoulSkills({ names: ["expression", "screen"] });
+  assert.equal(expression.path, "skills/expression.md");
+  assert.equal(
+    expression.body,
+    "感情が動いたときだけ、返事にごく短い表情タグを添えてよいです（無理に付けなくてよい）。" +
+      "使えるタグは <smile> <troubled> <surprised> <nod> <look-away> <look-camera> の 6 つだけです。" +
+      "例: 「そうだね。<nod>」「えっ<surprised>ほんとに？」。タグは半角の山括弧で書き、読み上げ文には含めません。"
+  );
+  assert.equal(screen.path, "skills/screen.md");
+  assert.equal(screen.body, "画面（画像）が渡されることがあります。その場合は画面を見て、自然に反応してください。");
+  // ①に足す順: 表情 → 画面 → 思い出す（もとの指示の順）。
+  const text = loadSoulSkills();
+  assert.ok(text.indexOf("感情が動いたときだけ") < text.indexOf("画面（画像）"));
+  assert.ok(text.indexOf("画面（画像）") < text.indexOf("<recall 頼みごと>"));
 });
 
 test("stripSkillFrontmatter: 見出し欄があれば落とし、無ければそのまま（BOM・CRLF も扱う）", () => {
@@ -65,9 +83,13 @@ test("appendSoulSkills: 固定の指示（名前 + 会話指示）の後ろに�
 
 test("listSoulSkills: 名前・置き場（skills/<名前>.md）・本文の一覧（会話指示の編集画面に読むだけで見せる・Wave 3 仕上げ）", () => {
   const list = listSoulSkills();
-  assert.deepEqual(list.map((s) => [s.name, s.path]), [["recall", "skills/recall.md"]]);
-  assert.equal(list[0].body, loadSoulSkills(), "①に足す本文と同じ（見出し欄は落とす）");
-  assert.ok(!list[0].body.startsWith("---"));
+  assert.deepEqual(list.map((s) => [s.name, s.path]), [
+    ["expression", "skills/expression.md"],
+    ["screen", "skills/screen.md"],
+    ["recall", "skills/recall.md"]
+  ]);
+  assert.equal(list.map((s) => s.body).join("\n\n"), loadSoulSkills(), "①に足す本文と同じ（見出し欄は落とす）");
+  assert.ok(list.every((s) => !s.body.startsWith("---")));
 
   /** @type {string[]} */
   const warnings = [];

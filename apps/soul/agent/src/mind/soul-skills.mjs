@@ -21,8 +21,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 /** 教えのファイルの置き場（apps/soul/agent/skills/）。 */
 export const SOUL_SKILLS_DIR = join(here, "..", "..", "skills");
 
-/** ①に足す教え（並び順に足す）。 */
-export const SOUL_SKILL_NAMES = Object.freeze(["recall"]);
+/**
+ * ①に足す教え（並び順に足す）。expression（表情タグ 6 語の使い方）と screen（画面が渡されること）は、もとは会話指示の
+ * 既定に入っていた仕組みの教え（応答の遅れの直し・latency-fix-plan.md §2-4 で切り分け）。並びはもとの指示の順
+ * （表情 → 画面 → 思い出す）に合わせる。
+ */
+export const SOUL_SKILL_NAMES = Object.freeze(["expression", "screen", "recall"]);
 
 /**
  * 先頭の見出し欄（`---` で囲んだ部分）を落として本文だけにする。

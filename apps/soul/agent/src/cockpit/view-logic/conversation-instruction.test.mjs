@@ -272,6 +272,12 @@ test("soul skills: 応答の soulSkills を読み、案内文を作る（配列�
     [{ name: "recall", path: "skills/recall.md", body: "本文" }]
   );
   assert.equal(SOUL_SKILL_LABELS.recall, "思い出す教え");
+  assert.equal(SOUL_SKILL_LABELS.expression, "表情タグの教え");
+  assert.equal(SOUL_SKILL_LABELS.screen, "画面の教え");
+  assert.equal(
+    soulSkillNoticeText({ name: "expression", path: "skills/expression.md" }),
+    "このほかに、表情タグの教え（skills/expression.md）がいつも足されています"
+  );
   assert.equal(
     soulSkillNoticeText({ name: "recall", path: "skills/recall.md" }),
     "このほかに、思い出す教え（skills/recall.md）がいつも足されています"

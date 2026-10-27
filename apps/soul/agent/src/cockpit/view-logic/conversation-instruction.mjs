@@ -87,6 +87,8 @@ export function parseConversationInstructionResponse(body, brainId) {
  * 魂がいつも足す教えの表示名（記憶の作り直し Wave 3 仕上げ・UI は mind を import しない）。未知の名前は「教え「名前」」。
  */
 export const SOUL_SKILL_LABELS = Object.freeze({
+  expression: "表情タグの教え",
+  screen: "画面の教え",
   recall: "思い出す教え"
 });
 

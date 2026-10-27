@@ -169,6 +169,7 @@ import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
 import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
 import { createFireTiming } from "./fire-latency.mjs";
+import { appendSoulSkills, loadSoulSkills } from "./soul-skills.mjs";
 import { performance } from "node:perf_hooks";
 
 /** 視覚発火の最小指示文（wave 計画 §2 裁定・人格の作り込みはしない＝persona の領分）。 */
@@ -195,14 +196,15 @@ export const PROGRESSIVE_CONTINUITY_INSTRUCTION =
  * 自己名の一言を追加（既定は耳側の呼びかけ検出 NAME_VARIANTS_V0「コーディ」と一致させ、呼ばれても自分の
  * 名前だと認識できるようにする最小の事実のみ）。Domain C の builder はこの一行だけを現在の frozen
  * model-family identity に差し替え、人格描写やキャラ付けは足さない＝persona の領分。
+ *
+ * 指示の切り分け（応答の遅れの直し・latency-fix-plan.md §2-4）: ここ（会話指示の既定・ユーザーが編集できる）は
+ * 話し方の部分だけにした。仕組みを教える部分（表情タグ 6 語の使い方と例・画面が渡されること）は、思い出す教えと
+ * 同じ固定のファイル（skills/expression.md・skills/screen.md・soul-skills.mjs）に移し、魂が①の固定の部分に足す
+ * （会話指示を書き換えても消えない）。
  */
 const FIRE_SYSTEM_PROMPT_BODY =
   "あなたは配信の相方です。直前の会話を踏まえ、短く自然な日本語で一言だけ返してください。" +
-  "箇条書き・記号・長い説明はしないでください。" +
-  "感情が動いたときだけ、返事にごく短い表情タグを添えてよいです（無理に付けなくてよい）。" +
-  "使えるタグは <smile> <troubled> <surprised> <nod> <look-away> <look-camera> の 6 つだけです。" +
-  "例: 「そうだね<nod>」「えっ<surprised>ほんとに？」。タグは半角の山括弧で書き、読み上げ文には含めません。" +
-  "画面（画像）が渡されることがあります。その場合は画面を見て、自然に反応してください。";
+  "箇条書き・記号・長い説明はしないでください。";
 
 /**
  * Build the self-name line for a newly-created Fire session.
@@ -285,8 +287,12 @@ export function buildFireSystemPrompt(identity = DEFAULT_MODEL_IDENTITY, convers
   return `あなたの名前は${resolved.canonicalName}（${resolved.latinName}）です。${body}`;
 }
 
-/** Cody-compatible default prompt retained for existing imports and tests. */
-export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
+/**
+ * Cody の既定の固定の指示（名前の一文 + 会話指示の既定 + 魂の教え）。操縦席が①に渡すもの（名前 + 会話指示 + 教え・
+ * scripts/cockpit.mjs）と同じ組み立てで、観測用のスクリプト（measure-fire 等・Claude の頭）にも同じ内容が届く。
+ * 教え（skills/）はこのモジュールを読み込んだ時点のもの。
+ */
+export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), loadSoulSkills());
 
 /**
  * @typedef {"idle" | "thinking" | "speaking"} FireState
@@ -345,7 +351,7 @@ export const FIRE_SYSTEM_PROMPT = buildFireSystemPrompt();
  * @param {(info: import("./fire-latency.mjs").FireLatency) => void} [options.onLatency]
  *   1 返事 1 回の遅延の通知（発火の中の区間）。声が鳴り始めた時点、鳴らなかったときは発火の終わり（ask した回だけ）。
  * @param {() => number} [options.monotonicNowImpl]  遅延を測る単調時計（既定 performance.now・テスト注入）。
- * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; atMs: number }) => void} [options.onAskRecord]
+ * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; serviceTier: string | null; atMs: number }) => void} [options.onAskRecord]
  *   ask が返るたびの記録（本文なし・数字と種類だけ）。windowMode は渡した会話の窓の種類
  *   （legacy = 会話の世代を持たない頭の従来の窓 / full = 新しい会話なので直近 5 分の全部 / delta = 増えた分だけ）。
  * @param {(info: { request: string; fireId: number | null }) => void} [options.onRecallRequest]
@@ -488,7 +494,14 @@ export function createFireOrchestrator(options) {
     const fire = currentFire;
     if (!fire || fire.latencyEmitted || fire.fireId == null || !fire.timing.hasAsked()) return;
     fire.latencyEmitted = true;
-    emit(onLatency, { fireId: fire.fireId, cause: fire.cause, vision: fire.vision, spoken, ...fire.timing.segments() });
+    emit(onLatency, {
+      fireId: fire.fireId,
+      cause: fire.cause,
+      vision: fire.vision,
+      spoken,
+      ...fire.timing.segments(),
+      serviceTier: typeof fire.serviceTier === "string" ? fire.serviceTier : null
+    });
   };
   /**
    * ask の直前に、その回の LLM に渡した会話の窓の範囲を通知する。
@@ -579,6 +592,8 @@ export function createFireOrchestrator(options) {
       tokenUsage: asked && asked.tokenUsage != null ? asked.tokenUsage : null,
       ttftMs: num(asked?.ttftMs),
       elapsedMs: num(asked?.elapsedMs),
+      // その返事の turn/start に送った速さの段（Codex の頭が返す・送っていなければ null）。
+      serviceTier: typeof asked?.serviceTier === "string" ? asked.serviceTier : null,
       atMs: nowImpl()
     });
   };
@@ -791,9 +806,12 @@ export function createFireOrchestrator(options) {
       append(delta) {
         if (!sawDelta) trace("llm.first_delta", { deltaChars: delta.length });
         sawDelta = true;
+        // 締めた（本文の揃った agentMessage で flush した）後に本文が続いた（次の agentMessage）。最後にもう一度締める。
+        flushed = false;
         trace("llm.delta.received", { deltaChars: delta.length });
         enqueue(incremental.append(delta), false);
       },
+      /** 締め（残りを最後の文として出す）。締めた後に本文が続かなければ、2 回目は何もしない。 */
       flush() {
         if (flushed) return;
         flushed = true;
@@ -851,10 +869,29 @@ export function createFireOrchestrator(options) {
       const askContent = consumeProgressiveCorrection(
         consumeDeferredInstructions(currentFireInstruction ? prependInstruction(content, currentFireInstruction) : content)
       );
-      const asked = await resources.session.ask(askContent, { onTextDelta: (delta) => boundary.append(delta) });
+      // 締めの合図（応答の遅れの直し・latency-fix-plan.md §2-2）: Codex は本文の揃った agentMessage の item/completed
+      // （commentary を除く）で onTextDone を呼ぶ。turn/completed（ask の戻り）を待たずに残りを最後の文として声に回す。
+      // 速さの段（操縦席の fast・Codex の頭のときだけ受理の時点の設定が configuration に載る）。送った段は
+      // turn/start の直後に知らされ、遅延の行（onLatency）に載せる。載っていない（Claude 等）なら渡さない。
+      const configuredServiceTier =
+        typeof resources.configuration?.serviceTier === "string" ? resources.configuration.serviceTier : null;
+      const askFire = currentFire;
+      const asked = await resources.session.ask(askContent, {
+        onTextDelta: (delta) => boundary.append(delta),
+        onTextDone: () => boundary.flush(),
+        ...(configuredServiceTier
+          ? {
+              serviceTier: configuredServiceTier,
+              onTurnStarted: (/** @type {any} */ meta) => {
+                if (askFire) askFire.serviceTier = typeof meta?.serviceTier === "string" ? meta.serviceTier : null;
+              }
+            }
+          : {})
+      });
       // delta を出さない頭（Claude）の「LLM 最初の文字」は session が測った ttftMs を使う（fire-latency.mjs）。
       if (currentFire && asked && typeof asked === "object") currentFire.timing.noteTtft(/** @type {any} */ (asked).ttftMs);
-      // A successful terminal result owns exactly one final remainder flush.
+      // A successful terminal result owns exactly one final remainder flush. 締めの合図で済んでいれば何もしない
+      // （二重に flush しない）。合図の後に本文が続いたときだけ、その残りをここで締める。
       boundary.flush();
       const progressive = boundary.snapshot();
       if (currentFire) currentFire.recall.sawDelta = progressive.sawDelta;
@@ -1757,6 +1794,8 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
         vision: false,
         timing: createFireTiming({ nowImpl: monotonicNowImpl }),
         latencyEmitted: false,
+        /** @type {string | null} その返事の turn/start に送った速さの段（Codex の頭・onTurnStarted で知る）。 */
+        serviceTier: /** @type {string | null} */ (null),
         recall: {
           sawDelta: false,
           streamed: /** @type {Array<{ request: string }>} */ ([]),

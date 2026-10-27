@@ -375,7 +375,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
     brain: null, // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
     memory: null, // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
-    compaction: null // 圧縮の目安: memory と同型の null 許容（contextCompactionStatus 未注入なら null）。
+    compaction: null, // 圧縮の目安: memory と同型の null 許容（contextCompactionStatus 未注入なら null）。
+    codexFast: null // ①の Codex の頭の fast: compaction と同型の null 許容（codexFastStatus 未注入なら null）。
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
@@ -390,9 +391,37 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     killed: true,
     brain: { brain: "codex", credentialHealth: true },
     memory: { lastRecordAtMs: 1721234567890, recording: false },
-    compaction: { thresholdTokens: 200_000 }
+    compaction: { thresholdTokens: 200_000 },
+    codexFast: { enabled: true, applicable: true, supported: true }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
+});
+
+test("Settings modal「頭脳・会話」: 圧縮の下に「返事の速さ」の Codex の fast トグルを置き、POST /api/codex-fast → snapshot 反映", () => {
+  const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
+  const brainPanel = source.slice(
+    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
+    source.indexOf('id="cockpit-settings-panel-memory"')
+  );
+  const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
+  // 置き場所: 頭脳・会話のタブの一覧側・圧縮の区画の後。
+  assert.ok(listSide.indexOf("会話の圧縮") < listSide.indexOf('<h3 class="drawer-subhead">返事の速さ</h3>'));
+  assert.match(listSide, /<label class="codex-fast-pill">\s*<span class="pill-label">Codex の fast<\/span>/);
+  assert.match(
+    listSide,
+    /type="checkbox"\s*class="codex-fast-toggle"\s*disabled=\$\{codexFastView\.disabled\}\s*checked=\$\{codexFastView\.checked\}\s*onChange=\$\{onCodexFastToggle\}/
+  );
+  assert.match(listSide, /codexFastStatusLabel\(settings && settings\.codexFast\)/, "Claude の頭・非対応モデルが分かる表示");
+  assert.match(listSide, /\$\{CODEX_FAST_NOTE\}/);
+  assert.match(listSide, /\$\{codexFastError\}/);
+  // 配線: チェックの値（boolean）で POST し、view-logic の文言で失敗を出し、成功は snapshot を適用する。
+  assert.match(
+    source,
+    /doFetch\("\/api\/codex-fast", \{[\s\S]*?body: JSON\.stringify\(\{ enabled \}\)[\s\S]*?codexFastPostErrorText\(res\)[\s\S]*?applySnapshot\(res\.j\)[\s\S]*?requestErrorText\("codexFast", e\)/
+  );
+  assert.match(source, /const enabled = !!\(ev && ev\.target && ev\.target\.checked\);/);
+  assert.match(source, /const codexFastView = codexFastToggleView\(settings && settings\.codexFast\);/);
+  assert.match(COCKPIT_CSS, /\.codex-fast-status\.on \{ color: var\(--up\); \}/);
 });
 
 test("Settings modal「頭脳・会話」: 圧縮を始める大きさの select + Set を頭脳の区画に置き、POST /api/compact-threshold → snapshot 反映", () => {
@@ -950,7 +979,7 @@ test("HealthLine（ログのタブ）: stt（方式と状態）を whisper 死�
     })
   ).join("");
   assert.ok(listening.includes("stt: ElevenLabs up"), listening);
-  assert.ok(listening.includes("whisper: unknown"), "既存の whisper 死活は残す");
+  assert.ok(!listening.includes("whisper:"), "ElevenLabs のときは whisper の死活を出さない（whisper のときだけ）");
   assert.ok(listening.includes("mic: マイク (2- Shure MV7+)"));
   const reconnecting = collectText(
     HealthLine({ ...base, ears: "listening", stt: { engine: "elevenlabs", status: "reconnecting", reason: null }, device: "Mic" })
@@ -964,6 +993,24 @@ test("HealthLine（ログのタブ）: stt（方式と状態）を whisper 死�
   const stopped = collectText(HealthLine({ ...base, ears: "stopped", stt: null, device: "Mic" })).join("");
   assert.ok(!stopped.includes("mic:"));
   assert.ok(!stopped.includes("stt:"), "stt が無ければ出さない");
+  assert.ok(stopped.includes("whisper:"), "stt が無ければ whisper の死活は今どおり出す");
+});
+
+test("HealthLine（ログのタブ）: whisper 以外（Zipformer / Parakeet / ElevenLabs）のときは whisper の死活を出さない", () => {
+  const base = {
+    health: { whisper: { status: "unknown", reason: null }, ffmpeg: { status: "up", reason: null } },
+    audioDevice: { name: "MV7+" },
+    ears: "listening",
+    device: "Mic"
+  };
+  for (const [engine, label] of [["zipformer", "Zipformer"], ["parakeet", "Parakeet"], ["elevenlabs", "ElevenLabs"]]) {
+    const text = collectText(HealthLine({ ...base, stt: { engine, status: "up", reason: null } })).join("");
+    assert.ok(!text.includes("whisper:"), `${engine}: whisper の項目は出さない`);
+    assert.ok(text.includes("ffmpeg:"), "ffmpeg は残す");
+    assert.ok(text.includes(`stt: ${label} up`), text);
+  }
+  const whisper = collectText(HealthLine({ ...base, stt: { engine: "whisper", status: "up", reason: null } })).join("");
+  assert.ok(whisper.includes("whisper:"));
 });
 
 test("COCKPIT_CSS: 文字起こしの繋ぎ直し中（.hstat.reconnecting）は黄色（--speaking）", () => {

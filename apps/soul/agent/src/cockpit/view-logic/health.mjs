@@ -91,8 +91,22 @@ export function mergeHealth(prev, next) {
  */
 export const STT_ENGINE_LABELS = Object.freeze({
   whisper: "whisper",
-  elevenlabs: "ElevenLabs"
+  elevenlabs: "ElevenLabs",
+  // ローカルの文字起こし（子プロセス）。ヘッダは `stt: Zipformer up` / 子が落ちたら `stt: Zipformer down — 理由`。
+  parakeet: "Parakeet",
+  zipformer: "Zipformer"
 });
+
+/**
+ * 健康 1 行に whisper の死活の項目を出すか。文字起こしが whisper のとき（または前回の Start で whisper を選んだとき）
+ * だけ出す。ElevenLabs / Parakeet / Zipformer は whisper-server を起動しないので出さない（local-stt-wave-plan 裁定）。
+ * state がまだ届かず stt が無い・engine が無いときは、既定の whisper とみなして出す。
+ * @param {{ engine?: string | null } | null | undefined} stt
+ * @returns {boolean}
+ */
+export function whisperHealthVisible(stt) {
+  return !stt || stt.engine == null || stt.engine === "whisper";
+}
 
 /**
  * ヘッダの文字起こし表示（`ElevenLabs up` 等）。state.stt（{ engine, status, reason }）を受ける。

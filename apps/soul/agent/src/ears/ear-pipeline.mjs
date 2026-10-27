@@ -61,6 +61,14 @@
  *     （「直前の commit 以降で最後の speechEnd → commit 到着」）。転写の startMs/endMs は commit
  *     到着時点のストリーム時刻（start = end。本番でこの値を読む処理は無い）。空の commit は
  *     転写バッファの既存の規則どおり discarded として数える。
+ *   - "parakeet" / "zipformer"（ローカルの文字起こし・local-stt-wave-plan.md §1）: whisper-server を
+ *     起動せず、sherpa-onnx を子プロセス（src/ears/local-stt/）で動かす。**親（このプロセス）では
+ *     sherpa-onnx-node を import しない**（耳の VAD の onnxruntime.dll と版がぶつかるため）。転写の継ぎ目
+ *     （transcribe(wavBytes)）・ASR キュー・転写バッファ・遅延の物差し（speechEnd → 転写）は whisper の経路の
+ *     まま。違うのは渡す音の余白だけ: (a) 本物の音を前に preRollMs（既定 200ms）広げて切り出す（ring.slice の
+ *     startMs。セグメンタの speechPadMs と合図のタイミングは変えない）、(b) 作り物の無音を前後に silencePadMs
+ *     （既定 300ms）足してから encode する。転写の startMs/endMs はセグメンタの範囲のまま（余白を含めない）。
+ *     子が落ちたら whisper の死と同じく ASR を止めて診断（localSttDown）を出し、再起動しない。
  *
  * ── クリーンシャットダウン ─────────────────────────────────────────
  *  dispose() 一発で ffmpeg・VAD セッション・whisper-server（または ElevenLabs 接続）・キュー・タイマが全部畳まれる。
@@ -77,9 +85,12 @@ import { createWhisperServer } from "./whisper-server.mjs";
 import { createWhisperInference, computeAudioCtx } from "./whisper-inference.mjs";
 import { createTranscriptBuffer } from "./transcript-buffer.mjs";
 import { createElevenLabsRealtimeStt } from "./elevenlabs-stt.mjs";
+// 親で読むのは fork する係と純関数だけ（sherpa-onnx-node は子プロセスの local-stt-worker.mjs だけが読む）。
+import { createLocalSttClient } from "./local-stt/local-stt-client.mjs";
+import { isLocalSttEngine, normalizeLocalSttSettings, padWithSilence } from "./local-stt/local-stt-engines.mjs";
 
-/** 文字起こしの方式（操縦席の選択肢）。既定は whisper（従来どおり）。 */
-export const STT_ENGINES = Object.freeze(["whisper", "elevenlabs"]);
+/** 文字起こしの方式（操縦席の選択肢）。既定は whisper（従来どおり）。parakeet / zipformer はローカル（子プロセス）。 */
+export const STT_ENGINES = Object.freeze(["whisper", "elevenlabs", "parakeet", "zipformer"]);
 
 /** 常駐の既定（根拠は上記ヘッダと experiments/s2-ears.md）。 */
 export const EAR_DEFAULTS = Object.freeze({
@@ -108,9 +119,13 @@ export const EAR_DEFAULTS = Object.freeze({
  * @param {object} [options.asr]      { queueMax=4, utteranceTimeoutMs=45000, timeoutMs=30000,
  *   dynamicAudioCtx=true, audioCtxOptions }。
  * @param {number} [options.ringMs=40000]  PCM リングバッファ保持長。
- * @param {{ engine?: "whisper" | "elevenlabs"; apiKey?: string; elevenLabs?: object }} [options.stt]
+ * @param {{ engine?: "whisper" | "elevenlabs" | "parakeet" | "zipformer"; apiKey?: string; elevenLabs?: object;
+ *   local?: { threads?: number; preRollMs?: number; silencePadMs?: number; hotwords?: string[]; hotwordsScore?: number; modelsDir?: string; client?: object } }} [options.stt]
  *   文字起こしの方式（既定 whisper）。elevenlabs のときは apiKey が要り（呼び出し側が env ファイルから
  *   読んで渡す）、elevenLabs は createElevenLabsRealtimeStt への追加設定（WebSocketImpl 等）。
+ *   parakeet / zipformer のときは local（範囲外は既定・normalizeLocalSttSettings）。local.client は
+ *   createLocalSttClient への追加設定（テスト注入の forkImpl / workerPath 等）。
+ * @param {typeof createLocalSttClient} [options.localSttFactory]  テスト注入（既定 createLocalSttClient）。
  * @param {(status: string, info: { reason: string | null }) => void} [options.onSttStatus]
  *   ElevenLabs 接続の状態遷移（connecting / up / reconnecting / down）。whisper では呼ばれない。
  * @param {(event: object) => void} [options.onVadEvent]     speechStart/End/Cancel（全部）。
@@ -165,6 +180,9 @@ export function createEarPipeline(options = {}) {
     throw new RangeError(`createEarPipeline: unknown stt engine ${JSON.stringify(sttEngine)}.`);
   }
   const useElevenLabs = sttEngine === "elevenlabs";
+  const useLocal = isLocalSttEngine(sttEngine);
+  const localSettings = normalizeLocalSttSettings(options.stt?.local ?? null);
+  const localSttFactory = options.localSttFactory ?? createLocalSttClient;
   const onSttStatus = options.onSttStatus ?? (() => {});
 
   const onVadEvent = options.onVadEvent ?? (() => {});
@@ -186,6 +204,8 @@ export function createEarPipeline(options = {}) {
   let capture = null;
   /** @type {ReturnType<typeof createElevenLabsRealtimeStt> | null} */
   let stt = null;
+  /** @type {ReturnType<typeof createLocalSttClient> | null} */
+  let localStt = null;
   /** ElevenLabs: 直前の commit 以降で最後の speechEnd の壁時計（遅延の物差しの起点）。 */
   /** @type {number | null} */
   let lastSpeechEndWallMs = null;
@@ -242,22 +262,33 @@ export function createEarPipeline(options = {}) {
     }
     // [0, 実データ末尾] への clamp はリングバッファの契約（flush 時 pad 超過・maxSpeech 分割の
     // 2×pad 重なり・容量超過破棄のどれが来ても安全）。
-    const cut = ring.slice({ startMs: event.startMs, endMs: event.endMs });
-    if (cut.samples.length === 0) {
+    // ローカルの文字起こし: 余白 (a) = 本物の音を前に preRollMs 広げて切り出す（セグメンタの範囲は変えない）。
+    const preRollMs = useLocal ? localSettings.preRollMs : 0;
+    const cut = ring.slice({ startMs: Math.max(0, event.startMs - preRollMs), endMs: event.endMs });
+    // 転写の範囲はセグメンタの範囲（余白を含めない）。whisper は preRoll 0 なので cut の範囲そのもの。
+    const rangeStartMs = Math.min(Math.max(cut.startMs, event.startMs), cut.endMs);
+    if (cut.samples.length === 0 || cut.endMs <= rangeStartMs) {
       onDiagnostic({ type: "emptyCut", startMs: event.startMs, endMs: event.endMs });
       return;
     }
     if (asrDown) {
       counters.asrSkipped += 1;
-      onDiagnostic({ type: "asrSkipped", reason: "whisperDown", startMs: cut.startMs, endMs: cut.endMs });
+      onDiagnostic({
+        type: "asrSkipped",
+        reason: useLocal ? "localSttDown" : "whisperDown",
+        startMs: rangeStartMs,
+        endMs: cut.endMs
+      });
       return;
     }
-    const wav = encodeWav(cut.samples, { sampleRate, channels: 1, bitsPerSample: 16 });
+    // 余白 (b) = 作り物の無音を前後に足す（ローカルのときだけ）。
+    const samples = useLocal ? padWithSilence(cut.samples, localSettings.silencePadMs, sampleRate) : cut.samples;
+    const wav = encodeWav(samples, { sampleRate, channels: 1, bitsPerSample: 16 });
     asrQueue.push({
       wav,
-      startMs: cut.startMs,
+      startMs: rangeStartMs,
       endMs: cut.endMs,
-      durationMs: cut.endMs - cut.startMs,
+      durationMs: cut.endMs - rangeStartMs,
       reason: event.reason,
       endWallMs: nowImpl()
     });
@@ -317,7 +348,8 @@ export function createEarPipeline(options = {}) {
   }
 
   async function transcribeAndAppend(job) {
-    const audioCtx = asrOptions.dynamicAudioCtx
+    // audio_ctx は whisper だけの話（ローカルの文字起こしには渡さない）。
+    const audioCtx = asrOptions.dynamicAudioCtx && !useLocal
       ? computeAudioCtx(job.durationMs, asrOptions.audioCtxOptions)
       : null;
     const { text } = await transcribe(job.wav, audioCtx != null ? { audioCtx } : undefined);
@@ -427,6 +459,18 @@ export function createEarPipeline(options = {}) {
     }
   }
 
+  /** ローカルの文字起こしの子プロセスの ready 後の死。whisper の死と同じく再起動せず ASR を止める。 */
+  function handleLocalSttExit(info) {
+    if (disposed) return;
+    asrDown = true;
+    onDiagnostic({ type: "localSttDown", phase: "runtime", engine: sttEngine, code: info.code, signal: info.signal });
+    while (asrQueue.length > 0) {
+      const dropped = asrQueue.shift();
+      counters.asrDropped += 1;
+      onDiagnostic({ type: "asrDropped", reason: "localSttDown", startMs: dropped?.startMs, endMs: dropped?.endMs });
+    }
+  }
+
   return {
     transcriptBuffer: buffer,
 
@@ -464,6 +508,55 @@ export function createEarPipeline(options = {}) {
           );
         }
         if (disposed) return;
+        capture = captureFactory({
+          ...(options.capture ?? {}),
+          sampleRate,
+          channels: 1,
+          onPcm: handlePcm,
+          onError: (line) => onDiagnostic({ type: "ffmpegStderr", line }),
+          onExit: handleCaptureExit
+        });
+        return;
+      }
+
+      if (useLocal) {
+        // ローカル: whisper-server は起動しない。VAD 準備 → 子プロセスの ready（モデル読み込み）→ マイクを開く。
+        vad = vadFactory(options.vad ?? {});
+        localStt = localSttFactory({
+          ...(/** @type {any} */ (options.stt?.local?.client) ?? {}),
+          engine: /** @type {"parakeet" | "zipformer"} */ (sttEngine),
+          modelsDir: options.stt?.local?.modelsDir,
+          threads: localSettings.threads,
+          hotwords: localSettings.hotwords,
+          hotwordsScore: localSettings.hotwordsScore,
+          setTimeoutImpl,
+          clearTimeoutImpl,
+          onExit: handleLocalSttExit,
+          onReady: (info) =>
+            onDiagnostic({
+              type: "localSttReady",
+              engine: sttEngine,
+              loadMs: info.loadMs,
+              decodingMethod: info.decodingMethod,
+              hotwordsUsed: info.hotwordsUsed.length,
+              hotwordsDropped: info.hotwordsDropped
+            })
+        });
+        try {
+          await vad.init();
+          await localStt.ready;
+        } catch (error) {
+          await this.dispose();
+          throw new Error(
+            `earPipeline.start: failed to bring up ears (${error instanceof Error ? error.message : String(error)})`,
+            { cause: error }
+          );
+        }
+        if (disposed) return;
+        if (options.transcribeImpl == null) {
+          const client = localStt;
+          transcribe = (wavBytes) => client.transcribe(wavBytes);
+        }
         capture = captureFactory({
           ...(options.capture ?? {}),
           sampleRate,
@@ -536,6 +629,7 @@ export function createEarPipeline(options = {}) {
       }
       server?.dispose();
       stt?.dispose();
+      localStt?.dispose();
     }
   };
 }

@@ -46,6 +46,12 @@
  *  - compactThresholdStatusLabel    → 「いま 20 万トークン（既定）」の表示文言。
  *  - COMPACT_THRESHOLD_NOTE         → Codex の頭のときだけ効く旨の短い説明。
  *  - compactThresholdPostErrorText  → POST /api/compact-threshold 応答の失敗文言（brainPostErrorText の写経）。
+ *
+ * Codex の fast（設定「頭脳・会話」タブ・①チャッピーの Codex の頭だけ・2026-10-27 合意）:
+ *  - codexFastToggleView    → チェックボックスの状態（snapshot の codexFast・無ければ使えない）。
+ *  - codexFastStatusLabel   → 今の効き方（Claude の頭では効かない・モデルが非対応・いま fast / 通常）。
+ *  - CODEX_FAST_NOTE        → ①だけに効く・使用量が増える・次の返事から効く旨の短い説明。
+ *  - codexFastPostErrorText → POST /api/codex-fast 応答の失敗文言（compactThresholdPostErrorText の写経）。
  */
 
 import { formatClock } from "./format-time.mjs";
@@ -285,6 +291,56 @@ export function compactThresholdPostErrorText(res) {
   return settingPostErrorText(res, "compaction control not available");
 }
 
+// ── Codex の fast（設定「頭脳・会話」タブ・①チャッピーの Codex の頭だけ・2026-10-27 合意）────────────
+
+/** fast の短い説明（drawer-note に出す）。 */
+export const CODEX_FAST_NOTE =
+  "チャッピーの Codex の頭の返事だけ速くします（使用量が増えます）。書き出し・思い出しは通常のまま。切り替えは次の返事から効きます。";
+
+/**
+ * fast のチェックボックスの状態（bargeInToggleView の様式）。snapshot の codexFast が無ければ使えない。
+ * Claude の頭でも設定はできる（Codex に切り替えたときに効く）ので無効にはしない（効かないことは文言で示す）。
+ * @param {{ enabled?: boolean } | null | undefined} codexFast
+ * @returns {{ disabled: boolean; checked: boolean; statusText: string; statusClassName: string }}
+ */
+export function codexFastToggleView(codexFast) {
+  if (!codexFast) {
+    return { disabled: true, checked: false, statusText: "not available", statusClassName: "codex-fast-status" };
+  }
+  const on = codexFast.enabled === true;
+  return {
+    disabled: false,
+    checked: on,
+    statusText: on ? "on" : "off",
+    statusClassName: "codex-fast-status " + (on ? "on" : "")
+  };
+}
+
+/**
+ * fast の今の効き方の文言。Claude の頭（applicable false）は「効かない」、モデルが priority を持たない
+ * （supported false）なら「非対応」、まだ確かめていない（supported null）で ON なら確かめる旨を添える。
+ * @param {{ enabled?: boolean; applicable?: boolean; supported?: boolean | null } | null | undefined} codexFast
+ * @returns {string}
+ */
+export function codexFastStatusLabel(codexFast) {
+  if (!codexFast) return "not available";
+  if (codexFast.applicable !== true) return "今の頭は Claude なので効きません（Codex の頭のときだけ）";
+  if (codexFast.supported === false) {
+    return codexFast.enabled === true ? "このモデルは fast 非対応（通常の速さで動きます）" : "このモデルは fast 非対応";
+  }
+  if (codexFast.enabled !== true) return "いま通常の速さ";
+  return codexFast.supported === true ? "いま fast（priority）" : "いま fast（モデルの対応は次の返事で確かめます）";
+}
+
+/**
+ * POST /api/codex-fast 応答 → エラー文言（compactThresholdPostErrorText の写経）。成功は null。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function codexFastPostErrorText(res) {
+  return settingPostErrorText(res, "codex fast control not available");
+}
+
 /**
  * POST /api/chat/connect 応答 → エラー文言（:787-791）。
  * 503 = chat 未結線・400 = invalid source・その他 !ok = connect failed。成功は null。
@@ -308,7 +364,10 @@ export const CHAT_EMPTY_SOURCE_ERROR = "enter a stream URL / video ID first";
  */
 export const STT_ENGINE_OPTIONS = Object.freeze([
   Object.freeze({ value: "whisper", label: "ローカル（whisper）" }),
-  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" })
+  Object.freeze({ value: "elevenlabs", label: "ElevenLabs" }),
+  // ローカルの文字起こし（子プロセスの sherpa-onnx・local-stt-wave-plan.md §1 の 4）。本命は Zipformer（速さ）。
+  Object.freeze({ value: "zipformer", label: "Zipformer（ローカル）" }),
+  Object.freeze({ value: "parakeet", label: "Parakeet（ローカル）" })
 ]);
 
 /**
@@ -367,7 +426,8 @@ const REQUEST_ERROR_PREFIX = {
   chatDisconnect: "chat disconnect error", //        :802
   brain: "brain error", //  多頭化 Domain C（POST /api/brain・audioDevice の写経）
   memoryRecord: "memory record error", // 配信間記憶（POST /api/memory-record・audioDevice の写経）
-  compactThreshold: "compaction threshold error" // 圧縮を始める大きさ（POST /api/compact-threshold・同型）
+  compactThreshold: "compaction threshold error", // 圧縮を始める大きさ（POST /api/compact-threshold・同型）
+  codexFast: "codex fast error" // Codex の fast（POST /api/codex-fast・同型）
 };
 
 /**

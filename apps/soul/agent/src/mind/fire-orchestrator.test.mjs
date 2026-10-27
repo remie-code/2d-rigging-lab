@@ -13,6 +13,7 @@ import {
   resolveConversationInstructionProfile
 } from "./fire-orchestrator.mjs";
 import { MODEL_IDENTITIES } from "./model-identity.mjs";
+import { appendSoulSkills, loadSoulSkills } from "./soul-skills.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { createBargeInGate, BARGE_IN_GRACE_MS, BARGE_IN_NOTE, KILL_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
 import { NG_WORDS, NG_BLOCKED_NOTE } from "./ng-words.mjs";
@@ -142,15 +143,31 @@ test("buildFireSystemPrompt: GPT family は Chappy self-name を新規セッシ�
 });
 
 test("buildFireSystemPrompt: unknown/absent identity は Cody 既定へ戻る", () => {
-  assert.equal(buildFireSystemPrompt(), FIRE_SYSTEM_PROMPT);
-  assert.equal(buildFireSystemPrompt({ id: "unknown" }), FIRE_SYSTEM_PROMPT);
+  // FIRE_SYSTEM_PROMPT は名前 + 会話指示の既定 + 魂の教え（応答の遅れの直し §2-4・操縦席が①に渡すものと同じ組み立て）。
+  assert.equal(appendSoulSkills(buildFireSystemPrompt(), loadSoulSkills()), FIRE_SYSTEM_PROMPT);
+  assert.equal(buildFireSystemPrompt({ id: "unknown" }), buildFireSystemPrompt());
+  assert.equal(buildFireSystemPrompt(MODEL_IDENTITIES.cody), buildFireSystemPrompt());
+});
+
+test("指示の切り分け: 会話指示の既定は話し方だけ・表情タグと画面の教えは固定の部分（FIRE_SYSTEM_PROMPT には教えとして届く）", () => {
+  assert.equal(
+    DEFAULT_CONVERSATION_INSTRUCTION_BODY,
+    "あなたは配信の相方です。直前の会話を踏まえ、短く自然な日本語で一言だけ返してください。箇条書き・記号・長い説明はしないでください。"
+  );
+  assert.doesNotMatch(DEFAULT_CONVERSATION_INSTRUCTION_BODY, /表情タグ|<nod>|画面/);
+  assert.equal(buildFireSystemPrompt(), `あなたの名前はコーディ（Cody）です。${DEFAULT_CONVERSATION_INSTRUCTION_BODY}`);
+  // Claude の頭（観測用のスクリプトの FIRE_SYSTEM_PROMPT 経由）にも同じ教えが届く。
+  assert.ok(FIRE_SYSTEM_PROMPT.includes("感情が動いたときだけ"));
+  assert.ok(FIRE_SYSTEM_PROMPT.includes("「そうだね。<nod>」"), "例は句点付き");
+  assert.ok(FIRE_SYSTEM_PROMPT.includes("画面（画像）が渡されることがあります。"));
+  assert.ok(FIRE_SYSTEM_PROMPT.includes("<recall 頼みごと>"));
 });
 
 test("conversation instruction profile: six technical brain ids resolve independently and preserve default bytes", () => {
   assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
   const baseline = resolveConversationInstructionProfile("claude");
   assert.equal(baseline.body, DEFAULT_CONVERSATION_INSTRUCTION_BODY);
-  assert.equal(buildFireSystemPrompt(MODEL_IDENTITIES.cody), FIRE_SYSTEM_PROMPT);
+  assert.equal(appendSoulSkills(buildFireSystemPrompt(MODEL_IDENTITIES.cody), loadSoulSkills()), FIRE_SYSTEM_PROMPT);
   const override = resolveConversationInstructionProfile("codex-61-sol", {
     "codex-61-sol": "Use a short custom response."
   });
@@ -3610,6 +3627,7 @@ test("増えた分だけ: 同じ会話の 2 回目以降は前回渡した最後
       tokenUsage: { last: { inputTokens: 10 }, total: { inputTokens: 30 }, modelContextWindow: 1000 },
       ttftMs: 42,
       elapsedMs: 80,
+      serviceTier: null,
       atMs: null
     }
   );
@@ -3966,5 +3984,150 @@ test("一括の読み上げ（本物の speakOnce）: 器が open を拒否し�
   const failed = traces.find((t) => t.event === "fire.failed");
   assert.equal(failed.stage, "control_channel.rejection");
   assert.equal(failed.failureCode, "speech_rejected");
+  orch.dispose();
+});
+
+// ── 応答の遅れの直し（latency-fix-plan.md §2-2）: 締めの合図（onTextDone）で残りを声に回す ──────────
+
+test("締めの合図: onTextDone（本文の揃った agentMessage）で句点の無い最後の文を出し、ask の戻りでは二重に flush しない", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("続けて");
+  const fakeSpeak = makeFakeSpeak();
+  const enqueued = [];
+  const traces = [];
+  let askReturned = false;
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(_input, askOptions) {
+        assert.equal(typeof askOptions?.onTextDone, "function");
+        askOptions.onTextDelta("うん。");
+        askOptions.onTextDelta("それは大事");
+        assert.deepEqual(enqueued.map((entry) => entry.text), ["うん。"]);
+        askOptions.onTextDone({ itemId: "a", phase: "final_answer" });
+        assert.deepEqual(enqueued.map((entry) => entry.text), ["うん。", "それは大事"], "turn/completed（ask の戻り）を待たずに出る");
+        assert.equal(traces.filter((event) => event.event === "progressive.boundary.flushed").length, 1);
+        askReturned = true;
+        return { replyText: "うん。それは大事", elapsedMs: 40 };
+      }
+    },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onProgressiveSentence: (chunk) => enqueued.push({ ...chunk, askReturned }),
+    onTrace: (event) => traces.push(event)
+  });
+
+  const result = await orch.fire();
+  assert.deepEqual(enqueued, [
+    { text: "うん。", index: 0, final: false, askReturned: false },
+    { text: "それは大事", index: 1, final: true, askReturned: false }
+  ]);
+  assert.equal(traces.filter((event) => event.event === "progressive.boundary.flushed").length, 1, "ask の戻りで二重に flush しない");
+  assert.equal(result.fired, true);
+  orch.dispose();
+});
+
+test("締めの合図の後に本文が続いたら（次の agentMessage）、その残りは ask の戻りで 1 回だけ締める", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("続けて");
+  const fakeSpeak = makeFakeSpeak();
+  const enqueued = [];
+  const traces = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: {
+      async ask(_input, askOptions) {
+        askOptions.onTextDelta("一つ目");
+        askOptions.onTextDone({ itemId: "a", phase: null });
+        askOptions.onTextDone({ itemId: "a", phase: null });
+        askOptions.onTextDelta("二つ目");
+        return { replyText: "一つ目二つ目" };
+      }
+    },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onProgressiveSentence: (chunk) => enqueued.push(chunk),
+    onTrace: (event) => traces.push(event)
+  });
+
+  await orch.fire();
+  assert.deepEqual(enqueued.map((entry) => entry.text), ["一つ目", "二つ目"]);
+  assert.equal(traces.filter((event) => event.event === "progressive.boundary.flushed").length, 2);
+  orch.dispose();
+});
+
+// ── Codex の fast（速さの段・操縦席の fast の切り替え・2026-10-27）────────────────────────────
+
+test("速さの段: 受理の configuration の serviceTier を ask に渡し、送った段（onTurnStarted）を遅延と記録の行に載せる", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("速くして");
+  /** @type {any[]} */
+  const askOptionsSeen = [];
+  /** @type {any[]} */
+  const latencies = [];
+  /** @type {any[]} */
+  const records = [];
+  let configuredTier = "priority";
+  const session = {
+    ask: async (/** @type {any} */ _content, /** @type {any} */ askOptions) => {
+      askOptionsSeen.push(askOptions);
+      // 頭がモデルの段を確かめた結果、送ったのは default だった（priority を持たないモデル）とする。
+      const sent = askOptions?.serviceTier === "priority" ? "default" : askOptions?.serviceTier ?? null;
+      askOptions?.onTurnStarted?.({ threadId: "t", turnId: "u", serviceTier: sent });
+      return { replyText: "", serviceTier: sent };
+    }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session,
+    acquireFireResources: () => ({ session, configuration: { brain: "codex-61-sol", serviceTier: configuredTier } }),
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onLatency: (l) => latencies.push(l),
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  assert.equal(askOptionsSeen[0].serviceTier, "priority", "受理の時点の設定を渡す");
+  assert.equal(typeof askOptionsSeen[0].onTurnStarted, "function");
+  assert.equal(latencies[0].serviceTier, "default", "遅延の行は実際に送った段");
+  assert.equal(records[0].serviceTier, "default", "記録の行は ask の戻りの段");
+
+  configuredTier = "default";
+  buffer.append({ startMs: 0, endMs: 0, text: "戻して" });
+  await orch.fire();
+  assert.equal(askOptionsSeen[1].serviceTier, "default", "OFF に戻したら次の返事から default");
+  assert.equal(latencies[1].serviceTier, "default");
+  orch.dispose();
+});
+
+test("速さの段: configuration に段が無い（Claude の頭・acquire の無い経路）なら ask に渡さず、行の serviceTier は null", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ふつうに");
+  /** @type {any[]} */
+  const askOptionsSeen = [];
+  /** @type {any[]} */
+  const latencies = [];
+  /** @type {any[]} */
+  const records = [];
+  const session = {
+    ask: async (/** @type {any} */ _content, /** @type {any} */ askOptions) => {
+      askOptionsSeen.push(askOptions);
+      return { replyText: "" };
+    }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session,
+    acquireFireResources: () => ({ session, configuration: { brain: "claude", serviceTier: null } }),
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onLatency: (l) => latencies.push(l),
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  assert.equal("serviceTier" in askOptionsSeen[0], false);
+  assert.equal("onTurnStarted" in askOptionsSeen[0], false);
+  assert.equal(latencies[0].serviceTier, null);
+  assert.equal(records[0].serviceTier, null);
   orch.dispose();
 });

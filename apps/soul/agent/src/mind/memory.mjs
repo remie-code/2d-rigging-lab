@@ -226,6 +226,8 @@ async function runWriterOnce({ create, request, dir, onWarning, commitImpl }) {
     cwd: dir,
     sandbox: "workspace-write",
     finalAnswerOnly: true,
+    // 使い捨て（記録ファイルを作らない・掃除しない・生きている①の記録を消さない・latency-fix-plan.md §2-1）。
+    ephemeral: true,
     ...(typeof onWarning === "function" ? { onWarning } : {})
   });
   try {
@@ -282,7 +284,7 @@ export const WRITER_MISS_WARNING = "memory: the writer finished without writing 
  * ②書き出し役を走らせる（書かずに答えたら、その場で 1 回だけやり直す）。
  *
  * - 空転写なら何もしない（セッションを作らない・コミットもしない）。戻り値 `{ written: false }`。
- * - `create({ systemPrompt, cwd: dir, sandbox: "workspace-write", finalAnswerOnly: true, onWarning })` →
+ * - `create({ systemPrompt, cwd: dir, sandbox: "workspace-write", finalAnswerOnly: true, ephemeral: true, onWarning })` →
  *   ask 1 回 → dispose（ask が失敗しても dispose する）→ コミット（ask が失敗しても、書きかけを残すためにコミットする）。
  * - ask の失敗は、コミットのあとで throw する（呼び出し側が握る）。やり直しはしない。
  *   コミットの失敗は throw せず、戻り値と onWarning で知らせる。

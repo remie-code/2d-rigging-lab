@@ -97,7 +97,9 @@ export function latencyBarView(rec, thresholds) {
     // 鳴らした声の engine（latency の voice・声の差し替え Wave 3）があれば添える（TTS / 声の区間を engine ごとに見比べる）。
     title:
       present.map((p) => p.label + " " + (p.ms / 1000).toFixed(2) + " 秒").join(" / ") +
-      (typeof rec.voice === "string" && rec.voice ? "（声: " + (VOICE_ENGINE_TITLES[rec.voice] ?? rec.voice) + "）" : "")
+      (typeof rec.voice === "string" && rec.voice ? "（声: " + (VOICE_ENGINE_TITLES[rec.voice] ?? rec.voice) + "）" : "") +
+      // その返事を Codex の fast（service tier "priority"）で頼んだなら小さく添える（fast の比較の材料）。
+      (rec.serviceTier === "priority" ? "（fast）" : "")
   };
 }
 

@@ -9,6 +9,7 @@ import {
   createSessionUsageLog,
   fireUsageRecord,
   compactionUsageRecord,
+  replyLatencyUsageRecord,
   sessionUsageFileName,
   SESSION_USAGE_RETENTION,
   SESSION_USAGE_SCHEMA
@@ -44,6 +45,7 @@ test("発火の 1 行: 数字と種類だけ（本文を持つ欄は無い）", 
     },
     ttftMs: 812.5,
     elapsedMs: 1500,
+    serviceTier: "priority",
     replyText: "本文は拾わない"
   });
   assert.deepEqual(record, {
@@ -59,11 +61,15 @@ test("発火の 1 行: 数字と種類だけ（本文を持つ欄は無い）", 
     vision: true,
     windowMode: "delta",
     includedCount: 3,
-    injectedChars: 120
+    injectedChars: 120,
+    serviceTier: "priority"
   });
   const empty = fireUsageRecord({ fireId: 1, vision: false });
   assert.equal(empty.lastInputTokens, null);
   assert.equal(empty.modelContextWindow, null);
+  assert.equal(empty.serviceTier, null, "段を送っていない（Claude 等）なら null");
+  assert.equal(fireUsageRecord({ fireId: 2, serviceTier: "default" }).serviceTier, "default");
+  assert.equal(fireUsageRecord({ fireId: 3, serviceTier: 1 }).serviceTier, null, "文字列でなければ null");
 });
 
 test("圧縮の開始・終了の 1 行", () => {
@@ -120,5 +126,68 @@ test("append: 置き場が無ければ作る・書けなくても throw しな�
     assert.doesNotThrow(() => failing.append({ type: "fire" }));
     await failing.flush();
     mkdirSync(dir, { recursive: true });
+  });
+});
+
+// ── 応答の遅れの直し（latency-fix-plan.md §2-5）: 返事ごとの遅延の内訳 ─────────────────────────────
+
+test("遅延の 1 行: SSE latency と同じレコードから、区間・合計・きっかけの種類・エンジン名だけを拾う（本文・ID は落とす）", () => {
+  const record = replyLatencyUsageRecord({
+    fireId: 7,
+    cause: { type: "speak-now", choice: "respond", probability: 0.72, trigger: "turn-end", triggerSeq: 12, judgeLatencyMs: 812 },
+    spoken: true,
+    segments: { transcribeMs: 512, judgeMs: 812, screenMs: null, llmFirstMs: 2100, firstSentenceMs: 90, ttsMs: 130, voiceMs: 60 },
+    otherMs: 40,
+    totalMs: 3744,
+    level: "ok",
+    vision: true,
+    brain: "codex-56-sol",
+    voice: "aivis",
+    stt: "parakeet",
+    serviceTier: "priority",
+    text: "本文は来ないはず"
+  });
+  assert.deepEqual(record, {
+    type: "latency",
+    fireId: 7,
+    causeType: "speak-now",
+    causeChoice: "respond",
+    spoken: true,
+    vision: true,
+    level: "ok",
+    brain: "codex-56-sol",
+    sttEngine: "parakeet",
+    voiceEngine: "aivis",
+    transcribeMs: 512,
+    judgeMs: 812,
+    screenMs: null,
+    llmFirstMs: 2100,
+    firstSentenceMs: 90,
+    ttsMs: 130,
+    voiceMs: 60,
+    otherMs: 40,
+    totalMs: 3744,
+    serviceTier: "priority"
+  });
+  const comment = replyLatencyUsageRecord({ fireId: 8, cause: { type: "comment-react", commentIds: ["msg-9"], commentSeqs: [3] }, spoken: false, segments: {} });
+  assert.equal(comment.causeType, "comment-react");
+  assert.equal(comment.causeChoice, null);
+  assert.equal(comment.totalMs, null);
+  assert.equal(comment.serviceTier, null, "段を送っていない返事は null");
+  assert.equal(JSON.stringify(comment).includes("msg-9"), false, "コメントの ID は残さない");
+  assert.equal(replyLatencyUsageRecord(null).type, "latency");
+});
+
+test("遅延の行は既存の行（発火・圧縮）と同じファイルに type を分けて足される", async () => {
+  await withDir(async (dir) => {
+    const log = createSessionUsageLog({ dir, startedAtMs: Date.UTC(2026, 9, 27, 10, 0, 0, 0), nowImpl: () => 1 });
+    log.append(fireUsageRecord({ fireId: 1, brain: "codex" }));
+    log.append(replyLatencyUsageRecord({ fireId: 1, cause: { type: "manual" }, spoken: true, segments: { llmFirstMs: 900 }, totalMs: 1500 }));
+    await log.flush();
+    const lines = readLines(log.path);
+    assert.deepEqual(lines.map((l) => l.type), ["fire", "latency"]);
+    assert.equal(lines[1].schema, SESSION_USAGE_SCHEMA);
+    assert.equal(lines[1].llmFirstMs, 900);
+    assert.equal(lines[1].causeType, "manual");
   });
 });

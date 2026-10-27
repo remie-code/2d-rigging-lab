@@ -56,6 +56,13 @@ test("latencyBarView: 区間は実測値の比（null・0 は出さない・そ�
   const withVoice = latencyBarView({ segments: { ttsMs: 130, voiceMs: 60 }, otherMs: null, totalMs: 900, level: "ok", voice: "elevenlabs" });
   assert.equal(withVoice?.title, "TTS 0.13 秒 / 声 0.06 秒（声: ElevenLabs）");
   assert.match(latencyBarView({ segments: { ttsMs: 100 }, totalMs: 900, level: "ok", voice: "aivis" })?.title ?? "", /（声: AivisSpeech）$/);
+  // Codex の fast（service tier "priority"）で頼んだ返事は title の末尾に（fast）を添える。通常（default）・無しは添えない。
+  assert.equal(
+    latencyBarView({ segments: { ttsMs: 130 }, totalMs: 900, level: "ok", voice: "aivis", serviceTier: "priority" })?.title,
+    "TTS 0.13 秒（声: AivisSpeech）（fast）"
+  );
+  assert.doesNotMatch(latencyBarView({ segments: { ttsMs: 130 }, totalMs: 900, level: "ok", serviceTier: "default" })?.title ?? "", /fast/);
+  assert.doesNotMatch(view.title, /fast/);
   // 鳴らなかった返事（totalMs null）は棒を出さない。
   assert.equal(latencyBarView({ fireId: 2, spoken: false, segments: {}, otherMs: null, totalMs: null, level: null }), null);
   assert.equal(latencyBarView(null), null);
