@@ -19,8 +19,8 @@
 | [ears-capture-buffer-2026-10.md](ears-capture-buffer-2026-10.md) | 実測+リポジトリ事実: 耳の dshow 取り込みが既定で 500ms ずつ届き、speechStart/End が 0〜500ms 遅れる。50ms で解消 | Recorded(2026-10-16)。既定 50ms への修正は ElevenLabs 調査の一段落後に別セッションで |
 | [quota-sources-2026-10.md](quota-sources-2026-10.md) | 各サービス(Codex / Claude / OpenAI API / ElevenLabs)の残量を割合で取る手段。OpenAI は残高 API なし、ElevenLabs は user_read が要る | Recorded(2026-10-17) |
 | [vision-capture-latency-2026-10.md](vision-capture-latency-2026-10.md) | 画面キャプチャ約 0.6 秒の内訳(PowerShell 起動 330ms + 毎回のコンパイル 110ms)、代替方式。OBS 窓タイトルの完全一致で撮影が全部失敗していた疑い | Recorded(2026-10-17) |
-| [context-growth-2026-10.md](context-growth-2026-10.md) | 長い配信で応答が遅くなる件: 会話の窓の重複・画像の残留・圧縮手段(Codex thread/compact/start、Claude /compact)・ユーザーの方針 | Recorded(2026-10-17) |
-| [stt-candidates-2026-10.md](stt-candidates-2026-10.md) | 耳(STT)の候補の洗い出し。ローカル化が動機(ElevenLabs の消費のほぼ全部が文字起こし)。本命は Parakeet-ja(sherpa-onnx-node・CPU)、比較に ReazonSpeech K2。「いろどり」は TTS(Irodori-TTS)だった | Recorded(2026-10-25) |
+| [context-growth-2026-10.md](context-growth-2026-10.md) | 長い配信で応答が遅くなる件: 会話の窓の重複・画像の残留・圧縮手段(Codex thread/compact/start、Claude /compact)・ユーザーの方針・Codex の fast と実配信の使用量(§10–§11) | Recorded(2026-10-28) |
+| [stt-candidates-2026-10.md](stt-candidates-2026-10.md) | 耳(STT)の候補の洗い出し。ローカル化が動機(ElevenLabs の消費のほぼ全部が文字起こし)。本命は Parakeet-ja(sherpa-onnx-node・CPU)、比較に ReazonSpeech K2。「いろどり」は TTS(Irodori-TTS)だった。Zipformer を採用し、実配信で合格(§7) | Recorded(2026-10-28) |
 
 ## 注意
 

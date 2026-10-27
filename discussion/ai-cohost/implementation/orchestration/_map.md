@@ -53,5 +53,5 @@
 | [voice-swap-wave-plan.md](voice-swap-wave-plan.md) | **完了・人間ゲート合格(2026-10-18)** | W1: 器の流し込みの約束 ∥ 流し込みプレイヤー → W2: 声の差し替え口 + AivisSpeech 載せ替え → W3: ElevenLabs engine ∥ 操縦席の切り替え・警告 → 人間ゲート6点。レビューは Gnome 単独 + wave 末の軽い突き合わせ。 |
 | [memory-recall-inventory.md](memory-recall-inventory.md) | **完了(2026-10-21)** | 記憶の作り直しの棚卸し。今の配信間記憶・耳の Stop・目印・結果の届け方・判定の写経元・②④の読み書きの実機確認・MCP の引き継ぎ・git。 |
 | [memory-recall-wave-plan.md](memory-recall-wave-plan.md) | **完了・思い出す流れは人間ゲート合格(2026-10-25)** | W1: セッションの役ごとの設定と MCP の切り離し ∥ 置き場・git・8 件の移し替え → W2: 書き出し役と保存の経路 → W3: 思い出す流れ → 人間ゲート 6 点。 |
-| [local-stt-wave-plan.md](local-stt-wave-plan.md) | **実装済み・人間ゲート待ち(2026-10-25)** | 文字起こしの選択肢に Parakeet / Zipformer(ローカル、sherpa-onnx-node を子プロセスで)を足す。1 wave・1 ドメイン。 |
-| [latency-fix-plan.md](latency-fix-plan.md) | **実装済み・実配信での確認待ち(2026-10-27)** | 応答の遅れの原因 2 つ(句点なしの 1 文が締めまで声に回らない/使い捨てのセッションの掃除がチャッピーの記録を消し Codex が毎回探し回る)の直しと、会話指示から仕組みの教えを固定ファイルに切り分け。 |
+| [local-stt-wave-plan.md](local-stt-wave-plan.md) | **人間ゲート合格(2026-10-28)** | 文字起こしの選択肢に Parakeet / Zipformer(ローカル、sherpa-onnx-node を子プロセスで)を足す。1 wave・1 ドメイン。 |
+| [latency-fix-plan.md](latency-fix-plan.md) | **実配信で確認済み(2026-10-28)** | 応答の遅れの原因 2 つ(句点なしの 1 文が締めまで声に回らない/使い捨てのセッションの掃除がチャッピーの記録を消し Codex が毎回探し回る)の直しと、会話指示から仕組みの教えを固定ファイルに切り分け。 |

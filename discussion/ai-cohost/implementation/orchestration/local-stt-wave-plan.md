@@ -1,6 +1,6 @@
 # ローカルの文字起こし(Parakeet / Zipformer)wave 計画
 
-> Status: 実装済み(Domain L、軽い突き合わせ合格 [../reviews/local-stt/review.md](../reviews/local-stt/review.md))。機械ゲート PASS(soul 1648/1648・soul-zone)。**人間ゲート PENDING** → [../waves/local-stt/human-gate.md](../waves/local-stt/human-gate.md)。
+> Status: 実装済み(Domain L、軽い突き合わせ合格 [../reviews/local-stt/review.md](../reviews/local-stt/review.md))。機械ゲート PASS(soul 1648/1648・soul-zone)。**人間ゲート合格(2026-10-28、約 2 時間の実配信)** → [../waves/local-stt/human-gate.md](../waves/local-stt/human-gate.md)。
 > 根拠: [../../research/stt-candidates-2026-10.md](../../research/stt-candidates-2026-10.md)(候補・CPU 実測・同じプロセスで動かせない問題・VAD の統一の検討)。
 > 動機: ElevenLabs の消費のほぼ全部が文字起こし(送った音声の長さで課金され、無音も送り続けるため配信の時間まるごと)。ローカルにすれば ElevenLabs は声だけになる。
 > 規模: 1 wave・1 ドメイン(Gnome)。終わったら軽い突き合わせ(Sylph)を 1 回。

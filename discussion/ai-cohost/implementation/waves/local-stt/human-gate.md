@@ -1,6 +1,6 @@
 # ローカルの文字起こし 人間ゲート
 
-> Status: PENDING(手順を用意 2026-10-25)。計画は [../../orchestration/local-stt-wave-plan.md](../../orchestration/local-stt-wave-plan.md) §2。
+> Status: **合格(ユーザー 2026-10-28、約 2 時間の実配信)**。計画は [../../orchestration/local-stt-wave-plan.md](../../orchestration/local-stt-wave-plan.md) §2。
 
 ## 0. 準備
 
@@ -21,6 +21,10 @@
 | 5 | Parakeet に切り替えて Stop → Start | 動く |
 | 6 | 配信のあと | ElevenLabs の残量が、文字起こしの分だけ減っていない |
 
-## 2. 記録
+## 2. 記録(ユーザー 2026-10-28)
 
-(ゲート後に追記)
+- 約 2 時間の配信を Zipformer で行い、「特に問題なかった」(ユーザー)。6 点を 1 つずつ分けた報告は受けていない。
+- 精度は ElevenLabs の方が圧倒的に高い(ユーザー)。ただし頭(gpt-6.1-sol)が前後の文脈で補い、差を感じさせなかった。
+  - 例: 「2,3回」が「二十三回」と書き起こされたが、チャッピーは文脈から書き起こしの誤りだと分かり、「2,3回」として会話した。
+- 遅れは気にならなかった(ユーザー)。
+- 2 時間の使用量: Codex は週の枠の約 25%、ElevenLabs は月の枠の約 5%(ユーザー)。「十分満足な値」。

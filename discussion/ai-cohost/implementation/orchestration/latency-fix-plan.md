@@ -1,6 +1,6 @@
 # 応答の遅れの直し(記録ファイルの掃除・締めの合図・句点)と、指示の切り分け — 計画
 
-> Status: 実装済み(2026-10-27。突き合わせ合格 [../reviews/latency-fix/review.md](../reviews/latency-fix/review.md)、報告 [../waves/latency-fix/report.md](../waves/latency-fix/report.md)、soul 1668/1668)。実配信での確認待ち。文の途中のタグで文が分かれる件は、聞いてから決める(ユーザー)。
+> Status: 実装済み(2026-10-27。突き合わせ合格 [../reviews/latency-fix/review.md](../reviews/latency-fix/review.md)、報告 [../waves/latency-fix/report.md](../waves/latency-fix/report.md)、soul 1668/1668)。**実配信で確認済み(2026-10-28、約 2 時間): 遅れは気にならず、特に問題なし(ユーザー)。** 文の途中のタグで文が分かれる件も、聞いて問題がなかったので今のままにする。
 
 ## 1. 原因(調査 2026-10-27、確定)
 
