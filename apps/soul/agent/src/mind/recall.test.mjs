@@ -70,6 +70,7 @@ test("runRecall: read-only・cwd = 記憶のフォルダ・最後の答えだけ
   assert.equal(opts.cwd, DIR);
   assert.equal(opts.sandbox, "read-only");
   assert.equal(opts.finalAnswerOnly, true);
+  assert.equal(opts.ephemeral, true, "使い捨て（記録ファイルを作らない・掃除しない）");
   assert.equal(opts.onWarning, onWarning, "警告は呼び出し側の口へ（config/read の alert が効く）");
   assert.equal(calls.asked.length, 1);
   assert.equal(calls.disposed, 1);

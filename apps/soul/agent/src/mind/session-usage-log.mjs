@@ -6,6 +6,10 @@
  * 画像の有無・渡した行数と文字数）と、圧縮の開始・終了を 1 行ずつ `session-usage/<起動時刻>.jsonl` に追記する。
  * **会話の本文は書かない**（数字と種類だけ）。配信を通して読み返し、圧縮のしきい値を決める材料にする。
  *
+ * 応答の遅れの直し（latency-fix-plan.md §2-5）: 返事ごとの遅延の内訳（type: "latency"・文字起こし・判定・画面・
+ * 最初の文字・最初の文・TTS・声・その他・合計、きっかけの種類、頭・文字起こし・声のエンジン名）も 1 行ずつ足す。
+ * 操縦席の SSE "latency" と同じレコード（cockpit-server の onReplyLatency）から作る。配信どうしで比べる材料。
+ *
  * fire-diagnostics.mjs と同じ流儀: ディスク I/O は直列の非同期キューで行い、発火の経路は待たない・止めない
  * （書けなくても握る）。ファイルは最初の 1 行で作り、そのときに古いものを消して直近 SESSION_USAGE_RETENTION
  * 個（今回の分を含む）だけ残す。置き場は apps/soul/agent/.gitignore 済み。
@@ -83,6 +87,39 @@ export function compactionUsageRecord(event, brain) {
     personaInjected: event?.personaInjected === true,
     personaDeferred: event?.personaDeferred === true,
     compactionInputTokens: num(event?.compactionInputTokens)
+  };
+}
+
+/**
+ * 返事の遅延（cockpit-server の onReplyLatency が渡す、SSE "latency" と同じレコード）から、記録の 1 行を作る（純関数）。
+ * 数字・種類・エンジン名だけを拾う（きっかけはコメントの ID や確率などを落とし、種類と speak-now の選択だけ）。
+ * @param {any} record
+ * @returns {Record<string, unknown>}
+ */
+export function replyLatencyUsageRecord(record) {
+  const segments = record?.segments ?? {};
+  const cause = record?.cause && typeof record.cause === "object" ? record.cause : null;
+  const str = (/** @type {unknown} */ v) => (typeof v === "string" ? v : null);
+  return {
+    type: "latency",
+    fireId: num(record?.fireId),
+    causeType: str(cause?.type),
+    causeChoice: str(cause?.choice),
+    spoken: record?.spoken === true,
+    vision: record?.vision === true,
+    level: str(record?.level),
+    brain: str(record?.brain),
+    sttEngine: str(record?.stt),
+    voiceEngine: str(record?.voice),
+    transcribeMs: num(segments.transcribeMs),
+    judgeMs: num(segments.judgeMs),
+    screenMs: num(segments.screenMs),
+    llmFirstMs: num(segments.llmFirstMs),
+    firstSentenceMs: num(segments.firstSentenceMs),
+    ttsMs: num(segments.ttsMs),
+    voiceMs: num(segments.voiceMs),
+    otherMs: num(record?.otherMs),
+    totalMs: num(record?.totalMs)
   };
 }
 

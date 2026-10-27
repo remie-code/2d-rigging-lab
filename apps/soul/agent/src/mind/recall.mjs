@@ -167,6 +167,8 @@ export async function runRecall(options) {
     cwd: dir,
     sandbox: "read-only",
     finalAnswerOnly: true,
+    // 使い捨て（記録ファイルを作らない・掃除しない・生きている①の記録を消さない・latency-fix-plan.md §2-1）。
+    ephemeral: true,
     ...(typeof onWarning === "function" ? { onWarning } : {})
   });
   /** @type {any} */

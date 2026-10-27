@@ -267,6 +267,7 @@ test("writeStreamRecord: ②を cwd=記憶のフォルダ・workspace-write・�
   assert.equal(calls.createOptions.cwd, dir);
   assert.equal(calls.createOptions.sandbox, "workspace-write");
   assert.equal(calls.createOptions.finalAnswerOnly, true);
+  assert.equal(calls.createOptions.ephemeral, true, "使い捨て（記録ファイルを作らない・掃除しない）");
   assert.equal(calls.createOptions.systemPrompt, WRITER_SYSTEM_PROMPT);
   // 頼む内容に今回の配信の識別（日付とファイル名）が入り、視聴者名は入らない。
   assert.equal(calls.ask.length, 1);

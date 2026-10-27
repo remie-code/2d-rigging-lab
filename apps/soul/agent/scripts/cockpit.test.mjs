@@ -1734,7 +1734,12 @@ test("createConversationInstructionHooks: getSoulSkills は①に足す教えと
   const hooks = createConversationInstructionHooks(settings, () => "claude");
   const skills = hooks.getSoulSkills();
   assert.deepEqual(skills, listSoulSkills());
-  assert.deepEqual(skills.map((s) => [s.name, s.path]), [["recall", "skills/recall.md"]]);
+  // 応答の遅れの直し（latency-fix-plan.md §2-4）: 表情タグ・画面の教えも固定のファイルになり、同じ一覧に並ぶ。
+  assert.deepEqual(skills.map((s) => [s.name, s.path]), [
+    ["expression", "skills/expression.md"],
+    ["screen", "skills/screen.md"],
+    ["recall", "skills/recall.md"]
+  ]);
   assert.equal(skills.map((s) => s.body).join("\n\n"), loadSoulSkills(), "①に足す本文と同じ");
   const injected = createConversationInstructionHooks(settings, () => "claude", undefined, () => [{ name: "x", path: "skills/x.md", body: "b" }]);
   assert.deepEqual(injected.getSoulSkills(), [{ name: "x", path: "skills/x.md", body: "b" }]);

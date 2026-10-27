@@ -68,7 +68,7 @@ import {
   DEFAULT_COMPACT_QUIET_MS,
   DEFAULT_COMPACT_MIN_INTERVAL_MS
 } from "../src/mind/context-compactor.mjs";
-import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord } from "../src/mind/session-usage-log.mjs";
+import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord, replyLatencyUsageRecord } from "../src/mind/session-usage-log.mjs";
 import { resolveLatencyThresholds } from "../src/mind/fire-latency.mjs";
 import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/quota.mjs";
 import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
@@ -82,7 +82,7 @@ import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
 import { DEFAULT_MEMORY_DIR, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
-import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
+import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
 import { appendSoulSkills, listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
 
@@ -1470,6 +1470,13 @@ async function main() {
     return;
   }
 
+  // 前回の起動で取り残した Codex の記録ファイル（台帳 codex-rollouts.local.json の分）を、起動時に 1 回だけ消す。
+  // 以後のセッション（①・②書き出し役・④思い出し役）を作っても掃除は走らない（応答の遅れの直し・latency-fix-plan.md §2-1）。
+  try {
+    sweepCodexRollouts();
+  } catch {
+    // 掃除は best effort（起動を止めない）。
+  }
   // ── S3 追撃 domain-c: fire は常時結線・session/player は遅延生成・Channel URL は後入力可 ──────
   const settings = createFileSettingsStore();
   // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
@@ -2142,7 +2149,11 @@ async function main() {
     // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
     quotaSource: quotaMonitor,
     latencyThresholds: resolveLatencyThresholdsFromSettings(settings),
-    onReplyLatency: (record) => process.stdout.write(formatReplyLatencyLine(record))
+    onReplyLatency: (record) => {
+      process.stdout.write(formatReplyLatencyLine(record));
+      // 返事ごとの遅延の内訳を起動ごとの記録（session-usage/）にも 1 行（SSE "latency" と同じ値・本文なし・全部の頭）。
+      sessionUsageLog.append(replyLatencyUsageRecord(record));
+    }
   });
 
   const url = await server.listen();

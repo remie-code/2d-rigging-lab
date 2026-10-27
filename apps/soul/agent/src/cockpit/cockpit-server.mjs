@@ -2200,7 +2200,8 @@ export function createCockpitServer(options = {}) {
     });
     const brain = typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null;
     // voice = その返事を鳴らした声の engine の種類（遅延の TTS / 声の区間を engine ごとに見比べる材料・additive）。
-    const payload = { ...record, vision: inFire?.vision === true, brain, voice: voice.engine ?? ttsEngine };
+    // stt = 文字起こしの方式（文字起こしの区間を方式ごとに見比べる材料・additive・応答の遅れの直し §2-5）。
+    const payload = { ...record, vision: inFire?.vision === true, brain, voice: voice.engine ?? ttsEngine, stt: sttEngine };
     broadcast("latency", payload);
     if (onReplyLatency) {
       try {

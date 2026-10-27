@@ -10,6 +10,14 @@
  * 記憶の作り直し Wave 3 Domain D: 思い出しの目印 `<recall 頼みごと>` も parser と同じ関数（recall-tag.mjs の
  * scanRecallTag）で読む。完結した目印は tags に出し、その `recalls`（頼みごと）を載せる。目印の終わり（同じ行の
  * 最後の `>`）が決まるまでは未完として待たせ、閉じていない目印は声に出さずに捨てる（parser と同じ speechText）。
+ *
+ * 応答の遅れの直し（latency-fix-plan.md §2-3）: 文の後ろに来た完結したタグ（6 語の表情タグ・思い出しの目印）も文の
+ * 区切りとみなす。タグの前に声にする文字（文字か数字が 1 つ以上・絵文字や記号だけは数えない）が溜まっていれば、
+ * タグを読んだ時点でそれを 1 文として出す（タグは文に含めない）。「そうだね<nod>」のように句点の無い 1 文が、
+ * 返事の締めまで声に回らないのを防ぐ。思い出しの目印は終わり（同じ行の最後の `>`）が行末か返事の終わりまで
+ * 決まらないので、`<recall` の後ろに語の文字でないもの（空白・`>`）が来て目印だと決まった時点で区切る（目印は
+ * 閉じていても閉じていなくても声に出ないため、その前で文が切れる）。知らない語のタグ・壊れた山括弧は区切りにしない
+ * （今までどおり）。
  */
 
 import { parseExpressionTags } from "./expression-parser.mjs";
@@ -18,6 +26,9 @@ import { scanRecallTag } from "./recall-tag.mjs";
 const SENTENCE_END = new Set(["。", "！", "？", "!", "?"]);
 const TAG_WORD_START = /^[A-Za-z]$/;
 const TAG_WORD_CHAR = /^[\w-]$/;
+/** 声にする文字（文字か数字）。タグの前で文を区切るかの判定に使う。 */
+const SPEAKABLE_CHAR = /[\p{L}\p{N}]/u;
+const RECALL_OPEN = "<recall";
 
 /**
  * @typedef {{
@@ -61,11 +72,24 @@ export function createIncrementalSentenceTagBuffer() {
     }
   };
 
+  /**
+   * タグ（完結した表情タグ・目印）の前で文を区切る: 声にする文字が溜まっていれば 1 文として出す。
+   * @param {SentenceTagDelta} out
+   */
+  const endSentenceBeforeTag = (out) => {
+    if (SPEAKABLE_CHAR.test(plain)) {
+      out.sentences.push(plain);
+      plain = "";
+    }
+  };
+
   /** @param {string} raw @param {number} position @param {SentenceTagDelta} out */
   const appendTag = (raw, position, out) => {
     // `parseExpressionTags` supplies the established expression vocabulary and
     // diagnostic shape. The raw tag remains available even when it is unknown.
     const parsed = parseExpressionTags(raw);
+    // 完結した表情タグ・思い出しの目印は文の区切り: 前に溜まった声の文字を 1 文として出す（タグは含めない）。
+    if (parsed.events.length > 0 || parsed.recalls.length > 0) endSentenceBeforeTag(out);
     out.tags.push({
       raw,
       position,
@@ -108,6 +132,10 @@ export function createIncrementalSentenceTagBuffer() {
         continue;
       }
       if (recall && recall.kind === "incomplete") {
+        // 目印だと決まった（`<recall` の後ろに語の文字でないもの）なら、終わりを待たずにその前で文を区切る。
+        if (source.startsWith(RECALL_OPEN, tagStart) && source.length > tagStart + RECALL_OPEN.length) {
+          endSentenceBeforeTag(out);
+        }
         cursor = tagStart;
         break;
       }

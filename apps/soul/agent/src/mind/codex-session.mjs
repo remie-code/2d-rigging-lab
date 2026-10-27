@@ -35,6 +35,25 @@
  *  - `finalAnswerOnly`: ツールを使う turn では、前置き（phase=commentary）の agentMessage も来る。true のとき
  *    replyText は phase=final_answer の agentMessage だけをつなげる（無ければ最後の agentMessage）。既定 false
  *    （全部つなげる今までの組み立て）。onTextDelta には前置きも含めて全部流れる。
+ *
+ * ── 記録ファイル（rollout）の掃除と、使い捨てのセッション（応答の遅れの直し・latency-fix-plan.md §1 B・§2-1）──────
+ *  Codex は thread ごとに ~/.codex/sessions/ に記録ファイルを書き、魂は自分の thread の id を台帳
+ *  （codex-rollouts.local.json）に残して、前回の起動の取り残しを消す。以前は createCodexSession のたびに台帳の
+ *  全部を消していたため、使い捨てのセッション（②書き出し役・④思い出し役）を作るたびに、生きている①の記録まで
+ *  消えていた（消えた後は項目を書くたびに Codex が flush_rollout の失敗で約 185ms ずつ止まり、返事の締めが遅れた）。
+ *  - 掃除（sweepCodexRollouts）は 1 プロセス・1 台帳につき 1 回だけ。操縦席は起動時に呼ぶ。呼ばれていなければ、
+ *    最初の（使い捨てでない）セッションを作るときに 1 回だけ走る（cli 等の入口のため）。
+ *  - 掃除は、このプロセスで生きている thread（まだ dispose していないセッションの thread）の記録を消さない。
+ *  - `ephemeral: true` のセッションは掃除しない。thread/start に `ephemeral: true` を渡し、記録ファイルを作らない
+ *    （Codex 0.163 の実機で確認: workspace-write でファイルは書ける・記録ファイルはできない・thread/delete は
+ *    「not persisted」で失敗する）。台帳にも載せず、dispose で thread/delete も記録の削除もしない。応答の thread が
+ *    ephemeral でなかった（古い Codex 等）ときは、今までどおり台帳に載せて dispose で消す。
+ *  - dispose は今までどおり、自分の thread の記録だけを消して台帳から外す。
+ *
+ * ── 返事の本文の締め（同 §2-2）──────────────────────────────────────────────────────
+ *  ask の第 2 引数の `onTextDone` は、agentMessage の item/completed（phase が commentary のものを除く・phase の
+ *  無いものは含む）を受け、delta の累積と item の text が一致したことを確かめた直後に呼ぶ。turn/completed を
+ *  待たずに逐次の読み上げを締める（最後の文を声に回す）ための口。本文は渡さない。
  */
 
 import { spawn as defaultSpawn } from "node:child_process";
@@ -201,9 +220,31 @@ function writeLedger(ledgerPath, threadIds) {
   }
 }
 
-function sweepLedger(homeDir, ledgerPath) {
-  for (const id of readLedger(ledgerPath)) deleteRolloutForThreadId(homeDir, id);
-  writeLedger(ledgerPath, []);
+/** 掃除を済ませた台帳（1 プロセス・1 台帳につき 1 回だけ）。 */
+const sweptLedgers = new Set();
+/** このプロセスで生きている（まだ dispose していない）使い捨てでないセッションの thread。掃除はこれを消さない。 */
+const liveThreadIds = new Set();
+
+/**
+ * 前回の起動の取り残し（台帳に残った thread の記録ファイル）を消す。1 プロセス・1 台帳につき 1 回だけ走り、
+ * 2 回目以降は何もしない。このプロセスで生きている thread の記録は消さず、台帳に残す。
+ * @param {{ homeDir?: string; ledgerPath?: string }} [options]
+ * @returns {{ swept: boolean; deleted: number; kept: number }}
+ */
+export function sweepCodexRollouts(options = {}) {
+  const homeDir = options.homeDir ?? os.homedir();
+  const ledgerPath = options.ledgerPath ?? DEFAULT_LEDGER_PATH;
+  const key = path.resolve(ledgerPath);
+  if (sweptLedgers.has(key)) return { swept: false, deleted: 0, kept: 0 };
+  sweptLedgers.add(key);
+  const kept = [];
+  let deleted = 0;
+  for (const id of readLedger(ledgerPath)) {
+    if (liveThreadIds.has(id)) kept.push(id);
+    else if (deleteRolloutForThreadId(homeDir, id)) deleted += 1;
+  }
+  writeLedger(ledgerPath, kept);
+  return { swept: true, deleted, kept: kept.length };
 }
 
 function appendLedger(ledgerPath, threadId) {
@@ -559,6 +600,8 @@ function turnIdFromNotification(message) {
  *   sandboxPolicy を揃えて指定する。approval は常に never。
  * @param {boolean} [options.finalAnswerOnly=false]  true なら replyText を phase=final_answer の agentMessage だけで
  *   組み立てる（無ければ最後の agentMessage）。ツールを使う turn の前置きを返事に混ぜないため。
+ * @param {boolean} [options.ephemeral=false]  true なら使い捨て（thread/start の ephemeral・記録ファイルを作らない・
+ *   掃除しない・台帳に載せない）。②書き出し役・④思い出し役が使う。
  */
 export function createCodexSession(options = {}) {
   const systemPrompt = `${options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT}`;
@@ -572,6 +615,7 @@ export function createCodexSession(options = {}) {
     throw new TypeError("codex-session: cwd must be an absolute path.");
   }
   const finalAnswerOnly = options.finalAnswerOnly === true;
+  const ephemeral = options.ephemeral === true;
   const env = options.env ?? process.env;
   const spawnImpl = options.spawnImpl ?? defaultSpawn;
   const homeDir = options.homeDir ?? os.homedir();
@@ -585,11 +629,14 @@ export function createCodexSession(options = {}) {
     const { warnings } = assertSubscriptionAuthEnvOpenAI(env);
     for (const warning of warnings) options.onWarning?.(warning);
   }
-  sweepLedger(homeDir, ledgerPath);
+  // 使い捨てのセッションは掃除しない。使い捨てでないものも、掃除はこのプロセスで 1 回だけ（生きている thread は残す）。
+  if (!ephemeral) sweepCodexRollouts({ homeDir, ledgerPath });
   const workingDirectory = mkdtempSync(path.join(os.tmpdir(), "codex-app-server-session-"));
   // thread/turn の作業フォルダ。役の指定が無ければ使い捨ての一時フォルダ（今までどおり）。
   const threadCwd = options.cwd ?? workingDirectory;
   const threadIds = [];
+  /** 記録ファイルを作った（ephemeral でない）thread。dispose で記録を消し、台帳から外す。 */
+  const persistedThreadIds = [];
   let disposed = false;
   let connection = null;
   let connectionGeneration = 0;
@@ -653,6 +700,7 @@ export function createCodexSession(options = {}) {
     if (!active || active.settled) return;
     active.settled = true;
     active.onTextDelta = null;
+    active.onTextDone = null;
     active.reject(error);
   };
   const failTurn = (error) => {
@@ -780,6 +828,11 @@ export function createCodexSession(options = {}) {
         state.finalText = item.text;
         state.phase = typeof item.phase === "string" ? item.phase : null;
         if (state.deltaText !== item.text) throw turnError("agent delta accumulation does not match the completed item");
+        // 本文が揃った（delta の累積 = item の text）。前置き（commentary）でなければ、締めの合図を出す。
+        if (state.phase !== "commentary" && typeof active.onTextDone === "function") {
+          const meta = { itemId: item.id, phase: state.phase, threadId: active.threadId, turnId: active.turnId, elapsedMs: performance.now() - active.startedAt };
+          try { active.onTextDone(meta); } catch {}
+        }
         return;
       }
       if (method === "thread/tokenUsage/updated") {
@@ -816,6 +869,7 @@ export function createCodexSession(options = {}) {
         }
         active.settled = true;
         active.onTextDelta = null;
+        active.onTextDone = null;
         active.resolve({ replyText, usage: active.usage, tokenUsage: active.tokenUsage, ttftMs: active.ttftMs });
       }
     } catch (error) {
@@ -882,6 +936,7 @@ export function createCodexSession(options = {}) {
       const mcpOverrides = await mcpOverridesFor(ready.connection);
       const result = await ready.connection.request("thread/start", {
         model, cwd: threadCwd, approvalPolicy: "never", sandbox,
+        ...(ephemeral ? { ephemeral: true } : {}),
         config: { forced_login_method: "chatgpt", web_search: "disabled", ...(mcpOverrides ? { mcp_servers: mcpOverrides } : {}) }
       });
       const id = result?.thread?.id;
@@ -892,7 +947,12 @@ export function createCodexSession(options = {}) {
       pendingPersonaThreadId = null;
       if (!threadIds.includes(id)) {
         threadIds.push(id);
-        appendLedger(ledgerPath, id);
+        // 使い捨て（応答の thread も ephemeral）なら記録ファイルは無い。台帳に載せず、掃除の対象にもしない。
+        if (!(ephemeral && result?.thread?.ephemeral === true)) {
+          persistedThreadIds.push(id);
+          liveThreadIds.add(id);
+          appendLedger(ledgerPath, id);
+        }
       }
       return { connection: ready.connection, threadId: id, generation: ready.generation };
     } catch (error) { throw error; }
@@ -923,13 +983,15 @@ export function createCodexSession(options = {}) {
      * Existing one-argument callers remain valid. Wave 2 can opt into the
      * ordered append-only stream through the additive second argument.
      * @param {string | Array<any>} content
-     * @param {{onTextDelta?: (delta: string, meta: {itemId:string;threadId:string;turnId:string;elapsedMs:number}) => void}} [askOptions]
+     * @param {{onTextDelta?: (delta: string, meta: {itemId:string;threadId:string;turnId:string;elapsedMs:number}) => void; onTextDone?: (meta: {itemId:string;phase:string|null;threadId:string;turnId:string;elapsedMs:number}) => void}} [askOptions]
+     *   onTextDone: commentary でない agentMessage の本文が揃った（item/completed）ときに呼ぶ（本文は渡さない）。
      */
     async ask(content, askOptions = {}) {
       if (disposed) throw new Error("codex-session already disposed.");
       if (askInProgress) throw new Error("codex-session: concurrent ask is not supported.");
       askInProgress = true;
       const onTextDelta = typeof askOptions?.onTextDelta === "function" ? askOptions.onTextDelta : null;
+      const onTextDone = typeof askOptions?.onTextDone === "function" ? askOptions.onTextDone : null;
       let snapshotted;
       try {
         snapshotted = snapshotInput(content, workingDirectory);
@@ -970,7 +1032,7 @@ export function createCodexSession(options = {}) {
         const terminal = new Promise((resolve, reject) => { terminalResolve = resolve; terminalReject = reject; });
         const active = {
           generation: ready.generation, threadId: ready.threadId, turnId: null, queued: [], items: new Map(), itemOrder: [],
-          deltaText: "", usage: null, tokenUsage: null, ttftMs: null, startedAt, onTextDelta, settled: false,
+          deltaText: "", usage: null, tokenUsage: null, ttftMs: null, startedAt, onTextDelta, onTextDone, settled: false,
           resolve: terminalResolve, reject: terminalReject
         };
         activeAsk = active;
@@ -1154,7 +1216,8 @@ export function createCodexSession(options = {}) {
           try { await live.request("turn/interrupt", { threadId: pendingCompaction.threadId, turnId: pendingCompaction.turnId }, disposeRpcTimeoutMs); } catch {}
         }
       }
-      if (live && liveThreadId) {
+      // 使い捨ての thread は記録が無く、thread/delete は「not persisted」で失敗するので呼ばない。
+      if (live && liveThreadId && persistedThreadIds.includes(liveThreadId)) {
         try { await live.request("thread/delete", { threadId: liveThreadId }, disposeRpcTimeoutMs); } catch {
           // 0.144.5 may fail with the observed agent_jobs DB error. Do not mutate its DB.
         }
@@ -1168,8 +1231,11 @@ export function createCodexSession(options = {}) {
       } catch (error) {
         disposeError = error;
       } finally {
-        for (const id of threadIds) deleteRolloutForThreadId(homeDir, id);
-        removeFromLedger(ledgerPath, threadIds);
+        for (const id of persistedThreadIds) {
+          deleteRolloutForThreadId(homeDir, id);
+          liveThreadIds.delete(id);
+        }
+        if (persistedThreadIds.length > 0) removeFromLedger(ledgerPath, persistedThreadIds);
         try { rmSync(workingDirectory, { recursive: true, force: true }); } catch {}
       }
       if (disposeError) throw disposeError;

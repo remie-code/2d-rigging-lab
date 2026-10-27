@@ -53,3 +53,6 @@ fire-diagnostics/
 # 起動ごと 1 ファイルの JSONL（session-usage-log.mjs・発火ごとの入力トークンと圧縮の開始・終了・本文なし）。
 # 配信を通して読み返すローカルの記録であって成果物ではない（fire-diagnostics/ と同格・直近 20 個を残す）。
 session-usage/
+
+# 設定ファイルの手元の写し(ユーザーの会話指示の全文を含む・非コミット)
+cockpit-settings.local.json.bak*

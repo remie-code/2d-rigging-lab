@@ -4253,6 +4253,7 @@ test("cockpit 声の選択: 遅延のレコードに鳴らした声の engine（
     await postJson(`${url}/api/fire`, {});
     const lat = await sse.waitFor((e) => e.event === "latency");
     assert.equal(lat.data.voice, "elevenlabs");
+    assert.equal(lat.data.stt, "whisper", "文字起こしの方式も載る（応答の遅れの直し §2-5）");
     assert.equal(lat.data.segments.ttsMs, 130);
     assert.equal(lat.data.segments.voiceMs, 60);
     assert.equal(logged[0].voice, "elevenlabs");
