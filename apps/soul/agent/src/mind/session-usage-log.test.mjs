@@ -45,6 +45,7 @@ test("発火の 1 行: 数字と種類だけ（本文を持つ欄は無い）", 
     },
     ttftMs: 812.5,
     elapsedMs: 1500,
+    serviceTier: "priority",
     replyText: "本文は拾わない"
   });
   assert.deepEqual(record, {
@@ -60,11 +61,15 @@ test("発火の 1 行: 数字と種類だけ（本文を持つ欄は無い）", 
     vision: true,
     windowMode: "delta",
     includedCount: 3,
-    injectedChars: 120
+    injectedChars: 120,
+    serviceTier: "priority"
   });
   const empty = fireUsageRecord({ fireId: 1, vision: false });
   assert.equal(empty.lastInputTokens, null);
   assert.equal(empty.modelContextWindow, null);
+  assert.equal(empty.serviceTier, null, "段を送っていない（Claude 等）なら null");
+  assert.equal(fireUsageRecord({ fireId: 2, serviceTier: "default" }).serviceTier, "default");
+  assert.equal(fireUsageRecord({ fireId: 3, serviceTier: 1 }).serviceTier, null, "文字列でなければ null");
 });
 
 test("圧縮の開始・終了の 1 行", () => {
@@ -139,6 +144,7 @@ test("遅延の 1 行: SSE latency と同じレコードから、区間・合計
     brain: "codex-56-sol",
     voice: "aivis",
     stt: "parakeet",
+    serviceTier: "priority",
     text: "本文は来ないはず"
   });
   assert.deepEqual(record, {
@@ -160,12 +166,14 @@ test("遅延の 1 行: SSE latency と同じレコードから、区間・合計
     ttsMs: 130,
     voiceMs: 60,
     otherMs: 40,
-    totalMs: 3744
+    totalMs: 3744,
+    serviceTier: "priority"
   });
   const comment = replyLatencyUsageRecord({ fireId: 8, cause: { type: "comment-react", commentIds: ["msg-9"], commentSeqs: [3] }, spoken: false, segments: {} });
   assert.equal(comment.causeType, "comment-react");
   assert.equal(comment.causeChoice, null);
   assert.equal(comment.totalMs, null);
+  assert.equal(comment.serviceTier, null, "段を送っていない返事は null");
   assert.equal(JSON.stringify(comment).includes("msg-9"), false, "コメントの ID は残さない");
   assert.equal(replyLatencyUsageRecord(null).type, "latency");
 });

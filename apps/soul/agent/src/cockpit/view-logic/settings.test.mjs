@@ -30,7 +30,11 @@ import {
   compactThresholdOptions,
   compactThresholdSelection,
   compactThresholdStatusLabel,
-  compactThresholdPostErrorText
+  compactThresholdPostErrorText,
+  CODEX_FAST_NOTE,
+  codexFastToggleView,
+  codexFastStatusLabel,
+  codexFastPostErrorText
 } from "./settings.mjs";
 import {
   DEFAULT_COMPACT_THRESHOLD_TOKENS,
@@ -281,4 +285,34 @@ test("compactThresholdPostErrorText / requestErrorText: POST /api/compact-thresh
     "set failed: tokens must be an integer from 50000 to 450000"
   );
   assert.equal(requestErrorText("compactThreshold", new Error("net")), "compaction threshold error: Error: net");
+});
+
+test("codexFastToggleView: snapshot の codexFast からチェックの状態（無ければ使えない・Claude の頭でも操作はできる）", () => {
+  assert.deepEqual(codexFastToggleView(null), { disabled: true, checked: false, statusText: "not available", statusClassName: "codex-fast-status" });
+  assert.deepEqual(codexFastToggleView({ enabled: true, applicable: true, supported: true }), {
+    disabled: false, checked: true, statusText: "on", statusClassName: "codex-fast-status on"
+  });
+  assert.deepEqual(codexFastToggleView({ enabled: false, applicable: true, supported: null }), {
+    disabled: false, checked: false, statusText: "off", statusClassName: "codex-fast-status "
+  });
+  assert.equal(codexFastToggleView({ enabled: true, applicable: false, supported: null }).disabled, false, "Claude の頭でも先に設定できる");
+});
+
+test("codexFastStatusLabel: Claude の頭では効かない・モデルが非対応・いま fast / 通常", () => {
+  assert.equal(codexFastStatusLabel(null), "not available");
+  assert.equal(codexFastStatusLabel({ enabled: true, applicable: false, supported: null }), "今の頭は Claude なので効きません（Codex の頭のときだけ）");
+  assert.equal(codexFastStatusLabel({ enabled: true, applicable: true, supported: false }), "このモデルは fast 非対応（通常の速さで動きます）");
+  assert.equal(codexFastStatusLabel({ enabled: false, applicable: true, supported: false }), "このモデルは fast 非対応");
+  assert.equal(codexFastStatusLabel({ enabled: true, applicable: true, supported: true }), "いま fast（priority）");
+  assert.equal(codexFastStatusLabel({ enabled: true, applicable: true, supported: null }), "いま fast（モデルの対応は次の返事で確かめます）");
+  assert.equal(codexFastStatusLabel({ enabled: false, applicable: true, supported: true }), "いま通常の速さ");
+  assert.match(CODEX_FAST_NOTE, /チャッピー/);
+  assert.match(CODEX_FAST_NOTE, /次の返事から/);
+});
+
+test("codexFastPostErrorText / requestErrorText: POST /api/codex-fast の失敗文言", () => {
+  assert.equal(codexFastPostErrorText({ status: 200, ok: true, j: {} }), null);
+  assert.equal(codexFastPostErrorText({ status: 503, ok: false, j: {} }), "codex fast control not available");
+  assert.equal(codexFastPostErrorText({ status: 400, ok: false, j: { error: "enabled must be a boolean" } }), "set failed: enabled must be a boolean");
+  assert.equal(requestErrorText("codexFast", new Error("net")), "codex fast error: Error: net");
 });

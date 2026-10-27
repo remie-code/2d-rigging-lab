@@ -112,7 +112,10 @@ export function settingsFromSnapshot(s) {
     memory: (s && s.memory) ?? null,
     // 圧縮の目安（{ thresholdTokens }・設定「頭脳・会話」タブの圧縮を始める大きさ）。memory と同型の null 許容
     // （contextCompactionStatus 未注入なら null）。
-    compaction: (s && s.compaction) ?? null
+    compaction: (s && s.compaction) ?? null,
+    // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定「頭脳・会話」タブ）。compaction と同型の
+    // null 許容（codexFastStatus 未注入なら null）。
+    codexFast: (s && s.codexFast) ?? null
   };
 }
 

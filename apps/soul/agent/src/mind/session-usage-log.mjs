@@ -10,6 +10,9 @@
  * 最初の文字・最初の文・TTS・声・その他・合計、きっかけの種類、頭・文字起こし・声のエンジン名）も 1 行ずつ足す。
  * 操縦席の SSE "latency" と同じレコード（cockpit-server の onReplyLatency）から作る。配信どうしで比べる材料。
  *
+ * 操縦席の fast の切り替え（2026-10-27）: fire と latency の行に serviceTier（その返事の turn/start に送った Codex の
+ * 速さの段・"priority" = fast / "default"・送っていなければ null）を足す（既存のキーはそのまま）。
+ *
  * fire-diagnostics.mjs と同じ流儀: ディスク I/O は直列の非同期キューで行い、発火の経路は待たない・止めない
  * （書けなくても握る）。ファイルは最初の 1 行で作り、そのときに古いものを消して直近 SESSION_USAGE_RETENTION
  * 個（今回の分を含む）だけ残す。置き場は apps/soul/agent/.gitignore 済み。
@@ -57,7 +60,9 @@ export function fireUsageRecord(info) {
     vision: info?.vision === true,
     windowMode: typeof info?.windowMode === "string" ? info.windowMode : null,
     includedCount: num(info?.includedCount),
-    injectedChars: num(info?.injectedChars)
+    injectedChars: num(info?.injectedChars),
+    // その返事の turn/start に送った Codex の速さの段（"priority" = fast / "default"・送っていなければ null）。
+    serviceTier: typeof info?.serviceTier === "string" ? info.serviceTier : null
   };
 }
 
@@ -119,7 +124,9 @@ export function replyLatencyUsageRecord(record) {
     ttsMs: num(segments.ttsMs),
     voiceMs: num(segments.voiceMs),
     otherMs: num(record?.otherMs),
-    totalMs: num(record?.totalMs)
+    totalMs: num(record?.totalMs),
+    // その返事の turn/start に送った Codex の速さの段（fire の行と同じ・Claude 等は null）。
+    serviceTier: str(record?.serviceTier)
   };
 }
 

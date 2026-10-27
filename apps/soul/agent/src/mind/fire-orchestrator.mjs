@@ -351,7 +351,7 @@ export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), load
  * @param {(info: import("./fire-latency.mjs").FireLatency) => void} [options.onLatency]
  *   1 返事 1 回の遅延の通知（発火の中の区間）。声が鳴り始めた時点、鳴らなかったときは発火の終わり（ask した回だけ）。
  * @param {() => number} [options.monotonicNowImpl]  遅延を測る単調時計（既定 performance.now・テスト注入）。
- * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; atMs: number }) => void} [options.onAskRecord]
+ * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; serviceTier: string | null; atMs: number }) => void} [options.onAskRecord]
  *   ask が返るたびの記録（本文なし・数字と種類だけ）。windowMode は渡した会話の窓の種類
  *   （legacy = 会話の世代を持たない頭の従来の窓 / full = 新しい会話なので直近 5 分の全部 / delta = 増えた分だけ）。
  * @param {(info: { request: string; fireId: number | null }) => void} [options.onRecallRequest]
@@ -494,7 +494,14 @@ export function createFireOrchestrator(options) {
     const fire = currentFire;
     if (!fire || fire.latencyEmitted || fire.fireId == null || !fire.timing.hasAsked()) return;
     fire.latencyEmitted = true;
-    emit(onLatency, { fireId: fire.fireId, cause: fire.cause, vision: fire.vision, spoken, ...fire.timing.segments() });
+    emit(onLatency, {
+      fireId: fire.fireId,
+      cause: fire.cause,
+      vision: fire.vision,
+      spoken,
+      ...fire.timing.segments(),
+      serviceTier: typeof fire.serviceTier === "string" ? fire.serviceTier : null
+    });
   };
   /**
    * ask の直前に、その回の LLM に渡した会話の窓の範囲を通知する。
@@ -585,6 +592,8 @@ export function createFireOrchestrator(options) {
       tokenUsage: asked && asked.tokenUsage != null ? asked.tokenUsage : null,
       ttftMs: num(asked?.ttftMs),
       elapsedMs: num(asked?.elapsedMs),
+      // その返事の turn/start に送った速さの段（Codex の頭が返す・送っていなければ null）。
+      serviceTier: typeof asked?.serviceTier === "string" ? asked.serviceTier : null,
       atMs: nowImpl()
     });
   };
@@ -862,9 +871,22 @@ export function createFireOrchestrator(options) {
       );
       // 締めの合図（応答の遅れの直し・latency-fix-plan.md §2-2）: Codex は本文の揃った agentMessage の item/completed
       // （commentary を除く）で onTextDone を呼ぶ。turn/completed（ask の戻り）を待たずに残りを最後の文として声に回す。
+      // 速さの段（操縦席の fast・Codex の頭のときだけ受理の時点の設定が configuration に載る）。送った段は
+      // turn/start の直後に知らされ、遅延の行（onLatency）に載せる。載っていない（Claude 等）なら渡さない。
+      const configuredServiceTier =
+        typeof resources.configuration?.serviceTier === "string" ? resources.configuration.serviceTier : null;
+      const askFire = currentFire;
       const asked = await resources.session.ask(askContent, {
         onTextDelta: (delta) => boundary.append(delta),
-        onTextDone: () => boundary.flush()
+        onTextDone: () => boundary.flush(),
+        ...(configuredServiceTier
+          ? {
+              serviceTier: configuredServiceTier,
+              onTurnStarted: (/** @type {any} */ meta) => {
+                if (askFire) askFire.serviceTier = typeof meta?.serviceTier === "string" ? meta.serviceTier : null;
+              }
+            }
+          : {})
       });
       // delta を出さない頭（Claude）の「LLM 最初の文字」は session が測った ttftMs を使う（fire-latency.mjs）。
       if (currentFire && asked && typeof asked === "object") currentFire.timing.noteTtft(/** @type {any} */ (asked).ttftMs);
@@ -1772,6 +1794,8 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
         vision: false,
         timing: createFireTiming({ nowImpl: monotonicNowImpl }),
         latencyEmitted: false,
+        /** @type {string | null} その返事の turn/start に送った速さの段（Codex の頭・onTurnStarted で知る）。 */
+        serviceTier: /** @type {string | null} */ (null),
         recall: {
           sawDelta: false,
           streamed: /** @type {Array<{ request: string }>} */ ([]),

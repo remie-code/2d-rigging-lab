@@ -3627,6 +3627,7 @@ test("増えた分だけ: 同じ会話の 2 回目以降は前回渡した最後
       tokenUsage: { last: { inputTokens: 10 }, total: { inputTokens: 30 }, modelContextWindow: 1000 },
       ttftMs: 42,
       elapsedMs: 80,
+      serviceTier: null,
       atMs: null
     }
   );
@@ -4052,5 +4053,81 @@ test("締めの合図の後に本文が続いたら（次の agentMessage）、�
   await orch.fire();
   assert.deepEqual(enqueued.map((entry) => entry.text), ["一つ目", "二つ目"]);
   assert.equal(traces.filter((event) => event.event === "progressive.boundary.flushed").length, 2);
+  orch.dispose();
+});
+
+// ── Codex の fast（速さの段・操縦席の fast の切り替え・2026-10-27）────────────────────────────
+
+test("速さの段: 受理の configuration の serviceTier を ask に渡し、送った段（onTurnStarted）を遅延と記録の行に載せる", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("速くして");
+  /** @type {any[]} */
+  const askOptionsSeen = [];
+  /** @type {any[]} */
+  const latencies = [];
+  /** @type {any[]} */
+  const records = [];
+  let configuredTier = "priority";
+  const session = {
+    ask: async (/** @type {any} */ _content, /** @type {any} */ askOptions) => {
+      askOptionsSeen.push(askOptions);
+      // 頭がモデルの段を確かめた結果、送ったのは default だった（priority を持たないモデル）とする。
+      const sent = askOptions?.serviceTier === "priority" ? "default" : askOptions?.serviceTier ?? null;
+      askOptions?.onTurnStarted?.({ threadId: "t", turnId: "u", serviceTier: sent });
+      return { replyText: "", serviceTier: sent };
+    }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session,
+    acquireFireResources: () => ({ session, configuration: { brain: "codex-61-sol", serviceTier: configuredTier } }),
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onLatency: (l) => latencies.push(l),
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  assert.equal(askOptionsSeen[0].serviceTier, "priority", "受理の時点の設定を渡す");
+  assert.equal(typeof askOptionsSeen[0].onTurnStarted, "function");
+  assert.equal(latencies[0].serviceTier, "default", "遅延の行は実際に送った段");
+  assert.equal(records[0].serviceTier, "default", "記録の行は ask の戻りの段");
+
+  configuredTier = "default";
+  buffer.append({ startMs: 0, endMs: 0, text: "戻して" });
+  await orch.fire();
+  assert.equal(askOptionsSeen[1].serviceTier, "default", "OFF に戻したら次の返事から default");
+  assert.equal(latencies[1].serviceTier, "default");
+  orch.dispose();
+});
+
+test("速さの段: configuration に段が無い（Claude の頭・acquire の無い経路）なら ask に渡さず、行の serviceTier は null", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou("ふつうに");
+  /** @type {any[]} */
+  const askOptionsSeen = [];
+  /** @type {any[]} */
+  const latencies = [];
+  /** @type {any[]} */
+  const records = [];
+  const session = {
+    ask: async (/** @type {any} */ _content, /** @type {any} */ askOptions) => {
+      askOptionsSeen.push(askOptions);
+      return { replyText: "" };
+    }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session,
+    acquireFireResources: () => ({ session, configuration: { brain: "claude", serviceTier: null } }),
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onLatency: (l) => latencies.push(l),
+    onAskRecord: (r) => records.push(r)
+  });
+  await orch.fire();
+  assert.equal("serviceTier" in askOptionsSeen[0], false);
+  assert.equal("onTurnStarted" in askOptionsSeen[0], false);
+  assert.equal(latencies[0].serviceTier, null);
+  assert.equal(records[0].serviceTier, null);
   orch.dispose();
 });

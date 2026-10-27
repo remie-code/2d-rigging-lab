@@ -2110,6 +2110,62 @@ test("圧縮の目安の結線: 設定画面の口（onSetCompactThresholdTokens
   assert.match(source, /phase: "started", inputTokens: event\.lastInputTokens, thresholdTokens: event\.thresholdTokens/);
 });
 
+test("resolveCodexServiceTier: Codex の頭は ON で priority・OFF で default（明示）・Claude の頭は null（送らない）", async () => {
+  const { resolveCodexServiceTier } = await import("./cockpit.mjs");
+  assert.equal(resolveCodexServiceTier("codex-61-sol", true), "priority");
+  assert.equal(resolveCodexServiceTier("codex", false), "default");
+  assert.equal(resolveCodexServiceTier("codex-astra", true), "priority");
+  assert.equal(resolveCodexServiceTier("claude", true), null);
+  assert.equal(resolveCodexServiceTier("claude-opus-55", false), null);
+  assert.equal(resolveCodexServiceTier(null, true), null);
+});
+
+test("createCodexFastHooks: 既定 OFF・記憶を復元・切り替えを保存して次の段に効かせる・モデルの対応を頭ごとに覚える", async () => {
+  const { createCodexFastHooks } = await import("./cockpit.mjs");
+  /** @type {boolean[]} */
+  const saved = [];
+  const hooks = createCodexFastHooks({ getCodexFastMode: () => null, setCodexFastMode: (v) => saved.push(v) });
+  assert.equal(hooks.isEnabled(), false, "未記憶は既定 OFF");
+  assert.equal(hooks.serviceTierFor("codex-61-sol"), "default");
+  assert.deepEqual(hooks.codexFastStatus("codex-61-sol"), { enabled: false, applicable: true, supported: null });
+  hooks.onSetCodexFastMode(true);
+  assert.deepEqual(saved, [true], "次回起動用に保存");
+  assert.equal(hooks.serviceTierFor("codex-61-sol"), "priority", "次の受理から priority");
+  assert.equal(hooks.serviceTierFor("claude"), null, "Claude の頭には送らない");
+  assert.deepEqual(hooks.codexFastStatus("claude"), { enabled: true, applicable: false, supported: null });
+  // model/list で読んだ段（codex-session の onServiceTiers）。変わったときだけ true（SSE で押す合図）。
+  assert.equal(hooks.noteServiceTiers("codex-61-sol", ["priority"]), true);
+  assert.equal(hooks.noteServiceTiers("codex-61-sol", ["priority"]), false, "同じなら押さない");
+  assert.deepEqual(hooks.codexFastStatus("codex-61-sol"), { enabled: true, applicable: true, supported: true });
+  assert.equal(hooks.noteServiceTiers("codex", []), true);
+  assert.deepEqual(hooks.codexFastStatus("codex"), { enabled: true, applicable: true, supported: false }, "priority を持たないモデル");
+  hooks.noteServiceTiers("codex-astra", null);
+  assert.equal(hooks.codexFastStatus("codex-astra").supported, null, "読めなければ不明");
+  hooks.onSetCodexFastMode(false);
+  assert.equal(hooks.serviceTierFor("codex-61-sol"), "default", "OFF に戻すと default を送る");
+  assert.equal(createCodexFastHooks({ getCodexFastMode: () => true }).isEnabled(), true, "記憶した ON を復元");
+  const failing = createCodexFastHooks({ getCodexFastMode: () => { throw new Error("disk"); }, setCodexFastMode: () => { throw new Error("disk"); } });
+  assert.equal(failing.isEnabled(), false, "読めなければ既定");
+  failing.onSetCodexFastMode(true);
+  assert.equal(failing.isEnabled(), true, "保存に失敗しても次の返事には効く");
+});
+
+test("Codex の fast の結線: 受理の configuration に段・①のセッションに onServiceTiers・cockpit-server に口を渡す", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
+  assert.match(source, /const codexFastHooks = createCodexFastHooks\(settings, false\);/);
+  assert.match(source, /serviceTier: codexFastHooks\.serviceTierFor\(currentBrain\)/, "受理の時点の設定 = 次の返事から効く");
+  assert.match(
+    source,
+    /onServiceTiers: \(\/\*\* @type \{any\} \*\/ info\) => \{\s*if \(codexFastHooks\.noteServiceTiers\(sessionBrain, info\?\.serviceTiers\)\) server\?\.codexFastStatusChanged\(\);/
+  );
+  assert.match(source, /onSetCodexFastMode,\s*codexFastStatus: \(\) => codexFastHooks\.codexFastStatus\(currentBrain\)/);
+  // ②書き出し役・④思い出し役は段を渡さない（通常のまま）。
+  const writer = source.slice(source.indexOf("const memoryRecorder = createMemoryRecorder"), source.indexOf("const memoryStatus = () =>"));
+  assert.ok(writer.length > 0);
+  assert.doesNotMatch(writer, /serviceTier/);
+});
+
 test("頭の作り直しの結線: 古い頭を畳んだら操縦席の「圧縮中」を戻す（resetContextCompaction）", async () => {
   const { readFileSync } = await import("node:fs");
   const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");

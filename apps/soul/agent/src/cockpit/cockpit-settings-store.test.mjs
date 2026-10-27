@@ -1042,3 +1042,27 @@ test("settings store: getLocalStt はローカルの文字起こしの設定（�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: codexFastMode（①の Codex の頭の fast）は未記憶 null・set で記憶（他のキーを消さない）・bool 以外は null", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getCodexFastMode(), null, "未作成は null（既定へのフォールバックは呼び出し側）");
+    writeFileSync(path, JSON.stringify({ brainChoice: "codex-61-sol", compactThresholdTokens: 150_000 }), "utf8");
+    store.setCodexFastMode(true);
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(saved.codexFastMode, true);
+    assert.equal(saved.brainChoice, "codex-61-sol");
+    assert.equal(saved.compactThresholdTokens, 150_000);
+    assert.equal(createFileSettingsStore({ path }).getCodexFastMode(), true, "次回起動で復元");
+    store.setCodexFastMode(false);
+    assert.equal(store.getCodexFastMode(), false, "明示の OFF は false（null と区別）");
+    store.setCodexFastMode(/** @type {any} */ ("yes"));
+    assert.equal(store.getCodexFastMode(), false, "true 以外は false として書く");
+    writeFileSync(path, JSON.stringify({ codexFastMode: "true" }), "utf8");
+    assert.equal(store.getCodexFastMode(), null, "bool でなければ null");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -517,6 +517,14 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  * @param {() => ({ thresholdTokens: number } | null)} [options.contextCompactionStatus]
  *   圧縮の目安の現況（`{ thresholdTokens }`）を返す。state snapshot の `compaction` に載せる（memoryStatus と同型・
  *   未注入なら null）。
+ * @param {(enabled: boolean) => void | Promise<void>} [options.onSetCodexFastMode]
+ *   ①チャッピーの Codex の頭の fast（service tier "priority"）の ON/OFF の変更フック（POST /api/codex-fast が呼ぶ・
+ *   onSetCompactThresholdTokens と同型）。**cockpit-server は fast の実体を知らない**（実体は cockpit.mjs が settings
+ *   永続 + 次の受理の configuration に載せる＝次の返事から効く）。未注入なら POST /api/codex-fast は 503。
+ * @param {() => ({ enabled: boolean; applicable: boolean; supported: boolean | null } | null)} [options.codexFastStatus]
+ *   fast の現況（enabled = 設定・applicable = 今の頭が Codex か・supported = 今の頭のモデルが priority を持つか
+ *   （まだ確かめていなければ null））。state snapshot の `codexFast` に載せる（未注入なら null）。変わったら
+ *   呼び出し側が `codexFastStatusChanged()` で知らせる。
  * @param {(engine: "parakeet" | "zipformer") => ({ ok: true } | { ok: false; reason: string })} [options.localSttModelCheck]
  *   ローカルの文字起こし（parakeet / zipformer）のモデルが揃っているか（既定 checkLocalSttModel = vendor/models を
  *   見る）。Start ごとに呼び、揃っていなければ耳を開かずに Start を失敗にする（ElevenLabs のキー切れと同じ流儀）。
@@ -679,6 +687,10 @@ export function createCockpitServer(options = {}) {
   // 目安の正本は cockpit.mjs の compactor（サーバは二重に持たない）。
   const onSetCompactThresholdTokens = options.onSetCompactThresholdTokens;
   const contextCompactionStatusImpl = options.contextCompactionStatus;
+  // Codex の fast（①の速さの段）: 変更フック + 現況（未注入ならそれぞれ 503/null・圧縮の目安と同型）。
+  // 設定の正本は cockpit.mjs（サーバは二重に持たない）。
+  const onSetCodexFastMode = options.onSetCodexFastMode;
+  const codexFastStatusImpl = options.codexFastStatus;
   // 操縦席の文字起こし選択: 現在の選択（Start のたびに更新・耳が動いている間は使用中の方式）・
   // 永続化フック・ElevenLabs キーの読み口・遅延ログの口。
   /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */
@@ -984,7 +996,9 @@ export function createCockpitServer(options = {}) {
       // 頭の会話の圧縮の最中か（状態のピルの「圧縮中」・既定 false・killed と同じく常に boolean）。
       compacting: contextCompacting,
       // 圧縮の目安（{ thresholdTokens }・設定の「頭脳・会話」タブ。未注入なら null・memory と同型）。
-      compaction: typeof contextCompactionStatusImpl === "function" ? (contextCompactionStatusImpl() ?? null) : null
+      compaction: typeof contextCompactionStatusImpl === "function" ? (contextCompactionStatusImpl() ?? null) : null,
+      // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定の「頭脳・会話」タブ。未注入なら null）。
+      codexFast: typeof codexFastStatusImpl === "function" ? (codexFastStatusImpl() ?? null) : null
     };
   }
 
@@ -2023,6 +2037,28 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/codex-fast") {
+      // ①の Codex の頭の fast の切り替え継ぎ目（POST /api/compact-threshold の写経）。保存と次の受理への反映は
+      // cockpit.mjs の onSetCodexFastMode が担う（次の返事から効く・セッションは作り直さない）。未注入なら 503。
+      if (typeof onSetCodexFastMode !== "function") {
+        sendJson(res, 503, { error: "codex fast control not available" });
+        return;
+      }
+      const body = await readJsonBody(req);
+      // トグル禁止・明示の boolean だけ受ける（verbosity の mode 検証と同型）。
+      if (typeof body.enabled !== "boolean") {
+        sendJson(res, 400, { error: "enabled must be a boolean" });
+        return;
+      }
+      try {
+        await onSetCodexFastMode(body.enabled);
+      } catch {
+        // 永続化の失敗は操作を止めない（onSetCompactThresholdTokens と同型の失敗寛容）。
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/memory-record") {
       // 配信間記憶: 手動「今日を記録」継ぎ目。onMemoryRecord 未注入なら 503。
       if (typeof onMemoryRecord !== "function") {
@@ -2201,7 +2237,15 @@ export function createCockpitServer(options = {}) {
     const brain = typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null;
     // voice = その返事を鳴らした声の engine の種類（遅延の TTS / 声の区間を engine ごとに見比べる材料・additive）。
     // stt = 文字起こしの方式（文字起こしの区間を方式ごとに見比べる材料・additive・応答の遅れの直し §2-5）。
-    const payload = { ...record, vision: inFire?.vision === true, brain, voice: voice.engine ?? ttsEngine, stt: sttEngine };
+    // serviceTier = その返事の turn/start に送った Codex の速さの段（fast の比較の材料・additive・送っていなければ null）。
+    const payload = {
+      ...record,
+      vision: inFire?.vision === true,
+      brain,
+      voice: voice.engine ?? ttsEngine,
+      stt: sttEngine,
+      serviceTier: typeof inFire?.serviceTier === "string" ? inFire.serviceTier : null
+    };
     broadcast("latency", payload);
     if (onReplyLatency) {
       try {
@@ -2994,6 +3038,11 @@ export function createCockpitServer(options = {}) {
     },
     /** 記憶の現況（memoryStatus）が変わったことを知らせる口（記録中の始まり・終わり）。SSE "state" で押す。 */
     memoryStatusChanged() {
+      if (closed) return;
+      broadcastState();
+    },
+    /** fast の現況（codexFastStatus・モデルが priority を持つかが分かったとき等）が変わったことを知らせる口。SSE "state" で押す。 */
+    codexFastStatusChanged() {
       if (closed) return;
       broadcastState();
     },

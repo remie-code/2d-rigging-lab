@@ -3359,6 +3359,78 @@ test("cockpit POST /api/compact-threshold: フックの throw は握って 200�
   }
 });
 
+// ── POST /api/codex-fast・snapshot.codexFast（①の Codex の頭の fast・POST /api/compact-threshold の写経）──
+
+test("cockpit POST /api/codex-fast: onSetCodexFastMode 未注入なら 503・snapshot.codexFast は null", async () => {
+  const server = createCockpitServer({});
+  try {
+    const url = await server.listen(0);
+    assert.equal((await getJson(`${url}/api/state`)).json.codexFast, null);
+    const r = await postJson(`${url}/api/codex-fast`, { enabled: true });
+    assert.equal(r.status, 503);
+    assert.match(r.json.error, /codex fast control not available/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/codex-fast: boolean だけをフックへ渡し、snapshot.codexFast（GET /api/state・SSE state）に載せる・codexFastStatusChanged で押す", async () => {
+  // 設定の正本は呼び出し側（cockpit.mjs の codexFastHooks）。テストは外側で正本を持つ最小 fake を組む。
+  let enabled = false;
+  /** @type {boolean | null} */
+  let supported = null;
+  /** @type {boolean[]} */
+  const received = [];
+  const server = createCockpitServer({
+    onSetCodexFastMode: (next) => {
+      received.push(next);
+      enabled = next;
+    },
+    codexFastStatus: () => ({ enabled, applicable: true, supported })
+  });
+  const url = await server.listen(0);
+  const client = openSseClient(`${url}/api/events`);
+  try {
+    assert.deepEqual((await client.waitFor((e) => e.event === "state")).data.codexFast, { enabled: false, applicable: true, supported: null });
+    const r = await postJson(`${url}/api/codex-fast`, { enabled: true });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.codexFast, { enabled: true, applicable: true, supported: null }, "応答は snapshot 全体");
+    await client.waitFor((e) => e.event === "state" && e.data.codexFast?.enabled === true);
+
+    for (const bad of [{ enabled: "true" }, { enabled: 1 }, {}, { enabled: null }]) {
+      const res = await postJson(`${url}/api/codex-fast`, bad);
+      assert.equal(res.status, 400, JSON.stringify(bad));
+    }
+    assert.equal((await postJson(`${url}/api/codex-fast`, { enabled: false })).status, 200);
+    assert.deepEqual(received, [true, false], "400 はフックを呼ばない（トグルしない）");
+
+    // モデルの対応が分かったら呼び出し側が知らせる → SSE state で押す。
+    supported = false;
+    server.codexFastStatusChanged();
+    await client.waitFor((e) => e.event === "state" && e.data.codexFast?.supported === false);
+  } finally {
+    client.close();
+    await server.close();
+  }
+});
+
+test("cockpit POST /api/codex-fast: フックの throw は握って 200（操作を止めない）", async () => {
+  const server = createCockpitServer({
+    onSetCodexFastMode: () => {
+      throw new Error("disk full");
+    },
+    codexFastStatus: () => ({ enabled: false, applicable: false, supported: null })
+  });
+  try {
+    const url = await server.listen(0);
+    const r = await postJson(`${url}/api/codex-fast`, { enabled: true });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json.codexFast, { enabled: false, applicable: false, supported: null });
+  } finally {
+    await server.close();
+  }
+});
+
 test("cockpit POST /api/memory: 記憶の ON/OFF は撤去した（404・旧フックを渡されても呼ばない）", async () => {
   /** @type {any[]} */
   const received = [];
@@ -4257,6 +4329,50 @@ test("cockpit 声の選択: 遅延のレコードに鳴らした声の engine（
     assert.equal(lat.data.segments.ttsMs, 130);
     assert.equal(lat.data.segments.voiceMs, 60);
     assert.equal(logged[0].voice, "elevenlabs");
+    assert.equal(lat.data.serviceTier, null, "段を送っていない返事は null");
+    sse.close();
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit Codex の fast: 遅延のレコードにその返事で送った速さの段（serviceTier）が載る", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  /** @type {any[]} */ const logged = [];
+  const fakeOrch = makeFakeOrchestrator({
+    fireResult: { fired: true, fireId: 4 },
+    drive: (hooks, record) => {
+      hooks.onLatency({
+        fireId: 4,
+        cause: record.lastFireOptions.cause,
+        vision: false,
+        spoken: true,
+        screenMs: null,
+        llmFirstMs: 400,
+        firstSentenceMs: 80,
+        ttsMs: 120,
+        voiceMs: 50,
+        inFireMs: 800,
+        otherMs: 150,
+        serviceTier: "priority"
+      });
+    }
+  });
+  const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    onPrepareVoiceEngine: () => ({ ok: true }),
+    onReplyLatency: (rec) => logged.push(rec)
+  });
+  try {
+    const url = await server.listen(0);
+    const sse = openSseClient(`${url}/api/events`);
+    await sse.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    await postJson(`${url}/api/fire`, {});
+    const lat = await sse.waitFor((e) => e.event === "latency");
+    assert.equal(lat.data.serviceTier, "priority");
+    assert.equal(logged[0].serviceTier, "priority", "記録（session-usage）へ渡すレコードにも載る");
     sse.close();
   } finally {
     await server.close();

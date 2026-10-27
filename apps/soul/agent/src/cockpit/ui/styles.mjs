@@ -552,6 +552,19 @@ html, body { overflow: hidden; }
 .barge-in-toggle { accent-color: var(--teal); }
 .barge-in-status { color: var(--muted); font-size: 12px; }
 .barge-in-status.on { color: var(--up); }
+/* Codex の fast トグル pill（設定「頭脳・会話」タブ・barge-in pill の写経）。 */
+.codex-fast-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+}
+.codex-fast-toggle { accent-color: var(--teal); }
+.codex-fast-status { color: var(--muted); font-size: 12px; }
+.codex-fast-status.on { color: var(--up); }
 /* 口数・話し始め・忙しい間のコメントのプルダウン。 */
 .verbosity { display: flex; align-items: center; gap: 8px; }
 .drawer-row .verbosity .pill-label { flex: 0 0 auto; }

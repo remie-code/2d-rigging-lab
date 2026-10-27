@@ -72,6 +72,10 @@
  *     範囲外・数でない値は null。旧キー `compactThresholdRatio`（窓に対する割合）は廃止（読まない）。
  *   setCompactThresholdTokens(tokens): 操縦席で圧縮を始める大きさを変えたときに記憶（次回起動で復元）。
  *     範囲外は null（= 既定）として書く。あわせて旧キー `compactThresholdRatio` をファイルから消す。
+ *   getCodexFastMode(): ①チャッピーの Codex の頭の fast（service tier "priority"）の ON/OFF の初期値（操縦席の
+ *     「頭脳・会話」タブ・2026-10-27 合意）。未記憶（null）は既定（OFF）へのフォールバックを呼び出し側（cockpit.mjs の
+ *     createCodexFastHooks）に委ねる（getBargeInEnabled と同型・bool の有無を区別）。
+ *   setCodexFastMode(enabled): 操縦席で切り替えたときに記憶（次回起動で復元）。キー `codexFastMode`。
  *   getLocalStt(): ローカルの文字起こし（Parakeet / Zipformer・local-stt-wave-plan.md §1 の 5）の設定
  *     （`{ threads, preRollMs, silencePadMs, hotwords }`・既定 2 / 200ms / 300ms / ["チャッピー", "コーディ"]）。
  *     操縦席にツマミは置かず、このファイルのキー `localSttThreads`（整数 1〜16）/ `localSttPreRollMs`（本物の音を
@@ -150,6 +154,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   getLatencyThresholds: () => { warnSec: number | null; alertSec: number | null };
  *   getContextCompaction: () => { thresholdTokens: number | null; quietSec: number | null; minIntervalMin: number | null };
  *   setCompactThresholdTokens: (tokens: number | null) => void;
+ *   getCodexFastMode: () => boolean | null;
+ *   setCodexFastMode: (enabled: boolean) => void;
  *   getLocalStt: () => { threads: number; preRollMs: number; silencePadMs: number; hotwords: string[]; hotwordsScore: number };
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
@@ -359,6 +365,14 @@ export function createFileSettingsStore(options = {}) {
     setCompactThresholdTokens(tokens) {
       // 旧キー（割合）は undefined で書く = JSON から落ちる（量に置き換えたので残さない）。
       writeMerged({ compactThresholdTokens: normalizeCompactThresholdTokens(tokens), compactThresholdRatio: undefined });
+    },
+    getCodexFastMode() {
+      const v = readAll().codexFastMode;
+      return typeof v === "boolean" ? v : null;
+    },
+    /** @param {boolean} enabled */
+    setCodexFastMode(enabled) {
+      writeMerged({ codexFastMode: enabled === true });
     },
     getLocalStt() {
       const all = readAll();

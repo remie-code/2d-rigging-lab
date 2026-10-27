@@ -109,3 +109,24 @@
 - 送っている量もキャッシュの当たり方もほぼ同じで、こちらの作りの差では説明がつかない。【推測】時間帯による OpenAI 側の混み具合の差。配信 2 回分なので断定しない。
 - ユーザー:「この速度で帰ってくるならもう不満はない」。混む時間帯には 4 秒台に戻る可能性がある。それでも圧縮で 15 万以下に保てば、23 万の段差は避けられる。
 - 先読み(返事を早めに作り始める)は、いったん置く判断をした([../decisions/research/talk-avatar-patterns-2026-10.md](../decisions/research/talk-avatar-patterns-2026-10.md) §4)。
+
+## 10. Codex の fast(service tier "priority")の実測と切り替え(2026-10-27)
+
+- model/list(Codex 0.163.0)で、gpt-6.1-sol の serviceTiers は `priority`(name "Fast"、"2x speed, increased usage")。gpt-5.6 系・gpt-6-astra も priority を持つ。ユーザーの設定は `service_tier = "default"`。
+- 短い一言の応答(新しい ephemeral thread、effort low、通常と fast を交互に 10 回ずつ)の中央値:
+
+| 区間 | 通常 | fast |
+|---|---|---|
+| 最初の文字まで | 4.16 秒 | 3.46 秒 |
+| 生成 | 0.83 秒 | 0.64 秒 |
+| 締め | 0.13 秒 | 0.10 秒 |
+| 合計 | 5.14 秒 | 4.39 秒 |
+
+- 合計で約 0.75 秒(約 15%)短くなり、10 組中 9 組で fast が速かった。「2 倍速」には届かない(待ちの大半は最初の文字まで)。
+- 使用率は週の窓の整数 % しか見えず、fast の消費の増え方は測れなかった。サーバー側で実際に priority で処理されたことを示す通知は無い(速くなったことが間接の根拠)。
+- スクリプト: scratchpad の codex-fast\(リポジトリ外)。
+- **決定(ユーザー 2026-10-27)**:
+  - 操縦席の設定「頭脳・会話」タブに fast の ON/OFF を置く(既定 OFF)。返事ごとに turn/start の serviceTier で送り、次の返事から効く。
+  - 対象は①の Codex の頭だけ。モデルが priority を持たなければ default を送る。Claude の頭のときは効かない旨を表示する。
+  - session-usage の行に serviceTier を残す。
+  - ユーザーは詫びの配布クレジット(75000)を使って、しばらく fast で配信してみる。
