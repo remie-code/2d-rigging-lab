@@ -14,6 +14,7 @@ import {
   StatusPill,
   StatusRow
 } from "./control-window-components";
+import { StagePngCapturePanel } from "./stage-png-capture-panel";
 import type {
   RuntimePlayerInputStatus
 } from "../preload/input-bridge-contract";
@@ -40,12 +41,15 @@ export function LiveControllerPage({
   stageState,
   lookForwardAvailable,
   drivenByPhysiology = false,
+  stagePngCaptureBusy,
   onSelectSingleVariant,
   onToggleMultiVariant,
   onResetVariants,
   onLookForward,
   onCenterModel,
   onUpdateStageMotionSettings,
+  onCaptureStagePng,
+  onOpenStagePngCaptureFolder,
   onOpenPhysiology = () => undefined
 }: {
   readonly variantStatus: RuntimePlayerVariantControllerStatus | null;
@@ -60,6 +64,7 @@ export function LiveControllerPage({
    * supplies it. Defaults to the tracking path (false).
    */
   readonly drivenByPhysiology?: boolean;
+  readonly stagePngCaptureBusy: boolean;
   readonly onSelectSingleVariant: (
     group: RuntimePlayerVariantControlGroup,
     variantId: string
@@ -75,6 +80,8 @@ export function LiveControllerPage({
   readonly onUpdateStageMotionSettings: (
     update: RuntimePlayerStageMotionSettingsUpdate
   ) => void;
+  readonly onCaptureStagePng: () => void;
+  readonly onOpenStagePngCaptureFolder: () => void;
   readonly onOpenPhysiology?: () => void;
 }): ReactElement {
   const stageMotionEnabled =
@@ -167,6 +174,14 @@ export function LiveControllerPage({
           />
         </Panel>
       </section>
+
+      <StagePngCapturePanel
+        runtimeExportStatus={runtimeExportStatus}
+        stageState={stageState}
+        busy={stagePngCaptureBusy}
+        onCapturePng={onCaptureStagePng}
+        onOpenFolder={onOpenStagePngCaptureFolder}
+      />
     </div>
   );
 }

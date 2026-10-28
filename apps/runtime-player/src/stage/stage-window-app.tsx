@@ -15,6 +15,13 @@ import type {
 import type {
   RuntimePlayerVariantControllerStatus
 } from "../preload/runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerStagePngCaptureReport
+} from "../preload/stage-png-capture-bridge-contract";
+import {
+  createStagePngCaptureReport,
+  createStagePngCaptureUnavailableReport
+} from "./stage-png-capture/stage-png-capture-report";
 import {
   createStaticStageCanvasRenderer,
   type StaticStageCanvasRenderer,
@@ -55,8 +62,18 @@ export function StageWindowApp(): ReactElement {
         error
       }));
       setRenderState("error");
+      // Answer capture requests at once instead of letting main time out.
+      const unsubscribeUnavailablePngCapture =
+        window.runtimePlayerStage.stagePngCapture.onCaptureRequested(
+          (request) => {
+            reportStagePngCapture(
+              createStagePngCaptureUnavailableReport(request)
+            );
+          }
+        );
       return () => {
         active = false;
+        unsubscribeUnavailablePngCapture();
       };
     }
 
@@ -228,6 +245,17 @@ export function StageWindowApp(): ReactElement {
 
         renderer.clearLiveParameterFrame();
       });
+    const unsubscribePngCapture =
+      window.runtimePlayerStage.stagePngCapture.onCaptureRequested((request) => {
+        if (!active) {
+          return;
+        }
+
+        // Redraw and read back synchronously, inside this IPC task.
+        reportStagePngCapture(
+          createStagePngCaptureReport(request, () => renderer.capturePngImage())
+        );
+      });
 
     return () => {
       active = false;
@@ -240,6 +268,7 @@ export function StageWindowApp(): ReactElement {
       unsubscribeArrangeState();
       unsubscribeLiveParameters();
       unsubscribeLiveParameterClear();
+      unsubscribePngCapture();
       renderer.dispose();
     };
   }, []);
@@ -363,6 +392,16 @@ function reportStageViewStatus(status: RuntimePlayerStageViewStatusReport): void
   window.runtimePlayerStage.stageView.reportStatus(status).catch((error: unknown) => {
     console.error("Stage status report failed.", error);
   });
+}
+
+function reportStagePngCapture(
+  report: RuntimePlayerStagePngCaptureReport
+): void {
+  window.runtimePlayerStage.stagePngCapture
+    .reportCapture(report)
+    .catch((error: unknown) => {
+      console.error("Stage PNG capture report failed.", error);
+    });
 }
 
 function reportStageViewTransform(transform: StageViewTransform): void {

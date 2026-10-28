@@ -73,6 +73,11 @@ export interface StaticStageCanvasRenderer {
   resetView(): void;
   centerModel(): void;
   getRenderMetricsSnapshot(): StaticStageRenderMetricsSnapshot;
+  /**
+   * Redraws the pose the Stage is showing now and reads the canvas back as PNG
+   * bytes in the same task (the drawing buffer is not preserved past it).
+   */
+  capturePngImage(): Uint8Array;
   clear(): void;
   dispose(): void;
 }
@@ -513,6 +518,25 @@ class StaticStageCanvasRendererController implements StaticStageCanvasRenderer {
     return snapshot;
   }
 
+  capturePngImage(): Uint8Array {
+    if (this.disposed) {
+      throw new Error("Stage renderer is disposed.");
+    }
+
+    // main may already see the model as loaded while this window has not
+    // received the payload yet; an empty canvas is not a capture.
+    if (this.renderInput === null) {
+      throw new Error("Stage has not drawn the model yet.");
+    }
+
+    // preserveDrawingBuffer stays false (the default), so the buffer is only
+    // readable until this task ends and the frame is composited. Redraw the held
+    // render input (no re-evaluation, so the pose does not advance) and encode
+    // it before yielding. toDataURL un-premultiplies, keeping alpha intact.
+    this.renderCurrentImmediate();
+    return decodePngDataUrl(this.canvas.toDataURL("image/png"));
+  }
+
   clear(): void {
     this.payload = null;
     this.renderInput = null;
@@ -887,6 +911,21 @@ export function shouldHandleStageViewInteraction(input: {
     input.viewInteractionEnabled &&
     input.hasRenderInput
   );
+}
+
+export function decodePngDataUrl(dataUrl: string): Uint8Array {
+  const prefix = "data:image/png;base64,";
+  if (!dataUrl.startsWith(prefix)) {
+    throw new Error("Stage canvas could not be encoded as PNG.");
+  }
+
+  const binary = atob(dataUrl.slice(prefix.length));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
 }
 
 function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement): {

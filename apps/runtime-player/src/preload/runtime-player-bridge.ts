@@ -19,6 +19,7 @@ import { modelMappingBridgeChannels } from "./model-mapping-bridge-channels";
 import { placeholderBridgeChannels } from "./placeholder-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
 import { runtimeVariantBridgeChannels } from "./runtime-variant-bridge-channels";
+import { stagePngCaptureBridgeChannels } from "./stage-png-capture-bridge-channels";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 import type {
   RuntimePlayerInputDiagnosticsSnapshot,
@@ -301,6 +302,12 @@ export function installRuntimePlayerBridge(): void {
         ),
       onResetViewRequested: (callback) =>
         subscribeToVoidEvent(stageViewBridgeChannels.resetRequested, callback)
+    },
+    stagePngCapture: {
+      capturePng: () =>
+        ipcRenderer.invoke(stagePngCaptureBridgeChannels.capturePng),
+      openFolder: () =>
+        ipcRenderer.invoke(stagePngCaptureBridgeChannels.openFolder)
     },
     browserSource: {
       getStatus: () =>

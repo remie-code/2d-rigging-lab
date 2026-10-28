@@ -132,6 +132,7 @@ export function ControlWindowApp(): ReactElement {
   const [calibrationName, setCalibrationName] =
     useState("iFacialMocap Profile");
   const [inputBusy, setInputBusy] = useState(false);
+  const [stagePngCaptureBusy, setStagePngCaptureBusy] = useState(false);
   const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(false);
   const [copyDiagnosticsState, setCopyDiagnosticsState] =
     useState<InputDiagnosticsCopyState>("idle");
@@ -353,6 +354,40 @@ export function ControlWindowApp(): ReactElement {
       const result = await action();
       setStageState(result.status);
       setStageViewStatus(result.status.stageView.renderStatus);
+      setFeedback({
+        message: result.message,
+        tone: result.result === "ok" ? "success" : "error"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    }
+  }
+
+  async function captureStagePng(): Promise<void> {
+    setStagePngCaptureBusy(true);
+
+    try {
+      const result = await window.runtimePlayer.stagePngCapture.capturePng();
+      setFeedback({
+        message: result.message,
+        tone: result.result === "ok" ? "success" : "error"
+      });
+    } catch (error) {
+      setFeedback({
+        message: getErrorMessage(error),
+        tone: "error"
+      });
+    } finally {
+      setStagePngCaptureBusy(false);
+    }
+  }
+
+  async function openStagePngCaptureFolder(): Promise<void> {
+    try {
+      const result = await window.runtimePlayer.stagePngCapture.openFolder();
       setFeedback({
         message: result.message,
         tone: result.result === "ok" ? "success" : "error"
@@ -664,6 +699,7 @@ export function ControlWindowApp(): ReactElement {
     receivePortInput,
     iphoneHostInput,
     inputBusy,
+    stagePngCaptureBusy,
     calibrationName,
     lookForwardAvailable,
     setReceivePortInput,
@@ -677,6 +713,8 @@ export function ControlWindowApp(): ReactElement {
     copyBrowserSourceUrl,
     copyChannelUrl,
     copyPerformanceDiagnosticsReport,
+    captureStagePng,
+    openStagePngCaptureFolder,
     runInputProfileAction,
     runMappingAction,
     runDynamicsTuneAction,
@@ -941,6 +979,7 @@ function renderActivePage(input: {
   readonly receivePortInput: string;
   readonly iphoneHostInput: string;
   readonly inputBusy: boolean;
+  readonly stagePngCaptureBusy: boolean;
   readonly calibrationName: string;
   readonly lookForwardAvailable: boolean;
   readonly setReceivePortInput: (value: string) => void;
@@ -956,6 +995,8 @@ function renderActivePage(input: {
   readonly copyPerformanceDiagnosticsReport: (
     reportText: string
   ) => Promise<void>;
+  readonly captureStagePng: () => Promise<void>;
+  readonly openStagePngCaptureFolder: () => Promise<void>;
   readonly runInputProfileAction: (
     action: () => Promise<RuntimePlayerInputProfileActionResult>
   ) => Promise<void>;
@@ -988,6 +1029,7 @@ function renderActivePage(input: {
         stageState={input.stageState}
         lookForwardAvailable={input.lookForwardAvailable}
         drivenByPhysiology={input.drivenByPhysiology}
+        stagePngCaptureBusy={input.stagePngCaptureBusy}
         onOpenPhysiology={() => input.setActivePage("physiology")}
         onSelectSingleVariant={(group, variantId) =>
           void input.runVariantAction(() =>
@@ -1025,6 +1067,10 @@ function renderActivePage(input: {
           void input.runStageAction(() =>
             window.runtimePlayer.stageView.updateStageMotionSettings(update)
           )
+        }
+        onCaptureStagePng={() => void input.captureStagePng()}
+        onOpenStagePngCaptureFolder={() =>
+          void input.openStagePngCaptureFolder()
         }
       />
     );
@@ -1170,6 +1216,7 @@ function renderActivePage(input: {
         runtimeExportStatus={input.runtimeExportStatus}
         browserSourceStatus={input.browserSourceStatus}
         drivenByPhysiology={input.drivenByPhysiology}
+        stagePngCaptureBusy={input.stagePngCaptureBusy}
         onFocusStage={() =>
           void input.runStageAction(() => window.runtimePlayer.focusStage())
         }
@@ -1219,6 +1266,10 @@ function renderActivePage(input: {
           void input.runStageAction(() =>
             window.runtimePlayer.stageView.copyWindowTitle()
           )
+        }
+        onCaptureStagePng={() => void input.captureStagePng()}
+        onOpenStagePngCaptureFolder={() =>
+          void input.openStagePngCaptureFolder()
         }
         onOpenRuntimeExport={() => void input.openRuntimeExportDirectory()}
         onRetryRuntimeExportRestore={() =>

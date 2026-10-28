@@ -154,6 +154,15 @@ describe("StagePage Browser Source output", () => {
     expect(copyWindowTitleIndex).toBeGreaterThan(fallbackIndex);
   });
 
+  it("offers Capture PNG and Open Folder for thumbnails", () => {
+    const markup = renderStagePage(createBrowserSourceStatus());
+
+    expect(markup).toContain("Thumbnail Capture");
+    expect(markup).toContain("Capture PNG");
+    expect(markup).toContain("Open Folder");
+    expect(markup).toContain("Load a model to capture");
+  });
+
   it("wires the Copy URL button to the provided callback", () => {
     const onCopyUrl = vi.fn();
     const panel = BrowserSourceOutputPanel({
@@ -188,6 +197,9 @@ function renderStagePage(
       onSetAlwaysOnTop: noop,
       onCopyBrowserSourceUrl: noop,
       onCopyWindowTitle: noop,
+      stagePngCaptureBusy: false,
+      onCaptureStagePng: noop,
+      onOpenStagePngCaptureFolder: noop,
       onOpenRuntimeExport: noop,
       onRetryRuntimeExportRestore: noop
     })

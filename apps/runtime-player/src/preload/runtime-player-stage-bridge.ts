@@ -4,6 +4,7 @@ import { dynamicsTuningBridgeChannels } from "./dynamics-tuning-bridge-channels"
 import { liveParameterBridgeChannels } from "./live-parameter-bridge-channels";
 import { runtimeExportBridgeChannels } from "./runtime-export-bridge-channels";
 import { runtimeVariantBridgeChannels } from "./runtime-variant-bridge-channels";
+import { stagePngCaptureBridgeChannels } from "./stage-png-capture-bridge-channels";
 import { stageViewBridgeChannels } from "./stage-view-bridge-channels";
 import type { RuntimePlayerLiveParameterFrame } from "./live-parameter-bridge-contract";
 import type {
@@ -23,6 +24,9 @@ import type {
 import type {
   RuntimePlayerVariantControllerStatus
 } from "./runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerStagePngCaptureRequest
+} from "./stage-png-capture-bridge-contract";
 
 export function installRuntimePlayerStageBridge(): void {
   const runtimePlayerStageApi: RuntimePlayerStageApi = {
@@ -101,6 +105,15 @@ export function installRuntimePlayerStageBridge(): void {
           stageViewBridgeChannels.arrangeStateChanged,
           callback
         )
+    },
+    stagePngCapture: {
+      onCaptureRequested: (callback) =>
+        subscribeToStagePngCaptureRequestEvent(
+          stagePngCaptureBridgeChannels.captureRequested,
+          callback
+        ),
+      reportCapture: (report) =>
+        ipcRenderer.invoke(stagePngCaptureBridgeChannels.reportCapture, report)
     }
   };
 
@@ -165,6 +178,24 @@ function subscribeToStageArrangeStateEvent(
   const listener = (
     _event: IpcRendererEvent,
     payload: RuntimePlayerStageArrangeState
+  ) => {
+    callback(payload);
+  };
+
+  ipcRenderer.on(channel, listener);
+
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
+function subscribeToStagePngCaptureRequestEvent(
+  channel: string,
+  callback: (payload: RuntimePlayerStagePngCaptureRequest) => void
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: RuntimePlayerStagePngCaptureRequest
   ) => {
     callback(payload);
   };
