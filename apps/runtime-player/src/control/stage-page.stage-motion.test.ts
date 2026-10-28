@@ -172,6 +172,9 @@ function createStagePageTree(input: StagePageTestInput = {}): ReactElement {
     onSetAlwaysOnTop: noop,
     onCopyBrowserSourceUrl: noop,
     onCopyWindowTitle: noop,
+    stagePngCaptureBusy: false,
+    onCaptureStagePng: noop,
+    onOpenStagePngCaptureFolder: noop,
     onOpenRuntimeExport: noop,
     onRetryRuntimeExportRestore: noop
   });

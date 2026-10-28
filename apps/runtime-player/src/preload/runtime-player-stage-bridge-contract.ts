@@ -17,6 +17,9 @@ import type {
 import type {
   RuntimePlayerStageRenderMetricsSnapshot
 } from "./performance-diagnostics-contract";
+import type {
+  RuntimePlayerStagePngCaptureReporterApi
+} from "./stage-png-capture-bridge-contract";
 
 export type RuntimePlayerStageRuntimeExportApi = {
   readonly getLoadedPayload: () => Promise<RuntimeExportLoadedPayload | null>;
@@ -64,6 +67,7 @@ export type RuntimePlayerStageApi = {
   readonly variants: RuntimePlayerStageVariantApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewReporterApi;
+  readonly stagePngCapture: RuntimePlayerStagePngCaptureReporterApi;
 };
 
 declare global {

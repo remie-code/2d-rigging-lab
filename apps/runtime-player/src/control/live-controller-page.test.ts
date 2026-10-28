@@ -26,6 +26,7 @@ import {
 import type {
   RuntimePlayerVariantControllerStatus
 } from "../preload/runtime-variant-bridge-contract";
+import type { RuntimeExportStatus } from "../preload/runtime-export-bridge-contract";
 
 describe("LiveControllerPage", () => {
   it("renders Variant controls first with compact live quick actions", () => {
@@ -93,6 +94,53 @@ describe("LiveControllerPage", () => {
     expect(onUpdateStageMotionSettings).toHaveBeenCalledWith({
       enabled: true
     });
+  });
+
+  it("wires Capture PNG and Open Folder once a model is loaded", () => {
+    const onCaptureStagePng = vi.fn();
+    const onOpenStagePngCaptureFolder = vi.fn();
+    const tree = createLiveControllerTree({
+      runtimeExportStatus: {
+        status: "loaded",
+        loaded: true,
+        statusLabel: "Runtime Export loaded",
+        directoryPath: "C:\\exports\\astra-chan-runtime",
+        loadedAtIso: "2026-10-28T06:00:00.000Z",
+        summary: {} as never,
+        operation: "manual-open"
+      },
+      onCaptureStagePng,
+      onOpenStagePngCaptureFolder
+    });
+
+    expect(findElementByAriaLabel(tree, "Capture PNG")?.disabled).toBe(false);
+    clickButton(tree, "Capture PNG");
+    clickButton(tree, "Open Folder");
+
+    expect(onCaptureStagePng).toHaveBeenCalledOnce();
+    expect(onOpenStagePngCaptureFolder).toHaveBeenCalledOnce();
+  });
+
+  it("holds Capture PNG without a loaded model or while capturing", () => {
+    const unloaded = createLiveControllerTree();
+    const busy = createLiveControllerTree({
+      runtimeExportStatus: {
+        status: "loaded",
+        loaded: true,
+        statusLabel: "Runtime Export loaded",
+        directoryPath: "C:\\exports\\astra-chan-runtime",
+        loadedAtIso: "2026-10-28T06:00:00.000Z",
+        summary: {} as never,
+        operation: "manual-open"
+      },
+      stagePngCaptureBusy: true
+    });
+
+    expect(findElementByAriaLabel(unloaded, "Capture PNG")?.disabled).toBe(true);
+    expect(findElementByAriaLabel(busy, "Capture PNG")?.disabled).toBe(true);
+    expect(findElementByAriaLabel(unloaded, "Open Folder")?.disabled).not.toBe(
+      true
+    );
   });
 
   it("shows no-variants and legacy states without enabling switching", () => {
@@ -198,7 +246,7 @@ function createLiveControllerTree(
 ): ReactElement {
   return createElement(LiveControllerPage, {
     variantStatus: input.variantStatus ?? createVariantStatus(),
-    runtimeExportStatus: null,
+    runtimeExportStatus: input.runtimeExportStatus ?? null,
     inputStatus: input.inputStatus ?? createInputStatus(),
     browserSourceStatus: null,
     stageState: input.stageState ?? createStageState(),
@@ -209,7 +257,10 @@ function createLiveControllerTree(
     onLookForward: input.onLookForward ?? noop,
     onCenterModel: input.onCenterModel ?? noop,
     onUpdateStageMotionSettings:
-      input.onUpdateStageMotionSettings ?? noopStageMotionUpdate
+      input.onUpdateStageMotionSettings ?? noopStageMotionUpdate,
+    stagePngCaptureBusy: input.stagePngCaptureBusy ?? false,
+    onCaptureStagePng: input.onCaptureStagePng ?? noop,
+    onOpenStagePngCaptureFolder: input.onOpenStagePngCaptureFolder ?? noop
   });
 }
 
@@ -444,6 +495,10 @@ function noopStageMotionUpdate(
 
 type LiveControllerTestInput = {
   readonly variantStatus?: RuntimePlayerVariantControllerStatus;
+  readonly runtimeExportStatus?: RuntimeExportStatus;
+  readonly stagePngCaptureBusy?: boolean;
+  readonly onCaptureStagePng?: () => void;
+  readonly onOpenStagePngCaptureFolder?: () => void;
   readonly inputStatus?: RuntimePlayerInputStatus;
   readonly stageState?: RuntimePlayerStageStateSnapshot;
   readonly lookForwardAvailable?: boolean;
@@ -464,6 +519,7 @@ type ComponentFunction = (props: unknown) => ReactNode;
 type ElementProps = {
   readonly "aria-label"?: unknown;
   readonly label?: unknown;
+  readonly disabled?: unknown;
   readonly children?: ReactNode;
   readonly onClick?: () => void;
 };

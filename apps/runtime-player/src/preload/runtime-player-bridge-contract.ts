@@ -20,6 +20,9 @@ import type {
   RuntimePlayerStageRenderMetricsSnapshot
 } from "./performance-diagnostics-contract";
 import type { RuntimePlayerVariantControllerApi } from "./runtime-variant-bridge-contract";
+import type {
+  RuntimePlayerStagePngCaptureApi
+} from "./stage-png-capture-bridge-contract";
 
 export const runtimePlayerStageWindowTitle = "Runtime Player Stage" as const;
 
@@ -243,6 +246,7 @@ export type RuntimePlayerApi = {
   readonly variants: RuntimePlayerVariantControllerApi;
   readonly liveParameters: RuntimePlayerLiveParameterApi;
   readonly stageView: RuntimePlayerStageViewApi;
+  readonly stagePngCapture: RuntimePlayerStagePngCaptureApi;
   readonly browserSource: RuntimePlayerBrowserSourceApi;
   readonly getStartupStatus: () => Promise<RuntimePlayerStartupStatus>;
   readonly getStageStatus: () => Promise<RuntimePlayerStageStatus>;

@@ -73,6 +73,12 @@ import {
   type RuntimePlayerStageViewBridgeRegistration
 } from "./stage-view-bridge-handlers";
 import { RuntimePlayerStageMotionRuntime } from "./stage-motion/stage-motion-runtime";
+import {
+  registerStagePngCaptureBridgeHandlers
+} from "./stage-png-capture/stage-png-capture-bridge-handlers";
+import {
+  resolveRuntimePlayerStagePngCaptureFolderPath
+} from "./stage-png-capture/stage-png-capture-file-name";
 import type { RuntimePlayerStageMotionDrive } from "./presence/stage-presence-drive";
 import {
   publishRuntimePlayerStageMotionDisplayState
@@ -547,7 +553,7 @@ export function startRuntimePlayerMain(): void {
         browserSourceServer.publishDynamicsTuningProfile(profile);
       }
     });
-    registerRuntimeExportBridgeHandlers({
+    const runtimeExportSession = registerRuntimeExportBridgeHandlers({
       windows,
       startupStateStore,
       onRuntimeExportChanging: async () => {
@@ -614,6 +620,14 @@ export function startRuntimePlayerMain(): void {
         physiologyBridge.publishStatus();
         setLoadedModelName(null);
       }
+    });
+    // Capture PNG (thumbnails): both roles save into the same
+    // Pictures\Runtime Player folder, named after the loaded export's folder.
+    registerStagePngCaptureBridgeHandlers({
+      windows,
+      getRuntimeExportStatus: () => runtimeExportSession.getStatus(),
+      getCaptureFolderPath: () =>
+        resolveRuntimePlayerStagePngCaptureFolderPath(app.getPath("pictures"))
     });
     const quitController = new RuntimePlayerQuitController({
       quit: () => {

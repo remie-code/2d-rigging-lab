@@ -22,6 +22,7 @@ import {
 } from "./control-window-formatters";
 import { BrowserSourceOutputPanel } from "./browser-source-output-panel";
 import { StageMotionPanel } from "./stage-motion-panel";
+import { StagePngCapturePanel } from "./stage-png-capture-panel";
 import type {
   RuntimePlayerStageMotionSettingsUpdate,
   RuntimePlayerStageStateSnapshot,
@@ -41,6 +42,7 @@ export function StagePage({
   runtimeExportStatus,
   browserSourceStatus,
   drivenByPhysiology = false,
+  stagePngCaptureBusy,
   onFocusStage,
   onResetView,
   onCenterModel,
@@ -51,6 +53,8 @@ export function StagePage({
   onSetAlwaysOnTop,
   onCopyBrowserSourceUrl,
   onCopyWindowTitle,
+  onCaptureStagePng,
+  onOpenStagePngCaptureFolder,
   onOpenRuntimeExport,
   onRetryRuntimeExportRestore
 }: {
@@ -63,6 +67,7 @@ export function StagePage({
    * Optional so tracking-host tests keep their call sites; defaults to tracking.
    */
   readonly drivenByPhysiology?: boolean;
+  readonly stagePngCaptureBusy: boolean;
   readonly onFocusStage: () => void;
   readonly onResetView: () => void;
   readonly onCenterModel: () => void;
@@ -75,6 +80,8 @@ export function StagePage({
   readonly onSetAlwaysOnTop: (enabled: boolean) => void;
   readonly onCopyBrowserSourceUrl: () => void;
   readonly onCopyWindowTitle: () => void;
+  readonly onCaptureStagePng: () => void;
+  readonly onOpenStagePngCaptureFolder: () => void;
   readonly onOpenRuntimeExport: () => void;
   readonly onRetryRuntimeExportRestore: () => void;
 }): ReactElement {
@@ -167,6 +174,14 @@ export function StagePage({
           onStartDepthScaleCalibration={onStartDepthScaleCalibration}
         />
       </section>
+
+      <StagePngCapturePanel
+        runtimeExportStatus={runtimeExportStatus}
+        stageState={stageState}
+        busy={stagePngCaptureBusy}
+        onCapturePng={onCaptureStagePng}
+        onOpenFolder={onOpenStagePngCaptureFolder}
+      />
 
       <BrowserSourceOutputPanel
         status={browserSourceStatus}

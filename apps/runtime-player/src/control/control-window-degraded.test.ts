@@ -223,6 +223,9 @@ function liveControllerProps() {
     onLookForward: noop,
     onCenterModel: noop,
     onUpdateStageMotionSettings: noop,
+    stagePngCaptureBusy: false,
+    onCaptureStagePng: noop,
+    onOpenStagePngCaptureFolder: noop,
     onOpenPhysiology: vi.fn()
   };
 }
