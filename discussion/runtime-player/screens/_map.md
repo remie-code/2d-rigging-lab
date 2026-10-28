@@ -15,6 +15,8 @@
 | [stage-motion-head-position-follow.md](stage-motion-head-position-follow.md) | Implemented through Wave11 source/tests/review; manual tuning pending | Head position由来のStage-level horizontal offset / explicit near/far depth scale offset、dead zone、reaction、limit、Window State auto-save、Browser Source composed transform境界 |
 | [live-controller-page.md](live-controller-page.md) | Implemented through Wave12 source/domain level; manual broadcast verification pending | 配信中の即時操作を集めるControl Window page。Variant切替、Reset to Model Default、Look Forward、Stage Motion quick toggle、Center Modelを扱い、native Stage / Browser Sourceへ同じsanitized active Variant selectionを反映する |
 | [performance-diagnostics.md](performance-diagnostics.md) | Updated / Wave18–19 lightweight diagnostics and bounded cadence evidence; product-confidence gates pending | Native Stage / Browser Source / Both のtimed capture、source/input FPSとrender FPSの分離、renderer frame pacing metrics、Wave18 product deep-profile removal boundary、Wave19 OBS/Chrome/Edge cadence observation、Copy Report、privacy boundary、manual comparison guidance |
+| [current-screens-inventory-2026-10.md](current-screens-inventory-2026-10.md) | Recorded(2026-10-28、Sylph の調査) | 器の Control Window 9 ページ・Stage Window・Browser Source と、操縦席の画面・器への頼みの経路・両方のファイル入出力の体験の棚卸し。screens/ の文書とのずれ(Physiology・Channel が未記載など)も §8 に記録 |
+| [thumbnail-capture.md](thumbnail-capture.md) | 完了(2026-10-28) | サムネ用の透過スクショ。Stage / Live Controller ページに「Capture PNG」、ピクチャ\Runtime Player\ に日時の名前で保存、「フォルダを開く」付き |
 
 ## Current Screen Principles
 
