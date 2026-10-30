@@ -17,6 +17,8 @@
 | [research/cockpit-today-2026-10.md](research/cockpit-today-2026-10.md) | 今の操縦席を配信者の目で: 起動から終わりまでの流れ、画面とタブごとの全操作(保存先・効く時・層の候補)、操縦席の外の作業、引っかかり、文書とのずれ |
 | [research/probe-repo-inventory-2026-10.md](research/probe-repo-inventory-2026-10.md) | 受信の試しのための棚卸し: 特区憲章の条文、試しのスクリプトの前例、鍵の読み方、依存の入れ方、ログの決まりの散らばり |
 | [research/probe-external-2026-10.md](research/probe-external-2026-10.md) | 受信の試しのための外部調査: Windows + Node 24 で入る版、復号失敗の数え方、#11653 の今、名前の取り方、ビープの流し方、プライバシーポリシーの義務 |
+| [research/restructure-cockpit-map-2026-10.md](research/restructure-cockpit-map-2026-10.md) | 組み直しのための地図: cockpit.mjs と cockpit-server.mjs の塊ごとの責務、場の始まりと終わりの散らばり、器なしで声を出すための止まる所 4 段、画面の部品の仕分け、観測の記録 |
+| [research/restructure-role-state-2026-10.md](research/restructure-role-state-2026-10.md) | 組み直しのための棚卸し: 記憶の置き場(定数 1 つ・②④の文面にパスなし・git と種の注意)、設定のキーの型、頭と名前の表、声の話者、名前の手がかり、文書の決まり |
 
 ## 2. Current State Summary
 
@@ -30,7 +32,7 @@
 ## 3. Next Actions
 
 1. 進め方は決定(scope §15): 受信の試し(済み・合格) → 配信の組み直し → Discord を足す。
-2. 次は組み直しの設計(ロールの持ち方・場・芯と入口出口の切り分け)。/context-check を通してから始める。
+2. 組み直しの設計のたたき台: [../architecture/stream-restructure.md](../architecture/stream-restructure.md)(前提は scope §18〜§20)。確認済み。次は wave の計画。
 
 ## 4. Unresolved Questions
 

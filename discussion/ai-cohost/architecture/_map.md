@@ -13,6 +13,7 @@
 | [c4-control-channel-v0.md](c4-control-channel-v0.md) | C4設計: 契約二層化(外殻=additive extension/payloadは所有閉問題が追加)、外殻5点(接続作法/要求/応答+拒否列挙/hello capabilities/寛容規則)、TTL統一機構(切断→基底復帰がタダ)、v0 intent.set、粗いオーバーレイ、参照ドライバ(特区最初の住人)、fixture=純JSON | 設計方向=Accepted(2026-07-11)。実装=C4完全閉鎖(2026-07-11) |
 | [c5-composition-and-envelopes.md](c5-composition-and-envelopes.md) | C5設計: スコープ裁定3件(Stage Presence=実効body信号に追従/変調は繰延/エンベロープは器側で描く)、intent.envelope、連続性原則(現在値からのre-attack)、解放も曲線で(失効・切断のスナップの一般解=「魂を殺しても」の見え方の完成)、C6前方互換 | 設計方向=Accepted(2026-07-11)。実装=C5完全閉鎖(2026-07-11、§7に裁定3改定=set ease-in) |
 | [c6-mouth-phoneme-timeline.md](c6-mouth-phoneme-timeline.md) | C6設計: モーラ契約(知識の置き場=音素→母音は魂側、凸不変条件は構造保証)、**時間仮説**(attack≈モーラ長のundershoot=coarticulation近似+開き縮小係数。実測不採用の理由=固定ゴール形は機械的)、C5相乗り、比較ゲート(実物の口との並置) | 設計方向=Accepted(2026-07-11) |
+| [stream-restructure.md](stream-restructure.md) | 配信の組み直し: ロール(置き場・持ち物・移し替え)、記憶をロールごとに、場(配信を始める / 終える)、体なしで声を出す、判定は体験のもの、画面のタブ、Discord を後で足せるかの確かめ、wave の案 | **Accepted(2026-10-31)**。次は wave の計画 |
 
 ## 未決事項(主要な設計分岐)
 
