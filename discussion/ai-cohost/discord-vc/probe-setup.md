@@ -11,11 +11,12 @@
 ## 2. アプリと Bot を作る(Developer Portal)
 
 1. https://discord.com/developers/applications を開き、New Application。名前は例えば「チャッピー」。
-2. Bot の画面で:
-   - **Public Bot を OFF**(あなた以外がサーバーに招待できないようにする)。
+2. 先に、左の一覧の Installation の画面で **Install Link を None** にして保存する。これが Discord の既定のリンクのままだと、次の Public Bot を OFF にしたときに「Private application cannot have a default authorization link」で保存できない(フォーラムの報告から。公式の文書では確かめていない)。
+3. 左の一覧の Bot の画面で:
+   - Authorization Flow の欄の **Public Bot を OFF**(あなた以外がサーバーに招待できないようにする)。
    - **Requires OAuth2 Code Grant は OFF のまま。**
    - **Privileged Gateway Intents(Presence / Server Members / Message Content)は 3 つとも OFF のまま。** 要るのは GUILDS と GUILD_VOICE_STATES だけで、どちらも特権ではない。
-   - Reset Token で鍵を出す。**表示は 1 回きり**なので、そのまま次の 3 のファイルに貼る。
+   - Reset Token で鍵を出す。**表示は 1 回きり**なので、そのまま §3 のファイルに貼る。
 
 ## 3. 鍵のファイルを置く
 
