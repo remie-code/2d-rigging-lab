@@ -25,12 +25,12 @@
 - 語彙と体験の整理は一区切り(scope §5〜§14): 配信と Discord 参加は別の体験で、芯を共有する。体験を選ぶ → ロールを入れる → 場が開く。記憶はロールごと。順番は、配信で結び目をほどいてから Discord を足す(§11)。
 - 配信モードの新しい形は stream-experience-sketch.md で全場面決定。
 - 開発の的と進め方を決めた(scope §15)。
+- 受信の試しは合格(2026-10-31、[../experiments/discord-receive-probe.md](../experiments/discord-receive-probe.md))。
 
 ## 3. Next Actions
 
-1. 進め方は決定(scope §15): 受信の試し → 配信の組み直し → Discord を足す。
-2. ユーザーが [probe-setup.md](probe-setup.md) に沿って Bot と鍵を用意する。
-3. 受信の試しの決めごとは scope §16。置き場・依存・修正を当てるか・プライバシーポリシーをユーザーに確かめてから Gnome に頼む。設計から先は /context-check を通してから。
+1. 進め方は決定(scope §15): 受信の試し(済み・合格) → 配信の組み直し → Discord を足す。
+2. 次は組み直しの設計(ロールの持ち方・場・芯と入口出口の切り分け)。/context-check を通してから始める。
 
 ## 4. Unresolved Questions
 

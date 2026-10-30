@@ -14,6 +14,7 @@
 | [brain-swap-terra.md](brain-swap-terra.md) | Codex Terraのbrain切替・速度・reasoning実測 | Completed |
 | [codex-streaming-sentence-probe.md](codex-streaming-sentence-probe.md) | GPT-5.6 Sol + visionで`item.updated`から安全な文chunkを早期取得できるかのbounded probe | Completed — observed SDK pathでは早期textなし (2026-08-30) |
 | [codex-app-server-streaming-probe.md](codex-app-server-streaming-probe.md) | 同梱Codex App Server + Sol + vision + effort `low`でagent text deltaと安全な第一文の先行時間を実測 | Completed — lossless Run 2で450 delta、第一文9.109秒先行 (2026-08-30) |
+| [discord-receive-probe.md](discord-receive-probe.md) | Discord の Bot が VC で 1 人の声を受け取れるかを数だけで確かめた試し(discord-vc の第一歩) | Completed — 合格。入った直後の最初の発言だけ頭が欠ける。#11653 は起きず (2026-10-31) |
 
 ## Current Result
 

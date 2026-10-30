@@ -24,7 +24,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [decisions/](decisions/_map.md) | 子トピック群: OpenAI Decisions API 等で知覚・演出を判定する(視線注視先・反応判定・音声タグ選び) | **Created(2026-10-12)**。gaze-target は一区切り(4x3粒度で推定可)、reaction-trigger は合意済み・未着手 |
 | [elevenlabs/](elevenlabs/_map.md) | 子トピック: ElevenLabs 一式(STT/TTS)への差し替え評価。発端は STT 確定遅延の短縮 | **Created(2026-10-12)**。TTS 調査のみ。STT 調査と全体構想の合意は後日 |
 | [memory/](memory/_map.md) | 子トピック: 配信をまたぐ記憶(構造化・オンデマンドの思い出し・きっかけで思い出す・記憶の整理) | **Created(2026-10-21)**。直近は構造化とオンデマンド化。文献調査と頭のツール制限の棚卸し中 |
-| [discord-vc/](discord-vc/_map.md) | 子トピック: 配信の外で、仲間内の Discord VC にチャッピーが Bot として参加する | **Created(2026-10-30)**。調査と体験の整理(配信モードの組み直しを含む)は一区切り。進め方は受信の試し → 配信の組み直し → Discord(scope §15)。Bot の用意待ち |
+| [discord-vc/](discord-vc/_map.md) | 子トピック: 配信の外で、仲間内の Discord VC にチャッピーが Bot として参加する | **Created(2026-10-30)**。調査と体験の整理(配信モードの組み直しを含む)は一区切り。進め方は受信の試し → 配信の組み直し → Discord(scope §15)。受信の試しは合格(2026-10-31)、次は組み直しの設計 |
 
 AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
