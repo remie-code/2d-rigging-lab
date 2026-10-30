@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  CONVERSATION_INSTRUCTION_BRAIN_IDS,
-  CONVERSATION_INSTRUCTION_BRAIN_OPTIONS,
   conversationInstructionInputError,
   conversationInstructionPath,
   conversationInstructionStatusView,
-  conversationBrainIdentity,
   createConversationInstructionController,
+  currentRoleView,
+  isConversationInstructionRoleId,
+  roleOptionsView,
   parseConversationInstructionResponse,
   parseSoulSkills,
   soulSkillNoticeText,
@@ -21,46 +21,53 @@ function response(body, { ok = true, status = 200 } = {}) {
   return { ok, status, async json() { return body; } };
 }
 
-function payload(brainId, instruction, isOverride = false, revision = 1) {
-  return { ok: true, brainId, instruction, isOverride, revision };
+function payload(roleId, instruction, isOverride = false, revision = 1) {
+  return { ok: true, roleId, instruction, isOverride, revision };
 }
 
-test("conversation instruction contract: exactly six technical brain IDs and encoded paths", () => {
-  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_IDS, ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
-  assert.deepEqual(CONVERSATION_INSTRUCTION_BRAIN_OPTIONS.map((item) => item.value), CONVERSATION_INSTRUCTION_BRAIN_IDS);
-  assert.equal(conversationInstructionPath("codex-56-sol"), "/api/conversation-instructions/codex-56-sol");
-  assert.equal(conversationInstructionPath("codex-astra"), "/api/conversation-instructions/codex-astra");
-  assert.equal(conversationInstructionPath("codex-61-sol"), "/api/conversation-instructions/codex-61-sol");
-  assert.equal(CONVERSATION_INSTRUCTION_BRAIN_IDS.includes("codex-55"), false);
+test("conversation instruction contract: 鍵はロールの id（英小文字の形）・パスは encode する（配信の組み直し Domain A）", () => {
+  for (const ok of ["chappy", "cody", "mio", "role-2", "codex-61-sol"]) assert.equal(isConversationInstructionRoleId(ok), true, ok);
+  for (const ng of ["", "Chappy", "1a", "a/b", "..", "x".repeat(33), null, 3]) {
+    assert.equal(isConversationInstructionRoleId(ng), false, String(ng));
+  }
+  assert.equal(conversationInstructionPath("chappy"), "/api/conversation-instructions/chappy");
   assert.equal(conversationInstructionPath("codex/unsafe"), "/api/conversation-instructions/codex%2Funsafe");
 });
 
-test("conversation editor identity uses supplied canonical active facts without a second brain map", () => {
+test("ロールの select の選択肢と今のロール: snapshot の role から作る（形の違う要素は落とす・名前が無ければ id）", () => {
+  const status = {
+    id: "chappy",
+    displayName: "チャッピー",
+    brain: "codex-61-sol",
+    roles: [
+      { id: "chappy", displayName: "チャッピー", brain: "codex-61-sol" },
+      { id: "mio", displayName: "  ", brain: "codex-astra" },
+      { id: "Bad", displayName: "x" },
+      null
+    ]
+  };
+  assert.deepEqual(roleOptionsView(status), [
+    { value: "chappy", label: "チャッピー", brain: "codex-61-sol" },
+    { value: "mio", label: "mio", brain: "codex-astra" }
+  ]);
+  assert.deepEqual(currentRoleView(status), { id: "chappy", displayName: "チャッピー", brain: "codex-61-sol" });
+  assert.deepEqual(roleOptionsView(null), []);
+  assert.equal(currentRoleView(null), null);
+  assert.equal(currentRoleView({ id: "../x" }), null);
+  // 名前は頭の id から作らない（頭 → 名前の表を持たない）。
   const source = readFileSync(fileURLToPath(new URL("./conversation-instruction.mjs", import.meta.url)), "utf8");
-  assert.doesNotMatch(source, /CONVERSATION_BRAIN_IDENTITY_PROJECTIONS/);
   assert.doesNotMatch(source, /["']claude["']\s*:\s*.*(?:cody|こーでぃー)|["']codex(?:-55|-56-sol)?["']\s*:\s*.*(?:chappy|チャッピー)/i);
-  for (const brainId of CONVERSATION_INSTRUCTION_BRAIN_IDS) {
-    const canonical = { id: `canonical-${brainId}`, displayName: `Canonical ${brainId}` };
-    assert.deepEqual(
-      conversationBrainIdentity({ brainId, activeBrainId: brainId, activeIdentity: canonical }),
-      canonical,
-      `${brainId} should pass through the canonical active identity fact`
-    );
-    assert.equal(
-      conversationBrainIdentity({ brainId, activeBrainId: "different-brain", activeIdentity: canonical }),
-      null,
-      `${brainId} must not display identity for a non-active profile`
-    );
-  }
 });
 
-test("conversation instruction response validation rejects malformed or wrong-brain payloads", () => {
+test("conversation instruction response validation rejects malformed or wrong-role payloads", () => {
   assert.deepEqual(parseConversationInstructionResponse(payload("claude", "default"), "claude"), {
-    brainId: "claude", instruction: "default", isOverride: false, revision: 1
+    roleId: "claude", instruction: "default", isOverride: false, revision: 1
   });
-  assert.equal(parseConversationInstructionResponse({ ok: true, brainId: "claude", instruction: "x" }, "claude"), null);
+  assert.equal(parseConversationInstructionResponse({ ok: true, roleId: "claude", instruction: "x" }, "claude"), null);
   assert.equal(parseConversationInstructionResponse(payload("codex", "x"), "claude"), null);
-  assert.equal(parseConversationInstructionResponse({ ok: false, brainId: "claude", instruction: "x", isOverride: false }, "claude"), null);
+  assert.equal(parseConversationInstructionResponse({ ok: false, roleId: "claude", instruction: "x", isOverride: false }, "claude"), null);
+  // 旧の応答（brainId）は受け取らない。
+  assert.equal(parseConversationInstructionResponse({ ok: true, brainId: "claude", instruction: "x", isOverride: false, revision: 1 }, "claude"), null);
   assert.equal(conversationInstructionInputError("  "), "会話指示を入力してください（空にする場合は「既定へ戻す」を使ってください）");
   assert.equal(conversationInstructionInputError("hello"), null);
 });
@@ -76,7 +83,7 @@ test("conversation instruction controller: load/save/reset and default/override/
   const controller = createConversationInstructionController({ fetchImpl });
   assert.equal((await controller.load("claude")).ok, true);
   assert.deepEqual(controller.getState("claude"), {
-    brainId: "claude", loaded: true, draft: "default body", saved: "default body", isOverride: false,
+    roleId: "claude", loaded: true, draft: "default body", saved: "default body", isOverride: false,
     revision: 4, status: "default", error: "", dirty: false, requestSeq: 1
   });
   controller.edit("claude", "custom body");

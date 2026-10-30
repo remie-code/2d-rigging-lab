@@ -97,7 +97,6 @@ import {
   COMMENT_HOLD_MAX_AGE_MS,
   COMMENT_HOLD_MAX_COUNT
 } from "../mind/comment-react.mjs";
-import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
 import { createRecallDesk } from "../mind/recall-desk.mjs";
 import { RECALL_JUDGE_TIMEOUT_MS } from "../mind/recall.mjs";
 import { composeReplyLatency, resolveLatencyThresholds } from "../mind/fire-latency.mjs";
@@ -107,8 +106,7 @@ import {
   quotaLowWarning,
   WARNING_EVENT_TTL_MS
 } from "./warnings.mjs";
-import { resolveBrainIdentity } from "../mind/brains.mjs";
-import { resolveModelIdentity } from "../mind/model-identity.mjs";
+import { DEFAULT_MODEL_IDENTITY, isRoleId, normalizeModelIdentity } from "../mind/model-identity.mjs";
 import { normalizeCompactThresholdTokens } from "../mind/context-compactor.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
@@ -456,22 +454,32 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
  *   未注入でも POST /api/verbosity 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
  *   スキップ）。
- * @param {(choice: string) => void | Promise<void>} [options.onSetBrain]
- *   頭脳切替フック（多頭化 Domain B・POST /api/brain が呼ぶ・onSetVerbosity と同型）。choice は検証済みの
- *   "claude" | "codex"。**cockpit-server は永続化・頭のホットスワップ実体を知らない**（責務境界: 実体は
- *   cockpit.mjs が settings 永続 + 現 session の dispose→null で担う）。未注入なら POST /api/brain は 503
- *   （onSetChannelUrl/onSetAudioDevice と同型の未注入ゲート）。
+ * @param {(roleId: string) => ({ ok: true; verbosity?: string; speakStartMode?: string; ttsEngine?: string }
+ *   | { ok: false; reason?: string } | Promise<any>)} [options.onSetRole]
+ *   ロールを選ぶフック（配信の組み直し Domain A・POST /api/role が呼ぶ・旧 onSetBrain の置き換え）。roleId は形を
+ *   確かめ済み（英小文字の id）。知らないロールなら `{ ok:false, reason }`（→ 400）。選べたら新しいロールの口数・
+ *   話し始め・声の方式を返す（サーバの scheduler と Start の既定に入れる）。**cockpit-server はロールの中身・
+ *   永続化・頭のホットスワップを知らない**（実体は cockpit.mjs）。耳が動いている間は呼ばずに 409（場の途中で
+ *   ロールを替えない）。未注入なら POST /api/role は 503。
+ * @param {() => (object | null)} [options.roleStatus]
+ *   ロールの現況（`{ id, displayName, brain, body, roles: [{ id, displayName, brain }] }`）。state snapshot の `role` に
+ *   載せる（未注入なら null）。性格の指示の本文は載せない。
  * @param {() => (object | null)} [options.brainStatus]
- *   頭脳の現況（`{ brain: string, credentialHealth: boolean }`）を返す。state snapshot に載せる
+ *   頭脳の現況（`{ brain: string, credentialHealth: boolean }`・今のロールが指す頭）を返す。state snapshot に載せる
  *   （audioDevice/channel と同型）。credentialHealth は資格情報ファイルの**存在確認のみ**（中身は読まない）。
  *   brain の状態正本は cockpit.mjs 側にあり、起動時の現況もこの status が運ぶ（サーバは brain 状態を
  *   二重管理せず・別途 initial 値は持たない）。未注入なら snapshot の brain:null。
- * @param {() => (Readonly<import("../mind/model-identity.mjs").ModelIdentity> | null | undefined)} [options.currentBrainIdentity]
- *   現在の registry identity を返す request/handling-time provider。起動スクリプトの currentBrain
- *   closure を正本とし、Whisper/scheduler/public snapshot が同じ provider を読む。brainStatus が
- *   未注入でも snapshot.brain.identity だけは provider から構成し、technical status が provider と
- *   不一致でも identity は provider を権威とする。
+ * @param {() => (Readonly<import("../mind/model-identity.mjs").ModelIdentity> | null | undefined)} [options.currentRoleIdentity]
+ *   今のロールの名前を返す request/handling-time provider（配信の組み直し Domain A・旧 currentBrainIdentity）。
+ *   起動スクリプトのロールの選択を正本とし、Whisper/scheduler/public snapshot/判定の名前が同じ provider を読む。
+ *   形だけを確かめ（model-identity.mjs の normalizeModelIdentity）、cody / chappy 以外の名前もそのまま通す。
+ *   brainStatus が未注入でも snapshot.brain.identity だけは provider から構成する。頭は名前を持たないので、
+ *   provider が無ければ identity は null（画面は中立の題）。
+ * @param {ReadonlyArray<string>} [options.notices]
+ *   起動時の知らせ（配信の組み直し Domain A: ロールへの引っ越しの結果の行）。snapshot の `notices` に載せ、
+ *   操縦席のログのタブに出す（起動 1 回分・引っ越しが無ければ空）。
  * @param {{
+ *   isKnownId?: (roleId: string) => boolean;
  *   getProfile: (brainId: string) => { body: string; hasOverride: boolean };
  *   save: (brainId: string, instruction: string) => boolean | Promise<boolean>;
  *   reset: (brainId: string) => boolean | Promise<boolean>;
@@ -671,13 +679,18 @@ export function createCockpitServer(options = {}) {
   // （未注入なら POST /api/verbosity 自体は 503 にならない・onSetSelfFireEnabled と同型の失敗寛容）。
   const verbosityInitialMode = typeof options.verbosityInitialMode === "string" ? options.verbosityInitialMode : "normal";
   const onSetVerbosity = typeof options.onSetVerbosity === "function" ? options.onSetVerbosity : null;
-  // 多頭化 Domain B: 頭脳切替フック（未注入なら POST /api/brain は 503・onSetChannelUrl と同型のゲート）と
-  // 現況（snapshot の brain に載せる・未注入なら null）。brain の状態正本は cockpit.mjs の currentBrain で、
+  // 配信の組み直し Domain A: 頭脳切替は「ロールの選択」に替わった（onSetRole・未注入なら POST /api/role は 503・
+  // onSetChannelUrl と同型のゲート）。頭の現況（snapshot の brain に載せる・未注入なら null）の正本は cockpit.mjs で、
   // 起動時の現況も brainStatus() が運ぶ（サーバは brain 状態を二重管理しない＝別途 initial 値は受けない）。
-  const onSetBrain = options.onSetBrain;
+  const onSetRole = options.onSetRole;
+  const roleStatusImpl = options.roleStatus;
   const brainStatusImpl = options.brainStatus;
-  const currentBrainIdentityImpl =
-    typeof options.currentBrainIdentity === "function" ? options.currentBrainIdentity : null;
+  const currentRoleIdentityImpl =
+    typeof options.currentRoleIdentity === "function" ? options.currentRoleIdentity : null;
+  /** 起動時の知らせ（引っ越しの結果など・文字列だけ）。 */
+  const startupNotices = Object.freeze(
+    Array.isArray(options.notices) ? options.notices.filter((line) => typeof line === "string") : []
+  );
   const conversationInstructionHooks = options.conversationInstructionHooks ?? null;
   // 配信間記憶: ON/OFF の永続化フック + 手動「今日を記録」フック + 現況(未注入ならそれぞれ 503/null・
   // onSetBrain/brainStatus と同型)。
@@ -919,27 +932,20 @@ export function createCockpitServer(options = {}) {
   function snapshot() {
     const bufStats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
     const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
-    // currentBrainIdentity is the single current-identity source for every C
-    // consumer. Normalize its frozen contract through the canonical resolver;
-    // malformed/absent values retain the Cody fallback. When the technical
-    // brain status is unavailable, the additive public identity still remains
-    // available for the title/header. The status object never overrides it.
-    const providedIdentity = currentBrainIdentityImpl
-      ? resolveModelIdentity(currentBrainIdentityImpl()?.id)
+    // currentRoleIdentity is the single current-identity source for every C
+    // consumer. Normalize its shape (normalizeModelIdentity); malformed values
+    // retain the Cody fallback. 配信の組み直し Domain A: 名前はロールが持ち、頭からは引かない。provider が
+    // 無ければ identity は null（画面は中立の題）。When the technical brain status is unavailable, the
+    // additive public identity still remains available for the title/header.
+    const providedIdentity = currentRoleIdentityImpl ? normalizeModelIdentity(currentRoleIdentityImpl()) : null;
+    const publicIdentity = providedIdentity
+      ? { id: providedIdentity.id, displayName: providedIdentity.displayName }
       : null;
     const publicBrain =
       rawBrain && typeof rawBrain === "object"
-        ? {
-            ...rawBrain,
-            identity: providedIdentity
-              ? { id: providedIdentity.id, displayName: providedIdentity.displayName }
-              : (() => {
-                  const identity = resolveBrainIdentity(/** @type {any} */ (rawBrain).brain);
-                  return { id: identity.id, displayName: identity.displayName };
-                })()
-          }
-        : providedIdentity
-          ? { identity: { id: providedIdentity.id, displayName: providedIdentity.displayName } }
+        ? { ...rawBrain, identity: publicIdentity }
+        : publicIdentity
+          ? { identity: publicIdentity }
           : null;
     return {
       ears: earsState,
@@ -978,6 +984,10 @@ export function createCockpitServer(options = {}) {
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
       brain: publicBrain,
+      // 配信の組み直し Domain A: ロールの現況（今のロール・選べるロールの一覧・未注入なら null）。
+      role: typeof roleStatusImpl === "function" ? (roleStatusImpl() ?? null) : null,
+      // 配信の組み直し Domain A: 起動時の知らせ（ロールへの引っ越しの結果・ログのタブに出す）。
+      notices: [...startupNotices],
       // 配信間記憶: 記憶の現況（{lastRecordAtMs, recording}・未注入なら null・brain と同型）。
       memory: typeof memoryStatusImpl === "function" ? (memoryStatusImpl() ?? null) : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
@@ -1317,15 +1327,17 @@ export function createCockpitServer(options = {}) {
 
     const baseOptions = options.pipelineOptions ?? {};
     // Resolve the Whisper lexical-bias prompt at request time. The injected
-    // provider observes cockpit.mjs currentBrain, so switching heads does not
-    // require restarting the ear pipeline.
+    // provider observes cockpit.mjs の今のロール, so switching roles does not
+    // require restarting the ear pipeline. 手がかりが空なら渡さない。
     const whisperOptions = {
       ...(/** @type {any} */ (baseOptions).whisper ?? {})
     };
-    if (currentBrainIdentityImpl) {
+    if (currentRoleIdentityImpl) {
       whisperOptions.promptProvider = () => {
-        const identity = currentBrainIdentityImpl();
-        return identity && typeof identity.whisperPrompt === "string" ? identity.whisperPrompt : undefined;
+        const identity = currentRoleIdentityImpl();
+        return identity && typeof identity.whisperPrompt === "string" && identity.whisperPrompt.length > 0
+          ? identity.whisperPrompt
+          : undefined;
       };
     }
     const p = pipelineFactory({
@@ -1508,11 +1520,12 @@ export function createCockpitServer(options = {}) {
   /**
    * Return the effective instruction response for the dedicated local API.
    * Instruction text intentionally has no other projection in the server.
-   * @param {string} brainId
+   * 配信の組み直し Domain A: 鍵はロールの id（応答の `roleId`）。本文はロールの instructions.md。
+   * @param {string} roleId
    */
-  function conversationInstructionResponse(brainId) {
+  function conversationInstructionResponse(roleId) {
     if (!conversationInstructionHooks) throw new Error("conversation instruction control not available");
-    const profile = conversationInstructionHooks.getProfile(brainId);
+    const profile = conversationInstructionHooks.getProfile(roleId);
     if (!profile || typeof profile.body !== "string" || typeof profile.hasOverride !== "boolean") {
       throw new Error("conversation instruction profile is invalid");
     }
@@ -1520,7 +1533,7 @@ export function createCockpitServer(options = {}) {
     if (!Number.isInteger(revision) || revision < 0) throw new Error("conversation instruction revision is invalid");
     return {
       ok: true,
-      brainId,
+      roleId,
       instruction: profile.body,
       isOverride: profile.hasOverride,
       revision,
@@ -1578,15 +1591,19 @@ export function createCockpitServer(options = {}) {
         sendJson(res, 503, { error: "conversation instruction control not available" });
         return;
       }
+      // 配信の組み直し Domain A: 鍵はロールの id（形を確かめ、hooks が知らないロールは断る）。
       let brainId;
       try {
         brainId = decodeURIComponent(conversationRoute[1]);
       } catch {
-        sendJson(res, 400, { error: "invalid conversation instruction brain id" });
+        sendJson(res, 400, { error: "invalid conversation instruction role id" });
         return;
       }
-      if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(brainId)) {
-        sendJson(res, 400, { error: "invalid conversation instruction brain id" });
+      const knownRole =
+        isRoleId(brainId) &&
+        (typeof conversationInstructionHooks.isKnownId !== "function" || conversationInstructionHooks.isKnownId(brainId) === true);
+      if (!knownRole) {
+        sendJson(res, 400, { error: "invalid conversation instruction role id" });
         return;
       }
       if (method === "GET") {
@@ -1930,37 +1947,45 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
-    if (method === "POST" && pathname === "/api/brain") {
-      // 多頭化 Domain B: 頭脳の切替継ぎ目（POST /api/verbosity / /api/kill の写経）。永続化 + 現 session の
-      // dispose→null（次発火から新頭）は cockpit.mjs の onSetBrain が担う（責務境界: cockpit-server は
-      // brain の中身を知らない）。未注入（S2.5 単体等）なら 503（onSetChannelUrl と同型の未注入ゲート）。
-      if (typeof onSetBrain !== "function") {
-        sendJson(res, 503, { error: "brain control not available" });
+    if (method === "POST" && pathname === "/api/role") {
+      // 配信の組み直し Domain A: ロールの選択の継ぎ目（旧 POST /api/brain の置き換え・POST /api/verbosity の写経）。
+      // ロールの中身・永続化・頭のホットスワップは cockpit.mjs の onSetRole が担う（責務境界: cockpit-server は
+      // ロールの中身を知らない）。未注入（S2.5 単体等）なら 503。
+      if (typeof onSetRole !== "function") {
+        sendJson(res, 503, { error: "role control not available" });
         return;
       }
       const body = await readJsonBody(req);
-      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 6 値は
-      // ここに直書きする（API の受理値/技術札は従来のワイヤ検証を保持する）。
-      // `resolveBrainIdentity` の import はこの検証表を置き換えるためではなく、下流の current public
-      // projection だけを canonical resolver から導出するための additive read-path である。2026-07-17
-      // 追撃で Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）がここへ追加された既存契約は変えない。2026-10-16 に
-      // GPT-5.5（"codex-55"）を外し、GPT-6.1 Sol / Claude Opus 5.5 を追加（brains.mjs と同じ値を保つ）。
-      if (
-        body.brain !== "claude" &&
-        body.brain !== "claude-opus-55" &&
-        body.brain !== "codex" &&
-        body.brain !== "codex-56-sol" &&
-        body.brain !== "codex-astra" &&
-        body.brain !== "codex-61-sol"
-      ) {
-        sendJson(res, 400, { error: "invalid brain" });
+      // トグル禁止・明示値のみ受理する（形はロールの id・中身の有無は onSetRole が答える）。
+      if (!isRoleId(body.role)) {
+        sendJson(res, 400, { error: "invalid role" });
         return;
       }
-      try {
-        await onSetBrain(body.brain);
-      } catch {
-        // best-effort（永続化 / dispose 失敗で操作を止めない・onSetVerbosity と同型の失敗寛容）。
+      // 場の途中でロールは替えない（stream-restructure.md §2.1）。場（Domain D）ができるまでは、耳が動いている間を
+      // 場の途中とみなして断る（名前・声・口数が配信の途中で替わらないように）。
+      if (earsState !== "stopped") {
+        sendJson(res, 409, { error: "耳が動いている間はロールを替えられない（Stop してから選ぶ）" });
+        return;
       }
+      /** @type {any} */
+      let result;
+      try {
+        result = await onSetRole(body.role);
+      } catch (error) {
+        result = { ok: false, reason: `ロールを選べない（${errMessage(error)}）` };
+      }
+      if (!result || result.ok !== true) {
+        sendJson(res, 400, { error: (result && typeof result.reason === "string" && result.reason) || "unknown role" });
+        return;
+      }
+      // 新しいロールの口数・話し始め・声の方式をサーバの現況に入れる（値の出どころはロール・設計 §5）。
+      if (fireScheduler && (result.verbosity === "quiet" || result.verbosity === "normal" || result.verbosity === "chatty")) {
+        fireScheduler.setVerbosity(result.verbosity);
+      }
+      if (result.speakStartMode === "classic" || result.speakStartMode === "speak-now") {
+        applySpeakStartMode(result.speakStartMode);
+      }
+      if (TTS_ENGINES.includes(result.ttsEngine)) ttsEngine = result.ttsEngine;
       broadcastState();
       sendJson(res, 200, snapshot());
       return;
@@ -2356,14 +2381,14 @@ export function createCockpitServer(options = {}) {
       // Name variants are handling-time providers. They share the current
       // registry identity with Whisper/public state and therefore switch
       // families without recreating the scheduler.
-      ...(currentBrainIdentityImpl
+      ...(currentRoleIdentityImpl
         ? {
             nameVariantsProvider: () => {
-              const identity = currentBrainIdentityImpl();
+              const identity = currentRoleIdentityImpl();
               return identity?.voiceCallVariants;
             },
             commentNameVariantsProvider: () => {
-              const identity = currentBrainIdentityImpl();
+              const identity = currentRoleIdentityImpl();
               return identity?.commentCallVariants;
             }
           }
@@ -2651,12 +2676,13 @@ export function createCockpitServer(options = {}) {
     if (commentReact) commentReact.reset();
   }
 
-  /** 今の頭の名前（判定の問いと会話のラベル用・snapshot の identity と同じ解決）。 */
+  /**
+   * 今のロールの名前（判定の問いと会話のラベル用・snapshot の identity と同じ解決）。配信の組み直し Domain A: 名前は
+   * ロールから引く（判定の文面は変えない・値の出どころだけ・設計 §5）。provider が無ければ既定（コーディ）。
+   */
   function currentSoulName() {
-    if (currentBrainIdentityImpl) return resolveModelIdentity(currentBrainIdentityImpl()?.id).canonicalName;
-    const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
-    return resolveBrainIdentity(rawBrain && typeof rawBrain === "object" ? /** @type {any} */ (rawBrain).brain : undefined)
-      .canonicalName;
+    if (currentRoleIdentityImpl) return normalizeModelIdentity(currentRoleIdentityImpl()).canonicalName;
+    return DEFAULT_MODEL_IDENTITY.canonicalName;
   }
 
   /** 判定ごとの記録を呼び出し側（cockpit.mjs のターミナル 1 行）へ渡す（本文は含めない・失敗寛容）。 */

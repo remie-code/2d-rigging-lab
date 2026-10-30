@@ -376,6 +376,9 @@ html, body { overflow: hidden; }
   font-size: 12px;
   flex-wrap: wrap;
 }
+/* 起動時の知らせ（配信の組み直し Domain A: ロールへの引っ越しの結果・ログのタブの上）。 */
+.startup-notices { padding: 0 0 10px; color: var(--muted); font-size: 12px; }
+.startup-notice { margin: 0 0 2px; }
 
 /* ── 一目の健康（ログのタブ）・死活の色 ── */
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }

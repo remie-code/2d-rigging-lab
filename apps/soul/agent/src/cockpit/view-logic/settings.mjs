@@ -28,7 +28,8 @@
  *  - requestErrorText         → 各 fetch catch の文言（:611 :629 :675 :693 :724 :748 :768 :794 :802 :809）
  *
  * 多頭化 Domain C（brain-swap-wave-plan.md §3）追加抽出:
- *  - brainPostErrorText → POST /api/brain 応答の失敗文言（audioDevicePostErrorText の写経・
+ *  - rolePostErrorText → POST /api/role 応答の失敗文言（配信の組み直し Domain A で旧 brainPostErrorText /
+ *    POST /api/brain から置き換え・audioDevicePostErrorText の写経・
  *    503=未注入・!ok="set failed: error"・成功は null）。
  *
  * 配信間記憶（記憶区画が settings-drawer に置かれるためここへ抽出。記憶の作り直し Wave 2 で ON/OFF と
@@ -45,7 +46,7 @@
  *  - compactThresholdSelection      → state snapshot の compaction.thresholdTokens を選択肢の値へ。
  *  - compactThresholdStatusLabel    → 「いま 20 万トークン（既定）」の表示文言。
  *  - COMPACT_THRESHOLD_NOTE         → Codex の頭のときだけ効く旨の短い説明。
- *  - compactThresholdPostErrorText  → POST /api/compact-threshold 応答の失敗文言（brainPostErrorText の写経）。
+ *  - compactThresholdPostErrorText  → POST /api/compact-threshold 応答の失敗文言（rolePostErrorText の写経）。
  *
  * Codex の fast（設定「頭脳・会話」タブ・①チャッピーの Codex の頭だけ・2026-10-27 合意）:
  *  - codexFastToggleView    → チェックボックスの状態（snapshot の codexFast・無ければ使えない）。
@@ -174,18 +175,19 @@ export function channelPostErrorText(res) {
 }
 
 /**
- * POST /api/brain 応答 → エラー文言（多頭化 Domain C・audioDevicePostErrorText の写経）。成功は null。
+ * POST /api/role 応答 → エラー文言（配信の組み直し Domain A・旧 POST /api/brain・audioDevicePostErrorText の写経）。
+ * 成功は null。耳が動いている間の 409・知らないロールの 400 はサーバの理由をそのまま出す。
  * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
  * @returns {string | null}
  */
-export function brainPostErrorText(res) {
-  return settingPostErrorText(res, "brain control not available");
+export function rolePostErrorText(res) {
+  return settingPostErrorText(res, "role control not available");
 }
 
 // ── 配信間記憶: 「今日を記録」と最後に記録した時刻の表示導出（settings-drawer「記憶」区画）─────
 
 /**
- * POST /api/memory-record 応答 → エラー文言（brainPostErrorText の写経）。成功は null。
+ * POST /api/memory-record 応答 → エラー文言（rolePostErrorText の写経）。成功は null。
  * サーバ側は記録失敗（②書き出し役・コミットの失敗を含む）を握って 200 を返す契約
  * （failure-tolerant）なので、ここが非 null を返すのは 503（未注入）等の配線レベルの失敗のみ。
  * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
@@ -283,7 +285,7 @@ export function compactThresholdStatusLabel(compaction) {
 }
 
 /**
- * POST /api/compact-threshold 応答 → エラー文言（brainPostErrorText の写経）。成功は null。
+ * POST /api/compact-threshold 応答 → エラー文言（rolePostErrorText の写経）。成功は null。
  * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
  * @returns {string | null}
  */
@@ -424,7 +426,7 @@ const REQUEST_ERROR_PREFIX = {
   channel: "channel error", //                       :768
   chatConnect: "chat connect error", //              :794
   chatDisconnect: "chat disconnect error", //        :802
-  brain: "brain error", //  多頭化 Domain C（POST /api/brain・audioDevice の写経）
+  role: "role error", //  配信の組み直し Domain A（POST /api/role・旧 POST /api/brain の "brain error"）
   memoryRecord: "memory record error", // 配信間記憶（POST /api/memory-record・audioDevice の写経）
   compactThreshold: "compaction threshold error", // 圧縮を始める大きさ（POST /api/compact-threshold・同型）
   codexFast: "codex fast error" // Codex の fast（POST /api/codex-fast・同型）

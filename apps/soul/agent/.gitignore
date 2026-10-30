@@ -56,3 +56,12 @@ session-usage/
 
 # 設定ファイルの手元の写し(ユーザーの会話指示の全文を含む・非コミット)
 cockpit-settings.local.json.bak*
+
+# ── ロールの置き場（配信の組み直し Domain A・非コミット）──────────────────────
+# roles/<role-id>/role.json と instructions.md（名前・性格の指示・声・モデル・しゃべり方・体）。アプリが保存する
+# 手元のデータであって成果物ではない（scope.md §18「アプリが保存しているデータが GitHub に載るのはおかしい」）。
+# roles.migrating-*/ は起動時の引っ越しの作業用フォルダ（書けたら roles/ へ名前を変える・途中で止まった残り）。
+# 引っ越しの前の写しは tmp/restructure-backups/ に置く（リポジトリの根の .gitignore の tmp/ で無視される）。
+# 先頭の / で apps/soul/agent/ 直下だけに留める（無いと src/roles/ のコードまで無視してしまう）。
+/roles/
+/roles.migrating-*/

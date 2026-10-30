@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 const COCKPIT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(COCKPIT_DIR, "ui");
 
-import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot } from "./ui/app.mjs";
+import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot, StartupNotices } from "./ui/app.mjs";
 import { TopBar, HealthLine, HealthStat, identityDisplayName, cockpitDocumentTitle, NEUTRAL_COCKPIT_TITLE } from "./ui/header.mjs";
 import { Feed, FeedRow, isStuckToBottom, STICK_THRESHOLD_PX } from "./ui/feed.mjs";
 import {
@@ -58,7 +58,6 @@ import { ConversationInstructionEditor } from "./ui/conversation-instruction-edi
 import { soulStatusView, selfFireToggleView, killSwitchView, bargeInToggleView } from "./view-logic/control.mjs";
 import { chatStatusView, channelStatusView } from "./view-logic/status.mjs";
 import { BRAIN_LABELS } from "./view-logic/health.mjs";
-import { conversationBrainIdentity } from "./view-logic/conversation-instruction.mjs";
 
 // ── (1) Node インポートスモーク（import 文自体が成功している時点で副作用ゼロの構造証明）──
 
@@ -374,6 +373,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     commentBusy: null, // コメント反応の合意 §2: scheduler 未生成なら null（speakStart と同型）。
     killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
     brain: null, // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
+    role: null, // 配信の組み直し Domain A: brain と同型の null 許容（roleStatus 未注入なら null）。
+    notices: [], // 配信の組み直し Domain A: 起動時の知らせ（無ければ空）。
     memory: null, // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
     compaction: null, // 圧縮の目安: memory と同型の null 許容（contextCompactionStatus 未注入なら null）。
     codexFast: null // ①の Codex の頭の fast: compaction と同型の null 許容（codexFastStatus 未注入なら null）。
@@ -390,6 +391,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     bargeIn: { enabled: false },
     killed: true,
     brain: { brain: "codex", credentialHealth: true },
+    role: { id: "chappy", displayName: "チャッピー", brain: "codex", body: true, roles: [{ id: "chappy", displayName: "チャッピー" }] },
+    notices: ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。"],
     memory: { lastRecordAtMs: 1721234567890, recording: false },
     compaction: { thresholdTokens: 200_000 },
     codexFast: { enabled: true, applicable: true, supported: true }
@@ -508,25 +511,36 @@ test("FeedRow vnode スモーク: 各行種が view-logic 導出済み文字列�
   assert.equal(texts({ kind: "unknown-kind" }), ""); // 未知 kind は何も描かない。
 });
 
-test("TopBar identity: サーバー提供の Cody/Chappy displayName を描き、欠落/未知は中立表示", () => {
+test("TopBar identity: サーバー提供のロールの名前（cody / chappy 以外も）を描き、形の違う・欠落は中立表示（配信の組み直し Domain A）", () => {
   const props = { ears: "listening", soul: "idle", warnings: [], quota: null, nowMs: 0 };
   assert.equal(identityDisplayName({ id: "cody", displayName: "こーでぃー" }), "こーでぃー");
   assert.equal(identityDisplayName({ id: "chappy", displayName: "チャッピー" }), "チャッピー");
+  // 名前はロールが持つので、cody / chappy の 2 組に限らない（形だけを確かめる）。
+  assert.equal(identityDisplayName({ id: "mio", displayName: "みお" }), "みお");
+  assert.equal(identityDisplayName({ id: "role-2", displayName: " 二人目 " }), "二人目");
   assert.equal(identityDisplayName(null), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "gpt", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "chappy", displayName: "stale" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "cody", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "Chappy", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "../x", displayName: "x" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "mio", displayName: "  " }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "mio", displayName: "あ".repeat(33) }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(identityDisplayName({ id: 1, displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(identityDisplayName({ id: "cody", displayName: 1 }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(collectText(TopBar({ ...props, identity: { id: "cody", displayName: "こーでぃー" } })).join("").includes("こーでぃー"), true);
-  assert.equal(collectText(TopBar({ ...props, identity: { id: "chappy", displayName: "チャッピー" } })).join("").includes("チャッピー"), true);
+  assert.equal(collectText(TopBar({ ...props, identity: { id: "mio", displayName: "みお" } })).join("").includes("みお"), true);
   assert.equal(collectText(TopBar({ ...props, identity: undefined })).join("").includes(NEUTRAL_COCKPIT_TITLE), true);
   assert.equal(cockpitDocumentTitle({ id: "cody", displayName: "こーでぃー" }), "こーでぃー — Soul Cockpit");
-  assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "チャッピー" }), "チャッピー — Soul Cockpit");
-  assert.equal(cockpitDocumentTitle({ id: "unknown", displayName: "GPT" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(cockpitDocumentTitle({ id: "cody", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(cockpitDocumentTitle({ id: "mio", displayName: "みお" }), "みお — Soul Cockpit");
+  assert.equal(cockpitDocumentTitle({ id: "Bad", displayName: "GPT" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(cockpitDocumentTitle(null), NEUTRAL_COCKPIT_TITLE);
+});
+
+test("StartupNotices vnode: 起動時の知らせ（ロールへの引っ越しの結果）をログのタブの上に行で出す・無ければ何も描かない", () => {
+  const vnode = StartupNotices({ notices: ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。", "設定ファイルの写し: C:/x"] });
+  assert.deepEqual(collectText(vnode), ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。", "設定ファイルの写し: C:/x"]);
+  assert.equal(StartupNotices({ notices: [] }), null);
+  assert.equal(StartupNotices({}), null);
+  const appSource = readFileSync(path.join(UI_DIR, "app.mjs"), "utf8");
+  assert.match(appSource, /<\$\{StartupNotices\} notices=\$\{settings\.notices\} \/>/);
 });
 
 test("HealthLine vnode スモーク（ログのタブ）: ランプ・死活・声の出力先が乗る", () => {
@@ -680,7 +694,6 @@ test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navig
 test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backdrop routes all prompt or proceed through one guard", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.match(source, /const requestEditorBack = .*runGuardedNavigation/);
-  assert.match(source, /const requestEditorBrain = .*runGuardedNavigation|runGuardedNavigation\(\(\) => setBrainSelected/);
   assert.match(source, /if \(ev\.key === "Escape"\)[\s\S]*?requestClose\(\)/);
   assert.match(source, /ev\.target === ev\.currentTarget\)[\s\S]*?requestClose\(\)/);
   assert.match(source, /closeRequestRef\.current = requestClose/);
@@ -705,66 +718,70 @@ test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backd
   assert.equal(settingsModalEventRoute({ eventType: "unknown", dirty: true, action: () => {}, onPrompt: () => {} }), null);
 });
 
-test("conversation identity seam: six editor brains consume only matching canonical active facts", () => {
-  assert.deepEqual(
-    ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"].map((brainId) => conversationBrainIdentity({ brainId })),
-    [null, null, null, null, null, null]
+test("Settings modal「頭脳・会話」: 頭脳の select はロールの select になり、snapshot の role から選択肢・POST /api/role → snapshot 反映（配信の組み直し Domain A）", () => {
+  const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
+  const brainPanel = source.slice(
+    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
+    source.indexOf('id="cockpit-settings-panel-memory"')
   );
-  for (const brainId of ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]) {
-    const canonical = { id: `canonical-${brainId}`, displayName: `Canonical ${brainId}` };
-    assert.deepEqual(conversationBrainIdentity({ brainId, activeBrainId: brainId, activeIdentity: canonical }), canonical);
-    assert.deepEqual(
-      conversationBrainIdentity({ brainId, activeBrainId: "claude", activeIdentity: canonical }),
-      brainId === "claude" ? canonical : null
-    );
-  }
-  const source = readFileSync(path.join(COCKPIT_DIR, "view-logic", "conversation-instruction.mjs"), "utf8");
-  assert.doesNotMatch(source, /CONVERSATION_BRAIN_IDENTITY_PROJECTIONS/);
+  const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
+  assert.match(listSide, /<label for="role-select">ロール<\/label>/);
+  assert.match(listSide, /id="role-select"[\s\S]*?options=\$\{roleOptionsView\(settings && settings\.role\)\}/);
+  assert.match(listSide, /class="btn-role-set"[^>]*onClick=\$\{onRoleSet\}/);
+  assert.doesNotMatch(source, /\/api\/brain|brain-select|BRAIN_OPTIONS/);
+  assert.match(
+    source,
+    /doFetch\("\/api\/role", \{[\s\S]*?body: JSON\.stringify\(\{ role \}\)[\s\S]*?rolePostErrorText\(res\)[\s\S]*?applySnapshot\(res\.j\)[\s\S]*?requestErrorText\("role", e\)/
+  );
+  // 会話指示の編集は今のロール（snapshot の role）だけ。
+  assert.match(source, /const currentRole = currentRoleView\(settings && settings\.role\);/);
+  assert.match(source, /conversationEditor\.save\(editorRoleId\)/);
 });
 
-test("conversation instruction editor vnode: six brain choices, editable body, readonly identity, no memory structure, and no dialog nesting", () => {
-  const seen = { back: false, edit: false, save: false, reset: false, brain: false };
+test("conversation instruction editor vnode: 今のロールの性格の指示を編集・ロールの名前とモデルは読むだけ・記憶の構造なし・dialog の入れ子なし（配信の組み直し Domain A）", () => {
+  const seen = { back: false, edit: false, save: false, reset: false };
   const vnode = ConversationInstructionEditor({
-    brainId: "codex",
-    brainLabel: "Codex (GPT-5.6 Terra)",
-    identity: { id: "chappy", displayName: "チャッピー" },
-    activeBrainId: "codex",
+    roleId: "chappy",
+    roleName: "チャッピー",
+    brainLabel: "GPT-6.1 Sol",
     state: { draft: "custom", status: "saved", dirty: false, isOverride: true, revision: 1 },
     onBack: () => { seen.back = true; },
     onEdit: () => { seen.edit = true; },
     onSave: () => { seen.save = true; },
-    onReset: () => { seen.reset = true; },
-    onBrainChange: () => { seen.brain = true; }
+    onReset: () => { seen.reset = true; }
   });
   const elements = collectElements(vnode);
   assert.equal(elements.some((node) => node.props && node.props.role === "dialog"), false);
-  const select = elements.find((node) => node.type === "select" && node.props.id === "conversation-instruction-brain");
-  assert.equal(select.props.value, "codex");
-  assert.deepEqual(elements.filter((node) => node.type === "option").map((node) => node.props.value), [
-    "claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"
-  ]);
+  assert.equal(elements.some((node) => node.type === "select"), false, "頭ごとの select は無い（今のロールだけ）");
   const textarea = elements.find((node) => node.type === "textarea");
   assert.equal(textarea.props.value, "custom");
   assert.equal(typeof textarea.props.onInput, "function");
+  assert.equal(textarea.props.disabled, false);
   const managed = elements.find((node) => node.props && node.props.class === "conversation-instruction-managed");
   assert.ok(managed);
-  assert.match(collectText(vnode).join(""), /チャッピー/);
+  const text = collectText(vnode).join("");
+  assert.match(text, /チャッピー/);
+  assert.match(text, /GPT-6\.1 Sol/);
+  assert.match(text, /このロールの保存済みの指示/);
   // 記憶の作り直し Wave 2: 起動時に記憶を載せないので、「記憶 N 件を搭載」の記憶構造の行は無い。
-  assert.doesNotMatch(collectText(vnode).join(""), /記憶|件を搭載/);
-  assert.match(collectText(vnode).join(""), /次のFireから反映/);
-  assert.match(collectText(vnode).join(""), /revision 1/);
-  assert.match(collectText(vnode).join(""), /読み取り専用/);
+  assert.doesNotMatch(text, /記憶|件を搭載/);
+  assert.match(text, /次のFireから反映/);
+  assert.match(text, /revision 1/);
+  assert.match(text, /読み取り専用/);
   const source = readFileSync(path.join(UI_DIR, "conversation-instruction-editor.mjs"), "utf8");
   assert.doesNotMatch(source, /memory.*text|memoryBody|transcript/i);
-  assert.deepEqual(seen, { back: false, edit: false, save: false, reset: false, brain: false });
+  assert.deepEqual(seen, { back: false, edit: false, save: false, reset: false });
+  // ロールが分からない間は書けない。
+  const unavailable = collectElements(ConversationInstructionEditor({ roleId: null, state: { draft: "", status: "idle" } }));
+  assert.equal(unavailable.find((node) => node.type === "textarea").props.disabled, true);
+  assert.ok(unavailable.filter((node) => node.type === "button" && /conversation-instruction-(save|reset)/.test(node.props.class)).every((b) => b.props.disabled === true));
 });
 
 test("conversation instruction editor vnode: 魂がいつも足す教えを案内し、本文を読むだけで見せる（編集の口は無い・Wave 3 仕上げ）", () => {
   const base = {
-    brainId: "codex",
+    roleId: "chappy",
+    roleName: "チャッピー",
     brainLabel: "Codex (GPT-5.6 Terra)",
-    identity: null,
-    activeBrainId: "codex",
     state: { draft: "custom", status: "saved", dirty: false, isOverride: true, revision: 1 },
     onEdit: () => {}
   };

@@ -13,8 +13,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { BRAINS, BRAIN_IDS, resolveBrainIdentity } from "./brains.mjs";
-import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
+import { BRAINS, BRAIN_IDS } from "./brains.mjs";
 
 const EXPECTED_IDS = ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"];
 const CODEX_IDS = ["codex", "codex-56-sol", "codex-astra", "codex-61-sol"];
@@ -31,32 +30,15 @@ test("brains: registry は Object.freeze されている（唯一の宣言テー
   }
 });
 
-test("brains: 6 brain entries bind to the exact frozen Cody/Chappy identities", () => {
-  assert.equal(BRAINS.claude.identity, MODEL_IDENTITIES.cody);
-  assert.equal(BRAINS["claude-opus-55"].identity, MODEL_IDENTITIES.cody);
-  for (const key of CODEX_IDS) {
-    assert.equal(BRAINS[key].identity, MODEL_IDENTITIES.chappy);
-  }
+test("brains: 頭は名前を持たない（配信の組み直し Domain A・名前はロールが持つ）", () => {
   for (const key of EXPECTED_IDS) {
-    assert.ok(Object.isFrozen(BRAINS[key].identity));
+    assert.equal(Object.prototype.hasOwnProperty.call(BRAINS[key], "identity"), false, key);
   }
-});
-
-test("brains: identity resolver preserves Cody fallback for unknown or absent persisted selections", () => {
-  assert.equal(resolveBrainIdentity("claude"), MODEL_IDENTITIES.cody);
-  assert.equal(resolveBrainIdentity("codex"), MODEL_IDENTITIES.chappy);
-  assert.equal(resolveBrainIdentity("claude-opus-55"), MODEL_IDENTITIES.cody);
-  assert.equal(resolveBrainIdentity("codex-56-sol"), MODEL_IDENTITIES.chappy);
-  assert.equal(resolveBrainIdentity("codex-astra"), MODEL_IDENTITIES.chappy);
-  assert.equal(resolveBrainIdentity("codex-61-sol"), MODEL_IDENTITIES.chappy);
   assert.equal(BRAINS["codex-astra"].label, "GPT-6 Astra");
   assert.equal(BRAINS["codex-61-sol"].label, "GPT-6.1 Sol");
   assert.equal(BRAINS["claude-opus-55"].label, "Claude (Opus 5.5)");
-  // 削除済みの GPT-5.5（保存済み設定に残り得る値）は未知値として Cody 既定へ倒れる。
+  // 削除済みの GPT-5.5（保存済み設定に残り得る値）は表に無い。
   assert.equal(BRAINS["codex-55"], undefined);
-  assert.equal(resolveBrainIdentity("codex-55"), DEFAULT_MODEL_IDENTITY);
-  assert.equal(resolveBrainIdentity(undefined), DEFAULT_MODEL_IDENTITY);
-  assert.equal(resolveBrainIdentity("removed-brain"), DEFAULT_MODEL_IDENTITY);
 });
 
 for (const key of EXPECTED_IDS) {

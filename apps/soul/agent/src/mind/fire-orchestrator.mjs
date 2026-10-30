@@ -167,7 +167,7 @@ import {
 } from "./barge-in.mjs";
 import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
-import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
+import { DEFAULT_MODEL_IDENTITY, normalizeModelIdentity } from "./model-identity.mjs";
 import { createFireTiming } from "./fire-latency.mjs";
 import { appendSoulSkills, loadSoulSkills } from "./soul-skills.mjs";
 import { performance } from "node:perf_hooks";
@@ -226,7 +226,11 @@ export const DEFAULT_CONVERSATION_INSTRUCTION_BODY = FIRE_SYSTEM_PROMPT_BODY;
 /** Backwards-friendly shorter alias for consumers of the profile resolver. */
 export const DEFAULT_CONVERSATION_INSTRUCTION = DEFAULT_CONVERSATION_INSTRUCTION_BODY;
 
-/** The only technical brain ids that may carry a conversation override. */
+/**
+ * The only technical brain ids that may carry a conversation override.
+ * 配信の組み直し Domain A: 会話指示はロールの instructions.md に移った。この頭ごとの上書きは古い設定ファイルのキー
+ * （conversationInstructions）を読む口と、ロールへの引っ越し（role-migration.mjs）でだけ使う。
+ */
 export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
   "claude",
   "claude-opus-55",
@@ -278,13 +282,12 @@ export function resolveConversationInstructionProfile(brainId, overrides = undef
  * @returns {string}
  */
 export function buildFireSystemPrompt(identity = DEFAULT_MODEL_IDENTITY, conversationInstruction = undefined) {
-  const resolved =
-    identity && typeof identity === "object" &&
-    (/** @type {any} */ (identity).id === "cody" || /** @type {any} */ (identity).id === "chappy")
-      ? MODEL_IDENTITIES[/** @type {"cody" | "chappy"} */ (/** @type {any} */ (identity).id)]
-      : DEFAULT_MODEL_IDENTITY;
+  // 配信の組み直し Domain A: 名前はロールが持つ。cody / chappy の表で引き直さず、形だけ確かめてそのまま使う
+  // （ロールの名前がほかの名前でも通る）。ローマ字が無ければ括弧ごと省く。
+  const resolved = normalizeModelIdentity(identity);
+  const latin = resolved.latinName ? `（${resolved.latinName}）` : "";
   const body = normalizeConversationInstruction(conversationInstruction) ?? DEFAULT_CONVERSATION_INSTRUCTION_BODY;
-  return `あなたの名前は${resolved.canonicalName}（${resolved.latinName}）です。${body}`;
+  return `あなたの名前は${resolved.canonicalName}${latin}です。${body}`;
 }
 
 /**

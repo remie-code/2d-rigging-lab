@@ -13,9 +13,10 @@
  *  - 各区画のエラー欄: devices-error（:168）→ マイク行 / channel-error（:177）→ Channel 行 /
  *    chat-error（:188）→ chat 行 / vision-error（:198）→ 視界行 / conversation-error（:212）は
  *    IA 再配置で分割 —— 音声出力系はここ（声の出力先行）・自発トグル系は運転バー（control-bar.mjs）。
- *  - 頭脳・会話（Domain C）: technical brain の選択/Set に加え、同じダイアログ内で
- *    conversation-instruction editor へ切り替える。編集本文だけを dedicated API へ保存し、
- *    identity は読み取り専用で表示する（記憶の構造の表示は記憶の作り直し Wave 2 で撤去）。頭脳の下に「圧縮を始める大きさ」（万トークンの select +
+ *  - 頭脳・会話（Domain C）: ロールの選択/Set（配信の組み直し Domain A で頭脳の選択から置き換え・POST /api/role・
+ *    耳が動いている間はサーバが断る）に加え、同じダイアログ内で conversation-instruction editor へ切り替える。
+ *    editor は今のロールの性格の指示（roles/<id>/instructions.md）だけを dedicated API へ保存し、ロールの名前と
+ *    モデルは読み取り専用で表示する（記憶の構造の表示は記憶の作り直し Wave 2 で撤去）。タブの組み直しは Domain E。頭脳の下に「圧縮を始める大きさ」（万トークンの select +
  *    Set・POST /api/compact-threshold → 保存と走っている compactor の差し替え = 次の確認から効く・既定 20 万の表示と
  *    Codex の頭のときだけ効く旨の説明。頭脳 select と同じ select + Set の流儀）。その下に「返事の速さ」の
  *    「Codex の fast」チェックボックス（POST /api/codex-fast → 次の返事から効く・①チャッピーの Codex の頭だけ。
@@ -74,7 +75,7 @@ import {
   TTS_ENGINE_OPTIONS,
   ttsEngineSelection,
   requestErrorText,
-  brainPostErrorText,
+  rolePostErrorText,
   memoryRecordPostErrorText,
   memoryStatusLabel,
   compactThresholdOptions,
@@ -91,19 +92,11 @@ import {
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
 import {
-  CONVERSATION_INSTRUCTION_BRAIN_IDS,
-  createConversationInstructionController
+  createConversationInstructionController,
+  currentRoleView,
+  roleOptionsView
 } from "../view-logic/conversation-instruction.mjs";
 import { ConversationInstructionEditor } from "./conversation-instruction-editor.mjs";
-
-/**
- * 頭脳 select の選択肢（多頭化 Domain C）。BRAIN_LABELS（view-logic/health.mjs）から機械的に組み立てる
- * ——唯一の宣言（id→表示ラベル）は health.mjs 側に集約し、ここでは複製しない。cockpit-server.mjs が
- * 「頭 id 2 値を直書きする」責務境界規律と同型（settings-drawer.mjs は src/mind/brains.mjs を import
- * しない）。
- * @type {Array<{ value: string; label: string }>}
- */
-const BRAIN_OPTIONS = Object.keys(BRAIN_LABELS).map((id) => ({ value: id, label: BRAIN_LABELS[id] }));
 
 /**
  * chevron 付き select（hooks 非使用・vnode 走査テスト対象）。option 列は view-logic の
@@ -295,9 +288,9 @@ export function CockpitSettingsModal({
   const [audioOptions, setAudioOptions] = useState(/** @type {Array<{value:string;label:string}>} */ ([]));
   const [audioSelected, setAudioSelected] = useState("");
   const [audioError, setAudioError] = useState(""); // conversation-error :212 の音声出力系。
-  // ── 頭脳（多頭化 Domain C・声の出力先行の写経）──
-  const [brainSelected, setBrainSelected] = useState("claude");
-  const [brainError, setBrainError] = useState("");
+  // ── ロール（配信の組み直し Domain A・旧 頭脳の select・声の出力先行の写経）──
+  const [roleSelected, setRoleSelected] = useState("");
+  const [roleError, setRoleError] = useState("");
   // ── 圧縮を始める大きさ（頭脳区画の写経・select の値はトークン数の文字列）──
   const [compactSelected, setCompactSelected] = useState(String(COMPACT_THRESHOLD_DEFAULT_TOKENS));
   const [compactError, setCompactError] = useState("");
@@ -321,8 +314,10 @@ export function CockpitSettingsModal({
   // Reading the version makes the controller's injected change hook an
   // explicit render dependency while keeping the state itself outside JSX.
   void conversationEditorVersion;
-  const conversationEditorState = conversationEditor.getState(brainSelected);
-  const currentSnapshotBrain = settings && settings.brain && settings.brain.brain;
+  // 会話指示の編集は今のロール（snapshot の role）だけ。
+  const currentRole = currentRoleView(settings && settings.role);
+  const editorRoleId = currentRole ? currentRole.id : "";
+  const conversationEditorState = conversationEditor.getState(editorRoleId);
   const [closeWarning, setCloseWarning] = useState(false);
   const pendingNavigationRef = useRef(/** @type {(() => void) | null} */ (null));
   const dialogRef = useRef(/** @type {HTMLElement | null} */ (null));
@@ -352,7 +347,7 @@ export function CockpitSettingsModal({
   };
 
   const discardCurrentConversationDraft = () => {
-    conversationEditor.discard(brainSelected);
+    conversationEditor.discard(editorRoleId);
     if (typeof onDiscardDraft === "function") onDiscardDraft();
   };
 
@@ -385,24 +380,17 @@ export function CockpitSettingsModal({
 
   const requestEditorBack = () => runGuardedNavigation(() => setConversationEditorOpen(false), "back");
 
-  const requestEditorBrain = (/** @type {any} */ ev) => {
-    const nextBrain = ev && ev.target ? ev.target.value : "";
-    if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(nextBrain)) return;
-    if (nextBrain === brainSelected) return;
-    runGuardedNavigation(() => setBrainSelected(nextBrain), "brain");
-  };
+  // ロールの select の現況同期（旧 頭脳 select の現況同期）: snapshot.role.id（起動時の現況 / POST /api/role 後の
+  // 反映）を select の表示へ入れる（未知値・欠落は変えない）。
+  useEffect(() => {
+    if (editorRoleId) setRoleSelected(editorRoleId);
+  }, [editorRoleId]);
 
   useEffect(() => {
-    if (CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(currentSnapshotBrain) && !conversationEditorOpen) {
-      setBrainSelected(currentSnapshotBrain);
+    if (editorRoleId && conversationEditorOpen && !conversationEditorState.loaded && conversationEditorState.status === "idle") {
+      conversationEditor.load(editorRoleId);
     }
-  }, [currentSnapshotBrain, conversationEditorOpen]);
-
-  useEffect(() => {
-    if (conversationEditorOpen && !conversationEditorState.loaded && conversationEditorState.status === "idle") {
-      conversationEditor.load(brainSelected);
-    }
-  }, [conversationEditorOpen, brainSelected, conversationEditorState.loaded, conversationEditorState.status]);
+  }, [conversationEditorOpen, editorRoleId, conversationEditorState.loaded, conversationEditorState.status]);
 
   useEffect(() => {
     if (!isDraftDirty && closeWarning) {
@@ -542,18 +530,6 @@ export function CockpitSettingsModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
-
-  // 頭脳 select の現況同期（多頭化 Domain C）: snapshot.brain.brain（起動時の現況 / POST /api/brain 後の
-  // 反映）が既知値（2026-07-17 追撃で claude/codex の 2 値から Codex 側 2 頭を追加・2026-10-16 時点で 6 値）なら select 表示へ
-  // 反映する。マイク/視界/出力先と違い一覧取得 API を持たない固定選択肢のため、select の初期値・以後の
-  // 現況表示はこの effect が担う（未知値/欠落は変更しない）。既知値の集合は BRAIN_OPTIONS（health.mjs の
-  // BRAIN_LABELS 由来）と同じ語彙——ここも「頭 id を直書きする」責務境界規律に合わせ、BRAIN_OPTIONS の
-  // value 集合をそのまま使う（複製の decay を避ける）。
-  const brainCurrent = settings && settings.brain ? settings.brain.brain : null;
-  useEffect(() => {
-    if (BRAIN_OPTIONS.some((o) => o.value === brainCurrent)) setBrainSelected(/** @type {string} */ (brainCurrent));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brainCurrent]);
 
   // 圧縮を始める大きさの現況同期（頭脳 select と同型）: snapshot.compaction.thresholdTokens（起動時の保存値 /
   // POST /api/compact-threshold 後の反映）が変わったら select 表示へ反映する（未注入・不正は変えない）。
@@ -712,28 +688,32 @@ export function CockpitSettingsModal({
       .catch((/** @type {unknown} */ e) => setAudioError(requestErrorText("audioDevice", e))); // :692-693
   };
 
-  /** 頭脳の Set（多頭化 Domain C・onAudioSet の写経）。POST /api/brain → 成功で snapshot 反映。 */
-  const onBrainSet = () => {
-    const brain = brainSelected || "claude";
-    setBrainError("");
-    doFetch("/api/brain", {
+  /**
+   * ロールの Set（配信の組み直し Domain A・旧 頭脳の Set・onAudioSet の写経）。POST /api/role → 成功で snapshot 反映。
+   * 耳が動いている間はサーバが 409 で断る（エラー欄に理由を出す）。
+   */
+  const onRoleSet = () => {
+    const role = roleSelected;
+    if (!role) return;
+    setRoleError("");
+    doFetch("/api/role", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ brain })
+      body: JSON.stringify({ role })
     })
       .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
       .then((/** @type {any} */ res) => {
-        const err = brainPostErrorText(res);
+        const err = rolePostErrorText(res);
         if (err != null) {
-          setBrainError(err);
+          setRoleError(err);
           return;
         }
-        applySnapshot(res.j); // snapshot（brain: {brain, credentialHealth}）で状態を更新。
+        applySnapshot(res.j); // snapshot（role・brain）で状態を更新。
       })
-      .catch((/** @type {unknown} */ e) => setBrainError(requestErrorText("brain", e)));
+      .catch((/** @type {unknown} */ e) => setRoleError(requestErrorText("role", e)));
   };
 
-  /** 圧縮を始める大きさの Set（onBrainSet の写経）。POST /api/compact-threshold → 成功で snapshot 反映。 */
+  /** 圧縮を始める大きさの Set（onRoleSet の写経）。POST /api/compact-threshold → 成功で snapshot 反映。 */
   const onCompactThresholdSet = () => {
     const tokens = Number(compactSelected);
     setCompactError("");
@@ -966,41 +946,39 @@ export function CockpitSettingsModal({
           <div class="cockpit-settings-prompt-slot" data-prompt-editor-slot>
             ${promptEditorSlot || html`
               <${ConversationInstructionEditor}
-                brainId=${brainSelected}
-                brainLabel=${BRAIN_LABELS[brainSelected] || "unknown"}
-                identity=${settings && settings.brain ? settings.brain.identity : null}
-                activeBrainId=${currentSnapshotBrain || null}
+                roleId=${editorRoleId || null}
+                roleName=${currentRole ? currentRole.displayName : null}
+                brainLabel=${currentRole && currentRole.brain ? BRAIN_LABELS[currentRole.brain] || "unknown" : "unknown"}
                 state=${conversationEditorState}
                 soulSkills=${conversationEditor.getSoulSkills()}
-                onBrainChange=${requestEditorBrain}
                 onBack=${requestEditorBack}
-                onEdit=${(/** @type {any} */ ev) => conversationEditor.edit(brainSelected, ev && ev.target ? ev.target.value : "")}
-                onSave=${() => conversationEditor.save(brainSelected)}
-                onReset=${() => conversationEditor.reset(brainSelected)}
+                onEdit=${(/** @type {any} */ ev) => conversationEditor.edit(editorRoleId, ev && ev.target ? ev.target.value : "")}
+                onSave=${() => conversationEditor.save(editorRoleId)}
+                onReset=${() => conversationEditor.reset(editorRoleId)}
               />
             `}
           </div>
         ` : html`
-          <h3>頭脳</h3>
+          <h3>ロール</h3>
           <div class="drawer-row">
-            <label for="brain-select">頭脳</label>
+            <label for="role-select">ロール</label>
             <${SettingsSelect}
-              id="brain-select"
-              className="drawer-select brain-select"
-              options=${BRAIN_OPTIONS}
-              value=${brainSelected}
-              onChange=${(/** @type {any} */ ev) => setBrainSelected(ev && ev.target ? ev.target.value : "")}
+              id="role-select"
+              className="drawer-select role-select"
+              options=${roleOptionsView(settings && settings.role)}
+              value=${roleSelected}
+              onChange=${(/** @type {any} */ ev) => setRoleSelected(ev && ev.target ? ev.target.value : "")}
             />
-            <button class="btn-brain-set" type="button" onClick=${onBrainSet}>Set</button>
+            <button class="btn-role-set" type="button" onClick=${onRoleSet}>Set</button>
           </div>
           <div class="drawer-note">
             <span class="brain-status">${brainLabel(settings && settings.brain)}</span>
             <span class="brain-credential-status">${brainCredentialHealthLabel(settings && settings.brain)}</span>
-            <span class="err">${brainError}</span>
+            <span class="err">${roleError}</span>
           </div>
-          <button class="conversation-instruction-open" type="button" onClick=${() => {
+          <button class="conversation-instruction-open" type="button" disabled=${!editorRoleId} onClick=${() => {
             setConversationEditorOpen(true);
-            conversationEditor.load(brainSelected);
+            conversationEditor.load(editorRoleId);
           }}>
             会話指示を編集
           </button>

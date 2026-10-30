@@ -107,6 +107,11 @@ export function settingsFromSnapshot(s) {
     // 多頭化 Domain C: 頭脳の現況（{brain, credentialHealth}）。audioDevice/channel と同型の null 許容
     // （brainStatus 未注入なら null）。
     brain: (s && s.brain) ?? null,
+    // 配信の組み直し Domain A: ロールの現況（{ id, displayName, brain, body, roles }）。brain と同型の null 許容
+    // （roleStatus 未注入なら null）。
+    role: (s && s.role) ?? null,
+    // 配信の組み直し Domain A: 起動時の知らせ（ロールへの引っ越しの結果の行・ログのタブに出す）。無ければ空。
+    notices: s && Array.isArray(s.notices) ? s.notices.filter((/** @type {unknown} */ line) => typeof line === "string") : [],
     // 配信間記憶: 記憶の現況（{lastRecordAtMs, recording}）。brain と同型の null 許容
     // （memoryStatus 未注入なら null）。
     memory: (s && s.memory) ?? null,
@@ -117,6 +122,21 @@ export function settingsFromSnapshot(s) {
     // null 許容（codexFastStatus 未注入なら null）。
     codexFast: (s && s.codexFast) ?? null
   };
+}
+
+/**
+ * 起動時の知らせ（配信の組み直し Domain A: ロールへの引っ越しの結果）をログのタブの上に出す（hooks 非使用）。
+ * 引っ越しが起きた起動だけサーバが行を渡す（無ければ何も描かない）。
+ * @param {{ notices?: ReadonlyArray<string> }} props
+ */
+export function StartupNotices({ notices }) {
+  const lines = Array.isArray(notices) ? notices : [];
+  if (lines.length === 0) return null;
+  return html`
+    <div class="startup-notices" role="note" aria-label="起動時の知らせ">
+      ${lines.map((line, i) => html`<p key=${i} class="startup-notice">${line}</p>`)}
+    </div>
+  `;
 }
 
 /**
@@ -368,6 +388,7 @@ export function App(props) {
           />`}
         logSlot=${(/** @type {boolean} */ active) => html`
           <${HealthLine} ears=${ears} health=${health} audioDevice=${settings.audioDevice} stt=${stt} tts=${tts} device=${device} />
+          <${StartupNotices} notices=${settings.notices} />
           <${Feed} rows=${feed.rows} usageNote=${usageNote} discarded=${discarded} uptimeText=${uptimeText} active=${active} />`}
       />
     </div>

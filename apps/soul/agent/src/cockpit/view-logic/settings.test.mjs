@@ -15,7 +15,7 @@ import {
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
   requestErrorText,
-  brainPostErrorText,
+  rolePostErrorText,
   memoryRecordPostErrorText,
   memoryStatusLabel,
   STT_ENGINE_OPTIONS,
@@ -122,8 +122,8 @@ test("設定 POST の失敗文言: 503 は各未注入文言・!ok は set faile
     "audio device control not available"
   );
   assert.equal(channelPostErrorText({ status: 503, ok: false, j: null }), "channel control not available");
-  assert.equal(brainPostErrorText({ status: 503, ok: false, j: null }), "brain control not available"); // 多頭化 Domain C。
-  for (const fn of [visionTargetPostErrorText, audioDevicePostErrorText, channelPostErrorText, brainPostErrorText]) {
+  assert.equal(rolePostErrorText({ status: 503, ok: false, j: null }), "role control not available"); // 配信の組み直し Domain A（旧 brain）。
+  for (const fn of [visionTargetPostErrorText, audioDevicePostErrorText, channelPostErrorText, rolePostErrorText]) {
     assert.equal(fn({ status: 500, ok: false, j: { error: "boom" } }), "set failed: boom");
     assert.equal(fn({ status: 500, ok: false, j: {} }), "set failed: error"); // error 欠落。
     assert.equal(fn({ status: 200, ok: true, j: {} }), null); // 成功はエラーなし。
@@ -166,7 +166,7 @@ test("requestErrorText: 各 fetch catch の prefix（現 cockpit.html の catch 
   assert.equal(requestErrorText("channel", e), "channel error: Error: net"); //                :768
   assert.equal(requestErrorText("chatConnect", e), "chat connect error: Error: net"); //       :794
   assert.equal(requestErrorText("chatDisconnect", e), "chat disconnect error: Error: net"); // :802
-  assert.equal(requestErrorText("brain", e), "brain error: Error: net"); // 多頭化 Domain C。
+  assert.equal(requestErrorText("role", e), "role error: Error: net"); // 配信の組み直し Domain A（旧 brain）。
 });
 
 // ── 配信間記憶: 「今日を記録」と最後に記録した時刻の表示導出（settings-drawer「記憶」区画） ─────

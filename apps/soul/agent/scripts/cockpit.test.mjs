@@ -1,11 +1,14 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   parseCockpitArgs,
   openCockpitBrowser,
-  buildBrainSessionSystemPrompt,
+  buildRoleSessionSystemPrompt,
   createLazyChannel,
   createSessionProxy,
   createInstructionRevisionController,
@@ -15,7 +18,9 @@ import {
   createSelfFireHooks,
   createBargeInHooks,
   createVerbosityHooks,
-  createBrainHooks,
+  createRoleHooks,
+  resolveRoleVoice,
+  applyRoleHotwords,
   createChatSourceHooks,
   createSttEngineHooks,
   createTtsEngineHooks,
@@ -40,6 +45,15 @@ import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
 import { createFireOrchestrator, resolveConversationInstructionProfile } from "../src/mind/fire-orchestrator.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
 import { listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
+import { MODEL_IDENTITIES } from "../src/mind/model-identity.mjs";
+import {
+  createRoleInstructionStore,
+  normalizeRole,
+  readRole,
+  roleFromIdentity,
+  writeRole,
+  writeRoleInstructions
+} from "../src/roles/role-store.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
 // 実 SDK / 実 TTS / 実器 / 実マイクは使わない（fake connectImpl のみ）。
@@ -1233,131 +1247,226 @@ test("createVerbosityHooks: settings.setVerbosityMode が throw しても onSetV
   assert.doesNotThrow(() => hooks.onSetVerbosity("chatty"));
 });
 
-// ── createBrainHooks（多頭化 Domain B: 頭脳選択の settings 橋渡し・createVerbosityHooks の写経）─────
+// ── createRoleHooks（配信の組み直し Domain A: 頭の選択 → ロールの選択・旧 createBrainHooks の置き換え）─────────
+//
+//  ロールの置き場は OS temp のフォルダ（本物の apps/soul/agent/roles/ には触れない）。設定は最小の fake。
 
-/** fake settings（cockpit-settings-store と同型の getBrainChoice/setBrainChoice を持つ最小 fake）。 */
-function makeFakeBrainSettings(initial = null) {
-  let current = initial;
+/** @param {any} t */
+function makeRolesDir(t) {
+  const dir = mkdtempSync(join(tmpdir(), "cockpit-roles-test-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+/** fake settings（getRoleChoice / setRoleChoice / getBrainChoice・cockpit-settings-store と同じ形）。 */
+function makeFakeRoleSettings({ roleChoice = null, brainChoice = null } = {}) {
+  const state = { roleChoice, brainChoice, writes: /** @type {Array<string | null>} */ ([]) };
   return {
-    getBrainChoice: () => current,
-    setBrainChoice: (choice) => {
-      current = choice;
-    }
+    state,
+    getRoleChoice: () => state.roleChoice,
+    setRoleChoice: (/** @type {string | null} */ id) => {
+      state.roleChoice = id;
+      state.writes.push(id);
+    },
+    getBrainChoice: () => state.brainChoice
   };
 }
 
-test("createBrainHooks: 未記憶（null）なら既定 \"claude\" にフォールバックする（無退行）", { timeout: 5000 }, () => {
-  const settings = makeFakeBrainSettings(null);
-  const hooks = createBrainHooks(settings);
-  assert.equal(hooks.resolveInitialBrain(), "claude");
+const MIO_ROLE = Object.freeze({
+  id: "mio",
+  name: { canonical: "ミオ", display: "みお", latin: "Mio" },
+  nameHints: { whisperPrompt: "みお、ミオ。", voiceCallVariants: ["ミオ"], commentCallVariants: ["Mio", "ミオ"], hotwords: ["ミオ"] },
+  brain: "codex-astra",
+  voice: { engine: "elevenlabs", aivisSpeaker: 1234, elevenLabsVoiceId: "voice-mio" },
+  verbosity: "chatty",
+  speakStartMode: "classic",
+  body: false
 });
 
-test("createBrainHooks: defaultChoice を明示指定できる", { timeout: 5000 }, () => {
-  const settings = makeFakeBrainSettings(null);
-  const hooks = createBrainHooks(settings, "codex");
-  assert.equal(hooks.resolveInitialBrain(), "codex");
+/** @param {string} dir */
+function writeChappyAndCody(dir) {
+  writeRole({ dir, role: roleFromIdentity(MODEL_IDENTITIES.chappy, { brain: "codex-61-sol", verbosity: "quiet" }) });
+  writeRole({ dir, role: roleFromIdentity(MODEL_IDENTITIES.cody, { brain: "claude-opus-55", speakStartMode: "classic" }) });
+}
+
+test("createRoleHooks: 起動時は roleChoice のロール・無ければ今までの頭の系統（GPT 系 → chappy・それ以外 → cody）・それも無ければ最初のロール", (t) => {
+  const dir = makeRolesDir(t);
+  writeChappyAndCody(dir);
+  assert.equal(createRoleHooks({ rolesDir: dir, settings: makeFakeRoleSettings({ roleChoice: "chappy" }) }).currentId(), "chappy");
+  assert.equal(createRoleHooks({ rolesDir: dir, settings: makeFakeRoleSettings({ brainChoice: "codex-astra" }) }).currentId(), "chappy");
+  assert.equal(createRoleHooks({ rolesDir: dir, settings: makeFakeRoleSettings({ brainChoice: "claude-opus-55" }) }).currentId(), "cody");
+  assert.equal(createRoleHooks({ rolesDir: dir, settings: makeFakeRoleSettings() }).currentId(), "cody", "未記憶は今までの既定（Claude/Cody）");
+  // 覚えたロールが置き場に無ければ系統で選ぶ。
+  assert.equal(
+    createRoleHooks({ rolesDir: dir, settings: makeFakeRoleSettings({ roleChoice: "gone", brainChoice: "codex" }) }).currentId(),
+    "chappy"
+  );
+  const onlyMio = makeRolesDir(t);
+  writeRole({ dir: onlyMio, role: MIO_ROLE });
+  const hooks = createRoleHooks({ rolesDir: onlyMio, settings: makeFakeRoleSettings({ brainChoice: "codex" }) });
+  assert.equal(hooks.currentId(), "mio");
+  assert.equal(hooks.isPersisted(), true);
+  assert.deepEqual(hooks.list(), [{ id: "mio", displayName: "みお", brain: "codex-astra" }]);
 });
 
-test("createBrainHooks: 記憶済みの既知2頭（claude/codex）は defaultChoice より優先される", { timeout: 5000 }, () => {
-  const settingsClaude = makeFakeBrainSettings("claude");
-  assert.equal(createBrainHooks(settingsClaude, "codex").resolveInitialBrain(), "claude");
-  const settingsCodex = makeFakeBrainSettings("codex");
-  assert.equal(createBrainHooks(settingsCodex, "claude").resolveInitialBrain(), "codex");
+test("createRoleHooks: ロールが 1 つも無ければ手元だけの既定（こーでぃーの名前）で動き、置き場には書かない", (t) => {
+  const root = makeRolesDir(t);
+  const rolesDir = join(root, "roles");
+  const hooks = createRoleHooks({ rolesDir, settings: makeFakeRoleSettings() });
+  assert.equal(hooks.currentId(), "cody");
+  assert.equal(hooks.isPersisted(), false);
+  assert.equal(hooks.identity().canonicalName, "コーディ");
+  hooks.roleSettings.setVerbosityMode("chatty");
+  assert.equal(hooks.current().verbosity, "chatty", "手元の値は替わる");
+  assert.equal(existsSync(rolesDir), false, "roles/ を作らない（次の起動で引っ越しが走れる）");
+  assert.deepEqual(hooks.knownIds(), []);
 });
 
-test("createBrainHooks: registry 駆動（2026-07-17 追撃・2026-10-16 更新）— 追加頭（claude-opus-55/codex-56-sol/codex-astra/codex-61-sol）も BRAIN_IDS 経由で優先される", { timeout: 5000 }, () => {
-  const settingsOpus55 = makeFakeBrainSettings("claude-opus-55");
-  assert.equal(createBrainHooks(settingsOpus55, "claude").resolveInitialBrain(), "claude-opus-55");
-  const settingsSol61 = makeFakeBrainSettings("codex-61-sol");
-  assert.equal(createBrainHooks(settingsSol61, "claude").resolveInitialBrain(), "codex-61-sol");
-  const settingsSol = makeFakeBrainSettings("codex-56-sol");
-  assert.equal(createBrainHooks(settingsSol, "claude").resolveInitialBrain(), "codex-56-sol");
-  const settingsAstra = makeFakeBrainSettings("codex-astra");
-  assert.equal(createBrainHooks(settingsAstra, "claude").resolveInitialBrain(), "codex-astra");
+test("createRoleHooks: select は置き場から読み直して今のロールにし roleChoice に覚える・読めなければ ok:false で今のまま", (t) => {
+  const dir = makeRolesDir(t);
+  writeChappyAndCody(dir);
+  const settings = makeFakeRoleSettings();
+  const hooks = createRoleHooks({ rolesDir: dir, settings });
+  assert.equal(hooks.currentId(), "cody");
+  // 起動のあとで足したロールも、選べば読める（一覧も読み直す）。
+  writeRole({ dir, role: MIO_ROLE });
+  const selected = hooks.select("mio");
+  assert.equal(selected.ok, true);
+  assert.equal(hooks.currentId(), "mio");
+  assert.deepEqual(settings.state.writes, ["mio"]);
+  assert.deepEqual(hooks.knownIds(), ["chappy", "cody", "mio"]);
+  const missing = hooks.select("nobody");
+  assert.equal(missing.ok, false);
+  assert.match(/** @type {any} */ (missing).reason, /ロール nobody を読めない/);
+  assert.equal(hooks.currentId(), "mio");
+  assert.deepEqual(settings.state.writes, ["mio"]);
+  // roleChoice の書き込みに失敗しても選択は止めない。
+  const throwing = { ...makeFakeRoleSettings(), setRoleChoice: () => { throw new Error("disk full"); } };
+  const hooks2 = createRoleHooks({ rolesDir: dir, settings: throwing });
+  assert.equal(hooks2.select("chappy").ok, true);
 });
 
-test("createBrainHooks: 記憶済みの未知値は defaultChoice にフォールバックする（防御的）", { timeout: 5000 }, () => {
-  const settings = makeFakeBrainSettings("gpt");
-  const hooks = createBrainHooks(settings, "claude");
-  assert.equal(hooks.resolveInitialBrain(), "claude");
+test("createRoleHooks: 口数・話し始め・声の方式は今のロールから引き、hooks の set はロールの role.json に書く（値の出どころ = ロール）", (t) => {
+  const dir = makeRolesDir(t);
+  writeChappyAndCody(dir);
+  const settings = makeFakeRoleSettings({ roleChoice: "chappy" });
+  const hooks = createRoleHooks({ rolesDir: dir, settings });
+  const verbosity = createVerbosityHooks(hooks.roleSettings);
+  const speakStart = createSpeakStartHooks({ ...hooks.roleSettings, getBackchannelMinIntervalSec: () => 3 });
+  const tts = createTtsEngineHooks(hooks.roleSettings);
+  assert.equal(verbosity.resolveInitialVerbosity(), "quiet");
+  assert.equal(speakStart.resolveInitialSpeakStartMode(), "speak-now");
+  assert.equal(speakStart.resolveBackchannelMinIntervalMs(), 3000, "相槌の間隔は設定ファイルのまま");
+  assert.equal(tts.resolveInitialTtsEngine(), "aivis");
+  verbosity.onSetVerbosity("chatty");
+  speakStart.onSetSpeakStartMode("classic");
+  tts.onSetTtsEngine("elevenlabs");
+  const onDisk = /** @type {any} */ (readRole({ dir, id: "chappy" })).role;
+  assert.equal(onDisk.verbosity, "chatty");
+  assert.equal(onDisk.speakStartMode, "classic");
+  assert.equal(onDisk.voice.engine, "elevenlabs");
+  // ほかのロールは触らない。
+  assert.equal(/** @type {any} */ (readRole({ dir, id: "cody" })).role.verbosity, "normal");
+  // ロールを替えれば、そのロールの値が出てくる。
+  hooks.select("cody");
+  assert.equal(createVerbosityHooks(hooks.roleSettings).resolveInitialVerbosity(), "normal");
+  assert.equal(createSpeakStartHooks(hooks.roleSettings).resolveInitialSpeakStartMode(), "classic");
+  // 書き込みに失敗しても操作は止めない。
+  const failing = createRoleHooks({ rolesDir: dir, settings, writeRoleImpl: () => { throw new Error("disk full"); } });
+  assert.doesNotThrow(() => createVerbosityHooks(failing.roleSettings).onSetVerbosity("quiet"));
 });
 
-test("createBrainHooks: 削除済みの GPT-5.5（記憶済み \"codex-55\"）は既定へ倒れる（2026-10-16）", { timeout: 5000 }, () => {
-  const settings = makeFakeBrainSettings("codex-55");
-  assert.equal(createBrainHooks(settings).resolveInitialBrain(), "claude");
-  assert.equal(createBrainHooks(settings, "codex").resolveInitialBrain(), "codex");
+test("名前はロールから引ける: cody / chappy 以外の名前でも、名前の一文・whisper の手がかり・呼ばれ方がそのまま通る", (t) => {
+  const dir = makeRolesDir(t);
+  writeRole({ dir, role: MIO_ROLE });
+  const hooks = createRoleHooks({ rolesDir: dir, settings: makeFakeRoleSettings({ roleChoice: "mio" }) });
+  const identity = hooks.identity();
+  assert.equal(identity.id, "mio");
+  assert.equal(identity.displayName, "みお");
+  assert.equal(identity.whisperPrompt, "みお、ミオ。");
+  assert.deepEqual([...identity.voiceCallVariants], ["ミオ"]);
+  const prompt = buildRoleSessionSystemPrompt(identity, "ミオの性格の指示", "");
+  assert.equal(prompt, "あなたの名前はミオ（Mio）です。ミオの性格の指示");
+  // 指示が無ければ既定の本文、教えは固定の部分として後ろに付く。
+  const plain = buildRoleSessionSystemPrompt(identity);
+  assert.ok(plain.startsWith("あなたの名前はミオ（Mio）です。あなたは配信の相方です。"));
+  assert.ok(plain.endsWith(loadSoulSkills()));
 });
 
-test("createBrainHooks: onSetBrain は settings.setBrainChoice へ橋渡しし・次回 resolveInitialBrain に反映する", { timeout: 5000 }, () => {
-  const settings = makeFakeBrainSettings(null);
-  const hooks = createBrainHooks(settings, "claude");
-  hooks.onSetBrain("codex");
-  assert.equal(settings.getBrainChoice(), "codex");
-  assert.equal(hooks.resolveInitialBrain(), "codex");
-});
-
-test("createBrainHooks: settings.setBrainChoice が throw しても onSetBrain は握って続行する", { timeout: 5000 }, () => {
-  const settings = {
-    getBrainChoice: () => null,
-    setBrainChoice: () => {
-      throw new Error("disk full");
-    }
-  };
-  const hooks = createBrainHooks(settings);
-  assert.doesNotThrow(() => hooks.onSetBrain("codex"));
-});
-
-test("buildBrainSessionSystemPrompt: all six brains resolve the canonical self-name", { timeout: 5000 }, () => {
-  const expected = new Map([
-    ["claude", "コーディ（Cody）"],
-    ["claude-opus-55", "コーディ（Cody）"],
-    ["codex", "チャッピー（Chappy）"],
-    ["codex-56-sol", "チャッピー（Chappy）"],
-    ["codex-astra", "チャッピー（Chappy）"],
-    ["codex-61-sol", "チャッピー（Chappy）"]
-  ]);
-  for (const [brainId, selfName] of expected) {
-    const prompt = buildBrainSessionSystemPrompt(brainId);
-    assert.ok(prompt.startsWith(`あなたの名前は${selfName}です。`), brainId);
-    assert.match(prompt, /相方/);
-  }
-  // Persisted/defensive unknown values retain Claude/Cody fallback.
-  assert.ok(buildBrainSessionSystemPrompt("unknown").startsWith("あなたの名前はコーディ（Cody）です。"));
-});
-
-test("buildBrainSessionSystemPrompt: override follows identity, and no memory is appended (記憶の作り直し Wave 2)", { timeout: 5000 }, () => {
-  const prompt = buildBrainSessionSystemPrompt("codex-56-sol", {
-    "codex-56-sol": "custom conversation body"
-  });
-  assert.ok(prompt.indexOf("あなたの名前はチャッピー（Chappy）です。") >= 0);
-  assert.ok(prompt.indexOf("あなたの名前はチャッピー（Chappy）です。") < prompt.indexOf("custom conversation body"));
-  // 会話指示の後ろには魂の教え（`<recall>` の使い方・Wave 3）だけが続き、記憶の節は足さない。
-  assert.ok(prompt.endsWith(`custom conversation body
-
-${loadSoulSkills()}`), "会話指示の後ろは魂の教えだけ");
-  assert.doesNotMatch(prompt, /これまでの配信で起きたことの記憶/);
-  // 教えを渡さなければ、会話指示で終わる（名前 + 会話指示）。
-  assert.ok(buildBrainSessionSystemPrompt("codex-56-sol", { "codex-56-sol": "custom conversation body" }, "").endsWith("custom conversation body"));
-});
-
-test("buildBrainSessionSystemPrompt: 6 つの頭すべてに魂の教え（<recall> の使い方）が固定の部分として付き、会話指示を上書きしても消えない（記憶の作り直し Wave 3）", { timeout: 5000 }, () => {
+test("buildRoleSessionSystemPrompt: cody / chappy の名前は今までと同じ一文・指示を上書きしても教えは消えない（記憶の作り直し Wave 3）", () => {
   const teaching = loadSoulSkills();
   assert.match(teaching, /<recall 頼みごと>/);
-  for (const brainId of ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]) {
-    const plain = buildBrainSessionSystemPrompt(brainId);
-    assert.ok(plain.endsWith(teaching), `${brainId}: 既定の会話指示`);
-    const overridden = buildBrainSessionSystemPrompt(brainId, { [brainId]: "まったく別の会話指示" });
-    assert.ok(overridden.includes("まったく別の会話指示"), `${brainId}: 上書きが効く`);
-    assert.ok(overridden.endsWith(teaching), `${brainId}: 上書きしても教えは残る`);
-    assert.ok(overridden.startsWith("あなたの名前は"), `${brainId}: 名前の一文が先頭`);
+  for (const [identity, selfName] of [
+    [MODEL_IDENTITIES.cody, "コーディ（Cody）"],
+    [MODEL_IDENTITIES.chappy, "チャッピー（Chappy）"]
+  ]) {
+    const plain = buildRoleSessionSystemPrompt(identity);
+    assert.ok(plain.startsWith(`あなたの名前は${selfName}です。`));
+    assert.ok(plain.endsWith(teaching));
+    const overridden = buildRoleSessionSystemPrompt(identity, "まったく別の会話指示");
+    assert.ok(overridden.includes("まったく別の会話指示"));
+    assert.ok(overridden.endsWith(teaching), "上書きしても教えは残る");
+    assert.doesNotMatch(overridden, /これまでの配信で起きたことの記憶/);
   }
+  // 形の壊れた名前は既定（コーディ）。
+  assert.ok(buildRoleSessionSystemPrompt({ id: "x" }).startsWith("あなたの名前はコーディ（Cody）です。"));
+});
+
+test("会話指示の口: 今のロールの instructions.md に書き、知らないロールは isKnownId で断る（配信の組み直し Domain A）", (t) => {
+  const dir = makeRolesDir(t);
+  writeChappyAndCody(dir);
+  writeRoleInstructions({ dir, id: "chappy", text: "チャッピーの指示" });
+  const roleHooks = createRoleHooks({ rolesDir: dir, settings: makeFakeRoleSettings({ roleChoice: "chappy" }) });
+  const revision = createInstructionRevisionController();
+  const hooks = createConversationInstructionHooks(
+    createRoleInstructionStore({ dir, knownIds: () => roleHooks.knownIds() }),
+    () => roleHooks.currentId(),
+    revision
+  );
+  assert.equal(hooks.isKnownId("chappy"), true);
+  assert.equal(hooks.isKnownId("mio"), false);
+  assert.equal(hooks.getProfile().body, "チャッピーの指示", "既定は今のロール");
+  assert.equal(hooks.getProfile("cody").hasOverride, false);
+  assert.equal(hooks.save("cody", "こーでぃーの指示"), true);
+  assert.equal(revision.getRevision(), 1);
+  assert.equal(readFileSync(join(dir, "cody", "instructions.md"), "utf8"), "こーでぃーの指示");
+  assert.equal(hooks.reset("cody"), true);
+  assert.equal(revision.getRevision(), 2);
+  assert.equal(hooks.getProfile("cody").hasOverride, false);
+  assert.throws(() => hooks.save("mio", "x"), /unknown role/);
+  assert.equal(revision.getRevision(), 2, "書けなければ revision は進まない");
+  // 置き場の口が isKnown を持たなければ通す（形の確かめは API）。
+  const legacy = createConversationInstructionHooks({ getConversationInstructionProfile: () => ({}) }, () => "x");
+  assert.equal(legacy.isKnownId("anything"), true);
+});
+
+test("resolveRoleVoice: --speaker はロールの話者を上書きし、無ければロールの値・それも無ければ既定（undefined）・ElevenLabs の声の id はロールから", () => {
+  const role = normalizeRole("mio", MIO_ROLE);
+  assert.deepEqual(resolveRoleVoice(role, {}), { speaker: 1234, voiceId: "voice-mio" });
+  assert.deepEqual(resolveRoleVoice(role, { speaker: "999" }), { speaker: "999", voiceId: "voice-mio" });
+  const plain = roleFromIdentity(MODEL_IDENTITIES.chappy);
+  assert.deepEqual(resolveRoleVoice(plain, {}), { speaker: undefined, voiceId: undefined });
+  assert.deepEqual(resolveRoleVoice(plain, parseCockpitArgs(["--speaker", "42"])), { speaker: "42", voiceId: undefined });
+});
+
+test("applyRoleHotwords: ロールの hotwords があればそれ（空 = なし）・null なら設定ファイルか既定のまま", () => {
+  const local = { threads: 2, preRollMs: 200, silencePadMs: 300, hotwords: ["チャッピー", "コーディ"], hotwordsScore: 1.5 };
+  assert.deepEqual(applyRoleHotwords(local, normalizeRole("mio", MIO_ROLE)).hotwords, ["ミオ"]);
+  assert.equal(applyRoleHotwords(local, normalizeRole("mio", MIO_ROLE)).threads, 2);
+  assert.equal(applyRoleHotwords(local, roleFromIdentity(MODEL_IDENTITIES.cody)), local);
+  assert.deepEqual(applyRoleHotwords(local, roleFromIdentity(MODEL_IDENTITIES.cody, { hotwords: [] })).hotwords, []);
 });
 
 // ── 頭の切替 × in-flight（不変条件の固定・brain-swap.md §9 (a')）──────────────────────────────
 //
 //  main() の session/currentBrain/ensureFireResources/onSetBrain 配線と同型の最小ハーネスで、実 read-path
 //  コード（createSessionProxy = cockpit.mjs の実体）を通して「切替は accepted Fire snapshot を乱さず、
-//  次の ask 境界で新頭へ置換される」不変条件を固定する。
+//  次の ask 境界で新頭へ置換される」不変条件を固定する。配信の組み直し Domain A: 切替はロールの選択（onSetRole）に
+//  なり、名前はロールから引く。ここでは頭の系統に合わせたロールの名前（GPT 系 = チャッピー）で指示を組む。
+
+/** @param {string} brain */
+const promptForBrain = (brain) =>
+  buildRoleSessionSystemPrompt(brain.startsWith("codex") ? MODEL_IDENTITIES.chappy : MODEL_IDENTITIES.cody);
 
 for (const targetBrain of ["codex", "codex-astra"]) {
 test(`brain 切替×in-flight: ${targetBrain} accepted session survives the setting write and is replaced at the next Fire`, { timeout: 5000 }, async () => {
@@ -1378,7 +1487,7 @@ test(`brain 切替×in-flight: ${targetBrain} accepted session survives the sett
     /** @type {any} */
     const head = {
       brain,
-      systemPrompt: buildBrainSessionSystemPrompt(brain),
+      systemPrompt: promptForBrain(brain),
       disposed: false,
       ask: (/** @type {string} */ input) => {
         if (brain === "claude" && pendingClaude) {
@@ -1437,7 +1546,7 @@ test(`brain 切替×in-flight: ${targetBrain} accepted session survives the sett
   await Promise.resolve();
   assert.deepEqual(created, ["claude"]);
   const claudeHead = session;
-  assert.equal(claudeHead.systemPrompt, buildBrainSessionSystemPrompt("claude"));
+  assert.equal(claudeHead.systemPrompt, promptForBrain("claude"));
   const configuredPlayer = player;
   assert.equal(playerCreations, 1);
 
@@ -1453,7 +1562,7 @@ test(`brain 切替×in-flight: ${targetBrain} accepted session survives the sett
   assert.deepEqual(disposed, ["claude"]);
   assert.deepEqual(created, ["claude", targetBrain]);
   assert.equal(next.replyText, `${targetBrain}:hi`);
-  assert.equal(session.systemPrompt, buildBrainSessionSystemPrompt(targetBrain));
+  assert.equal(session.systemPrompt, promptForBrain(targetBrain));
   assert.equal(player, configuredPlayer, "brain swap must not reconstruct the configured TTS player");
   assert.equal(player.ttsConfig, ttsConfig, "brain swap must preserve TTS base URL/speaker config");
   assert.equal(playerCreations, 1, "brain swap must not create a second TTS dependency");
@@ -1465,7 +1574,7 @@ test(`brain 切替×in-flight: ${targetBrain} accepted session survives the sett
   const reverse = await proxy.ask("back");
   assert.deepEqual(disposed, ["claude", targetBrain]);
   assert.equal(reverse.replyText, "claude:back");
-  assert.equal(session.systemPrompt, buildBrainSessionSystemPrompt("claude"));
+  assert.equal(session.systemPrompt, promptForBrain("claude"));
   assert.deepEqual(created, ["claude", targetBrain, "claude"]);
   assert.equal(player, configuredPlayer);
   assert.equal(playerCreations, 1);
@@ -1549,7 +1658,10 @@ test("conversation instruction revision: production session seam reuses, replace
     });
   const makeSession = () => {
     const index = sessions.length;
-    const systemPrompt = buildBrainSessionSystemPrompt(currentBrain, overrides);
+    const systemPrompt = buildRoleSessionSystemPrompt(
+      MODEL_IDENTITIES.chappy,
+      resolveConversationInstructionProfile(currentBrain, overrides).body
+    );
     const head = {
       index,
       systemPrompt,
@@ -2295,6 +2407,44 @@ test("createVoiceEngineManager: aivis を作り・同じ種類の Start は使�
   assert.equal(mgr.current(), null);
   // キーは status の通知に載らない。
   assert.equal(JSON.stringify(statuses).includes(FAKE_TTS_KEY), false);
+});
+
+test("createVoiceEngineManager: 声（話者・声の id）が替われば種類が同じでも engine を作り直す（配信の組み直し Domain A・voiceKey）", { timeout: 5000 }, () => {
+  const f = makeFakeVoiceFactory();
+  let voice = { speaker: 7, voiceId: undefined };
+  const mgr = createVoiceEngineManager({
+    createEngine: f.createEngine,
+    loadApiKey: () => ({ ok: true, apiKey: FAKE_TTS_KEY }),
+    aivisDeps: () => ({ ttsBaseUrl: "http://aivis.test", speaker: voice.speaker }),
+    elevenLabsDeps: () => ({ readingClient: { marker: "reading" }, ...(voice.voiceId ? { voiceId: voice.voiceId } : {}) }),
+    voiceKey: () => JSON.stringify(voice)
+  });
+  assert.deepEqual(mgr.prepare("aivis"), { ok: true });
+  const first = f.made[0].engine;
+  // 声が同じなら使い回す（今までと同じ）。
+  assert.deepEqual(mgr.prepare("aivis"), { ok: true });
+  assert.equal(f.made.length, 1);
+  // 話者が替われば（ロールを替えた）古い engine を dispose して、新しい話者で作り直す。
+  voice = { speaker: 1234, voiceId: undefined };
+  assert.deepEqual(mgr.prepare("aivis"), { ok: true });
+  assert.equal(first.disposed, true);
+  assert.equal(f.made.length, 2);
+  assert.equal(f.made[1].deps.speaker, 1234);
+  // Start より前の Fire（ensure）も、声が替わっていれば作り直す。
+  voice = { speaker: 1234, voiceId: "voice-b" };
+  const ensured = mgr.ensure("aivis");
+  assert.equal(f.made.length, 3);
+  assert.equal(ensured, f.made[2].engine);
+  assert.equal(f.made[1].engine.disposed, true);
+  assert.equal(mgr.ensure("aivis"), ensured, "同じ声なら ensure は今の engine");
+  // ElevenLabs の声の id も同じ（替われば作り直し・deps に voiceId が載る）。
+  assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+  assert.equal(f.made[3].deps.voiceId, "voice-b");
+  voice = { speaker: 1234, voiceId: "voice-c" };
+  assert.deepEqual(mgr.prepare("elevenlabs"), { ok: true });
+  assert.equal(f.made.length, 5);
+  assert.equal(f.made[4].deps.voiceId, "voice-c");
+  mgr.dispose();
 });
 
 test("createVoiceEngineManager: engine の onStatus を今の engine の分だけ流す（作り直した古い engine の通知は捨てる）", { timeout: 5000 }, () => {

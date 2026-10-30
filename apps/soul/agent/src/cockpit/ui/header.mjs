@@ -29,25 +29,25 @@ import { killSwitchView } from "../view-logic/control.mjs";
 
 /**
  * Current public identity is supplied by the server. The UI validates the
- * frozen wire shape only; it never derives a soul name from a technical brain
- * id. Invalid/missing values intentionally fall back to a neutral label so a
- * previous identity cannot leak while state is unavailable.
+ * wire shape only; it never derives a soul name from a technical brain id.
+ * 配信の組み直し Domain A: 名前はロールが持つので、cody / chappy の 2 組の許可リストはやめ、形
+ * （id がロールの id の形・見せる名前が空でない 32 字までの文字列）だけを確かめる。Invalid/missing values
+ * intentionally fall back to a neutral label so a previous identity cannot leak while state is unavailable.
+ * ロールの id の形は model-identity.mjs の ROLE_ID_PATTERN の写し（ui は mind を import しない決まり）。
  */
-const IDENTITY_PAIRS = Object.freeze([
-  Object.freeze({ id: "cody", displayName: "こーでぃー" }),
-  Object.freeze({ id: "chappy", displayName: "チャッピー" })
-]);
+const ROLE_ID_SHAPE = /^[a-z][a-z0-9-]{0,31}$/;
+const DISPLAY_NAME_MAX_CHARS = 32;
 export const NEUTRAL_COCKPIT_TITLE = "Soul Cockpit";
 
 /** @param {unknown} identity @returns {string} */
 export function identityDisplayName(identity) {
   if (!identity || typeof identity !== "object") return NEUTRAL_COCKPIT_TITLE;
   const candidate = /** @type {{ id?: unknown; displayName?: unknown }} */ (identity);
-  const isExactPair = IDENTITY_PAIRS.some(
-    (pair) => pair.id === candidate.id && pair.displayName === candidate.displayName
-  );
-  if (!isExactPair) return NEUTRAL_COCKPIT_TITLE;
-  return /** @type {string} */ (candidate.displayName);
+  if (typeof candidate.id !== "string" || !ROLE_ID_SHAPE.test(candidate.id)) return NEUTRAL_COCKPIT_TITLE;
+  if (typeof candidate.displayName !== "string") return NEUTRAL_COCKPIT_TITLE;
+  const displayName = candidate.displayName.trim();
+  if (displayName.length === 0 || [...displayName].length > DISPLAY_NAME_MAX_CHARS) return NEUTRAL_COCKPIT_TITLE;
+  return displayName;
 }
 
 /** @param {unknown} identity @returns {string} */
