@@ -15,6 +15,8 @@
 | [research/soul-inventory-2026-10.md](research/soul-inventory-2026-10.md) | 棚卸し: 今の魂の耳(1 本前提)・話者ラベル(3 値)・口(器が必須)・判定(配信の語が直書き)の差し替え点 |
 | [research/layer-classification-2026-10.md](research/layer-classification-2026-10.md) | 仕分け: 今の魂の機能を体験・ロール・芯・入口出口に振り分けた表、固い結び目、どの層にも入らないもの(場・名簿・操作する人など)、今のロールの置き場 |
 | [research/cockpit-today-2026-10.md](research/cockpit-today-2026-10.md) | 今の操縦席を配信者の目で: 起動から終わりまでの流れ、画面とタブごとの全操作(保存先・効く時・層の候補)、操縦席の外の作業、引っかかり、文書とのずれ |
+| [research/probe-repo-inventory-2026-10.md](research/probe-repo-inventory-2026-10.md) | 受信の試しのための棚卸し: 特区憲章の条文、試しのスクリプトの前例、鍵の読み方、依存の入れ方、ログの決まりの散らばり |
+| [research/probe-external-2026-10.md](research/probe-external-2026-10.md) | 受信の試しのための外部調査: Windows + Node 24 で入る版、復号失敗の数え方、#11653 の今、名前の取り方、ビープの流し方、プライバシーポリシーの義務 |
 
 ## 2. Current State Summary
 
@@ -28,7 +30,7 @@
 
 1. 進め方は決定(scope §15): 受信の試し → 配信の組み直し → Discord を足す。
 2. ユーザーが [probe-setup.md](probe-setup.md) に沿って Bot と鍵を用意する。
-3. 受信の試しの計画を立てる。設計から先は /context-check を通してから。
+3. 受信の試しの決めごとは scope §16。置き場・依存・修正を当てるか・プライバシーポリシーをユーザーに確かめてから Gnome に頼む。設計から先は /context-check を通してから。
 
 ## 4. Unresolved Questions
 
