@@ -135,6 +135,8 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   （開き直せば `GET /api/state` で復元）。
 - **サーバ**（`src/cockpit/cockpit-server.mjs`・Domain A）: HTTP 静的配信 + 制御 API（デバイス列挙 / 耳 start
   /stop / 状態）+ SSE ライブチャネル。**127.0.0.1 限定**（非 loopback host は構築時に throw・認証なし）。
+  （※ 配信の組み直し（2026-10-31）で、耳の Start / Stop は「配信を始める / 終える」= `POST /api/stream/start`・
+  `/api/stream/stop` に替わった。`/api/ears/start`・`/api/ears/stop` は後方互換の別名。下の「配信の組み直し」節を参照。）
 - **デバイス選択の永続化**（`src/cockpit/cockpit-settings-store.mjs`）: 選んだマイクを
   `cockpit-settings.local.json`（.gitignore 済み・**非コミット**）に記憶し次回の初期選択に使う。
   読み書き失敗は握って続行（起動を止めない）。
@@ -156,7 +158,10 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   busy 状態機械（idle/thinking/speaking・busy 中の fire は無視）。
 - **fire 有効の操縦席起動**（`scripts/cockpit.mjs`・Domain B）: Channel URL は **操縦席（ブラウザ）の
   Channel 欄から入力**するのが標準（S3 追撃 domain-c・「CLI を触らせない」思想の徹底）。`--channel` は
-  **後方互換の初期値**として残る:
+  **後方互換の初期値**として残る（※ 配信の組み直し（2026-10-31）からの今の形: 器の URL の欄は「準備・設定」→
+  「配信の準備」の器（Channel）で、ロールに体があるときだけ出る。`--channel` を渡しても起動時には何もつながず、頭の
+  セッションと器の接続は「配信を始める」で作る（下の eager 生成・初回 Fire 時の接続の記述は当時のもの）。体のない
+  ロールは器を使わない。下の「配信の組み直し」節を参照）:
 
   ```
   # 標準: --channel なしで起動し、ブラウザの Channel 欄に URL を入れて Fire を有効化（URL は記憶される）
@@ -349,6 +354,9 @@ MediaPlayer 化・途中停止+出力デバイス指定）**・**barge-in（VAD 
 - **★ 耳を起動した状態で Connect する**（重要）: 合流先の転写バッファは耳パイプライン所有ゆえ、
   **マイク（耳）未起動ではコメントが合流できず発火しない**（`chatBufferAbsent` ゴースト行）。cohost は
   どのみち声も拾うので「マイクを Start してから Live chat を Connect」が素直な運用。
+  （※ 配信の組み直し（2026-10-31）からの今の形: YouTube の欄は「準備・設定」→「配信の準備」。この起動で入れた
+  （欄を離れたら保存 = `POST /api/chat/source`）・Connect した URL は「配信を始める」がつなぎ、前回の起動から欄に
+  残っているだけの URL はつながない。場を開いてから URL を入れて Connect してもよい。「配信を終える」で畳む。）
 - **実疎通（テスト配信でコメントを拾って返す）は人間ゲートの領分**（機械テストは全 fake・実 YouTube への
   HTTP は 1 バイトも踏まない）。手順は
   `discussion/ai-cohost/implementation/waves/s7/human-gate-procedure.md`・followup は
@@ -422,6 +430,9 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
 - **頭の選び方**: 配信前に操縦席（⚙ 設定引き出し）の「頭脳」区画で選ぶ（`Claude (Opus 4.8)` /
   `Claude (Opus 5.5)` / `Codex (GPT-5.6 Terra)` / `Codex (GPT-5.6 Sol)` / `GPT-6 Astra` / `GPT-6.1 Sol`
   の 6 頭・`POST /api/brain`。GPT-5.5 は 2026-10-16 に削除し、保存済みの選択は既定の Claude へ倒れる）。
+  （※ 配信の組み直し（2026-10-31）で `POST /api/brain` と「頭脳」区画は無くなった。頭（動かすモデル）はロールの持ち物で、
+  「準備・設定」→「ロール」のタブでロールを選ぶ（`POST /api/role`）か、今のロールのモデルを直す（`POST /api/role/edit`）。
+  どちらも場が閉じている間だけ。下の「配信の組み直し」節を参照。）
   **配信前選択が本線**——「魂を起動し、
   LLM を選び、動作確認をして、配信を開始する」の正のフローどおり、配信中の差し替えは運用外。
 - **頭の表**（`src/mind/brains.mjs`）: `BRAINS` registry が唯一の宣言箇所（id・表示札・create・
@@ -452,9 +463,10 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
 2. `src/mind/brains.mjs` の `BRAINS` registry へ 1 項目足す（`{id, label, create, credentialPath}`）。
 3. サブスク枠認証ガードが要るなら `src/mind/env-guard.mjs` に provider 別の sibling 関数を足す
    （`assertSubscriptionAuthEnvOpenAI` と同型）。
-4. 操縦席側（`src/cockpit/ui/settings-drawer.mjs` の「頭脳」区画の select・
-   `src/cockpit/view-logic/health.mjs` の `BRAIN_LABELS`・`src/cockpit/cockpit-server.mjs` の
-   `POST /api/brain` 妥当性検証）に頭 id を追記する。cockpit 層は責務境界により `brains.mjs` を
+4. 操縦席側（`src/cockpit/view-logic/health.mjs` の `BRAIN_LABELS`。ロールのタブのモデルの select
+   （`src/cockpit/view-logic/role.mjs` の `ROLE_MODEL_OPTIONS`）はここから作る）に頭 id を追記する（配信の組み直しで旧
+   「頭脳」区画と `POST /api/brain` は無くなった。ロールのモデルの確かめは魂側の `src/roles/role-store.mjs` が
+   `brains.mjs` の `BRAIN_IDS` で行う）。cockpit 層は責務境界により `brains.mjs` を
    import しない（id・表示札を各層が直書きする規律・verbosity の quiet/normal/chatty と同じ）ため、
    `BRAINS` registry が唯一の正で、cockpit 層はそれと**同じ値**を保つ責任を負う。
 5. **ローカルファイルしか読めない頭（画像を `local_image` でしか受けない等）を足す場合**、Codex
@@ -517,7 +529,8 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
   （「記憶なしで起動」の直感どおり・止水栓）。切替は頭脳切替と同じ「現セッションを dispose→null にし、
   次の発火から新しい仮面（記憶あり/なし）が効く」ホットスワップ。
   ON に戻すと直近ダイジェストを読み直して再搭載する。
-- **記憶の主権はファイルシステム**: `apps/soul/agent/memories/*.md`（1 配信 1 ファイル・
+- **記憶の主権はファイルシステム**（※ 記憶の作り直しで形が変わり、配信の組み直し（2026-10-31）から記憶のフォルダは
+  ロールごとの `apps/soul/agent/memories/<role-id>/`（git もロールごと）。以下は当時の記録）: `apps/soul/agent/memories/*.md`（1 配信 1 ファイル・
   `.gitignore` 済み・コミットしない）に人間可読 Markdown で書く。読める・直せる・消せる——
   気に入らない記憶はエディタで開いて直接編集するか、ファイルごと消せばよい（UI に「記憶の編集」
   機能は無い・ファイルシステムが正）。
@@ -528,3 +541,27 @@ IA に再設計した。UX の正は `discussion/ai-cohost/implementation/screen
   `discussion/ai-cohost/implementation/orchestration/stream-memory-wave-plan.md` /
   `stream-memory-inventory.md`。wave 記録・followup 台帳は
   `discussion/ai-cohost/implementation/waves/stream-memory/`。
+
+#### 配信の組み直し: ロール・場・体なしの口（2026-10-31）
+
+設計の正本は `discussion/ai-cohost/architecture/stream-restructure.md`、体験は
+`discussion/ai-cohost/discord-vc/stream-experience-sketch.md`。上の節の Start / Stop・`/api/brain`・Channel 欄・
+`--channel` の先充填・`memories/` 直下の記述は当時のもので、今の形は次のとおり。
+
+- **ロール**（`src/roles/role-store.mjs`・置き場 `apps/soul/agent/roles/<role-id>/`（.gitignore 済み）の `role.json` と
+  `instructions.md`）: 名前・名前の手がかり・動かすモデル（頭）・性格の指示・声（方式・話者・声の id）・口数・話し始め・
+  体（器を使うか）を持つ。操縦席の「準備・設定」→「ロール」のタブで選ぶ（`POST /api/role`）・直す（`POST /api/role/edit`）・
+  今のロールを写して作る（`POST /api/role/new`）。性格の指示は `/api/conversation-instructions/:roleId`。
+  場が閉じている間だけ（場の途中は 409）。口数・話し始めの口（`POST /api/verbosity`・`/api/speak-start`）も同じく場の途中は 409。
+- **場**（「配信を始める / 終える」・`POST /api/stream/start`・`/api/stream/stop`。`/api/ears/*` は後方互換の別名）:
+  始めるでロールを固め、場の記録を作り直し、耳・目・声 → 頭のセッション → 体があれば器 → YouTube の順に起こす。
+  器につながらなければ場は開かない。YouTube はこの起動で入れた（`POST /api/chat/source`）・Connect した URL へつなぎ、
+  前回の起動から欄に残っているだけの URL はつながない（つながらなくても場は開く）。終えるで畳み、記憶の最後の保存を
+  待つ（画面に「記録中」）。Ctrl+C も場が開いていれば同じ道を通る。手動の発火と「今日を記録」は場が開いている間だけ。
+  マイク・文字起こしは場が閉じている間だけ替えられる。
+- **体なしの口**: 体のないロールは器を使わず、手元の再生器だけで鳴らす（表情のタグは剥がして捨てる）。
+- **記憶**: ロールごとの `apps/soul/agent/memories/<role-id>/`（git もロールごと・`src/memory/memory-store.mjs`）。
+- **起動時の引っ越し**（1 回だけ・`src/roles/role-migration.mjs`）: 前の設定からロール（`roles/`）を作り、`memories/` の
+  直下の記憶を `memories/chappy/` へ移す。移す前の写しは `apps/soul/agent/tmp/restructure-backups/restructure-<日時>/`。
+- **画面**: 「準備・設定」のタブは配信の準備 / ロール / 運転 / 記憶 / ログの 5 つ。器（Channel）の欄はロールに体が
+  あるときだけ出る。

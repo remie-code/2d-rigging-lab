@@ -612,7 +612,7 @@ test("createLazyChannel.connect: 今の URL でつないでおく（つながっ
 
 // ── 3. YouTube ───────────────────────────────────────────────────────────
 
-test("配信を始める: 保存してある前回の YouTube の URL だけではつなぎにいかない（この起動で場を開く前に Connect したものだけ・配信の組み直し Domain E）", async () => {
+test("配信を始める: 前回の起動から欄に残っているだけの YouTube の URL（保存値の読み込みだけ）にはつなぎにいかない（配信の組み直し 仕上げ）", async () => {
   const v = makeVenue();
   const chat = makeChat(v.events);
   const { server, url } = await startServer(v, {
@@ -622,19 +622,129 @@ test("配信を始める: 保存してある前回の YouTube の URL だけで�
   try {
     const before = await state(url);
     assert.equal(before.chat.source, "https://youtube.example/old-live", "欄には前回の URL が戻る（今のまま）");
+    assert.equal(before.chat.enteredThisBoot, false, "この起動ではまだ入れていない");
     const started = await post(url, "/api/stream/start", { device: "Mic" });
     assert.equal(started.status, 200);
     assert.equal(started.json.stream.phase, "open");
-    assert.equal(started.json.chat.connected, false, "保存した URL だけでは開くときにつながない");
+    assert.equal(started.json.chat.connected, false, "保存値だけでは開くときにつながない");
     assert.equal(chat.record.created, 0, "前回の URL へつなぎにいかない");
     // 場を開いたあとで Connect すればつながる（ふだんの流れ・scope §19）。
     const connected = await post(url, "/api/chat/connect", { source: "https://youtube.example/today" });
     assert.equal(connected.json.chat.connected, true);
-    // 終えると畳むので、次の場には持ち込まない（前の配信の URL へ毎回つなぎにいかない）。
-    await post(url, "/api/stream/stop");
-    const again = await post(url, "/api/stream/start", { device: "Mic" });
-    assert.equal(again.json.chat.connected, false, "前の場で Connect した器官は次の場に持ち込まない");
+    assert.equal(connected.json.chat.enteredThisBoot, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("配信を始める: この起動で入れた（POST /api/chat/source で保存した）YouTube の URL へ、始めるでつなぐ（器のあと・Connect は要らない）", async () => {
+  const v = makeVenue({ roleRef: { current: { id: "chappy", name: { canonical: "チャッピー" }, body: true } } });
+  const chat = makeChat(v.events);
+  /** @type {Array<string | null>} */
+  const persisted = [];
+  let saved = /** @type {string | null} */ ("https://youtube.example/old-live");
+  const { server, url } = await startServer(v, {
+    chatClientFactory: chat.factory,
+    chatSourceStatus: () => ({ source: saved }),
+    onSetChatSource: (/** @type {string | null} */ s) => {
+      persisted.push(s);
+      saved = s;
+    }
+  });
+  try {
+    const entered = await post(url, "/api/chat/source", { source: "  https://youtube.example/today  " });
+    assert.equal(entered.status, 200);
+    assert.deepEqual(persisted, ["https://youtube.example/today"], "保存する（trim 済み・次の起動で欄に戻る）");
+    assert.equal(entered.json.chat.source, "https://youtube.example/today");
+    assert.equal(entered.json.chat.enteredThisBoot, true);
+    assert.equal(entered.json.chat.connected, false, "入れただけではつながない（つなぐのは配信を始める）");
+    assert.equal(chat.record.created, 0);
+    v.events.length = 0;
+    const started = await post(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(started.status, 200);
+    assert.equal(started.json.stream.phase, "open");
+    assert.equal(started.json.chat.connected, true, "この起動で入れた URL へつなぐ");
+    assert.deepEqual(chat.record.sources, ["https://youtube.example/today"]);
+    const order = v.events.filter((e) => e === "channel.connect" || e.startsWith("chat.start"));
+    assert.deepEqual(order, ["channel.connect", "chat.start:https://youtube.example/today"], "YouTube は器のあと（始める 7）");
+  } finally {
+    await server.close();
+  }
+});
+
+test("配信を始める: この起動で入れた YouTube の URL につながらなくても場は開く（器官は畳む・Connect でつなぎ直せる）", async () => {
+  const v = makeVenue();
+  const chat = makeChat(v.events, { startThrows: true });
+  const { server, url } = await startServer(v, { chatClientFactory: chat.factory });
+  try {
+    await post(url, "/api/chat/source", { source: "https://youtube.example/today" });
+    const started = await post(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(started.status, 200, "YouTube につながらなくても始めるは通る");
+    assert.equal(started.json.stream.phase, "open");
+    assert.equal(started.json.stream.error, null);
+    assert.equal(started.json.chat.connected, false, "つながらなかった器官は畳む（つながっていない器官を残さない）");
     assert.equal(chat.record.created, 1);
+    assert.equal(chat.record.stopped, 1);
+    assert.equal(started.json.chat.enteredThisBoot, true, "入れたことは覚えている（次の場でまたつなぎにいく）");
+  } finally {
+    await server.close();
+  }
+});
+
+test("配信を始める: 終えたあと次の場でも、この起動で入れた・Connect した URL ならまたつなぐ（新しい器官）。欄を空にして保存したら・Disconnect したらつながない", async () => {
+  const v = makeVenue();
+  const chat = makeChat(v.events);
+  const { server, url } = await startServer(v, { chatClientFactory: chat.factory });
+  try {
+    // 場を開いてから入れて Connect する（ふだんの流れ）。
+    await post(url, "/api/stream/start", { device: "Mic" });
+    await post(url, "/api/chat/connect", { source: "https://youtube.example/today" });
+    await post(url, "/api/stream/stop");
+    assert.equal((await state(url)).chat.connected, false, "終えると畳む");
+    const second = await post(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(second.json.chat.connected, true, "同じ起動の間は、Connect した URL へ次の場でもつなぐ");
+    assert.deepEqual(chat.record.sources, ["https://youtube.example/today", "https://youtube.example/today"], "畳んだ器官は使い回さず作り直す");
+    await post(url, "/api/stream/stop");
+    // 欄を空にして保存 = つながない。
+    const cleared = await post(url, "/api/chat/source", { source: "" });
+    assert.equal(cleared.json.chat.enteredThisBoot, false);
+    assert.equal((await post(url, "/api/stream/start", { device: "Mic" })).json.chat.connected, false);
+    await post(url, "/api/stream/stop");
+    // 入れ直してから Disconnect = つながない（自分で切ったものは勝手につなぎ直さない）。
+    await post(url, "/api/chat/source", { source: "https://youtube.example/another" });
+    const disconnected = await post(url, "/api/chat/disconnect");
+    assert.equal(disconnected.json.chat.enteredThisBoot, false);
+    assert.equal((await post(url, "/api/stream/start", { device: "Mic" })).json.chat.connected, false);
+    assert.equal(chat.record.created, 2);
+  } finally {
+    await server.close();
+  }
+});
+
+test("POST /api/chat/source: 文字列か null だけ受ける（それ以外は 400 で何も変えない）・null は消す・場の途中でも保存できる（つなぎはしない）", async () => {
+  const v = makeVenue();
+  const chat = makeChat(v.events);
+  /** @type {Array<string | null>} */
+  const persisted = [];
+  const { server, url } = await startServer(v, {
+    chatClientFactory: chat.factory,
+    onSetChatSource: (/** @type {string | null} */ s) => {
+      persisted.push(s);
+    }
+  });
+  try {
+    for (const bad of [{}, { source: 3 }, { source: ["x"] }]) {
+      assert.equal((await post(url, "/api/chat/source", bad)).status, 400, JSON.stringify(bad));
+    }
+    assert.deepEqual(persisted, []);
+    await post(url, "/api/stream/start", { device: "Mic" });
+    const during = await post(url, "/api/chat/source", { source: "https://youtube.example/today" });
+    assert.equal(during.status, 200, "YouTube の欄は場の途中でも触れる");
+    assert.equal(during.json.chat.connected, false, "場の途中の保存ではつながない（つなぐのは Connect）");
+    assert.equal(chat.record.created, 0);
+    const nulled = await post(url, "/api/chat/source", { source: null });
+    assert.equal(nulled.json.chat.enteredThisBoot, false);
+    assert.deepEqual(persisted, ["https://youtube.example/today", null]);
   } finally {
     await server.close();
   }

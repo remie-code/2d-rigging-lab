@@ -34,11 +34,14 @@ import {
   memoryPlaceLabel,
   memoryRecordButtonView,
   streamLocksInputs,
-  STREAM_LOCKED_INPUTS_NOTE
+  STREAM_LOCKED_INPUTS_NOTE,
+  chatConnectErrorText,
+  chatSourceSaveErrorText,
+  requestErrorText
 } from "./view-logic/settings.mjs";
 import { manualFireStreamView, fireNoteFromFireResponse, soulStatusView } from "./view-logic/control.mjs";
 import { statusPillView, driveSummaryView } from "./view-logic/glance-meters.mjs";
-import { channelStatusView } from "./view-logic/status.mjs";
+import { channelStatusView, chatAutoConnectHint, CHAT_CONNECT_ON_START_HINT, CHAT_PREVIOUS_SOURCE_HINT } from "./view-logic/status.mjs";
 import { BRAIN_LABELS } from "./view-logic/health.mjs";
 import { TopBar, identityDisplayName } from "./ui/header.mjs";
 import { roleIdentityOf } from "./ui/app.mjs";
@@ -329,6 +332,40 @@ test("配信の準備: 場が開いている間はマイク・文字起こしだ
     const tagEnd = prepare.indexOf(">", start);
     assert.doesNotMatch(prepare.slice(start, prepare.indexOf("/>", start) > 0 ? Math.min(prepare.indexOf("/>", start), tagEnd + 400) : tagEnd), /inputsLocked|roleLocked|streamLocked/, `${free} は場の途中も触れる`);
   }
+});
+
+test("配信の準備: YouTube の欄は離れたら保存する（POST /api/chat/source）・「配信を始める」は保存が済んでから頼む・欄の下に案内（配信の組み直し 仕上げ）", () => {
+  const prepare = panel("prepare", "role");
+  const source = read("settings-drawer.mjs");
+  assert.match(prepare, /id="chat-source"[\s\S]{0,600}?onChange=\$\{onChatSourceCommit\}/, "欄の change（入れ終えて離れた・Enter）で保存する");
+  assert.match(source, /const saving = postJson\("\/api\/chat\/source", \{ source \}\)/);
+  assert.match(source, /chatSaveRef\.current = saving;/);
+  assert.match(source, /Promise\.resolve\(chatSaveRef\.current\)\n\s+\.catch\(\(\) => \{\}\)\n\s+\.then\(\(\) => postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)\)/, "保存が済んでから始める（この起動で入れた URL をサーバが知っている順）");
+  assert.match(source, /const chatHint = chatAutoConnectHint\(settings && settings\.chat, settings && settings\.stream\);/);
+  assert.match(prepare, /\$\{chatHint \? html`<span class="drawer-hint chat-auto-connect-hint">\$\{chatHint\}<\/span>` : null\}/);
+});
+
+test("chatAutoConnectHint: 場が閉じていてつながっていないときだけ — この起動で入れた URL は「配信を始めるとつなぐ」・前回の起動から残っているだけの URL は「自動ではつながない」", () => {
+  const closed = { phase: "closed" };
+  assert.equal(chatAutoConnectHint({ source: "https://y/today", connected: false, enteredThisBoot: true }, closed), CHAT_CONNECT_ON_START_HINT);
+  assert.equal(chatAutoConnectHint({ source: "https://y/old", connected: false, enteredThisBoot: false }, closed), CHAT_PREVIOUS_SOURCE_HINT);
+  assert.match(CHAT_PREVIOUS_SOURCE_HINT, /自動ではつながない/);
+  assert.equal(chatAutoConnectHint({ source: null, connected: false, enteredThisBoot: false }, closed), null, "欄が空なら出さない");
+  assert.equal(chatAutoConnectHint({ source: "https://y/today", connected: true, enteredThisBoot: true }, closed), null, "つながっていれば出さない");
+  for (const phase of ["opening", "open", "closing"]) {
+    assert.equal(chatAutoConnectHint({ source: "https://y/old", connected: false, enteredThisBoot: false }, { phase }), null, `${phase} は出さない（場の途中は Connect）`);
+  }
+  assert.equal(chatAutoConnectHint(null, closed), null);
+  assert.equal(chatAutoConnectHint({ source: "x", connected: false }, null), null, "stream を持たない古いサーバでは出さない");
+});
+
+test("chatConnectErrorText は 409（配信を始めている・終えている途中）でサーバの文面をそのまま出す・chatSourceSaveErrorText は失敗だけ文言にする", () => {
+  assert.equal(chatConnectErrorText({ status: 409, ok: false, j: { error: "配信を終えている途中（記録中・少し待ってからもう一度）" } }), "配信を終えている途中（記録中・少し待ってからもう一度）");
+  assert.match(String(chatConnectErrorText({ status: 409, ok: false, j: null })), /少し待ってから/);
+  assert.equal(chatConnectErrorText({ status: 200, ok: true, j: {} }), null);
+  assert.equal(chatSourceSaveErrorText({ status: 200, ok: true, j: {} }), null);
+  assert.equal(chatSourceSaveErrorText({ status: 400, ok: false, j: { error: "bad" } }), "save failed: bad");
+  assert.equal(requestErrorText("chatSource", "boom"), "chat source error: boom");
 });
 
 test("配信の準備: 「配信を始める」は選んだマイク・文字起こしで始め、始められなかった理由は stream.error（メイン画面と同じ値）を出す・配信中は案内だけ", () => {

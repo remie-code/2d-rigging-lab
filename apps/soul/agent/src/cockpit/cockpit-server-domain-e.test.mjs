@@ -347,3 +347,274 @@ test("配信を終える: 想定外の例外（写しの throw）でも closing 
     await server.close();
   }
 });
+
+// ── 配信の組み直し 仕上げ ─────────────────────────────────────────────────────
+//  - POST /api/verbosity・/api/speak-start も場が閉じていなければ 409（ロールの持ち物・何も変えない）
+//  - 開きかけ・閉じかけの間の YouTube の Connect は 409（全体の突き合わせの持ち越し 2）
+//  - closeStream で想定外の例外が出ても、記憶の最後の保存がまだなら 1 回だけ頼む
+//  - openStream で耳を起こしたあとの想定外の例外でも、耳・目・頭のセッション・器を畳む（全体の突き合わせの持ち越し 1）
+
+/** 偽のチャット器官（工場の呼び出しと stop を記録）。 */
+function makeChat() {
+  const record = { created: 0, stopped: 0 };
+  const factory = (/** @type {{ source: string }} */ { source }) => {
+    record.created += 1;
+    return {
+      async start() {},
+      stop() {
+        record.stopped += 1;
+      },
+      getState: () => "live",
+      getSource: () => source,
+      onMessage: () => () => {},
+      onStatus: () => () => {},
+      onDiagnostic: () => () => {}
+    };
+  };
+  return { factory, record };
+}
+
+/** 場の口の偽物（saveFinal を手で待たせられる・呼び出しを記録）。 */
+function makeHeldStreamHooks() {
+  const calls = { saveFinal: /** @type {any[]} */ ([]) };
+  /** @type {Array<() => void>} */
+  const releases = [];
+  const hooks = {
+    saveFinal: (/** @type {any} */ transcript) => {
+      calls.saveFinal.push(transcript);
+      return new Promise((resolve) => releases.push(() => resolve(undefined)));
+    }
+  };
+  return { hooks, calls, releases };
+}
+
+test("POST /api/verbosity・/api/speak-start: 場が閉じていない間（開いている・閉じかけ）は 409 で何も変えない（永続化も呼ばない）・閉じていれば通る", async () => {
+  /** @type {string[]} */
+  const persisted = [];
+  const held = makeHeldStreamHooks();
+  const { server, url } = await startServer({
+    streamHooks: held.hooks,
+    onSetVerbosity: (/** @type {string} */ m) => persisted.push(`verbosity:${m}`),
+    onSetSpeakStartMode: (/** @type {string} */ m) => persisted.push(`speak:${m}`)
+  });
+  try {
+    const before = await state(url);
+    const otherSpeak = before.speakStart === "classic" ? "speak-now" : "classic";
+    await send(url, "/api/stream/start", { device: "Mic" });
+    for (const [path, mode] of [["/api/verbosity", "chatty"], ["/api/speak-start", otherSpeak]]) {
+      const r = await send(url, path, { mode });
+      assert.equal(r.status, 409, `${path} は場の途中は断る`);
+      assert.match(r.json.error, /配信の途中は/);
+      assert.equal(r.json.state.stream.phase, "open", "/api/role/edit と同じ返し方（error と state）");
+    }
+    // 閉じかけ（記録中）も断る。
+    const stopping = send(url, "/api/stream/stop");
+    while (held.releases.length === 0) await new Promise((r) => setImmediate(r));
+    assert.equal((await state(url)).stream.phase, "closing");
+    assert.equal((await send(url, "/api/verbosity", { mode: "chatty" })).status, 409, "閉じかけも断る");
+    assert.equal((await send(url, "/api/speak-start", { mode: otherSpeak })).status, 409, "閉じかけも断る");
+    held.releases[0]();
+    await stopping;
+    const after = await state(url);
+    assert.equal(after.verbosity, before.verbosity, "口数は替わっていない");
+    assert.equal(after.speakStart, before.speakStart, "話し始めは替わっていない");
+    assert.deepEqual(persisted, [], "永続化も呼ばない");
+    // 閉じていれば通る。
+    const v = await send(url, "/api/verbosity", { mode: "chatty" });
+    assert.equal(v.status, 200);
+    assert.equal(v.json.verbosity, "chatty");
+    const s = await send(url, "/api/speak-start", { mode: otherSpeak });
+    assert.equal(s.status, 200);
+    assert.equal(s.json.speakStart, otherSpeak);
+    assert.deepEqual(persisted, ["verbosity:chatty", `speak:${otherSpeak}`]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("POST /api/chat/connect: 閉じかけ（記録中）の間は 409 で器官を作らない（場の外に残さない）・開きかけも 409・開いている間は通る", async () => {
+  const chat = makeChat();
+  const held = makeHeldStreamHooks();
+  /** @type {Array<() => void>} */
+  const openReleases = [];
+  let holdOpening = false;
+  const { server, url } = await startServer({
+    chatClientFactory: /** @type {any} */ (chat.factory),
+    streamHooks: {
+      ...held.hooks,
+      renewRecords: () => (holdOpening ? new Promise((resolve) => openReleases.push(() => resolve(undefined))) : undefined)
+    }
+  });
+  try {
+    await send(url, "/api/stream/start", { device: "Mic" });
+    const stopping = send(url, "/api/stream/stop");
+    while (held.releases.length === 0) await new Promise((r) => setImmediate(r));
+    assert.equal((await state(url)).stream.phase, "closing");
+    const refused = await send(url, "/api/chat/connect", { source: "https://youtube.example/today" });
+    assert.equal(refused.status, 409);
+    assert.match(refused.json.error, /終えている途中/);
+    assert.equal(chat.record.created, 0, "閉じかけの間は器官を作らない");
+    assert.equal(refused.json.state.chat.enteredThisBoot, false, "何も変えない（入れたことにもしない）");
+    held.releases[0]();
+    await stopping;
+    const closedState = await state(url);
+    assert.equal(closedState.stream.phase, "closed");
+    assert.equal(closedState.chat.connected, false, "場の外に器官が残らない");
+    // 開きかけも断る（始める 7 のつなぎと競らない）。
+    holdOpening = true;
+    const opening = send(url, "/api/stream/start", { device: "Mic" });
+    while (openReleases.length === 0) await new Promise((r) => setImmediate(r));
+    assert.equal((await state(url)).stream.phase, "opening");
+    assert.equal((await send(url, "/api/chat/connect", { source: "https://youtube.example/today" })).status, 409);
+    assert.equal(chat.record.created, 0);
+    openReleases[0]();
+    await opening;
+    holdOpening = false;
+    // 開いている間は通る（ふだんの流れ）。
+    const connected = await send(url, "/api/chat/connect", { source: "https://youtube.example/today" });
+    assert.equal(connected.status, 200);
+    assert.equal(connected.json.chat.connected, true);
+    assert.equal(chat.record.created, 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test("配信を終える: 畳む途中で想定外の例外が出ても、記憶の最後の保存を 1 回だけ（その場の写しで）頼み、残りも畳んで closed に戻る・もう一度始められる", async () => {
+  /** @type {any[]} */
+  const saves = [];
+  const calls = { closeBody: 0, eyesStopped: 0 };
+  let throwOnCloseSession = false;
+  const { server, url, ears } = await startServer({
+    onEarsStopped: () => {
+      calls.eyesStopped += 1;
+    },
+    streamHooks: {
+      // 頭のセッションを畳む口を引いた瞬間に想定外に投げる（runStreamHook の try の外 = 想定外の例外）。
+      get closeSession() {
+        if (throwOnCloseSession) throw new Error("closeSession exploded (fake)");
+        return async () => {};
+      },
+      closeBody: async () => {
+        calls.closeBody += 1;
+      },
+      saveFinal: async (/** @type {any} */ transcript) => {
+        saves.push(transcript);
+      }
+    }
+  });
+  try {
+    await send(url, "/api/stream/start", { device: "Mic" });
+    ears.record.buffer.append({ startMs: 0, endMs: 900, text: "今日はありがとう" });
+    throwOnCloseSession = true;
+    const closeBodyBefore = calls.closeBody;
+    const r = await send(url, "/api/stream/stop");
+    assert.equal(r.status, 500);
+    assert.match(r.json.error, /想定外のエラー.*closeSession exploded/);
+    assert.equal(saves.length, 1, "最後の保存は 1 回だけ頼む（記憶を落とさない・二重に頼まない）");
+    assert.deepEqual(saves[0].map((/** @type {any} */ e) => e.text), ["今日はありがとう"], "畳む前に取った写しで頼む");
+    const s = await state(url);
+    assert.equal(s.stream.phase, "closed", "closing のまま固まらない");
+    assert.equal(s.ears, "stopped", "投げた段の前の耳も畳む");
+    assert.equal(ears.record.disposed, 1);
+    assert.ok(calls.eyesStopped >= 1, "目も畳む");
+    assert.ok(calls.closeBody > closeBodyBefore, "投げた段の後の器も畳む");
+    throwOnCloseSession = false;
+    const again = await send(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(again.status, 200);
+    assert.equal(again.json.stream.phase, "open");
+    await send(url, "/api/stream/stop");
+    assert.equal(saves.length, 2, "次の場の終わりはふだんどおり 1 回");
+  } finally {
+    await server.close();
+  }
+});
+
+test("配信を終える: 最後の保存を頼んだあとで投げても二度は頼まない・写しが取れずに投げたら空で 1 回だけ頼む・どちらも closed に戻る", async () => {
+  /** @type {any[]} */
+  const saves = [];
+  let saveThrows = false;
+  const { server, url, ears } = await startServer({
+    streamHooks: {
+      saveFinal: async (/** @type {any} */ transcript) => {
+        saves.push(transcript);
+        if (saveThrows) throw new Error("save exploded (fake)");
+      }
+    }
+  });
+  try {
+    // 頼んだあとで投げる（保存の口が投げる）→ 二度は頼まない。
+    await send(url, "/api/stream/start", { device: "Mic" });
+    saveThrows = true;
+    await send(url, "/api/stream/stop");
+    assert.equal(saves.length, 1, "頼んだあとで投げても二度頼まない");
+    assert.equal(server.streamStatus().phase, "closed");
+    saveThrows = false;
+    // 写しを取るところで投げる → 頼む前なので 1 回だけ頼む（写しは取れないので空）。
+    await send(url, "/api/stream/start", { device: "Mic" });
+    ears.record.allThrows = true;
+    const r = await send(url, "/api/stream/stop");
+    assert.equal(r.status, 500);
+    assert.equal(saves.length, 2, "まだ頼んでいなければ 1 回だけ頼む");
+    assert.deepEqual(saves[1], [], "写しが取れなければ空で頼む（保存の口がどうするかは cockpit.mjs）");
+    assert.equal(server.streamStatus().phase, "closed");
+    ears.record.allThrows = false;
+    assert.equal((await send(url, "/api/stream/start", { device: "Mic" })).status, 200, "もう一度始められる");
+  } finally {
+    await server.close();
+  }
+});
+
+test("配信を始める: 耳を起こしたあとの想定外の例外でも、耳・目・頭のセッション・器を畳んで closed + error に戻る・もう一度始められる", async () => {
+  const calls = { openSession: 0, closeSession: 0, closeBody: 0, eyesStarted: 0, eyesStopped: 0 };
+  let throwOnOpenSession = true;
+  const { server, url, ears } = await startServer({
+    onEarsStarted: () => {
+      calls.eyesStarted += 1;
+    },
+    onEarsStopped: () => {
+      calls.eyesStopped += 1;
+    },
+    streamHooks: {
+      // 頭のセッションを作る口を引いた瞬間に 1 回だけ想定外に投げる（耳・目・声はもう起きている）。
+      get openSession() {
+        if (throwOnOpenSession) {
+          throwOnOpenSession = false;
+          throw new Error("openSession exploded (fake)");
+        }
+        return async () => {
+          calls.openSession += 1;
+        };
+      },
+      closeSession: async () => {
+        calls.closeSession += 1;
+      },
+      closeBody: async () => {
+        calls.closeBody += 1;
+      }
+    }
+  });
+  try {
+    const r = await send(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(r.status, 500);
+    assert.match(r.json.error, /想定外のエラー.*openSession exploded/);
+    assert.equal(ears.record.created, 1, "耳は起きていた");
+    assert.equal(calls.eyesStarted, 1, "目と声の出口も起きていた");
+    assert.equal(ears.record.disposed, 1, "耳を畳む");
+    assert.equal(calls.eyesStopped, 1, "目を畳む");
+    assert.equal(calls.closeSession, 1, "頭のセッションを畳む");
+    assert.equal(calls.closeBody, 1, "器を畳む");
+    const s = await state(url);
+    assert.equal(s.stream.phase, "closed", "opening のまま固まらない");
+    assert.match(s.stream.error, /openSession exploded/);
+    assert.equal(s.ears, "stopped");
+    const again = await send(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(again.status, 200);
+    assert.equal(again.json.stream.phase, "open");
+    assert.equal(again.json.stream.error, null);
+    assert.equal(calls.openSession, 1);
+    assert.equal(ears.record.created, 2);
+  } finally {
+    await server.close();
+  }
+});

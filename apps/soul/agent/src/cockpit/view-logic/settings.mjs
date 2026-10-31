@@ -1,6 +1,8 @@
 // @ts-check
 /**
- * view-logic: 設定引き出し（接続 / 入出力）の表示導出（preact 非依存の純関数）。
+ * view-logic: 設定のダイアログ（準備・設定）の表示導出（preact 非依存の純関数）。配信の組み直し Domain E からタブは
+ * 配信の準備 / ロール / 運転 / 記憶 / ログの 5 つ（旧「接続」「入出力」「頭脳・会話」のタブは無い・下の行番号つきの対応は
+ * 抽出した当時の cockpit.html の記録）。
  *
  * 操縦席 UI 改定 Domain C の追加抽出。現 cockpit.html の設定系ハンドラ（loadDevices / loadWindows /
  * loadAudioDevices の一覧構築・各 POST の失敗文言・視界の現況表示）から DOM 構築 / fetch 配線を
@@ -22,9 +24,12 @@
  *  - visionTargetPostErrorText→ :624-627 POST /api/vision-target 応答の失敗文言
  *  - audioDevicePostErrorText → :688-691 POST /api/audio-device 応答の失敗文言
  *  - channelPostErrorText     → :762-765 POST /api/channel 応答の失敗文言
- *  - chatConnectErrorText     → :787-791 POST /api/chat/connect 応答の失敗文言（400 = invalid source）
+ *  - chatConnectErrorText     → :787-791 POST /api/chat/connect 応答の失敗文言（400 = invalid source・409 = 配信を
+ *                                始めている / 終えている途中は断る（配信の組み直し 仕上げ）・サーバの文面をそのまま）
+ *  - chatSourceSaveErrorText  → POST /api/chat/source（YouTube の欄に入れた値の保存・配信の組み直し 仕上げ）の失敗文言
  *  - CHAT_EMPTY_SOURCE_ERROR  → :779 空 source で Connect を押した時の文言
- *  - earsStartFailureText     → :740-742 POST /api/ears/start 応答の失敗文言（409/500 とも !ok）
+ *  - earsStartFailureText     → :740-742 「配信を始める」（POST /api/stream/start・旧 POST /api/ears/start は別名で同じ）
+ *                                応答の失敗文言（409/500 とも !ok）
  *  - requestErrorText         → 各 fetch catch の文言（:611 :629 :675 :693 :724 :748 :768 :794 :802 :809）
  *
  * 多頭化 Domain C（brain-swap-wave-plan.md §3）追加抽出:
@@ -39,7 +44,8 @@
  *  - memoryStatusLabel      → 「最後に記録: HH:MM:SS」（まだなら「まだ記録なし」・記録中なら「（記録中…）」を足す）。
  *    lastRecordAtMs はローカル時刻表示へ変換（format-time.mjs の formatClock を再利用）。
  *
- * 圧縮を始める大きさ（設定「頭脳・会話」タブ・context-growth-2026-10.md §8 の後の合意 2026-10-19）:
+ * 圧縮を始める大きさ（頭の調整・配信の組み直し Domain E からロールのタブの下・旧「頭脳・会話」タブ・
+ * context-growth-2026-10.md §8 の後の合意 2026-10-19）:
  *  - COMPACT_THRESHOLD_*            → 既定 20 万・範囲 5 万〜45 万・1 万刻み（src/mind/context-compactor.mjs の定数と
  *                                     同じ値。画面は src/mind を import できないので写しを持ち、テストで一致を固定する）。
  *  - compactThresholdOptions        → select の選択肢（万トークン・既定に「（既定）」）。
@@ -48,7 +54,7 @@
  *  - COMPACT_THRESHOLD_NOTE         → Codex の頭のときだけ効く旨の短い説明。
  *  - compactThresholdPostErrorText  → POST /api/compact-threshold 応答の失敗文言（rolePostErrorText の写経）。
  *
- * Codex の fast（設定「頭脳・会話」タブ・①チャッピーの Codex の頭だけ・2026-10-27 合意）:
+ * Codex の fast（頭の調整・ロールのタブの下・旧「頭脳・会話」タブ・①チャッピーの Codex の頭だけ・2026-10-27 合意）:
  *  - codexFastToggleView    → チェックボックスの状態（snapshot の codexFast・無ければ使えない）。
  *  - codexFastStatusLabel   → 今の効き方（Claude の頭では効かない・モデルが非対応・いま fast / 通常）。
  *  - CODEX_FAST_NOTE        → ①だけに効く・使用量が増える・次の返事から効く旨の短い説明。
@@ -255,7 +261,7 @@ export function memoryRecordButtonView(stream, busy) {
   };
 }
 
-// ── 圧縮を始める大きさ（設定「頭脳・会話」タブ）──────────────────────────────
+// ── 圧縮を始める大きさ（頭の調整・ロールのタブの下）──────────────────────────────
 
 /** 既定の目安（トークン・src/mind/context-compactor.mjs の DEFAULT_COMPACT_THRESHOLD_TOKENS と同じ値）。 */
 export const COMPACT_THRESHOLD_DEFAULT_TOKENS = 200_000;
@@ -338,7 +344,7 @@ export function compactThresholdPostErrorText(res) {
   return settingPostErrorText(res, "compaction control not available");
 }
 
-// ── Codex の fast（設定「頭脳・会話」タブ・①チャッピーの Codex の頭だけ・2026-10-27 合意）────────────
+// ── Codex の fast（頭の調整・ロールのタブの下・①チャッピーの Codex の頭だけ・2026-10-27 合意）────────────
 
 /** fast の短い説明（drawer-note に出す）。 */
 export const CODEX_FAST_NOTE =
@@ -397,16 +403,28 @@ export function codexFastPostErrorText(res) {
 export function chatConnectErrorText(res) {
   if (res.status === 503) return "chat not available (start cockpit normally to enable live chat)";
   if (res.status === 400) return "invalid source: " + ((res.j && res.j.error) || "error");
+  // 配信の組み直し 仕上げ: 配信を始めている・終えている途中は断る（サーバの文面 = 少し待ってからもう一度、をそのまま出す）。
+  if (res.status === 409) return (res.j && res.j.error) || "配信を始めている・終えている途中（少し待ってからもう一度）";
   if (!res.ok) return "connect failed: " + ((res.j && res.j.error) || "error");
   return null;
+}
+
+/**
+ * POST /api/chat/source 応答 → エラー文言（YouTube の欄に入れた値の保存・配信の組み直し 仕上げ）。成功は null。
+ * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
+ * @returns {string | null}
+ */
+export function chatSourceSaveErrorText(res) {
+  if (res.ok) return null;
+  return "save failed: " + ((res.j && res.j.error) || "error");
 }
 
 /** 空 source で Connect を押した時の文言（:779）。 */
 export const CHAT_EMPTY_SOURCE_ERROR = "enter a stream URL / video ID first";
 
 /**
- * 文字起こしの方式の選択肢（設定「入出力」タブのマイクの下・cockpit-stt-selection.md §4.2）。
- * value は POST /api/ears/start の body `sttEngine`（サーバー側 STT_ENGINES と同じ語彙）。
+ * 文字起こしの方式の選択肢（配信の準備のタブのたたんだもの・マイクの下・旧「入出力」タブ・cockpit-stt-selection.md §4.2）。
+ * value は POST /api/stream/start の body `sttEngine`（サーバー側 STT_ENGINES と同じ語彙）。
  * @type {ReadonlyArray<{ value: string; label: string }>}
  */
 export const STT_ENGINE_OPTIONS = Object.freeze([
@@ -428,9 +446,9 @@ export function sttEngineSelection(stt) {
 }
 
 /**
- * 声の方式の選択肢（設定「入出力」タブの文字起こしの下・声の差し替え Wave 3 Domain E）。文字起こしと同じく
- * Start の前に選び、効くのは次の Start から。value は POST /api/ears/start の body `ttsEngine`（サーバー側
- * TTS_ENGINES と同じ語彙）。
+ * 声の方式の選択肢（声の差し替え Wave 3 Domain E・サーバー側 TTS_ENGINES と同じ語彙）。配信の組み直し Domain E から
+ * 声の方式はロールの声で、ロールのタブの編集の select（view-logic/role.mjs の ROLE_VOICE_ENGINE_OPTIONS がこれ）から
+ * POST /api/role/edit で直す。配信の準備のタブには出さない（旧「入出力」タブの選択は無い）。
  * @type {ReadonlyArray<{ value: string; label: string }>}
  */
 export const TTS_ENGINE_OPTIONS = Object.freeze([
@@ -439,7 +457,8 @@ export const TTS_ENGINE_OPTIONS = Object.freeze([
 ]);
 
 /**
- * state.tts.engine を選択肢の値へ（未知/欠落は null = 選択を変えない・sttEngineSelection と同型）。
+ * state.tts.engine を選択肢の値へ（未知/欠落は null = 選択を変えない・sttEngineSelection と同型）。配信の組み直し
+ * Domain E から画面は使わない（声の方式はロールの下書きが持つ・テストが語彙を固定するので残す）。
  * @param {{ engine?: string | null } | null | undefined} tts
  * @returns {string | null}
  */
@@ -463,7 +482,7 @@ export function streamLocksInputs(stream) {
 export const STREAM_LOCKED_INPUTS_NOTE = "配信の途中はマイク・文字起こしを替えられない（配信を終えてから）";
 
 /**
- * POST /api/ears/start 応答 → 失敗文言（:740-742）。!ok（409 transitioning / 500 とも）は
+ * 「配信を始める」（POST /api/stream/start・旧 POST /api/ears/start）応答 → 失敗文言（:740-742）。!ok（409 / 500 とも）は
  * "start failed: error"・成功は null（呼び出し側は snapshot を適用しエラー欄をクリア :743-745）。
  * @param {{ ok: boolean; j?: { error?: string | null } | null }} res
  * @returns {string | null}
@@ -485,6 +504,7 @@ const REQUEST_ERROR_PREFIX = {
   channel: "channel error", //                       :768
   chatConnect: "chat connect error", //              :794
   chatDisconnect: "chat disconnect error", //        :802
+  chatSource: "chat source error", // 配信の組み直し 仕上げ（POST /api/chat/source・YouTube の欄の保存）
   role: "role error", //  配信の組み直し Domain A（POST /api/role・旧 POST /api/brain の "brain error"）
   memoryRecord: "memory record error", // 配信間記憶（POST /api/memory-record・audioDevice の写経）
   compactThreshold: "compaction threshold error", // 圧縮を始める大きさ（POST /api/compact-threshold・同型）

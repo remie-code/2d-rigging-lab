@@ -7,23 +7,33 @@
  *
  * 実 pipeline factory（createEarPipeline・既定）+ file-backed settings store + 実ページで
  * `createCockpitServer` を構成し、**127.0.0.1** に listen して**アクセス URL を標準出力に表示**する。
- * ユーザーはその URL をブラウザで開き、マイクを選んで Start を押す（CLI を一切触らない）。
+ * ユーザーはその URL をブラウザで開き、今日のロールを選んで「配信を始める」を押す（CLI を一切触らない）。
  *
- * 実マイクが無い/未接続でもサーバ自体は起動しページは開ける（耳の Start を押すまで実デバイスに触れない）。
- * SIGINT（Ctrl+C）/ stdin EOF で clean close（ears-cli.mjs の型を踏襲・server.close() でハンドル解放）。
+ * 実マイクが無い/未接続でもサーバ自体は起動しページは開ける（「配信を始める」を押すまで実デバイスに触れない）。
+ * SIGINT（Ctrl+C）/ stdin EOF で clean close（ears-cli.mjs の型を踏襲・server.close() でハンドル解放）。配信中なら
+ * 「配信を終える」と同じ道（記憶の最後の保存を待つ）を通ってから閉じる（createCockpitShutdown）。
+ *
+ * ── 配信の組み直し（2026-10-31・stream-restructure.md）で変わったこと ────────────────────
+ *  下の S3 以降の節は当時の記録。今の形は: 頭のセッションと器（Channel）の接続は「配信を始める」で作り、「配信を
+ *  終える」で畳む（起動時の先充填はしない・`--channel` を渡しても同じ）。器を使うのはロールに体があるときだけ。
+ *  頭・名前・性格の指示・声・口数・話し始め・体はロールの持ち物（POST /api/role・/api/role/edit・/api/role/new）。
+ *  記憶はロールごと（`memories/<role-id>/`）。耳の Start / Stop は「配信を始める / 終える」（POST /api/stream/start・
+ *  /api/stream/stop。/api/ears/* は後方互換の別名）に替わった。
  *
  * ── S3: 発火（Fire）の本番結線 ─────────────────────────────────────────────
  *  fireOrchestratorFactory は**常に注入**する（実 createLlmSession（FIRE_SYSTEM_PROMPT・
  *  claude-opus-4-8 既定）+ connectChannel + 流し込みプレイヤー（createStreamPlayer）+ 声の差し替え口
  *  （createVoiceEngine・既定 AivisSpeech）+ SpeechStreamer）。Channel URL は
- *  `--channel <ws-url>`（後方互換の初期値）**または操縦席の URL 入力**（POST /api/channel）で渡せる。
+ *  `--channel <ws-url>`（後方互換の初期値）**または操縦席の URL 入力**（配信の準備のタブの器（Channel）の欄・
+ *  POST /api/channel・体のあるロールのときだけ出る）で渡せる。
  *
  *  ── S2.5 無退行【session/player の遅延生成】(S3 追撃 domain-c) ─────────────────
  *  操縦席から URL を後入力する構造にすると「fire を常時受けられる」形になるが、**URL も fire も
  *  使わないユーザー（S2.5 挙動）に LLM セッションの spawn（≈12s）を強いてはならない**。よって
  *  session/player は `ensureFireResources()` で**遅延生成**する:
- *    - `--channel` 明示指定時のみ起動時に eager 生成（従来どおり TTFT 先払い・挙動不変）。
- *    - それ以外（URL 未設定 / settings 復元 / 操縦席入力）は**初回 fire 時**に生成。
+ *    - （当時）`--channel` 明示指定時のみ起動時に eager 生成。配信の組み直し Domain D でやめた（頭のセッションはいつも
+ *      「配信を始める」で作る）。
+ *    - （当時）それ以外（URL 未設定 / settings 復元 / 操縦席入力）は**初回 fire 時**に生成。今は「配信を始める」で作る。
  *  声の差し替え Wave 2: 流し込みプレイヤー（起動に約 0.5 秒）と声の差し替え口は耳の Start のときに作る
  *  （最初の Fire に乗せない・申し送り 1）。Start より前の Fire は従来どおりその場で作る。
  *  声の差し替え Wave 3: 声の方式（設定キー `ttsEngine`・AivisSpeech / ElevenLabs）は耳の Start で読み、
@@ -41,6 +51,8 @@
  *  `--channel` 指定があればそれを初期値に（＋ settings にも載せる）。UI/ログは redactToken を通す。
  *
  *  ── 接続タイミングの設計判断【lazy connect】───────────────────────────────
+ *  （配信の組み直し Domain D から: 体のあるロールでは「配信を始める」が createLazyChannel の connect() で先につなぎ、
+ *  つながらなければ場を開かない。「配信を終える」で close する。以下の lazy の性質は場の途中の張り直しに残る。）
  *  channel は **初回 fire 時に接続し成功をキャッシュする lazy proxy**（createLazyChannel）。接続失敗は
  *  キャッシュせず throw → orchestrator が fireError 診断に落とす（起動は止めない・操縦席のゴースト行で
  *  見える・次の fire で再試行 = 器を後から立てても操縦席の再起動不要）。URL 変更（setUrl）時は既存
@@ -1381,7 +1393,7 @@ export function applyRoleHotwords(localStt, role) {
  */
 export function createChatSourceHooks(settings) {
   return {
-    /** cockpit-server の onSetChatSource（POST /api/chat/connect が呼ぶ）。 */
+    /** cockpit-server の onSetChatSource（POST /api/chat/connect と POST /api/chat/source（欄に入れた値の保存）が呼ぶ）。 */
     onSetChatSource: (source) => {
       try {
         settings.setChatSource(source ?? null); // 次回起動で入力欄に復元（file-backed・失敗寛容）。
@@ -2121,10 +2133,10 @@ export function createCockpitShutdown(deps) {
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --open                待受け完了後に既定ブラウザを開く（Windows）
-  --channel <ws-url>    器の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の**初期値**
-                        （後方互換）。指定しても起動時には LLM セッションを作らない（頭のセッションと Channel の
-                        接続は「配信を始める」で作る）。未指定でも操縦席（ブラウザ）の Channel 欄から URL を入力
-                        できる（URL は次回起動まで記憶される）。
+  --channel <ws-url>    器（runtime-player）の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の
+                        **初期値**（後方互換）。ふだんは操縦席の「準備・設定」→「配信の準備」の器（Channel）の欄に
+                        入れる（ロールに体があるときだけ出る・URL は次回起動まで記憶される）。指定しても起動時には
+                        何もつながない（頭のセッションと器の接続は「配信を始める」で作る）。体のないロールでは使わない。
   --tts-base-url <url>  AivisSpeech の base URL（既定 http://127.0.0.1:10101）
   --speaker <id>        AivisSpeech の話者 ID（ロールの話者を上書きする・無ければロールの値）
   --fire-window-min <m> 注入窓の幅（分・既定 ${FIRE_WINDOW_MS / 60000}）

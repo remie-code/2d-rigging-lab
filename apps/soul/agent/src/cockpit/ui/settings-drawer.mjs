@@ -6,7 +6,9 @@
  *
  * 配信の組み直し Domain E（stream-restructure.md §6・体験の場面 2・3・5）でタブを
  * **配信の準備 / ロール / 運転 / 記憶 / ログ** の 5 つに組み直した:
- *  - 配信の準備（場面 3）: 毎回見るもの = YouTube の URL（Connect / Disconnect）・ゲームの窓・**ロールに体があるときだけ**
+ *  - 配信の準備（場面 3）: 毎回見るもの = YouTube の URL（Connect / Disconnect・欄を離れたら保存 = POST /api/chat/source。
+ *    この起動で入れた・Connect した URL は「配信を始める」がつなぎ、前回の起動から欄に残っているだけの URL はつながない・
+ *    配信の組み直し 仕上げ。欄の下に chatAutoConnectHint の案内）・ゲームの窓・**ロールに体があるときだけ**
  *    器（Channel）の URL。たたんだもの（`<details>`）= マイク・文字起こし・声の出力先・忙しい間のコメント。select は保存した
  *    値を選んだ状態で出す（マイクは lastDevice・ゲームの窓は visionTarget.title・声の出力先は audioDevice.name）。場が開いて
  *    いる間（開きかけ・閉じかけも）はマイク・文字起こしは触れない（YouTube の URL・ゲームの窓は触れる）。声の方式はここから
@@ -53,6 +55,7 @@ import {
   audioDevicePostErrorText,
   channelPostErrorText,
   chatConnectErrorText,
+  chatSourceSaveErrorText,
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
   STT_ENGINE_OPTIONS,
@@ -76,7 +79,7 @@ import {
   streamLocksInputs,
   STREAM_LOCKED_INPUTS_NOTE
 } from "../view-logic/settings.mjs";
-import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
+import { chatStatusView, channelStatusView, shouldRestoreChatSource, chatAutoConnectHint } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
 import { commentBusyPostErrorText, commentBusyRequestErrorText } from "../view-logic/control.mjs";
 import { streamStartView } from "../view-logic/glance-meters.mjs";
@@ -275,6 +278,9 @@ export function CockpitSettingsModal({
   const [chatSource, setChatSource] = useState("");
   const chatSourceRef = useRef(""); //   復元判定用の現在値。
   const chatEditedRef = useRef(false); // 入力中は復元しない。
+  // 欄に入れた値の保存（POST /api/chat/source）の最後の要求。「配信を始める」はこれが済んでから頼む（入れた直後に押しても
+  // サーバがこの起動で入れた URL を知っている順にする・配信の組み直し 仕上げ）。
+  const chatSaveRef = useRef(/** @type {Promise<unknown>} */ (Promise.resolve()));
   const [chatError, setChatError] = useState("");
   const [connectBusy, setConnectBusy] = useState(false);
   // ── 配信の準備: ゲームの窓（保存した窓を選んだ状態で出す・選び直したら上書きしない）──
@@ -600,7 +606,10 @@ export function CockpitSettingsModal({
     setStartBusy(true);
     setStartRequestError("");
     sttEditedRef.current = false; // 始めた後はサーバーの記憶（state.stt.engine）に同期してよい。
-    postJson("/api/stream/start", { device, sttEngine: sttSelected || "whisper" })
+    // YouTube の欄に入れた値の保存が走っていれば、それが済んでから始める（この起動で入れた URL へ始めるがつなぐ）。
+    Promise.resolve(chatSaveRef.current)
+      .catch(() => {})
+      .then(() => postJson("/api/stream/start", { device, sttEngine: sttSelected || "whisper" }))
       .then((/** @type {any} */ res) => {
         if (res.ok) {
           applySnapshot(res.j);
@@ -629,6 +638,29 @@ export function CockpitSettingsModal({
         setChannelUrl(""); //    生 URL（token）を入力欄に残さない。
       })
       .catch((/** @type {unknown} */ e) => setChannelError(requestErrorText("channel", e)));
+  };
+
+  /**
+   * YouTube の欄に入れた値を保存する（欄の change = 入れ終えて欄を離れた・Enter のとき・POST /api/chat/source）。
+   * 配信の組み直し 仕上げ（体験の素描 場面 3: 「URL を入れるだけで、Connect は配信を始めるがやる」）: この起動で入れた
+   * URL は「配信を始める」がつなぐ。空にして離れたら「つながない」（保存した値も消す）。つなぎはしない（つなぐのは
+   * 配信を始める か Connect）。場の途中も保存できる（欄は場の間も触れる）。
+   */
+  const onChatSourceCommit = () => {
+    const source = chatSourceRef.current || "";
+    setChatError("");
+    const saving = postJson("/api/chat/source", { source })
+      .then((/** @type {any} */ res) => {
+        const err = chatSourceSaveErrorText(res);
+        if (err != null) {
+          setChatError(err);
+          return;
+        }
+        chatEditedRef.current = false; // 保存した source への同期を再び許す。
+        applySnapshot(res.j);
+      })
+      .catch((/** @type {unknown} */ e) => setChatError(requestErrorText("chatSource", e)));
+    chatSaveRef.current = saving;
   };
 
   /** Chat Connect（場の途中でも押せる・ふだんは場を開いてから URL を入れて押す）。 */
@@ -863,6 +895,7 @@ export function CockpitSettingsModal({
 
   const channelView = channelStatusView(settings && settings.channel);
   const chatView = chatStatusView(chatDisplay);
+  const chatHint = chatAutoConnectHint(settings && settings.chat, settings && settings.stream);
   const showChannel = channelFieldVisible(settings);
   const startView = streamStartView(settings && settings.stream, startRequestError);
   const recordView = memoryRecordButtonView(settings && settings.stream, recordBusy);
@@ -912,6 +945,7 @@ export function CockpitSettingsModal({
               chatSourceRef.current = v;
               setChatSource(v);
             }}
+            onChange=${onChatSourceCommit}
           />
           <button class="btn-chat-connect" type="button" disabled=${connectBusy} onClick=${onChatConnect}>
             Connect
@@ -927,6 +961,7 @@ export function CockpitSettingsModal({
         </div>
         <div class="drawer-note">
           <${DrawerStatus} view=${chatView} />
+          ${chatHint ? html`<span class="drawer-hint chat-auto-connect-hint">${chatHint}</span>` : null}
           <span class="err">${chatError}</span>
         </div>
         <div class="drawer-row">

@@ -4586,7 +4586,10 @@ test("cockpit speak-now: you の転写で判定 → 自発なら fire({vision:pr
 test("cockpit speak-now: 口数は問いの性格の 1 文にだけ効く（POST /api/verbosity の後の判定から）", async () => {
   const h = await startSpeakNowServer();
   try {
+    // 配信の組み直し 仕上げ: 口数はロールの持ち物で、場の途中は替えられない（409）。終えてから替え、次の場の判定から効く。
+    await postJson(`${h.url}/api/stream/stop`, {});
     await postJson(`${h.url}/api/verbosity`, { mode: "chatty" });
+    await postJson(`${h.url}/api/stream/start`, { device: "Mic" });
     h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "なんか言って" });
     assert.match(h.fakeJudge.calls[0].request.instructions, /^チャッピーは話好きなおしゃべりな性格/);
   } finally {
@@ -5007,7 +5010,7 @@ test("cockpit POST /api/speak-start: 503（scheduler 無し）・400（無効値
   });
   try {
     const url = await server.listen(0);
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    // 配信の組み直し 仕上げ: 話し始めはロールの持ち物で、場が閉じている間だけ替えられる（場の途中は 409）。
     for (const bad of [{ mode: "bogus" }, { mode: 1 }, {}]) {
       const r = await postJson(`${url}/api/speak-start`, bad);
       assert.equal(r.status, 400, JSON.stringify(bad));
@@ -5016,11 +5019,14 @@ test("cockpit POST /api/speak-start: 503（scheduler 無し）・400（無効値
     const on = await postJson(`${url}/api/speak-start`, { mode: "speak-now" });
     assert.equal(on.status, 200);
     assert.equal(on.json.speakStart, "speak-now");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
     fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディこれ見て" });
     assert.equal(fakeOrch.record.fireCount, 0, "speak-now の間は呼びかけが止まる");
     assert.equal(fakeJudge.calls.length, 1, "代わりに判定");
+    await postJson(`${url}/api/ears/stop`, {});
     const off = await postJson(`${url}/api/speak-start`, { mode: "classic" });
     assert.equal(off.json.speakStart, "classic");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
     fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディこれ見て" });
     assert.equal(fakeOrch.record.fireCount, 1, "従来に戻すと呼びかけが効く");
     assert.equal(fakeJudge.calls.length, 1, "従来の間は判定しない");
@@ -5322,8 +5328,13 @@ test("cockpit コメント反応: 話し始めを従来に切り替えると取�
   try {
     h.fakeOrch.record.state = "speaking";
     h.server.ingestChatMessage({ text: "取っておく", displayName: "a" });
-    await postJson(`${h.url}/api/speak-start`, { mode: "classic" });
+    // 配信の組み直し 仕上げ: 話し始めは場の途中では替えられない（409）。配信を終える（取っておいた分は畳むときに捨てる）→
+    // 従来に替える → 次の場では反応する判定を呼ばない。
+    assert.equal((await postJson(`${h.url}/api/speak-start`, { mode: "classic" })).status, 409);
     h.fakeOrch.record.state = "idle";
+    await postJson(`${h.url}/api/stream/stop`, {});
+    assert.equal((await postJson(`${h.url}/api/speak-start`, { mode: "classic" })).status, 200);
+    await postJson(`${h.url}/api/stream/start`, { device: "Mic" });
     h.fakeOrch.record.hooks.onState("idle");
     h.server.ingestChatMessage({ text: "従来のコメント", displayName: "b" });
     assert.equal(h.reactJudge.calls.length, 0);

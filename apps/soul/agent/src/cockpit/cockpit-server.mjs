@@ -46,7 +46,7 @@
  *   - 圧縮中: snapshot の compacting（頭の会話の圧縮の最中だけ true・状態のピルの「圧縮中」）。started で true、
  *     finished / failed / 頭の作り直し（resetContextCompaction）で false。変わったら SSE "state" で押す。
  *   - 圧縮の目安: snapshot の compaction（`{ thresholdTokens }` = 圧縮を始める大きさ・直近の入力トークン）。
- *     POST /api/compact-threshold で変え（設定の「頭脳・会話」タブ）、onSetCompactThresholdTokens が保存と走っている
+ *     POST /api/compact-threshold で変え（設定のロールのタブの下の頭の調整・旧「頭脳・会話」タブ）、onSetCompactThresholdTokens が保存と走っている
  *     compactor の差し替えを担う（cockpit.mjs）。
  *
  * ── 思い出す流れ（記憶の作り直し Wave 3 Domain D）──────────────────────────────────
@@ -115,7 +115,10 @@ export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
 export const DEFAULT_COCKPIT_PORT = 8181;
 /** 状態スナップショットに載せる直近転写の件数（タブ開き直し時の復元用）。 */
 export const DEFAULT_TRANSCRIPT_HISTORY = 200;
-/** 声の方式（POST /api/ears/start の body `ttsEngine`・設定キー `ttsEngine` と同じ語彙・声の差し替え Wave 3）。 */
+/**
+ * 声の方式（設定キー `ttsEngine`・ロールの声の方式と同じ語彙・声の差し替え Wave 3）。配信の組み直しからはロールの声が
+ * 決める（applyRoleResult）。POST /api/stream/start（旧 /api/ears/start）の body `ttsEngine` は後方互換で受ける。
+ */
 export const TTS_ENGINES = Object.freeze(["aivis", "elevenlabs"]);
 /** 声の engine の状態の語彙（VoiceEngine の status と同じ + まだ知らない unknown）。 */
 const VOICE_STATUSES = Object.freeze(["unknown", "connecting", "up", "reconnecting", "down"]);
@@ -514,12 +517,13 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は器官の中身（innertube 取得）を知らない**（責務境界: fireOrchestratorFactory と
  *   同型・実体は cockpit.mjs が注入する）。未注入なら POST /api/chat/connect は 503。
  * @param {(source: string | null) => void | Promise<void>} [options.onSetChatSource]
- *   配信 source の永続化フック（S7・onSetChannelUrl の写経）。Connect 時に受けた source（trim 済み）を
- *   渡す。**cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
- *   未注入でも Connect 自体は成立する（永続化のみスキップ）。
+ *   配信 source の永続化フック（S7・onSetChannelUrl の写経）。Connect 時と POST /api/chat/source（欄に入れた値の保存・
+ *   配信の組み直し 仕上げ）で受けた source（trim 済み・空は null）を渡す。**cockpit-server は永続化実体を知らない**
+ *   （実体は cockpit.mjs が settings へ橋渡しする）。未注入でも Connect 自体は成立する（永続化のみスキップ）。
  * @param {() => ({ source: string | null } | null)} [options.chatSourceStatus]
  *   記憶済みの配信 source（`{ source }`）を返す。state snapshot の `chat.source`（入力欄の既定復元用・
- *   Connect 前/切断後も残る）に載せる。未注入なら chat.source:null。
+ *   Connect 前/切断後も残る）に載せる。未注入なら chat.source:null。この値（前回の起動から残っている値）だけでは
+ *   「配信を始める」はつながない（つなぐのはこの起動で入れた・Connect した source だけ・startChatForStream）。
  * @param {() => (Promise<void> | void)} [options.onMemoryRecord]
  *   手動「今日を記録」フック（POST /api/memory-record が呼ぶ）。**cockpit-server は記憶の書き出し/保存を
  *   知らない**（実体は cockpit.mjs の保存の係・ライブ転写取得含め呼び出し側の責務）。フックの
@@ -564,27 +568,29 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   呼び出し側が `codexFastStatusChanged()` で知らせる。
  * @param {(engine: "parakeet" | "zipformer") => ({ ok: true } | { ok: false; reason: string })} [options.localSttModelCheck]
  *   ローカルの文字起こし（parakeet / zipformer）のモデルが揃っているか（既定 checkLocalSttModel = vendor/models を
- *   見る）。Start ごとに呼び、揃っていなければ耳を開かずに Start を失敗にする（ElevenLabs のキー切れと同じ流儀）。
+ *   見る）。耳の Start（「配信を始める」の 4）ごとに呼び、揃っていなければ耳を開かずに始めるを失敗にする（ElevenLabs の
+ *   キー切れと同じ流儀）。
  * @param {(() => object | null) | object} [options.localSttSettings]
- *   ローカルの文字起こしの設定（{ threads, preRollMs, silencePadMs, hotwords, hotwordsScore }・範囲外は既定）。関数なら Start ごとに
- *   読む（設定ファイルの書き換えが次の Start から効く）。pipeline の stt.local へそのまま渡す。
+ *   ローカルの文字起こしの設定（{ threads, preRollMs, silencePadMs, hotwords, hotwordsScore }・範囲外は既定）。関数なら
+ *   「配信を始める」ごとに読む（設定ファイルの書き換えが次の場から効く）。pipeline の stt.local へそのまま渡す。
  * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [options.sttEngineInitial="whisper"]
  *   文字起こしの方式の初期選択（操縦席の文字起こし選択・cockpit-stt-selection.md）。起動時の値は
  *   呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（selfFireInitialEnabled と同型）。
- *   選択は POST /api/ears/start の body `sttEngine` で受け、Start ごとに onSetSttEngine で永続化する
- *   （マイクと同じく [Start] の前に選ぶ・動作中に変えるなら Stop→Start）。
+ *   選択は POST /api/stream/start（旧 /api/ears/start）の body `sttEngine` で受け、「配信を始める」ごとに onSetSttEngine で
+ *   永続化する（マイクと同じく場が閉じている間に選ぶ・場の途中は替えられない＝終えてから始め直す・stream-restructure.md §3）。
  * @param {(engine: string) => void | Promise<void>} [options.onSetSttEngine]
- *   文字起こしの方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ *   文字起こしの方式の永続化フック（「配信を始める」で呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
  * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.elevenLabsApiKeyProvider]
  *   ElevenLabs のキーを返す（既定 loadElevenLabsApiKey = `apps/soul/agent/.env.elevenlabs.local` を
- *   コード内で直接読む・process.env に入れない）。Start ごとに読む。キーは pipeline へ渡すだけで、
+ *   コード内で直接読む・process.env に入れない）。「配信を始める」ごとに読む。キーは pipeline へ渡すだけで、
  *   state/SSE/ログ/エラーには載せない。
  * @param {"aivis" | "elevenlabs"} [options.ttsEngineInitial="aivis"]
  *   声の方式の初期選択（声の差し替え Wave 3 Domain E・voice-swap-wave-plan.md §3）。sttEngineInitial の写経:
- *   起動時の値は cockpit.mjs が settings から読んで渡す（未知値は aivis）。選択は POST /api/ears/start の body
- *   `ttsEngine` で受け、Start ごとに onSetTtsEngine で永続化する（効くのは次の Start から）。
+ *   起動時の値は cockpit.mjs が settings から読んで渡す（未知値は aivis）。配信の組み直しからは今のロールの声の方式
+ *   （ロールの選択・編集・新規の applyRoleResult）が現況を決め、「配信を始める」ごとに onSetTtsEngine で書き戻す。
+ *   POST /api/stream/start（旧 /api/ears/start）の body `ttsEngine` は後方互換で受ける（画面は送らない）。
  * @param {(engine: string) => void | Promise<void>} [options.onSetTtsEngine]
- *   声の方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ *   声の方式の永続化フック（「配信を始める」で呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
  * @param {(engine: "aivis" | "elevenlabs") => ({ ok: boolean; reason?: string } | Promise<{ ok: boolean; reason?: string }>)} [options.onPrepareVoiceEngine]
  *   耳の Start で声の engine を用意する口（cockpit.mjs が engine の作成・作り直し・ElevenLabs のキーの読み込みを
  *   担う。**cockpit-server は engine の実体もキーも知らない**）。耳を開く前に呼び、`ok:false` なら Start を失敗に
@@ -941,6 +947,14 @@ export function createCockpitServer(options = {}) {
   /** @type {string | null} */
   let lastChatStatus = null;
   /**
+   * この起動で入れた YouTube の source（配信の組み直し 仕上げ・体験の素描 場面 3 の注記）。POST /api/chat/source で
+   * 保存した値か、Connect した値。「配信を始める」はこの source へつなぐ（startChatForStream）。起動時に設定から読み戻した
+   * だけの前回の source（chatSourceStatus の値）はここに入らない＝つなぎにいかない（配信ごとに URL が替わるため）。
+   * 欄を空にして保存したとき・Disconnect を押したときは null に戻す（つながない）。
+   * @type {string | null}
+   */
+  let chatSourceThisBoot = null;
+  /**
    * 配信者の行の文字起こしの遅延（seq → ms・遅延の「文字起こし」区間の材料）。直近だけ持つ。
    * @type {Map<number, number | null>}
    */
@@ -1066,7 +1080,10 @@ export function createCockpitServer(options = {}) {
       chat: {
         source: typeof chatSourceStatusImpl === "function" ? (chatSourceStatusImpl()?.source ?? null) : null,
         connected: chatClient != null,
-        state: chatClient ? chatClient.getState() : null
+        state: chatClient ? chatClient.getState() : null,
+        // この起動で入れた（保存した・Connect した）source があるか（配信の組み直し 仕上げ）。true なら「配信を始める」で
+        // つなぐ。欄に前回の値が戻っているだけなら false（自動ではつながない）。
+        enteredThisBoot: chatSourceThisBoot != null
       },
       // 操縦席の作り直し 1 回目（データ側・cockpit-glance-redesign.md §9）: 残量・警告・遅延のしきい値。
       quota: quotaSource ? quotaSnapshotSafe() : null,
@@ -1074,9 +1091,9 @@ export function createCockpitServer(options = {}) {
       latencyThresholds: { ...latencyThresholds },
       // 頭の会話の圧縮の最中か（状態のピルの「圧縮中」・既定 false・killed と同じく常に boolean）。
       compacting: contextCompacting,
-      // 圧縮の目安（{ thresholdTokens }・設定の「頭脳・会話」タブ。未注入なら null・memory と同型）。
+      // 圧縮の目安（{ thresholdTokens }・設定のロールのタブの下の頭の調整。未注入なら null・memory と同型）。
       compaction: typeof contextCompactionStatusImpl === "function" ? (contextCompactionStatusImpl() ?? null) : null,
-      // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定の「頭脳・会話」タブ。未注入なら null）。
+      // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定のロールのタブの下の頭の調整。未注入なら null）。
       codexFast: typeof codexFastStatusImpl === "function" ? (codexFastStatusImpl() ?? null) : null
     };
   }
@@ -1284,7 +1301,7 @@ export function createCockpitServer(options = {}) {
       // 永続化失敗は起動を止めない（B の file-backed 実体の I/O 失敗を握る）。
     }
 
-    // 文字起こしの方式（マイクと同じく Start の前に選ぶ）。Start ごとに記憶する（失敗寛容）。
+    // 文字起こしの方式（マイクと同じく場が閉じている間に選ぶ）。「配信を始める」ごとに記憶する（失敗寛容）。
     if (engineChoice) sttEngine = engineChoice;
     const engine = sttEngine;
     if (onSetSttEngine) {
@@ -1294,7 +1311,7 @@ export function createCockpitServer(options = {}) {
         // 永続化失敗は起動を止めない（setLastDevice と同型）。
       }
     }
-    // 声の方式（文字起こしと同じく Start の前に選び、Start ごとに記憶する・失敗寛容）。
+    // 声の方式（今のロールの声・applyRoleResult が揃える）。「配信を始める」ごとに記憶する（失敗寛容）。
     if (ttsChoice) ttsEngine = ttsChoice;
     const voiceKind = ttsEngine;
     if (onSetTtsEngine) {
@@ -1588,7 +1605,8 @@ export function createCockpitServer(options = {}) {
   //  /api/stream/start・/api/stream/stop と、後方互換の /api/ears/start・/api/ears/stop）と、Ctrl+C（cockpit.mjs の
   //  shutdown が endStream を呼ぶ）はどれもここを通る（別の道を残さない）。
   //  始める: ロールを固める → 場の記録を作り直す → KILL を OFF → 判定・発火の予定・コメント反応・思い出しの係の積み残しを
-  //  捨てる → 耳・目・声 → 頭のセッション → 体があれば器（つながらなければ場は開かない）→ YouTube（場を開く前に Connect したものだけ持ち込む・無くても開く）。
+  //  捨てる → 耳・目・声 → 頭のセッション → 体があれば器（つながらなければ場は開かない）→ YouTube（Connect 済みなら持ち込み、
+  //  この起動で入れた URL ならつなぐ・前回の起動から欄に残っているだけの URL はつながない・つながらなくても開く）。
   //  終える: 写し → 畳む → 記憶の最後の保存を待つ（closing の間 = 「記録中」）→ 閉じる。
 
   /**
@@ -1689,36 +1707,68 @@ export function createCockpitServer(options = {}) {
    * 場の器官を畳む（配信を終える の 2・始めるの途中の失敗の巻き戻し）。順は設計 §3 のとおり YouTube → 判定・
    * 発火の予定 → （鳴っている声を止める）→ 目・耳 → 頭のセッション → 器。器は体の有無に関わらず畳む（体ありの Fire の
    * あと体なしへ替えたときの開きっぱなしを防ぐ）。
+   * 1 つの段が想定外に投げても残りの段は畳む（耳・頭のセッション・器を畳み残さない）。投げた段があれば、全部を畳んだ
+   * あとで最初の例外を投げ直す（呼び出し側の catch が「想定外のエラー」として扱う・配信の組み直し 仕上げ）。
    * @param {{ chat: boolean; ears: boolean; session: boolean }} what
    */
   async function foldStream(what) {
-    if (what.chat) foldChatClient();
-    parkJudges();
-    parkFireScheduler();
-    parkRecallDesk();
-    // 鳴っている・考えている返事を止める（キルと同じ切り方）。KILL の表示（killed）は替えない＝次の始めるで revive する。
-    if (fireOrchestrator && typeof (/** @type {any} */ (fireOrchestrator).kill) === "function" && fireOrchestrator.getState() !== "idle") {
+    /** @type {{ error: unknown } | null} */
+    let failure = null;
+    /** @param {() => unknown} fn */
+    const step = async (fn) => {
       try {
-        await /** @type {any} */ (fireOrchestrator).kill();
-      } catch {
-        // best-effort
+        await fn();
+      } catch (error) {
+        if (!failure) failure = { error };
       }
-    }
-    if (what.ears) await stopEars();
-    if (what.session) await runStreamHook("closeSession");
-    await runStreamHook("closeBody");
+    };
+    if (what.chat) await step(() => foldChatClient());
+    await step(() => parkJudges());
+    await step(() => parkFireScheduler());
+    await step(() => parkRecallDesk());
+    // 鳴っている・考えている返事を止める（キルと同じ切り方）。KILL の表示（killed）は替えない＝次の始めるで revive する。
+    await step(async () => {
+      if (fireOrchestrator && typeof (/** @type {any} */ (fireOrchestrator).kill) === "function" && fireOrchestrator.getState() !== "idle") {
+        try {
+          await /** @type {any} */ (fireOrchestrator).kill();
+        } catch {
+          // best-effort
+        }
+      }
+    });
+    if (what.ears) await step(() => stopEars());
+    if (what.session) await step(() => runStreamHook("closeSession"));
+    await step(() => runStreamHook("closeBody"));
+    if (failure) throw failure.error;
   }
 
   /**
-   * YouTube（始める 7）。配信の組み直し Domain E・Undine の追認: 「URL が前もって入っていれば」は「この起動で場を開く前に
-   * Connect したものだけ」と読む。場が閉じている間に Connect してあれば、その器官をそのまま場に持ち込む（作り直さない）。
-   * 設定に保存してある前回の URL へは、ここではつなぎにいかない（配信ごとに URL が替わるので、前の配信の URL へ毎回
-   * つなぎにいくのは体験に合わない。欄に前回の値が戻るのは今のまま＝Connect を押せばつながる）。前の場で Connect した
-   * 器官は「配信を終える」で畳むので持ち込まれない。どちらでも場は開く。
-   * @returns {boolean}  持ち込んだ器官があるか。
+   * YouTube（始める 7・stream-restructure.md §3）。配信の組み直し 仕上げ・Undine の追認（体験の素描 場面 3 の注記）:
+   * **この起動で入れた、または Connect した URL はつなぐ。前回の起動から欄に残っているだけの URL はつながない**
+   * （配信ごとに URL が替わるため）。
+   *  - 場を開く前に Connect してあれば、その器官をそのまま場に持ち込む（作り直さない）。
+   *  - 器官が無く、この起動で入れた source（chatSourceThisBoot）があれば、それへつなぐ（POST /api/chat/connect と同じ
+   *    connectChat）。前の場で入れた source も、同じ起動の間は次の場でまたつなぐ（「配信を終える」は器官を畳むが、入れた
+   *    ことは覚えている）。
+   *  - 起動時に設定から読み戻しただけの前回の source（chatSourceStatus）へは、つなぎにいかない。
+   *  - つながらなくても（器官の生成や start が投げても）場は開く。器官は畳み、ログのタブに 1 行（chatDiagnostic）出す。
+   * @returns {Promise<"kept" | "connected" | "none" | "failed">}
    */
-  function keepPreconnectedChat() {
-    return chatClient != null;
+  async function startChatForStream() {
+    if (chatClient != null) return "kept";
+    if (chatSourceThisBoot == null || typeof chatClientFactory !== "function") return "none";
+    try {
+      await connectChat(chatSourceThisBoot);
+      return "connected";
+    } catch (error) {
+      foldChatClient();
+      broadcastChatDiagnostic({
+        kind: "internalError",
+        message: `配信を始めるときに YouTube につなげなかった（${errMessage(error)}・Connect でつなぎ直せる）`,
+        atMs: nowImpl()
+      });
+      return "failed";
+    }
   }
 
   /**
@@ -1811,8 +1861,8 @@ export function createCockpitServer(options = {}) {
       // 6. 体があれば器（体なしは cockpit.mjs が何もしない）。つながらなければ場は開かない。
       const body = await runStreamHook("connectBody");
       if (!body.ok) return fail(body.reason, { ears: true, session: true });
-      // 7. YouTube（この起動で場を開く前に Connect したものだけ持ち込む。無くても場は開く）。
-      keepPreconnectedChat();
+      // 7. YouTube（Connect 済みなら持ち込む・この起動で入れた URL ならつなぐ。つながらなくても場は開く）。
+      await startChatForStream();
       streamPhase = "open";
       streamOpenedAtMs = nowImpl();
       broadcastState();
@@ -1846,19 +1896,41 @@ export function createCockpitServer(options = {}) {
     const run = (async () => {
       /** @type {{ ok: true } | { ok: false; status: number; error: string }} */
       let outcome = { ok: true };
+      /** @type {ReadonlyArray<any> | null} */
+      let transcript = null;
+      // 記憶の最後の保存を頼んだか（想定外の例外の道で二度頼まないため）。
+      let finalSaveRequested = false;
       try {
         // 1. 会話の正本の写しを取る（畳むと消える）。
-        const transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
+        transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
         // 2. YouTube・判定・発火の予定・目・耳・頭のセッション・器を畳む。
         await foldStream({ chat: true, ears: true, session: true });
         // 3. 記憶の最後の保存をして待つ（この間 stream.phase は "closing" = 画面の「記録中」）。
+        finalSaveRequested = true;
         await runStreamHook("saveFinal", transcript);
       } catch (error) {
         // 想定外の例外でも closing のまま固めない: 畳み残しをもう一度畳んで（best-effort）から閉じる。
+        // 配信の組み直し 仕上げ・Undine の追認: 記憶を落とさない側に倒す。最後の保存がまだ頼まれていなければ 1 回だけ
+        // 頼む（写しが取れていなければ、耳が残っていればもう一度だけ写しを試す。取れなければ空で頼む）。
+        if (transcript == null) {
+          try {
+            transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
+          } catch {
+            transcript = [];
+          }
+        }
         try {
           await foldStream({ chat: true, ears: true, session: true });
         } catch {
           // best-effort
+        }
+        if (!finalSaveRequested) {
+          finalSaveRequested = true;
+          try {
+            await runStreamHook("saveFinal", transcript);
+          } catch {
+            // best-effort（保存の口を引くこと自体が投げても閉じる）。
+          }
         }
         outcome = { ok: false, status: 500, error: `配信を終える途中で想定外のエラー（${errMessage(error)}）` };
       }
@@ -2248,6 +2320,12 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // 配信の組み直し 仕上げ・Undine の追認: 口数はロールの持ち物。場の途中（開きかけ・開いている・閉じかけ）は替えない
+      // （POST /api/role/edit と同じ 409・何も変えない・設計 §3「ロールを固める」）。
+      if (streamPhase !== "closed") {
+        sendJson(res, 409, { error: "配信の途中は口数を替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
+        return;
+      }
       const mode = body.mode;
       // self-fire は boolean 強制だが、verbosity は妥当な mode（quiet/normal/chatty）を要求する
       // （無効入力を早期に弾く・防御的）。
@@ -2275,6 +2353,11 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // 配信の組み直し 仕上げ: 話し始めもロールの持ち物（POST /api/verbosity と同じ 409・何も変えない）。
+      if (streamPhase !== "closed") {
+        sendJson(res, 409, { error: "配信の途中は話し始めを替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
+        return;
+      }
       const mode = body.mode;
       if (mode !== "classic" && mode !== "speak-now") {
         sendJson(res, 400, { error: "invalid speak-start mode" });
@@ -2459,6 +2542,13 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // 配信の組み直し 仕上げ（全体の突き合わせの持ち越し 2）: 場の開きかけ・閉じかけの間は Connect を断る（閉じかけの
+      // 間につないだ器官が場の外に残り、次の場へ持ち込まれるのを防ぐ・開きかけは始める 7 のつなぎと競らない）。何も変えない。
+      // 閉じている間と開いている間は今のまま通す（YouTube の欄は場が開いている間も触れる・設計 §3）。
+      if (streamPhase === "opening" || streamPhase === "closing") {
+        sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
+        return;
+      }
       const raw = typeof body.source === "string" ? body.source.trim() : "";
       if (raw.length === 0) {
         // Connect には配信 source が要る（空はクリアではなくエラー・停止は disconnect で行う）。
@@ -2478,8 +2568,33 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/chat/source") {
+      // 配信の組み直し 仕上げ（体験の素描 場面 3: 「URL を入れるだけで、Connect は配信を始めるがやる」）: YouTube の欄に
+      // 入れた source を保存し、この起動で入れたことを覚える（つなぎはしない・つなぐのは「配信を始める」か Connect）。
+      // 空（または null）は「つながない」: 保存した値を消し、覚えたことも消す。場のどの状態でも通す（欄は場の間も触れる）。
+      const body = await readJsonBody(req);
+      if (body.source !== null && typeof body.source !== "string") {
+        sendJson(res, 400, { error: "chat source must be a string (or null to clear)." });
+        return;
+      }
+      const raw = typeof body.source === "string" ? body.source.trim() : "";
+      const source = raw.length > 0 ? raw : null;
+      chatSourceThisBoot = source;
+      if (typeof onSetChatSource === "function") {
+        try {
+          await onSetChatSource(source);
+        } catch {
+          // 永続化の失敗は止めない（この起動の間は覚えている・connectChat と同じ失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/chat/disconnect") {
-      // 稼働中のチャット器官を停止して畳む（冪等・器官が無くても 200）。
+      // 稼働中のチャット器官を停止して畳む（冪等・器官が無くても 200）。配信の組み直し 仕上げ: 自分で切った source は
+      // 次の「配信を始める」でつなぎ直さない（この起動で入れたことを忘れる・欄の値と保存した値はそのまま）。
+      chatSourceThisBoot = null;
       foldChatClient();
       broadcastState();
       sendJson(res, 200, snapshot());
@@ -3415,6 +3530,8 @@ export function createCockpitServer(options = {}) {
    * @returns {Promise<void>}
    */
   async function connectChat(source) {
+    // この起動で Connect した source を覚える（次の「配信を始める」でもつなぐ・配信の組み直し 仕上げ）。
+    chatSourceThisBoot = source;
     foldChatClient(); // 作り直し: 既存器官を畳んでから新規生成（同一インスタンス restart は無い）。
     const client = /** @type {any} */ (chatClientFactory)({ source });
     chatClient = client;

@@ -6,6 +6,9 @@
  *  - [recall-flow.md](../../../../../discussion/ai-cohost/memory/recall-flow.md) — 役の区別・git は魂が機械的にコミット。
  *  - [conventions-draft.md](../../../../../discussion/ai-cohost/memory/conventions-draft.md) — `_conventions.md` の本文。
  *  - [memory-recall-wave-plan.md](../../../../../discussion/ai-cohost/implementation/orchestration/memory-recall-wave-plan.md) — §1 Domain B。
+ *  - [stream-restructure.md](../../../../../discussion/ai-cohost/architecture/stream-restructure.md) — §2.3 記憶はロールごと。
+ *  記憶の作り直しの当時は記憶のフォルダが `memories/` の直下だった。配信の組み直し(2026-10-31)から、記憶のフォルダは
+ *  ロールごとの `memories/<role-id>/`(チャッピーは `memories/chappy/`)で、この部品が受け取る `dir` はそのフォルダ。
  *
  * ── この部品がやること ───────────────────────────────────────────────────
  *  1. prepareMemoryFolder: 記憶のフォルダが無ければ作り、`.git` が無ければ `git init` し、
