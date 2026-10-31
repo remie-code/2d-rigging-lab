@@ -76,7 +76,7 @@ test("runRecall: read-only・cwd = 記憶のフォルダ・最後の答えだけ
   assert.equal(calls.disposed, 1);
 });
 
-test("runRecall: 頼みには頼みごと・直近 1 分の会話（視聴者名なし）・_conventions.md から探す手順・答えの形が入る", { timeout: 5000 }, async () => {
+test("runRecall: 頼みには頼みごと・直近 1 分の会話（視聴者名つき）・_conventions.md から探す手順・答えの形が入る", { timeout: 5000 }, async () => {
   const { create, calls } = makeFakeCreate(async () => ({ replyText: "見つからなかった" }));
   const result = await runRecall({ create, request: "エルデンリング 前回どこまで", entries: sampleEntries(), nowMs: NOW, dir: DIR });
   assert.deepEqual(result, { found: false, summary: "" });
@@ -88,18 +88,19 @@ test("runRecall: 頼みには頼みごと・直近 1 分の会話（視聴者名
   assert.match(content, /「見つかった」/);
   assert.match(content, /「見つからなかった」とだけ答える/);
   assert.match(content, /you: 前回どこまで行ったっけ/);
-  assert.match(content, /viewer: ボス倒した？/);
+  assert.match(content, /viewer\(taro_viewer\): ボス倒した？/);
   assert.match(content, /soul: ちょっと記録見てくるね/);
-  assert.ok(!content.includes("taro_viewer"), "視聴者名を落とす");
   assert.ok(!content.includes("古い話"), "1 分より前は渡さない");
   assert.match(RECALL_SYSTEM_PROMPT, /`_conventions\.md` を読み/);
   assert.match(RECALL_SYSTEM_PROMPT, /読むだけ/);
 });
 
-test("formatRecentConversation: 窓は 1 分・空行は捨てる・名前は描かない", () => {
+test("formatRecentConversation: 窓は 1 分・空行は捨てる・視聴者の名前を付ける", () => {
   assert.equal(RECALL_CONTEXT_MS, 60_000);
   const text = formatRecentConversation([...sampleEntries(), { speaker: "you", text: "  ", appendedAtMs: NOW }], { nowMs: NOW });
-  assert.equal(text, "you: 前回どこまで行ったっけ\nviewer: ボス倒した？\nsoul: ちょっと記録見てくるね");
+  assert.equal(text, "you: 前回どこまで行ったっけ\nviewer(taro_viewer): ボス倒した？\nsoul: ちょっと記録見てくるね");
+  const noName = formatRecentConversation([{ speaker: "viewer", text: "こんにちは", appendedAtMs: NOW }], { nowMs: NOW });
+  assert.equal(noName, "viewer: こんにちは", "名前が無い viewer 行は名前なしのまま");
   assert.match(buildRecallRequest({ request: "x", recentText: "" }), /\(なし\)/);
 });
 

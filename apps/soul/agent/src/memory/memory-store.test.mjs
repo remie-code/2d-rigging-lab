@@ -55,7 +55,7 @@ test("種は conventions-draft の本文(見出しから始まり、たたき台
   const seed = readFileSync(CONVENTIONS_SEED_PATH, "utf8");
   assert.ok(seed.startsWith("# 記憶の置き場の決まり"));
   assert.ok(!seed.includes("たたき台"));
-  assert.ok(seed.includes("視聴者の名前"));
+  assert.ok(!seed.includes("視聴者の名前"), "名前の縛りは置かない");
 });
 
 test("prepareMemoryFolder: 無いフォルダを作り、git init し、ローカル設定と種を置く", async (t) => {

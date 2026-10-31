@@ -28,11 +28,12 @@
 - 配信モードの新しい形は stream-experience-sketch.md で全場面決定。
 - 開発の的と進め方を決めた(scope §15)。
 - 受信の試しは合格(2026-10-31、[../experiments/discord-receive-probe.md](../experiments/discord-receive-probe.md))。
+- 配信の組み直しは完了(2026-10-31、人間ゲート合格、master へマージ `e1e77f75`)。計画と結果: [../implementation/orchestration/stream-restructure-wave-plan.md](../implementation/orchestration/stream-restructure-wave-plan.md)。
 
 ## 3. Next Actions
 
-1. 進め方は決定(scope §15): 受信の試し(済み・合格) → 配信の組み直し → Discord を足す。
-2. 組み直しの設計のたたき台: [../architecture/stream-restructure.md](../architecture/stream-restructure.md)(前提は scope §18〜§20)。確認済み。次は wave の計画。
+1. 進め方(scope §15): 受信の試し(済み・合格) → 配信の組み直し(済み) → **Discord を足す(次)**。
+2. Discord を足す前の context-check(2026-10-31): 最初の的・体験の素描の ★・記憶の扱いをユーザーと決め、外の事実は棚卸しで埋める。
 
 ## 4. Unresolved Questions
 

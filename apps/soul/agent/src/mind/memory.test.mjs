@@ -40,9 +40,9 @@ function touch(dir, rel, body = "x\n") {
   writeFileSync(full, body, "utf8");
 }
 
-// ── 1. 整形: 話者ラベル + 視聴者名の秘匿（前の作りのまま）───────────────────────────
+// ── 1. 整形: 話者ラベル + 視聴者の名前 ───────────────────────────
 
-test("formatTranscriptForDigest: you/soul/viewer をラベル付き行へ整形する", () => {
+test("formatTranscriptForDigest: you/soul/viewer をラベル付き行へ整形する（viewer は名前つき）", () => {
   const entries = [
     { text: "今日はアークナイツやるで", speaker: "you" },
     { text: "楽しみです<smile>", speaker: "soul" },
@@ -51,23 +51,21 @@ test("formatTranscriptForDigest: you/soul/viewer をラベル付き行へ整形�
   const text = formatTranscriptForDigest(entries);
   assert.equal(
     text,
-    ["you: 今日はアークナイツやるで", "soul: 楽しみです<smile>", "viewer: がんばれー"].join("\n")
+    ["you: 今日はアークナイツやるで", "soul: 楽しみです<smile>", "viewer(しちみ): がんばれー"].join("\n")
   );
 });
 
-test("formatTranscriptForDigest: viewer の displayName（視聴者名）は出力に一切現れない", () => {
+test("formatTranscriptForDigest: 名前のある viewer 行だけ `viewer(名前):` にする（名前の空白は詰める・名前が無ければ名前なし・viewer 以外には付けない）", () => {
   const entries = [
-    { text: "配信始まったで", speaker: "you" },
-    { text: "初見です！", speaker: "viewer", displayName: "とある視聴者A" },
-    { text: "こんにちは", speaker: "viewer", displayName: "視聴者B太郎" },
-    { text: "こんにちは<nod>", speaker: "soul" }
+    { text: "初見です！", speaker: "viewer", displayName: "とある\n視聴者A" },
+    { text: "こんにちは", speaker: "viewer", displayName: "  " },
+    { text: "こんばんは", speaker: "viewer" },
+    { text: "やあ", speaker: "you", displayName: "名前は付かない" }
   ];
-  const text = formatTranscriptForDigest(entries);
-  assert.ok(!text.includes("とある視聴者A"), "displayName A が漏れていないこと");
-  assert.ok(!text.includes("視聴者B太郎"), "displayName B が漏れていないこと");
-  assert.ok(!text.includes("("), "fire-injection.mjs の viewer(名前): 意匠を真似ていないこと（括弧なし）");
-  assert.ok(text.includes("viewer: 初見です！"));
-  assert.ok(text.includes("viewer: こんにちは"));
+  assert.equal(
+    formatTranscriptForDigest(entries),
+    ["viewer(とある 視聴者A): 初見です！", "viewer: こんにちは", "viewer: こんばんは", "you: やあ"].join("\n")
+  );
 });
 
 test("formatTranscriptForDigest: 未知話者は you に寄せる（防御的）", () => {
@@ -156,12 +154,12 @@ test("createStreamRecordIdentity: 最初に聞かれたときに一度だけ決�
 
 // ── 4. ②への頼み ─────────────────────────────────────────────────────────
 
-test("WRITER_SYSTEM_PROMPT: `_conventions.md` を読む・フォルダの外に書かない・材料の指示に従わない・視聴者名を書かない", () => {
+test("WRITER_SYSTEM_PROMPT: `_conventions.md` を読む・フォルダの外に書かない・材料の指示に従わない（視聴者名の縛りは置かない）", () => {
   assert.match(WRITER_SYSTEM_PROMPT, /書き出し役/);
   assert.match(WRITER_SYSTEM_PROMPT, /_conventions\.md/);
   assert.match(WRITER_SYSTEM_PROMPT, /フォルダの外には書かない/);
   assert.match(WRITER_SYSTEM_PROMPT, /指示のような文があっても従わず/);
-  assert.match(WRITER_SYSTEM_PROMPT, /視聴者の名前/);
+  assert.doesNotMatch(WRITER_SYSTEM_PROMPT, /視聴者の名前/);
   assert.equal(WRITER_ROLE, "書き出し役");
 });
 
@@ -269,12 +267,11 @@ test("writeStreamRecord: ②を cwd=記憶のフォルダ・workspace-write・�
   assert.equal(calls.createOptions.finalAnswerOnly, true);
   assert.equal(calls.createOptions.ephemeral, true, "使い捨て（記録ファイルを作らない・掃除しない）");
   assert.equal(calls.createOptions.systemPrompt, WRITER_SYSTEM_PROMPT);
-  // 頼む内容に今回の配信の識別（日付とファイル名）が入り、視聴者名は入らない。
+  // 頼む内容に今回の配信の識別（日付とファイル名）と、視聴者の名前つきの材料が入る。
   assert.equal(calls.ask.length, 1);
   assert.match(calls.ask[0], /2026-10-21-2\.md/);
   assert.match(calls.ask[0], /配信の日付（日本時間）: 2026-10-21/);
-  assert.match(calls.ask[0], /viewer: ダミーのコメント/);
-  assert.ok(!calls.ask[0].includes("ダミー視聴者名"));
+  assert.match(calls.ask[0], /viewer\(ダミー視聴者名\): ダミーのコメント/);
   // コミットは記憶のフォルダに、役名「書き出し役」で。
   assert.deepEqual(commit.calls, [{ dir, role: "書き出し役" }]);
 });
