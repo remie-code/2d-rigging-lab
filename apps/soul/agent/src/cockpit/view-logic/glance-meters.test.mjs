@@ -12,6 +12,9 @@ import {
   WARNINGS_SHOWN,
   statusPillView,
   isPreStream,
+  streamPhaseOf,
+  streamStartView,
+  endStreamButtonView,
   driveSummaryView,
   QUOTA_LOW_PERCENT,
   QUOTA_CRITICAL_PERCENT,
@@ -161,4 +164,54 @@ test("driveSummaryView: 自発・口数・話し始め・忙しい間のコメ�
     ["OFF", "控えめ", "従来", "見逃す"]
   );
   assert.deepEqual(driveSummaryView(null).map((s) => s.value), ["—", "—", "—", "—"]);
+});
+
+// ── 配信の組み直し Domain D: 場（配信を始める / 終える）のメイン画面 ─────────────────────────────
+
+test("streamPhaseOf / isPreStream(ears, stream): 場の状態で決める（stream の無い古いサーバは耳の状態から読む）", () => {
+  assert.equal(streamPhaseOf({ phase: "open" }, "stopped"), "open");
+  assert.equal(streamPhaseOf({ phase: "closing" }, "listening"), "closing");
+  assert.equal(streamPhaseOf(null, "listening"), "open");
+  assert.equal(streamPhaseOf(null, "stopped"), "closed");
+  assert.equal(streamPhaseOf({ phase: "bogus" }, null), "closed");
+  assert.equal(isPreStream("listening", { phase: "closed" }), true, "場が閉じていれば配信前");
+  assert.equal(isPreStream("listening", { phase: "opening" }), true, "開きかけも中央のボタン（押せない）");
+  assert.equal(isPreStream("stopped", { phase: "closing" }), true, "閉じかけ（記録中）も中央");
+  assert.equal(isPreStream("listening", { phase: "open" }), false, "開いているときは今のまま（会話の列）");
+  assert.equal(isPreStream("listening", null), false, "stream の無い古いサーバは耳の状態");
+  assert.equal(isPreStream("stopped"), true, "stream を渡さなければ今までどおり");
+});
+
+test("streamStartView: 閉じているときは「配信を始める」（押せる）と始められなかった理由・開きかけ / 閉じかけは押せない・閉じかけは「記録中…」", () => {
+  assert.deepEqual(streamStartView({ phase: "closed", error: null }), {
+    phase: "closed",
+    startText: "配信を始める",
+    startDisabled: false,
+    noteText: "",
+    errorText: ""
+  });
+  const reason = "体の器（runtime-player）につながらない — runtime-player が起動していないか、channel が開いていない。";
+  assert.equal(streamStartView({ phase: "closed", error: reason }).errorText, reason);
+  assert.equal(streamStartView({ phase: "closed", error: reason }, "通信の失敗").errorText, "通信の失敗", "要求そのものの失敗を先に");
+  assert.deepEqual(streamStartView({ phase: "opening", error: null }), {
+    phase: "opening",
+    startText: "配信を始めています…",
+    startDisabled: true,
+    noteText: "",
+    errorText: ""
+  });
+  assert.deepEqual(streamStartView({ phase: "closing", error: null }), {
+    phase: "closing",
+    startText: "配信を終えています…",
+    startDisabled: true,
+    noteText: "記録中…",
+    errorText: ""
+  });
+  assert.equal(streamStartView(null).startText, "配信を始める");
+});
+
+test("endStreamButtonView: 「配信を終える」は場が開いている間だけ・1 回目で armed（もう一度押すと終える）", () => {
+  assert.deepEqual(endStreamButtonView({ phase: "open" }, false), { show: true, text: "配信を終える", className: "stream-end" });
+  assert.deepEqual(endStreamButtonView({ phase: "open" }, true), { show: true, text: "もう一度押すと配信を終える", className: "stream-end armed" });
+  for (const phase of ["closed", "opening", "closing"]) assert.equal(endStreamButtonView({ phase }, false).show, false, phase);
 });

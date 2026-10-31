@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 const COCKPIT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(COCKPIT_DIR, "ui");
 
-import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot } from "./ui/app.mjs";
+import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot, StartupNotices } from "./ui/app.mjs";
 import { TopBar, HealthLine, HealthStat, identityDisplayName, cockpitDocumentTitle, NEUTRAL_COCKPIT_TITLE } from "./ui/header.mjs";
 import { Feed, FeedRow, isStuckToBottom, STICK_THRESHOLD_PX } from "./ui/feed.mjs";
 import {
@@ -58,7 +58,6 @@ import { ConversationInstructionEditor } from "./ui/conversation-instruction-edi
 import { soulStatusView, selfFireToggleView, killSwitchView, bargeInToggleView } from "./view-logic/control.mjs";
 import { chatStatusView, channelStatusView } from "./view-logic/status.mjs";
 import { BRAIN_LABELS } from "./view-logic/health.mjs";
-import { conversationBrainIdentity } from "./view-logic/conversation-instruction.mjs";
 
 // ── (1) Node インポートスモーク（import 文自体が成功している時点で副作用ゼロの構造証明）──
 
@@ -374,9 +373,12 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     commentBusy: null, // コメント反応の合意 §2: scheduler 未生成なら null（speakStart と同型）。
     killed: false, // S8: サーバ既定 false（他の null 許容フィールドとは非対称）。
     brain: null, // 多頭化 Domain C: audioDevice/channel と同型の null 許容。
+    role: null, // 配信の組み直し Domain A: brain と同型の null 許容（roleStatus 未注入なら null）。
+    notices: [], // 配信の組み直し Domain A: 起動時の知らせ（無ければ空）。
     memory: null, // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
     compaction: null, // 圧縮の目安: memory と同型の null 許容（contextCompactionStatus 未注入なら null）。
-    codexFast: null // ①の Codex の頭の fast: compaction と同型の null 許容（codexFastStatus 未注入なら null）。
+    codexFast: null, // ①の Codex の頭の fast: compaction と同型の null 許容（codexFastStatus 未注入なら null）。
+    stream: null // 配信の組み直し Domain D: 場の状態（無い古いサーバは null）。
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
@@ -390,21 +392,24 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     bargeIn: { enabled: false },
     killed: true,
     brain: { brain: "codex", credentialHealth: true },
+    role: { id: "chappy", displayName: "チャッピー", brain: "codex", body: true, roles: [{ id: "chappy", displayName: "チャッピー" }] },
+    notices: ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。"],
     memory: { lastRecordAtMs: 1721234567890, recording: false },
     compaction: { thresholdTokens: 200_000 },
-    codexFast: { enabled: true, applicable: true, supported: true }
+    codexFast: { enabled: true, applicable: true, supported: true },
+    stream: { phase: "open", error: null, openedAtMs: 1721234560000 }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
 });
 
-test("Settings modal「頭脳・会話」: 圧縮の下に「返事の速さ」の Codex の fast トグルを置き、POST /api/codex-fast → snapshot 反映", () => {
+test("Settings modal「ロール」（頭の調整・配信の組み直し Domain E で頭脳・会話から移した）: 圧縮の下に「返事の速さ」の Codex の fast トグルを置き、POST /api/codex-fast → snapshot 反映", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   const brainPanel = source.slice(
-    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
-    source.indexOf('id="cockpit-settings-panel-memory"')
+    source.indexOf('id="cockpit-settings-panel-role"'),
+    source.indexOf('id="cockpit-settings-panel-drive"')
   );
   const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
-  // 置き場所: 頭脳・会話のタブの一覧側・圧縮の区画の後。
+  // 置き場所: ロールのタブの一覧側（性格の指示の編集ページではない側）・圧縮の区画の後。
   assert.ok(listSide.indexOf("会話の圧縮") < listSide.indexOf('<h3 class="drawer-subhead">返事の速さ</h3>'));
   assert.match(listSide, /<label class="codex-fast-pill">\s*<span class="pill-label">Codex の fast<\/span>/);
   assert.match(
@@ -424,14 +429,14 @@ test("Settings modal「頭脳・会話」: 圧縮の下に「返事の速さ」�
   assert.match(COCKPIT_CSS, /\.codex-fast-status\.on \{ color: var\(--up\); \}/);
 });
 
-test("Settings modal「頭脳・会話」: 圧縮を始める大きさの select + Set を頭脳の区画に置き、POST /api/compact-threshold → snapshot 反映", () => {
+test("Settings modal「ロール」（頭の調整・配信の組み直し Domain E で頭脳・会話から移した）: 圧縮を始める大きさの select + Set を置き、POST /api/compact-threshold → snapshot 反映", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   const brainPanel = source.slice(
-    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
-    source.indexOf('id="cockpit-settings-panel-memory"')
+    source.indexOf('id="cockpit-settings-panel-role"'),
+    source.indexOf('id="cockpit-settings-panel-drive"')
   );
   assert.ok(brainPanel.length > 0);
-  // 置き場所: 頭脳・会話のタブ（会話指示の編集ページではない側）。
+  // 置き場所: ロールのタブ（性格の指示の編集ページではない側）。
   const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
   assert.match(listSide, /<h3 class="drawer-subhead">会話の圧縮<\/h3>/);
   assert.match(listSide, /<label for="compact-threshold-select">圧縮を始める大きさ<\/label>/);
@@ -508,25 +513,36 @@ test("FeedRow vnode スモーク: 各行種が view-logic 導出済み文字列�
   assert.equal(texts({ kind: "unknown-kind" }), ""); // 未知 kind は何も描かない。
 });
 
-test("TopBar identity: サーバー提供の Cody/Chappy displayName を描き、欠落/未知は中立表示", () => {
+test("TopBar identity: サーバー提供のロールの名前（cody / chappy 以外も）を描き、形の違う・欠落は中立表示（配信の組み直し Domain A）", () => {
   const props = { ears: "listening", soul: "idle", warnings: [], quota: null, nowMs: 0 };
   assert.equal(identityDisplayName({ id: "cody", displayName: "こーでぃー" }), "こーでぃー");
   assert.equal(identityDisplayName({ id: "chappy", displayName: "チャッピー" }), "チャッピー");
+  // 名前はロールが持つので、cody / chappy の 2 組に限らない（形だけを確かめる）。
+  assert.equal(identityDisplayName({ id: "mio", displayName: "みお" }), "みお");
+  assert.equal(identityDisplayName({ id: "role-2", displayName: " 二人目 " }), "二人目");
   assert.equal(identityDisplayName(null), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "gpt", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "chappy", displayName: "stale" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "cody", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(identityDisplayName({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "Chappy", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "../x", displayName: "x" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "mio", displayName: "  " }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(identityDisplayName({ id: "mio", displayName: "あ".repeat(33) }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(identityDisplayName({ id: 1, displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(identityDisplayName({ id: "cody", displayName: 1 }), NEUTRAL_COCKPIT_TITLE);
   assert.equal(collectText(TopBar({ ...props, identity: { id: "cody", displayName: "こーでぃー" } })).join("").includes("こーでぃー"), true);
-  assert.equal(collectText(TopBar({ ...props, identity: { id: "chappy", displayName: "チャッピー" } })).join("").includes("チャッピー"), true);
+  assert.equal(collectText(TopBar({ ...props, identity: { id: "mio", displayName: "みお" } })).join("").includes("みお"), true);
   assert.equal(collectText(TopBar({ ...props, identity: undefined })).join("").includes(NEUTRAL_COCKPIT_TITLE), true);
   assert.equal(cockpitDocumentTitle({ id: "cody", displayName: "こーでぃー" }), "こーでぃー — Soul Cockpit");
-  assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "チャッピー" }), "チャッピー — Soul Cockpit");
-  assert.equal(cockpitDocumentTitle({ id: "unknown", displayName: "GPT" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(cockpitDocumentTitle({ id: "cody", displayName: "チャッピー" }), NEUTRAL_COCKPIT_TITLE);
-  assert.equal(cockpitDocumentTitle({ id: "chappy", displayName: "こーでぃー" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(cockpitDocumentTitle({ id: "mio", displayName: "みお" }), "みお — Soul Cockpit");
+  assert.equal(cockpitDocumentTitle({ id: "Bad", displayName: "GPT" }), NEUTRAL_COCKPIT_TITLE);
+  assert.equal(cockpitDocumentTitle(null), NEUTRAL_COCKPIT_TITLE);
+});
+
+test("StartupNotices vnode: 起動時の知らせ（ロールへの引っ越しの結果）をログのタブの上に行で出す・無ければ何も描かない", () => {
+  const vnode = StartupNotices({ notices: ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。", "設定ファイルの写し: C:/x"] });
+  assert.deepEqual(collectText(vnode), ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。", "設定ファイルの写し: C:/x"]);
+  assert.equal(StartupNotices({ notices: [] }), null);
+  assert.equal(StartupNotices({}), null);
+  const appSource = readFileSync(path.join(UI_DIR, "app.mjs"), "utf8");
+  assert.match(appSource, /<\$\{StartupNotices\} notices=\$\{settings\.notices\} \/>/);
 });
 
 test("HealthLine vnode スモーク（ログのタブ）: ランプ・死活・声の出力先が乗る", () => {
@@ -589,18 +605,21 @@ test("Domain C import スモーク: control-bar/settings-drawer が Node で imp
   ]);
 });
 
-test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (運転・ログを足した), and bounded prompt slot", () => {
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["connections", "input-output", "brain-conversation", "memory", "drive", "log"]);
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["接続", "入出力", "頭脳・会話", "記憶", "運転", "ログ"]);
+test("Cockpit Settings modal shell: one labelled dialog, five internal tabs (配信の準備 / ロール / 運転 / 記憶 / ログ・配信の組み直し Domain E), and bounded prompt slot", () => {
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["prepare", "role", "drive", "memory", "log"]);
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["配信の準備", "ロール", "運転", "記憶", "ログ"]);
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.match(source, /role="dialog"\s+aria-modal="true"/);
   assert.match(source, /role="tablist"/);
   assert.match(source, /role="tab"/);
-  assert.equal((source.match(/role="tabpanel"/g) || []).length, 6, "one panel per category");
+  assert.equal((source.match(/role="tabpanel"/g) || []).length, 5, "one panel per category");
+  for (const category of SETTINGS_CATEGORIES) {
+    assert.match(source, new RegExp(`id="cockpit-settings-panel-${category.id}"[^>]*hidden=\\$\\{activeCategory !== "${category.id}"\\}`));
+  }
+  assert.match(source, /useState\("prepare"\)/, "開くと配信の準備のタブ");
   assert.match(source, /driveSlot/);
   assert.match(source, /logSlot/);
   assert.match(source, />準備・設定</);
-  assert.match(source, /id="cockpit-settings-panel-connections"[\s\S]*?hidden=\$\{activeCategory !== "connections"\}/);
   assert.match(source, /data-prompt-editor-slot/);
   assert.doesNotMatch(source, /role="alertdialog"/);
   assert.match(source, /ev\.key === "Escape"/);
@@ -609,10 +628,11 @@ test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (運�
   assert.match(source, /\[hidden\]/);
   assert.match(source, /ArrowLeft/);
   assert.match(source, /closeRequestRef/);
-  assert.equal(settingsModalNextCategory("connections", "ArrowRight"), "input-output");
-  assert.equal(settingsModalNextCategory("connections", "ArrowLeft"), "log");
-  assert.equal(settingsModalNextCategory("memory", "Home"), "connections");
-  assert.equal(settingsModalNextCategory("connections", "End"), "log");
+  assert.equal(settingsModalNextCategory("prepare", "ArrowRight"), "role");
+  assert.equal(settingsModalNextCategory("prepare", "ArrowLeft"), "log");
+  assert.equal(settingsModalNextCategory("memory", "Home"), "prepare");
+  assert.equal(settingsModalNextCategory("prepare", "End"), "log");
+  assert.equal(settingsModalNextCategory("brain-conversation", "ArrowRight"), "prepare", "古いタブの id は先頭へ");
   assert.equal(settingsModalCloseAction({ dirty: false }), "close");
   assert.equal(settingsModalCloseAction({ dirty: true }), "prompt");
   assert.equal(settingsModalFocusBoundary(0, 3, true), 2);
@@ -627,18 +647,18 @@ test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (運�
 });
 
 test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navigation and focuses only after acceptance", () => {
-  const tabs = ["connections", "input-output", "brain-conversation", "memory", "drive", "log"].map((id) => ({
+  const tabs = ["prepare", "role", "drive", "memory", "log"].map((id) => ({
     id: "cockpit-settings-tab-" + id,
     focusCount: 0,
     focus() { this.focusCount += 1; }
   }));
   const navigations = [];
   for (const [index, key, expected] of [
-    [0, "ArrowRight", "input-output"],
-    [1, "ArrowLeft", "connections"],
+    [0, "ArrowRight", "role"],
+    [1, "ArrowLeft", "prepare"],
     [1, "End", "log"],
-    [3, "Home", "connections"],
-    [3, "ArrowRight", "drive"]
+    [3, "Home", "prepare"],
+    [3, "ArrowRight", "log"]
   ]) {
     const result = settingsModalKeyboardCategoryAction({
       tabs,
@@ -677,14 +697,13 @@ test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navig
   assert.equal(cleanProceed, true);
 });
 
-test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backdrop routes all prompt or proceed through one guard", () => {
+test("Cockpit Settings dirty event seam: back/category/header/Escape/backdrop routes all prompt or proceed through one guard（旧「頭脳」の種類は消した・配信の組み直し Domain E）", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.match(source, /const requestEditorBack = .*runGuardedNavigation/);
-  assert.match(source, /const requestEditorBrain = .*runGuardedNavigation|runGuardedNavigation\(\(\) => setBrainSelected/);
   assert.match(source, /if \(ev\.key === "Escape"\)[\s\S]*?requestClose\(\)/);
   assert.match(source, /ev\.target === ev\.currentTarget\)[\s\S]*?requestClose\(\)/);
   assert.match(source, /closeRequestRef\.current = requestClose/);
-  const eventTypes = ["back", "category-click", "category-keyboard", "brain", "close", "close"];
+  const eventTypes = ["back", "category-click", "category-keyboard", "close", "close"];
   const outcomes = [];
   for (const eventType of eventTypes) {
     let pending = null;
@@ -701,70 +720,76 @@ test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backd
     pending();
     assert.equal(performed, true);
   }
-  assert.deepEqual(outcomes, ["prompt", "prompt", "prompt", "prompt", "prompt", "prompt"]);
+  assert.deepEqual(outcomes, ["prompt", "prompt", "prompt", "prompt", "prompt"]);
   assert.equal(settingsModalEventRoute({ eventType: "unknown", dirty: true, action: () => {}, onPrompt: () => {} }), null);
+  assert.equal(settingsModalEventRoute({ eventType: "brain", dirty: true, action: () => {}, onPrompt: () => {} }), null, "旧「頭脳」の種類は無い");
+  assert.doesNotMatch(source, /"category-keyboard", "brain"/, "設定のダイアログに古い brain の種類が残らない");
 });
 
-test("conversation identity seam: six editor brains consume only matching canonical active facts", () => {
-  assert.deepEqual(
-    ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"].map((brainId) => conversationBrainIdentity({ brainId })),
-    [null, null, null, null, null, null]
+test("Settings modal「ロール」: 今日のロールの select（配信の組み直し Domain E でロールのタブへ）、snapshot の role から選択肢・POST /api/role → snapshot 反映（配信の組み直し Domain A）", () => {
+  const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
+  const brainPanel = source.slice(
+    source.indexOf('id="cockpit-settings-panel-role"'),
+    source.indexOf('id="cockpit-settings-panel-drive"')
   );
-  for (const brainId of ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]) {
-    const canonical = { id: `canonical-${brainId}`, displayName: `Canonical ${brainId}` };
-    assert.deepEqual(conversationBrainIdentity({ brainId, activeBrainId: brainId, activeIdentity: canonical }), canonical);
-    assert.deepEqual(
-      conversationBrainIdentity({ brainId, activeBrainId: "claude", activeIdentity: canonical }),
-      brainId === "claude" ? canonical : null
-    );
-  }
-  const source = readFileSync(path.join(COCKPIT_DIR, "view-logic", "conversation-instruction.mjs"), "utf8");
-  assert.doesNotMatch(source, /CONVERSATION_BRAIN_IDENTITY_PROJECTIONS/);
+  const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
+  assert.match(listSide, /<label for="role-select">今日のロール<\/label>/);
+  assert.match(listSide, /id="role-select"[\s\S]*?options=\$\{roleOptionsView\(settings && settings\.role\)\}/);
+  assert.match(listSide, /class="btn-role-set"[^>]*onClick=\$\{onRoleSet\}/);
+  assert.doesNotMatch(source, /\/api\/brain|brain-select|BRAIN_OPTIONS/);
+  assert.match(
+    source,
+    /doFetch\("\/api\/role", \{[\s\S]*?body: JSON\.stringify\(\{ role \}\)[\s\S]*?rolePostErrorText\(res\)[\s\S]*?applySnapshot\(res\.j\)[\s\S]*?requestErrorText\("role", e\)/
+  );
+  // 会話指示の編集は今のロール（snapshot の role）だけ。
+  assert.match(source, /const currentRole = currentRoleView\(settings && settings\.role\);/);
+  assert.match(source, /conversationEditor\.save\(editorRoleId\)/);
 });
 
-test("conversation instruction editor vnode: six brain choices, editable body, readonly identity, no memory structure, and no dialog nesting", () => {
-  const seen = { back: false, edit: false, save: false, reset: false, brain: false };
+test("conversation instruction editor vnode: 今のロールの性格の指示を編集・ロールの名前とモデルは読むだけ・記憶の構造なし・dialog の入れ子なし（配信の組み直し Domain A）", () => {
+  const seen = { back: false, edit: false, save: false, reset: false };
   const vnode = ConversationInstructionEditor({
-    brainId: "codex",
-    brainLabel: "Codex (GPT-5.6 Terra)",
-    identity: { id: "chappy", displayName: "チャッピー" },
-    activeBrainId: "codex",
+    roleId: "chappy",
+    roleName: "チャッピー",
+    brainLabel: "GPT-6.1 Sol",
     state: { draft: "custom", status: "saved", dirty: false, isOverride: true, revision: 1 },
     onBack: () => { seen.back = true; },
     onEdit: () => { seen.edit = true; },
     onSave: () => { seen.save = true; },
-    onReset: () => { seen.reset = true; },
-    onBrainChange: () => { seen.brain = true; }
+    onReset: () => { seen.reset = true; }
   });
   const elements = collectElements(vnode);
   assert.equal(elements.some((node) => node.props && node.props.role === "dialog"), false);
-  const select = elements.find((node) => node.type === "select" && node.props.id === "conversation-instruction-brain");
-  assert.equal(select.props.value, "codex");
-  assert.deepEqual(elements.filter((node) => node.type === "option").map((node) => node.props.value), [
-    "claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"
-  ]);
+  assert.equal(elements.some((node) => node.type === "select"), false, "頭ごとの select は無い（今のロールだけ）");
   const textarea = elements.find((node) => node.type === "textarea");
   assert.equal(textarea.props.value, "custom");
   assert.equal(typeof textarea.props.onInput, "function");
+  assert.equal(textarea.props.disabled, false);
   const managed = elements.find((node) => node.props && node.props.class === "conversation-instruction-managed");
   assert.ok(managed);
-  assert.match(collectText(vnode).join(""), /チャッピー/);
+  const text = collectText(vnode).join("");
+  assert.match(text, /チャッピー/);
+  assert.match(text, /GPT-6\.1 Sol/);
+  assert.match(text, /このロールの保存済みの指示/);
   // 記憶の作り直し Wave 2: 起動時に記憶を載せないので、「記憶 N 件を搭載」の記憶構造の行は無い。
-  assert.doesNotMatch(collectText(vnode).join(""), /記憶|件を搭載/);
-  assert.match(collectText(vnode).join(""), /次のFireから反映/);
-  assert.match(collectText(vnode).join(""), /revision 1/);
-  assert.match(collectText(vnode).join(""), /読み取り専用/);
+  assert.doesNotMatch(text, /記憶|件を搭載/);
+  assert.match(text, /次のFireから反映/);
+  assert.match(text, /revision 1/);
+  assert.match(text, /読み取り専用/);
   const source = readFileSync(path.join(UI_DIR, "conversation-instruction-editor.mjs"), "utf8");
   assert.doesNotMatch(source, /memory.*text|memoryBody|transcript/i);
-  assert.deepEqual(seen, { back: false, edit: false, save: false, reset: false, brain: false });
+  assert.deepEqual(seen, { back: false, edit: false, save: false, reset: false });
+  // ロールが分からない間は書けない。
+  const unavailable = collectElements(ConversationInstructionEditor({ roleId: null, state: { draft: "", status: "idle" } }));
+  assert.equal(unavailable.find((node) => node.type === "textarea").props.disabled, true);
+  assert.ok(unavailable.filter((node) => node.type === "button" && /conversation-instruction-(save|reset)/.test(node.props.class)).every((b) => b.props.disabled === true));
 });
 
 test("conversation instruction editor vnode: 魂がいつも足す教えを案内し、本文を読むだけで見せる（編集の口は無い・Wave 3 仕上げ）", () => {
   const base = {
-    brainId: "codex",
+    roleId: "chappy",
+    roleName: "チャッピー",
     brainLabel: "Codex (GPT-5.6 Terra)",
-    identity: null,
-    activeBrainId: "codex",
     state: { draft: "custom", status: "saved", dirty: false, isOverride: true, revision: 1 },
     onEdit: () => {}
   };
@@ -1036,22 +1061,18 @@ test("HealthLine（ログのタブ）: tts（声の方式と状態）を stt の
   assert.ok(!collectText(HealthLine(base)).join("").includes("tts:"), "tts が無ければ出さない");
 });
 
-test("設定の入出力タブ: 文字起こしの下に声の選択（AivisSpeech / ElevenLabs）・Start の body で ttsEngine を送り・state.tts から復元", () => {
+test("声の方式は配信の準備から外れてロールの声になった（配信の組み直し Domain E）: 「配信を始める」は ttsEngine を送らず、ロールの編集に声の方式・話者・声の id", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
-  const stt = source.indexOf('id="stt-engine-select"');
-  const tts = source.indexOf('id="tts-engine-select"');
-  const micErr = source.indexOf("${micError}");
-  const audio = source.indexOf('id="audio-device-select"');
-  assert.ok(stt > 0 && tts > stt, "声の選択は文字起こしの下");
-  assert.ok(micErr > tts, "Start の失敗理由（共用のエラー欄）は声の選択の下");
-  assert.ok(audio > micErr, "声の出力先はその下（並びは変えない）");
-  assert.match(source, /<label for="tts-engine-select">声<\/label>/);
-  assert.match(source, /options=\$\{TTS_ENGINE_OPTIONS\}/);
-  assert.match(source, /JSON\.stringify\(\{ device, sttEngine: sttSelected \|\| "whisper", ttsEngine: ttsSelected \|\| "aivis" \}\)/);
-  assert.match(source, /ttsEngineSelection\(ttsEngine \? \{ engine: ttsEngine \} : null\)/);
-  assert.match(source, /if \(ttsRestored != null && !ttsEditedRef\.current\) setTtsSelected\(ttsRestored\)/);
+  assert.doesNotMatch(source, /id="tts-engine-select"/, "配信の準備に声の方式の select は無い");
+  assert.doesNotMatch(source, /ttsSelected|ttsEditedRef|ttsEngineSelection/);
+  assert.match(source, /postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)/);
+  const rolePanel = source.slice(source.indexOf('id="cockpit-settings-panel-role"'), source.indexOf('id="cockpit-settings-panel-drive"'));
+  assert.match(rolePanel, /<label for="role-voice-engine-select">声<\/label>/);
+  assert.match(rolePanel, /options=\$\{ROLE_VOICE_ENGINE_OPTIONS\}/);
+  assert.match(rolePanel, /<label for="role-aivis-speaker">AivisSpeech の話者<\/label>/);
+  assert.match(rolePanel, /<label for="role-elevenlabs-voice">ElevenLabs の声の id<\/label>/);
   const app = readFileSync(path.join(UI_DIR, "app.mjs"), "utf8");
-  assert.match(app, /ttsEngine=\$\{tts \? tts\.engine : null\}/);
+  assert.doesNotMatch(app, /ttsEngine=\$\{tts \? tts\.engine : null\}/, "設定のダイアログへ声の方式を渡さない");
   assert.match(app, /if \(s\.tts\) setTts\(s\.tts\)/);
-  assert.match(app, /<\$\{HealthLine\}[^>]*tts=\$\{tts\}/);
+  assert.match(app, /<\$\{HealthLine\}[^>]*tts=\$\{tts\}/, "ログのタブの健康 1 行の tts: は今のまま");
 });

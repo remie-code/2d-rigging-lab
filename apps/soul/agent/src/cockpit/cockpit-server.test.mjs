@@ -55,6 +55,16 @@ async function postJson(url, obj) {
   const r = await httpRequest(url, { method: "POST", body: obj != null ? JSON.stringify(obj) : "" });
   return { status: r.status, json: r.body ? JSON.parse(r.body) : null };
 }
+/**
+ * 配信の組み直し Domain E: 手動の発火（POST /api/fire・/api/vision-fire）は場が開いている間だけ（閉じている間は 409）。
+ * 発火を見るテストは先に場を開く（pipelineFactory に偽の耳を渡しておくこと）。
+ * @param {string} url
+ */
+async function openStreamForFire(url) {
+  const r = await postJson(`${url}/api/stream/start`, { device: "Mic" });
+  assert.equal(r.status, 200, "場が開く（偽の耳）");
+  assert.equal(r.json.stream.phase, "open");
+}
 async function putJson(url, obj) {
   const r = await httpRequest(url, { method: "PUT", body: obj != null ? JSON.stringify(obj) : "" });
   return { status: r.status, json: r.body ? JSON.parse(r.body) : null };
@@ -199,7 +209,11 @@ function fakeSpawn(stderrText, { exitCode = 1, emitError = false } = {}) {
   };
 }
 
-/** Dedicated API fake: no file, provider, network, or runtime session is involved. */
+/**
+ * Dedicated API fake: no file, provider, network, or runtime session is involved.
+ * 配信の組み直し Domain A: 鍵はロールの id。ここでは旧テストの id（ロールの id の形の名前）を知っているロールとして使う。
+ */
+const FAKE_INSTRUCTION_ROLE_IDS = Object.freeze(["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
 function makeFakeConversationInstructionHooks(initialOverrides = {}) {
   const overrides = { ...initialOverrides };
   let revision = 0;
@@ -207,6 +221,9 @@ function makeFakeConversationInstructionHooks(initialOverrides = {}) {
   let failReset = false;
   const record = { saveRevisions: [], resetRevisions: [] };
   const hooks = {
+    isKnownId(roleId) {
+      return FAKE_INSTRUCTION_ROLE_IDS.includes(roleId);
+    },
     getProfile(brainId) {
       const override = overrides[brainId] ?? null;
       return { body: override ?? `default:${brainId}`, hasOverride: override != null };
@@ -591,7 +608,7 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
       assert.equal(result.status, 200);
       assert.deepEqual(result.json, {
         ok: true,
-        brainId,
+        roleId: brainId,
         instruction: `default:${brainId}`,
         isOverride: false,
         revision: 0
@@ -604,7 +621,7 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
     assert.equal(saved.status, 200);
     assert.deepEqual(saved.json, {
       ok: true,
-      brainId: "codex-61-sol",
+      roleId: "codex-61-sol",
       instruction: "custom codex-61-sol instruction",
       isOverride: true,
       revision: 1
@@ -617,7 +634,7 @@ test("conversation instruction API: defaults, per-brain override, reset, and rev
     assert.equal(reset.status, 200);
     assert.deepEqual(reset.json, {
       ok: true,
-      brainId: "codex-61-sol",
+      roleId: "codex-61-sol",
       instruction: "default:codex-61-sol",
       isOverride: false,
       revision: 2
@@ -706,7 +723,7 @@ test("conversation instruction API: unknown brain IDs and malformed/non-string/t
         body: method === "PUT" ? JSON.stringify({ instruction: "x" }) : undefined
       });
       assert.equal(r.status, 400);
-      assert.match(JSON.parse(r.body).error, /invalid conversation instruction brain id/);
+      assert.match(JSON.parse(r.body).error, /invalid conversation instruction role id/);
     }
 
     const malformed = await httpRequest(`${url}/api/conversation-instructions/claude`, {
@@ -755,7 +772,7 @@ test("conversation instruction API: unavailable hooks return 503 and unsupported
     }
     const malformedPath = await getJson(`${url}/api/conversation-instructions/%E0%A4%A`);
     assert.equal(malformedPath.status, 400);
-    assert.match(malformedPath.json.error, /invalid conversation instruction brain id/);
+    assert.match(malformedPath.json.error, /invalid conversation instruction role id/);
   } finally {
     await bare.close();
     await withHooks.close();
@@ -781,7 +798,7 @@ test("conversation instruction API: durable persistence failure does not advance
     assert.equal(afterFailure.status, 200);
     assert.deepEqual(afterFailure.json, {
       ok: true,
-      brainId: "claude",
+      roleId: "claude",
       instruction: "default:claude",
       isOverride: false,
       revision: 0
@@ -808,7 +825,7 @@ test("conversation instruction API: reset persistence failure preserves the over
     const afterFailure = await getJson(`${url}/api/conversation-instructions/claude`);
     assert.deepEqual(afterFailure.json, {
       ok: true,
-      brainId: "claude",
+      roleId: "claude",
       instruction: "existing override",
       isOverride: true,
       revision: 0
@@ -838,7 +855,7 @@ test("conversation instruction privacy: successful secret save stays only in ded
     conversationInstructionHooks: hooks,
     pipelineFactory: /** @type {any} */ (pipeline.factory),
     fireOrchestratorFactory: /** @type {any} */ (orchestrator.factory),
-    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    currentRoleIdentity: () => MODEL_IDENTITIES.chappy,
     brainStatus: () => ({ brain: "codex-61-sol", credentialHealth: true }),
     memoryStatus: () => ({ lastRecordAtMs: memoryRecords > 0 ? 12345 : null, recording: false }),
     onMemoryRecord: async () => {
@@ -1063,9 +1080,10 @@ test("cockpit POST /api/fire: 受理は 202・fire() の結果 JSON を返す", 
   const fake = makeFakeOrchestrator({
     fireResult: { fired: true, replyText: "ひるごはん食べよ", injectedChars: 20, includedCount: 2 }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/fire`, {});
     assert.equal(r.status, 202);
     assert.equal(r.json.fired, true);
@@ -1073,8 +1091,8 @@ test("cockpit POST /api/fire: 受理は 202・fire() の結果 JSON を返す", 
     assert.equal(r.json.includedCount, 2);
     assert.equal(r.json.state, "idle"); // getState() から補完される。
     assert.equal(fake.record.fireCount, 1);
-    // getBuffer フックは pipeline?.transcriptBuffer（耳未起動なら null）。
-    assert.equal(fake.record.hooks.getBuffer(), null);
+    // getBuffer フックは pipeline?.transcriptBuffer（場が開いている = 耳が動いているので偽の耳のバッファ）。
+    assert.notEqual(fake.record.hooks.getBuffer(), null);
   } finally {
     await server.close();
   }
@@ -1084,9 +1102,10 @@ test("cockpit POST /api/fire: busy は 200 で {fired:false, reason:'busy', stat
   const fake = makeFakeOrchestrator({
     fireResult: { fired: false, reason: "busy", state: "thinking" }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/fire`, {});
     assert.equal(r.status, 200);
     assert.equal(r.json.fired, false);
@@ -1117,11 +1136,12 @@ test("cockpit SSE: fire() の onState/onFire が soul/fire イベントで流れ
       hooks.onState("idle");
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state"); // 接続確立。
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
 
     const thinking = await client.waitFor((e) => e.event === "soul" && e.data.state === "thinking");
@@ -1157,11 +1177,12 @@ test("cockpit SSE: fire() の onExpression が expression イベントで流れ�
       hooks.onState("idle");
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state"); // 接続確立。
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
 
     const nod = await client.waitFor((e) => e.event === "expression" && e.data.word === "nod");
@@ -1492,9 +1513,10 @@ test("cockpit POST /api/vision-fire: fire({ vision: true }) を呼び・受理�
   const fake = makeFakeOrchestrator({
     fireResult: { fired: true, replyText: "画面見えたよ", injectedChars: 5, includedCount: 1, vision: true }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/vision-fire`, {});
     assert.equal(r.status, 202);
     assert.equal(r.json.fired, true);
@@ -1511,9 +1533,10 @@ test("cockpit POST /api/vision-fire: 対象未設定は 200 で {fired:false, re
   const fake = makeFakeOrchestrator({
     fireResult: { fired: false, reason: "vision-no-target" }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/vision-fire`, {});
     assert.equal(r.status, 200);
     assert.equal(r.json.fired, false);
@@ -1537,11 +1560,12 @@ test("cockpit SSE: fire({vision:true}) の onVisionCaptured が visionCaptured �
       });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/vision-fire`, {});
     const captured = await client.waitFor((e) => e.event === "visionCaptured");
     assert.equal(captured.data.title, "Sample Game");
@@ -1562,11 +1586,12 @@ test("cockpit SSE: onUsage が usage イベントで流れる（通常 Fire・�
       hooks.onUsage({ usage: { input_tokens: 284, output_tokens: 12 }, vision: false });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const usage = await client.waitFor((e) => e.event === "usage");
     assert.equal(usage.data.usage.input_tokens, 284);
@@ -1584,11 +1609,12 @@ test("cockpit SSE: fireVisionError（onDiagnostic 経由）は diagnostic イベ
       hooks.onDiagnostic({ type: "fireVisionError", kind: "minimized", message: "window is minimized" });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/vision-fire`, {});
     const diag = await client.waitFor((e) => e.event === "diagnostic" && e.data.type === "fireVisionError");
     assert.equal(diag.data.kind, "minimized");
@@ -2624,58 +2650,107 @@ test("cockpit S8 born-killed: fireOrchestratorFactory の hooks に initialKille
   }
 });
 
-// ── POST /api/brain（多頭化 Domain B・POST /api/verbosity / /api/kill の写経）─────────────────
+// ── POST /api/role（配信の組み直し Domain A・旧 POST /api/brain の置き換え・POST /api/verbosity の写経）─────────
 //
-//  頭脳の切替継ぎ目。永続化 + 現 session の dispose→null（次発火から新頭）は cockpit.mjs の onSetBrain が
-//  担う（責務境界: cockpit-server は brain の lifecycle/credential 実体を知らない）。snapshot の brain は
-//  brainStatus() 経由で頭札 + 資格情報の存在確認（credentialHealth）を載せ、identity projection は canonical
-//  resolver から additive に導出する。onSetBrain 未注入なら 503（未注入ゲート）。
+//  ロールの選択の継ぎ目。ロールの中身・永続化・次の Fire の境目でのセッションの作り直しは cockpit.mjs の onSetRole が
+//  担う（責務境界: cockpit-server はロールの中身を知らない）。snapshot の role は roleStatus()、brain は brainStatus()
+//  （ロールが指す頭の札 + 資格情報の存在確認）、brain.identity は currentRoleIdentity（ロールの名前）から載せる。
+//  onSetRole 未注入なら 503。耳が動いている間は 409（場の途中でロールを替えない）。
 
-/** cockpit.mjs の onSetBrain/brainStatus 配線と同型の最小 fake（現在の頭を保持し切替を記録する）。 */
-function makeFakeBrainWiring(initial = "claude") {
-  let currentBrain = initial;
+/** cockpit.mjs の onSetRole/roleStatus/currentRoleIdentity/brainStatus 配線と同型の最小 fake。 */
+function makeFakeRoleWiring(initial = "cody") {
+  /** @type {Record<string, any>} */
+  const roles = {
+    cody: { identity: MODEL_IDENTITIES.cody, brain: "claude-opus-55", verbosity: "normal", speakStartMode: "speak-now", ttsEngine: "aivis" },
+    chappy: { identity: MODEL_IDENTITIES.chappy, brain: "codex-61-sol", verbosity: "chatty", speakStartMode: "classic", ttsEngine: "elevenlabs" },
+    mio: {
+      identity: Object.freeze({
+        id: "mio",
+        canonicalName: "ミオ",
+        latinName: "Mio",
+        displayName: "みお",
+        whisperPrompt: "みお、ミオ。",
+        voiceCallVariants: ["ミオ"],
+        commentCallVariants: ["Mio", "ミオ"]
+      }),
+      brain: "codex-astra",
+      verbosity: "quiet",
+      speakStartMode: "speak-now",
+      ttsEngine: "aivis"
+    }
+  };
+  let current = initial;
   const record = { calls: /** @type {string[]} */ ([]) };
   return {
     record,
-    onSetBrain: async (/** @type {string} */ choice) => {
-      record.calls.push(choice);
-      currentBrain = choice;
+    onSetRole: async (/** @type {string} */ id) => {
+      record.calls.push(id);
+      const role = roles[id];
+      if (!role) return { ok: false, reason: `ロール ${id} を読めない（role.json が無い）` };
+      current = id;
+      return { ok: true, verbosity: role.verbosity, speakStartMode: role.speakStartMode, ttsEngine: role.ttsEngine };
     },
+    roleStatus: () => ({
+      id: current,
+      displayName: roles[current].identity.displayName,
+      brain: roles[current].brain,
+      body: true,
+      roles: Object.keys(roles).map((id) => ({ id, displayName: roles[id].identity.displayName, brain: roles[id].brain }))
+    }),
+    currentRoleIdentity: () => roles[current].identity,
     // 資格情報は存在確認のみ（テストは boolean 固定・中身は読まない=実 auth.json に触れない）。
+    brainStatus: () => ({ brain: roles[current].brain, credentialHealth: true })
+  };
+}
+
+/** 頭の札だけを返す最小 fake（観測層の brain 札のテスト用・現在の頭を保持する）。 */
+function makeFakeBrainWiring(initial = "claude") {
+  const currentBrain = initial;
+  return {
     brainStatus: () => ({ brain: currentBrain, credentialHealth: true })
   };
 }
 
-test("cockpit POST /api/brain: onSetBrain 未注入なら 503", async () => {
+test("cockpit POST /api/role: onSetRole 未注入なら 503（旧 POST /api/brain は無い = 404）", async () => {
   const server = createCockpitServer({});
   try {
     const url = await server.listen(0);
-    const r = await postJson(`${url}/api/brain`, { brain: "codex" });
+    const r = await postJson(`${url}/api/role`, { role: "chappy" });
     assert.equal(r.status, 503);
-    assert.match(r.json.error, /brain control not available/);
+    assert.match(r.json.error, /role control not available/);
+    const old = await postJson(`${url}/api/brain`, { brain: "codex" });
+    assert.equal(old.status, 404);
   } finally {
     await server.close();
   }
 });
 
-test("cockpit GET /api/state: snapshot に brain が載る（既定 brain・credentialHealth boolean）", async () => {
-  const wiring = makeFakeBrainWiring("claude");
-  const server = createCockpitServer({ brainStatus: /** @type {any} */ (wiring.brainStatus) });
+test("cockpit GET /api/state: snapshot に role（今のロール・一覧）と brain（ロールが指す頭）が載り、名前はロールから", async () => {
+  const wiring = makeFakeRoleWiring("chappy");
+  const server = createCockpitServer({
+    roleStatus: wiring.roleStatus,
+    brainStatus: wiring.brainStatus,
+    currentRoleIdentity: wiring.currentRoleIdentity
+  });
   try {
     const url = await server.listen(0);
     const s = await getJson(`${url}/api/state`);
     assert.deepEqual(s.json.brain, {
-      brain: "claude",
+      brain: "codex-61-sol",
       credentialHealth: true,
-      identity: { id: "cody", displayName: "こーでぃー" }
+      identity: { id: "chappy", displayName: "チャッピー" }
     });
-    assert.equal(typeof s.json.brain.credentialHealth, "boolean");
-    const unknown = createCockpitServer({ brainStatus: () => ({ brain: "not-registered", credentialHealth: false }) });
-    const unknownUrl = await unknown.listen(0);
-    const unknownState = await getJson(`${unknownUrl}/api/state`);
-    assert.deepEqual(unknownState.json.brain.identity, { id: "cody", displayName: "こーでぃー" });
-    await unknown.close();
-    // brainStatus 未注入なら null（未注入ゲートの対称・別サーバで確認）。
+    assert.equal(s.json.role.id, "chappy");
+    assert.deepEqual(s.json.role.roles.map((/** @type {any} */ r) => r.id), ["cody", "chappy", "mio"]);
+    assert.deepEqual(s.json.notices, []);
+    // 頭は名前を持たない: 名前の provider が無ければ identity は null（頭の id から名前を作らない）。
+    const brainOnly = createCockpitServer({ brainStatus: () => ({ brain: "codex", credentialHealth: false }) });
+    const brainOnlyUrl = await brainOnly.listen(0);
+    const brainOnlyState = await getJson(`${brainOnlyUrl}/api/state`);
+    assert.deepEqual(brainOnlyState.json.brain, { brain: "codex", credentialHealth: false, identity: null });
+    assert.equal(brainOnlyState.json.role, null);
+    await brainOnly.close();
+    // brainStatus も名前も未注入なら null（未注入ゲートの対称・別サーバで確認）。
     const bare = createCockpitServer({});
     const bareUrl = await bare.listen(0);
     const bs = await getJson(`${bareUrl}/api/state`);
@@ -2686,129 +2761,106 @@ test("cockpit GET /api/state: snapshot に brain が載る（既定 brain・cred
   }
 });
 
-test("cockpit POST /api/brain: {brain:\"codex\"} → 200・snapshot.brain.brain===\"codex\"・onSetBrain が呼ばれる・SSE state が流れる", async () => {
-  const wiring = makeFakeBrainWiring("claude");
+test("cockpit POST /api/role: 選んだロールの名前・頭が snapshot に出て、口数・話し始め・声の方式もロールの値になる・SSE state が流れる", async () => {
+  const wiring = makeFakeRoleWiring("cody");
+  const fakeOrch = makeFakeOrchestrator({});
   const server = createCockpitServer({
-    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
-    brainStatus: /** @type {any} */ (wiring.brainStatus)
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    onSetRole: wiring.onSetRole,
+    roleStatus: wiring.roleStatus,
+    brainStatus: wiring.brainStatus,
+    currentRoleIdentity: wiring.currentRoleIdentity,
+    verbosityInitialMode: "normal",
+    speakStartModeInitial: "speak-now",
+    ttsEngineInitial: "aivis"
   });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
-    const r = await postJson(`${url}/api/brain`, { brain: "codex" });
+    const r = await postJson(`${url}/api/role`, { role: "chappy" });
     assert.equal(r.status, 200);
-    assert.equal(r.json.brain.brain, "codex");
+    assert.deepEqual(wiring.record.calls, ["chappy"]);
+    assert.equal(r.json.role.id, "chappy");
+    assert.equal(r.json.brain.brain, "codex-61-sol");
     assert.deepEqual(r.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
-    assert.deepEqual(wiring.record.calls, ["codex"]);
-    // broadcastState() が SSE "state" に brain.brain:"codex" を乗せて流れる。
-    const evt = await client.waitFor((e) => e.event === "state" && e.data.brain && e.data.brain.brain === "codex");
-    assert.equal(evt.data.brain.brain, "codex");
-    // GET /api/state も反映済み。
-    const s = await getJson(`${url}/api/state`);
-    assert.equal(s.json.brain.brain, "codex");
+    assert.equal(r.json.verbosity, "chatty");
+    assert.equal(r.json.speakStart, "classic");
+    assert.equal(r.json.tts.engine, "elevenlabs");
+    const evt = await client.waitFor((e) => e.event === "state" && e.data.role && e.data.role.id === "chappy");
+    assert.equal(evt.data.verbosity, "chatty");
+    // cody / chappy 以外の名前もそのまま通る。
+    const mio = await postJson(`${url}/api/role`, { role: "mio" });
+    assert.equal(mio.status, 200);
+    assert.deepEqual(mio.json.brain.identity, { id: "mio", displayName: "みお" });
+    assert.equal(mio.json.verbosity, "quiet");
+    assert.equal(mio.json.speakStart, "speak-now");
+    assert.equal(mio.json.tts.engine, "aivis");
   } finally {
     client.close();
     await server.close();
   }
 });
 
-test("cockpit POST /api/brain: {brain:\"claude\"} → 200（Claude へ戻す）", async () => {
-  const wiring = makeFakeBrainWiring("codex");
+test("cockpit POST /api/role: 知らないロールは onSetRole の理由で 400・形の違う値は onSetRole を呼ばず 400・state 不変", async () => {
+  const wiring = makeFakeRoleWiring("cody");
   const server = createCockpitServer({
-    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
-    brainStatus: /** @type {any} */ (wiring.brainStatus)
+    onSetRole: wiring.onSetRole,
+    roleStatus: wiring.roleStatus,
+    brainStatus: wiring.brainStatus,
+    currentRoleIdentity: wiring.currentRoleIdentity
   });
   try {
     const url = await server.listen(0);
-    const r = await postJson(`${url}/api/brain`, { brain: "claude" });
-    assert.equal(r.status, 200);
-    assert.equal(r.json.brain.brain, "claude");
-    assert.deepEqual(r.json.brain.identity, { id: "cody", displayName: "こーでぃー" });
-    assert.deepEqual(wiring.record.calls, ["claude"]);
-  } finally {
-    await server.close();
-  }
-});
-
-test("cockpit POST /api/brain: GPT-6.1 Sol / 5.6 Sol / Astra → 200 with shared Chappy identity", async () => {
-  const wiring = makeFakeBrainWiring("claude");
-  const server = createCockpitServer({
-    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
-    brainStatus: /** @type {any} */ (wiring.brainStatus)
-  });
-  try {
-    const url = await server.listen(0);
-    const r61 = await postJson(`${url}/api/brain`, { brain: "codex-61-sol" });
-    assert.equal(r61.status, 200);
-    assert.equal(r61.json.brain.brain, "codex-61-sol");
-    assert.deepEqual(r61.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
-    const rSol = await postJson(`${url}/api/brain`, { brain: "codex-56-sol" });
-    assert.equal(rSol.status, 200);
-    assert.equal(rSol.json.brain.brain, "codex-56-sol");
-    assert.deepEqual(rSol.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
-    const rAstra = await postJson(`${url}/api/brain`, { brain: "codex-astra" });
-    assert.equal(rAstra.status, 200);
-    assert.equal(rAstra.json.brain.brain, "codex-astra");
-    assert.deepEqual(rAstra.json.brain.identity, { id: "chappy", displayName: "チャッピー" });
-    assert.deepEqual(wiring.record.calls, ["codex-61-sol", "codex-56-sol", "codex-astra"]);
-  } finally {
-    await server.close();
-  }
-});
-
-test("cockpit POST /api/brain: Claude Opus 5.5 → 200 with Cody identity / 削除済み GPT-5.5 は 400", async () => {
-  const wiring = makeFakeBrainWiring("codex");
-  const server = createCockpitServer({
-    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
-    brainStatus: /** @type {any} */ (wiring.brainStatus)
-  });
-  try {
-    const url = await server.listen(0);
-    const rOpus = await postJson(`${url}/api/brain`, { brain: "claude-opus-55" });
-    assert.equal(rOpus.status, 200);
-    assert.equal(rOpus.json.brain.brain, "claude-opus-55");
-    assert.deepEqual(rOpus.json.brain.identity, { id: "cody", displayName: "こーでぃー" });
-    const r55 = await postJson(`${url}/api/brain`, { brain: "codex-55" });
-    assert.equal(r55.status, 400);
-    assert.match(r55.json.error, /invalid brain/);
-    assert.deepEqual(wiring.record.calls, ["claude-opus-55"]);
-  } finally {
-    await server.close();
-  }
-});
-
-test("cockpit POST /api/brain: 不正値（gpt）は 400・onSetBrain を呼ばず state 不変", async () => {
-  const wiring = makeFakeBrainWiring("claude");
-  const server = createCockpitServer({
-    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
-    brainStatus: /** @type {any} */ (wiring.brainStatus)
-  });
-  try {
-    const url = await server.listen(0);
-    const r = await postJson(`${url}/api/brain`, { brain: "gpt" });
-    assert.equal(r.status, 400);
-    assert.match(r.json.error, /invalid brain/);
-    assert.deepEqual(wiring.record.calls, []); // 切替は起きていない。
+    const unknown = await postJson(`${url}/api/role`, { role: "nobody" });
+    assert.equal(unknown.status, 400);
+    assert.match(unknown.json.error, /ロール nobody を読めない/);
+    assert.deepEqual(wiring.record.calls, ["nobody"]);
+    for (const role of ["Chappy", "../cody", "", 3, null, undefined, "codex-61-sol!"]) {
+      const r = await postJson(`${url}/api/role`, role === undefined ? {} : { role });
+      assert.equal(r.status, 400, String(role));
+      assert.match(r.json.error, /invalid role/);
+    }
+    assert.deepEqual(wiring.record.calls, ["nobody"], "形の違う値では呼ばない");
     const s = await getJson(`${url}/api/state`);
-    assert.equal(s.json.brain.brain, "claude"); // 現況は不変。
+    assert.equal(s.json.role.id, "cody");
   } finally {
     await server.close();
   }
 });
 
-test("cockpit POST /api/brain: body 欠落（brain が undefined）は 400", async () => {
-  const wiring = makeFakeBrainWiring("claude");
+test("cockpit POST /api/role: 場が開いている間は 409 で断り onSetRole を呼ばない（場の途中でロールを替えない）・配信を終えたあとは選べる", async () => {
+  const wiring = makeFakeRoleWiring("cody");
+  const fakePipe = makeFakePipeline();
   const server = createCockpitServer({
-    onSetBrain: /** @type {any} */ (wiring.onSetBrain),
-    brainStatus: /** @type {any} */ (wiring.brainStatus)
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    onSetRole: wiring.onSetRole,
+    roleStatus: wiring.roleStatus,
+    currentRoleIdentity: wiring.currentRoleIdentity
   });
   try {
     const url = await server.listen(0);
-    const r = await postJson(`${url}/api/brain`, {});
-    assert.equal(r.status, 400);
-    assert.match(r.json.error, /invalid brain/);
+    const start = await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.equal(start.status, 200);
+    const refused = await postJson(`${url}/api/role`, { role: "chappy" });
+    assert.equal(refused.status, 409);
+    assert.match(refused.json.error, /配信の途中はロールを替えられない/);
     assert.deepEqual(wiring.record.calls, []);
+    await postJson(`${url}/api/ears/stop`, {});
+    const ok = await postJson(`${url}/api/role`, { role: "chappy" });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(wiring.record.calls, ["chappy"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("cockpit notices: 起動時の知らせ（ロールへの引っ越しの結果）を snapshot の notices に載せる（文字列だけ）", async () => {
+  const server = createCockpitServer({ notices: ["今の設定をロールへ引っ越した。", /** @type {any} */ (3), "設定ファイルの写し: x"] });
+  try {
+    const url = await server.listen(0);
+    const s = await getJson(`${url}/api/state`);
+    assert.deepEqual(s.json.notices, ["今の設定をロールへ引っ越した。", "設定ファイルの写し: x"]);
   } finally {
     await server.close();
   }
@@ -2824,7 +2876,7 @@ test("cockpit current identity providers: Whisper prompt/voice/comment seams swi
     fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
     fireSchedulerFactory: /** @type {any} */ (cap.factory),
     selfFireInitialEnabled: true,
-    currentBrainIdentity: () => currentIdentity
+    currentRoleIdentity: () => currentIdentity
   });
   try {
     const url = await server.listen(0);
@@ -2840,6 +2892,14 @@ test("cockpit current identity providers: Whisper prompt/voice/comment seams swi
     assert.deepEqual(cap.record.options.nameVariantsProvider(), MODEL_IDENTITIES.chappy.voiceCallVariants);
     assert.deepEqual(cap.record.options.commentNameVariantsProvider(), MODEL_IDENTITIES.chappy.commentCallVariants);
     assert.equal(fakePipe.record.options.whisper.promptProvider(), MODEL_IDENTITIES.chappy.whisperPrompt);
+    // 配信の組み直し Domain A: ロールの名前は cody / chappy 以外でもそのまま通る（空の手がかりは渡さない）。
+    currentIdentity = /** @type {any} */ ({
+      id: "mio", canonicalName: "ミオ", latinName: "", displayName: "みお",
+      whisperPrompt: "", voiceCallVariants: ["ミオ"], commentCallVariants: ["Mio"]
+    });
+    assert.deepEqual(cap.record.options.nameVariantsProvider(), ["ミオ"]);
+    assert.deepEqual(cap.record.options.commentNameVariantsProvider(), ["Mio"]);
+    assert.equal(fakePipe.record.options.whisper.promptProvider(), undefined);
   } finally {
     await server.close();
   }
@@ -2849,7 +2909,7 @@ test("cockpit current identity provider is the public-state authority even witho
   let currentIdentity = MODEL_IDENTITIES.chappy;
   let technicalStatus = null;
   const server = createCockpitServer({
-    currentBrainIdentity: () => currentIdentity,
+    currentRoleIdentity: () => currentIdentity,
     brainStatus: () => technicalStatus
   });
   try {
@@ -2860,7 +2920,7 @@ test("cockpit current identity provider is the public-state authority even witho
     });
 
     // A deliberately mismatched technical status cannot relabel the current
-    // identity; all C consumers follow the currentBrainIdentity provider.
+    // identity; all C consumers follow the currentRoleIdentity provider.
     technicalStatus = { brain: "codex", credentialHealth: true };
     currentIdentity = MODEL_IDENTITIES.cody;
     const mismatched = await getJson(`${url}/api/state`);
@@ -2891,6 +2951,7 @@ test("cockpit SSE: onSoulTranscript の entry.latencyMs が transcript(speaker:s
     }
   });
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     fireOrchestratorFactory: /** @type {any} */ (fake.factory),
     brainStatus: /** @type {any} */ (wiring.brainStatus)
   });
@@ -2898,6 +2959,7 @@ test("cockpit SSE: onSoulTranscript の entry.latencyMs が transcript(speaker:s
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const soulLine = await client.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
     assert.equal(soulLine.data.latencyMs, 2345);
@@ -2917,11 +2979,12 @@ test("cockpit SSE: onSoulTranscript の entry に latencyMs が無ければ従�
       hooks.onSoulTranscript({ seq: 1, startMs: 0, endMs: 0, text: "はい", speaker: "soul", appendedAtMs: 1000 });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const soulLine = await client.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
     assert.equal(soulLine.data.latencyMs, null);
@@ -2942,6 +3005,7 @@ test("cockpit SSE: onUsage に brain 札が additive で乗る（既存 usage �
     }
   });
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     fireOrchestratorFactory: /** @type {any} */ (fake.factory),
     brainStatus: /** @type {any} */ (wiring.brainStatus)
   });
@@ -2949,6 +3013,7 @@ test("cockpit SSE: onUsage に brain 札が additive で乗る（既存 usage �
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const usage = await client.waitFor((e) => e.event === "usage");
     // 既存フィールドは無変更。
@@ -3023,11 +3088,12 @@ test("cockpit SSE: bargeIn 診断は elapsedMs/charsSpoken/totalChars/prefix を
       });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const diag = await client.waitFor((e) => e.event === "diagnostic" && e.data.type === "bargeIn");
     assert.equal(diag.data.elapsedMs, 350);
@@ -3202,50 +3268,53 @@ test("cockpit barge-in born-disabled: bargeInInitialEnabled 未指定は既定 O
 //  ゲート（onSetBrain/onSetChannelUrl と同型）。cockpit.mjs 側の②書き出し役・保存・ライブ転写取得は一切
 //  ここに関与しない（責務境界・fake フックのみで実 LLM/実 FS 消費ゼロ）。記憶の ON/OFF（POST /api/memory）は撤去。
 
-test("cockpit 耳の Stop: pipeline を畳む前の転写を onEarsStopping に渡す（Stop の後は空・close では呼ばない）", async () => {
+test("cockpit 配信を終える: 畳む前の転写の写しを saveFinal に渡す（終えた後は空・閉じた場の終えると close では呼ばない）", async () => {
   const fake = makeFakePipeline();
   /** @type {Array<{ transcript: any[]; disposedAtCall: boolean }>} */
   const calls = [];
   const server = createCockpitServer({
     pipelineFactory: /** @type {any} */ (fake.factory),
-    onEarsStopping: (transcript) => calls.push({ transcript, disposedAtCall: fake.record.disposed })
+    streamHooks: { saveFinal: (transcript) => calls.push({ transcript, disposedAtCall: fake.record.disposed }) }
   });
   try {
     const url = await server.listen(0);
-    // 耳が起動していない Stop では呼ばない。
-    await postJson(`${url}/api/ears/stop`, {});
+    // 場が閉じている間の終えるでは呼ばない（記録しない）。
+    await postJson(`${url}/api/stream/stop`, {});
     assert.equal(calls.length, 0);
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
     fake.record.buffer.append({ startMs: 0, endMs: 1000, text: "ダミーの一言" });
     fake.record.buffer.append({ startMs: 1000, endMs: 2000, text: "ダミーの二言" });
-    const stop = await postJson(`${url}/api/ears/stop`, {});
+    const stop = await postJson(`${url}/api/stream/stop`, {});
     assert.equal(stop.status, 200);
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].disposedAtCall, false, "畳む前に呼ぶ");
+    assert.equal(calls[0].disposedAtCall, true, "写しは畳む前に取り、保存は畳んだあと");
     assert.deepEqual(calls[0].transcript.map((e) => e.text), ["ダミーの一言", "ダミーの二言"]);
-    assert.deepEqual(server.getTranscript(), [], "Stop の後はライブの転写が取れない（だから Stop の時点で渡す）");
-    // もう一度 Start して close（Ctrl+C の経路）では呼ばない。
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.deepEqual(server.getTranscript(), [], "終えた後はライブの転写が取れない（だから畳む前に写す）");
+    // もう一度始めて close（終えるを通らない畳み）では呼ばない（Ctrl+C は cockpit.mjs が endStream を先に呼ぶ）。
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
   } finally {
     await server.close();
   }
   assert.equal(calls.length, 1);
 });
 
-test("cockpit 耳の Stop: onEarsStopping が throw しても Stop は成り立つ", async () => {
+test("cockpit 配信を終える: saveFinal が throw しても場は閉じる", async () => {
   const fake = makeFakePipeline();
   const server = createCockpitServer({
     pipelineFactory: /** @type {any} */ (fake.factory),
-    onEarsStopping: () => {
-      throw new Error("boom");
+    streamHooks: {
+      saveFinal: () => {
+        throw new Error("boom");
+      }
     }
   });
   try {
     const url = await server.listen(0);
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
-    const stop = await postJson(`${url}/api/ears/stop`, {});
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
+    const stop = await postJson(`${url}/api/stream/stop`, {});
     assert.equal(stop.status, 200);
     assert.equal(stop.json.ears, "stopped");
+    assert.equal(stop.json.stream.phase, "closed");
     assert.equal(fake.record.disposed, true);
   } finally {
     await server.close();
@@ -3465,6 +3534,7 @@ test("cockpit POST /api/memory-record: onMemoryRecord 未注入なら 503", asyn
 test("cockpit POST /api/memory-record: onMemoryRecord を呼び・broadcastState + snapshot 反映", async () => {
   let calls = 0;
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     onMemoryRecord: async () => {
       calls += 1;
     },
@@ -3474,6 +3544,8 @@ test("cockpit POST /api/memory-record: onMemoryRecord を呼び・broadcastState
     const url = await server.listen(0);
     const s0 = await getJson(`${url}/api/state`);
     assert.equal(s0.json.memory.lastRecordAtMs, null);
+    // 配信の組み直し Domain D: 「今日を記録」は場が開いている間だけ。
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
 
     const r = await postJson(`${url}/api/memory-record`, {});
     assert.equal(r.status, 200);
@@ -3486,12 +3558,14 @@ test("cockpit POST /api/memory-record: onMemoryRecord を呼び・broadcastState
 
 test("cockpit POST /api/memory-record: onMemoryRecord が throw しても 200 を返す（記録失敗で 500 にしない・失敗寛容）", async () => {
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     onMemoryRecord: async () => {
       throw new Error("generateDigest failed");
     }
   });
   try {
     const url = await server.listen(0);
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
     const r = await postJson(`${url}/api/memory-record`, {});
     assert.equal(r.status, 200);
   } finally {
@@ -3501,6 +3575,7 @@ test("cockpit POST /api/memory-record: onMemoryRecord が throw しても 200 �
 
 test("cockpit POST /api/memory-record: broadcastState が飛ぶ（SSE state event 発行・記録の有無に関わらず現況を再配信）", async () => {
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     onMemoryRecord: async () => {},
     memoryStatus: () => ({ lastRecordAtMs: null, recording: false })
   });
@@ -3508,6 +3583,7 @@ test("cockpit POST /api/memory-record: broadcastState が飛ぶ（SSE state even
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
     const before = client.events.filter((e) => e.event === "state").length;
     await postJson(`${url}/api/memory-record`, {});
     await client.waitFor((e) => e.event === "state" && client.events.filter((x) => x.event === "state").length > before);
@@ -3597,10 +3673,13 @@ test("cockpit onFireRequest: kind:\"interjection\" は silence でない→ fire
   const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "そうだね" } });
   const server = createCockpitServer({
     fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
-    fireSchedulerFactory: /** @type {any} */ (cap.factory)
+    fireSchedulerFactory: /** @type {any} */ (cap.factory),
+    // 人間ゲート前の直し: 自発の発火は場が開いている間だけ（偽の耳で場を開く）。
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory)
   });
   try {
-    await server.listen(0);
+    const url = await server.listen(0);
+    await openStreamForFire(url);
     assert.equal(typeof cap.record.onFireRequest, "function");
     cap.record.onFireRequest({ kind: "interjection" });
     // fire() は非同期に呼ばれる（onFireRequest 内で Promise.resolve().then(...) するため一 tick 待つ）。
@@ -3617,12 +3696,15 @@ test("cockpit onFireRequest: kind:\"interjection\" は selfFire SSE に素通し
   const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "そうだね" } });
   const server = createCockpitServer({
     fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
-    fireSchedulerFactory: /** @type {any} */ (cap.factory)
+    fireSchedulerFactory: /** @type {any} */ (cap.factory),
+    // 人間ゲート前の直し: 自発の発火は場が開いている間だけ（偽の耳で場を開く）。
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory)
   });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url);
     cap.record.onFireRequest({ kind: "interjection" });
     const evt = await client.waitFor((e) => e.event === "selfFire" && e.data.kind === "interjection");
     assert.equal(evt.data.kind, "interjection");
@@ -4419,7 +4501,7 @@ async function startSpeakNowServer(over = {}) {
     speakStartModeInitial: "speak-now",
     speakNowJudge: fakeJudge.judge,
     onSpeakNowJudgment: (info) => logged.push(info),
-    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    currentRoleIdentity: () => MODEL_IDENTITIES.chappy,
     nowImpl: () => 1000, // fake バッファの appendedAtMs（1000）と同じ時計 = 直近 3 分の窓に入る。
     ...over.options
   });
@@ -4510,7 +4592,10 @@ test("cockpit speak-now: you の転写で判定 → 自発なら fire({vision:pr
 test("cockpit speak-now: 口数は問いの性格の 1 文にだけ効く（POST /api/verbosity の後の判定から）", async () => {
   const h = await startSpeakNowServer();
   try {
+    // 配信の組み直し 仕上げ: 口数はロールの持ち物で、場の途中は替えられない（409）。終えてから替え、次の場の判定から効く。
+    await postJson(`${h.url}/api/stream/stop`, {});
     await postJson(`${h.url}/api/verbosity`, { mode: "chatty" });
+    await postJson(`${h.url}/api/stream/start`, { device: "Mic" });
     h.fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "なんか言って" });
     assert.match(h.fakeJudge.calls[0].request.instructions, /^チャッピーは話好きなおしゃべりな性格/);
   } finally {
@@ -4931,7 +5016,7 @@ test("cockpit POST /api/speak-start: 503（scheduler 無し）・400（無効値
   });
   try {
     const url = await server.listen(0);
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    // 配信の組み直し 仕上げ: 話し始めはロールの持ち物で、場が閉じている間だけ替えられる（場の途中は 409）。
     for (const bad of [{ mode: "bogus" }, { mode: 1 }, {}]) {
       const r = await postJson(`${url}/api/speak-start`, bad);
       assert.equal(r.status, 400, JSON.stringify(bad));
@@ -4940,11 +5025,14 @@ test("cockpit POST /api/speak-start: 503（scheduler 無し）・400（無効値
     const on = await postJson(`${url}/api/speak-start`, { mode: "speak-now" });
     assert.equal(on.status, 200);
     assert.equal(on.json.speakStart, "speak-now");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
     fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディこれ見て" });
     assert.equal(fakeOrch.record.fireCount, 0, "speak-now の間は呼びかけが止まる");
     assert.equal(fakeJudge.calls.length, 1, "代わりに判定");
+    await postJson(`${url}/api/ears/stop`, {});
     const off = await postJson(`${url}/api/speak-start`, { mode: "classic" });
     assert.equal(off.json.speakStart, "classic");
+    await postJson(`${url}/api/ears/start`, { device: "Mic" });
     fakePipe.record.buffer.append({ startMs: 0, endMs: 900, text: "コーディこれ見て" });
     assert.equal(fakeOrch.record.fireCount, 1, "従来に戻すと呼びかけが効く");
     assert.equal(fakeJudge.calls.length, 1, "従来の間は判定しない");
@@ -5003,7 +5091,7 @@ async function startCommentServer(over = {}) {
     commentGuard: passAllGuard,
     commentReactJudge: reactJudge.judge,
     onCommentJudgment: (info) => logged.push(info),
-    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    currentRoleIdentity: () => MODEL_IDENTITIES.chappy,
     nowImpl: () => 1000,
     ...over
   });
@@ -5246,8 +5334,13 @@ test("cockpit コメント反応: 話し始めを従来に切り替えると取�
   try {
     h.fakeOrch.record.state = "speaking";
     h.server.ingestChatMessage({ text: "取っておく", displayName: "a" });
-    await postJson(`${h.url}/api/speak-start`, { mode: "classic" });
+    // 配信の組み直し 仕上げ: 話し始めは場の途中では替えられない（409）。配信を終える（取っておいた分は畳むときに捨てる）→
+    // 従来に替える → 次の場では反応する判定を呼ばない。
+    assert.equal((await postJson(`${h.url}/api/speak-start`, { mode: "classic" })).status, 409);
     h.fakeOrch.record.state = "idle";
+    await postJson(`${h.url}/api/stream/stop`, {});
+    assert.equal((await postJson(`${h.url}/api/speak-start`, { mode: "classic" })).status, 200);
+    await postJson(`${h.url}/api/stream/start`, { device: "Mic" });
     h.fakeOrch.record.hooks.onState("idle");
     h.server.ingestChatMessage({ text: "従来のコメント", displayName: "b" });
     assert.equal(h.reactJudge.calls.length, 0);
@@ -5423,7 +5516,7 @@ test("cockpit 作り直しデータ: speak-now の発火の遅延は 文字起�
     selfFireInitialEnabled: true,
     speakStartModeInitial: "speak-now",
     speakNowJudge: fakeJudge.judge,
-    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    currentRoleIdentity: () => MODEL_IDENTITIES.chappy,
     nowImpl: () => 1000,
     onReplyLatency: (rec) => logged.push(rec)
   });
@@ -5754,15 +5847,18 @@ async function startRecallServer(over = {}) {
       }),
     recallJudge: over.recallJudge ?? (async () => avoidAnswer(0.2)),
     onRecallEvent: (/** @type {any} */ e) => terminal.push(e),
-    currentBrainIdentity: () => MODEL_IDENTITIES.chappy,
+    currentRoleIdentity: () => MODEL_IDENTITIES.chappy,
     nowImpl: () => 1000,
     // Wave 3 仕上げ: 自発の発火が OFF だと結果はしゃべらせず黙って渡すので、発火の経路を見るテストは ON で始める。
     selfFireInitialEnabled: true,
+    // 人間ゲート前の直し: 自発の発火（思い出しの①も）は場が開いている間だけ。発火を見るので偽の耳で場を開いておく。
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     ...(over.options ?? {})
   });
   const url = await server.listen(0);
   const sse = openSseClient(`${url}/api/events`);
   await sse.waitFor((e) => e.event === "state");
+  await openStreamForFire(url);
   return { server, url, sse, orch, runs, terminal };
 }
 
@@ -6002,5 +6098,57 @@ test("cockpit 思い出し: recallRunner が無ければ係を作らず、目印
     assert.equal(orch.record.fires.length, 0);
   } finally {
     await server.close();
+  }
+});
+
+test("cockpit 体なし（配信の組み直し Domain C）: 遅延のレコードに bodyless: true の印が載る（SSE と記録の両方・体ありは載らない）", async () => {
+  for (const bodyless of [true, false]) {
+    const fakePipe = makeOnAppendPipeline();
+    /** @type {any[]} */ const logged = [];
+    const fakeOrch = makeFakeOrchestrator({
+      fireResult: { fired: true, fireId: 5 },
+      drive: (hooks, record) => {
+        hooks.onLatency({
+          fireId: 5,
+          cause: record.lastFireOptions.cause,
+          vision: false,
+          spoken: true,
+          screenMs: null,
+          llmFirstMs: 400,
+          firstSentenceMs: 80,
+          ttsMs: 120,
+          voiceMs: 10,
+          inFireMs: 700,
+          otherMs: 90,
+          serviceTier: null,
+          ...(bodyless ? { bodyless: true } : {})
+        });
+      }
+    });
+    const server = createCockpitServer({
+      pipelineFactory: /** @type {any} */ (fakePipe.factory),
+      fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+      onPrepareVoiceEngine: () => ({ ok: true }),
+      onReplyLatency: (rec) => logged.push(rec)
+    });
+    try {
+      const url = await server.listen(0);
+      const sse = openSseClient(`${url}/api/events`);
+      await sse.waitFor((e) => e.event === "state");
+      await postJson(`${url}/api/ears/start`, { device: "Mic" });
+      await postJson(`${url}/api/fire`, {});
+      const lat = await sse.waitFor((e) => e.event === "latency");
+      if (bodyless) {
+        assert.equal(lat.data.bodyless, true);
+        assert.equal(logged[0].bodyless, true, "記録（session-usage）へ渡すレコードにも載る");
+      } else {
+        assert.equal("bodyless" in lat.data, false, "体ありは今と同じ形");
+        assert.equal("bodyless" in logged[0], false);
+      }
+      assert.equal(lat.data.segments.voiceMs, 10);
+      sse.close();
+    } finally {
+      await server.close();
+    }
   }
 });

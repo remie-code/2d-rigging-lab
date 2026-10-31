@@ -6,12 +6,14 @@
  *  - 上の細い帯（header.mjs TopBar）: 名前・頭のモデル名・状態のピル・異常時だけの警告・残量ゲージ 2 本・KILL
  *    （KILL 中は帯を赤くし復帰ボタン。POST /api/kill は App が持つ）。
  *  - 会話タイムライン（conversation.mjs・左 約 6 割・主役）とコメント（comments.mjs・右 約 3.5 割）。材料は
- *    view-logic/glance-timeline.mjs の状態（glance）で、SSE ごとに glanceAfterSseEvent を通す。配信前（耳が止まって
- *    いる間）は会話の場所の中央に「準備・設定を開く」。
+ *    view-logic/glance-timeline.mjs の状態（glance）で、SSE ごとに glanceAfterSseEvent を通す。配信前（場が閉じて
+ *    いる間）は会話の場所の中央に「配信を始める」と「準備・設定」（配信の組み直し Domain D）。
+ *  - 「配信を終える」は下の帯の歯車の左（場が開いている間だけ・2 回押し）。始める / 終えるは POST /api/stream/start・stop。
  *  - 下の細い帯（bottom-bar.mjs）: 運転設定の表示・遅延の凡例 8 つ・歯車「準備・設定」。
- *  - 準備・設定（settings-drawer.mjs のダイアログ）: 既存の 4 タブに「運転」（control-bar.mjs DrivePanel = 旧運転
- *    バー + 手動の発火）と「ログ」（今の観測フィード feed.mjs + 旧ヘッダの一目の健康）を足した。初回の自動展開は
- *    やめた（§7・§9.2）。
+ *  - 準備・設定（settings-drawer.mjs のダイアログ）: 配信の組み直し Domain E で「配信の準備 / ロール / 運転 / 記憶 / ログ」
+ *    の 5 タブ。運転は control-bar.mjs DrivePanel（自発・かぶり・手動の発火）、ログは今の観測フィード feed.mjs + 旧ヘッダの
+ *    一目の健康。初回の自動展開はやめた（§7・§9.2）。
+ *  - 上の帯の名前はロールの名前（snapshot の role。無い古いサーバは brain.identity）。
  *
  * SSE 購読: SSE_EVENT_NAMES（既存 13 本 + 1 回目で足した fireAsk / latency / quota / warnings の 4 本）。
  * 観測フィード（ログのタブ）は rows.mjs の feedAfterSseEvent、会話とコメントは glanceAfterSseEvent、非タイムライン効果
@@ -45,7 +47,7 @@ import {
   conversationRowsView,
   commentRowsView
 } from "../view-logic/glance-timeline.mjs";
-import { latencyBarView, isPreStream, DEFAULT_LATENCY_THRESHOLDS } from "../view-logic/glance-meters.mjs";
+import { latencyBarView, isPreStream, streamStartView, DEFAULT_LATENCY_THRESHOLDS } from "../view-logic/glance-meters.mjs";
 
 /**
  * 購読する SSE イベントの全リスト（既存 13 本 + 操縦席の作り直し 1 回目で足した 4 本・データの形 §1）。
@@ -107,6 +109,11 @@ export function settingsFromSnapshot(s) {
     // 多頭化 Domain C: 頭脳の現況（{brain, credentialHealth}）。audioDevice/channel と同型の null 許容
     // （brainStatus 未注入なら null）。
     brain: (s && s.brain) ?? null,
+    // 配信の組み直し Domain A: ロールの現況（{ id, displayName, brain, body, roles }）。brain と同型の null 許容
+    // （roleStatus 未注入なら null）。
+    role: (s && s.role) ?? null,
+    // 配信の組み直し Domain A: 起動時の知らせ（ロールへの引っ越しの結果の行・ログのタブに出す）。無ければ空。
+    notices: s && Array.isArray(s.notices) ? s.notices.filter((/** @type {unknown} */ line) => typeof line === "string") : [],
     // 配信間記憶: 記憶の現況（{lastRecordAtMs, recording}）。brain と同型の null 許容
     // （memoryStatus 未注入なら null）。
     memory: (s && s.memory) ?? null,
@@ -115,8 +122,38 @@ export function settingsFromSnapshot(s) {
     compaction: (s && s.compaction) ?? null,
     // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定「頭脳・会話」タブ）。compaction と同型の
     // null 許容（codexFastStatus 未注入なら null）。
-    codexFast: (s && s.codexFast) ?? null
+    codexFast: (s && s.codexFast) ?? null,
+    // 配信の組み直し Domain D: 場の状態（{ phase, error, openedAtMs }・メイン画面の「配信を始める / 終える」と、場が開いている
+    // 間のマイク・文字起こしの固定）。無い古いサーバは null（画面は耳の状態から読む）。
+    stream: (s && s.stream) ?? null
   };
+}
+
+/**
+ * 上の帯・題に出す名前の元（配信の組み直し Domain E: ロールの名前）。snapshot の role（{ id, displayName }）があればそれ、
+ * 無い古いサーバは brain.identity。形の確かめは header.mjs の identityDisplayName が行う（形が違えば中立の題）。
+ * @param {any} settings  settingsFromSnapshot の値。
+ * @returns {{ id: unknown; displayName: unknown } | null}
+ */
+export function roleIdentityOf(settings) {
+  const role = settings && settings.role;
+  if (role && typeof role === "object" && typeof role.id === "string") return { id: role.id, displayName: role.displayName };
+  return settings && settings.brain ? settings.brain.identity ?? null : null;
+}
+
+/**
+ * 起動時の知らせ（配信の組み直し Domain A: ロールへの引っ越しの結果）をログのタブの上に出す（hooks 非使用）。
+ * 引っ越しが起きた起動だけサーバが行を渡す（無ければ何も描かない）。
+ * @param {{ notices?: ReadonlyArray<string> }} props
+ */
+export function StartupNotices({ notices }) {
+  const lines = Array.isArray(notices) ? notices : [];
+  if (lines.length === 0) return null;
+  return html`
+    <div class="startup-notices" role="note" aria-label="起動時の知らせ">
+      ${lines.map((line, i) => html`<p key=${i} class="startup-notice">${line}</p>`)}
+    </div>
+  `;
 }
 
 /**
@@ -157,6 +194,11 @@ export function App(props) {
   // 準備・設定の開閉（歯車・配信前の「準備・設定を開く」。初回の自動展開はしない・§7・§9.2）。
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsCloseRequestRef = useRef(/** @type {() => void} */ (() => setSettingsOpen(false)));
+  // 配信の組み直し Domain D: 「配信を始める」の要求そのものの失敗（通信の失敗・409。始められなかった理由はサーバの
+  // stream.error が持つ）と、「配信を終える」の 2 回押しの 1 回目（armed・数秒で戻す）。
+  const [streamRequestError, setStreamRequestError] = useState("");
+  const [endArmed, setEndArmed] = useState(false);
+  const endArmTimerRef = useRef(/** @type {any} */ (null));
 
   // applyState 相当（:265-284）。ハンドラと初期化の両方から呼ぶため ref で固定。
   const applyStateRef = useRef(/** @type {(s: any) => void} */ (() => {}));
@@ -268,12 +310,15 @@ export function App(props) {
   // The HTML starts with a neutral title. Once current server state arrives,
   // reflect only the additive public identity view; malformed/missing data
   // deliberately returns to the neutral title instead of retaining stale text.
-  const currentIdentity = settings && settings.brain ? settings.brain.identity : null;
+  // 配信の組み直し Domain E: 上の帯・題の名前はロールの名前（snapshot の role の id と見せる名前）。role を持たない古い
+  // サーバは今までどおり brain.identity。
+  const currentIdentity = roleIdentityOf(settings);
+  const documentTitle = cockpitDocumentTitle(currentIdentity);
   useEffect(() => {
     const doc = globalThis.document;
     if (!doc || typeof doc !== "object") return;
-    doc.title = cockpitDocumentTitle(currentIdentity);
-  }, [currentIdentity]);
+    doc.title = documentTitle;
+  }, [documentTitle]);
 
   /**
    * KILL / 復帰（上の帯の小さなボタン・明示 boolean を送る。トグルではない）。成功は snapshot 全体の応答を適用する。
@@ -299,7 +344,49 @@ export function App(props) {
       .catch((/** @type {unknown} */ e) => setKillError(killRequestErrorText(e)));
   };
 
-  // 歯車・配信前の「準備・設定を開く」（開いているときは閉じる要求 = 未保存の会話指示の確認を通す）。
+  /**
+   * 「配信を始める」（メイン画面の中央・配信の組み直し Domain D）。マイク・文字起こし・声は前回の選択（サーバの記憶）で
+   * 始める（選び直すのは準備・設定）。成功も失敗も応答の snapshot を適用する（失敗の理由は stream.error に載る）。
+   */
+  const startStream = () => {
+    const doFetch = props.fetchImpl || globalThis.fetch;
+    setStreamRequestError("");
+    doFetch("/api/stream/start", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        if (res.ok) {
+          applySnapshot(res.j);
+          return;
+        }
+        if (res.j && res.j.state) applySnapshot(res.j.state);
+        // 始めるの途中で失敗した理由はサーバの stream.error に残る。それ以外（409 など）はここで出す。
+        if (!(res.j && res.j.state && res.j.state.stream && res.j.state.stream.error)) {
+          setStreamRequestError((res.j && res.j.error) || "配信を始められない");
+        }
+      })
+      .catch((/** @type {unknown} */ e) => setStreamRequestError(`配信を始められない（${String(e)}）`));
+  };
+
+  /** 「配信を終える」（下の帯・2 回押し）。1 回目は armed にするだけ（4 秒で戻す）、続けて押したら終える。 */
+  const endStream = () => {
+    if (endArmTimerRef.current) clearTimeout(endArmTimerRef.current);
+    if (!endArmed) {
+      setEndArmed(true);
+      endArmTimerRef.current = setTimeout(() => setEndArmed(false), 4000);
+      return;
+    }
+    setEndArmed(false);
+    endArmTimerRef.current = null;
+    const doFetch = props.fetchImpl || globalThis.fetch;
+    doFetch("/api/stream/stop", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+      .then((/** @type {any} */ r) => r.json())
+      .then((/** @type {any} */ j) => applySnapshot(j && j.state ? j.state : j))
+      .catch(() => {
+        /* 終えるの途中の状態は SSE の state で届く。 */
+      });
+  };
+
+  // 歯車・配信前の「準備・設定」（開いているときは閉じる要求 = 未保存の会話指示の確認を通す）。
   const toggleSettings = () => {
     if (settingsOpen) {
       settingsCloseRequestRef.current();
@@ -328,6 +415,7 @@ export function App(props) {
         soul=${soul}
         ears=${ears}
         compacting=${compacting}
+        stream=${settings.stream}
         warnings=${warnings}
         quota=${quota}
         killed=${settings.killed}
@@ -337,17 +425,23 @@ export function App(props) {
         onRevive=${() => setKilled(false)}
       />
       <main class="glance-main">
-        <${ConversationPanel} rows=${convoRows} preStream=${isPreStream(ears)} onOpenSettings=${toggleSettings} />
+        <${ConversationPanel}
+          rows=${convoRows}
+          preStream=${isPreStream(ears, settings.stream)}
+          start=${streamStartView(settings.stream, streamRequestError)}
+          onStartStream=${startStream}
+          onOpenSettings=${toggleSettings}
+        />
         <${CommentsPanel} rows=${commentRows} />
       </main>
-      <${BottomBar} settings=${settings} settingsOpen=${settingsOpen} onOpenSettings=${toggleSettings} />
+      <${BottomBar} settings=${settings} settingsOpen=${settingsOpen} onOpenSettings=${toggleSettings}
+        endArmed=${endArmed} onEndStream=${endStream} />
       ${/* ── 準備・設定（歯車で開閉・普段は畳む）。運転とログのタブの中身はここで組んで渡す。── */ ""}
       <${CockpitSettingsModal}
         open=${settingsOpen}
         onClose=${() => setSettingsOpen(false)}
         settings=${settings}
         sttEngine=${stt ? stt.engine : null}
-        ttsEngine=${tts ? tts.engine : null}
         chatDisplay=${chatDisplay}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}
@@ -359,15 +453,14 @@ export function App(props) {
             fireNote=${fireNote}
             setFireNote=${setFireNote}
             selfFire=${settings.selfFire}
-            verbosity=${settings.verbosity}
-            speakStart=${settings.speakStart}
-            commentBusy=${settings.commentBusy}
             bargeIn=${settings.bargeIn}
+            stream=${settings.stream}
             applySnapshot=${applySnapshot}
             fetchImpl=${props.fetchImpl}
           />`}
         logSlot=${(/** @type {boolean} */ active) => html`
           <${HealthLine} ears=${ears} health=${health} audioDevice=${settings.audioDevice} stt=${stt} tts=${tts} device=${device} />
+          <${StartupNotices} notices=${settings.notices} />
           <${Feed} rows=${feed.rows} usageNote=${usageNote} discarded=${discarded} uptimeText=${uptimeText} active=${active} />`}
       />
     </div>

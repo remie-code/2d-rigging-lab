@@ -4131,3 +4131,281 @@ test("速さの段: configuration に段が無い（Claude の頭・acquire の�
   assert.equal(records[0].serviceTier, null);
   orch.dispose();
 });
+
+// ── 配信の組み直し Domain C: 体なしの声（stream-restructure.md §4）─────────────────────────────────
+//  体の無いロールの Fire（受理の資源の body: false）は器を使わない。運び手に channel を渡さず手元の再生器だけで
+//  鳴らす。表情タグは剥がして捨てる（器へ送らない・診断を出さない）。割り込み・キルの口閉じも送らない。
+//  割り込みの切断点は器ではなく時間割と STARTED から求めるので、体ありと同じ結果になる。
+
+/** 体なしの受理の資源（器を渡しても使われないことを確かめるため、rig の器を一緒に渡す）。 */
+function bodylessResources(rig) {
+  return async () => ({ body: false, channel: rig.channel, engine: rig.engine, player: rig.player });
+}
+
+test("体なし（一括の読み上げ・本物の speakOnce）: 器へ何も送らず手元の再生器だけで鳴らし、ENDED で完了する（play-failed にならない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const rig = makeOneShotRig();
+  const diags = [];
+  const traces = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "こんにちは" }; } },
+    channel: rig.channel,
+    player: rig.player,
+    acquireFireResources: bodylessResources(rig),
+    onDiagnostic: (d) => diags.push(d),
+    onTrace: (t) => traces.push(t)
+  });
+  const p = orch.fire();
+  await flushMicrotasks(200);
+  assert.equal(rig.player.opened.length, 1, "器の受理を待たずに player.open");
+  assert.deepEqual(rig.sent, [], "openSpeech / appendSpeech / endSpeech を送らない");
+  assert.equal(traces.find((t) => t.event === "speech.playback.activated")?.bodyless, true);
+  rig.player.emitFor("started", 0);
+  rig.player.emitFor("ended", 0);
+  const result = await p;
+  assert.equal(result.fired, true);
+  assert.equal(result.replyText, "こんにちは");
+  assert.equal(buffer.all()[1].text, "こんにちは");
+  assert.deepEqual(rig.sent, []);
+  assert.deepEqual(diags, []);
+  orch.dispose();
+});
+
+test("体なし: 割り込みの「どこまで声に出たか」は体ありと同じ（同じ時間割と STARTED の時刻から同じ文字数）・口閉じの診断を出さない", { timeout: 5000 }, async () => {
+  /** @param {boolean} body */
+  const run = async (body) => {
+    const buffer = bufferWithYou("ねえ、聞いてる？");
+    const rig = makeOneShotRig();
+    const diags = [];
+    const orch = createFireOrchestrator({
+      getBuffer: () => buffer,
+      session: { async ask() { return { replyText: "こんにちは" }; } },
+      engine: rig.engine,
+      channel: rig.channel,
+      player: rig.player,
+      ...(body ? {} : { acquireFireResources: bodylessResources(rig) }),
+      onDiagnostic: (d) => diags.push(d)
+    });
+    const p = orch.fire();
+    await flushMicrotasks(200);
+    rig.player.emit("started", rig.player.opened[0], { atMs: 1000 });
+    const info = await orch.interrupt(1350);
+    const result = await p;
+    orch.dispose();
+    return { info, result, diags, sent: rig.sent, stops: rig.player.stops, soul: buffer.all()[1].text };
+  };
+  const withBody = await run(true);
+  const bodyless = await run(false);
+  assert.equal(withBody.info.prefix, "こんに", "体ありの基準（今と同じ）");
+  assert.deepEqual(
+    { prefix: bodyless.info.prefix, charsSpoken: bodyless.info.charsSpoken, elapsedMs: bodyless.info.elapsedMs },
+    { prefix: withBody.info.prefix, charsSpoken: withBody.info.charsSpoken, elapsedMs: withBody.info.elapsedMs }
+  );
+  assert.equal(bodyless.result.interrupted, true);
+  assert.equal(bodyless.result.charsSpoken, withBody.result.charsSpoken);
+  assert.equal(bodyless.soul, withBody.soul);
+  assert.equal(bodyless.stops, 1, "声は止める");
+  assert.deepEqual(bodyless.sent, [], "口閉じ（sendSet）も含めて器へ何も送らない");
+  assert.deepEqual(bodyless.diags.map((d) => d.type), ["bargeIn"], "MouthClose の診断を出さない");
+  assert.equal(withBody.sent.filter((e) => e.op === "set").length, 1, "体ありは今どおり口を閉じる");
+});
+
+test("体なし: 器を持たない speak の返り（stop なし）でも、割り込み・キルで …MouthCloseError を出さない（体ありは今どおり出す）", { timeout: 5000 }, async () => {
+  /** @param {"interrupt" | "kill"} action @param {boolean} body */
+  const run = async (action, body) => {
+    const buffer = bufferWithYou();
+    const speak = makeBargeSpeak({ playbackStartedAtMs: 1000 });
+    const diags = [];
+    const orch = createFireOrchestrator({
+      getBuffer: () => buffer,
+      session: { async ask() { return { replyText: "こんにちは" }; } },
+      speakImpl: speak.speakImpl,
+      // sendSet を持たない器（体ありなら「口を閉じられない」診断になる）。
+      channel: {},
+      player: makeStopPlayer().player,
+      body,
+      onDiagnostic: (d) => diags.push(d)
+    });
+    const p = orch.fire();
+    await flushMicrotasks(200);
+    const info = action === "interrupt" ? await orch.interrupt(1350) : await orch.kill(1350);
+    await p;
+    orch.dispose();
+    return { info, types: diags.map((d) => d.type) };
+  };
+  for (const action of /** @type {const} */ (["interrupt", "kill"])) {
+    const prefixType = action === "interrupt" ? "bargeIn" : "kill";
+    const withBody = await run(action, true);
+    assert.ok(withBody.types.includes(`${prefixType}MouthCloseError`), `${action}: 体ありは今どおり`);
+    const bodyless = await run(action, false);
+    assert.deepEqual(bodyless.types, [prefixType], `${action}: 体なしは切断の診断だけ`);
+    assert.equal(bodyless.info.prefix, withBody.info.prefix, `${action}: 切断点は同じ`);
+  }
+});
+
+test("体なし: 表情タグは剥がして捨てる（器へ envelope を送らない・onExpression も診断も出さない）・声は剥がした本文", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel();
+  const diags = [];
+  const expressions = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "やあ<look-away>げんき？" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    acquireFireResources: async () => ({ body: false, channel: expr.channel }),
+    onDiagnostic: (d) => diags.push(d),
+    onExpression: (e) => expressions.push(e)
+  });
+  const result = await orch.fire();
+  assert.equal(result.fired, true);
+  assert.equal(fakeSpeak.spoken[0].text, "やあげんき？");
+  assert.equal(fakeSpeak.spoken[0].deps.channel, null, "一括の読み上げに器を渡さない");
+  assert.deepEqual(result.expressions, [], "適用も拒否も数えない");
+  assert.equal(expr.envelopes.length, 0);
+  assert.deepEqual(expressions, []);
+  assert.deepEqual(diags, []);
+  assert.equal(buffer.all()[1].text, "やあげんき？");
+  orch.dispose();
+});
+
+test("体なし: 表情タグだけの返事は表情を出さない expression-only で静かに畳む（空の返事の診断も出さない）", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel();
+  const diags = [];
+  const states = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: { async ask() { return { replyText: "<look-away>" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    body: false,
+    onDiagnostic: (d) => diags.push(d),
+    onState: (s) => states.push(s)
+  });
+  const result = await orch.fire();
+  assert.deepEqual(
+    { fired: result.fired, reason: result.reason, expressed: result.expressed, expressions: result.expressions },
+    { fired: false, reason: "expression-only", expressed: false, expressions: [] }
+  );
+  assert.equal(fakeSpeak.spoken.length, 0);
+  assert.equal(expr.envelopes.length, 0);
+  assert.deepEqual(diags, []);
+  assert.deepEqual(states, ["thinking", "idle"], "speaking にしない");
+  assert.equal(buffer.all().length, 1);
+  orch.dispose();
+});
+
+test("体なし（文ごとの読み上げ）: 運び手に器を渡さず鳴らし、表情タグは捨て、割り込みの声に出た分は体ありと同じ", { timeout: 5000 }, async () => {
+  /** @param {boolean} body */
+  const run = async (body) => {
+    const buffer = bufferWithYou("progressive bodyless");
+    const player = makeProgressivePlayer();
+    const continueFirst = deferred();
+    const expr = makeExprChannel();
+    const channels = [];
+    const diags = [];
+    const session = {
+      async ask(/** @type {any} */ _input, /** @type {any} */ askOptions) {
+        askOptions.onTextDelta("先行。<look-away>");
+        await continueFirst.promise;
+        askOptions.onTextDelta("後続。");
+        return { replyText: "先行。<look-away>後続。" };
+      }
+    };
+    const orch = createFireOrchestrator({
+      getBuffer: () => buffer,
+      session,
+      channel: expr.channel,
+      player,
+      body,
+      progressivePlayback: true,
+      speechStreamerFactory: (/** @type {any} */ options) => {
+        channels.push(options.channel);
+        return createSpeechStreamer({
+          ...options,
+          engine: makeProgressiveEngine(),
+          channel: options.channel == null ? null : streamChannel(options.channel)
+        });
+      },
+      onDiagnostic: (d) => diags.push(d)
+    });
+    const fired = orch.fire();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    emitProgressiveOwned(player, "STARTED", 0);
+    emitProgressiveOwned(player, "ENDED", 0);
+    const interrupted = await orch.interrupt();
+    continueFirst.resolve();
+    const result = await fired;
+    orch.dispose();
+    return { channels, interrupted, result, diags, envelopes: expr.envelopes, plays: player.plays.length, stops: player.stops };
+  };
+  const withBody = await run(true);
+  const bodyless = await run(false);
+  assert.deepEqual(bodyless.channels, [null], "運び手へ器を渡さない");
+  assert.notEqual(withBody.channels[0], null, "体ありは今どおり器を渡す");
+  assert.equal(bodyless.plays, 1, "手元の再生器で鳴った");
+  assert.deepEqual(bodyless.interrupted, withBody.interrupted);
+  assert.deepEqual(bodyless.interrupted, { interrupted: true, charsSpoken: 3, prefix: "先行。" });
+  assert.equal(bodyless.result.reason, "barge-in");
+  assert.equal(bodyless.envelopes.length, 0);
+  assert.deepEqual(bodyless.diags.map((d) => d.type), ["bargeIn"]);
+});
+
+test("体なし: 遅延の通知に bodyless: true の印が付く（体ありは付かない＝今と同じ形）", { timeout: 5000 }, async () => {
+  /** @param {boolean | undefined} body */
+  const run = async (body) => {
+    const latencies = [];
+    const orch = createFireOrchestrator({
+      getBuffer: () => bufferWithYou(),
+      session: { ask: async () => ({ replyText: "うん", ttftMs: 100 }) },
+      speakImpl: makeFakeSpeak().speakImpl,
+      channel: fakeChannel,
+      player: fakePlayer,
+      ...(body === undefined ? {} : { acquireFireResources: async () => ({ body }) }),
+      onLatency: (l) => latencies.push(l)
+    });
+    await orch.fire();
+    orch.dispose();
+    return latencies;
+  };
+  const bodyless = await run(false);
+  assert.equal(bodyless.length, 1);
+  assert.equal(bodyless[0].bodyless, true);
+  for (const body of [true, undefined]) {
+    const latencies = await run(body);
+    assert.equal(latencies.length, 1);
+    assert.equal("bodyless" in latencies[0], false, `body=${body}: 体ありは印を付けない`);
+  }
+});
+
+test("体の有無は受理のたびに読む: 同じ orchestrator でも、受理の資源が替われば次の Fire から体なし / 体ありになる", { timeout: 5000 }, async () => {
+  const fakeSpeak = makeFakeSpeak();
+  const expr = makeExprChannel();
+  let body = true;
+  const orch = createFireOrchestrator({
+    getBuffer: () => bufferWithYou(),
+    session: { async ask() { return { replyText: "やあ<look-away>" }; } },
+    speakImpl: fakeSpeak.speakImpl,
+    channel: expr.channel,
+    player: fakePlayer,
+    acquireFireResources: async () => ({ body, channel: expr.channel })
+  });
+  await orch.fire();
+  assert.equal(expr.envelopes.length, 2, "体あり: 表情を送る");
+  assert.equal(fakeSpeak.spoken[0].deps.channel, expr.channel);
+  body = false;
+  await orch.fire();
+  assert.equal(expr.envelopes.length, 2, "体なし: 送らない");
+  assert.equal(fakeSpeak.spoken[1].deps.channel, null);
+  body = true;
+  await orch.fire();
+  assert.equal(expr.envelopes.length, 4, "体ありに戻せば今どおり");
+  orch.dispose();
+});

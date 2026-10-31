@@ -22,6 +22,13 @@
  *   - 未知タグ（パーサ診断）は onDiagnostic({type:"expressionUnknownTag", tag})、演出適用は onExpression で通知
  *     （ワイヤ契約は domain-a.md ワイヤ契約節・Domain B が消費）。
  *
+ * ── 体なし（配信の組み直し Domain C・stream-restructure.md §4）─────────────────────────
+ *  受理の時点の資源が `body: false` の Fire は器を使わない。運び手（文ごと・一括）に channel を渡さず手元の
+ *  再生器だけで鳴らす。表情タグは speechText から剥がして捨てる（envelope を送らない・applied/rejected に
+ *  数えない・expression の診断を出さない。タグだけの返事は reason:"expression-only"・expressed:false）。
+ *  割り込み・キルの口閉じも送らない（`…MouthCloseError` を出さない）。割り込みの切断点は器ではなく時間割と
+ *  player の STARTED から求めるので、体の有無で変わらない。遅延の通知には `bodyless: true` を付ける。
+ *
  * ── 何を作らない / 変えない ────────────────────────────────────────────────
  *  session（createLlmSession の返り）・speak・channel・player・転写バッファは**受け取るだけ**。
  *  ここで作らず・変えない（S1/S2 の器官はそのまま結線する）。所有権は呼び出し側（本番結線 = Domain B）。
@@ -167,7 +174,7 @@ import {
 } from "./barge-in.mjs";
 import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
-import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
+import { DEFAULT_MODEL_IDENTITY, normalizeModelIdentity } from "./model-identity.mjs";
 import { createFireTiming } from "./fire-latency.mjs";
 import { appendSoulSkills, loadSoulSkills } from "./soul-skills.mjs";
 import { performance } from "node:perf_hooks";
@@ -226,7 +233,11 @@ export const DEFAULT_CONVERSATION_INSTRUCTION_BODY = FIRE_SYSTEM_PROMPT_BODY;
 /** Backwards-friendly shorter alias for consumers of the profile resolver. */
 export const DEFAULT_CONVERSATION_INSTRUCTION = DEFAULT_CONVERSATION_INSTRUCTION_BODY;
 
-/** The only technical brain ids that may carry a conversation override. */
+/**
+ * The only technical brain ids that may carry a conversation override.
+ * 配信の組み直し Domain A: 会話指示はロールの instructions.md に移った。この頭ごとの上書きは古い設定ファイルのキー
+ * （conversationInstructions）を読む口と、ロールへの引っ越し（role-migration.mjs）でだけ使う。
+ */
 export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
   "claude",
   "claude-opus-55",
@@ -278,13 +289,12 @@ export function resolveConversationInstructionProfile(brainId, overrides = undef
  * @returns {string}
  */
 export function buildFireSystemPrompt(identity = DEFAULT_MODEL_IDENTITY, conversationInstruction = undefined) {
-  const resolved =
-    identity && typeof identity === "object" &&
-    (/** @type {any} */ (identity).id === "cody" || /** @type {any} */ (identity).id === "chappy")
-      ? MODEL_IDENTITIES[/** @type {"cody" | "chappy"} */ (/** @type {any} */ (identity).id)]
-      : DEFAULT_MODEL_IDENTITY;
+  // 配信の組み直し Domain A: 名前はロールが持つ。cody / chappy の表で引き直さず、形だけ確かめてそのまま使う
+  // （ロールの名前がほかの名前でも通る）。ローマ字が無ければ括弧ごと省く。
+  const resolved = normalizeModelIdentity(identity);
+  const latin = resolved.latinName ? `（${resolved.latinName}）` : "";
   const body = normalizeConversationInstruction(conversationInstruction) ?? DEFAULT_CONVERSATION_INSTRUCTION_BODY;
-  return `あなたの名前は${resolved.canonicalName}（${resolved.latinName}）です。${body}`;
+  return `あなたの名前は${resolved.canonicalName}${latin}です。${body}`;
 }
 
 /**
@@ -312,6 +322,10 @@ export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), load
  *   `stop(cause)` で止め方を渡す。持たない返りは「返った時点で鳴り終わった」とみなす。
  * @param {{ openSpeech?: Function; appendSpeech?: Function; endSpeech?: Function; sendEnvelope?: Function; sendSet?: Function }} [options.channel]
  *   発話（intent.speechStream）・演出・口閉じの送出へ渡す接続済みチャネル。
+ * @param {boolean} [options.body=true]  ロールに体があるか（配信の組み直し Domain C・stream-restructure.md §4）。
+ *   acquireFireResources の返りが `body` を持てばそちらが勝つ（受理の時点の値）。false（体なし）の Fire は器を
+ *   使わない: 運び手に channel を渡さず手元の再生器だけで鳴らし、表情タグは剥がして捨て（診断も出さない）、
+ *   割り込み・キルの口閉じも送らない（体が無いことを失敗として数えない）。遅延の通知に `bodyless: true` を付ける。
  * @param {number} [options.expressionIntensity=1.0]  演出強さ係数（全 peak 一括スケール・表の外で適用）。
  * @param {any} [options.player]  常駐の流し込みプレイヤー（stream-player.mjs・open/write/end/stop/onEvent）。
  * @param {import("../voice/engines/voice-engine.mjs").VoiceEngine} [options.engine]  声の差し替え口。
@@ -319,6 +333,7 @@ export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), load
  * @param {object} [options.speakDeps]  既定の AivisSpeech engine へ渡す deps（tts/ttsBaseUrl/speaker/sConfig）。
  * @param {() => object | Promise<object>} [options.acquireFireResources]
  *   accepted 公開前に exact session/channel/player/engine snapshot を取得する production seam。
+ *   返りの `body: false` は体なしの Fire（channel は渡さない・渡しても使わない）。
  * @param {number} [options.windowMs=FIRE_WINDOW_MS]  注入窓幅。
  * @param {number} [options.maxChars=FIRE_MAX_CHARS]  注入文字数上限。
  * @param {() => number} [options.nowImpl=Date.now]  窓の起点となる壁時計（注入可）。
@@ -375,6 +390,7 @@ export function createFireOrchestrator(options) {
   }
   const speakImpl = options.speakImpl ?? defaultSpeak;
   const channel = options.channel;
+  const defaultBody = options.body !== false;
   const player = options.player;
   const speakDeps = options.speakDeps ?? {};
   const acquireFireResources = options.acquireFireResources;
@@ -462,10 +478,10 @@ export function createFireOrchestrator(options) {
   let nextFireId = 0;
   /**
    * 今の 1 発（fire() の claim から finally まで）。fireId は受理した時点で振る（受理しなかった発火は null）。
-   * single-flight なので 1 つで足りる。
+   * single-flight なので 1 つで足りる。body は受理の時点のロールの体の有無（資源を取るまでは既定の値）。
    * recall は思い出しの目印の拾い場所（streamed = 逐次の部品が読んだもの・final = 最後の parser の結果・
    * discard = 渡さない返事）。
-   * @type {null | { fireId: number | null; cause: object | null; vision: boolean; timing: ReturnType<typeof createFireTiming>; latencyEmitted: boolean; recall: { sawDelta: boolean; streamed: Array<{ request: string }>; final: Array<{ request: string }> | null; discard: boolean } }}
+   * @type {null | { fireId: number | null; cause: object | null; vision: boolean; body: boolean; timing: ReturnType<typeof createFireTiming>; latencyEmitted: boolean; recall: { sawDelta: boolean; streamed: Array<{ request: string }>; final: Array<{ request: string }> | null; discard: boolean } }}
    */
   let currentFire = null;
 
@@ -500,7 +516,9 @@ export function createFireOrchestrator(options) {
       vision: fire.vision,
       spoken,
       ...fire.timing.segments(),
-      serviceTier: typeof fire.serviceTier === "string" ? fire.serviceTier : null
+      serviceTier: typeof fire.serviceTier === "string" ? fire.serviceTier : null,
+      // 体なしの印（声の区間に器の往復が入らない・fire-latency.mjs）。体があるときは付けない（記録の形を変えない）。
+      ...(fire.body === false ? { bodyless: true } : {})
     });
   };
   /**
@@ -601,9 +619,12 @@ export function createFireOrchestrator(options) {
   const acquireResources = async () => {
     const supplied =
       typeof acquireFireResources === "function" ? await acquireFireResources() : {};
+    // 体の有無は受理の時点の値（snapshot が持てばそれ）。体なしの Fire は器を持たない（既定の channel にも戻らない）。
+    const body = typeof supplied?.body === "boolean" ? supplied.body : defaultBody;
     const resources = {
       session: supplied?.session ?? session,
-      channel: supplied?.channel ?? channel,
+      channel: body ? supplied?.channel ?? channel : null,
+      body,
       player: supplied?.player ?? player,
       engine: supplied?.engine ?? options.engine ?? null,
       speakDeps: Object.freeze({ ...speakDeps, ...(supplied?.speakDeps ?? {}) }),
@@ -613,6 +634,7 @@ export function createFireOrchestrator(options) {
     if (!resources.session || typeof resources.session.ask !== "function") {
       throw new Error("accepted Fire snapshot has no session.ask().");
     }
+    if (currentFire) currentFire.body = body;
     return Object.freeze(resources);
   };
 
@@ -630,8 +652,15 @@ export function createFireOrchestrator(options) {
     }
   };
 
-  /** Release Runtime mouth timeline after either legacy or progressive stop. */
+  /** 体なしの Fire か（受理の時点の資源。資源が無ければ既定の値）。 @param {any} resources */
+  const isBodyless = (resources) => (resources ? resources.body === false : !defaultBody);
+
+  /**
+   * Release Runtime mouth timeline after either legacy or progressive stop.
+   * 体なしの Fire では口が無いので何も送らず、診断も出さない（体が無いことを失敗として数えない）。
+   */
   const releaseMouth = async (diagnosticType, resources = currentFireResources) => {
+    if (isBodyless(resources)) return;
     const ownedChannel = resources?.channel ?? channel;
     try {
       if (ownedChannel && typeof ownedChannel.sendSet === "function") {
@@ -685,6 +714,7 @@ export function createFireOrchestrator(options) {
    * @param {any} resources
    */
   const streamReleaseMouth = (resources) => async (/** @type {{ cause: string }} */ info) => {
+    if (isBodyless(resources)) return;
     if (info?.cause === "barge-in") return releaseMouth("bargeIn", resources);
     if (info?.cause === "killed") return releaseMouth("kill", resources);
     const ownedChannel = resources?.channel ?? channel;
@@ -1001,13 +1031,18 @@ export function createFireOrchestrator(options) {
     // パーサ: replyText → speechText（読み上げ・会話ログ）+ 演出イベント列 + 診断。
     const parsed = parseExpressionTags(replyText);
     const speechText = parsed.speechText;
-    const events = parsed.events;
+    // 体なし（stream-restructure.md §4）: 表情タグは speechText から剥がした上で捨てる（器へ送らない・数えない・
+    // 診断も出さない）。未知タグ・壊れタグの診断は返事の形の知らせなので、体の有無に関わらず今どおり出す。
+    const bodyless = isBodyless(resources);
+    const droppedExpressionCount = bodyless ? parsed.events.length : 0;
+    const events = bodyless ? [] : parsed.events;
     // 思い出しの目印（一括の読み上げの拾い場所）。渡すのは fire() が結果を返す直前。
     if (currentFire) currentFire.recall.final = parsed.recalls.map((recall) => ({ request: recall.request }));
     trace("llm.response.parsed", {
       modelOutputChars: replyText.length,
       speechChars: speechText.length,
-      expressionCount: events.length
+      expressionCount: events.length,
+      ...(bodyless ? { bodyless: true, droppedExpressionCount } : {})
     });
     // 未知タグ・壊れタグ診断は expression 接頭辞で onDiagnostic へ（声にも演出にも出さない）。
     for (const d of parsed.diagnostics) {
@@ -1082,6 +1117,12 @@ export function createFireOrchestrator(options) {
         "progressive_speech_mismatch",
         "progressive.delivery.verify"
       );
+    }
+
+    // 体なしで表情タグだけの返事: 捨てたタグのほかに何も無い。体があれば表情だけを出す回なので、空の返事
+    // （fireEmptyReply）とは数えず、表情を出さなかった expression-only として静かに畳む（診断を出さない）。
+    if (!hasSpeech && droppedExpressionCount > 0) {
+      return { fired: false, reason: "expression-only", expressed: false, expressions: [], ...extra };
     }
 
     // 発話も演出も無い（空応答 / 未知タグのみ）→ 既存 fireEmptyReply 経路。
@@ -1792,6 +1833,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
         fireId: /** @type {number | null} */ (null),
         cause,
         vision: false,
+        body: defaultBody,
         timing: createFireTiming({ nowImpl: monotonicNowImpl }),
         latencyEmitted: false,
         /** @type {string | null} その返事の turn/start に送った速さの段（Codex の頭・onTurnStarted で知る）。 */

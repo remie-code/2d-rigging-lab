@@ -29,6 +29,17 @@ export const SOUL_SKILLS_DIR = join(here, "..", "..", "skills");
 export const SOUL_SKILL_NAMES = Object.freeze(["expression", "screen", "recall"]);
 
 /**
+ * ロールの体の有無に合わせて①に足す教えの名前（配信の組み直し Domain C・stream-restructure.md §4）。体が無い
+ * ロールには表情タグの教え（expression）を渡さない（器が無く、タグは剥がして捨てるため）。体があれば今どおり全部。
+ * 教えの本文は変えない（渡すかどうかだけ）。
+ * @param {unknown} body  ロールの `body`（false だけを「体なし」と読む）。
+ * @returns {ReadonlyArray<string>}
+ */
+export function soulSkillNamesForBody(body) {
+  return body === false ? SOUL_SKILL_NAMES.filter((name) => name !== "expression") : SOUL_SKILL_NAMES;
+}
+
+/**
  * 先頭の見出し欄（`---` で囲んだ部分）を落として本文だけにする。
  * @param {string} text
  * @returns {string}

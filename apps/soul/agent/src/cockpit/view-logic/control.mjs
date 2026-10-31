@@ -18,6 +18,7 @@
  *  - fireNoteFromFireResponse → :561-563 / :580-582 POST /api/fire・/api/vision-fire 応答
  *                                （503 = fire 未結線・fired:false は reason・受理は null = ノートを変えない）
  *  - fireRequestErrorNote     → :566-567 / :585-586 fetch catch（"fire error: e" / "vision fire error: e"）
+ *  - manualFireStreamView     → 配信の組み直し Domain E: 場が開いていない間は手動の発火を押せない（サーバも 409）
  *  - selfFireToggleView       → :324-340 `applySelfFire(sf)`（null = scheduler 未生成 → disable +
  *                                "not available"・それ以外は checked/on/off 導出）
  *  - selfFirePostErrorText    → :645-648 POST /api/self-fire 応答（503 / set failed・成功は null）
@@ -78,8 +79,23 @@ export function fireNoteFromSseFire(d) {
  */
 export function fireNoteFromFireResponse(res) {
   if (res.status === 503) return "fire not available (start cockpit with --channel)";
+  // 配信の組み直し Domain E: 場が開いていない間の手動の発火はサーバが 409 で断る（理由の文言をそのまま出す）。
+  if (res.status === 409) return "not fired: " + ((res.j && /** @type {any} */ (res.j).error) || (res.j && res.j.reason) || "stream-not-open");
   if (res.j && res.j.fired === false) return "not fired: " + (res.j.reason || "unknown");
   return null;
+}
+
+/**
+ * 手動の発火（Fire / Fire+視覚）が場の外で押せないか（配信の組み直し Domain E・Undine の追認: 場が閉じている間の手動の
+ * 発火は断る）。場が開いていない間（閉じている・開きかけ・閉じかけ）は押せない。stream を持たない古いサーバ（null）は
+ * 今までどおり押せる。
+ * @param {{ phase?: string } | null | undefined} stream  snapshot の stream。
+ * @returns {{ blocked: boolean; note: string }}
+ */
+export function manualFireStreamView(stream) {
+  const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
+  const blocked = phase != null && phase !== "open";
+  return { blocked, note: blocked ? "配信を始めると押せる" : "" };
 }
 
 /**

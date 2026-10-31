@@ -98,6 +98,8 @@ export function compactionUsageRecord(event, brain) {
 /**
  * 返事の遅延（cockpit-server の onReplyLatency が渡す、SSE "latency" と同じレコード）から、記録の 1 行を作る（純関数）。
  * 数字・種類・エンジン名だけを拾う（きっかけはコメントの ID や確率などを落とし、種類と speak-now の選択だけ）。
+ * 体なしの返事（レコードの `bodyless: true`・配信の組み直し Domain C）には `bodyless: true` を足す（声の区間に器の
+ * 往復が入らない印）。体があるときの行の形は変えない（キーを足さない）。
  * @param {any} record
  * @returns {Record<string, unknown>}
  */
@@ -126,7 +128,8 @@ export function replyLatencyUsageRecord(record) {
     otherMs: num(record?.otherMs),
     totalMs: num(record?.totalMs),
     // その返事の turn/start に送った Codex の速さの段（fire の行と同じ・Claude 等は null）。
-    serviceTier: str(record?.serviceTier)
+    serviceTier: str(record?.serviceTier),
+    ...(record?.bodyless === true ? { bodyless: true } : {})
   };
 }
 

@@ -31,7 +31,7 @@
 
 import { readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { DEFAULT_MEMORY_DIR, commitMemoryChanges } from "../memory/memory-store.mjs";
+import { commitMemoryChanges } from "../memory/memory-store.mjs";
 
 /** ②のコミットの役名（memory-store の buildCommitMessage に渡す固定の語）。 */
 export const WRITER_ROLE = "書き出し役";
@@ -300,13 +300,14 @@ export const WRITER_MISS_WARNING = "memory: the writer finished without writing 
  * @param {BrainCreateFn} options.create  ②の頭（Codex）の create。
  * @param {ReadonlyArray<{ text: string; speaker?: string; displayName?: string }>} options.entries  全量転写。
  * @param {{ dateJst: string; baseName: string }} options.record  今回の配信の識別（createStreamRecordIdentity の get()）。
- * @param {string} [options.dir=DEFAULT_MEMORY_DIR]  記憶のフォルダ（絶対パス）。
+ * @param {string} options.dir  記憶のフォルダ（絶対パス・今のロールの `memories/<role-id>/`）。省略できない（配信の組み直し
+ *   Domain B: 記憶の根や、ほかのロールのフォルダへ書かないように、呼び出し側が保存の引き金のときのロールのフォルダを渡す）。
  * @param {(warning: string) => void} [options.onWarning]
  * @param {typeof commitMemoryChanges} [options.commitImpl]  差し替え口（テスト用）。
  * @returns {Promise<{ written: false; missing?: true; commit?: Awaited<ReturnType<typeof commitMemoryChanges>> } | { written: true; commit: Awaited<ReturnType<typeof commitMemoryChanges>> }>}
  */
 export async function writeStreamRecord(options) {
-  const { create, entries, record, dir = DEFAULT_MEMORY_DIR, onWarning, commitImpl = commitMemoryChanges } = options;
+  const { create, entries, record, dir, onWarning, commitImpl = commitMemoryChanges } = options;
   const transcriptText = formatTranscriptForDigest(entries ?? []);
   if (transcriptText.length === 0) return { written: false };
   if (typeof create !== "function") {
@@ -314,6 +315,9 @@ export async function writeStreamRecord(options) {
   }
   if (!record || typeof record.dateJst !== "string" || typeof record.baseName !== "string") {
     throw new TypeError("writeStreamRecord: options.record must have dateJst and baseName.");
+  }
+  if (typeof dir !== "string" || dir.length === 0) {
+    throw new TypeError("writeStreamRecord: options.dir is required.");
   }
 
   const existingFiles = findStreamRecordFiles({ dir, baseName: record.baseName });

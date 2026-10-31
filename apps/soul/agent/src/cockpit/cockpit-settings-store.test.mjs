@@ -1066,3 +1066,22 @@ test("settings store: codexFastMode（①の Codex の頭の fast）は未記憶
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("settings store: roleChoice（配信の組み直し Domain A・今選んでいるロール）は往復し、ほかのキーを消さない", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    writeFileSync(path, JSON.stringify({ brainChoice: "codex", verbosityMode: "chatty" }), "utf8");
+    const store = createFileSettingsStore({ path });
+    assert.equal(store.getRoleChoice(), null);
+    store.setRoleChoice("chappy");
+    assert.equal(createFileSettingsStore({ path }).getRoleChoice(), "chappy");
+    const all = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(all.brainChoice, "codex", "古いキーは残る");
+    assert.equal(all.verbosityMode, "chatty");
+    store.setRoleChoice(null);
+    assert.equal(store.getRoleChoice(), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -31,10 +31,11 @@
  *     未記憶/未知値のフォールバックは呼び出し側（cockpit.mjs の createVerbosityHooks）に委ねる
  *     （vision target と同型の文字列キー・asStringOrNull）。
  *   setVerbosityMode(mode): 操縦席で口数モードを切替えたときに記憶（次回起動で復元）。
- *   getBrainChoice(): 頭脳の選択（claude/codex）の初期値（多頭化 Domain B・brain-swap-wave-plan.md §3）。
- *     未記憶/未知値のフォールバックは呼び出し側（cockpit.mjs の createBrainHooks）に委ねる
- *     （verbosityMode と同型の文字列キー・asStringOrNull）。
- *   setBrainChoice(choice): 操縦席で頭脳を切替えたときに記憶（次回起動で復元）。
+ *   getBrainChoice(): 頭脳の選択（claude/codex・多頭化 Domain B・brain-swap-wave-plan.md §3）。配信の組み直し
+ *     Domain A からは読むだけ（ロールへの引っ越しの元と、roleChoice が無いときの初めのロールの選び方）。
+ *   setBrainChoice(choice): 古い口（配信の組み直し Domain A から操縦席は書かない）。
+ *   getRoleChoice() / setRoleChoice(roleId): 今選んでいるロールの id（配信の組み直し Domain A・cockpit.mjs の
+ *     createRoleHooks が読み書きする。ロールの中身は roles/<id>/ にある）。
  *   （配信間記憶の ON/OFF（memoryEnabled）は記憶の作り直し Wave 2 で撤去。古いファイルにキーが残っていても読まない。）
  *   getSttEngine(): 文字起こしの方式（whisper / elevenlabs）の初期値（操縦席の文字起こし選択・
  *     cockpit-stt-selection.md）。未記憶/未知値のフォールバック（既定 whisper）は呼び出し側（cockpit.mjs）
@@ -141,6 +142,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setVerbosityMode: (mode: string | null) => void;
  *   getBrainChoice: () => string | null;
  *   setBrainChoice: (choice: string | null) => void;
+ *   getRoleChoice: () => string | null;
+ *   setRoleChoice: (roleId: string | null) => void;
  *   getSttEngine: () => string | null;
  *   setSttEngine: (engine: string | null) => void;
  *   getTtsEngine: () => string | null;
@@ -307,6 +310,15 @@ export function createFileSettingsStore(options = {}) {
     /** @param {string | null} choice */
     setBrainChoice(choice) {
       writeMerged({ brainChoice: choice ?? null });
+    },
+    // 配信の組み直し Domain A: 今選んでいるロールの id（ロールの中身は roles/<id>/ にあり、ここは選択だけ）。
+    // 頭の選択（brainChoice）はもう読まない（引っ越しの元と、roleChoice が無いときの初めの選び方にだけ使う）。
+    getRoleChoice() {
+      return asStringOrNull(readAll().roleChoice);
+    },
+    /** @param {string | null} roleId */
+    setRoleChoice(roleId) {
+      writeMerged({ roleChoice: roleId ?? null });
     },
     getSttEngine() {
       return asStringOrNull(readAll().sttEngine);

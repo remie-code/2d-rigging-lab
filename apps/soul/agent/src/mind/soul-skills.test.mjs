@@ -108,3 +108,26 @@ test("listSoulSkills: 名前・置き場（skills/<名前>.md）・本文の一�
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /"b"/);
 });
+
+// ── 配信の組み直し Domain C: 体の無いロールには表情の教えを渡さない（stream-restructure.md §4）─────────────
+
+test("soulSkillNamesForBody: 体なし（false）は expression を外す・体あり（true / 未指定）は今どおり全部", async () => {
+  const { soulSkillNamesForBody } = await import("./soul-skills.mjs");
+  assert.deepEqual([...soulSkillNamesForBody(false)], ["screen", "recall"]);
+  assert.equal(soulSkillNamesForBody(true), SOUL_SKILL_NAMES);
+  assert.equal(soulSkillNamesForBody(undefined), SOUL_SKILL_NAMES, "false だけを体なしと読む");
+  assert.deepEqual([...SOUL_SKILL_NAMES], ["expression", "screen", "recall"], "既定の並びは変えない");
+});
+
+test("体なしの教え: 表情の教えの本文が①に足されない・ほかの教えは同じ本文で足される（本文は変えない）", async () => {
+  const { soulSkillNamesForBody } = await import("./soul-skills.mjs");
+  const all = listSoulSkills();
+  const expression = all.find((skill) => skill.name === "expression");
+  assert.ok(expression && expression.body.length > 0);
+  const bodyless = loadSoulSkills({ names: soulSkillNamesForBody(false) });
+  assert.equal(bodyless.includes(expression.body), false);
+  for (const skill of all.filter((s) => s.name !== "expression")) {
+    assert.ok(bodyless.includes(skill.body), skill.name);
+  }
+  assert.equal(loadSoulSkills({ names: soulSkillNamesForBody(true) }), loadSoulSkills(), "体ありは今と同じ文字列");
+});

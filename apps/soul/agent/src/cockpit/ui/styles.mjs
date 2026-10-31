@@ -126,6 +126,8 @@ html, body { overflow: hidden; }
 .status-pill.speaking { color: var(--teal); }
 .status-pill.speaking .pill-dot { box-shadow: 0 0 8px var(--teal); }
 .status-pill.compacting { color: var(--compacting); }
+/* 配信の組み直し Domain E: 場の閉じかけ（記憶の最後の保存を待つ間）の「記録中」（中央の「記録中…」と同じ琥珀色）。 */
+.status-pill.recording { color: var(--amber); }
 .kill-status.killed {
   color: #fff;
   background: var(--down);
@@ -270,9 +272,12 @@ html, body { overflow: hidden; }
 .seg-voice { background: var(--seg-voice); }
 .seg-other { background: var(--seg-other); }
 
-/* 配信前（耳が止まっている間）: 会話の場所の中央に大きく「準備・設定を開く」 */
+/* 配信前（場が閉じている間・配信の組み直し Domain D）: 会話の場所の中央に大きく「配信を始める」と横に「準備・設定」。
+   始められなかった理由と、閉じかけの「記録中…」もここ。 */
 .prestream { flex: 1 1 auto; display: grid; place-items: center; }
-.prestream-open {
+.prestream-box { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 640px; padding: 0 16px; }
+.prestream-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.prestream-start {
   font: inherit;
   font-size: 20px;
   font-weight: 600;
@@ -283,7 +288,31 @@ html, body { overflow: hidden; }
   padding: 22px 48px;
   cursor: pointer;
 }
-.prestream-open:hover { background: var(--linked-bg); }
+.prestream-start:hover { background: var(--linked-bg); }
+.prestream-start:disabled { opacity: 0.6; cursor: default; }
+.prestream-open {
+  font: inherit;
+  font-size: 15px;
+  color: var(--fg-soft);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 24px;
+  cursor: pointer;
+}
+.prestream-open:hover { border-color: var(--teal); color: var(--teal); }
+.prestream-note { margin: 0; color: var(--amber); font-size: 14px; }
+.prestream-error {
+  margin: 0;
+  color: var(--alert-text);
+  background: var(--alert-bg);
+  border: 1px solid var(--down);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: normal;
+}
 
 /* コメント: 新しいものが上。入らない古い行は下で切る（下端は淡く消す）。 */
 .comments-list {
@@ -353,6 +382,20 @@ html, body { overflow: hidden; }
   font-size: 12px;
 }
 .bottom-bar .settings-toggle:hover { color: var(--teal); }
+/* 配信の組み直し Domain D: 「配信を終える」（場が開いている間だけ・小さく・2 回押し。1 回目で armed = 赤みの枠） */
+.bottom-bar .stream-end {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.bottom-bar .stream-end:hover { color: var(--fg-soft); }
+.bottom-bar .stream-end.armed { color: var(--alert-text); border-color: var(--down); background: var(--alert-bg); }
 /* 横 1280 程度まで: 帯の文字と間隔を詰める */
 @media (max-width: 1500px) {
   .top-bar, .bottom-bar { gap: 10px; padding-left: 14px; padding-right: 14px; }
@@ -376,6 +419,9 @@ html, body { overflow: hidden; }
   font-size: 12px;
   flex-wrap: wrap;
 }
+/* 起動時の知らせ（配信の組み直し Domain A: ロールへの引っ越しの結果・ログのタブの上）。 */
+.startup-notices { padding: 0 0 10px; color: var(--muted); font-size: 12px; }
+.startup-notice { margin: 0 0 2px; }
 
 /* ── 一目の健康（ログのタブ）・死活の色 ── */
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); display: inline-block; }
@@ -552,7 +598,7 @@ html, body { overflow: hidden; }
 .barge-in-toggle { accent-color: var(--teal); }
 .barge-in-status { color: var(--muted); font-size: 12px; }
 .barge-in-status.on { color: var(--up); }
-/* Codex の fast トグル pill（設定「頭脳・会話」タブ・barge-in pill の写経）。 */
+/* Codex の fast トグル pill（設定「ロール」タブの頭の調整・barge-in pill の写経）。 */
 .codex-fast-pill {
   display: flex;
   align-items: center;
@@ -598,7 +644,6 @@ html, body { overflow: hidden; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.drawer-close { line-height: 1; }
 .drawer-section { padding: 8px 0; }
 .drawer-section + .drawer-section { border-top: 1px solid var(--border); }
 .drawer-section h3 { font-size: 12px; margin: 0 0 8px; color: var(--teal); letter-spacing: 0.06em; }
@@ -658,6 +703,8 @@ html, body { overflow: hidden; }
 .channel-status.connected { color: var(--up); }
 .channel-status.error { color: var(--down); }
 .channel-status.connecting { color: var(--speaking); }
+/* 配信の組み直し Domain C・E: 体の無いロールの「体なし」（問題ではないので静かな紫・圧縮中と同じ色）。 */
+.channel-status.bodyless { color: var(--compacting); }
 .chat-status.live { color: var(--up); }
 .chat-status.connecting { color: var(--speaking); }
 .chat-status.retrying { color: var(--speaking); }
@@ -666,10 +713,29 @@ html, body { overflow: hidden; }
 .settings-drawer .btn-chat-connect, .cockpit-settings-modal .btn-chat-connect { color: var(--up); }
 .settings-drawer .btn-chat-disconnect, .cockpit-settings-modal .btn-chat-disconnect { color: var(--down); }
 .settings-drawer .btn-start, .cockpit-settings-modal .btn-start { color: var(--up); }
-.settings-drawer .btn-stop, .cockpit-settings-modal .btn-stop { color: var(--down); }
 .audio-device-status, .vision-target-status { color: var(--muted); }
 /* エラー欄（現 cockpit.html:83 .err の意味論を継承・各区画に配置）。 */
 .err { color: var(--down); }
+/* 配信の組み直し Domain E: 補いの案内（場の途中で触れない理由・既定の意味など）。 */
+.drawer-hint { color: var(--muted); font-size: 12px; }
+.fire-stream-note { color: var(--muted); font-size: 12px; }
+/* 配信の準備のたたんだもの（マイク・文字起こし・声の出力先・忙しい間のコメント）。普段は閉じておく。 */
+.prepare-more { margin: 6px 0 4px; border-top: 1px dashed var(--border); padding-top: 6px; }
+.prepare-more > summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 0; }
+.prepare-more[open] > summary { color: var(--teal); }
+.prepare-start { padding-top: 10px; }
+/* ロールの編集の「体」トグル（Codex の fast pill の写経）。 */
+.role-body-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+}
+.role-body-toggle { accent-color: var(--teal); }
+.settings-drawer .btn-role-save, .cockpit-settings-modal .btn-role-save { color: var(--up); }
 
 /* Cockpit Settings modal shell. Existing drawer control classes remain as
    aliases so migrated controls retain their visual and endpoint behaviour. */
@@ -703,26 +769,14 @@ html, body { overflow: hidden; }
 .cockpit-settings-dirty-warning { display: flex; align-items: center; gap: 8px; padding: 8px 0; color: var(--speaking); }
 .cockpit-settings-dirty-warning span { margin-right: auto; }
 .cockpit-settings-prompt-slot { border-top: 1px solid var(--border); margin-top: 8px; }
-.cockpit-settings-advanced { color: var(--muted); }
 /* Conversation-instruction editor (Domain C). Status always has text; the
    class is an additional cue and is never the sole indication of state. */
 .conversation-instruction-editor { padding: 8px 0; }
 .conversation-instruction-editor-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .conversation-instruction-editor-head h3 { margin: 0; color: var(--teal); }
 .conversation-instruction-back { margin-right: auto; }
-.conversation-instruction-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.conversation-instruction-selection label { color: var(--muted); }
-.conversation-instruction-selection select {
-  min-width: 240px;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 26px 6px 10px;
-  font: inherit;
-}
-.conversation-instruction-technical-label,
 .conversation-instruction-readonly-note,
+.conversation-instruction-locked-note,
 .conversation-instruction-revision { color: var(--muted); font-size: 12px; }
 .conversation-instruction-managed {
   display: grid;

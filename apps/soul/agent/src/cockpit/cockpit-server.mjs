@@ -46,7 +46,7 @@
  *   - 圧縮中: snapshot の compacting（頭の会話の圧縮の最中だけ true・状態のピルの「圧縮中」）。started で true、
  *     finished / failed / 頭の作り直し（resetContextCompaction）で false。変わったら SSE "state" で押す。
  *   - 圧縮の目安: snapshot の compaction（`{ thresholdTokens }` = 圧縮を始める大きさ・直近の入力トークン）。
- *     POST /api/compact-threshold で変え（設定の「頭脳・会話」タブ）、onSetCompactThresholdTokens が保存と走っている
+ *     POST /api/compact-threshold で変え（設定のロールのタブの下の頭の調整・旧「頭脳・会話」タブ）、onSetCompactThresholdTokens が保存と走っている
  *     compactor の差し替えを担う（cockpit.mjs）。
  *
  * ── 思い出す流れ（記憶の作り直し Wave 3 Domain D）──────────────────────────────────
@@ -97,7 +97,6 @@ import {
   COMMENT_HOLD_MAX_AGE_MS,
   COMMENT_HOLD_MAX_COUNT
 } from "../mind/comment-react.mjs";
-import { CONVERSATION_INSTRUCTION_BRAIN_IDS } from "../mind/fire-orchestrator.mjs";
 import { createRecallDesk } from "../mind/recall-desk.mjs";
 import { RECALL_JUDGE_TIMEOUT_MS } from "../mind/recall.mjs";
 import { composeReplyLatency, resolveLatencyThresholds } from "../mind/fire-latency.mjs";
@@ -107,8 +106,7 @@ import {
   quotaLowWarning,
   WARNING_EVENT_TTL_MS
 } from "./warnings.mjs";
-import { resolveBrainIdentity } from "../mind/brains.mjs";
-import { resolveModelIdentity } from "../mind/model-identity.mjs";
+import { DEFAULT_MODEL_IDENTITY, isRoleId, normalizeModelIdentity } from "../mind/model-identity.mjs";
 import { normalizeCompactThresholdTokens } from "../mind/context-compactor.mjs";
 
 /** コクピット既定 host（loopback 束縛・外に開かない）。 */
@@ -117,7 +115,10 @@ export const DEFAULT_COCKPIT_HOST = "127.0.0.1";
 export const DEFAULT_COCKPIT_PORT = 8181;
 /** 状態スナップショットに載せる直近転写の件数（タブ開き直し時の復元用）。 */
 export const DEFAULT_TRANSCRIPT_HISTORY = 200;
-/** 声の方式（POST /api/ears/start の body `ttsEngine`・設定キー `ttsEngine` と同じ語彙・声の差し替え Wave 3）。 */
+/**
+ * 声の方式（設定キー `ttsEngine`・ロールの声の方式と同じ語彙・声の差し替え Wave 3）。配信の組み直しからはロールの声が
+ * 決める（applyRoleResult）。POST /api/stream/start（旧 /api/ears/start）の body `ttsEngine` は後方互換で受ける。
+ */
 export const TTS_ENGINES = Object.freeze(["aivis", "elevenlabs"]);
 /** 声の engine の状態の語彙（VoiceEngine の status と同じ + まだ知らない unknown）。 */
 const VOICE_STATUSES = Object.freeze(["unknown", "connecting", "up", "reconnecting", "down"]);
@@ -456,22 +457,47 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
  *   未注入でも POST /api/verbosity 自体は 503 にならない（scheduler があれば切替は効く。永続化のみ
  *   スキップ）。
- * @param {(choice: string) => void | Promise<void>} [options.onSetBrain]
- *   頭脳切替フック（多頭化 Domain B・POST /api/brain が呼ぶ・onSetVerbosity と同型）。choice は検証済みの
- *   "claude" | "codex"。**cockpit-server は永続化・頭のホットスワップ実体を知らない**（責務境界: 実体は
- *   cockpit.mjs が settings 永続 + 現 session の dispose→null で担う）。未注入なら POST /api/brain は 503
- *   （onSetChannelUrl/onSetAudioDevice と同型の未注入ゲート）。
+ * @param {(roleId: string) => ({ ok: true; verbosity?: string; speakStartMode?: string; ttsEngine?: string }
+ *   | { ok: false; reason?: string } | Promise<any>)} [options.onSetRole]
+ *   ロールを選ぶフック（配信の組み直し Domain A・POST /api/role が呼ぶ・旧 onSetBrain の置き換え）。roleId は形を
+ *   確かめ済み（英小文字の id）。知らないロールなら `{ ok:false, reason }`（→ 400）。選べたら新しいロールの口数・
+ *   話し始め・声の方式を返す（サーバの scheduler と Start の既定に入れる）。**cockpit-server はロールの中身・
+ *   永続化・頭のホットスワップを知らない**（実体は cockpit.mjs）。場が閉じていない間（開いている・開きかけ・閉じかけ）は
+ *   呼ばずに 409（場の途中でロールを替えない・配信の組み直し Domain D）。未注入なら POST /api/role は 503。
+ * @param {() => (object | null)} [options.roleStatus]
+ *   ロールの現況（`{ id, displayName, brain, body, roles: [{ id, displayName, brain }] }`）。state snapshot の `role` に
+ *   載せる（未注入なら null）。性格の指示の本文は載せない。配信の組み直し Domain E からは、ロールの編集の画面が読む
+ *   持ち物（`name`・`voice`・`verbosity`・`speakStartMode`・`editable`）も載る（サーバは中身を見ずにそのまま載せる）。
+ * @param {(patch: object) => ({ ok: true; verbosity?: string; speakStartMode?: string; ttsEngine?: string }
+ *   | { ok: false; reason?: string } | Promise<any>)} [options.onUpdateRole]
+ *   今のロールを編集するフック（配信の組み直し Domain E・POST /api/role/edit が呼ぶ）。patch は画面のロールの編集の
+ *   中身（名前・モデル・声・口数・話し始め・体）。確かめと永続化は cockpit.mjs（断るなら `{ ok:false, reason }` → 400・
+ *   throw → 500）。編集できたら口数・話し始め・声の方式を返す（POST /api/role と同じく scheduler と Start の既定に入れる）。
+ *   場が閉じていない間は呼ばずに 409（場の途中でロールの持ち物を替えない・stream-restructure.md §2.1・§3）。未注入なら 503。
+ * @param {(input: { id: string; name: string | null }) => ({ ok: true; verbosity?: string; speakStartMode?: string; ttsEngine?: string }
+ *   | { ok: false; reason?: string; conflict?: boolean } | Promise<any>)} [options.onCreateRole]
+ *   今のロールを写して新しいロールを作り、そのロールを選ぶフック（配信の組み直し Domain E・POST /api/role/new が呼ぶ）。
+ *   id は形（Windows の予約名を含めて）を確かめ済み。同じ id があれば `{ ok:false, conflict:true }` → 409。場が閉じていない
+ *   間は呼ばずに 409。未注入なら 503。
+ * @param {ReadonlyArray<{ kind: string; severity: "warn" | "alert"; message: string; detail?: string | null }>} [options.startupWarnings]
+ *   起動時に上の帯へ出しておく警告（配信の組み直し Domain E: 起動時の引っ越しの失敗）。状態で決まる警告として起動の間
+ *   ずっと出る（直らない＝次の起動でもう一度確かめる）。
  * @param {() => (object | null)} [options.brainStatus]
- *   頭脳の現況（`{ brain: string, credentialHealth: boolean }`）を返す。state snapshot に載せる
+ *   頭脳の現況（`{ brain: string, credentialHealth: boolean }`・今のロールが指す頭）を返す。state snapshot に載せる
  *   （audioDevice/channel と同型）。credentialHealth は資格情報ファイルの**存在確認のみ**（中身は読まない）。
  *   brain の状態正本は cockpit.mjs 側にあり、起動時の現況もこの status が運ぶ（サーバは brain 状態を
  *   二重管理せず・別途 initial 値は持たない）。未注入なら snapshot の brain:null。
- * @param {() => (Readonly<import("../mind/model-identity.mjs").ModelIdentity> | null | undefined)} [options.currentBrainIdentity]
- *   現在の registry identity を返す request/handling-time provider。起動スクリプトの currentBrain
- *   closure を正本とし、Whisper/scheduler/public snapshot が同じ provider を読む。brainStatus が
- *   未注入でも snapshot.brain.identity だけは provider から構成し、technical status が provider と
- *   不一致でも identity は provider を権威とする。
+ * @param {() => (Readonly<import("../mind/model-identity.mjs").ModelIdentity> | null | undefined)} [options.currentRoleIdentity]
+ *   今のロールの名前を返す request/handling-time provider（配信の組み直し Domain A・旧 currentBrainIdentity）。
+ *   起動スクリプトのロールの選択を正本とし、Whisper/scheduler/public snapshot/判定の名前が同じ provider を読む。
+ *   形だけを確かめ（model-identity.mjs の normalizeModelIdentity）、cody / chappy 以外の名前もそのまま通す。
+ *   brainStatus が未注入でも snapshot.brain.identity だけは provider から構成する。頭は名前を持たないので、
+ *   provider が無ければ identity は null（画面は中立の題）。
+ * @param {ReadonlyArray<string>} [options.notices]
+ *   起動時の知らせ（配信の組み直し Domain A: ロールへの引っ越しの結果の行）。snapshot の `notices` に載せ、
+ *   操縦席のログのタブに出す（起動 1 回分・引っ越しが無ければ空）。
  * @param {{
+ *   isKnownId?: (roleId: string) => boolean;
  *   getProfile: (brainId: string) => { body: string; hasOverride: boolean };
  *   save: (brainId: string, instruction: string) => boolean | Promise<boolean>;
  *   reset: (brainId: string) => boolean | Promise<boolean>;
@@ -491,25 +517,40 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   **cockpit-server は器官の中身（innertube 取得）を知らない**（責務境界: fireOrchestratorFactory と
  *   同型・実体は cockpit.mjs が注入する）。未注入なら POST /api/chat/connect は 503。
  * @param {(source: string | null) => void | Promise<void>} [options.onSetChatSource]
- *   配信 source の永続化フック（S7・onSetChannelUrl の写経）。Connect 時に受けた source（trim 済み）を
- *   渡す。**cockpit-server は永続化実体を知らない**（実体は cockpit.mjs が settings へ橋渡しする）。
- *   未注入でも Connect 自体は成立する（永続化のみスキップ）。
+ *   配信 source の永続化フック（S7・onSetChannelUrl の写経）。Connect 時と POST /api/chat/source（欄に入れた値の保存・
+ *   配信の組み直し 仕上げ）で受けた source（trim 済み・空は null）を渡す。**cockpit-server は永続化実体を知らない**
+ *   （実体は cockpit.mjs が settings へ橋渡しする）。未注入でも Connect 自体は成立する（永続化のみスキップ）。
  * @param {() => ({ source: string | null } | null)} [options.chatSourceStatus]
  *   記憶済みの配信 source（`{ source }`）を返す。state snapshot の `chat.source`（入力欄の既定復元用・
- *   Connect 前/切断後も残る）に載せる。未注入なら chat.source:null。
+ *   Connect 前/切断後も残る）に載せる。未注入なら chat.source:null。この値（前回の起動から残っている値）だけでは
+ *   「配信を始める」はつながない（つなぐのはこの起動で入れた・Connect した source だけ・startChatForStream）。
  * @param {() => (Promise<void> | void)} [options.onMemoryRecord]
  *   手動「今日を記録」フック（POST /api/memory-record が呼ぶ）。**cockpit-server は記憶の書き出し/保存を
  *   知らない**（実体は cockpit.mjs の保存の係・ライブ転写取得含め呼び出し側の責務）。フックの
  *   throw は 500 にせず握って続行する（記録失敗で操作を止めない・failure-tolerant）。未注入なら
- *   POST /api/memory-record は 503。記憶の ON/OFF（POST /api/memory）は撤去した（記憶の作り直し Wave 2・全部残す）。
+ *   POST /api/memory-record は 503。場が開いていなければ呼ばずに 409（配信の組み直し Domain D）。記憶の ON/OFF（POST /api/memory）は撤去した（記憶の作り直し Wave 2・全部残す）。
  * @param {() => (object | null)} [options.memoryStatus]
  *   記憶の現況（`{ lastRecordAtMs: number | null, recording: boolean }`）を返す。
  *   state snapshot の `memory` に載せる（brainStatus/audioDeviceStatus と同型）。未注入なら
- *   snapshot の memory:null。変わったら呼び出し側が `memoryStatusChanged()` で知らせる。
- * @param {(transcript: Array<any>) => void} [options.onEarsStopping]
- *   耳の Stop で、pipeline を畳む**前**に、その時点の全量転写（transcriptBuffer.all() のコピー）を渡す口
- *   （記憶の作り直し Wave 2: 耳の Stop でも記録する）。待たない・throw は握る。耳が起動していなければ呼ばない。
- *   close() 経由では呼ばない（Ctrl+C の最後の保存は cockpit.mjs が close の前に転写を取る）。
+ *   snapshot の memory:null。変わったら呼び出し側が `memoryStatusChanged()` で知らせる。配信の組み直し Domain E からは
+ *   記憶のタブの「どのロールの記憶か」（`available`・`roleId`・`roleName`・`dir`）も載る（サーバは中身を見ない）。
+ * @param {{
+ *   renewRecords?: () => (void | Promise<void>);
+ *   openSession?: () => ({ ok: boolean; reason?: string } | void | Promise<{ ok: boolean; reason?: string } | void>);
+ *   connectBody?: () => ({ ok: boolean; reason?: string } | void | Promise<{ ok: boolean; reason?: string } | void>);
+ *   closeSession?: () => (void | Promise<void>);
+ *   closeBody?: () => (void | Promise<void>);
+ *   saveFinal?: (transcript: Array<any>) => (void | Promise<void>);
+ * }} [options.streamHooks]
+ *   場（配信を始める / 終える）の cockpit.mjs 側の口（配信の組み直し Domain D・stream-restructure.md §3）。
+ *   **cockpit-server は記録・頭のセッション・器・記憶の中身を知らない**（実体は cockpit.mjs の createStreamVenueHooks）。
+ *   - renewRecords: 始める 2（場の記録を作り直す: 記憶の本体のファイル名・頭の文脈の記録のファイル・置き場の準備）。
+ *   - openSession: 始める 5（頭のセッションをロールのモデルと指示で作る）。`ok:false` なら場を開かない。
+ *   - connectBody: 始める 6（ロールに体があれば器につなぐ。体なしは何もしない）。`ok:false` なら場を開かない
+ *     （reason は「runtime-player が起動していないか、channel が開いていない」の知らせ）。
+ *   - closeSession / closeBody: 畳む（頭のセッション・器。器は体の有無に関わらず畳む）。始めるの途中の失敗の巻き戻しでも呼ぶ。
+ *   - saveFinal: 終える 3（写した転写で記憶の最後の保存をして待つ。待つ上限と打ち切りは cockpit.mjs が持つ）。
+ *   どれも任意（無ければ飛ばす）。throw は握る（始める口の throw は失敗として扱う）。
  * @param {(tokens: number) => void | Promise<void>} [options.onSetCompactThresholdTokens]
  *   圧縮を始める大きさ（直近の入力トークン・整数で 5 万〜45 万）の変更フック（POST /api/compact-threshold が呼ぶ・
  *   onSetBargeInEnabled と同型）。**cockpit-server は圧縮の実体を知らない**（実体は cockpit.mjs が settings 永続 +
@@ -527,27 +568,29 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   呼び出し側が `codexFastStatusChanged()` で知らせる。
  * @param {(engine: "parakeet" | "zipformer") => ({ ok: true } | { ok: false; reason: string })} [options.localSttModelCheck]
  *   ローカルの文字起こし（parakeet / zipformer）のモデルが揃っているか（既定 checkLocalSttModel = vendor/models を
- *   見る）。Start ごとに呼び、揃っていなければ耳を開かずに Start を失敗にする（ElevenLabs のキー切れと同じ流儀）。
+ *   見る）。耳の Start（「配信を始める」の 4）ごとに呼び、揃っていなければ耳を開かずに始めるを失敗にする（ElevenLabs の
+ *   キー切れと同じ流儀）。
  * @param {(() => object | null) | object} [options.localSttSettings]
- *   ローカルの文字起こしの設定（{ threads, preRollMs, silencePadMs, hotwords, hotwordsScore }・範囲外は既定）。関数なら Start ごとに
- *   読む（設定ファイルの書き換えが次の Start から効く）。pipeline の stt.local へそのまま渡す。
+ *   ローカルの文字起こしの設定（{ threads, preRollMs, silencePadMs, hotwords, hotwordsScore }・範囲外は既定）。関数なら
+ *   「配信を始める」ごとに読む（設定ファイルの書き換えが次の場から効く）。pipeline の stt.local へそのまま渡す。
  * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [options.sttEngineInitial="whisper"]
  *   文字起こしの方式の初期選択（操縦席の文字起こし選択・cockpit-stt-selection.md）。起動時の値は
  *   呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（selfFireInitialEnabled と同型）。
- *   選択は POST /api/ears/start の body `sttEngine` で受け、Start ごとに onSetSttEngine で永続化する
- *   （マイクと同じく [Start] の前に選ぶ・動作中に変えるなら Stop→Start）。
+ *   選択は POST /api/stream/start（旧 /api/ears/start）の body `sttEngine` で受け、「配信を始める」ごとに onSetSttEngine で
+ *   永続化する（マイクと同じく場が閉じている間に選ぶ・場の途中は替えられない＝終えてから始め直す・stream-restructure.md §3）。
  * @param {(engine: string) => void | Promise<void>} [options.onSetSttEngine]
- *   文字起こしの方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ *   文字起こしの方式の永続化フック（「配信を始める」で呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
  * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.elevenLabsApiKeyProvider]
  *   ElevenLabs のキーを返す（既定 loadElevenLabsApiKey = `apps/soul/agent/.env.elevenlabs.local` を
- *   コード内で直接読む・process.env に入れない）。Start ごとに読む。キーは pipeline へ渡すだけで、
+ *   コード内で直接読む・process.env に入れない）。「配信を始める」ごとに読む。キーは pipeline へ渡すだけで、
  *   state/SSE/ログ/エラーには載せない。
  * @param {"aivis" | "elevenlabs"} [options.ttsEngineInitial="aivis"]
  *   声の方式の初期選択（声の差し替え Wave 3 Domain E・voice-swap-wave-plan.md §3）。sttEngineInitial の写経:
- *   起動時の値は cockpit.mjs が settings から読んで渡す（未知値は aivis）。選択は POST /api/ears/start の body
- *   `ttsEngine` で受け、Start ごとに onSetTtsEngine で永続化する（効くのは次の Start から）。
+ *   起動時の値は cockpit.mjs が settings から読んで渡す（未知値は aivis）。配信の組み直しからは今のロールの声の方式
+ *   （ロールの選択・編集・新規の applyRoleResult）が現況を決め、「配信を始める」ごとに onSetTtsEngine で書き戻す。
+ *   POST /api/stream/start（旧 /api/ears/start）の body `ttsEngine` は後方互換で受ける（画面は送らない）。
  * @param {(engine: string) => void | Promise<void>} [options.onSetTtsEngine]
- *   声の方式の永続化フック（Start 時に呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ *   声の方式の永続化フック（「配信を始める」で呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
  * @param {(engine: "aivis" | "elevenlabs") => ({ ok: boolean; reason?: string } | Promise<{ ok: boolean; reason?: string }>)} [options.onPrepareVoiceEngine]
  *   耳の Start で声の engine を用意する口（cockpit.mjs が engine の作成・作り直し・ElevenLabs のキーの読み込みを
  *   担う。**cockpit-server は engine の実体もキーも知らない**）。耳を開く前に呼び、`ok:false` なら Start を失敗に
@@ -625,6 +668,9 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
  *   close: () => Promise<void>;
  *   isListening: () => boolean;
  *   earsStatus: () => string;
+ *   streamStatus: () => { phase: string; error: string | null; openedAtMs: number | null };
+ *   startStream: (request?: object) => Promise<object>;
+ *   endStream: () => Promise<object>;
  *   fireState: () => string | null;
  *   setSelfFireEnabled: (enabled: boolean) => boolean;
  *   selfFireStatus: () => { enabled: boolean } | null;
@@ -671,13 +717,20 @@ export function createCockpitServer(options = {}) {
   // （未注入なら POST /api/verbosity 自体は 503 にならない・onSetSelfFireEnabled と同型の失敗寛容）。
   const verbosityInitialMode = typeof options.verbosityInitialMode === "string" ? options.verbosityInitialMode : "normal";
   const onSetVerbosity = typeof options.onSetVerbosity === "function" ? options.onSetVerbosity : null;
-  // 多頭化 Domain B: 頭脳切替フック（未注入なら POST /api/brain は 503・onSetChannelUrl と同型のゲート）と
-  // 現況（snapshot の brain に載せる・未注入なら null）。brain の状態正本は cockpit.mjs の currentBrain で、
+  // 配信の組み直し Domain A: 頭脳切替は「ロールの選択」に替わった（onSetRole・未注入なら POST /api/role は 503・
+  // onSetChannelUrl と同型のゲート）。頭の現況（snapshot の brain に載せる・未注入なら null）の正本は cockpit.mjs で、
   // 起動時の現況も brainStatus() が運ぶ（サーバは brain 状態を二重管理しない＝別途 initial 値は受けない）。
-  const onSetBrain = options.onSetBrain;
+  const onSetRole = options.onSetRole;
+  const onUpdateRole = typeof options.onUpdateRole === "function" ? options.onUpdateRole : null;
+  const onCreateRole = typeof options.onCreateRole === "function" ? options.onCreateRole : null;
+  const roleStatusImpl = options.roleStatus;
   const brainStatusImpl = options.brainStatus;
-  const currentBrainIdentityImpl =
-    typeof options.currentBrainIdentity === "function" ? options.currentBrainIdentity : null;
+  const currentRoleIdentityImpl =
+    typeof options.currentRoleIdentity === "function" ? options.currentRoleIdentity : null;
+  /** 起動時の知らせ（引っ越しの結果など・文字列だけ）。 */
+  const startupNotices = Object.freeze(
+    Array.isArray(options.notices) ? options.notices.filter((line) => typeof line === "string") : []
+  );
   const conversationInstructionHooks = options.conversationInstructionHooks ?? null;
   // 配信間記憶: ON/OFF の永続化フック + 手動「今日を記録」フック + 現況(未注入ならそれぞれ 503/null・
   // onSetBrain/brainStatus と同型)。
@@ -723,8 +776,9 @@ export function createCockpitServer(options = {}) {
   // 画面キャプチャの撮る係の寿命を耳の Start / Stop に合わせる口（vision-capture-latency §4 の 2）。
   const onEarsStarted = typeof options.onEarsStarted === "function" ? options.onEarsStarted : null;
   const onEarsStopped = typeof options.onEarsStopped === "function" ? options.onEarsStopped : null;
-  // 耳の Stop で pipeline を畳む前の転写を渡す口（記憶の作り直し Wave 2・耳の Stop でも記録する）。
-  const onEarsStopping = typeof options.onEarsStopping === "function" ? options.onEarsStopping : null;
+  // 場（配信を始める / 終える）の cockpit.mjs 側の口（配信の組み直し Domain D）。耳の Stop で記録する口
+  // （旧 onEarsStopping）は無くした: 記憶の最後の保存は「配信を終える」の saveFinal の 1 本だけを通る。
+  const streamHooks = options.streamHooks && typeof options.streamHooks === "object" ? options.streamHooks : {};
   /** @param {(() => void) | null} hook */
   const callEarsHook = (hook) => {
     if (!hook) return;
@@ -815,8 +869,23 @@ export function createCockpitServer(options = {}) {
   let currentDevice = null;
   /** @type {number | null} */
   let startedAtMs = null;
-  let transitioning = false;
   let closed = false;
+  // 配信の組み直し Domain D: 場（配信を始める / 終える・stream-restructure.md §3）。closed → opening → open →
+  // closing → closed。opening / closing の間は次の始める・終えるを断る（旧 transitioning の型）。場が閉じていない間は
+  // ロールを替えない（opening から = ロールを固める）・マイクと文字起こしを替えない（始める口だけが替える）。
+  /** @type {"closed" | "opening" | "open" | "closing"} */
+  let streamPhase = "closed";
+  /** 直近の「配信を始める」が始められなかった理由（次の始めるで消す）。 @type {string | null} */
+  let streamError = null;
+  /** @type {number | null} */
+  let streamOpenedAtMs = null;
+  /** 進行中の始める / 終える（Ctrl+C の終えるが待つ）。 @type {Promise<any> | null} */
+  let streamTransition = null;
+  /**
+   * 場の世代（「配信を始める」で場を開きかけるたびに 1 つ進む）。後ろでつなぐ YouTube（始める 7）が、つながった時点で
+   * まだ同じ場が開いているかを確かめる材料（配信の組み直し 人間ゲート前の直し）。
+   */
+  let streamGeneration = 0;
   // S8「キルスイッチ」: キル状態の正本（サーバ側に一つ）。POST /api/kill が設定・snapshot() に露出・
   // fireOrchestrator 生成時（initialKilled）+ 遷移時（kill()/revive()）の両方へ伝播する（domain-b.md §）。
   let killed = false;
@@ -834,15 +903,23 @@ export function createCockpitServer(options = {}) {
   // 側で fake clock/注入 RNG により全分岐テスト済み（domain-c.md）。
   /** @type {ReturnType<typeof createFireScheduler> | null} */
   let fireScheduler = null;
+  /** 発火の予定を作る口（orchestrator 結線のときだけ・配信を始めるたびに作り直す）。 @type {((init: { enabled: boolean; verbosity: string }) => any) | null} */
+  let makeFireScheduler = null;
   // speak-now の判定部品（fireScheduler と同じく orchestrator が fire/getState を持つときだけ生成する）。
   /** @type {ReturnType<typeof createSpeakNowController> | null} */
   let speakNow = null;
+  /** speak-now の判定部品を作る口（配信を始めるたびに作り直す）。 @type {(() => ReturnType<typeof createSpeakNowController>) | null} */
+  let makeSpeakNow = null;
   // コメント反応の判定部品（speakNow と同じく orchestrator が fire/getState を持つときだけ生成する）。
   /** @type {ReturnType<typeof createCommentReactController> | null} */
   let commentReact = null;
+  /** コメント反応の判定部品を作る口（配信を始めるたびに作り直す）。 @type {(() => ReturnType<typeof createCommentReactController>) | null} */
+  let makeCommentReact = null;
   // 思い出しの係（記憶の作り直し Wave 3・orchestrator が fire/getState を持ち、recallRunner があるときだけ生成する）。
   /** @type {ReturnType<typeof createRecallDesk> | null} */
   let recallDesk = null;
+  /** 思い出しの係を作る口（配信を始めるたびに作り直す）。 @type {(() => ReturnType<typeof createRecallDesk>) | null} */
+  let makeRecallDesk = null;
   // 弾く判定の待ち行列。判定は並行に走らせるが、転写バッファへは届いた順に積む（先のコメントの判定完了を
   // 待つ・合意 §1-5）。decision が付いた先頭から順に取り出す。
   /** @type {Array<{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }>} */
@@ -875,6 +952,14 @@ export function createCockpitServer(options = {}) {
   /** @type {string | null} */
   let lastChatStatus = null;
   /**
+   * この起動で入れた YouTube の source（配信の組み直し 仕上げ・体験の素描 場面 3 の注記）。POST /api/chat/source で
+   * 保存した値か、Connect した値。「配信を始める」はこの source へつなぐ（startChatForStream）。起動時に設定から読み戻した
+   * だけの前回の source（chatSourceStatus の値）はここに入らない＝つなぎにいかない（配信ごとに URL が替わるため）。
+   * 欄を空にして保存したとき・Disconnect を押したときは null に戻す（つながない）。
+   * @type {string | null}
+   */
+  let chatSourceThisBoot = null;
+  /**
    * 配信者の行の文字起こしの遅延（seq → ms・遅延の「文字起こし」区間の材料）。直近だけ持つ。
    * @type {Map<number, number | null>}
    */
@@ -887,6 +972,19 @@ export function createCockpitServer(options = {}) {
       typeof options.warningEventTtlMs === "number" && options.warningEventTtlMs > 0 ? options.warningEventTtlMs : WARNING_EVENT_TTL_MS,
     onChange: (list) => broadcast("warnings", { warnings: list })
   });
+  // 配信の組み直し Domain E: 起動時の警告（引っ越しの失敗）。起動の間ずっと出す。
+  if (Array.isArray(options.startupWarnings)) {
+    options.startupWarnings.forEach((spec, index) => {
+      if (spec && typeof spec.kind === "string" && typeof spec.message === "string" && (spec.severity === "warn" || spec.severity === "alert")) {
+        warningBoard.setCondition(`startup:${index}:${spec.kind}`, {
+          kind: spec.kind,
+          severity: spec.severity,
+          message: spec.message,
+          detail: typeof spec.detail === "string" ? spec.detail : null
+        });
+      }
+    });
+  }
   /** @type {(() => void) | null} */
   let quotaUnsub = null;
 
@@ -919,30 +1017,26 @@ export function createCockpitServer(options = {}) {
   function snapshot() {
     const bufStats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
     const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
-    // currentBrainIdentity is the single current-identity source for every C
-    // consumer. Normalize its frozen contract through the canonical resolver;
-    // malformed/absent values retain the Cody fallback. When the technical
-    // brain status is unavailable, the additive public identity still remains
-    // available for the title/header. The status object never overrides it.
-    const providedIdentity = currentBrainIdentityImpl
-      ? resolveModelIdentity(currentBrainIdentityImpl()?.id)
+    // currentRoleIdentity is the single current-identity source for every C
+    // consumer. Normalize its shape (normalizeModelIdentity); malformed values
+    // retain the Cody fallback. 配信の組み直し Domain A: 名前はロールが持ち、頭からは引かない。provider が
+    // 無ければ identity は null（画面は中立の題）。When the technical brain status is unavailable, the
+    // additive public identity still remains available for the title/header.
+    const providedIdentity = currentRoleIdentityImpl ? normalizeModelIdentity(currentRoleIdentityImpl()) : null;
+    const publicIdentity = providedIdentity
+      ? { id: providedIdentity.id, displayName: providedIdentity.displayName }
       : null;
     const publicBrain =
       rawBrain && typeof rawBrain === "object"
-        ? {
-            ...rawBrain,
-            identity: providedIdentity
-              ? { id: providedIdentity.id, displayName: providedIdentity.displayName }
-              : (() => {
-                  const identity = resolveBrainIdentity(/** @type {any} */ (rawBrain).brain);
-                  return { id: identity.id, displayName: identity.displayName };
-                })()
-          }
-        : providedIdentity
-          ? { identity: { id: providedIdentity.id, displayName: providedIdentity.displayName } }
+        ? { ...rawBrain, identity: publicIdentity }
+        : publicIdentity
+          ? { identity: publicIdentity }
           : null;
     return {
       ears: earsState,
+      // 配信の組み直し Domain D: 場の状態（phase = closed / opening / open / closing・error = 直近の始められなかった
+      // 理由・openedAtMs = 開いた時刻）。closing の間は記憶の最後の保存を待っている（画面の「記録中」）。
+      stream: { phase: streamPhase, error: streamError, openedAtMs: streamOpenedAtMs },
       device: currentDevice,
       health: {
         whisper: { status: health.whisper, reason: health.whisperReason },
@@ -978,6 +1072,10 @@ export function createCockpitServer(options = {}) {
       killed: killed,
       // 多頭化 Domain B: 頭脳の現況（頭札 + 資格情報の存在確認・未注入なら null・audioDevice/channel と同型）。
       brain: publicBrain,
+      // 配信の組み直し Domain A: ロールの現況（今のロール・選べるロールの一覧・未注入なら null）。
+      role: typeof roleStatusImpl === "function" ? (roleStatusImpl() ?? null) : null,
+      // 配信の組み直し Domain A: 起動時の知らせ（ロールへの引っ越しの結果・ログのタブに出す）。
+      notices: [...startupNotices],
       // 配信間記憶: 記憶の現況（{lastRecordAtMs, recording}・未注入なら null・brain と同型）。
       memory: typeof memoryStatusImpl === "function" ? (memoryStatusImpl() ?? null) : null,
       // S6「会話が続く」: 魂の声の出力デバイスの現況（未注入なら null）。
@@ -987,7 +1085,10 @@ export function createCockpitServer(options = {}) {
       chat: {
         source: typeof chatSourceStatusImpl === "function" ? (chatSourceStatusImpl()?.source ?? null) : null,
         connected: chatClient != null,
-        state: chatClient ? chatClient.getState() : null
+        state: chatClient ? chatClient.getState() : null,
+        // この起動で入れた（保存した・Connect した）source があるか（配信の組み直し 仕上げ）。true なら「配信を始める」で
+        // つなぐ。欄に前回の値が戻っているだけなら false（自動ではつながない）。
+        enteredThisBoot: chatSourceThisBoot != null
       },
       // 操縦席の作り直し 1 回目（データ側・cockpit-glance-redesign.md §9）: 残量・警告・遅延のしきい値。
       quota: quotaSource ? quotaSnapshotSafe() : null,
@@ -995,9 +1096,9 @@ export function createCockpitServer(options = {}) {
       latencyThresholds: { ...latencyThresholds },
       // 頭の会話の圧縮の最中か（状態のピルの「圧縮中」・既定 false・killed と同じく常に boolean）。
       compacting: contextCompacting,
-      // 圧縮の目安（{ thresholdTokens }・設定の「頭脳・会話」タブ。未注入なら null・memory と同型）。
+      // 圧縮の目安（{ thresholdTokens }・設定のロールのタブの下の頭の調整。未注入なら null・memory と同型）。
       compaction: typeof contextCompactionStatusImpl === "function" ? (contextCompactionStatusImpl() ?? null) : null,
-      // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定の「頭脳・会話」タブ。未注入なら null）。
+      // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定のロールのタブの下の頭の調整。未注入なら null）。
       codexFast: typeof codexFastStatusImpl === "function" ? (codexFastStatusImpl() ?? null) : null
     };
   }
@@ -1205,7 +1306,7 @@ export function createCockpitServer(options = {}) {
       // 永続化失敗は起動を止めない（B の file-backed 実体の I/O 失敗を握る）。
     }
 
-    // 文字起こしの方式（マイクと同じく Start の前に選ぶ）。Start ごとに記憶する（失敗寛容）。
+    // 文字起こしの方式（マイクと同じく場が閉じている間に選ぶ）。「配信を始める」ごとに記憶する（失敗寛容）。
     if (engineChoice) sttEngine = engineChoice;
     const engine = sttEngine;
     if (onSetSttEngine) {
@@ -1215,7 +1316,7 @@ export function createCockpitServer(options = {}) {
         // 永続化失敗は起動を止めない（setLastDevice と同型）。
       }
     }
-    // 声の方式（文字起こしと同じく Start の前に選び、Start ごとに記憶する・失敗寛容）。
+    // 声の方式（今のロールの声・applyRoleResult が揃える）。「配信を始める」ごとに記憶する（失敗寛容）。
     if (ttsChoice) ttsEngine = ttsChoice;
     const voiceKind = ttsEngine;
     if (onSetTtsEngine) {
@@ -1317,15 +1418,17 @@ export function createCockpitServer(options = {}) {
 
     const baseOptions = options.pipelineOptions ?? {};
     // Resolve the Whisper lexical-bias prompt at request time. The injected
-    // provider observes cockpit.mjs currentBrain, so switching heads does not
-    // require restarting the ear pipeline.
+    // provider observes cockpit.mjs の今のロール, so switching roles does not
+    // require restarting the ear pipeline. 手がかりが空なら渡さない。
     const whisperOptions = {
       ...(/** @type {any} */ (baseOptions).whisper ?? {})
     };
-    if (currentBrainIdentityImpl) {
+    if (currentRoleIdentityImpl) {
       whisperOptions.promptProvider = () => {
-        const identity = currentBrainIdentityImpl();
-        return identity && typeof identity.whisperPrompt === "string" ? identity.whisperPrompt : undefined;
+        const identity = currentRoleIdentityImpl();
+        return identity && typeof identity.whisperPrompt === "string" && identity.whisperPrompt.length > 0
+          ? identity.whisperPrompt
+          : undefined;
       };
     }
     const p = pipelineFactory({
@@ -1467,7 +1570,11 @@ export function createCockpitServer(options = {}) {
     return { ok: true, state: snapshot() };
   }
 
-  /** @returns {Promise<object>} 停止後の状態。 */
+  /**
+   * 耳（と会話の正本）と目を畳む。配信の組み直し Domain D から「配信を終える」（closeStream）の畳む の中だけで呼ぶ
+   * （転写の写しは closeStream が先に取る＝ここでは記録しない）。
+   * @returns {Promise<object>} 停止後の状態。
+   */
   async function stopEars() {
     callEarsHook(onEarsStopped);
     if (!pipeline) {
@@ -1475,14 +1582,6 @@ export function createCockpitServer(options = {}) {
       return snapshot();
     }
     const p = pipeline;
-    // 記憶: 転写は pipeline が持つので、畳む前に渡す（close 経由の onEarsStopped では、もう空になっている）。
-    if (onEarsStopping) {
-      try {
-        onEarsStopping(p.transcriptBuffer.all());
-      } catch {
-        // 記録の失敗で耳の Stop を止めない。
-      }
-    }
     pipeline = null;
     if (discardUnsub) {
       discardUnsub();
@@ -1505,14 +1604,479 @@ export function createCockpitServer(options = {}) {
     return snapshot();
   }
 
+  // ── 場（配信を始める / 終える・配信の組み直し Domain D・stream-restructure.md §3）──────────────
+  //
+  //  「配信を始める」「配信を終える」をそれぞれ 1 本の関数にまとめる（openStream / closeStream）。API（POST
+  //  /api/stream/start・/api/stream/stop と、後方互換の /api/ears/start・/api/ears/stop）と、Ctrl+C（cockpit.mjs の
+  //  shutdown が endStream を呼ぶ）はどれもここを通る（別の道を残さない）。
+  //  始める: ロールを固める → 場の記録を作り直す → KILL を OFF → 判定・発火の予定・コメント反応・思い出しの係の積み残しを
+  //  捨てる → 耳・目・声 → 頭のセッション → 体があれば器（つながらなければ場は開かない）→ YouTube（Connect 済みなら持ち込み、
+  //  この起動で入れた URL ならつなぐ・前回の起動から欄に残っているだけの URL はつながない・つながらなくても開く）。
+  //  終える: 写し → 畳む → 記憶の最後の保存を待つ（closing の間 = 「記録中」）→ 閉じる。
+
+  /**
+   * 場の口（streamHooks）を 1 つ呼ぶ。無ければ ok。`{ ok:false, reason }` を返すか throw したら失敗。
+   * @param {string} name
+   * @param {...any} args
+   * @returns {Promise<{ ok: true } | { ok: false; reason: string }>}
+   */
+  async function runStreamHook(name, ...args) {
+    const hook = /** @type {any} */ (streamHooks)[name];
+    if (typeof hook !== "function") return { ok: true };
+    try {
+      const result = await hook(...args);
+      if (result && typeof result === "object" && result.ok === false) {
+        return { ok: false, reason: typeof result.reason === "string" && result.reason ? result.reason : `${name} failed` };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: errMessage(error) };
+    }
+  }
+
+  /**
+   * 判定の積み残しを捨てる（speak-now・コメント反応の忙しい間の積み残し・弾く判定の待ち行列・相槌の印・文字起こしの
+   * 遅延の控え）。
+   */
+  function discardJudgments() {
+    if (speakNow) speakNow.reset();
+    if (commentReact) commentReact.reset();
+    guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が取り出さない（列に無い）。
+    backchannelFirePending = false;
+    sttLatencyBySeq.clear();
+  }
+
+  /**
+   * 判定部品を畳む（積み残しを捨てた上で dispose・走っている判定の結果が後から返っても無視する）。畳んだ部品は場が閉じて
+   * いる間の置き場として残す（話し始めの方式の切り替えの reset などは何もしない）。
+   */
+  function parkJudges() {
+    discardJudgments();
+    for (const judge of [speakNow, commentReact]) {
+      if (!judge) continue;
+      try {
+        judge.dispose();
+      } catch {
+        // best-effort
+      }
+    }
+  }
+
+  /** 判定部品を作り直す（配信を始める の 3・前の場の走っている判定の結果を新しい場に混ぜない）。 */
+  function renewJudges() {
+    parkJudges();
+    if (makeSpeakNow) speakNow = makeSpeakNow();
+    if (makeCommentReact) commentReact = makeCommentReact();
+  }
+
+  /**
+   * 発火の予定を畳む（タイマを解除する）。畳んだ実体は場が閉じている間の値の置き場として残す（自発の ON/OFF・口数は
+   * 読み書きできるが、タイマはもう張らない・fire-scheduler の dispose の契約）。次の「配信を始める」で作り直す。
+   */
+  function parkFireScheduler() {
+    if (!fireScheduler) return;
+    try {
+      fireScheduler.dispose();
+    } catch {
+      // best-effort
+    }
+  }
+
+  /** 発火の予定を作り直す（積み残しを捨てる・reset が無いので作り直す）。自発の ON/OFF・口数は前の値を引き継ぐ。 */
+  function renewFireScheduler() {
+    if (!makeFireScheduler) return;
+    const enabled = fireScheduler ? fireScheduler.isEnabled() : selfFireInitialEnabled;
+    const verbosity = fireScheduler ? fireScheduler.getVerbosity() : verbosityInitialMode;
+    parkFireScheduler();
+    fireScheduler = makeFireScheduler({ enabled, verbosity });
+  }
+
+  /** 思い出しの係を畳む（走っている④の結果が後から返っても無視する・届ける列も捨てる）。 */
+  function parkRecallDesk() {
+    if (!recallDesk) return;
+    try {
+      recallDesk.dispose();
+    } catch {
+      // best-effort
+    }
+    recallDesk = null;
+  }
+
+  /** 思い出しの係を作り直す（積み残しを捨てる・reset が無いので作り直す）。 */
+  function renewRecallDesk() {
+    parkRecallDesk();
+    if (makeRecallDesk) recallDesk = makeRecallDesk();
+  }
+
+  /**
+   * 場の器官を畳む（配信を終える の 2・始めるの途中の失敗の巻き戻し）。順は設計 §3 のとおり YouTube → 判定・
+   * 発火の予定 → （鳴っている声を止める）→ 目・耳 → 頭のセッション → 器。器は体の有無に関わらず畳む（体ありの Fire の
+   * あと体なしへ替えたときの開きっぱなしを防ぐ）。
+   * 1 つの段が想定外に投げても残りの段は畳む（耳・頭のセッション・器を畳み残さない）。投げた段があれば、全部を畳んだ
+   * あとで最初の例外を投げ直す（呼び出し側の catch が「想定外のエラー」として扱う・配信の組み直し 仕上げ）。
+   * @param {{ chat: boolean; ears: boolean; session: boolean }} what
+   */
+  async function foldStream(what) {
+    /** @type {{ error: unknown } | null} */
+    let failure = null;
+    /** @param {() => unknown} fn */
+    const step = async (fn) => {
+      try {
+        await fn();
+      } catch (error) {
+        if (!failure) failure = { error };
+      }
+    };
+    if (what.chat) await step(() => foldChatClient());
+    await step(() => parkJudges());
+    await step(() => parkFireScheduler());
+    await step(() => parkRecallDesk());
+    // 鳴っている・考えている返事を止める（キルと同じ切り方）。KILL の表示（killed）は替えない＝次の始めるで revive する。
+    await step(async () => {
+      if (fireOrchestrator && typeof (/** @type {any} */ (fireOrchestrator).kill) === "function" && fireOrchestrator.getState() !== "idle") {
+        try {
+          await /** @type {any} */ (fireOrchestrator).kill();
+        } catch {
+          // best-effort
+        }
+      }
+    });
+    if (what.ears) await step(() => stopEars());
+    if (what.session) await step(() => runStreamHook("closeSession"));
+    await step(() => runStreamHook("closeBody"));
+    if (failure) throw failure.error;
+  }
+
+  /**
+   * YouTube（始める 7・stream-restructure.md §3）。配信の組み直し 仕上げ・Undine の追認（体験の素描 場面 3 の注記）:
+   * **この起動で入れた、または Connect した URL はつなぐ。前回の起動から欄に残っているだけの URL はつながない**
+   * （配信ごとに URL が替わるため）。
+   *  - 場を開く前に Connect してあれば、その器官をそのまま場に持ち込む（作り直さない）。
+   *  - 器官が無く、この起動で入れた source（chatSourceThisBoot）があれば、それへつなぐ（POST /api/chat/connect と同じ
+   *    connectChat）。前の場で入れた source も、同じ起動の間は次の場でまたつなぐ（「配信を終える」は器官を畳むが、入れた
+   *    ことは覚えている）。
+   *  - 起動時に設定から読み戻しただけの前回の source（chatSourceStatus）へは、つなぎにいかない。
+   *  - つながらなくても（器官の生成や start が投げても）場は開く。器官は畳み、ログのタブに 1 行（chatDiagnostic）出す。
+   *
+   * 配信の組み直し 人間ゲート前の直し（Undine・設計 §3 の 7「つながらなくても場は開く」）: **つなぐのは待たない**。場を
+   * open にしてから後ろでつなぐ（YouTube の応答待ちで「開きかけ」が長引き、その間「配信を終える」が断られるのを防ぐ）。
+   * 戻り値の Promise は reject しない（呼び出し側は await しない）。後ろでつないでいる間に:
+   *  - 場が閉じた・別の場になった（世代が替わった・open でない・サーバを閉じた）→ あとからつながった器官は畳んで残さない
+   *    （「配信を終える」の foldStream が先に畳んでいれば stop をもう一度呼ぶだけ・stop は冪等）。警告も出さない。
+   *  - Connect / Disconnect が押された（器官が差し替わった・畳まれた）→ 押した方を優先する。後ろのつなぎは黙って捨てる
+   *    （つながらなかったときも、押した方の器官を畳まない・警告を出さない）。
+   * @returns {Promise<"kept" | "connected" | "none" | "failed" | "stale">}
+   */
+  function startChatForStream() {
+    if (chatClient != null) return Promise.resolve("kept");
+    if (chatSourceThisBoot == null || typeof chatClientFactory !== "function") return Promise.resolve("none");
+    const generation = streamGeneration;
+    // connectChat は await の前（同期の部分）で器官を作って chatClient に入れる。後ろのつなぎが自分の器官かを見分けるため、
+    // 呼んだ直後の chatClient を取っておく（工場が同期で投げたときは null のまま・connectChat は reject を返す）。
+    /** @type {Promise<void>} */
+    let connecting;
+    try {
+      connecting = connectChat(chatSourceThisBoot);
+    } catch (error) {
+      connecting = Promise.reject(error);
+    }
+    const mine = chatClient;
+    /** 後ろのつなぎが片付いた時点で、まだ同じ場が開いていて、器官が自分のままか。 */
+    const stillMine = () => !closed && streamPhase === "open" && streamGeneration === generation && chatClient === mine;
+    /** 自分の器官だけを畳む（差し替わっていれば、自分の器官の stop だけを念のため呼ぶ）。 */
+    const dropMine = () => {
+      if (mine != null && chatClient === mine) {
+        foldChatClient();
+        return;
+      }
+      if (mine != null) {
+        try {
+          mine.stop();
+        } catch {
+          // best-effort（既に畳まれていても冪等）。
+        }
+      }
+    };
+    return connecting.then(
+      () => {
+        if (!stillMine()) {
+          // 場が閉じた・別の場になった・押した操作で差し替わった: あとからつながったものを残さない。
+          dropMine();
+          return /** @type {const} */ ("stale");
+        }
+        broadcastState();
+        return /** @type {const} */ ("connected");
+      },
+      (error) => {
+        if (!stillMine()) {
+          dropMine();
+          return /** @type {const} */ ("stale");
+        }
+        foldChatClient();
+        broadcastChatDiagnostic({
+          kind: "internalError",
+          message: `配信を始めるときに YouTube につなげなかった（${errMessage(error)}・Connect でつなぎ直せる）`,
+          atMs: nowImpl()
+        });
+        broadcastState();
+        return /** @type {const} */ ("failed");
+      }
+    ).catch(() => /** @type {const} */ ("failed")); // 片付けの中の想定外の throw も未処理の reject にしない。
+  }
+
+  /**
+   * ロールを選んだ・直した結果の口数・話し始め・声の方式を、サーバの現況（scheduler・話し始め・Start の既定）に入れる
+   * （値の出どころはロール・設計 §5・POST /api/role・/api/role/edit・/api/role/new の共通）。
+   * @param {{ verbosity?: unknown; speakStartMode?: unknown; ttsEngine?: unknown }} result
+   */
+  function applyRoleResult(result) {
+    if (fireScheduler && (result.verbosity === "quiet" || result.verbosity === "normal" || result.verbosity === "chatty")) {
+      fireScheduler.setVerbosity(result.verbosity);
+    }
+    if (result.speakStartMode === "classic" || result.speakStartMode === "speak-now") {
+      applySpeakStartMode(result.speakStartMode);
+    }
+    if (TTS_ENGINES.includes(/** @type {any} */ (result.ttsEngine))) ttsEngine = /** @type {any} */ (result.ttsEngine);
+  }
+
+  /**
+   * 場が開いていない間（閉じている・開きかけ・閉じかけ）の手動の発火（POST /api/fire・/api/vision-fire・AHK のホットキー）を
+   * 409 で断る（配信の組み直し Domain E・Undine の追認: 頭のセッションは場の始まりで作るので、場の外で立てない）。
+   * @param {import("node:http").ServerResponse} res
+   * @returns {boolean}  断ったら true。
+   */
+  function refuseManualFireOutsideStream(res) {
+    if (streamPhase === "open") return false;
+    sendJson(res, 409, {
+      fired: false,
+      reason: "stream-not-open",
+      error: "配信を始めてから押す（配信の外では発火しない）",
+      state: fireOrchestrator ? fireOrchestrator.getState() : "idle"
+    });
+    return true;
+  }
+
+  /** 場が開きかけ・閉じかけのときの断りの文面。 */
+  function streamBusyMessage() {
+    return streamPhase === "opening"
+      ? "配信を始めている途中（少し待ってからもう一度）"
+      : streamPhase === "closing"
+        ? "配信を終えている途中（記録中・少し待ってからもう一度）"
+        : "配信の途中（配信を終えてから始め直す）";
+  }
+
+  /**
+   * 配信を始める（stream-restructure.md §3）。場が閉じているときだけ。途中で失敗したら、それまでに起こしたものを畳んで
+   * 閉じた状態に戻し、理由を返す（snapshot の stream.error にも残す・メイン画面から押したときにも見える）。
+   * @param {{ device?: string | null; sttEngine?: any; ttsEngine?: any }} [request]
+   * @returns {Promise<{ ok: true; state: object } | { ok: false; status: number; error: string; state: object }>}
+   */
+  async function openStream(request = {}) {
+    if (closed) return { ok: false, status: 503, error: "cockpit server is closing.", state: snapshot() };
+    if (streamPhase !== "closed") return { ok: false, status: 409, error: streamBusyMessage(), state: snapshot() };
+    // 1. ロールを固める（ここから閉じるまで POST /api/role は断る）。
+    streamPhase = "opening";
+    streamGeneration += 1;
+    streamError = null;
+    broadcastState();
+    /** @param {string} reason @param {{ ears?: boolean; session?: boolean }} started */
+    const fail = async (reason, started) => {
+      try {
+        await foldStream({ chat: false, ears: started.ears === true, session: started.session === true });
+      } catch {
+        // 畳むのが想定外に投げても、閉じた状態には戻す（下）。
+      }
+      streamPhase = "closed";
+      streamOpenedAtMs = null;
+      streamError = reason;
+      broadcastState();
+      return { ok: /** @type {const} */ (false), status: 500, error: reason, state: snapshot() };
+    };
+    const steps = async () => {
+      // 2. 場の記録を作り直す（記憶の本体のファイル名・頭の文脈の記録のファイル・そのロールの置き場の準備）。
+      const renewed = await runStreamHook("renewRecords");
+      if (!renewed.ok) return fail(`場の記録を作り直せない（${renewed.reason}）`, {});
+      // 3. KILL を OFF に戻す。判定・発火の予定・コメント反応・思い出しの係の積み残しを捨てる。
+      killed = false;
+      try {
+        /** @type {any} */ (fireOrchestrator)?.revive?.();
+      } catch {
+        // best-effort
+      }
+      renewJudges();
+      renewFireScheduler();
+      renewRecallDesk();
+      // 4. 耳（と会話の正本）・目・声（耳の Start が onEarsStarted で目と声の出口を起こす）。
+      const ears = await startEars(request.device ?? null, request.sttEngine ?? undefined, request.ttsEngine ?? undefined);
+      if (!ears.ok) return fail(ears.error, {});
+      // 5. 頭のセッション。
+      const session = await runStreamHook("openSession");
+      if (!session.ok) return fail(session.reason, { ears: true, session: true });
+      // 6. 体があれば器（体なしは cockpit.mjs が何もしない）。つながらなければ場は開かない。
+      const body = await runStreamHook("connectBody");
+      if (!body.ok) return fail(body.reason, { ears: true, session: true });
+      streamPhase = "open";
+      streamOpenedAtMs = nowImpl();
+      // 7. YouTube（Connect 済みなら持ち込む・この起動で入れた URL ならつなぐ。つながらなくても場は開く）。
+      // 人間ゲート前の直し: 場を先に open にし、つなぐのは待たない（後ろでつなぐ・reject しない Promise を捨てる）。
+      void startChatForStream();
+      broadcastState();
+      return { ok: /** @type {const} */ (true), state: snapshot() };
+    };
+    const run = (async () => {
+      try {
+        return await steps();
+      } catch (error) {
+        // 想定外の例外（工場関数・畳むの throw など）でも opening のまま固めない: 起こしたかもしれないものを全部畳んで閉じる。
+        return fail(`配信を始められない（想定外のエラー: ${errMessage(error)}）`, { ears: true, session: true });
+      }
+    })();
+    streamTransition = run;
+    try {
+      return await run;
+    } finally {
+      if (streamTransition === run) streamTransition = null;
+    }
+  }
+
+  /**
+   * 配信を終える（stream-restructure.md §3）。場が開いているときだけ（閉じていれば何もしない）。
+   * @returns {Promise<{ ok: true; state: object } | { ok: false; status: number; error: string; state: object }>}
+   */
+  async function closeStream() {
+    if (streamPhase === "closed") return { ok: true, state: snapshot() };
+    if (streamPhase !== "open") return { ok: false, status: 409, error: streamBusyMessage(), state: snapshot() };
+    streamPhase = "closing";
+    broadcastState();
+    const run = (async () => {
+      /** @type {{ ok: true } | { ok: false; status: number; error: string }} */
+      let outcome = { ok: true };
+      /** @type {ReadonlyArray<any> | null} */
+      let transcript = null;
+      // 記憶の最後の保存を頼んだか（想定外の例外の道で二度頼まないため）。
+      let finalSaveRequested = false;
+      try {
+        // 1. 会話の正本の写しを取る（畳むと消える）。
+        transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
+        // 2. YouTube・判定・発火の予定・目・耳・頭のセッション・器を畳む。後ろでつないでいる YouTube（始める 7）は待たない:
+        //    器官はもう chatClient に入っているのでここで畳む。あとからつながっても場の世代で見分けて残さない（startChatForStream）。
+        await foldStream({ chat: true, ears: true, session: true });
+        // 3. 記憶の最後の保存をして待つ（この間 stream.phase は "closing" = 画面の「記録中」）。
+        finalSaveRequested = true;
+        await runStreamHook("saveFinal", transcript);
+      } catch (error) {
+        // 想定外の例外でも closing のまま固めない: 畳み残しをもう一度畳んで（best-effort）から閉じる。
+        // 配信の組み直し 仕上げ・Undine の追認: 記憶を落とさない側に倒す。最後の保存がまだ頼まれていなければ 1 回だけ
+        // 頼む（写しが取れていなければ、耳が残っていればもう一度だけ写しを試す。取れなければ空で頼む）。
+        if (transcript == null) {
+          try {
+            transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
+          } catch {
+            transcript = [];
+          }
+        }
+        try {
+          await foldStream({ chat: true, ears: true, session: true });
+        } catch {
+          // best-effort
+        }
+        if (!finalSaveRequested) {
+          finalSaveRequested = true;
+          try {
+            await runStreamHook("saveFinal", transcript);
+          } catch {
+            // best-effort（保存の口を引くこと自体が投げても閉じる）。
+          }
+        }
+        outcome = { ok: false, status: 500, error: `配信を終える途中で想定外のエラー（${errMessage(error)}）` };
+      }
+      // 4. 場を閉じる（ロールを選び直せる）。途中で投げても閉じる。
+      streamPhase = "closed";
+      streamOpenedAtMs = null;
+      if (!closed) broadcastState();
+      return { ...outcome, state: snapshot() };
+    })();
+    streamTransition = run;
+    try {
+      return await run;
+    } finally {
+      if (streamTransition === run) streamTransition = null;
+    }
+  }
+
+  /**
+   * Ctrl+C の「配信を終える」（cockpit.mjs の shutdown）。開きかけ・閉じかけなら終わるのを待ってから、開いていれば
+   * 終える（HTTP の終える は途中を 409 で断るが、Ctrl+C は断らずに待つ）。
+   * @returns {Promise<object>}
+   */
+  async function endStreamForShutdown() {
+    while (streamTransition) {
+      try {
+        await streamTransition;
+      } catch {
+        // best-effort
+      }
+    }
+    if (streamPhase === "open") await closeStream();
+    return snapshot();
+  }
+
+  /**
+   * POST の始めるの body を確かめて openStream に渡す（/api/stream/start と /api/ears/start の共通）。
+   * @param {import("node:http").IncomingMessage} req
+   * @param {import("node:http").ServerResponse} res
+   * @param {URL} url
+   */
+  async function handleStreamStart(req, res, url) {
+    if (streamPhase !== "closed") {
+      // 場が開いている間はマイク・文字起こしを替えない（始め直すには終えてから）。
+      sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
+      return;
+    }
+    const body = await readJsonBody(req);
+    // 文字起こしの方式（任意・省略時は現在の選択）。未知値は 400（誤 POST を早期に弾く）。
+    if (body.sttEngine !== undefined && body.sttEngine !== null && !STT_ENGINES.includes(body.sttEngine)) {
+      sendJson(res, 400, { error: "invalid stt engine", state: snapshot() });
+      return;
+    }
+    // 声の方式（任意・省略時は現在の選択）。未知値は 400（sttEngine と同じ）。
+    if (body.ttsEngine !== undefined && body.ttsEngine !== null && !TTS_ENGINES.includes(body.ttsEngine)) {
+      sendJson(res, 400, { error: "invalid tts engine", state: snapshot() });
+      return;
+    }
+    // body を読む間に別の始めるが割り込んでいたら断る。
+    if (streamPhase !== "closed") {
+      sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
+      return;
+    }
+    const deviceRaw = body.device ?? url.searchParams.get("device") ?? (await resolveLastDevice());
+    const result = await openStream({
+      device: deviceRaw ?? null,
+      sttEngine: body.sttEngine ?? undefined,
+      ttsEngine: body.ttsEngine ?? undefined
+    });
+    sendJson(res, result.ok ? 200 : result.status, result.ok ? result.state : { error: result.error, state: result.state });
+  }
+
+  /**
+   * POST の終えるを closeStream に渡す（/api/stream/stop と /api/ears/stop の共通）。記憶の最後の保存が終わってから
+   * 閉じた状態を返す（その間は SSE の state が closing = 「記録中」を流す）。
+   * @param {import("node:http").ServerResponse} res
+   */
+  async function handleStreamStop(res) {
+    const result = await closeStream();
+    sendJson(res, result.ok ? 200 : result.status, result.ok ? result.state : { error: result.error, state: result.state });
+  }
+
   /**
    * Return the effective instruction response for the dedicated local API.
    * Instruction text intentionally has no other projection in the server.
-   * @param {string} brainId
+   * 配信の組み直し Domain A: 鍵はロールの id（応答の `roleId`）。本文はロールの instructions.md。
+   * @param {string} roleId
    */
-  function conversationInstructionResponse(brainId) {
+  function conversationInstructionResponse(roleId) {
     if (!conversationInstructionHooks) throw new Error("conversation instruction control not available");
-    const profile = conversationInstructionHooks.getProfile(brainId);
+    const profile = conversationInstructionHooks.getProfile(roleId);
     if (!profile || typeof profile.body !== "string" || typeof profile.hasOverride !== "boolean") {
       throw new Error("conversation instruction profile is invalid");
     }
@@ -1520,7 +2084,7 @@ export function createCockpitServer(options = {}) {
     if (!Number.isInteger(revision) || revision < 0) throw new Error("conversation instruction revision is invalid");
     return {
       ok: true,
-      brainId,
+      roleId,
       instruction: profile.body,
       isOverride: profile.hasOverride,
       revision,
@@ -1578,15 +2142,19 @@ export function createCockpitServer(options = {}) {
         sendJson(res, 503, { error: "conversation instruction control not available" });
         return;
       }
+      // 配信の組み直し Domain A: 鍵はロールの id（形を確かめ、hooks が知らないロールは断る）。
       let brainId;
       try {
         brainId = decodeURIComponent(conversationRoute[1]);
       } catch {
-        sendJson(res, 400, { error: "invalid conversation instruction brain id" });
+        sendJson(res, 400, { error: "invalid conversation instruction role id" });
         return;
       }
-      if (!CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(brainId)) {
-        sendJson(res, 400, { error: "invalid conversation instruction brain id" });
+      const knownRole =
+        isRoleId(brainId) &&
+        (typeof conversationInstructionHooks.isKnownId !== "function" || conversationInstructionHooks.isKnownId(brainId) === true);
+      if (!knownRole) {
+        sendJson(res, 400, { error: "invalid conversation instruction role id" });
         return;
       }
       if (method === "GET") {
@@ -1595,6 +2163,11 @@ export function createCockpitServer(options = {}) {
         } catch {
           sendJson(res, 500, { error: "failed to read conversation instruction" });
         }
+        return;
+      }
+      // 配信の組み直し Domain E: 性格の指示はロールの持ち物。場の途中は書き換えない（POST /api/role/edit と同じ 409）。
+      if (streamPhase !== "closed") {
+        sendJson(res, 409, { error: "配信の途中は性格の指示を直せない（配信を終えてから直す）" });
         return;
       }
       if (method === "PUT") {
@@ -1655,44 +2228,15 @@ export function createCockpitServer(options = {}) {
       openSse(req, res);
       return;
     }
-    if (method === "POST" && pathname === "/api/ears/start") {
-      if (transitioning) {
-        sendJson(res, 409, { error: "ears are transitioning; retry shortly.", state: snapshot() });
-        return;
-      }
-      transitioning = true;
-      try {
-        const body = await readJsonBody(req);
-        const deviceRaw = body.device ?? url.searchParams.get("device") ?? (await resolveLastDevice());
-        // 文字起こしの方式（任意・省略時は現在の選択）。未知値は 400（誤 POST を早期に弾く）。
-        if (body.sttEngine !== undefined && body.sttEngine !== null && !STT_ENGINES.includes(body.sttEngine)) {
-          sendJson(res, 400, { error: "invalid stt engine", state: snapshot() });
-          return;
-        }
-        // 声の方式（任意・省略時は現在の選択）。未知値は 400（sttEngine と同じ）。
-        if (body.ttsEngine !== undefined && body.ttsEngine !== null && !TTS_ENGINES.includes(body.ttsEngine)) {
-          sendJson(res, 400, { error: "invalid tts engine", state: snapshot() });
-          return;
-        }
-        const result = await startEars(deviceRaw ?? null, body.sttEngine ?? undefined, body.ttsEngine ?? undefined);
-        sendJson(res, result.ok ? 200 : 500, result.ok ? result.state : { error: result.error, state: result.state });
-      } finally {
-        transitioning = false;
-      }
+    // 配信の組み直し Domain D: 「配信を始める / 終える」（場の関数 openStream / closeStream）。/api/ears/start・
+    // /api/ears/stop は後方互換の別名（設定のダイアログの旧 Start / Stop・scripts/preflight-fire.mjs）で、同じ道を通る
+    // （耳だけを起こす・止める道は残さない）。
+    if (method === "POST" && (pathname === "/api/stream/start" || pathname === "/api/ears/start")) {
+      await handleStreamStart(req, res, url);
       return;
     }
-    if (method === "POST" && pathname === "/api/ears/stop") {
-      if (transitioning) {
-        sendJson(res, 409, { error: "ears are transitioning; retry shortly.", state: snapshot() });
-        return;
-      }
-      transitioning = true;
-      try {
-        const state = await stopEars();
-        sendJson(res, 200, state);
-      } finally {
-        transitioning = false;
-      }
+    if (method === "POST" && (pathname === "/api/stream/stop" || pathname === "/api/ears/stop")) {
+      await handleStreamStop(res);
       return;
     }
     if (method === "POST" && pathname === "/api/fire") {
@@ -1701,6 +2245,8 @@ export function createCockpitServer(options = {}) {
         sendJson(res, 503, { error: "fire not available" });
         return;
       }
+      // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
+      if (refuseManualFireOutsideStream(res)) return;
       // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
       // きっかけ = 手動（操縦席のボタン・AHK のホットキー）。
       const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ cause: { type: "manual", vision: false } }));
@@ -1742,6 +2288,8 @@ export function createCockpitServer(options = {}) {
         sendJson(res, 503, { error: "fire not available" });
         return;
       }
+      // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
+      if (refuseManualFireOutsideStream(res)) return;
       // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
       const result = await trackFire(() =>
         /** @type {any} */ (fireOrchestrator).fire({ vision: true, cause: { type: "manual", vision: true } })
@@ -1828,6 +2376,12 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // 配信の組み直し 仕上げ・Undine の追認: 口数はロールの持ち物。場の途中（開きかけ・開いている・閉じかけ）は替えない
+      // （POST /api/role/edit と同じ 409・何も変えない・設計 §3「ロールを固める」）。
+      if (streamPhase !== "closed") {
+        sendJson(res, 409, { error: "配信の途中は口数を替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
+        return;
+      }
       const mode = body.mode;
       // self-fire は boolean 強制だが、verbosity は妥当な mode（quiet/normal/chatty）を要求する
       // （無効入力を早期に弾く・防御的）。
@@ -1855,6 +2409,11 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // 配信の組み直し 仕上げ: 話し始めもロールの持ち物（POST /api/verbosity と同じ 409・何も変えない）。
+      if (streamPhase !== "closed") {
+        sendJson(res, 409, { error: "配信の途中は話し始めを替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
+        return;
+      }
       const mode = body.mode;
       if (mode !== "classic" && mode !== "speak-now") {
         sendJson(res, 400, { error: "invalid speak-start mode" });
@@ -1930,37 +2489,87 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
-    if (method === "POST" && pathname === "/api/brain") {
-      // 多頭化 Domain B: 頭脳の切替継ぎ目（POST /api/verbosity / /api/kill の写経）。永続化 + 現 session の
-      // dispose→null（次発火から新頭）は cockpit.mjs の onSetBrain が担う（責務境界: cockpit-server は
-      // brain の中身を知らない）。未注入（S2.5 単体等）なら 503（onSetChannelUrl と同型の未注入ゲート）。
-      if (typeof onSetBrain !== "function") {
-        sendJson(res, 503, { error: "brain control not available" });
+    if (method === "POST" && pathname === "/api/role") {
+      // 配信の組み直し Domain A: ロールの選択の継ぎ目（旧 POST /api/brain の置き換え・POST /api/verbosity の写経）。
+      // ロールの中身・永続化・頭のホットスワップは cockpit.mjs の onSetRole が担う（責務境界: cockpit-server は
+      // ロールの中身を知らない）。未注入（S2.5 単体等）なら 503。
+      if (typeof onSetRole !== "function") {
+        sendJson(res, 503, { error: "role control not available" });
         return;
       }
       const body = await readJsonBody(req);
-      // トグル禁止・明示値のみ受理する（誤 POST を早期に弾く・verbosity の mode 検証と同型）。頭 id 6 値は
-      // ここに直書きする（API の受理値/技術札は従来のワイヤ検証を保持する）。
-      // `resolveBrainIdentity` の import はこの検証表を置き換えるためではなく、下流の current public
-      // projection だけを canonical resolver から導出するための additive read-path である。2026-07-17
-      // 追撃で Codex 側 2 頭（GPT-5.5 / GPT-5.6 Sol）がここへ追加された既存契約は変えない。2026-10-16 に
-      // GPT-5.5（"codex-55"）を外し、GPT-6.1 Sol / Claude Opus 5.5 を追加（brains.mjs と同じ値を保つ）。
-      if (
-        body.brain !== "claude" &&
-        body.brain !== "claude-opus-55" &&
-        body.brain !== "codex" &&
-        body.brain !== "codex-56-sol" &&
-        body.brain !== "codex-astra" &&
-        body.brain !== "codex-61-sol"
-      ) {
-        sendJson(res, 400, { error: "invalid brain" });
+      // トグル禁止・明示値のみ受理する（形はロールの id・中身の有無は onSetRole が答える）。
+      if (!isRoleId(body.role)) {
+        sendJson(res, 400, { error: "invalid role" });
         return;
       }
-      try {
-        await onSetBrain(body.brain);
-      } catch {
-        // best-effort（永続化 / dispose 失敗で操作を止めない・onSetVerbosity と同型の失敗寛容）。
+      // 場の途中でロールは替えない（stream-restructure.md §2.1・§3「ロールを固める」）。配信の組み直し Domain D: 場が
+      // 開いている間・開きかけ・閉じかけ（記録中）は断る（名前・声・口数・記憶の置き場が配信の途中で替わらないように）。
+      if (streamPhase !== "closed") {
+        sendJson(res, 409, { error: "配信の途中はロールを替えられない（配信を終えてから選ぶ）", state: snapshot() });
+        return;
       }
+      /** @type {any} */
+      let result;
+      try {
+        result = await onSetRole(body.role);
+      } catch (error) {
+        result = { ok: false, reason: `ロールを選べない（${errMessage(error)}）` };
+      }
+      if (!result || result.ok !== true) {
+        sendJson(res, 400, { error: (result && typeof result.reason === "string" && result.reason) || "unknown role" });
+        return;
+      }
+      applyRoleResult(result);
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    if (method === "POST" && (pathname === "/api/role/edit" || pathname === "/api/role/new")) {
+      // 配信の組み直し Domain E: ロールの編集（今のロール）と、今のロールを写して新しいロールを作る口。中身の確かめと
+      // 永続化は cockpit.mjs（onUpdateRole / onCreateRole）。場の途中はロールの持ち物を替えない（POST /api/role と同じ 409）。
+      const isEdit = pathname === "/api/role/edit";
+      const hook = isEdit ? onUpdateRole : onCreateRole;
+      if (!hook) {
+        sendJson(res, 503, { error: "role edit not available" });
+        return;
+      }
+      const parsed = await readJsonBodyStrict(req);
+      if (!parsed.ok || !parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
+        sendJson(res, 400, { error: "malformed JSON body" });
+        return;
+      }
+      if (streamPhase !== "closed") {
+        sendJson(res, 409, { error: "配信の途中はロールを直せない（配信を終えてから直す）", state: snapshot() });
+        return;
+      }
+      const body = /** @type {Record<string, any>} */ (parsed.value);
+      if (!isEdit) {
+        if (!isRoleId(body.id)) {
+          sendJson(res, 400, { error: "ロールの id は英小文字で始まる 32 字までの英小文字・数字・-（Windows の予約名は使えない）" });
+          return;
+        }
+        if (body.name != null && typeof body.name !== "string") {
+          sendJson(res, 400, { error: "invalid role name" });
+          return;
+        }
+      }
+      /** @type {any} */
+      let result;
+      try {
+        result = isEdit
+          ? await /** @type {any} */ (hook)(body)
+          : await /** @type {any} */ (hook)({ id: body.id, name: typeof body.name === "string" ? body.name : null });
+      } catch (error) {
+        sendJson(res, 500, { error: `ロールを書けない（${errMessage(error)}）` });
+        return;
+      }
+      if (!result || result.ok !== true) {
+        const reason = (result && typeof result.reason === "string" && result.reason) || "ロールを直せない";
+        sendJson(res, result && result.conflict === true ? 409 : 400, { error: reason });
+        return;
+      }
+      applyRoleResult(result);
       broadcastState();
       sendJson(res, 200, snapshot());
       return;
@@ -1989,6 +2598,14 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // 配信の組み直し 仕上げ（全体の突き合わせの持ち越し 2）: 場の開きかけ・閉じかけの間は Connect を断る（閉じかけの
+      // 間につないだ器官が場の外に残り、次の場へ持ち込まれるのを防ぐ）。何も変えない。開いている間に押されたら、後ろでつないでいる
+      // 始める 7 のつなぎより押した方を優先する（後ろのつなぎは黙って捨てる・startChatForStream）。
+      // 閉じている間と開いている間は今のまま通す（YouTube の欄は場が開いている間も触れる・設計 §3）。
+      if (streamPhase === "opening" || streamPhase === "closing") {
+        sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
+        return;
+      }
       const raw = typeof body.source === "string" ? body.source.trim() : "";
       if (raw.length === 0) {
         // Connect には配信 source が要る（空はクリアではなくエラー・停止は disconnect で行う）。
@@ -2008,8 +2625,33 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 200, snapshot());
       return;
     }
+    if (method === "POST" && pathname === "/api/chat/source") {
+      // 配信の組み直し 仕上げ（体験の素描 場面 3: 「URL を入れるだけで、Connect は配信を始めるがやる」）: YouTube の欄に
+      // 入れた source を保存し、この起動で入れたことを覚える（つなぎはしない・つなぐのは「配信を始める」か Connect）。
+      // 空（または null）は「つながない」: 保存した値を消し、覚えたことも消す。場のどの状態でも通す（欄は場の間も触れる）。
+      const body = await readJsonBody(req);
+      if (body.source !== null && typeof body.source !== "string") {
+        sendJson(res, 400, { error: "chat source must be a string (or null to clear)." });
+        return;
+      }
+      const raw = typeof body.source === "string" ? body.source.trim() : "";
+      const source = raw.length > 0 ? raw : null;
+      chatSourceThisBoot = source;
+      if (typeof onSetChatSource === "function") {
+        try {
+          await onSetChatSource(source);
+        } catch {
+          // 永続化の失敗は止めない（この起動の間は覚えている・connectChat と同じ失敗寛容）。
+        }
+      }
+      broadcastState();
+      sendJson(res, 200, snapshot());
+      return;
+    }
     if (method === "POST" && pathname === "/api/chat/disconnect") {
-      // 稼働中のチャット器官を停止して畳む（冪等・器官が無くても 200）。
+      // 稼働中のチャット器官を停止して畳む（冪等・器官が無くても 200）。配信の組み直し 仕上げ: 自分で切った source は
+      // 次の「配信を始める」でつなぎ直さない（この起動で入れたことを忘れる・欄の値と保存した値はそのまま）。
+      chatSourceThisBoot = null;
       foldChatClient();
       broadcastState();
       sendJson(res, 200, snapshot());
@@ -2063,6 +2705,12 @@ export function createCockpitServer(options = {}) {
       // 配信間記憶: 手動「今日を記録」継ぎ目。onMemoryRecord 未注入なら 503。
       if (typeof onMemoryRecord !== "function") {
         sendJson(res, 503, { error: "memory record control not available" });
+        return;
+      }
+      // 配信の組み直し Domain D: 「今日を記録」は場が開いている間だけ（stream-restructure.md §3。閉じかけは「配信を終える」の
+      // 最後の保存が走っている）。
+      if (streamPhase !== "open") {
+        sendJson(res, 409, { error: "配信を始めている間だけ記録できる（記録は「配信を終える」でも行う）", state: snapshot() });
         return;
       }
       try {
@@ -2238,13 +2886,15 @@ export function createCockpitServer(options = {}) {
     // voice = その返事を鳴らした声の engine の種類（遅延の TTS / 声の区間を engine ごとに見比べる材料・additive）。
     // stt = 文字起こしの方式（文字起こしの区間を方式ごとに見比べる材料・additive・応答の遅れの直し §2-5）。
     // serviceTier = その返事の turn/start に送った Codex の速さの段（fast の比較の材料・additive・送っていなければ null）。
+    // bodyless = 体なしの返事の印（配信の組み直し Domain C・声の区間に器の往復が入らない・体があるときは付けない）。
     const payload = {
       ...record,
       vision: inFire?.vision === true,
       brain,
       voice: voice.engine ?? ttsEngine,
       stt: sttEngine,
-      serviceTier: typeof inFire?.serviceTier === "string" ? inFire.serviceTier : null
+      serviceTier: typeof inFire?.serviceTier === "string" ? inFire.serviceTier : null,
+      ...(inFire?.bodyless === true ? { bodyless: true } : {})
     };
     broadcast("latency", payload);
     if (onReplyLatency) {
@@ -2349,21 +2999,23 @@ export function createCockpitServer(options = {}) {
     // （interjection はタイマー駆動のみで即時発火経路が無いため・server 側ロジックの直接テストに必要）。
     const fireSchedulerFactory =
       typeof options.fireSchedulerFactory === "function" ? options.fireSchedulerFactory : createFireScheduler;
-    fireScheduler = fireSchedulerFactory({
-      enabled: selfFireInitialEnabled,
-      verbosity: verbosityInitialMode,
+    // 配信の組み直し Domain D: 発火の予定は「配信を始める」のたびに作り直す（積み残しを捨てる・fire-scheduler は reset を
+    // 持たない）。自発の ON/OFF・口数は前の値を引き継ぐ（renewFireScheduler）。
+    makeFireScheduler = ({ enabled, verbosity }) => fireSchedulerFactory({
+      enabled,
+      verbosity,
       isBusy: () => /** @type {any} */ (fireOrchestrator).getState() !== "idle",
       // Name variants are handling-time providers. They share the current
       // registry identity with Whisper/public state and therefore switch
       // families without recreating the scheduler.
-      ...(currentBrainIdentityImpl
+      ...(currentRoleIdentityImpl
         ? {
             nameVariantsProvider: () => {
-              const identity = currentBrainIdentityImpl();
+              const identity = currentRoleIdentityImpl();
               return identity?.voiceCallVariants;
             },
             commentNameVariantsProvider: () => {
-              const identity = currentBrainIdentityImpl();
+              const identity = currentRoleIdentityImpl();
               return identity?.commentCallVariants;
             }
           }
@@ -2379,6 +3031,10 @@ export function createCockpitServer(options = {}) {
         requestSelfFire(kind, req && req.kind === "silence" ? { vision: true, cause } : { vision: "preferred", cause });
       }
     });
+    fireScheduler = makeFireScheduler({ enabled: selfFireInitialEnabled, verbosity: verbosityInitialMode });
+    // 配信の組み直し Domain D: 場は閉じた状態で生まれる。場が閉じている間は発火の予定のタイマを張らない（沈黙の予定が
+    // 耳の無い間に発火を頼み続けない・棚卸し §5）。畳んだ実体は自発の ON/OFF・口数の置き場として残し、始めるで作り直す。
+    parkFireScheduler();
 
     // speak-now（話し始めの判定・合意 §1〜§3）の部品。fire-scheduler の外に置き、結線だけをここで張る。
     //  - 忙しい: orchestrator が idle でない、またはサーバが呼んだ fire() がまだ片付いていない。
@@ -2391,7 +3047,9 @@ export function createCockpitServer(options = {}) {
     //    応答・自発と同じ selfFire 行（判定行「判定: 相槌 0.xx」の直後に出る）。前の相槌を喋り始めてから
     //    backchannelMinIntervalMs の間は部品が流す（action=skip-interval・ターミナルの 1 行だけ）。
     //  - 判定行（待つ以外）と失敗は selfFire SSE に相乗りしてフィードへ（合意 §5・新 SSE を足さない）。
-    speakNow = createSpeakNowController({
+    // 配信の組み直し Domain D: speak-now の判定部品も「配信を始める」のたびに作り直す（reset は忙しい間の積み残ししか
+    // 捨てず、走っている判定の結果が次の場で返ると発火してしまうため。dispose した古い部品は返ってきた結果を無視する）。
+    makeSpeakNow = () => createSpeakNowController({
       judge: speakNowJudge,
       getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
@@ -2449,6 +3107,7 @@ export function createCockpitServer(options = {}) {
         warnJudgeError("speak-now", e.message);
       }
     });
+    speakNow = makeSpeakNow();
 
     // コメント反応（反応する判定・コメント反応の合意 §1-6〜§2）の部品。speak-now と同じ置き方・同じ「忙しい」と
     // 「判定してよい」（speak-now モード・自発 ON・KILL でない）。従来モードでは呼ばない（今の comment /
@@ -2457,7 +3116,8 @@ export function createCockpitServer(options = {}) {
     //    付ける（コメント本文は視聴者の発言として括る・返事は短め）。speak-now の発火とは先に出た方が勝つ
     //    （後から返った方は忙しいので、あとで拾う / 捨てる）。
     //  - 判定行（反応する のときだけ）と失敗は selfFire SSE に相乗りしてフィードへ（新 SSE を足さない）。
-    commentReact = createCommentReactController({
+    // 配信の組み直し Domain D: コメント反応の判定部品も speak-now と同じく「配信を始める」のたびに作り直す。
+    makeCommentReact = () => createCommentReactController({
       judge: commentReactJudge,
       getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
@@ -2507,6 +3167,7 @@ export function createCockpitServer(options = {}) {
       },
       onSkip: (s) => reportComment({ stage: "react", ok: true, skipped: true, commentId: s.commentId, action: s.action })
     });
+    commentReact = makeCommentReact();
   }
 
   // 思い出しの係（記憶の作り直し Wave 3 Domain D・recall-flow.md §4・§7）。speak-now / コメント反応とは違い、話し始めの
@@ -2520,8 +3181,9 @@ export function createCockpitServer(options = {}) {
     typeof (/** @type {any} */ (fireOrchestrator).fire) === "function" &&
     typeof (/** @type {any} */ (fireOrchestrator).getState) === "function"
   ) {
-    recallDesk = createRecallDesk({
-      runRecall: recallRunner,
+    // 配信の組み直し Domain D: 思い出しの係も「配信を始める」のたびに作り直す（recall-desk は reset を持たない）。
+    makeRecallDesk = () => createRecallDesk({
+      runRecall: /** @type {any} */ (recallRunner),
       judge: recallJudge,
       getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
@@ -2560,6 +3222,7 @@ export function createCockpitServer(options = {}) {
         });
       }
     });
+    recallDesk = makeRecallDesk();
   }
 
   /**
@@ -2577,6 +3240,11 @@ export function createCockpitServer(options = {}) {
    *   `{ fired:false, reason:"error" }`）。思い出しの係が「忙しかったか・受理されたか」を見る。
    */
   function requestSelfFire(kind, fireOptions, extra = {}) {
+    // 配信の組み直し 人間ゲート前の直し（Undine）: 場が開いていない間（開きかけ・閉じかけ・閉じている）の自発の発火は捨てる
+    // （手動の Fire の refuseManualFireOutsideStream と揃える）。自発の口（発火の予定・speak-now・コメント反応・思い出しの
+    // 係）はみなここを通るので、ここ 1 か所で捨てる。頭へ流さず、フィードにも出さない（開きかけの間の取りこぼしは行にしない）。
+    // 思い出しの係には受理しなかった結果を返す（busy ではないので届けは「見送り」になる）。
+    if (streamPhase !== "open") return Promise.resolve({ fired: false, reason: "stream-not-open" });
     try {
       return trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
         .then((result) => {
@@ -2651,12 +3319,13 @@ export function createCockpitServer(options = {}) {
     if (commentReact) commentReact.reset();
   }
 
-  /** 今の頭の名前（判定の問いと会話のラベル用・snapshot の identity と同じ解決）。 */
+  /**
+   * 今のロールの名前（判定の問いと会話のラベル用・snapshot の identity と同じ解決）。配信の組み直し Domain A: 名前は
+   * ロールから引く（判定の文面は変えない・値の出どころだけ・設計 §5）。provider が無ければ既定（コーディ）。
+   */
   function currentSoulName() {
-    if (currentBrainIdentityImpl) return resolveModelIdentity(currentBrainIdentityImpl()?.id).canonicalName;
-    const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
-    return resolveBrainIdentity(rawBrain && typeof rawBrain === "object" ? /** @type {any} */ (rawBrain).brain : undefined)
-      .canonicalName;
+    if (currentRoleIdentityImpl) return normalizeModelIdentity(currentRoleIdentityImpl()).canonicalName;
+    return DEFAULT_MODEL_IDENTITY.canonicalName;
   }
 
   /** 判定ごとの記録を呼び出し側（cockpit.mjs のターミナル 1 行）へ渡す（本文は含めない・失敗寛容）。 */
@@ -2923,6 +3592,8 @@ export function createCockpitServer(options = {}) {
    * @returns {Promise<void>}
    */
   async function connectChat(source) {
+    // この起動で Connect した source を覚える（次の「配信を始める」でもつなぐ・配信の組み直し 仕上げ）。
+    chatSourceThisBoot = source;
     foldChatClient(); // 作り直し: 既存器官を畳んでから新規生成（同一インスタンス restart は無い）。
     const client = /** @type {any} */ (chatClientFactory)({ source });
     chatClient = client;
@@ -2970,6 +3641,18 @@ export function createCockpitServer(options = {}) {
     },
     isListening: () => server.listening,
     earsStatus: () => earsState,
+    /**
+     * 場の状態（配信の組み直し Domain D・additive な内部 JS API）。cockpit.mjs が 20 分ごとの保存・Ctrl+C の道で読む。
+     * @returns {{ phase: "closed" | "opening" | "open" | "closing"; error: string | null; openedAtMs: number | null }}
+     */
+    streamStatus: () => ({ phase: streamPhase, error: streamError, openedAtMs: streamOpenedAtMs }),
+    /** 配信を始める（POST /api/stream/start と同じ関数・テストと内部用）。 */
+    startStream: (/** @type {{ device?: string | null; sttEngine?: any; ttsEngine?: any }} */ request = {}) => openStream(request),
+    /**
+     * Ctrl+C の「配信を終える」（cockpit.mjs の shutdown）。開きかけ・閉じかけなら終わるのを待ち、開いていれば終える
+     * （POST /api/stream/stop と同じ closeStream を通る）。閉じていれば何もしない（記憶の保存を頼まない）。
+     */
+    endStream: () => endStreamForShutdown(),
     /** 発火状態（idle/thinking/speaking）。orchestrator 未注入なら null。 */
     fireState: () => (fireOrchestrator ? fireOrchestrator.getState() : null),
     /**
@@ -3189,6 +3872,9 @@ export function createCockpitServer(options = {}) {
       }
       earsState = "stopped";
       startedAtMs = null;
+      // 場も閉じる（記憶の保存は頼まない。Ctrl+C の保存は cockpit.mjs が close の前に endStream で済ませる）。
+      streamPhase = "closed";
+      streamOpenedAtMs = null;
       callEarsHook(onEarsStopped);
       await new Promise((resolve) => {
         server.closeAllConnections?.();

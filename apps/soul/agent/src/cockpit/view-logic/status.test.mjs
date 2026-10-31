@@ -93,3 +93,15 @@ test("channelStatusView: 接続状態の色分け（connected=緑/error=赤/conn
     className: "channel-status connected"
   });
 });
+
+test("channelStatusView（体なし・配信の組み直し Domain C）: 今のロールに体が無ければ URL や接続に関わらず「体なし」", () => {
+  const bodyless = { text: "体なし", className: "channel-status bodyless" };
+  assert.deepEqual(channelStatusView({ configured: false, url: null, connection: "unset", body: false }), bodyless);
+  assert.deepEqual(channelStatusView({ configured: true, url: "ws://a/channel", connection: "error", body: false }), bodyless);
+  // 体あり（body: true）・body を持たない状態は今どおり。
+  assert.deepEqual(channelStatusView({ configured: true, url: "ws://a/channel", connection: "connected", body: true }), {
+    text: "ws://a/channel — connected",
+    className: "channel-status connected"
+  });
+  assert.deepEqual(channelStatusView({ configured: false, body: true }), { text: "not configured", className: "channel-status" });
+});

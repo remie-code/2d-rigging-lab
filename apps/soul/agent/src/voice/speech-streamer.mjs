@@ -14,6 +14,10 @@
  *  - 鳴らす番が来て、形式（format）と最初の音（または end）が揃ったら:
  *      器へ openSpeech → accepted を受けたら player.open → 溜めた口の時間割を appendSpeech（音より先）→
  *      溜めた音を player.write → 続きも届くたびに同じ順で流す → engine の end で player.end + endSpeech。
+ *  - 器は任意（配信の組み直し Domain C・stream-restructure.md §4）。体の無いロールでは channel を渡さない。
+ *    そのときは器への送信（openSpeech / appendSpeech / endSpeech）と口の release をすべて飛ばし、
+ *    鳴らす番が来たらすぐ player.open して手元の再生器だけで鳴らす。時間割は器が無くても engine から受け取って
+ *    貯める（割り込みの「どこまで声に出たか」の材料・snapshot()）。
  *  - player の STARTED（実際に鳴り始めた）で「声が出た」、ENDED（全部鳴り終わった）でその文を完了にし、
  *    次の文へ進む。STOPPED / ERROR / 異常終了・タイムアウトは世代全体を閉じる。
  *
@@ -25,6 +29,8 @@
  *    中断・失敗・dispose の経路は player.stop のあと口の release（mouth-open=0）を送る（`releaseMouth`）。
  *    endSpeech が届かなかったときも、鳴り終わりで release を送る。
  *  - 口の t=0 は器が open を受理した時刻。声は player.open のあと鳴り始める（ずれは今と同程度）。
+ *    器が無いときは口が無いので t=0 も無い。player.open は鳴らす番が来た時点で呼ぶ。割り込みの切断点は
+ *    器の有無に関係なく、時間割と player の STARTED の時刻から求める（fire-orchestrator の computeSpokenPrefix）。
  *
  * ── 割り込み・キル ─────────────────────────────────────────────────────────
  *  `bargeIn()`（最初の STARTED の後だけ効く）/ `kill()` / `dispose()` / `abort(cause)`: 世代を閉じ、鳴っている
@@ -76,15 +82,16 @@ let nextGenerationNumber = 0;
  * @param {import("./engines/voice-engine.mjs").VoiceEngine} options.engine  声の差し替え口。
  * @param {{ open: Function; write: Function; end: Function; stop: Function; onEvent: (listener: (event: any) => void) => () => void }} options.player
  *   流し込みプレイヤー（stream-player.mjs の createStreamPlayer の返り、または同じ形）。
- * @param {{ openSpeech: Function; appendSpeech: Function; endSpeech: Function; sendSet?: Function }} options.channel
- *   器への接続（channel-client の connectChannel の返り、または同じ形）。
+ * @param {{ openSpeech: Function; appendSpeech: Function; endSpeech: Function; sendSet?: Function } | null} [options.channel]
+ *   器への接続（channel-client の connectChannel の返り、または同じ形）。null / 未指定 = 体なし（器への送信を
+ *   飛ばし、手元の再生器だけで鳴らす）。渡すなら openSpeech/appendSpeech/endSpeech が要る。
  * @param {string} [options.generationId]  世代名（診断と jobId の接頭辞）。
  * @param {(info: { cause: string; jobId: string; playbackId: string }) => unknown | Promise<unknown>} [options.releaseMouth]
- *   口の release（既定: channel.sendSet で mouth-open=0・ttl 400ms）。失敗は握る。
+ *   口の release（既定: channel.sendSet で mouth-open=0・ttl 400ms）。失敗は握る。器が無い（体なし）ときは呼ばない。
  * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace]  診断（本文なし）。
  * @param {(info: { jobId: string; index: number; playbackId: string; atMs: number }) => void} [options.onPlaybackStarted]
  * @param {(info: { jobId: string; index: number; playbackId: string }) => void} [options.onPlaybackActivated]
- *   器が open を受理して player.open した時点（一括の読み上げの「鳴らし始めた」）。
+ *   器が open を受理して player.open した時点（器が無いときは player.open した時点・一括の読み上げの「鳴らし始めた」）。
  * @param {number} [options.playbackStartTimeoutMs]
  * @param {number} [options.playbackCompletionMarginMs]
  * @param {() => number} [options.nowImpl]  STARTED が atMs を持たないときの時計（既定 Date.now）。
@@ -102,8 +109,10 @@ export function createSpeechStreamer(options) {
   if (!player || ["open", "write", "end", "stop", "onEvent"].some((m) => typeof player[m] !== "function")) {
     throw new TypeError("createSpeechStreamer requires a stream player (open/write/end/stop/onEvent).");
   }
-  if (!channel || ["openSpeech", "appendSpeech", "endSpeech"].some((m) => typeof channel[m] !== "function")) {
-    throw new TypeError("createSpeechStreamer requires channel.openSpeech/appendSpeech/endSpeech().");
+  // 器は任意（体なし = null / 未指定）。渡すなら発話の 3 つの口が揃っていること。
+  const hasChannel = channel != null;
+  if (hasChannel && ["openSpeech", "appendSpeech", "endSpeech"].some((m) => typeof channel[m] !== "function")) {
+    throw new TypeError("createSpeechStreamer requires channel.openSpeech/appendSpeech/endSpeech() (or no channel when bodyless).");
   }
 
   const generationId =
@@ -125,7 +134,7 @@ export function createSpeechStreamer(options) {
   const releaseMouthImpl =
     options.releaseMouth ??
     (async () => {
-      if (typeof channel.sendSet !== "function") return;
+      if (typeof channel?.sendSet !== "function") return;
       await channel.sendSet({ slotId: MOUTH_CLOSE_SLOT_ID, value: 0, ttlMs: MOUTH_CLOSE_TTL_MS });
     });
 
@@ -217,8 +226,9 @@ export function createSpeechStreamer(options) {
     }
   };
 
-  /** 口の release（失敗は握る・settle はこれを待つ）。 */
+  /** 口の release（失敗は握る・settle はこれを待つ）。器が無い（体なし）なら口も無いので何もしない。 */
   const releaseMouth = (/** @type {any} */ job, /** @type {string} */ cause) => {
+    if (!hasChannel) return Promise.resolve();
     const run = Promise.resolve()
       .then(() => releaseMouthImpl({ cause, jobId: job.jobId, playbackId: job.playbackId }))
       .then(
@@ -398,8 +408,9 @@ export function createSpeechStreamer(options) {
 
   const flush = (/** @type {any} */ job) => {
     if (job !== active || closed || job.phase !== "open") return;
-    // 口の時間割を音より先に送る（データ切れによる口形の跳びを避ける・申し送り 2）。
-    while (job.timelineSent < job.timeline.length) {
+    // 口の時間割を音より先に送る（データ切れによる口形の跳びを避ける・申し送り 2）。器が無ければ送らない
+    // （時間割は job.timeline に貯めたまま・割り込みの材料）。
+    while (hasChannel && job.timelineSent < job.timeline.length) {
       const batch = job.timeline.slice(job.timelineSent, job.timelineSent + SPEECH_STREAM_APPEND_MAX_ITEMS);
       job.timelineSent += batch.length;
       sendToRuntime(job, "append", () => channel.appendSpeech(job.playbackId, batch), { timelineCount: batch.length });
@@ -434,7 +445,7 @@ export function createSpeechStreamer(options) {
       abort("play-failed", diagnosticError("stream player lost the utterance", "player_ownership_lost", "player.end"));
       return;
     }
-    sendToRuntime(job, "end", () => channel.endSpeech(job.playbackId));
+    if (hasChannel) sendToRuntime(job, "end", () => channel.endSpeech(job.playbackId));
     trace("speech.playback.input_completed", {
       jobId: job.jobId,
       playbackId: job.playbackId,
@@ -453,7 +464,13 @@ export function createSpeechStreamer(options) {
       speechChars: job.text.length,
       timelineCount: job.timeline.length
     });
-    let outcome;
+    /** @type {any} */
+    let outcome = null;
+    if (!hasChannel) {
+      // 体なし: 器の受理を待たず、すぐ手元の再生器を開く（openSpeech を送らない）。
+      openPlayer(job, null);
+      return;
+    }
     try {
       outcome = await channel.openSpeech(job.playbackId);
     } catch (error) {
@@ -475,6 +492,15 @@ export function createSpeechStreamer(options) {
       return;
     }
     // 口の t=0 = 器の受理。声はこの後に鳴り始める（今と同じ流儀）。
+    openPlayer(job, outcome);
+  };
+
+  /**
+   * 手元の再生器を開いて、溜めた分を流し始める（器の受理の後・器が無ければ鳴らす番が来た時点）。
+   * @param {any} job
+   * @param {any} outcome  器の open の返り（器が無ければ null）。
+   */
+  const openPlayer = (job, outcome) => {
     try {
       player.open(job.playbackId, { sampleRate: job.format.sampleRate, channels: job.format.channels });
     } catch (error) {
@@ -485,10 +511,11 @@ export function createSpeechStreamer(options) {
     trace("speech.playback.activated", {
       jobId: job.jobId,
       playbackId: job.playbackId,
-      requestId: typeof outcome.requestId === "string" ? outcome.requestId : null,
-      serializedUtf8Bytes: typeof outcome.serializedUtf8Bytes === "number" ? outcome.serializedUtf8Bytes : null,
+      requestId: typeof outcome?.requestId === "string" ? outcome.requestId : null,
+      serializedUtf8Bytes: typeof outcome?.serializedUtf8Bytes === "number" ? outcome.serializedUtf8Bytes : null,
       sampleRate: job.format.sampleRate,
-      channels: job.format.channels
+      channels: job.format.channels,
+      ...(hasChannel ? {} : { bodyless: true })
     });
     notify(options.onPlaybackActivated, { jobId: job.jobId, index: job.index, playbackId: job.playbackId });
     flush(job);
@@ -755,7 +782,8 @@ export function createSpeechStreamer(options) {
 }
 
 /**
- * 1 文だけの発話（Claude 経路の一括の読み上げ）。器が open を受理して鳴らし始めたら返る。
+ * 1 文だけの発話（Claude 経路の一括の読み上げ）。器が open を受理して鳴らし始めたら返る（器が無い = 体なしなら
+ * 手元の再生器を開いた時点で返る・deps.channel を渡さない）。
  * それより前の失敗（合成・器の拒否・送信失敗）は投げる。返りの `ended` は ENDED（または中断・失敗）で
  * 解決する（WAV 長のタイマーは使わない）。
  *
@@ -763,7 +791,7 @@ export function createSpeechStreamer(options) {
  * @param {object} deps
  * @param {import("./engines/voice-engine.mjs").VoiceEngine} deps.engine
  * @param {any} deps.player
- * @param {any} deps.channel
+ * @param {any} [deps.channel]  器（null / 未指定 = 体なし）。
  * @param {string} [deps.generationId]
  * @param {(event: string, fields?: Record<string, unknown>) => void} [deps.onTrace]
  * @param {(info: { cause: string; jobId: string; playbackId: string }) => unknown} [deps.releaseMouth]

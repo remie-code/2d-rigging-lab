@@ -111,12 +111,16 @@ test("CommentBusySelect vnode: 「忙しい間のコメント: あとで拾う /
   assert.equal(select.props.disabled, true);
 });
 
-test("DrivePanel（運転タブ）: 話し始めの隣に忙しい間のコメントのプルダウン・POST /api/comment-busy・エラー文言", () => {
-  const src = readFileSync(new URL("./ui/control-bar.mjs", import.meta.url), "utf8");
-  const speakAt = src.indexOf("<${SpeakStartSelect}");
-  const busyAt = src.indexOf("<${CommentBusySelect}");
-  assert.ok(speakAt > 0 && busyAt > speakAt, "話し始めの直後");
-  assert.ok(src.includes('doFetch("/api/comment-busy"'));
+test("配信の準備のたたんだもの（配信の組み直し Domain E で運転のタブから移した）: 声の出力先の下に忙しい間のコメントのプルダウン・POST /api/comment-busy・エラー文言", () => {
+  const src = readFileSync(new URL("./ui/settings-drawer.mjs", import.meta.url), "utf8");
+  const prepare = src.slice(src.indexOf('id="cockpit-settings-panel-prepare"'), src.indexOf('id="cockpit-settings-panel-role"'));
+  const more = prepare.slice(prepare.indexOf('<details class="prepare-more">'), prepare.indexOf("</details>"));
+  const audioAt = more.indexOf('id="audio-device-select"');
+  const busyAt = more.indexOf("<${CommentBusySelect}");
+  assert.ok(audioAt > 0 && busyAt > audioAt, "たたんだものの中・声の出力先の下");
+  assert.ok(src.includes('postJson("/api/comment-busy", { policy })'));
+  const drive = readFileSync(new URL("./ui/control-bar.mjs", import.meta.url), "utf8");
+  assert.ok(!drive.slice(drive.indexOf("export function DrivePanel")).includes("<${CommentBusySelect}"), "運転のタブには無い");
   assert.equal(commentBusyPostErrorText({ status: 503, ok: false, j: null }), "comment-busy control not available");
   assert.equal(commentBusyPostErrorText({ status: 400, ok: false, j: { error: "invalid comment-busy policy" } }), "set failed: invalid comment-busy policy");
   assert.equal(commentBusyPostErrorText({ status: 200, ok: true, j: {} }), null);

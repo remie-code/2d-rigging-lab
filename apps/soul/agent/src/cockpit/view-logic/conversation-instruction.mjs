@@ -4,71 +4,74 @@
  *
  * The editor deliberately owns no identity or prompt composition knowledge.
  * It only consumes the dedicated Cockpit API and keeps one draft baseline per
- * technical brain.  The controller is injected with fetch and a change hook,
- * making all tests fake-only and keeping stale responses out of the UI.
+ * role. 配信の組み直し Domain A: 会話指示はロールの性格の指示（roles/<id>/instructions.md）になり、鍵は
+ * 頭の id からロールの id に替わった（応答の `roleId`）。The controller is injected with fetch and a change
+ * hook, making all tests fake-only and keeping stale responses out of the UI.
  */
 
-import { BRAIN_LABELS } from "./health.mjs";
-
-/** @type {ReadonlyArray<string>} */
-export const CONVERSATION_INSTRUCTION_BRAIN_IDS = Object.freeze([
-  "claude",
-  "claude-opus-55",
-  "codex",
-  "codex-56-sol",
-  "codex-astra",
-  "codex-61-sol"
-]);
-
-/** @type {ReadonlyArray<{ value: string; label: string }>} */
-export const CONVERSATION_INSTRUCTION_BRAIN_OPTIONS = Object.freeze(
-  CONVERSATION_INSTRUCTION_BRAIN_IDS.map((value) => ({ value, label: BRAIN_LABELS[value] }))
-);
+import { ROLE_ID_PATTERN, isRoleIdShape } from "./role.mjs";
 
 /**
- * Resolve the read-only identity displayed for the selected editor profile.
- * The runtime-provided identity is used only when the selected technical
- * brain is active. The dedicated instruction API intentionally does not
- * expose identity for other profiles, so the UI returns null there instead
- * of inventing a second brain→identity table or showing a false active name.
- * @param {{ brainId: string; activeBrainId?: string | null; activeIdentity?: any }} input
- * @returns {{ id: string; displayName: string } | null}
+ * ロールの id の形（配信の組み直し Domain E: 画面側の写しは view-logic/role.mjs の 1 か所から引く。model-identity.mjs の
+ * ROLE_ID_PATTERN と一致することはテストで固定）。
  */
-export function conversationBrainIdentity({ brainId, activeBrainId, activeIdentity }) {
-  if (
-    brainId === activeBrainId &&
-    activeIdentity &&
-    typeof activeIdentity === "object" &&
-    typeof activeIdentity.id === "string" &&
-    typeof activeIdentity.displayName === "string" &&
-    activeIdentity.displayName
-  ) {
-    return { id: activeIdentity.id, displayName: activeIdentity.displayName };
-  }
-  return null;
+export const CONVERSATION_INSTRUCTION_ROLE_ID_PATTERN = ROLE_ID_PATTERN;
+
+/** @param {unknown} value @returns {boolean}  ロールの id か（形・Windows の予約名でない）。 */
+export function isConversationInstructionRoleId(value) {
+  return isRoleIdShape(value);
 }
 
-/** @param {unknown} value @returns {boolean} */
-export function isConversationInstructionBrainId(value) {
-  return typeof value === "string" && CONVERSATION_INSTRUCTION_BRAIN_IDS.includes(value);
+/**
+ * snapshot の `role`（`{ id, displayName, brain, roles: [{ id, displayName, brain }] }`）から、ロールの select の
+ * 選択肢を作る（形の違う要素は落とす・見せる名前が無ければ id）。
+ * @param {unknown} roleStatus
+ * @returns {Array<{ value: string; label: string; brain: string | null }>}
+ */
+export function roleOptionsView(roleStatus) {
+  const list = roleStatus && typeof roleStatus === "object" ? /** @type {any} */ (roleStatus).roles : null;
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((item) => item && typeof item === "object" && isConversationInstructionRoleId(item.id))
+    .map((item) => ({
+      value: item.id,
+      label: typeof item.displayName === "string" && item.displayName.trim() ? item.displayName : item.id,
+      brain: typeof item.brain === "string" ? item.brain : null
+    }));
 }
 
-/** @param {string} brainId @returns {string} */
-export function conversationInstructionPath(brainId) {
-  return "/api/conversation-instructions/" + encodeURIComponent(brainId);
+/**
+ * 今のロール（snapshot の `role`）の id と見せる名前。読めなければ null。
+ * @param {unknown} roleStatus
+ * @returns {{ id: string; displayName: string; brain: string | null } | null}
+ */
+export function currentRoleView(roleStatus) {
+  if (!roleStatus || typeof roleStatus !== "object") return null;
+  const value = /** @type {any} */ (roleStatus);
+  if (!isConversationInstructionRoleId(value.id)) return null;
+  return {
+    id: value.id,
+    displayName: typeof value.displayName === "string" && value.displayName.trim() ? value.displayName : value.id,
+    brain: typeof value.brain === "string" ? value.brain : null
+  };
+}
+
+/** @param {string} roleId @returns {string} */
+export function conversationInstructionPath(roleId) {
+  return "/api/conversation-instructions/" + encodeURIComponent(roleId);
 }
 
 /**
  * @param {unknown} body
- * @param {string} brainId
- * @returns {{ brainId: string; instruction: string; isOverride: boolean; revision: number | null } | null}
+ * @param {string} roleId
+ * @returns {{ roleId: string; instruction: string; isOverride: boolean; revision: number | null } | null}
  */
-export function parseConversationInstructionResponse(body, brainId) {
+export function parseConversationInstructionResponse(body, roleId) {
   if (!body || typeof body !== "object") return null;
   const value = /** @type {any} */ (body);
   if (
     value.ok !== true ||
-    value.brainId !== brainId ||
+    value.roleId !== roleId ||
     typeof value.instruction !== "string" ||
     value.instruction.trim().length === 0
   ) return null;
@@ -76,7 +79,7 @@ export function parseConversationInstructionResponse(body, brainId) {
   if (typeof value.revision !== "number" || !Number.isFinite(value.revision)) return null;
   const revision = value.revision;
   return {
-    brainId,
+    roleId,
     instruction: value.instruction,
     isOverride: value.isOverride,
     revision
@@ -177,7 +180,7 @@ function emptyEntry() {
 }
 
 /**
- * A small per-brain editor controller. Every async operation is associated
+ * A small per-role editor controller. Every async operation is associated
  * with a monotonically increasing request sequence. A response may update
  * only its own brain and only when it is still the latest operation. A user
  * edit made while a request is pending is retained while the server baseline
@@ -201,32 +204,32 @@ export function createConversationInstructionController(options = {}) {
     if (parsed) soulSkills = parsed;
   };
 
-  const entryFor = (brainId) => {
-    if (!entries.has(brainId)) entries.set(brainId, emptyEntry());
-    return entries.get(brainId);
+  const entryFor = (roleId) => {
+    if (!entries.has(roleId)) entries.set(roleId, emptyEntry());
+    return entries.get(roleId);
   };
   const notify = () => onChange();
-  const valid = (brainId) => isConversationInstructionBrainId(brainId);
+  const valid = (roleId) => isConversationInstructionRoleId(roleId);
   const responseError = (response, fallback) => {
     const status = response && typeof response.status === "number" ? response.status : 0;
     if (status === 400) return "会話指示のリクエストが不正です";
-    if (status === 404) return "指定した頭脳の会話指示が見つかりません";
+    if (status === 404) return "指定したロールの会話指示が見つかりません";
     return fallback;
   };
 
-  /** @param {string} brainId */
-  const load = async (brainId) => {
-    if (!valid(brainId)) return { ok: false, error: "指定できない頭脳です" };
-    const entry = entryFor(brainId);
+  /** @param {string} roleId */
+  const load = async (roleId) => {
+    if (!valid(roleId)) return { ok: false, error: "指定できないロールです" };
+    const entry = entryFor(roleId);
     const seq = entry.requestSeq + 1;
     entry.requestSeq = seq;
     entry.status = "loading";
     entry.error = "";
     notify();
     try {
-      const response = await fetchImpl(conversationInstructionPath(brainId));
+      const response = await fetchImpl(conversationInstructionPath(roleId));
       const body = await response.json();
-      const parsed = parseConversationInstructionResponse(body, brainId);
+      const parsed = parseConversationInstructionResponse(body, roleId);
       if (entry.requestSeq !== seq) return { ok: false, stale: true };
       if (!response.ok || !parsed) {
         entry.status = "error";
@@ -256,10 +259,10 @@ export function createConversationInstructionController(options = {}) {
     }
   };
 
-  /** @param {string} brainId @param {string} value */
-  const edit = (brainId, value) => {
-    if (!valid(brainId)) return false;
-    const entry = entryFor(brainId);
+  /** @param {string} roleId @param {string} value */
+  const edit = (roleId, value) => {
+    if (!valid(roleId)) return false;
+    const entry = entryFor(roleId);
     entry.draft = typeof value === "string" ? value : "";
     entry.dirty = entry.draft !== entry.saved;
     if (entry.status !== "loading" && entry.status !== "saving" && entry.status !== "resetting") {
@@ -270,10 +273,10 @@ export function createConversationInstructionController(options = {}) {
     return true;
   };
 
-  /** @param {string} brainId */
-  const save = async (brainId) => {
-    if (!valid(brainId)) return { ok: false, error: "指定できない頭脳です" };
-    const entry = entryFor(brainId);
+  /** @param {string} roleId */
+  const save = async (roleId) => {
+    if (!valid(roleId)) return { ok: false, error: "指定できないロールです" };
+    const entry = entryFor(roleId);
     const inputError = conversationInstructionInputError(entry.draft);
     if (inputError) {
       entry.status = "error";
@@ -288,13 +291,13 @@ export function createConversationInstructionController(options = {}) {
     entry.error = "";
     notify();
     try {
-      const response = await fetchImpl(conversationInstructionPath(brainId), {
+      const response = await fetchImpl(conversationInstructionPath(roleId), {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ instruction: valueAtStart })
       });
       const body = await response.json();
-      const parsed = parseConversationInstructionResponse(body, brainId);
+      const parsed = parseConversationInstructionResponse(body, roleId);
       if (entry.requestSeq !== seq) return { ok: false, stale: true };
       if (!response.ok || !parsed) {
         entry.status = "error";
@@ -323,10 +326,10 @@ export function createConversationInstructionController(options = {}) {
     }
   };
 
-  /** @param {string} brainId */
-  const reset = async (brainId) => {
-    if (!valid(brainId)) return { ok: false, error: "指定できない頭脳です" };
-    const entry = entryFor(brainId);
+  /** @param {string} roleId */
+  const reset = async (roleId) => {
+    if (!valid(roleId)) return { ok: false, error: "指定できないロールです" };
+    const entry = entryFor(roleId);
     const seq = entry.requestSeq + 1;
     entry.requestSeq = seq;
     const valueAtStart = entry.draft;
@@ -334,9 +337,9 @@ export function createConversationInstructionController(options = {}) {
     entry.error = "";
     notify();
     try {
-      const response = await fetchImpl(conversationInstructionPath(brainId), { method: "DELETE" });
+      const response = await fetchImpl(conversationInstructionPath(roleId), { method: "DELETE" });
       const body = await response.json();
-      const parsed = parseConversationInstructionResponse(body, brainId);
+      const parsed = parseConversationInstructionResponse(body, roleId);
       if (entry.requestSeq !== seq) return { ok: false, stale: true };
       if (!response.ok || !parsed) {
         entry.status = "error";
@@ -366,10 +369,10 @@ export function createConversationInstructionController(options = {}) {
     }
   };
 
-  /** @param {string} brainId */
-  const discard = (brainId) => {
-    if (!valid(brainId)) return false;
-    const entry = entryFor(brainId);
+  /** @param {string} roleId */
+  const discard = (roleId) => {
+    if (!valid(roleId)) return false;
+    const entry = entryFor(roleId);
     entry.draft = entry.saved;
     entry.dirty = false;
     entry.status = entry.isOverride ? "saved" : "default";
@@ -384,12 +387,12 @@ export function createConversationInstructionController(options = {}) {
     save,
     reset,
     discard,
-    getState(brainId) {
-      if (!valid(brainId)) return Object.freeze({ ...emptyEntry(), brainId, error: "指定できない頭脳です" });
-      return { brainId, ...entryFor(brainId) };
+    getState(roleId) {
+      if (!valid(roleId)) return Object.freeze({ ...emptyEntry(), roleId, error: "指定できないロールです" });
+      return { roleId, ...entryFor(roleId) };
     },
-    isDirty(brainId) {
-      return valid(brainId) ? !!entryFor(brainId).dirty : false;
+    isDirty(roleId) {
+      return valid(roleId) ? !!entryFor(roleId).dirty : false;
     },
     /** 魂がいつも足す教え（読むだけの表示用・編集の口は無い）。 */
     getSoulSkills() {

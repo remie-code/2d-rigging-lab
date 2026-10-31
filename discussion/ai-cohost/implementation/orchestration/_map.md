@@ -55,3 +55,5 @@
 | [memory-recall-wave-plan.md](memory-recall-wave-plan.md) | **完了・思い出す流れは人間ゲート合格(2026-10-25)** | W1: セッションの役ごとの設定と MCP の切り離し ∥ 置き場・git・8 件の移し替え → W2: 書き出し役と保存の経路 → W3: 思い出す流れ → 人間ゲート 6 点。 |
 | [local-stt-wave-plan.md](local-stt-wave-plan.md) | **人間ゲート合格(2026-10-28)** | 文字起こしの選択肢に Parakeet / Zipformer(ローカル、sherpa-onnx-node を子プロセスで)を足す。1 wave・1 ドメイン。 |
 | [latency-fix-plan.md](latency-fix-plan.md) | **実配信で確認済み(2026-10-28)** | 応答の遅れの原因 2 つ(句点なしの 1 文が締めまで声に回らない/使い捨てのセッションの掃除がチャッピーの記録を消し Codex が毎回探し回る)の直しと、会話指示から仕組みの教えを固定ファイルに切り分け。 |
+| [stream-restructure-inventory.md](stream-restructure-inventory.md) | **棚卸し済み(2026-10-31)** | 配信の組み直し(ロール・記憶をロールごとに・体なしの声・場・画面)の棚卸し。前例の wave 計画の形とモデル配分、設計の各部分が触るファイルと重なり、テストの土台、引っ越しのテストの型。 |
+| [stream-restructure-wave-plan.md](stream-restructure-wave-plan.md) | **実装中(2026-10-31)** | 配信の組み直し。A ロールと引っ越し → B 記憶をロールごとに → C 体なしの声 → D 場 → E 画面 → 全体の突き合わせ → 人間ゲート 6 点。ドメインごとに Orch-Sylph(opus)・Gnome(opus)・Review-Sylph(sonnet)。見直しは止めてよい理由を 4 つに絞る。 |

@@ -30,14 +30,16 @@
  * @property {(options?: object) => MindSession} create  頭セッションを起動する（Domain B が options に
  *   systemPrompt 等を渡す）。**ここでは呼ばない**（health test は実 create を呼ばない＝実 SDK 消費ゼロ）。
  * @property {string} credentialPath  資格情報ファイルの絶対パス（健康表示の存在確認用・中身は読まない）。
- * @property {Readonly<import("./model-identity.mjs").ModelIdentity>} identity  魂名の frozen identity contract。
+ *
+ * 配信の組み直し Domain A: 頭は名前（identity）を持たない。名前はロール（src/roles/role-store.mjs）が持ち、
+ * ロールは「どの頭で動かすか」をこの表の id で指すだけ。頭の性質（資格情報・Claude の env ガード・Codex の残量・
+ * fast・文脈の圧縮）は頭に付いたまま。
  */
 
 import os from "node:os";
 import path from "node:path";
 import { createLlmSession } from "./llm-session.mjs";
 import { createCodexSession } from "./codex-session.mjs";
-import { DEFAULT_MODEL_IDENTITY, MODEL_IDENTITIES } from "./model-identity.mjs";
 
 /**
  * 頭の表（フラット registry・v0 裁定=brain-swap.md §2・2026-07-17 追撃で claude/codex の 2 項目から
@@ -52,26 +54,23 @@ export const BRAINS = Object.freeze({
     id: "claude",
     label: "Claude (Opus 4.8)",
     create: (options) => createLlmSession(options),
-    credentialPath: path.join(os.homedir(), ".claude", ".credentials.json"),
-    identity: MODEL_IDENTITIES.cody
+    credentialPath: path.join(os.homedir(), ".claude", ".credentials.json")
   }),
   // ── 2026-10-16 追加: Claude 側の別モデル（Opus 5.5）──────────────────────────────────────────
   //  既存 claude 行（Opus 4.8・llm-session.mjs の DEFAULT_MODEL）は残し、model だけを options 経由で
   //  上書きする別行として足す（llm-session.mjs 本体は無変更・codex 側の別モデル行と同じ流儀）。
-  //  資格情報・identity（Cody）・Anthropic env ガードは claude 行と共有する。
+  //  資格情報・Anthropic env ガードは claude 行と共有する。
   "claude-opus-55": Object.freeze({
     id: "claude-opus-55",
     label: "Claude (Opus 5.5)",
     create: (options) => createLlmSession({ ...options, model: "claude-opus-5-5" }),
-    credentialPath: path.join(os.homedir(), ".claude", ".credentials.json"),
-    identity: MODEL_IDENTITIES.cody
+    credentialPath: path.join(os.homedir(), ".claude", ".credentials.json")
   }),
   codex: Object.freeze({
     id: "codex",
     label: "Codex (GPT-5.6 Terra)",
     create: (options) => createCodexSession(options),
-    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
-    identity: MODEL_IDENTITIES.chappy
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
   }),
   // ── 追撃(2026-07-17・S8後の人間ゲート観測「Terra は自然だが深みがない」を受けた比較追加)────────
   //  registry はフラットな行追加で増設を受ける設計(brain-swap.md §2 裁定)どおり、Codex 側の別モデルを
@@ -79,23 +78,21 @@ export const BRAINS = Object.freeze({
   //  受ける既存設計のまま)。誤 ID なら startThread の初回 run が 400 で即可視(Terra 導入時の実測どおりの
   //  安全な失敗形・brain-swap-terra.md)。
   //  2026-10-16: GPT-5.5 行（"codex-55"）は Codex から外れた（10/14・bundled 0.153.4 の model/list にも
-  //  不在）ため削除。保存済み brainChoice に "codex-55" が残っていても createBrainHooks の
-  //  BRAIN_IDS 検証で既定（claude）へ倒れる。
+  //  不在）ため削除。保存済みの値に "codex-55" が残っていても BRAIN_IDS の検証で既定へ倒れる（配信の組み直し
+  //  Domain A からは role.json の brain を role-store.mjs の normalizeRole が検証する）。
   "codex-56-sol": Object.freeze({
     id: "codex-56-sol",
     label: "Codex (GPT-5.6 Sol)",
     // App Server 0.144.5 の model/list 実測で Sol は low..ultra を列挙し none を列挙しなかった。
     // progressive speech の accepted decision に従い、Sol は effort=low へ共通 adapter 経由で配線する。
     create: (options) => createCodexSession({ ...options, model: "gpt-5.6-sol", effort: "low" }),
-    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
-    identity: MODEL_IDENTITIES.chappy
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
   }),
   "codex-astra": Object.freeze({
     id: "codex-astra",
     label: "GPT-6 Astra",
     create: (options) => createCodexSession({ ...options, model: "gpt-6-astra", effort: "low" }),
-    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
-    identity: MODEL_IDENTITIES.chappy
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
   }),
   "codex-61-sol": Object.freeze({
     id: "codex-61-sol",
@@ -103,8 +100,7 @@ export const BRAINS = Object.freeze({
     // 2026-10-16 追加。@openai/codex-sdk 0.163.0 同梱 App Server の model/list 実測で gpt-6.1-sol は
     // supportedReasoningEfforts = low..ultra（none なし・default low）。Sol/Astra と同じく最小の low。
     create: (options) => createCodexSession({ ...options, model: "gpt-6.1-sol", effort: "low" }),
-    credentialPath: path.join(os.homedir(), ".codex", "auth.json"),
-    identity: MODEL_IDENTITIES.chappy
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
   })
 });
 
@@ -113,15 +109,3 @@ export const BRAINS = Object.freeze({
  * @type {ReadonlyArray<string>}
  */
 export const BRAIN_IDS = Object.freeze(Object.keys(BRAINS));
-
-/**
- * Resolve the identity attached to a persisted brain selection. Unknown or
- * absent values retain the existing Claude/Cody fallback.
- *
- * @param {unknown} brainId
- * @returns {Readonly<import("./model-identity.mjs").ModelIdentity>}
- */
-export function resolveBrainIdentity(brainId) {
-  const entry = typeof brainId === "string" ? BRAINS[brainId] : undefined;
-  return entry?.identity ?? DEFAULT_MODEL_IDENTITY;
-}

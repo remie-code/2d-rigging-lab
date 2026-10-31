@@ -20,6 +20,9 @@
  *    文ごとの読み上げも一括の読み上げも jobId が `…:sentence-1` のものだけを見る（jobId の無いトレースも数える）。
  *  - 声: 最初の音のかたまりから声が鳴り始めるまで（`voice.audio.first_chunk` → `voice.player.started`＝
  *    流し込みプレイヤーの STARTED）。器への open の往復・プレイヤーの立ち上がりを含む。
+ *    体の無いロール（配信の組み直し Domain C・stream-restructure.md §4）では器へ open を送らないので、この区間は
+ *    器の往復を含まない（プレイヤーの立ち上がりだけ）。体ありと見比べられるよう、そのレコードには `bodyless: true`
+ *    の印が付く（体があるときは付けない）。
  *  - inFireMs: fire() が呼ばれてから声が鳴り始めるまで（資源の取得・画面・LLM・TTS・声とその間の隙間すべて）。
  *  - otherMs: inFireMs のうち名前の付いた区間に入らない残り（Claude では「最初の文字」以降の生成の続きが主）。
  *
@@ -188,8 +191,10 @@ export function createFireTiming(options) {
  *   inFireMs: number | null;
  *   otherMs: number | null;
  *   serviceTier?: string | null;
+ *   bodyless?: true;
  * }} FireLatency  orchestrator の onLatency が渡す発火の中の区間。serviceTier はその返事の turn/start に送った
  *   Codex の速さの段（"priority" = fast / "default"・送っていない頭は null・操縦席の fast の切り替え）。
+ *   bodyless は体なしの Fire の印（声の区間に器の往復が入らない・体があるときは持たない）。
  */
 
 /**

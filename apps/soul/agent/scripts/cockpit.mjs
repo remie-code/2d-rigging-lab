@@ -7,23 +7,33 @@
  *
  * 実 pipeline factory（createEarPipeline・既定）+ file-backed settings store + 実ページで
  * `createCockpitServer` を構成し、**127.0.0.1** に listen して**アクセス URL を標準出力に表示**する。
- * ユーザーはその URL をブラウザで開き、マイクを選んで Start を押す（CLI を一切触らない）。
+ * ユーザーはその URL をブラウザで開き、今日のロールを選んで「配信を始める」を押す（CLI を一切触らない）。
  *
- * 実マイクが無い/未接続でもサーバ自体は起動しページは開ける（耳の Start を押すまで実デバイスに触れない）。
- * SIGINT（Ctrl+C）/ stdin EOF で clean close（ears-cli.mjs の型を踏襲・server.close() でハンドル解放）。
+ * 実マイクが無い/未接続でもサーバ自体は起動しページは開ける（「配信を始める」を押すまで実デバイスに触れない）。
+ * SIGINT（Ctrl+C）/ stdin EOF で clean close（ears-cli.mjs の型を踏襲・server.close() でハンドル解放）。配信中なら
+ * 「配信を終える」と同じ道（記憶の最後の保存を待つ）を通ってから閉じる（createCockpitShutdown）。
+ *
+ * ── 配信の組み直し（2026-10-31・stream-restructure.md）で変わったこと ────────────────────
+ *  下の S3 以降の節は当時の記録。今の形は: 頭のセッションと器（Channel）の接続は「配信を始める」で作り、「配信を
+ *  終える」で畳む（起動時の先充填はしない・`--channel` を渡しても同じ）。器を使うのはロールに体があるときだけ。
+ *  頭・名前・性格の指示・声・口数・話し始め・体はロールの持ち物（POST /api/role・/api/role/edit・/api/role/new）。
+ *  記憶はロールごと（`memories/<role-id>/`）。耳の Start / Stop は「配信を始める / 終える」（POST /api/stream/start・
+ *  /api/stream/stop。/api/ears/* は後方互換の別名）に替わった。
  *
  * ── S3: 発火（Fire）の本番結線 ─────────────────────────────────────────────
  *  fireOrchestratorFactory は**常に注入**する（実 createLlmSession（FIRE_SYSTEM_PROMPT・
  *  claude-opus-4-8 既定）+ connectChannel + 流し込みプレイヤー（createStreamPlayer）+ 声の差し替え口
  *  （createVoiceEngine・既定 AivisSpeech）+ SpeechStreamer）。Channel URL は
- *  `--channel <ws-url>`（後方互換の初期値）**または操縦席の URL 入力**（POST /api/channel）で渡せる。
+ *  `--channel <ws-url>`（後方互換の初期値）**または操縦席の URL 入力**（配信の準備のタブの器（Channel）の欄・
+ *  POST /api/channel・体のあるロールのときだけ出る）で渡せる。
  *
  *  ── S2.5 無退行【session/player の遅延生成】(S3 追撃 domain-c) ─────────────────
  *  操縦席から URL を後入力する構造にすると「fire を常時受けられる」形になるが、**URL も fire も
  *  使わないユーザー（S2.5 挙動）に LLM セッションの spawn（≈12s）を強いてはならない**。よって
  *  session/player は `ensureFireResources()` で**遅延生成**する:
- *    - `--channel` 明示指定時のみ起動時に eager 生成（従来どおり TTFT 先払い・挙動不変）。
- *    - それ以外（URL 未設定 / settings 復元 / 操縦席入力）は**初回 fire 時**に生成。
+ *    - （当時）`--channel` 明示指定時のみ起動時に eager 生成。配信の組み直し Domain D でやめた（頭のセッションはいつも
+ *      「配信を始める」で作る）。
+ *    - （当時）それ以外（URL 未設定 / settings 復元 / 操縦席入力）は**初回 fire 時**に生成。今は「配信を始める」で作る。
  *  声の差し替え Wave 2: 流し込みプレイヤー（起動に約 0.5 秒）と声の差し替え口は耳の Start のときに作る
  *  （最初の Fire に乗せない・申し送り 1）。Start より前の Fire は従来どおりその場で作る。
  *  声の差し替え Wave 3: 声の方式（設定キー `ttsEngine`・AivisSpeech / ElevenLabs）は耳の Start で読み、
@@ -31,6 +41,9 @@
  *  （種類が同じでも、落ちた（down の）ElevenLabs の engine は Start で作り直し、キーを読み直す）。
  *  URL 未設定のまま fire しても発話の送出前に session.ask で弾く（lazyChannel が URL 未設定を
  *  明示エラーにする前に、ここで no-URL を検出して spawn しない）。→ S2.5 ユーザーは何も spawn しない。
+ *  配信の組み直し Domain C: この URL の確かめは**ロールに体があるときだけ**（stream-restructure.md §4）。体の無い
+ *  ロールは器を使わないので、URL が無くても頭に聞き、発火を受理し、手元の再生器だけで鳴らす（器は運び手・
+ *  発火に渡さない・§resolveFireChannel）。体があるときの断りと文面は今のまま。
  *
  *  ── Channel URL の記憶（settings）──────────────────────────────────────────
  *  URL はマイク選択と同じ file-backed settings（`cockpit-settings.local.json`・.gitignore 済み・
@@ -38,6 +51,8 @@
  *  `--channel` 指定があればそれを初期値に（＋ settings にも載せる）。UI/ログは redactToken を通す。
  *
  *  ── 接続タイミングの設計判断【lazy connect】───────────────────────────────
+ *  （配信の組み直し Domain D から: 体のあるロールでは「配信を始める」が createLazyChannel の connect() で先につなぎ、
+ *  つながらなければ場を開かない。「配信を終える」で close する。以下の lazy の性質は場の途中の張り直しに残る。）
  *  channel は **初回 fire 時に接続し成功をキャッシュする lazy proxy**（createLazyChannel）。接続失敗は
  *  キャッシュせず throw → orchestrator が fireError 診断に落とす（起動は止めない・操縦席のゴースト行で
  *  見える・次の fire で再試行 = 器を後から立てても操縦席の再起動不要）。URL 変更（setUrl）時は既存
@@ -50,16 +65,34 @@ import { existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 
 import { createCockpitServer, DEFAULT_COCKPIT_PORT } from "../src/cockpit/cockpit-server.mjs";
-import { createFileSettingsStore } from "../src/cockpit/cockpit-settings-store.mjs";
+import { createFileSettingsStore, DEFAULT_SETTINGS_PATH } from "../src/cockpit/cockpit-settings-store.mjs";
 import { cockpitHtmlPath } from "../src/cockpit/cockpit-page.mjs";
 import { assertSubscriptionAuthEnv } from "../src/mind/env-guard.mjs";
 import { createLlmSession } from "../src/mind/llm-session.mjs";
-import { BRAINS, BRAIN_IDS, resolveBrainIdentity } from "../src/mind/brains.mjs";
+import { BRAINS } from "../src/mind/brains.mjs";
+import { buildFireSystemPrompt, createFireOrchestrator } from "../src/mind/fire-orchestrator.mjs";
+import { MODEL_IDENTITIES } from "../src/mind/model-identity.mjs";
 import {
-  buildFireSystemPrompt,
-  createFireOrchestrator,
-  resolveConversationInstructionProfile
-} from "../src/mind/fire-orchestrator.mjs";
+  DEFAULT_ROLES_DIR,
+  applyRolePatch,
+  copyRoleAs,
+  createRoleInstructionStore,
+  listRoles,
+  normalizeRole,
+  readRole,
+  readRoleInstructions,
+  roleFromIdentity,
+  roleIdentity,
+  roleToJson,
+  writeRole,
+  writeRoleInstructions
+} from "../src/roles/role-store.mjs";
+import {
+  DEFAULT_MIGRATION_BACKUP_ROOT,
+  formatStartupMigrationReport,
+  migrationBackupDir,
+  runStartupMigration
+} from "../src/roles/role-migration.mjs";
 import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
 import {
   createContextCompactor,
@@ -81,10 +114,10 @@ import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
-import { DEFAULT_MEMORY_DIR, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
+import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
-import { appendSoulSkills, listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
+import { appendSoulSkills, listSoulSkills, loadSoulSkills, soulSkillNamesForBody } from "../src/mind/soul-skills.mjs";
 
 /**
  * 配信間記憶: 定期保存の間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
@@ -105,24 +138,20 @@ export const SHUTDOWN_MEMORY_TIMEOUT_MS = 90_000;
 /**
  * Compose the system prompt for one newly-created brain session.
  *
- * Identity resolution happens exactly once per invocation. The production
- * ensureFireResources() uses the equivalent resolver-backed currentBrain
- * provider directly; this pure helper keeps the mapping testable without
- * starting a session.
+ * 配信の組み直し Domain A: 名前と性格の指示はロールから引く（頭の id から名前を決めない）。本番の
+ * ensureFireResources() は今のロールの名前（roleIdentity）と instructions.md の本文でこれを呼ぶ。
  *
  * 記憶の作り直し Wave 2: 起動時に直近の記録を載せる仕組みは撤去した（①は配信の最初に記憶を持たない・
  * recall-flow.md §7）。人格の指示は「名前 + 会話指示」に、Wave 3 で魂の教え（skills/ の `<recall>` の使い方・
  * soul-skills.mjs）を足した。教えは名前の一文と同じく魂が足す固定の部分で、会話指示を書き換えても消えない。
  *
- * @param {unknown} brainId
- * @param {Record<string, string>} [instructionOverrides]
+ * @param {unknown} identity  ロールの名前（roleIdentity の形）。形が壊れていれば既定（コーディ）。
+ * @param {string} [instructionBody]  性格の指示（無い・空なら既定の本文）。
  * @param {string} [skillsText]  足す教え（既定は skills/ から読む）。
  * @returns {string}
  */
-export function buildBrainSessionSystemPrompt(brainId, instructionOverrides = undefined, skillsText = undefined) {
-  const identity = resolveBrainIdentity(brainId);
-  const profile = resolveConversationInstructionProfile(brainId, instructionOverrides);
-  return appendSoulSkills(buildFireSystemPrompt(identity, profile.body), skillsText ?? loadSoulSkills());
+export function buildRoleSessionSystemPrompt(identity, instructionBody = undefined, skillsText = undefined) {
+  return appendSoulSkills(buildFireSystemPrompt(identity, instructionBody), skillsText ?? loadSoulSkills());
 }
 
 /** @param {string[]} argv */
@@ -194,6 +223,7 @@ export function openCockpitBrowser(url, execFileImpl = execFile, warn = (message
  *   connectionStatus: () => string;
  *   connectionGeneration: () => number;
  *   acceptedConnectionGeneration: () => number;
+ *   connect: () => Promise<void>;
  *   close: () => Promise<void>;
  * }}
  */
@@ -336,10 +366,24 @@ export function createLazyChannel(url, options = {}) {
     acceptedConnectionGeneration() {
       return channelPromise == null ? connectionGeneration + 1 : connectionGeneration;
     },
+    /**
+     * 今の URL で器につないでおく（配信の組み直し Domain D:「配信を始める」で体のあるロールの器を確かめる口）。
+     * つながっていればそのまま。URL が無い・つながらない（runtime-player が起動していない・channel が開いていない・
+     * hello が来ない）なら投げる（失敗は非キャッシュ = 次の始める / Fire でもう一度つなぐ）。
+     * @returns {Promise<void>}
+     */
+    async connect() {
+      await ensure();
+    },
+    /**
+     * 接続を畳む。URL はそのまま残し、次の送信（か connect）でつなぎ直せる（配信の組み直し Domain D: 場の終わりで畳み、
+     * 次の場の始まりでつなぐ）。
+     */
     async close() {
       if (channelPromise == null) return;
       const pending = channelPromise;
       channelPromise = null;
+      connState = currentUrl == null ? "unset" : "idle";
       try {
         const channel = await pending;
         await channel.close();
@@ -350,13 +394,35 @@ export function createLazyChannel(url, options = {}) {
   };
 }
 
+/** 体のあるロールで器の URL が無いまま発火したときの断りの文面（今と同じ）。 */
+export const CHANNEL_URL_NOT_SET_MESSAGE = "Channel URL is not set — set it in the cockpit (Channel field) before firing.";
+
+/**
+ * 受理する Fire の器を決める（配信の組み直し Domain C・stream-restructure.md §4）。
+ *  - 体あり: 今どおり、器の URL が無ければ断る（受理しない）。器（lazyChannel）と受理の時点の URL を返す。
+ *  - 体なし: 器を使わない。URL の有無を見ず、器は渡さない（channel: null）。運び手は手元の再生器だけで鳴らす。
+ * @param {object} options
+ * @param {boolean} options.body  受理の時点のロールの体の有無。
+ * @param {{ getUrl: () => string | null }} options.channel  器（lazyChannel）。
+ * @returns {{ body: boolean; channel: any | null; channelUrl: string | null }}
+ */
+export function resolveFireChannel({ body, channel }) {
+  if (body === false) return { body: false, channel: null, channelUrl: null };
+  const channelUrl = channel.getUrl();
+  if (channelUrl == null) throw new Error(CHANNEL_URL_NOT_SET_MESSAGE);
+  return { body: true, channel, channelUrl };
+}
+
 /**
  * session.ask への透過プロキシを作る（S3 の Channel URL 未設定チェック + 遅延生成は不変）。
  * S5: `ask(input)` は文字列（通常 Fire）と content ブロック配列（視覚発火）の両方を素通しする。
  * Progressive Speech C1: additive な ask options（onTextDelta）も同じ session へ透過する。
  * （分岐しない＝透過。型ガードは session 側が担う）。
  * @param {object} options
+ * 配信の組み直し Domain C: URL の確かめは `hasBody()` が true のとき（今のロールに体があるとき）だけ。体なしは
+ * URL が無くても頭に聞く。hasBody を渡さなければ今どおり（いつも確かめる）。
  * @param {() => string | null} options.getUrl  現在の Channel URL（lazyChannel.getUrl）。
+ * @param {() => boolean} [options.hasBody]  今のロールに体があるか（聞くたびに読む・既定 いつも true）。
  * @param {() => void} options.ensureFireResources  session/player の遅延生成（冪等）。
  * @param {() => void | Promise<void>} [options.ensureSessionCurrent] 次の accepted Fire の設定反映。
  * @param {() => { ask: (input: string | Array<any>, askOptions?: object) => Promise<any> } | null} options.getSession
@@ -364,14 +430,15 @@ export function createLazyChannel(url, options = {}) {
  */
 export function createSessionProxy(options) {
   const { getUrl, ensureFireResources, getSession, ensureSessionCurrent } = options;
+  const hasBody = typeof options.hasBody === "function" ? options.hasBody : () => true;
   return {
     /** @param {string | Array<any>} input @param {object} [askOptions] */
     async ask(input, askOptions) {
       if (typeof ensureSessionCurrent === "function") {
         await ensureSessionCurrent();
       }
-      if (getUrl() == null) {
-        throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
+      if (hasBody() !== false && getUrl() == null) {
+        throw new Error(CHANNEL_URL_NOT_SET_MESSAGE);
       }
       ensureFireResources();
       return /** @type {any} */ (getSession()).ask(input, askOptions);
@@ -406,20 +473,30 @@ export function createInstructionRevisionController(initialRevision = 0) {
  * Wave 3 仕上げ（記憶の作り直し）: 魂が①の固定の指示にいつも足す教え（skills/）を、会話指示の編集画面に読むだけで
  * 見せるため、getSoulSkills で名前・置き場・本文を返す（①に足すものと同じ listSoulSkills から読む・編集はできない）。
  *
- * @param {object} settings
- * @param {() => string} getBrainId
+ * 配信の組み直し Domain A: 会話指示はロールの性格の指示（roles/<id>/instructions.md）になった。本番は
+ * role-store.mjs の createRoleInstructionStore を置き場の口として渡し、鍵はロールの id。置き場の口が
+ * `isKnownConversationInstructionId` を持てば、知らない id を isKnownId で断れる（API の 400）。
+ *
+ * @param {object} settings  置き場の口（getConversationInstructionProfile / set… / reset…）。
+ * @param {() => string} getRoleId  今のロールの id。
  * @param {ReturnType<typeof createInstructionRevisionController>} [revision]
  * @param {() => Array<{ name: string; path: string; body: string }>} [getSoulSkills]  テスト注入（既定 listSoulSkills）。
  */
 export function createConversationInstructionHooks(
   settings,
-  getBrainId,
+  getRoleId,
   revision = createInstructionRevisionController(),
   getSoulSkills = () => listSoulSkills()
 ) {
   const store = /** @type {any} */ (settings);
-  const currentId = () => getBrainId();
+  const currentId = () => getRoleId();
   return {
+    /** 知っている id か（置き場の口が知らなければ、形の確かめは API に任せて通す）。 @param {string} id */
+    isKnownId(id) {
+      return typeof store.isKnownConversationInstructionId === "function"
+        ? store.isKnownConversationInstructionId(id) === true
+        : true;
+    },
     getProfile(brainId = currentId()) {
       return store.getConversationInstructionProfile(brainId);
     },
@@ -608,14 +685,21 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  *    あとはライブの転写が空になるため、Stop のときに取った転写を後から来た空や短い転写で上書きしない）。
  *  - 材料（転写）は保存を頼んだ時点で取る（耳の Stop では pipeline を畳む前に取ったものが渡る）。
  *  - 空の転写は走らせない。
+ *  - **置き場も保存を頼んだ時点で取る**（配信の組み直し Domain B・getPlace = その時点のロールの記憶のフォルダ）。
+ *    走っている保存・待っている保存は、頼んだときのロールのフォルダに書く（あとでロールが替わっても、ほかの
+ *    ロールのフォルダに書かない・stream-restructure.md §2.3）。待っている 1 件と置き場が違う頼みは差し替えずに
+ *    後ろに並べる（置き場ごとに順に走らせる）。getPlace が無ければ今まで通り（置き場は undefined で 1 つ）。
  * 1 回の保存（writeImpl）の失敗は握って onError に渡す（どの呼び出し元も巻き込まない）。
  *
  * @param {object} deps
  * @param {() => ReadonlyArray<any>} deps.getLiveEntries  材料の省略時に使うライブの転写（cockpit-server の getTranscript）。
- * @param {(entries: ReadonlyArray<any>) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
- *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。
- * @param {(info: { atMs: number; entriesLength: number; commit?: any }) => void} [deps.onSaved]
- *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。
+ * @param {(entries: ReadonlyArray<any>, place: any) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
+ *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値。
+ * @param {() => any} [deps.getPlace]  保存を頼んだ時点の置き場（本番は今のロールの記憶のフォルダ・§createRoleMemoryPlaces）。
+ *   同じ置き場には同じ値（=== で比べる）を返すこと。投げたら null。
+ * @param {(info: { atMs: number; entriesLength: number; commit?: any; place?: any }) => void} [deps.onSaved]
+ *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。place は getPlace があるとき
+ *   だけ載る（その保存を頼んだ時点の置き場・配信の組み直し Domain D の場ごとの数え方）。
  * @param {(error: unknown) => void} [deps.onError]
  * @param {(recording: boolean) => void} [deps.onRecordingChange]  走り始めと全部終わったとき（操縦席の「記録中」）。
  * @param {() => number} [deps.nowImpl=Date.now]
@@ -630,8 +714,8 @@ export function createMemoryRecorder(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   /** @type {Promise<void> | null} 走っている保存の一続き（待たせた分まで含む）。 */
   let chain = null;
-  /** @type {{ entries: ReadonlyArray<any>; promise: Promise<void>; resolve: () => void } | null} */
-  let queued = null;
+  /** @type {Array<{ entries: ReadonlyArray<any>; place: any; promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
+  const waiting = [];
 
   const callSafely = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
     if (typeof fn !== "function") return;
@@ -642,18 +726,33 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries) => {
+  const placeNow = () => {
+    if (typeof deps.getPlace !== "function") return undefined;
     try {
-      const result = await deps.writeImpl(entries);
+      return deps.getPlace();
+    } catch {
+      return null;
+    }
+  };
+
+  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
+    try {
+      const result = await deps.writeImpl(entries, place);
       if (result && result.written) {
-        callSafely(deps.onSaved, { atMs: nowImpl(), entriesLength: entries.length, commit: result.commit });
+        // 置き場（getPlace があるときだけ）も渡す: main() が「頼んだ時点の場」の保存だけを数える（配信の組み直し Domain D）。
+        callSafely(deps.onSaved, {
+          atMs: nowImpl(),
+          entriesLength: entries.length,
+          commit: result.commit,
+          ...(place !== undefined ? { place } : {})
+        });
       }
     } catch (error) {
       callSafely(deps.onError, error);
     }
   };
 
-  const start = (/** @type {ReadonlyArray<any>} */ entries) => {
+  const start = (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
     /** @type {() => void} */
     let resolveOwn = () => {};
     const own = new Promise((resolve) => {
@@ -662,12 +761,11 @@ export function createMemoryRecorder(deps) {
     callSafely(deps.onRecordingChange, true);
     chain = (async () => {
       try {
-        await runOnce(entries);
+        await runOnce(entries, place);
         resolveOwn();
-        while (queued) {
-          const next = queued;
-          queued = null;
-          await runOnce(next.entries);
+        while (waiting.length > 0) {
+          const next = /** @type {(typeof waiting)[number]} */ (waiting.shift());
+          await runOnce(next.entries, next.place);
           next.resolve();
         }
       } finally {
@@ -683,21 +781,321 @@ export function createMemoryRecorder(deps) {
     record(entriesOverride) {
       const entries = entriesOverride ?? deps.getLiveEntries();
       if (!Array.isArray(entries) || entries.length === 0) return Promise.resolve();
-      if (!chain) return start(entries);
-      if (queued) {
-        if (entries.length >= queued.entries.length) queued.entries = entries;
-        return queued.promise;
+      const place = placeNow();
+      if (!chain) return start(entries, place);
+      const last = waiting[waiting.length - 1];
+      if (last && last.place === place) {
+        if (entries.length >= last.entries.length) last.entries = entries;
+        return last.promise;
       }
       /** @type {() => void} */
       let resolve = () => {};
       const promise = new Promise((r) => {
         resolve = () => r(undefined);
       });
-      queued = { entries, promise, resolve };
+      waiting.push({ entries, place, promise, resolve });
       return promise;
     },
     isRecording: () => chain != null,
     whenIdle: () => chain ?? Promise.resolve()
+  };
+}
+
+/**
+ * @typedef {object} RoleMemoryPlace
+ * @property {string} roleId  この置き場のロール。
+ * @property {string} dir  ロールの記憶のフォルダ（`memories/<role-id>/`・②④の作業フォルダ）。
+ * @property {Promise<void>} ready  準備（git init・ローカル設定・`_conventions.md` の種）が終わったら解決する（失敗しても reject しない）。
+ * @property {{ get: () => { dateJst: string; baseName: string } }} streamRecord  このロールの今回の配信の本体のファイル名。
+ * @property {number} streamNo  この置き場を作った場の番号（beginStream のたびに 1 つ進む・まだ場が無ければ 0）。
+ */
+
+/**
+ * 記憶の置き場を今のロールに付いていかせる（配信の組み直し Domain B・stream-restructure.md §2.3）。
+ *
+ *  - place(): 今のロールの置き場を返す。ロールごとに 1 回だけ作って持ち回る（同じロールなら同じ値）。作るときに
+ *    そのロールのフォルダの準備（prepareMemoryFolder・`_conventions.md` が無ければ種の「チャッピー」をロールの呼び名に
+ *    差し替えて書く）を始め、本体のファイル名（createStreamRecordIdentity・最初の保存で 1 回だけ決める）を作る。
+ *    同じ場の中でロールを戻したときは前に作った置き場（同じ本体のファイル名）を使う。
+ *  - beginStream(startedAtMs): 配信の組み直し Domain D。場の始まりで置き場を作り直す（作った置き場を捨て、場の番号を
+ *    進め、次の place() でそのときのロールの置き場を新しい本体のファイル名で作る・準備もそこでもう一度走らせる =
+ *    冪等）。場の始まりで place() を呼び、その ready を待てば「場の始まりでそのロールの置き場が用意されている」。
+ *  - available が false（記憶の引っ越しが失敗した起動）のときは、どのロールのフォルダも準備せず、place() は null
+ *    （前の形の記録が残る根の中に、ロールのフォルダや git を作らない）。
+ *  - 準備の失敗は配信を止めない（onPrepareFailed へ・保存のたびにコミットが失敗として警告に出る・今までと同じ）。
+ *
+ * @param {object} deps
+ * @param {string} deps.root  記憶の根（本番は DEFAULT_MEMORY_DIR）。
+ * @param {() => { id: string; name: { canonical: string } }} deps.currentRole  今のロール（roleHooks.current）。
+ * @param {number} deps.startedAtMs  配信の始まり（本体のファイル名の日付）。
+ * @param {boolean} [deps.available=true]
+ * @param {(options: { dir: string; soulName: string }) => Promise<{ ok: boolean; error?: string }>} [deps.prepareImpl]
+ * @param {(options: { dir: string; startedAtMs: number }) => { get: () => { dateJst: string; baseName: string } }} [deps.createIdentityImpl]
+ * @param {(info: { roleId: string; error: string }) => void} [deps.onPrepareFailed]
+ * @returns {{ place: () => Readonly<RoleMemoryPlace> | null; beginStream: (startedAtMs: number) => void; streamNo: () => number }}
+ */
+export function createRoleMemoryPlaces(deps) {
+  const prepareImpl = deps.prepareImpl ?? ((/** @type {any} */ options) => prepareMemoryFolder(options));
+  const createIdentityImpl = deps.createIdentityImpl ?? createStreamRecordIdentity;
+  const available = deps.available !== false;
+  /** @type {Map<string, Readonly<RoleMemoryPlace>>} */
+  const places = new Map();
+  // 今の場の始まり（本体のファイル名の日付）と番号（配信の組み直し Domain D）。まだ場が無ければ起動の時刻と 0。
+  let startedAtMs = deps.startedAtMs;
+  let streamNo = 0;
+  const reportFailure = (/** @type {string} */ roleId, /** @type {string} */ error) => {
+    try {
+      deps.onPrepareFailed?.({ roleId, error });
+    } catch {
+      // 知らせ先の失敗で準備を止めない。
+    }
+  };
+  return {
+    place() {
+      if (!available) return null;
+      const role = deps.currentRole();
+      const cached = places.get(role.id);
+      if (cached) return cached;
+      /** @type {string} */
+      let dir;
+      try {
+        dir = memoryDirForRole(deps.root, role.id);
+      } catch {
+        return null;
+      }
+      const ready = Promise.resolve()
+        .then(() => prepareImpl({ dir, soulName: role.name.canonical }))
+        .then(
+          (result) => {
+            if (!result || !result.ok) reportFailure(role.id, String(result?.error ?? "unknown"));
+          },
+          (error) => reportFailure(role.id, error instanceof Error ? error.message : String(error))
+        );
+      const place = Object.freeze({
+        roleId: role.id,
+        dir,
+        ready,
+        streamRecord: createIdentityImpl({ dir, startedAtMs }),
+        streamNo
+      });
+      places.set(role.id, place);
+      return place;
+    },
+    /**
+     * 今のロールの置き場が「どのロールの・どのフォルダか」だけを返す（配信の組み直し Domain E・記憶のタブの表示）。
+     * place() と同じ決め方（今のロール・memoryDirForRole）で、置き場を作らない・準備（git init・種）を走らせない。
+     * 記憶を読み書きしない起動（引っ越しの失敗）は null。
+     * @returns {{ roleId: string; dir: string } | null}
+     */
+    placeInfo() {
+      if (!available) return null;
+      const role = deps.currentRole();
+      const cached = places.get(role.id);
+      if (cached) return { roleId: cached.roleId, dir: cached.dir };
+      try {
+        return { roleId: role.id, dir: memoryDirForRole(deps.root, role.id) };
+      } catch {
+        return null;
+      }
+    },
+    beginStream(nextStartedAtMs) {
+      startedAtMs = nextStartedAtMs;
+      streamNo += 1;
+      places.clear();
+    },
+    streamNo: () => streamNo
+  };
+}
+
+/**
+ * 起動時の引っ越しの失敗を、操縦席の上の帯の警告にする（配信の組み直し Domain E・Undine の追認: ログだけでなく上の帯
+ * にも出す）。失敗が無ければ空。文言は短く、詳しい行はログのタブの「起動時の知らせ」に出る。
+ * @param {{ roles: { status: string }; memories: { status: string } }} result  runStartupMigration の結果。
+ * @returns {Array<{ kind: string; severity: "warn" | "alert"; message: string; detail?: string | null }>}
+ */
+export function startupMigrationWarnings(result) {
+  /** @type {Array<{ kind: string; severity: "warn" | "alert"; message: string; detail?: string | null }>} */
+  const out = [];
+  if (result && result.memories && result.memories.status === "failed") {
+    out.push({
+      kind: "memory-migration-failed",
+      severity: "alert",
+      message: "記憶の引っ越しに失敗した（この起動では記憶を読み書きしない）",
+      detail: typeof (/** @type {any} */ (result.memories).error) === "string" ? /** @type {any} */ (result.memories).error : null
+    });
+  }
+  if (result && result.roles && result.roles.status === "failed") {
+    out.push({
+      kind: "role-migration-failed",
+      severity: "alert",
+      message: "ロールへの引っ越しに失敗した（この起動は既定のロールで動く）",
+      detail: typeof (/** @type {any} */ (result.roles).error) === "string" ? /** @type {any} */ (result.roles).error : null
+    });
+  }
+  return out;
+}
+
+/** 体のあるロールで器（runtime-player）につながらず、場を開かなかったときの知らせ（配信の組み直し Domain D・scope §19）。 */
+export const BODY_CONNECT_FAILED_MESSAGE =
+  "体の器（runtime-player）につながらない — runtime-player が起動していないか、channel が開いていない。" +
+  "runtime-player を起動して channel を開いてから、もう一度「配信を始める」を押す。";
+
+/** 体のあるロールで器の URL が入っていないまま「配信を始める」を押したときの知らせ（配信の組み直し Domain D）。 */
+export const BODY_URL_NOT_SET_MESSAGE =
+  "体の器（runtime-player）の URL が入っていない — 準備・設定の Channel 欄に runtime-player の channel の URL を入れてから、" +
+  "もう一度「配信を始める」を押す。";
+
+/**
+ * 場（配信を始める / 終える）の cockpit.mjs 側の口と、場ごとの記録（配信の組み直し Domain D・stream-restructure.md §3）。
+ * cockpit-server の openStream / closeStream が `hooks` を順に呼ぶ（server の `streamHooks`）。
+ *
+ *  - hooks.renewRecords（始める 2）: 場の記録を作り直す。場の番号を進め、記憶の本体のファイル名（memoryPlaces.beginStream）と
+ *    頭の文脈の記録のファイル（renewUsageLog）を新しくし、保存の数え（lastRecordedSeq / lastRecordAtMs）を 0 / null に
+ *    戻す（新しい場の転写は 0 から始まるので、前の場の seq と比べて保存を飛ばさない）。そのロールの置き場の準備
+ *    （git init・種）もここで待つ（ロールの切り替えの応答を git init で待たせない・場の始まりで用意されている）。
+ *  - hooks.openSession（始める 5）: 頭のセッションを今のロールのモデルと指示で作る（前の場のセッションは使わない）。
+ *  - hooks.connectBody（始める 6）: ロールに体があれば器につなぐ（resolveFireChannel と同じく今のロールの body を見る）。
+ *    URL が無い・つながらないなら `{ ok:false, reason }`（場は開かない）。体なしは器を見ない・つながない。
+ *  - hooks.closeSession / hooks.closeBody（畳む）: 頭のセッションを畳む・器を畳む（器は体の有無に関わらず）。
+ *  - hooks.saveFinal（終える 3）: 写した転写が前の保存から増えていれば最後の保存を頼み、走っている保存の終わりまで待つ
+ *    （上限 memoryTimeoutMs・skipMemoryWait で打ち切れる = もう一度の Ctrl+C）。増えていなければ頼まない。
+ *  - checkpoint(): 20 分ごとの保存の 1 回分。場が開いている間だけ、前の保存から転写が増えていれば頼む。
+ *  - noteSaved(info): 保存の係の onSaved。頼んだ時点の場（置き場の streamNo）が今の場のときだけ数える（前の場の
+ *    遅れて終わった保存で、新しい場の数えを上書きしない）。
+ *  - waitForRunningSaves(): Ctrl+C で場が閉じていたとき、走っている保存（前の場の最後の保存の残りなど）を待つ（頼まない）。
+ *
+ * @param {object} deps
+ * @param {{ beginStream: (startedAtMs: number) => void; place: () => any; streamNo: () => number }} deps.memoryPlaces
+ * @param {{ record: (entries?: ReadonlyArray<any>) => Promise<void>; whenIdle: () => Promise<void>; isRecording: () => boolean }} deps.memoryRecorder
+ * @param {(startedAtMs: number) => void} [deps.renewUsageLog]  頭の文脈の記録のファイルを新しくする（本番は createSessionUsageLog の作り直し）。
+ * @param {() => (void | Promise<void>)} deps.openSession  頭のセッションを作り直す（前のセッションを畳んでから作る）。
+ * @param {() => (void | Promise<void>)} deps.closeSession  頭のセッションを畳む（冪等）。
+ * @param {() => boolean} deps.hasBody  今のロールに体があるか（roleHooks.current().body）。
+ * @param {{ getUrl: () => string | null; connect: () => Promise<void>; close: () => Promise<void> }} deps.channel  器（lazyChannel）。
+ * @param {() => boolean} [deps.isStreamOpen]  場が開いているか（20 分ごとの保存の判定・server.streamStatus）。
+ * @param {() => ReadonlyArray<any>} [deps.getEntries]  ライブの転写（server.getTranscript）。
+ * @param {() => number} [deps.nowImpl=Date.now]
+ * @param {number} [deps.memoryTimeoutMs=SHUTDOWN_MEMORY_TIMEOUT_MS]  最後の保存を待つ上限。
+ * @param {typeof setTimeout} [deps.setTimeoutImpl]
+ * @param {(info: { timeoutMs: number }) => void} [deps.onMemoryWait]  保存を待ち始めたとき（ターミナルに 1 行）。
+ */
+export function createStreamVenueHooks(deps) {
+  const nowImpl = deps.nowImpl ?? Date.now;
+  const memoryTimeoutMs = deps.memoryTimeoutMs ?? SHUTDOWN_MEMORY_TIMEOUT_MS;
+  const setTimeoutImpl = deps.setTimeoutImpl ?? setTimeout;
+  /** この場で最後に保存が成り立った時刻（snapshot の memory.lastRecordAtMs）。場の始まりで null に戻す。 @type {number | null} */
+  let lastRecordAtMs = null;
+  /** この場で最後に保存が成り立った時点の転写の件数（保存を飛ばす判定）。場の始まりで 0 に戻す。 */
+  let lastRecordedSeq = 0;
+  /** 保存を待っている間だけ入る「待たずに進む」口。 @type {(() => void) | null} */
+  let skipWait = null;
+
+  /** 走っている保存を、上限つき・打ち切れる形で待つ。 @param {Promise<any>} done */
+  const waitBounded = async (done) => {
+    try {
+      deps.onMemoryWait?.({ timeoutMs: memoryTimeoutMs });
+    } catch {
+      // 知らせの失敗で待ちを止めない。
+    }
+    await Promise.race([
+      raceMemoryRecordWithTimeout(done, memoryTimeoutMs, setTimeoutImpl),
+      new Promise((resolve) => {
+        skipWait = () => resolve(undefined);
+      })
+    ]);
+    skipWait = null;
+  };
+
+  return {
+    hooks: {
+      async renewRecords() {
+        const startedAtMs = nowImpl();
+        lastRecordedSeq = 0;
+        lastRecordAtMs = null;
+        deps.renewUsageLog?.(startedAtMs);
+        deps.memoryPlaces.beginStream(startedAtMs);
+        await deps.memoryPlaces.place()?.ready;
+      },
+      async openSession() {
+        try {
+          await deps.openSession();
+          return { ok: true };
+        } catch (error) {
+          return { ok: false, reason: `頭のセッションを作れない（${error instanceof Error ? error.message : String(error)}）` };
+        }
+      },
+      async connectBody() {
+        if (deps.hasBody() === false) return { ok: true, body: false };
+        if (deps.channel.getUrl() == null) return { ok: false, reason: BODY_URL_NOT_SET_MESSAGE };
+        try {
+          await deps.channel.connect();
+          return { ok: true, body: true };
+        } catch {
+          return { ok: false, reason: BODY_CONNECT_FAILED_MESSAGE };
+        }
+      },
+      async closeSession() {
+        try {
+          await deps.closeSession();
+        } catch {
+          // best-effort（畳めなかったセッションは使わない）。
+        }
+      },
+      async closeBody() {
+        try {
+          await deps.channel.close();
+        } catch {
+          // best-effort
+        }
+      },
+      /** @param {ReadonlyArray<any>} transcript */
+      async saveFinal(transcript) {
+        const entries =
+          Array.isArray(transcript) && !shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq) ? transcript : [];
+        const done = Promise.all([deps.memoryRecorder.record(entries), deps.memoryRecorder.whenIdle()]);
+        if (!deps.memoryRecorder.isRecording()) return;
+        await waitBounded(done);
+      }
+    },
+    /**
+     * 20 分ごとの保存の 1 回分（場が開いている間だけ・転写が前の保存から増えていなければ頼まない）。
+     * @returns {boolean}  頼んだら true。
+     */
+    checkpoint() {
+      if (typeof deps.isStreamOpen !== "function" || !deps.isStreamOpen()) return false;
+      const entries = typeof deps.getEntries === "function" ? deps.getEntries() : [];
+      if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return false; // 空回しでトークンを燃やさない。
+      deps.memoryRecorder.record(entries).catch(() => {});
+      return true;
+    },
+    /**
+     * 保存の係の onSaved。今の場の保存だけを数える（置き場を持たない保存 = テストの係は数える）。
+     * @param {{ atMs: number; entriesLength: number; place?: any }} info
+     * @returns {boolean}  数えたら true。
+     */
+    noteSaved(info) {
+      const place = info ? info.place : undefined;
+      if (place && typeof place.streamNo === "number" && place.streamNo !== deps.memoryPlaces.streamNo()) return false;
+      lastRecordAtMs = info.atMs;
+      lastRecordedSeq = info.entriesLength;
+      return true;
+    },
+    lastRecordAtMs: () => lastRecordAtMs,
+    lastRecordedSeq: () => lastRecordedSeq,
+    /** 走っている保存を待つ（頼まない・上限つき・打ち切れる）。走っていなければすぐ返る。 */
+    async waitForRunningSaves() {
+      if (!deps.memoryRecorder.isRecording()) return;
+      await waitBounded(deps.memoryRecorder.whenIdle());
+    },
+    /**
+     * 保存の待ちを打ち切る（もう一度の Ctrl+C）。待っていなければ false。
+     * @returns {boolean}
+     */
+    skipMemoryWait() {
+      if (!skipWait) return false;
+      skipWait();
+      return true;
+    }
   };
 }
 
@@ -782,45 +1180,202 @@ export function createVerbosityHooks(settings, defaultMode = "normal") {
 }
 
 /**
- * settings の頭脳選択（brainChoice）を、cockpit.mjs の起動フック（resolveInitialBrain）と切替継ぎ目
- * （onSetBrain の永続化部分）へ橋渡しする（多頭化 Domain B・brain-swap-wave-plan.md §3・
- * createVerbosityHooks と同型の薄い配線層）。settings に記憶が無い、または registry（BRAIN_IDS・
- * brains.mjs）に存在しない値が入っていた場合は defaultChoice（既定 "claude"）にフォールバックする
- * （防御的・verbosity の「未知値は normal」と同じ規律・Claude 既定で無退行）。
+ * ロールの選択（配信の組み直し Domain A・旧 createBrainHooks の置き換え）。頭を選ぶ代わりにロールを選び、ロールが
+ * 名前・性格の指示・動かすモデル（頭の id）・声・口数・話し始め・hotwords・体を持つ（stream-restructure.md §2）。
  *
- * ── registry 駆動（2026-07-17 追撃）──────────────────────────────────────────
- *  cockpit.mjs は既に `BRAINS`/`BRAIN_IDS`（brains.mjs）を import 済みの層なので、cockpit-server.mjs や
- *  settings-drawer.mjs が採る「頭 id を直書きする責務境界規律」（brains.mjs を import しない層向けの
- *  規律）はここには適用されない。よってここは `BRAIN_IDS.includes(...)` で動的に検証し、頭が増減しても
- *  この関数自体は変更不要にする。
+ *  - 起動時: ロールの置き場（roles/）を読み、設定の `roleChoice` のロールを選ぶ。無ければ（引っ越し直後など）
+ *    今までの頭の選択（`brainChoice`）の系統で選ぶ（GPT 系 → chappy、それ以外・未記憶 → cody＝今までの既定）。
+ *    それも無ければ id の順で最初のロール。ロールが 1 つも読めなければ、こーでぃーの名前の既定のロールを
+ *    手元だけに持つ（置き場には書かない＝`roles/` を作らないので、次の起動で引っ越しがもう一度走れる）。
+ *  - select(id): 置き場から読み直して今のロールにし、`roleChoice` に覚える（失敗寛容）。読めなければ ok:false。
+ *  - update(patch): 今のロールの持ち物を書き換えて role.json に書く（手元だけの既定のロールは書かない・失敗寛容）。
+ *  - edit(patch) / create({ id, name }): 配信の組み直し Domain E のロールの編集・今のロールを写して新しいロール（画面の
+ *    ロールのタブ）。厳しく確かめ（role-store の applyRolePatch / copyRoleAs）、書き込みの失敗は投げる。手元だけの既定の
+ *    ロールでは断る（roles/ を作ると次の起動の引っ越しが走らなくなるため）。
+ *  - roleSettings: 口数・話し始め・声の方式の hooks（createVerbosityHooks / createSpeakStartHooks /
+ *    createTtsEngineHooks）へ、設定の代わりに渡す読み書きの口（値の出どころを設定 → ロールに替える）。
  *
- * ここは「永続化」だけを担う純関数の配線層。実際の頭のホットスワップ（現 session の dispose→null）は
- * main() の effectful な onSetBrain がこの永続化を呼んだ上で担う（createAudioDeviceHooks と main() の
- * onSetAudioDevice の関係と同型）。
- *
- * @param {{ getBrainChoice: () => string | null; setBrainChoice: (choice: string | null) => void }} settings
- * @param {string} [defaultChoice="claude"]  未記憶/未知値のフォールバック（v0 既定は Claude 頭・無退行）。
- * @returns {{
- *   resolveInitialBrain: () => string;
- *   onSetBrain: (choice: string) => void;
- * }}
+ * @param {object} options
+ * @param {string} options.rolesDir
+ * @param {{ getRoleChoice?: () => string | null; setRoleChoice?: (id: string | null) => void;
+ *   getBrainChoice?: () => string | null }} options.settings
+ * @param {(role: any) => any} [options.writeRoleImpl]  テスト注入（既定 role-store の writeRole）。
  */
-export function createBrainHooks(settings, defaultChoice = "claude") {
-  return {
-    /** 起動時の初期頭脳（未記憶/未知値は defaultChoice）。 */
-    resolveInitialBrain: () => {
-      const remembered = settings.getBrainChoice();
-      return remembered != null && BRAIN_IDS.includes(remembered) ? remembered : defaultChoice;
-    },
-    /** 頭脳選択の永続化（main() の effectful onSetBrain が dispose→null の前にこれを呼ぶ）。 */
-    onSetBrain: (choice) => {
-      try {
-        settings.setBrainChoice(choice); // 次回起動で復元（file-backed・失敗寛容）。
-      } catch {
-        // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
-      }
+export function createRoleHooks(options) {
+  const rolesDir = options.rolesDir;
+  const settings = options.settings;
+  const writeRoleImpl = options.writeRoleImpl ?? ((/** @type {any} */ role) => writeRole({ dir: rolesDir, role }));
+  // 性格の指示の写し（新しいロールを作るとき）。上書きが無ければ null（写さない＝既定の本文）。
+  const readInstructionsImpl = (/** @type {string} */ id) => readRoleInstructions({ dir: rolesDir, id }).override;
+  const writeInstructionsImpl = (/** @type {string} */ id, /** @type {string} */ text) =>
+    writeRoleInstructions({ dir: rolesDir, id, text });
+  /** @type {Array<Readonly<import("../src/roles/role-store.mjs").Role>>} */
+  let roles = listRoles({ dir: rolesDir }).roles;
+  const call = (/** @type {() => any} */ fn) => {
+    try {
+      return fn();
+    } catch {
+      return null;
     }
   };
+  const pickInitial = () => {
+    const byId = (/** @type {unknown} */ id) => roles.find((role) => role.id === id) ?? null;
+    const remembered = byId(call(() => settings.getRoleChoice?.()));
+    if (remembered) return remembered;
+    const legacyBrain = call(() => settings.getBrainChoice?.());
+    const family = byId(isCodexBrainId(legacyBrain) ? "chappy" : "cody");
+    return family ?? roles[0] ?? null;
+  };
+  const initial = pickInitial();
+  /** 置き場から読んだロールか（手元だけの既定のロールは書かない）。 */
+  let persisted = initial != null;
+  let current = initial ?? roleFromIdentity(MODEL_IDENTITIES.cody);
+
+  /** @param {Record<string, unknown>} patch */
+  const update = (patch) => {
+    const next = normalizeRole(current.id, { ...roleToJson(current), ...patch });
+    if (persisted) {
+      try {
+        writeRoleImpl(next);
+      } catch {
+        // 書き込みの失敗は操作を止めない（設定の set と同じ失敗寛容）。
+      }
+    }
+    current = next;
+    roles = roles.map((role) => (role.id === next.id ? next : role));
+    return current;
+  };
+
+  return {
+    /** 今のロール（凍っている）。 */
+    current: () => current,
+    currentId: () => current.id,
+    /** 今のロールの名前（発火の指示・whisper・呼びかけ・snapshot が読む）。 */
+    identity: () => roleIdentity(current),
+    /** 置き場から読んだロールか。 */
+    isPersisted: () => persisted,
+    /** 選べるロールの一覧（id・見せる名前・動かす頭の id だけ）。 */
+    list: () => roles.map((role) => ({ id: role.id, displayName: role.name.display, brain: role.brain })),
+    /** 置き場にあるロールの id（会話指示の API が知っている id）。 */
+    knownIds: () => roles.map((role) => role.id),
+    /**
+     * @param {string} id
+     * @returns {{ ok: true; role: Readonly<import("../src/roles/role-store.mjs").Role> } | { ok: false; reason: string }}
+     */
+    select(id) {
+      const read = readRole({ dir: rolesDir, id });
+      if (!read.ok) return { ok: false, reason: `ロール ${id} を読めない（${read.reason}）` };
+      roles = listRoles({ dir: rolesDir }).roles;
+      current = read.role;
+      persisted = true;
+      call(() => settings.setRoleChoice?.(id)); // 次回起動で復元（file-backed・失敗寛容）。
+      return { ok: true, role: current };
+    },
+    update,
+    /**
+     * 今のロールを編集する（配信の組み直し Domain E・POST /api/role/edit）。update と違い、書き換えを厳しく確かめ
+     * （applyRolePatch）、書き込みの失敗は投げる（API の 500）。置き場から読んだロールでなければ断る（手元だけの既定の
+     * ロールを書くと roles/ ができて、次の起動の引っ越しが走らなくなるため）。
+     * @param {unknown} patch
+     * @returns {{ ok: true; role: Readonly<import("../src/roles/role-store.mjs").Role> } | { ok: false; reason: string }}
+     */
+    edit(patch) {
+      if (!persisted) return { ok: false, reason: "ロールの置き場が無い（引っ越しに失敗した起動ではロールを編集できない）" };
+      const applied = applyRolePatch(current, patch);
+      if (!applied.ok) return applied;
+      writeRoleImpl(applied.role);
+      current = applied.role;
+      roles = roles.map((role) => (role.id === current.id ? current : role));
+      return { ok: true, role: current };
+    },
+    /**
+     * 今のロールを写して新しいロールを作る（配信の組み直し Domain E・POST /api/role/new）。モデル・声・口数・話し始め・
+     * 体と性格の指示（instructions.md の上書き）を写し、名前は新しい名前にする。選ぶのは呼び出し側（select）。
+     * 同じ id のロールがあれば断る。書き込みの失敗は投げる。
+     * @param {{ id: string; name?: string | null }} input
+     * @returns {{ ok: true; role: Readonly<import("../src/roles/role-store.mjs").Role> } | { ok: false; reason: string; conflict?: boolean }}
+     */
+    create(input) {
+      if (!persisted) return { ok: false, reason: "ロールの置き場が無い（引っ越しに失敗した起動ではロールを作れない）" };
+      const copied = copyRoleAs(current, { id: input.id, name: input.name ?? null });
+      if (!copied.ok) return copied;
+      const exists = roles.some((role) => role.id === copied.role.id) || readRole({ dir: rolesDir, id: copied.role.id }).ok;
+      if (exists) return { ok: false, reason: `ロール ${copied.role.id} はもうある`, conflict: true };
+      writeRoleImpl(copied.role);
+      const instructions = readInstructionsImpl(current.id);
+      if (instructions != null) writeInstructionsImpl(copied.role.id, instructions);
+      roles = listRoles({ dir: rolesDir }).roles;
+      if (!roles.some((role) => role.id === copied.role.id)) roles = [...roles, copied.role];
+      return { ok: true, role: copied.role };
+    },
+    roleSettings: {
+      getVerbosityMode: () => current.verbosity,
+      setVerbosityMode: (/** @type {string | null} */ mode) => void update({ verbosity: mode }),
+      getSpeakStartMode: () => current.speakStartMode,
+      setSpeakStartMode: (/** @type {string | null} */ mode) => void update({ speakStartMode: mode }),
+      getTtsEngine: () => current.voice.engine,
+      setTtsEngine: (/** @type {string | null} */ engine) => void update({ voice: { ...current.voice, engine } })
+    }
+  };
+}
+
+/**
+ * ロールの編集と新しいロールの口（配信の組み直し Domain E・cockpit-server の onUpdateRole / onCreateRole）。
+ * 場が閉じている間だけ呼ばれる（cockpit-server が場の途中は 409 で断る・stream-restructure.md §2.1・§3）。
+ *
+ *  - onUpdateRole(patch): 今のロールを編集する（roleHooks.edit）。編集できたら onRoleEdited（main() が頭・声の方式を
+ *    今のロールに揃え、頭の文脈の revision を進める＝次のセッションは新しい名前・モデル・体で作る）を呼び、口数・
+ *    話し始め・声の方式を返す（POST /api/role と同じ形・サーバの scheduler と Start の既定に入れる）。書き込みの失敗は投げる。
+ *  - onCreateRole({ id, name }): 今のロールを写して新しいロールを作り（roleHooks.create）、そのロールを選ぶ（selectRole =
+ *    main() の onSetRole・POST /api/role と同じ道）。
+ *
+ * @param {object} deps
+ * @param {{ edit: (patch: unknown) => any; create: (input: { id: string; name?: string | null }) => any }} deps.roleHooks
+ * @param {(role: any) => void} deps.onRoleEdited
+ * @param {(id: string) => any} deps.selectRole
+ */
+export function createRoleEditHooks(deps) {
+  return {
+    /** @param {unknown} patch */
+    onUpdateRole(patch) {
+      const result = deps.roleHooks.edit(patch);
+      if (!result || result.ok !== true) return result;
+      const role = result.role;
+      deps.onRoleEdited(role);
+      return { ok: true, verbosity: role.verbosity, speakStartMode: role.speakStartMode, ttsEngine: role.voice.engine };
+    },
+    /** @param {{ id: string; name?: string | null }} input */
+    async onCreateRole(input) {
+      const created = deps.roleHooks.create(input);
+      if (!created || created.ok !== true) return created;
+      return deps.selectRole(created.role.id);
+    }
+  };
+}
+
+/**
+ * ロールの声を声の engine の deps にする（配信の組み直し Domain A）。AivisSpeech の話者は起動引数 `--speaker` が
+ * あればそれ（ロールの値を上書きする）、無ければロールの値、それも無ければ undefined（tts-client の既定の話者）。
+ * ElevenLabs の声の id はロールの値（無ければ undefined = engine の既定の声）。
+ * @param {{ voice: { aivisSpeaker: number | null; elevenLabsVoiceId: string | null } }} role
+ * @param {{ speaker?: string }} args
+ * @returns {{ speaker: string | number | undefined; voiceId: string | undefined }}
+ */
+export function resolveRoleVoice(role, args) {
+  const speaker = args.speaker != null && args.speaker !== "" ? args.speaker : (role.voice.aivisSpeaker ?? undefined);
+  return { speaker, voiceId: role.voice.elevenLabsVoiceId ?? undefined };
+}
+
+/**
+ * ローカルの文字起こしの設定に、ロールの hotwords を重ねる（配信の組み直し Domain A）。ロールが hotwords を
+ * 持っていればそれ（空の配列 = hotwords なし）、null なら設定ファイルの値か既定のまま。
+ * @param {any} localStt  settings.getLocalStt() の値。
+ * @param {{ nameHints: { hotwords: ReadonlyArray<string> | null } }} role
+ */
+export function applyRoleHotwords(localStt, role) {
+  const hotwords = role.nameHints.hotwords;
+  if (hotwords == null) return localStt;
+  return { ...(localStt && typeof localStt === "object" ? localStt : {}), hotwords: [...hotwords] };
 }
 
 /**
@@ -838,7 +1393,7 @@ export function createBrainHooks(settings, defaultChoice = "claude") {
  */
 export function createChatSourceHooks(settings) {
   return {
-    /** cockpit-server の onSetChatSource（POST /api/chat/connect が呼ぶ）。 */
+    /** cockpit-server の onSetChatSource（POST /api/chat/connect と POST /api/chat/source（欄に入れた値の保存）が呼ぶ）。 */
     onSetChatSource: (source) => {
       try {
         settings.setChatSource(source ?? null); // 次回起動で入力欄に復元（file-backed・失敗寛容）。
@@ -976,6 +1531,8 @@ export function voiceDiagnosticReason(diagnostic) {
  * @param {() => object} [options.elevenLabsDeps]  ElevenLabs の追加 deps（readingClient など・apiKey と onReadingsFallback と onDiagnostic はここで足す）。
  * @param {(info: { engine: string; status: string; reason: string | null }) => void} [options.onStatus]
  * @param {(info?: unknown) => void} [options.onReadingsFallback]  読みが取れず簡易版の口になったとき。
+ * @param {() => string} [options.voiceKey]  声の中身（話者・声の id）の鍵（配信の組み直し Domain A）。種類が同じでも
+ *   鍵が engine を作ったときと違えば作り直す（ロールを替えて声が替わったとき）。既定は常に同じ鍵。
  */
 export function createVoiceEngineManager(options = {}) {
   const createEngine = options.createEngine ?? createVoiceEngine;
@@ -984,10 +1541,13 @@ export function createVoiceEngineManager(options = {}) {
   const elevenLabsDeps = options.elevenLabsDeps ?? (() => ({}));
   const onStatus = typeof options.onStatus === "function" ? options.onStatus : () => {};
   const onReadingsFallback = typeof options.onReadingsFallback === "function" ? options.onReadingsFallback : () => {};
+  const voiceKey = typeof options.voiceKey === "function" ? options.voiceKey : () => "";
   /** @type {any} */
   let engine = null;
   /** @type {string | null} */
   let engineKind = null;
+  /** 今の engine を作ったときの声の鍵。 @type {string | null} */
+  let engineKey = null;
   /** @type {(() => void) | null} */
   let statusOff = null;
   /** 今の engine の診断の受け口（作り直したら古い engine の診断は捨てる）。 @type {{ live: boolean; reason: string | null } | null} */
@@ -1015,6 +1575,7 @@ export function createVoiceEngineManager(options = {}) {
     diagSlot = null;
     engine = null;
     engineKind = null;
+    engineKey = null;
     if (old) {
       try {
         old.dispose();
@@ -1029,7 +1590,8 @@ export function createVoiceEngineManager(options = {}) {
    * @returns {{ ok: true } | { ok: false; reason: string }}
    */
   const prepare = (kind) => {
-    if (engine != null && engineKind === kind) {
+    const key = voiceKey();
+    if (engine != null && engineKind === kind && engineKey === key) {
       // 落ちた ElevenLabs の engine は使い回さない（下で dispose し、キーを読み直して作り直す）。
       if (!(kind === "elevenlabs" && engine.status === "down")) return { ok: true };
     }
@@ -1091,6 +1653,7 @@ export function createVoiceEngineManager(options = {}) {
     }
     engine = made;
     engineKind = kind;
+    engineKey = key;
     diagSlot = slot;
     if (made && typeof made.onStatus === "function") {
       statusOff = made.onStatus((/** @type {string} */ status) => {
@@ -1106,10 +1669,11 @@ export function createVoiceEngineManager(options = {}) {
     prepare,
     /**
      * Start より前の Fire 用: 今の engine を返す（無ければ kind で作る）。用意できなければ理由の Error を投げる。
+     * 声の鍵が作ったときと違えば（ロールを替えて声が替わった）作り直す。
      * @param {string} kind
      */
     ensure(kind) {
-      if (engine != null) return engine;
+      if (engine != null && engineKey === voiceKey()) return engine;
       const result = prepare(kind);
       if (!result.ok) throw new Error(result.reason);
       return engine;
@@ -1512,22 +2076,73 @@ export function formatReplyLatencyLine(record) {
     `stt=${ms(seg.transcribeMs)} judge=${ms(seg.judgeMs)} screen=${ms(seg.screenMs)} llm=${ms(seg.llmFirstMs)} ` +
     `sentence=${ms(seg.firstSentenceMs)} tts=${ms(seg.ttsMs)} voice=${ms(seg.voiceMs)} other=${ms(record?.otherMs)}` +
     `${typeof record?.voice === "string" ? ` voiceEngine=${record.voice}` : ""}` +
-    `${record?.spoken === false ? " spoken=no" : ""}\n`
+    `${record?.spoken === false ? " spoken=no" : ""}` +
+    // 体なしの返事（声の区間に器の往復が入らない・配信の組み直し Domain C）。体があるときは今と同じ行。
+    `${record?.bodyless === true ? " body=none" : ""}\n`
   );
+}
+
+/**
+ * 操縦席の終わり（Ctrl+C / stdin の EOF）の手順（配信の組み直し Domain D・stream-restructure.md §3「Ctrl+C」）。
+ *  1. もう一度呼ばれたら（2 回目の Ctrl+C）、記録の待ちを打ち切るだけ（待っていなければ何もしない）。
+ *  2. 場が閉じていなければ「配信を終える」と同じ道（server.endStream = 写し → 畳む → 記憶の最後の保存を待つ → 閉じる）を
+ *     通る。開きかけ・閉じかけなら終わるのを待つ。閉じていれば保存は頼まない（場の外では記録しない）。
+ *  3. server.close() → 場が閉じていたときだけ、走っている保存（前の場の最後の保存の残りなど）を待つ（頼まない・
+ *     上限つき・打ち切れる。2 で終えたときはそこで待ったので待たない）→ 残りの常駐を畳む（disposeRest）。どこで
+ *     失敗しても finalize（プロセスの終わり）は必ず走る。
+ * @param {object} deps
+ * @param {(line: string) => void} deps.write
+ * @param {() => void} [deps.beforeClose]  最初に畳むもの（隙間の圧縮の見張り）。
+ * @param {{ streamStatus: () => { phase: string }; endStream: () => Promise<any>; close: () => Promise<void> }} deps.server
+ * @param {{ skipMemoryWait: () => boolean; waitForRunningSaves: () => Promise<void> }} deps.venue
+ * @param {() => Promise<void>} deps.disposeRest
+ * @param {() => Promise<void>} deps.finalize
+ * @returns {() => Promise<void>}
+ */
+export function createCockpitShutdown(deps) {
+  let closing = false;
+  return async function shutdown() {
+    if (closing) {
+      if (deps.venue.skipMemoryWait()) deps.write("[cockpit] 記録の書き出しを待たずに終了します。\n");
+      return;
+    }
+    closing = true;
+    deps.write("\n[cockpit] closing…\n");
+    try {
+      try {
+        deps.beforeClose?.();
+      } catch {
+        // best-effort
+      }
+      let ended = false;
+      if (deps.server.streamStatus().phase !== "closed") {
+        deps.write("[cockpit] 配信を終えます（記録してから畳みます・もう一度 Ctrl+C で記録を待たずに終了）。\n");
+        await deps.server.endStream();
+        ended = true;
+      }
+      await deps.server.close(); // orchestrator.dispose を含む（cockpit-server の close 契約）。
+      // 終えるを通ったときは、そこで走っている保存の終わりまで待った（か打ち切った）ので、もう一度は待たない。
+      if (!ended) await deps.venue.waitForRunningSaves();
+      await deps.disposeRest();
+    } finally {
+      await deps.finalize();
+    }
+  };
 }
 
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --open                待受け完了後に既定ブラウザを開く（Windows）
-  --channel <ws-url>    器の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の**初期値**
-                        （後方互換）。指定すると起動時に LLM セッションを eager 生成し Fire を先充填。
-                        未指定でも操縦席（ブラウザ）の Channel 欄から URL を入力すれば Fire が有効化される
-                        （URL は次回起動まで記憶される）。URL も Fire も使わなければ何も spawn しない（S2.5）。
+  --channel <ws-url>    器（runtime-player）の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の
+                        **初期値**（後方互換）。ふだんは操縦席の「準備・設定」→「配信の準備」の器（Channel）の欄に
+                        入れる（ロールに体があるときだけ出る・URL は次回起動まで記憶される）。指定しても起動時には
+                        何もつながない（頭のセッションと器の接続は「配信を始める」で作る）。体のないロールでは使わない。
   --tts-base-url <url>  AivisSpeech の base URL（既定 http://127.0.0.1:10101）
-  --speaker <id>        TTS 話者 ID
+  --speaker <id>        AivisSpeech の話者 ID（ロールの話者を上書きする・無ければロールの値）
   --fire-window-min <m> 注入窓の幅（分・既定 ${FIRE_WINDOW_MS / 60000}）
   --fire-max-chars <n>  注入テキストの文字数上限（既定 ${FIRE_MAX_CHARS}）
-  起動後、表示された http://127.0.0.1:<port>/ をブラウザで開く。Ctrl+C / EOF で終了。
+  起動後、表示された http://127.0.0.1:<port>/ をブラウザで開き「配信を始める」を押す。Ctrl+C / EOF で終了
+  （配信中なら「配信を終える」と同じ道で記録してから畳む）。
 `;
 
 async function main() {
@@ -1545,8 +2160,31 @@ async function main() {
   } catch {
     // 掃除は best effort（起動を止めない）。
   }
+  // 配信の組み直し Domain A・B: 起動時の引っ越し（stream-restructure.md §2.4）。設定の分はロールの置き場（roles/）が
+  // 無いときだけ設定ファイルから chappy と cody を作る（古いキーは消さない）。記憶の分は memories/ の直下に記録があって
+  // memories/chappy/ が無いときだけ、中身を .git ごと memories/chappy/ へ移す（記憶のフォルダの準備より前）。2 つの
+  // 条件は混ぜずに独立に判定する。移す前の写しは、この起動の 1 つの写しのフォルダ（tmp/restructure-backups/ の下）に
+  // 両方置く。何が起きたかはここでターミナルへ 1 回だけ出し、操縦席のログのタブにも同じ行を出す。
+  const migrationBackup = migrationBackupDir(DEFAULT_MIGRATION_BACKUP_ROOT, Date.now());
+  const startupMigration = runStartupMigration({
+    rolesDir: DEFAULT_ROLES_DIR,
+    settingsPath: DEFAULT_SETTINGS_PATH,
+    memoriesDir: DEFAULT_MEMORY_DIR,
+    backupDir: migrationBackup
+  });
+  const startupNotices = formatStartupMigrationReport(startupMigration);
+  const startupMigrationFailed =
+    startupMigration.roles.status === "failed" || startupMigration.memories.status === "failed";
+  for (const line of startupNotices) {
+    if (startupMigrationFailed) process.stderr.write(`[cockpit] WARN: ${line}\n`);
+    else process.stdout.write(`[cockpit] ${line}\n`);
+  }
+
   // ── S3 追撃 domain-c: fire は常時結線・session/player は遅延生成・Channel URL は後入力可 ──────
   const settings = createFileSettingsStore();
+  // 配信の組み直し Domain A: ロールの選択（頭の選択の置き換え・§createRoleHooks）。名前・性格の指示・動かすモデル・
+  // 声・口数・話し始め・hotwords は今のロールから引く。
+  const roleHooks = createRoleHooks({ rolesDir: DEFAULT_ROLES_DIR, settings });
   // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
   const visionTargetHooks = createVisionTargetHooks(settings);
   // S6「会話が続く」: 魂の声の出力デバイス設定（vision target と同型の薄い橋渡し・§createAudioDeviceHooks）。
@@ -1555,20 +2193,22 @@ async function main() {
   const selfFireHooks = createSelfFireHooks(settings, false);
   // 「朗読と合いの手」: barge-in ON/OFF の永続トグル（既定 ON・裁定 1・§createBargeInHooks）。
   const bargeInHooks = createBargeInHooks(settings, true);
-  // 口数モード（quiet/normal/chatty・既定 "normal"・§createVerbosityHooks）。
-  const verbosityHooks = createVerbosityHooks(settings);
-  // 多頭化 Domain B: 頭脳選択（claude/codex・既定 "claude"・§createBrainHooks）。永続化の薄い橋渡し
-  // （ホットスワップの effectful 部分は下の onSetBrain が担う）。
-  const brainHooks = createBrainHooks(settings);
+  // 口数モード（quiet/normal/chatty・既定 "normal"・§createVerbosityHooks）。配信の組み直し Domain A から値の
+  // 出どころは今のロール（role.json の verbosity）。
+  const verbosityHooks = createVerbosityHooks(roleHooks.roleSettings);
   // S7「視聴者が混ざる」: 視聴者チャット配信 source の永続化（Channel URL と同型の薄い橋渡し・
   // §createChatSourceHooks）。実チャット器官の Connect/停止は cockpit-server 所有（POST 駆動）。
   const chatSourceHooks = createChatSourceHooks(settings);
   // 操縦席の文字起こし選択（whisper / ElevenLabs・既定 whisper・§createSttEngineHooks）。
   const sttEngineHooks = createSttEngineHooks(settings);
-  // 声の方式（AivisSpeech / ElevenLabs・既定 aivis・§createTtsEngineHooks）。
-  const ttsEngineHooks = createTtsEngineHooks(settings);
-  // 話し始めの方式（従来 / speak-now・初回既定 speak-now・§createSpeakStartHooks）。
-  const speakStartHooks = createSpeakStartHooks(settings);
+  // 声の方式（AivisSpeech / ElevenLabs・既定 aivis・§createTtsEngineHooks）。出どころは今のロール（voice.engine）。
+  const ttsEngineHooks = createTtsEngineHooks(roleHooks.roleSettings);
+  // 話し始めの方式（従来 / speak-now・初回既定 speak-now・§createSpeakStartHooks）。出どころは今のロール
+  // （speakStartMode）。相槌どうしの最小間隔は技術のつまみなので設定ファイルのまま。
+  const speakStartHooks = createSpeakStartHooks({
+    ...roleHooks.roleSettings,
+    getBackchannelMinIntervalSec: () => settings.getBackchannelMinIntervalSec()
+  });
   // 忙しい間のコメントの扱い（あとで拾う / 見逃す・既定 あとで拾う・§createCommentBusyHooks）。
   const commentBusyHooks = createCommentBusyHooks(settings);
   const commentHold = commentBusyHooks.resolveCommentHold();
@@ -1585,6 +2225,10 @@ async function main() {
   let sessionInstructionRevision = null;
   let sessionContextRevision = 0;
   let sessionAcceptedContextRevision = null;
+  // 今のセッションを作ったときのロールの体の有無（①に表情の教えを足したか）。今のロールの体と違えば次の Fire の境目で
+  // 作り直す（配信の組み直し Domain C）。
+  /** @type {boolean | null} */
+  let sessionBody = null;
   /** @type {ReturnType<typeof createStreamPlayer> | null} */
   let player = null;
   let audioRevision = 0;
@@ -1592,14 +2236,22 @@ async function main() {
   // 声の差し替え口（Start のときに作る・種類が変われば作り直す）。desiredTtsEngine は最後に Start で選ばれた方式
   // （起動直後は記憶の値）で、Start より前の Fire もこの方式で作る。
   let desiredTtsEngine = ttsEngineHooks.resolveInitialTtsEngine();
+  // 配信の組み直し Domain A: 声（AivisSpeech の話者・ElevenLabs の声の id）は今のロールから引く。`--speaker` は
+  // ロールの話者を上書きする（§resolveRoleVoice）。話者・声の id が替われば engine を作り直す（voiceKey）。
+  const roleVoice = () => resolveRoleVoice(roleHooks.current(), args);
   const voiceEngines = createVoiceEngineManager({
-    aivisDeps: () => ({ ttsBaseUrl: args.ttsBaseUrl, speaker: args.speaker }),
+    aivisDeps: () => ({ ttsBaseUrl: args.ttsBaseUrl, speaker: roleVoice().speaker }),
     // D と E の接点（voice-swap-wave-plan.md §3）: 読みは AivisSpeech の /accent_phrases（tts-client の口）から取る。
-    elevenLabsDeps: () => ({
-      readingClient: createTtsClient({ baseUrl: args.ttsBaseUrl, speaker: args.speaker }),
-      ttsBaseUrl: args.ttsBaseUrl,
-      speaker: args.speaker
-    }),
+    elevenLabsDeps: () => {
+      const voice = roleVoice();
+      return {
+        readingClient: createTtsClient({ baseUrl: args.ttsBaseUrl, speaker: voice.speaker }),
+        ttsBaseUrl: args.ttsBaseUrl,
+        speaker: voice.speaker,
+        ...(voice.voiceId ? { voiceId: voice.voiceId } : {})
+      };
+    },
+    voiceKey: () => JSON.stringify(roleVoice()),
     onStatus: (info) => server?.setVoiceEngineStatus(info),
     onReadingsFallback: () => server?.reportVoiceReadingsFallback()
   });
@@ -1608,42 +2260,53 @@ async function main() {
   // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
   /** @type {ReturnType<typeof createCockpitServer> | undefined} */
   let server;
-  // 多頭化 Domain B: 現在の頭（claude/codex）。session let と同格の main() スコープ let。ensureFireResources
-  // がこの値で頭を分岐し、onSetBrain が切替時に更新する（切替は現 session を dispose→null にし、次の
-  // ensureFireResources が新頭を生成する＝inventory §2-1 のホットスワップ経路）。KILL 状態は orchestrator
-  // 側にあり切替を跨いで生存する（頭非依存・触らない）。
-  let currentBrain = brainHooks.resolveInitialBrain();
+  // 多頭化 Domain B: 現在の頭。session let と同格の main() スコープ let。ensureFireResources がこの値で頭を分岐する。
+  // 配信の組み直し Domain A: 頭は今のロールが指す（role.json の brain）。onSetRole がロールを替えたときに更新する
+  // （切替は現 session を次の Fire の境目で dispose→null にし、次の ensureFireResources が新しい頭を生成する）。
+  // KILL 状態は orchestrator 側にあり切替を跨いで生存する（頭非依存・触らない）。
+  let currentBrain = roleHooks.current().brain;
+  // 配信の組み直し Domain C: 今のロールに体があるか（role.json の body）。値は持ち回らず、使う時点でいつも今のロールから
+  // 読む（受理のたび・頭に聞くたび・セッションを作るとき）。耳が止まっている間にロールを替えても古い値が残らない。
+  const currentBody = () => roleHooks.current().body !== false;
+  // 会話指示 = 今のロールの性格の指示（roles/<id>/instructions.md・§createRoleInstructionStore）。
+  // 編集画面に読むだけで見せる教えは、①に足すものと同じく今のロールの体に合わせる（体なしは expression を出さない）。
   const conversationInstructionHooks = createConversationInstructionHooks(
-    settings,
-    () => currentBrain,
-    instructionRevision
+    createRoleInstructionStore({ dir: DEFAULT_ROLES_DIR, knownIds: () => roleHooks.knownIds() }),
+    () => roleHooks.currentId(),
+    instructionRevision,
+    () => listSoulSkills({ names: soulSkillNamesForBody(currentBody()) })
   );
-  // One runtime authority for the selected brain. All current identity seams
-  // (prompt, Whisper, scheduler, and public state) read this closure at the
-  // appropriate lifecycle boundary; no surface keeps its own brain/name map.
-  const getCurrentBrainIdentity = () => resolveBrainIdentity(currentBrain);
+  // One runtime authority for the current name. All identity seams (prompt, Whisper, scheduler, and public
+  // state) read this closure at the appropriate lifecycle boundary. 配信の組み直し Domain A: 名前は今のロールが
+  // 持つ（頭からは引かない）。
+  const getCurrentRoleIdentity = () => roleHooks.identity();
 
   // 配信間記憶（記憶の作り直し Wave 2）: 起動時に記憶を①へ載せることはしない（①は思い出したいときに頼む・
   // recall-flow.md §7）。記憶のフォルダを準備し（無ければ作る・git init・`_conventions.md` の種）、
   // 今回の配信の本体のファイル名を最初の保存で一度だけ決めて持ち回る（申し送り 2）。
+  // 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（memories/<role-id>/・§createRoleMemoryPlaces）。
+  // 準備・本体のファイル名・②・④はどれも今のロールの置き場を使う。記憶の引っ越しが失敗した起動では、記憶を読み書き
+  // しない（前の形の記録が残る根を触らない）。配信の組み直し Domain D: 置き場（本体のファイル名）は場の始まりで作り直し、
+  // そのロールの置き場の準備もそこで待つ（§createStreamVenueHooks の renewRecords・起動時とロールの切り替えでは待たない）。
   const memoryStartedAtMs = Date.now();
-  const memoryPrepared = await prepareMemoryFolder({ dir: DEFAULT_MEMORY_DIR });
-  if (!memoryPrepared.ok) {
-    // 記録できないだけで配信は止めない（保存のたびにコミットが失敗として警告に出る）。
-    process.stderr.write(`[cockpit] WARN: memory folder is not ready (${memoryPrepared.error})\n`);
-  }
-  const streamRecord = createStreamRecordIdentity({ dir: DEFAULT_MEMORY_DIR, startedAtMs: memoryStartedAtMs });
+  const memoryPlaces = createRoleMemoryPlaces({
+    root: DEFAULT_MEMORY_DIR,
+    currentRole: () => roleHooks.current(),
+    startedAtMs: memoryStartedAtMs,
+    available: startupMigration.memories.status !== "failed",
+    onPrepareFailed: ({ roleId, error }) => {
+      // 記録できないだけで配信は止めない（保存のたびにコミットが失敗として警告に出る）。
+      process.stderr.write(`[cockpit] WARN: memory folder is not ready (${roleId}: ${error})\n`);
+    }
+  });
   // 頭のセッション（①・②）の警告はターミナルへ 1 行。MCP の名前の読み取り（config/read）の失敗は、ユーザーの
   // MCP が起動しうるので操縦席の上の帯にも alert で出す（ユーザー決定 2026-10-21・続けるのは同じ）。
   const onBrainWarning = (/** @type {string} */ w) => {
     process.stderr.write(`[cockpit] WARN: ${w}\n`);
     if (isMcpConfigReadFailureWarning(w)) server?.reportMcpConfigReadFailed();
   };
-  // 最新の記録時刻（state snapshot の memory.lastRecordAtMs）。このプロセス内で記録が成立するまでは
-  // null（前回起動の記録時刻を跨いで持ち越さない設計判断・裁量判断は完了報告に記載）。
-  let lastRecordAtMs = /** @type {number | null} */ (null);
-  // チェックポイントの「転写が前回記録から不変ならスキップ」判定用（shouldSkipMemoryCheckpoint）。
-  let lastRecordedSeq = 0;
+  // 最新の記録時刻（snapshot の memory.lastRecordAtMs）と「転写が前回記録から不変ならスキップ」の判定用の件数は、
+  // 配信の組み直し Domain D から場ごと（§createStreamVenueHooks が持つ・場の始まりで null / 0 に戻す）。
 
   // 初期 Channel URL: --channel（後方互換）> settings の lastChannelUrl（前回起動の記憶）> 未設定。
   const initialUrl = args.channel ?? settings.getLastChannelUrl() ?? null;
@@ -1651,9 +2314,10 @@ async function main() {
   let channelRevision = 0;
   let appliedChannelRevision = 0;
   const fireDiagnostics = createFireDiagnostics();
-  // 頭の文脈の記録（起動ごと 1 ファイル・session-usage/・本文なし・context-growth-2026-10.md §6）。
-  // 発火ごとの 1 行（Codex の頭のとき）と、圧縮の開始・終了を 1 行ずつ。
-  const sessionUsageLog = createSessionUsageLog();
+  // 頭の文脈の記録（session-usage/・本文なし・context-growth-2026-10.md §6）。発火ごとの 1 行（Codex の頭のとき）と、
+  // 圧縮の開始・終了を 1 行ずつ。配信の組み直し Domain D: 場 1 つに 1 ファイル（場の始まりで作り直す・
+  // §createStreamVenueHooks の renewRecords）。起動から最初の場までの分は起動の時刻のファイル（書くものが無ければ作られない）。
+  let sessionUsageLog = createSessionUsageLog();
   // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6・§8）。目安は settings ファイルのキー
   // （無ければ 20 万トークン / 3 秒 / 10 分）。圧縮を始める大きさは操縦席の設定（頭脳・会話のタブ）からも変えられ、
   // contextCompactionHooks が保存と走っている compactor の差し替えを担う（次の確認から効く）。隙間の材料は
@@ -1721,14 +2385,25 @@ async function main() {
    * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（耳の Start で先に作る）。
    */
   const ensureFireResources = () => {
+    ensureSession();
+    ensureVoiceResources();
+  };
+
+  /**
+   * 頭のセッションを遅延生成する（冪等・既に生成済みなら何もしない）。配信の組み直し Domain D から、ふだんは「配信を始める」
+   * で作る（§openStreamSession）。場の途中で会話指示・体が替わったときは、次の Fire の境目で作り直す（applyDesiredFireSettings）。
+   */
+  const ensureSession = () => {
     if (session == null) {
       // 多頭化 Domain B: 頭の生成は registry 経由（brains.mjs の BRAINS）。未知値は防御的に Claude へ。
       const brainDef = BRAINS[currentBrain] ?? BRAINS.claude;
-      // Resolve once for this newly-created session. A later brain selection
+      // Resolve once for this newly-created session. A later role selection
       // disposes this session; the next Fire resolves the new identity again.
-      const sessionIdentity = getCurrentBrainIdentity();
+      const sessionIdentity = getCurrentRoleIdentity();
       // このセッションの頭（fast の対応の有無をどの頭のものとして覚えるか）。
       const sessionBrain = currentBrain;
+      // このセッションのロールの体の有無（体なしは表情の教えを①に足さない・配信の組み直し Domain C）。
+      const sessionHasBody = currentBody();
       // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
       //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
       //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
@@ -1749,9 +2424,11 @@ async function main() {
       session = brainDef.create({
         // 人格の指示は「名前 + 会話指示」+ 魂の教え（`<recall>` の使い方・skills/）。起動時の記憶の搭載は撤去
         // （記憶の作り直し Wave 2）。教えは会話指示とは別の固定の部分で、会話指示を書き換えても消えない（Wave 3）。
-        systemPrompt: appendSoulSkills(
-          buildFireSystemPrompt(sessionIdentity, conversationInstructionHooks.getProfile(currentBrain).body),
-          loadSoulSkills({ onWarning: onBrainWarning })
+        // 配信の組み直し Domain A: 名前と性格の指示は今のロールから（§buildRoleSessionSystemPrompt）。
+        systemPrompt: buildRoleSessionSystemPrompt(
+          sessionIdentity,
+          conversationInstructionHooks.getProfile(roleHooks.currentId()).body,
+          loadSoulSkills({ names: soulSkillNamesForBody(sessionHasBody), onWarning: onBrainWarning })
         ),
         onWarning: onBrainWarning,
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
@@ -1770,8 +2447,36 @@ async function main() {
       });
       sessionInstructionRevision = instructionRevision.getRevision();
       sessionAcceptedContextRevision = sessionContextRevision;
+      sessionBody = sessionHasBody;
     }
-    ensureVoiceResources();
+  };
+
+  /**
+   * 頭のセッションを畳む（冪等・配信の組み直し Domain D: 「配信を終える」と、始めるの途中の失敗の巻き戻し）。畳んだ頭の
+   * 圧縮はもう続かないので、操縦席の「圧縮中」も戻す。
+   */
+  const disposeSession = async () => {
+    const current = session;
+    if (current == null) return;
+    session = null;
+    sessionInstructionRevision = null;
+    sessionAcceptedContextRevision = null;
+    sessionBody = null;
+    server?.resetContextCompaction();
+    try {
+      await current.dispose();
+    } catch {
+      // best-effort（畳んだセッションは使わない）。
+    }
+  };
+
+  /**
+   * 「配信を始める」の頭のセッション（stream-restructure.md §3 の 5）: 前の場のセッション（や起動時に作ったもの）は使わず、
+   * 今のロールのモデルと指示で作り直す。
+   */
+  const openStreamSession = async () => {
+    await disposeSession();
+    ensureSession();
   };
 
   /**
@@ -1808,7 +2513,9 @@ async function main() {
   };
 
   const applyDesiredFireSettings = async () => {
-    if (appliedChannelRevision !== channelRevision) {
+    // 器の URL の差し替えは体のあるロールのときだけ（体なしは器を使わない。差し替えは体のあるロールに戻った最初の
+    // Fire の境目で効く・配信の組み直し Domain C）。
+    if (currentBody() && appliedChannelRevision !== channelRevision) {
       lazyChannel.setUrl(desiredChannelUrl);
       appliedChannelRevision = channelRevision;
     }
@@ -1824,7 +2531,8 @@ async function main() {
     const sessionStale =
       session != null &&
       (sessionInstructionRevision !== instructionRevision.getRevision() ||
-        sessionAcceptedContextRevision !== sessionContextRevision);
+        sessionAcceptedContextRevision !== sessionContextRevision ||
+        sessionBody !== currentBody());
     if (sessionStale) {
       const stale = session;
       try {
@@ -1839,15 +2547,18 @@ async function main() {
         session = null;
         sessionInstructionRevision = null;
         sessionAcceptedContextRevision = null;
+        sessionBody = null;
       }
     }
   };
 
   // orchestrator に渡す session/player は proxy（実体は ensureFireResources で遅延生成）。
   // session.ask は URL 未設定なら spawn せず明示エラー（→ orchestrator が fireError 診断に落とす）。
+  // 配信の組み直し Domain C: URL の確かめはロールに体があるときだけ（hasBody）。
   // S5: ask(input) は string | content ブロック配列を透過する（createSessionProxy 参照）。
   const sessionProxy = createSessionProxy({
     getUrl: () => lazyChannel.getUrl(),
+    hasBody: currentBody,
     ensureFireResources,
     getSession: () => session,
     ensureSessionCurrent: applyDesiredFireSettings
@@ -1877,15 +2588,17 @@ async function main() {
       return /** @type {any} */ (player).onEvent(listener);
     }
   };
-  const productionSpeakDeps = Object.freeze({
-    ttsBaseUrl: args.ttsBaseUrl,
-    speaker: args.speaker
-  });
+  // 既定の AivisSpeech engine の deps（話者は今のロールの声・`--speaker` が上書き）。受理のたびに作る。
+  const productionSpeakDeps = () =>
+    Object.freeze({
+      ttsBaseUrl: args.ttsBaseUrl,
+      speaker: roleVoice().speaker
+    });
   const acquireAcceptedFireResources = async () => {
     await applyDesiredFireSettings();
-    if (lazyChannel.getUrl() == null) {
-      throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
-    }
+    // 配信の組み直し Domain C: 体の有無は受理の時点の今のロールから読む。体ありは今どおり URL が無ければ断る。
+    // 体なしは器を渡さない（URL を見ない・運び手は手元の再生器だけで鳴らす・§resolveFireChannel）。
+    const fireChannel = resolveFireChannel({ body: currentBody(), channel: lazyChannel });
     ensureFireResources();
     const acceptedSession = session;
     // 進行中の発話はこの player / engine を最後まで使う（デバイス変更の作り直しは次の Fire の境目）。
@@ -1893,17 +2606,18 @@ async function main() {
     const acceptedEngine = voiceEngines.current();
     return Object.freeze({
       session: acceptedSession,
-      channel: lazyChannel,
+      channel: fireChannel.channel,
+      body: fireChannel.body,
       player: acceptedPlayer,
       engine: acceptedEngine,
-      speakDeps: productionSpeakDeps,
+      speakDeps: productionSpeakDeps(),
       configuration: Object.freeze({
         brain: currentBrain,
         sessionContextRevision,
         instructionRevision: instructionRevision.getRevision(),
         audioDevice: audioDeviceHooks.getAudioDevice(),
         audioRevision,
-        channelUrl: lazyChannel.getUrl(),
+        channelUrl: fireChannel.channelUrl,
         channelRevision,
         // ①の turn/start に送る速さの段（Codex の頭のときだけ・受理の時点の fast の設定・Claude は null）。
         serviceTier: codexFastHooks.serviceTierFor(currentBrain)
@@ -1913,7 +2627,8 @@ async function main() {
         instructionRevision: instructionRevision.getRevision(),
         audioRevision,
         channelRevision,
-        channelConnectionGeneration: lazyChannel.acceptedConnectionGeneration()
+        // 体なしの Fire は器につながないので、器の接続の世代も持たない（null）。
+        channelConnectionGeneration: fireChannel.body ? lazyChannel.acceptedConnectionGeneration() : null
       })
     });
   };
@@ -1937,20 +2652,69 @@ async function main() {
   };
 
   /**
-   * 操縦席（POST /api/brain）から頭脳を設定/変更する（多頭化 Domain B・onSetAudioDevice の型）。
+   * 操縦席（POST /api/role）からロールを選ぶ（配信の組み直し Domain A・旧 onSetBrain の置き換え）。
+   * 場が閉じていない間は cockpit-server が断る（場の途中でロールを替えない・stream-restructure.md §2.1・Domain D）。
    *
-   * ── 頭のホットスワップ【次 accepted Fire で dispose→再生成】──────────────────
-   *  brainHooks.onSetBrain(choice) で選択を永続化し desired context revision を進める。進行中 Fire の
-   *  session は触らず、次の sessionProxy.ask 境界でのみ置換する。
-   * @param {string} choice
+   * ── ロールの切替【次 accepted Fire で dispose→再生成】────────────────────────
+   *  頭・名前・性格の指示は、desired context revision を進めて次の sessionProxy.ask 境界でセッションを作り直して
+   *  替わる（旧 onSetBrain と同じ。進行中 Fire の session は触らない）。声は次の Start（か Start より前の Fire）で、
+   *  話者・声の id が違えば engine を作り直す（voiceKey）。口数・話し始め・声の方式は戻り値で cockpit-server へ
+   *  渡す（scheduler と Start の既定に入れる）。whisper の手がかり・呼びかけの照合は次の発話から今のロールを読む。
+   *  体の有無（Domain C）は持ち回らず、次の受理・頭に聞くとき・セッションを作るときに今のロールから読む（currentBody）。
+   * @param {string} id
    */
-  const onSetBrain = async (choice) => {
-    brainHooks.onSetBrain(choice); // 次回起動でも復元（file-backed・失敗寛容）。
-    currentBrain = choice;
+  const onSetRole = async (id) => {
+    const selected = roleHooks.select(id);
+    if (!selected.ok) return selected;
+    const role = selected.role;
+    currentBrain = role.brain;
+    desiredTtsEngine = role.voice.engine;
     sessionContextRevision += 1;
     // Codex の残量は頭が Codex のときだけ（Codex でなくなったら不明に戻す・Codex 同士の切替は同じアカウントなので保つ）。
-    if (!isCodexBrainId(choice)) quotaMonitor.clearCodex();
-    process.stdout.write(`[cockpit] brain set: ${choice}\n`);
+    if (!isCodexBrainId(currentBrain)) quotaMonitor.clearCodex();
+    // 配信の組み直し Domain B・D: 記憶の置き場は替えたロールのフォルダ。準備（git init・種）は場の始まりで待つ
+    // （ロールの切り替えの応答を待たせない・§createStreamVenueHooks の renewRecords）。走っている・待っている保存は、
+    // 頼んだときのロールの置き場に書く（createMemoryRecorder の getPlace）。
+    process.stdout.write(`[cockpit] role set: ${role.id} (brain ${role.brain})\n`);
+    return { ok: true, verbosity: role.verbosity, speakStartMode: role.speakStartMode, ttsEngine: role.voice.engine };
+  };
+
+  /**
+   * 操縦席（POST /api/role/edit・/api/role/new）からロールを編集する・今のロールを写して新しいロールを作る（配信の組み直し
+   * Domain E・§createRoleEditHooks）。場が閉じている間だけ（cockpit-server が場の途中は 409 で断る）。編集したら、頭・声の
+   * 方式を今のロールに揃え、頭の文脈の revision を進める（次のセッションは新しい名前・モデル・性格・体で作る＝ロールの
+   * 切り替えと同じ）。体は持ち回らないので currentBody() がすぐ新しい値を読む。
+   */
+  const roleEditHooks = createRoleEditHooks({
+    roleHooks,
+    selectRole: (id) => onSetRole(id),
+    onRoleEdited: (role) => {
+      currentBrain = role.brain;
+      desiredTtsEngine = role.voice.engine;
+      sessionContextRevision += 1;
+      if (!isCodexBrainId(currentBrain)) quotaMonitor.clearCodex();
+      process.stdout.write(`[cockpit] role edited: ${role.id} (brain ${role.brain}, body ${role.body ? "on" : "off"})\n`);
+    }
+  });
+
+  /**
+   * state snapshot に載せるロールの現況（今のロールと選べるロールの一覧）。配信の組み直し Domain E: ロールの編集の画面が
+   * 読む持ち物（名前・声・口数・話し始め・体）も載せる。性格の指示の本文は載せない（専用の API だけ）。
+   */
+  const roleStatus = () => {
+    const role = roleHooks.current();
+    return {
+      id: role.id,
+      displayName: role.name.display,
+      brain: role.brain,
+      body: role.body,
+      name: { canonical: role.name.canonical, display: role.name.display, latin: role.name.latin },
+      voice: { engine: role.voice.engine, aivisSpeaker: role.voice.aivisSpeaker, elevenLabsVoiceId: role.voice.elevenLabsVoiceId },
+      verbosity: role.verbosity,
+      speakStartMode: role.speakStartMode,
+      editable: roleHooks.isPersisted(),
+      roles: roleHooks.list()
+    };
   };
 
   /**
@@ -1972,23 +2736,31 @@ async function main() {
     return { brain: currentBrain, credentialHealth: existsSync(def.credentialPath) };
   };
 
-  // ── 配信間記憶: 保存の係（定期・手動「今日を記録」・耳の Stop・Ctrl+C のどれもここを通る・直列）──────────
+  // ── 配信間記憶: 保存の係（定期・手動「今日を記録」・配信を終える（Ctrl+C）のどれもここを通る・直列）──────────
   //  1 回の保存 = ②書き出し役（使い捨ての Codex・cwd = 記憶のフォルダ・workspace-write）が本体と目次を書き、
   //  魂が記憶のフォルダの git にコミットする（writeStreamRecord）。②の頭は Codex に固定（resolveWriterBrainDef）。
   //  server は下方の createCockpitServer(...) で代入される前方参照(sessionProxy の getSession と同型)。
+  //  配信の組み直し Domain B: 記憶のフォルダ（と本体のファイル名）は保存を頼んだ時点のロールの置き場（getPlace）。
+  //  配信の組み直し Domain D: 引き金は 20 分ごと・手動「今日を記録」（どちらも場が開いている間だけ）・「配信を終える」
+  //  （Ctrl+C も同じ道）。耳の Stop の引き金は「配信を終える」に 1 本化した。
   const memoryRecorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
-    writeImpl: (entries) =>
-      writeStreamRecord({
+    getPlace: () => memoryPlaces.place(),
+    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place) => {
+      if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
+      await place.ready;
+      return writeStreamRecord({
         create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
         entries,
-        record: streamRecord.get(),
-        dir: DEFAULT_MEMORY_DIR,
+        record: place.streamRecord.get(),
+        dir: place.dir,
         onWarning: onBrainWarning
-      }),
-    onSaved: ({ atMs, entriesLength, commit }) => {
-      lastRecordAtMs = atMs;
-      lastRecordedSeq = entriesLength;
+      });
+    },
+    onSaved: (info) => {
+      // 配信の組み直し Domain D: 頼んだ時点の場の保存だけを、その場の数えにする（§createStreamVenueHooks の noteSaved）。
+      streamVenue.noteSaved(info);
+      const { commit } = info;
       // 本文・トピック名は出さない（コミットの有無だけ）。
       const what = commit && commit.ok ? (commit.committed ? `commit ${String(commit.commit).slice(0, 7)}` : "no changes") : "commit failed";
       process.stdout.write(`[cockpit] memory recorded (${what})\n`);
@@ -2002,44 +2774,80 @@ async function main() {
     onRecordingChange: () => server?.memoryStatusChanged()
   });
 
-  // 引き金①: 定期保存(20 分毎・転写が前回記録から不変ならスキップ=inventory §2-4)。
+  // 配信の組み直し Domain D: 場（配信を始める / 終える）の cockpit.mjs 側の口と場ごとの記録（§createStreamVenueHooks）。
+  // cockpit-server の openStream / closeStream が streamHooks として順に呼ぶ。器の URL は場の始まりで今の値に揃えてから
+  // 確かめる（体のあるロールのときだけ・体なしは器を見ない）。
+  const streamVenue = createStreamVenueHooks({
+    memoryPlaces,
+    memoryRecorder,
+    renewUsageLog: (startedAtMs) => {
+      const previous = sessionUsageLog;
+      sessionUsageLog = createSessionUsageLog({ startedAtMs });
+      void previous.flush();
+    },
+    openSession: openStreamSession,
+    closeSession: disposeSession,
+    hasBody: currentBody,
+    channel: {
+      getUrl: () => {
+        if (appliedChannelRevision !== channelRevision) {
+          lazyChannel.setUrl(desiredChannelUrl);
+          appliedChannelRevision = channelRevision;
+        }
+        return lazyChannel.getUrl();
+      },
+      connect: () => lazyChannel.connect(),
+      close: () => lazyChannel.close()
+    },
+    isStreamOpen: () => server?.streamStatus().phase === "open",
+    getEntries: () => (server ? server.getTranscript() : []),
+    onMemoryWait: ({ timeoutMs }) =>
+      process.stdout.write(`[cockpit] 記録を書き出し中…（最大 ${timeoutMs / 1000} 秒・Ctrl+C で終了中ならもう一度 Ctrl+C で待たずに終了）\n`)
+  });
+
+  // 引き金①: 定期保存(20 分毎・場が開いている間だけ・転写が前回記録から不変ならスキップ=inventory §2-4)。
   // unref() でプロセス生存に寄与させない(ears-cli 等の既存タイマ規律)。
   const memoryCheckpointTimer = setInterval(() => {
-    const entries = server ? server.getTranscript() : [];
-    if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return; // 空回しでトークンを燃やさない。
-    memoryRecorder.record(entries).catch(() => {});
+    streamVenue.checkpoint();
   }, MEMORY_CHECKPOINT_INTERVAL_MS);
   memoryCheckpointTimer.unref();
 
-  /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(保存の係の薄いラッパ)。 */
+  /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(保存の係の薄いラッパ・場が閉じていればサーバが断る)。 */
   const onMemoryRecord = () => memoryRecorder.record();
-
-  /**
-   * 引き金③: 耳の Stop（cockpit-server が pipeline を畳む前の転写を渡す）。Stop の応答は待たせない。
-   * 前の保存から転写が増えていなければ書かない（「今日を記録」の直後の Stop で②を空回りさせない）。
-   */
-  const onEarsStopping = (/** @type {ReadonlyArray<any>} */ transcript) => {
-    if (shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq)) return;
-    memoryRecorder.record(transcript).catch(() => {});
-  };
 
   /**
    * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
    * 同じ決め方）を cwd = 記憶のフォルダ・read-only・最後の答えだけで作る。警告は①②と同じ onBrainWarning へ。
+   * 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（ほかのロールの記憶は読まない）。
    * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number }} job
    */
-  const recallRunner = (job) =>
-    runRecall({
+  const recallRunner = async (job) => {
+    const place = memoryPlaces.place();
+    if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
+    await place.ready;
+    return runRecall({
       create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
       request: job.request,
       entries: job.entries,
       nowMs: job.nowMs,
-      dir: DEFAULT_MEMORY_DIR,
+      dir: place.dir,
       onWarning: onBrainWarning
     });
+  };
 
-  /** state snapshot に載せる記憶の現況（最後に記録した時刻と、今記録中か）。 */
-  const memoryStatus = () => ({ lastRecordAtMs, recording: memoryRecorder.isRecording() });
+  /** state snapshot に載せる記憶の現況（この場で最後に記録した時刻と、今記録中か）。 */
+  // 配信の組み直し Domain E: 記憶のタブに「どのロールの記憶か」を出す（memoryPlaces.placeInfo・置き場は作らない）。
+  const memoryStatus = () => {
+    const info = memoryPlaces.placeInfo();
+    return {
+      lastRecordAtMs: streamVenue.lastRecordAtMs(),
+      recording: memoryRecorder.isRecording(),
+      available: info != null,
+      roleId: info ? info.roleId : null,
+      roleName: info ? roleHooks.current().name.display : null,
+      dir: info ? info.dir : null
+    };
+  };
 
   /** fireOrchestratorFactory は常に注入する（Channel URL 未設定でも fire は「使えないが結線済み」）。 */
   const fireOrchestratorFactory = (/** @type {any} */ hooks) =>
@@ -2099,7 +2907,7 @@ async function main() {
       // （vision-capture-latency §4・使えない間は captureWindow＝毎回起動に戻る）。
       getVisionTarget: visionTargetHooks.getVisionTarget,
       captureImpl: residentCapture.capture,
-      speakDeps: productionSpeakDeps,
+      speakDeps: productionSpeakDeps(),
       ...(windowMs != null ? { windowMs } : {}),
       ...(maxChars != null ? { maxChars } : {})
     });
@@ -2118,30 +2926,35 @@ async function main() {
     );
   };
 
-  /** state snapshot に載せる Channel の現況（redact 済み・token を平文で出さない）。 */
+  /**
+   * state snapshot に載せる Channel の現況（redact 済み・token を平文で出さない）。
+   * 配信の組み直し Domain C: 今のロールの体の有無（body）も載せる。体なしなら画面の器の状態は「体なし」
+   * （view-logic/status.mjs の channelStatusView）。
+   */
   const channelStatus = () => {
     const u = desiredChannelUrl;
     return {
       configured: u != null,
       url: u != null ? redactToken(u) : null,
-      connection: lazyChannel.connectionStatus()
+      connection: lazyChannel.connectionStatus(),
+      body: currentBody()
     };
   };
 
-  // --channel 明示指定は従来どおり起動時に eager 生成（TTFT 先払い・S3 挙動不変）。
-  if (args.channel) {
-    ensureFireResources();
-  }
+  // 配信の組み直し Domain D: --channel で起動しても、起動時には頭のセッションを作らない（先充填はやめた）。頭のセッションは
+  // 「配信を始める」で今のロールのモデルと指示で作る（§openStreamSession・stream-restructure.md §3 の 5）。
 
   server = createCockpitServer({
     port: args.port ?? DEFAULT_COCKPIT_PORT,
     indexHtmlPath: cockpitHtmlPath,
     settingsStore: settings,
     // Current identity providers are request/handling-time closures. The
-    // server consumes this same resolver-backed view for Whisper, scheduler,
-    // and additive public state; changing currentBrain does not require ear or
+    // server consumes this same role-backed view for Whisper, scheduler,
+    // and additive public state; changing the role does not require ear or
     // scheduler recreation.
-    currentBrainIdentity: getCurrentBrainIdentity,
+    currentRoleIdentity: getCurrentRoleIdentity,
+    // 配信の組み直し Domain A: 起動時の引っ越しの結果（ログのタブに出す・引っ越しが無ければ空）。
+    notices: startupNotices,
     fireOrchestratorFactory,
     onSetChannelUrl,
     channelStatus,
@@ -2163,11 +2976,16 @@ async function main() {
     // 口数モード（quiet/normal/chatty・起動時は settings から復元・既定 "normal"）。
     verbosityInitialMode: verbosityHooks.resolveInitialVerbosity(),
     onSetVerbosity: verbosityHooks.onSetVerbosity,
-    // 多頭化 Domain B: 頭脳選択（claude/codex）。POST /api/brain で onSetBrain（永続化 + 現 session の
-    // dispose→null によるホットスワップ）を呼び、snapshot に brainStatus()（頭札 + 資格情報の存在確認）を
-    // 載せる。brain の状態正本は cockpit.mjs 側の currentBrain で、起動時の現況は brainStatus() が
-    // そのまま運ぶ（audioDevice/channel/visionTarget と同型＝別途 initial は持たせない）。
-    onSetBrain,
+    // 配信の組み直し Domain A: ロールの選択（旧 頭脳選択）。POST /api/role で onSetRole（選択の永続化 + 次の Fire の
+    // 境目でのセッションの作り直し）を呼び、snapshot に roleStatus()（今のロール・一覧）と brainStatus()（ロールが
+    // 指す頭の札 + 資格情報の存在確認）を載せる。状態の正本は cockpit.mjs 側（roleHooks・currentBrain）。
+    onSetRole,
+    roleStatus,
+    // 配信の組み直し Domain E: ロールの編集（POST /api/role/edit）と、今のロールを写して新しいロール（POST /api/role/new）。
+    onUpdateRole: roleEditHooks.onUpdateRole,
+    onCreateRole: roleEditHooks.onCreateRole,
+    // 配信の組み直し Domain E: 起動時の引っ越しの失敗は上の帯の警告にも出す（ログのタブの行に加えて）。
+    startupWarnings: startupMigrationWarnings(startupMigration),
     brainStatus,
     // Conversation instructions are exposed only through the dedicated local API. The hook owns durable
     // settings writes and effective revision advancement; no instruction text enters state/SSE/transcript.
@@ -2193,7 +3011,8 @@ async function main() {
     onSetSttEngine: sttEngineHooks.onSetSttEngine,
     // ローカルの文字起こし（Parakeet / Zipformer）の設定（画面なし・設定ファイルのキー）。Start ごとに読む。
     // モデルの存在確認は cockpit-server の既定（vendor/models）に任せる。
-    localSttSettings: () => settings.getLocalStt(),
+    // 配信の組み直し Domain A: hotwords は今のロールの名前の手がかり（ロールに無ければ設定ファイルか既定）。
+    localSttSettings: () => applyRoleHotwords(settings.getLocalStt(), roleHooks.current()),
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
     // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶し、耳を開く前に engine を用意する
     // （種類が変われば作り直す・ElevenLabs のキーはここで読む）。用意できなければ Start は理由つきで失敗する。
@@ -2216,8 +3035,8 @@ async function main() {
       }
     },
     onEarsStopped: () => residentCapture.stop(),
-    // 配信間記憶: 耳の Stop で、pipeline を畳む前の転写を保存の係へ渡す（close 経由では呼ばれない＝Ctrl+C は下の shutdown）。
-    onEarsStopping,
+    // 配信の組み直し Domain D: 場（配信を始める / 終える）の口。場の記録の作り直し・頭のセッション・器・記憶の最後の保存。
+    streamHooks: streamVenue.hooks,
     // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
     // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
     // （.env.decisions.local をコード内で直接読む）に任せる。
@@ -2253,72 +3072,41 @@ async function main() {
   quotaMonitor.start();
   contextCompactor.start();
   process.stdout.write(`[cockpit] listening on ${url} (loopback only)\n`);
-  process.stdout.write(`[cockpit] open  ${url}/  in your browser — pick a mic, press Start, speak.\n`);
+  process.stdout.write(`[cockpit] open  ${url}/  in your browser — 「配信を始める」を押して、話しかける。\n`);
   const startupUrl = lazyChannel.getUrl();
-  if (startupUrl) {
+  // 配信の組み直し Domain D: 頭のセッションと器の接続は「配信を始める」で作る（起動時には作らない・--channel でも同じ）。
+  if (!currentBody()) {
+    // 配信の組み直し Domain C: 体の無いロールは器を使わない（URL の有無を案内しない）。
+    process.stdout.write(
+      `[cockpit] fire wired: ロール ${roleHooks.currentId()} は体なし — 器（Channel）にはつながず、手元の再生器だけで声を出します` +
+        "（表情タグは使いません）。LLM セッションは「配信を始める」で作ります。\n"
+    );
+  } else if (startupUrl) {
     process.stdout.write(
       `[cockpit] fire enabled: channel = ${redactToken(startupUrl)} ` +
         `(window ${(args.fireWindowMin ?? FIRE_WINDOW_MS / 60000)} min, max ${args.fireMaxChars ?? FIRE_MAX_CHARS} chars). ` +
-        (args.channel
-          ? "LLM セッションは起動時に先充填済み。"
-          : "設定から復元。LLM セッションは初回 Fire 時に生成します。") +
-        " Channel は初回 Fire 時に接続します（失敗は fire error として操縦席に出ます・次の Fire で再試行）。\n"
+        (args.channel ? "起動引数から。" : "設定から復元。") +
+        "LLM セッションと Channel の接続は「配信を始める」で作ります（Channel につながらなければ配信は始まりません）。\n"
     );
   } else {
     process.stdout.write(
-      "[cockpit] fire wired but no channel URL yet — 操縦席の Channel 欄に URL を入れると Fire が有効化されます" +
-        "（URL も Fire も使わなければ何も spawn しません = S2.5 挙動）。\n"
+      "[cockpit] fire wired but no channel URL yet — 操縦席の Channel 欄に URL を入れてから「配信を始める」を押してください" +
+        "（体のあるロールは Channel につながらないと配信を始められません）。\n"
     );
   }
-  process.stdout.write("[cockpit] Ctrl+C / EOF で終了します（魂は close で畳みます）。\n");
+  process.stdout.write("[cockpit] Ctrl+C / EOF で終了します（配信中なら「配信を終える」と同じ道で記録してから畳みます）。\n");
 
-  let closing = false;
-  /** 記録の書き出しを待っている間だけ入る「待たずに終える」口（もう一度 Ctrl+C で呼ぶ）。 @type {(() => void) | null} */
-  let skipMemoryWait = null;
-  const shutdown = async () => {
-    if (closing) {
-      if (skipMemoryWait) {
-        process.stdout.write("[cockpit] 記録の書き出しを待たずに終了します。\n");
-        skipMemoryWait();
-      }
-      return;
-    }
-    closing = true;
-    process.stdout.write("\n[cockpit] closing…\n");
-    contextCompactor.dispose();
-    // 配信間記憶: 引き金④(Ctrl+C の最後の保存)。★重要な配管事実: 転写バッファは pipeline 所有(cockpit-server
-    // 内)で、server.close() は pipeline を dispose して null に戻す(cockpit-server.mjs の close 契約)。
-    // よって転写のスナップショットは close() より前に確保する(close 後には転写が取れない)。
-    // 前の保存から転写が増えていなければ、もう一度は書かない（耳の Stop や「今日を記録」の直後の終了で②を空回りさせない）。
-    const liveEntries = server.getTranscript();
-    const finalMemoryEntries = shouldSkipMemoryCheckpoint(liveEntries.length, lastRecordedSeq) ? [] : liveEntries;
-    try {
-      await server.close(); // orchestrator.dispose を含む（cockpit-server の close 契約）。
-      // 配信間記憶: 最後の保存は close() 直後・常駐 dispose の前(inventory §2-3・L0 設計判断 3)。走っている保存
-      // （耳の Stop・定期など）があれば、その終わりも待つ（保存は直列・②を途中で切らない）。
-      // best-effort + timeout(shutdown が固まらない): 失敗/timeout/もう一度の Ctrl+C のどれでも下の
-      // session/player/lazyChannel dispose は必ず走る(race 自体は例外を投げない=普通に処理が進む)。
-      const memoryDone = Promise.all([memoryRecorder.record(finalMemoryEntries), memoryRecorder.whenIdle()]);
-      if (memoryRecorder.isRecording()) {
-        process.stdout.write(
-          `[cockpit] 記録を書き出し中…（最大 ${SHUTDOWN_MEMORY_TIMEOUT_MS / 1000} 秒・もう一度 Ctrl+C で待たずに終了）\n`
-        );
-        await Promise.race([
-          raceMemoryRecordWithTimeout(memoryDone, SHUTDOWN_MEMORY_TIMEOUT_MS),
-          new Promise((resolve) => {
-            skipMemoryWait = () => resolve(undefined);
-          })
-        ]);
-        skipMemoryWait = null;
-      }
-      // S3: fire 結線の常駐リソースも確実に畳む（リーク禁止・cli.mjs の dispose 順の型）。
-      if (session) {
-        try {
-          await session.dispose();
-        } catch {
-          // best-effort
-        }
-      }
+  // 配信の組み直し Domain D: Ctrl+C は、場が開いていれば「配信を終える」と同じ道（server.endStream）を通ってから畳む
+  // （§createCockpitShutdown）。閉じていれば保存は頼まない。もう一度の Ctrl+C で記録の待ちを打ち切る。
+  const shutdown = createCockpitShutdown({
+    write: (line) => process.stdout.write(line),
+    beforeClose: () => contextCompactor.dispose(),
+    server,
+    venue: streamVenue,
+    // S3: fire 結線の常駐リソースも確実に畳む（リーク禁止・cli.mjs の dispose 順の型）。頭のセッションと器は場の終わりで
+    // 畳み済みのはず（冪等）。
+    disposeRest: async () => {
+      await disposeSession();
       if (player) {
         try {
           player.dispose();
@@ -2327,14 +3115,13 @@ async function main() {
         }
       }
       voiceEngines.dispose();
-      if (lazyChannel) {
-        try {
-          await lazyChannel.close();
-        } catch {
-          // best-effort
-        }
+      try {
+        await lazyChannel.close();
+      } catch {
+        // best-effort
       }
-    } finally {
+    },
+    finalize: async () => {
       // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
       residentCapture.stop();
       quotaMonitor.stop();
@@ -2342,7 +3129,7 @@ async function main() {
       await Promise.race([sessionUsageLog.flush(), new Promise((resolve) => setTimeout(resolve, 1000))]);
       process.exit(0);
     }
-  };
+  });
   process.on("SIGINT", shutdown);
   // stdin EOF（Ctrl+Z→Enter / パイプ終端）でも畳む（ears-cli.mjs の型）。
   const rl = createInterface({ input: process.stdin });

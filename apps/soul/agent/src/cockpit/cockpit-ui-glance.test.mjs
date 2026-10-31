@@ -9,7 +9,7 @@ import { CommentsPanel } from "./ui/comments.mjs";
 import { BottomBar } from "./ui/bottom-bar.mjs";
 import { COCKPIT_CSS } from "./ui/styles.mjs";
 import { emptyGlance, glanceAfterSseEvent, conversationRowsView, commentRowsView } from "./view-logic/glance-timeline.mjs";
-import { latencyBarView, quotaGaugeView } from "./view-logic/glance-meters.mjs";
+import { latencyBarView, quotaGaugeView, streamStartView } from "./view-logic/glance-meters.mjs";
 
 // 操縦席の作り直し（2 回目: 画面・cockpit-glance-redesign.md）の部品の vnode 走査（render 不要・hooks 非使用の部品だけ）。
 // 表示の結び付けと文言は view-logic（glance-timeline / glance-meters の fixture）が固定し、ここは「描くだけ」の写像を固定する。
@@ -88,15 +88,62 @@ test("ConversationPanel: 会話の行・判定の札・遅延の棒・反応の�
   ]);
 });
 
-test("ConversationPanel: 配信前は会話の場所の中央に「準備・設定を開く」（押すと onOpenSettings）", () => {
+test("ConversationPanel: 配信前（場が閉じている間）は会話の場所の中央に「配信を始める」と「準備・設定」（配信の組み直し Domain D）", () => {
   let opened = 0;
-  const vnode = ConversationPanel({ rows: [], preStream: true, onOpenSettings: () => (opened += 1) });
-  const button = collectElements(vnode).find((n) => n.type === "button");
-  assert.equal(button.props.class, "prestream-open");
-  assert.equal(collectText(button).join(""), "準備・設定を開く");
-  button.props.onClick();
+  let started = 0;
+  const vnode = ConversationPanel({
+    rows: [],
+    preStream: true,
+    start: streamStartView({ phase: "closed", error: null }),
+    onStartStream: () => (started += 1),
+    onOpenSettings: () => (opened += 1)
+  });
+  const buttons = collectElements(vnode).filter((n) => n.type === "button");
+  assert.deepEqual(buttons.map((b) => b.props.class), ["prestream-start", "prestream-open"]);
+  assert.equal(collectText(buttons[0]).join(""), "配信を始める");
+  assert.equal(collectText(buttons[1]).join(""), "準備・設定");
+  assert.equal(buttons[0].props.disabled, false);
+  buttons[0].props.onClick();
+  buttons[1].props.onClick();
+  assert.equal(started, 1);
   assert.equal(opened, 1);
   assert.equal(collectElements(vnode).some((n) => n.props && n.props.class === "convo-list"), false);
+  assert.equal(collectElements(vnode).some((n) => n.props && n.props.class === "prestream-error"), false, "理由が無ければ出さない");
+});
+
+test("ConversationPanel: 始められなかった理由（runtime-player が起動していない等）と、閉じかけの「記録中…」を中央に出す", () => {
+  const reason = "体の器（runtime-player）につながらない — runtime-player が起動していないか、channel が開いていない。";
+  const failed = ConversationPanel({ rows: [], preStream: true, start: streamStartView({ phase: "closed", error: reason }) });
+  const err = collectElements(failed).find((n) => n.props && n.props.class === "prestream-error");
+  assert.ok(err);
+  assert.equal(err.props.role, "alert");
+  assert.equal(collectText(err).join(""), reason);
+  const closing = ConversationPanel({ rows: [], preStream: true, start: streamStartView({ phase: "closing", error: null }) });
+  const start = collectElements(closing).find((n) => n.props && n.props.class === "prestream-start");
+  assert.equal(start.props.disabled, true);
+  assert.equal(collectText(start).join(""), "配信を終えています…");
+  const note = collectElements(closing).find((n) => n.props && n.props.class === "prestream-note");
+  assert.equal(collectText(note).join(""), "記録中…");
+  const opening = ConversationPanel({ rows: [], preStream: true, start: streamStartView({ phase: "opening", error: null }) });
+  const openingStart = collectElements(opening).find((n) => n.props && n.props.class === "prestream-start");
+  assert.equal(openingStart.props.disabled, true);
+  assert.equal(collectText(openingStart).join(""), "配信を始めています…");
+});
+
+test("BottomBar: 「配信を終える」は場が開いている間だけ歯車の左に出し、2 回押し（1 回目で armed）", () => {
+  let ended = 0;
+  const closedBar = BottomBar({ settings: { stream: { phase: "closed" } }, onEndStream: () => (ended += 1) });
+  assert.equal(collectElements(closedBar).some((n) => n.props && typeof n.props.class === "string" && n.props.class.startsWith("stream-end")), false);
+  const openBar = BottomBar({ settings: { stream: { phase: "open" } }, endArmed: false, onEndStream: () => (ended += 1) });
+  const buttons = collectElements(openBar).filter((n) => n.type === "button");
+  assert.deepEqual(buttons.map((b) => b.props.class), ["stream-end", "settings-toggle"], "歯車の左");
+  assert.equal(collectText(buttons[0]).join(""), "配信を終える");
+  buttons[0].props.onClick();
+  assert.equal(ended, 1);
+  const armedBar = BottomBar({ settings: { stream: { phase: "open" } }, endArmed: true });
+  const armed = collectElements(armedBar).find((n) => n.type === "button" && String(n.props.class).startsWith("stream-end"));
+  assert.equal(armed.props.class, "stream-end armed");
+  assert.equal(collectText(armed).join(""), "もう一度押すと配信を終える");
 });
 
 test("ConversationRow: 相槌の間隔の薄い行・種類の札（手動）", () => {
