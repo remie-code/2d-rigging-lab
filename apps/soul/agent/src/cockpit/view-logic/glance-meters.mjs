@@ -164,17 +164,23 @@ export function warningsView(list, nowMs) {
 
 /**
  * 状態のピル（聞いてる / 考えてる / 喋ってる / 圧縮中）。耳が止まっている間に暇なら「止まってる」（配信前）。
- * 優先順位: 喋ってる > 圧縮中 > 考えてる > 聞いてる > 起動中 > 止まってる。圧縮中に届いた発火は圧縮の終わりまで
+ * 優先順位: 喋ってる > 圧縮中 > 考えてる > （場の）始めてる・記録中 > 聞いてる > 起動中 > 止まってる。圧縮中に届いた発火は圧縮の終わりまで
  * （最大 60 秒）待たされるので、その間は「考えてる」ではなく「圧縮中」を見せる（2026-10-18 合意）。
  * @param {string | null | undefined} soul  SSE soul の state。
  * @param {string | null | undefined} ears  snapshot の ears。
  * @param {boolean | null | undefined} [compacting]  snapshot の compacting（頭の会話の圧縮の最中か）。
+ * @param {{ phase?: string } | null | undefined} [stream]  snapshot の stream（配信の組み直し Domain E: 考えてる の次に
+ *   開きかけ「始めてる」・閉じかけ「記録中」を出す。開いている・閉じている・無いときは今のまま）。
  * @returns {{ text: string; className: string }}
  */
-export function statusPillView(soul, ears, compacting) {
+export function statusPillView(soul, ears, compacting, stream) {
   if (soul === "speaking") return { text: "喋ってる", className: "status-pill speaking" };
   if (compacting === true) return { text: "圧縮中", className: "status-pill compacting" };
   if (soul === "thinking") return { text: "考えてる", className: "status-pill thinking" };
+  // 配信の組み直し Domain E: 場の開きかけ・閉じかけ（記憶の最後の保存を待つ間）だけ場の状態を出す（それ以外は今のまま）。
+  const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
+  if (phase === "opening") return { text: "始めてる", className: "status-pill starting" };
+  if (phase === "closing") return { text: "記録中", className: "status-pill recording" };
   if (ears === "listening") return { text: "聞いてる", className: "status-pill listening" };
   if (ears === "starting") return { text: "起動中", className: "status-pill starting" };
   return { text: "止まってる", className: "status-pill stopped" };
@@ -257,10 +263,15 @@ export function driveSummaryView(settings) {
   const s = settings || {};
   const pick = (/** @type {Record<string, string>} */ labels, /** @type {any} */ v) =>
     typeof v === "string" ? labels[v] ?? v : "—";
+  // 配信の組み直し Domain E: 口数・話し始めはロールの値（snapshot の role.verbosity / role.speakStartMode）。ロールが
+  // 持っていない古いサーバは今までどおり scheduler の現況（verbosity / speakStart）。
+  const role = /** @type {any} */ (s).role;
+  const verbosity = role && typeof role.verbosity === "string" ? role.verbosity : s.verbosity;
+  const speakStart = role && typeof role.speakStartMode === "string" ? role.speakStartMode : s.speakStart;
   return [
     { label: "自発", value: s.selfFire ? (s.selfFire.enabled ? "ON" : "OFF") : "—" },
-    { label: "口数", value: pick(VERBOSITY_LABELS, s.verbosity) },
-    { label: "話し始め", value: pick(SPEAK_START_LABELS, s.speakStart) },
+    { label: "口数", value: pick(VERBOSITY_LABELS, verbosity) },
+    { label: "話し始め", value: pick(SPEAK_START_LABELS, speakStart) },
     { label: "忙しい間のコメント", value: pick(COMMENT_BUSY_LABELS, s.commentBusy) }
   ];
 }

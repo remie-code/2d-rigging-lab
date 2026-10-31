@@ -135,6 +135,21 @@ export function initialDeviceSelection(options, preferred) {
 }
 
 /**
+ * 保存した値を選んだ状態で出す select の選択値（配信の組み直し Domain E・stream-restructure.md §6: ゲームの窓・声の出力先）。
+ * ユーザーが選び直している間（edited）で、その値がまだ一覧にあればそのまま。そうでなければ保存した値（一覧に無ければ先頭・
+ * 一覧が空なら ""）。一覧と保存した値（snapshot）の届く順に関わらず、届くたびに呼んでよい。
+ * @param {Array<{ value: string; label: string }>} options
+ * @param {string | null | undefined} saved
+ * @param {string} current
+ * @param {boolean} edited
+ * @returns {string}
+ */
+export function savedDeviceSelection(options, saved, current, edited) {
+  if (edited && options.some((o) => o.value === current)) return current;
+  return initialDeviceSelection(options, saved);
+}
+
+/**
  * 設定 POST の共通失敗文言（503 = 未注入・!ok = "set failed: error"・成功 = null）。
  * @param {{ status: number; ok: boolean; j?: { error?: string | null } | null }} res
  * @param {string} notAvailableText
@@ -208,6 +223,36 @@ export function memoryStatusLabel(memory) {
   if (!memory) return "not available";
   const last = typeof memory.lastRecordAtMs === "number" ? formatClock(memory.lastRecordAtMs) : "まだ記録なし";
   return `最後に記録: ${last}${memory.recording === true ? "（記録中…）" : ""}`;
+}
+
+/**
+ * 記憶のタブの見出しの下: どのロールの記憶か（配信の組み直し Domain E・cockpit.mjs の memoryPlaces.placeInfo の roleId / dir）。
+ * 記憶の引っ越しに失敗した起動（available:false）はその旨。roleId を持たない古いサーバ・未注入は ""（何も出さない）。
+ * @param {{ available?: boolean; roleId?: string | null; roleName?: string | null; dir?: string | null } | null | undefined} memory
+ * @returns {string}
+ */
+export function memoryPlaceLabel(memory) {
+  if (!memory) return "";
+  if (memory.available === false) return "記憶の引っ越しに失敗したので、この起動では記憶を読み書きしない（次の起動でもう一度確かめる）";
+  if (typeof memory.roleId !== "string" || memory.roleId === "") return "";
+  const name = typeof memory.roleName === "string" && memory.roleName.trim() ? memory.roleName : memory.roleId;
+  return `${name} の記憶（${typeof memory.dir === "string" && memory.dir ? memory.dir : memory.roleId}）`;
+}
+
+/**
+ * 「今日を記録」ボタン（配信の組み直し Domain D・E: 場が開いている間だけ押せる見た目）。stream を持たない古いサーバ（null）は
+ * 今までどおり押せる（サーバが断る）。連打防止の busy でも押せない。
+ * @param {{ phase?: string } | null | undefined} stream  snapshot の stream。
+ * @param {boolean} busy
+ * @returns {{ disabled: boolean; note: string }}
+ */
+export function memoryRecordButtonView(stream, busy) {
+  const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
+  const outside = phase != null && phase !== "open";
+  return {
+    disabled: busy === true || outside,
+    note: outside ? "配信を始めている間だけ記録できる（「配信を終える」でも記録する）" : ""
+  };
 }
 
 // ── 圧縮を始める大きさ（設定「頭脳・会話」タブ）──────────────────────────────
@@ -413,6 +458,9 @@ export function streamLocksInputs(stream) {
   const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
   return phase === "opening" || phase === "open" || phase === "closing";
 }
+
+/** 場が開いている間にマイク・文字起こしの欄に添える案内（配信の組み直し Domain E）。 */
+export const STREAM_LOCKED_INPUTS_NOTE = "配信の途中はマイク・文字起こしを替えられない（配信を終えてから）";
 
 /**
  * POST /api/ears/start 応答 → 失敗文言（:740-742）。!ok（409 transitioning / 500 とも）は

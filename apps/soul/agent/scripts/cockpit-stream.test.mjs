@@ -328,6 +328,8 @@ test("配信を始める: ロールを固める → 場の記録を作り直す 
   try {
     // 場が閉じている間に KILL を ON にしておく（始めるで OFF に戻る）。
     await post(url, "/api/kill", { killed: true });
+    // 配信の組み直し Domain E: YouTube は「この起動で場を開く前に Connect したもの」だけ場に持ち込む。
+    await post(url, "/api/chat/connect", { source: "https://youtube.example/live" });
     assert.equal((await state(url)).killed, true);
     assert.equal((await state(url)).stream.phase, "closed");
     v.events.length = 0;
@@ -337,7 +339,8 @@ test("配信を始める: ロールを固める → 場の記録を作り直す 
     assert.equal(started.json.stream.error, null);
     assert.equal(started.json.killed, false, "KILL は場の始まりで OFF に戻る");
     assert.equal(started.json.ears, "listening");
-    assert.equal(started.json.chat.connected, true, "保存してある YouTube の URL があればつなぐ");
+    assert.equal(started.json.chat.connected, true, "場を開く前に Connect した器官を持ち込む");
+    assert.equal(chat.record.created, 1, "持ち込んだ器官を作り直さない");
     assert.deepEqual(v.events, [
       "usageLog.renew",
       "memory.prepare:chappy",
@@ -347,8 +350,7 @@ test("配信を始める: ロールを固める → 場の記録を作り直す 
       "eyes+voice.start",
       "session.open",
       "channel.getUrl",
-      "channel.connect",
-      "chat.start:https://youtube.example/live"
+      "channel.connect"
     ]);
     assert.equal(orchestrator.record.reviveCount, 1, "始めるが orchestrator のキルも戻す");
     assert.equal(schedulersMade, 2, "発火の予定は始めるのたびに作り直す（起動時の 1 つ + 始めるの 1 つ）");
@@ -610,20 +612,29 @@ test("createLazyChannel.connect: 今の URL でつないでおく（つながっ
 
 // ── 3. YouTube ───────────────────────────────────────────────────────────
 
-test("配信を始める: 保存してある YouTube の URL につながらなくても場は開く（器官は畳む）", async () => {
+test("配信を始める: 保存してある前回の YouTube の URL だけではつなぎにいかない（この起動で場を開く前に Connect したものだけ・配信の組み直し Domain E）", async () => {
   const v = makeVenue();
-  const chat = makeChat(v.events, { startThrows: true });
+  const chat = makeChat(v.events);
   const { server, url } = await startServer(v, {
     chatClientFactory: chat.factory,
     chatSourceStatus: () => ({ source: "https://youtube.example/old-live" })
   });
   try {
+    const before = await state(url);
+    assert.equal(before.chat.source, "https://youtube.example/old-live", "欄には前回の URL が戻る（今のまま）");
     const started = await post(url, "/api/stream/start", { device: "Mic" });
     assert.equal(started.status, 200);
     assert.equal(started.json.stream.phase, "open");
-    assert.equal(started.json.chat.connected, false);
+    assert.equal(started.json.chat.connected, false, "保存した URL だけでは開くときにつながない");
+    assert.equal(chat.record.created, 0, "前回の URL へつなぎにいかない");
+    // 場を開いたあとで Connect すればつながる（ふだんの流れ・scope §19）。
+    const connected = await post(url, "/api/chat/connect", { source: "https://youtube.example/today" });
+    assert.equal(connected.json.chat.connected, true);
+    // 終えると畳むので、次の場には持ち込まない（前の配信の URL へ毎回つなぎにいかない）。
+    await post(url, "/api/stream/stop");
+    const again = await post(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(again.json.chat.connected, false, "前の場で Connect した器官は次の場に持ち込まない");
     assert.equal(chat.record.created, 1);
-    assert.equal(chat.record.stopped, 1);
   } finally {
     await server.close();
   }
@@ -789,6 +800,8 @@ test("配信を終える: 写し → 畳む（YouTube・判定・発火の予定
   });
   try {
     await post(url, "/api/stream/start", { device: "Mic" });
+    // 場を開いたあとで YouTube の URL を入れて Connect する（ふだんの流れ・scope §19）。
+    await post(url, "/api/chat/connect", { source: "https://youtube.example/live" });
     ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "一言" });
     ears.record.buffer.append({ startMs: 1000, endMs: 2000, text: "二言" });
     orchestrator.record.state = "speaking"; // 喋っている途中で終える。
@@ -1172,13 +1185,13 @@ test("Ctrl+C: 場が閉じていても、走っている保存（前の場の最
 
 // ── 9. メイン画面（view-logic・設定のダイアログの結線） ─────────────────────────
 
-test("設定のダイアログの Start / Stop は場の関数（/api/stream/start・/api/stream/stop）を通り、場が開いている間はマイク・文字起こしを触れない", async () => {
+test("設定のダイアログの「配信を始める」は場の関数（/api/stream/start）を通り、場が開いている間はマイク・文字起こしを触れない（Stop は下の帯の 2 回押しだけ・配信の組み直し Domain E）", async () => {
   const { readFileSync } = await import("node:fs");
   const drawer = readFileSync(new URL("../src/cockpit/ui/settings-drawer.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  assert.match(drawer, /doFetch\("\/api\/stream\/start", \{/);
-  assert.match(drawer, /doFetch\("\/api\/stream\/stop", \{ method: "POST" \}\)/);
+  assert.match(drawer, /postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)/);
+  assert.doesNotMatch(drawer, /\/api\/stream\/stop/, "設定のダイアログから 1 回押しで終える口は外した（下の帯の 2 回押しだけ）");
   assert.doesNotMatch(drawer, /\/api\/ears\/(start|stop)/, "耳だけを起こす・止める道を残さない");
-  assert.match(drawer, /const inputsLocked = streamLocksInputs\(settings && settings\.stream\);/);
+  assert.match(drawer, /const streamLocked = streamLocksInputs\(settings && settings\.stream\);/);
   assert.match(drawer, /id="device-select"[\s\S]{0,200}?disabled=\$\{inputsLocked\}/);
   assert.match(drawer, /id="stt-engine-select"[\s\S]{0,200}?disabled=\$\{inputsLocked\}/);
   const app = readFileSync(new URL("../src/cockpit/ui/app.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");

@@ -97,11 +97,35 @@ export function resolveModelIdentity(identityId) {
 export const ROLE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 
 /**
+ * Windows でフォルダ名にできない予約名（配信の組み直し Domain E）。ロールの id はロールの置き場（`roles/<id>/`）と
+ * 記憶のフォルダ（`memories/<id>/`）の名前になるので、形が合っていてもこれらは通さない。大文字小文字は問わない
+ * （ROLE_ID_PATTERN は英小文字だけを通すが、ここでも小文字にして比べる）。
+ * 操縦席の画面側の写し（src/cockpit/view-logic/role.mjs）と一致することをテストで固定している。
+ */
+export const WINDOWS_RESERVED_NAMES = Object.freeze([
+  "con",
+  "prn",
+  "aux",
+  "nul",
+  ...Array.from({ length: 10 }, (_, i) => `com${i}`),
+  ...Array.from({ length: 10 }, (_, i) => `lpt${i}`)
+]);
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}  Windows の予約名か（大文字小文字を問わない）。
+ */
+export function isWindowsReservedName(value) {
+  return typeof value === "string" && WINDOWS_RESERVED_NAMES.includes(value.toLowerCase());
+}
+
+/**
+ * ロールの id か（形が {@link ROLE_ID_PATTERN} に合い、Windows の予約名でない）。
  * @param {unknown} value
  * @returns {value is string}
  */
 export function isRoleId(value) {
-  return typeof value === "string" && ROLE_ID_PATTERN.test(value);
+  return typeof value === "string" && ROLE_ID_PATTERN.test(value) && !isWindowsReservedName(value);
 }
 
 /** 名前の 1 項目の上限（字数）。 */

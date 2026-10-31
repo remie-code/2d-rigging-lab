@@ -62,14 +62,18 @@ import { buildFireSystemPrompt, createFireOrchestrator } from "../src/mind/fire-
 import { MODEL_IDENTITIES } from "../src/mind/model-identity.mjs";
 import {
   DEFAULT_ROLES_DIR,
+  applyRolePatch,
+  copyRoleAs,
   createRoleInstructionStore,
   listRoles,
   normalizeRole,
   readRole,
+  readRoleInstructions,
   roleFromIdentity,
   roleIdentity,
   roleToJson,
-  writeRole
+  writeRole,
+  writeRoleInstructions
 } from "../src/roles/role-store.mjs";
 import {
   DEFAULT_MIGRATION_BACKUP_ROOT,
@@ -865,6 +869,23 @@ export function createRoleMemoryPlaces(deps) {
       places.set(role.id, place);
       return place;
     },
+    /**
+     * 今のロールの置き場が「どのロールの・どのフォルダか」だけを返す（配信の組み直し Domain E・記憶のタブの表示）。
+     * place() と同じ決め方（今のロール・memoryDirForRole）で、置き場を作らない・準備（git init・種）を走らせない。
+     * 記憶を読み書きしない起動（引っ越しの失敗）は null。
+     * @returns {{ roleId: string; dir: string } | null}
+     */
+    placeInfo() {
+      if (!available) return null;
+      const role = deps.currentRole();
+      const cached = places.get(role.id);
+      if (cached) return { roleId: cached.roleId, dir: cached.dir };
+      try {
+        return { roleId: role.id, dir: memoryDirForRole(deps.root, role.id) };
+      } catch {
+        return null;
+      }
+    },
     beginStream(nextStartedAtMs) {
       startedAtMs = nextStartedAtMs;
       streamNo += 1;
@@ -872,6 +893,34 @@ export function createRoleMemoryPlaces(deps) {
     },
     streamNo: () => streamNo
   };
+}
+
+/**
+ * 起動時の引っ越しの失敗を、操縦席の上の帯の警告にする（配信の組み直し Domain E・Undine の追認: ログだけでなく上の帯
+ * にも出す）。失敗が無ければ空。文言は短く、詳しい行はログのタブの「起動時の知らせ」に出る。
+ * @param {{ roles: { status: string }; memories: { status: string } }} result  runStartupMigration の結果。
+ * @returns {Array<{ kind: string; severity: "warn" | "alert"; message: string; detail?: string | null }>}
+ */
+export function startupMigrationWarnings(result) {
+  /** @type {Array<{ kind: string; severity: "warn" | "alert"; message: string; detail?: string | null }>} */
+  const out = [];
+  if (result && result.memories && result.memories.status === "failed") {
+    out.push({
+      kind: "memory-migration-failed",
+      severity: "alert",
+      message: "記憶の引っ越しに失敗した（この起動では記憶を読み書きしない）",
+      detail: typeof (/** @type {any} */ (result.memories).error) === "string" ? /** @type {any} */ (result.memories).error : null
+    });
+  }
+  if (result && result.roles && result.roles.status === "failed") {
+    out.push({
+      kind: "role-migration-failed",
+      severity: "alert",
+      message: "ロールへの引っ越しに失敗した（この起動は既定のロールで動く）",
+      detail: typeof (/** @type {any} */ (result.roles).error) === "string" ? /** @type {any} */ (result.roles).error : null
+    });
+  }
+  return out;
 }
 
 /** 体のあるロールで器（runtime-player）につながらず、場を開かなかったときの知らせ（配信の組み直し Domain D・scope §19）。 */
@@ -1128,6 +1177,9 @@ export function createVerbosityHooks(settings, defaultMode = "normal") {
  *    手元だけに持つ（置き場には書かない＝`roles/` を作らないので、次の起動で引っ越しがもう一度走れる）。
  *  - select(id): 置き場から読み直して今のロールにし、`roleChoice` に覚える（失敗寛容）。読めなければ ok:false。
  *  - update(patch): 今のロールの持ち物を書き換えて role.json に書く（手元だけの既定のロールは書かない・失敗寛容）。
+ *  - edit(patch) / create({ id, name }): 配信の組み直し Domain E のロールの編集・今のロールを写して新しいロール（画面の
+ *    ロールのタブ）。厳しく確かめ（role-store の applyRolePatch / copyRoleAs）、書き込みの失敗は投げる。手元だけの既定の
+ *    ロールでは断る（roles/ を作ると次の起動の引っ越しが走らなくなるため）。
  *  - roleSettings: 口数・話し始め・声の方式の hooks（createVerbosityHooks / createSpeakStartHooks /
  *    createTtsEngineHooks）へ、設定の代わりに渡す読み書きの口（値の出どころを設定 → ロールに替える）。
  *
@@ -1141,6 +1193,10 @@ export function createRoleHooks(options) {
   const rolesDir = options.rolesDir;
   const settings = options.settings;
   const writeRoleImpl = options.writeRoleImpl ?? ((/** @type {any} */ role) => writeRole({ dir: rolesDir, role }));
+  // 性格の指示の写し（新しいロールを作るとき）。上書きが無ければ null（写さない＝既定の本文）。
+  const readInstructionsImpl = (/** @type {string} */ id) => readRoleInstructions({ dir: rolesDir, id }).override;
+  const writeInstructionsImpl = (/** @type {string} */ id, /** @type {string} */ text) =>
+    writeRoleInstructions({ dir: rolesDir, id, text });
   /** @type {Array<Readonly<import("../src/roles/role-store.mjs").Role>>} */
   let roles = listRoles({ dir: rolesDir }).roles;
   const call = (/** @type {() => any} */ fn) => {
@@ -1204,6 +1260,42 @@ export function createRoleHooks(options) {
       return { ok: true, role: current };
     },
     update,
+    /**
+     * 今のロールを編集する（配信の組み直し Domain E・POST /api/role/edit）。update と違い、書き換えを厳しく確かめ
+     * （applyRolePatch）、書き込みの失敗は投げる（API の 500）。置き場から読んだロールでなければ断る（手元だけの既定の
+     * ロールを書くと roles/ ができて、次の起動の引っ越しが走らなくなるため）。
+     * @param {unknown} patch
+     * @returns {{ ok: true; role: Readonly<import("../src/roles/role-store.mjs").Role> } | { ok: false; reason: string }}
+     */
+    edit(patch) {
+      if (!persisted) return { ok: false, reason: "ロールの置き場が無い（引っ越しに失敗した起動ではロールを編集できない）" };
+      const applied = applyRolePatch(current, patch);
+      if (!applied.ok) return applied;
+      writeRoleImpl(applied.role);
+      current = applied.role;
+      roles = roles.map((role) => (role.id === current.id ? current : role));
+      return { ok: true, role: current };
+    },
+    /**
+     * 今のロールを写して新しいロールを作る（配信の組み直し Domain E・POST /api/role/new）。モデル・声・口数・話し始め・
+     * 体と性格の指示（instructions.md の上書き）を写し、名前は新しい名前にする。選ぶのは呼び出し側（select）。
+     * 同じ id のロールがあれば断る。書き込みの失敗は投げる。
+     * @param {{ id: string; name?: string | null }} input
+     * @returns {{ ok: true; role: Readonly<import("../src/roles/role-store.mjs").Role> } | { ok: false; reason: string; conflict?: boolean }}
+     */
+    create(input) {
+      if (!persisted) return { ok: false, reason: "ロールの置き場が無い（引っ越しに失敗した起動ではロールを作れない）" };
+      const copied = copyRoleAs(current, { id: input.id, name: input.name ?? null });
+      if (!copied.ok) return copied;
+      const exists = roles.some((role) => role.id === copied.role.id) || readRole({ dir: rolesDir, id: copied.role.id }).ok;
+      if (exists) return { ok: false, reason: `ロール ${copied.role.id} はもうある`, conflict: true };
+      writeRoleImpl(copied.role);
+      const instructions = readInstructionsImpl(current.id);
+      if (instructions != null) writeInstructionsImpl(copied.role.id, instructions);
+      roles = listRoles({ dir: rolesDir }).roles;
+      if (!roles.some((role) => role.id === copied.role.id)) roles = [...roles, copied.role];
+      return { ok: true, role: copied.role };
+    },
     roleSettings: {
       getVerbosityMode: () => current.verbosity,
       setVerbosityMode: (/** @type {string | null} */ mode) => void update({ verbosity: mode }),
@@ -1211,6 +1303,40 @@ export function createRoleHooks(options) {
       setSpeakStartMode: (/** @type {string | null} */ mode) => void update({ speakStartMode: mode }),
       getTtsEngine: () => current.voice.engine,
       setTtsEngine: (/** @type {string | null} */ engine) => void update({ voice: { ...current.voice, engine } })
+    }
+  };
+}
+
+/**
+ * ロールの編集と新しいロールの口（配信の組み直し Domain E・cockpit-server の onUpdateRole / onCreateRole）。
+ * 場が閉じている間だけ呼ばれる（cockpit-server が場の途中は 409 で断る・stream-restructure.md §2.1・§3）。
+ *
+ *  - onUpdateRole(patch): 今のロールを編集する（roleHooks.edit）。編集できたら onRoleEdited（main() が頭・声の方式を
+ *    今のロールに揃え、頭の文脈の revision を進める＝次のセッションは新しい名前・モデル・体で作る）を呼び、口数・
+ *    話し始め・声の方式を返す（POST /api/role と同じ形・サーバの scheduler と Start の既定に入れる）。書き込みの失敗は投げる。
+ *  - onCreateRole({ id, name }): 今のロールを写して新しいロールを作り（roleHooks.create）、そのロールを選ぶ（selectRole =
+ *    main() の onSetRole・POST /api/role と同じ道）。
+ *
+ * @param {object} deps
+ * @param {{ edit: (patch: unknown) => any; create: (input: { id: string; name?: string | null }) => any }} deps.roleHooks
+ * @param {(role: any) => void} deps.onRoleEdited
+ * @param {(id: string) => any} deps.selectRole
+ */
+export function createRoleEditHooks(deps) {
+  return {
+    /** @param {unknown} patch */
+    onUpdateRole(patch) {
+      const result = deps.roleHooks.edit(patch);
+      if (!result || result.ok !== true) return result;
+      const role = result.role;
+      deps.onRoleEdited(role);
+      return { ok: true, verbosity: role.verbosity, speakStartMode: role.speakStartMode, ttsEngine: role.voice.engine };
+    },
+    /** @param {{ id: string; name?: string | null }} input */
+    async onCreateRole(input) {
+      const created = deps.roleHooks.create(input);
+      if (!created || created.ok !== true) return created;
+      return deps.selectRole(created.role.id);
     }
   };
 }
@@ -2541,10 +2667,42 @@ async function main() {
     return { ok: true, verbosity: role.verbosity, speakStartMode: role.speakStartMode, ttsEngine: role.voice.engine };
   };
 
-  /** state snapshot に載せるロールの現況（今のロールと選べるロールの一覧・名前と頭の id だけ）。 */
+  /**
+   * 操縦席（POST /api/role/edit・/api/role/new）からロールを編集する・今のロールを写して新しいロールを作る（配信の組み直し
+   * Domain E・§createRoleEditHooks）。場が閉じている間だけ（cockpit-server が場の途中は 409 で断る）。編集したら、頭・声の
+   * 方式を今のロールに揃え、頭の文脈の revision を進める（次のセッションは新しい名前・モデル・性格・体で作る＝ロールの
+   * 切り替えと同じ）。体は持ち回らないので currentBody() がすぐ新しい値を読む。
+   */
+  const roleEditHooks = createRoleEditHooks({
+    roleHooks,
+    selectRole: (id) => onSetRole(id),
+    onRoleEdited: (role) => {
+      currentBrain = role.brain;
+      desiredTtsEngine = role.voice.engine;
+      sessionContextRevision += 1;
+      if (!isCodexBrainId(currentBrain)) quotaMonitor.clearCodex();
+      process.stdout.write(`[cockpit] role edited: ${role.id} (brain ${role.brain}, body ${role.body ? "on" : "off"})\n`);
+    }
+  });
+
+  /**
+   * state snapshot に載せるロールの現況（今のロールと選べるロールの一覧）。配信の組み直し Domain E: ロールの編集の画面が
+   * 読む持ち物（名前・声・口数・話し始め・体）も載せる。性格の指示の本文は載せない（専用の API だけ）。
+   */
   const roleStatus = () => {
     const role = roleHooks.current();
-    return { id: role.id, displayName: role.name.display, brain: role.brain, body: role.body, roles: roleHooks.list() };
+    return {
+      id: role.id,
+      displayName: role.name.display,
+      brain: role.brain,
+      body: role.body,
+      name: { canonical: role.name.canonical, display: role.name.display, latin: role.name.latin },
+      voice: { engine: role.voice.engine, aivisSpeaker: role.voice.aivisSpeaker, elevenLabsVoiceId: role.voice.elevenLabsVoiceId },
+      verbosity: role.verbosity,
+      speakStartMode: role.speakStartMode,
+      editable: roleHooks.isPersisted(),
+      roles: roleHooks.list()
+    };
   };
 
   /**
@@ -2666,7 +2824,18 @@ async function main() {
   };
 
   /** state snapshot に載せる記憶の現況（この場で最後に記録した時刻と、今記録中か）。 */
-  const memoryStatus = () => ({ lastRecordAtMs: streamVenue.lastRecordAtMs(), recording: memoryRecorder.isRecording() });
+  // 配信の組み直し Domain E: 記憶のタブに「どのロールの記憶か」を出す（memoryPlaces.placeInfo・置き場は作らない）。
+  const memoryStatus = () => {
+    const info = memoryPlaces.placeInfo();
+    return {
+      lastRecordAtMs: streamVenue.lastRecordAtMs(),
+      recording: memoryRecorder.isRecording(),
+      available: info != null,
+      roleId: info ? info.roleId : null,
+      roleName: info ? roleHooks.current().name.display : null,
+      dir: info ? info.dir : null
+    };
+  };
 
   /** fireOrchestratorFactory は常に注入する（Channel URL 未設定でも fire は「使えないが結線済み」）。 */
   const fireOrchestratorFactory = (/** @type {any} */ hooks) =>
@@ -2800,6 +2969,11 @@ async function main() {
     // 指す頭の札 + 資格情報の存在確認）を載せる。状態の正本は cockpit.mjs 側（roleHooks・currentBrain）。
     onSetRole,
     roleStatus,
+    // 配信の組み直し Domain E: ロールの編集（POST /api/role/edit）と、今のロールを写して新しいロール（POST /api/role/new）。
+    onUpdateRole: roleEditHooks.onUpdateRole,
+    onCreateRole: roleEditHooks.onCreateRole,
+    // 配信の組み直し Domain E: 起動時の引っ越しの失敗は上の帯の警告にも出す（ログのタブの行に加えて）。
+    startupWarnings: startupMigrationWarnings(startupMigration),
     brainStatus,
     // Conversation instructions are exposed only through the dedicated local API. The hook owns durable
     // settings writes and effective revision advancement; no instruction text enters state/SSE/transcript.

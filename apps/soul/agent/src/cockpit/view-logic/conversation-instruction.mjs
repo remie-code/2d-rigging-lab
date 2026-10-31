@@ -9,14 +9,17 @@
  * hook, making all tests fake-only and keeping stale responses out of the UI.
  */
 
-/**
- * ロールの id の形（model-identity.mjs の ROLE_ID_PATTERN の写し・view-logic は mind を import しない決まり）。
- */
-export const CONVERSATION_INSTRUCTION_ROLE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+import { ROLE_ID_PATTERN, isRoleIdShape } from "./role.mjs";
 
-/** @param {unknown} value @returns {boolean} */
+/**
+ * ロールの id の形（配信の組み直し Domain E: 画面側の写しは view-logic/role.mjs の 1 か所から引く。model-identity.mjs の
+ * ROLE_ID_PATTERN と一致することはテストで固定）。
+ */
+export const CONVERSATION_INSTRUCTION_ROLE_ID_PATTERN = ROLE_ID_PATTERN;
+
+/** @param {unknown} value @returns {boolean}  ロールの id か（形・Windows の予約名でない）。 */
 export function isConversationInstructionRoleId(value) {
-  return typeof value === "string" && CONVERSATION_INSTRUCTION_ROLE_ID_PATTERN.test(value);
+  return isRoleIdShape(value);
 }
 
 /**

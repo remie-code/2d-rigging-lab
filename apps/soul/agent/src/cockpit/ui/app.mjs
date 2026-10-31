@@ -10,9 +10,10 @@
  *    いる間）は会話の場所の中央に「配信を始める」と「準備・設定」（配信の組み直し Domain D）。
  *  - 「配信を終える」は下の帯の歯車の左（場が開いている間だけ・2 回押し）。始める / 終えるは POST /api/stream/start・stop。
  *  - 下の細い帯（bottom-bar.mjs）: 運転設定の表示・遅延の凡例 8 つ・歯車「準備・設定」。
- *  - 準備・設定（settings-drawer.mjs のダイアログ）: 既存の 4 タブに「運転」（control-bar.mjs DrivePanel = 旧運転
- *    バー + 手動の発火）と「ログ」（今の観測フィード feed.mjs + 旧ヘッダの一目の健康）を足した。初回の自動展開は
- *    やめた（§7・§9.2）。
+ *  - 準備・設定（settings-drawer.mjs のダイアログ）: 配信の組み直し Domain E で「配信の準備 / ロール / 運転 / 記憶 / ログ」
+ *    の 5 タブ。運転は control-bar.mjs DrivePanel（自発・かぶり・手動の発火）、ログは今の観測フィード feed.mjs + 旧ヘッダの
+ *    一目の健康。初回の自動展開はやめた（§7・§9.2）。
+ *  - 上の帯の名前はロールの名前（snapshot の role。無い古いサーバは brain.identity）。
  *
  * SSE 購読: SSE_EVENT_NAMES（既存 13 本 + 1 回目で足した fireAsk / latency / quota / warnings の 4 本）。
  * 観測フィード（ログのタブ）は rows.mjs の feedAfterSseEvent、会話とコメントは glanceAfterSseEvent、非タイムライン効果
@@ -126,6 +127,18 @@ export function settingsFromSnapshot(s) {
     // 間のマイク・文字起こしの固定）。無い古いサーバは null（画面は耳の状態から読む）。
     stream: (s && s.stream) ?? null
   };
+}
+
+/**
+ * 上の帯・題に出す名前の元（配信の組み直し Domain E: ロールの名前）。snapshot の role（{ id, displayName }）があればそれ、
+ * 無い古いサーバは brain.identity。形の確かめは header.mjs の identityDisplayName が行う（形が違えば中立の題）。
+ * @param {any} settings  settingsFromSnapshot の値。
+ * @returns {{ id: unknown; displayName: unknown } | null}
+ */
+export function roleIdentityOf(settings) {
+  const role = settings && settings.role;
+  if (role && typeof role === "object" && typeof role.id === "string") return { id: role.id, displayName: role.displayName };
+  return settings && settings.brain ? settings.brain.identity ?? null : null;
 }
 
 /**
@@ -297,12 +310,15 @@ export function App(props) {
   // The HTML starts with a neutral title. Once current server state arrives,
   // reflect only the additive public identity view; malformed/missing data
   // deliberately returns to the neutral title instead of retaining stale text.
-  const currentIdentity = settings && settings.brain ? settings.brain.identity : null;
+  // 配信の組み直し Domain E: 上の帯・題の名前はロールの名前（snapshot の role の id と見せる名前）。role を持たない古い
+  // サーバは今までどおり brain.identity。
+  const currentIdentity = roleIdentityOf(settings);
+  const documentTitle = cockpitDocumentTitle(currentIdentity);
   useEffect(() => {
     const doc = globalThis.document;
     if (!doc || typeof doc !== "object") return;
-    doc.title = cockpitDocumentTitle(currentIdentity);
-  }, [currentIdentity]);
+    doc.title = documentTitle;
+  }, [documentTitle]);
 
   /**
    * KILL / 復帰（上の帯の小さなボタン・明示 boolean を送る。トグルではない）。成功は snapshot 全体の応答を適用する。
@@ -399,6 +415,7 @@ export function App(props) {
         soul=${soul}
         ears=${ears}
         compacting=${compacting}
+        stream=${settings.stream}
         warnings=${warnings}
         quota=${quota}
         killed=${settings.killed}
@@ -425,7 +442,6 @@ export function App(props) {
         onClose=${() => setSettingsOpen(false)}
         settings=${settings}
         sttEngine=${stt ? stt.engine : null}
-        ttsEngine=${tts ? tts.engine : null}
         chatDisplay=${chatDisplay}
         applySnapshot=${applySnapshot}
         fetchImpl=${props.fetchImpl}
@@ -437,10 +453,8 @@ export function App(props) {
             fireNote=${fireNote}
             setFireNote=${setFireNote}
             selfFire=${settings.selfFire}
-            verbosity=${settings.verbosity}
-            speakStart=${settings.speakStart}
-            commentBusy=${settings.commentBusy}
             bargeIn=${settings.bargeIn}
+            stream=${settings.stream}
             applySnapshot=${applySnapshot}
             fetchImpl=${props.fetchImpl}
           />`}

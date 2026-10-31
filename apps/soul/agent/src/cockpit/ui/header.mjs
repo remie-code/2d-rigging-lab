@@ -26,6 +26,7 @@ import {
 } from "../view-logic/health.mjs";
 import { statusPillView, quotaGaugeView, warningsView } from "../view-logic/glance-meters.mjs";
 import { killSwitchView } from "../view-logic/control.mjs";
+import { isRoleIdShape } from "../view-logic/role.mjs";
 
 /**
  * Current public identity is supplied by the server. The UI validates the
@@ -33,9 +34,9 @@ import { killSwitchView } from "../view-logic/control.mjs";
  * 配信の組み直し Domain A: 名前はロールが持つので、cody / chappy の 2 組の許可リストはやめ、形
  * （id がロールの id の形・見せる名前が空でない 32 字までの文字列）だけを確かめる。Invalid/missing values
  * intentionally fall back to a neutral label so a previous identity cannot leak while state is unavailable.
- * ロールの id の形は model-identity.mjs の ROLE_ID_PATTERN の写し（ui は mind を import しない決まり）。
+ * ロールの id の形は view-logic/role.mjs の isRoleIdShape から引く（配信の組み直し Domain E: ui は mind を import しない
+ * 決まりなので、画面側の写しは view-logic/role.mjs の 1 か所。model-identity.mjs と一致することはテストで固定）。
  */
-const ROLE_ID_SHAPE = /^[a-z][a-z0-9-]{0,31}$/;
 const DISPLAY_NAME_MAX_CHARS = 32;
 export const NEUTRAL_COCKPIT_TITLE = "Soul Cockpit";
 
@@ -43,7 +44,7 @@ export const NEUTRAL_COCKPIT_TITLE = "Soul Cockpit";
 export function identityDisplayName(identity) {
   if (!identity || typeof identity !== "object") return NEUTRAL_COCKPIT_TITLE;
   const candidate = /** @type {{ id?: unknown; displayName?: unknown }} */ (identity);
-  if (typeof candidate.id !== "string" || !ROLE_ID_SHAPE.test(candidate.id)) return NEUTRAL_COCKPIT_TITLE;
+  if (!isRoleIdShape(candidate.id)) return NEUTRAL_COCKPIT_TITLE;
   if (typeof candidate.displayName !== "string") return NEUTRAL_COCKPIT_TITLE;
   const displayName = candidate.displayName.trim();
   if (displayName.length === 0 || [...displayName].length > DISPLAY_NAME_MAX_CHARS) return NEUTRAL_COCKPIT_TITLE;
@@ -111,12 +112,13 @@ export function QuotaGauge({ view }) {
 
 /**
  * 上の細い帯（hooks 非使用・vnode 走査テスト対象）。
- * compacting は snapshot の compacting（頭の会話の圧縮の最中・状態のピルの「圧縮中」）。
- * @param {{ identity?: unknown; modelText?: string; soul?: string; ears?: string; compacting?: boolean; warnings?: any[]; quota?: any;
+ * compacting は snapshot の compacting（頭の会話の圧縮の最中・状態のピルの「圧縮中」）。stream は snapshot の stream
+ * （配信の組み直し Domain E: 開きかけ・閉じかけ（記録中）だけ状態のピルに出す）。名前（identity）はロールの名前。
+ * @param {{ identity?: unknown; modelText?: string; soul?: string; ears?: string; compacting?: boolean; stream?: any; warnings?: any[]; quota?: any;
  *   killed?: boolean; killError?: string; nowMs: number; onKill?: () => void; onRevive?: () => void }} props
  */
-export function TopBar({ identity, modelText = "", soul, ears, compacting = false, warnings, quota, killed = false, killError = "", nowMs, onKill, onRevive }) {
-  const pill = statusPillView(soul, ears, compacting);
+export function TopBar({ identity, modelText = "", soul, ears, compacting = false, stream = null, warnings, quota, killed = false, killError = "", nowMs, onKill, onRevive }) {
+  const pill = statusPillView(soul, ears, compacting, stream);
   const warn = warningsView(warnings, nowMs);
   const killView = killSwitchView(killed);
   const codex = quotaGaugeView("Codex 週", quota && quota.codex);

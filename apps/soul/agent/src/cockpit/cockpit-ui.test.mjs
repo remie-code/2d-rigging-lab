@@ -402,14 +402,14 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
   assert.deepEqual(settingsFromSnapshot(s), s);
 });
 
-test("Settings modal「頭脳・会話」: 圧縮の下に「返事の速さ」の Codex の fast トグルを置き、POST /api/codex-fast → snapshot 反映", () => {
+test("Settings modal「ロール」（頭の調整・配信の組み直し Domain E で頭脳・会話から移した）: 圧縮の下に「返事の速さ」の Codex の fast トグルを置き、POST /api/codex-fast → snapshot 反映", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   const brainPanel = source.slice(
-    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
-    source.indexOf('id="cockpit-settings-panel-memory"')
+    source.indexOf('id="cockpit-settings-panel-role"'),
+    source.indexOf('id="cockpit-settings-panel-drive"')
   );
   const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
-  // 置き場所: 頭脳・会話のタブの一覧側・圧縮の区画の後。
+  // 置き場所: ロールのタブの一覧側（性格の指示の編集ページではない側）・圧縮の区画の後。
   assert.ok(listSide.indexOf("会話の圧縮") < listSide.indexOf('<h3 class="drawer-subhead">返事の速さ</h3>'));
   assert.match(listSide, /<label class="codex-fast-pill">\s*<span class="pill-label">Codex の fast<\/span>/);
   assert.match(
@@ -429,14 +429,14 @@ test("Settings modal「頭脳・会話」: 圧縮の下に「返事の速さ」�
   assert.match(COCKPIT_CSS, /\.codex-fast-status\.on \{ color: var\(--up\); \}/);
 });
 
-test("Settings modal「頭脳・会話」: 圧縮を始める大きさの select + Set を頭脳の区画に置き、POST /api/compact-threshold → snapshot 反映", () => {
+test("Settings modal「ロール」（頭の調整・配信の組み直し Domain E で頭脳・会話から移した）: 圧縮を始める大きさの select + Set を置き、POST /api/compact-threshold → snapshot 反映", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   const brainPanel = source.slice(
-    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
-    source.indexOf('id="cockpit-settings-panel-memory"')
+    source.indexOf('id="cockpit-settings-panel-role"'),
+    source.indexOf('id="cockpit-settings-panel-drive"')
   );
   assert.ok(brainPanel.length > 0);
-  // 置き場所: 頭脳・会話のタブ（会話指示の編集ページではない側）。
+  // 置き場所: ロールのタブ（性格の指示の編集ページではない側）。
   const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
   assert.match(listSide, /<h3 class="drawer-subhead">会話の圧縮<\/h3>/);
   assert.match(listSide, /<label for="compact-threshold-select">圧縮を始める大きさ<\/label>/);
@@ -605,18 +605,21 @@ test("Domain C import スモーク: control-bar/settings-drawer が Node で imp
   ]);
 });
 
-test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (運転・ログを足した), and bounded prompt slot", () => {
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["connections", "input-output", "brain-conversation", "memory", "drive", "log"]);
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["接続", "入出力", "頭脳・会話", "記憶", "運転", "ログ"]);
+test("Cockpit Settings modal shell: one labelled dialog, five internal tabs (配信の準備 / ロール / 運転 / 記憶 / ログ・配信の組み直し Domain E), and bounded prompt slot", () => {
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["prepare", "role", "drive", "memory", "log"]);
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["配信の準備", "ロール", "運転", "記憶", "ログ"]);
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.match(source, /role="dialog"\s+aria-modal="true"/);
   assert.match(source, /role="tablist"/);
   assert.match(source, /role="tab"/);
-  assert.equal((source.match(/role="tabpanel"/g) || []).length, 6, "one panel per category");
+  assert.equal((source.match(/role="tabpanel"/g) || []).length, 5, "one panel per category");
+  for (const category of SETTINGS_CATEGORIES) {
+    assert.match(source, new RegExp(`id="cockpit-settings-panel-${category.id}"[^>]*hidden=\\$\\{activeCategory !== "${category.id}"\\}`));
+  }
+  assert.match(source, /useState\("prepare"\)/, "開くと配信の準備のタブ");
   assert.match(source, /driveSlot/);
   assert.match(source, /logSlot/);
   assert.match(source, />準備・設定</);
-  assert.match(source, /id="cockpit-settings-panel-connections"[\s\S]*?hidden=\$\{activeCategory !== "connections"\}/);
   assert.match(source, /data-prompt-editor-slot/);
   assert.doesNotMatch(source, /role="alertdialog"/);
   assert.match(source, /ev\.key === "Escape"/);
@@ -625,10 +628,11 @@ test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (運�
   assert.match(source, /\[hidden\]/);
   assert.match(source, /ArrowLeft/);
   assert.match(source, /closeRequestRef/);
-  assert.equal(settingsModalNextCategory("connections", "ArrowRight"), "input-output");
-  assert.equal(settingsModalNextCategory("connections", "ArrowLeft"), "log");
-  assert.equal(settingsModalNextCategory("memory", "Home"), "connections");
-  assert.equal(settingsModalNextCategory("connections", "End"), "log");
+  assert.equal(settingsModalNextCategory("prepare", "ArrowRight"), "role");
+  assert.equal(settingsModalNextCategory("prepare", "ArrowLeft"), "log");
+  assert.equal(settingsModalNextCategory("memory", "Home"), "prepare");
+  assert.equal(settingsModalNextCategory("prepare", "End"), "log");
+  assert.equal(settingsModalNextCategory("brain-conversation", "ArrowRight"), "prepare", "古いタブの id は先頭へ");
   assert.equal(settingsModalCloseAction({ dirty: false }), "close");
   assert.equal(settingsModalCloseAction({ dirty: true }), "prompt");
   assert.equal(settingsModalFocusBoundary(0, 3, true), 2);
@@ -643,18 +647,18 @@ test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (運�
 });
 
 test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navigation and focuses only after acceptance", () => {
-  const tabs = ["connections", "input-output", "brain-conversation", "memory", "drive", "log"].map((id) => ({
+  const tabs = ["prepare", "role", "drive", "memory", "log"].map((id) => ({
     id: "cockpit-settings-tab-" + id,
     focusCount: 0,
     focus() { this.focusCount += 1; }
   }));
   const navigations = [];
   for (const [index, key, expected] of [
-    [0, "ArrowRight", "input-output"],
-    [1, "ArrowLeft", "connections"],
+    [0, "ArrowRight", "role"],
+    [1, "ArrowLeft", "prepare"],
     [1, "End", "log"],
-    [3, "Home", "connections"],
-    [3, "ArrowRight", "drive"]
+    [3, "Home", "prepare"],
+    [3, "ArrowRight", "log"]
   ]) {
     const result = settingsModalKeyboardCategoryAction({
       tabs,
@@ -693,13 +697,13 @@ test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navig
   assert.equal(cleanProceed, true);
 });
 
-test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backdrop routes all prompt or proceed through one guard", () => {
+test("Cockpit Settings dirty event seam: back/category/header/Escape/backdrop routes all prompt or proceed through one guard（旧「頭脳」の種類は消した・配信の組み直し Domain E）", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.match(source, /const requestEditorBack = .*runGuardedNavigation/);
   assert.match(source, /if \(ev\.key === "Escape"\)[\s\S]*?requestClose\(\)/);
   assert.match(source, /ev\.target === ev\.currentTarget\)[\s\S]*?requestClose\(\)/);
   assert.match(source, /closeRequestRef\.current = requestClose/);
-  const eventTypes = ["back", "category-click", "category-keyboard", "brain", "close", "close"];
+  const eventTypes = ["back", "category-click", "category-keyboard", "close", "close"];
   const outcomes = [];
   for (const eventType of eventTypes) {
     let pending = null;
@@ -716,18 +720,20 @@ test("Cockpit Settings dirty event seam: back/category/brain/header/Escape/backd
     pending();
     assert.equal(performed, true);
   }
-  assert.deepEqual(outcomes, ["prompt", "prompt", "prompt", "prompt", "prompt", "prompt"]);
+  assert.deepEqual(outcomes, ["prompt", "prompt", "prompt", "prompt", "prompt"]);
   assert.equal(settingsModalEventRoute({ eventType: "unknown", dirty: true, action: () => {}, onPrompt: () => {} }), null);
+  assert.equal(settingsModalEventRoute({ eventType: "brain", dirty: true, action: () => {}, onPrompt: () => {} }), null, "旧「頭脳」の種類は無い");
+  assert.doesNotMatch(source, /"category-keyboard", "brain"/, "設定のダイアログに古い brain の種類が残らない");
 });
 
-test("Settings modal「頭脳・会話」: 頭脳の select はロールの select になり、snapshot の role から選択肢・POST /api/role → snapshot 反映（配信の組み直し Domain A）", () => {
+test("Settings modal「ロール」: 今日のロールの select（配信の組み直し Domain E でロールのタブへ）、snapshot の role から選択肢・POST /api/role → snapshot 反映（配信の組み直し Domain A）", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   const brainPanel = source.slice(
-    source.indexOf('id="cockpit-settings-panel-brain-conversation"'),
-    source.indexOf('id="cockpit-settings-panel-memory"')
+    source.indexOf('id="cockpit-settings-panel-role"'),
+    source.indexOf('id="cockpit-settings-panel-drive"')
   );
   const listSide = brainPanel.slice(brainPanel.indexOf("` : html`"));
-  assert.match(listSide, /<label for="role-select">ロール<\/label>/);
+  assert.match(listSide, /<label for="role-select">今日のロール<\/label>/);
   assert.match(listSide, /id="role-select"[\s\S]*?options=\$\{roleOptionsView\(settings && settings\.role\)\}/);
   assert.match(listSide, /class="btn-role-set"[^>]*onClick=\$\{onRoleSet\}/);
   assert.doesNotMatch(source, /\/api\/brain|brain-select|BRAIN_OPTIONS/);
@@ -1055,22 +1061,18 @@ test("HealthLine（ログのタブ）: tts（声の方式と状態）を stt の
   assert.ok(!collectText(HealthLine(base)).join("").includes("tts:"), "tts が無ければ出さない");
 });
 
-test("設定の入出力タブ: 文字起こしの下に声の選択（AivisSpeech / ElevenLabs）・Start の body で ttsEngine を送り・state.tts から復元", () => {
+test("声の方式は配信の準備から外れてロールの声になった（配信の組み直し Domain E）: 「配信を始める」は ttsEngine を送らず、ロールの編集に声の方式・話者・声の id", () => {
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
-  const stt = source.indexOf('id="stt-engine-select"');
-  const tts = source.indexOf('id="tts-engine-select"');
-  const micErr = source.indexOf("${micError}");
-  const audio = source.indexOf('id="audio-device-select"');
-  assert.ok(stt > 0 && tts > stt, "声の選択は文字起こしの下");
-  assert.ok(micErr > tts, "Start の失敗理由（共用のエラー欄）は声の選択の下");
-  assert.ok(audio > micErr, "声の出力先はその下（並びは変えない）");
-  assert.match(source, /<label for="tts-engine-select">声<\/label>/);
-  assert.match(source, /options=\$\{TTS_ENGINE_OPTIONS\}/);
-  assert.match(source, /JSON\.stringify\(\{ device, sttEngine: sttSelected \|\| "whisper", ttsEngine: ttsSelected \|\| "aivis" \}\)/);
-  assert.match(source, /ttsEngineSelection\(ttsEngine \? \{ engine: ttsEngine \} : null\)/);
-  assert.match(source, /if \(ttsRestored != null && !ttsEditedRef\.current\) setTtsSelected\(ttsRestored\)/);
+  assert.doesNotMatch(source, /id="tts-engine-select"/, "配信の準備に声の方式の select は無い");
+  assert.doesNotMatch(source, /ttsSelected|ttsEditedRef|ttsEngineSelection/);
+  assert.match(source, /postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)/);
+  const rolePanel = source.slice(source.indexOf('id="cockpit-settings-panel-role"'), source.indexOf('id="cockpit-settings-panel-drive"'));
+  assert.match(rolePanel, /<label for="role-voice-engine-select">声<\/label>/);
+  assert.match(rolePanel, /options=\$\{ROLE_VOICE_ENGINE_OPTIONS\}/);
+  assert.match(rolePanel, /<label for="role-aivis-speaker">AivisSpeech の話者<\/label>/);
+  assert.match(rolePanel, /<label for="role-elevenlabs-voice">ElevenLabs の声の id<\/label>/);
   const app = readFileSync(path.join(UI_DIR, "app.mjs"), "utf8");
-  assert.match(app, /ttsEngine=\$\{tts \? tts\.engine : null\}/);
+  assert.doesNotMatch(app, /ttsEngine=\$\{tts \? tts\.engine : null\}/, "設定のダイアログへ声の方式を渡さない");
   assert.match(app, /if \(s\.tts\) setTts\(s\.tts\)/);
-  assert.match(app, /<\$\{HealthLine\}[^>]*tts=\$\{tts\}/);
+  assert.match(app, /<\$\{HealthLine\}[^>]*tts=\$\{tts\}/, "ログのタブの健康 1 行の tts: は今のまま");
 });

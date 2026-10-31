@@ -55,6 +55,16 @@ async function postJson(url, obj) {
   const r = await httpRequest(url, { method: "POST", body: obj != null ? JSON.stringify(obj) : "" });
   return { status: r.status, json: r.body ? JSON.parse(r.body) : null };
 }
+/**
+ * 配信の組み直し Domain E: 手動の発火（POST /api/fire・/api/vision-fire）は場が開いている間だけ（閉じている間は 409）。
+ * 発火を見るテストは先に場を開く（pipelineFactory に偽の耳を渡しておくこと）。
+ * @param {string} url
+ */
+async function openStreamForFire(url) {
+  const r = await postJson(`${url}/api/stream/start`, { device: "Mic" });
+  assert.equal(r.status, 200, "場が開く（偽の耳）");
+  assert.equal(r.json.stream.phase, "open");
+}
 async function putJson(url, obj) {
   const r = await httpRequest(url, { method: "PUT", body: obj != null ? JSON.stringify(obj) : "" });
   return { status: r.status, json: r.body ? JSON.parse(r.body) : null };
@@ -1070,9 +1080,10 @@ test("cockpit POST /api/fire: 受理は 202・fire() の結果 JSON を返す", 
   const fake = makeFakeOrchestrator({
     fireResult: { fired: true, replyText: "ひるごはん食べよ", injectedChars: 20, includedCount: 2 }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/fire`, {});
     assert.equal(r.status, 202);
     assert.equal(r.json.fired, true);
@@ -1080,8 +1091,8 @@ test("cockpit POST /api/fire: 受理は 202・fire() の結果 JSON を返す", 
     assert.equal(r.json.includedCount, 2);
     assert.equal(r.json.state, "idle"); // getState() から補完される。
     assert.equal(fake.record.fireCount, 1);
-    // getBuffer フックは pipeline?.transcriptBuffer（耳未起動なら null）。
-    assert.equal(fake.record.hooks.getBuffer(), null);
+    // getBuffer フックは pipeline?.transcriptBuffer（場が開いている = 耳が動いているので偽の耳のバッファ）。
+    assert.notEqual(fake.record.hooks.getBuffer(), null);
   } finally {
     await server.close();
   }
@@ -1091,9 +1102,10 @@ test("cockpit POST /api/fire: busy は 200 で {fired:false, reason:'busy', stat
   const fake = makeFakeOrchestrator({
     fireResult: { fired: false, reason: "busy", state: "thinking" }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/fire`, {});
     assert.equal(r.status, 200);
     assert.equal(r.json.fired, false);
@@ -1124,11 +1136,12 @@ test("cockpit SSE: fire() の onState/onFire が soul/fire イベントで流れ
       hooks.onState("idle");
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state"); // 接続確立。
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
 
     const thinking = await client.waitFor((e) => e.event === "soul" && e.data.state === "thinking");
@@ -1164,11 +1177,12 @@ test("cockpit SSE: fire() の onExpression が expression イベントで流れ�
       hooks.onState("idle");
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state"); // 接続確立。
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
 
     const nod = await client.waitFor((e) => e.event === "expression" && e.data.word === "nod");
@@ -1499,9 +1513,10 @@ test("cockpit POST /api/vision-fire: fire({ vision: true }) を呼び・受理�
   const fake = makeFakeOrchestrator({
     fireResult: { fired: true, replyText: "画面見えたよ", injectedChars: 5, includedCount: 1, vision: true }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/vision-fire`, {});
     assert.equal(r.status, 202);
     assert.equal(r.json.fired, true);
@@ -1518,9 +1533,10 @@ test("cockpit POST /api/vision-fire: 対象未設定は 200 で {fired:false, re
   const fake = makeFakeOrchestrator({
     fireResult: { fired: false, reason: "vision-no-target" }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   try {
     const url = await server.listen(0);
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     const r = await postJson(`${url}/api/vision-fire`, {});
     assert.equal(r.status, 200);
     assert.equal(r.json.fired, false);
@@ -1544,11 +1560,12 @@ test("cockpit SSE: fire({vision:true}) の onVisionCaptured が visionCaptured �
       });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/vision-fire`, {});
     const captured = await client.waitFor((e) => e.event === "visionCaptured");
     assert.equal(captured.data.title, "Sample Game");
@@ -1569,11 +1586,12 @@ test("cockpit SSE: onUsage が usage イベントで流れる（通常 Fire・�
       hooks.onUsage({ usage: { input_tokens: 284, output_tokens: 12 }, vision: false });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const usage = await client.waitFor((e) => e.event === "usage");
     assert.equal(usage.data.usage.input_tokens, 284);
@@ -1591,11 +1609,12 @@ test("cockpit SSE: fireVisionError（onDiagnostic 経由）は diagnostic イベ
       hooks.onDiagnostic({ type: "fireVisionError", kind: "minimized", message: "window is minimized" });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/vision-fire`, {});
     const diag = await client.waitFor((e) => e.event === "diagnostic" && e.data.type === "fireVisionError");
     assert.equal(diag.data.kind, "minimized");
@@ -2932,6 +2951,7 @@ test("cockpit SSE: onSoulTranscript の entry.latencyMs が transcript(speaker:s
     }
   });
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     fireOrchestratorFactory: /** @type {any} */ (fake.factory),
     brainStatus: /** @type {any} */ (wiring.brainStatus)
   });
@@ -2939,6 +2959,7 @@ test("cockpit SSE: onSoulTranscript の entry.latencyMs が transcript(speaker:s
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const soulLine = await client.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
     assert.equal(soulLine.data.latencyMs, 2345);
@@ -2958,11 +2979,12 @@ test("cockpit SSE: onSoulTranscript の entry に latencyMs が無ければ従�
       hooks.onSoulTranscript({ seq: 1, startMs: 0, endMs: 0, text: "はい", speaker: "soul", appendedAtMs: 1000 });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const soulLine = await client.waitFor((e) => e.event === "transcript" && e.data.speaker === "soul");
     assert.equal(soulLine.data.latencyMs, null);
@@ -2983,6 +3005,7 @@ test("cockpit SSE: onUsage に brain 札が additive で乗る（既存 usage �
     }
   });
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     fireOrchestratorFactory: /** @type {any} */ (fake.factory),
     brainStatus: /** @type {any} */ (wiring.brainStatus)
   });
@@ -2990,6 +3013,7 @@ test("cockpit SSE: onUsage に brain 札が additive で乗る（既存 usage �
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const usage = await client.waitFor((e) => e.event === "usage");
     // 既存フィールドは無変更。
@@ -3064,11 +3088,12 @@ test("cockpit SSE: bargeIn 診断は elapsedMs/charsSpoken/totalChars/prefix を
       });
     }
   });
-  const server = createCockpitServer({ fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
+  const server = createCockpitServer({ pipelineFactory: /** @type {any} */ (makeFakePipeline().factory), fireOrchestratorFactory: /** @type {any} */ (fake.factory) });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url); // 配信の組み直し Domain E: 手動の発火は場が開いている間だけ。
     await postJson(`${url}/api/fire`, {});
     const diag = await client.waitFor((e) => e.event === "diagnostic" && e.data.type === "bargeIn");
     assert.equal(diag.data.elapsedMs, 350);

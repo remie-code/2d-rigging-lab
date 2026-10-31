@@ -4,6 +4,8 @@
  *
  * 配信の組み直し Domain A: 会話指示は今のロールの性格の指示（roles/<id>/instructions.md）。編集するのは今の
  * ロールだけ（頭ごとの select はやめた）。ロールの名前と動かすモデルは読むだけで見せる。
+ * 配信の組み直し Domain E: ロールのタブの「ロールの編集 → 性格の指示」のページになった（戻り先はロール）。場の途中
+ * （locked）は書けない（ロールの持ち物は場の途中で替えない・サーバも 409 で断る）。
  */
 
 import { html } from "../vendor/htm.preact.standalone.mjs";
@@ -13,7 +15,7 @@ import { conversationInstructionStatusView, soulSkillNoticeText } from "../view-
  * soulSkills（記憶の作り直し Wave 3 仕上げ）: 魂が①の固定の指示にいつも足す教え（skills/）。会話指示とは別に足される
  * ことを案内し、本文を読むだけで見せる（pre・編集の口は無い）。空なら何も出さない。
  * @param {{ roleId: string | null; roleName?: string | null; brainLabel?: string | null; state: any;
- *   soulSkills?: ReadonlyArray<{ name: string; path: string; body: string }>;
+ *   soulSkills?: ReadonlyArray<{ name: string; path: string; body: string }>; locked?: boolean;
  *   onBack?: () => void; onEdit?: (ev: any) => void; onSave?: () => void; onReset?: () => void }} props
  */
 export function ConversationInstructionEditor({
@@ -22,6 +24,7 @@ export function ConversationInstructionEditor({
   brainLabel,
   state,
   soulSkills,
+  locked = false,
   onBack,
   onEdit,
   onSave,
@@ -32,14 +35,14 @@ export function ConversationInstructionEditor({
   const busy = ["loading", "saving", "resetting"].includes(currentState.status);
   const revisionText = typeof currentState.revision === "number" ? `revision ${currentState.revision}` : "revision 未取得";
   const skills = Array.isArray(soulSkills) ? soulSkills : [];
-  const unavailable = !roleId;
+  const unavailable = !roleId || locked === true;
   return html`
     <div class="conversation-instruction-editor" data-conversation-instruction-editor>
       <div class="conversation-instruction-editor-head">
-        <button type="button" class="conversation-instruction-back" aria-label="頭脳・会話へ戻る" onClick=${onBack}>
-          ← 頭脳・会話
+        <button type="button" class="conversation-instruction-back" aria-label="ロールへ戻る" onClick=${onBack}>
+          ← ロール
         </button>
-        <h3>会話指示</h3>
+        <h3>性格の指示</h3>
       </div>
       <dl class="conversation-instruction-managed" aria-label="今のロール（読み取り専用）">
         <div>
@@ -51,7 +54,8 @@ export function ConversationInstructionEditor({
           <dd>${brainLabel || "unknown"}</dd>
         </div>
       </dl>
-      <p class="conversation-instruction-readonly-note">今のロールの性格の指示を書きます。名前とモデルはここでは変えられません（読み取り専用）。</p>
+      <p class="conversation-instruction-readonly-note">今のロールの性格の指示を書きます。名前とモデルはロールの編集で変えます（ここでは読み取り専用）。</p>
+      ${locked ? html`<p class="conversation-instruction-locked-note">配信の途中は性格の指示を直せない（配信を終えてから）。</p>` : null}
       <p class="conversation-instruction-revision" aria-label="会話指示の適用状態">
         適用状態: ${currentState.isOverride ? "このロールの保存済みの指示" : "既定"}（${revisionText}）
       </p>

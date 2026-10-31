@@ -223,6 +223,114 @@ export function roleIdentity(role) {
 }
 
 /**
+ * 名前から作る名前の手がかり(配信の組み直し Domain E: ロールの編集で名前を替えたとき・新しいロールを作ったとき)。
+ * 呼ばれ方・whisper の手がかり・hotwords を新しい名前だけにする(写した元のロールの名前で呼ばれたと取り違えないため)。
+ * @param {{ canonical: string; latin: string }} name
+ */
+function nameHintsForName(name) {
+  return {
+    whisperPrompt: `${name.canonical}。`,
+    voiceCallVariants: [name.canonical],
+    commentCallVariants: [...(name.latin ? [name.latin] : []), name.canonical],
+    hotwords: [name.canonical]
+  };
+}
+
+/** @param {unknown} value @returns {value is Record<string, any>} */
+function isPlainObject(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * ロールの編集(配信の組み直し Domain E・操縦席のロールのタブ)の書き換えを、項目ごとに厳しく確かめてロールに当てる。
+ * 読むときの normalizeRole と違い、型の違う・範囲外の値は既定へ倒さず、理由を返して断る(画面で入れ損ねた値で
+ * 黙ってモデルや声が替わらないように)。書き換えられるのは 名前(呼び名・見せる名前・ローマ字)・動かすモデル・声
+ * (方式・AivisSpeech の話者・ElevenLabs の声の id)・口数・話し始め・体。名前の手がかりは直接は書き換えず、呼び名か
+ * ローマ字が替わったときだけ新しい名前から作り直す。性格の指示は別の口(instructions.md)。
+ *
+ * @param {Readonly<Role>} role  今のロール。
+ * @param {unknown} patch
+ * @returns {{ ok: true; role: Readonly<Role> } | { ok: false; reason: string }}
+ */
+export function applyRolePatch(role, patch) {
+  if (!isPlainObject(patch)) return { ok: false, reason: "ロールの編集の形が違う" };
+  const json = /** @type {Record<string, any>} */ (roleToJson(role));
+  if (patch.name !== undefined) {
+    if (!isPlainObject(patch.name)) return { ok: false, reason: "名前の形が違う" };
+    const canonical = nameText(patch.name.canonical);
+    const display = nameText(patch.name.display);
+    if (canonical == null) return { ok: false, reason: `呼び名は 1〜${NAME_MAX_CHARS} 字` };
+    if (display == null) return { ok: false, reason: `見せる名前は 1〜${NAME_MAX_CHARS} 字` };
+    const latinRaw = patch.name.latin ?? "";
+    if (typeof latinRaw !== "string") return { ok: false, reason: "ローマ字の形が違う" };
+    const latin = latinRaw.trim();
+    if ([...latin].length > NAME_MAX_CHARS) return { ok: false, reason: `ローマ字は ${NAME_MAX_CHARS} 字まで` };
+    const nameChanged = canonical !== role.name.canonical || latin !== role.name.latin;
+    json.name = { canonical, display, latin };
+    if (nameChanged) json.nameHints = nameHintsForName({ canonical, latin });
+  }
+  if (patch.brain !== undefined) {
+    if (typeof patch.brain !== "string" || !BRAIN_IDS.includes(patch.brain)) return { ok: false, reason: "知らないモデル" };
+    json.brain = patch.brain;
+  }
+  if (patch.voice !== undefined) {
+    if (!isPlainObject(patch.voice)) return { ok: false, reason: "声の形が違う" };
+    const voice = { ...json.voice };
+    if (patch.voice.engine !== undefined) {
+      if (!ROLE_VOICE_ENGINES.includes(patch.voice.engine)) return { ok: false, reason: "知らない声の方式" };
+      voice.engine = patch.voice.engine;
+    }
+    if (patch.voice.aivisSpeaker !== undefined) {
+      const speaker = patch.voice.aivisSpeaker;
+      if (speaker !== null && !(typeof speaker === "number" && Number.isSafeInteger(speaker) && speaker >= 0)) {
+        return { ok: false, reason: "AivisSpeech の話者は 0 以上の整数(空なら既定)" };
+      }
+      voice.aivisSpeaker = speaker;
+    }
+    if (patch.voice.elevenLabsVoiceId !== undefined) {
+      const voiceId = patch.voice.elevenLabsVoiceId === "" ? null : patch.voice.elevenLabsVoiceId;
+      if (voiceId !== null && !(typeof voiceId === "string" && ELEVENLABS_VOICE_ID_PATTERN.test(voiceId))) {
+        return { ok: false, reason: "ElevenLabs の声の id は英数字・_・- の 64 字まで(空なら既定)" };
+      }
+      voice.elevenLabsVoiceId = voiceId;
+    }
+    json.voice = voice;
+  }
+  if (patch.verbosity !== undefined) {
+    if (!ROLE_VERBOSITY_MODES.includes(patch.verbosity)) return { ok: false, reason: "知らない口数" };
+    json.verbosity = patch.verbosity;
+  }
+  if (patch.speakStartMode !== undefined) {
+    if (!ROLE_SPEAK_START_MODES.includes(patch.speakStartMode)) return { ok: false, reason: "知らない話し始め" };
+    json.speakStartMode = patch.speakStartMode;
+  }
+  if (patch.body !== undefined) {
+    if (typeof patch.body !== "boolean") return { ok: false, reason: "体は使う / 使わないのどちらか" };
+    json.body = patch.body;
+  }
+  return { ok: true, role: normalizeRole(role.id, json) };
+}
+
+/**
+ * 今のロールを写して新しいロールを作る(配信の組み直し Domain E・設計 §6「新しいロールは、今のロールを写して作る」)。
+ * モデル・声・口数・話し始め・体を写し、名前は新しい名前(無ければ id)にして名前の手がかりを作り直す。書かない
+ * (置き場に書くのは呼び出し側)。性格の指示(instructions.md)は呼び出し側が写す。
+ *
+ * @param {Readonly<Role>} role  写す元。
+ * @param {{ id: string; name?: string | null }} options
+ * @returns {{ ok: true; role: Readonly<Role> } | { ok: false; reason: string }}
+ */
+export function copyRoleAs(role, { id, name }) {
+  if (!isRoleId(id)) return { ok: false, reason: "ロールの id は英小文字で始まる 32 字までの英小文字・数字・-(Windows の予約名は使えない)" };
+  const given = name == null || (typeof name === "string" && name.trim() === "") ? id : nameText(name);
+  if (given == null) return { ok: false, reason: `名前は 1〜${NAME_MAX_CHARS} 字` };
+  const json = /** @type {Record<string, any>} */ (roleToJson(role));
+  json.name = { canonical: given, display: given, latin: "" };
+  json.nameHints = nameHintsForName({ canonical: given, latin: "" });
+  return { ok: true, role: normalizeRole(id, json) };
+}
+
+/**
  * 名前のひな形(model-identity.mjs の cody / chappy の表)からロールを作る(引っ越しと、ロールが 1 つも無いときの
  * 既定に使う)。残りの持ち物は `rest` で渡す(無ければ既定)。
  * @param {Readonly<import("../mind/model-identity.mjs").ModelIdentity>} identity

@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_MODEL_IDENTITY,
   MODEL_IDENTITIES,
+  WINDOWS_RESERVED_NAMES,
   isRoleId,
+  isWindowsReservedName,
   normalizeModelIdentity,
   resolveModelIdentity
 } from "./model-identity.mjs";
@@ -98,4 +100,19 @@ test("model identity: normalizeModelIdentity はロールの名前を形だけ�
   }
   assert.equal(isRoleId("chappy"), true);
   assert.equal(isRoleId("../chappy"), false);
+});
+
+test("isRoleId: Windows の予約名は大文字小文字を問わず通さない（isWindowsReservedName・配信の組み直し Domain E）", () => {
+  for (const reserved of ["con", "CON", "Nul", "prn", "aux", "com0", "com1", "COM9", "lpt0", "lpt1", "LPT9"]) {
+    assert.equal(isWindowsReservedName(reserved), true, reserved);
+    assert.equal(isRoleId(reserved), false, reserved);
+  }
+  for (const ok of ["console", "com10", "lpt", "con-1", "nul2"]) {
+    assert.equal(isWindowsReservedName(ok), false, ok);
+    assert.equal(isRoleId(ok), true, ok);
+  }
+  assert.equal(WINDOWS_RESERVED_NAMES.length, 24);
+  assert.ok(Object.isFrozen(WINDOWS_RESERVED_NAMES));
+  // 名前を受け取る側も予約名の id は既定へ倒す。
+  assert.equal(normalizeModelIdentity({ id: "con", canonicalName: "コン", displayName: "コン" }), DEFAULT_MODEL_IDENTITY);
 });

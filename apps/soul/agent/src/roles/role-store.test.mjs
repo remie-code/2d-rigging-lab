@@ -10,12 +10,15 @@ import { join } from "node:path";
 import {
   DEFAULT_ROLES_DIR,
   ROLE_DEFAULTS,
+  applyRolePatch,
+  copyRoleAs,
   createRoleInstructionStore,
   isRoleId,
   listRoles,
   normalizeRole,
   readRole,
   readRoleInstructions,
+  roleDir,
   roleFromIdentity,
   roleIdentity,
   roleToJson,
@@ -200,4 +203,103 @@ test("role store: isRoleId は英小文字で始まる 32 字までの英小文�
   for (const ng of ["", "Chappy", "1abc", "-a", "a_b", "a.b", "a/b", "..", "x".repeat(33), 3, null]) {
     assert.equal(isRoleId(ng), false, String(ng));
   }
+});
+
+test("role store: isRoleId は Windows の予約名（con・nul・prn・aux・com0〜9・lpt0〜9）を通さない・ロールの置き場に書けない（配信の組み直し Domain E）", () => {
+  for (const reserved of ["con", "nul", "prn", "aux", "com1", "com9", "com0", "lpt1", "lpt9", "lpt0"]) {
+    assert.equal(isRoleId(reserved), false, reserved);
+    assert.throws(() => roleDir("x", reserved), TypeError, reserved);
+    assert.equal(readRole({ dir: "x", id: reserved }).ok, false, reserved);
+  }
+  // 予約名を含むだけの id・予約名に似た id は通す。
+  for (const ok of ["con-1", "console", "com10", "lpt", "nul2x", "auxx"]) assert.equal(isRoleId(ok), true, ok);
+});
+
+// ── ロールの編集・新しいロール（配信の組み直し Domain E）────────────────────────────
+
+test("applyRolePatch: 名前・モデル・声・口数・話し始め・体を書き換える（書き換えない項目は今のまま・凍っている）", () => {
+  const base = normalizeRole("mio", FULL_ROLE);
+  const result = applyRolePatch(base, {
+    brain: "claude-opus-55",
+    voice: { engine: "aivis", aivisSpeaker: 7, elevenLabsVoiceId: "" },
+    verbosity: "quiet",
+    speakStartMode: "speak-now",
+    body: true
+  });
+  assert.equal(result.ok, true);
+  const role = /** @type {any} */ (result).role;
+  assert.equal(role.brain, "claude-opus-55");
+  assert.deepEqual({ ...role.voice }, { engine: "aivis", aivisSpeaker: 7, elevenLabsVoiceId: null });
+  assert.equal(role.verbosity, "quiet");
+  assert.equal(role.speakStartMode, "speak-now");
+  assert.equal(role.body, true);
+  // 名前を書き換えていなければ名前と手がかりはそのまま。
+  assert.deepEqual({ ...role.name }, { ...base.name });
+  assert.deepEqual([...role.nameHints.voiceCallVariants], [...base.nameHints.voiceCallVariants]);
+  assert.ok(Object.isFrozen(role));
+  // 体だけの書き換え。
+  const bodyOnly = applyRolePatch(base, { body: true });
+  assert.equal(/** @type {any} */ (bodyOnly).role.body, true);
+  assert.equal(/** @type {any} */ (bodyOnly).role.brain, base.brain);
+});
+
+test("applyRolePatch: 呼び名かローマ字を替えたら名前の手がかり（呼ばれ方・whisper・hotwords）を新しい名前から作り直す", () => {
+  const base = normalizeRole("mio", FULL_ROLE);
+  const renamed = /** @type {any} */ (applyRolePatch(base, { name: { canonical: "ソラ", display: "そら", latin: "Sora" } })).role;
+  assert.deepEqual({ ...renamed.name }, { canonical: "ソラ", display: "そら", latin: "Sora" });
+  assert.equal(renamed.nameHints.whisperPrompt, "ソラ。");
+  assert.deepEqual([...renamed.nameHints.voiceCallVariants], ["ソラ"]);
+  assert.deepEqual([...renamed.nameHints.commentCallVariants], ["Sora", "ソラ"]);
+  assert.deepEqual([...renamed.nameHints.hotwords], ["ソラ"]);
+  // 見せる名前だけを替えたときは手がかりを触らない。
+  const displayOnly = /** @type {any} */ (applyRolePatch(base, { name: { canonical: "ミオ", display: "ミオちゃん", latin: "Mio" } })).role;
+  assert.equal(displayOnly.name.display, "ミオちゃん");
+  assert.deepEqual([...displayOnly.nameHints.voiceCallVariants], ["ミオ", "みお"]);
+});
+
+test("applyRolePatch: 型の違う・範囲外の値は既定へ倒さず理由を返して断る", () => {
+  const base = normalizeRole("mio", FULL_ROLE);
+  for (const bad of [
+    null,
+    [],
+    "x",
+    { brain: "gpt-unknown" },
+    { brain: 3 },
+    { voice: "aivis" },
+    { voice: { engine: "openai" } },
+    { voice: { aivisSpeaker: -1 } },
+    { voice: { aivisSpeaker: 1.5 } },
+    { voice: { aivisSpeaker: "12" } },
+    { voice: { elevenLabsVoiceId: "has space" } },
+    { verbosity: "loud" },
+    { speakStartMode: "now" },
+    { body: "yes" },
+    { name: "ミオ" },
+    { name: { canonical: "", display: "みお" } },
+    { name: { canonical: "ミオ", display: "" } },
+    { name: { canonical: "ミオ", display: "みお", latin: 3 } },
+    { name: { canonical: "x".repeat(33), display: "みお" } }
+  ]) {
+    const result = applyRolePatch(base, bad);
+    assert.equal(result.ok, false, JSON.stringify(bad));
+    assert.equal(typeof (/** @type {any} */ (result).reason), "string");
+  }
+});
+
+test("copyRoleAs: 今のロールのモデル・声・口数・話し始め・体を写し、名前は新しい名前（無ければ id）で手がかりを作り直す", () => {
+  const base = normalizeRole("chappy", { ...FULL_ROLE, name: { canonical: "チャッピー", display: "チャッピー", latin: "Chappy" } });
+  const copied = /** @type {any} */ (copyRoleAs(base, { id: "mio", name: "ミオ" })).role;
+  assert.equal(copied.id, "mio");
+  assert.deepEqual({ ...copied.name }, { canonical: "ミオ", display: "ミオ", latin: "" });
+  assert.deepEqual([...copied.nameHints.voiceCallVariants], ["ミオ"]);
+  assert.deepEqual([...copied.nameHints.hotwords], ["ミオ"]);
+  assert.equal(copied.brain, base.brain);
+  assert.deepEqual({ ...copied.voice }, { ...base.voice });
+  assert.equal(copied.verbosity, base.verbosity);
+  assert.equal(copied.speakStartMode, base.speakStartMode);
+  assert.equal(copied.body, base.body);
+  const unnamed = /** @type {any} */ (copyRoleAs(base, { id: "sora" })).role;
+  assert.equal(unnamed.name.canonical, "sora");
+  for (const id of ["con", "NUL", "Mio", "", "a/b"]) assert.equal(copyRoleAs(base, { id }).ok, false, id);
+  assert.equal(copyRoleAs(base, { id: "mio", name: "x".repeat(33) }).ok, false);
 });

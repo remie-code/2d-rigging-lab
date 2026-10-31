@@ -256,6 +256,13 @@ test("memoryDirForRole: 記憶の根の下のロールの id のフォルダ。�
   assert.throws(() => memoryDirForRole("", "chappy"), TypeError);
 });
 
+test("memoryDirForRole: Windows の予約名（con・nul・com1・lpt1 など）はフォルダ名にしない（配信の組み直し Domain E）", () => {
+  for (const reserved of ["con", "nul", "prn", "aux", "com1", "com9", "lpt1", "lpt9"]) {
+    assert.throws(() => memoryDirForRole(join("x", "memories"), reserved), TypeError, reserved);
+  }
+  assert.equal(memoryDirForRole(join("x", "memories"), "con-2"), join("x", "memories", "con-2"));
+});
+
 test("conventionsSeedForName: 種の「チャッピー」だけを呼び名に差し替える(ほかの文面は一字も変えない)", () => {
   const seed = readFileSync(CONVENTIONS_SEED_PATH, "utf8").replace(/\r\n/g, "\n");
   const count = seed.split(CONVENTIONS_SEED_NAME).length - 1;

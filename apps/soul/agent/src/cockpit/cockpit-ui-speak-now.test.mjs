@@ -115,13 +115,18 @@ test("speakStartPostErrorText / speakStartRequestErrorText: 503/!ok の文言・
   assert.equal(speakStartRequestErrorText(new Error("net")), "speak-start error: Error: net");
 });
 
-test("DrivePanel（運転タブ）: 口数の隣に話し始めのプルダウンが並ぶ（hooks を使うため関数としてはソースで確認）", async () => {
+test("ロールの編集（配信の組み直し Domain E で運転のタブから移した）: 口数の隣に話し始めのプルダウンが並び、ロールの下書きに書く（POST /api/role/edit）・運転のタブには無い", async () => {
   const { readFileSync } = await import("node:fs");
-  const src = readFileSync(new URL("./ui/control-bar.mjs", import.meta.url), "utf8");
-  const verbosityAt = src.indexOf("<${VerbositySelect}");
-  const speakAt = src.indexOf("<${SpeakStartSelect}");
+  const drawer = readFileSync(new URL("./ui/settings-drawer.mjs", import.meta.url), "utf8");
+  const rolePanel = drawer.slice(drawer.indexOf('id="cockpit-settings-panel-role"'), drawer.indexOf('id="cockpit-settings-panel-drive"'));
+  const verbosityAt = rolePanel.indexOf("<${VerbositySelect}");
+  const speakAt = rolePanel.indexOf("<${SpeakStartSelect}");
   assert.ok(verbosityAt > 0 && speakAt > verbosityAt, "口数の直後");
-  assert.ok(src.includes('doFetch("/api/speak-start"'));
+  assert.ok(rolePanel.includes('onChange=${onRoleText("speakStartMode")}'), "話し始めはロールの下書き");
+  const drive = readFileSync(new URL("./ui/control-bar.mjs", import.meta.url), "utf8");
+  const panel = drive.slice(drive.indexOf("export function DrivePanel"));
+  assert.ok(!panel.includes("<${SpeakStartSelect}") && !panel.includes("<${VerbositySelect}"), "運転のタブから外した（配信中に替えない）");
+  assert.ok(!drive.includes('doFetch("/api/speak-start"'), "運転のタブから話し始めの POST を外した");
   assert.equal(typeof DrivePanel, "function");
   assert.ok(COCKPIT_CSS.includes(".row.judgment-marker"), "判定行の意匠");
 });
