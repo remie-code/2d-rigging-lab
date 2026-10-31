@@ -34,6 +34,7 @@ import {
   formatCommentJudgmentLine,
   shouldSkipMemoryCheckpoint,
   createMemoryRecorder,
+  createRoleMemoryPlaces,
   resolveWriterBrainDef,
   isMcpConfigReadFailureWarning,
   formatRecallEventLine,
@@ -2819,4 +2820,190 @@ test("声の選択の結線: Start で ttsEngine の engine を用意し・作�
     await server.close();
     mgr.dispose();
   }
+});
+
+// ── 記憶をロールごとに（配信の組み直し Domain B）──────────────────────────────────────────
+//  保存の係が置き場（ロールの記憶のフォルダ）を頼んだ時点で取ること、置き場がロールに付いていくこと、main() の結線。
+//  本物の②④は使わない。置き場の準備は偽物か、OS temp の本物の git だけ（apps/soul/agent/memories/ には触れない）。
+
+/** 解決を外から操れる writeImpl（材料と置き場を記録する）。 */
+function makePlacedWrite() {
+  /** @type {Array<{ entries: any[]; place: any; resolve: (v: any) => void }>} */
+  const pending = [];
+  const writeImpl = (/** @type {any[]} */ entries, /** @type {any} */ place) =>
+    new Promise((resolve) => {
+      pending.push({ entries, place, resolve });
+    });
+  return { writeImpl, pending };
+}
+
+test("createMemoryRecorder: 置き場は保存を頼んだ時点のもの（走っている・待っている保存は、あとでロールが替わっても前のロールのフォルダに書く）", { timeout: 5000 }, async () => {
+  const w = makePlacedWrite();
+  const chappy = { roleId: "chappy" };
+  const cody = { roleId: "cody" };
+  let current = chappy;
+  const recorder = createMemoryRecorder({ getLiveEntries: () => [], getPlace: () => current, writeImpl: w.writeImpl });
+  const first = recorder.record(["c1"]); // 走る（チャッピー）。
+  const queuedChappy = recorder.record(["c1", "c2"]); // 耳の Stop の転写（チャッピー）が待つ。
+  current = cody; // 耳が止まっている間にロールを替えた。
+  const queuedCody = recorder.record(["k1"]); // こーでぃーの頼みは、チャッピーの待ちに合流しない。
+  const mergedCody = recorder.record(["k1", "k2"]); // 同じ置き場の待ちには合流する（今まで通り）。
+  assert.notEqual(queuedChappy, queuedCody);
+  assert.equal(queuedCody, mergedCody);
+  await tick();
+  assert.equal(w.pending.length, 1);
+  assert.equal(w.pending[0].place, chappy);
+  w.pending[0].resolve({ written: true });
+  await first;
+  await tick();
+  assert.deepEqual(w.pending[1].entries, ["c1", "c2"]);
+  assert.equal(w.pending[1].place, chappy, "待っていた保存は頼んだときのロールのフォルダ");
+  w.pending[1].resolve({ written: true });
+  await queuedChappy;
+  await tick();
+  assert.deepEqual(w.pending[2].entries, ["k1", "k2"]);
+  assert.equal(w.pending[2].place, cody);
+  w.pending[2].resolve({ written: true });
+  await queuedCody;
+  await recorder.whenIdle();
+  assert.equal(w.pending.length, 3, "直列のまま（置き場ごとに 1 回ずつ）");
+});
+
+test("createMemoryRecorder: getPlace が投げたら置き場は null（保存の係は止まらず writeImpl が断る）", { timeout: 5000 }, async () => {
+  const w = makePlacedWrite();
+  const recorder = createMemoryRecorder({
+    getLiveEntries: () => [],
+    getPlace: () => {
+      throw new Error("boom");
+    },
+    writeImpl: w.writeImpl
+  });
+  const done = recorder.record(["x"]);
+  assert.equal(w.pending[0].place, null);
+  w.pending[0].resolve({ written: false });
+  await done;
+});
+
+/** 偽物の置き場の準備（呼ばれた引数を記録・結果は差し替え可）。 */
+function makeFakePlaceDeps(roleRef, { prepareResult = { ok: true } } = {}) {
+  /** @type {any[]} */
+  const prepared = [];
+  /** @type {any[]} */
+  const identities = [];
+  return {
+    prepared,
+    identities,
+    deps: {
+      root: join("C:", "tmp", "memories-root"),
+      currentRole: () => roleRef.current,
+      startedAtMs: 1234,
+      prepareImpl: async (/** @type {any} */ options) => {
+        prepared.push(options);
+        return typeof prepareResult === "function" ? prepareResult(options) : prepareResult;
+      },
+      createIdentityImpl: (/** @type {any} */ options) => {
+        identities.push(options);
+        return { get: () => ({ dateJst: "2026-10-31", baseName: `${options.dir}-base` }) };
+      }
+    }
+  };
+}
+
+test("createRoleMemoryPlaces: 今のロールの置き場（memories/<role-id>/・準備は呼び名の種・本体のファイル名）をロールごとに 1 回だけ作る", async () => {
+  const chappy = roleFromIdentity(MODEL_IDENTITIES.chappy);
+  const cody = roleFromIdentity(MODEL_IDENTITIES.cody);
+  const ref = { current: chappy };
+  const fake = makeFakePlaceDeps(ref);
+  const places = createRoleMemoryPlaces(fake.deps);
+  const a = places.place();
+  assert.ok(a);
+  assert.equal(a.roleId, "chappy");
+  assert.equal(a.dir, join(fake.deps.root, "chappy"));
+  await a.ready;
+  assert.deepEqual(fake.prepared, [{ dir: join(fake.deps.root, "chappy"), soulName: "チャッピー" }]);
+  assert.deepEqual(fake.identities, [{ dir: join(fake.deps.root, "chappy"), startedAtMs: 1234 }]);
+  assert.equal(places.place(), a, "同じロールなら同じ置き場（準備も本体のファイル名も作り直さない）");
+  ref.current = cody;
+  const b = places.place();
+  assert.ok(b);
+  assert.notEqual(b, a);
+  assert.equal(b.dir, join(fake.deps.root, "cody"));
+  await b.ready;
+  assert.deepEqual(fake.prepared[1], { dir: join(fake.deps.root, "cody"), soulName: "コーディ" });
+  ref.current = chappy;
+  assert.equal(places.place(), a, "戻したロールは前の置き場（同じ本体のファイル名）");
+  assert.equal(fake.prepared.length, 2);
+});
+
+test("createRoleMemoryPlaces: 記憶の引っ越しが失敗した起動（available: false）では何も準備せず null", async () => {
+  const ref = { current: roleFromIdentity(MODEL_IDENTITIES.chappy) };
+  const fake = makeFakePlaceDeps(ref);
+  const places = createRoleMemoryPlaces({ ...fake.deps, available: false });
+  assert.equal(places.place(), null);
+  assert.deepEqual(fake.prepared, []);
+  assert.deepEqual(fake.identities, []);
+});
+
+test("createRoleMemoryPlaces: 準備の失敗は onPrepareFailed へ（ready は reject しない・配信を止めない）", async () => {
+  const ref = { current: roleFromIdentity(MODEL_IDENTITIES.cody) };
+  /** @type {any[]} */
+  const failures = [];
+  const failing = makeFakePlaceDeps(ref, { prepareResult: { ok: false, error: "git init: git not found" } });
+  const place = createRoleMemoryPlaces({ ...failing.deps, onPrepareFailed: (info) => failures.push(info) }).place();
+  await place?.ready;
+  assert.deepEqual(failures, [{ roleId: "cody", error: "git init: git not found" }]);
+  const throwing = makeFakePlaceDeps(ref, {
+    prepareResult: () => {
+      throw new Error("boom");
+    }
+  });
+  const place2 = createRoleMemoryPlaces({ ...throwing.deps, onPrepareFailed: (info) => failures.push(info) }).place();
+  await place2?.ready;
+  assert.deepEqual(failures[1], { roleId: "cody", error: "boom" });
+});
+
+test("createRoleMemoryPlaces: 本物の git で、ロールごとのフォルダと git ができ、新しいロールの種は呼び名に差し替わる", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "cockpit-role-memory-test-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const memoriesRoot = join(root, "memories");
+  const mio = normalizeRole("mio", { name: { canonical: "ミオ", display: "みお" } });
+  const ref = { current: /** @type {any} */ (roleFromIdentity(MODEL_IDENTITIES.chappy)) };
+  const places = createRoleMemoryPlaces({ root: memoriesRoot, currentRole: () => ref.current, startedAtMs: Date.UTC(2026, 9, 31, 3) });
+  await places.place()?.ready;
+  ref.current = mio;
+  const mioPlace = places.place();
+  await mioPlace?.ready;
+  assert.ok(existsSync(join(memoriesRoot, "chappy", ".git")));
+  assert.ok(existsSync(join(memoriesRoot, "mio", ".git")));
+  assert.equal(existsSync(join(memoriesRoot, ".git")), false, "記憶の根には git を作らない");
+  const seed = readFileSync(join(memoriesRoot, "chappy", "_conventions.md"), "utf8");
+  const mioConventions = readFileSync(join(memoriesRoot, "mio", "_conventions.md"), "utf8");
+  assert.ok(seed.includes("チャッピー"));
+  assert.ok(!mioConventions.includes("チャッピー"));
+  assert.equal(mioConventions.split("ミオ").join("チャッピー"), seed);
+  assert.deepEqual(mioPlace?.streamRecord.get(), { dateJst: "2026-10-31", baseName: "2026-10-31" });
+});
+
+test("記憶をロールごとにの結線: 引っ越し（写しのフォルダを共有）→ 置き場の準備の順、記憶の 4 か所は今のロールの置き場", async () => {
+  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
+  const main = source.slice(source.indexOf("async function main()"));
+  // 写しのフォルダは 1 つの値を設定の分と記憶の分で共有する。
+  assert.match(main, /const migrationBackup = migrationBackupDir\(DEFAULT_MIGRATION_BACKUP_ROOT, Date\.now\(\)\);/);
+  assert.match(main, /runStartupMigration\(\{[\s\S]{0,200}?memoriesDir: DEFAULT_MEMORY_DIR,\s*backupDir: migrationBackup\s*\}\)/);
+  // 記憶の引っ越しは、記憶のフォルダの準備より前。
+  const migrateAt = main.indexOf("runStartupMigration({");
+  const placesAt = main.indexOf("createRoleMemoryPlaces({");
+  const prepareAt = main.indexOf("await memoryPlaces.place()?.ready;");
+  assert.ok(migrateAt > 0 && migrateAt < placesAt && placesAt < prepareAt);
+  assert.match(main, /available: startupMigration\.memories\.status !== "failed"/);
+  // 記憶の根をそのまま記憶のフォルダとして渡さない（準備・本体のファイル名・②・④）。
+  assert.doesNotMatch(source, /dir: DEFAULT_MEMORY_DIR/);
+  assert.doesNotMatch(source, /createStreamRecordIdentity\(\{ dir: DEFAULT_MEMORY_DIR/);
+  const writer = source.slice(source.indexOf("const memoryRecorder = createMemoryRecorder"), source.indexOf("const memoryStatus = () =>"));
+  assert.match(writer, /getPlace: \(\) => memoryPlaces\.place\(\)/);
+  assert.match(writer, /record: place\.streamRecord\.get\(\),\s*dir: place\.dir,/);
+  assert.match(writer, /const recallRunner = async \(job\) => \{\s*const place = memoryPlaces\.place\(\);[\s\S]*?dir: place\.dir,/);
+  // ロールを替えたら替えたロールの置き場を準備する。
+  const onSetRole = main.slice(main.indexOf("const onSetRole = async (id) =>"), main.indexOf("const roleStatus = () =>"));
+  assert.match(onSetRole, /await memoryPlaces\.place\(\)\?\.ready;/);
 });

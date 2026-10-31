@@ -540,6 +540,15 @@ test("writeStreamRecord: create と record が無ければ TypeError", async () 
   );
 });
 
+test("writeStreamRecord: dir が無ければ TypeError（配信の組み直し Domain B: 既定の置き場=記憶の根へは書かない）", async () => {
+  const { create, calls } = makeFakeCreate();
+  await assert.rejects(
+    () => writeStreamRecord(/** @type {any} */ ({ create, entries: [{ text: "x", speaker: "you" }], record: RECORD })),
+    /options\.dir is required/
+  );
+  assert.equal(calls.create, 0, "②を作らない");
+});
+
 test("writeStreamRecord: 本物の git の通し（試験用の記憶のフォルダに偽物の②が書き、書き出し役のコミットが 1 つ積まれる）", async (t) => {
   const root = tmpDir();
   t.after(() => rmSync(root, { recursive: true, force: true }));

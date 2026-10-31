@@ -65,3 +65,8 @@ cockpit-settings.local.json.bak*
 # 先頭の / で apps/soul/agent/ 直下だけに留める（無いと src/roles/ のコードまで無視してしまう）。
 /roles/
 /roles.migrating-*/
+
+# ── 記憶の引っ越しの作業用フォルダ（配信の組み直し Domain B・非コミット）──────────────
+# 起動時の引っ越し（記憶の分）で memories/ をいったんこの名前へ移し、作り直した memories/ の下の chappy/ へ移す
+# （src/memory/memory-migration.mjs）。途中で止まったときの残りもこの名前。memories/<role-id>/ は上の memories/ で無視される。
+/memories.migrating-*/

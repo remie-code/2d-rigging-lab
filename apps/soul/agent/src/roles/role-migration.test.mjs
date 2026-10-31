@@ -3,6 +3,7 @@
 // 走らせる。本物の設定ファイル・apps/soul/agent/roles/ には触れない。
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,9 +12,12 @@ import {
   DEFAULT_MIGRATION_BACKUP_ROOT,
   chappyInstructionBrains,
   formatRoleMigrationReport,
+  formatStartupMigrationReport,
   migrateSettingsToRoles,
-  migrationBackupDir
+  migrationBackupDir,
+  runStartupMigration
 } from "./role-migration.mjs";
+import { commitMemoryChanges, pinnedGitArgs, prepareMemoryFolder } from "../memory/memory-store.mjs";
 import { listRoles, readRole, readRoleInstructions } from "./role-store.mjs";
 import { MODEL_IDENTITIES } from "../mind/model-identity.mjs";
 import { DEFAULT_CONVERSATION_INSTRUCTION_BODY } from "../mind/fire-orchestrator.mjs";
@@ -218,4 +222,92 @@ test("引っ越し: 写しの置き場は apps/soul/agent/tmp/restructure-backup
   assert.ok(DEFAULT_MIGRATION_BACKUP_ROOT.replace(/\\/g, "/").endsWith("apps/soul/agent/tmp/restructure-backups"));
   const dir = migrationBackupDir("/root", new Date(2026, 9, 31, 9, 5, 7).getTime());
   assert.equal(dir.replace(/\\/g, "/"), "/root/restructure-20261031-090507");
+});
+
+// ── 起動時の引っ越しの 1 つの流れ(設定の分 + 記憶の分・配信の組み直し Domain B)──────────────────
+//  記憶の分は本物の git で前の形(memories/ 直下に .git と記録)を作って確かめる。
+
+/** 前の形の記憶(memories/ 直下に .git・_conventions.md・記録 1 つ・コミット 1 つ)。 @param {string} memoriesDir */
+async function makeLegacyMemories(memoriesDir) {
+  assert.equal((await prepareMemoryFolder({ dir: memoriesDir })).ok, true);
+  mkdirSync(join(memoriesDir, "topic"), { recursive: true });
+  writeFileSync(join(memoriesDir, "topic", "2026-10-20.md"), "ダミーの本体\n", "utf8");
+  const committed = await commitMemoryChanges({ dir: memoriesDir, role: "書き出し役" });
+  assert.equal(committed.ok && committed.committed, true);
+  return execFileSync("git", pinnedGitArgs(memoriesDir, ["rev-parse", "HEAD"]), { encoding: "utf8" }).trim();
+}
+
+/** @param {any} paths */
+const runStartup = (paths) =>
+  runStartupMigration({
+    rolesDir: paths.rolesDir,
+    settingsPath: paths.settingsPath,
+    memoriesDir: join(paths.root, "memories"),
+    backupDir: paths.backupDir
+  });
+
+test("起動の引っ越し: 設定と記憶を 1 つの流れで移し、写しは同じフォルダに置き、表示に件数を足す", async (t) => {
+  const paths = setup(t, OLD_SETTINGS);
+  const memoriesDir = join(paths.root, "memories");
+  const head = await makeLegacyMemories(memoriesDir);
+  const result = runStartup(paths);
+  assert.equal(result.roles.status, "migrated");
+  assert.equal(result.memories.status, "migrated");
+  // 写しのフォルダは 1 つ(設定ファイルと記憶の両方)。
+  assert.deepEqual(readdirSync(paths.backupDir).sort(), ["cockpit-settings.local.json", "memories"]);
+  const chappy = join(memoriesDir, "chappy");
+  assert.equal(execFileSync("git", pinnedGitArgs(chappy, ["rev-parse", "HEAD"]), { encoding: "utf8" }).trim(), head);
+  const lines = formatStartupMigrationReport(result);
+  assert.equal(lines[0], "今の設定をロールへ引っ越した（古い設定のキーは残してある）。");
+  assert.ok(lines.includes(`記憶をロールのフォルダへ引っ越した（記録 1 件・履歴ごと）: ${chappy}`), lines.join("\n"));
+  assert.ok(lines.includes(`記憶の写し: ${join(paths.backupDir, "memories")}`));
+  // 2 回目はどちらも何もしない。
+  const second = runStartup(paths);
+  assert.deepEqual(second.roles, { status: "skipped" });
+  assert.equal(second.memories.status, "skipped");
+  assert.deepEqual(formatStartupMigrationReport(second), []);
+});
+
+test("起動の引っ越し: 記憶の分は roles/ の有無と混ぜずに判定する(roles/ がすでにある起動でも移す)", async (t) => {
+  const paths = setup(t, OLD_SETTINGS);
+  mkdirSync(paths.rolesDir); // Domain A の版で一度起動したあと(roles/ はある・記憶はまだ前の形)。
+  const memoriesDir = join(paths.root, "memories");
+  await makeLegacyMemories(memoriesDir);
+  const result = runStartup(paths);
+  assert.deepEqual(result.roles, { status: "skipped" });
+  assert.equal(result.memories.status, "migrated");
+  assert.ok(existsSync(join(memoriesDir, "chappy", ".git")));
+  assert.equal(existsSync(join(paths.backupDir, "cockpit-settings.local.json")), false, "設定の写しは取らない");
+  assert.ok(existsSync(join(paths.backupDir, "memories", ".git")), "記憶の写しは取る");
+});
+
+test("起動の引っ越し: まっさらな起動(seeded)でも記憶の分はそれだけで判定する", async (t) => {
+  // 設定ファイルが無く、記憶だけ前の形がある。
+  const paths = setup(t, undefined);
+  const memoriesDir = join(paths.root, "memories");
+  await makeLegacyMemories(memoriesDir);
+  const result = runStartup(paths);
+  assert.equal(result.roles.status, "seeded");
+  assert.equal(result.memories.status, "migrated");
+  // 設定ファイルも記憶も無い起動: ロールは seeded、記憶は何もしない(写しのフォルダも作らない)。
+  const fresh = setup(t, undefined);
+  const freshResult = runStartup(fresh);
+  assert.equal(freshResult.roles.status, "seeded");
+  assert.deepEqual(freshResult.memories, { status: "skipped", legacyLeft: false, leftovers: [] });
+  assert.equal(existsSync(fresh.backupDir), false);
+  assert.equal(existsSync(join(fresh.root, "memories")), false);
+});
+
+test("起動の引っ越し: 記憶の分が失敗しても設定の分は進む(表示は失敗の行)", async (t) => {
+  const paths = setup(t, OLD_SETTINGS);
+  const memoriesDir = join(paths.root, "memories");
+  await makeLegacyMemories(memoriesDir);
+  // 記憶の写しの置き場がもう塞がっている(上書きしない)。
+  mkdirSync(join(paths.backupDir, "memories"), { recursive: true });
+  const result = runStartup(paths);
+  assert.equal(result.roles.status, "migrated");
+  assert.equal(result.memories.status, "failed");
+  assert.ok(existsSync(join(memoriesDir, ".git")), "記憶は元の形のまま");
+  const lines = formatStartupMigrationReport(result);
+  assert.ok(lines.some((line) => line.startsWith("記憶の引っ越しに失敗した: ")));
 });

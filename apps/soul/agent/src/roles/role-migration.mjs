@@ -20,6 +20,10 @@
  *    今の設定の値(無ければ今の既定)を写す。AivisSpeech の話者と ElevenLabs の声の id は設定に無い(起動引数か
  *    コードの既定)ので「コードの既定」(null)にする。体は両方「使う」。名前と名前の手がかりは model-identity.mjs の表。
  *
+ * ── 記憶の分と 1 つの流れにする(配信の組み直し Domain B) ─────────────────
+ *  起動時は runStartupMigration が設定の分 → 記憶の分(src/memory/memory-migration.mjs)の順に呼ぶ。写しのフォルダは
+ *  共有し、動く条件はそれぞれ独立に判定する。表示は formatStartupMigrationReport(記憶の分は件数を足す)。
+ *
  * ── 途中で止まっても半端な置き場を残さない ─────────────────────────────
  *  ロールはいったん隣の作業用フォルダに書き、全部書けてから `roles/` へ名前を変える。途中で失敗したら作業用の
  *  フォルダを消して失敗で返す(`roles/` が無いままなので、次の起動でもう一度引っ越しが走る)。
@@ -34,6 +38,7 @@ import { BRAIN_IDS } from "../mind/brains.mjs";
 import { MODEL_IDENTITIES } from "../mind/model-identity.mjs";
 import { LOCAL_STT_DEFAULTS } from "../ears/local-stt/local-stt-engines.mjs";
 import { roleFromIdentity, writeRole, writeRoleInstructions } from "./role-store.mjs";
+import { formatMemoryMigrationReport, migrateMemoriesToRole } from "../memory/memory-migration.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -238,4 +243,37 @@ export function formatRoleMigrationReport(result) {
   }
   if (result.settingsBackupPath) lines.push(`設定ファイルの写し: ${result.settingsBackupPath}`);
   return lines;
+}
+
+/**
+ * @typedef {{ roles: RoleMigrationResult; memories: import("../memory/memory-migration.mjs").MemoryMigrationResult }} StartupMigrationResult
+ */
+
+/**
+ * 起動時の引っ越しの 1 つの流れ(設定の分 → 記憶の分・配信の組み直し Domain B)。写しのフォルダは 2 つで共有する
+ * (1 回の起動で 1 つ)。**動く条件は混ぜない**: 設定の分は `roles/` の有無、記憶の分は `memories/` の直下の記録と
+ * `memories/chappy/` の有無だけで決める(`roles/` がすでにある起動でも、まっさらで seeded の起動でも記憶の分は
+ * それだけで判定する)。どちらも投げない。
+ *
+ * @param {object} options
+ * @param {string} options.rolesDir  ロールの置き場(本番は DEFAULT_ROLES_DIR)。
+ * @param {string} options.settingsPath  設定ファイル(本番は DEFAULT_SETTINGS_PATH)。
+ * @param {string} options.memoriesDir  記憶の根(本番は memory-store.mjs の DEFAULT_MEMORY_DIR)。
+ * @param {string} options.backupDir  この起動の写しのフォルダ({@link migrationBackupDir})。
+ * @returns {StartupMigrationResult}
+ */
+export function runStartupMigration({ rolesDir, settingsPath, memoriesDir, backupDir }) {
+  const roles = migrateSettingsToRoles({ rolesDir, settingsPath, backupDir });
+  const memories = migrateMemoriesToRole({ memoriesDir, backupDir });
+  return { roles, memories };
+}
+
+/**
+ * 起動時の引っ越しの結果を、ターミナルと操縦席のログに 1 回だけ出す行にする(設定の分の行 + 記憶の分の行・
+ * 記憶の分は移した記録の件数と写しの置き場)。何も起きなければ空。
+ * @param {StartupMigrationResult} result
+ * @returns {string[]}
+ */
+export function formatStartupMigrationReport(result) {
+  return [...formatRoleMigrationReport(result.roles), ...formatMemoryMigrationReport(result.memories)];
 }

@@ -70,9 +70,9 @@ import {
 } from "../src/roles/role-store.mjs";
 import {
   DEFAULT_MIGRATION_BACKUP_ROOT,
-  formatRoleMigrationReport,
-  migrateSettingsToRoles,
-  migrationBackupDir
+  formatStartupMigrationReport,
+  migrationBackupDir,
+  runStartupMigration
 } from "../src/roles/role-migration.mjs";
 import { createFireDiagnostics } from "../src/mind/fire-diagnostics.mjs";
 import {
@@ -95,7 +95,7 @@ import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
-import { DEFAULT_MEMORY_DIR, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
+import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
 import { appendSoulSkills, listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
@@ -628,12 +628,18 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  *    あとはライブの転写が空になるため、Stop のときに取った転写を後から来た空や短い転写で上書きしない）。
  *  - 材料（転写）は保存を頼んだ時点で取る（耳の Stop では pipeline を畳む前に取ったものが渡る）。
  *  - 空の転写は走らせない。
+ *  - **置き場も保存を頼んだ時点で取る**（配信の組み直し Domain B・getPlace = その時点のロールの記憶のフォルダ）。
+ *    走っている保存・待っている保存は、頼んだときのロールのフォルダに書く（あとでロールが替わっても、ほかの
+ *    ロールのフォルダに書かない・stream-restructure.md §2.3）。待っている 1 件と置き場が違う頼みは差し替えずに
+ *    後ろに並べる（置き場ごとに順に走らせる）。getPlace が無ければ今まで通り（置き場は undefined で 1 つ）。
  * 1 回の保存（writeImpl）の失敗は握って onError に渡す（どの呼び出し元も巻き込まない）。
  *
  * @param {object} deps
  * @param {() => ReadonlyArray<any>} deps.getLiveEntries  材料の省略時に使うライブの転写（cockpit-server の getTranscript）。
- * @param {(entries: ReadonlyArray<any>) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
- *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。
+ * @param {(entries: ReadonlyArray<any>, place: any) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
+ *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値。
+ * @param {() => any} [deps.getPlace]  保存を頼んだ時点の置き場（本番は今のロールの記憶のフォルダ・§createRoleMemoryPlaces）。
+ *   同じ置き場には同じ値（=== で比べる）を返すこと。投げたら null。
  * @param {(info: { atMs: number; entriesLength: number; commit?: any }) => void} [deps.onSaved]
  *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。
  * @param {(error: unknown) => void} [deps.onError]
@@ -650,8 +656,8 @@ export function createMemoryRecorder(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   /** @type {Promise<void> | null} 走っている保存の一続き（待たせた分まで含む）。 */
   let chain = null;
-  /** @type {{ entries: ReadonlyArray<any>; promise: Promise<void>; resolve: () => void } | null} */
-  let queued = null;
+  /** @type {Array<{ entries: ReadonlyArray<any>; place: any; promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
+  const waiting = [];
 
   const callSafely = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
     if (typeof fn !== "function") return;
@@ -662,9 +668,18 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries) => {
+  const placeNow = () => {
+    if (typeof deps.getPlace !== "function") return undefined;
     try {
-      const result = await deps.writeImpl(entries);
+      return deps.getPlace();
+    } catch {
+      return null;
+    }
+  };
+
+  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
+    try {
+      const result = await deps.writeImpl(entries, place);
       if (result && result.written) {
         callSafely(deps.onSaved, { atMs: nowImpl(), entriesLength: entries.length, commit: result.commit });
       }
@@ -673,7 +688,7 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const start = (/** @type {ReadonlyArray<any>} */ entries) => {
+  const start = (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
     /** @type {() => void} */
     let resolveOwn = () => {};
     const own = new Promise((resolve) => {
@@ -682,12 +697,11 @@ export function createMemoryRecorder(deps) {
     callSafely(deps.onRecordingChange, true);
     chain = (async () => {
       try {
-        await runOnce(entries);
+        await runOnce(entries, place);
         resolveOwn();
-        while (queued) {
-          const next = queued;
-          queued = null;
-          await runOnce(next.entries);
+        while (waiting.length > 0) {
+          const next = /** @type {(typeof waiting)[number]} */ (waiting.shift());
+          await runOnce(next.entries, next.place);
           next.resolve();
         }
       } finally {
@@ -703,21 +717,100 @@ export function createMemoryRecorder(deps) {
     record(entriesOverride) {
       const entries = entriesOverride ?? deps.getLiveEntries();
       if (!Array.isArray(entries) || entries.length === 0) return Promise.resolve();
-      if (!chain) return start(entries);
-      if (queued) {
-        if (entries.length >= queued.entries.length) queued.entries = entries;
-        return queued.promise;
+      const place = placeNow();
+      if (!chain) return start(entries, place);
+      const last = waiting[waiting.length - 1];
+      if (last && last.place === place) {
+        if (entries.length >= last.entries.length) last.entries = entries;
+        return last.promise;
       }
       /** @type {() => void} */
       let resolve = () => {};
       const promise = new Promise((r) => {
         resolve = () => r(undefined);
       });
-      queued = { entries, promise, resolve };
+      waiting.push({ entries, place, promise, resolve });
       return promise;
     },
     isRecording: () => chain != null,
     whenIdle: () => chain ?? Promise.resolve()
+  };
+}
+
+/**
+ * @typedef {object} RoleMemoryPlace
+ * @property {string} roleId  この置き場のロール。
+ * @property {string} dir  ロールの記憶のフォルダ（`memories/<role-id>/`・②④の作業フォルダ）。
+ * @property {Promise<void>} ready  準備（git init・ローカル設定・`_conventions.md` の種）が終わったら解決する（失敗しても reject しない）。
+ * @property {{ get: () => { dateJst: string; baseName: string } }} streamRecord  このロールの今回の配信の本体のファイル名。
+ */
+
+/**
+ * 記憶の置き場を今のロールに付いていかせる（配信の組み直し Domain B・stream-restructure.md §2.3）。
+ *
+ *  - place(): 今のロールの置き場を返す。ロールごとに 1 回だけ作って持ち回る（同じロールなら同じ値）。作るときに
+ *    そのロールのフォルダの準備（prepareMemoryFolder・`_conventions.md` が無ければ種の「チャッピー」をロールの呼び名に
+ *    差し替えて書く）を始め、本体のファイル名（createStreamRecordIdentity・最初の保存で 1 回だけ決める）を作る。
+ *    起動時に 1 回、ロールを替えたときに 1 回呼ぶ（替えたロールのフォルダの準備をそこで始める）。ロールを戻したときは
+ *    前に作った置き場（同じ本体のファイル名）を使う（今までの「1 起動 1 本体」をロールごとにしたもの・場ごとの
+ *    作り直しは Domain D）。
+ *  - available が false（記憶の引っ越しが失敗した起動）のときは、どのロールのフォルダも準備せず、place() は null
+ *    （前の形の記録が残る根の中に、ロールのフォルダや git を作らない）。
+ *  - 準備の失敗は配信を止めない（onPrepareFailed へ・保存のたびにコミットが失敗として警告に出る・今までと同じ）。
+ *
+ * @param {object} deps
+ * @param {string} deps.root  記憶の根（本番は DEFAULT_MEMORY_DIR）。
+ * @param {() => { id: string; name: { canonical: string } }} deps.currentRole  今のロール（roleHooks.current）。
+ * @param {number} deps.startedAtMs  配信の始まり（本体のファイル名の日付）。
+ * @param {boolean} [deps.available=true]
+ * @param {(options: { dir: string; soulName: string }) => Promise<{ ok: boolean; error?: string }>} [deps.prepareImpl]
+ * @param {(options: { dir: string; startedAtMs: number }) => { get: () => { dateJst: string; baseName: string } }} [deps.createIdentityImpl]
+ * @param {(info: { roleId: string; error: string }) => void} [deps.onPrepareFailed]
+ * @returns {{ place: () => Readonly<RoleMemoryPlace> | null }}
+ */
+export function createRoleMemoryPlaces(deps) {
+  const prepareImpl = deps.prepareImpl ?? ((/** @type {any} */ options) => prepareMemoryFolder(options));
+  const createIdentityImpl = deps.createIdentityImpl ?? createStreamRecordIdentity;
+  const available = deps.available !== false;
+  /** @type {Map<string, Readonly<RoleMemoryPlace>>} */
+  const places = new Map();
+  const reportFailure = (/** @type {string} */ roleId, /** @type {string} */ error) => {
+    try {
+      deps.onPrepareFailed?.({ roleId, error });
+    } catch {
+      // 知らせ先の失敗で準備を止めない。
+    }
+  };
+  return {
+    place() {
+      if (!available) return null;
+      const role = deps.currentRole();
+      const cached = places.get(role.id);
+      if (cached) return cached;
+      /** @type {string} */
+      let dir;
+      try {
+        dir = memoryDirForRole(deps.root, role.id);
+      } catch {
+        return null;
+      }
+      const ready = Promise.resolve()
+        .then(() => prepareImpl({ dir, soulName: role.name.canonical }))
+        .then(
+          (result) => {
+            if (!result || !result.ok) reportFailure(role.id, String(result?.error ?? "unknown"));
+          },
+          (error) => reportFailure(role.id, error instanceof Error ? error.message : String(error))
+        );
+      const place = Object.freeze({
+        roleId: role.id,
+        dir,
+        ready,
+        streamRecord: createIdentityImpl({ dir, startedAtMs: deps.startedAtMs })
+      });
+      places.set(role.id, place);
+      return place;
+    }
   };
 }
 
@@ -1654,17 +1747,23 @@ async function main() {
   } catch {
     // 掃除は best effort（起動を止めない）。
   }
-  // 配信の組み直し Domain A: 起動時の引っ越し（設定の分・stream-restructure.md §2.4）。ロールの置き場（roles/）が
-  // 無いときだけ、設定ファイルから chappy と cody を作る（移す前に設定ファイルを tmp/restructure-backups/ へ写す・
-  // 古いキーは消さない）。何が起きたかはここでターミナルへ 1 回だけ出し、操縦席のログのタブにも同じ行を出す。
-  const roleMigration = migrateSettingsToRoles({
+  // 配信の組み直し Domain A・B: 起動時の引っ越し（stream-restructure.md §2.4）。設定の分はロールの置き場（roles/）が
+  // 無いときだけ設定ファイルから chappy と cody を作る（古いキーは消さない）。記憶の分は memories/ の直下に記録があって
+  // memories/chappy/ が無いときだけ、中身を .git ごと memories/chappy/ へ移す（記憶のフォルダの準備より前）。2 つの
+  // 条件は混ぜずに独立に判定する。移す前の写しは、この起動の 1 つの写しのフォルダ（tmp/restructure-backups/ の下）に
+  // 両方置く。何が起きたかはここでターミナルへ 1 回だけ出し、操縦席のログのタブにも同じ行を出す。
+  const migrationBackup = migrationBackupDir(DEFAULT_MIGRATION_BACKUP_ROOT, Date.now());
+  const startupMigration = runStartupMigration({
     rolesDir: DEFAULT_ROLES_DIR,
     settingsPath: DEFAULT_SETTINGS_PATH,
-    backupDir: migrationBackupDir(DEFAULT_MIGRATION_BACKUP_ROOT, Date.now())
+    memoriesDir: DEFAULT_MEMORY_DIR,
+    backupDir: migrationBackup
   });
-  const startupNotices = formatRoleMigrationReport(roleMigration);
+  const startupNotices = formatStartupMigrationReport(startupMigration);
+  const startupMigrationFailed =
+    startupMigration.roles.status === "failed" || startupMigration.memories.status === "failed";
   for (const line of startupNotices) {
-    if (roleMigration.status === "failed") process.stderr.write(`[cockpit] WARN: ${line}\n`);
+    if (startupMigrationFailed) process.stderr.write(`[cockpit] WARN: ${line}\n`);
     else process.stdout.write(`[cockpit] ${line}\n`);
   }
 
@@ -1763,13 +1862,21 @@ async function main() {
   // 配信間記憶（記憶の作り直し Wave 2）: 起動時に記憶を①へ載せることはしない（①は思い出したいときに頼む・
   // recall-flow.md §7）。記憶のフォルダを準備し（無ければ作る・git init・`_conventions.md` の種）、
   // 今回の配信の本体のファイル名を最初の保存で一度だけ決めて持ち回る（申し送り 2）。
+  // 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（memories/<role-id>/・§createRoleMemoryPlaces）。
+  // 準備・本体のファイル名・②・④はどれも今のロールの置き場を使い、ロールを替えたら替えたロールの置き場を準備する
+  // （onSetRole）。記憶の引っ越しが失敗した起動では、記憶を読み書きしない（前の形の記録が残る根を触らない）。
   const memoryStartedAtMs = Date.now();
-  const memoryPrepared = await prepareMemoryFolder({ dir: DEFAULT_MEMORY_DIR });
-  if (!memoryPrepared.ok) {
-    // 記録できないだけで配信は止めない（保存のたびにコミットが失敗として警告に出る）。
-    process.stderr.write(`[cockpit] WARN: memory folder is not ready (${memoryPrepared.error})\n`);
-  }
-  const streamRecord = createStreamRecordIdentity({ dir: DEFAULT_MEMORY_DIR, startedAtMs: memoryStartedAtMs });
+  const memoryPlaces = createRoleMemoryPlaces({
+    root: DEFAULT_MEMORY_DIR,
+    currentRole: () => roleHooks.current(),
+    startedAtMs: memoryStartedAtMs,
+    available: startupMigration.memories.status !== "failed",
+    onPrepareFailed: ({ roleId, error }) => {
+      // 記録できないだけで配信は止めない（保存のたびにコミットが失敗として警告に出る）。
+      process.stderr.write(`[cockpit] WARN: memory folder is not ready (${roleId}: ${error})\n`);
+    }
+  });
+  await memoryPlaces.place()?.ready;
   // 頭のセッション（①・②）の警告はターミナルへ 1 行。MCP の名前の読み取り（config/read）の失敗は、ユーザーの
   // MCP が起動しうるので操縦席の上の帯にも alert で出す（ユーザー決定 2026-10-21・続けるのは同じ）。
   const onBrainWarning = (/** @type {string} */ w) => {
@@ -2097,6 +2204,9 @@ async function main() {
     sessionContextRevision += 1;
     // Codex の残量は頭が Codex のときだけ（Codex でなくなったら不明に戻す・Codex 同士の切替は同じアカウントなので保つ）。
     if (!isCodexBrainId(currentBrain)) quotaMonitor.clearCodex();
+    // 配信の組み直し Domain B: 記憶の置き場は替えたロールのフォルダ。ここで準備（git init・種）を済ませる。
+    // 走っている・待っている保存は、頼んだときのロールの置き場に書く（createMemoryRecorder の getPlace）。
+    await memoryPlaces.place()?.ready;
     process.stdout.write(`[cockpit] role set: ${role.id} (brain ${role.brain})\n`);
     return { ok: true, verbosity: role.verbosity, speakStartMode: role.speakStartMode, ttsEngine: role.voice.engine };
   };
@@ -2130,16 +2240,21 @@ async function main() {
   //  1 回の保存 = ②書き出し役（使い捨ての Codex・cwd = 記憶のフォルダ・workspace-write）が本体と目次を書き、
   //  魂が記憶のフォルダの git にコミットする（writeStreamRecord）。②の頭は Codex に固定（resolveWriterBrainDef）。
   //  server は下方の createCockpitServer(...) で代入される前方参照(sessionProxy の getSession と同型)。
+  //  配信の組み直し Domain B: 記憶のフォルダ（と本体のファイル名）は保存を頼んだ時点のロールの置き場（getPlace）。
   const memoryRecorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
-    writeImpl: (entries) =>
-      writeStreamRecord({
+    getPlace: () => memoryPlaces.place(),
+    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place) => {
+      if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
+      await place.ready;
+      return writeStreamRecord({
         create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
         entries,
-        record: streamRecord.get(),
-        dir: DEFAULT_MEMORY_DIR,
+        record: place.streamRecord.get(),
+        dir: place.dir,
         onWarning: onBrainWarning
-      }),
+      });
+    },
     onSaved: ({ atMs, entriesLength, commit }) => {
       lastRecordAtMs = atMs;
       lastRecordedSeq = entriesLength;
@@ -2180,17 +2295,22 @@ async function main() {
   /**
    * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
    * 同じ決め方）を cwd = 記憶のフォルダ・read-only・最後の答えだけで作る。警告は①②と同じ onBrainWarning へ。
+   * 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（ほかのロールの記憶は読まない）。
    * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number }} job
    */
-  const recallRunner = (job) =>
-    runRecall({
+  const recallRunner = async (job) => {
+    const place = memoryPlaces.place();
+    if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
+    await place.ready;
+    return runRecall({
       create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
       request: job.request,
       entries: job.entries,
       nowMs: job.nowMs,
-      dir: DEFAULT_MEMORY_DIR,
+      dir: place.dir,
       onWarning: onBrainWarning
     });
+  };
 
   /** state snapshot に載せる記憶の現況（最後に記録した時刻と、今記録中か）。 */
   const memoryStatus = () => ({ lastRecordAtMs, recording: memoryRecorder.isRecording() });

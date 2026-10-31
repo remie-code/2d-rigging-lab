@@ -1,6 +1,8 @@
 # 配信の組み直しの wave 計画(Undine 2026-10-31)
 
-> Status: 計画済み(2026-10-31)。ブランチ `ai-cohost/stream-restructure`。
+> Status: 実装中。ブランチ `ai-cohost/stream-restructure`。
+> - Domain A 合格(1 ループ・止めた指摘 0・soul 1732/1732・soul-zone)、コミット `38084596`。報告 [../waves/stream-restructure/domain-a-report.md](../waves/stream-restructure/domain-a-report.md)。Undine の追認(質問 1〜4): 耳が動いている間の `/api/role` の 409 は Domain D までのつなぎとして可(D で「場が開いているか」に替える)。まっさらな起動で既定の 2 ロールを作るのは可。話者は null で `--speaker` を起動時の上書きに残すのは可。README の古い `/api/brain` の記述は全体の突き合わせのあとの仕上げで直す。
+> - Domain B 合格(1 ループ・止めた指摘 0・soul 1758/1758・soul-zone)。報告 [../waves/stream-restructure/domain-b-report.md](../waves/stream-restructure/domain-b-report.md)。Undine の追認: 記憶の引っ越しが失敗した起動では記憶を読み書きせず、配信は止めない形を可とする(前の形とロールのフォルダの取り違えを防ぐため)。ただし失敗はログだけでなく**上の帯の警告にも出す**(Domain E の持ち越しに足す)。ユーザーが別の扱いを望めば変える。ロールを戻したときに前の置き場を使うのは Domain D までのつなぎとして可。
 > 根拠: 設計 [../../architecture/stream-restructure.md](../../architecture/stream-restructure.md)(Accepted)、決定 [../../discord-vc/scope.md](../../discord-vc/scope.md) §18〜§20、棚卸し [stream-restructure-inventory.md](stream-restructure-inventory.md)(触るファイル・重なり・テストの土台)。
 > 進め方(ユーザー 2026-10-31): 1 本のブランチに全部積み、人間ゲートは最後の 1 回。ゲートに受かったら master へマージする。ドメインは依存に沿って**全部順に**作る(大きいファイルを共有するため並べない)。ドメインごとに Orch-Sylph が Gnome と Review-Sylph を回す(SKILL 本来の型)。見直しの粒度は §4。
 
