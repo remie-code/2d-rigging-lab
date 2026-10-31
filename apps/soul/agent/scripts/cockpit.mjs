@@ -1100,6 +1100,51 @@ export function createStreamVenueHooks(deps) {
 }
 
 /**
+ * 場に入るロールの束（Discord モード Domain B・discord-mode.md §5）。cockpit-server の `roles` に渡す一覧の要素。
+ * main() の今の 1 つずつの変数（今のロール・場の口・声の engine と再生器・④）を包んで 1 つの束にする。束の口はどれも
+ * 呼んだ時点の今のロールを読む（ロールの切り替えで束を作り直さない・場の間はサーバが一覧ごと固め、ロールの選択も断る）。
+ * 「束を作る工場」（main() の結び合った変数をロールごとに作る所）の切り出しは 2 つ目のロールのとき（設計 §5・§12.2）。
+ *
+ *  - id() / identity(): 今のロールの id と名前（名前・whisper の手がかり・呼びかけの照合・判定に渡す名前・soul の行）。
+ *  - hooks: 場の口 6 つ（createStreamVenueHooks の hooks = 場の記録・頭のセッション・器・記憶の最後の保存）。同じものを渡す。
+ *  - voice.prepare(kind): 声の engine を用意する（始める 6・入口を開く前・ElevenLabs のキーはここで読む）。
+ *  - voice.startResources(): 再生器と声の差し替え口を起こす（始める 6・待たない）。投げたら警告の 1 行にして場は止めない。
+ *  - recall.run(job): ④思い出し役を走らせる（今のロールの記憶の置き場を読む）。無ければ null。
+ *
+ * @param {object} deps
+ * @param {() => string} deps.currentId
+ * @param {() => any} deps.identity
+ * @param {object} deps.streamHooks
+ * @param {(kind: "aivis" | "elevenlabs") => any} deps.prepareVoice
+ * @param {() => void} deps.startVoiceResources
+ * @param {((job: { request: string; entries: ReadonlyArray<any>; nowMs: number }) => Promise<any>) | null} [deps.recallRunner]
+ * @param {(line: string) => void} [deps.onWarning]  警告の 1 行（本文・キーは入れない）。
+ */
+export function createVenueRoleBundle(deps) {
+  const recallRunner = typeof deps.recallRunner === "function" ? deps.recallRunner : null;
+  return Object.freeze({
+    id: () => deps.currentId(),
+    identity: () => deps.identity(),
+    hooks: deps.streamHooks,
+    voice: Object.freeze({
+      prepare: (/** @type {"aivis" | "elevenlabs"} */ kind) => deps.prepareVoice(kind),
+      startResources: () => {
+        try {
+          deps.startVoiceResources();
+        } catch (error) {
+          try {
+            deps.onWarning?.(`voice resources failed to start: ${error instanceof Error ? error.message : String(error)}`);
+          } catch {
+            // 知らせの失敗で場を止めない。
+          }
+        }
+      }
+    }),
+    recall: recallRunner ? Object.freeze({ run: (/** @type {any} */ job) => recallRunner(job) }) : null
+  });
+}
+
+/**
  * Codex の頭の警告が「MCP の名前の読み取り（config/read）に失敗した」ものか（codex-session.mjs の
  * MCP_CONFIG_READ_FAILED_WARNING との一致で判定する・文言の一部の一致はやめた＝Wave 2 からの申し送り 2）。
  * 操縦席の上の帯に alert として出す（ユーザー決定 2026-10-21: 続けるが目立たせる）。
@@ -2355,7 +2400,7 @@ async function main() {
     readCodex: createCodexQuotaReader({ getBrain: () => currentBrain, getSession: () => session }),
     readElevenLabs: () => fetchElevenLabsSubscription()
   });
-  // 画面キャプチャの撮る係（常駐 PowerShell）。耳の Start で立ち上げ、耳の Stop・操縦席の終了で止める
+  // 画面キャプチャの撮る係（常駐 PowerShell）。場を開くとき（場の共通の段・耳の後）に立ち上げ、場を閉じるとき・操縦席の終了で止める
   // （discussion/ai-cohost/research/vision-capture-latency-2026-10.md §4）。使えない間の撮影は今の
   // captureWindow（毎回起動）に戻る。記録は標準出力へ 1 行（数字と種類だけ）。
   const residentCapture = createResidentCapture({
@@ -2382,7 +2427,7 @@ async function main() {
    *
    * S6「会話が続く」: player は起動時（またはデバイス変更後の再生成時）に settings の出力デバイス名を
    * env 経由で渡す（`createStreamPlayer({ deviceName })`）。未記憶なら deviceName 未指定 = 既定デバイス。
-   * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（耳の Start で先に作る）。
+   * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（場を開くときに先に作る・ロールの束の voice.startResources）。
    */
   const ensureFireResources = () => {
     ensureSession();
@@ -2481,7 +2526,7 @@ async function main() {
 
   /**
    * 流し込みプレイヤー（常駐 PowerShell + C#・起動に約 0.5 秒）と声の差し替え口を用意する（冪等）。
-   * 耳の Start のときに呼んで先に起こしておく（申し送り 1・最初の Fire に起動を乗せない）。常駐が
+   * 場を開くとき（耳の後・ロールの束の voice.startResources）に呼んで先に起こしておく（申し送り 1・最初の Fire に起動を乗せない）。常駐が
    * 落ちていたら作り直す。出力デバイスの変更は applyDesiredFireSettings が次の Fire の境目で反映する
    * （revision 方式・進行中の発話は accepted snapshot の player を最後まで使う）。
    */
@@ -2944,15 +2989,31 @@ async function main() {
   // 配信の組み直し Domain D: --channel で起動しても、起動時には頭のセッションを作らない（先充填はやめた）。頭のセッションは
   // 「配信を始める」で今のロールのモデルと指示で作る（§openStreamSession・stream-restructure.md §3 の 5）。
 
+  // Discord モード Domain B: 場に入るロールの束（§createVenueRoleBundle・最初の的では今のロール 1 つ）。今の 1 つずつの変数を
+  // 包む: 今のロールの名前、場の口（場の記録・頭のセッション・器・記憶の最後の保存）、声の engine の用意（耳を開く前・種類が
+  // 変われば作り直す・ElevenLabs のキーはここで読む・用意できなければ場は開かない）と再生器（流し込みプレイヤーと声の差し替え
+  // 口・最初の Fire に乗せない）、④思い出し役。サーバはロールに依る値をこの束から引く。
+  const venueRole = createVenueRoleBundle({
+    currentId: () => roleHooks.currentId(),
+    identity: getCurrentRoleIdentity,
+    streamHooks: streamVenue.hooks,
+    prepareVoice: (kind) => {
+      desiredTtsEngine = kind;
+      return voiceEngines.prepare(kind);
+    },
+    startVoiceResources: ensureVoiceResources,
+    recallRunner,
+    onWarning: (line) => process.stderr.write(`[cockpit] WARN: ${line}\n`)
+  });
+
   server = createCockpitServer({
     port: args.port ?? DEFAULT_COCKPIT_PORT,
     indexHtmlPath: cockpitHtmlPath,
     settingsStore: settings,
-    // Current identity providers are request/handling-time closures. The
-    // server consumes this same role-backed view for Whisper, scheduler,
-    // and additive public state; changing the role does not require ear or
-    // scheduler recreation.
-    currentRoleIdentity: getCurrentRoleIdentity,
+    // Discord モード Domain B: 場に入るロールの一覧（最初の的では今のロールの束 1 つ・§createVenueRoleBundle）。名前（whisper・
+    // 呼びかけの照合・判定・snapshot）・場の口・声の engine と再生器・④はこの束から引く。束の口は呼んだ時点の今のロールを読む
+    // （ロールの切り替えで耳や予定を作り直さない）。
+    roles: [venueRole],
     // 配信の組み直し Domain A: 起動時の引っ越しの結果（ログのタブに出す・引っ越しが無ければ空）。
     notices: startupNotices,
     fireOrchestratorFactory,
@@ -3014,29 +3075,14 @@ async function main() {
     // 配信の組み直し Domain A: hotwords は今のロールの名前の手がかり（ロールに無ければ設定ファイルか既定）。
     localSttSettings: () => applyRoleHotwords(settings.getLocalStt(), roleHooks.current()),
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
-    // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶し、耳を開く前に engine を用意する
-    // （種類が変われば作り直す・ElevenLabs のキーはここで読む）。用意できなければ Start は理由つきで失敗する。
+    // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶する。engine の用意（耳を開く前・用意
+    // できなければ Start は理由つきで失敗する）と再生器はロールの束（venueRole.voice）が持つ。
     ttsEngineInitial: desiredTtsEngine,
     onSetTtsEngine: ttsEngineHooks.onSetTtsEngine,
-    onPrepareVoiceEngine: (kind) => {
-      desiredTtsEngine = kind;
-      return voiceEngines.prepare(kind);
-    },
-    // 画面キャプチャの撮る係の寿命を耳に合わせる（vision-capture-latency §4 の 2）。close() でも止まる。
-    // 声の差し替え Wave 2: 流し込みプレイヤーと声の差し替え口も Start のときに起こす（最初の Fire に乗せない）。
-    onEarsStarted: () => {
-      residentCapture.start();
-      try {
-        ensureVoiceResources();
-      } catch (error) {
-        process.stderr.write(
-          `[cockpit] WARN: voice resources failed to start: ${error instanceof Error ? error.message : String(error)}\n`
-        );
-      }
-    },
-    onEarsStopped: () => residentCapture.stop(),
-    // 配信の組み直し Domain D: 場（配信を始める / 終える）の口。場の記録の作り直し・頭のセッション・器・記憶の最後の保存。
-    streamHooks: streamVenue.hooks,
+    // 画面キャプチャの撮る係（目）の寿命を場に合わせる（vision-capture-latency §4 の 2・Discord モード Domain B: 場の共通の段）。
+    // close() でも止まる。
+    onEyesStart: () => residentCapture.start(),
+    onEyesStop: () => residentCapture.stop(),
     // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
     // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
     // （.env.decisions.local をコード内で直接読む）に任せる。
@@ -3053,9 +3099,8 @@ async function main() {
     commentHoldMaxAgeMs: commentHold.maxAgeMs,
     commentHoldMaxCount: commentHold.maxCount,
     onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info)),
-    // 記憶の作り直し Wave 3: 思い出しの係（④は使い捨ての Codex・「避けるか」判定は cockpit-server の既定の Decisions API）。
-    // 係の出来事は標準出力へ 1 行（頼みごと・記憶の中身は書かない）。
-    recallRunner,
+    // 記憶の作り直し Wave 3: 思い出しの係（④は使い捨ての Codex・ロールの束の recall.run・「避けるか」判定は cockpit-server の
+    // 既定の Decisions API）。係の出来事は標準出力へ 1 行（頼みごと・記憶の中身は書かない）。
     onRecallEvent: (event) => process.stdout.write(formatRecallEventLine(event)),
     // 操縦席の作り直し 1 回目（データ側）: 残量・遅延のしきい値（settings の latencyWarnSec / latencyAlertSec・既定 4 / 6 秒）・
     // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
@@ -3122,7 +3167,7 @@ async function main() {
       }
     },
     finalize: async () => {
-      // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
+      // 撮る係は close() の onEyesStop で止まっているはずだが、途中で throw しても取り残さない（冪等）。
       residentCapture.stop();
       quotaMonitor.stop();
       // 記録の書き残しを少しだけ待つ（固まらないよう上限つき）。
