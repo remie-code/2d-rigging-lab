@@ -2263,13 +2263,15 @@ export function createCockpitServer(options = {}) {
     // voice = その返事を鳴らした声の engine の種類（遅延の TTS / 声の区間を engine ごとに見比べる材料・additive）。
     // stt = 文字起こしの方式（文字起こしの区間を方式ごとに見比べる材料・additive・応答の遅れの直し §2-5）。
     // serviceTier = その返事の turn/start に送った Codex の速さの段（fast の比較の材料・additive・送っていなければ null）。
+    // bodyless = 体なしの返事の印（配信の組み直し Domain C・声の区間に器の往復が入らない・体があるときは付けない）。
     const payload = {
       ...record,
       vision: inFire?.vision === true,
       brain,
       voice: voice.engine ?? ttsEngine,
       stt: sttEngine,
-      serviceTier: typeof inFire?.serviceTier === "string" ? inFire.serviceTier : null
+      serviceTier: typeof inFire?.serviceTier === "string" ? inFire.serviceTier : null,
+      ...(inFire?.bodyless === true ? { bodyless: true } : {})
     };
     broadcast("latency", payload);
     if (onReplyLatency) {

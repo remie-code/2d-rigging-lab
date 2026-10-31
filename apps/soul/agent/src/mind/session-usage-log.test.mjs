@@ -191,3 +191,14 @@ test("遅延の行は既存の行（発火・圧縮）と同じファイルに t
     assert.equal(lines[1].causeType, "manual");
   });
 });
+
+test("遅延の 1 行（体なし・配信の組み直し Domain C）: bodyless の返事には bodyless: true を足す・体ありの行は今と同じ形", () => {
+  const base = { fireId: 9, cause: { type: "manual" }, spoken: true, segments: { ttsMs: 120, voiceMs: 15 }, totalMs: 800, level: "ok" };
+  const bodyless = replyLatencyUsageRecord({ ...base, bodyless: true });
+  assert.equal(bodyless.bodyless, true);
+  assert.equal(bodyless.voiceMs, 15);
+  const withBody = replyLatencyUsageRecord(base);
+  assert.equal("bodyless" in withBody, false, "体ありはキーを足さない");
+  assert.deepEqual({ ...bodyless, bodyless: undefined }, { ...withBody, bodyless: undefined });
+  assert.equal("bodyless" in replyLatencyUsageRecord({ ...base, bodyless: "yes" }), false, "true だけを印と読む");
+});

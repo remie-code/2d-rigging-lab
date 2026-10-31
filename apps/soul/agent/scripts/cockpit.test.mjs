@@ -3007,3 +3007,134 @@ test("記憶をロールごとにの結線: 引っ越し（写しのフォルダ
   const onSetRole = main.slice(main.indexOf("const onSetRole = async (id) =>"), main.indexOf("const roleStatus = () =>"));
   assert.match(onSetRole, /await memoryPlaces\.place\(\)\?\.ready;/);
 });
+
+// ── 配信の組み直し Domain C: 体なしの声（stream-restructure.md §4）─────────────────────────────────
+//  器の URL の確かめは「ロールに体があるときだけ」。体なしは URL が無くても頭に聞き、発火を受理し、器を渡さない。
+
+test("createSessionProxy（体なし）: URL が無くても頭に聞ける・体ありは今どおり断る・体の有無は聞くたびに読む", { timeout: 5000 }, async () => {
+  let body = false;
+  let created = 0;
+  const asked = [];
+  const proxy = createSessionProxy({
+    getUrl: () => null,
+    hasBody: () => body,
+    ensureFireResources: () => {
+      created += 1;
+    },
+    getSession: () => ({ ask: async (/** @type {any} */ input) => { asked.push(input); return { replyText: "ok" }; } })
+  });
+  const out = await proxy.ask("体なし");
+  assert.equal(out.replyText, "ok");
+  assert.deepEqual(asked, ["体なし"]);
+  assert.equal(created, 1);
+  body = true;
+  await assert.rejects(() => proxy.ask("体あり"), /Channel URL is not set/);
+  assert.equal(created, 1, "体ありで URL が無ければ今どおり spawn しない");
+});
+
+test("resolveFireChannel: 体ありは URL が無ければ今と同じ文面で断る・あれば器と URL・体なしは URL を見ず器を渡さない", async () => {
+  const { resolveFireChannel, CHANNEL_URL_NOT_SET_MESSAGE } = await import("./cockpit.mjs");
+  assert.equal(CHANNEL_URL_NOT_SET_MESSAGE, "Channel URL is not set — set it in the cockpit (Channel field) before firing.");
+  const unset = createLazyChannel(null);
+  assert.throws(() => resolveFireChannel({ body: true, channel: unset }), (/** @type {any} */ e) => e.message === CHANNEL_URL_NOT_SET_MESSAGE);
+  let getUrlCalls = 0;
+  const watched = { getUrl: () => { getUrlCalls += 1; return null; } };
+  assert.deepEqual(resolveFireChannel({ body: false, channel: watched }), { body: false, channel: null, channelUrl: null });
+  assert.equal(getUrlCalls, 0, "体なしは URL を見ない");
+  const set = createLazyChannel("ws://127.0.0.1:1/channel?token=x");
+  const resolved = resolveFireChannel({ body: true, channel: set });
+  assert.equal(resolved.body, true);
+  assert.equal(resolved.channel, set);
+  assert.equal(resolved.channelUrl, "ws://127.0.0.1:1/channel?token=x");
+});
+
+test("体なしの受理（本番の器の取り方 + 本物の orchestrator）: URL が無くても発火を受理して器なしで鳴らす・体ありは今どおり受理しない", { timeout: 5000 }, async () => {
+  const { resolveFireChannel } = await import("./cockpit.mjs");
+  /** @param {boolean} body */
+  const run = async (body) => {
+    const buffer = createTranscriptBuffer();
+    buffer.append({ startMs: 0, endMs: 100, text: "ねえ" });
+    const lazy = createLazyChannel(null);
+    const fires = [];
+    const diags = [];
+    const spoken = [];
+    const session = { ask: async () => ({ replyText: "うん" }) };
+    const orch = createFireOrchestrator({
+      getBuffer: () => buffer,
+      session,
+      channel: /** @type {any} */ (lazy),
+      player: { play() {} },
+      speakImpl: async (/** @type {string} */ text, /** @type {any} */ deps) => {
+        spoken.push({ text, channel: deps.channel });
+        return {};
+      },
+      // cockpit.mjs の acquireAcceptedFireResources と同じ器の取り方（受理の時点の体から）。
+      acquireFireResources: async () => {
+        const fireChannel = resolveFireChannel({ body, channel: lazy });
+        return { session, channel: fireChannel.channel, body: fireChannel.body, configuration: { channelUrl: fireChannel.channelUrl } };
+      },
+      onFire: (f) => fires.push(f),
+      onDiagnostic: (d) => diags.push(d)
+    });
+    const result = await orch.fire();
+    orch.dispose();
+    return { result, fires, diags, spoken };
+  };
+  const bodyless = await run(false);
+  assert.equal(bodyless.result.fired, true);
+  assert.equal(bodyless.fires[0].accepted, true);
+  assert.deepEqual(bodyless.spoken, [{ text: "うん", channel: null }]);
+  assert.deepEqual(bodyless.diags, []);
+  const withBody = await run(true);
+  assert.equal(withBody.result.fired, false);
+  assert.equal(withBody.result.reason, "error");
+  assert.match(withBody.result.message, /Channel URL is not set/);
+  assert.equal(withBody.fires.length, 0, "体ありで URL が無ければ受理しない（今どおり）");
+  assert.equal(withBody.spoken.length, 0);
+});
+
+test("体なしの結線（main）: 体は使う時点で今のロールから読む（受理・頭に聞く・セッション作り・器の差し替え・器の状態・教え）", async () => {
+  // 作業コピーの改行（CRLF / LF）に依らず読む。
+  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.match(source, /const currentBody = \(\) => roleHooks\.current\(\)\.body !== false;/);
+  assert.match(source, /hasBody: currentBody,/, "頭に聞くたびに体を読む");
+  assert.match(source, /const fireChannel = resolveFireChannel\(\{ body: currentBody\(\), channel: lazyChannel \}\);/, "受理のたびに体を読む");
+  assert.match(source, /channel: fireChannel\.channel,\n\s+body: fireChannel\.body,/);
+  assert.match(source, /channelUrl: fireChannel\.channelUrl,/);
+  assert.match(source, /if \(currentBody\(\) && appliedChannelRevision !== channelRevision\) \{\n\s+lazyChannel\.setUrl\(desiredChannelUrl\);/, "器の URL の差し替えは体があるときだけ");
+  assert.match(source, /loadSoulSkills\(\{ names: soulSkillNamesForBody\(sessionHasBody\), onWarning: onBrainWarning \}\)/, "体なしは表情の教えを①に渡さない");
+  assert.match(source, /sessionBody !== currentBody\(\)\);/, "体の有無が替われば次の Fire の境目でセッションを作り直す");
+  assert.match(source, /\(\) => listSoulSkills\(\{ names: soulSkillNamesForBody\(currentBody\(\)\) \}\)/, "編集画面に見せる教えも体に合わせる");
+  assert.match(source, /connection: lazyChannel\.connectionStatus\(\),\n\s+body: currentBody\(\)/, "器の状態に体の有無を載せる");
+  assert.equal(/acquireAcceptedFireResources = async \(\) => \{\n\s+await applyDesiredFireSettings\(\);\n\s+if \(lazyChannel\.getUrl\(\) == null\)/.test(source), false, "受理で URL を無条件には確かめない");
+});
+
+test("buildRoleSessionSystemPrompt（体なし）: 体なしの教えで作った①には表情の教えが入らない・体ありは今どおり入る", async () => {
+  const { soulSkillNamesForBody } = await import("../src/mind/soul-skills.mjs");
+  const expression = listSoulSkills().find((skill) => skill.name === "expression");
+  assert.ok(expression);
+  const identity = MODEL_IDENTITIES.cody;
+  const bodyless = buildRoleSessionSystemPrompt(identity, "指示", loadSoulSkills({ names: soulSkillNamesForBody(false) }));
+  const withBody = buildRoleSessionSystemPrompt(identity, "指示", loadSoulSkills({ names: soulSkillNamesForBody(true) }));
+  assert.equal(bodyless.includes(expression.body), false);
+  assert.equal(withBody.includes(expression.body), true);
+  assert.equal(withBody, buildRoleSessionSystemPrompt(identity, "指示"), "体ありは今と同じ①");
+});
+
+test("createConversationInstructionHooks（体なし）: 編集画面に見せる教えに表情の教えが出ない", async () => {
+  const { soulSkillNamesForBody } = await import("../src/mind/soul-skills.mjs");
+  const hooks = createConversationInstructionHooks(
+    { getConversationInstructionProfile: () => ({}) },
+    () => "mio",
+    createInstructionRevisionController(),
+    () => listSoulSkills({ names: soulSkillNamesForBody(false) })
+  );
+  assert.deepEqual(hooks.getSoulSkills().map((s) => s.name), ["screen", "recall"]);
+});
+
+test("formatReplyLatencyLine（体なし）: 体なしの返事は末尾に body=none（体ありは今と同じ行）", async () => {
+  const { formatReplyLatencyLine } = await import("./cockpit.mjs");
+  const base = { fireId: 6, cause: null, spoken: true, segments: { ttsMs: 130, voiceMs: 20 }, totalMs: 900, level: "ok", voice: "aivis" };
+  assert.match(formatReplyLatencyLine({ ...base, bodyless: true }), /voiceEngine=aivis body=none\n$/);
+  assert.equal(formatReplyLatencyLine(base).includes("body="), false);
+});

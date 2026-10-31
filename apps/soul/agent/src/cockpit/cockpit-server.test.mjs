@@ -6045,3 +6045,55 @@ test("cockpit 思い出し: recallRunner が無ければ係を作らず、目印
     await server.close();
   }
 });
+
+test("cockpit 体なし（配信の組み直し Domain C）: 遅延のレコードに bodyless: true の印が載る（SSE と記録の両方・体ありは載らない）", async () => {
+  for (const bodyless of [true, false]) {
+    const fakePipe = makeOnAppendPipeline();
+    /** @type {any[]} */ const logged = [];
+    const fakeOrch = makeFakeOrchestrator({
+      fireResult: { fired: true, fireId: 5 },
+      drive: (hooks, record) => {
+        hooks.onLatency({
+          fireId: 5,
+          cause: record.lastFireOptions.cause,
+          vision: false,
+          spoken: true,
+          screenMs: null,
+          llmFirstMs: 400,
+          firstSentenceMs: 80,
+          ttsMs: 120,
+          voiceMs: 10,
+          inFireMs: 700,
+          otherMs: 90,
+          serviceTier: null,
+          ...(bodyless ? { bodyless: true } : {})
+        });
+      }
+    });
+    const server = createCockpitServer({
+      pipelineFactory: /** @type {any} */ (fakePipe.factory),
+      fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+      onPrepareVoiceEngine: () => ({ ok: true }),
+      onReplyLatency: (rec) => logged.push(rec)
+    });
+    try {
+      const url = await server.listen(0);
+      const sse = openSseClient(`${url}/api/events`);
+      await sse.waitFor((e) => e.event === "state");
+      await postJson(`${url}/api/ears/start`, { device: "Mic" });
+      await postJson(`${url}/api/fire`, {});
+      const lat = await sse.waitFor((e) => e.event === "latency");
+      if (bodyless) {
+        assert.equal(lat.data.bodyless, true);
+        assert.equal(logged[0].bodyless, true, "記録（session-usage）へ渡すレコードにも載る");
+      } else {
+        assert.equal("bodyless" in lat.data, false, "体ありは今と同じ形");
+        assert.equal("bodyless" in logged[0], false);
+      }
+      assert.equal(lat.data.segments.voiceMs, 10);
+      sse.close();
+    } finally {
+      await server.close();
+    }
+  }
+});

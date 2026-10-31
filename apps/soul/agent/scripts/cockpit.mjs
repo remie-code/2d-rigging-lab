@@ -31,6 +31,9 @@
  *  （種類が同じでも、落ちた（down の）ElevenLabs の engine は Start で作り直し、キーを読み直す）。
  *  URL 未設定のまま fire しても発話の送出前に session.ask で弾く（lazyChannel が URL 未設定を
  *  明示エラーにする前に、ここで no-URL を検出して spawn しない）。→ S2.5 ユーザーは何も spawn しない。
+ *  配信の組み直し Domain C: この URL の確かめは**ロールに体があるときだけ**（stream-restructure.md §4）。体の無い
+ *  ロールは器を使わないので、URL が無くても頭に聞き、発火を受理し、手元の再生器だけで鳴らす（器は運び手・
+ *  発火に渡さない・§resolveFireChannel）。体があるときの断りと文面は今のまま。
  *
  *  ── Channel URL の記憶（settings）──────────────────────────────────────────
  *  URL はマイク選択と同じ file-backed settings（`cockpit-settings.local.json`・.gitignore 済み・
@@ -98,7 +101,7 @@ import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memor
 import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
-import { appendSoulSkills, listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
+import { appendSoulSkills, listSoulSkills, loadSoulSkills, soulSkillNamesForBody } from "../src/mind/soul-skills.mjs";
 
 /**
  * 配信間記憶: 定期保存の間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
@@ -360,13 +363,35 @@ export function createLazyChannel(url, options = {}) {
   };
 }
 
+/** 体のあるロールで器の URL が無いまま発火したときの断りの文面（今と同じ）。 */
+export const CHANNEL_URL_NOT_SET_MESSAGE = "Channel URL is not set — set it in the cockpit (Channel field) before firing.";
+
+/**
+ * 受理する Fire の器を決める（配信の組み直し Domain C・stream-restructure.md §4）。
+ *  - 体あり: 今どおり、器の URL が無ければ断る（受理しない）。器（lazyChannel）と受理の時点の URL を返す。
+ *  - 体なし: 器を使わない。URL の有無を見ず、器は渡さない（channel: null）。運び手は手元の再生器だけで鳴らす。
+ * @param {object} options
+ * @param {boolean} options.body  受理の時点のロールの体の有無。
+ * @param {{ getUrl: () => string | null }} options.channel  器（lazyChannel）。
+ * @returns {{ body: boolean; channel: any | null; channelUrl: string | null }}
+ */
+export function resolveFireChannel({ body, channel }) {
+  if (body === false) return { body: false, channel: null, channelUrl: null };
+  const channelUrl = channel.getUrl();
+  if (channelUrl == null) throw new Error(CHANNEL_URL_NOT_SET_MESSAGE);
+  return { body: true, channel, channelUrl };
+}
+
 /**
  * session.ask への透過プロキシを作る（S3 の Channel URL 未設定チェック + 遅延生成は不変）。
  * S5: `ask(input)` は文字列（通常 Fire）と content ブロック配列（視覚発火）の両方を素通しする。
  * Progressive Speech C1: additive な ask options（onTextDelta）も同じ session へ透過する。
  * （分岐しない＝透過。型ガードは session 側が担う）。
  * @param {object} options
+ * 配信の組み直し Domain C: URL の確かめは `hasBody()` が true のとき（今のロールに体があるとき）だけ。体なしは
+ * URL が無くても頭に聞く。hasBody を渡さなければ今どおり（いつも確かめる）。
  * @param {() => string | null} options.getUrl  現在の Channel URL（lazyChannel.getUrl）。
+ * @param {() => boolean} [options.hasBody]  今のロールに体があるか（聞くたびに読む・既定 いつも true）。
  * @param {() => void} options.ensureFireResources  session/player の遅延生成（冪等）。
  * @param {() => void | Promise<void>} [options.ensureSessionCurrent] 次の accepted Fire の設定反映。
  * @param {() => { ask: (input: string | Array<any>, askOptions?: object) => Promise<any> } | null} options.getSession
@@ -374,14 +399,15 @@ export function createLazyChannel(url, options = {}) {
  */
 export function createSessionProxy(options) {
   const { getUrl, ensureFireResources, getSession, ensureSessionCurrent } = options;
+  const hasBody = typeof options.hasBody === "function" ? options.hasBody : () => true;
   return {
     /** @param {string | Array<any>} input @param {object} [askOptions] */
     async ask(input, askOptions) {
       if (typeof ensureSessionCurrent === "function") {
         await ensureSessionCurrent();
       }
-      if (getUrl() == null) {
-        throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
+      if (hasBody() !== false && getUrl() == null) {
+        throw new Error(CHANNEL_URL_NOT_SET_MESSAGE);
       }
       ensureFireResources();
       return /** @type {any} */ (getSession()).ask(input, askOptions);
@@ -1714,7 +1740,9 @@ export function formatReplyLatencyLine(record) {
     `stt=${ms(seg.transcribeMs)} judge=${ms(seg.judgeMs)} screen=${ms(seg.screenMs)} llm=${ms(seg.llmFirstMs)} ` +
     `sentence=${ms(seg.firstSentenceMs)} tts=${ms(seg.ttsMs)} voice=${ms(seg.voiceMs)} other=${ms(record?.otherMs)}` +
     `${typeof record?.voice === "string" ? ` voiceEngine=${record.voice}` : ""}` +
-    `${record?.spoken === false ? " spoken=no" : ""}\n`
+    `${record?.spoken === false ? " spoken=no" : ""}` +
+    // 体なしの返事（声の区間に器の往復が入らない・配信の組み直し Domain C）。体があるときは今と同じ行。
+    `${record?.bodyless === true ? " body=none" : ""}\n`
   );
 }
 
@@ -1812,6 +1840,10 @@ async function main() {
   let sessionInstructionRevision = null;
   let sessionContextRevision = 0;
   let sessionAcceptedContextRevision = null;
+  // 今のセッションを作ったときのロールの体の有無（①に表情の教えを足したか）。今のロールの体と違えば次の Fire の境目で
+  // 作り直す（配信の組み直し Domain C）。
+  /** @type {boolean | null} */
+  let sessionBody = null;
   /** @type {ReturnType<typeof createStreamPlayer> | null} */
   let player = null;
   let audioRevision = 0;
@@ -1848,11 +1880,16 @@ async function main() {
   // （切替は現 session を次の Fire の境目で dispose→null にし、次の ensureFireResources が新しい頭を生成する）。
   // KILL 状態は orchestrator 側にあり切替を跨いで生存する（頭非依存・触らない）。
   let currentBrain = roleHooks.current().brain;
+  // 配信の組み直し Domain C: 今のロールに体があるか（role.json の body）。値は持ち回らず、使う時点でいつも今のロールから
+  // 読む（受理のたび・頭に聞くたび・セッションを作るとき）。耳が止まっている間にロールを替えても古い値が残らない。
+  const currentBody = () => roleHooks.current().body !== false;
   // 会話指示 = 今のロールの性格の指示（roles/<id>/instructions.md・§createRoleInstructionStore）。
+  // 編集画面に読むだけで見せる教えは、①に足すものと同じく今のロールの体に合わせる（体なしは expression を出さない）。
   const conversationInstructionHooks = createConversationInstructionHooks(
     createRoleInstructionStore({ dir: DEFAULT_ROLES_DIR, knownIds: () => roleHooks.knownIds() }),
     () => roleHooks.currentId(),
-    instructionRevision
+    instructionRevision,
+    () => listSoulSkills({ names: soulSkillNamesForBody(currentBody()) })
   );
   // One runtime authority for the current name. All identity seams (prompt, Whisper, scheduler, and public
   // state) read this closure at the appropriate lifecycle boundary. 配信の組み直し Domain A: 名前は今のロールが
@@ -1973,6 +2010,8 @@ async function main() {
       const sessionIdentity = getCurrentRoleIdentity();
       // このセッションの頭（fast の対応の有無をどの頭のものとして覚えるか）。
       const sessionBrain = currentBrain;
+      // このセッションのロールの体の有無（体なしは表情の教えを①に足さない・配信の組み直し Domain C）。
+      const sessionHasBody = currentBody();
       // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
       //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
       //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
@@ -1997,7 +2036,7 @@ async function main() {
         systemPrompt: buildRoleSessionSystemPrompt(
           sessionIdentity,
           conversationInstructionHooks.getProfile(roleHooks.currentId()).body,
-          loadSoulSkills({ onWarning: onBrainWarning })
+          loadSoulSkills({ names: soulSkillNamesForBody(sessionHasBody), onWarning: onBrainWarning })
         ),
         onWarning: onBrainWarning,
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
@@ -2016,6 +2055,7 @@ async function main() {
       });
       sessionInstructionRevision = instructionRevision.getRevision();
       sessionAcceptedContextRevision = sessionContextRevision;
+      sessionBody = sessionHasBody;
     }
     ensureVoiceResources();
   };
@@ -2054,7 +2094,9 @@ async function main() {
   };
 
   const applyDesiredFireSettings = async () => {
-    if (appliedChannelRevision !== channelRevision) {
+    // 器の URL の差し替えは体のあるロールのときだけ（体なしは器を使わない。差し替えは体のあるロールに戻った最初の
+    // Fire の境目で効く・配信の組み直し Domain C）。
+    if (currentBody() && appliedChannelRevision !== channelRevision) {
       lazyChannel.setUrl(desiredChannelUrl);
       appliedChannelRevision = channelRevision;
     }
@@ -2070,7 +2112,8 @@ async function main() {
     const sessionStale =
       session != null &&
       (sessionInstructionRevision !== instructionRevision.getRevision() ||
-        sessionAcceptedContextRevision !== sessionContextRevision);
+        sessionAcceptedContextRevision !== sessionContextRevision ||
+        sessionBody !== currentBody());
     if (sessionStale) {
       const stale = session;
       try {
@@ -2085,15 +2128,18 @@ async function main() {
         session = null;
         sessionInstructionRevision = null;
         sessionAcceptedContextRevision = null;
+        sessionBody = null;
       }
     }
   };
 
   // orchestrator に渡す session/player は proxy（実体は ensureFireResources で遅延生成）。
   // session.ask は URL 未設定なら spawn せず明示エラー（→ orchestrator が fireError 診断に落とす）。
+  // 配信の組み直し Domain C: URL の確かめはロールに体があるときだけ（hasBody）。
   // S5: ask(input) は string | content ブロック配列を透過する（createSessionProxy 参照）。
   const sessionProxy = createSessionProxy({
     getUrl: () => lazyChannel.getUrl(),
+    hasBody: currentBody,
     ensureFireResources,
     getSession: () => session,
     ensureSessionCurrent: applyDesiredFireSettings
@@ -2131,9 +2177,9 @@ async function main() {
     });
   const acquireAcceptedFireResources = async () => {
     await applyDesiredFireSettings();
-    if (lazyChannel.getUrl() == null) {
-      throw new Error("Channel URL is not set — set it in the cockpit (Channel field) before firing.");
-    }
+    // 配信の組み直し Domain C: 体の有無は受理の時点の今のロールから読む。体ありは今どおり URL が無ければ断る。
+    // 体なしは器を渡さない（URL を見ない・運び手は手元の再生器だけで鳴らす・§resolveFireChannel）。
+    const fireChannel = resolveFireChannel({ body: currentBody(), channel: lazyChannel });
     ensureFireResources();
     const acceptedSession = session;
     // 進行中の発話はこの player / engine を最後まで使う（デバイス変更の作り直しは次の Fire の境目）。
@@ -2141,7 +2187,8 @@ async function main() {
     const acceptedEngine = voiceEngines.current();
     return Object.freeze({
       session: acceptedSession,
-      channel: lazyChannel,
+      channel: fireChannel.channel,
+      body: fireChannel.body,
       player: acceptedPlayer,
       engine: acceptedEngine,
       speakDeps: productionSpeakDeps(),
@@ -2151,7 +2198,7 @@ async function main() {
         instructionRevision: instructionRevision.getRevision(),
         audioDevice: audioDeviceHooks.getAudioDevice(),
         audioRevision,
-        channelUrl: lazyChannel.getUrl(),
+        channelUrl: fireChannel.channelUrl,
         channelRevision,
         // ①の turn/start に送る速さの段（Codex の頭のときだけ・受理の時点の fast の設定・Claude は null）。
         serviceTier: codexFastHooks.serviceTierFor(currentBrain)
@@ -2161,7 +2208,8 @@ async function main() {
         instructionRevision: instructionRevision.getRevision(),
         audioRevision,
         channelRevision,
-        channelConnectionGeneration: lazyChannel.acceptedConnectionGeneration()
+        // 体なしの Fire は器につながないので、器の接続の世代も持たない（null）。
+        channelConnectionGeneration: fireChannel.body ? lazyChannel.acceptedConnectionGeneration() : null
       })
     });
   };
@@ -2193,6 +2241,7 @@ async function main() {
    *  替わる（旧 onSetBrain と同じ。進行中 Fire の session は触らない）。声は次の Start（か Start より前の Fire）で、
    *  話者・声の id が違えば engine を作り直す（voiceKey）。口数・話し始め・声の方式は戻り値で cockpit-server へ
    *  渡す（scheduler と Start の既定に入れる）。whisper の手がかり・呼びかけの照合は次の発話から今のロールを読む。
+   *  体の有無（Domain C）は持ち回らず、次の受理・頭に聞くとき・セッションを作るときに今のロールから読む（currentBody）。
    * @param {string} id
    */
   const onSetRole = async (id) => {
@@ -2392,13 +2441,18 @@ async function main() {
     );
   };
 
-  /** state snapshot に載せる Channel の現況（redact 済み・token を平文で出さない）。 */
+  /**
+   * state snapshot に載せる Channel の現況（redact 済み・token を平文で出さない）。
+   * 配信の組み直し Domain C: 今のロールの体の有無（body）も載せる。体なしなら画面の器の状態は「体なし」
+   * （view-logic/status.mjs の channelStatusView）。
+   */
   const channelStatus = () => {
     const u = desiredChannelUrl;
     return {
       configured: u != null,
       url: u != null ? redactToken(u) : null,
-      connection: lazyChannel.connectionStatus()
+      connection: lazyChannel.connectionStatus(),
+      body: currentBody()
     };
   };
 
@@ -2532,7 +2586,13 @@ async function main() {
   process.stdout.write(`[cockpit] listening on ${url} (loopback only)\n`);
   process.stdout.write(`[cockpit] open  ${url}/  in your browser — pick a mic, press Start, speak.\n`);
   const startupUrl = lazyChannel.getUrl();
-  if (startupUrl) {
+  if (!currentBody()) {
+    // 配信の組み直し Domain C: 体の無いロールは器を使わない（URL の有無を案内しない）。
+    process.stdout.write(
+      `[cockpit] fire wired: ロール ${roleHooks.currentId()} は体なし — 器（Channel）にはつながず、手元の再生器だけで声を出します` +
+        "（表情タグは使いません）。LLM セッションは初回 Fire 時に生成します。\n"
+    );
+  } else if (startupUrl) {
     process.stdout.write(
       `[cockpit] fire enabled: channel = ${redactToken(startupUrl)} ` +
         `(window ${(args.fireWindowMin ?? FIRE_WINDOW_MS / 60000)} min, max ${args.fireMaxChars ?? FIRE_MAX_CHARS} chars). ` +

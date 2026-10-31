@@ -575,3 +575,123 @@ test("AivisSpeech engine と組んだ 1 文: 均等割りの時間割を append�
   player.emitFor("ended", 0);
   assert.equal((await handle.ended).status, "completed");
 });
+
+// ── 配信の組み直し Domain C: 器は任意（体なし・stream-restructure.md §4）─────────────────────────────
+//  channel を渡さない運び手は、器への送信（openSpeech / appendSpeech / endSpeech / 口の release）を飛ばし、
+//  手元の再生器だけで鳴らす。時間割は器が無くても貯める（割り込みの材料）。
+
+/** 器なしの rig（player の呼び出しだけを並べる）。 */
+function makeBodylessRig(options = {}) {
+  const log = [];
+  const player = createFakeStreamPlayer(/** @type {any} */ (options).player);
+  for (const name of ["open", "write", "end", "stop"]) {
+    const original = /** @type {any} */ (player)[name].bind(player);
+    /** @type {any} */ (player)[name] = (/** @type {any[]} */ ...args) => {
+      log.push(`player.${name}`);
+      return original(...args);
+    };
+  }
+  return { log, player };
+}
+
+const TWO_MORA_CHUNKS = () => [
+  { type: "format", sampleRate: 24000, channels: 1 },
+  { type: "timeline", entries: [{ timeMs: 0, vowel: "a", s: 0.5 }, { timeMs: 100, vowel: "i", s: 0.5 }] },
+  { type: "audio", pcm: new Uint8Array(480) },
+  { type: "end" }
+];
+
+test("器なし（体なし）: openSpeech を待たずに player.open → write → end、STARTED / ENDED で完了（器へは何も送らない）", async () => {
+  const { log, player } = makeBodylessRig();
+  const traces = [];
+  const releases = [];
+  const streamer = createSpeechStreamer({
+    engine: createFakeVoiceEngine(),
+    player,
+    channel: null,
+    generationId: "nobody",
+    releaseMouth: (info) => {
+      releases.push(info.cause);
+    },
+    onTrace: (event, fields) => traces.push({ event, ...fields })
+  });
+  streamer.enqueue({ text: "一。", index: 0 });
+  streamer.enqueue({ text: "二。", index: 1, final: true });
+  const done = streamer.finish();
+  await settle();
+  assert.deepEqual(log, ["player.open", "player.write", "player.end"], "器の受理を待たない・器へ送らない");
+  assert.equal(traces.find((t) => t.event === "speech.playback.activated")?.bodyless, true);
+  player.emit("started", player.opened[0], { atMs: 100 });
+  assert.deepEqual(streamer.snapshot().active?.timeline, [{ timeMs: 0, vowel: "a", s: 0.5 }], "時間割は器が無くても貯める");
+  player.emitFor("ended", 0);
+  await settle();
+  player.emitFor("started", 1);
+  player.emitFor("ended", 1);
+  const outcome = await done;
+  assert.equal(outcome.status, "completed");
+  assert.equal(outcome.playedText, "一。二。");
+  assert.deepEqual(releases, [], "口が無いので release しない");
+  assert.equal(traces.some((t) => t.event.startsWith("speech.channel.")), false, "器の拒否・失敗も起きない");
+});
+
+test("器なし（体なし）: channel 未指定でも同じ（入口で投げない）・器を渡すなら 3 つの口が要るのは今どおり", async () => {
+  const { player } = makeBodylessRig();
+  const streamer = createSpeechStreamer({ engine: createFakeVoiceEngine(), player });
+  streamer.enqueue({ text: "あ。", final: true });
+  const done = streamer.finish();
+  await settle();
+  assert.equal(player.opened.length, 1);
+  player.emitFor("started", 0);
+  player.emitFor("ended", 0);
+  assert.equal((await done).status, "completed");
+  assert.throws(() => createSpeechStreamer(/** @type {any} */ ({ engine: createFakeVoiceEngine(), player, channel: { openSpeech() {} } })), /openSpeech/);
+});
+
+test("器なし（体なし）: 割り込み・キルは player.stop で止めて cancelled（play-failed ではない）・口の release は呼ばない", async () => {
+  for (const action of ["bargeIn", "kill"]) {
+    const { log, player } = makeBodylessRig();
+    const releases = [];
+    const streamer = createSpeechStreamer({
+      engine: createFakeVoiceEngine(),
+      player,
+      releaseMouth: (info) => {
+        releases.push(info.cause);
+      }
+    });
+    streamer.enqueue({ text: "こんにちは。", final: true });
+    const done = streamer.finish();
+    await settle();
+    player.emit("started", player.opened[0], { atMs: 500 });
+    assert.equal(action === "bargeIn" ? streamer.bargeIn() : streamer.kill(), true, action);
+    const outcome = await done;
+    assert.equal(outcome.status, "cancelled", action);
+    assert.equal(outcome.terminalCause, action === "bargeIn" ? "barge-in" : "killed");
+    assert.equal(log.at(-1), "player.stop", action);
+    assert.deepEqual(releases, [], action);
+    assert.equal(outcome.stoppedActive?.startedAtMs, 500, `${action}: 切断点の材料（STARTED の時刻）を残す`);
+  }
+});
+
+test("speakOnce 器なし（体なし）: player.open で返り、切断点の材料（時間割と STARTED の時刻）は器ありと同じ", async () => {
+  /** @param {boolean} withChannel */
+  const run = async (withChannel) => {
+    const rig = makeRig();
+    const engine = createFakeVoiceEngine({ chunksFor: TWO_MORA_CHUNKS });
+    const handle = await speakOnce("あい", { engine, player: rig.player, ...(withChannel ? { channel: rig.channel } : {}) });
+    await settle();
+    rig.player.emit("started", rig.player.opened[0], { atMs: 2000 });
+    await handle.stop("barge-in");
+    return { snapshot: handle.snapshot(), ended: await handle.ended, sent: rig.channel.sent.length, stops: rig.player.stops };
+  };
+  const withBody = await run(true);
+  const bodyless = await run(false);
+  assert.deepEqual(bodyless.snapshot, withBody.snapshot);
+  assert.deepEqual(bodyless.snapshot, {
+    timeline: [{ timeMs: 0, vowel: "a", s: 0.5 }, { timeMs: 100, vowel: "i", s: 0.5 }],
+    startedAtMs: 2000
+  });
+  assert.equal(bodyless.ended.status, "cancelled");
+  assert.equal(bodyless.stops, 1);
+  assert.equal(bodyless.sent, 0, "器へは何も送らない");
+  assert.ok(withBody.sent > 0, "器ありは今どおり送る");
+});
