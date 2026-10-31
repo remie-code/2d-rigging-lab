@@ -32,8 +32,8 @@
 
 ## 3. Next Actions
 
-1. 進め方(scope §15): 受信の試し(済み・合格) → 配信の組み直し(済み) → **Discord を足す(次)**。
-2. Discord を足す前の context-check(2026-10-31): 最初の的・体験の素描の ★・記憶の扱いをユーザーと決め、外の事実は棚卸しで埋める。
+1. 進め方(scope §15): 受信の試し(済み・合格) → 配信の組み直し(済み) → **Discord を足す(実装中、2026-10-31〜)**。
+2. 設計 [../architecture/discord-mode.md](../architecture/discord-mode.md)(Accepted)、wave 計画 [../implementation/orchestration/discord-mode-wave-plan.md](../implementation/orchestration/discord-mode-wave-plan.md)。ブランチ `ai-cohost/discord-mode`。
 
 ## 4. Unresolved Questions
 
