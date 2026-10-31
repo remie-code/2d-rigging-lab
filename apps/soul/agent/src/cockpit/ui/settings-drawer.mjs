@@ -87,7 +87,8 @@ import {
   codexFastToggleView,
   codexFastStatusLabel,
   codexFastPostErrorText,
-  CODEX_FAST_NOTE
+  CODEX_FAST_NOTE,
+  streamLocksInputs
 } from "../view-logic/settings.mjs";
 import { chatStatusView, channelStatusView, shouldRestoreChatSource } from "../view-logic/status.mjs";
 import { voiceOutputLabel, BRAIN_LABELS, brainLabel, brainCredentialHealthLabel } from "../view-logic/health.mjs";
@@ -551,13 +552,16 @@ export function CockpitSettingsModal({
 
   // ── ハンドラ（すべて「POST → view-logic で文言 → snapshot 適用」の同型フロー）──
 
-  /** Start（:730-750）。 */
+  /**
+   * Start（:730-750）。配信の組み直し Domain D: 「配信を始める」と同じ場の関数（POST /api/stream/start）を通る
+   * （耳だけを起こす道は残さない）。マイク・文字起こし・声の選択をここで渡す。
+   */
   const onStart = () => {
     const device = micSelected || null; // :731
     setMicBusy(true); //                    :732 setBusy(true)
     sttEditedRef.current = false; // Start 後はサーバーの記憶（state.stt.engine）に同期してよい。
     ttsEditedRef.current = false; //  声も同じ（state.tts.engine）。
-    doFetch("/api/ears/start", {
+    doFetch("/api/stream/start", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ device, sttEngine: sttSelected || "whisper", ttsEngine: ttsSelected || "aivis" })
@@ -577,12 +581,15 @@ export function CockpitSettingsModal({
       .then(() => setMicBusy(false)); //              :749 setBusy(false)
   };
 
-  /** Stop（:804-811・エラー欄クリアは無し = 原実装踏襲）。 */
+  /**
+   * Stop（:804-811・エラー欄クリアは無し = 原実装踏襲）。配信の組み直し Domain D: 「配信を終える」と同じ場の関数
+   * （POST /api/stream/stop・記録してから閉じる）を通る。
+   */
   const onStop = () => {
     setMicBusy(true); // :805
-    doFetch("/api/ears/stop", { method: "POST" })
+    doFetch("/api/stream/stop", { method: "POST" })
       .then((/** @type {any} */ r) => r.json())
-      .then((/** @type {any} */ j) => applySnapshot(j)) //                                  :808
+      .then((/** @type {any} */ j) => applySnapshot(j && j.state ? j.state : j)) //          :808
       .catch((/** @type {unknown} */ e) => setMicError(requestErrorText("earsStop", e))) // :809
       .then(() => setMicBusy(false)); //                                                    :810
   };
@@ -780,6 +787,9 @@ export function CockpitSettingsModal({
 
   const channelView = channelStatusView(settings && settings.channel);
   const chatView = chatStatusView(chatDisplay);
+  // 配信の組み直し Domain D: 場が開いている間（開きかけ・閉じかけも）はマイク・文字起こしを触れない（サーバも始める口
+  // でしか替えない・stream-restructure.md §3）。見た目の組み直しは Domain E。
+  const inputsLocked = streamLocksInputs(settings && settings.stream);
 
   return html`
     <div class="cockpit-settings-backdrop" data-open=${open ? "true" : "false"} hidden=${!open}
@@ -872,6 +882,7 @@ export function CockpitSettingsModal({
             className="drawer-select device-select"
             options=${micOptions}
             value=${micSelected}
+            disabled=${inputsLocked}
             onChange=${(/** @type {any} */ ev) => setMicSelected(ev && ev.target ? ev.target.value : "")}
           />
           <button class="btn-start" type="button" disabled=${micBusy} onClick=${onStart}>Start</button>
@@ -884,6 +895,7 @@ export function CockpitSettingsModal({
             className="drawer-select stt-engine-select"
             options=${STT_ENGINE_OPTIONS}
             value=${sttSelected}
+            disabled=${inputsLocked}
             onChange=${(/** @type {any} */ ev) => {
               sttEditedRef.current = true;
               setSttSelected(ev && ev.target ? ev.target.value : "whisper");

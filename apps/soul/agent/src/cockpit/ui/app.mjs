@@ -6,8 +6,9 @@
  *  - 上の細い帯（header.mjs TopBar）: 名前・頭のモデル名・状態のピル・異常時だけの警告・残量ゲージ 2 本・KILL
  *    （KILL 中は帯を赤くし復帰ボタン。POST /api/kill は App が持つ）。
  *  - 会話タイムライン（conversation.mjs・左 約 6 割・主役）とコメント（comments.mjs・右 約 3.5 割）。材料は
- *    view-logic/glance-timeline.mjs の状態（glance）で、SSE ごとに glanceAfterSseEvent を通す。配信前（耳が止まって
- *    いる間）は会話の場所の中央に「準備・設定を開く」。
+ *    view-logic/glance-timeline.mjs の状態（glance）で、SSE ごとに glanceAfterSseEvent を通す。配信前（場が閉じて
+ *    いる間）は会話の場所の中央に「配信を始める」と「準備・設定」（配信の組み直し Domain D）。
+ *  - 「配信を終える」は下の帯の歯車の左（場が開いている間だけ・2 回押し）。始める / 終えるは POST /api/stream/start・stop。
  *  - 下の細い帯（bottom-bar.mjs）: 運転設定の表示・遅延の凡例 8 つ・歯車「準備・設定」。
  *  - 準備・設定（settings-drawer.mjs のダイアログ）: 既存の 4 タブに「運転」（control-bar.mjs DrivePanel = 旧運転
  *    バー + 手動の発火）と「ログ」（今の観測フィード feed.mjs + 旧ヘッダの一目の健康）を足した。初回の自動展開は
@@ -45,7 +46,7 @@ import {
   conversationRowsView,
   commentRowsView
 } from "../view-logic/glance-timeline.mjs";
-import { latencyBarView, isPreStream, DEFAULT_LATENCY_THRESHOLDS } from "../view-logic/glance-meters.mjs";
+import { latencyBarView, isPreStream, streamStartView, DEFAULT_LATENCY_THRESHOLDS } from "../view-logic/glance-meters.mjs";
 
 /**
  * 購読する SSE イベントの全リスト（既存 13 本 + 操縦席の作り直し 1 回目で足した 4 本・データの形 §1）。
@@ -120,7 +121,10 @@ export function settingsFromSnapshot(s) {
     compaction: (s && s.compaction) ?? null,
     // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定「頭脳・会話」タブ）。compaction と同型の
     // null 許容（codexFastStatus 未注入なら null）。
-    codexFast: (s && s.codexFast) ?? null
+    codexFast: (s && s.codexFast) ?? null,
+    // 配信の組み直し Domain D: 場の状態（{ phase, error, openedAtMs }・メイン画面の「配信を始める / 終える」と、場が開いている
+    // 間のマイク・文字起こしの固定）。無い古いサーバは null（画面は耳の状態から読む）。
+    stream: (s && s.stream) ?? null
   };
 }
 
@@ -177,6 +181,11 @@ export function App(props) {
   // 準備・設定の開閉（歯車・配信前の「準備・設定を開く」。初回の自動展開はしない・§7・§9.2）。
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsCloseRequestRef = useRef(/** @type {() => void} */ (() => setSettingsOpen(false)));
+  // 配信の組み直し Domain D: 「配信を始める」の要求そのものの失敗（通信の失敗・409。始められなかった理由はサーバの
+  // stream.error が持つ）と、「配信を終える」の 2 回押しの 1 回目（armed・数秒で戻す）。
+  const [streamRequestError, setStreamRequestError] = useState("");
+  const [endArmed, setEndArmed] = useState(false);
+  const endArmTimerRef = useRef(/** @type {any} */ (null));
 
   // applyState 相当（:265-284）。ハンドラと初期化の両方から呼ぶため ref で固定。
   const applyStateRef = useRef(/** @type {(s: any) => void} */ (() => {}));
@@ -319,7 +328,49 @@ export function App(props) {
       .catch((/** @type {unknown} */ e) => setKillError(killRequestErrorText(e)));
   };
 
-  // 歯車・配信前の「準備・設定を開く」（開いているときは閉じる要求 = 未保存の会話指示の確認を通す）。
+  /**
+   * 「配信を始める」（メイン画面の中央・配信の組み直し Domain D）。マイク・文字起こし・声は前回の選択（サーバの記憶）で
+   * 始める（選び直すのは準備・設定）。成功も失敗も応答の snapshot を適用する（失敗の理由は stream.error に載る）。
+   */
+  const startStream = () => {
+    const doFetch = props.fetchImpl || globalThis.fetch;
+    setStreamRequestError("");
+    doFetch("/api/stream/start", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        if (res.ok) {
+          applySnapshot(res.j);
+          return;
+        }
+        if (res.j && res.j.state) applySnapshot(res.j.state);
+        // 始めるの途中で失敗した理由はサーバの stream.error に残る。それ以外（409 など）はここで出す。
+        if (!(res.j && res.j.state && res.j.state.stream && res.j.state.stream.error)) {
+          setStreamRequestError((res.j && res.j.error) || "配信を始められない");
+        }
+      })
+      .catch((/** @type {unknown} */ e) => setStreamRequestError(`配信を始められない（${String(e)}）`));
+  };
+
+  /** 「配信を終える」（下の帯・2 回押し）。1 回目は armed にするだけ（4 秒で戻す）、続けて押したら終える。 */
+  const endStream = () => {
+    if (endArmTimerRef.current) clearTimeout(endArmTimerRef.current);
+    if (!endArmed) {
+      setEndArmed(true);
+      endArmTimerRef.current = setTimeout(() => setEndArmed(false), 4000);
+      return;
+    }
+    setEndArmed(false);
+    endArmTimerRef.current = null;
+    const doFetch = props.fetchImpl || globalThis.fetch;
+    doFetch("/api/stream/stop", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+      .then((/** @type {any} */ r) => r.json())
+      .then((/** @type {any} */ j) => applySnapshot(j && j.state ? j.state : j))
+      .catch(() => {
+        /* 終えるの途中の状態は SSE の state で届く。 */
+      });
+  };
+
+  // 歯車・配信前の「準備・設定」（開いているときは閉じる要求 = 未保存の会話指示の確認を通す）。
   const toggleSettings = () => {
     if (settingsOpen) {
       settingsCloseRequestRef.current();
@@ -357,10 +408,17 @@ export function App(props) {
         onRevive=${() => setKilled(false)}
       />
       <main class="glance-main">
-        <${ConversationPanel} rows=${convoRows} preStream=${isPreStream(ears)} onOpenSettings=${toggleSettings} />
+        <${ConversationPanel}
+          rows=${convoRows}
+          preStream=${isPreStream(ears, settings.stream)}
+          start=${streamStartView(settings.stream, streamRequestError)}
+          onStartStream=${startStream}
+          onOpenSettings=${toggleSettings}
+        />
         <${CommentsPanel} rows=${commentRows} />
       </main>
-      <${BottomBar} settings=${settings} settingsOpen=${settingsOpen} onOpenSettings=${toggleSettings} />
+      <${BottomBar} settings=${settings} settingsOpen=${settingsOpen} onOpenSettings=${toggleSettings}
+        endArmed=${endArmed} onEndStream=${endStream} />
       ${/* ── 準備・設定（歯車で開閉・普段は畳む）。運転とログのタブの中身はここで組んで渡す。── */ ""}
       <${CockpitSettingsModal}
         open=${settingsOpen}

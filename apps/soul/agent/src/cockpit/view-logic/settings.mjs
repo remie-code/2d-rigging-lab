@@ -404,6 +404,17 @@ export function ttsEngineSelection(tts) {
 }
 
 /**
+ * 場が開いている間（開きかけ・閉じかけも）か = マイク・文字起こしを触れない間（配信の組み直し Domain D・stream-restructure.md
+ * §3「マイク・文字起こしの方式は、場が閉じている間だけ変えられる」）。stream を持たない古いサーバ（null）は固めない。
+ * @param {{ phase?: string } | null | undefined} stream  snapshot の stream。
+ * @returns {boolean}
+ */
+export function streamLocksInputs(stream) {
+  const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
+  return phase === "opening" || phase === "open" || phase === "closing";
+}
+
+/**
  * POST /api/ears/start 応答 → 失敗文言（:740-742）。!ok（409 transitioning / 500 とも）は
  * "start failed: error"・成功は null（呼び出し側は snapshot を適用しエラー欄をクリア :743-745）。
  * @param {{ ok: boolean; j?: { error?: string | null } | null }} res

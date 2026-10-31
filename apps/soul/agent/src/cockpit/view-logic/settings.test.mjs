@@ -14,6 +14,7 @@ import {
   chatConnectErrorText,
   CHAT_EMPTY_SOURCE_ERROR,
   earsStartFailureText,
+  streamLocksInputs,
   requestErrorText,
   rolePostErrorText,
   memoryRecordPostErrorText,
@@ -315,4 +316,12 @@ test("codexFastPostErrorText / requestErrorText: POST /api/codex-fast の失敗�
   assert.equal(codexFastPostErrorText({ status: 503, ok: false, j: {} }), "codex fast control not available");
   assert.equal(codexFastPostErrorText({ status: 400, ok: false, j: { error: "enabled must be a boolean" } }), "set failed: enabled must be a boolean");
   assert.equal(requestErrorText("codexFast", new Error("net")), "codex fast error: Error: net");
+});
+
+test("streamLocksInputs: 場が開いている間（開きかけ・閉じかけも）はマイク・文字起こしを触れない（配信の組み直し Domain D）", () => {
+  assert.equal(streamLocksInputs({ phase: "closed" }), false);
+  assert.equal(streamLocksInputs({ phase: "opening" }), true);
+  assert.equal(streamLocksInputs({ phase: "open" }), true);
+  assert.equal(streamLocksInputs({ phase: "closing" }), true);
+  assert.equal(streamLocksInputs(null), false, "stream の無い古いサーバは固めない");
 });

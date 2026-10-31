@@ -180,9 +180,64 @@ export function statusPillView(soul, ears, compacting) {
   return { text: "止まってる", className: "status-pill stopped" };
 }
 
-/** 配信前（耳が止まっている間）か。起動中は配信前に数えない。 @param {string | null | undefined} ears */
-export function isPreStream(ears) {
-  return ears !== "listening" && ears !== "starting";
+/**
+ * 場の状態（配信の組み直し Domain D・snapshot の stream.phase）。stream を持たない古いサーバは耳の状態から読む
+ * （聞いている・起動中 = 開いている）。
+ * @param {{ phase?: string } | null | undefined} stream
+ * @param {string | null | undefined} [ears]
+ * @returns {"closed" | "opening" | "open" | "closing"}
+ */
+export function streamPhaseOf(stream, ears) {
+  const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
+  if (phase === "closed" || phase === "opening" || phase === "open" || phase === "closing") return phase;
+  return ears === "listening" || ears === "starting" ? "open" : "closed";
+}
+
+/**
+ * 配信前か（メイン画面の中央に「配信を始める」を出す間）。配信の組み直し Domain D: stream を渡せば場が開いていない間
+ * （閉じている・開きかけ・閉じかけ）。stream を渡さなければ今までどおり耳が止まっている間（起動中は配信前に数えない）。
+ * @param {string | null | undefined} ears
+ * @param {{ phase?: string } | null} [stream]
+ */
+export function isPreStream(ears, stream) {
+  if (stream === undefined) return ears !== "listening" && ears !== "starting";
+  return streamPhaseOf(stream, ears) !== "open";
+}
+
+/**
+ * 場が開いていない間のメイン画面の中央（配信の組み直し Domain D・stream-restructure.md §6）。閉じているときは「配信を始める」
+ * （押せる）と始められなかった理由、開きかけは押せない「配信を始めています…」、閉じかけ（記憶の最後の保存を待つ間）は
+ * 押せない「配信を終えています…」と「記録中…」。「準備・設定」はいつも横に出す（描く側）。
+ * @param {{ phase?: string; error?: string | null } | null | undefined} stream  snapshot の stream。
+ * @param {string} [requestError]  始めるの要求そのものの失敗（通信の失敗・409 など・サーバの stream.error に残らないもの）。
+ * @returns {{ phase: "closed" | "opening" | "open" | "closing"; startText: string; startDisabled: boolean; noteText: string; errorText: string }}
+ */
+export function streamStartView(stream, requestError = "") {
+  const phase = streamPhaseOf(stream, null);
+  const serverError = stream && typeof stream.error === "string" ? stream.error : "";
+  return {
+    phase,
+    startText: phase === "opening" ? "配信を始めています…" : phase === "closing" ? "配信を終えています…" : "配信を始める",
+    startDisabled: phase !== "closed",
+    noteText: phase === "closing" ? "記録中…" : "",
+    errorText: phase === "closed" ? requestError || serverError : ""
+  };
+}
+
+/**
+ * 下の帯の「配信を終える」（配信の組み直し Domain D）。場が開いている間だけ出す。誤って押しにくいよう、1 回目の押下で
+ * 「もう一度押すと配信を終える」に変わり（armed）、続けて押したときだけ終える（描く側が数秒で armed を戻す）。
+ * @param {{ phase?: string } | null | undefined} stream
+ * @param {boolean} armed
+ * @returns {{ show: boolean; text: string; className: string }}
+ */
+export function endStreamButtonView(stream, armed) {
+  const show = streamPhaseOf(stream, null) === "open";
+  return {
+    show,
+    text: armed ? "もう一度押すと配信を終える" : "配信を終える",
+    className: "stream-end" + (armed ? " armed" : "")
+  };
 }
 
 /** 口数の表示名（運転タブの選択肢もここから作る）。 */

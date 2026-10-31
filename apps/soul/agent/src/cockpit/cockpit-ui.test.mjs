@@ -377,7 +377,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     notices: [], // 配信の組み直し Domain A: 起動時の知らせ（無ければ空）。
     memory: null, // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
     compaction: null, // 圧縮の目安: memory と同型の null 許容（contextCompactionStatus 未注入なら null）。
-    codexFast: null // ①の Codex の頭の fast: compaction と同型の null 許容（codexFastStatus 未注入なら null）。
+    codexFast: null, // ①の Codex の頭の fast: compaction と同型の null 許容（codexFastStatus 未注入なら null）。
+    stream: null // 配信の組み直し Domain D: 場の状態（無い古いサーバは null）。
   });
   const s = {
     channel: { configured: true, url: "ws://x — redacted" },
@@ -395,7 +396,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     notices: ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。"],
     memory: { lastRecordAtMs: 1721234567890, recording: false },
     compaction: { thresholdTokens: 200_000 },
-    codexFast: { enabled: true, applicable: true, supported: true }
+    codexFast: { enabled: true, applicable: true, supported: true },
+    stream: { phase: "open", error: null, openedAtMs: 1721234560000 }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
 });

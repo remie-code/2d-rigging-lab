@@ -270,9 +270,12 @@ html, body { overflow: hidden; }
 .seg-voice { background: var(--seg-voice); }
 .seg-other { background: var(--seg-other); }
 
-/* 配信前（耳が止まっている間）: 会話の場所の中央に大きく「準備・設定を開く」 */
+/* 配信前（場が閉じている間・配信の組み直し Domain D）: 会話の場所の中央に大きく「配信を始める」と横に「準備・設定」。
+   始められなかった理由と、閉じかけの「記録中…」もここ。 */
 .prestream { flex: 1 1 auto; display: grid; place-items: center; }
-.prestream-open {
+.prestream-box { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 640px; padding: 0 16px; }
+.prestream-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.prestream-start {
   font: inherit;
   font-size: 20px;
   font-weight: 600;
@@ -283,7 +286,31 @@ html, body { overflow: hidden; }
   padding: 22px 48px;
   cursor: pointer;
 }
-.prestream-open:hover { background: var(--linked-bg); }
+.prestream-start:hover { background: var(--linked-bg); }
+.prestream-start:disabled { opacity: 0.6; cursor: default; }
+.prestream-open {
+  font: inherit;
+  font-size: 15px;
+  color: var(--fg-soft);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 24px;
+  cursor: pointer;
+}
+.prestream-open:hover { border-color: var(--teal); color: var(--teal); }
+.prestream-note { margin: 0; color: var(--amber); font-size: 14px; }
+.prestream-error {
+  margin: 0;
+  color: var(--alert-text);
+  background: var(--alert-bg);
+  border: 1px solid var(--down);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: normal;
+}
 
 /* コメント: 新しいものが上。入らない古い行は下で切る（下端は淡く消す）。 */
 .comments-list {
@@ -353,6 +380,20 @@ html, body { overflow: hidden; }
   font-size: 12px;
 }
 .bottom-bar .settings-toggle:hover { color: var(--teal); }
+/* 配信の組み直し Domain D: 「配信を終える」（場が開いている間だけ・小さく・2 回押し。1 回目で armed = 赤みの枠） */
+.bottom-bar .stream-end {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.bottom-bar .stream-end:hover { color: var(--fg-soft); }
+.bottom-bar .stream-end.armed { color: var(--alert-text); border-color: var(--down); background: var(--alert-bg); }
 /* 横 1280 程度まで: 帯の文字と間隔を詰める */
 @media (max-width: 1500px) {
   .top-bar, .bottom-bar { gap: 10px; padding-left: 14px; padding-right: 14px; }

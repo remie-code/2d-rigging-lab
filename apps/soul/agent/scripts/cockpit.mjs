@@ -207,6 +207,7 @@ export function openCockpitBrowser(url, execFileImpl = execFile, warn = (message
  *   connectionStatus: () => string;
  *   connectionGeneration: () => number;
  *   acceptedConnectionGeneration: () => number;
+ *   connect: () => Promise<void>;
  *   close: () => Promise<void>;
  * }}
  */
@@ -349,10 +350,24 @@ export function createLazyChannel(url, options = {}) {
     acceptedConnectionGeneration() {
       return channelPromise == null ? connectionGeneration + 1 : connectionGeneration;
     },
+    /**
+     * 今の URL で器につないでおく（配信の組み直し Domain D:「配信を始める」で体のあるロールの器を確かめる口）。
+     * つながっていればそのまま。URL が無い・つながらない（runtime-player が起動していない・channel が開いていない・
+     * hello が来ない）なら投げる（失敗は非キャッシュ = 次の始める / Fire でもう一度つなぐ）。
+     * @returns {Promise<void>}
+     */
+    async connect() {
+      await ensure();
+    },
+    /**
+     * 接続を畳む。URL はそのまま残し、次の送信（か connect）でつなぎ直せる（配信の組み直し Domain D: 場の終わりで畳み、
+     * 次の場の始まりでつなぐ）。
+     */
     async close() {
       if (channelPromise == null) return;
       const pending = channelPromise;
       channelPromise = null;
+      connState = currentUrl == null ? "unset" : "idle";
       try {
         const channel = await pending;
         await channel.close();
@@ -666,8 +681,9 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値。
  * @param {() => any} [deps.getPlace]  保存を頼んだ時点の置き場（本番は今のロールの記憶のフォルダ・§createRoleMemoryPlaces）。
  *   同じ置き場には同じ値（=== で比べる）を返すこと。投げたら null。
- * @param {(info: { atMs: number; entriesLength: number; commit?: any }) => void} [deps.onSaved]
- *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。
+ * @param {(info: { atMs: number; entriesLength: number; commit?: any; place?: any }) => void} [deps.onSaved]
+ *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。place は getPlace があるとき
+ *   だけ載る（その保存を頼んだ時点の置き場・配信の組み直し Domain D の場ごとの数え方）。
  * @param {(error: unknown) => void} [deps.onError]
  * @param {(recording: boolean) => void} [deps.onRecordingChange]  走り始めと全部終わったとき（操縦席の「記録中」）。
  * @param {() => number} [deps.nowImpl=Date.now]
@@ -707,7 +723,13 @@ export function createMemoryRecorder(deps) {
     try {
       const result = await deps.writeImpl(entries, place);
       if (result && result.written) {
-        callSafely(deps.onSaved, { atMs: nowImpl(), entriesLength: entries.length, commit: result.commit });
+        // 置き場（getPlace があるときだけ）も渡す: main() が「頼んだ時点の場」の保存だけを数える（配信の組み直し Domain D）。
+        callSafely(deps.onSaved, {
+          atMs: nowImpl(),
+          entriesLength: entries.length,
+          commit: result.commit,
+          ...(place !== undefined ? { place } : {})
+        });
       }
     } catch (error) {
       callSafely(deps.onError, error);
@@ -769,6 +791,7 @@ export function createMemoryRecorder(deps) {
  * @property {string} dir  ロールの記憶のフォルダ（`memories/<role-id>/`・②④の作業フォルダ）。
  * @property {Promise<void>} ready  準備（git init・ローカル設定・`_conventions.md` の種）が終わったら解決する（失敗しても reject しない）。
  * @property {{ get: () => { dateJst: string; baseName: string } }} streamRecord  このロールの今回の配信の本体のファイル名。
+ * @property {number} streamNo  この置き場を作った場の番号（beginStream のたびに 1 つ進む・まだ場が無ければ 0）。
  */
 
 /**
@@ -777,9 +800,10 @@ export function createMemoryRecorder(deps) {
  *  - place(): 今のロールの置き場を返す。ロールごとに 1 回だけ作って持ち回る（同じロールなら同じ値）。作るときに
  *    そのロールのフォルダの準備（prepareMemoryFolder・`_conventions.md` が無ければ種の「チャッピー」をロールの呼び名に
  *    差し替えて書く）を始め、本体のファイル名（createStreamRecordIdentity・最初の保存で 1 回だけ決める）を作る。
- *    起動時に 1 回、ロールを替えたときに 1 回呼ぶ（替えたロールのフォルダの準備をそこで始める）。ロールを戻したときは
- *    前に作った置き場（同じ本体のファイル名）を使う（今までの「1 起動 1 本体」をロールごとにしたもの・場ごとの
- *    作り直しは Domain D）。
+ *    同じ場の中でロールを戻したときは前に作った置き場（同じ本体のファイル名）を使う。
+ *  - beginStream(startedAtMs): 配信の組み直し Domain D。場の始まりで置き場を作り直す（作った置き場を捨て、場の番号を
+ *    進め、次の place() でそのときのロールの置き場を新しい本体のファイル名で作る・準備もそこでもう一度走らせる =
+ *    冪等）。場の始まりで place() を呼び、その ready を待てば「場の始まりでそのロールの置き場が用意されている」。
  *  - available が false（記憶の引っ越しが失敗した起動）のときは、どのロールのフォルダも準備せず、place() は null
  *    （前の形の記録が残る根の中に、ロールのフォルダや git を作らない）。
  *  - 準備の失敗は配信を止めない（onPrepareFailed へ・保存のたびにコミットが失敗として警告に出る・今までと同じ）。
@@ -792,7 +816,7 @@ export function createMemoryRecorder(deps) {
  * @param {(options: { dir: string; soulName: string }) => Promise<{ ok: boolean; error?: string }>} [deps.prepareImpl]
  * @param {(options: { dir: string; startedAtMs: number }) => { get: () => { dateJst: string; baseName: string } }} [deps.createIdentityImpl]
  * @param {(info: { roleId: string; error: string }) => void} [deps.onPrepareFailed]
- * @returns {{ place: () => Readonly<RoleMemoryPlace> | null }}
+ * @returns {{ place: () => Readonly<RoleMemoryPlace> | null; beginStream: (startedAtMs: number) => void; streamNo: () => number }}
  */
 export function createRoleMemoryPlaces(deps) {
   const prepareImpl = deps.prepareImpl ?? ((/** @type {any} */ options) => prepareMemoryFolder(options));
@@ -800,6 +824,9 @@ export function createRoleMemoryPlaces(deps) {
   const available = deps.available !== false;
   /** @type {Map<string, Readonly<RoleMemoryPlace>>} */
   const places = new Map();
+  // 今の場の始まり（本体のファイル名の日付）と番号（配信の組み直し Domain D）。まだ場が無ければ起動の時刻と 0。
+  let startedAtMs = deps.startedAtMs;
+  let streamNo = 0;
   const reportFailure = (/** @type {string} */ roleId, /** @type {string} */ error) => {
     try {
       deps.onPrepareFailed?.({ roleId, error });
@@ -832,10 +859,181 @@ export function createRoleMemoryPlaces(deps) {
         roleId: role.id,
         dir,
         ready,
-        streamRecord: createIdentityImpl({ dir, startedAtMs: deps.startedAtMs })
+        streamRecord: createIdentityImpl({ dir, startedAtMs }),
+        streamNo
       });
       places.set(role.id, place);
       return place;
+    },
+    beginStream(nextStartedAtMs) {
+      startedAtMs = nextStartedAtMs;
+      streamNo += 1;
+      places.clear();
+    },
+    streamNo: () => streamNo
+  };
+}
+
+/** 体のあるロールで器（runtime-player）につながらず、場を開かなかったときの知らせ（配信の組み直し Domain D・scope §19）。 */
+export const BODY_CONNECT_FAILED_MESSAGE =
+  "体の器（runtime-player）につながらない — runtime-player が起動していないか、channel が開いていない。" +
+  "runtime-player を起動して channel を開いてから、もう一度「配信を始める」を押す。";
+
+/** 体のあるロールで器の URL が入っていないまま「配信を始める」を押したときの知らせ（配信の組み直し Domain D）。 */
+export const BODY_URL_NOT_SET_MESSAGE =
+  "体の器（runtime-player）の URL が入っていない — 準備・設定の Channel 欄に runtime-player の channel の URL を入れてから、" +
+  "もう一度「配信を始める」を押す。";
+
+/**
+ * 場（配信を始める / 終える）の cockpit.mjs 側の口と、場ごとの記録（配信の組み直し Domain D・stream-restructure.md §3）。
+ * cockpit-server の openStream / closeStream が `hooks` を順に呼ぶ（server の `streamHooks`）。
+ *
+ *  - hooks.renewRecords（始める 2）: 場の記録を作り直す。場の番号を進め、記憶の本体のファイル名（memoryPlaces.beginStream）と
+ *    頭の文脈の記録のファイル（renewUsageLog）を新しくし、保存の数え（lastRecordedSeq / lastRecordAtMs）を 0 / null に
+ *    戻す（新しい場の転写は 0 から始まるので、前の場の seq と比べて保存を飛ばさない）。そのロールの置き場の準備
+ *    （git init・種）もここで待つ（ロールの切り替えの応答を git init で待たせない・場の始まりで用意されている）。
+ *  - hooks.openSession（始める 5）: 頭のセッションを今のロールのモデルと指示で作る（前の場のセッションは使わない）。
+ *  - hooks.connectBody（始める 6）: ロールに体があれば器につなぐ（resolveFireChannel と同じく今のロールの body を見る）。
+ *    URL が無い・つながらないなら `{ ok:false, reason }`（場は開かない）。体なしは器を見ない・つながない。
+ *  - hooks.closeSession / hooks.closeBody（畳む）: 頭のセッションを畳む・器を畳む（器は体の有無に関わらず）。
+ *  - hooks.saveFinal（終える 3）: 写した転写が前の保存から増えていれば最後の保存を頼み、走っている保存の終わりまで待つ
+ *    （上限 memoryTimeoutMs・skipMemoryWait で打ち切れる = もう一度の Ctrl+C）。増えていなければ頼まない。
+ *  - checkpoint(): 20 分ごとの保存の 1 回分。場が開いている間だけ、前の保存から転写が増えていれば頼む。
+ *  - noteSaved(info): 保存の係の onSaved。頼んだ時点の場（置き場の streamNo）が今の場のときだけ数える（前の場の
+ *    遅れて終わった保存で、新しい場の数えを上書きしない）。
+ *  - waitForRunningSaves(): Ctrl+C で場が閉じていたとき、走っている保存（前の場の最後の保存の残りなど）を待つ（頼まない）。
+ *
+ * @param {object} deps
+ * @param {{ beginStream: (startedAtMs: number) => void; place: () => any; streamNo: () => number }} deps.memoryPlaces
+ * @param {{ record: (entries?: ReadonlyArray<any>) => Promise<void>; whenIdle: () => Promise<void>; isRecording: () => boolean }} deps.memoryRecorder
+ * @param {(startedAtMs: number) => void} [deps.renewUsageLog]  頭の文脈の記録のファイルを新しくする（本番は createSessionUsageLog の作り直し）。
+ * @param {() => (void | Promise<void>)} deps.openSession  頭のセッションを作り直す（前のセッションを畳んでから作る）。
+ * @param {() => (void | Promise<void>)} deps.closeSession  頭のセッションを畳む（冪等）。
+ * @param {() => boolean} deps.hasBody  今のロールに体があるか（roleHooks.current().body）。
+ * @param {{ getUrl: () => string | null; connect: () => Promise<void>; close: () => Promise<void> }} deps.channel  器（lazyChannel）。
+ * @param {() => boolean} [deps.isStreamOpen]  場が開いているか（20 分ごとの保存の判定・server.streamStatus）。
+ * @param {() => ReadonlyArray<any>} [deps.getEntries]  ライブの転写（server.getTranscript）。
+ * @param {() => number} [deps.nowImpl=Date.now]
+ * @param {number} [deps.memoryTimeoutMs=SHUTDOWN_MEMORY_TIMEOUT_MS]  最後の保存を待つ上限。
+ * @param {typeof setTimeout} [deps.setTimeoutImpl]
+ * @param {(info: { timeoutMs: number }) => void} [deps.onMemoryWait]  保存を待ち始めたとき（ターミナルに 1 行）。
+ */
+export function createStreamVenueHooks(deps) {
+  const nowImpl = deps.nowImpl ?? Date.now;
+  const memoryTimeoutMs = deps.memoryTimeoutMs ?? SHUTDOWN_MEMORY_TIMEOUT_MS;
+  const setTimeoutImpl = deps.setTimeoutImpl ?? setTimeout;
+  /** この場で最後に保存が成り立った時刻（snapshot の memory.lastRecordAtMs）。場の始まりで null に戻す。 @type {number | null} */
+  let lastRecordAtMs = null;
+  /** この場で最後に保存が成り立った時点の転写の件数（保存を飛ばす判定）。場の始まりで 0 に戻す。 */
+  let lastRecordedSeq = 0;
+  /** 保存を待っている間だけ入る「待たずに進む」口。 @type {(() => void) | null} */
+  let skipWait = null;
+
+  /** 走っている保存を、上限つき・打ち切れる形で待つ。 @param {Promise<any>} done */
+  const waitBounded = async (done) => {
+    try {
+      deps.onMemoryWait?.({ timeoutMs: memoryTimeoutMs });
+    } catch {
+      // 知らせの失敗で待ちを止めない。
+    }
+    await Promise.race([
+      raceMemoryRecordWithTimeout(done, memoryTimeoutMs, setTimeoutImpl),
+      new Promise((resolve) => {
+        skipWait = () => resolve(undefined);
+      })
+    ]);
+    skipWait = null;
+  };
+
+  return {
+    hooks: {
+      async renewRecords() {
+        const startedAtMs = nowImpl();
+        lastRecordedSeq = 0;
+        lastRecordAtMs = null;
+        deps.renewUsageLog?.(startedAtMs);
+        deps.memoryPlaces.beginStream(startedAtMs);
+        await deps.memoryPlaces.place()?.ready;
+      },
+      async openSession() {
+        try {
+          await deps.openSession();
+          return { ok: true };
+        } catch (error) {
+          return { ok: false, reason: `頭のセッションを作れない（${error instanceof Error ? error.message : String(error)}）` };
+        }
+      },
+      async connectBody() {
+        if (deps.hasBody() === false) return { ok: true, body: false };
+        if (deps.channel.getUrl() == null) return { ok: false, reason: BODY_URL_NOT_SET_MESSAGE };
+        try {
+          await deps.channel.connect();
+          return { ok: true, body: true };
+        } catch {
+          return { ok: false, reason: BODY_CONNECT_FAILED_MESSAGE };
+        }
+      },
+      async closeSession() {
+        try {
+          await deps.closeSession();
+        } catch {
+          // best-effort（畳めなかったセッションは使わない）。
+        }
+      },
+      async closeBody() {
+        try {
+          await deps.channel.close();
+        } catch {
+          // best-effort
+        }
+      },
+      /** @param {ReadonlyArray<any>} transcript */
+      async saveFinal(transcript) {
+        const entries =
+          Array.isArray(transcript) && !shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq) ? transcript : [];
+        const done = Promise.all([deps.memoryRecorder.record(entries), deps.memoryRecorder.whenIdle()]);
+        if (!deps.memoryRecorder.isRecording()) return;
+        await waitBounded(done);
+      }
+    },
+    /**
+     * 20 分ごとの保存の 1 回分（場が開いている間だけ・転写が前の保存から増えていなければ頼まない）。
+     * @returns {boolean}  頼んだら true。
+     */
+    checkpoint() {
+      if (typeof deps.isStreamOpen !== "function" || !deps.isStreamOpen()) return false;
+      const entries = typeof deps.getEntries === "function" ? deps.getEntries() : [];
+      if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return false; // 空回しでトークンを燃やさない。
+      deps.memoryRecorder.record(entries).catch(() => {});
+      return true;
+    },
+    /**
+     * 保存の係の onSaved。今の場の保存だけを数える（置き場を持たない保存 = テストの係は数える）。
+     * @param {{ atMs: number; entriesLength: number; place?: any }} info
+     * @returns {boolean}  数えたら true。
+     */
+    noteSaved(info) {
+      const place = info ? info.place : undefined;
+      if (place && typeof place.streamNo === "number" && place.streamNo !== deps.memoryPlaces.streamNo()) return false;
+      lastRecordAtMs = info.atMs;
+      lastRecordedSeq = info.entriesLength;
+      return true;
+    },
+    lastRecordAtMs: () => lastRecordAtMs,
+    lastRecordedSeq: () => lastRecordedSeq,
+    /** 走っている保存を待つ（頼まない・上限つき・打ち切れる）。走っていなければすぐ返る。 */
+    async waitForRunningSaves() {
+      if (!deps.memoryRecorder.isRecording()) return;
+      await waitBounded(deps.memoryRecorder.whenIdle());
+    },
+    /**
+     * 保存の待ちを打ち切る（もう一度の Ctrl+C）。待っていなければ false。
+     * @returns {boolean}
+     */
+    skipMemoryWait() {
+      if (!skipWait) return false;
+      skipWait();
+      return true;
     }
   };
 }
@@ -1746,18 +1944,67 @@ export function formatReplyLatencyLine(record) {
   );
 }
 
+/**
+ * 操縦席の終わり（Ctrl+C / stdin の EOF）の手順（配信の組み直し Domain D・stream-restructure.md §3「Ctrl+C」）。
+ *  1. もう一度呼ばれたら（2 回目の Ctrl+C）、記録の待ちを打ち切るだけ（待っていなければ何もしない）。
+ *  2. 場が閉じていなければ「配信を終える」と同じ道（server.endStream = 写し → 畳む → 記憶の最後の保存を待つ → 閉じる）を
+ *     通る。開きかけ・閉じかけなら終わるのを待つ。閉じていれば保存は頼まない（場の外では記録しない）。
+ *  3. server.close() → 場が閉じていたときだけ、走っている保存（前の場の最後の保存の残りなど）を待つ（頼まない・
+ *     上限つき・打ち切れる。2 で終えたときはそこで待ったので待たない）→ 残りの常駐を畳む（disposeRest）。どこで
+ *     失敗しても finalize（プロセスの終わり）は必ず走る。
+ * @param {object} deps
+ * @param {(line: string) => void} deps.write
+ * @param {() => void} [deps.beforeClose]  最初に畳むもの（隙間の圧縮の見張り）。
+ * @param {{ streamStatus: () => { phase: string }; endStream: () => Promise<any>; close: () => Promise<void> }} deps.server
+ * @param {{ skipMemoryWait: () => boolean; waitForRunningSaves: () => Promise<void> }} deps.venue
+ * @param {() => Promise<void>} deps.disposeRest
+ * @param {() => Promise<void>} deps.finalize
+ * @returns {() => Promise<void>}
+ */
+export function createCockpitShutdown(deps) {
+  let closing = false;
+  return async function shutdown() {
+    if (closing) {
+      if (deps.venue.skipMemoryWait()) deps.write("[cockpit] 記録の書き出しを待たずに終了します。\n");
+      return;
+    }
+    closing = true;
+    deps.write("\n[cockpit] closing…\n");
+    try {
+      try {
+        deps.beforeClose?.();
+      } catch {
+        // best-effort
+      }
+      let ended = false;
+      if (deps.server.streamStatus().phase !== "closed") {
+        deps.write("[cockpit] 配信を終えます（記録してから畳みます・もう一度 Ctrl+C で記録を待たずに終了）。\n");
+        await deps.server.endStream();
+        ended = true;
+      }
+      await deps.server.close(); // orchestrator.dispose を含む（cockpit-server の close 契約）。
+      // 終えるを通ったときは、そこで走っている保存の終わりまで待った（か打ち切った）ので、もう一度は待たない。
+      if (!ended) await deps.venue.waitForRunningSaves();
+      await deps.disposeRest();
+    } finally {
+      await deps.finalize();
+    }
+  };
+}
+
 const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [options]
   --port N              listen port（既定 ${DEFAULT_COCKPIT_PORT}・127.0.0.1 限定）
   --open                待受け完了後に既定ブラウザを開く（Windows）
   --channel <ws-url>    器の Control Channel URL（ws://127.0.0.1:<port>/channel?token=..）の**初期値**
-                        （後方互換）。指定すると起動時に LLM セッションを eager 生成し Fire を先充填。
-                        未指定でも操縦席（ブラウザ）の Channel 欄から URL を入力すれば Fire が有効化される
-                        （URL は次回起動まで記憶される）。URL も Fire も使わなければ何も spawn しない（S2.5）。
+                        （後方互換）。指定しても起動時には LLM セッションを作らない（頭のセッションと Channel の
+                        接続は「配信を始める」で作る）。未指定でも操縦席（ブラウザ）の Channel 欄から URL を入力
+                        できる（URL は次回起動まで記憶される）。
   --tts-base-url <url>  AivisSpeech の base URL（既定 http://127.0.0.1:10101）
   --speaker <id>        AivisSpeech の話者 ID（ロールの話者を上書きする・無ければロールの値）
   --fire-window-min <m> 注入窓の幅（分・既定 ${FIRE_WINDOW_MS / 60000}）
   --fire-max-chars <n>  注入テキストの文字数上限（既定 ${FIRE_MAX_CHARS}）
-  起動後、表示された http://127.0.0.1:<port>/ をブラウザで開く。Ctrl+C / EOF で終了。
+  起動後、表示された http://127.0.0.1:<port>/ をブラウザで開き「配信を始める」を押す。Ctrl+C / EOF で終了
+  （配信中なら「配信を終える」と同じ道で記録してから畳む）。
 `;
 
 async function main() {
@@ -1900,8 +2147,9 @@ async function main() {
   // recall-flow.md §7）。記憶のフォルダを準備し（無ければ作る・git init・`_conventions.md` の種）、
   // 今回の配信の本体のファイル名を最初の保存で一度だけ決めて持ち回る（申し送り 2）。
   // 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（memories/<role-id>/・§createRoleMemoryPlaces）。
-  // 準備・本体のファイル名・②・④はどれも今のロールの置き場を使い、ロールを替えたら替えたロールの置き場を準備する
-  // （onSetRole）。記憶の引っ越しが失敗した起動では、記憶を読み書きしない（前の形の記録が残る根を触らない）。
+  // 準備・本体のファイル名・②・④はどれも今のロールの置き場を使う。記憶の引っ越しが失敗した起動では、記憶を読み書き
+  // しない（前の形の記録が残る根を触らない）。配信の組み直し Domain D: 置き場（本体のファイル名）は場の始まりで作り直し、
+  // そのロールの置き場の準備もそこで待つ（§createStreamVenueHooks の renewRecords・起動時とロールの切り替えでは待たない）。
   const memoryStartedAtMs = Date.now();
   const memoryPlaces = createRoleMemoryPlaces({
     root: DEFAULT_MEMORY_DIR,
@@ -1913,18 +2161,14 @@ async function main() {
       process.stderr.write(`[cockpit] WARN: memory folder is not ready (${roleId}: ${error})\n`);
     }
   });
-  await memoryPlaces.place()?.ready;
   // 頭のセッション（①・②）の警告はターミナルへ 1 行。MCP の名前の読み取り（config/read）の失敗は、ユーザーの
   // MCP が起動しうるので操縦席の上の帯にも alert で出す（ユーザー決定 2026-10-21・続けるのは同じ）。
   const onBrainWarning = (/** @type {string} */ w) => {
     process.stderr.write(`[cockpit] WARN: ${w}\n`);
     if (isMcpConfigReadFailureWarning(w)) server?.reportMcpConfigReadFailed();
   };
-  // 最新の記録時刻（state snapshot の memory.lastRecordAtMs）。このプロセス内で記録が成立するまでは
-  // null（前回起動の記録時刻を跨いで持ち越さない設計判断・裁量判断は完了報告に記載）。
-  let lastRecordAtMs = /** @type {number | null} */ (null);
-  // チェックポイントの「転写が前回記録から不変ならスキップ」判定用（shouldSkipMemoryCheckpoint）。
-  let lastRecordedSeq = 0;
+  // 最新の記録時刻（snapshot の memory.lastRecordAtMs）と「転写が前回記録から不変ならスキップ」の判定用の件数は、
+  // 配信の組み直し Domain D から場ごと（§createStreamVenueHooks が持つ・場の始まりで null / 0 に戻す）。
 
   // 初期 Channel URL: --channel（後方互換）> settings の lastChannelUrl（前回起動の記憶）> 未設定。
   const initialUrl = args.channel ?? settings.getLastChannelUrl() ?? null;
@@ -1932,9 +2176,10 @@ async function main() {
   let channelRevision = 0;
   let appliedChannelRevision = 0;
   const fireDiagnostics = createFireDiagnostics();
-  // 頭の文脈の記録（起動ごと 1 ファイル・session-usage/・本文なし・context-growth-2026-10.md §6）。
-  // 発火ごとの 1 行（Codex の頭のとき）と、圧縮の開始・終了を 1 行ずつ。
-  const sessionUsageLog = createSessionUsageLog();
+  // 頭の文脈の記録（session-usage/・本文なし・context-growth-2026-10.md §6）。発火ごとの 1 行（Codex の頭のとき）と、
+  // 圧縮の開始・終了を 1 行ずつ。配信の組み直し Domain D: 場 1 つに 1 ファイル（場の始まりで作り直す・
+  // §createStreamVenueHooks の renewRecords）。起動から最初の場までの分は起動の時刻のファイル（書くものが無ければ作られない）。
+  let sessionUsageLog = createSessionUsageLog();
   // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6・§8）。目安は settings ファイルのキー
   // （無ければ 20 万トークン / 3 秒 / 10 分）。圧縮を始める大きさは操縦席の設定（頭脳・会話のタブ）からも変えられ、
   // contextCompactionHooks が保存と走っている compactor の差し替えを担う（次の確認から効く）。隙間の材料は
@@ -2002,6 +2247,15 @@ async function main() {
    * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（耳の Start で先に作る）。
    */
   const ensureFireResources = () => {
+    ensureSession();
+    ensureVoiceResources();
+  };
+
+  /**
+   * 頭のセッションを遅延生成する（冪等・既に生成済みなら何もしない）。配信の組み直し Domain D から、ふだんは「配信を始める」
+   * で作る（§openStreamSession）。場の途中で会話指示・体が替わったときは、次の Fire の境目で作り直す（applyDesiredFireSettings）。
+   */
+  const ensureSession = () => {
     if (session == null) {
       // 多頭化 Domain B: 頭の生成は registry 経由（brains.mjs の BRAINS）。未知値は防御的に Claude へ。
       const brainDef = BRAINS[currentBrain] ?? BRAINS.claude;
@@ -2057,7 +2311,34 @@ async function main() {
       sessionAcceptedContextRevision = sessionContextRevision;
       sessionBody = sessionHasBody;
     }
-    ensureVoiceResources();
+  };
+
+  /**
+   * 頭のセッションを畳む（冪等・配信の組み直し Domain D: 「配信を終える」と、始めるの途中の失敗の巻き戻し）。畳んだ頭の
+   * 圧縮はもう続かないので、操縦席の「圧縮中」も戻す。
+   */
+  const disposeSession = async () => {
+    const current = session;
+    if (current == null) return;
+    session = null;
+    sessionInstructionRevision = null;
+    sessionAcceptedContextRevision = null;
+    sessionBody = null;
+    server?.resetContextCompaction();
+    try {
+      await current.dispose();
+    } catch {
+      // best-effort（畳んだセッションは使わない）。
+    }
+  };
+
+  /**
+   * 「配信を始める」の頭のセッション（stream-restructure.md §3 の 5）: 前の場のセッション（や起動時に作ったもの）は使わず、
+   * 今のロールのモデルと指示で作り直す。
+   */
+  const openStreamSession = async () => {
+    await disposeSession();
+    ensureSession();
   };
 
   /**
@@ -2234,7 +2515,7 @@ async function main() {
 
   /**
    * 操縦席（POST /api/role）からロールを選ぶ（配信の組み直し Domain A・旧 onSetBrain の置き換え）。
-   * 耳が動いている間は cockpit-server が断る（場の途中でロールを替えない・stream-restructure.md §2.1）。
+   * 場が閉じていない間は cockpit-server が断る（場の途中でロールを替えない・stream-restructure.md §2.1・Domain D）。
    *
    * ── ロールの切替【次 accepted Fire で dispose→再生成】────────────────────────
    *  頭・名前・性格の指示は、desired context revision を進めて次の sessionProxy.ask 境界でセッションを作り直して
@@ -2253,9 +2534,9 @@ async function main() {
     sessionContextRevision += 1;
     // Codex の残量は頭が Codex のときだけ（Codex でなくなったら不明に戻す・Codex 同士の切替は同じアカウントなので保つ）。
     if (!isCodexBrainId(currentBrain)) quotaMonitor.clearCodex();
-    // 配信の組み直し Domain B: 記憶の置き場は替えたロールのフォルダ。ここで準備（git init・種）を済ませる。
-    // 走っている・待っている保存は、頼んだときのロールの置き場に書く（createMemoryRecorder の getPlace）。
-    await memoryPlaces.place()?.ready;
+    // 配信の組み直し Domain B・D: 記憶の置き場は替えたロールのフォルダ。準備（git init・種）は場の始まりで待つ
+    // （ロールの切り替えの応答を待たせない・§createStreamVenueHooks の renewRecords）。走っている・待っている保存は、
+    // 頼んだときのロールの置き場に書く（createMemoryRecorder の getPlace）。
     process.stdout.write(`[cockpit] role set: ${role.id} (brain ${role.brain})\n`);
     return { ok: true, verbosity: role.verbosity, speakStartMode: role.speakStartMode, ttsEngine: role.voice.engine };
   };
@@ -2285,11 +2566,13 @@ async function main() {
     return { brain: currentBrain, credentialHealth: existsSync(def.credentialPath) };
   };
 
-  // ── 配信間記憶: 保存の係（定期・手動「今日を記録」・耳の Stop・Ctrl+C のどれもここを通る・直列）──────────
+  // ── 配信間記憶: 保存の係（定期・手動「今日を記録」・配信を終える（Ctrl+C）のどれもここを通る・直列）──────────
   //  1 回の保存 = ②書き出し役（使い捨ての Codex・cwd = 記憶のフォルダ・workspace-write）が本体と目次を書き、
   //  魂が記憶のフォルダの git にコミットする（writeStreamRecord）。②の頭は Codex に固定（resolveWriterBrainDef）。
   //  server は下方の createCockpitServer(...) で代入される前方参照(sessionProxy の getSession と同型)。
   //  配信の組み直し Domain B: 記憶のフォルダ（と本体のファイル名）は保存を頼んだ時点のロールの置き場（getPlace）。
+  //  配信の組み直し Domain D: 引き金は 20 分ごと・手動「今日を記録」（どちらも場が開いている間だけ）・「配信を終える」
+  //  （Ctrl+C も同じ道）。耳の Stop の引き金は「配信を終える」に 1 本化した。
   const memoryRecorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
     getPlace: () => memoryPlaces.place(),
@@ -2304,9 +2587,10 @@ async function main() {
         onWarning: onBrainWarning
       });
     },
-    onSaved: ({ atMs, entriesLength, commit }) => {
-      lastRecordAtMs = atMs;
-      lastRecordedSeq = entriesLength;
+    onSaved: (info) => {
+      // 配信の組み直し Domain D: 頼んだ時点の場の保存だけを、その場の数えにする（§createStreamVenueHooks の noteSaved）。
+      streamVenue.noteSaved(info);
+      const { commit } = info;
       // 本文・トピック名は出さない（コミットの有無だけ）。
       const what = commit && commit.ok ? (commit.committed ? `commit ${String(commit.commit).slice(0, 7)}` : "no changes") : "commit failed";
       process.stdout.write(`[cockpit] memory recorded (${what})\n`);
@@ -2320,26 +2604,46 @@ async function main() {
     onRecordingChange: () => server?.memoryStatusChanged()
   });
 
-  // 引き金①: 定期保存(20 分毎・転写が前回記録から不変ならスキップ=inventory §2-4)。
+  // 配信の組み直し Domain D: 場（配信を始める / 終える）の cockpit.mjs 側の口と場ごとの記録（§createStreamVenueHooks）。
+  // cockpit-server の openStream / closeStream が streamHooks として順に呼ぶ。器の URL は場の始まりで今の値に揃えてから
+  // 確かめる（体のあるロールのときだけ・体なしは器を見ない）。
+  const streamVenue = createStreamVenueHooks({
+    memoryPlaces,
+    memoryRecorder,
+    renewUsageLog: (startedAtMs) => {
+      const previous = sessionUsageLog;
+      sessionUsageLog = createSessionUsageLog({ startedAtMs });
+      void previous.flush();
+    },
+    openSession: openStreamSession,
+    closeSession: disposeSession,
+    hasBody: currentBody,
+    channel: {
+      getUrl: () => {
+        if (appliedChannelRevision !== channelRevision) {
+          lazyChannel.setUrl(desiredChannelUrl);
+          appliedChannelRevision = channelRevision;
+        }
+        return lazyChannel.getUrl();
+      },
+      connect: () => lazyChannel.connect(),
+      close: () => lazyChannel.close()
+    },
+    isStreamOpen: () => server?.streamStatus().phase === "open",
+    getEntries: () => (server ? server.getTranscript() : []),
+    onMemoryWait: ({ timeoutMs }) =>
+      process.stdout.write(`[cockpit] 記録を書き出し中…（最大 ${timeoutMs / 1000} 秒・Ctrl+C で終了中ならもう一度 Ctrl+C で待たずに終了）\n`)
+  });
+
+  // 引き金①: 定期保存(20 分毎・場が開いている間だけ・転写が前回記録から不変ならスキップ=inventory §2-4)。
   // unref() でプロセス生存に寄与させない(ears-cli 等の既存タイマ規律)。
   const memoryCheckpointTimer = setInterval(() => {
-    const entries = server ? server.getTranscript() : [];
-    if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return; // 空回しでトークンを燃やさない。
-    memoryRecorder.record(entries).catch(() => {});
+    streamVenue.checkpoint();
   }, MEMORY_CHECKPOINT_INTERVAL_MS);
   memoryCheckpointTimer.unref();
 
-  /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(保存の係の薄いラッパ)。 */
+  /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(保存の係の薄いラッパ・場が閉じていればサーバが断る)。 */
   const onMemoryRecord = () => memoryRecorder.record();
-
-  /**
-   * 引き金③: 耳の Stop（cockpit-server が pipeline を畳む前の転写を渡す）。Stop の応答は待たせない。
-   * 前の保存から転写が増えていなければ書かない（「今日を記録」の直後の Stop で②を空回りさせない）。
-   */
-  const onEarsStopping = (/** @type {ReadonlyArray<any>} */ transcript) => {
-    if (shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq)) return;
-    memoryRecorder.record(transcript).catch(() => {});
-  };
 
   /**
    * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
@@ -2361,8 +2665,8 @@ async function main() {
     });
   };
 
-  /** state snapshot に載せる記憶の現況（最後に記録した時刻と、今記録中か）。 */
-  const memoryStatus = () => ({ lastRecordAtMs, recording: memoryRecorder.isRecording() });
+  /** state snapshot に載せる記憶の現況（この場で最後に記録した時刻と、今記録中か）。 */
+  const memoryStatus = () => ({ lastRecordAtMs: streamVenue.lastRecordAtMs(), recording: memoryRecorder.isRecording() });
 
   /** fireOrchestratorFactory は常に注入する（Channel URL 未設定でも fire は「使えないが結線済み」）。 */
   const fireOrchestratorFactory = (/** @type {any} */ hooks) =>
@@ -2456,10 +2760,8 @@ async function main() {
     };
   };
 
-  // --channel 明示指定は従来どおり起動時に eager 生成（TTFT 先払い・S3 挙動不変）。
-  if (args.channel) {
-    ensureFireResources();
-  }
+  // 配信の組み直し Domain D: --channel で起動しても、起動時には頭のセッションを作らない（先充填はやめた）。頭のセッションは
+  // 「配信を始める」で今のロールのモデルと指示で作る（§openStreamSession・stream-restructure.md §3 の 5）。
 
   server = createCockpitServer({
     port: args.port ?? DEFAULT_COCKPIT_PORT,
@@ -2547,8 +2849,8 @@ async function main() {
       }
     },
     onEarsStopped: () => residentCapture.stop(),
-    // 配信間記憶: 耳の Stop で、pipeline を畳む前の転写を保存の係へ渡す（close 経由では呼ばれない＝Ctrl+C は下の shutdown）。
-    onEarsStopping,
+    // 配信の組み直し Domain D: 場（配信を始める / 終える）の口。場の記録の作り直し・頭のセッション・器・記憶の最後の保存。
+    streamHooks: streamVenue.hooks,
     // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
     // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
     // （.env.decisions.local をコード内で直接読む）に任せる。
@@ -2584,78 +2886,41 @@ async function main() {
   quotaMonitor.start();
   contextCompactor.start();
   process.stdout.write(`[cockpit] listening on ${url} (loopback only)\n`);
-  process.stdout.write(`[cockpit] open  ${url}/  in your browser — pick a mic, press Start, speak.\n`);
+  process.stdout.write(`[cockpit] open  ${url}/  in your browser — 「配信を始める」を押して、話しかける。\n`);
   const startupUrl = lazyChannel.getUrl();
+  // 配信の組み直し Domain D: 頭のセッションと器の接続は「配信を始める」で作る（起動時には作らない・--channel でも同じ）。
   if (!currentBody()) {
     // 配信の組み直し Domain C: 体の無いロールは器を使わない（URL の有無を案内しない）。
     process.stdout.write(
       `[cockpit] fire wired: ロール ${roleHooks.currentId()} は体なし — 器（Channel）にはつながず、手元の再生器だけで声を出します` +
-        "（表情タグは使いません）。LLM セッションは初回 Fire 時に生成します。\n"
+        "（表情タグは使いません）。LLM セッションは「配信を始める」で作ります。\n"
     );
   } else if (startupUrl) {
     process.stdout.write(
       `[cockpit] fire enabled: channel = ${redactToken(startupUrl)} ` +
         `(window ${(args.fireWindowMin ?? FIRE_WINDOW_MS / 60000)} min, max ${args.fireMaxChars ?? FIRE_MAX_CHARS} chars). ` +
-        (args.channel
-          ? "LLM セッションは起動時に先充填済み。"
-          : "設定から復元。LLM セッションは初回 Fire 時に生成します。") +
-        " Channel は初回 Fire 時に接続します（失敗は fire error として操縦席に出ます・次の Fire で再試行）。\n"
+        (args.channel ? "起動引数から。" : "設定から復元。") +
+        "LLM セッションと Channel の接続は「配信を始める」で作ります（Channel につながらなければ配信は始まりません）。\n"
     );
   } else {
     process.stdout.write(
-      "[cockpit] fire wired but no channel URL yet — 操縦席の Channel 欄に URL を入れると Fire が有効化されます" +
-        "（URL も Fire も使わなければ何も spawn しません = S2.5 挙動）。\n"
+      "[cockpit] fire wired but no channel URL yet — 操縦席の Channel 欄に URL を入れてから「配信を始める」を押してください" +
+        "（体のあるロールは Channel につながらないと配信を始められません）。\n"
     );
   }
-  process.stdout.write("[cockpit] Ctrl+C / EOF で終了します（魂は close で畳みます）。\n");
+  process.stdout.write("[cockpit] Ctrl+C / EOF で終了します（配信中なら「配信を終える」と同じ道で記録してから畳みます）。\n");
 
-  let closing = false;
-  /** 記録の書き出しを待っている間だけ入る「待たずに終える」口（もう一度 Ctrl+C で呼ぶ）。 @type {(() => void) | null} */
-  let skipMemoryWait = null;
-  const shutdown = async () => {
-    if (closing) {
-      if (skipMemoryWait) {
-        process.stdout.write("[cockpit] 記録の書き出しを待たずに終了します。\n");
-        skipMemoryWait();
-      }
-      return;
-    }
-    closing = true;
-    process.stdout.write("\n[cockpit] closing…\n");
-    contextCompactor.dispose();
-    // 配信間記憶: 引き金④(Ctrl+C の最後の保存)。★重要な配管事実: 転写バッファは pipeline 所有(cockpit-server
-    // 内)で、server.close() は pipeline を dispose して null に戻す(cockpit-server.mjs の close 契約)。
-    // よって転写のスナップショットは close() より前に確保する(close 後には転写が取れない)。
-    // 前の保存から転写が増えていなければ、もう一度は書かない（耳の Stop や「今日を記録」の直後の終了で②を空回りさせない）。
-    const liveEntries = server.getTranscript();
-    const finalMemoryEntries = shouldSkipMemoryCheckpoint(liveEntries.length, lastRecordedSeq) ? [] : liveEntries;
-    try {
-      await server.close(); // orchestrator.dispose を含む（cockpit-server の close 契約）。
-      // 配信間記憶: 最後の保存は close() 直後・常駐 dispose の前(inventory §2-3・L0 設計判断 3)。走っている保存
-      // （耳の Stop・定期など）があれば、その終わりも待つ（保存は直列・②を途中で切らない）。
-      // best-effort + timeout(shutdown が固まらない): 失敗/timeout/もう一度の Ctrl+C のどれでも下の
-      // session/player/lazyChannel dispose は必ず走る(race 自体は例外を投げない=普通に処理が進む)。
-      const memoryDone = Promise.all([memoryRecorder.record(finalMemoryEntries), memoryRecorder.whenIdle()]);
-      if (memoryRecorder.isRecording()) {
-        process.stdout.write(
-          `[cockpit] 記録を書き出し中…（最大 ${SHUTDOWN_MEMORY_TIMEOUT_MS / 1000} 秒・もう一度 Ctrl+C で待たずに終了）\n`
-        );
-        await Promise.race([
-          raceMemoryRecordWithTimeout(memoryDone, SHUTDOWN_MEMORY_TIMEOUT_MS),
-          new Promise((resolve) => {
-            skipMemoryWait = () => resolve(undefined);
-          })
-        ]);
-        skipMemoryWait = null;
-      }
-      // S3: fire 結線の常駐リソースも確実に畳む（リーク禁止・cli.mjs の dispose 順の型）。
-      if (session) {
-        try {
-          await session.dispose();
-        } catch {
-          // best-effort
-        }
-      }
+  // 配信の組み直し Domain D: Ctrl+C は、場が開いていれば「配信を終える」と同じ道（server.endStream）を通ってから畳む
+  // （§createCockpitShutdown）。閉じていれば保存は頼まない。もう一度の Ctrl+C で記録の待ちを打ち切る。
+  const shutdown = createCockpitShutdown({
+    write: (line) => process.stdout.write(line),
+    beforeClose: () => contextCompactor.dispose(),
+    server,
+    venue: streamVenue,
+    // S3: fire 結線の常駐リソースも確実に畳む（リーク禁止・cli.mjs の dispose 順の型）。頭のセッションと器は場の終わりで
+    // 畳み済みのはず（冪等）。
+    disposeRest: async () => {
+      await disposeSession();
       if (player) {
         try {
           player.dispose();
@@ -2664,14 +2929,13 @@ async function main() {
         }
       }
       voiceEngines.dispose();
-      if (lazyChannel) {
-        try {
-          await lazyChannel.close();
-        } catch {
-          // best-effort
-        }
+      try {
+        await lazyChannel.close();
+      } catch {
+        // best-effort
       }
-    } finally {
+    },
+    finalize: async () => {
       // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
       residentCapture.stop();
       quotaMonitor.stop();
@@ -2679,7 +2943,7 @@ async function main() {
       await Promise.race([sessionUsageLog.flush(), new Promise((resolve) => setTimeout(resolve, 1000))]);
       process.exit(0);
     }
-  };
+  });
   process.on("SIGINT", shutdown);
   // stdin EOF（Ctrl+Z→Enter / パイプ終端）でも畳む（ears-cli.mjs の型）。
   const rl = createInterface({ input: process.stdin });

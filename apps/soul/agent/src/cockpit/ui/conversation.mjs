@@ -11,7 +11,7 @@
  *    コメント反応は本文の後ろに「💬 名前 に反応」、きっかけの行が無い発火は小さく種類（「手動」「沈黙」）。
  *  - 相槌の間隔で流れた判定: 薄い灰色の 1 行。
  *  - 最新の返事の行は淡く強調し、そのきっかけの配信者の行も同じ色で淡くつなぐ。
- * 配信前（耳が止まっている間）は会話の場所の中央に大きく「準備・設定を開く」（§4・§9.2）。
+ * 配信前（場が閉じている間）は会話の場所の中央に大きく「配信を始める」と「準備・設定」（§4・§9.2・配信の組み直し Domain D）。
  *
  * トップレベル副作用ゼロ（export function のみ）。hooks は使わない（vnode 走査テスト対象）。
  */
@@ -68,17 +68,29 @@ export function ConversationRow({ row }) {
 
 /**
  * 会話タイムライン本体（hooks 非使用）。
+ * 配信の組み直し Domain D: 場が開いていない間（preStream）は、会話の場所の中央に「配信を始める」とその横に「準備・設定」。
+ * 始められなかった理由（「runtime-player が起動していないか、channel が開いていない」など）と、閉じかけの「記録中…」も
+ * ここに出す（文言は view-logic/glance-meters.mjs の streamStartView）。場が開いているときは今のまま。
  * @param {{ rows: import("../view-logic/glance-timeline.mjs").ConvoRowView[]; preStream?: boolean;
- *   onOpenSettings?: () => void }} props
+ *   onOpenSettings?: () => void; onStartStream?: () => void;
+ *   start?: { startText: string; startDisabled: boolean; noteText: string; errorText: string } }} props
  */
-export function ConversationPanel({ rows, preStream = false, onOpenSettings }) {
+export function ConversationPanel({ rows, preStream = false, onOpenSettings, onStartStream, start }) {
+  const view = start ?? { startText: "配信を始める", startDisabled: false, noteText: "", errorText: "" };
   return html`
     <section class="glance-panel convo-panel" aria-label="会話">
       <h2 class="panel-title">会話</h2>
       ${preStream
         ? html`
           <div class="prestream">
-            <button class="prestream-open" type="button" onClick=${onOpenSettings}>準備・設定を開く</button>
+            <div class="prestream-box">
+              <div class="prestream-actions">
+                <button class="prestream-start" type="button" disabled=${view.startDisabled} onClick=${onStartStream}>${view.startText}</button>
+                <button class="prestream-open" type="button" onClick=${onOpenSettings}>準備・設定</button>
+              </div>
+              ${view.noteText ? html`<p class="prestream-note" role="status">${view.noteText}</p>` : null}
+              ${view.errorText ? html`<p class="prestream-error" role="alert">${view.errorText}</p>` : null}
+            </div>
           </div>`
         : html`
           <div class="convo-list" role="log" aria-live="polite">

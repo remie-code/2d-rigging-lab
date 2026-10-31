@@ -2810,7 +2810,7 @@ test("cockpit POST /api/role: 知らないロールは onSetRole の理由で 40
   }
 });
 
-test("cockpit POST /api/role: 耳が動いている間は 409 で断り onSetRole を呼ばない（場の途中でロールを替えない）・Stop のあとは選べる", async () => {
+test("cockpit POST /api/role: 場が開いている間は 409 で断り onSetRole を呼ばない（場の途中でロールを替えない）・配信を終えたあとは選べる", async () => {
   const wiring = makeFakeRoleWiring("cody");
   const fakePipe = makeFakePipeline();
   const server = createCockpitServer({
@@ -2825,7 +2825,7 @@ test("cockpit POST /api/role: 耳が動いている間は 409 で断り onSetRol
     assert.equal(start.status, 200);
     const refused = await postJson(`${url}/api/role`, { role: "chappy" });
     assert.equal(refused.status, 409);
-    assert.match(refused.json.error, /耳が動いている間はロールを替えられない/);
+    assert.match(refused.json.error, /配信の途中はロールを替えられない/);
     assert.deepEqual(wiring.record.calls, []);
     await postJson(`${url}/api/ears/stop`, {});
     const ok = await postJson(`${url}/api/role`, { role: "chappy" });
@@ -3243,50 +3243,53 @@ test("cockpit barge-in born-disabled: bargeInInitialEnabled 未指定は既定 O
 //  ゲート（onSetBrain/onSetChannelUrl と同型）。cockpit.mjs 側の②書き出し役・保存・ライブ転写取得は一切
 //  ここに関与しない（責務境界・fake フックのみで実 LLM/実 FS 消費ゼロ）。記憶の ON/OFF（POST /api/memory）は撤去。
 
-test("cockpit 耳の Stop: pipeline を畳む前の転写を onEarsStopping に渡す（Stop の後は空・close では呼ばない）", async () => {
+test("cockpit 配信を終える: 畳む前の転写の写しを saveFinal に渡す（終えた後は空・閉じた場の終えると close では呼ばない）", async () => {
   const fake = makeFakePipeline();
   /** @type {Array<{ transcript: any[]; disposedAtCall: boolean }>} */
   const calls = [];
   const server = createCockpitServer({
     pipelineFactory: /** @type {any} */ (fake.factory),
-    onEarsStopping: (transcript) => calls.push({ transcript, disposedAtCall: fake.record.disposed })
+    streamHooks: { saveFinal: (transcript) => calls.push({ transcript, disposedAtCall: fake.record.disposed }) }
   });
   try {
     const url = await server.listen(0);
-    // 耳が起動していない Stop では呼ばない。
-    await postJson(`${url}/api/ears/stop`, {});
+    // 場が閉じている間の終えるでは呼ばない（記録しない）。
+    await postJson(`${url}/api/stream/stop`, {});
     assert.equal(calls.length, 0);
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
     fake.record.buffer.append({ startMs: 0, endMs: 1000, text: "ダミーの一言" });
     fake.record.buffer.append({ startMs: 1000, endMs: 2000, text: "ダミーの二言" });
-    const stop = await postJson(`${url}/api/ears/stop`, {});
+    const stop = await postJson(`${url}/api/stream/stop`, {});
     assert.equal(stop.status, 200);
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].disposedAtCall, false, "畳む前に呼ぶ");
+    assert.equal(calls[0].disposedAtCall, true, "写しは畳む前に取り、保存は畳んだあと");
     assert.deepEqual(calls[0].transcript.map((e) => e.text), ["ダミーの一言", "ダミーの二言"]);
-    assert.deepEqual(server.getTranscript(), [], "Stop の後はライブの転写が取れない（だから Stop の時点で渡す）");
-    // もう一度 Start して close（Ctrl+C の経路）では呼ばない。
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
+    assert.deepEqual(server.getTranscript(), [], "終えた後はライブの転写が取れない（だから畳む前に写す）");
+    // もう一度始めて close（終えるを通らない畳み）では呼ばない（Ctrl+C は cockpit.mjs が endStream を先に呼ぶ）。
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
   } finally {
     await server.close();
   }
   assert.equal(calls.length, 1);
 });
 
-test("cockpit 耳の Stop: onEarsStopping が throw しても Stop は成り立つ", async () => {
+test("cockpit 配信を終える: saveFinal が throw しても場は閉じる", async () => {
   const fake = makeFakePipeline();
   const server = createCockpitServer({
     pipelineFactory: /** @type {any} */ (fake.factory),
-    onEarsStopping: () => {
-      throw new Error("boom");
+    streamHooks: {
+      saveFinal: () => {
+        throw new Error("boom");
+      }
     }
   });
   try {
     const url = await server.listen(0);
-    await postJson(`${url}/api/ears/start`, { device: "Mic" });
-    const stop = await postJson(`${url}/api/ears/stop`, {});
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
+    const stop = await postJson(`${url}/api/stream/stop`, {});
     assert.equal(stop.status, 200);
     assert.equal(stop.json.ears, "stopped");
+    assert.equal(stop.json.stream.phase, "closed");
     assert.equal(fake.record.disposed, true);
   } finally {
     await server.close();
@@ -3506,6 +3509,7 @@ test("cockpit POST /api/memory-record: onMemoryRecord 未注入なら 503", asyn
 test("cockpit POST /api/memory-record: onMemoryRecord を呼び・broadcastState + snapshot 反映", async () => {
   let calls = 0;
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     onMemoryRecord: async () => {
       calls += 1;
     },
@@ -3515,6 +3519,8 @@ test("cockpit POST /api/memory-record: onMemoryRecord を呼び・broadcastState
     const url = await server.listen(0);
     const s0 = await getJson(`${url}/api/state`);
     assert.equal(s0.json.memory.lastRecordAtMs, null);
+    // 配信の組み直し Domain D: 「今日を記録」は場が開いている間だけ。
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
 
     const r = await postJson(`${url}/api/memory-record`, {});
     assert.equal(r.status, 200);
@@ -3527,12 +3533,14 @@ test("cockpit POST /api/memory-record: onMemoryRecord を呼び・broadcastState
 
 test("cockpit POST /api/memory-record: onMemoryRecord が throw しても 200 を返す（記録失敗で 500 にしない・失敗寛容）", async () => {
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     onMemoryRecord: async () => {
       throw new Error("generateDigest failed");
     }
   });
   try {
     const url = await server.listen(0);
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
     const r = await postJson(`${url}/api/memory-record`, {});
     assert.equal(r.status, 200);
   } finally {
@@ -3542,6 +3550,7 @@ test("cockpit POST /api/memory-record: onMemoryRecord が throw しても 200 �
 
 test("cockpit POST /api/memory-record: broadcastState が飛ぶ（SSE state event 発行・記録の有無に関わらず現況を再配信）", async () => {
   const server = createCockpitServer({
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     onMemoryRecord: async () => {},
     memoryStatus: () => ({ lastRecordAtMs: null, recording: false })
   });
@@ -3549,6 +3558,7 @@ test("cockpit POST /api/memory-record: broadcastState が飛ぶ（SSE state even
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await postJson(`${url}/api/stream/start`, { device: "Mic" });
     const before = client.events.filter((e) => e.event === "state").length;
     await postJson(`${url}/api/memory-record`, {});
     await client.waitFor((e) => e.event === "state" && client.events.filter((x) => x.event === "state").length > before);

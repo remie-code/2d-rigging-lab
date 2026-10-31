@@ -35,6 +35,7 @@ import {
   shouldSkipMemoryCheckpoint,
   createMemoryRecorder,
   createRoleMemoryPlaces,
+  createStreamVenueHooks,
   resolveWriterBrainDef,
   isMcpConfigReadFailureWarning,
   formatRecallEventLine,
@@ -1037,9 +1038,10 @@ test("createMemoryRecorder: entriesOverride 指定時はライブ転写（getLiv
   assert.deepEqual(w.calls, [["override"]]);
 });
 
-// ── 耳の Stop → 保存の係 → ②（記憶の作り直し Wave 2・cockpit-server と同じ並びの最小ハーネス）─────────
+// ── 配信を終える → 保存の係 → ②（記憶の作り直し Wave 2 の「耳の Stop → 保存」を配信の組み直し Domain D で場の関数に
+//    合わせて書き直したもの・本物の cockpit-server + 本物の createStreamVenueHooks の最小ハーネス）─────────
 
-test("耳の Stop で保存される: Stop のときの転写が②の材料になり、Stop の後の定期保存は空回りしない", { timeout: 5000 }, async () => {
+test("配信を終えると保存される: 終えるときの転写が②の材料になり、終えた後の定期保存は空回りしない", { timeout: 5000 }, async () => {
   const { createCockpitServer } = await import("../src/cockpit/cockpit-server.mjs");
   const { createTranscriptBuffer: makeBuffer } = await import("../src/ears/transcript-buffer.mjs");
   /** @type {any} */
@@ -1057,38 +1059,42 @@ test("耳の Stop で保存される: Stop のときの転写が②の材料に�
   };
   /** @type {any[][]} */
   const written = [];
-  let lastRecordedSeq = 0;
   /** @type {any} */
   let server = null;
+  /** @type {any} */
+  let venue = null;
   const recorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
     writeImpl: async (entries) => {
       written.push(entries.map((e) => e.text));
       return { written: true };
     },
-    onSaved: ({ entriesLength }) => {
-      lastRecordedSeq = entriesLength;
-    }
+    onSaved: (info) => venue.noteSaved(info)
   });
-  server = createCockpitServer({
-    pipelineFactory: /** @type {any} */ (pipelineFactory),
-    // cockpit.mjs の onEarsStopping と同じ形（前の保存から増えていなければ書かない）。
-    onEarsStopping: (transcript) => {
-      if (shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq)) return;
-      recorder.record(transcript).catch(() => {});
-    }
+  venue = createStreamVenueHooks({
+    memoryPlaces: { beginStream() {}, place: () => null, streamNo: () => 0 },
+    memoryRecorder: recorder,
+    openSession: () => {},
+    closeSession: async () => {},
+    hasBody: () => false,
+    channel: { getUrl: () => null, connect: async () => {}, close: async () => {} },
+    isStreamOpen: () => server.streamStatus().phase === "open",
+    getEntries: () => server.getTranscript()
   });
+  server = createCockpitServer({ pipelineFactory: /** @type {any} */ (pipelineFactory), streamHooks: venue.hooks });
   try {
     const url = await server.listen(0);
     const post = (/** @type {string} */ p) =>
       fetch(`${url}${p}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ device: "Mic" }) });
-    await post("/api/ears/start");
+    await post("/api/stream/start");
     buffer.append({ startMs: 0, endMs: 1000, text: "ダミーA" });
     buffer.append({ startMs: 1000, endMs: 2000, text: "ダミーB" });
-    await post("/api/ears/stop");
-    await recorder.whenIdle();
+    const stop = await post("/api/stream/stop");
+    assert.equal(stop.status, 200);
     assert.deepEqual(written, [["ダミーA", "ダミーB"]]);
-    // Stop の後: ライブの転写は空なので、定期保存（や Ctrl+C）は何も走らせない。
+    assert.equal(venue.lastRecordedSeq(), 2);
+    // 終えた後: 場が閉じているので、定期保存は何も走らせない（ライブの転写も空）。
+    assert.equal(venue.checkpoint(), false);
     await recorder.record();
     assert.equal(written.length, 1);
   } finally {
@@ -1141,6 +1147,9 @@ test("配信間記憶の決め打ち定数: MEMORY_CHECKPOINT_INTERVAL_MS=20分�
 //  main() の shutdown 相当を、実 server/session/player を使わない最小ハーネスで再現する。固定する不変条件:
 //  (a) 転写スナップショットは server.close() より前に確保する（close 後は pipeline が dispose されて転写が取れない）、
 //  (b) 最後の保存は走っている保存の終わりも待つ（直列）、(c) ハング/失敗しても timeout に束縛され、後続の dispose は必ず走る。
+//  配信の組み直し Domain D: main() の shutdown そのものは createCockpitShutdown（場が開いていれば server.endStream =
+//  closeStream が写し → 畳む → 最後の保存の順を受け持つ）になった。その並びは scripts/cockpit-stream.test.mjs が本物の
+//  server と場の口で固定する。ここは保存の待ち方（直列・上限）の不変条件として残す。
 
 test("shutdown 型ハーネス: 転写は close() より前に確保し、最後の保存は走っている保存の後に走り、後続 dispose は必ず走る", { timeout: 5000 }, async () => {
   /** @type {string[]} */
@@ -2990,11 +2999,16 @@ test("記憶をロールごとにの結線: 引っ越し（写しのフォルダ
   // 写しのフォルダは 1 つの値を設定の分と記憶の分で共有する。
   assert.match(main, /const migrationBackup = migrationBackupDir\(DEFAULT_MIGRATION_BACKUP_ROOT, Date\.now\(\)\);/);
   assert.match(main, /runStartupMigration\(\{[\s\S]{0,200}?memoriesDir: DEFAULT_MEMORY_DIR,\s*backupDir: migrationBackup\s*\}\)/);
-  // 記憶の引っ越しは、記憶のフォルダの準備より前。
+  // 記憶の引っ越しは、記憶のフォルダの置き場を作るより前。配信の組み直し Domain D: 置き場の準備は起動時ではなく場の始まりで
+  // 待つ（createStreamVenueHooks の renewRecords・streamHooks として cockpit-server へ渡す）。
   const migrateAt = main.indexOf("runStartupMigration({");
   const placesAt = main.indexOf("createRoleMemoryPlaces({");
-  const prepareAt = main.indexOf("await memoryPlaces.place()?.ready;");
-  assert.ok(migrateAt > 0 && migrateAt < placesAt && placesAt < prepareAt);
+  const venueAt = main.indexOf("const streamVenue = createStreamVenueHooks({");
+  assert.ok(migrateAt > 0 && migrateAt < placesAt && placesAt < venueAt);
+  assert.doesNotMatch(main, /await memoryPlaces\.place\(\)\?\.ready;/, "起動時には準備を待たない");
+  assert.match(main, /streamHooks: streamVenue\.hooks,/);
+  const venueFn = source.slice(source.indexOf("export function createStreamVenueHooks"), source.indexOf("export function isMcpConfigReadFailureWarning"));
+  assert.match(venueFn, /deps\.memoryPlaces\.beginStream\(startedAtMs\);\s*await deps\.memoryPlaces\.place\(\)\?\.ready;/, "場の始まりで置き場を作り直して準備を待つ");
   assert.match(main, /available: startupMigration\.memories\.status !== "failed"/);
   // 記憶の根をそのまま記憶のフォルダとして渡さない（準備・本体のファイル名・②・④）。
   assert.doesNotMatch(source, /dir: DEFAULT_MEMORY_DIR/);
@@ -3003,9 +3017,9 @@ test("記憶をロールごとにの結線: 引っ越し（写しのフォルダ
   assert.match(writer, /getPlace: \(\) => memoryPlaces\.place\(\)/);
   assert.match(writer, /record: place\.streamRecord\.get\(\),\s*dir: place\.dir,/);
   assert.match(writer, /const recallRunner = async \(job\) => \{\s*const place = memoryPlaces\.place\(\);[\s\S]*?dir: place\.dir,/);
-  // ロールを替えたら替えたロールの置き場を準備する。
+  // 配信の組み直し Domain D: ロールの切り替えでは置き場の準備を待たない（応答を git init で遅らせない・場の始まりで待つ）。
   const onSetRole = main.slice(main.indexOf("const onSetRole = async (id) =>"), main.indexOf("const roleStatus = () =>"));
-  assert.match(onSetRole, /await memoryPlaces\.place\(\)\?\.ready;/);
+  assert.doesNotMatch(onSetRole, /memoryPlaces\.place\(\)/);
 });
 
 // ── 配信の組み直し Domain C: 体なしの声（stream-restructure.md §4）─────────────────────────────────

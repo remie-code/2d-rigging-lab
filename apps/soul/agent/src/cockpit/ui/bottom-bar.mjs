@@ -10,14 +10,18 @@
  */
 
 import { html } from "../vendor/htm.preact.standalone.mjs";
-import { driveSummaryView, LATENCY_SEGMENTS } from "../view-logic/glance-meters.mjs";
+import { driveSummaryView, endStreamButtonView, LATENCY_SEGMENTS } from "../view-logic/glance-meters.mjs";
 
 /**
  * 下の帯本体。
- * @param {{ settings: any; settingsOpen?: boolean; onOpenSettings?: () => void }} props
+ * 配信の組み直し Domain D: 場が開いている間だけ、歯車の左に小さく「配信を終える」（誤って押しにくいよう 2 回押し・
+ * 1 回目で「もう一度押すと配信を終える」に変わる。armed は App が持ち、数秒で戻す）。
+ * @param {{ settings: any; settingsOpen?: boolean; onOpenSettings?: () => void; endArmed?: boolean;
+ *   onEndStream?: () => void }} props
  */
-export function BottomBar({ settings, settingsOpen = false, onOpenSettings }) {
+export function BottomBar({ settings, settingsOpen = false, onOpenSettings, endArmed = false, onEndStream }) {
   const summary = driveSummaryView(settings);
+  const endView = endStreamButtonView(settings && settings.stream, endArmed);
   return html`
     <footer class="bottom-bar">
       <div class="drive-summary">
@@ -30,6 +34,9 @@ export function BottomBar({ settings, settingsOpen = false, onOpenSettings }) {
           <span key=${s.key} class="legend-item" title=${"hint" in s ? s.hint : null}><span class=${"legend-swatch " + s.className}></span>${s.label}</span>
         `)}
       </div>
+      ${endView.show
+        ? html`<button class=${endView.className} type="button" onClick=${onEndStream}>${endView.text}</button>`
+        : null}
       <button id="cockpit-settings-trigger" class="settings-toggle" type="button"
         aria-label="準備・設定を開く" aria-expanded=${!!settingsOpen}
         aria-controls="cockpit-settings-dialog" onClick=${onOpenSettings}>⚙ 準備・設定</button>
