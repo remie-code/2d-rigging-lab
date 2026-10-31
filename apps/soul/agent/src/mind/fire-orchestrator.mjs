@@ -345,6 +345,8 @@ export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), load
  * @param {(info: object) => void} [options.onFire]  Fire 受理/棄却の通知。
  * @param {(diag: object) => void} [options.onDiagnostic]  失敗診断（fireError / fireEmptyReply / fireVisionError）。
  * @param {(entry: object) => void} [options.onSoulTranscript]  soul 追記の通知（結線層が transcript として broadcast）。
+ * @param {() => ({ id?: string; name?: string } | null | undefined)} [options.getSoulSpeaker]  soul の行に載せるロールの
+ *   id と名前（Discord モード Domain A・discord-mode.md §3.2 a。正本の speakerId / displayName。整形・放送には出ない）。
  *   自然完了時（processAskedReply の通常完了パス）は entry に `latencyMs`（asked.elapsedMs 実測・
  *   非数値なら null）を additive で乗せる（多頭化 Domain C・観測層の応答レイテンシ実値化）。
  *   NG ブロック時/barge-in 中断時の soul 追記は既存どおり latencyMs を持たない entry（結線層側で null 扱い）。
@@ -403,6 +405,29 @@ export function createFireOrchestrator(options) {
     typeof options.expressionIntensity === "number" ? options.expressionIntensity : 1.0;
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
+  const getSoulSpeaker = typeof options.getSoulSpeaker === "function" ? options.getSoulSpeaker : null;
+
+  /**
+   * soul の行に載せるロールの名前と id（Discord モード Domain A・discord-mode.md §3.2 a）。正本にだけ残る（整形はロールが
+   * 1 つの間は `soul: 本文` のまま、放送・ログには出ない）。口が無い・読めないときは載せない（従来の行の形）。
+   * @returns {{ displayName?: string; speakerId?: string }}
+   */
+  function soulSpeakerFields() {
+    if (!getSoulSpeaker) return {};
+    /** @type {any} */
+    let speaker;
+    try {
+      speaker = getSoulSpeaker();
+    } catch {
+      return {};
+    }
+    if (!speaker || typeof speaker !== "object") return {};
+    /** @type {{ displayName?: string; speakerId?: string }} */
+    const fields = {};
+    if (typeof speaker.name === "string" && speaker.name.trim().length > 0) fields.displayName = speaker.name;
+    if (typeof speaker.id === "string" && speaker.id.length > 0) fields.speakerId = speaker.id;
+    return fields;
+  }
   const {
     onState,
     onFire,
@@ -749,7 +774,7 @@ export function createFireOrchestrator(options) {
       outcome.playedText.length > 0
     ) {
       const text = `${outcome.playedText}\n${PROGRESSIVE_INTERRUPTION_NOTE}`;
-      const appended = owner.buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul" });
+      const appended = owner.buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul", ...soulSpeakerFields() });
       if (appended && appended.appended && appended.entry) {
         emit(onSoulTranscript, withFireId(appended.entry, owner.fireId));
         // Commit only after the canonical visible projection exists. The next
@@ -1072,7 +1097,7 @@ export function createFireOrchestrator(options) {
           ...extra
         };
       }
-      const appended = buffer.append({ startMs: 0, endMs: 0, text: NG_BLOCKED_NOTE, speaker: "soul" });
+      const appended = buffer.append({ startMs: 0, endMs: 0, text: NG_BLOCKED_NOTE, speaker: "soul", ...soulSpeakerFields() });
       if (appended && appended.appended && appended.entry) {
         emit(onSoulTranscript, withFireId(appended.entry));
       }
@@ -1138,7 +1163,7 @@ export function createFireOrchestrator(options) {
       }
       // Every queued sentence has reached matching ENDED. Commit the final
       // tag-free answer once; sentence audio was already delivered by C2.
-      const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
+      const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul", ...soulSpeakerFields() });
       if (appended && appended.appended && appended.entry) {
         const latencyMs = asked && typeof asked.elapsedMs === "number" ? asked.elapsedMs : null;
         emit(onSoulTranscript, { ...withFireId(appended.entry), latencyMs });
@@ -1262,7 +1287,7 @@ export function createFireOrchestrator(options) {
       if (partial) {
         const text = `${partial.prefix}
 ${PROGRESSIVE_INTERRUPTION_NOTE}`;
-        const appended = buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul" });
+        const appended = buffer.append({ startMs: 0, endMs: 0, text, speaker: "soul", ...soulSpeakerFields() });
         if (appended && appended.appended && appended.entry) {
           emit(onSoulTranscript, withFireId(appended.entry));
         }
@@ -1293,7 +1318,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
 
     // 自然完了 → 全文を soul 記録（**speechText のみ**・startMs/endMs=0）。broadcast は onSoulTranscript 経由。
     // S5: 視覚発火でも画像は一切積まない（会話ログの正本は speechText のみ・ディスク非保存の流儀）。
-    const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul" });
+    const appended = buffer.append({ startMs: 0, endMs: 0, text: speechText, speaker: "soul", ...soulSpeakerFields() });
     if (appended && appended.appended && appended.entry) {
       // 多頭化 Domain C: 応答レイテンシの実値化（wave-plan §3 Domain C・blocking #7 は不変=検問所
       // ロジック自体は 1 行も触っていない・ここは自然完了パスのみへの additive な通知配線）。
@@ -1372,7 +1397,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
 
     // ④ soul 追記（接頭辞 + note・1 回・上書きせず append）。broadcast は onSoulTranscript 経由。
     const soulText = cut.prefix + note;
-    const appended = pb.buffer.append({ startMs: 0, endMs: 0, text: soulText, speaker: "soul" });
+    const appended = pb.buffer.append({ startMs: 0, endMs: 0, text: soulText, speaker: "soul", ...soulSpeakerFields() });
     pb.appended = true;
     if (appended && appended.appended && appended.entry) {
       emit(onSoulTranscript, withFireId(appended.entry));

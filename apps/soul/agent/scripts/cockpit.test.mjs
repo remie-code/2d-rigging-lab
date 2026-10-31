@@ -1046,8 +1046,9 @@ test("配信を終えると保存される: 終えるときの転写が②の材
   const { createTranscriptBuffer: makeBuffer } = await import("../src/ears/transcript-buffer.mjs");
   /** @type {any} */
   let buffer = null;
-  const pipelineFactory = () => {
-    buffer = makeBuffer({ nowImpl: () => 1000 });
+  // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+  const pipelineFactory = (/** @type {any} */ options) => {
+    buffer = options?.transcriptBuffer ?? makeBuffer({ nowImpl: () => 1000 });
     return {
       transcriptBuffer: buffer,
       async start() {},
@@ -2745,8 +2746,9 @@ test("声の選択の結線: Start で ttsEngine の engine を用意し・作�
   /** @type {string | null} */
   let stored = null;
   const hooks = createTtsEngineHooks({ getTtsEngine: () => stored, setTtsEngine: (e) => { stored = e; } });
-  const pipelineFactory = () => {
-    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+  // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+  const pipelineFactory = (/** @type {any} */ options) => {
+    const buffer = options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 });
     return {
       transcriptBuffer: buffer,
       async start() {},

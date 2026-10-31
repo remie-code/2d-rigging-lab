@@ -73,6 +73,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
+import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
 // ローカルの文字起こしの語彙とモデルの存在確認だけ（sherpa-onnx-node は子プロセスだけが読む）。
 import { isLocalSttEngine, checkLocalSttModel, LOCAL_STT_ENGINE_TITLES } from "../ears/local-stt/local-stt-engines.mjs";
@@ -423,7 +424,7 @@ const MAX_PORT_REROLLS = 50;
  *   kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean;
  *   deferInstruction?: (text: string) => boolean }} [options.fireOrchestratorFactory]
  *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire・/api/vision-fire
- *   が 503）。cockpit が握る getBuffer（=pipeline?.transcriptBuffer ?? null）と broadcast フックを渡し、
+ *   が 503）。cockpit が握る getBuffer（= 場の会話の正本・場が閉じていれば null）と broadcast フックを渡し、
  *   返った orchestrator の fire()/fire({vision:true}) を POST /api/fire・POST /api/vision-fire で await
  *   する。onState/onFire/onDiagnostic/onSoulTranscript/onExpression は SSE（soul/fire/diagnostic/
  *   transcript/expression）へ broadcast される。onExpression は S4「表情が乗る」の演出適用通知
@@ -875,8 +876,15 @@ export function createCockpitServer(options = {}) {
 
   /** @type {ReturnType<typeof createEarPipeline> | null} */
   let pipeline = null;
-  /** @type {(() => void) | null} */
-  let discardUnsub = null;
+  /**
+   * 会話の正本（Discord モード Domain A・discord-mode.md §3.1）。場が開くとき（openStream）に場が作り、耳には積む口として
+   * 渡す。場が閉じるとき（耳を畳んだ直後・始められなかったとき・サーバを閉じるとき）に手放す。サーバで正本を読む所は
+   * どれもここを読む（耳が無くても正本はある）。
+   * @type {ReturnType<typeof createTranscriptBuffer> | null}
+   */
+  let venueTranscript = null;
+  /** 正本に張った購読（追記 1 本・破棄 1 本）の解除。 @type {Array<() => void>} */
+  let venueTranscriptUnsubs = [];
   /** @type {"stopped" | "starting" | "listening"} */
   let earsState = "stopped";
   /** @type {string | null} */
@@ -1024,12 +1032,14 @@ export function createCockpitServer(options = {}) {
     appendedAtMs: entry.appendedAtMs,
     speaker: entry.speaker ?? "you", // S3 で会話ログへ昇格（you/soul）。既定は you（S2 挙動不変）。
     // S7「視聴者が混ざる」: viewer コメントの投稿者名（Domain C が `viewer(名前):` を描く材料）。
-    // you/soul では null（追加フィールド・既存の購読者は無視）。
-    displayName: entry.displayName ?? null
+    // 名前の無い行では null（追加フィールド・既存の購読者は無視）。Discord モード Domain A: soul の行はロールの名前を
+    // 正本に持つが、放送には載せない（配信で出ていなかった名前を新たに出さない・ロールが 1 つの間は `soul` のまま）。
+    // speakerId（場の中の記録にだけ持つ id）はここで拾わない＝放送に出ない。
+    displayName: entry.speaker === "soul" ? null : entry.displayName ?? null
   });
 
   function snapshot() {
-    const bufStats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
+    const bufStats = venueTranscript ? venueTranscript.stats() : { appended: 0, discarded: 0 };
     const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
     // currentRoleIdentity is the single current-identity source for every C
     // consumer. Normalize its shape (normalizeModelIdentity); malformed values
@@ -1065,7 +1075,7 @@ export function createCockpitServer(options = {}) {
       appended: bufStats.appended,
       discarded: bufStats.discarded,
       uptimeMs: earsState === "listening" && startedAtMs != null ? Math.max(0, nowImpl() - startedAtMs) : 0,
-      transcripts: pipeline ? pipeline.transcriptBuffer.last(transcriptHistory).map(toWireEntry) : [],
+      transcripts: venueTranscript ? venueTranscript.last(transcriptHistory).map(toWireEntry) : [],
       // S3 追撃 domain-c: Channel の現況（Domain B が redact 済みで返す・未注入なら null）。
       channel: typeof channelStatusImpl === "function" ? (channelStatusImpl() ?? null) : null,
       // S5「目が開く」: 視覚発火の対象ウインドウの現況（未注入なら null）。
@@ -1489,19 +1499,14 @@ export function createCockpitServer(options = {}) {
         // S6 自発発火: VAD を発火スケジューラへも回す（区切り応答の無音待ち・沈黙の活動リセット）。
         if (fireScheduler) fireScheduler.handleVadEvent(e);
       },
+      // 会話の正本は場のもの（Discord モード Domain A）。耳は積むだけで、正本に購読を張らない（場が 1 回だけ張る:
+      // openVenueTranscript。発火の予定と speak-now へ回すのはそちら）。
+      ...(venueTranscript ? { transcriptBuffer: venueTranscript } : {}),
+      // 耳ごとの口: この耳が積んだ行だけが、遅延と audioCtx を添えてここへ来る（放送・遅延のログ・遅延の材料）。
       onTranscript: (entry, meta) => {
-        // S6 自発発火: 転写を発火スケジューラへ回す（you = 呼びかけ照合 + 活動 / soul = 不応期リセット /
-        // viewer = handleTranscript 内で no-op ★二重発火の断ち）。**soul 除外の前**に回す（scheduler は
-        // soul 発話を不応期の基点に使うため you/soul 両方を要る。viewer は scheduler 内で無視される）。
-        if (fireScheduler) fireScheduler.handleTranscript(entry);
-        // speak-now: you の転写 1 件ごとに判定（soul/viewer は部品内で無視・モード外/OFF/KILL も部品内で無視）。
-        if (speakNow) speakNow.handleTranscript(entry);
-        // soul の発話行はここ（耳の onTranscript 経路）では放送しない。soul も you と同じ
-        // transcriptBuffer に append されるため onAppend→onTranscript を必ず通るが、soul の正経路は
-        // orchestrator の onSoulTranscript → broadcastSoulTranscript の 1 本。ここで除外しないと
-        // 同一エントリが二重に broadcast("transcript") される（S3 追撃 domain-c で接地した二重表示バグ）。
-        // ★ S7: viewer コメントも同じ transcriptBuffer へ append されるため onTranscript を通るが、
-        // viewer 行の放送は取り込み経路（ingestChatMessage）が 1 本で担う。ここで除外しないと二重放送。
+        // soul / viewer の行はここでは放送しない（守りとして残す。soul の正経路は orchestrator の onSoulTranscript →
+        // broadcastSoulTranscript の 1 本、viewer 行の放送は取り込み経路（ingestChatMessage）が 1 本で担う。自前の正本の耳や
+        // 偽の耳が正本のすべての行でここを呼んでも二重に放送しない・S3 追撃 domain-c / S7 で接地した二重放送の断ち）。
         if (/** @type {any} */ (entry).speaker === "soul" || /** @type {any} */ (entry).speaker === "viewer") return;
         // 文字起こしの遅延は画面に出さず（合意 §4.2）、数字だけをログの口へ（本文は渡さない）。
         if (onSttLatency) {
@@ -1518,7 +1523,7 @@ export function createCockpitServer(options = {}) {
           sttLatencyBySeq.set(/** @type {any} */ (entry).seq, ms);
           if (sttLatencyBySeq.size > STT_LATENCY_KEEP) sttLatencyBySeq.delete(sttLatencyBySeq.keys().next().value);
         }
-        const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
+        const stats = venueTranscript ? venueTranscript.stats() : { appended: 0, discarded: 0 };
         broadcast("transcript", {
           ...toWireEntry(entry),
           latencyMs: meta?.latencyMs ?? null,
@@ -1530,27 +1535,11 @@ export function createCockpitServer(options = {}) {
       onDiagnostic: handleDiagnostic
     });
 
-    // discard 購読は transcriptBuffer 直参照（正本の破棄を footer の diagnostic 材料に）。
-    discardUnsub = p.transcriptBuffer.onDiscard((info) => {
-      const stats = p.transcriptBuffer.stats();
-      broadcast("discard", {
-        startMs: info.startMs,
-        endMs: info.endMs,
-        reason: info.reason,
-        appended: stats.appended,
-        discarded: stats.discarded
-      });
-    });
-
     pipeline = p;
     try {
       await p.start();
     } catch (error) {
-      // start 失敗（whisper spawn 失敗等）: pipeline は自身で dispose 済み。状態を畳む。
-      if (discardUnsub) {
-        discardUnsub();
-        discardUnsub = null;
-      }
+      // start 失敗（whisper spawn 失敗等）: pipeline は自身で dispose 済み。状態を畳む（正本は場が手放す）。
       pipeline = null;
       earsState = "stopped";
       startedAtMs = null;
@@ -1584,23 +1573,75 @@ export function createCockpitServer(options = {}) {
     return { ok: true, state: snapshot() };
   }
 
+  // ── 会話の正本（場のもの・Discord モード Domain A・discord-mode.md §3.1）──────────────────────────
+  //
+  //  場が開くとき（openStream の 4、耳の前）に場が作り、耳には積む口として渡す。購読は場が 1 回だけ張る（耳が N 本でも
+  //  N 重にならない）: 追記 → 発火の予定と speak-now（どの話者の行も・従来の耳の onTranscript の前半）、破棄 → 放送。
+  //  耳ごとの情報（遅延・audioCtx・文字起こしの方式）は耳ごとの口（startEars の onTranscript）で受ける。
+  //  手放すのは、配信では耳を畳むのと同じ時（stopEars の中・始められなかったとき・サーバを閉じるとき）。配信では場が
+  //  開いている間は耳が止まらないので、正本が読める間は従来と同じ。
+
   /**
-   * 耳（と会話の正本）と目を畳む。配信の組み直し Domain D から「配信を終える」（closeStream）の畳む の中だけで呼ぶ
+   * 正本を作って購読を張る（前の正本が残っていれば先に手放す）。
+   * @returns {ReturnType<typeof createTranscriptBuffer>}
+   */
+  function openVenueTranscript() {
+    releaseVenueTranscript();
+    // 時計は場の時計（窓を切る判定と同じ・本番はどちらも Date.now で、耳が自前で作っていたときと同じ）。
+    const buffer = createTranscriptBuffer({ nowImpl });
+    venueTranscript = buffer;
+    venueTranscriptUnsubs = [
+      buffer.onAppend((entry) => {
+        // S6 自発発火: 転写を発火スケジューラへ回す（you = 呼びかけ照合 + 活動 / soul = 不応期リセット /
+        // viewer = handleTranscript 内で no-op ★二重発火の断ち）。scheduler は soul 発話を不応期の基点に使うため
+        // you / soul 両方を要る。viewer は scheduler 内で無視される。
+        if (fireScheduler) fireScheduler.handleTranscript(entry);
+        // speak-now: you の転写 1 件ごとに判定（soul/viewer は部品内で無視・モード外/OFF/KILL も部品内で無視）。
+        if (speakNow) speakNow.handleTranscript(entry);
+      }),
+      // 破棄の購読（正本の破棄を footer の diagnostic 材料に）。
+      buffer.onDiscard((info) => {
+        const stats = buffer.stats();
+        broadcast("discard", {
+          startMs: info.startMs,
+          endMs: info.endMs,
+          reason: info.reason,
+          appended: stats.appended,
+          discarded: stats.discarded
+        });
+      })
+    ];
+    return buffer;
+  }
+
+  /** 正本を手放す（購読を外す・冪等）。写しが要るなら先に取っておく（closeStream の 1）。 */
+  function releaseVenueTranscript() {
+    for (const unsub of venueTranscriptUnsubs) {
+      try {
+        unsub();
+      } catch {
+        // best-effort
+      }
+    }
+    venueTranscriptUnsubs = [];
+    venueTranscript = null;
+  }
+
+  /**
+   * 耳と目を畳み、会話の正本を手放す。配信の組み直し Domain D から「配信を終える」（closeStream）の畳む の中だけで呼ぶ
    * （転写の写しは closeStream が先に取る＝ここでは記録しない）。
    * @returns {Promise<object>} 停止後の状態。
    */
   async function stopEars() {
     callEarsHook(onEarsStopped);
+    // 正本は場のものだが、配信では耳を畳むのと同じ時に手放す（畳んだ後は正本が読めない＝従来どおり）。
+    releaseVenueTranscript();
     if (!pipeline) {
       earsState = "stopped";
       return snapshot();
     }
     const p = pipeline;
     pipeline = null;
-    if (discardUnsub) {
-      discardUnsub();
-      discardUnsub = null;
-    }
     try {
       await p.dispose();
     } catch {
@@ -1900,6 +1941,8 @@ export function createCockpitServer(options = {}) {
       } catch {
         // 畳むのが想定外に投げても、閉じた状態には戻す（下）。
       }
+      // 会話の正本も手放す（耳を開く前・耳が開かなかったときも。場が閉じている間は正本が無い＝従来どおり）。
+      releaseVenueTranscript();
       streamPhase = "closed";
       streamOpenedAtMs = null;
       streamError = reason;
@@ -1920,7 +1963,9 @@ export function createCockpitServer(options = {}) {
       renewJudges();
       renewFireScheduler();
       renewRecallDesk();
-      // 4. 耳（と会話の正本）・目・声（耳の Start が onEarsStarted で目と声の出口を起こす）。
+      // 4. 会話の正本（場が作る・Discord モード Domain A）→ 耳（正本に積む）・目・声（耳の Start が onEarsStarted で目と
+      //    声の出口を起こす）。
+      openVenueTranscript();
       const ears = await startEars(request.device ?? null, request.sttEngine ?? undefined, request.ttsEngine ?? undefined);
       if (!ears.ok) return fail(ears.error, {});
       // 5. 頭のセッション。
@@ -1971,7 +2016,7 @@ export function createCockpitServer(options = {}) {
       let finalSaveRequested = false;
       try {
         // 1. 会話の正本の写しを取る（畳むと消える）。
-        transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
+        transcript = venueTranscript ? venueTranscript.all() : [];
         // 2. YouTube・判定・発火の予定・目・耳・頭のセッション・器を畳む。後ろでつないでいる YouTube（始める 7）は待たない:
         //    器官はもう chatClient に入っているのでここで畳む。あとからつながっても場の世代で見分けて残さない（startChatForStream）。
         await foldStream({ chat: true, ears: true, session: true });
@@ -1984,7 +2029,7 @@ export function createCockpitServer(options = {}) {
         // 頼む（写しが取れていなければ、耳が残っていればもう一度だけ写しを試す。取れなければ空で頼む）。
         if (transcript == null) {
           try {
-            transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
+            transcript = venueTranscript ? venueTranscript.all() : [];
           } catch {
             transcript = [];
           }
@@ -2847,12 +2892,11 @@ export function createCockpitServer(options = {}) {
   // ── 発火オーケストレータ（S3 Domain A・追加的結線）────────────────────────
   //
   //  未注入時は fireOrchestrator=null（POST /api/fire は 503・S2.5 は無退行）。注入時は cockpit が
-  //  getBuffer（正本 = pipeline?.transcriptBuffer）と broadcast フックを渡す。soul の発話行の正経路は
+  //  getBuffer（正本 = 場の会話の正本 venueTranscript）と broadcast フックを渡す。soul の発話行の正経路は
   //  orchestrator の onSoulTranscript フックで受け、既存 transcript イベント（speaker:"soul"）として
   //  broadcast する（domain-a.md ワイヤ契約 §）。
-  //  注意（S3 追撃 domain-c）: soul も同じ transcriptBuffer に append されるため耳の onTranscript
-  //  （startEars 内）も必ず通る。そちらは speaker:"soul" を除外して二重放送を断つ（onTranscript の
-  //  先頭ガード参照）。ここ（onSoulTranscript 経路）が soul の唯一の放送元。
+  //  注意（S3 追撃 domain-c）: soul も同じ正本に append される。耳ごとの口（startEars の onTranscript）は
+  //  speaker:"soul" を除外して二重放送を断つ（先頭ガード参照）。ここ（onSoulTranscript 経路）が soul の唯一の放送元。
 
   /**
    * soul の追記を既存 transcript イベントとして push（耳の onTranscript 経路とは別口）。
@@ -2867,7 +2911,7 @@ export function createCockpitServer(options = {}) {
    *    （配信前選択が本線・切替は運用外という v0 裁定の下で許容）。
    */
   function broadcastSoulTranscript(entry) {
-    const stats = pipeline ? pipeline.transcriptBuffer.stats() : { appended: 0, discarded: 0 };
+    const stats = venueTranscript ? venueTranscript.stats() : { appended: 0, discarded: 0 };
     const latencyMs = entry && typeof (/** @type {any} */ (entry).latencyMs) === "number"
       ? /** @type {any} */ (entry).latencyMs
       : null;
@@ -2924,7 +2968,15 @@ export function createCockpitServer(options = {}) {
   let fireOrchestrator = null;
   if (typeof options.fireOrchestratorFactory === "function") {
     fireOrchestrator = options.fireOrchestratorFactory({
-      getBuffer: () => (pipeline ? pipeline.transcriptBuffer : null),
+      getBuffer: () => venueTranscript,
+      // soul の行に載せるロールの id と名前（Discord モード Domain A・discord-mode.md §3.2 a）。今のロールの identity から引く
+      // （名前は判定に渡す名前 currentSoulName と同じ canonicalName・ロールの口が無ければ載せない）。正本にだけ残り、
+      // ①②④・判定・放送には出ない（ロールが 1 つの間は整形が `soul: 本文` のまま）。
+      getSoulSpeaker: () => {
+        if (!currentRoleIdentityImpl) return null;
+        const identity = normalizeModelIdentity(currentRoleIdentityImpl());
+        return { id: identity.id, name: identity.canonicalName };
+      },
       onState: (state) => {
         broadcast("soul", { state });
         // speak-now の相槌: 相槌の発火でチャッピーが喋り始めた時点を、相槌どうしの歯止めの数え始めにする
@@ -3065,7 +3117,7 @@ export function createCockpitServer(options = {}) {
     // 捨てず、走っている判定の結果が次の場で返ると発火してしまうため。dispose した古い部品は返ってきた結果を無視する）。
     makeSpeakNow = () => createSpeakNowController({
       judge: speakNowJudge,
-      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      getEntries: () => (venueTranscript ? venueTranscript.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
       isActive: () =>
         speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
@@ -3133,7 +3185,7 @@ export function createCockpitServer(options = {}) {
     // 配信の組み直し Domain D: コメント反応の判定部品も speak-now と同じく「配信を始める」のたびに作り直す。
     makeCommentReact = () => createCommentReactController({
       judge: commentReactJudge,
-      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      getEntries: () => (venueTranscript ? venueTranscript.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
       isActive: () =>
         speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
@@ -3199,7 +3251,7 @@ export function createCockpitServer(options = {}) {
     makeRecallDesk = () => createRecallDesk({
       runRecall: /** @type {any} */ (recallRunner),
       judge: recallJudge,
-      getEntries: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+      getEntries: () => (venueTranscript ? venueTranscript.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
       isKilled: () => killed,
       isSelfFireOn: () => fireScheduler != null && fireScheduler.isEnabled(),
@@ -3373,12 +3425,12 @@ export function createCockpitServer(options = {}) {
   //   (b) SSE "transcript"（speaker:"viewer"+displayName）を 1 本放送（Domain C が `viewer(名前):` を描く）、
   //   (c) fireScheduler.handleChatMessage（comment / comment-call 判定）を回す。
   //
-  //  ★ 二重発火/二重放送の断ち: (a) の append は buffer.onAppend→耳の onTranscript を通るが、そこでは
-  //  viewer は handleTranscript（scheduler 内で no-op）+ 放送除外（viewer 分岐）で無害化済み。発火は
+  //  ★ 二重発火/二重放送の断ち: (a) の append は正本の onAppend（場の購読）を通るが、そこでは
+  //  viewer は handleTranscript（scheduler 内で no-op）で無害化済み（耳ごとの口は viewer を放送しない）。発火は
   //  handleChatMessage だけ・放送はこの経路だけが担う。
   //
-  //  バッファ生存の裁定（v0・§質問で escalate）: 転写バッファは耳パイプライン所有（遅延起動）。耳が
-  //  未起動ならバッファが無い。その場合は**合流先が無い**ので append/scheduler をスキップし、ゴースト行の
+  //  バッファ生存（Discord モード Domain A で正本は場の所有に替わった・discord-mode.md §3.1）: 正本は場が開く
+  //  ときに作り、閉じるときに手放す。場が閉じていれば正本が無い（耳の有無ではなく場の有無）。その場合は**合流先が無い**ので append/scheduler をスキップし、ゴースト行の
   //  診断（chatBufferAbsent）だけ出す（バッファ無しで発火しても会話ログにコメントが載らず盲目発火に
   //  なるため scheduler も回さない）。バッファ所有権の巻き上げ（耳非依存化）は S1〜S6 挙動・器不変を
   //  脅かしうる構造変更ゆえ v0 では実装せず domain-b.md §質問で escalate する。
@@ -3405,7 +3457,7 @@ export function createCockpitServer(options = {}) {
       const text = msg && typeof msg.text === "string" ? msg.text : "";
       const displayName = msg && typeof msg.displayName === "string" ? msg.displayName : undefined;
       if (text.trim().length === 0) return; // 空コメントは捨てる（バッファも捨てる・二度手間を避ける）。
-      const buffer = pipeline ? pipeline.transcriptBuffer : null;
+      const buffer = venueTranscript;
       if (!buffer) {
         // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、判定・append/scheduler はスキップ。
         handleDiagnostic({
@@ -3504,7 +3556,7 @@ export function createCockpitServer(options = {}) {
    */
   function commitComment(slot) {
     const { text, displayName } = slot;
-    const buffer = pipeline ? pipeline.transcriptBuffer : null;
+    const buffer = venueTranscript;
     if (!buffer) {
       // 判定を待つ間に耳が止まった = 合流先が無い（取り込み時と同じ扱い）。
       handleDiagnostic({
@@ -3805,12 +3857,12 @@ export function createCockpitServer(options = {}) {
     bargeInStatus: () => (bargeInGate ? { enabled: bargeInGate.isEnabled() } : null),
     /**
      * 配信間記憶: 転写の全量スナップショット（cockpit.mjs のチェックポイント/手動記録/shutdown 最終版が
-     * ライブ転写を読む口・additive な内部 JS API=HTTP/SSE のワイヤ契約ではない）。pipeline 未生成
-     * （耳が一度も start していない）なら空配列。transcriptBuffer.all() は防御的コピーを返す
+     * ライブ転写を読む口・additive な内部 JS API=HTTP/SSE のワイヤ契約ではない）。場の会話の正本が無い
+     * （場が閉じている）なら空配列。all() は防御的コピーを返す
      * （ears/transcript-buffer.mjs）ので呼び出し側が書き換えても正本は壊れない。
      * @returns {Array<any>}
      */
-    getTranscript: () => (pipeline ? pipeline.transcriptBuffer.all() : []),
+    getTranscript: () => (venueTranscript ? venueTranscript.all() : []),
     // ── S7「視聴者が混ざる」: チャット器官の取り込み経路（Domain C の attach 点）───────────────
     /** チャット器官の 1 コメントを取り込む（append + SSE viewer 行放送 + scheduler.handleChatMessage）。 */
     ingestChatMessage,
@@ -3880,10 +3932,7 @@ export function createCockpitServer(options = {}) {
         }
       }
       sseClients.clear();
-      if (discardUnsub) {
-        discardUnsub();
-        discardUnsub = null;
-      }
+      releaseVenueTranscript();
       if (pipeline) {
         const p = pipeline;
         pipeline = null;

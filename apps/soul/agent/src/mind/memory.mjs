@@ -49,6 +49,9 @@ function labelOf(speaker) {
 
 /**
  * 会話ログの 1 エントリを 1 行へ整形する。名前のある viewer 行は `viewer(名前): 本文` にする（空白は 1 つに詰める）。
+ * soul 行はロールの名前を持っていても `soul: 本文` のまま（ロールが 1 つの間・discord-mode.md §3.2 a）。speakerId は読まない。
+ * Discord モード Domain A の持ち越し: 名前のある you 行（`you(名前):`）はまだ付けない（既存テスト memory.test.mjs の
+ * 「viewer 以外には付けない」の期待値と設計 §3.2 がぶつかるため・判断を呼び出し元へ返した）。
  * @param {{ text: string; speaker?: string; displayName?: string }} e
  * @returns {string}
  */

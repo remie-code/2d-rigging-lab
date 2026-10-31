@@ -219,8 +219,9 @@ test("createRoleEditHooks.onCreateRole: 作ったロールを selectRole（main 
 
 /** 偽の耳（場を開くため・転写の正本は本物の transcript-buffer）。 */
 function makeEars() {
-  return () => ({
-    transcriptBuffer: createTranscriptBuffer({ nowImpl: () => 1000 }),
+  // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+  return (/** @type {any} */ options) => ({
+    transcriptBuffer: options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 }),
     async start() {},
     async dispose() {},
     isDisposed: () => false,

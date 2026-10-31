@@ -129,9 +129,13 @@ export const EAR_DEFAULTS = Object.freeze({
  * @param {(status: string, info: { reason: string | null }) => void} [options.onSttStatus]
  *   ElevenLabs 接続の状態遷移（connecting / up / reconnecting / down）。whisper では呼ばれない。
  * @param {(event: object) => void} [options.onVadEvent]     speechStart/End/Cancel（全部）。
+ * @param {ReturnType<typeof createTranscriptBuffer>} [options.transcriptBuffer]  会話の正本（積む口・Discord モード
+ *   Domain A）。場が作って渡す。渡されなければ耳が自分で作る（従来どおり）。渡されたときは耳は onAppend を張らない。
  * @param {(entry: object, meta: { latencyMs: number | null; audioCtx: number | null }) => void} [options.onTranscript]
  *   転写がバッファに積まれた（正経路）。latencyMs は whisper が「speechEnd → 転写」、ElevenLabs が
  *   「直前の commit 以降で最後の speechEnd → commit 到着」（その間に speechEnd が無ければ null）。
+ *   自前の正本のときは onAppend 経由で**正本のすべての行**（soul / viewer も）で呼ぶ（従来どおり）。外から渡された
+ *   正本のときは**この耳が積んだ行だけ**で呼ぶ（ほかの行の購読は正本の持ち主の場が 1 回だけ張る）。
  * @param {(diag: object) => void} [options.onDiagnostic]    落とした発話・死・破棄などの診断。
  * @param {() => number} [options.nowImpl]  壁時計（レイテンシ計測用）。既定 Date.now。
  * @param {typeof setTimeout} [options.setTimeoutImpl]
@@ -189,7 +193,11 @@ export function createEarPipeline(options = {}) {
   const onTranscript = options.onTranscript ?? (() => {});
   const onDiagnostic = options.onDiagnostic ?? (() => {});
 
-  const buffer = createTranscriptBuffer({ nowImpl });
+  // 会話の正本（Discord モード Domain A・discord-mode.md §3.1）: 場が作って渡す（積む口）。渡されなければ自分で作る
+  // （従来どおり・テストの互換）。渡された正本には onAppend を張らない（張るのは持ち主の場が 1 回だけ。耳が N 本でも
+  // N 重にならない）。そのとき onTranscript は「この耳が積んだ行」にだけ、遅延と audioCtx を添えて直に呼ぶ（耳ごとの口）。
+  const externalBuffer = options.transcriptBuffer ?? null;
+  const buffer = externalBuffer ?? createTranscriptBuffer({ nowImpl });
   const ring = createPcmRingBuffer({ capacityMs: ringMs, sampleRate });
   const framer = createPcmFramer();
 
@@ -238,9 +246,32 @@ export function createEarPipeline(options = {}) {
   // パイプライン自身の転写通知は「最初に登録した自前 listener」で受ける。
   // transcript-buffer の listener は登録順に呼ばれるため、後から登録された外部購読者（S3 等）が
   // throw しても、この通知は既に配信済み＝外部の契約違反に巻き込まれない（note 4 の線引き）。
-  buffer.onAppend((entry) => {
-    onTranscript(entry, currentMeta ?? { latencyMs: NaN, audioCtx: null });
-  });
+  if (!externalBuffer) {
+    buffer.onAppend((entry) => {
+      onTranscript(entry, currentMeta ?? { latencyMs: NaN, audioCtx: null });
+    });
+  }
+
+  /**
+   * 外から渡された正本に積んだとき、この耳が積んだ行だけを onTranscript へ渡す（自前の正本では onAppend が渡すので
+   * 何もしない）。onTranscript の throw は、自前の正本のときの listener の throw と同じく listenerError の診断に落とす。
+   * @param {{ appended: boolean; entry: any }} result
+   * @param {{ latencyMs: number | null; audioCtx: number | null }} meta
+   * @param {{ startMs: number; endMs: number }} range
+   */
+  function notifyOwnAppend(result, meta, range) {
+    if (!externalBuffer || !result.appended || !result.entry) return;
+    try {
+      onTranscript(result.entry, meta);
+    } catch (error) {
+      onDiagnostic({
+        type: "listenerError",
+        message: error instanceof Error ? error.message : String(error),
+        startMs: range.startMs,
+        endMs: range.endMs
+      });
+    }
+  }
 
   const segmenter = createSpeechSegmenter(segmenterOptions, (event) => {
     if (disposed) return;
@@ -379,7 +410,9 @@ export function createEarPipeline(options = {}) {
         endMs: job.endMs,
         latencyMs: currentMeta.latencyMs
       });
+      return;
     }
+    notifyOwnAppend(result, currentMeta, job);
   }
 
   /**
@@ -397,6 +430,8 @@ export function createEarPipeline(options = {}) {
       const result = buffer.append({ startMs: tMs, endMs: tMs, text: typeof commit.text === "string" ? commit.text : "" });
       if (!result.appended) {
         onDiagnostic({ type: "transcriptDiscarded", reason: result.reason, startMs: tMs, endMs: tMs, latencyMs });
+      } else {
+        notifyOwnAppend(result, currentMeta, { startMs: tMs, endMs: tMs });
       }
     } catch (error) {
       // 外部購読者の listener 契約違反（whisper 経路の transcribeAndAppend と同じ扱い）。

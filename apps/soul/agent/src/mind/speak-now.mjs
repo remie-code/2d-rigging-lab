@@ -132,11 +132,23 @@ export function buildSpeakNowChoices(name) {
 }
 
 /**
+ * you の行のラベル（「配信者」。名前があれば「配信者(名前)」・Discord モード Domain A。配信では you に名前を入れないので
+ * 「配信者」のまま）。
+ * @param {unknown} displayName
+ * @returns {string}
+ */
+function hostLabel(displayName) {
+  const name = typeof displayName === "string" ? displayName.trim() : "";
+  return name.length > 0 ? `${SPEAK_NOW_HOST_LABEL}(${name})` : SPEAK_NOW_HOST_LABEL;
+}
+
+/**
  * 転写バッファのエントリ列 → 判定の入力（直近 windowMs の「配信者: …」「{名前}: …」）。
  * you / soul だけを使う（viewer は入れない・合意 §1）。空文字の行は捨てる。時刻は appendedAtMs
  * （you と soul を同じ実時間軸で並べる・transcript-buffer の流儀）。appendedAtMs が数でない行は
- * 窓の判定をせずに入れる（防御的）。
- * @param {ReadonlyArray<{ speaker?: string; text?: string; appendedAtMs?: number }>} entries
+ * 窓の判定をせずに入れる（防御的）。名前のある you の行は「配信者(名前)」。soul の行はロールの名前を持っていても
+ * soulName（今の頭の名前）のまま。speakerId は読まない。
+ * @param {ReadonlyArray<{ speaker?: string; text?: string; displayName?: string; appendedAtMs?: number }>} entries
  * @param {{ nowMs: number; soulName: string; windowMs?: number }} p
  * @returns {string}
  */
@@ -149,8 +161,7 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
     const text = typeof e.text === "string" ? e.text.trim() : "";
     if (text.length === 0) continue;
     if (typeof e.appendedAtMs === "number" && Number.isFinite(e.appendedAtMs) && e.appendedAtMs < from) continue;
-    const label = e.speaker === "soul" ? soulName : SPEAK_NOW_HOST_LABEL;
-    lines.push(`${label}: ${text}`);
+    lines.push(`${e.speaker === "soul" ? soulName : hostLabel(e.displayName)}: ${text}`);
   }
   return lines.join("\n");
 }

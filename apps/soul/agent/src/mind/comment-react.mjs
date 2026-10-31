@@ -118,7 +118,9 @@ export function buildCommentReactInput(entries, comment, { nowMs, soulName, wind
     } else if (speaker === "soul") {
       lines.push(`${soulName}: ${text}`);
     } else {
-      lines.push(`配信者: ${text}`);
+      // 名前のある you の行は「配信者(名前)」（Discord モード Domain A・配信では you に名前を入れない）。
+      const name = typeof e.displayName === "string" ? e.displayName.trim() : "";
+      lines.push(`${name.length > 0 ? `配信者(${name})` : "配信者"}: ${text}`);
     }
   }
   return `これまでの会話:\n${lines.join("\n") || "(なし)"}\n\n届いたコメント:\n${viewerLabel(comment.displayName)}: 「${comment.text}」`;

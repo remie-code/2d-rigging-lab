@@ -168,7 +168,8 @@ function makeFakePipeline() {
   };
   const factory = (options) => {
     record.options = options;
-    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+    // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+    const buffer = options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 });
     record.buffer = buffer;
     return {
       transcriptBuffer: buffer,
@@ -1328,7 +1329,8 @@ function makeOnAppendPipeline() {
   const record = { /** @type {any} */ options: null, /** @type {any} */ buffer: null, disposed: false };
   const factory = (/** @type {any} */ options) => {
     record.options = options;
-    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+    // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+    const buffer = options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 });
     record.buffer = buffer;
     // ear-pipeline.mjs:179-181 と同じ購読（you も soul も同じ列に積まれ、onAppend で onTranscript を通る）。
     buffer.onAppend((entry) => {

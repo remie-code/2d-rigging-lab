@@ -45,7 +45,8 @@ function makeEars(events = []) {
   const factory = (/** @type {any} */ options) => {
     record.created += 1;
     record.options = options;
-    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+    // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+    const buffer = options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 });
     record.buffer = buffer;
     buffer.onAppend((entry) => options.onTranscript(entry, { latencyMs: 10, audioCtx: null }));
     return {

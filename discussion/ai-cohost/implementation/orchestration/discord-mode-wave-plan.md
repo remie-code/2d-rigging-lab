@@ -1,6 +1,7 @@
 # Discord モードの wave 計画(Undine 2026-10-31)
 
 > Status: 着手(ユーザー 2026-10-31「開始していいよ / ドメインは君の方で順次起動して大丈夫」)。ブランチ `ai-cohost/discord-mode`。
+> - Domain A 合格(1 ループ・止めた指摘 0・soul 1938/1938・soul-zone・期待値を変えた既存テスト 0。`chatBufferAbsent` も正本の寿命を「場が開いている間」にしたので変えずに通った)。報告 [../waves/discord-mode/domain-a-report.md](../waves/discord-mode/domain-a-report.md)。固定テスト `src/mind/stream-wording-pin.test.mjs`(36 件、HEAD の未変更のコードから採取)。Undine の追認: (1) ②④の整形に名前つき you の `you(名前):` を入れるのは **Domain C で行う**(②④を語の組に組み替える所と同じなので)。`memory.test.mjs:58-65` の「you に名前を付けない」の期待値 1 行は、設計 §3.2 による変更として C で認める(配信では you に名前が入らないので配信の文字列は変わらない。固定テストは変えない)。(2) `buildRecallAvoidInput` には名前を付けないままで可。(3) Gnome の裁量 9 つ(耳ごとの口から情報を引く・正本の寿命は場が開いている間・判定の入力は「配信者(名前)」など)は可。
 > 根拠: 設計 [../../architecture/discord-mode.md](../../architecture/discord-mode.md)(Accepted)、決定 [../../discord-vc/scope.md](../../discord-vc/scope.md) §21〜§24、棚卸し [discord-mode-inventory.md](discord-mode-inventory.md)(触るファイル・重なり・テストの土台・§9 の問い)。
 > 進め方(scope §24): 前例 [stream-restructure-wave-plan.md](stream-restructure-wave-plan.md) と同じ。1 本のブランチ、ドメインは**全部順に**、ドメインごとに Orch-Sylph が Gnome と Review-Sylph を回す。開発は今の作業フォルダのまま。**ドメインの途中では配信しない**(ユーザーが配信するときは声をかけてもらい、区切りのよい所で master のきれいな状態に戻す)。push は機能が完成してからまとめて(scope §23)。
 > ドメインの記号は設計 §11 と違う(設計の B を B と C に分け、判定の差し口を C に前倒しした)。下の対応表を正とする。

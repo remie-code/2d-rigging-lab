@@ -31,9 +31,10 @@ async function state(url) {
 /** 偽の耳（転写の正本は本物の transcript-buffer）。 */
 function makeEars() {
   const record = { created: 0, disposed: 0, /** @type {any} */ buffer: null, allThrows: false };
-  const factory = () => {
+  const factory = (/** @type {any} */ options) => {
     record.created += 1;
-    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+    // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+    const buffer = options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 });
     record.buffer = buffer;
     const all = buffer.all.bind(buffer);
     buffer.all = () => {
