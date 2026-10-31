@@ -117,7 +117,13 @@ import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memor
 import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
-import { appendSoulSkills, listSoulSkills, loadSoulSkills, soulSkillNamesForBody } from "../src/mind/soul-skills.mjs";
+import {
+  appendSoulSkills,
+  listSoulSkills,
+  loadSoulSkills,
+  soulSkillNamesForBody,
+  soulSkillNamesForVenue
+} from "../src/mind/soul-skills.mjs";
 
 /**
  * 配信間記憶: 定期保存の間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
@@ -466,6 +472,34 @@ export function createInstructionRevisionController(initialRevision = 0) {
 }
 
 /**
+ * 場の言葉のうち、①の教えと会話指示の編集画面に効くもの（Discord モード Domain C・discord-mode.md §3.4 ①の側）。場が開いていて、
+ * その体験が語の組か教えを持つときだけ `{ wording, teaching }` を返す。場が閉じている・配信（語の組も教えも null）なら null
+ * （= 今の配信の道をそのまま通す: ①の固定の指示も編集画面の本文も一字も変わらない）。
+ * @param {unknown} context  cockpit-server の venueContext() の値（閉じていれば null）。
+ * @returns {{ wording: any; teaching: string | null } | null}
+ */
+export function venueSoulWords(context) {
+  if (!context || typeof context !== "object") return null;
+  const { wording, teaching } = /** @type {{ wording?: any; teaching?: any }} */ (context);
+  if (wording == null && teaching == null) return null;
+  return { wording: wording ?? null, teaching: typeof teaching === "string" ? teaching : null };
+}
+
+/**
+ * 場の体験の言葉で①に足す教えの一覧（Discord モード Domain C）。体の有無で選ぶ教えの最後に体験の教えを足し、本文の印をその
+ * 体験の語の組で差す。venueSoulWords が null（配信・閉じている）のときは呼ばない（呼び出し側が今の道を通す）。
+ * @param {{ body: boolean; venue: { wording: any; teaching: string | null }; onWarning?: (warning: string) => void; listImpl?: typeof listSoulSkills }} p
+ * @returns {Array<{ name: string; path: string; body: string }>}
+ */
+export function listVenueSoulSkills({ body, venue, onWarning, listImpl = listSoulSkills }) {
+  return listImpl({
+    names: soulSkillNamesForVenue({ body, teaching: venue.teaching }),
+    wording: venue.wording,
+    ...(typeof onWarning === "function" ? { onWarning } : {})
+  });
+}
+
+/**
  * Adapt the file-backed settings store to the dedicated Cockpit instruction
  * surface. Persistence owns validation and durable writes; this thin seam is
  * responsible only for incrementing the effective revision after success.
@@ -480,13 +514,19 @@ export function createInstructionRevisionController(initialRevision = 0) {
  * @param {object} settings  置き場の口（getConversationInstructionProfile / set… / reset…）。
  * @param {() => string} getRoleId  今のロールの id。
  * @param {ReturnType<typeof createInstructionRevisionController>} [revision]
+ * Discord モード Domain C: 場が開いていて、その体験が語の組か教えを持つ（配信でない）ときは、getVenueSoulSkills が返す一覧
+ * （その体験の語で差した本文・体験の教えも含む）を見せる。null を返したら（場が閉じている・配信）getSoulSkills（配信の語）。
+ *
  * @param {() => Array<{ name: string; path: string; body: string }>} [getSoulSkills]  テスト注入（既定 listSoulSkills）。
+ * @param {() => (Array<{ name: string; path: string; body: string }> | null)} [getVenueSoulSkills]  場の体験の言葉で見せる一覧
+ *   （Discord モード Domain C・既定は常に null = getSoulSkills）。
  */
 export function createConversationInstructionHooks(
   settings,
   getRoleId,
   revision = createInstructionRevisionController(),
-  getSoulSkills = () => listSoulSkills()
+  getSoulSkills = () => listSoulSkills(),
+  getVenueSoulSkills = () => null
 ) {
   const store = /** @type {any} */ (settings);
   const currentId = () => getRoleId();
@@ -517,7 +557,7 @@ export function createConversationInstructionHooks(
       return revision.getRevision();
     },
     getSoulSkills() {
-      return getSoulSkills();
+      return getVenueSoulSkills() ?? getSoulSkills();
     }
   };
 }
@@ -693,10 +733,14 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  *
  * @param {object} deps
  * @param {() => ReadonlyArray<any>} deps.getLiveEntries  材料の省略時に使うライブの転写（cockpit-server の getTranscript）。
- * @param {(entries: ReadonlyArray<any>, place: any) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
- *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値。
+ * @param {(entries: ReadonlyArray<any>, place: any, wording: any) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
+ *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値、wording は頼んだ時点の
+ *   getWording() の値。
  * @param {() => any} [deps.getPlace]  保存を頼んだ時点の置き場（本番は今のロールの記憶のフォルダ・§createRoleMemoryPlaces）。
  *   同じ置き場には同じ値（=== で比べる）を返すこと。投げたら null。
+ * @param {() => any} [deps.getWording]  保存を頼んだ時点の場の語の組（Discord モード Domain C・本番は cockpit-server の
+ *   venueContext().wording）。writeImpl の 3 つ目の引数に渡る。null / 無し / 投げたら null（= 配信の語の組）。置き場は場ごとに
+ *   作り直す（beginStream）ので、同じ置き場の頼みは同じ場の語の組（待っている 1 件を差し替えるときも新しい方の値にする）。
  * @param {(info: { atMs: number; entriesLength: number; commit?: any; place?: any }) => void} [deps.onSaved]
  *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。place は getPlace があるとき
  *   だけ載る（その保存を頼んだ時点の置き場・配信の組み直し Domain D の場ごとの数え方）。
@@ -714,7 +758,7 @@ export function createMemoryRecorder(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   /** @type {Promise<void> | null} 走っている保存の一続き（待たせた分まで含む）。 */
   let chain = null;
-  /** @type {Array<{ entries: ReadonlyArray<any>; place: any; promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
+  /** @type {Array<{ entries: ReadonlyArray<any>; place: any; wording: any; promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
   const waiting = [];
 
   const callSafely = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
@@ -735,9 +779,18 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
+  const wordingNow = () => {
+    if (typeof deps.getWording !== "function") return null;
     try {
-      const result = await deps.writeImpl(entries, place);
+      return deps.getWording() ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place, /** @type {any} */ wording) => {
+    try {
+      const result = await deps.writeImpl(entries, place, wording);
       if (result && result.written) {
         // 置き場（getPlace があるときだけ）も渡す: main() が「頼んだ時点の場」の保存だけを数える（配信の組み直し Domain D）。
         callSafely(deps.onSaved, {
@@ -752,7 +805,7 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const start = (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
+  const start = (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place, /** @type {any} */ wording) => {
     /** @type {() => void} */
     let resolveOwn = () => {};
     const own = new Promise((resolve) => {
@@ -761,11 +814,11 @@ export function createMemoryRecorder(deps) {
     callSafely(deps.onRecordingChange, true);
     chain = (async () => {
       try {
-        await runOnce(entries, place);
+        await runOnce(entries, place, wording);
         resolveOwn();
         while (waiting.length > 0) {
           const next = /** @type {(typeof waiting)[number]} */ (waiting.shift());
-          await runOnce(next.entries, next.place);
+          await runOnce(next.entries, next.place, next.wording);
           next.resolve();
         }
       } finally {
@@ -782,10 +835,14 @@ export function createMemoryRecorder(deps) {
       const entries = entriesOverride ?? deps.getLiveEntries();
       if (!Array.isArray(entries) || entries.length === 0) return Promise.resolve();
       const place = placeNow();
-      if (!chain) return start(entries, place);
+      const wording = wordingNow();
+      if (!chain) return start(entries, place, wording);
       const last = waiting[waiting.length - 1];
       if (last && last.place === place) {
-        if (entries.length >= last.entries.length) last.entries = entries;
+        if (entries.length >= last.entries.length) {
+          last.entries = entries;
+          last.wording = wording;
+        }
         return last.promise;
       }
       /** @type {() => void} */
@@ -793,7 +850,7 @@ export function createMemoryRecorder(deps) {
       const promise = new Promise((r) => {
         resolve = () => r(undefined);
       });
-      waiting.push({ entries, place, promise, resolve });
+      waiting.push({ entries, place, wording, promise, resolve });
       return promise;
     },
     isRecording: () => chain != null,
@@ -1109,7 +1166,8 @@ export function createStreamVenueHooks(deps) {
  *  - hooks: 場の口 6 つ（createStreamVenueHooks の hooks = 場の記録・頭のセッション・器・記憶の最後の保存）。同じものを渡す。
  *  - voice.prepare(kind): 声の engine を用意する（始める 6・入口を開く前・ElevenLabs のキーはここで読む）。
  *  - voice.startResources(): 再生器と声の差し替え口を起こす（始める 6・待たない）。投げたら警告の 1 行にして場は止めない。
- *  - recall.run(job): ④思い出し役を走らせる（今のロールの記憶の置き場を読む）。無ければ null。
+ *  - recall.run(job): ④思い出し役を走らせる（今のロールの記憶の置き場を読む）。無ければ null。job.wording（場の語の組・
+ *    Discord モード Domain C。null = 配信の語）もそのまま渡す。
  *
  * @param {object} deps
  * @param {() => string} deps.currentId
@@ -1117,7 +1175,7 @@ export function createStreamVenueHooks(deps) {
  * @param {object} deps.streamHooks
  * @param {(kind: "aivis" | "elevenlabs") => any} deps.prepareVoice
  * @param {() => void} deps.startVoiceResources
- * @param {((job: { request: string; entries: ReadonlyArray<any>; nowMs: number }) => Promise<any>) | null} [deps.recallRunner]
+ * @param {((job: { request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }) => Promise<any>) | null} [deps.recallRunner]
  * @param {(line: string) => void} [deps.onWarning]  警告の 1 行（本文・キーは入れない）。
  */
 export function createVenueRoleBundle(deps) {
@@ -2315,11 +2373,17 @@ async function main() {
   const currentBody = () => roleHooks.current().body !== false;
   // 会話指示 = 今のロールの性格の指示（roles/<id>/instructions.md・§createRoleInstructionStore）。
   // 編集画面に読むだけで見せる教えは、①に足すものと同じく今のロールの体に合わせる（体なしは expression を出さない）。
+  // Discord モード Domain C: 場が開いていてその体験が語の組か教えを持つ（配信でない）ときは、その体験の語で差した本文と体験の
+  // 教えを見せる（§venueSoulWords）。場が閉じている・配信なら今の道（配信の語）。
   const conversationInstructionHooks = createConversationInstructionHooks(
     createRoleInstructionStore({ dir: DEFAULT_ROLES_DIR, knownIds: () => roleHooks.knownIds() }),
     () => roleHooks.currentId(),
     instructionRevision,
-    () => listSoulSkills({ names: soulSkillNamesForBody(currentBody()) })
+    () => listSoulSkills({ names: soulSkillNamesForBody(currentBody()) }),
+    () => {
+      const venue = venueSoulWords(server?.venueContext() ?? null);
+      return venue ? listVenueSoulSkills({ body: currentBody(), venue }) : null;
+    }
   );
   // One runtime authority for the current name. All identity seams (prompt, Whisper, scheduler, and public
   // state) read this closure at the appropriate lifecycle boundary. 配信の組み直し Domain A: 名前は今のロールが
@@ -2449,6 +2513,9 @@ async function main() {
       const sessionBrain = currentBrain;
       // このセッションのロールの体の有無（体なしは表情の教えを①に足さない・配信の組み直し Domain C）。
       const sessionHasBody = currentBody();
+      // このセッションの場の言葉（Discord モード Domain C・§venueSoulWords）。体験の教えと語の組を持つ場（配信でない）だけ
+      // 体験の道で教えを読む。配信・場の外は null で、今の道（①の固定の指示は一字も変わらない）。
+      const sessionVenue = venueSoulWords(server?.venueContext() ?? null);
       // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
       //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
       //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
@@ -2473,7 +2540,11 @@ async function main() {
         systemPrompt: buildRoleSessionSystemPrompt(
           sessionIdentity,
           conversationInstructionHooks.getProfile(roleHooks.currentId()).body,
-          loadSoulSkills({ names: soulSkillNamesForBody(sessionHasBody), onWarning: onBrainWarning })
+          sessionVenue
+            ? listVenueSoulSkills({ body: sessionHasBody, venue: sessionVenue, onWarning: onBrainWarning })
+                .map((skill) => skill.body)
+                .join("\n\n")
+            : loadSoulSkills({ names: soulSkillNamesForBody(sessionHasBody), onWarning: onBrainWarning })
         ),
         onWarning: onBrainWarning,
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
@@ -2791,7 +2862,10 @@ async function main() {
   const memoryRecorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
     getPlace: () => memoryPlaces.place(),
-    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place) => {
+    // Discord モード Domain C: 保存を頼んだ時点の場の語の組（定期・手動・「配信を終える」の最後の保存のどれも場が開いている
+    // 間に頼む・閉じる段の最後の保存も場を閉じる前）。場の外・配信は null = 配信の語の組。
+    getWording: () => server?.venueContext()?.wording ?? null,
+    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place, wording) => {
       if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
       await place.ready;
       return writeStreamRecord({
@@ -2799,6 +2873,7 @@ async function main() {
         entries,
         record: place.streamRecord.get(),
         dir: place.dir,
+        wording,
         onWarning: onBrainWarning
       });
     },
@@ -2864,7 +2939,7 @@ async function main() {
    * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
    * 同じ決め方）を cwd = 記憶のフォルダ・read-only・最後の答えだけで作る。警告は①②と同じ onBrainWarning へ。
    * 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（ほかのロールの記憶は読まない）。
-   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number }} job
+   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }} job
    */
   const recallRunner = async (job) => {
     const place = memoryPlaces.place();
@@ -2876,6 +2951,8 @@ async function main() {
       entries: job.entries,
       nowMs: job.nowMs,
       dir: place.dir,
+      // Discord モード Domain C: 思い出しの係が渡すその場の語の組（null = 配信の語の組）。
+      wording: job.wording ?? null,
       onWarning: onBrainWarning
     });
   };

@@ -43,6 +43,11 @@
  *  transcript のきっかけはその転写の seq、after-busy は判定する時点で最後の配信者の行の seq（無ければ null）。
  *  発火の要求には選択の確率と判定の遅延も載せる（結線層が発火のきっかけ = cause にする）。
  *
+ * ── 問いの組（Discord モード Domain C・discord-mode.md §8 の b）──────────────────────────────────
+ *  問いの組み立て（問いの文・選択肢・入力の整形・you の行のラベル・相槌の発火の内部指示）は、外から questions で渡せる
+ *  （体験の口の判定の組 judgeSet.speakNow。Discord の文面は Domain F）。渡さなければ今の配信の問い（STREAM_SPEAK_NOW_QUESTIONS）。
+ *  忙しい間の数え・あとから（after-busy）・並行の判定・相槌の歯止めは、どの問いの組でも同じ（この部品が持つ）。
+ *
  * 依存（judge・バッファ・busy・identity・口数・通知先・時計）は全部注入。純ロジックとして fake で
  * 全分岐をテストする。
  */
@@ -133,13 +138,14 @@ export function buildSpeakNowChoices(name) {
 
 /**
  * you の行のラベル（「配信者」。名前があれば「配信者(名前)」・Discord モード Domain A。配信では you に名前を入れないので
- * 「配信者」のまま）。
+ * 「配信者」のまま）。label は問いの組の hostLabel（Discord モード Domain C・既定は SPEAK_NOW_HOST_LABEL）。
  * @param {unknown} displayName
+ * @param {string} [label=SPEAK_NOW_HOST_LABEL]
  * @returns {string}
  */
-function hostLabel(displayName) {
+function hostLabel(displayName, label = SPEAK_NOW_HOST_LABEL) {
   const name = typeof displayName === "string" ? displayName.trim() : "";
-  return name.length > 0 ? `${SPEAK_NOW_HOST_LABEL}(${name})` : SPEAK_NOW_HOST_LABEL;
+  return name.length > 0 ? `${label}(${name})` : label;
 }
 
 /**
@@ -147,12 +153,13 @@ function hostLabel(displayName) {
  * you / soul だけを使う（viewer は入れない・合意 §1）。空文字の行は捨てる。時刻は appendedAtMs
  * （you と soul を同じ実時間軸で並べる・transcript-buffer の流儀）。appendedAtMs が数でない行は
  * 窓の判定をせずに入れる（防御的）。名前のある you の行は「配信者(名前)」。soul の行はロールの名前を持っていても
- * soulName（今の頭の名前）のまま。speakerId は読まない。
+ * soulName（今の頭の名前）のまま。speakerId は読まない。you の行のラベルは hostLabel（既定は SPEAK_NOW_HOST_LABEL「配信者」・
+ * 問いの組から差せる・Discord モード Domain C）。
  * @param {ReadonlyArray<{ speaker?: string; text?: string; displayName?: string; appendedAtMs?: number }>} entries
- * @param {{ nowMs: number; soulName: string; windowMs?: number }} p
+ * @param {{ nowMs: number; soulName: string; windowMs?: number; hostLabel?: string }} p
  * @returns {string}
  */
-export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_NOW_CONTEXT_MS }) {
+export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_NOW_CONTEXT_MS, hostLabel: label = SPEAK_NOW_HOST_LABEL }) {
   const from = nowMs - windowMs;
   /** @type {string[]} */
   const lines = [];
@@ -161,9 +168,65 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
     const text = typeof e.text === "string" ? e.text.trim() : "";
     if (text.length === 0) continue;
     if (typeof e.appendedAtMs === "number" && Number.isFinite(e.appendedAtMs) && e.appendedAtMs < from) continue;
-    lines.push(`${e.speaker === "soul" ? soulName : hostLabel(e.displayName)}: ${text}`);
+    lines.push(`${e.speaker === "soul" ? soulName : hostLabel(e.displayName, label)}: ${text}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * @typedef {ReadonlyArray<{ value: string; description: string }>} SpeakNowChoices
+ * @typedef {{
+ *   hostLabel: string;
+ *   buildInstructions: (p: { name: string; verbosity?: string | null }) => string;
+ *   buildChoices: (name: string) => SpeakNowChoices;
+ *   buildInput: (entries: ReadonlyArray<any>, p: { nowMs: number; soulName: string; hostLabel: string }) => string;
+ *   backchannelInstruction: string;
+ * }} SpeakNowQuestions
+ *   speak-now の問いの組（Discord モード Domain C・discord-mode.md §8 の b）。
+ *   - hostLabel: 判定の入力の you の行のラベル（配信は「配信者」）。buildInput に渡る。
+ *   - buildInstructions: 判定の問い（性格の 1 文 + 問い）。
+ *   - buildChoices: 選択肢（value は wait / backchannel / respond / initiate / look。発火するかは value で決まる）。
+ *   - buildInput: 転写 → 判定の入力（空文字なら判定しない）。
+ *   - backchannelInstruction: 相槌の発火で、その 1 回だけ ask の先頭に付ける内部指示（結線層が使う）。
+ */
+
+/** 配信の問いの組（今の問い・選択肢・入力の整形・ラベル・相槌の指示）。 */
+export const STREAM_SPEAK_NOW_QUESTIONS = Object.freeze({
+  hostLabel: SPEAK_NOW_HOST_LABEL,
+  buildInstructions: buildSpeakNowInstructions,
+  buildChoices: buildSpeakNowChoices,
+  buildInput: buildSpeakNowInput,
+  backchannelInstruction: SPEAK_NOW_BACKCHANNEL_INSTRUCTION
+});
+
+/** 問いの組の項目（並び）。 */
+export const SPEAK_NOW_QUESTION_KEYS = Object.freeze(["hostLabel", "buildInstructions", "buildChoices", "buildInput", "backchannelInstruction"]);
+
+/**
+ * 問いの組を使う形にする。null / undefined は配信の問いの組。渡された組で欠けている項目は配信の項目で埋める（hostLabel だけを
+ * 替えた組なら、配信の入力の整形がそのラベルで行を作る）。項目の型が違えば TypeError（黙って配信の問いに戻さない）。
+ * @param {unknown} [questions]
+ * @returns {Readonly<SpeakNowQuestions>}
+ */
+export function resolveSpeakNowQuestions(questions) {
+  if (questions == null || questions === STREAM_SPEAK_NOW_QUESTIONS) return STREAM_SPEAK_NOW_QUESTIONS;
+  if (typeof questions !== "object" || Array.isArray(questions)) {
+    throw new TypeError("speak-now questions must be an object.");
+  }
+  const q = /** @type {Record<string, unknown>} */ (questions);
+  const extra = Object.keys(q).filter((k) => !SPEAK_NOW_QUESTION_KEYS.includes(k));
+  if (extra.length > 0) throw new TypeError(`speak-now questions have unknown items: ${extra.join(", ")}.`);
+  for (const key of ["hostLabel", "backchannelInstruction"]) {
+    if (q[key] !== undefined && (typeof q[key] !== "string" || /** @type {string} */ (q[key]).trim().length === 0)) {
+      throw new TypeError(`speak-now questions "${key}" must be a non-empty string.`);
+    }
+  }
+  for (const key of ["buildInstructions", "buildChoices", "buildInput"]) {
+    if (q[key] !== undefined && typeof q[key] !== "function") {
+      throw new TypeError(`speak-now questions "${key}" must be a function.`);
+    }
+  }
+  return Object.freeze({ ...STREAM_SPEAK_NOW_QUESTIONS, ...Object.fromEntries(Object.entries(q).filter(([, v]) => v !== undefined)) });
 }
 
 /**
@@ -212,6 +275,8 @@ function lastHostSeq(entries) {
  *   間隔の数え始めと判定もこの時計で測る。
  * @param {number} [options.backchannelMinIntervalMs=SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS]  相槌どうしの最小間隔
  *   （前の相槌を喋り始めてから、次の相槌を喋らせない時間）。0 なら歯止めなし。負・非数は既定。
+ * @param {unknown} [options.questions]  問いの組（Discord モード Domain C・resolveSpeakNowQuestions）。渡さなければ今の配信の問い。
+ *   作るときに 1 回だけ読む（場を開くたびに部品を作り直すので、その場の体験の問いになる）。
  * @returns {{
  *   handleTranscript: (entry: { speaker?: string; seq?: number } | null) => void;
  *   notifyIdle: () => void;
@@ -233,6 +298,7 @@ export function createSpeakNowController(options) {
   const onJudgment = typeof options.onJudgment === "function" ? options.onJudgment : () => {};
   const onError = typeof options.onError === "function" ? options.onError : () => {};
   const nowImpl = options.nowImpl ?? Date.now;
+  const questions = resolveSpeakNowQuestions(options.questions);
   const backchannelMinIntervalMs =
     typeof options.backchannelMinIntervalMs === "number" &&
     Number.isFinite(options.backchannelMinIntervalMs) &&
@@ -267,13 +333,13 @@ export function createSpeakNowController(options) {
   const runJudge = (trigger, seqHint = null) => {
     const name = getName();
     const entries = getEntries() ?? [];
-    const input = buildSpeakNowInput(entries, { nowMs: nowImpl(), soulName: name });
-    if (input.length === 0) return; // 窓に会話が無い（判定する材料が無い）。
+    const input = questions.buildInput(entries, { nowMs: nowImpl(), soulName: name, hostLabel: questions.hostLabel });
+    if (typeof input !== "string" || input.length === 0) return; // 窓に会話が無い（判定する材料が無い）。
     const triggerSeq = typeof seqHint === "number" && Number.isFinite(seqHint) ? seqHint : lastHostSeq(entries);
     const request = {
       input,
-      instructions: buildSpeakNowInstructions({ name, verbosity: getVerbosity() }),
-      choices: buildSpeakNowChoices(name)
+      instructions: questions.buildInstructions({ name, verbosity: getVerbosity() }),
+      choices: questions.buildChoices(name)
     };
     /** @type {Promise<any>} */
     let p;

@@ -64,7 +64,7 @@ test("formatTranscriptForDigest: 名前のある viewer 行だけ `viewer(名前
   ];
   assert.equal(
     formatTranscriptForDigest(entries),
-    ["viewer(とある 視聴者A): 初見です！", "viewer: こんにちは", "viewer: こんばんは", "you: やあ"].join("\n")
+    ["viewer(とある 視聴者A): 初見です！", "viewer: こんにちは", "viewer: こんばんは", "you(名前は付かない): やあ"].join("\n")
   );
 });
 
