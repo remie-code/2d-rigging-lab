@@ -1,6 +1,6 @@
 # 配信の組み直しの wave 計画(Undine 2026-10-31)
 
-> Status: 実装中。ブランチ `ai-cohost/stream-restructure`。
+> Status: 人間ゲート合格(ユーザー 2026-10-31)。ブランチ `ai-cohost/stream-restructure`。ユーザーが新しい版で本番の配信をし、過去の記憶を思い出して問題なくふるまえた。引っ越し(12:49 に 1 回、写しあり、記憶の履歴 49 件が残る)・20 分ごとの保存と終わりの保存・Codex が `memories/chappy` で git の根を止めることは Undine が読むだけで確かめた。手順 3(runtime-player なしでは場が開かない)と 6(体なしのロール)はユーザーが試して問題なし。手順 7(新しいロール)と Ctrl+C で終える道は未確認のまま。
 > - Domain A 合格(1 ループ・止めた指摘 0・soul 1732/1732・soul-zone)、コミット `38084596`。報告 [../waves/stream-restructure/domain-a-report.md](../waves/stream-restructure/domain-a-report.md)。Undine の追認(質問 1〜4): 耳が動いている間の `/api/role` の 409 は Domain D までのつなぎとして可(D で「場が開いているか」に替える)。まっさらな起動で既定の 2 ロールを作るのは可。話者は null で `--speaker` を起動時の上書きに残すのは可。README の古い `/api/brain` の記述は全体の突き合わせのあとの仕上げで直す。
 > - Domain B 合格(1 ループ・止めた指摘 0・soul 1758/1758・soul-zone)。報告 [../waves/stream-restructure/domain-b-report.md](../waves/stream-restructure/domain-b-report.md)。Undine の追認: 記憶の引っ越しが失敗した起動では記憶を読み書きせず、配信は止めない形を可とする(前の形とロールのフォルダの取り違えを防ぐため)。ただし失敗はログだけでなく**上の帯の警告にも出す**(Domain E の持ち越しに足す)。ユーザーが別の扱いを望めば変える。ロールを戻したときに前の置き場を使うのは Domain D までのつなぎとして可。
 > - Domain C 合格(1 ループ・止めた指摘 0・soul 1782/1782・soul-zone・期待値を変えた既存テスト 0)。報告 [../waves/stream-restructure/domain-c-report.md](../waves/stream-restructure/domain-c-report.md)。Undine の追認: 体なしでも未知タグ・壊れタグの診断は出す(頭の書き損じの手がかりなので残す。黙らせるのは表情の適用の診断だけ)。体なしでタグだけの返事を `expression-only` で静かに畳むのは可。場の終わりの器の close は**体の有無に関わらず行う**(レビューの側。体ありの Fire のあと体なしへ替えたときの開きっぱなしを防ぐ)。
