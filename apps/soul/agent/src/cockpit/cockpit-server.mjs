@@ -881,6 +881,11 @@ export function createCockpitServer(options = {}) {
   let streamOpenedAtMs = null;
   /** 進行中の始める / 終える（Ctrl+C の終えるが待つ）。 @type {Promise<any> | null} */
   let streamTransition = null;
+  /**
+   * 場の世代（「配信を始める」で場を開きかけるたびに 1 つ進む）。後ろでつなぐ YouTube（始める 7）が、つながった時点で
+   * まだ同じ場が開いているかを確かめる材料（配信の組み直し 人間ゲート前の直し）。
+   */
+  let streamGeneration = 0;
   // S8「キルスイッチ」: キル状態の正本（サーバ側に一つ）。POST /api/kill が設定・snapshot() に露出・
   // fireOrchestrator 生成時（initialKilled）+ 遷移時（kill()/revive()）の両方へ伝播する（domain-b.md §）。
   let killed = false;
@@ -1752,23 +1757,71 @@ export function createCockpitServer(options = {}) {
    *    ことは覚えている）。
    *  - 起動時に設定から読み戻しただけの前回の source（chatSourceStatus）へは、つなぎにいかない。
    *  - つながらなくても（器官の生成や start が投げても）場は開く。器官は畳み、ログのタブに 1 行（chatDiagnostic）出す。
-   * @returns {Promise<"kept" | "connected" | "none" | "failed">}
+   *
+   * 配信の組み直し 人間ゲート前の直し（Undine・設計 §3 の 7「つながらなくても場は開く」）: **つなぐのは待たない**。場を
+   * open にしてから後ろでつなぐ（YouTube の応答待ちで「開きかけ」が長引き、その間「配信を終える」が断られるのを防ぐ）。
+   * 戻り値の Promise は reject しない（呼び出し側は await しない）。後ろでつないでいる間に:
+   *  - 場が閉じた・別の場になった（世代が替わった・open でない・サーバを閉じた）→ あとからつながった器官は畳んで残さない
+   *    （「配信を終える」の foldStream が先に畳んでいれば stop をもう一度呼ぶだけ・stop は冪等）。警告も出さない。
+   *  - Connect / Disconnect が押された（器官が差し替わった・畳まれた）→ 押した方を優先する。後ろのつなぎは黙って捨てる
+   *    （つながらなかったときも、押した方の器官を畳まない・警告を出さない）。
+   * @returns {Promise<"kept" | "connected" | "none" | "failed" | "stale">}
    */
-  async function startChatForStream() {
-    if (chatClient != null) return "kept";
-    if (chatSourceThisBoot == null || typeof chatClientFactory !== "function") return "none";
+  function startChatForStream() {
+    if (chatClient != null) return Promise.resolve("kept");
+    if (chatSourceThisBoot == null || typeof chatClientFactory !== "function") return Promise.resolve("none");
+    const generation = streamGeneration;
+    // connectChat は await の前（同期の部分）で器官を作って chatClient に入れる。後ろのつなぎが自分の器官かを見分けるため、
+    // 呼んだ直後の chatClient を取っておく（工場が同期で投げたときは null のまま・connectChat は reject を返す）。
+    /** @type {Promise<void>} */
+    let connecting;
     try {
-      await connectChat(chatSourceThisBoot);
-      return "connected";
+      connecting = connectChat(chatSourceThisBoot);
     } catch (error) {
-      foldChatClient();
-      broadcastChatDiagnostic({
-        kind: "internalError",
-        message: `配信を始めるときに YouTube につなげなかった（${errMessage(error)}・Connect でつなぎ直せる）`,
-        atMs: nowImpl()
-      });
-      return "failed";
+      connecting = Promise.reject(error);
     }
+    const mine = chatClient;
+    /** 後ろのつなぎが片付いた時点で、まだ同じ場が開いていて、器官が自分のままか。 */
+    const stillMine = () => !closed && streamPhase === "open" && streamGeneration === generation && chatClient === mine;
+    /** 自分の器官だけを畳む（差し替わっていれば、自分の器官の stop だけを念のため呼ぶ）。 */
+    const dropMine = () => {
+      if (mine != null && chatClient === mine) {
+        foldChatClient();
+        return;
+      }
+      if (mine != null) {
+        try {
+          mine.stop();
+        } catch {
+          // best-effort（既に畳まれていても冪等）。
+        }
+      }
+    };
+    return connecting.then(
+      () => {
+        if (!stillMine()) {
+          // 場が閉じた・別の場になった・押した操作で差し替わった: あとからつながったものを残さない。
+          dropMine();
+          return /** @type {const} */ ("stale");
+        }
+        broadcastState();
+        return /** @type {const} */ ("connected");
+      },
+      (error) => {
+        if (!stillMine()) {
+          dropMine();
+          return /** @type {const} */ ("stale");
+        }
+        foldChatClient();
+        broadcastChatDiagnostic({
+          kind: "internalError",
+          message: `配信を始めるときに YouTube につなげなかった（${errMessage(error)}・Connect でつなぎ直せる）`,
+          atMs: nowImpl()
+        });
+        broadcastState();
+        return /** @type {const} */ ("failed");
+      }
+    ).catch(() => /** @type {const} */ ("failed")); // 片付けの中の想定外の throw も未処理の reject にしない。
   }
 
   /**
@@ -1823,6 +1876,7 @@ export function createCockpitServer(options = {}) {
     if (streamPhase !== "closed") return { ok: false, status: 409, error: streamBusyMessage(), state: snapshot() };
     // 1. ロールを固める（ここから閉じるまで POST /api/role は断る）。
     streamPhase = "opening";
+    streamGeneration += 1;
     streamError = null;
     broadcastState();
     /** @param {string} reason @param {{ ears?: boolean; session?: boolean }} started */
@@ -1861,10 +1915,11 @@ export function createCockpitServer(options = {}) {
       // 6. 体があれば器（体なしは cockpit.mjs が何もしない）。つながらなければ場は開かない。
       const body = await runStreamHook("connectBody");
       if (!body.ok) return fail(body.reason, { ears: true, session: true });
-      // 7. YouTube（Connect 済みなら持ち込む・この起動で入れた URL ならつなぐ。つながらなくても場は開く）。
-      await startChatForStream();
       streamPhase = "open";
       streamOpenedAtMs = nowImpl();
+      // 7. YouTube（Connect 済みなら持ち込む・この起動で入れた URL ならつなぐ。つながらなくても場は開く）。
+      // 人間ゲート前の直し: 場を先に open にし、つなぐのは待たない（後ろでつなぐ・reject しない Promise を捨てる）。
+      void startChatForStream();
       broadcastState();
       return { ok: /** @type {const} */ (true), state: snapshot() };
     };
@@ -1903,7 +1958,8 @@ export function createCockpitServer(options = {}) {
       try {
         // 1. 会話の正本の写しを取る（畳むと消える）。
         transcript = pipeline ? pipeline.transcriptBuffer.all() : [];
-        // 2. YouTube・判定・発火の予定・目・耳・頭のセッション・器を畳む。
+        // 2. YouTube・判定・発火の予定・目・耳・頭のセッション・器を畳む。後ろでつないでいる YouTube（始める 7）は待たない:
+        //    器官はもう chatClient に入っているのでここで畳む。あとからつながっても場の世代で見分けて残さない（startChatForStream）。
         await foldStream({ chat: true, ears: true, session: true });
         // 3. 記憶の最後の保存をして待つ（この間 stream.phase は "closing" = 画面の「記録中」）。
         finalSaveRequested = true;
@@ -2543,7 +2599,8 @@ export function createCockpitServer(options = {}) {
       }
       const body = await readJsonBody(req);
       // 配信の組み直し 仕上げ（全体の突き合わせの持ち越し 2）: 場の開きかけ・閉じかけの間は Connect を断る（閉じかけの
-      // 間につないだ器官が場の外に残り、次の場へ持ち込まれるのを防ぐ・開きかけは始める 7 のつなぎと競らない）。何も変えない。
+      // 間につないだ器官が場の外に残り、次の場へ持ち込まれるのを防ぐ）。何も変えない。開いている間に押されたら、後ろでつないでいる
+      // 始める 7 のつなぎより押した方を優先する（後ろのつなぎは黙って捨てる・startChatForStream）。
       // 閉じている間と開いている間は今のまま通す（YouTube の欄は場が開いている間も触れる・設計 §3）。
       if (streamPhase === "opening" || streamPhase === "closing") {
         sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
@@ -3183,6 +3240,11 @@ export function createCockpitServer(options = {}) {
    *   `{ fired:false, reason:"error" }`）。思い出しの係が「忙しかったか・受理されたか」を見る。
    */
   function requestSelfFire(kind, fireOptions, extra = {}) {
+    // 配信の組み直し 人間ゲート前の直し（Undine）: 場が開いていない間（開きかけ・閉じかけ・閉じている）の自発の発火は捨てる
+    // （手動の Fire の refuseManualFireOutsideStream と揃える）。自発の口（発火の予定・speak-now・コメント反応・思い出しの
+    // 係）はみなここを通るので、ここ 1 か所で捨てる。頭へ流さず、フィードにも出さない（開きかけの間の取りこぼしは行にしない）。
+    // 思い出しの係には受理しなかった結果を返す（busy ではないので届けは「見送り」になる）。
+    if (streamPhase !== "open") return Promise.resolve({ fired: false, reason: "stream-not-open" });
     try {
       return trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
         .then((result) => {

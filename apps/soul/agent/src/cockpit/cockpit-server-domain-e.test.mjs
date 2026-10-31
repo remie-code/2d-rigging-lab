@@ -618,3 +618,328 @@ test("配信を始める: 耳を起こしたあとの想定外の例外でも、
     await server.close();
   }
 });
+
+// ── 人間ゲート前の直し: YouTube は場を開いてから後ろでつなぐ・場が開いていない間の自発の発火は捨てる ──────────────
+//  設計 stream-restructure.md §3 の 7「つながらなくても場は開く」。始めるは YouTube の start() を待たない。
+
+/** @param {number} [ms] */
+const tick = (ms = 10) => new Promise((r) => setTimeout(r, ms));
+
+/** @param {() => boolean} pred @param {number} [timeoutMs] */
+async function waitUntil(pred, timeoutMs = 2000) {
+  const until = Date.now() + timeoutMs;
+  while (!pred()) {
+    if (Date.now() > until) throw new Error("waitUntil timed out");
+    await tick(5);
+  }
+}
+
+/**
+ * 偽のチャット器官（start() は手で片付ける）。hang(source) が true の source は start が返ってこない（resolve / reject を
+ * テストが呼ぶまで）。それ以外はすぐ片付く（Connect の HTTP を待たせないため）。
+ * @param {{ hang?: (source: string) => boolean }} [opts]
+ */
+function makeDeferredChat(opts = {}) {
+  const hang = opts.hang ?? (() => true);
+  /** @type {any[]} */
+  const clients = [];
+  const factory = (/** @type {{ source: string }} */ { source }) => {
+    /** @type {(v?: unknown) => void} */
+    let resolve = () => {};
+    /** @type {(e: unknown) => void} */
+    let reject = () => {};
+    const started = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    const client = {
+      source,
+      startCalls: 0,
+      stopped: 0,
+      resolve,
+      reject,
+      start() {
+        client.startCalls += 1;
+        if (!hang(source)) return Promise.resolve();
+        return started;
+      },
+      stop() {
+        client.stopped += 1;
+      },
+      getState: () => (client.stopped > 0 ? "dead" : "connecting"),
+      getSource: () => source,
+      onMessage: () => () => {},
+      onStatus: () => () => {},
+      onDiagnostic: () => () => {}
+    };
+    clients.push(client);
+    return client;
+  };
+  return { factory, clients };
+}
+
+/** SSE を読む（event と data を貯める）。 @param {string} url */
+function openEvents(url) {
+  /** @type {Array<{ event: string; data: any }>} */
+  const events = [];
+  const ac = new AbortController();
+  (async () => {
+    try {
+      const r = await fetch(`${url}/api/events`, { signal: ac.signal });
+      const reader = /** @type {any} */ (r.body).getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          let event = "message";
+          let data = "";
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          try {
+            events.push({ event, data: JSON.parse(data) });
+          } catch {
+            events.push({ event, data });
+          }
+        }
+      }
+    } catch {
+      // 閉じた（abort・server close）。
+    }
+  })();
+  return { events, close: () => ac.abort() };
+}
+
+/** 未処理の reject を数える（テストの間だけ）。 */
+function watchUnhandled() {
+  /** @type {unknown[]} */
+  const seen = [];
+  const onUnhandled = (/** @type {unknown} */ reason) => seen.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  return { seen, stop: () => process.off("unhandledRejection", onUnhandled) };
+}
+
+test("配信を始める: YouTube の start() が返ってこなくても場はすぐ開き、配信を終えられる（断られない）。あとから start が片付いても器官は畳んで残さない", async () => {
+  const unhandled = watchUnhandled();
+  const chat = makeDeferredChat();
+  const { server, url } = await startServer({ chatClientFactory: chat.factory });
+  try {
+    await send(url, "/api/chat/source", { source: "https://youtube.example/today" });
+    const started = await send(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(started.status, 200, "YouTube の応答を待たずに始めるが返る");
+    assert.equal(started.json.stream.phase, "open", "場は先に開く");
+    assert.equal(chat.clients.length, 1);
+    assert.equal(chat.clients[0].startCalls, 1, "つなぎには行っている（後ろで）");
+    const stopped = await send(url, "/api/stream/stop");
+    assert.equal(stopped.status, 200, "後ろでつないでいる間も「配信を終える」は断られない");
+    assert.equal(stopped.json.stream.phase, "closed");
+    assert.equal(stopped.json.chat.connected, false, "終えると後ろでつないでいた器官も畳む");
+    assert.equal(chat.clients[0].stopped >= 1, true);
+    // あとから start が成功しても、閉じた場の器官は残さない。
+    chat.clients[0].resolve();
+    await tick();
+    const s = await state(url);
+    assert.equal(s.chat.connected, false, "あとからつながっても状態に残らない");
+    assert.equal(s.stream.phase, "closed");
+    assert.equal(chat.clients[0].stopped >= 1, true, "stop が呼ばれている");
+    // あとから失敗しても警告は出さない・未処理の reject を出さない（閉じた場のつなぎ）。
+    await send(url, "/api/stream/start", { device: "Mic" });
+    await send(url, "/api/stream/stop");
+    assert.equal(chat.clients.length, 2);
+    chat.clients[1].reject(new Error("timeout (fake)"));
+    await tick();
+    assert.equal((await state(url)).chat.connected, false);
+    assert.deepEqual(unhandled.seen, [], "未処理の reject を出さない");
+  } finally {
+    unhandled.stop();
+    await server.close();
+  }
+});
+
+test("配信を始める: 前の場の後ろのつなぎが、次の場が開いてから片付いても残さない（次の場のつなぎはそのまま）", async () => {
+  const chat = makeDeferredChat();
+  const { server, url } = await startServer({ chatClientFactory: chat.factory });
+  try {
+    await send(url, "/api/chat/source", { source: "https://youtube.example/today" });
+    await send(url, "/api/stream/start", { device: "Mic" });
+    await send(url, "/api/stream/stop");
+    const second = await send(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(second.json.stream.phase, "open");
+    assert.equal(chat.clients.length, 2, "次の場は新しい器官でつなぎにいく");
+    // 前の場のつなぎがあとから成功する。
+    chat.clients[0].resolve();
+    await tick();
+    assert.equal(chat.clients[0].stopped >= 1, true, "前の場の器官は畳む");
+    assert.equal(chat.clients[1].stopped, 0, "次の場の器官は畳まない");
+    let s = await state(url);
+    assert.equal(s.chat.connected, true, "次の場の器官は残る");
+    // 次の場のつなぎが成功する → そのまま。
+    chat.clients[1].resolve();
+    await tick();
+    s = await state(url);
+    assert.equal(s.chat.connected, true);
+    assert.equal(chat.clients[1].stopped, 0);
+    assert.equal(s.stream.phase, "open");
+  } finally {
+    await server.close();
+  }
+});
+
+test("配信を始める: 後ろのつなぎが失敗したら警告（ログの行）を出し、場は開いたまま・器官は畳む・未処理の reject を出さない", async () => {
+  const unhandled = watchUnhandled();
+  const chat = makeDeferredChat();
+  const { server, url } = await startServer({ chatClientFactory: chat.factory });
+  const sse = openEvents(url);
+  try {
+    await waitUntil(() => sse.events.some((e) => e.event === "state"));
+    await send(url, "/api/chat/source", { source: "https://youtube.example/today" });
+    const started = await send(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(started.json.stream.phase, "open");
+    chat.clients[0].reject(new Error("timeout (fake)"));
+    await waitUntil(() => sse.events.some((e) => e.event === "chatDiagnostic"));
+    const diag = /** @type {any} */ (sse.events.find((e) => e.event === "chatDiagnostic"));
+    assert.equal(diag.data.kind, "internalError");
+    assert.match(diag.data.message, /配信を始めるときに YouTube につなげなかった（timeout \(fake\)・Connect でつなぎ直せる）/);
+    const s = await state(url);
+    assert.equal(s.stream.phase, "open", "つながらなくても場は開いたまま");
+    assert.equal(s.stream.error, null);
+    assert.equal(s.chat.connected, false, "つながらなかった器官は畳む");
+    assert.equal(chat.clients[0].stopped, 1);
+    assert.equal(s.chat.enteredThisBoot, true, "入れたことは覚えている");
+    assert.deepEqual(unhandled.seen, []);
+  } finally {
+    unhandled.stop();
+    sse.close();
+    await server.close();
+  }
+});
+
+test("配信を始める: 後ろのつなぎの間に Connect / Disconnect を押したら押した方を優先する（後ろのつなぎは黙って捨てる・押した器官を畳まない）", async () => {
+  const unhandled = watchUnhandled();
+  const chat = makeDeferredChat({ hang: (source) => source.includes("slow") });
+  const { server, url } = await startServer({ chatClientFactory: chat.factory });
+  const sse = openEvents(url);
+  try {
+    await waitUntil(() => sse.events.some((e) => e.event === "state"));
+    await send(url, "/api/chat/source", { source: "https://youtube.example/slow" });
+    await send(url, "/api/stream/start", { device: "Mic" });
+    // 後ろでつないでいる間に別の URL へ Connect する。
+    const connected = await send(url, "/api/chat/connect", { source: "https://youtube.example/fast" });
+    assert.equal(connected.status, 200);
+    assert.equal(chat.clients.length, 2);
+    assert.equal(chat.clients[0].stopped, 1, "後ろでつないでいた器官は Connect が畳む");
+    // 後ろのつなぎがあとから失敗しても、押した方の器官は畳まない・警告も出さない。
+    chat.clients[0].reject(new Error("timeout (fake)"));
+    await tick();
+    let s = await state(url);
+    assert.equal(s.chat.connected, true, "Connect した器官は残る");
+    assert.equal(chat.clients[1].stopped, 0);
+    assert.equal(sse.events.some((e) => e.event === "chatDiagnostic"), false, "押した方を優先したので警告は出さない");
+    await send(url, "/api/stream/stop");
+    // Disconnect: 後ろでつないでいる間に切ったら、あとからつながっても残さない。
+    await send(url, "/api/chat/source", { source: "https://youtube.example/slow-again" });
+    await send(url, "/api/stream/start", { device: "Mic" });
+    assert.equal(chat.clients.length, 3);
+    const disconnected = await send(url, "/api/chat/disconnect");
+    assert.equal(disconnected.json.chat.connected, false);
+    chat.clients[2].resolve();
+    await tick();
+    s = await state(url);
+    assert.equal(s.chat.connected, false, "切ったものはあとからつながっても残さない");
+    assert.equal(chat.clients[2].stopped >= 1, true);
+    assert.equal(s.stream.phase, "open");
+    assert.deepEqual(unhandled.seen, []);
+  } finally {
+    unhandled.stop();
+    sse.close();
+    await server.close();
+  }
+});
+
+/** 発火の予定の偽物（onFireRequest を捕まえるだけ・他は何もしない）。 */
+function makeSchedulerCapture() {
+  /** @type {any} */
+  const record = { onFireRequest: null };
+  const factory = (/** @type {any} */ opts) => {
+    record.onFireRequest = opts.onFireRequest;
+    return {
+      handleVadEvent() {},
+      handleTranscript() {},
+      handleChatMessage() {},
+      setEnabled() {},
+      isEnabled: () => true,
+      setVerbosity() {},
+      getVerbosity: () => "normal",
+      silenceBudgetRemaining: () => 0,
+      commentBudgetRemaining: () => 0,
+      dispose() {}
+    };
+  };
+  return { factory, record };
+}
+
+test("自発の発火: 場が開いていない間（閉じている・開きかけ・閉じかけ）は捨てる（頭に流さない）。開いている間だけ通す（手動の Fire と揃える）", async () => {
+  const cap = makeSchedulerCapture();
+  /** @type {(v?: unknown) => void} */
+  let releaseSession = () => {};
+  /** @type {(v?: unknown) => void} */
+  let releaseSave = () => {};
+  const { server, url, orchestrator } = await startServer({
+    fireSchedulerFactory: /** @type {any} */ (cap.factory),
+    streamHooks: {
+      openSession: () =>
+        new Promise((r) => {
+          releaseSession = r;
+        }),
+      saveFinal: () =>
+        new Promise((r) => {
+          releaseSave = r;
+        })
+    }
+  });
+  const sse = openEvents(url);
+  try {
+    await waitUntil(() => sse.events.some((e) => e.event === "state"));
+    // 閉じている間。
+    cap.record.onFireRequest({ kind: "interjection" });
+    await tick(20);
+    assert.equal(orchestrator.record.fires.length, 0, "閉じている間の自発は捨てる");
+    // 開きかけ（耳は起きている・頭のセッションの準備で止めている）。
+    const starting = send(url, "/api/stream/start", { device: "Mic" });
+    await waitUntil(() => server.streamStatus().phase === "opening" && server.earsStatus() === "listening");
+    cap.record.onFireRequest({ kind: "interjection" });
+    cap.record.onFireRequest({ kind: "silence" });
+    await tick(20);
+    assert.equal(orchestrator.record.fires.length, 0, "開きかけの間の自発は頭に流れない");
+    releaseSession();
+    const started = await starting;
+    assert.equal(started.json.stream.phase, "open");
+    // 開いている間は通す。
+    cap.record.onFireRequest({ kind: "interjection" });
+    await waitUntil(() => orchestrator.record.fires.length === 1);
+    await waitUntil(() => sse.events.some((e) => e.event === "selfFire" && e.data.kind === "interjection"));
+    // 閉じかけ（記憶の最後の保存で止めている）。
+    const stopping = send(url, "/api/stream/stop");
+    await waitUntil(() => server.streamStatus().phase === "closing");
+    cap.record.onFireRequest({ kind: "interjection" });
+    await tick(20);
+    assert.equal(orchestrator.record.fires.length, 1, "閉じかけの間の自発は捨てる");
+    releaseSave();
+    assert.equal((await stopping).json.stream.phase, "closed");
+    assert.equal(
+      sse.events.filter((e) => e.event === "selfFire").length,
+      1,
+      "捨てた自発はフィードの行にもしない（開いている間の 1 回だけ）"
+    );
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});

@@ -3673,10 +3673,13 @@ test("cockpit onFireRequest: kind:\"interjection\" は silence でない→ fire
   const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "そうだね" } });
   const server = createCockpitServer({
     fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
-    fireSchedulerFactory: /** @type {any} */ (cap.factory)
+    fireSchedulerFactory: /** @type {any} */ (cap.factory),
+    // 人間ゲート前の直し: 自発の発火は場が開いている間だけ（偽の耳で場を開く）。
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory)
   });
   try {
-    await server.listen(0);
+    const url = await server.listen(0);
+    await openStreamForFire(url);
     assert.equal(typeof cap.record.onFireRequest, "function");
     cap.record.onFireRequest({ kind: "interjection" });
     // fire() は非同期に呼ばれる（onFireRequest 内で Promise.resolve().then(...) するため一 tick 待つ）。
@@ -3693,12 +3696,15 @@ test("cockpit onFireRequest: kind:\"interjection\" は selfFire SSE に素通し
   const fakeOrch = makeFakeOrchestrator({ fireResult: { fired: true, replyText: "そうだね" } });
   const server = createCockpitServer({
     fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
-    fireSchedulerFactory: /** @type {any} */ (cap.factory)
+    fireSchedulerFactory: /** @type {any} */ (cap.factory),
+    // 人間ゲート前の直し: 自発の発火は場が開いている間だけ（偽の耳で場を開く）。
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory)
   });
   const url = await server.listen(0);
   const client = openSseClient(`${url}/api/events`);
   try {
     await client.waitFor((e) => e.event === "state");
+    await openStreamForFire(url);
     cap.record.onFireRequest({ kind: "interjection" });
     const evt = await client.waitFor((e) => e.event === "selfFire" && e.data.kind === "interjection");
     assert.equal(evt.data.kind, "interjection");
@@ -5845,11 +5851,14 @@ async function startRecallServer(over = {}) {
     nowImpl: () => 1000,
     // Wave 3 仕上げ: 自発の発火が OFF だと結果はしゃべらせず黙って渡すので、発火の経路を見るテストは ON で始める。
     selfFireInitialEnabled: true,
+    // 人間ゲート前の直し: 自発の発火（思い出しの①も）は場が開いている間だけ。発火を見るので偽の耳で場を開いておく。
+    pipelineFactory: /** @type {any} */ (makeFakePipeline().factory),
     ...(over.options ?? {})
   });
   const url = await server.listen(0);
   const sse = openSseClient(`${url}/api/events`);
   await sse.waitFor((e) => e.event === "state");
+  await openStreamForFire(url);
   return { server, url, sse, orch, runs, terminal };
 }
 

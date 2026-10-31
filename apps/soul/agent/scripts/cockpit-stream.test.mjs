@@ -682,10 +682,14 @@ test("配信を始める: この起動で入れた YouTube の URL につなが�
     assert.equal(started.status, 200, "YouTube につながらなくても始めるは通る");
     assert.equal(started.json.stream.phase, "open");
     assert.equal(started.json.stream.error, null);
-    assert.equal(started.json.chat.connected, false, "つながらなかった器官は畳む（つながっていない器官を残さない）");
+    // 人間ゲート前の直し: YouTube は場を開いてから後ろでつなぐ（始めるは待たない）。片付くのを待ってから見る。
+    for (let i = 0; i < 100 && chat.record.stopped < 1; i += 1) await new Promise((r) => setTimeout(r, 5));
+    const after = await state(url);
+    assert.equal(after.stream.phase, "open", "つながらなくても場は開いたまま");
+    assert.equal(after.chat.connected, false, "つながらなかった器官は畳む（つながっていない器官を残さない）");
     assert.equal(chat.record.created, 1);
     assert.equal(chat.record.stopped, 1);
-    assert.equal(started.json.chat.enteredThisBoot, true, "入れたことは覚えている（次の場でまたつなぎにいく）");
+    assert.equal(after.chat.enteredThisBoot, true, "入れたことは覚えている（次の場でまたつなぎにいく）");
   } finally {
     await server.close();
   }
