@@ -319,7 +319,12 @@ test("Domain I 抜けて入り直す: 場の段を通らない（頭のセッシ
     assert.equal(left.json.ears, "stopped", "耳は聞いていない");
     assert.equal(left.json.stt.engine, "elevenlabs", "文字起こしの方式は残る（配信の方式に見えない）");
     assert.equal(left.json.uptimeMs, 0);
-    assert.deepEqual(left.json.transcripts.map((/** @type {any} */ e) => e.text), ["こんにちは"], "正本は続く");
+    // Discord モード Domain J（§13.5）: 入った・抜けたの出来事の行も正本に並ぶ。
+    assert.deepEqual(
+      left.json.transcripts.map((/** @type {any} */ e) => e.text),
+      [`チャッピーが VC「${VC_1}」に入った`, "こんにちは", `チャッピーが VC「${VC_1}」から抜けた`],
+      "正本は続く"
+    );
     assert.equal(h.ears.ears[0].disposed, true, "人の耳は drop");
     h.advance(60_000);
     const joined = await post(h.url, "/api/discord/vc", { action: "join", channelId: CHANNEL });
@@ -335,7 +340,14 @@ test("Domain I 抜けて入り直す: 場の段を通らない（頭のセッシ
     await waitUntil(() => h.orchestrator.record.fires.length === 1);
     assert.equal(h.judgeRequests.length, 2, "判定は作り直さず続く");
     assert.equal(h.orchestrator.record.fires[0].cause.type, "speak-now");
-    assert.deepEqual(h.server.getTranscript().map((/** @type {any} */ e) => e.text), ["こんにちは", "続きだけど"]);
+    // Domain J: 出来事の行（入った・抜けた・入った）が並ぶ。判定は人の 2 行でだけ走った（上の 2 回）。
+    assert.deepEqual(h.server.getTranscript().map((/** @type {any} */ e) => e.text), [
+      `チャッピーが VC「${VC_1}」に入った`,
+      "こんにちは",
+      `チャッピーが VC「${VC_1}」から抜けた`,
+      `チャッピーが VC「${VC_1}」に入った`,
+      "続きだけど"
+    ]);
     assert.deepEqual(
       h.events,
       ["renewRecords", "eyes.start", "openSession"],
@@ -535,7 +547,9 @@ for (const where of /** @type {const} */ (["outside", "moved"])) {
       assert.equal(r.json.stream.phase, "closed");
       assert.equal(r.json.stream.connection, null);
       assert.equal(r.json.stream.vcName, null);
-      assert.ok(h.events.includes("saveFinal:今日はここまで"), JSON.stringify(h.events));
+      // Discord モード Domain J（§13.5）: 記憶の最後の保存の材料には出来事の行（入った・抜けた / 移った）も載る。
+      const lastEvent = where === "outside" ? `チャッピーが VC「${VC_1}」から抜けた` : `チャッピーが VC「${VC_1}」から「${VC_2}」に移った`;
+      assert.ok(h.events.includes(`saveFinal:チャッピーが VC「${VC_1}」に入った|今日はここまで|${lastEvent}`), JSON.stringify(h.events));
       assert.ok(h.events.includes("closeSession"));
       assert.equal(h.fake.record.destroyedClients, 1, "ログアウトする");
       assert.ok(h.fake.record.connections.every((c) => c.state.status === "destroyed"));

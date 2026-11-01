@@ -38,13 +38,15 @@ import { resolveVenueWording } from "./venue-wording.mjs";
 export const WRITER_ROLE = "書き出し役";
 
 /**
- * 話者ラベルを返す（未知話者は "you" に寄せる・防御的・fire-injection.mjs labelOf の写経）。
+ * 話者ラベルを返す（未知話者は "you" に寄せる・防御的・fire-injection.mjs labelOf の写経）。event は出来事の行（`event: 本文`・
+ * Discord モード Domain J。配信には出来事の行が無いので配信の文字列は変わらない）。
  * @param {unknown} speaker
- * @returns {"you" | "soul" | "viewer"}
+ * @returns {"you" | "soul" | "viewer" | "event"}
  */
 function labelOf(speaker) {
   if (speaker === "soul") return "soul";
   if (speaker === "viewer") return "viewer";
+  if (speaker === "event") return "event";
   return "you";
 }
 

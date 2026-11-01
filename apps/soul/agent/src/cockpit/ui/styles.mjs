@@ -245,6 +245,9 @@ html, body { overflow: hidden; }
 /* 相槌の間隔で流れた判定の薄い 1 行 */
 .convo-row.note { min-height: 30px; color: var(--ghost); font-size: 12px; }
 .convo-row.note > .text { color: var(--ghost); }
+/* 出来事の行（入った・抜けた・人の出入り・Discord モード Domain J）: 時刻つきの控えめな 1 行 */
+.convo-row.event { min-height: 30px; color: var(--ghost); font-size: 12px; }
+.convo-row.event > .text { color: var(--ghost); }
 /* 最新の返事の行と、そのきっかけの配信者の行（同じ色で淡くつなぐ） */
 .convo-row.latest { background: var(--latest-bg); }
 .convo-row.linked { background: var(--linked-bg); }
@@ -520,6 +523,8 @@ html, body { overflow: hidden; }
 .row.speaker-soul .who { color: var(--speaker-soul); }
 .row.speaker-viewer .who { color: var(--speaker-viewer); }
 .row.speaker-viewer .text { color: var(--viewer-text); }
+.row.speaker-event .who { color: var(--ghost); }
+.row.speaker-event .text { color: var(--ghost); }
 /* speaking 行（VAD 連動・出現消滅） */
 .row.speaking .text { color: var(--speaking); font-style: italic; }
 /* ゴースト行（§7: グレー斜体） */

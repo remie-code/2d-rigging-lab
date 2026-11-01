@@ -111,6 +111,8 @@ export function buildCommentReactInput(entries, comment, { nowMs, soulName, wind
     if (text.length === 0) continue;
     if (typeof e.appendedAtMs === "number" && Number.isFinite(e.appendedAtMs) && e.appendedAtMs < from) continue;
     const speaker = e.speaker ?? "you";
+    // 出来事の行（Discord モード Domain J）は判定に渡さない（配信には出来事の行が無い）。
+    if (speaker === "event") continue;
     if (speaker === "viewer") {
       // それまでの通ったコメントだけ（自分自身・後のコメントは入れない）。
       if (ownSeq != null && typeof e.seq === "number" && e.seq >= ownSeq) continue;

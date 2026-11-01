@@ -412,13 +412,17 @@ test("人ごとの購読と耳: 2 人で 2 本・行は you + 名前 + id で正
     h.ears.hear(earB, "やあ", 80);
     const lines = h.server.getTranscript().map((/** @type {any} */ e) => [e.speaker, e.displayName, e.speakerId, e.text]);
     assert.deepEqual(lines, [
+      // Discord モード Domain J（§13.5）: 入ったときの出来事の行（話者の 3 種類とは別・名前と id の欄は持たない）。
+      ["event", undefined, undefined, "チャッピーが VC「一般」に入った"],
       ["you", NAME_A, USER_A, "こんにちは"],
       ["you", NAME_B, USER_B, "やあ"]
     ]);
     // 放送: 名前は行に載る・id は載らない。遅延のログは方式と数字だけ。
-    await waitUntil(() => sse.events.filter((e) => e.event === "transcript").length >= 2);
+    await waitUntil(() => sse.events.filter((e) => e.event === "transcript").length >= 3);
     const you = sse.events.filter((e) => e.event === "transcript").map((e) => [e.data.displayName, e.data.text, e.data.speakerId]);
     assert.deepEqual(you, [
+      // Discord モード Domain J（§13.5）: 入ったときの出来事の行も放送する（名前の欄は null・id は載らない）。
+      [null, "チャッピーが VC「一般」に入った", undefined],
       [NAME_A, "こんにちは", undefined],
       [NAME_B, "やあ", undefined]
     ]);
@@ -463,7 +467,12 @@ test("人が抜けたら耳を束から外す（正本は続く）・ほかの�
     h.fake.voiceState({ userId: USER_B, guildId: GUILD, from: CHANNEL, to: null });
     await waitUntil(() => earB.disposed);
     assert.equal(earA.disposed, false);
-    assert.deepEqual(h.server.getTranscript().map((/** @type {any} */ e) => e.text), ["またね"], "正本は続く");
+    // Discord モード Domain J（§13.5）: 入った・人が出ていったの出来事の行が正本に並ぶ（ほかのサーバーの出来事は行にしない）。
+    assert.deepEqual(
+      h.server.getTranscript().map((/** @type {any} */ e) => e.text),
+      ["チャッピーが VC「一般」に入った", "またね", `${NAME_B}が出ていった`],
+      "正本は続く"
+    );
     // 抜けた人が戻って話せば、新しい耳を作る。
     h.fake.voiceState({ userId: USER_B, guildId: GUILD, from: null, to: CHANNEL });
     await tick(10); // 抜けたときに閉じた購読が片付くのを待つ。
@@ -537,7 +546,8 @@ test("閉じる: VC を抜けてログアウト・耳を畳む・snapshot は閉
     h.events.length = 0;
     const r = await post(h.url, "/api/stream/stop");
     assert.equal(r.status, 200);
-    assert.deepEqual(h.events, ["eyes.stop", "chappy.closeSession", "chappy.closeBody", "chappy.saveFinal:0"]);
+    // Discord モード Domain J（§13.5）: 記憶の最後の保存には入ったときの出来事の行 1 行が載る。
+    assert.deepEqual(h.events, ["eyes.stop", "chappy.closeSession", "chappy.closeBody", "chappy.saveFinal:1"]);
     assert.equal(h.ears.ears[0].disposed, true);
     const connection = /** @type {any} */ (h.fake.connection());
     assert.equal(connection.destroyCount, 1, "VC を抜ける");
@@ -866,6 +876,14 @@ test("Discord の場の間は準備の書き換えと一覧の読み込みを断
 
 // ── 6. 本物の耳と本物の opusscript ─────────────────────────────────────────
 
+/**
+ * 耳が積んだ行だけ（Discord モード Domain J の出来事の行〔入った など〕を除く）。本物の耳の区切りを確かめるテスト用。
+ * @param {any} h
+ */
+function heardLines(h) {
+  return h.server.getTranscript().filter((/** @type {any} */ e) => e.speaker !== "event");
+}
+
 /** 本物の opusscript で 440Hz の音を 20ms ずつ Opus にする（48kHz・ステレオ）。 @param {any} OpusScript @param {number} ms */
 function encodeTone(OpusScript, ms) {
   const encoder = new OpusScript(48000, 2, OpusScript.Application.AUDIO);
@@ -932,8 +950,8 @@ test("本物の耳と本物の opusscript: 1 秒の声 → 購読の終わりの
     await tick(100);
     assert.equal(parts.calls.length, 0, "黙ったと分かるまでは区切らない");
     h.fake.endSpeech(USER_A);
-    await waitUntil(() => h.server.getTranscript().length === 1, 5000);
-    const [line] = h.server.getTranscript();
+    await waitUntil(() => heardLines(h).length === 1, 5000);
+    const [line] = heardLines(h);
     assert.deepEqual([line.speaker, line.displayName, line.speakerId, line.text], ["you", NAME_A, USER_A, "聞こえた"]);
     // 短すぎる発話（200ms）は捨てる（区切りの minSpeechMs = 400ms）。
     h.fake.speak(USER_A);
@@ -941,7 +959,7 @@ test("本物の耳と本物の opusscript: 1 秒の声 → 購読の終わりの
     h.fake.endSpeech(USER_A);
     await tick(400);
     assert.equal(parts.calls.length, 1);
-    assert.equal(h.server.getTranscript().length, 1);
+    assert.equal(heardLines(h).length, 1);
     const st = (await get(h.url, "/api/state")).json;
     assert.equal(st.health.whisper.status, "up");
     await post(h.url, "/api/stream/stop");
@@ -968,7 +986,7 @@ test("本物の耳: 購読の終わりに無音を足さないと区切りが閉
     h.fake.endSpeech(USER_A);
     await tick(400);
     assert.equal(parts.calls.length, 0);
-    assert.equal(h.server.getTranscript().length, 0);
+    assert.equal(heardLines(h).length, 0);
   } finally {
     await h.cleanup();
   }

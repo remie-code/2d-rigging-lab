@@ -62,6 +62,7 @@ export const STREAM_WORDING = Object.freeze({
  * （src/discord/discord-experience.mjs）が wording に置く。最後の言い回しは人間ゲート 2 で見る。
  *  - keeper: 記憶の置き場は配信と通話で同じ（ロールの置き場）なので、「配信の」を外した呼び名。
  *  - speakers: Discord ではコメントが無いので viewer の説明を外す。you の行は `you(名前): 本文`（名前つき・②④の整形）。
+ *    出来事の行 `event: 本文`（入った・抜けた・人の出入り・Discord モード Domain J・§13.5）の説明を足す。
  *  - records: ④・`skills/recall.md`・①に渡す結果の文面。置き場には配信と通話の両方の記録がある前提の語。
  *  - conventionsNote: ②④の頼みの手順「1. `_conventions.md` を読む。」の直後に区切りなしでつながる 1 文（日本語の文の並びなので
  *    空白も改行も入れない）。`_conventions.md` と種のファイルは変えず、決まりの中の「配信」を通話にも当てはめて読ませる（scope §23）。
@@ -70,7 +71,7 @@ export const CALL_WORDING = Object.freeze({
   keeper: "相方の AI の記憶の置き場",
   venue: "通話",
   transcriptKind: "Discord の通話の文字起こし",
-  speakers: "you = 通話で話す人（括弧の中はその人の名前）、soul = 相方の AI 自身。",
+  speakers: "you = 通話で話す人（括弧の中はその人の名前）、soul = 相方の AI 自身、event = 通話の中の出来事（入った・抜けたなど）。",
   records: "過去の配信や通話の記録",
   partner: "通話の相手",
   conventionsNote: "決まりの中の「配信」は、通話にも同じように当てはめて読む。"

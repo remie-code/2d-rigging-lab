@@ -59,7 +59,7 @@ export const CAUSE_KIND_LABELS = Object.freeze({
 });
 
 /**
- * @typedef {{ id: number; kind: "you" | "soul" | "note"; seq: number | null; fireId: number | null; atMs: number;
+ * @typedef {{ id: number; kind: "you" | "soul" | "note" | "event"; seq: number | null; fireId: number | null; atMs: number;
  *   text: string; choice?: string | null; probability?: number | null; displayName?: string | null }} ConvoRow
  * @typedef {{ id: number; kind: "comment" | "rejected"; commentId: string | null; displayName: string | null;
  *   text: string; reject: string | null; atMs: number }} CommentRow
@@ -112,6 +112,8 @@ function appendCapped(list, item, keep) {
 /**
  * 転写（SSE transcript / snapshot の履歴の 1 件）を会話かコメントへ積む。
  * 配信者（you・speaker 欠落）とチャッピー（soul）は会話、視聴者（viewer）はコメント（会話には混ぜない）。
+ * 出来事の行（event・Discord モード Domain J・§13.5「左の『会話』の欄には控えめな 1 行」）は会話の列に控えめな 1 行で積む
+ * （判定の札・遅延・きっかけは付かない。推論の範囲には seq で入る）。配信には出来事の行が無い。
  * @param {GlanceState} g  @param {any} d  @param {number} nowMs
  * @returns {GlanceState}
  */
@@ -131,6 +133,11 @@ export function glanceWithTranscript(g, d, nowMs) {
       atMs
     };
     return { ...g, comments: appendCapped(g.comments, row, COMMENTS_KEEP), nextId: g.nextId + 1 };
+  }
+  if (speaker === "event") {
+    /** @type {ConvoRow} */
+    const eventRow = { id: g.nextId, kind: "event", seq: isNum(d.seq) ? d.seq : null, fireId: null, atMs, text: d.text };
+    return { ...g, convo: appendCapped(g.convo, eventRow, CONVO_KEEP), nextId: g.nextId + 1 };
   }
   if (speaker !== "you" && speaker !== "soul") return g;
   /** @type {ConvoRow} */
@@ -309,7 +316,7 @@ export function commentReactText(commentIds, comments) {
  * 会話の行の表示（描くだけの形）。
  * @typedef {{
  *   key: number;
- *   kind: "you" | "soul" | "note";
+ *   kind: "you" | "soul" | "note" | "event";
  *   timeText: string;
  *   whoText: string;
  *   text: string;
@@ -388,6 +395,8 @@ export function conversationRowsView(g, options = {}) {
       view.text = skippedJudgmentText(r.choice, r.probability);
       return view;
     }
+    // 出来事の行（Domain J）: 時刻と本文だけ（話者名・札・遅延・きっかけは付けない）。
+    if (r.kind === "event") return view;
     if (r.kind === "you") {
       const j = r.seq != null ? g.judgments[String(r.seq)] : null;
       if (j) view.chipText = judgmentChipText(j.choice, j.probability);

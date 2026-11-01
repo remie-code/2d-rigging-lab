@@ -650,8 +650,13 @@ export function createDiscordExperience(deps) {
   //   - "vc-disconnect"（切れた・猶予のあいだ戻らなかった）・"vc-reconnect"（切れたのがつながり直した）
   //   - "person-join" / "person-leave"（今いる VC の人の入ってきた・出ていった。Bot 自身とほかの Bot は除く）
 
-  /** @param {any} x @param {Record<string, unknown>} event */
+  /**
+   * 体験を畳んだあと（x.closed）に遅れて終わった VC 操作・届いた知らせは合図しない（Domain J: 閉じたあとの control の 1 行・
+   * 出来事の行を作らない・次の場に混ぜない。場の側も開いている間だけ正本に足す）。
+   * @param {any} x @param {Record<string, unknown>} event
+   */
   const emitVc = (x, event) => {
+    if (!x || x.closed) return;
     try {
       x.venue.vcEvent?.(Object.freeze({ ...event }));
     } catch {

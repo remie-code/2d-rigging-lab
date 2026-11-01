@@ -80,7 +80,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
-import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
+import { createTranscriptBuffer, EVENT_SPEAKER, isEventEntry } from "../ears/transcript-buffer.mjs";
 import { createEarBundle } from "../ears/ear-bundle.mjs";
 import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
 import { DEFAULT_WHISPER_PORT } from "../ears/whisper-server.mjs";
@@ -110,6 +110,7 @@ import {
 import { createRecallDesk } from "../mind/recall-desk.mjs";
 import { RECALL_JUDGE_TIMEOUT_MS, resolveRecallAvoidQuestions } from "../mind/recall.mjs";
 import { resolveVenueWording } from "../mind/venue-wording.mjs";
+import { venueEventLineText } from "../mind/venue-events.mjs";
 import { isVenueTeachingName } from "../mind/soul-skills.mjs";
 import { composeReplyLatency, resolveLatencyThresholds } from "../mind/fire-latency.mjs";
 import {
@@ -1882,6 +1883,9 @@ export function createCockpitServer(options = {}) {
       roles: venueRoles ?? [],
       // Discord モード Domain D: 外から渡された体験（Discord）が人ごとの耳を作る口と、耳の状態を場に知らせる口。
       ...venueEarsControl,
+      // Discord モード Domain J: 出来事の合図はこの場（開いた世代）のものだけを受ける（前の場の体験から遅れて届いた合図を、
+      // 次の場の control・正本に混ぜない）。
+      vcEvent: venueVcEventMouth(streamGeneration),
       createEar: createVenueEar
     });
   }
@@ -1994,14 +1998,51 @@ export function createCockpitServer(options = {}) {
 
   /**
    * 体験から届いた VC の出来事の合図（Discord モード Domain I・§13.2・§13.3）。`{ kind, channelName?, fromChannelName?, name?, via? }`
-   * （id は来ない）。今は control の記録（種類だけ・VC の名前・人の名前は渡さない）を書くだけ。
-   * Domain J への申し送り: ここで会話の正本に出来事の行を足す（I では足さない）。人の出入り（person-join / person-leave）と
-   * つながり直し（vc-reconnect）も届く（記録はしない）。
+   * （id は来ない）。control の記録（種類だけ・VC の名前・人の名前は渡さない）を書き、会話の正本に出来事の行を足す
+   * （Domain J・§13.5）。人の出入り（person-join / person-leave）とつながり直し（vc-reconnect）は control には書かない
+   * （行にはする）。
    * @param {any} event
    */
   function noteVenueVcEvent(event) {
     const kind = event && typeof event.kind === "string" ? event.kind : null;
     if (kind && VC_EVENT_CONTROLS.has(kind)) reportControl({ control: kind });
+    appendVenueEventLine(event);
+  }
+
+  /**
+   * 開いた世代に結んだ出来事の合図の口（Discord モード Domain J）。世代が替わったあと（場を閉じて次の場を開いた）に届いた合図は
+   * 捨てる（control にも正本にも書かない）。
+   * @param {number} generation
+   * @returns {(event: any) => void}
+   */
+  function venueVcEventMouth(generation) {
+    return (event) => {
+      if (generation !== streamGeneration) return;
+      noteVenueVcEvent(event);
+    };
+  }
+
+  /**
+   * 出来事の行を会話の正本に足して放送する（Discord モード Domain J・§13.5）。場が開いている間（入口を開く途中の「入った」を含めて
+   * 開きかけ・開いている）だけ。閉じかけ・閉じたあと・開いていないときに遅れて届いた合図は足さない（閉じる段で写しを取ったあとの
+   * 行を作らない・次の場に前の場の出来事を混ぜない）。行は判定・発火の予定に回らない（openVenueTranscript の購読が出来事の行を
+   * 飛ばす）。名前は本文の中にだけ入る（ログ・session-usage には書かない）。失敗しても入口を止めない。
+   * @param {any} event
+   */
+  function appendVenueEventLine(event) {
+    if (closed || (streamPhase !== "open" && streamPhase !== "opening")) return;
+    const buffer = venueTranscript;
+    if (!buffer) return;
+    try {
+      const text = venueEventLineText(event, { soulName: currentSoulName() });
+      if (text == null) return;
+      const result = buffer.append({ startMs: 0, endMs: 0, text, speaker: EVENT_SPEAKER });
+      if (!result.appended || !result.entry) return;
+      const stats = buffer.stats();
+      broadcast("transcript", { ...toWireEntry(result.entry), appended: stats.appended, discarded: stats.discarded });
+    } catch {
+      // best-effort（出来事の行の失敗で入口の操作を止めない）。
+    }
   }
 
   /**
@@ -2501,6 +2542,9 @@ export function createCockpitServer(options = {}) {
     venueTranscript = buffer;
     venueTranscriptUnsubs = [
       buffer.onAppend((entry) => {
+        // Discord モード Domain J（§13.5）: 出来事の行は判定にも発火の予定にも回さない（判定のきっかけにしない・発火の流れは
+        // 変えない）。チャッピーは次の発火の会話の窓で出来事を見る。
+        if (isEventEntry(entry)) return;
         // S6 自発発火: 転写を発火スケジューラへ回す（you = 呼びかけ照合 + 活動 / soul = 不応期リセット /
         // viewer = handleTranscript 内で no-op ★二重発火の断ち）。scheduler は soul 発話を不応期の基点に使うため
         // you / soul 両方を要る。viewer は scheduler 内で無視される。

@@ -44,6 +44,12 @@
  *  入れない）。**id は場の中の記録にだけ持ち、①②④・判定・ログ・放送には出さない**（整形と放送はこの欄を読まない）。
  *  省略時はどちらも undefined。
  *
+ *  **Discord モード Domain J（discord-mode.md §13.5）**: 話者の 3 種類とは別の行の種類「出来事」（`speaker:"event"`・EVENT_SPEAKER）を
+ *  足す。人が通話の中で気づく出来事（チャッピーが VC に入った・抜けた・移った・切られた、今いる VC の人が入ってきた・出ていった）を
+ *  短い日本語の 1 文（text）で持つ。soul / viewer と同じく startMs/endMs=0・窓は appendedAtMs。名前は本文の中にだけあり、displayName・
+ *  speakerId は持たない。頭への会話の窓・②④の材料には載るが、判定の入力には入れず、判定・発火の予定のきっかけにもしない（場の購読が
+ *  出来事の行を発火の予定と speak-now へ回さない・判定の入力の組み立ては出来事の行を飛ばす）。配信では出来事の行を積まない。
+ *
  *  正本の持ち主は場（cockpit-server の「配信を始める」が作る）。耳は外から渡された正本に積む（ear-pipeline.mjs の
  *  `transcriptBuffer`）。渡されなければ耳が自分で作る（従来どおり）。
  *  下流の注入整形（fire-injection.mjs）は viewer 行を `viewer(名前): 本文` として描く。合流は Domain A の
@@ -76,7 +82,7 @@ export function isBlankTranscript(text) {
 }
 
 /**
- * @typedef {"you" | "soul" | "viewer"} Speaker
+ * @typedef {"you" | "soul" | "viewer" | "event"} Speaker
  */
 
 /**
@@ -87,8 +93,20 @@ export function isBlankTranscript(text) {
  * @typedef {{ startMs: number; endMs: number; text: string; speaker?: Speaker; displayName?: string; speakerId?: string }} TranscriptInput
  */
 
-/** 許容する話者ラベル（既定 you = S2 挙動不変・soul = S3 の魂発話・viewer = S7 の視聴者コメント）。 */
-const VALID_SPEAKERS = new Set(["you", "soul", "viewer"]);
+/** 出来事の行の種類（話者の 3 種類とは別・Discord モード Domain J）。 */
+export const EVENT_SPEAKER = "event";
+
+/**
+ * 出来事の行か（Discord モード Domain J）。判定の入力の組み立て・発火のきっかけはこれで出来事の行を飛ばす。
+ * @param {unknown} entry
+ * @returns {boolean}
+ */
+export function isEventEntry(entry) {
+  return entry != null && typeof entry === "object" && /** @type {any} */ (entry).speaker === EVENT_SPEAKER;
+}
+
+/** 許容する話者ラベル（既定 you = S2 挙動不変・soul = S3 の魂発話・viewer = S7 の視聴者コメント・event = 出来事の行〔Domain J〕）。 */
+const VALID_SPEAKERS = new Set(["you", "soul", "viewer", EVENT_SPEAKER]);
 
 /**
  * 転写バッファを作る。
@@ -140,7 +158,7 @@ export function createTranscriptBuffer(options = {}) {
     // speaker は任意（既定 "you"）。渡された場合のみ検証する（不正値は throw）。
     if (speaker !== undefined && !VALID_SPEAKERS.has(speaker)) {
       throw new RangeError(
-        `transcriptBuffer.append: speaker must be "you", "soul" or "viewer"; got ${JSON.stringify(speaker)}.`
+        `transcriptBuffer.append: speaker must be "you", "soul", "viewer" or "event"; got ${JSON.stringify(speaker)}.`
       );
     }
     // displayName は任意（どの話者にも許す・Discord モード Domain A）。渡された場合のみ軽く型検証する。

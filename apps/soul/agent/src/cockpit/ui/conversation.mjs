@@ -10,6 +10,7 @@
  *  - チャッピーの行: 右端に遅延の棒（長さ固定・区間は比・8 色）と合計（4 秒超琥珀・6 秒超赤）。
  *    コメント反応は本文の後ろに「💬 名前 に反応」、きっかけの行が無い発火は小さく種類（「手動」「沈黙」）。
  *  - 相槌の間隔で流れた判定: 薄い灰色の 1 行。
+ *  - 出来事の行（入った・抜けた・人の出入り・Discord モード Domain J）: 時刻つきの薄い灰色の 1 行。
  *  - 最新の返事の行は淡く強調し、そのきっかけの配信者の行も同じ色で淡くつなぐ。
  * 配信前（場が閉じている間）は会話の場所の中央に大きく「配信を始める」と「準備・設定」（§4・§9.2・配信の組み直し Domain D）。
  *
@@ -48,6 +49,10 @@ export function ConversationRow({ row }) {
     (row.linked ? " linked" : "");
   if (row.kind === "note") {
     return html`<div class=${cls}><span class="time"></span><span class="who"></span><span class="text">${row.text}</span></div>`;
+  }
+  // 出来事の行（Discord モード Domain J）: 時刻と本文だけの控えめな 1 行。
+  if (row.kind === "event") {
+    return html`<div class=${cls}><span class="time">${row.timeText}</span><span class="who"></span><span class="text"><span class="body">${row.text}</span></span></div>`;
   }
   return html`
     <div class=${cls}>
