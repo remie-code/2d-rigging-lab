@@ -4456,6 +4456,10 @@ export function createCockpitServer(options = {}) {
    */
   function ingestChatMessage(msg) {
     if (closed) return;
+    // Discord の場（開きかけ・開いている・閉じかけ）にはコメントが無い（discord-mode.md §4.3）。場が閉じている間に Connect した
+    // 器官のコメントは、弾く判定にも正本にも回さずに捨てる（ユーザーの Connect は切らない・器官は畳まない）。名前・本文を出さないため、
+    // 診断もログも出さない。
+    if (discordVenueActive()) return;
     try {
       const text = msg && typeof msg.text === "string" ? msg.text : "";
       const displayName = msg && typeof msg.displayName === "string" ? msg.displayName : undefined;
@@ -4558,6 +4562,8 @@ export function createCockpitServer(options = {}) {
    * @param {{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number }} slot
    */
   function commitComment(slot) {
+    // 守りの 2 層目: Discord の場では積まない（ingestChatMessage の入口で捨てているので今の作りでは届かない。何も出さない）。
+    if (discordVenueActive()) return;
     const { text, displayName } = slot;
     const buffer = venueTranscript;
     if (!buffer) {
