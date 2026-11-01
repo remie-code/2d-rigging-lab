@@ -107,7 +107,15 @@ import {
   DEFAULT_COMPACT_QUIET_MS,
   DEFAULT_COMPACT_MIN_INTERVAL_MS
 } from "../src/mind/context-compactor.mjs";
-import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord, replyLatencyUsageRecord } from "../src/mind/session-usage-log.mjs";
+import {
+  createSessionUsageLog,
+  fireUsageRecord,
+  compactionUsageRecord,
+  replyLatencyUsageRecord,
+  judgmentUsageRecord,
+  fireRefusedUsageRecord,
+  controlUsageRecord
+} from "../src/mind/session-usage-log.mjs";
 import { resolveLatencyThresholds } from "../src/mind/fire-latency.mjs";
 import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/quota.mjs";
 import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
@@ -133,8 +141,18 @@ import {
 
 /**
  * 配信間記憶: 定期保存の間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
+ * Discord モード Domain H（discord-mode.md §13.6・gate-2-midwrite-investigation.md §4 の案 B）: 「場の始まり、または
+ * 前の保存（途中・手動の「今日を記録」）、またはこの場で前に途中保存を頼んだ時刻」からこの長さがたったときだけ頼む
+ * （isMemoryCheckpointDue・createStreamVenueHooks の checkpoint）。
  */
 export const MEMORY_CHECKPOINT_INTERVAL_MS = 20 * 60 * 1000;
+
+/**
+ * 配信間記憶: 定期保存を確かめる間隔（Discord モード Domain H・discord-mode.md §13.6）。タイマーは起動時に 1 回張る形の
+ * まま、この間隔で checkpoint() を呼び、経過時間で頼むかを決める（場の口で張る・止めるを持たない＝漏れが無い）。
+ * 頼むのは場の始まり・前の保存から 20 分（MEMORY_CHECKPOINT_INTERVAL_MS）たったときで、遅れはこの間隔まで。
+ */
+export const MEMORY_CHECKPOINT_TICK_MS = 60 * 1000;
 
 /**
  * 配信間記憶: Ctrl+C の最後の保存を待つ上限（best-effort・shutdown が固まらない）。
@@ -736,6 +754,26 @@ export function shouldSkipMemoryCheckpoint(currentSeq, lastRecordedSeq) {
 }
 
 /**
+ * 配信間記憶: 途中保存の頃合いか（Discord モード Domain H・discord-mode.md §13.6・gate-2-midwrite-investigation.md §4 の
+ * 案 B）。起点 = max(場の始まり, この場で前に保存が成り立った時刻, この場で前に途中保存を頼んだ時刻)（null は数えない）
+ * から intervalMs 以上たっていれば true。起点が 1 つも無ければ false（場が始まっていない）。純関数（I/O ゼロ）。
+ *  - 前の保存には途中保存・手動の「今日を記録」のどちらも入る（手動で保存すると起点が戻る）。
+ *  - 前に頼んだ時刻も入れるのは、保存が失敗し続けたときに 1 分ごとに頼み直さないため（頼みの頻度を今の 20 分おきより
+ *    増やさない）。
+ * @param {number} nowMs
+ * @param {{ startedAtMs: number | null; lastSavedAtMs: number | null; lastRequestedAtMs: number | null }} since
+ * @param {number} [intervalMs=MEMORY_CHECKPOINT_INTERVAL_MS]
+ * @returns {boolean}
+ */
+export function isMemoryCheckpointDue(nowMs, since, intervalMs = MEMORY_CHECKPOINT_INTERVAL_MS) {
+  const marks = [since?.startedAtMs, since?.lastSavedAtMs, since?.lastRequestedAtMs].filter(
+    (v) => typeof v === "number" && Number.isFinite(v)
+  );
+  if (marks.length === 0) return false;
+  return nowMs - Math.max(.../** @type {number[]} */ (marks)) >= intervalMs;
+}
+
+/**
  * ②書き出し役・④思い出し役の頭（申し送り 1: Codex に固定）。今の頭が Codex 系ならその頭（①と同じ頭・
  * recall-flow.md §6）、Claude 系なら既定の Codex（Claude の頭は cwd / sandbox / finalAnswerOnly を黙って無視するため
  * 使わない）。④も同じ決め方（記憶の作り直し Wave 2 からの申し送り 1）。
@@ -1066,7 +1104,8 @@ export const BODY_URL_NOT_SET_MESSAGE =
  * @param {{ getUrl: () => string | null; connect: () => Promise<void>; close: () => Promise<void> }} deps.channel  器（lazyChannel）。
  * @param {() => boolean} [deps.isStreamOpen]  場が開いているか（20 分ごとの保存の判定・server.streamStatus）。
  * @param {() => ReadonlyArray<any>} [deps.getEntries]  ライブの転写（server.getTranscript）。
- * @param {() => number} [deps.nowImpl=Date.now]
+ * @param {() => number} [deps.nowImpl=Date.now]  場の始まりの時刻と、途中保存の経過時間（Discord モード Domain H）の時計。
+ * @param {number} [deps.checkpointIntervalMs=MEMORY_CHECKPOINT_INTERVAL_MS]  途中保存を頼むまでの経過（Discord モード Domain H）。
  * @param {number} [deps.memoryTimeoutMs=SHUTDOWN_MEMORY_TIMEOUT_MS]  最後の保存を待つ上限。
  * @param {typeof setTimeout} [deps.setTimeoutImpl]
  * @param {(info: { timeoutMs: number }) => void} [deps.onMemoryWait]  保存を待ち始めたとき（ターミナルに 1 行）。
@@ -1075,8 +1114,16 @@ export function createStreamVenueHooks(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   const memoryTimeoutMs = deps.memoryTimeoutMs ?? SHUTDOWN_MEMORY_TIMEOUT_MS;
   const setTimeoutImpl = deps.setTimeoutImpl ?? setTimeout;
+  const checkpointIntervalMs = deps.checkpointIntervalMs ?? MEMORY_CHECKPOINT_INTERVAL_MS;
   /** この場で最後に保存が成り立った時刻（snapshot の memory.lastRecordAtMs）。場の始まりで null に戻す。 @type {number | null} */
   let lastRecordAtMs = null;
+  // Discord モード Domain H（discord-mode.md §13.6）: 途中保存の経過時間の起点（どれも nowImpl の時計・場の始まりで戻す）。
+  /** この場の始まり（renewRecords の時刻）。 @type {number | null} */
+  let venueStartedAtMs = null;
+  /** この場で最後に保存が成り立ったと数えた時刻（noteSaved を受けた時点の nowImpl・途中・手動・最後のどれでも）。 @type {number | null} */
+  let lastSavedAtMs = null;
+  /** この場で最後に途中保存を頼んだ時刻（checkpoint が頼んだ時点・保存が失敗し続けても頼み直しを 20 分おきに保つ）。 @type {number | null} */
+  let lastCheckpointRequestedAtMs = null;
   /** この場で最後に保存が成り立った時点の転写の件数（保存を飛ばす判定）。場の始まりで 0 に戻す。 */
   let lastRecordedSeq = 0;
   /** 保存を待っている間だけ入る「待たずに進む」口。 @type {(() => void) | null} */
@@ -1104,6 +1151,9 @@ export function createStreamVenueHooks(deps) {
         const startedAtMs = nowImpl();
         lastRecordedSeq = 0;
         lastRecordAtMs = null;
+        venueStartedAtMs = startedAtMs;
+        lastSavedAtMs = null;
+        lastCheckpointRequestedAtMs = null;
         deps.renewUsageLog?.(startedAtMs);
         deps.memoryPlaces.beginStream(startedAtMs);
         await deps.memoryPlaces.place()?.ready;
@@ -1151,12 +1201,19 @@ export function createStreamVenueHooks(deps) {
     },
     /**
      * 20 分ごとの保存の 1 回分（場が開いている間だけ・転写が前の保存から増えていなければ頼まない）。
+     * Discord モード Domain H（discord-mode.md §13.6）: main のタイマーは起動時に張ったまま 1 分ごと
+     * （MEMORY_CHECKPOINT_TICK_MS）に呼ぶ。頼むのは、場の始まり・前の保存（途中・手動）・前に頼んだ時刻のうち一番遅い
+     * ものから 20 分たったときだけ（isMemoryCheckpointDue）。体験の種類は見ない（配信の場にも同じく効く）。
      * @returns {boolean}  頼んだら true。
      */
     checkpoint() {
       if (typeof deps.isStreamOpen !== "function" || !deps.isStreamOpen()) return false;
       const entries = typeof deps.getEntries === "function" ? deps.getEntries() : [];
       if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return false; // 空回しでトークンを燃やさない。
+      const nowMs = nowImpl();
+      const since = { startedAtMs: venueStartedAtMs, lastSavedAtMs, lastRequestedAtMs: lastCheckpointRequestedAtMs };
+      if (!isMemoryCheckpointDue(nowMs, since, checkpointIntervalMs)) return false; // 場の始まり・前の保存から 20 分たっていない。
+      lastCheckpointRequestedAtMs = nowMs;
       deps.memoryRecorder.record(entries).catch(() => {});
       return true;
     },
@@ -1170,6 +1227,10 @@ export function createStreamVenueHooks(deps) {
       if (place && typeof place.streamNo === "number" && place.streamNo !== deps.memoryPlaces.streamNo()) return false;
       lastRecordAtMs = info.atMs;
       lastRecordedSeq = info.entriesLength;
+      // Discord モード Domain H: 途中保存の起点を戻す（途中・手動の「今日を記録」のどちらでも）。info.atMs は保存の係の
+      // 時計で保存が終わった時刻（writeImpl が返った直後）。ここでは場の時計（nowImpl）で、受けた時刻を起点にする
+      // （onSaved は終わった直後に同期で呼ばれるので同じ時刻・テストで時計を差し替えても起点が揃う）。
+      lastSavedAtMs = nowImpl();
       return true;
     },
     lastRecordAtMs: () => lastRecordAtMs,
@@ -2595,6 +2656,21 @@ async function main() {
   // 圧縮の開始・終了を 1 行ずつ。配信の組み直し Domain D: 場 1 つに 1 ファイル（場の始まりで作り直す・
   // §createStreamVenueHooks の renewRecords）。起動から最初の場までの分は起動の時刻のファイル（書くものが無ければ作られない）。
   let sessionUsageLog = createSessionUsageLog();
+  /**
+   * Discord モード Domain H（discord-mode.md §13.7）: 判定・発火の断り・つまみの行を今の場の記録へ 1 行（本文・名前・id
+   * なし・頭の種類に関係なく書く）。作れなかった行（null = 許す一覧に無い control）は書かない。記録の失敗で判定・発火を
+   * 止めない（append も throw しない）。Domain I〜K は VC の出来事をサーバの reportControl（onControl）から渡すか、
+   * cockpit.mjs 側ならこの口を `recordSessionUsage(controlUsageRecord({ control: "vc-join" }))` の形で呼ぶ。
+   * @param {Record<string, unknown> | null} record
+   */
+  const recordSessionUsage = (record) => {
+    if (record == null) return;
+    try {
+      sessionUsageLog.append(record);
+    } catch {
+      // 記録の失敗で判定・発火を止めない。
+    }
+  };
   // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6・§8）。目安は settings ファイルのキー
   // （無ければ 20 万トークン / 3 秒 / 10 分）。圧縮を始める大きさは操縦席の設定（頭脳・会話のタブ）からも変えられ、
   // contextCompactionHooks が保存と走っている compactor の差し替えを担う（次の確認から効く）。隙間の材料は
@@ -3104,9 +3180,11 @@ async function main() {
 
   // 引き金①: 定期保存(20 分毎・場が開いている間だけ・転写が前回記録から不変ならスキップ=inventory §2-4)。
   // unref() でプロセス生存に寄与させない(ears-cli 等の既存タイマ規律)。
+  // Discord モード Domain H（discord-mode.md §13.6）: 張るのは起動時の 1 回のまま、1 分ごとに確かめる。頼むかは checkpoint
+  // が「場の始まり・前の保存（途中・手動）から 20 分」で決める（起動から 20 分ごとに当たって、入り直した直後に頼む、を直す）。
   const memoryCheckpointTimer = setInterval(() => {
     streamVenue.checkpoint();
-  }, MEMORY_CHECKPOINT_INTERVAL_MS);
+  }, MEMORY_CHECKPOINT_TICK_MS);
   memoryCheckpointTimer.unref();
 
   /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(保存の係の薄いラッパ・場が閉じていればサーバが断る)。 */
@@ -3360,7 +3438,16 @@ async function main() {
     // （.env.decisions.local をコード内で直接読む）に任せる。
     speakStartModeInitial: speakStartHooks.resolveInitialSpeakStartMode(),
     onSetSpeakStartMode: speakStartHooks.onSetSpeakStartMode,
-    onSpeakNowJudgment: (info) => process.stdout.write(formatSpeakNowLine(info)),
+    onSpeakNowJudgment: (info) => {
+      process.stdout.write(formatSpeakNowLine(info));
+      // Discord モード Domain H（discord-mode.md §13.7）: 判定ごとに今の場の記録（session-usage/）へ 1 行（時刻・きっかけ・
+      // 選択・確率・行き先・遅延・エラーの種類だけ・エラー文は書かない）。ターミナルの 1 行はそのまま。
+      recordSessionUsage(judgmentUsageRecord(info));
+    },
+    // Discord モード Domain H: 発火の要求を断った（場が開いていない・KILL・忙しい・耳が無い・窓が空など）を記録へ 1 行。
+    onFireRefused: (info) => recordSessionUsage(fireRefusedUsageRecord(info)),
+    // Discord モード Domain H: つまみ（自発・かぶり判定・KILL）の切り替えを記録へ 1 行（前後の真偽だけ）。
+    onControl: (info) => recordSessionUsage(controlUsageRecord(info)),
     // 相槌どうしの最小間隔は settings ファイルの backchannelMinIntervalSec（無ければ 8 秒・backchannel.md §2）。
     backchannelMinIntervalMs: speakStartHooks.resolveBackchannelMinIntervalMs(),
     // コメント判定（弾く判定は全モード・反応する判定は speak-now の間）: 忙しい間のコメントの扱いは settings から

@@ -13,6 +13,11 @@
  * 操縦席の fast の切り替え（2026-10-27）: fire と latency の行に serviceTier（その返事の turn/start に送った Codex の
  * 速さの段・"priority" = fast / "default"・送っていなければ null）を足す（既存のキーはそのまま）。
  *
+ * Discord モード Domain H（discord-mode.md §13.7・人間ゲート 2 の「応答やのに黙った」の切り分け）: 判定ごとの行
+ * （type: "judgment"）・発火の要求を断った行（type: "fire-refused"）・つまみの切り替えの行（type: "control"）を足す。
+ * どれも拾う欄を決めた純関数で作り、会話の中身・人の名前・Discord の id・コメントの id・エラー文は書かない（エラーは
+ * 種類だけ）。頭の種類に関係なく書く（fire の行は Codex のときだけだが、この 3 つは場の記録）。ふるまいは変えない。
+ *
  * fire-diagnostics.mjs と同じ流儀: ディスク I/O は直列の非同期キューで行い、発火の経路は待たない・止めない
  * （書けなくても握る）。ファイルは最初の 1 行で作り、そのときに古いものを消して直近 SESSION_USAGE_RETENTION
  * 個（今回の分を含む）だけ残す。置き場は apps/soul/agent/.gitignore 済み。
@@ -131,6 +136,105 @@ export function replyLatencyUsageRecord(record) {
     serviceTier: str(record?.serviceTier),
     ...(record?.bodyless === true ? { bodyless: true } : {})
   };
+}
+
+// ── Discord モード Domain H: 判定・発火の断り・つまみの記録（discord-mode.md §13.7）──────────────────────────
+
+/**
+ * 記録に載せてよい語（コードが決めた短い語: trigger・action・きっかけの種類・断った理由）。英小文字で始まり、
+ * 英小文字・数字・- だけの 40 文字まで。これに合わない値（文・名前・id が紛れ込んだもの）は null に落とす。
+ * @param {unknown} v
+ * @returns {string | null}
+ */
+const token = (v) => (typeof v === "string" && /^[a-z][a-z0-9-]{0,39}$/.test(v) ? v : null);
+
+/** 判定の選択肢（speak-now の 5 択・speak-now.mjs の buildChoices と同じ）。確率はこの名前だけ拾う。 */
+export const JUDGMENT_CHOICES = Object.freeze(["wait", "backchannel", "respond", "initiate", "look"]);
+
+/**
+ * 判定のエラーの種類（speak-now-decisions.mjs の SpeakNowJudgeError の kind と同じ語）。これ以外は "unknown"。
+ *  - no-key: キーが無い / network: 通信失敗 / auth: 認証失敗（401・403） / http: そのほかの HTTP エラー /
+ *    timeout: 時間切れ / shape: 応答の形が想定外。
+ */
+export const JUDGMENT_ERROR_KINDS = Object.freeze(["no-key", "network", "auth", "http", "timeout", "shape"]);
+
+/**
+ * 判定ごとの 1 行（cockpit-server の onSpeakNowJudgment が渡す info から作る純関数）。成功なら選択・確率・行き先、
+ * 失敗ならエラーの種類（と HTTP の状態の数）だけ。**エラー文（info.error）は書かない**（通信失敗・HTTP エラーの文には
+ * 相手の文が入りうる・gate-2-silence-investigation.md §1.2 #9）。
+ * @param {any} info  成功: `{ ok: true, trigger, triggerSeq, choice, probability, probs, latencyMs, action }`。
+ *   失敗: `{ ok: false, trigger, error, latencyMs, errorKind?, errorStatus? }`。
+ * @returns {Record<string, unknown>}
+ */
+export function judgmentUsageRecord(info) {
+  const ok = info?.ok === true;
+  const probsIn = ok && info?.probs && typeof info.probs === "object" ? info.probs : null;
+  /** @type {Record<string, number | null> | null} */
+  let probs = null;
+  if (probsIn) {
+    probs = {};
+    for (const key of JUDGMENT_CHOICES) probs[key] = num(probsIn[key]);
+  }
+  const choice = ok && typeof info?.choice === "string" && JUDGMENT_CHOICES.includes(info.choice) ? info.choice : null;
+  const errorKind = ok
+    ? null
+    : typeof info?.errorKind === "string" && JUDGMENT_ERROR_KINDS.includes(info.errorKind)
+      ? info.errorKind
+      : "unknown";
+  return {
+    type: "judgment",
+    ok,
+    trigger: token(info?.trigger),
+    triggerSeq: num(info?.triggerSeq),
+    choice,
+    p: ok ? num(info?.probability) : null,
+    probs,
+    action: ok ? token(info?.action) : null,
+    latencyMs: num(info?.latencyMs),
+    errorKind,
+    errorStatus: ok ? null : num(info?.errorStatus)
+  };
+}
+
+/**
+ * 発火の要求を断った 1 行（cockpit-server の onFireRefused が渡す info から作る純関数）。きっかけの種類
+ * （speak-now・manual・recall・silence・comment-react など）と断った理由（stream-not-open・busy・killed・
+ * ears-not-running・empty-window・vision-no-target など）・視覚の発火か、だけ。きっかけのほかの欄
+ * （確率・コメントの id・転写の seq など）は拾わない。
+ * @param {any} info  `{ cause: string | null; reason: string | null; vision?: boolean }`
+ * @returns {Record<string, unknown>}
+ */
+export function fireRefusedUsageRecord(info) {
+  return {
+    type: "fire-refused",
+    cause: token(info?.cause),
+    reason: token(info?.reason),
+    vision: info?.vision === true
+  };
+}
+
+/**
+ * control の行に書いてよいつまみ・出来事の名前（許す一覧）。Domain H は自発・かぶり判定・KILL の 3 つ。
+ * Domain I〜K が VC に入る・抜ける・移る・切れたを足すときに使う名前も先に置く（呼ぶだけで済むように）。
+ *  - self-fire: 自発的にしゃべる（POST /api/self-fire） / barge-in: かぶり判定（POST /api/barge-in） /
+ *    kill: KILL（POST /api/kill）。この 3 つは from / to に前後の真偽を載せる。
+ *  - vc-join: VC に入った / vc-leave: VC から抜けた / vc-move: 別の VC へ移った（パネルからでも、Discord の画面で
+ *    動かされたのでも） / vc-disconnect: 外から切れた（キック・チャンネルの削除・つなぎ直しを待つ切れ）。
+ *    VC の名前・Discord の id は載せない（from / to は null のまま）。
+ */
+export const USAGE_CONTROL_KINDS = Object.freeze(["self-fire", "barge-in", "kill", "vc-join", "vc-leave", "vc-move", "vc-disconnect"]);
+
+/**
+ * つまみの切り替え・VC の出来事の 1 行（純関数）。名前が許す一覧に無ければ null（呼び出し側は書かない）。
+ * 新旧の値は真偽だけ（真偽でなければ null）。名前・id・VC の名前を受ける欄は無い。
+ * @param {any} info  `{ control: string; from?: boolean; to?: boolean }`
+ * @returns {Record<string, unknown> | null}
+ */
+export function controlUsageRecord(info) {
+  const control = typeof info?.control === "string" && USAGE_CONTROL_KINDS.includes(info.control) ? info.control : null;
+  if (control == null) return null;
+  const bool = (/** @type {unknown} */ v) => (typeof v === "boolean" ? v : null);
+  return { type: "control", control, from: bool(info?.from), to: bool(info?.to) };
 }
 
 /**

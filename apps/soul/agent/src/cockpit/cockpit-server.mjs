@@ -877,7 +877,21 @@ const MAX_PORT_REROLLS = 50;
  *   process.env に入れない）。キーは state/SSE/ログ/エラーに載せない。
  * @param {(info: object) => void} [options.onSpeakNowJudgment]
  *   判定ごとの記録（遅延・選択・確率・行き先 or 失敗理由。会話の本文は渡さない）。cockpit.mjs が標準出力に
- *   1 行書く（合意 §5）。
+ *   1 行書く（合意 §5）。Discord モード Domain H: 同じ info を session-usage の judgment の行にもする。失敗のときは
+ *   判定の失敗が種類を持っていれば `errorKind`（no-key / network / auth / http / timeout / shape）と `errorStatus`
+ *   （HTTP の状態の数）も載る（持っていなければ今の形のまま）。
+ * @param {(info: { cause: string | null; reason: string; vision: boolean }) => void} [options.onFireRefused]
+ *   発火の要求を断ったときの口（Discord モード Domain H・discord-mode.md §13.7・失敗寛容）。cause はきっかけの種類
+ *   （speak-now・manual・recall・silence・comment-react など）、reason は断った理由。次の 3 か所から呼ぶ（同じ断りを
+ *   2 度呼ばない）: 場が開いていない間の自発の発火（requestSelfFire の stream-not-open）・場が開いていない間の手動の
+ *   Fire（refuseManualFireOutsideStream の stream-not-open）・orchestrator が受理しなかった発火（onFire の
+ *   accepted:false = killed・busy・ears-not-running・empty-window・vision-no-target）。cockpit.mjs が session-usage の
+ *   fire-refused の行にする。きっかけのほかの欄（コメントの id など）は渡さない。
+ * @param {(info: { control: string; from?: boolean | null; to?: boolean | null }) => void} [options.onControl]
+ *   つまみの切り替えの口（Discord モード Domain H・失敗寛容）。POST /api/self-fire（control "self-fire"）・
+ *   /api/barge-in（"barge-in"）・/api/kill（"kill"）を受け付けたときに、前後の真偽を渡す。Domain I〜K は VC に入る・
+ *   抜ける・移る・切れたを、サーバの中の reportControl（この口を包む）から同じ口で渡す（名前の一覧は
+ *   session-usage-log.mjs の USAGE_CONTROL_KINDS）。cockpit.mjs が session-usage の control の行にする。
  * @param {number} [options.backchannelMinIntervalMs=SPEAK_NOW_BACKCHANNEL_MIN_INTERVAL_MS]
  *   相槌どうしの最小間隔（前の相槌を喋り始めてから次の相槌を喋らせない時間・既定 8 秒・
  *   discussion/ai-cohost/decisions/speak-now/backchannel.md §2）。0 なら歯止めなし。cockpit.mjs が settings の
@@ -1063,6 +1077,9 @@ export function createCockpitServer(options = {}) {
             typeof options.decisionsApiKeyProvider === "function" ? options.decisionsApiKeyProvider : () => loadDecisionsApiKey()
         });
   const onSpeakNowJudgment = typeof options.onSpeakNowJudgment === "function" ? options.onSpeakNowJudgment : null;
+  // Discord モード Domain H: 発火の断り・つまみの切り替えの記録の口（cockpit.mjs が session-usage に書く）。
+  const onFireRefused = typeof options.onFireRefused === "function" ? options.onFireRefused : null;
+  const onControl = typeof options.onControl === "function" ? options.onControl : null;
   const backchannelMinIntervalMs =
     typeof options.backchannelMinIntervalMs === "number" &&
     Number.isFinite(options.backchannelMinIntervalMs) &&
@@ -2685,11 +2702,14 @@ export function createCockpitServer(options = {}) {
   /**
    * 場が開いていない間（閉じている・開きかけ・閉じかけ）の手動の発火（POST /api/fire・/api/vision-fire・AHK のホットキー）を
    * 409 で断る（配信の組み直し Domain E・Undine の追認: 頭のセッションは場の始まりで作るので、場の外で立てない）。
+   * Discord モード Domain H: 断ったことを onFireRefused にも渡す（session-usage の fire-refused の行）。
    * @param {import("node:http").ServerResponse} res
+   * @param {{ vision: boolean }} [fire]  どちらの手動の Fire か（記録用）。
    * @returns {boolean}  断ったら true。
    */
-  function refuseManualFireOutsideStream(res) {
+  function refuseManualFireOutsideStream(res, fire = { vision: false }) {
     if (streamPhase === "open") return false;
+    reportFireRefused({ cause: "manual", reason: "stream-not-open", vision: fire.vision === true });
     sendJson(res, 409, {
       fired: false,
       reason: "stream-not-open",
@@ -3280,7 +3300,7 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
-      if (refuseManualFireOutsideStream(res)) return;
+      if (refuseManualFireOutsideStream(res, { vision: false })) return;
       // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
       // きっかけ = 手動（操縦席のボタン・AHK のホットキー）。
       const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ cause: { type: "manual", vision: false } }));
@@ -3323,7 +3343,7 @@ export function createCockpitServer(options = {}) {
         return;
       }
       // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
-      if (refuseManualFireOutsideStream(res)) return;
+      if (refuseManualFireOutsideStream(res, { vision: true })) return;
       // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
       const result = await trackFire(() =>
         /** @type {any} */ (fireOrchestrator).fire({ vision: true, cause: { type: "manual", vision: true } })
@@ -3369,7 +3389,10 @@ export function createCockpitServer(options = {}) {
       }
       const body = await readJsonBody(req);
       const enabled = body.enabled === true;
+      const selfFireBefore = fireScheduler.isEnabled();
       fireScheduler.setEnabled(enabled);
+      // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
+      reportControl({ control: "self-fire", from: selfFireBefore, to: fireScheduler.isEnabled() });
       if (typeof onSetSelfFireEnabled === "function") {
         try {
           await onSetSelfFireEnabled(fireScheduler.isEnabled());
@@ -3390,7 +3413,10 @@ export function createCockpitServer(options = {}) {
       }
       const body = await readJsonBody(req);
       const enabled = body.enabled === true;
+      const bargeInBefore = bargeInGate.isEnabled();
       bargeInGate.setEnabled(enabled);
+      // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
+      reportControl({ control: "barge-in", from: bargeInBefore, to: bargeInGate.isEnabled() });
       if (typeof onSetBargeInEnabled === "function") {
         try {
           await onSetBargeInEnabled(bargeInGate.isEnabled());
@@ -3511,7 +3537,10 @@ export function createCockpitServer(options = {}) {
         sendJson(res, 400, { error: "killed must be a boolean" });
         return;
       }
+      const killedBefore = killed;
       killed = body.killed; // 正本更新。
+      // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
+      reportControl({ control: "kill", from: killedBefore, to: killed });
       // orchestrator へ遷移時伝播（best-effort・onSetSelfFireEnabled :887-893 と同型の失敗寛容）。
       // POST /api/kill は fire() の Promise には一切依存しない（kill 中の再生を barge-in と見分けられない
       // ため・レスポンス正本は snapshot + kill() 自身の戻り値のみ・domain-a.md 申し送り）。
@@ -3977,7 +4006,20 @@ export function createCockpitServer(options = {}) {
         // 思い出しの係: 喋り終わって手が空いたら、届ける結果を片付ける（recall-flow.md §4）。
         if (state === "idle" && recallDesk) recallDesk.notifyIdle();
       },
-      onFire: (info) => broadcast("fire", info),
+      onFire: (info) => {
+        broadcast("fire", info);
+        // Discord モード Domain H: orchestrator が受理しなかった発火（killed・busy・ears-not-running・empty-window・
+        // vision-no-target）を記録の口へ（きっかけは種類だけ・コメントの id などは渡さない）。
+        const fireInfo = /** @type {any} */ (info);
+        if (fireInfo && fireInfo.accepted === false) {
+          const cause = fireInfo.cause && typeof fireInfo.cause === "object" ? fireInfo.cause : null;
+          reportFireRefused({
+            cause: cause && typeof cause.type === "string" ? cause.type : null,
+            reason: typeof fireInfo.reason === "string" ? fireInfo.reason : "unknown",
+            vision: fireInfo.vision === true || (cause != null && cause.vision === true)
+          });
+        }
+      },
       onDiagnostic: (diag) => handleDiagnostic(diag),
       onSoulTranscript: (entry) => broadcastSoulTranscript(entry),
       // 推論の範囲: ask の時点の会話の窓の始まりと終わりの seq（全経路・SSE "fireAsk"）。
@@ -4163,7 +4205,15 @@ export function createCockpitServer(options = {}) {
             trigger: e.trigger,
             triggerSeq: e.triggerSeq ?? null
           });
-          reportSpeakNow({ ok: false, trigger: e.trigger, error: e.message, latencyMs: e.latencyMs });
+          // Discord モード Domain H: 失敗の種類（持っていれば）も渡す（記録は種類だけを書き、文は書かない）。
+          reportSpeakNow({
+            ok: false,
+            trigger: e.trigger,
+            error: e.message,
+            latencyMs: e.latencyMs,
+            ...(typeof e.errorKind === "string" ? { errorKind: e.errorKind } : {}),
+            ...(typeof e.errorStatus === "number" ? { errorStatus: e.errorStatus } : {})
+          });
           warnJudgeError("speak-now", e.message);
         }
       });
@@ -4312,7 +4362,17 @@ export function createCockpitServer(options = {}) {
     // （手動の Fire の refuseManualFireOutsideStream と揃える）。自発の口（発火の予定・speak-now・コメント反応・思い出しの
     // 係）はみなここを通るので、ここ 1 か所で捨てる。頭へ流さず、フィードにも出さない（開きかけの間の取りこぼしは行にしない）。
     // 思い出しの係には受理しなかった結果を返す（busy ではないので届けは「見送り」になる）。
-    if (streamPhase !== "open") return Promise.resolve({ fired: false, reason: "stream-not-open" });
+    // Discord モード Domain H（discord-mode.md §13.7）: ここで捨てた要求は今どこにも出ないので、記録の口にだけ渡す
+    // （画面・フィードには今までどおり出さない）。
+    if (streamPhase !== "open") {
+      const requestCause = fireOptions && fireOptions.cause && typeof fireOptions.cause === "object" ? /** @type {any} */ (fireOptions.cause) : null;
+      reportFireRefused({
+        cause: requestCause && typeof requestCause.type === "string" ? requestCause.type : typeof kind === "string" ? kind : null,
+        reason: "stream-not-open",
+        vision: !!fireOptions && fireOptions.vision === true
+      });
+      return Promise.resolve({ fired: false, reason: "stream-not-open" });
+    }
     try {
       return trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
         .then((result) => {
@@ -4404,6 +4464,35 @@ export function createCockpitServer(options = {}) {
       onSpeakNowJudgment(info);
     } catch {
       // ログの失敗で判定を止めない。
+    }
+  }
+
+  /**
+   * 発火の要求を断ったことを呼び出し側（cockpit.mjs の session-usage の fire-refused の行）へ渡す（Discord モード
+   * Domain H・本文・id は含めない・失敗寛容 = 記録の失敗で発火の道を止めない）。
+   * @param {{ cause: string | null; reason: string; vision: boolean }} info
+   */
+  function reportFireRefused(info) {
+    if (!onFireRefused) return;
+    try {
+      onFireRefused(info);
+    } catch {
+      // 記録の失敗で発火の道を止めない。
+    }
+  }
+
+  /**
+   * つまみの切り替え・VC の出来事を呼び出し側（cockpit.mjs の session-usage の control の行）へ渡す（Discord モード
+   * Domain H・失敗寛容）。Domain I〜K は VC に入る・抜ける・移る・切れたをここから渡す（例 `{ control: "vc-join" }`・
+   * 名前の一覧は session-usage-log.mjs の USAGE_CONTROL_KINDS・VC の名前・Discord の id は渡さない）。
+   * @param {{ control: string; from?: boolean | null; to?: boolean | null }} info
+   */
+  function reportControl(info) {
+    if (!onControl) return;
+    try {
+      onControl(info);
+    } catch {
+      // 記録の失敗でつまみの操作を止めない。
     }
   }
 

@@ -47,17 +47,28 @@ export const OPENAI_DECISIONS_API_KEY_NAME = "OPENAI_DECISIONS_API_KEY";
 /** キーのファイル（apps/soul/agent/.env.decisions.local・gitignore 済み）。 */
 export const DEFAULT_DECISIONS_ENV_PATH = join(here, "..", "..", ".env.decisions.local");
 
-/** 判定の失敗（表示用の短い理由 + 分かれば遅延）。message にキー値は含めない。 */
+/**
+ * 判定の失敗（表示用の短い理由 + 分かれば遅延）。message にキー値は含めない。
+ *
+ * Discord モード Domain H（discord-mode.md §13.7）: 失敗の種類 `kind`（no-key / network / auth / http / timeout /
+ * shape）と HTTP の状態の数 `status`（auth・http のときだけ）も持つ。判定の記録（session-usage の judgment の行）が
+ * 文を照合せずに種類だけを書くため。message・判定のふるまいは変えない。
+ */
 export class SpeakNowJudgeError extends Error {
   /**
    * @param {string} message  表示用の理由（フィード・ターミナルにそのまま出せる文言）。
    * @param {number | null} [latencyMs]
+   * @param {{ kind?: "no-key" | "network" | "auth" | "http" | "timeout" | "shape"; status?: number | null }} [detail]
    */
-  constructor(message, latencyMs = null) {
+  constructor(message, latencyMs = null, detail = {}) {
     super(message);
     this.name = "SpeakNowJudgeError";
     /** @type {number | null} */
     this.latencyMs = latencyMs;
+    /** @type {string | null} 失敗の種類（記録用・文は含めない）。 */
+    this.kind = typeof detail.kind === "string" ? detail.kind : null;
+    /** @type {number | null} HTTP の状態の数（auth・http のときだけ）。 */
+    this.status = typeof detail.status === "number" ? detail.status : null;
   }
 }
 
@@ -162,7 +173,7 @@ function createDecisionsTransport(options = {}) {
       key = { ok: false };
     }
     if (!key || !key.ok || typeof key.apiKey !== "string" || key.apiKey.length === 0) {
-      throw new SpeakNowJudgeError((key && key.reason) || "Decisions API のキーが見つからない");
+      throw new SpeakNowJudgeError((key && key.reason) || "Decisions API のキーが見つからない", null, { kind: "no-key" });
     }
     const apiKey = key.apiKey;
     const body = JSON.stringify({ model, input, questions });
@@ -176,7 +187,7 @@ function createDecisionsTransport(options = {}) {
     const timeout = new Promise((_, reject) => {
       timer = setTimeoutImpl(() => {
         controller.abort();
-        reject(new SpeakNowJudgeError(timeoutText, elapsed()));
+        reject(new SpeakNowJudgeError(timeoutText, elapsed(), { kind: "timeout" }));
       }, timeoutMs);
     });
 
@@ -191,7 +202,7 @@ function createDecisionsTransport(options = {}) {
           signal: controller.signal
         });
       } catch (error) {
-        throw new SpeakNowJudgeError(redactKey(`通信失敗: ${errText(error)}`, apiKey), elapsed());
+        throw new SpeakNowJudgeError(redactKey(`通信失敗: ${errText(error)}`, apiKey), elapsed(), { kind: "network" });
       }
       /** @type {any} */
       let json = null;
@@ -204,14 +215,14 @@ function createDecisionsTransport(options = {}) {
         const status = Number(res.status) || 0;
         // 401/403 はサーバ文言にキー断片が入りうるので出さない。
         if (status === 401 || status === 403) {
-          throw new SpeakNowJudgeError(`認証失敗（${status}）`, elapsed());
+          throw new SpeakNowJudgeError(`認証失敗（${status}）`, elapsed(), { kind: "auth", status });
         }
         const detail = json && json.error && typeof json.error.message === "string" ? json.error.message.slice(0, 200) : "no detail";
         // エラーの種類（例 429 の credit_balance_exhausted）を末尾に残す（操縦席の「残高切れ」の警告の材料・
         // discussion/ai-cohost/implementation/screens/cockpit-glance-redesign.md §9.2）。
         const rawCode = json && json.error ? (json.error.code ?? json.error.type) : null;
         const code = typeof rawCode === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(rawCode) ? ` [${rawCode}]` : "";
-        throw new SpeakNowJudgeError(redactKey(`HTTP ${status}: ${detail}${code}`, apiKey), elapsed());
+        throw new SpeakNowJudgeError(redactKey(`HTTP ${status}: ${detail}${code}`, apiKey), elapsed(), { kind: "http", status });
       }
       return parse(json, elapsed);
     })();
@@ -255,7 +266,7 @@ export function createDecisionsJudge(options = {}) {
       const answer = answers.find((/** @type {any} */ a) => a && a.name === DECISIONS_QUESTION_NAME) ?? null;
       const choice = answer && typeof answer.choice === "string" ? answer.choice : null;
       if (choice == null || !allowed.has(choice)) {
-        throw new SpeakNowJudgeError("応答の形が想定外（choice が読めない）", elapsed());
+        throw new SpeakNowJudgeError("応答の形が想定外（choice が読めない）", elapsed(), { kind: "shape" });
       }
       return { choice, probs: readProbabilities(answer), latencyMs: elapsed() };
     });
@@ -295,7 +306,7 @@ export function createDecisionsQuestionsJudge(options = {}) {
     );
     return send(request.input, questions, (json, elapsed) => {
       if (!json || !Array.isArray(json.answers)) {
-        throw new SpeakNowJudgeError("応答の形が想定外（answers が無い）", elapsed());
+        throw new SpeakNowJudgeError("応答の形が想定外（answers が無い）", elapsed(), { kind: "shape" });
       }
       /** @type {Record<string, DecisionsAnswer>} */
       const answers = {};

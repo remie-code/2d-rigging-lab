@@ -304,7 +304,7 @@ export function resolveSpeakNowQuestions(questions) {
  *   latencyMs: number | null;
  *   action: "fire" | "drop-busy" | "drop-inactive" | "skip-interval" | "none";
  * }} SpeakNowJudgment
- * @typedef {{ trigger: SpeakNowTrigger; triggerSeq: number | null; message: string; latencyMs: number | null }} SpeakNowJudgeFailure
+ * @typedef {{ trigger: SpeakNowTrigger; triggerSeq: number | null; message: string; latencyMs: number | null; errorKind?: string; errorStatus?: number }} SpeakNowJudgeFailure
  * @typedef {{ choice: string; probability: number | null; trigger: SpeakNowTrigger; triggerSeq: number | null; latencyMs: number | null }} SpeakNowFireRequest
  */
 
@@ -444,7 +444,20 @@ export function createSpeakNowController(options) {
         if (disposed) return;
         const message = error instanceof Error ? error.message : String(error);
         const latencyMs = error && typeof error.latencyMs === "number" ? error.latencyMs : null;
-        safe(() => onError({ trigger, triggerSeq, message, latencyMs }));
+        // Discord モード Domain H（discord-mode.md §13.7）: 判定の記録に書く失敗の種類（SpeakNowJudgeError の kind・
+        // status）。持っている失敗のときだけ足す（無ければ今の形のまま・判定のふるまいは変えない）。
+        const errorKind = error && typeof error.kind === "string" ? error.kind : null;
+        const errorStatus = error && typeof error.status === "number" ? error.status : null;
+        safe(() =>
+          onError({
+            trigger,
+            triggerSeq,
+            message,
+            latencyMs,
+            ...(errorKind != null ? { errorKind } : {}),
+            ...(errorStatus != null ? { errorStatus } : {})
+          })
+        );
       }
     );
   };

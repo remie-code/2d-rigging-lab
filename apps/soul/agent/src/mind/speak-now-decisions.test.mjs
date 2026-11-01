@@ -315,3 +315,58 @@ test("judge: HTTP エラーの種類（error.code）を末尾に残す（429 の
   });
   await assert.rejects(judgeOdd(request()), (e) => e.message === "HTTP 400: bad");
 });
+
+// ── Discord モード Domain H: 失敗の種類（判定の記録が文を照合せずに種類だけを書くため・discord-mode.md §13.7）──────
+
+test("judge: 失敗は種類（kind）を持つ — キー無し・時間切れ・通信・認証・HTTP（status つき）・形。message は今のまま", async () => {
+  /** @param {any} judge */
+  const failure = async (judge) => {
+    try {
+      await judge(request());
+    } catch (e) {
+      return /** @type {any} */ (e);
+    }
+    throw new Error("rejects のはず");
+  };
+  const noKey = await failure(createDecisionsJudge({ apiKeyProvider: () => ({ ok: false, reason: "キーが見つからない（テスト）" }), fetchImpl: makeFetch(okResponse()).fetchImpl }));
+  assert.equal(noKey.kind, "no-key");
+  assert.equal(noKey.status, null);
+  assert.equal(noKey.message, "キーが見つからない（テスト）");
+
+  const timers = makeTimers();
+  const pending = createDecisionsJudge({
+    apiKeyProvider: keyOk,
+    fetchImpl: /** @type {any} */ (() => new Promise(() => {})),
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    nowImpl: timers.now
+  })(request());
+  await Promise.resolve();
+  timers.advance(DECISIONS_TIMEOUT_MS);
+  const timeout = await pending.catch((e) => e);
+  assert.equal(timeout.kind, "timeout");
+  assert.match(timeout.message, /タイムアウト/);
+
+  const network = await failure(createDecisionsJudge({ apiKeyProvider: keyOk, fetchImpl: /** @type {any} */ (async () => { throw new Error("ECONNRESET"); }) }));
+  assert.equal(network.kind, "network");
+  assert.match(network.message, /通信失敗: ECONNRESET/);
+
+  const auth = await failure(createDecisionsJudge({ apiKeyProvider: keyOk, fetchImpl: makeFetch({ ok: false, status: 403, json: async () => ({}) }).fetchImpl }));
+  assert.equal(auth.kind, "auth");
+  assert.equal(auth.status, 403);
+  assert.equal(auth.message, "認証失敗（403）");
+
+  const http = await failure(createDecisionsJudge({ apiKeyProvider: keyOk, fetchImpl: makeFetch({ ok: false, status: 429, json: async () => ({ error: { message: "quota", code: "credit_balance_exhausted" } }) }).fetchImpl }));
+  assert.equal(http.kind, "http");
+  assert.equal(http.status, 429);
+  assert.equal(http.message, "HTTP 429: quota [credit_balance_exhausted]");
+
+  const shape = await failure(createDecisionsJudge({ apiKeyProvider: keyOk, fetchImpl: makeFetch({ ok: true, status: 200, json: async () => ({}) }).fetchImpl }));
+  assert.equal(shape.kind, "shape");
+  const noAnswers = await createDecisionsQuestionsJudge({ apiKeyProvider: keyOk, fetchImpl: makeFetch({ ok: true, status: 200, json: async () => ({}) }).fetchImpl })({ input: "x", questions: guardQuestions() }).catch((e) => e);
+  assert.equal(noAnswers.kind, "shape");
+  // 種類を渡さない作り方（既存の呼び方）は null のまま。
+  const plain = new SpeakNowJudgeError("x", 1);
+  assert.equal(plain.kind, null);
+  assert.equal(plain.status, null);
+});
