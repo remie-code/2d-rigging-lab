@@ -55,7 +55,9 @@ export const DISCORD_NO_VISION_LABEL = "使わない（目を起こさない）"
 export const DISCORD_CONNECTION_LABELS = Object.freeze({
   joining: "VC に入っている途中",
   joined: "VC に入っている",
-  disconnected: "VC から切れた（つなぎ直しを待っている）"
+  disconnected: "VC から切れた（つなぎ直しを待っている）",
+  // Discord モード Domain I（§13.4）: どの VC にもいない（体験は開いたまま）。パネル・文言の作り込みは Domain K。
+  outside: "VC の外で待っている"
 });
 
 /**
@@ -104,7 +106,7 @@ export function discordJoinView(stream, available) {
 export function venueConnectionView(stream) {
   if (!isDiscordVenue(stream)) return null;
   const c = stream && typeof stream.connection === "string" ? stream.connection : null;
-  if (c !== "joining" && c !== "joined" && c !== "disconnected") return null;
+  if (c !== "joining" && c !== "joined" && c !== "disconnected" && c !== "outside") return null;
   return {
     text: DISCORD_CONNECTION_LABELS[c],
     className: "venue-connection " + c,

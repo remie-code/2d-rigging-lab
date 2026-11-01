@@ -17,6 +17,12 @@
  * NoSubscriberBehavior・src/test-support/fake-discord-audio.mjs）を足し、偽の接続に `subscribe(player)` を足した。返り値の `audio` で
  * 20ms の周期を進める（`audio.step(n)`）。D の口とふるまいは変えていない。
  *
+ * Discord モード Domain I: 接続の状態に閉じのコード（`setConnectionStatus("disconnected", { closeCode: 4014 })`）・Bot を Discord の
+ * 画面で動かす（`moveBot`・ライブラリと同じく joinConfig.channelId を書き換え、Bot 自身の voiceStateUpdate を出す）・外から切る
+ * （`kickBot`）・サーバーの voiceStates（人数）・入退室の member（名前・Bot か）・チャンネルの guildId を足した。同じ guild + group の
+ * 接続を destroy しないまま joinVoiceChannel を呼ぶと、本物のライブラリはその接続を使い回すので、その呼び出しを `record.reusedJoins`
+ * に数える（偽物は今までどおり新しい接続を作る）。D・E の口とふるまいは変えていない。
+ *
  * ID はどれも明らかに偽の値（`guild-fake-1`・`user-fake-a` など）をテストが決める。
  */
 
@@ -77,7 +83,7 @@ export const OPUS_SILENCE_FRAME = Buffer.from([0xf8, 0xff, 0xfe]);
 
 /**
  * @typedef {{ id: string; name: string; type?: number; rawPosition?: number }} FakeChannelSpec
- * @typedef {{ id: string; name: string; channels?: FakeChannelSpec[]; members?: Record<string, string> }} FakeGuildSpec
+ * @typedef {{ id: string; name: string; channels?: FakeChannelSpec[]; members?: Record<string, string>; voiceStates?: Record<string, string> }} FakeGuildSpec
  */
 
 /**
@@ -101,15 +107,32 @@ export function createFakeDiscord(options = {}) {
     /** @type {any[]} */ connections: [],
     /** @type {Array<{ userId: string; options: any }>} */ subscribes: [],
     /** @type {string[]} */ memberFetches: [],
+    /** destroy していない同じ guild + group の接続があるのに呼ばれた joinVoiceChannel（本物は使い回す・Domain I）。 @type {any[]} */
+    reusedJoins: [],
     loadCount: 0
   };
 
-  /** @param {FakeChannelSpec} spec */
-  const makeChannel = (spec) => {
+  /** サーバーごとの voiceStates（userId → channelId・Domain I の人数）。 @type {Map<string, Map<string, { id: string; channelId: string }>>} */
+  const voiceStateCaches = new Map();
+  /** @param {string} guildId */
+  const voiceStateCache = (guildId) => {
+    let cache = voiceStateCaches.get(guildId);
+    if (!cache) {
+      cache = new Map();
+      const spec = guildSpecs.find((g) => g.id === guildId);
+      for (const [userId, channelId] of Object.entries(spec?.voiceStates ?? {})) cache.set(userId, { id: userId, channelId });
+      voiceStateCaches.set(guildId, cache);
+    }
+    return cache;
+  };
+
+  /** @param {FakeChannelSpec} spec @param {string} [guildId] */
+  const makeChannel = (spec, guildId) => {
     const type = spec.type ?? FAKE_CHANNEL_TYPE.GuildVoice;
     return {
       id: spec.id,
       name: spec.name,
+      guildId,
       type,
       rawPosition: spec.rawPosition ?? 0,
       isVoiceBased: () => type === FAKE_CHANNEL_TYPE.GuildVoice || type === FAKE_CHANNEL_TYPE.GuildStageVoice,
@@ -119,10 +142,11 @@ export function createFakeDiscord(options = {}) {
 
   /** @param {FakeGuildSpec} spec */
   const makeGuild = (spec) => {
-    const channels = (spec.channels ?? []).map(makeChannel);
+    const channels = (spec.channels ?? []).map((c) => makeChannel(c, spec.id));
     return {
       id: spec.id,
       name: spec.name,
+      voiceStates: { cache: voiceStateCache(spec.id) },
       voiceAdapterCreator: () => ({ sendPayload: () => true, destroy: () => {} }),
       channels: {
         /** @param {string} [id] */
@@ -211,10 +235,10 @@ export function createFakeDiscord(options = {}) {
       if (this.state.status === FAKE_VOICE_STATUS.Destroyed) return undefined;
       return fakeSubscribe(this, player);
     }
-    /** @param {string} status */
-    setStatus(status) {
+    /** @param {string} status @param {object} [extra]  状態に足す値（Domain I: closeCode・reason）。 */
+    setStatus(status, extra = {}) {
       const old = this.state;
-      this.state = { status };
+      this.state = { status, ...extra };
       this.emit("stateChange", old, this.state);
     }
     destroy() {
@@ -227,6 +251,13 @@ export function createFakeDiscord(options = {}) {
   /** @param {any} config */
   const joinVoiceChannel = (config) => {
     record.joins.push(config);
+    const live = record.connections.find(
+      (c) =>
+        c.state.status !== FAKE_VOICE_STATUS.Destroyed &&
+        c.joinConfig.guildId === config.guildId &&
+        (c.joinConfig.group ?? "default") === (config.group ?? "default")
+    );
+    if (live) record.reusedJoins.push(config);
     const connection = new FakeVoiceConnection(config);
     record.connections.push(connection);
     if (!options.joinFails) {
@@ -239,22 +270,37 @@ export function createFakeDiscord(options = {}) {
     return connection;
   };
 
-  /** @param {any} connection @param {string} status @param {number} _timeoutMs */
-  const entersState = (connection, status, _timeoutMs) => {
+  /**
+   * Domain I: 本物と同じく、上限（timeoutMs）までに目当ての状態にならなければ reject する（数でなければ待ち続ける）。
+   * @param {any} connection @param {string} status @param {number} timeoutMs
+   */
+  const entersState = (connection, status, timeoutMs) => {
     if (options.joinFails) return Promise.reject(new Error("The operation was aborted (fake)"));
     if (connection.state.status === status) return Promise.resolve(connection);
     return new Promise((resolve, reject) => {
+      /** @type {any} */
+      let timer = null;
+      const done = () => {
+        connection.off("stateChange", onChange);
+        if (timer) clearTimeout(timer);
+      };
       /** @param {any} _old @param {any} next */
       const onChange = (_old, next) => {
         if (next.status === status) {
-          connection.off("stateChange", onChange);
+          done();
           resolve(connection);
         } else if (next.status === FAKE_VOICE_STATUS.Destroyed) {
-          connection.off("stateChange", onChange);
+          done();
           reject(new Error("destroyed"));
         }
       };
       connection.on("stateChange", onChange);
+      if (typeof timeoutMs === "number" && Number.isFinite(timeoutMs)) {
+        timer = setTimeout(() => {
+          done();
+          reject(new Error("The operation was aborted (fake timeout)"));
+        }, timeoutMs);
+      }
     });
   };
 
@@ -307,18 +353,78 @@ export function createFakeDiscord(options = {}) {
     endSpeech(userId) {
       connection()?.receiver.subscriptions.get(userId)?.end();
     },
-    /** 入退室（client の voiceStateUpdate）。 @param {{ userId: string; guildId: string; from: string | null; to: string | null }} change */
+    /**
+     * 入退室（client の voiceStateUpdate）。Domain I: name / bot を渡すと member（displayName・user.bot）を載せる。サーバーの
+     * voiceStates（人数）も書き換える。
+     * @param {{ userId: string; guildId: string; from: string | null; to: string | null; name?: string; bot?: boolean }} change
+     */
     voiceState(change) {
       const guild = { id: change.guildId };
+      const member =
+        change.name !== undefined || change.bot !== undefined
+          ? { displayName: change.name ?? null, user: { id: change.userId, bot: change.bot === true } }
+          : undefined;
+      const cache = voiceStateCache(change.guildId);
+      if (change.to) cache.set(change.userId, { id: change.userId, channelId: change.to });
+      else cache.delete(change.userId);
       client()?.emit(
         FAKE_EVENTS.VoiceStateUpdate,
-        { id: change.userId, guild, channelId: change.from },
-        { id: change.userId, guild, channelId: change.to }
+        { id: change.userId, guild, channelId: change.from, ...(member ? { member } : {}) },
+        { id: change.userId, guild, channelId: change.to, ...(member ? { member } : {}) }
       );
     },
-    /** 接続の状態を替える（切れた・つながり直した）。 @param {string} status */
-    setConnectionStatus(status) {
-      connection()?.setStatus(status);
+    /** 接続の状態を替える（切れた・つながり直した）。 @param {string} status @param {object} [extra]  closeCode・reason（Domain I）。 */
+    setConnectionStatus(status, extra) {
+      connection()?.setStatus(status, extra);
+    },
+    /**
+     * Discord の画面で Bot を別の VC へ動かす（Domain I）。本物と同じ順: ライブラリが Bot の VOICE_STATE_UPDATE で接続の
+     * joinConfig.channelId を書き換え → client が voiceStateUpdate を出す。opts.closeCode4014 なら、そのあと声の WebSocket が 4014 で
+     * 閉じて Disconnected（closeCode 4014）→ 動いた先の声のサーバーの知らせで Connecting → Ready（opts.recover が false なら戻らない）。
+     * opts.closeFirst なら 4014 を voiceStateUpdate より先に出す。opts.channelName を渡すと newState.channel に名前を載せる。
+     * @param {string} to @param {{ closeCode4014?: boolean; closeFirst?: boolean; recover?: boolean; channelName?: string }} [opts]
+     */
+    moveBot(to, opts = {}) {
+      const c = connection();
+      if (!c) throw new Error("no connection");
+      const guildId = c.joinConfig.guildId;
+      const from = c.joinConfig.channelId;
+      const close = () => {
+        if (opts.closeCode4014) c.setStatus(FAKE_VOICE_STATUS.Disconnected, { reason: 0, closeCode: 4014 });
+      };
+      if (opts.closeFirst) close();
+      c.joinConfig = { ...c.joinConfig, channelId: to };
+      const guild = { id: guildId };
+      voiceStateCache(guildId).set(botUserId, { id: botUserId, channelId: to });
+      client()?.emit(
+        FAKE_EVENTS.VoiceStateUpdate,
+        { id: botUserId, guild, channelId: from },
+        { id: botUserId, guild, channelId: to, ...(opts.channelName ? { channel: { id: to, name: opts.channelName } } : {}) }
+      );
+      if (!opts.closeFirst) close();
+      if (opts.closeCode4014 && opts.recover !== false) {
+        c.setStatus(FAKE_VOICE_STATUS.Connecting);
+        c.setStatus(FAKE_VOICE_STATUS.Ready);
+      }
+    },
+    /**
+     * 外から切る（Domain I・キック / チャンネルの削除）: Bot 自身の voiceStateUpdate（VC → なし）と 4014 の Disconnected。
+     * opts.voiceState が false なら 4014 だけ。
+     * @param {{ voiceState?: boolean }} [opts]
+     */
+    kickBot(opts = {}) {
+      const c = connection();
+      if (!c) throw new Error("no connection");
+      const guildId = c.joinConfig.guildId;
+      if (opts.voiceState !== false) {
+        voiceStateCache(guildId).delete(botUserId);
+        client()?.emit(
+          FAKE_EVENTS.VoiceStateUpdate,
+          { id: botUserId, guild: { id: guildId }, channelId: c.joinConfig.channelId },
+          { id: botUserId, guild: { id: guildId }, channelId: null }
+        );
+      }
+      c.setStatus(FAKE_VOICE_STATUS.Disconnected, { reason: 0, closeCode: 4014 });
     }
   };
 }

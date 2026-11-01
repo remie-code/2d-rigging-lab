@@ -18,7 +18,17 @@
  *
  * ── 閉じる ─────────────────────────────────────────────────────────────
  *  closeEntrance: VC を抜けてログアウトする（場が正本を手放し耳の束を畳んだあと）。**冪等**（開いていなくても・二重でも）。
- *  抜けるのは操作者の操作（場を閉じる）だけ。全員が抜けても、接続が切れても、Bot は自分では抜けない（scope §21・§23）。
+ *  抜けるのは操作者の操作（場を閉じる・VC から抜ける）だけ。全員が抜けても、接続が切れても、Bot は自分では抜けない（scope §21・§23）。
+ *
+ * ── 体験と VC 接続（Discord モード Domain I・§13.2・§13.3）──────────────────────────────────
+ *  体験の分（client・guild・部品・botId・耳の束・耳の番号・client の VoiceStateUpdate の購読）と、接続の分（voice connection・
+ *  接続のイベント・receiver・speaking の購読・人ごとの購読 / デコーダ / 耳・出口）を分けて持つ。場（server）の API から
+ *  vc.join / vc.leave / vc.move を呼ぶ: 抜ける = 接続の分を畳む（人の耳を束から drop・出口を畳む・connection を destroy。耳の束は
+ *  体験の間 1 つのまま・client はログアウトしない）、移る = 抜ける + 入る。どの VC にもいない間は接続の状態 "outside"・耳は
+ *  「聞いていない」（場の口 pauseEars）・出口は差し口に「VC にいない」の口を残す（hold・手元のスピーカーに戻さない）。
+ *  外から: 閉じのコード 4014 は猶予（動かされたときのつなぎ直しを待つ）のあと VC の外で待っている。Bot 自身が今いる VC から別の
+ *  VC へ動いた（Discord の画面で動かされた）ら、動いた先を今の VC として追う。自分で抜けた・移ったときは接続の購読を先に外す
+ *  ので「切れた」と出ない。出来事は場の口 vcEvent へ合図する（種類と VC・人の名前だけ・id は渡さない。Domain J が使う）。
  *
  * ── 人ごとの音 → 耳（§6.2）────────────────────────────────────────────────
  *  人ごとに Opus のデコーダ 1 つ（直に 16kHz モノラル）と耳 1 本。耳は場の口 createEar（配信の耳と同じ組み立て・whisper /
@@ -67,8 +77,31 @@ import {
 /** Discord の準備の文字起こしの方式が無いときの既定（配信の文字起こしの既定と同じ）。 */
 export const DEFAULT_DISCORD_STT_ENGINE = "whisper";
 
-/** snapshot の `stream.connection` の値（Discord の場の間だけ・それ以外は null）。 */
-export const DISCORD_CONNECTION_STATES = Object.freeze(["joining", "joined", "disconnected"]);
+/**
+ * snapshot の `stream.connection` の値（Discord の場の間だけ・それ以外は null）。Domain I: "outside" = どの VC にもいない（自分で
+ * 抜けた・外から切られた〔閉じのコード 4014〕。体験は開いたまま VC の外で待っている）。
+ */
+export const DISCORD_CONNECTION_STATES = Object.freeze(["joining", "joined", "disconnected", "outside"]);
+
+/** 声の WebSocket の閉じのコード「つなぎ直さない」（キック・チャンネルの削除・移された。@discordjs/voice はつなぎ直さない）。 */
+export const DISCORD_CLOSE_CODE_DO_NOT_RECONNECT = 4014;
+/**
+ * 切れたあとの猶予（Domain I）。この間に戻れば何もしない（動かされたときのつなぎ直し・短い途切れ）。戻らなければ、4014 なら
+ * VC の外で待っている、それ以外は「切れた」の合図を 1 回出す（公式の勧めの 5 秒と同じ）。
+ */
+export const DISCORD_DISCONNECT_GRACE_MS = 5_000;
+/** snapshot に載せる VC の名前の上限（字数）。 */
+export const DISCORD_CHANNEL_NAME_MAX_CHARS = 100;
+
+/** 入る・抜ける・移る（POST /api/discord/vc）を断る理由（決まった短い日本語・id や名前を入れない）。 */
+export const DISCORD_VC_REFUSALS = Object.freeze({
+  notOpen: "Discord の場が開いていない（VC に入ってから）",
+  busy: "VC に入る・抜ける・移るの途中（少し待ってからもう一度）",
+  inVc: "もう VC にいる（別の VC へは「移る」）",
+  notInVc: "どの VC にもいない（「入る」で入る）",
+  same: "もうその VC にいる",
+  channelId: "ボイスチャンネルの id の形が違う"
+});
 
 /** 購読を閉じる無音の長さ（AfterSilence の duration）。 */
 export const DISCORD_SILENCE_END_MS = 500;
@@ -282,6 +315,7 @@ export function speakerTranscriptMouth(buffer, person) {
  * @param {number} [deps.silenceEndMs=DISCORD_SILENCE_END_MS]
  * @param {number} [deps.tailSilenceMs=DISCORD_TAIL_SILENCE_MS]
  * @param {number} [deps.minSpeechMs=DISCORD_MIN_SPEECH_MS]
+ * @param {number} [deps.disconnectGraceMs=DISCORD_DISCONNECT_GRACE_MS]  切れたあとの猶予（Domain I・テストは短くする）。
  */
 export function createDiscordExperience(deps) {
   const settings = deps.settings;
@@ -295,11 +329,12 @@ export function createDiscordExperience(deps) {
   const silenceEndMs = deps.silenceEndMs ?? DISCORD_SILENCE_END_MS;
   const tailSilenceMs = deps.tailSilenceMs ?? DISCORD_TAIL_SILENCE_MS;
   const minSpeechMs = deps.minSpeechMs ?? DISCORD_MIN_SPEECH_MS;
+  const disconnectGraceMs = deps.disconnectGraceMs ?? DISCORD_DISCONNECT_GRACE_MS;
 
-  /** @type {"joining" | "joined" | "disconnected" | null} */
+  /** @type {"joining" | "joined" | "disconnected" | "outside" | null} */
   let connection = null;
-  /** 今の VC の 1 回分（開いている間だけ）。 @type {any} */
-  let session = null;
+  /** 体験の分（openEntrance が成り立ってから closeEntrance まで・Domain I）。 @type {any} */
+  let experience = null;
   /** 読み込み中の一覧（同時に 2 回はログインしない）。 @type {Promise<any> | null} */
   let catalogInFlight = null;
 
@@ -311,7 +346,7 @@ export function createDiscordExperience(deps) {
     }
   };
 
-  /** @param {"joining" | "joined" | "disconnected" | null} next @param {any} [venue] */
+  /** @param {"joining" | "joined" | "disconnected" | "outside" | null} next @param {any} [venue] */
   const setConnection = (next, venue) => {
     if (connection === next) return;
     connection = next;
@@ -400,29 +435,39 @@ export function createDiscordExperience(deps) {
     }
   };
 
-  // ── 人ごとの音 → 耳 ──────────────────────────────────────────────────
+  // ── 体験の分と接続の分（Discord モード Domain I・discord-mode.md §13.2）────────────────────────────
+  //
+  //  体験の分 x（openEntrance が成り立ってから closeEntrance まで）: client（ログイン）・guild・部品（voice・OpusScript・discord）・
+  //    botId・耳の束（体験の間 1 つ・抜けても畳まない）・耳の番号（seq）・client の VoiceStateUpdate の購読（x.offs）・数え（counters）・
+  //    今の接続の分（x.link・どの VC にもいなければ null）・抜けたときに差し口に残した出口（x.heldOutlet）。
+  //  接続の分 c（VC 1 つにつき 1 つ）: VC の名前と id・voice connection・接続のイベント・receiver・speaking の購読（c.offs）・
+  //    人ごとの購読 / デコーダ / 耳（c.people）・出口（c.outlet）・つなぎ直しを見る猶予のタイマ。
+  //  抜ける = 接続の分を畳む（人の耳を束から drop・出口を畳む・connection を destroy）。移る = 抜ける + 入る（destroy して入り直す）。
 
-  /** 空いている一番小さい席（whisper の口の番号をずらすため）。 @param {any} s */
-  const freeSlot = (s) => {
-    const used = new Set([...s.people.values()].map((p) => p.slot));
+  /** 空いている一番小さい席（whisper の口の番号をずらすため）。今の接続の分の人から数える。 @param {any} c */
+  const freeSlot = (c) => {
+    const used = new Set([...c.people.values()].map((p) => p.slot));
     let slot = 0;
     while (used.has(slot)) slot += 1;
     return slot;
   };
 
+  /** @param {any} x @param {any} c */
+  const linkLive = (x, c) => !x.closed && !c.closed && x.link === c;
+
   /**
-   * その人の耳（無ければ作る）。耳が起きなかった人は、この場の間は聞かない（null）。
-   * @param {any} s @param {string} userId
+   * その人の耳（無ければ作る）。耳が起きなかった人は、この接続の間は聞かない（null）。
+   * @param {any} x @param {any} c @param {string} userId
    */
-  const ensurePerson = (s, userId) => {
-    const existing = s.people.get(userId);
+  const ensurePerson = (x, c, userId) => {
+    const existing = c.people.get(userId);
     if (existing) return existing.failed ? null : existing;
-    if (s.closed || !s.ears || s.ears.isDisposed()) return null;
-    s.seq += 1;
+    if (!linkLive(x, c) || !x.ears || x.ears.isDisposed()) return null;
+    x.seq += 1;
     const person = {
       userId,
-      key: `discord-${s.seq}`,
-      slot: freeSlot(s),
+      key: `discord-${x.seq}`,
+      slot: freeSlot(c),
       /** @type {string | null} */ name: null,
       source: createSpeakerAudioSource(),
       /** @type {any} */ decoder: null,
@@ -431,30 +476,30 @@ export function createDiscordExperience(deps) {
       gone: false
     };
     try {
-      person.decoder = createOpusDecoder16k(s.OpusScript);
+      person.decoder = createOpusDecoder16k(x.OpusScript);
     } catch {
       person.failed = true;
-      s.people.set(userId, person);
+      c.people.set(userId, person);
       say("speaker decoder failed");
       return null;
     }
-    s.people.set(userId, person);
-    void fetchName(s, person);
+    c.people.set(userId, person);
+    void fetchName(x, person);
     /** @type {any} */
     let ear;
     try {
-      ear = s.venue.createEar({
-        earPlan: s.plan.earPlan,
-        ears: s.ears,
+      ear = x.venue.createEar({
+        earPlan: x.plan.earPlan,
+        ears: x.ears,
         key: person.key,
         captureFactory: person.source.captureFactory,
-        transcriptBuffer: speakerTranscriptMouth(s.venue.transcriptBuffer, person),
+        transcriptBuffer: speakerTranscriptMouth(x.venue.transcriptBuffer, person),
         segmenter: { minSpeechMs },
         whisperPortOffset: person.slot
       });
-      s.ears.add(person.key, ear);
+      x.ears.add(person.key, ear);
     } catch {
-      failPerson(s, person, null);
+      failPerson(x, c, person, null);
       return null;
     }
     person.ear = ear;
@@ -462,40 +507,40 @@ export function createDiscordExperience(deps) {
       .then(() => ear.start())
       .then(
         () => {
-          if (s.closed || person.gone) return;
+          if (!linkLive(x, c) || person.gone) return;
           try {
-            s.venue.earStarted?.(s.plan.earPlan.engine);
+            x.venue.earStarted?.(x.plan.earPlan.engine);
           } catch {
             // best-effort
           }
-          say(`speaker ear started (speakers ${countLive(s)})`);
+          say(`speaker ear started (speakers ${countLive(c)})`);
         },
         () => {
-          if (s.closed || person.gone) return;
-          failPerson(s, person, DISCORD_REASONS.ear);
+          if (!linkLive(x, c) || person.gone) return;
+          failPerson(x, c, person, DISCORD_REASONS.ear);
         }
       );
     return person;
   };
 
-  /** @param {any} s */
-  const countLive = (s) => [...s.people.values()].filter((p) => !p.failed && !p.gone).length;
+  /** @param {any} c */
+  const countLive = (c) => [...c.people.values()].filter((p) => !p.failed && !p.gone).length;
 
   /**
-   * 耳が起きなかった人（この場の間は聞かない）。耳は耳の側が自分を畳む約束なので、束から外して念のため畳む。
-   * @param {any} s @param {any} person @param {string | null} reason
+   * 耳が起きなかった人（この接続の間は聞かない）。耳は耳の側が自分を畳む約束なので、束から外して念のため畳む。
+   * @param {any} x @param {any} c @param {any} person @param {string | null} reason
    */
-  const failPerson = (s, person, reason) => {
+  const failPerson = (x, c, person, reason) => {
     person.failed = true;
-    releasePerson(s, person);
+    releasePerson(c, person);
     try {
-      void s.ears?.drop(person.key);
+      void x.ears?.drop(person.key);
     } catch {
       // best-effort
     }
     if (reason) {
       try {
-        s.venue.earFailed?.(s.plan.earPlan.engine, reason);
+        x.venue.earFailed?.(x.plan.earPlan.engine, reason);
       } catch {
         // best-effort
       }
@@ -503,10 +548,10 @@ export function createDiscordExperience(deps) {
     say("speaker ear failed");
   };
 
-  /** 購読・デコーダ・音の入口を畳む（耳そのものは束の側）。 @param {any} s @param {any} person */
-  const releasePerson = (s, person) => {
+  /** 購読・デコーダ・音の入口を畳む（耳そのものは束の側）。 @param {any} c @param {any} person */
+  const releasePerson = (c, person) => {
     try {
-      s.receiver?.subscriptions?.get(person.userId)?.destroy?.();
+      c.receiver?.subscriptions?.get(person.userId)?.destroy?.();
     } catch {
       // best-effort
     }
@@ -525,10 +570,26 @@ export function createDiscordExperience(deps) {
     }
   };
 
-  /** 名前は 1 人 1 回だけ取る（特権 Intent なしで取れる・受信の試し）。取れなければ名前なし。 @param {any} s @param {any} person */
-  const fetchName = async (s, person) => {
+  /**
+   * 人を 1 人外す（購読・デコーダ・音の入口を畳み、耳を束から drop）。
+   * @param {any} x @param {any} c @param {any} person
+   */
+  const dropPerson = async (x, c, person) => {
+    person.gone = true;
+    c.people.delete(person.userId);
+    releasePerson(c, person);
+    if (person.failed) return;
     try {
-      const member = await s.guild.members.fetch(person.userId);
+      await x.ears?.drop(person.key);
+    } catch {
+      // best-effort
+    }
+  };
+
+  /** 名前は 1 人 1 回だけ取る（特権 Intent なしで取れる・受信の試し）。取れなければ名前なし。 @param {any} x @param {any} person */
+  const fetchName = async (x, person) => {
+    try {
+      const member = await x.guild.members.fetch(person.userId);
       const name = member && typeof member.displayName === "string" ? member.displayName.trim() : "";
       if (name.length > 0) person.name = name;
     } catch {
@@ -538,135 +599,482 @@ export function createDiscordExperience(deps) {
 
   /**
    * 人が話し始めた（receiver.speaking の start）: その人を購読し、デコードして耳へ流す。
-   * @param {any} s @param {string} userId
+   * @param {any} x @param {any} c @param {string} userId
    */
-  const handleSpeakingStart = (s, userId) => {
-    if (s.closed || typeof userId !== "string" || userId === s.botId) return;
-    const receiver = s.receiver;
+  const handleSpeakingStart = (x, c, userId) => {
+    if (!linkLive(x, c) || typeof userId !== "string" || userId === x.botId) return;
+    const receiver = c.receiver;
     // 同じ人の購読が続いている間（黙って閉じる前）は、同じ購読のまま。
     if (receiver.subscriptions.has(userId)) return;
-    const person = ensurePerson(s, userId);
+    const person = ensurePerson(x, c, userId);
     if (!person) return;
     /** @type {any} */
     let stream;
     try {
-      stream = receiver.subscribe(userId, { end: { behavior: s.voice.EndBehaviorType.AfterSilence, duration: silenceEndMs } });
+      stream = receiver.subscribe(userId, { end: { behavior: x.voice.EndBehaviorType.AfterSilence, duration: silenceEndMs } });
     } catch {
-      s.counters.subscribeErrors += 1;
+      x.counters.subscribeErrors += 1;
       return;
     }
-    s.counters.utterances += 1;
+    x.counters.utterances += 1;
     stream.on("data", (/** @type {Buffer} */ packet) => {
-      if (s.closed || person.gone || person.failed) return;
-      s.counters.packets += 1;
+      if (!linkLive(x, c) || person.gone || person.failed) return;
+      x.counters.packets += 1;
       // §6.4 の 1: 3 バイトの無音のフレームはデコードの前に捨てる。
       if (isOpusSilenceFrame(packet)) {
-        s.counters.silenceFrames += 1;
+        x.counters.silenceFrames += 1;
         return;
       }
       try {
         person.source.push(toPcmBuffer(person.decoder.decode(packet)));
       } catch {
-        s.counters.decodeErrors += 1;
+        x.counters.decodeErrors += 1;
       }
     });
     stream.on("error", () => {
-      s.counters.streamErrors += 1;
+      x.counters.streamErrors += 1;
     });
     // 購読の終わり（黙った）: 耳の区切りが閉じるよう短い無音を足す（Discord は黙っている間は音を送らない）。
     stream.once("close", () => {
-      if (s.closed || person.gone || person.failed) return;
+      if (!linkLive(x, c) || person.gone || person.failed) return;
       person.source.push(silencePcm(tailSilenceMs));
     });
   };
 
+  // ── 出来事の合図（Domain J のための口・Domain I）─────────────────────────────────
+  //
+  //  体験から場（server）へ VC の出来事を知らせる（場の口 vcEvent）。中身は種類と VC の名前・人の名前だけ（Discord の id は渡さない）。
+  //  場はここから `control` の記録を書き、Domain J が会話の正本の出来事の行にする（I では正本に行を足さない）。
+  //   - "vc-join"（入った・via: "open" = 体験を開いた / "panel" = API）・"vc-leave"（自分で抜けた）・"vc-move"（自分で移った）
+  //   - "vc-moved"（Discord の画面で動かされた・追った）・"vc-kicked"（外から切られた = 4014 / Bot 自身が VC の外へ）
+  //   - "vc-disconnect"（切れた・猶予のあいだ戻らなかった）・"vc-reconnect"（切れたのがつながり直した）
+  //   - "person-join" / "person-leave"（今いる VC の人の入ってきた・出ていった。Bot 自身とほかの Bot は除く）
+
+  /** @param {any} x @param {Record<string, unknown>} event */
+  const emitVc = (x, event) => {
+    try {
+      x.venue.vcEvent?.(Object.freeze({ ...event }));
+    } catch {
+      // 知らせの失敗で入口を止めない。
+    }
+  };
+
+  /** VC の名前（文字列でなければ null・長すぎる名前は切る）。 @param {any} channel */
+  const channelNameOf = (channel) => {
+    const raw = channel && typeof channel.name === "string" ? channel.name.trim() : "";
+    return raw.length > 0 ? [...raw].slice(0, DISCORD_CHANNEL_NAME_MAX_CHARS).join("") : null;
+  };
+
+  /** 人の名前（VoiceState の member の displayName・無ければ null）。 @param {any} state */
+  const memberNameOf = (state) => {
+    const raw = state?.member && typeof state.member.displayName === "string" ? state.member.displayName.trim() : "";
+    return raw.length > 0 ? raw : null;
+  };
+
+  /** その VoiceState の人が Bot か（分からなければ false）。 @param {any} state */
+  const memberIsBot = (state) => state?.member?.user?.bot === true;
+
   /**
-   * VC への入退室: 抜けた人の耳を束から外す（正本は続く・場は閉じない）。全員が抜けても Bot は抜けない。
-   * @param {any} s @param {any} oldState @param {any} newState
+   * VC への入退室（client の VoiceStateUpdate）。**今いる VC**（x.link の channelId）を見る:
+   *  - Bot 自身: 今いる VC から別の VC へ = Discord の画面で動かされた（動いた先を今の VC として追う）。今いる VC から外へ = 外から
+   *    切られた（VC の外で待っている）。
+   *  - ほかの人: 今いる VC から抜けた人の耳を束から外す（正本は続く・場は閉じない）。全員が抜けても Bot は抜けない。
+   * @param {any} x @param {any} oldState @param {any} newState
    */
-  const handleVoiceState = (s, oldState, newState) => {
-    if (s.closed) return;
+  const handleVoiceState = (x, oldState, newState) => {
+    if (x.closed) return;
     const guildId = newState?.guild?.id ?? oldState?.guild?.id ?? null;
-    if (guildId !== s.plan.guildId) return;
+    if (guildId !== x.plan.guildId) return;
     const userId = newState?.id ?? oldState?.id;
-    if (typeof userId !== "string" || userId === s.botId) return;
-    const was = oldState?.channelId === s.plan.channelId;
-    const now = newState?.channelId === s.plan.channelId;
-    if (!was || now) return;
-    const person = s.people.get(userId);
+    if (typeof userId !== "string") return;
+    const c = x.link;
+    if (!c || c.closed || !c.readyOnce) return;
+    const from = oldState?.channelId ?? null;
+    const to = newState?.channelId ?? null;
+    if (userId === x.botId) {
+      handleBotVoiceState(x, c, from, to, newState);
+      return;
+    }
+    const was = from === c.channelId;
+    const now = to === c.channelId;
+    if (was === now) return;
+    const bot = memberIsBot(newState) || memberIsBot(oldState);
+    if (now) {
+      if (!bot) emitVc(x, { kind: "person-join", channelName: c.channelName, name: memberNameOf(newState) });
+      return;
+    }
+    const person = c.people.get(userId);
+    if (!bot) emitVc(x, { kind: "person-leave", channelName: c.channelName, name: memberNameOf(oldState) ?? person?.name ?? null });
     if (!person) return;
-    person.gone = true;
-    s.people.delete(userId);
-    releasePerson(s, person);
-    if (!person.failed) {
+    void dropPerson(x, c, person);
+    say(`speaker left (speakers ${countLive(c)})`);
+  };
+
+  /**
+   * Bot 自身の VoiceStateUpdate。今いる VC から動いたときだけ見る（自分で抜けた・移ったあとの遅れて届く知らせは、もう今の VC では
+   * ないので見ない）。
+   * @param {any} x @param {any} c @param {string | null} from @param {string | null} to @param {any} newState
+   */
+  const handleBotVoiceState = (x, c, from, to, newState) => {
+    if (from !== c.channelId || to === c.channelId) return;
+    if (to == null) {
+      void goOutside(x, c, "voice-state");
+      return;
+    }
+    // Discord の画面で動かされた: ライブラリは同じ接続のまま動いた先へつなぎ直す（joinConfig.channelId を書き換える）。
+    // 動いた先を今の VC として追う（名前・人の出入りを見る先を替える）。前の VC の人の耳は drop。出口と receiver は同じ接続のまま。
+    const fromName = c.channelName;
+    c.channelId = to;
+    c.channelName = channelNameOf(newState?.channel) ?? null;
+    const people = [...c.people.values()];
+    for (const person of people) void dropPerson(x, c, person);
+    say(`moved by someone (dropped speakers ${people.length})`);
+    const notify = () => emitVc(x, { kind: "vc-moved", fromChannelName: fromName, channelName: c.channelName });
+    if (c.channelName != null) {
+      notifyChanged(x);
+      notify();
+      return;
+    }
+    // 名前が手元に無ければ取ってから知らせる（取れなくても知らせる）。
+    const movedTo = to;
+    void (async () => {
       try {
-        void s.ears?.drop(person.key);
+        const channel = await x.guild.channels.fetch(movedTo);
+        if (linkLive(x, c) && c.channelId === movedTo) c.channelName = channelNameOf(channel);
+      } catch {
+        // 名前なし
+      }
+      if (!linkLive(x, c)) return;
+      notifyChanged(x);
+      notify();
+    })();
+  };
+
+  /** @param {any} x */
+  const notifyChanged = (x) => {
+    try {
+      x.venue?.changed?.();
+    } catch {
+      // best-effort
+    }
+  };
+
+  /** @param {any} c */
+  const clearGrace = (c) => {
+    if (c.graceTimer != null) {
+      try {
+        clearTimeoutImpl(c.graceTimer);
       } catch {
         // best-effort
       }
+      c.graceTimer = null;
     }
-    say(`speaker left (speakers ${countLive(s)})`);
+  };
+
+  /**
+   * 切れたあとの猶予（disconnectGraceMs）。猶予のあいだに戻れば何もしない（動かされたときのつなぎ直し・短い途切れ）。戻らなければ:
+   * 閉じのコード 4014（キック・チャンネルの削除）なら VC の外で待っている、それ以外は「切れた」の合図（場は閉じない・ライブラリの
+   * つなぎ直しに任せる）。
+   * @param {any} x @param {any} c
+   */
+  const startGrace = (x, c) => {
+    clearGrace(c);
+    const timer = setTimeoutImpl(() => {
+      c.graceTimer = null;
+      if (!linkLive(x, c)) return;
+      const st = x.voice.VoiceConnectionStatus;
+      const state = c.connection?.state ?? {};
+      if (state.status === st.Ready) return;
+      if (state.status === st.Disconnected && state.closeCode === DISCORD_CLOSE_CODE_DO_NOT_RECONNECT) {
+        void goOutside(x, c, "4014");
+        return;
+      }
+      if (!c.disconnectNoticed) {
+        c.disconnectNoticed = true;
+        emitVc(x, { kind: "vc-disconnect", channelName: c.channelName });
+      }
+    }, disconnectGraceMs);
+    /** @type {any} */ (timer)?.unref?.();
+    c.graceTimer = timer;
   };
 
   /**
    * 接続の状態（ライブラリのつなぎ直しに任せる・場は閉じない）。最初に Ready になるまでは「入っている途中」のまま。
-   * @param {any} s @param {string} status
+   * Ready 以外はみな「切れた」（今のまま）。閉じのコード 4014 のときは猶予のあと VC の外で待っている（startGrace）。
+   * @param {any} x @param {any} c @param {any} next  新しい状態（status・closeCode）。
    */
-  const handleConnectionStatus = (s, status) => {
-    if (s.closed || session !== s) return;
-    const st = s.voice.VoiceConnectionStatus;
-    if (!s.readyOnce) return;
-    const next = status === st.Ready ? "joined" : "disconnected";
-    if (next !== connection) say(`connection ${next}`);
-    setConnection(next, s.venue);
+  const handleConnectionStatus = (x, c, next) => {
+    if (!linkLive(x, c) || !c.readyOnce) return;
+    const st = x.voice.VoiceConnectionStatus;
+    const status = next?.status;
+    if (status === st.Ready) {
+      clearGrace(c);
+      if (c.disconnectNoticed) {
+        c.disconnectNoticed = false;
+        emitVc(x, { kind: "vc-reconnect", channelName: c.channelName });
+      }
+      if (connection !== "joined") say("connection joined");
+      setConnection("joined", x.venue);
+      return;
+    }
+    if (status === st.Disconnected && next?.closeCode === DISCORD_CLOSE_CODE_DO_NOT_RECONNECT) {
+      // 4014: ライブラリはつなぎ直さない。動かされたときも一度これが来うる（動いた先の声のサーバーの知らせで Connecting に進む）
+      // ので、猶予を見てから外へ落とす。猶予は 4014 が来た時から数え直す（猶予の終わりに今の状態を見るので、その間に
+      // Signalling / Connecting / Ready へ進めば外へは落とさない）。
+      startGrace(x, c);
+    } else if (c.graceTimer == null) {
+      // 4014 でない切れ・つなぎ直しの途中。猶予が走っていなければ張る（戻らなければ「切れた」の合図を 1 回出す）。
+      startGrace(x, c);
+    }
+    if (connection !== "disconnected") say("connection disconnected");
+    setConnection("disconnected", x.venue);
   };
 
   /**
-   * 今の VC の 1 回分を畳む（冪等）: 購読・デコーダ・耳の束・出口・接続・ログイン。
-   * @param {any} s
+   * 接続の分を畳む（冪等）: 接続の購読を先に外す（自分で抜けたときに「切れた」と出さない）→ 鳴っている返事を止める → 人の耳を
+   * 束から drop → 出口を畳む（hold なら差し口に「VC にいない」の口を残す = 手元のスピーカーに戻さない）→ connection を destroy。
+   * 耳の束は畳まない（体験の間 1 つ）。client はログアウトしない。
+   * @param {any} x @param {any} c @param {{ hold: boolean }} how
    */
-  const teardown = async (s) => {
-    if (!s || s.closed) return;
-    s.closed = true;
-    for (const off of s.offs.splice(0)) {
+  const foldLink = async (x, c, how) => {
+    if (!c || c.closed) return;
+    c.closed = true;
+    // 畳み始めた時点で「今の VC」ではない（畳んでいる間に届く知らせ・操作は、この接続の分を今の VC とみなさない）。
+    if (x.link === c) x.link = null;
+    clearGrace(c);
+    for (const off of c.offs.splice(0)) {
       try {
         off();
       } catch {
         // best-effort
       }
     }
-    for (const person of s.people.values()) releasePerson(s, person);
-    s.people.clear();
-    if (s.ears) {
+    if (how.hold) {
+      // 抜けた瞬間に鳴っている途中の返事は、割り込みと同じ切り方で止める（どこまで声に出たかを残す・場の口 hushVoice）。
       try {
-        await s.ears.dispose();
+        x.venue.hushVoice?.();
       } catch {
         // best-effort
       }
     }
-    if (s.outlet) {
+    const people = [...c.people.values()];
+    c.people.clear();
+    await Promise.all(people.map((person) => {
+      person.gone = true;
+      releasePerson(c, person);
+      if (person.failed || !x.ears) return Promise.resolve();
+      return Promise.resolve()
+        .then(() => x.ears.drop(person.key))
+        .catch(() => {});
+    }));
+    if (c.outlet) {
+      const outlet = c.outlet;
+      c.outlet = null;
       try {
-        await s.outlet.dispose?.();
+        await (how.hold ? outlet.dispose?.({ hold: true }) : outlet.dispose?.());
       } catch {
         // best-effort
       }
-      s.outlet = null;
+      if (how.hold) x.heldOutlet = outlet;
     }
-    if (s.connection) {
+    if (c.connection) {
       try {
-        if (s.connection.state?.status !== s.voice?.VoiceConnectionStatus?.Destroyed) s.connection.destroy();
+        if (c.connection.state?.status !== x.voice?.VoiceConnectionStatus?.Destroyed) c.connection.destroy();
       } catch {
         // best-effort（既に壊れていても畳む）。
       }
     }
-    await destroyClient(s.client);
-    if (session === s) session = null;
   };
 
-  /** @param {any} s @param {any} target @param {string} event @param {(...args: any[]) => void} fn */
-  const listen = (s, target, event, fn) => {
+  /**
+   * どの VC にもいない状態にする（接続の分は畳んだあと）: 接続の状態「VC の外で待っている」・耳は「聞いていない」（文字起こしの方式・
+   * 稼働時間は残す・場の口 pauseEars）。
+   * @param {any} x
+   */
+  const settleOutside = (x) => {
+    if (x.closed) return;
+    try {
+      x.venue.pauseEars?.();
+    } catch {
+      // best-effort
+    }
+    setConnection("outside", x.venue);
+  };
+
+  /**
+   * 外から切られた（4014 / Bot 自身が VC の外へ）: 接続の分を畳み、VC の外で待っている（体験は閉じない）。
+   * @param {any} x @param {any} c @param {string} why  ログの種類だけ（"4014" | "voice-state"）。
+   */
+  const goOutside = async (x, c, why) => {
+    if (!linkLive(x, c)) return;
+    const channelName = c.channelName;
+    await foldLink(x, c, { hold: true });
+    if (x.closed) return;
+    if (x.link == null) settleOutside(x);
+    say(`outside (${why})`);
+    emitVc(x, { kind: "vc-kicked", channelName });
+  };
+
+  /** 聞く口を足し、外す口を offs に積む。 @param {Array<() => void>} offs @param {any} target @param {string} event @param {(...args: any[]) => void} fn */
+  const listen = (offs, target, event, fn) => {
     target.on(event, fn);
-    s.offs.push(() => target.off?.(event, fn) ?? target.removeListener?.(event, fn));
+    offs.push(() => target.off?.(event, fn) ?? target.removeListener?.(event, fn));
+  };
+
+  /**
+   * 入る先のチャンネルを確かめる: **体験の client の guild**（同じサーバー）のボイスチャンネルだけ（ステージ・文字・ほかのサーバーの
+   * チャンネルは断る）。
+   * @param {any} x @param {unknown} channelId
+   * @returns {Promise<{ ok: true; channel: any } | { ok: false; reason: string; code: "shape" | "channel" | "closed" }>}
+   */
+  const resolveVoiceChannel = async (x, channelId) => {
+    if (typeof channelId !== "string" || !PREP_ID_PATTERN.test(channelId)) {
+      return { ok: false, reason: DISCORD_VC_REFUSALS.channelId, code: "shape" };
+    }
+    /** @type {any} */
+    let channel = null;
+    try {
+      channel = await x.guild.channels.fetch(channelId);
+    } catch {
+      channel = null;
+    }
+    if (x.closed) return { ok: false, reason: DISCORD_REASONS.closed, code: "closed" };
+    const voiceType = x.discord.ChannelType?.GuildVoice;
+    const guildOf = channel ? channel.guildId ?? channel.guild?.id ?? null : null;
+    if (
+      !channel ||
+      typeof channel.isVoiceBased !== "function" ||
+      !channel.isVoiceBased() ||
+      (voiceType !== undefined && channel.type !== voiceType) ||
+      (guildOf != null && guildOf !== x.guild.id)
+    ) {
+      return { ok: false, reason: DISCORD_REASONS.channel, code: "channel" };
+    }
+    return { ok: true, channel };
+  };
+
+  /**
+   * VC に入る（接続の分を作る）: joinVoiceChannel → Ready を待つ →（最初だけ）耳の束・client の購読 → speaking の購読 → 出口。
+   * 失敗したら作りかけの接続の分を畳み、理由を返す（呼び出し側が状態を決める）。
+   * @param {any} x @param {any} channel  resolveVoiceChannel で確かめたチャンネル。
+   * @returns {Promise<{ ok: true } | { ok: false; reason: string; code: "join" | "outlet" | "closed" }>}
+   */
+  const joinLink = async (x, channel) => {
+    const voice = x.voice;
+    const c = {
+      channelId: String(channel.id),
+      channelName: channelNameOf(channel),
+      /** @type {any} */ connection: null,
+      /** @type {any} */ receiver: null,
+      /** @type {any} */ outlet: null,
+      people: new Map(),
+      /** @type {Array<() => void>} */ offs: [],
+      readyOnce: false,
+      closed: false,
+      disconnectNoticed: false,
+      /** @type {any} */ graceTimer: null
+    };
+    x.link = c;
+    setConnection("joining", x.venue);
+    /** @param {"join" | "outlet" | "closed"} code @param {string} reason */
+    const fail = async (code, reason) => {
+      await foldLink(x, c, { hold: false });
+      return { ok: /** @type {const} */ (false), reason, code };
+    };
+    try {
+      // 1 Bot は 1 サーバーで 1 VC。group はロールの id（同じプロセスの 2 つ目の Bot が 1 つ目の接続を使い回さない・外部 §2.1）。
+      c.connection = voice.joinVoiceChannel({
+        channelId: c.channelId,
+        guildId: x.plan.guildId,
+        adapterCreator: x.guild.voiceAdapterCreator,
+        selfDeaf: false,
+        selfMute: false,
+        group: x.plan.groupId
+      });
+    } catch {
+      return fail("join", DISCORD_REASONS.join);
+    }
+    listen(c.offs, c.connection, "error", () => say("connection error"));
+    listen(c.offs, c.connection, "stateChange", (/** @type {any} */ _old, /** @type {any} */ next) => handleConnectionStatus(x, c, next));
+    try {
+      await voice.entersState(c.connection, voice.VoiceConnectionStatus.Ready, readyTimeoutMs);
+    } catch {
+      return fail(x.closed || c.closed ? "closed" : "join", x.closed || c.closed ? DISCORD_REASONS.closed : DISCORD_REASONS.join);
+    }
+    if (!linkLive(x, c)) return fail("closed", DISCORD_REASONS.closed);
+    c.readyOnce = true;
+    // 耳の束（体験の間 1 つ・人ごとの耳は話し始めたときに束ねる）。
+    if (!x.ears) x.ears = x.venue.createEars();
+    c.receiver = c.connection.receiver;
+    listen(c.offs, c.receiver.speaking, "start", (/** @type {string} */ userId) => handleSpeakingStart(x, c, userId));
+    if (!x.voiceStateListening) {
+      // client の購読は体験の分（抜けても外さない）。
+      x.voiceStateListening = true;
+      listen(x.offs, x.client, x.discord.Events.VoiceStateUpdate, (/** @type {any} */ o, /** @type {any} */ n) =>
+        handleVoiceState(x, o, n)
+      );
+    }
+    // Discord の出口（Domain E・設計 §7・§5「再生器はロールごと、Discord では Bot の接続ごと」）。deps.outletFactory が
+    // 渡されていればそれ、無ければその場のロールの束の voice.openOutlet（cockpit.mjs が Discord 向けの再生器を作ってその
+    // ロールの声に差す）。どちらも無ければ出口なし（声は手元の再生器のまま・D のふるまい）。
+    const outletFactory = typeof deps.outletFactory === "function" ? deps.outletFactory : roleOutletFactory(x.venue.roles, x.plan.groupId);
+    if (outletFactory) {
+      try {
+        c.outlet = outletFactory({ connection: c.connection, voice, groupId: x.plan.groupId }) ?? null;
+        if (c.outlet) say("outlet ready");
+      } catch {
+        // 出口を作れなければ入らない（VC に入っても声を出せない・手元のスピーカーから出す形に黙って戻さない）。
+        c.outlet = null;
+        say("outlet failed");
+        return fail("outlet", DISCORD_REASONS.outlet);
+      }
+      // 新しい出口が差し口の「VC にいない」の口を置き換えた。
+      x.heldOutlet = null;
+    }
+    setConnection("joined", x.venue);
+    try {
+      x.venue.earsListening?.();
+    } catch {
+      // best-effort
+    }
+    say("joined");
+    return { ok: /** @type {const} */ (true) };
+  };
+
+  /**
+   * 体験の分を畳む（冪等）: client の購読 → 接続の分 → 差し口に残した出口 → 耳の束 → ログアウト。
+   * @param {any} x
+   */
+  const teardown = async (x) => {
+    if (!x || x.closed) return;
+    x.closed = true;
+    for (const off of x.offs.splice(0)) {
+      try {
+        off();
+      } catch {
+        // best-effort
+      }
+    }
+    if (x.link) await foldLink(x, x.link, { hold: false });
+    if (x.heldOutlet) {
+      // 抜けたときに差し口に残した「VC にいない」の口を外す（場を閉じたら次の配信の場は手元の再生器）。
+      const held = x.heldOutlet;
+      x.heldOutlet = null;
+      try {
+        await held.dispose?.();
+      } catch {
+        // best-effort
+      }
+    }
+    if (x.ears) {
+      try {
+        await x.ears.dispose();
+      } catch {
+        // best-effort
+      }
+    }
+    await destroyClient(x.client);
+    if (experience === x) experience = null;
   };
 
   // ── 体験の口 ──────────────────────────────────────────────────────────
@@ -752,12 +1160,12 @@ export function createDiscordExperience(deps) {
   }
 
   /**
-   * 入口を開く: ログイン → サーバーとボイスチャンネル → VC に入る → 耳の束。どこかで止まったら自分で畳み、理由を返す
+   * 入口を開く: ログイン → サーバーとボイスチャンネル → VC に入る（準備の VC）→ 耳の束。どこかで止まったら自分で畳み、理由を返す
    * （場は開かない）。想定外の例外も投げずに理由にする。
    * @param {any} plan @param {any} venue
    */
   async function openEntrance(plan, venue) {
-    if (session) await teardown(session);
+    if (experience) await teardown(experience);
     if (!plan || !venue || typeof venue.createEars !== "function" || typeof venue.createEar !== "function") {
       try {
         venue?.stopEars?.();
@@ -767,37 +1175,37 @@ export function createDiscordExperience(deps) {
       return { ok: false, reason: DISCORD_REASONS.venue };
     }
     /** @type {any} */
-    const s = {
-      // 鍵は持ち回らない（ログインに 1 回使うだけ・plan の外に写さない）。
+    const x = {
+      // 鍵は持ち回らない（ログインに 1 回使うだけ・plan の外に写さない）。channelId は準備の VC（開くときに入る先・書き換えない）。
       plan: Object.freeze({ guildId: plan.guildId, channelId: plan.channelId, groupId: plan.groupId, earPlan: plan.earPlan }),
       venue,
       client: null,
       guild: null,
-      connection: null,
-      receiver: null,
       ears: null,
-      outlet: null,
       voice: null,
+      discord: null,
       OpusScript: null,
       botId: null,
-      readyOnce: false,
       closed: false,
       seq: 0,
-      people: new Map(),
+      /** @type {any} */ link: null,
+      /** @type {any} */ heldOutlet: null,
+      /** @type {Promise<any> | null} */ op: null,
+      voiceStateListening: false,
       /** @type {Array<() => void>} */ offs: [],
       counters: { utterances: 0, packets: 0, silenceFrames: 0, decodeErrors: 0, streamErrors: 0, subscribeErrors: 0 }
     };
-    session = s;
+    experience = x;
     setConnection("joining", venue);
     /** @param {string} reason */
     const refuse = async (reason) => {
-      await teardown(s);
+      await teardown(x);
       try {
         venue.stopEars?.();
       } catch {
         // best-effort
       }
-      if (session === null || session === s) setConnection(null, venue);
+      if (experience === null || experience === x) setConnection(null, venue);
       say(`could not join (${reason})`);
       return { ok: /** @type {const} */ (false), reason };
     };
@@ -809,115 +1217,50 @@ export function createDiscordExperience(deps) {
       } catch {
         return refuse(DISCORD_REASONS.libraries);
       }
-      if (s.closed) return refuse(DISCORD_REASONS.closed);
-      s.voice = libs.voice;
-      s.OpusScript = libs.OpusScript;
+      if (x.closed) return refuse(DISCORD_REASONS.closed);
+      x.voice = libs.voice;
+      x.discord = libs.discord;
+      x.OpusScript = libs.OpusScript;
       say("logging in");
       try {
-        s.client = await loginClient(libs.discord, plan.token);
+        x.client = await loginClient(libs.discord, plan.token);
       } catch {
         return refuse(DISCORD_REASONS.login);
       }
-      if (s.closed) {
+      if (x.closed) {
         // Domain E（D の持ち越し）: ログインの途中で閉じられた（closeEntrance・サーバを閉じた）。そのときの teardown はまだ client を
         // 持っていなかったので、ログインした Bot をここでログアウトさせる（refuse の teardown は閉じた後なので何もしない）。
-        await destroyClient(s.client);
+        await destroyClient(x.client);
         return refuse(DISCORD_REASONS.closed);
       }
-      s.botId = s.client.user?.id ?? null;
+      x.botId = x.client.user?.id ?? null;
       try {
-        s.guild = await s.client.guilds.fetch(plan.guildId);
+        x.guild = await x.client.guilds.fetch(plan.guildId);
       } catch {
-        s.guild = null;
+        x.guild = null;
       }
-      if (!s.guild) return refuse(DISCORD_REASONS.guild);
-      /** @type {any} */
-      let channel = null;
-      try {
-        channel = await s.guild.channels.fetch(plan.channelId);
-      } catch {
-        channel = null;
-      }
-      // 声のチャンネルだけ（ステージは話し手にならないと声を出せないので、一覧と同じく外す）。
-      const voiceType = libs.discord.ChannelType?.GuildVoice;
-      if (
-        !channel ||
-        typeof channel.isVoiceBased !== "function" ||
-        !channel.isVoiceBased() ||
-        (voiceType !== undefined && channel.type !== voiceType)
-      ) {
-        return refuse(DISCORD_REASONS.channel);
-      }
-      if (s.closed) return refuse(DISCORD_REASONS.closed);
-      const voice = s.voice;
-      try {
-        // 1 Bot は 1 サーバーで 1 VC。group はロールの id（同じプロセスの 2 つ目の Bot が 1 つ目の接続を使い回さない・外部 §2.1）。
-        s.connection = voice.joinVoiceChannel({
-          channelId: plan.channelId,
-          guildId: plan.guildId,
-          adapterCreator: s.guild.voiceAdapterCreator,
-          selfDeaf: false,
-          selfMute: false,
-          group: plan.groupId
-        });
-      } catch {
-        return refuse(DISCORD_REASONS.join);
-      }
-      listen(s, s.connection, "error", () => say("connection error"));
-      listen(s, s.connection, "stateChange", (/** @type {any} */ _old, /** @type {any} */ next) =>
-        handleConnectionStatus(s, next?.status)
-      );
-      try {
-        await voice.entersState(s.connection, voice.VoiceConnectionStatus.Ready, readyTimeoutMs);
-      } catch {
-        return refuse(DISCORD_REASONS.join);
-      }
-      if (s.closed) return refuse(DISCORD_REASONS.closed);
-      s.readyOnce = true;
-      // 耳の束（人ごとの耳は話し始めたときに束ねる）。
-      s.ears = venue.createEars();
-      s.receiver = s.connection.receiver;
-      listen(s, s.receiver.speaking, "start", (/** @type {string} */ userId) => handleSpeakingStart(s, userId));
-      listen(s, s.client, libs.discord.Events.VoiceStateUpdate, (/** @type {any} */ o, /** @type {any} */ n) =>
-        handleVoiceState(s, o, n)
-      );
-      // Discord の出口（Domain E・設計 §7・§5「再生器はロールごと、Discord では Bot の接続ごと」）。deps.outletFactory が
-      // 渡されていればそれ、無ければその場のロールの束の voice.openOutlet（cockpit.mjs が Discord 向けの再生器を作ってその
-      // ロールの声に差す）。どちらも無ければ出口なし（声は手元の再生器のまま・D のふるまい）。
-      const outletFactory = typeof deps.outletFactory === "function" ? deps.outletFactory : roleOutletFactory(venue.roles, plan.groupId);
-      if (outletFactory) {
-        try {
-          s.outlet = outletFactory({ connection: s.connection, voice, groupId: plan.groupId }) ?? null;
-          if (s.outlet) say("outlet ready");
-        } catch {
-          // 出口を作れなければ場を開かない（VC に入っても声を出せない・手元のスピーカーから出す形に黙って戻さない）。
-          s.outlet = null;
-          say("outlet failed");
-          return refuse(DISCORD_REASONS.outlet);
-        }
-      }
-      setConnection("joined", venue);
-      try {
-        venue.earsListening?.();
-      } catch {
-        // best-effort
-      }
-      say("joined");
-      return { ok: true, ears: s.ears };
+      if (!x.guild) return refuse(DISCORD_REASONS.guild);
+      const resolved = await resolveVoiceChannel(x, plan.channelId);
+      if (!resolved.ok) return refuse(resolved.code === "closed" ? DISCORD_REASONS.closed : DISCORD_REASONS.channel);
+      if (x.closed) return refuse(DISCORD_REASONS.closed);
+      const joined = await joinLink(x, resolved.channel);
+      if (!joined.ok) return refuse(joined.reason);
+      emitVc(x, { kind: "vc-join", via: "open", channelName: x.link?.channelName ?? null });
+      return { ok: true, ears: x.ears };
     } catch {
       return refuse(DISCORD_REASONS.unexpectedOpen);
     }
   }
 
   /**
-   * 入口を閉じる（場が正本を手放し耳の束を畳んだあと・サーバを閉じるときも）。冪等（開いていなくても・二重でも）。
+   * 入口を閉じる（場が正本を手放し耳の束を畳んだあと・サーバを閉じるときも）。冪等（開いていなくても・二重でも・VC にいなくても）。
    * @param {{ hadEars?: boolean; shutdown?: boolean }} [_info] @param {any} [control]
    */
   async function closeEntrance(_info, control) {
-    const s = session;
-    if (s) {
-      const c = s.counters;
-      await teardown(s);
+    const x = experience;
+    if (x) {
+      const c = x.counters;
+      await teardown(x);
       say(
         `left (utterances ${c.utterances}, packets ${c.packets}, silence frames ${c.silenceFrames}, decode errors ${c.decodeErrors})`
       );
@@ -928,6 +1271,143 @@ export function createDiscordExperience(deps) {
     } catch {
       // best-effort
     }
+  }
+
+  // ── 入る / 抜ける / 移る（Discord モード Domain I・discord-mode.md §13.2・§13.3）──────────────────────
+  //
+  //  場（server）の API（POST /api/discord/vc）から呼ばれる。体験が開いていなければ断る。同時に 2 つは受けない（途中なら断る）。
+  //  入る先は API で渡した VC（準備の discordChannelId は書き換えない）。どの結果も `{ ok:true }` か
+  //  `{ ok:false, code, reason }`（code: "not-open" | "busy" | "in-vc" | "not-in-vc" | "same" | "shape" | "channel" | "join" | "outlet" | "closed"）。
+
+  /**
+   * @template T
+   * @param {(x: any) => Promise<T>} run
+   * @returns {Promise<T | { ok: false; code: string; reason: string }>}
+   */
+  const runOp = async (run) => {
+    const x = experience;
+    if (!x || x.closed || !x.guild) return { ok: false, code: "not-open", reason: DISCORD_VC_REFUSALS.notOpen };
+    if (x.op) return { ok: false, code: "busy", reason: DISCORD_VC_REFUSALS.busy };
+    const p = (async () => {
+      try {
+        return await run(x);
+      } catch {
+        return { ok: /** @type {const} */ (false), code: "join", reason: DISCORD_REASONS.unexpectedOpen };
+      }
+    })();
+    x.op = p;
+    try {
+      return await p;
+    } finally {
+      if (x.op === p) x.op = null;
+    }
+  };
+
+  /** @param {any} x @param {any} r */
+  const afterFailedJoin = (x, r) => {
+    if (!x.closed && x.link == null) settleOutside(x);
+    say(`could not join (${r.reason})`);
+  };
+
+  /**
+   * どの VC にもいない間に、同じサーバーの VC に入る。
+   * @param {unknown} channelId
+   */
+  function joinVoice(channelId) {
+    return runOp(async (x) => {
+      if (x.link) return { ok: false, code: "in-vc", reason: DISCORD_VC_REFUSALS.inVc };
+      const resolved = await resolveVoiceChannel(x, channelId);
+      if (!resolved.ok) return resolved;
+      const r = await joinLink(x, resolved.channel);
+      if (!r.ok) {
+        afterFailedJoin(x, r);
+        return r;
+      }
+      emitVc(x, { kind: "vc-join", via: "panel", channelName: x.link?.channelName ?? null });
+      return { ok: true };
+    });
+  }
+
+  /** 今いる VC から抜ける（体験は閉じない・頭と会話は残る）。 */
+  function leaveVoice() {
+    return runOp(async (x) => {
+      const c = x.link;
+      if (!c) return { ok: false, code: "not-in-vc", reason: DISCORD_VC_REFUSALS.notInVc };
+      const channelName = c.channelName;
+      await foldLink(x, c, { hold: true });
+      settleOutside(x);
+      say("left voice channel");
+      emitVc(x, { kind: "vc-leave", channelName });
+      return { ok: true };
+    });
+  }
+
+  /**
+   * 同じサーバーの別の VC へ移る（抜ける + 入る・destroy して入り直す）。先に移る先を確かめる（使えない VC なら抜けない）。
+   * @param {unknown} channelId
+   */
+  function moveVoice(channelId) {
+    return runOp(async (x) => {
+      const c = x.link;
+      if (!c) return { ok: false, code: "not-in-vc", reason: DISCORD_VC_REFUSALS.notInVc };
+      if (channelId === c.channelId) return { ok: false, code: "same", reason: DISCORD_VC_REFUSALS.same };
+      const resolved = await resolveVoiceChannel(x, channelId);
+      if (!resolved.ok) return resolved;
+      if (x.link !== c) return { ok: false, code: "not-in-vc", reason: DISCORD_VC_REFUSALS.notInVc };
+      const fromName = c.channelName;
+      await foldLink(x, c, { hold: true });
+      if (x.closed) return { ok: false, code: "closed", reason: DISCORD_REASONS.closed };
+      // 移る間は聞いていない（入れれば聞いているに戻る）。
+      try {
+        x.venue.pauseEars?.();
+      } catch {
+        // best-effort
+      }
+      const r = await joinLink(x, resolved.channel);
+      if (!r.ok) {
+        afterFailedJoin(x, r);
+        // 前の VC からは抜けた（入れなかった）。
+        emitVc(x, { kind: "vc-leave", channelName: fromName });
+        return r;
+      }
+      emitVc(x, { kind: "vc-move", fromChannelName: fromName, channelName: x.link?.channelName ?? null });
+      return { ok: true };
+    });
+  }
+
+  /**
+   * 体験の client の guild から、同じサーバーのボイスチャンネルの一覧（名前・人数〔Bot 自身を除く voiceStates の数〕・今いるか）を
+   * 取る（Domain K のための口・2 本目のログインはしない）。id は API の応答にだけ載せる（snapshot・ログには載せない）。
+   * @returns {Promise<{ ok: true; channels: Array<{ id: string; name: string; people: number; current: boolean }> } | { ok: false; code: string; reason: string }>}
+   */
+  async function listVoiceChannels() {
+    const x = experience;
+    if (!x || x.closed || !x.guild) return { ok: false, code: "not-open", reason: DISCORD_VC_REFUSALS.notOpen };
+    /** @type {any} */
+    let all;
+    try {
+      all = await x.guild.channels.fetch();
+    } catch {
+      return { ok: false, code: "catalog", reason: DISCORD_REASONS.catalog };
+    }
+    const voiceType = x.discord.ChannelType?.GuildVoice;
+    /** @type {Map<string, number>} */
+    const counts = new Map();
+    try {
+      for (const vs of x.guild.voiceStates?.cache?.values?.() ?? []) {
+        const id = vs?.channelId;
+        if (typeof id !== "string" || vs.id === x.botId) continue;
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    } catch {
+      // 数えられなければ 0 人。
+    }
+    const current = x.link && !x.link.closed ? x.link.channelId : null;
+    const channels = [...(all?.values?.() ?? [])]
+      .filter((ch) => ch && typeof ch.isVoiceBased === "function" && ch.isVoiceBased() && (voiceType === undefined || ch.type === voiceType))
+      .sort((a, b) => (a.rawPosition ?? a.position ?? 0) - (b.rawPosition ?? b.position ?? 0))
+      .map((ch) => ({ id: String(ch.id), name: String(ch.name ?? ""), people: counts.get(String(ch.id)) ?? 0, current: String(ch.id) === current }));
+    return { ok: true, channels };
   }
 
   /** @param {string} phase */
@@ -1042,15 +1522,26 @@ export function createDiscordExperience(deps) {
     closeEntrance,
     busyMessage,
     unexpectedErrorMessage,
-    /** snapshot の `stream.connection`（"joining" | "joined" | "disconnected" | null）。 */
+    /** snapshot の `stream.connection`（"joining" | "joined" | "disconnected" | "outside" | null）。 */
     connectionStatus: () => connection,
+    /** 今いる（入っている途中・つなぎ直している途中を含む）VC の名前（Domain I・snapshot の stream.vcName・どこにもいなければ null）。 */
+    voiceChannelName: () =>
+      experience && !experience.closed && experience.link && !experience.link.closed ? experience.link.channelName ?? null : null,
+    /**
+     * 入る / 抜ける / 移る と、同じサーバーの VC の一覧（Domain I・POST / GET /api/discord/vc）。結果は `{ ok:true }` か
+     * `{ ok:false, code, reason }`。一覧は `{ ok:true, channels: [{ id, name, people, current }] }`。
+     */
+    vc: Object.freeze({ join: joinVoice, leave: leaveVoice, move: moveVoice, list: listVoiceChannels }),
     catalog,
     prep,
     visionTarget,
     /** 場の目を起こすか（Domain G・設計 §4.3 の 7: 見る窓を選んでいなければ Discord の場では目を起こさない）。 */
     eyesWanted: () => readVisionTarget() != null,
     /** Discord の出口（Domain E）が今の接続を引く口（VC に入っていなければ null）。 */
-    voiceConnection: () => (session && !session.closed && session.readyOnce ? session.connection : null),
+    voiceConnection: () =>
+      experience && !experience.closed && experience.link && !experience.link.closed && experience.link.readyOnce
+        ? experience.link.connection
+        : null,
     // 言葉と判定の組（Discord モード Domain F）: 通話の語の組・①に足す Discord の教え・Discord の判定の組。
     wording: CALL_WORDING,
     teaching: venueTeachingName("discord"),

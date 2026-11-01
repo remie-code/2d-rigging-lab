@@ -321,7 +321,17 @@ test("つまみの 1 行: 許す一覧の名前と前後の真偽だけ（一覧
   assert.deepEqual(join, { type: "control", control: "vc-join", from: null, to: null });
   const text = JSON.stringify(join);
   for (const leak of ["雑談部屋", "123456789012345678", "987654321098765432"]) assert.equal(text.includes(leak), false, leak);
-  assert.deepEqual([...USAGE_CONTROL_KINDS], ["self-fire", "barge-in", "kill", "vc-join", "vc-leave", "vc-move", "vc-disconnect"]);
+  assert.deepEqual([...USAGE_CONTROL_KINDS], [
+    "self-fire",
+    "barge-in",
+    "kill",
+    "vc-join",
+    "vc-leave",
+    "vc-move",
+    "vc-disconnect",
+    "vc-moved",
+    "vc-kicked"
+  ]);
   for (const control of USAGE_CONTROL_KINDS) assert.equal(controlUsageRecord({ control })?.control, control);
   assert.equal(controlUsageRecord({ control: "雑談部屋" }), null);
   assert.equal(controlUsageRecord({ control: "verbosity" }), null, "一覧に無いつまみは書かない");

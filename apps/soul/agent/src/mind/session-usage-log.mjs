@@ -218,11 +218,23 @@ export function fireRefusedUsageRecord(info) {
  * Domain I〜K が VC に入る・抜ける・移る・切れたを足すときに使う名前も先に置く（呼ぶだけで済むように）。
  *  - self-fire: 自発的にしゃべる（POST /api/self-fire） / barge-in: かぶり判定（POST /api/barge-in） /
  *    kill: KILL（POST /api/kill）。この 3 つは from / to に前後の真偽を載せる。
- *  - vc-join: VC に入った / vc-leave: VC から抜けた / vc-move: 別の VC へ移った（パネルからでも、Discord の画面で
- *    動かされたのでも） / vc-disconnect: 外から切れた（キック・チャンネルの削除・つなぎ直しを待つ切れ）。
+ *  - vc-join: VC に入った（体験を開いたとき・パネル / API から） / vc-leave: 自分で VC から抜けた（移る先に入れなかったときも） /
+ *    vc-move: 自分で別の VC へ移った / vc-disconnect: 切れた（つなぎ直しを待つ切れ・猶予のあいだ戻らなかった）。
+ *  - Domain I で足した: vc-moved: Discord の画面で別の VC へ動かされた（動いた先を追った） / vc-kicked: 外から切られた
+ *    （閉じのコード 4014 = キック・チャンネルの削除・Bot 自身が VC の外へ。VC の外で待っている）。
  *    VC の名前・Discord の id は載せない（from / to は null のまま）。
  */
-export const USAGE_CONTROL_KINDS = Object.freeze(["self-fire", "barge-in", "kill", "vc-join", "vc-leave", "vc-move", "vc-disconnect"]);
+export const USAGE_CONTROL_KINDS = Object.freeze([
+  "self-fire",
+  "barge-in",
+  "kill",
+  "vc-join",
+  "vc-leave",
+  "vc-move",
+  "vc-disconnect",
+  "vc-moved",
+  "vc-kicked"
+]);
 
 /**
  * つまみの切り替え・VC の出来事の 1 行（純関数）。名前が許す一覧に無ければ null（呼び出し側は書かない）。

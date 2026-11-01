@@ -326,7 +326,7 @@ test("Discord の場を開く: 下見（鍵）→ 声の engine → ログイン
     assert.deepEqual(s.stt, { engine: "elevenlabs", status: "up", reason: null });
     assert.equal(s.health.ffmpeg.status, "unknown", "Discord の場にマイクは無い");
     assert.deepEqual(s.discord, { available: true });
-    assert.deepEqual([...VENUE_CONNECTION_STATES], ["joining", "joined", "disconnected"]);
+    assert.deepEqual([...VENUE_CONNECTION_STATES], ["joining", "joined", "disconnected", "outside"]);
     // 開く途中の snapshot: 入っている途中。
     const states = sse.events.filter((e) => e.event === "state").map((e) => e.data);
     assert.ok(states.some((d) => d.stream.experience === "discord" && d.stream.connection === "joining" && d.ears === "starting"));

@@ -184,8 +184,19 @@ const STREAM_EAR_KEY = "mic";
  * snapshot の `stream.connection` の値（Discord モード Domain D・discord-mode.md §4.5・§6.1）。Discord の場の間だけ:
  * "joining" = VC に入っている途中、"joined" = 入っている、"disconnected" = 途中で切れた（場は閉じない・ライブラリのつなぎ直しに
  * 任せる。つながり直せば "joined" に戻る）。配信の場・閉じている間は null。
+ * Discord モード Domain I（§13.3）: "outside" = どの VC にもいない（自分で抜けた・外から切られた〔閉じのコード 4014〕。場は開いた
+ * まま VC の外で待っている・耳は聞いていない・発火は not-in-vc で断る）。
  */
-export const VENUE_CONNECTION_STATES = Object.freeze(["joining", "joined", "disconnected"]);
+export const VENUE_CONNECTION_STATES = Object.freeze(["joining", "joined", "disconnected", "outside"]);
+
+/** 入る・抜ける・移る（POST /api/discord/vc）の action（Discord モード Domain I）。 */
+export const VENUE_VC_ACTIONS = Object.freeze(["join", "leave", "move"]);
+
+/** 入る・抜ける・移るを Discord の場の外で断る文面（Discord モード Domain I）。 */
+export const DISCORD_VC_NOT_OPEN_MESSAGE = "Discord の場が開いていない（「Discord の VC に入る」で場を開いてから）";
+
+/** VC の外の間の手動の Fire の断りの文面（Discord モード Domain I・§13.3）。 */
+export const NOT_IN_VC_FIRE_MESSAGE = "VC に入ってから押す（VC の外では発火しない）";
 
 /**
  * 場が開きかけ・閉じかけ・開いているときの断りの文面（体験の口が文面を持たないときの既定・配信は配信の文面を持つ）。
@@ -228,6 +239,24 @@ export function normalizeVenueExperience(kind, mouth) {
       const value = typeof mouth.connectionStatus === "function" ? mouth.connectionStatus() : null;
       return VENUE_CONNECTION_STATES.includes(value) ? value : null;
     },
+    // Discord モード Domain I: 今いる VC の名前（snapshot の stream.vcName・文字列でなければ null・id は載せない）。
+    voiceChannelName: () => {
+      const value = typeof mouth.voiceChannelName === "function" ? mouth.voiceChannelName() : null;
+      return typeof value === "string" && value.length > 0 ? value : null;
+    },
+    // Discord モード Domain I: 入る / 抜ける / 移る と同じサーバーの VC の一覧（POST / GET /api/discord/vc）。無ければ null（409）。
+    vc:
+      mouth.vc &&
+      typeof mouth.vc.join === "function" &&
+      typeof mouth.vc.leave === "function" &&
+      typeof mouth.vc.move === "function"
+        ? Object.freeze({
+            join: (/** @type {unknown} */ channelId) => mouth.vc.join(channelId),
+            leave: () => mouth.vc.leave(),
+            move: (/** @type {unknown} */ channelId) => mouth.vc.move(channelId),
+            list: typeof mouth.vc.list === "function" ? () => mouth.vc.list() : null
+          })
+        : null,
     // Discord モード Domain D: 場を開く・閉じる途中の想定外の例外の文面。口が文面を持てば生のエラー文を渡さない。
     /** @param {"opening" | "closing"} phase @param {string} detail */
     unexpectedErrorMessage: (phase, detail) => {
@@ -795,6 +824,12 @@ const MAX_PORT_REROLLS = 50;
  *   Discord モード Domain G で足した口（どれも任意）:
  *   - visionTarget = { get, set }（GET / POST /api/discord/vision-target・その体験の見る窓（目）・配信の見る窓とは別）。
  *   - eyesWanted()（場の目を起こすか・false なら始める 7 で目を起こさない。口が持たなければ起こす = 配信と同じ）。
+ *   Discord モード Domain I で足した口（どれも任意・discord-mode.md §13.2・§13.3）:
+ *   - vc = { join(channelId), leave(), move(channelId), list()? }（POST / GET /api/discord/vc・場の段は触らない）。結果は
+ *     `{ ok:true }` か `{ ok:false, code, reason }`。voiceChannelName()（snapshot の stream.vcName・今いる VC の名前）。
+ *   - control / venue に pauseEars()（耳を「聞いていない」に・文字起こしの方式と稼働時間は残す。earsListening() で聞いているに戻る）、
+ *     hushVoice()（VC から抜けた瞬間に鳴っている返事を割り込みと同じ切り方で止める）、vcEvent(event)（VC の出来事の合図。
+ *     `{ kind, channelName?, fromChannelName?, name?, via? }`・id は渡さない。control の記録を書く。Domain J が正本の出来事の行にする）。
  *   - wording / teaching / judgeSet（任意・Discord モード Domain C）: 語の組（②④・skills/recall.md・思い出しの結果を①に渡す
  *     文面）・①に足す体験の教えの名前（`venue-<体験の種類>`）・判定の組 `{ speakNow, recallAvoid }`（speak-now の問いの組・
  *     思い出しの「避けるか」の問いの組。recallAvoid は Domain F）。無ければ配信の既定。
@@ -1300,6 +1335,11 @@ export function createCockpitServer(options = {}) {
   /** @type {"stopped" | "starting" | "listening"} */
   let earsState = "stopped";
   /**
+   * 外から渡された体験（Discord）の耳を「聞いていない」にしたか（Discord モード Domain I・VC にいない間）。真の間は、聞いているに
+   * 戻すとき（earsListening）稼働時間の起点（startedAtMs）を替えない。
+   */
+  let venueEarsPaused = false;
+  /**
    * 外から渡された体験（Discord）の場の間だけの文字起こしの方式（Discord モード Domain D・discord-mode.md §6.3: Discord の準備で
    * 配信と別に持つ）。配信の場・閉じている間は null（配信の選択 sttEngine を使う・activeSttEngine）。
    * @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | null}
@@ -1498,13 +1538,15 @@ export function createCockpitServer(options = {}) {
       // Discord モード Domain B: experience = 開いている（開きかけ・閉じかけを含む）場の体験の種類（"stream" | "discord"）。
       // 閉じている間は null（どの体験も開いていない）。
       // Discord モード Domain D: connection = Discord の場の接続の状態（"joining" | "joined" | "disconnected"・VENUE_CONNECTION_STATES）。
-      // 配信の場・閉じている間は null。
+      // 配信の場・閉じている間は null。Domain I: "outside"（どの VC にもいない・場は開いたまま）と vcName（今いる VC の名前）。
       stream: {
         phase: streamPhase,
         error: streamError,
         openedAtMs: streamOpenedAtMs,
         experience: venueExperienceKind(),
-        connection: venueConnectionStatus()
+        connection: venueConnectionStatus(),
+        // Discord モード Domain I: 今いる VC の名前（Discord の場の間だけ・どこにもいなければ null・Discord の id は載せない）。
+        vcName: venueVoiceChannelName()
       },
       // Discord モード Domain D: Discord の体験が使えるか（この操縦席に Discord の入口が渡されていれば { available: true }・無ければ null）。
       // 準備の中身（サーバー・チャンネルの id）は snapshot に載せない（GET /api/discord/prep で読む）。
@@ -1880,6 +1922,7 @@ export function createCockpitServer(options = {}) {
     earsState = "stopped";
     startedAtMs = null;
     venueSttEngine = null;
+    venueEarsPaused = false;
     health.whisper = "unknown";
     health.whisperReason = null;
     health.ffmpeg = "unknown";
@@ -1889,10 +1932,27 @@ export function createCockpitServer(options = {}) {
     if (changed && !closed) broadcastState();
   }
 
-  /** 入口が開いた（耳は聞いている）。マイクは無いので ffmpeg は unknown のまま。 */
+  /**
+   * 耳を「聞いていない」にする（Discord モード Domain I・どの VC にもいない間）。stopEars と違い、場の間の文字起こしの方式
+   * （venueSttEngine）と稼働時間の起点（startedAtMs）は消さない。人の耳はもう束に無いので whisper / stt の死活は unknown に戻す。
+   * 冪等（変わったときだけ放送）。
+   */
+  function pauseVenueEars() {
+    const changed = earsState !== "stopped" || health.stt !== "unknown" || health.whisper !== "unknown";
+    earsState = "stopped";
+    venueEarsPaused = true;
+    health.whisper = "unknown";
+    health.whisperReason = null;
+    health.stt = "unknown";
+    health.sttReason = null;
+    if (changed && !closed) broadcastState();
+  }
+
+  /** 入口が開いた（耳は聞いている）。マイクは無いので ffmpeg は unknown のまま。VC に入り直したときは稼働時間の起点を替えない。 */
   function markVenueEarsListening() {
     earsState = "listening";
-    startedAtMs = nowImpl();
+    if (!(venueEarsPaused && startedAtMs != null)) startedAtMs = nowImpl();
+    venueEarsPaused = false;
     health.stt = "up";
     health.sttReason = null;
     if (!closed) broadcastState();
@@ -1914,6 +1974,34 @@ export function createCockpitServer(options = {}) {
   /** 外から渡された体験の口の状態が変わった（snapshot を放送し直す）。 */
   function venueExperienceChanged() {
     if (!closed) broadcastState();
+  }
+
+  /**
+   * VC から抜けた瞬間に鳴っている返事を止める（Discord モード Domain I・§13.3「黙って待つ」）。割り込み（barge-in）と同じ切り方
+   * （声を止め・どこまで声に出たかを soul の行に残す）。話していなければ何もしない（interrupt は冪等）。待たない・投げない。
+   */
+  function hushVenueVoice() {
+    if (!fireOrchestrator || typeof (/** @type {any} */ (fireOrchestrator).interrupt) !== "function") return;
+    try {
+      void Promise.resolve(/** @type {any} */ (fireOrchestrator).interrupt()).catch(() => {});
+    } catch {
+      // best-effort（抜ける道を止めない）。
+    }
+  }
+
+  /** VC の出来事のうち、session-usage の control に残す種類（session-usage-log.mjs の USAGE_CONTROL_KINDS と同じ名前）。 */
+  const VC_EVENT_CONTROLS = new Set(["vc-join", "vc-leave", "vc-move", "vc-moved", "vc-kicked", "vc-disconnect"]);
+
+  /**
+   * 体験から届いた VC の出来事の合図（Discord モード Domain I・§13.2・§13.3）。`{ kind, channelName?, fromChannelName?, name?, via? }`
+   * （id は来ない）。今は control の記録（種類だけ・VC の名前・人の名前は渡さない）を書くだけ。
+   * Domain J への申し送り: ここで会話の正本に出来事の行を足す（I では足さない）。人の出入り（person-join / person-leave）と
+   * つながり直し（vc-reconnect）も届く（記録はしない）。
+   * @param {any} event
+   */
+  function noteVenueVcEvent(event) {
+    const kind = event && typeof event.kind === "string" ? event.kind : null;
+    if (kind && VC_EVENT_CONTROLS.has(kind)) reportControl({ control: kind });
   }
 
   /**
@@ -1942,7 +2030,11 @@ export function createCockpitServer(options = {}) {
     earsListening: markVenueEarsListening,
     earStarted: reportVenueEarStarted,
     earFailed: reportVenueEarFailed,
-    changed: venueExperienceChanged
+    changed: venueExperienceChanged,
+    // Discord モード Domain I: 耳を「聞いていない」に・鳴っている返事を止める・VC の出来事の合図。
+    pauseEars: pauseVenueEars,
+    hushVoice: hushVenueVoice,
+    vcEvent: noteVenueVcEvent
   });
 
   /** 下見・取りやめ・閉じる口に渡す場の口（ロールの一覧と耳の状態の口）。 */
@@ -2313,7 +2405,7 @@ export function createCockpitServer(options = {}) {
 
   /**
    * 開いている場の接続の状態（Discord モード Domain D・snapshot の stream.connection）。配信の場・閉じている間は null。
-   * @returns {"joining" | "joined" | "disconnected" | null}
+   * @returns {"joining" | "joined" | "disconnected" | "outside" | null}
    */
   function venueConnectionStatus() {
     if (!venueExperience || typeof venueExperience.connectionStatus !== "function") return null;
@@ -2322,6 +2414,29 @@ export function createCockpitServer(options = {}) {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * 開いている場の今いる VC の名前（Discord モード Domain I・snapshot の stream.vcName）。配信の場・閉じている間は null。
+   * @returns {string | null}
+   */
+  function venueVoiceChannelName() {
+    if (!venueExperience || typeof venueExperience.voiceChannelName !== "function") return null;
+    try {
+      return venueExperience.voiceChannelName();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 開いている Discord の場で、どの VC にもいないか（Discord モード Domain I・§13.3）。VC の外で待っている（"outside"）と、
+   * 入る・移るの途中（"joining"・出口がまだ無い）の間は真。接続の状態を持たない口・配信の場・閉じている間は偽。
+   */
+  function venueOutsideVoice() {
+    if (!venueExperience || venueExperience.kind !== "discord") return false;
+    const c = venueConnectionStatus();
+    return c === "outside" || c === "joining";
   }
 
   /** Discord の場（開きかけ・開いている・閉じかけ）か。準備の書き換えと一覧の読み込みを断る。 */
@@ -2708,7 +2823,19 @@ export function createCockpitServer(options = {}) {
    * @returns {boolean}  断ったら true。
    */
   function refuseManualFireOutsideStream(res, fire = { vision: false }) {
-    if (streamPhase === "open") return false;
+    if (streamPhase === "open") {
+      // Discord モード Domain I（§13.3）: Discord の場で、どの VC にもいない間の手動の発火も断る（出口が無いと声が手元の
+      // スピーカーに戻るため）。記録は 1 回だけ（orchestrator へは届けない）。応答は場の外の断りと同じ形。
+      if (!venueOutsideVoice()) return false;
+      reportFireRefused({ cause: "manual", reason: "not-in-vc", vision: fire.vision === true });
+      sendJson(res, 409, {
+        fired: false,
+        reason: "not-in-vc",
+        error: NOT_IN_VC_FIRE_MESSAGE,
+        state: fireOrchestrator ? fireOrchestrator.getState() : "idle"
+      });
+      return true;
+    }
     reportFireRefused({ cause: "manual", reason: "stream-not-open", vision: fire.vision === true });
     sendJson(res, 409, {
       fired: false,
@@ -2732,6 +2859,7 @@ export function createCockpitServer(options = {}) {
     venueRoles = null;
     // Discord モード Domain D: 場の間だけの文字起こしの方式も手放す（配信の選択に戻る）。
     venueSttEngine = null;
+    venueEarsPaused = false;
   }
 
   /**
@@ -3098,6 +3226,65 @@ export function createCockpitServer(options = {}) {
   }
 
   /**
+   * 入る / 抜ける / 移る と、同じサーバーの VC の一覧（Discord モード Domain I・discord-mode.md §13.2・§13.3）。場の段は触らない
+   * （頭のセッション・正本・判定・目・発火の予定・思い出しの係は持ったまま・場の記録を作り直さない = renewRecords を呼ばない）。
+   *  - POST `{ action: "join" | "leave" | "move", channelId? }` → 200 snapshot。入る・移るの channelId は体験の client の guild（同じ
+   *    サーバー）のボイスチャンネルだけ（形が違えば 400・ほかのサーバー / 文字やステージのチャンネル / 見つからなければ 404）。
+   *    準備の discordChannelId は書き換えない。状態が合わない（もう VC にいるのに入る・どこにもいないのに抜ける / 移る・同じ VC へ
+   *    移る・ほかの操作の途中）は 409。VC に入れない（時間切れ・権限など）・出口を作れないは 502（どの VC にもいない状態になる）。
+   *  - GET → 200 `{ channels: [{ id, name, people, current }] }`（Domain K のための口・id は応答にだけ・snapshot / ログには載せない）。
+   *  - Discord の場が開いていない（閉じている・開きかけ・閉じかけ・配信の場）なら 409。Discord の入口が無ければ 503。
+   * @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {string} method
+   */
+  async function handleDiscordVc(req, res, method) {
+    if (!discordExperience) {
+      sendJson(res, 503, { error: DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE });
+      return;
+    }
+    const body = method === "POST" ? await readJsonBody(req) : {};
+    const ops = venueExperience && venueExperience.kind === "discord" ? venueExperience.vc : null;
+    if (streamPhase !== "open" || !ops) {
+      sendJson(res, 409, { error: DISCORD_VC_NOT_OPEN_MESSAGE, state: snapshot() });
+      return;
+    }
+    if (method === "GET") {
+      /** @type {any} */
+      let listed = null;
+      try {
+        listed = ops.list ? await ops.list() : null;
+      } catch {
+        listed = null;
+      }
+      if (!listed || listed.ok !== true || !Array.isArray(listed.channels)) {
+        sendJson(res, 502, { error: (listed && typeof listed.reason === "string" && listed.reason) || "ボイスチャンネルの一覧を読めない" });
+        return;
+      }
+      sendJson(res, 200, { channels: listed.channels });
+      return;
+    }
+    const action = body && typeof body.action === "string" ? body.action : null;
+    if (!action || !VENUE_VC_ACTIONS.includes(action)) {
+      sendJson(res, 400, { error: "action は join / leave / move のどれか" });
+      return;
+    }
+    /** @type {any} */
+    let result;
+    try {
+      result =
+        action === "join" ? await ops.join(body.channelId) : action === "move" ? await ops.move(body.channelId) : await ops.leave();
+    } catch {
+      result = { ok: false, code: "join", reason: "VC の操作の途中で想定外のエラー" };
+    }
+    if (result && result.ok === true) {
+      sendJson(res, 200, snapshot());
+      return;
+    }
+    const code = result && typeof result.code === "string" ? result.code : "join";
+    const status = code === "shape" ? 400 : code === "channel" ? 404 : code === "join" || code === "outlet" ? 502 : 409;
+    sendJson(res, status, { error: (result && typeof result.reason === "string" && result.reason) || "VC の操作ができない", state: snapshot() });
+  }
+
+  /**
    * POST の終えるを closeStream に渡す（/api/stream/stop と /api/ears/stop の共通）。記憶の最後の保存が終わってから
    * 閉じた状態を返す（その間は SSE の state が closing = 「記録中」を流す）。
    * @param {import("node:http").ServerResponse} res
@@ -3286,6 +3473,11 @@ export function createCockpitServer(options = {}) {
     }
     if (method === "POST" && pathname === "/api/discord/catalog") {
       await handleDiscordCatalog(res);
+      return;
+    }
+    // Discord モード Domain I: 入る / 抜ける / 移る（POST）と同じサーバーの VC の一覧（GET）。
+    if (pathname === "/api/discord/vc" && (method === "GET" || method === "POST")) {
+      await handleDiscordVc(req, res, method);
       return;
     }
     // Discord モード Domain G: Discord の場の見る窓（目）の読み書き（配信の見る窓 /api/vision-target とは別）。
@@ -4372,6 +4564,17 @@ export function createCockpitServer(options = {}) {
         vision: !!fireOptions && fireOptions.vision === true
       });
       return Promise.resolve({ fired: false, reason: "stream-not-open" });
+    }
+    // Discord モード Domain I（§13.3）: どの VC にもいない間の自発の発火（遅れて返った判定・思い出しの係など）も捨てる（出口が
+    // 無いと声が手元のスピーカーに戻るため）。画面・フィードには出さず、記録の口にだけ 1 回渡す。
+    if (venueOutsideVoice()) {
+      const requestCause = fireOptions && fireOptions.cause && typeof fireOptions.cause === "object" ? /** @type {any} */ (fireOptions.cause) : null;
+      reportFireRefused({
+        cause: requestCause && typeof requestCause.type === "string" ? requestCause.type : typeof kind === "string" ? kind : null,
+        reason: "not-in-vc",
+        vision: !!fireOptions && fireOptions.vision === true
+      });
+      return Promise.resolve({ fired: false, reason: "not-in-vc" });
     }
     try {
       return trackFire(() => /** @type {any} */ (fireOrchestrator).fire(fireOptions))
