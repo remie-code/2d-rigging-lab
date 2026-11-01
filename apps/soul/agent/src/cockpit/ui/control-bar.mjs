@@ -53,6 +53,7 @@ import {
   manualFireStreamView
 } from "../view-logic/control.mjs";
 import { VERBOSITY_LABELS, SPEAK_START_LABELS, COMMENT_BUSY_LABELS } from "../view-logic/glance-meters.mjs";
+import { DISCORD_SPEAK_START_FIXED_NOTE } from "../view-logic/discord.mjs";
 
 /** @param {Record<string, string>} labels @returns {Array<{ value: string; label: string }>} */
 function optionsFrom(labels) {
@@ -152,18 +153,20 @@ export function VerbositySelect({ verbosity, onChange, disabled = false }) {
  * 話し始めの方式のプルダウン（speak-now 合意 §5・VerbositySelect と同型の controlled 部品・hooks 非使用）。
  * value は snapshot 由来の speakStart。null（scheduler 未生成）は disable して "classic" 表示に畳む。
  * 配信の組み直し Domain E: ロールの編集（ロールのタブ）が使う。disabled は場の途中（ロールを直せない間）。
- * @param {{ speakStart?: string | null; onChange: (ev: any) => void; disabled?: boolean }} props
+ * Discord モード Domain G: fixed（snapshot の speakStartFixed === true・Discord の場）なら方式を選ばせない（speak-now を出して
+ * 押せない・title に断りの文面 DISCORD_SPEAK_START_FIXED_NOTE）。ロールの保存値（speakStart）は替えない。配信は今まで通り。
+ * @param {{ speakStart?: string | null; onChange: (ev: any) => void; disabled?: boolean; fixed?: boolean }} props
  */
-export function SpeakStartSelect({ speakStart, onChange, disabled = false }) {
+export function SpeakStartSelect({ speakStart, onChange, disabled = false, fixed = false }) {
   return html`
     <label class="verbosity speak-start">
       <span class="pill-label">話し始め</span>
       <select
         class="verbosity-select speak-start-select"
-        value=${speakStart ?? "classic"}
-        disabled=${disabled || speakStart == null}
+        value=${fixed ? "speak-now" : speakStart ?? "classic"}
+        disabled=${fixed || disabled || speakStart == null}
         onChange=${onChange}
-        title="従来: 区切り・呼びかけ・合いの手の機械信号 / speak-now: 配信者の発言ごとに判定 API が反応を決める"
+        title=${fixed ? DISCORD_SPEAK_START_FIXED_NOTE : "従来: 区切り・呼びかけ・合いの手の機械信号 / speak-now: 配信者の発言ごとに判定 API が反応を決める"}
       >
         ${SPEAK_START_OPTIONS.map((o) => html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}
       </select>

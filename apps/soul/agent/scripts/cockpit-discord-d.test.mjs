@@ -136,7 +136,8 @@ test("場の結線（main）: Discord の体験の口を作って experiences �
   assert.match(main, /discordBotKeyFile: \(\) => roleDiscordBotKeyFile\(roleHooks\.current\(\)\),/);
   assert.match(
     main,
-    /const discordExperience = createDiscordVenueExperience\(\{\n\s+settings,\n\s+currentKeyFile: \(\) => roleDiscordBotKeyFile\(roleHooks\.current\(\)\),\n\s+write: \(line\) => process\.stdout\.write\(line\)\n\s+\}\);/
+    // Discord モード Domain G（E の追認 (1)）: 一覧の読み込みも鍵のファイル名の形が合わなければ断る口（currentKeyFileRefused）を足した。
+    /const discordExperience = createDiscordVenueExperience\(\{\n\s+settings,\n\s+currentKeyFile: \(\) => roleDiscordBotKeyFile\(roleHooks\.current\(\)\),\n\s+currentKeyFileRefused: \(\) => roleDiscordBotKeyFileRefused\(roleHooks\.current\(\)\),\n\s+write: \(line\) => process\.stdout\.write\(line\)\n\s+\}\);/
   );
   const call = main.slice(main.indexOf("server = createCockpitServer({"), main.indexOf("const url = await server.listen();"));
   assert.match(call, /experiences: \{ discord: discordExperience \},/);

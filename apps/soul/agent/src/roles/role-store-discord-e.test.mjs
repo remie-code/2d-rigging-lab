@@ -5,7 +5,8 @@
  *  - 書いていない（undefined）・null は今どおり既定 `.env.discord.local`（断らない）。
  *  - 書いてあって形が合わない値は、値を持たずに印だけ（`discordBotKeyFileInvalid: true`）。roleDiscordBotKeyFile は今どおり既定を返す
  *    （D のテストの期待値のまま）が、roleDiscordBotKeyFileRefused が true になる。
- *  - 書き戻し・画面の編集・写しでも断るまま（"" として書く・元の値は書き戻さない）。読み直しても断る。
+ *  - 書き戻し・画面の編集・写しでも断るまま。Discord モード Domain G（E の追認 (4)）: 書き戻しでは手で書いた元の値をそのまま
+ *    残す（"" に置き換えない）。読み直しても形が合わないので断る。
  *  - 形が合う名前は今どおり（断らない）。
  * 置き場は一時フォルダだけ（実データの roles/ には触れない）。
  */
@@ -48,7 +49,7 @@ test("形が合わない値: 値は持たず印だけ・roleDiscordBotKeyFile �
   }
 });
 
-test("書き戻し・画面の編集・写し: 断るまま（\"\" として書く・元の値は書かない）・読み直しても断る", () => {
+test("書き戻し・画面の編集・写し: 断るまま（Domain G: 元の値をそのまま書き戻す・\"\" に置き換えない）・読み直しても断る", () => {
   const dir = mkdtempSync(join(tmpdir(), "discord-e-role-"));
   try {
     mkdirSync(join(dir, "chappy"), { recursive: true });
@@ -61,15 +62,14 @@ test("書き戻し・画面の編集・写し: 断るまま（\"\" として書�
     assert.equal(read.ok, true);
     const role = /** @type {any} */ (read).role;
     assert.equal(roleDiscordBotKeyFileRefused(role), true);
-    assert.equal(roleToJson(role).discordBotKeyFile, "");
+    assert.equal(roleToJson(role).discordBotKeyFile, `C:/keys/${FAKE_TOKEN}`, "Domain G: 元の値のまま");
     // 画面の編集（ほかの項目）でも黙って既定に戻らない。
     const edited = applyRolePatch(role, { verbosity: "quiet" });
     assert.equal(edited.ok, true);
     assert.equal(roleDiscordBotKeyFileRefused(/** @type {any} */ (edited).role), true);
     writeRole({ dir, role: /** @type {any} */ (edited).role });
     const text = readFileSync(join(dir, "chappy", "role.json"), "utf8");
-    assert.equal(text.includes(FAKE_TOKEN), false, "元の値（鍵を含みうる）は書き戻さない");
-    assert.equal(JSON.parse(text).discordBotKeyFile, "");
+    assert.equal(JSON.parse(text).discordBotKeyFile, `C:/keys/${FAKE_TOKEN}`, "Domain G: ユーザーが手で書いた値を黙って消さない");
     const back = readRole({ dir, id: "chappy" });
     assert.equal(roleDiscordBotKeyFileRefused(/** @type {any} */ (back).role), true, "読み直しても断る");
     const copied = copyRoleAs(role, { id: "mio", name: "ミオ" });

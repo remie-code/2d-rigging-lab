@@ -168,6 +168,16 @@ export const DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE =
  * speak-now に固定（scope §23・discord-mode.md §8）。
  */
 export const DISCORD_SPEAK_START_FIXED_MESSAGE = "Discord の通話では話し始めは speak-now に固定（替えられない）";
+/**
+ * Discord の場の間に YouTube のコメントにつなごうとしたときの断り（Discord モード Domain G・F の追認 (2)・409・何も変えない）。
+ * Discord の場にはコメントが無い（discord-mode.md §4.3 の表「開いたあと: なし」・§8 コメント反応は Discord では作らない）。
+ */
+export const DISCORD_CHAT_CONNECT_REFUSED_MESSAGE = "Discord の通話の間は YouTube のコメントにつながない（VC から抜けてから）";
+/**
+ * 場が閉じていてコメントを積む正本が無いときの診断（chatBufferAbsent）の文面（Discord モード Domain G: 正本は場のもの・
+ * discord-mode.md §3.1。「耳が無い」ではなく「場が開いていない」）。
+ */
+export const CHAT_BUFFER_ABSENT_MESSAGE = "venue not open; viewer comment cannot merge into transcript buffer (no fire).";
 /** 配信のマイクの耳を耳の束に束ねるときの名前（束の中の key）。 */
 const STREAM_EAR_KEY = "mic";
 /**
@@ -231,6 +241,24 @@ export function normalizeVenueExperience(kind, mouth) {
       mouth.prep && typeof mouth.prep.get === "function" && typeof mouth.prep.set === "function"
         ? Object.freeze({ get: () => mouth.prep.get(), set: (/** @type {unknown} */ patch) => mouth.prep.set(patch) })
         : null,
+    // Discord モード Domain G: その体験の見る窓（目）の置き場（GET / POST /api/discord/vision-target）。無ければ null。
+    visionTarget:
+      mouth.visionTarget && typeof mouth.visionTarget.get === "function" && typeof mouth.visionTarget.set === "function"
+        ? Object.freeze({
+            get: () => mouth.visionTarget.get(),
+            set: (/** @type {unknown} */ value) => mouth.visionTarget.set(value)
+          })
+        : null,
+    // Discord モード Domain G（設計 §4.3 の 7「見る窓は体験の準備で選んだもの。選んでいなければ起こさない」）: 場の目を起こすか。
+    // 口が持たなければ起こす（今の配信と同じ）。読めなければ起こさない側に倒す。
+    eyesWanted: () => {
+      if (typeof mouth.eyesWanted !== "function") return true;
+      try {
+        return mouth.eyesWanted() === true;
+      } catch {
+        return false;
+      }
+    },
     afterOpen: () => {
       if (typeof mouth.afterOpen === "function") mouth.afterOpen();
     },
@@ -764,6 +792,9 @@ const MAX_PORT_REROLLS = 50;
  *   - connectionStatus()（snapshot の stream.connection・VENUE_CONNECTION_STATES）。
  *   - unexpectedErrorMessage(phase)（場を開く・閉じる途中の想定外の例外の文面。生のエラー文は渡さない）。
  *   - catalog()（POST /api/discord/catalog）・prep = { get, set }（GET / POST /api/discord/prep）。
+ *   Discord モード Domain G で足した口（どれも任意）:
+ *   - visionTarget = { get, set }（GET / POST /api/discord/vision-target・その体験の見る窓（目）・配信の見る窓とは別）。
+ *   - eyesWanted()（場の目を起こすか・false なら始める 7 で目を起こさない。口が持たなければ起こす = 配信と同じ）。
  *   - wording / teaching / judgeSet（任意・Discord モード Domain C）: 語の組（②④・skills/recall.md・思い出しの結果を①に渡す
  *     文面）・①に足す体験の教えの名前（`venue-<体験の種類>`）・判定の組 `{ speakNow, recallAvoid }`（speak-now の問いの組・
  *     思い出しの「避けるか」の問いの組。recallAvoid は Domain F）。無ければ配信の既定。
@@ -2375,8 +2406,13 @@ export function createCockpitServer(options = {}) {
 
   // ── 場の共通の段: 目・耳の束・入口を閉じる（Discord モード Domain B）────────────────────────────
 
-  /** 目を起こす（始める 7・旧名 onEarsStarted と新しい名 onEyesStart・待たない・投げても場は止めない）。 */
+  /**
+   * 目を起こす（始める 7・旧名 onEarsStarted と新しい名 onEyesStart・待たない・投げても場は止めない）。Discord モード Domain G:
+   * 体験の口が「目を起こさない」と言えば（Discord の場で見る窓を選んでいない・設計 §4.3 の 7）起こさない。配信の口は言わない
+   * （今まで通り起こす）。止める口は冪等なので、閉じる段では今まで通り呼ぶ。
+   */
   function startVenueEyes() {
+    if (venueExperience && typeof venueExperience.eyesWanted === "function" && venueExperience.eyesWanted() !== true) return;
     callEarsHook(onEarsStarted);
     callEarsHook(onEyesStart);
   }
@@ -2969,6 +3005,49 @@ export function createCockpitServer(options = {}) {
   }
 
   /**
+   * Discord の場の見る窓（目）の読み書き（Discord モード Domain G・設計 §9「Discord の準備: 見る窓（目）」・§4.3 の 7）。
+   * GET → 200 `{ visionTarget: { title } }`。POST（body `{ title }`・null / "" で消す = Discord の場で目を起こさない）→ 200
+   * `{ visionTarget: { title } }`・形が違えば 400 `{ error }`・Discord の場の間は 409（準備と同じく場が閉じている間に選ぶ）。
+   * 配信の見る窓（POST /api/vision-target・snapshot の visionTarget）とは別に持つ。Discord の入口が無ければ 503。
+   * @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {string} method
+   */
+  async function handleDiscordVisionTarget(req, res, method) {
+    const store = discordExperience ? discordExperience.visionTarget : null;
+    if (!store) {
+      sendJson(res, 503, { error: DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE });
+      return;
+    }
+    if (method === "GET") {
+      /** @type {unknown} */
+      let title = null;
+      try {
+        title = store.get();
+      } catch {
+        title = null;
+      }
+      sendJson(res, 200, { visionTarget: { title: typeof title === "string" ? title : null } });
+      return;
+    }
+    const body = await readJsonBody(req);
+    if (discordVenueActive()) {
+      sendJson(res, 409, { error: streamBusyMessage() });
+      return;
+    }
+    /** @type {any} */
+    let result;
+    try {
+      result = store.set(body.title);
+    } catch {
+      result = { ok: false, reason: "見る窓を保存できない" };
+    }
+    if (!result || result.ok !== true) {
+      sendJson(res, 400, { error: (result && typeof result.reason === "string" && result.reason) || "見る窓の形が違う" });
+      return;
+    }
+    sendJson(res, 200, { visionTarget: { title: typeof result.title === "string" ? result.title : null } });
+  }
+
+  /**
    * サーバーとボイスチャンネルの一覧を読み込む（Discord モード Domain D・設計 §9「読み込む」）。今のロールの鍵でログインし、取って
    * ログアウトする。200 `{ guilds: [{ id, name, channels: [{ id, name }] }] }`・読めなければ 502 `{ error }`（決まった文面）・
    * Discord の場の間は 409。Discord の入口が無ければ 503。
@@ -3187,6 +3266,11 @@ export function createCockpitServer(options = {}) {
     }
     if (method === "POST" && pathname === "/api/discord/catalog") {
       await handleDiscordCatalog(res);
+      return;
+    }
+    // Discord モード Domain G: Discord の場の見る窓（目）の読み書き（配信の見る窓 /api/vision-target とは別）。
+    if (pathname === "/api/discord/vision-target" && (method === "GET" || method === "POST")) {
+      await handleDiscordVisionTarget(req, res, method);
       return;
     }
     if (method === "POST" && pathname === "/api/fire") {
@@ -3553,6 +3637,12 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // Discord モード Domain G（F の追認 (2)）: Discord の場（開きかけ・開いている・閉じかけ）の間は Connect を断る（Discord の場には
+      // コメントが無い・設計 §4.3）。何も変えない。画面も Discord の場の間は Connect を出さない。
+      if (discordVenueActive()) {
+        sendJson(res, 409, { error: DISCORD_CHAT_CONNECT_REFUSED_MESSAGE, state: snapshot() });
+        return;
+      }
       // 配信の組み直し 仕上げ（全体の突き合わせの持ち越し 2）: 場の開きかけ・閉じかけの間は Connect を断る（閉じかけの
       // 間につないだ器官が場の外に残り、次の場へ持ち込まれるのを防ぐ）。何も変えない。開いている間に押されたら、後ろでつないでいる
       // 始める 7 のつなぎより押した方を優先する（後ろのつなぎは黙って捨てる・startChatForStream）。
@@ -4375,7 +4465,7 @@ export function createCockpitServer(options = {}) {
         // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、判定・append/scheduler はスキップ。
         handleDiagnostic({
           type: "chatBufferAbsent",
-          message: "ears not running; viewer comment cannot merge into transcript buffer (no fire).",
+          message: CHAT_BUFFER_ABSENT_MESSAGE,
           reason: displayName ?? null
         });
         return;
@@ -4474,7 +4564,7 @@ export function createCockpitServer(options = {}) {
       // 判定を待つ間に耳が止まった = 合流先が無い（取り込み時と同じ扱い）。
       handleDiagnostic({
         type: "chatBufferAbsent",
-        message: "ears not running; viewer comment cannot merge into transcript buffer (no fire).",
+        message: CHAT_BUFFER_ABSENT_MESSAGE,
         reason: displayName ?? null
       });
       return;

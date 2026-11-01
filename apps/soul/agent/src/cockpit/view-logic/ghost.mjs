@@ -56,7 +56,8 @@ export function diagnosticGhostLabel(d) {
     case "bargeInMouthCloseError":
       return "(barge-in: mouth-close failed — " + ((d && d.message) || "?") + ")";
     case "chatBufferAbsent":
-      return "(chat: ears not running — comment did not merge)";
+      // Discord モード Domain G: 正本は場のもの（場が閉じていると積めない・cockpit-server の CHAT_BUFFER_ABSENT_MESSAGE と同じ意味）。
+      return "(chat: venue not open — comment did not merge)";
     case "contextCompaction":
       return contextCompactionGhostLabel(/** @type {any} */ (d));
     // 意図的非表示（行を作らない）: expressionBrokenTag / expressionRejected / expressionSendError。

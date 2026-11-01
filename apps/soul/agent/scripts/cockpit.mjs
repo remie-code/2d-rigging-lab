@@ -599,6 +599,35 @@ export function createVisionTargetHooks(settings) {
 }
 
 /**
+ * 発火が撮る見る窓を、開いている場の体験で選ぶ（Discord モード Domain G・discord-mode.md §4.3 の 7・§9: 見る窓は体験の準備で
+ * 選んだもの）。Discord の場（開きかけ・閉じかけを含む）では Discord の準備の見る窓（選んでいなければ null = 画像なしの発火）、
+ * それ以外（配信の場・閉じている間）は今まで通り配信の見る窓。fire-orchestrator の getVisionTarget に渡す。
+ *
+ * @param {{ stream: () => (string | null); discord: () => (string | null); experience: () => (string | null | undefined) }} deps
+ * @returns {() => (string | null)}
+ */
+export function createVenueVisionTarget(deps) {
+  return () => {
+    /** @type {unknown} */
+    let kind = null;
+    try {
+      kind = deps.experience();
+    } catch {
+      kind = null;
+    }
+    if (kind === "discord") {
+      try {
+        const title = deps.discord();
+        return typeof title === "string" && title.length > 0 ? title : null;
+      } catch {
+        return null;
+      }
+    }
+    return deps.stream();
+  };
+}
+
+/**
  * settings の出力デバイス（audioDevice）を、cockpit-server の口（onSetAudioDevice/audioDeviceStatus）へ
  * 橋渡しする（S6「会話が続く」・Domain D。visionTarget と同型の薄い配線層）。
  *
@@ -1233,12 +1262,17 @@ export function createVenueRoleBundle(deps) {
  *
  *  - settings: Discord の準備（サーバー・ボイスチャンネル・文字起こしの方式）の get / set（cockpit-settings.local.json）。
  *  - currentKeyFile(): 今のロールの鍵のファイル名（一覧の読み込みで使う。場を開くときはロールの束の discordBotKeyFile）。
+ *  - currentKeyFileRefused(): 今のロールの鍵のファイル名の形が合わないか（Discord モード Domain G・一覧の読み込みも入口と同じく
+ *    鍵を読まずログインせずに断る）。無ければ断らない。
+ *  - settings の getDiscordVisionTarget / setDiscordVisionTarget（Domain G）: Discord の場の見る窓（目）の置き場（配信の見る窓とは別）。
  *  - write(line): ログの口（`[cockpit] discord: …` の 1 行・数と状態だけ。文字起こしの本文・名前・Discord の id は書かない）。
  *  - loadLibraries / loadToken: テスト注入（既定は discord.js などを使うときに動的 import・鍵は role の指すファイルから直に読む）。
  *
  * @param {object} deps
- * @param {{ getDiscordPrep: () => any; setDiscordPrep: (patch: object) => void }} deps.settings
+ * @param {{ getDiscordPrep: () => any; setDiscordPrep: (patch: object) => void;
+ *   getDiscordVisionTarget?: () => (string | null); setDiscordVisionTarget?: (title: string | null) => void }} deps.settings
  * @param {() => string} deps.currentKeyFile
+ * @param {() => boolean} [deps.currentKeyFileRefused]
  * @param {(line: string) => void} deps.write
  * @param {() => Promise<any>} [deps.loadLibraries]
  * @param {(fileName: string) => any} [deps.loadToken]
@@ -1249,9 +1283,17 @@ export function createDiscordVenueExperience(deps) {
     ...(deps.options ?? {}),
     settings: {
       getDiscordPrep: () => deps.settings.getDiscordPrep(),
-      setDiscordPrep: (/** @type {object} */ patch) => deps.settings.setDiscordPrep(patch)
+      setDiscordPrep: (/** @type {object} */ patch) => deps.settings.setDiscordPrep(patch),
+      // Discord モード Domain G: Discord の場の見る窓（目）。置き場が無ければ「選んでいない」（目を起こさない）。
+      getDiscordVisionTarget: () =>
+        typeof deps.settings.getDiscordVisionTarget === "function" ? deps.settings.getDiscordVisionTarget() : null,
+      setDiscordVisionTarget: (/** @type {string | null} */ title) => {
+        if (typeof deps.settings.setDiscordVisionTarget !== "function") throw new Error("no place to keep the Discord vision target");
+        deps.settings.setDiscordVisionTarget(title);
+      }
     },
     currentKeyFile: () => deps.currentKeyFile(),
+    ...(deps.currentKeyFileRefused ? { currentKeyFileRefused: () => /** @type {() => boolean} */ (deps.currentKeyFileRefused)() } : {}),
     log: (/** @type {string} */ line) => deps.write(`[cockpit] discord: ${line}\n`),
     ...(deps.loadLibraries ? { loadLibraries: deps.loadLibraries } : {}),
     ...(deps.loadToken ? { loadToken: deps.loadToken } : {})
@@ -2403,6 +2445,12 @@ async function main() {
   const roleHooks = createRoleHooks({ rolesDir: DEFAULT_ROLES_DIR, settings });
   // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
   const visionTargetHooks = createVisionTargetHooks(settings);
+  // Discord モード Domain G: 発火が撮る見る窓は開いている場の体験で選ぶ（Discord の場は Discord の準備の見る窓）。
+  const venueVisionTarget = createVenueVisionTarget({
+    stream: visionTargetHooks.getVisionTarget,
+    discord: () => settings.getDiscordVisionTarget(),
+    experience: () => server?.venueContext()?.experience ?? null
+  });
   // S6「会話が続く」: 魂の声の出力デバイス設定（vision target と同型の薄い橋渡し・§createAudioDeviceHooks）。
   const audioDeviceHooks = createAudioDeviceHooks(settings);
   // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（既定 OFF・§createSelfFireHooks）。
@@ -3156,7 +3204,8 @@ async function main() {
       acquireFireResources: acquireAcceptedFireResources,
       // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。撮影は常駐の撮る係に頼む
       // （vision-capture-latency §4・使えない間は captureWindow＝毎回起動に戻る）。
-      getVisionTarget: visionTargetHooks.getVisionTarget,
+      // Discord モード Domain G: Discord の場では Discord の準備の見る窓（§createVenueVisionTarget）。
+      getVisionTarget: venueVisionTarget,
       captureImpl: residentCapture.capture,
       speakDeps: productionSpeakDeps(),
       ...(windowMs != null ? { windowMs } : {}),
@@ -3223,6 +3272,7 @@ async function main() {
   const discordExperience = createDiscordVenueExperience({
     settings,
     currentKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
+    currentKeyFileRefused: () => roleDiscordBotKeyFileRefused(roleHooks.current()),
     write: (line) => process.stdout.write(line)
   });
 

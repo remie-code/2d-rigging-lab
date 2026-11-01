@@ -15,6 +15,11 @@
  *    外した（ロールの声）。いちばん下に「配信を始める」（選んだマイク・文字起こしで POST /api/stream/start）。始められなかった
  *    理由の正はメイン画面の中央（snapshot の stream.error）で、ここにも同じ値を出す（ダイアログがメイン画面を覆うため）。
  *    「配信を終える」は下の帯の 2 回押しだけ（ここの Stop は外した）。
+ *  - Discord の準備（Discord モード Domain G・discord-mode.md §9）: サーバー・ボイスチャンネル（「読み込む」= POST /api/discord/catalog
+ *    の一覧から名前で選ぶ・id は表示しない）・見る窓（目・POST /api/discord/vision-target・配信のゲームの窓とは別・選ばなければ
+ *    Discord の場で目を起こさない）・文字起こしの方式（POST /api/discord/prep）。いちばん下に「Discord の VC に入る」
+ *    （POST /api/stream/start { experience: "discord" }）。Discord の場の間は替えられない（サーバも 409）。Discord の入口が無い
+ *    サーバ（snapshot の discord が null）では案内だけ。Discord の場の間は、配信の準備の YouTube の Connect を出さない。
  *  - ロール（場面 1・2）: 今日のロールの選択（POST /api/role）と、今のロールの編集（名前・モデル・性格の指示・声（方式・
  *    AivisSpeech の話者・ElevenLabs の声の id）・口数・話し始め・体 → POST /api/role/edit）。性格の指示は同じタブの中の
  *    ページ（conversation-instruction editor・今のロールの instructions.md）。新しいロールは今のロールを写して作る
@@ -37,7 +42,8 @@
  * 消えない。
  *
  * props 契約（app.mjs が結線する）:
- *  - open / onClose / settings（settingsFromSnapshot の値）/ sttEngine / chatDisplay / applySnapshot / fetchImpl /
+ *  - open / onClose / settings（settingsFromSnapshot の値）/ discordAvailable / speakStartFixed（Discord モード Domain G・app.mjs の
+ *    venueExtrasFromSnapshot）/ sttEngine / chatDisplay / applySnapshot / fetchImpl /
  *    closeRequestRef / driveSlot / logSlot / promptEditorSlot / draftDirty / dirty / onDiscardDraft / onContinueDraft。
  *
  * トップレベル副作用ゼロ（export function/const のみ）。
@@ -99,6 +105,23 @@ import {
   roleLockedNote,
   roleEditPostErrorText
 } from "../view-logic/role.mjs";
+import {
+  DISCORD_CHAT_HIDDEN_NOTE,
+  DISCORD_OPEN_NOTE,
+  DISCORD_OPEN_NOTE_IN_STREAM_PREP,
+  DISCORD_PREP_LOCKED_NOTE,
+  DISCORD_SPEAK_START_FIXED_NOTE,
+  DISCORD_UNAVAILABLE_NOTE,
+  STREAM_OPEN_NOTE_IN_DISCORD_PREP,
+  discordCatalogErrorText,
+  discordChannelOptions,
+  discordGuildOptions,
+  discordJoinView,
+  discordPrepPostErrorText,
+  discordVisionLabel,
+  discordVisionOptions,
+  isDiscordVenue
+} from "../view-logic/discord.mjs";
 import { ConversationInstructionEditor } from "./conversation-instruction-editor.mjs";
 import { VerbositySelect, SpeakStartSelect, CommentBusySelect } from "./control-bar.mjs";
 
@@ -127,9 +150,12 @@ export function DrawerStatus({ view }) {
 
 /**
  * 設定のダイアログのタブ（配信の組み直し Domain E・stream-restructure.md §6: 配信の準備 / ロール / 運転 / 記憶 / ログ）。
+ * Discord モード Domain G（discord-mode.md §9 の推奨）: 配信の準備の次に「Discord の準備」を足して 6 つ（ロール・運転・記憶・
+ * ログは体験の外の共通の場所のまま）。
  */
 export const SETTINGS_CATEGORIES = Object.freeze([
   Object.freeze({ id: "prepare", label: "配信の準備" }),
+  Object.freeze({ id: "discord", label: "Discord の準備" }),
   Object.freeze({ id: "role", label: "ロール" }),
   Object.freeze({ id: "drive", label: "運転" }),
   Object.freeze({ id: "memory", label: "記憶" }),
@@ -239,7 +265,8 @@ const responseOf = (r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, s
  * conversation editor is a page within this same dialog (ロールのタブの中); it never creates a
  * nested dialog or changes existing immediate-setting endpoint handlers.
  *
- * @param {{ open?: boolean; onClose?: () => void; settings: any; sttEngine?: string | null; chatDisplay?: string | null;
+ * @param {{ open?: boolean; onClose?: () => void; settings: any; discordAvailable?: boolean; speakStartFixed?: boolean | null;
+ *   sttEngine?: string | null; chatDisplay?: string | null;
  *   applySnapshot: (s: any) => void; fetchImpl?: any; promptEditorSlot?: any;
  *   draftDirty?: boolean; dirty?: boolean; onDiscardDraft?: () => void; onContinueDraft?: () => void;
  *   closeRequestRef?: { current: (() => void) | null }; driveSlot?: any; logSlot?: any }} props
@@ -248,6 +275,8 @@ export function CockpitSettingsModal({
   open,
   onClose,
   settings,
+  discordAvailable = false,
+  speakStartFixed = null,
   sttEngine = null,
   chatDisplay,
   applySnapshot,
@@ -295,6 +324,18 @@ export function CockpitSettingsModal({
   const [audioError, setAudioError] = useState("");
   // ── 配信の準備: 忙しい間のコメント（snapshot の commentBusy で controlled・エラー欄だけ持つ）──
   const [commentBusyError, setCommentBusyError] = useState("");
+  // ── Discord の準備（Discord モード Domain G）: 保存した準備（GET /api/discord/prep）・見る窓・読み込んだ一覧 ──
+  const [discordPrep, setDiscordPrep] = useState(
+    /** @type {{ guildId: string | null; channelId: string | null; sttEngine: string | null }} */ ({ guildId: null, channelId: null, sttEngine: null })
+  );
+  const [discordVision, setDiscordVision] = useState(/** @type {string | null} */ (null));
+  const [discordCatalog, setDiscordCatalog] = useState(/** @type {any} */ (null));
+  const [discordCatalogBusy, setDiscordCatalogBusy] = useState(false);
+  const [discordCatalogError, setDiscordCatalogError] = useState("");
+  const [discordPrepError, setDiscordPrepError] = useState("");
+  const [discordVisionError, setDiscordVisionError] = useState("");
+  const [discordJoinBusy, setDiscordJoinBusy] = useState(false);
+  const [discordJoinRequestError, setDiscordJoinRequestError] = useState("");
   // ── ロール: 今日のロールの選択 ──
   const [roleSelected, setRoleSelected] = useState("");
   const [roleError, setRoleError] = useState("");
@@ -588,6 +629,28 @@ export function CockpitSettingsModal({
     if (compactCurrent != null) setCompactSelected(compactCurrent);
   }, [compactCurrent]);
 
+  // Discord の準備の読み込み（Discord モード Domain G）: Discord の入口があれば、保存した準備と見る窓を読む（一覧は「読み込む」で）。
+  useEffect(() => {
+    if (!discordAvailable) return;
+    doFetch("/api/discord/prep")
+      .then((/** @type {any} */ r) => r.json())
+      .then((/** @type {any} */ j) => {
+        if (j && j.prep && typeof j.prep === "object") setDiscordPrep(j.prep);
+      })
+      .catch(() => {
+        /* 読めなくても画面は開く（選び直せば保存される）。 */
+      });
+    doFetch("/api/discord/vision-target")
+      .then((/** @type {any} */ r) => r.json())
+      .then((/** @type {any} */ j) => {
+        if (j && j.visionTarget) setDiscordVision(typeof j.visionTarget.title === "string" ? j.visionTarget.title : null);
+      })
+      .catch(() => {
+        /* 同上。 */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discordAvailable]);
+
   // 文字起こしの選択の復元（state.stt.engine・ユーザーが選び直した後は上書きしない）。
   const sttRestored = sttEngineSelection(sttEngine ? { engine: sttEngine } : null);
   useEffect(() => {
@@ -622,6 +685,78 @@ export function CockpitSettingsModal({
       })
       .catch((/** @type {unknown} */ e) => setStartRequestError(requestErrorText("earsStart", e)))
       .then(() => setStartBusy(false));
+  };
+
+  /**
+   * 「Discord の VC に入る」（Discord の準備のタブ・Discord モード Domain G）。メイン画面と同じ場の関数（POST /api/stream/start
+   * { experience: "discord" }）。入れなかった理由はサーバの stream.error（メイン画面の中央が正・ここにも同じ値を出す）。
+   */
+  const onDiscordJoin = () => {
+    setDiscordJoinBusy(true);
+    setDiscordJoinRequestError("");
+    postJson("/api/stream/start", { experience: "discord" })
+      .then((/** @type {any} */ res) => {
+        if (res.ok) {
+          applySnapshot(res.j);
+          return;
+        }
+        if (res.j && res.j.state) applySnapshot(res.j.state);
+        if (!(res.j && res.j.state && res.j.state.stream && res.j.state.stream.error)) {
+          setDiscordJoinRequestError((res.j && res.j.error) || "Discord の VC に入れない");
+        }
+      })
+      .catch((/** @type {unknown} */ e) => setDiscordJoinRequestError("Discord の VC に入れない（" + String(e) + "）"))
+      .then(() => setDiscordJoinBusy(false));
+  };
+
+  /** サーバーとボイスチャンネルの一覧を読み込む（POST /api/discord/catalog・ロールの Bot がログイン → 取得 → ログアウト）。 */
+  const onDiscordCatalog = () => {
+    setDiscordCatalogBusy(true);
+    setDiscordCatalogError("");
+    postJson("/api/discord/catalog", {})
+      .then((/** @type {any} */ res) => {
+        const err = discordCatalogErrorText(res);
+        if (err != null) {
+          setDiscordCatalogError(err);
+          return;
+        }
+        setDiscordCatalog(res.j);
+      })
+      .catch((/** @type {unknown} */ e) => setDiscordCatalogError("サーバーとボイスチャンネルの一覧を読めない（" + String(e) + "）"))
+      .then(() => setDiscordCatalogBusy(false));
+  };
+
+  /**
+   * Discord の準備の 1 項目を保存する（POST /api/discord/prep・null で消す。サーバーを替えるとチャンネルは消える）。
+   * @param {{ guildId?: string | null; channelId?: string | null; sttEngine?: string | null }} patch
+   */
+  const saveDiscordPrep = (patch) => {
+    setDiscordPrepError("");
+    postJson("/api/discord/prep", patch)
+      .then((/** @type {any} */ res) => {
+        const err = discordPrepPostErrorText(res);
+        if (err != null) {
+          setDiscordPrepError(err);
+          return;
+        }
+        if (res.j && res.j.prep) setDiscordPrep(res.j.prep);
+      })
+      .catch((/** @type {unknown} */ e) => setDiscordPrepError("Discord の準備を保存できない（" + String(e) + "）"));
+  };
+
+  /** Discord の場の見る窓（目）を保存する（POST /api/discord/vision-target・"" は使わない = 目を起こさない）。 @param {string} title */
+  const saveDiscordVision = (title) => {
+    setDiscordVisionError("");
+    postJson("/api/discord/vision-target", { title: title || null })
+      .then((/** @type {any} */ res) => {
+        const err = discordPrepPostErrorText(res);
+        if (err != null) {
+          setDiscordVisionError(err);
+          return;
+        }
+        setDiscordVision(res.j && res.j.visionTarget && typeof res.j.visionTarget.title === "string" ? res.j.visionTarget.title : null);
+      })
+      .catch((/** @type {unknown} */ e) => setDiscordVisionError("見る窓を保存できない（" + String(e) + "）"));
   };
 
   /** Channel Set（token 秘匿 = 成功後に入力欄クリア）。 */
@@ -898,6 +1033,12 @@ export function CockpitSettingsModal({
   const chatHint = chatAutoConnectHint(settings && settings.chat, settings && settings.stream);
   const showChannel = channelFieldVisible(settings);
   const startView = streamStartView(settings && settings.stream, startRequestError);
+  // Discord モード Domain G: Discord の場か（YouTube の Connect を出さない・Discord の準備を固める・話し始めを選ばせない）。
+  const discordVenue = isDiscordVenue(settings && settings.stream);
+  const discordLocked = discordVenue;
+  const discordJoin = discordJoinView(settings && settings.stream, discordAvailable);
+  const discordJoinErrorView = streamStartView(settings && settings.stream, discordJoinRequestError);
+  const speakStartIsFixed = speakStartFixed === true;
   const recordView = memoryRecordButtonView(settings && settings.stream, recordBusy);
   const roleInputsDisabled = roleLocked || !roleEditable || !roleDraft;
 
@@ -947,9 +1088,10 @@ export function CockpitSettingsModal({
             }}
             onChange=${onChatSourceCommit}
           />
+          ${discordVenue ? null : html`
           <button class="btn-chat-connect" type="button" disabled=${connectBusy} onClick=${onChatConnect}>
             Connect
-          </button>
+          </button>`}
           <button
             class="btn-chat-disconnect"
             type="button"
@@ -962,6 +1104,7 @@ export function CockpitSettingsModal({
         <div class="drawer-note">
           <${DrawerStatus} view=${chatView} />
           ${chatHint ? html`<span class="drawer-hint chat-auto-connect-hint">${chatHint}</span>` : null}
+          ${discordVenue ? html`<span class="drawer-hint discord-chat-hidden-hint">${DISCORD_CHAT_HIDDEN_NOTE}</span>` : null}
           <span class="err">${chatError}</span>
         </div>
         <div class="drawer-row">
@@ -1066,7 +1209,7 @@ export function CockpitSettingsModal({
         </details>
         ${startView.phase === "open" ? html`
           <div class="drawer-note prepare-start-note">
-            <span class="drawer-hint">配信中（終えるときは下の帯の「配信を終える」）</span>
+            <span class="drawer-hint">${discordVenue ? DISCORD_OPEN_NOTE_IN_STREAM_PREP : "配信中（終えるときは下の帯の「配信を終える」）"}</span>
           </div>
         ` : html`
           <div class="drawer-row prepare-start">
@@ -1077,6 +1220,90 @@ export function CockpitSettingsModal({
           </div>
           <div class="drawer-note">
             <span class="err start-error" role=${startView.errorText ? "alert" : null}>${startView.errorText}</span>
+          </div>
+        `}
+      </div>
+      <div id="cockpit-settings-panel-discord" class="drawer-section" data-settings-category="discord" role="tabpanel" aria-labelledby="cockpit-settings-tab-discord" hidden=${activeCategory !== "discord"}>
+        <h3>Discord の準備</h3>
+        ${discordAvailable ? html`
+          <div class="drawer-row">
+            <label for="discord-guild-select">サーバー</label>
+            <${SettingsSelect}
+              id="discord-guild-select"
+              className="drawer-select discord-guild-select"
+              options=${discordGuildOptions(discordCatalog, discordPrep.guildId)}
+              value=${discordPrep.guildId ?? ""}
+              disabled=${discordLocked}
+              onChange=${(/** @type {any} */ ev) => saveDiscordPrep({ guildId: (ev && ev.target ? ev.target.value : "") || null })}
+            />
+            <button class="btn-discord-catalog" type="button" disabled=${discordLocked || discordCatalogBusy} onClick=${onDiscordCatalog}>
+              読み込む
+            </button>
+          </div>
+          <div class="drawer-row">
+            <label for="discord-channel-select">ボイスチャンネル</label>
+            <${SettingsSelect}
+              id="discord-channel-select"
+              className="drawer-select discord-channel-select"
+              options=${discordChannelOptions(discordCatalog, discordPrep.guildId, discordPrep.channelId)}
+              value=${discordPrep.channelId ?? ""}
+              disabled=${discordLocked || !discordPrep.guildId}
+              onChange=${(/** @type {any} */ ev) => saveDiscordPrep({ channelId: (ev && ev.target ? ev.target.value : "") || null })}
+            />
+          </div>
+          <div class="drawer-note">
+            <span class="drawer-hint">「読み込む」でロールの Bot がログインし、入っているサーバーとボイスチャンネルを読んでログアウトする</span>
+            <span class="err discord-catalog-error">${discordCatalogError}</span>
+          </div>
+          <div class="drawer-row">
+            <label for="discord-vision-select">見る窓（目）</label>
+            <${SettingsSelect}
+              id="discord-vision-select"
+              className="drawer-select discord-vision-select"
+              options=${discordVisionOptions(winOptions, discordVision)}
+              value=${discordVision ?? ""}
+              disabled=${discordLocked}
+              onChange=${(/** @type {any} */ ev) => saveDiscordVision(ev && ev.target ? ev.target.value : "")}
+            />
+            <button class="btn-discord-vision-refresh" type="button" onClick=${() => loadWindows()}>Refresh windows</button>
+          </div>
+          <div class="drawer-note">
+            <span class="discord-vision-status">${discordVisionLabel(discordVision)}</span>
+            <span class="err">${discordVisionError}</span>
+          </div>
+          <div class="drawer-row">
+            <label for="discord-stt-engine-select">文字起こし</label>
+            <${SettingsSelect}
+              id="discord-stt-engine-select"
+              className="drawer-select discord-stt-engine-select"
+              options=${STT_ENGINE_OPTIONS}
+              value=${discordPrep.sttEngine ?? "whisper"}
+              disabled=${discordLocked}
+              onChange=${(/** @type {any} */ ev) => saveDiscordPrep({ sttEngine: (ev && ev.target ? ev.target.value : "") || null })}
+            />
+          </div>
+          <div class="drawer-note">
+            ${discordLocked ? html`<span class="drawer-hint">${DISCORD_PREP_LOCKED_NOTE}</span>` : null}
+            <span class="err discord-prep-error">${discordPrepError}</span>
+          </div>
+          ${discordJoinErrorView.phase === "open" ? html`
+            <div class="drawer-note discord-join-note">
+              <span class="drawer-hint">${discordVenue ? DISCORD_OPEN_NOTE : STREAM_OPEN_NOTE_IN_DISCORD_PREP}</span>
+            </div>
+          ` : html`
+            <div class="drawer-row discord-join">
+              <button class="btn-discord-join" type="button" disabled=${discordJoinBusy || discordJoin.disabled} onClick=${onDiscordJoin}>
+                ${discordJoin.text}
+              </button>
+              ${discordJoinErrorView.noteText ? html`<span class="drawer-hint">${discordJoinErrorView.noteText}</span>` : null}
+            </div>
+            <div class="drawer-note">
+              <span class="err discord-join-error" role=${discordJoinErrorView.errorText ? "alert" : null}>${discordJoinErrorView.errorText}</span>
+            </div>
+          `}
+        ` : html`
+          <div class="drawer-note discord-unavailable-note">
+            <span class="drawer-hint">${DISCORD_UNAVAILABLE_NOTE}</span>
           </div>
         `}
       </div>
@@ -1181,8 +1408,9 @@ export function CockpitSettingsModal({
             <${VerbositySelect} verbosity=${roleDraft ? roleDraft.verbosity : null} disabled=${roleInputsDisabled}
               onChange=${onRoleText("verbosity")} />
             <${SpeakStartSelect} speakStart=${roleDraft ? roleDraft.speakStartMode : null} disabled=${roleInputsDisabled}
-              onChange=${onRoleText("speakStartMode")} />
+              fixed=${speakStartIsFixed} onChange=${onRoleText("speakStartMode")} />
           </div>
+          ${speakStartIsFixed ? html`<div class="drawer-note"><span class="drawer-hint speak-start-fixed-note">${DISCORD_SPEAK_START_FIXED_NOTE}</span></div>` : null}
           <div class="drawer-row">
             <label class="role-body-pill">
               <span class="pill-label">体</span>

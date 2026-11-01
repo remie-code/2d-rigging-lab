@@ -29,9 +29,10 @@
  *  discord-mode.md §5)。無い・合わない値なら項目ごと持たない(= 既定 `.env.discord.local`・roleDiscordBotKeyFile)。鍵の中身は
  *  role.json に入れない。操縦席の画面では編集しない(手で書く・最初の的は 1 ロール)。持っているロールは書き戻しでも落とさない。
  *  Discord モード Domain E: 書いてあるのに形が合わない値(null は「書いていない」と同じ)は、値を持たずに印
- *  `discordBotKeyFileInvalid: true` だけを持つ。Discord の入口は印があれば断る(roleDiscordBotKeyFileRefused)。書き戻し・編集・
- *  写しでは印を `"discordBotKeyFile": ""`(形の合わない値)として書き、読み直しても断るままにする(元の値は書き戻さない・パスや
- *  鍵を含みうるため。画面の編集で黙って既定の鍵に戻らないように)。
+ *  `discordBotKeyFileInvalid: true` だけを持つ。Discord の入口は印があれば断る(roleDiscordBotKeyFileRefused)。
+ *  Discord モード Domain G(E の追認 (4)): 書き戻し・編集・写しでは、ユーザーが手で書いた**元の値をそのまま**書き戻す(黙って消さない・
+ *  黙って既定の鍵に戻さない)。元の値はロールの見える項目には持たず(列挙されない内側の置き場・JSON にも snapshot にも出ない)、
+ *  roleToJson / writeRole だけが読む。読み直しても形が合わないので断るまま。使うとき(入口・一覧の読み込み)に断る。
  *  `aivisSpeaker` / `elevenLabsVoiceId` の null は「コードの既定」(tts-client の DEFAULT_SPEAKER_ID・ElevenLabs の
  *  既定の声)。`hotwords` の null は「設定ファイル(localSttHotwords)か既定に任せる」。
  *
@@ -87,6 +88,10 @@ const NAME_MAX_CHARS = 32;
 const VARIANTS_MAX_COUNT = 50;
 const WHISPER_PROMPT_MAX_CHARS = 200;
 const ELEVENLABS_VOICE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+/**
+ * 形の合わない `discordBotKeyFile` の元の値の置き場(Discord モード Domain G・列挙されない symbol の項目・role-store の中だけで読む)。
+ */
+const INVALID_DISCORD_BOT_KEY_FILE_VALUE = Symbol("invalidDiscordBotKeyFileValue");
 
 /**
  * @typedef {object} RoleName
@@ -167,7 +172,8 @@ export function normalizeRole(id, raw) {
   const hotwords = textList(h.hotwords);
   const v = r.voice && typeof r.voice === "object" ? r.voice : {};
   const speaker = v.aivisSpeaker;
-  return Object.freeze({
+  /** @type {any} */
+  const role = {
     id,
     name: Object.freeze({ canonical, display, latin }),
     nameHints: Object.freeze({
@@ -190,9 +196,29 @@ export function normalizeRole(id, raw) {
     body: typeof r.body === "boolean" ? r.body : ROLE_DEFAULTS.body,
     // Discord モード Domain D: 鍵のファイル名(形が合うときだけ持つ・無ければ既定・今の項目の形は変えない)。
     ...(isDiscordBotKeyFileName(r.discordBotKeyFile) ? { discordBotKeyFile: r.discordBotKeyFile } : {}),
-    // Discord モード Domain E: 書いてあるのに形が合わない(値は持たない・入口で断る印)。
+    // Discord モード Domain E: 書いてあるのに形が合わない(値は見える項目に持たない・入口で断る印)。
     ...(isInvalidDiscordBotKeyFile(r.discordBotKeyFile) ? { discordBotKeyFileInvalid: /** @type {const} */ (true) } : {})
-  });
+  };
+  // Discord モード Domain G: 形が合わない元の値は、書き戻しのためだけに列挙されない内側の置き場に残す(JSON・spread・snapshot に出ない)。
+  if (isInvalidDiscordBotKeyFile(r.discordBotKeyFile)) {
+    Object.defineProperty(role, INVALID_DISCORD_BOT_KEY_FILE_VALUE, {
+      value: copyJsonValue(r.discordBotKeyFile),
+      enumerable: false,
+      writable: false,
+      configurable: false
+    });
+  }
+  return Object.freeze(role);
+}
+
+/** JSON の値を写す(手で書いた配列・オブジェクトでも、あとから書き換わらないように)。 @param {unknown} value */
+function copyJsonValue(value) {
+  if (value === null || typeof value !== "object") return value;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -215,13 +241,19 @@ export function roleDiscordBotKeyFileRefused(role) {
 }
 
 /**
- * 書き戻しの形(Discord モード Domain E): 形が合う名前はそのまま、形の合わなかった印は "" (形の合わない値・読み直しても断る)、
- * どちらでもなければ項目なし。
+ * 書き戻しの形: 形が合う名前はそのまま、形の合わなかった印は手で書いた元の値をそのまま(Discord モード Domain G・E の追認 (4)。
+ * 読み直しても形が合わないので断るまま)、どちらでもなければ項目なし。元の値の置き場が無い(内側の置き場を落とした写しなど)ときは
+ * "" (形の合わない値・断るまま・E の形)。
  * @param {any} role
  */
 function discordBotKeyFileJson(role) {
   if (isDiscordBotKeyFileName(role.discordBotKeyFile)) return { discordBotKeyFile: role.discordBotKeyFile };
-  if (role.discordBotKeyFileInvalid === true) return { discordBotKeyFile: "" };
+  if (role.discordBotKeyFileInvalid === true) {
+    const kept = Object.prototype.hasOwnProperty.call(role, INVALID_DISCORD_BOT_KEY_FILE_VALUE)
+      ? copyJsonValue(role[INVALID_DISCORD_BOT_KEY_FILE_VALUE])
+      : "";
+    return { discordBotKeyFile: kept };
+  }
   return {};
 }
 

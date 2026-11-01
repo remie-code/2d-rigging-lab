@@ -1916,7 +1916,8 @@ test("cockpit S7 chat: 耳未起動（バッファ無し）は chatBufferAbsent 
 
     // 診断（ゴースト行材料）だけ出る。合流先が無いので append/fire しない（盲目発火しない）。
     const diag = await sse.waitFor((e) => e.event === "diagnostic" && e.data.type === "chatBufferAbsent");
-    assert.match(diag.data.message, /ears not running/);
+    // Discord モード Domain G: 正本は場のもの（「耳が無い」ではなく「場が開いていない」）。
+    assert.match(diag.data.message, /venue not open/);
     assert.equal(fakeOrch.record.fireCount, 0);
     await new Promise((r) => setTimeout(r, 30));
     assert.equal(sse.events.filter((e) => e.event === "transcript" && e.data.speaker === "viewer").length, 0);

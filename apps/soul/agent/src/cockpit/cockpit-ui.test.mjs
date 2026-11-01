@@ -605,14 +605,14 @@ test("Domain C import スモーク: control-bar/settings-drawer が Node で imp
   ]);
 });
 
-test("Cockpit Settings modal shell: one labelled dialog, five internal tabs (配信の準備 / ロール / 運転 / 記憶 / ログ・配信の組み直し Domain E), and bounded prompt slot", () => {
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["prepare", "role", "drive", "memory", "log"]);
-  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["配信の準備", "ロール", "運転", "記憶", "ログ"]);
+test("Cockpit Settings modal shell: one labelled dialog, six internal tabs (配信の準備 / Discord の準備 / ロール / 運転 / 記憶 / ログ・配信の組み直し Domain E + Discord モード Domain G), and bounded prompt slot", () => {
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.id), ["prepare", "discord", "role", "drive", "memory", "log"]);
+  assert.deepEqual(SETTINGS_CATEGORIES.map((c) => c.label), ["配信の準備", "Discord の準備", "ロール", "運転", "記憶", "ログ"]);
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.match(source, /role="dialog"\s+aria-modal="true"/);
   assert.match(source, /role="tablist"/);
   assert.match(source, /role="tab"/);
-  assert.equal((source.match(/role="tabpanel"/g) || []).length, 5, "one panel per category");
+  assert.equal((source.match(/role="tabpanel"/g) || []).length, 6, "one panel per category");
   for (const category of SETTINGS_CATEGORIES) {
     assert.match(source, new RegExp(`id="cockpit-settings-panel-${category.id}"[^>]*hidden=\\$\\{activeCategory !== "${category.id}"\\}`));
   }
@@ -628,7 +628,7 @@ test("Cockpit Settings modal shell: one labelled dialog, five internal tabs (配
   assert.match(source, /\[hidden\]/);
   assert.match(source, /ArrowLeft/);
   assert.match(source, /closeRequestRef/);
-  assert.equal(settingsModalNextCategory("prepare", "ArrowRight"), "role");
+  assert.equal(settingsModalNextCategory("prepare", "ArrowRight"), "discord", "Discord モード Domain G: 配信の準備の次は Discord の準備");
   assert.equal(settingsModalNextCategory("prepare", "ArrowLeft"), "log");
   assert.equal(settingsModalNextCategory("memory", "Home"), "prepare");
   assert.equal(settingsModalNextCategory("prepare", "End"), "log");
@@ -647,18 +647,18 @@ test("Cockpit Settings modal shell: one labelled dialog, five internal tabs (配
 });
 
 test("Cockpit Settings keyboard/category seam: Arrow/Home/End uses guarded navigation and focuses only after acceptance", () => {
-  const tabs = ["prepare", "role", "drive", "memory", "log"].map((id) => ({
+  const tabs = ["prepare", "discord", "role", "drive", "memory", "log"].map((id) => ({
     id: "cockpit-settings-tab-" + id,
     focusCount: 0,
     focus() { this.focusCount += 1; }
   }));
   const navigations = [];
   for (const [index, key, expected] of [
-    [0, "ArrowRight", "role"],
+    [0, "ArrowRight", "discord"],
     [1, "ArrowLeft", "prepare"],
-    [1, "End", "log"],
-    [3, "Home", "prepare"],
-    [3, "ArrowRight", "log"]
+    [2, "End", "log"],
+    [4, "Home", "prepare"],
+    [4, "ArrowRight", "log"]
   ]) {
     const result = settingsModalKeyboardCategoryAction({
       tabs,

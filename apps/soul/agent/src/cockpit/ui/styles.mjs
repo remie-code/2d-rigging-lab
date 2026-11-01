@@ -128,6 +128,11 @@ html, body { overflow: hidden; }
 .status-pill.compacting { color: var(--compacting); }
 /* 配信の組み直し Domain E: 場の閉じかけ（記憶の最後の保存を待つ間）の「記録中」（中央の「記録中…」と同じ琥珀色）。 */
 .status-pill.recording { color: var(--amber); }
+/* Discord モード Domain G: Discord の場の接続の状態（入っている途中 / 入っている / 切れた）。配信の場では出ない。 */
+.venue-connection { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; }
+.venue-connection.joined { color: var(--up); }
+.venue-connection.joining { color: var(--amber); }
+.venue-connection.disconnected { color: var(--alert-text); border-color: var(--down); background: var(--alert-bg); font-weight: 600; }
 .kill-status.killed {
   color: #fff;
   background: var(--down);
@@ -186,6 +191,8 @@ html, body { overflow: hidden; }
 }
 .glance-panel { display: flex; flex-direction: column; min-height: 0; padding: 14px 18px 10px 0; }
 .comments-panel { padding: 14px 0 10px 22px; border-left: 1px solid var(--border); }
+/* Discord モード Domain G: Discord の場の間はコメントの列を出さない（会話が横いっぱい）。 */
+.glance-main.solo { grid-template-columns: minmax(0, 1fr); }
 .panel-title { font-size: 14px; font-weight: 700; margin: 0 0 8px; color: var(--fg); }
 
 /* 会話: 最新が下。入らない古い行は上で切る（スクロールしない・上端は淡く消す）。 */

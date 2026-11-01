@@ -38,6 +38,11 @@
  *  問いの組, recallAvoid: Discord の「避けるか」の問いの組 }。話し始めを speak-now に固定し、自発の発火の予定を作らないのは場の側
  *  （cockpit-server の venueFixesSpeakNow。体験の種類 "discord" で決まる）。
  *
+ * ── 画面の準備（Discord モード Domain G・§9・§4.3 の 7）──────────────────────────────────────
+ *  visionTarget = Discord の場の見る窓（目）の置き場（配信の見る窓とは別・`cockpit-settings.local.json` の discordVisionTarget）。
+ *  eyesWanted() = 見る窓を選んでいるか（選んでいなければ場は Discord の場で目を起こさない）。一覧の読み込み（catalog）も、ロールの
+ *  鍵のファイル名の形が合わなければ（currentKeyFileRefused）鍵を読まずログインせずに断る（入口と同じ・E の追認 (1)）。
+ *
  * ── 守り（§10）─────────────────────────────────────────────────────────
  *  鍵はロールの指すファイルからコードの中で読み（discord-token.mjs）、process.env に入れない。理由の文面は決まった短い日本語
  *  （鍵の値・Discord の id・名前・discord.js の生のエラー文を入れない）。ログ（log の口）は数と状態だけ（文字起こしの本文・
@@ -111,6 +116,40 @@ export const DISCORD_PREP_REFUSALS = Object.freeze({
   channelId: "ボイスチャンネルの id の形が違う",
   sttEngine: "知らない文字起こしの方式"
 });
+
+/** Discord の場の見る窓の名前（ウインドウのタイトル）の上限（字数・Discord モード Domain G）。 */
+export const DISCORD_VISION_TARGET_MAX_CHARS = 512;
+
+/** Discord の場の見る窓の書き換えを断る理由（Discord モード Domain G）。 */
+export const DISCORD_VISION_TARGET_REFUSALS = Object.freeze({
+  shape: "見る窓の形が違う（窓の名前の文字列か null）",
+  length: `見る窓の名前が長すぎる（${DISCORD_VISION_TARGET_MAX_CHARS} 字まで）`
+});
+
+/**
+ * Discord の場の見る窓の生の値を揃える（空白だけ・文字列でない・長すぎる値は「選んでいない」= null）。
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
+export function normalizeDiscordVisionTarget(raw) {
+  if (typeof raw !== "string") return null;
+  const title = raw.trim();
+  return title.length > 0 && [...title].length <= DISCORD_VISION_TARGET_MAX_CHARS ? title : null;
+}
+
+/**
+ * Discord の場の見る窓の書き換え（画面からの値）を確かめる。null / "" は消す（目を起こさない）。
+ * @param {unknown} value
+ * @returns {{ ok: true; title: string | null } | { ok: false; reason: string }}
+ */
+export function checkDiscordVisionTarget(value) {
+  if (value === null || value === undefined) return { ok: true, title: null };
+  if (typeof value !== "string") return { ok: false, reason: DISCORD_VISION_TARGET_REFUSALS.shape };
+  const title = value.trim();
+  if (title.length === 0) return { ok: true, title: null };
+  if ([...title].length > DISCORD_VISION_TARGET_MAX_CHARS) return { ok: false, reason: DISCORD_VISION_TARGET_REFUSALS.length };
+  return { ok: true, title };
+}
 
 /**
  * 待つ（上限つき）。上限を超えたら reject。
@@ -223,6 +262,10 @@ export function speakerTranscriptMouth(buffer, person) {
  *   （cockpit-settings-store.mjs の get / set。テストは一時フォルダの設定ファイル）。
  * @param {() => (string | null | undefined)} [deps.currentKeyFile]  今のロールの鍵のファイル名（一覧の読み込みと、場のロールの束が
  *   指していないときに使う）。無ければ既定 `.env.discord.local`。
+ * @param {() => boolean} [deps.currentKeyFileRefused]  今のロールの鍵のファイル名の形が合わないか（Discord モード Domain G・
+ *   一覧の読み込みも入口と同じく断る。true なら鍵を読まずログインしない）。無ければ断らない。
+ *   deps.settings に getDiscordVisionTarget / setDiscordVisionTarget があれば、Discord の場の見る窓（目）の置き場に使う（無ければ
+ *   いつも「選んでいない」= Discord の場で目を起こさない）。
  * @param {(fileName: string) => ({ ok: true; token: string } | { ok: false; reason: string })} [deps.loadToken]  鍵を読む口
  *   （既定 loadDiscordBotToken。テストは差し替える）。
  * @param {() => Promise<import("./discord-libraries.mjs").DiscordLibraries>} [deps.loadLibraries]  Discord の部品を読み込む口
@@ -293,6 +336,26 @@ export function createDiscordExperience(deps) {
       return typeof name === "string" && name.length > 0 ? name : DEFAULT_DISCORD_BOT_KEY_FILE;
     } catch {
       return DEFAULT_DISCORD_BOT_KEY_FILE;
+    }
+  };
+
+  /** 今のロールの鍵のファイル名の形が合わないか（Domain G・一覧の読み込みで断る）。読めなければ断る側に倒す。 */
+  const currentKeyFileRefused = () => {
+    if (typeof deps.currentKeyFileRefused !== "function") return false;
+    try {
+      return deps.currentKeyFileRefused() === true;
+    } catch {
+      return true;
+    }
+  };
+
+  /** Discord の場の見る窓（Domain G）。読めなければ「選んでいない」。 */
+  const readVisionTarget = () => {
+    try {
+      const get = /** @type {any} */ (settings).getDiscordVisionTarget;
+      return typeof get === "function" ? normalizeDiscordVisionTarget(get.call(settings)) : null;
+    } catch {
+      return null;
     }
   };
 
@@ -889,6 +952,11 @@ export function createDiscordExperience(deps) {
   function catalog() {
     if (catalogInFlight) return catalogInFlight;
     const run = (async () => {
+      // Domain G（E の追認 (1)）: ロールの鍵のファイル名の形が合わなければ、鍵を読まずログインせずに断る（入口と同じ文面・値は出さない）。
+      if (currentKeyFileRefused()) {
+        say("catalog: key file name refused");
+        return { ok: /** @type {const} */ (false), reason: DISCORD_REASONS.keyFileName };
+      }
       const token = readToken(currentKeyFile());
       if (!token.ok) return { ok: /** @type {const} */ (false), reason: token.reason };
       /** @type {any} */
@@ -950,6 +1018,23 @@ export function createDiscordExperience(deps) {
     }
   });
 
+  /** Discord の場の見る窓（目）の置き場（Domain G・配信の見る窓とは別）。 */
+  const visionTarget = Object.freeze({
+    get: () => readVisionTarget(),
+    /**
+     * @param {unknown} value  窓の名前（null / "" は消す）。
+     * @returns {{ ok: true; title: string | null } | { ok: false; reason: string }}
+     */
+    set(value) {
+      const checked = checkDiscordVisionTarget(value);
+      if (!checked.ok) return checked;
+      const put = /** @type {any} */ (settings).setDiscordVisionTarget;
+      if (typeof put !== "function") return { ok: false, reason: "見る窓を保存できない" };
+      put.call(settings, checked.title);
+      return { ok: true, title: readVisionTarget() };
+    }
+  });
+
   return Object.freeze({
     prepareEntrance,
     abortEntrance,
@@ -961,6 +1046,9 @@ export function createDiscordExperience(deps) {
     connectionStatus: () => connection,
     catalog,
     prep,
+    visionTarget,
+    /** 場の目を起こすか（Domain G・設計 §4.3 の 7: 見る窓を選んでいなければ Discord の場では目を起こさない）。 */
+    eyesWanted: () => readVisionTarget() != null,
     /** Discord の出口（Domain E）が今の接続を引く口（VC に入っていなければ null）。 */
     voiceConnection: () => (session && !session.closed && session.readyOnce ? session.connection : null),
     // 言葉と判定の組（Discord モード Domain F）: 通話の語の組・①に足す Discord の教え・Discord の判定の組。

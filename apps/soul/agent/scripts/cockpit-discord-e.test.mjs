@@ -156,6 +156,8 @@ async function startVenue(p = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "discord-e-cockpit-"));
   const settings = createFileSettingsStore({ path: path.join(dir, "cockpit-settings.local.json") });
   settings.setDiscordPrep({ guildId: GUILD, channelId: CHANNEL, sttEngine: "elevenlabs" });
+  // Discord モード Domain G: Discord の場の見る窓を選んでおく（選んでいなければ Discord の場では目を起こさない・設計 §4.3 の 7）。
+  settings.setDiscordVisionTarget("偽のゲームの窓");
   const fake = createFakeDiscord({ guilds: [{ id: GUILD, name: "試し", channels: [{ id: CHANNEL, name: "一般" }], members: {} }] });
   /** @type {string[]} */
   const events = [];

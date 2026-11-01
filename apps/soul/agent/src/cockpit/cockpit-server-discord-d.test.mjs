@@ -204,6 +204,8 @@ async function startDiscordServer(p = {}) {
   const settings = createFileSettingsStore({ path: settingsPath });
   const prep = p.prep === undefined ? { guildId: GUILD, channelId: CHANNEL, sttEngine: "elevenlabs" } : p.prep;
   if (prep) settings.setDiscordPrep(prep);
+  // Discord モード Domain G: Discord の場の見る窓を選んでおく（選んでいなければ Discord の場では目を起こさない・設計 §4.3 の 7）。
+  settings.setDiscordVisionTarget("偽のゲームの窓");
   /** @type {string[]} */
   const events = [];
   const fake = createFakeDiscord({

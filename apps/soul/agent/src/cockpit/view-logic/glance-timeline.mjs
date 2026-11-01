@@ -26,6 +26,7 @@
 import { formatClock } from "./format-time.mjs";
 import { SPEAK_NOW_CHOICE_LABELS } from "./markers.mjs";
 import { COMMENT_GUARD_KIND_LABELS } from "./ghost.mjs";
+import { youLabelFor } from "./discord.mjs";
 
 /** 会話の行を持つ上限（画面に入るのは数十行・余裕を持たせる）。 */
 export const CONVO_KEEP = 300;
@@ -34,7 +35,11 @@ export const COMMENTS_KEEP = 200;
 /** fireId / seq / commentId で引く材料を持つ上限。 */
 export const LINK_KEEP = 300;
 
-/** 会話の話者ラベル（配信者）。チャッピー側は頭の表示名（identity）を使う。 */
+/**
+ * 会話の話者ラベル（配信者）。チャッピー側は頭の表示名（identity）を使う。Discord モード Domain G: Discord の場では you の行を
+ * 行の Discord の名前（displayName・無ければ「参加者」）で出す（conversationRowsView の options.experience・view-logic/discord.mjs の
+ * youLabelFor）。配信では今のまま「配信者」。
+ */
 export const STREAMER_LABEL = "配信者";
 
 /**
@@ -55,7 +60,7 @@ export const CAUSE_KIND_LABELS = Object.freeze({
 
 /**
  * @typedef {{ id: number; kind: "you" | "soul" | "note"; seq: number | null; fireId: number | null; atMs: number;
- *   text: string; choice?: string | null; probability?: number | null }} ConvoRow
+ *   text: string; choice?: string | null; probability?: number | null; displayName?: string | null }} ConvoRow
  * @typedef {{ id: number; kind: "comment" | "rejected"; commentId: string | null; displayName: string | null;
  *   text: string; reject: string | null; atMs: number }} CommentRow
  * @typedef {{
@@ -135,7 +140,9 @@ export function glanceWithTranscript(g, d, nowMs) {
     seq: isNum(d.seq) ? d.seq : null,
     fireId: speaker === "soul" && isNum(d.fireId) ? d.fireId : null,
     atMs,
-    text: d.text
+    text: d.text,
+    // Discord モード Domain G: you の行の名前（Discord の名前・配信では載らない）。表示は体験で選ぶ（conversationRowsView）。
+    ...(speaker === "you" && typeof d.displayName === "string" && d.displayName ? { displayName: d.displayName } : {})
   };
   return { ...g, convo: appendCapped(g.convo, row, CONVO_KEEP), nextId: g.nextId + 1 };
 }
@@ -321,13 +328,15 @@ export function commentReactText(commentIds, comments) {
 /**
  * 会話の列の表示行（古い順。画面は下に寄せて、入らない古い行を上で切る）。
  * @param {GlanceState} g
- * @param {{ soulName?: string; latencyView?: (rec: any) => any }} [options]
+ * @param {{ soulName?: string; latencyView?: (rec: any) => any; experience?: string | null }} [options]
  *   soulName: チャッピーの行の話者名。latencyView: 遅延のレコード → 棒の表示（glance-meters.mjs の latencyBarView を
- *   閾値つきで渡す）。無ければ遅延は出さない。
+ *   閾値つきで渡す）。無ければ遅延は出さない。experience: 開いている場の体験（snapshot の stream.experience・Discord モード
+ *   Domain G）。"discord" なら you の行は行の名前（無ければ「参加者」）、それ以外は「配信者」。
  * @returns {ConvoRowView[]}
  */
 export function conversationRowsView(g, options = {}) {
   const soulName = options.soulName || "soul";
+  const experience = options.experience ?? null;
   const seqs = new Set(g.convo.filter((r) => r.seq != null).map((r) => r.seq));
 
   // 推論の範囲（最新の 1 回分）: 範囲に入る最初と最後の行の位置。その間の行（判定の薄い行も）を範囲とする。
@@ -363,7 +372,7 @@ export function conversationRowsView(g, options = {}) {
       key: r.id,
       kind: r.kind,
       timeText: r.kind === "note" ? "" : formatClock(r.atMs),
-      whoText: r.kind === "you" ? STREAMER_LABEL : r.kind === "soul" ? soulName : "",
+      whoText: r.kind === "you" ? youLabelFor(experience, r.displayName, STREAMER_LABEL) : r.kind === "soul" ? soulName : "",
       text: r.text,
       chipText: null,
       reactText: null,

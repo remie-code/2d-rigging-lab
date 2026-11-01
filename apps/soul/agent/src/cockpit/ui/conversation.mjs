@@ -71,11 +71,14 @@ export function ConversationRow({ row }) {
  * 配信の組み直し Domain D: 場が開いていない間（preStream）は、会話の場所の中央に「配信を始める」とその横に「準備・設定」。
  * 始められなかった理由（「runtime-player が起動していないか、channel が開いていない」など）と、閉じかけの「記録中…」も
  * ここに出す（文言は view-logic/glance-meters.mjs の streamStartView）。場が開いているときは今のまま。
+ * Discord モード Domain G（設計 §4.1・§9・scope §21）: 体験は場を開くときに選ぶ。Discord の入口があれば（join.show）、「配信を
+ * 始める」の横に「Discord の VC に入る」を並べる（文言は view-logic/discord.mjs の discordJoinView）。入口が無ければ今のまま。
  * @param {{ rows: import("../view-logic/glance-timeline.mjs").ConvoRowView[]; preStream?: boolean;
- *   onOpenSettings?: () => void; onStartStream?: () => void;
- *   start?: { startText: string; startDisabled: boolean; noteText: string; errorText: string } }} props
+ *   onOpenSettings?: () => void; onStartStream?: () => void; onJoinDiscord?: () => void;
+ *   start?: { startText: string; startDisabled: boolean; noteText: string; errorText: string };
+ *   join?: { show: boolean; text: string; disabled: boolean } }} props
  */
-export function ConversationPanel({ rows, preStream = false, onOpenSettings, onStartStream, start }) {
+export function ConversationPanel({ rows, preStream = false, onOpenSettings, onStartStream, onJoinDiscord, start, join }) {
   const view = start ?? { startText: "配信を始める", startDisabled: false, noteText: "", errorText: "" };
   return html`
     <section class="glance-panel convo-panel" aria-label="会話">
@@ -86,6 +89,9 @@ export function ConversationPanel({ rows, preStream = false, onOpenSettings, onS
             <div class="prestream-box">
               <div class="prestream-actions">
                 <button class="prestream-start" type="button" disabled=${view.startDisabled} onClick=${onStartStream}>${view.startText}</button>
+                ${join && join.show
+                  ? html`<button class="prestream-start prestream-discord" type="button" disabled=${join.disabled} onClick=${onJoinDiscord}>${join.text}</button>`
+                  : null}
                 <button class="prestream-open" type="button" onClick=${onOpenSettings}>準備・設定</button>
               </div>
               ${view.noteText ? html`<p class="prestream-note" role="status">${view.noteText}</p>` : null}

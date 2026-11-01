@@ -83,6 +83,10 @@
  *     id の形の確かめ）は呼び出し側（src/discord/discord-experience.mjs）に委ねる（sttEngine と同型・asStringOrNull）。配信の
  *     文字起こしの選択（sttEngine）とは別に持つ。
  *   setDiscordPrep(patch): 操縦席の Discord の準備で選んだときに記憶（渡したキーだけ書く・null で消す）。
+ *   getDiscordVisionTarget(): Discord の場の見る窓（目）のタイトル（Discord モード Domain G・discord-mode.md §4.3 の 7・§9）。
+ *     キー `discordVisionTarget`。配信の見る窓（visionTarget）とは別に持つ。未記憶は null（Discord の場で目を起こさない）。
+ *     形の確かめ（空白・長さ）は呼び出し側（src/discord/discord-experience.mjs）に委ねる（asStringOrNull）。
+ *   setDiscordVisionTarget(title): 操縦席の Discord の準備で選んだときに記憶（null で消す）。
  *   getLocalStt(): ローカルの文字起こし（Parakeet / Zipformer・local-stt-wave-plan.md §1 の 5）の設定
  *     （`{ threads, preRollMs, silencePadMs, hotwords }`・既定 2 / 200ms / 300ms / ["チャッピー", "コーディ"]）。
  *     操縦席にツマミは置かず、このファイルのキー `localSttThreads`（整数 1〜16）/ `localSttPreRollMs`（本物の音を
@@ -167,6 +171,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setCodexFastMode: (enabled: boolean) => void;
  *   getDiscordPrep: () => { guildId: string | null; channelId: string | null; sttEngine: string | null };
  *   setDiscordPrep: (patch: { guildId?: string | null; channelId?: string | null; sttEngine?: string | null }) => void;
+ *   getDiscordVisionTarget: () => string | null;
+ *   setDiscordVisionTarget: (title: string | null) => void;
  *   getLocalStt: () => { threads: number; preRollMs: number; silencePadMs: number; hotwords: string[]; hotwordsScore: number };
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
@@ -412,6 +418,14 @@ export function createFileSettingsStore(options = {}) {
       if (p.channelId !== undefined) out.discordChannelId = p.channelId ?? null;
       if (p.sttEngine !== undefined) out.discordSttEngine = p.sttEngine ?? null;
       if (Object.keys(out).length > 0) writeMerged(out);
+    },
+    // Discord モード Domain G: Discord の場の見る窓（目）。配信の見る窓（visionTarget）とは別のキー。
+    getDiscordVisionTarget() {
+      return asStringOrNull(readAll().discordVisionTarget);
+    },
+    /** @param {string | null} title */
+    setDiscordVisionTarget(title) {
+      writeMerged({ discordVisionTarget: typeof title === "string" && title.length > 0 ? title : null });
     },
     getLocalStt() {
       const all = readAll();
