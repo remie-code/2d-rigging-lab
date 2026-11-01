@@ -83,6 +83,7 @@ import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { createEarBundle } from "../ears/ear-bundle.mjs";
 import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
+import { DEFAULT_WHISPER_PORT } from "../ears/whisper-server.mjs";
 // ローカルの文字起こしの語彙とモデルの存在確認だけ（sherpa-onnx-node は子プロセスだけが読む）。
 import { isLocalSttEngine, checkLocalSttModel, LOCAL_STT_ENGINE_TITLES } from "../ears/local-stt/local-stt-engines.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
@@ -164,6 +165,12 @@ export const DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE =
   "Discord の体験はまだ使えない（この操縦席には Discord の入口が無い）";
 /** 配信のマイクの耳を耳の束に束ねるときの名前（束の中の key）。 */
 const STREAM_EAR_KEY = "mic";
+/**
+ * snapshot の `stream.connection` の値（Discord モード Domain D・discord-mode.md §4.5・§6.1）。Discord の場の間だけ:
+ * "joining" = VC に入っている途中、"joined" = 入っている、"disconnected" = 途中で切れた（場は閉じない・ライブラリのつなぎ直しに
+ * 任せる。つながり直せば "joined" に戻る）。配信の場・閉じている間は null。
+ */
+export const VENUE_CONNECTION_STATES = Object.freeze(["joining", "joined", "disconnected"]);
 
 /**
  * 場が開きかけ・閉じかけ・開いているときの断りの文面（体験の口が文面を持たないときの既定・配信は配信の文面を持つ）。
@@ -188,17 +195,37 @@ export function normalizeVenueExperience(kind, mouth) {
   if (typeof mouth.openEntrance !== "function" || typeof mouth.closeEntrance !== "function") return null;
   return Object.freeze({
     kind,
-    /** @param {any} request */
-    prepareEntrance: (request) =>
-      typeof mouth.prepareEntrance === "function" ? mouth.prepareEntrance(request) : { ok: true, plan: null },
-    /** @param {any} prepared */
-    abortEntrance: (prepared) => {
-      if (typeof mouth.abortEntrance === "function") mouth.abortEntrance(prepared);
+    // Discord モード Domain D: 下見・取りやめ・閉じる口には場の口（control = roles・prepareEars・stopEars・changed）を 2 つ目の
+    // 引数で渡す（配信の口は使わない）。
+    /** @param {any} request @param {any} [control] */
+    prepareEntrance: (request, control) =>
+      typeof mouth.prepareEntrance === "function" ? mouth.prepareEntrance(request, control) : { ok: true, plan: null },
+    /** @param {any} prepared @param {any} [control] */
+    abortEntrance: (prepared, control) => {
+      if (typeof mouth.abortEntrance === "function") mouth.abortEntrance(prepared, control);
     },
     /** @param {any} plan @param {any} venue */
     openEntrance: (plan, venue) => mouth.openEntrance(plan, venue),
-    /** @param {{ hadEars: boolean; shutdown: boolean }} info */
-    closeEntrance: (info) => mouth.closeEntrance(info),
+    /** @param {{ hadEars: boolean; shutdown: boolean }} info @param {any} [control] */
+    closeEntrance: (info, control) => mouth.closeEntrance(info, control),
+    // Discord モード Domain D: 接続の状態（snapshot の stream.connection・知らない値は null）。
+    connectionStatus: () => {
+      const value = typeof mouth.connectionStatus === "function" ? mouth.connectionStatus() : null;
+      return VENUE_CONNECTION_STATES.includes(value) ? value : null;
+    },
+    // Discord モード Domain D: 場を開く・閉じる途中の想定外の例外の文面。口が文面を持てば生のエラー文を渡さない。
+    /** @param {"opening" | "closing"} phase @param {string} detail */
+    unexpectedErrorMessage: (phase, detail) => {
+      const text = typeof mouth.unexpectedErrorMessage === "function" ? mouth.unexpectedErrorMessage(phase) : null;
+      if (typeof text === "string" && text.length > 0) return text;
+      return phase === "closing" ? `場を閉じる途中で想定外のエラー（${detail}）` : `場を開けない（想定外のエラー: ${detail}）`;
+    },
+    // Discord モード Domain D: 準備の口（一覧の読み込み・準備の読み書き）。無ければ null（その API は 503）。
+    catalog: typeof mouth.catalog === "function" ? () => mouth.catalog() : null,
+    prep:
+      mouth.prep && typeof mouth.prep.get === "function" && typeof mouth.prep.set === "function"
+        ? Object.freeze({ get: () => mouth.prep.get(), set: (/** @type {unknown} */ patch) => mouth.prep.set(patch) })
+        : null,
     afterOpen: () => {
       if (typeof mouth.afterOpen === "function") mouth.afterOpen();
     },
@@ -720,6 +747,16 @@ const MAX_PORT_REROLLS = 50;
  *   - closeEntrance({ hadEars, shutdown }): 入口を閉じる（閉じる段・場が正本を手放し耳の束を畳んだあと。shutdown = サーバを閉じる）。
  *   - afterOpen()（任意）: 開いたあと（始める 10・待たない）。foldAfterOpen()（任意）: その片付け（閉じる段の最初）。
  *   - busyMessage(phase)（任意）: 開きかけ・閉じかけ・開いているときの断りの文面。
+ *   Discord モード Domain D で足した口（どれも任意・配信の口は使わない）:
+ *   - prepareEntrance / abortEntrance / closeEntrance の 2 つ目の引数 control = { roles（固めたロールの一覧）, prepareEars(engine)
+ *     （文字起こしのキー・モデルを確かめて耳を「起こしている途中」に・`{ ok, earPlan }`）, stopEars()（耳の状態を Stopped に・冪等）,
+ *     earsListening(), earStarted(engine), earFailed(engine, reason), changed()（snapshot を放送し直す） }。openEntrance の venue にも
+ *     同じ口と createEar(spec)（人ごとの耳を配信の耳と同じ組み立てで作る・束ねて起こすのは体験の側）を足した。
+ *   - openEntrance が `{ ok:false }` を返したときは、入口が自分で畳む（耳の束・接続など。場は closeEntrance を呼ばない）。
+ *   - closeEntrance は開いていなくても・二重でも呼ばれる（冪等に作る）。
+ *   - connectionStatus()（snapshot の stream.connection・VENUE_CONNECTION_STATES）。
+ *   - unexpectedErrorMessage(phase)（場を開く・閉じる途中の想定外の例外の文面。生のエラー文は渡さない）。
+ *   - catalog()（POST /api/discord/catalog）・prep = { get, set }（GET / POST /api/discord/prep）。
  *   - wording / teaching / judgeSet（任意・Discord モード Domain C）: 語の組（②④・skills/recall.md・思い出しの結果を①に渡す
  *     文面）・①に足す体験の教えの名前（`venue-<体験の種類>`）・判定の組 `{ speakNow }`（speak-now の問いの組）。無ければ配信の既定。
  *     形は normalizeVenueWords が確かめる。渡り方: 判定の組は始める 3（判定を作り直す所）、語の組は思い出しの係（始める 3）と
@@ -1206,6 +1243,21 @@ export function createCockpitServer(options = {}) {
   let venueTranscriptUnsubs = [];
   /** @type {"stopped" | "starting" | "listening"} */
   let earsState = "stopped";
+  /**
+   * 外から渡された体験（Discord）の場の間だけの文字起こしの方式（Discord モード Domain D・discord-mode.md §6.3: Discord の準備で
+   * 配信と別に持つ）。配信の場・閉じている間は null（配信の選択 sttEngine を使う・activeSttEngine）。
+   * @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | null}
+   */
+  let venueSttEngine = null;
+  /** 外から渡された Discord の体験の口（Domain D）。渡されていなければ null（"discord" の始めるは 503 で断る）。 */
+  const discordExperience = normalizeVenueExperience(
+    "discord",
+    options.experiences && typeof options.experiences === "object" ? /** @type {any} */ (options.experiences).discord : null
+  );
+  /** 今の文字起こしの方式（Discord の場の間は Discord の準備の方式・それ以外は配信の選択）。 */
+  function activeSttEngine() {
+    return venueSttEngine ?? sttEngine;
+  }
   /** @type {string | null} */
   let currentDevice = null;
   /** @type {number | null} */
@@ -1389,7 +1441,18 @@ export function createCockpitServer(options = {}) {
       // 理由・openedAtMs = 開いた時刻）。closing の間は記憶の最後の保存を待っている（画面の「記録中」）。
       // Discord モード Domain B: experience = 開いている（開きかけ・閉じかけを含む）場の体験の種類（"stream" | "discord"）。
       // 閉じている間は null（どの体験も開いていない）。
-      stream: { phase: streamPhase, error: streamError, openedAtMs: streamOpenedAtMs, experience: venueExperienceKind() },
+      // Discord モード Domain D: connection = Discord の場の接続の状態（"joining" | "joined" | "disconnected"・VENUE_CONNECTION_STATES）。
+      // 配信の場・閉じている間は null。
+      stream: {
+        phase: streamPhase,
+        error: streamError,
+        openedAtMs: streamOpenedAtMs,
+        experience: venueExperienceKind(),
+        connection: venueConnectionStatus()
+      },
+      // Discord モード Domain D: Discord の体験が使えるか（この操縦席に Discord の入口が渡されていれば { available: true }・無ければ null）。
+      // 準備の中身（サーバー・チャンネルの id）は snapshot に載せない（GET /api/discord/prep で読む）。
+      discord: discordExperience ? { available: true } : null,
       device: currentDevice,
       health: {
         whisper: { status: health.whisper, reason: health.whisperReason },
@@ -1397,7 +1460,8 @@ export function createCockpitServer(options = {}) {
       },
       // 操縦席の文字起こし選択: 方式（耳が動いている間は使用中、止まっている間は前回 Start の選択）と状態。
       // ヘッダの `stt: ElevenLabs up` 表示と、設定の選択肢の復元に使う（キーは載せない）。
-      stt: { engine: sttEngine, status: health.stt, reason: health.sttReason },
+      // Discord モード Domain D: Discord の場の間は Discord の準備の方式（activeSttEngine）。
+      stt: { engine: activeSttEngine(), status: health.stt, reason: health.sttReason },
       // 声の方式（前回 Start の選択・起動直後は記憶の値）と、今の engine の状態（キーは載せない）。
       // 設定の選択肢の復元と、ログのタブの健康 1 行の `tts:` に使う。
       tts: { engine: ttsEngine, status: voice.status, reason: voice.reason },
@@ -1481,13 +1545,14 @@ export function createCockpitServer(options = {}) {
   function refreshStateWarnings() {
     if (closed) return;
     // 文字起こし（耳を止めている間は unknown = 警告なし）。
-    const sttLabel = sttEngine === "elevenlabs" ? "ElevenLabs" : LOCAL_STT_ENGINE_TITLES[sttEngine] ?? "whisper";
+    const sttNow = activeSttEngine();
+    const sttLabel = sttNow === "elevenlabs" ? "ElevenLabs" : LOCAL_STT_ENGINE_TITLES[sttNow] ?? "whisper";
     warningBoard.setCondition(
       "stt",
       health.stt === "down"
-        ? { kind: "stt-down", severity: "alert", message: "文字起こしが止まっている", detail: health.sttReason, source: sttEngine }
+        ? { kind: "stt-down", severity: "alert", message: "文字起こしが止まっている", detail: health.sttReason, source: sttNow }
         : health.stt === "reconnecting"
-          ? { kind: "stt-reconnecting", severity: "warn", message: `文字起こしを繋ぎ直し中（${sttLabel}）`, detail: health.sttReason, source: sttEngine }
+          ? { kind: "stt-reconnecting", severity: "warn", message: `文字起こしを繋ぎ直し中（${sttLabel}）`, detail: health.sttReason, source: sttNow }
           : null
     );
     // 声（ElevenLabs のときだけ。AivisSpeech は状態で警告を出さない＝今どおり）。組み立ては文字起こしと同じ。
@@ -1596,12 +1661,12 @@ export function createCockpitServer(options = {}) {
       const reason = `whisper-server down (${d.phase ?? "runtime"}; code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`;
       setHealth("whisper", "down", reason);
       // whisper で文字起こし中なら stt も down（ヘッダの `stt: whisper down`）。
-      if (sttEngine === "whisper" && earsState !== "stopped") setHealth("stt", "down", reason);
+      if (activeSttEngine() === "whisper" && earsState !== "stopped") setHealth("stt", "down", reason);
     } else if (d && d.type === "localSttDown") {
       // ローカルの文字起こしの子プロセスが落ちた（whisperDown と同格: stt down = 上の帯の alert「文字起こしが止まっている」）。
       const title = LOCAL_STT_ENGINE_TITLES[d.engine] ?? String(d.engine ?? "local");
       const reason = `${title} の文字起こしの子プロセスが落ちた (code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`;
-      if (isLocalSttEngine(sttEngine) && earsState !== "stopped") setHealth("stt", "down", reason);
+      if (isLocalSttEngine(activeSttEngine()) && earsState !== "stopped") setHealth("stt", "down", reason);
     } else if (d && d.type === "ffmpegExit" && d.willRestart === false) {
       // willRestart=false = 再起動予算切れ/恒久死（capture の再起動耐性が尽きた）。
       // willRestart=true は capture が自己回復するため up のまま（transient blip）。
@@ -1712,8 +1777,117 @@ export function createCockpitServer(options = {}) {
       onVadEvent: handleVenueVad,
       createEars: () => createEarBundle({ onVadEvent: handleVenueVad }),
       onDiagnostic: handleDiagnostic,
-      roles: venueRoles ?? []
+      roles: venueRoles ?? [],
+      // Discord モード Domain D: 外から渡された体験（Discord）が人ごとの耳を作る口と、耳の状態を場に知らせる口。
+      ...venueEarsControl,
+      createEar: createVenueEar
     });
+  }
+
+  // ── 外から渡された体験（Discord）の耳の口（Discord モード Domain D・discord-mode.md §6.2・§6.3）────────────────
+  //
+  //  配信の入口は耳の状態（snapshot の ears・health・stt）をサーバの中で直に替える。外から渡された体験はサーバの変数に触れない
+  //  ので、同じ替え方をこの口で頼む。どれも配信の入口からは呼ばない（配信のふるまいは変わらない）。
+  //   - prepareEars(engine): 下見。文字起こしの方式を場の間だけ覚え（activeSttEngine）、耳を「起こしている途中」にし、キーと
+  //     モデルを確かめる（配信の下見と同じ beginEarsStarting / checkEarEngine）。`{ ok:true, earPlan }` か `{ ok:false, reason }`。
+  //   - stopEars(): 耳の状態を Stopped に戻し、場の間の方式を手放す（冪等・変わったときだけ放送）。
+  //   - earsListening(): 入口が開いた（VC に入った）。耳は聞いている状態（人ごとの耳は話し始めたときに束ねる）。
+  //   - earStarted(engine) / earFailed(engine, reason): 人ごとの耳が起きた・起きなかった（whisper / stt の死活）。
+  //   - changed(): 体験の口の状態（接続の状態など）が変わった（snapshot を放送し直す）。
+  //   - createEar(spec): 人ごとの耳を作る（buildEarPipeline・配信の耳と同じ組み立て）。束ねる・起こすのは体験の側。
+
+  /**
+   * @param {string} engine
+   * @returns {{ ok: true; earPlan: { engine: string; elevenLabs: any; localStt: any } } | { ok: false; reason: string }}
+   */
+  function prepareVenueEars(engine) {
+    if (!STT_ENGINES.includes(/** @type {any} */ (engine))) return { ok: false, reason: "文字起こしの方式が使えない" };
+    venueSttEngine = /** @type {any} */ (engine);
+    beginEarsStarting(engine);
+    const checked = checkEarEngine(engine);
+    if (!checked.ok) return checked;
+    return { ok: true, earPlan: Object.freeze({ engine, elevenLabs: checked.elevenLabs, localStt: checked.localStt }) };
+  }
+
+  /** 耳の状態を Stopped に戻す（冪等・変わったときだけ放送）。 */
+  function stopVenueEars() {
+    const changed =
+      earsState !== "stopped" ||
+      venueSttEngine !== null ||
+      health.stt !== "unknown" ||
+      health.whisper !== "unknown" ||
+      health.ffmpeg !== "unknown";
+    earsState = "stopped";
+    startedAtMs = null;
+    venueSttEngine = null;
+    health.whisper = "unknown";
+    health.whisperReason = null;
+    health.ffmpeg = "unknown";
+    health.ffmpegReason = null;
+    health.stt = "unknown";
+    health.sttReason = null;
+    if (changed && !closed) broadcastState();
+  }
+
+  /** 入口が開いた（耳は聞いている）。マイクは無いので ffmpeg は unknown のまま。 */
+  function markVenueEarsListening() {
+    earsState = "listening";
+    startedAtMs = nowImpl();
+    health.stt = "up";
+    health.sttReason = null;
+    if (!closed) broadcastState();
+  }
+
+  /** @param {string} engine */
+  function reportVenueEarStarted(engine) {
+    if (earsState === "stopped" || closed) return;
+    if (engine === "whisper" && health.whisper !== "up") setHealth("whisper", "up", null);
+  }
+
+  /** @param {string} engine @param {string} reason */
+  function reportVenueEarFailed(engine, reason) {
+    if (earsState === "stopped" || closed) return;
+    if (engine === "whisper") setHealth("whisper", "down", reason);
+    setHealth("stt", "down", reason);
+  }
+
+  /** 外から渡された体験の口の状態が変わった（snapshot を放送し直す）。 */
+  function venueExperienceChanged() {
+    if (!closed) broadcastState();
+  }
+
+  /**
+   * 人ごとの耳を作る（束ねる・起こすのは体験の側）。
+   * @param {{ earPlan: any; ears: any; key: string; captureFactory?: any; transcriptBuffer: any; segmenter?: object; whisperPortOffset?: number }} spec
+   */
+  function createVenueEar(spec) {
+    if (!spec || !spec.earPlan || !spec.ears || typeof spec.key !== "string") throw new TypeError("createEar: invalid ear spec");
+    return buildEarPipeline({
+      earPlan: spec.earPlan,
+      ears: spec.ears,
+      key: spec.key,
+      captureFactory: spec.captureFactory,
+      segmenter: spec.segmenter,
+      whisperPortOffset: spec.whisperPortOffset,
+      transcriptBuffer: spec.transcriptBuffer ?? venueTranscript,
+      onTranscript: makeEarTranscriptMouth(spec.earPlan.engine),
+      onDiagnostic: handleDiagnostic
+    });
+  }
+
+  /** 体験の口に渡す耳の状態の口（どの入口でも同じもの）。 */
+  const venueEarsControl = Object.freeze({
+    prepareEars: prepareVenueEars,
+    stopEars: stopVenueEars,
+    earsListening: markVenueEarsListening,
+    earStarted: reportVenueEarStarted,
+    earFailed: reportVenueEarFailed,
+    changed: venueExperienceChanged
+  });
+
+  /** 下見・取りやめ・閉じる口に渡す場の口（ロールの一覧と耳の状態の口）。 */
+  function venueControlContext() {
+    return Object.freeze({ roles: venueRoles ?? [], ...venueEarsControl });
   }
 
   // ── 配信の体験の口（"stream"・Discord モード Domain B・discord-mode.md §4.3 の表の「配信」の列）──────────────
@@ -1761,6 +1935,18 @@ export function createCockpitServer(options = {}) {
       }
     }
 
+    beginEarsStarting(engine);
+    const checked = checkEarEngine(engine);
+    if (!checked.ok) return checked;
+    const { elevenLabs, localStt } = checked;
+    return { ok: true, voiceKind, plan: { device, engine, elevenLabs, localStt } };
+  }
+
+  /**
+   * 耳の状態を「起こしている途中」にして放送する（配信と Discord の下見の共通・Discord モード Domain D で配信の下見から出した）。
+   * @param {string} engine
+   */
+  function beginEarsStarting(engine) {
     earsState = "starting";
     health.whisper = "unknown";
     health.whisperReason = null;
@@ -1771,7 +1957,15 @@ export function createCockpitServer(options = {}) {
     // Start 押下直後からヘッダを「Starting」にする（whisper のモデル読み込み待ち等の間も Stopped のまま
     // にならないように・合意 §2 範囲 3）。
     broadcastState();
+  }
 
+  /**
+   * 文字起こしのキー・モデルを確かめる（配信と Discord の下見の共通・Discord モード Domain D で配信の下見から出した）。
+   * 揃っていなければ耳の状態を Stopped・stt down（理由つき）にして放送し `{ ok:false, reason }`。
+   * @param {string} engine
+   * @returns {{ ok: true; elevenLabs: { engine: "elevenlabs"; apiKey: string } | null; localStt: { engine: "parakeet" | "zipformer"; local: object | null } | null } | { ok: false; reason: string }}
+   */
+  function checkEarEngine(engine) {
     /** @type {{ engine: "elevenlabs"; apiKey: string } | null} */
     let elevenLabs = null;
     if (engine === "elevenlabs") {
@@ -1825,7 +2019,7 @@ export function createCockpitServer(options = {}) {
       }
       localStt = { engine, local };
     }
-    return { ok: true, voiceKind, plan: { device, engine, elevenLabs, localStt } };
+    return { ok: true, elevenLabs, localStt };
   }
 
   /**
@@ -1836,6 +2030,77 @@ export function createCockpitServer(options = {}) {
     startedAtMs = null;
     health.stt = "unknown";
     health.sttReason = null;
+  }
+
+  /**
+   * 耳を 1 本作る（配信のマイクの耳と Discord の人ごとの耳の共通の組み立て・Discord モード Domain D で配信の入口から出した）。
+   * whisper / ElevenLabs / ローカルの選び分け・whisper の名前の手がかり・ElevenLabs の状態を stt の死活へ・場の正本（積む口）と
+   * 耳ごとの口。配信の耳の options の形は今のまま（Discord だけが captureFactory・区切りの上書き・whisper の口の番号を足す）。
+   * @param {{
+   *   earPlan: { engine: string; elevenLabs: any; localStt: any };
+   *   ears: ReturnType<typeof createEarBundle>;
+   *   key: string;
+   *   capture?: object;
+   *   captureFactory?: (opts: any) => any;
+   *   segmenter?: object;
+   *   whisperPortOffset?: number;
+   *   transcriptBuffer: any;
+   *   onTranscript: (entry: any, meta: any) => void;
+   *   onDiagnostic: (d: any) => void;
+   * }} spec
+   */
+  function buildEarPipeline(spec) {
+    const { engine, elevenLabs, localStt } = spec.earPlan;
+    const ears = spec.ears;
+    const baseOptions = options.pipelineOptions ?? {};
+    // Resolve the Whisper lexical-bias prompt at request time. The injected
+    // provider observes cockpit.mjs の今のロール, so switching roles does not
+    // require restarting the ear pipeline. 手がかりが空なら渡さない。
+    const whisperOptions = {
+      ...(/** @type {any} */ (baseOptions).whisper ?? {})
+    };
+    // Discord の人ごとの耳（whisper）: 2 人目からは whisper-server の口の番号をずらす（同じ口を取り合わない）。
+    if (typeof spec.whisperPortOffset === "number" && Number.isInteger(spec.whisperPortOffset) && spec.whisperPortOffset > 0) {
+      whisperOptions.port = (typeof whisperOptions.port === "number" ? whisperOptions.port : DEFAULT_WHISPER_PORT) + spec.whisperPortOffset;
+    }
+    const identityFn = roleIdentityFn();
+    if (identityFn) {
+      whisperOptions.promptProvider = () => {
+        const identity = identityFn();
+        return identity && typeof identity.whisperPrompt === "string" && identity.whisperPrompt.length > 0
+          ? identity.whisperPrompt
+          : undefined;
+      };
+    }
+    return pipelineFactory({
+      ...baseOptions,
+      whisper: whisperOptions,
+      // ElevenLabs のときだけ stt を渡す（whisper は pipeline の既定＝従来と同じ options 形）。
+      ...(elevenLabs ? { stt: { ...(/** @type {any} */ (baseOptions).stt ?? {}), ...elevenLabs } } : {}),
+      // ローカルのときは engine と設定（stt.local）を渡す（pipelineOptions.stt.local があればその上に重ねる）。
+      ...(localStt
+        ? {
+            stt: {
+              ...(/** @type {any} */ (baseOptions).stt ?? {}),
+              engine: localStt.engine,
+              local: { ...(/** @type {any} */ (baseOptions).stt?.local ?? {}), ...(localStt.local ?? {}) }
+            }
+          }
+        : {}),
+      // Discord の耳だけ: 区切りの上書き（短すぎる発話を捨てる・discord-mode.md §6.4 の 3）。
+      ...(spec.segmenter ? { segmenter: { ...(/** @type {any} */ (baseOptions).segmenter ?? {}), ...spec.segmenter } } : {}),
+      onSttStatus: (status, info) => {
+        if (pipeline !== ears) return; // 畳んだ後・別の Start の通知は無視。
+        setHealth("stt", /** @type {any} */ (status), info && info.reason ? info.reason : null);
+      },
+      capture: spec.capture ?? { ...(/** @type {any} */ (baseOptions).capture ?? {}) },
+      // Discord の耳だけ: 音の入口（ffmpeg の代わりに人ごとの音を流す口）。
+      ...(spec.captureFactory ? { captureFactory: spec.captureFactory } : {}),
+      onVadEvent: ears.vadMouth(spec.key),
+      transcriptBuffer: spec.transcriptBuffer,
+      onTranscript: spec.onTranscript,
+      onDiagnostic: spec.onDiagnostic
+    });
   }
 
   /**
@@ -1852,48 +2117,17 @@ export function createCockpitServer(options = {}) {
     }
     const { device, engine, elevenLabs, localStt } = plan;
     const baseOptions = options.pipelineOptions ?? {};
-    // Resolve the Whisper lexical-bias prompt at request time. The injected
-    // provider observes cockpit.mjs の今のロール, so switching roles does not
-    // require restarting the ear pipeline. 手がかりが空なら渡さない。
-    const whisperOptions = {
-      ...(/** @type {any} */ (baseOptions).whisper ?? {})
-    };
-    const identityFn = roleIdentityFn();
-    if (identityFn) {
-      whisperOptions.promptProvider = () => {
-        const identity = identityFn();
-        return identity && typeof identity.whisperPrompt === "string" && identity.whisperPrompt.length > 0
-          ? identity.whisperPrompt
-          : undefined;
-      };
-    }
     // 耳の束（配信はマイクの耳 1 本）。VAD は束が「喋っているか」を覚えてから場の VAD の口へ渡す。
     const ears = venue.createEars();
-    const p = pipelineFactory({
-      ...baseOptions,
-      whisper: whisperOptions,
-      // ElevenLabs のときだけ stt を渡す（whisper は pipeline の既定＝従来と同じ options 形）。
-      ...(elevenLabs ? { stt: { ...(/** @type {any} */ (baseOptions).stt ?? {}), ...elevenLabs } } : {}),
-      // ローカルのときは engine と設定（stt.local）を渡す（pipelineOptions.stt.local があればその上に重ねる）。
-      ...(localStt
-        ? {
-            stt: {
-              ...(/** @type {any} */ (baseOptions).stt ?? {}),
-              engine: localStt.engine,
-              local: { ...(/** @type {any} */ (baseOptions).stt?.local ?? {}), ...(localStt.local ?? {}) }
-            }
-          }
-        : {}),
-      onSttStatus: (status, info) => {
-        if (pipeline !== ears) return; // 畳んだ後・別の Start の通知は無視。
-        setHealth("stt", /** @type {any} */ (status), info && info.reason ? info.reason : null);
-      },
+    const p = buildEarPipeline({
+      earPlan: { engine, elevenLabs, localStt },
+      ears,
+      key: STREAM_EAR_KEY,
       capture: {
         ...(/** @type {any} */ (baseOptions).capture ?? {}),
         ...(device != null ? { device } : {}),
         ...(inputFormat ? { inputFormat } : {})
       },
-      onVadEvent: ears.vadMouth(STREAM_EAR_KEY),
       // 会話の正本は場のもの（Discord モード Domain A）。耳は積むだけで、正本に購読を張らない（場が 1 回だけ張る:
       // openVenueTranscript。発火の予定と speak-now へ回すのはそちら）。
       transcriptBuffer: venue.transcriptBuffer,
@@ -1994,11 +2228,7 @@ export function createCockpitServer(options = {}) {
     teaching: null,
     judgeSet: null
   });
-  /** 外から渡された Discord の体験の口（Domain D）。渡されていなければ null（"discord" の始めるは 503 で断る）。 */
-  const discordExperience = normalizeVenueExperience(
-    "discord",
-    options.experiences && typeof options.experiences === "object" ? /** @type {any} */ (options.experiences).discord : null
-  );
+  // 外から渡された Discord の体験の口（discordExperience）は、snapshot が読むので先頭の方で作る（Discord モード Domain D）。
 
   /**
    * 始めるの体験を選ぶ（省けば配信）。
@@ -2019,6 +2249,24 @@ export function createCockpitServer(options = {}) {
   /** 開いている場の体験の種類（閉じていれば null）。 */
   function venueExperienceKind() {
     return venueExperience ? venueExperience.kind : null;
+  }
+
+  /**
+   * 開いている場の接続の状態（Discord モード Domain D・snapshot の stream.connection）。配信の場・閉じている間は null。
+   * @returns {"joining" | "joined" | "disconnected" | null}
+   */
+  function venueConnectionStatus() {
+    if (!venueExperience || typeof venueExperience.connectionStatus !== "function") return null;
+    try {
+      return venueExperience.connectionStatus();
+    } catch {
+      return null;
+    }
+  }
+
+  /** Discord の場（開きかけ・開いている・閉じかけ）か。準備の書き換えと一覧の読み込みを断る。 */
+  function discordVenueActive() {
+    return venueExperience != null && venueExperience.kind === "discord";
   }
 
   /**
@@ -2134,7 +2382,7 @@ export function createCockpitServer(options = {}) {
     // 正本は場のもの。配信では耳を畳むのと同じ時に手放す（畳んだ後は正本が読めない＝従来どおり）。
     releaseVenueTranscript();
     const hadEars = await foldVenueEars();
-    await experience.closeEntrance({ hadEars, shutdown: false });
+    await experience.closeEntrance({ hadEars, shutdown: false }, venueControlContext());
   }
 
   // ── 場（配信を始める / 終える・配信の組み直し Domain D・stream-restructure.md §3）──────────────
@@ -2396,6 +2644,22 @@ export function createCockpitServer(options = {}) {
     streamOpenedAtMs = null;
     venueExperience = null;
     venueRoles = null;
+    // Discord モード Domain D: 場の間だけの文字起こしの方式も手放す（配信の選択に戻る）。
+    venueSttEngine = null;
+  }
+
+  /**
+   * 場を開く・閉じる途中の想定外の例外の文面（Discord モード Domain D）。配信は今の文面のまま。外から渡された体験は口の文面
+   * （normalizeVenueExperience。Discord は生のエラー文を入れない）。
+   * @param {any} experience @param {"opening" | "closing"} phase @param {unknown} error
+   */
+  function unexpectedVenueErrorMessage(experience, phase, error) {
+    if (experience && experience !== streamExperience && typeof experience.unexpectedErrorMessage === "function") {
+      return experience.unexpectedErrorMessage(phase, errMessage(error));
+    }
+    return phase === "closing"
+      ? `配信を終える途中で想定外のエラー（${errMessage(error)}）`
+      : `配信を始められない（想定外のエラー: ${errMessage(error)}）`;
   }
 
   /**
@@ -2451,14 +2715,14 @@ export function createCockpitServer(options = {}) {
       openVenueTranscript();
       // 5. 入口を開く（体験の口）。下見（配信: マイク・文字起こしと声の方式・Starting・キーとモデルの確かめ）→ 6 の前半 →
       //    開く（配信: 耳を起こす）。
-      const prepared = normalizeEntranceResult(await experience.prepareEntrance(request), "入口を開けない");
+      const prepared = normalizeEntranceResult(await experience.prepareEntrance(request, venueControlContext()), "入口を開けない");
       if (!prepared.ok) return fail(prepared.reason, {});
       // 6 の前半. 声の engine の用意（場の共通の段・ロールごと）。今も入口を開く前（配信: 耳を起こす前・文字起こしのキー
       //    切れの後）。用意できなければ入口を開かずに場を開かない（文字起こしのキー切れと同じ流儀・自動で AivisSpeech に戻さない）。
       const voiceKind = prepared.voiceKind === "aivis" || prepared.voiceKind === "elevenlabs" ? prepared.voiceKind : ttsEngine;
       const voiced = await prepareVenueVoices(voiceKind);
       if (!voiced.ok) {
-        experience.abortEntrance(prepared);
+        experience.abortEntrance(prepared, venueControlContext());
         voice.engine = voiceKind;
         voice.status = "down";
         voice.reason = clipVoiceReason(voiced.reason);
@@ -2467,7 +2731,7 @@ export function createCockpitServer(options = {}) {
       }
       // 正本が無ければ入口を開かない（開く段の順の誤り・サーバを閉じた途中など。耳に自前の正本を持たせて隠さない）。
       if (!venueTranscript) {
-        experience.abortEntrance(prepared);
+        experience.abortEntrance(prepared, venueControlContext());
         return fail("会話の正本が無い（入口を開けない）", {});
       }
       const opened = normalizeEntranceResult(await experience.openEntrance(prepared.plan, venueEntranceContext()), "入口を開けない");
@@ -2498,7 +2762,8 @@ export function createCockpitServer(options = {}) {
         return await steps();
       } catch (error) {
         // 想定外の例外（工場関数・畳むの throw など）でも opening のまま固めない: 起こしたかもしれないものを全部畳んで閉じる。
-        return fail(`配信を始められない（想定外のエラー: ${errMessage(error)}）`, { ears: true, session: true });
+        // Discord モード Domain D: 文面は体験の口から（配信は今の文面・Discord は生のエラー文を入れない文面）。
+        return fail(unexpectedVenueErrorMessage(experience, "opening", error), { ears: true, session: true });
       }
     })();
     streamTransition = run;
@@ -2558,7 +2823,7 @@ export function createCockpitServer(options = {}) {
             // best-effort（保存の口を引くこと自体が投げても閉じる）。
           }
         }
-        outcome = { ok: false, status: 500, error: `配信を終える途中で想定外のエラー（${errMessage(error)}）` };
+        outcome = { ok: false, status: 500, error: unexpectedVenueErrorMessage(venueExperience ?? streamExperience, "closing", error) };
       }
       // 4. 場を閉じる（ロールを選び直せる・固めたロールの一覧と体験も手放す）。途中で投げても閉じる。
       markVenueClosed();
@@ -2632,6 +2897,71 @@ export function createCockpitServer(options = {}) {
       experience: body.experience ?? undefined
     });
     sendJson(res, result.ok ? 200 : result.status, result.ok ? result.state : { error: result.error, state: result.state });
+  }
+
+  /**
+   * Discord の準備の読み書き（Discord モード Domain D）。GET → 200 `{ prep }`。POST（body `{ guildId?, channelId?, sttEngine? }`・
+   * null / "" で消す）→ 200 `{ prep }`・形が違えば 400 `{ error }`・Discord の場の間は 409 `{ error }`（場が閉じている間に選ぶ）。
+   * prep = `{ guildId, channelId, sttEngine }`（どれも string | null）。Discord の入口が無ければ 503。
+   * @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {string} method
+   */
+  async function handleDiscordPrep(req, res, method) {
+    const store = discordExperience ? discordExperience.prep : null;
+    if (!store) {
+      sendJson(res, 503, { error: DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE });
+      return;
+    }
+    if (method === "GET") {
+      sendJson(res, 200, { prep: store.get() });
+      return;
+    }
+    const body = await readJsonBody(req);
+    if (discordVenueActive()) {
+      sendJson(res, 409, { error: streamBusyMessage() });
+      return;
+    }
+    /** @type {any} */
+    let result;
+    try {
+      result = store.set(body);
+    } catch {
+      result = { ok: false, reason: "Discord の準備を保存できない" };
+    }
+    if (!result || result.ok !== true) {
+      sendJson(res, 400, { error: (result && typeof result.reason === "string" && result.reason) || "Discord の準備の形が違う" });
+      return;
+    }
+    sendJson(res, 200, { prep: result.prep });
+  }
+
+  /**
+   * サーバーとボイスチャンネルの一覧を読み込む（Discord モード Domain D・設計 §9「読み込む」）。今のロールの鍵でログインし、取って
+   * ログアウトする。200 `{ guilds: [{ id, name, channels: [{ id, name }] }] }`・読めなければ 502 `{ error }`（決まった文面）・
+   * Discord の場の間は 409。Discord の入口が無ければ 503。
+   * @param {import("node:http").ServerResponse} res
+   */
+  async function handleDiscordCatalog(res) {
+    const load = discordExperience ? discordExperience.catalog : null;
+    if (!load) {
+      sendJson(res, 503, { error: DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE });
+      return;
+    }
+    if (discordVenueActive()) {
+      sendJson(res, 409, { error: streamBusyMessage() });
+      return;
+    }
+    /** @type {any} */
+    let result;
+    try {
+      result = await load();
+    } catch {
+      result = null;
+    }
+    if (!result || result.ok !== true || !Array.isArray(result.guilds)) {
+      sendJson(res, 502, { error: (result && typeof result.reason === "string" && result.reason) || "サーバーとボイスチャンネルの一覧を読めない" });
+      return;
+    }
+    sendJson(res, 200, { guilds: result.guilds });
   }
 
   /**
@@ -2813,6 +3143,16 @@ export function createCockpitServer(options = {}) {
     }
     if (method === "POST" && (pathname === "/api/stream/stop" || pathname === "/api/ears/stop")) {
       await handleStreamStop(res);
+      return;
+    }
+    // Discord モード Domain D: Discord の準備（サーバー・ボイスチャンネル・文字起こしの方式）の読み書きと、サーバーとボイス
+    // チャンネルの一覧の読み込み（Bot がログイン → 取得 → ログアウト）。画面は Domain G。Discord の入口が無ければ 503。
+    if (pathname === "/api/discord/prep" && (method === "GET" || method === "POST")) {
+      await handleDiscordPrep(req, res, method);
+      return;
+    }
+    if (method === "POST" && pathname === "/api/discord/catalog") {
+      await handleDiscordCatalog(res);
       return;
     }
     if (method === "POST" && pathname === "/api/fire") {
@@ -3467,7 +3807,7 @@ export function createCockpitServer(options = {}) {
       vision: inFire?.vision === true,
       brain,
       voice: voice.engine ?? ttsEngine,
-      stt: sttEngine,
+      stt: activeSttEngine(),
       serviceTier: typeof inFire?.serviceTier === "string" ? inFire.serviceTier : null,
       ...(inFire?.bodyless === true ? { bodyless: true } : {})
     };
@@ -4471,7 +4811,7 @@ export function createCockpitServer(options = {}) {
       releaseVenueTranscript();
       const hadEars = await foldVenueEars();
       try {
-        await (venueExperience ?? streamExperience).closeEntrance({ hadEars, shutdown: true });
+        await (venueExperience ?? streamExperience).closeEntrance({ hadEars, shutdown: true }, venueControlContext());
       } catch {
         // best-effort（入口を閉じる口が投げても畳む）。
       }

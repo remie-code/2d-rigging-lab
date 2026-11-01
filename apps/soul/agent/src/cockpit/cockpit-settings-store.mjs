@@ -77,6 +77,12 @@
  *     「頭脳・会話」タブ・2026-10-27 合意）。未記憶（null）は既定（OFF）へのフォールバックを呼び出し側（cockpit.mjs の
  *     createCodexFastHooks）に委ねる（getBargeInEnabled と同型・bool の有無を区別）。
  *   setCodexFastMode(enabled): 操縦席で切り替えたときに記憶（次回起動で復元）。キー `codexFastMode`。
+ *   getDiscordPrep(): Discord の準備（Discord モード Domain D・discord-mode.md §6.3・§9）= `{ guildId, channelId, sttEngine }`
+ *     （各 string | null）。キー `discordGuildId` / `discordChannelId` / `discordSttEngine`。サーバーやチャンネルの id は
+ *     コミットしない（このファイルは .gitignore 済み・discord-mode.md §10）。未記憶/未知値のフォールバック（文字起こしの既定 whisper・
+ *     id の形の確かめ）は呼び出し側（src/discord/discord-experience.mjs）に委ねる（sttEngine と同型・asStringOrNull）。配信の
+ *     文字起こしの選択（sttEngine）とは別に持つ。
+ *   setDiscordPrep(patch): 操縦席の Discord の準備で選んだときに記憶（渡したキーだけ書く・null で消す）。
  *   getLocalStt(): ローカルの文字起こし（Parakeet / Zipformer・local-stt-wave-plan.md §1 の 5）の設定
  *     （`{ threads, preRollMs, silencePadMs, hotwords }`・既定 2 / 200ms / 300ms / ["チャッピー", "コーディ"]）。
  *     操縦席にツマミは置かず、このファイルのキー `localSttThreads`（整数 1〜16）/ `localSttPreRollMs`（本物の音を
@@ -159,6 +165,8 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setCompactThresholdTokens: (tokens: number | null) => void;
  *   getCodexFastMode: () => boolean | null;
  *   setCodexFastMode: (enabled: boolean) => void;
+ *   getDiscordPrep: () => { guildId: string | null; channelId: string | null; sttEngine: string | null };
+ *   setDiscordPrep: (patch: { guildId?: string | null; channelId?: string | null; sttEngine?: string | null }) => void;
  *   getLocalStt: () => { threads: number; preRollMs: number; silencePadMs: number; hotwords: string[]; hotwordsScore: number };
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
@@ -385,6 +393,25 @@ export function createFileSettingsStore(options = {}) {
     /** @param {boolean} enabled */
     setCodexFastMode(enabled) {
       writeMerged({ codexFastMode: enabled === true });
+    },
+    // Discord モード Domain D: Discord の準備（サーバー・ボイスチャンネル・文字起こしの方式）。配信の選択とは別のキー。
+    getDiscordPrep() {
+      const all = readAll();
+      return {
+        guildId: asStringOrNull(all.discordGuildId),
+        channelId: asStringOrNull(all.discordChannelId),
+        sttEngine: asStringOrNull(all.discordSttEngine)
+      };
+    },
+    /** @param {{ guildId?: string | null; channelId?: string | null; sttEngine?: string | null }} patch */
+    setDiscordPrep(patch) {
+      const p = patch && typeof patch === "object" ? patch : {};
+      /** @type {Record<string, string | null>} */
+      const out = {};
+      if (p.guildId !== undefined) out.discordGuildId = p.guildId ?? null;
+      if (p.channelId !== undefined) out.discordChannelId = p.channelId ?? null;
+      if (p.sttEngine !== undefined) out.discordSttEngine = p.sttEngine ?? null;
+      if (Object.keys(out).length > 0) writeMerged(out);
     },
     getLocalStt() {
       const all = readAll();

@@ -22,8 +22,12 @@
  *     "voice": { "engine": "aivis" | "elevenlabs", "aivisSpeaker": 888753760 | null, "elevenLabsVoiceId": "…" | null },
  *     "verbosity": "quiet" | "normal" | "chatty",
  *     "speakStartMode": "classic" | "speak-now",
- *     "body": true | false
+ *     "body": true | false,
+ *     "discordBotKeyFile": ".env.discord.local"   (任意・Discord モード Domain D)
  *   }
+ *  `discordBotKeyFile` は Discord の Bot の鍵のファイル名だけ(`apps/soul/agent/` 直下の `.env.discord*.local` に合う名前・
+ *  discord-mode.md §5)。無い・合わない値なら項目ごと持たない(= 既定 `.env.discord.local`・roleDiscordBotKeyFile)。鍵の中身は
+ *  role.json に入れない。操縦席の画面では編集しない(手で書く・最初の的は 1 ロール)。持っているロールは書き戻しでも落とさない。
  *  `aivisSpeaker` / `elevenLabsVoiceId` の null は「コードの既定」(tts-client の DEFAULT_SPEAKER_ID・ElevenLabs の
  *  既定の声)。`hotwords` の null は「設定ファイル(localSttHotwords)か既定に任せる」。
  *
@@ -44,6 +48,7 @@ import { fileURLToPath } from "node:url";
 import { BRAIN_IDS } from "../mind/brains.mjs";
 import { DEFAULT_CONVERSATION_INSTRUCTION_BODY } from "../mind/fire-orchestrator.mjs";
 import { isRoleId, ROLE_ID_PATTERN } from "../mind/model-identity.mjs";
+import { DEFAULT_DISCORD_BOT_KEY_FILE, isDiscordBotKeyFileName } from "../discord/discord-token.mjs";
 
 export { isRoleId, ROLE_ID_PATTERN };
 
@@ -105,6 +110,8 @@ const ELEVENLABS_VOICE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
  * @property {"quiet" | "normal" | "chatty"} verbosity
  * @property {"classic" | "speak-now"} speakStartMode
  * @property {boolean} body  体(器)を使うか。
+ * @property {string} [discordBotKeyFile]  Discord の Bot の鍵のファイル名(role.json に書いてあって形が合うときだけ持つ・
+ *   無ければ既定 `.env.discord.local`・roleDiscordBotKeyFile)。
  */
 
 /** @param {unknown} value @returns {string | null} */
@@ -174,8 +181,20 @@ export function normalizeRole(id, raw) {
     }),
     verbosity: ROLE_VERBOSITY_MODES.includes(r.verbosity) ? r.verbosity : ROLE_DEFAULTS.verbosity,
     speakStartMode: ROLE_SPEAK_START_MODES.includes(r.speakStartMode) ? r.speakStartMode : ROLE_DEFAULTS.speakStartMode,
-    body: typeof r.body === "boolean" ? r.body : ROLE_DEFAULTS.body
+    body: typeof r.body === "boolean" ? r.body : ROLE_DEFAULTS.body,
+    // Discord モード Domain D: 鍵のファイル名(形が合うときだけ持つ・無ければ既定・今の項目の形は変えない)。
+    ...(isDiscordBotKeyFileName(r.discordBotKeyFile) ? { discordBotKeyFile: r.discordBotKeyFile } : {})
   });
+}
+
+/**
+ * ロールの Discord の Bot の鍵のファイル名(Discord モード Domain D)。指していなければ既定 `.env.discord.local`。
+ * @param {Readonly<Role> | null | undefined} role
+ * @returns {string}
+ */
+export function roleDiscordBotKeyFile(role) {
+  const name = role && typeof role === "object" ? role.discordBotKeyFile : undefined;
+  return isDiscordBotKeyFileName(name) ? name : DEFAULT_DISCORD_BOT_KEY_FILE;
 }
 
 /**
@@ -200,7 +219,8 @@ export function roleToJson(role) {
     },
     verbosity: role.verbosity,
     speakStartMode: role.speakStartMode,
-    body: role.body
+    body: role.body,
+    ...(isDiscordBotKeyFileName(role.discordBotKeyFile) ? { discordBotKeyFile: role.discordBotKeyFile } : {})
   };
 }
 
@@ -411,7 +431,8 @@ function roleToJsonLoose(role) {
     voice: role.voice,
     verbosity: role.verbosity,
     speakStartMode: role.speakStartMode,
-    body: role.body
+    body: role.body,
+    discordBotKeyFile: role.discordBotKeyFile
   };
 }
 

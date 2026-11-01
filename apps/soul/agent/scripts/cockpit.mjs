@@ -84,9 +84,13 @@ import {
   roleFromIdentity,
   roleIdentity,
   roleToJson,
+  roleDiscordBotKeyFile,
   writeRole,
   writeRoleInstructions
 } from "../src/roles/role-store.mjs";
+// Discord モード Domain D: Discord の体験の口（discord.js などは使うときに src/discord/discord-libraries.mjs が動的 import する。
+// ここから静的には読まない＝配信だけのときは読み込まない）。
+import { createDiscordExperience } from "../src/discord/discord-experience.mjs";
 import {
   DEFAULT_MIGRATION_BACKUP_ROOT,
   formatStartupMigrationReport,
@@ -1176,13 +1180,18 @@ export function createStreamVenueHooks(deps) {
  * @param {(kind: "aivis" | "elevenlabs") => any} deps.prepareVoice
  * @param {() => void} deps.startVoiceResources
  * @param {((job: { request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }) => Promise<any>) | null} [deps.recallRunner]
+ * @param {(() => string) | null} [deps.discordBotKeyFile]  今のロールの Discord の Bot の鍵のファイル名（Discord モード Domain D・
+ *   role.json の discordBotKeyFile・無ければ既定 `.env.discord.local`）。束の discordBotKeyFile() で引く（無ければ null）。
  * @param {(line: string) => void} [deps.onWarning]  警告の 1 行（本文・キーは入れない）。
  */
 export function createVenueRoleBundle(deps) {
   const recallRunner = typeof deps.recallRunner === "function" ? deps.recallRunner : null;
+  const discordBotKeyFile = typeof deps.discordBotKeyFile === "function" ? deps.discordBotKeyFile : null;
   return Object.freeze({
     id: () => deps.currentId(),
     identity: () => deps.identity(),
+    // Discord モード Domain D: Discord の入口が鍵を読むファイル名（鍵の中身は持たない）。
+    discordBotKeyFile: discordBotKeyFile ? () => discordBotKeyFile() : null,
     hooks: deps.streamHooks,
     voice: Object.freeze({
       prepare: (/** @type {"aivis" | "elevenlabs"} */ kind) => deps.prepareVoice(kind),
@@ -1199,6 +1208,37 @@ export function createVenueRoleBundle(deps) {
       }
     }),
     recall: recallRunner ? Object.freeze({ run: (/** @type {any} */ job) => recallRunner(job) }) : null
+  });
+}
+
+/**
+ * Discord の体験の口（Discord モード Domain D・discord-mode.md §4.3・§6・§9）。cockpit-server の `experiences.discord` に渡す。
+ * main() の今の変数（設定の置き場・今のロールの鍵のファイル名・標準出力）を包んで src/discord/discord-experience.mjs の口を作る。
+ *
+ *  - settings: Discord の準備（サーバー・ボイスチャンネル・文字起こしの方式）の get / set（cockpit-settings.local.json）。
+ *  - currentKeyFile(): 今のロールの鍵のファイル名（一覧の読み込みで使う。場を開くときはロールの束の discordBotKeyFile）。
+ *  - write(line): ログの口（`[cockpit] discord: …` の 1 行・数と状態だけ。文字起こしの本文・名前・Discord の id は書かない）。
+ *  - loadLibraries / loadToken: テスト注入（既定は discord.js などを使うときに動的 import・鍵は role の指すファイルから直に読む）。
+ *
+ * @param {object} deps
+ * @param {{ getDiscordPrep: () => any; setDiscordPrep: (patch: object) => void }} deps.settings
+ * @param {() => string} deps.currentKeyFile
+ * @param {(line: string) => void} deps.write
+ * @param {() => Promise<any>} [deps.loadLibraries]
+ * @param {(fileName: string) => any} [deps.loadToken]
+ * @param {object} [deps.options]  createDiscordExperience へそのまま渡す追加（待ちの長さ・出口の置き場など）。
+ */
+export function createDiscordVenueExperience(deps) {
+  return createDiscordExperience({
+    ...(deps.options ?? {}),
+    settings: {
+      getDiscordPrep: () => deps.settings.getDiscordPrep(),
+      setDiscordPrep: (/** @type {object} */ patch) => deps.settings.setDiscordPrep(patch)
+    },
+    currentKeyFile: () => deps.currentKeyFile(),
+    log: (/** @type {string} */ line) => deps.write(`[cockpit] discord: ${line}\n`),
+    ...(deps.loadLibraries ? { loadLibraries: deps.loadLibraries } : {}),
+    ...(deps.loadToken ? { loadToken: deps.loadToken } : {})
   });
 }
 
@@ -3080,7 +3120,17 @@ async function main() {
     },
     startVoiceResources: ensureVoiceResources,
     recallRunner,
+    // Discord モード Domain D: Discord の入口が鍵を読むファイル名（今のロールの role.json の discordBotKeyFile・無ければ既定）。
+    discordBotKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
     onWarning: (line) => process.stderr.write(`[cockpit] WARN: ${line}\n`)
+  });
+
+  // Discord モード Domain D: Discord の体験の口（§createDiscordVenueExperience）。準備（サーバー・ボイスチャンネル・文字起こしの
+  // 方式）は settings に保存し、鍵は今のロールの指すファイルから読む。ログは数と状態だけ。
+  const discordExperience = createDiscordVenueExperience({
+    settings,
+    currentKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
+    write: (line) => process.stdout.write(line)
   });
 
   server = createCockpitServer({
@@ -3091,6 +3141,8 @@ async function main() {
     // 呼びかけの照合・判定・snapshot）・場の口・声の engine と再生器・④はこの束から引く。束の口は呼んだ時点の今のロールを読む
     // （ロールの切り替えで耳や予定を作り直さない）。
     roles: [venueRole],
+    // Discord モード Domain D: 場の体験の口（配信の口はサーバの中・Discord の口はここから渡す）。
+    experiences: { discord: discordExperience },
     // 配信の組み直し Domain A: 起動時の引っ越しの結果（ログのタブに出す・引っ越しが無ければ空）。
     notices: startupNotices,
     fireOrchestratorFactory,

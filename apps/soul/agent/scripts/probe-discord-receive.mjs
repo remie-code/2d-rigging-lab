@@ -40,16 +40,17 @@
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseArgs, parseEnv } from "node:util";
+import { parseArgs } from "node:util";
+
+import { DISCORD_BOT_TOKEN_NAME, readDiscordBotTokenFile } from "../src/discord/discord-token.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** 鍵を置く env ファイルの変数名。 */
-export const DISCORD_BOT_TOKEN_NAME = "DISCORD_BOT_TOKEN";
+/** 鍵を置く env ファイルの変数名（src/discord/discord-token.mjs と同じもの）。 */
+export { DISCORD_BOT_TOKEN_NAME };
 
 /** 鍵の置き場の既定（`apps/soul/agent/.env.discord.local`・gitignore 済み）。 */
 export const DEFAULT_DISCORD_ENV_PATH = join(here, "..", ".env.discord.local");
@@ -112,32 +113,18 @@ export function parseProbeArgs(argv) {
 
 /**
  * `.env.discord.local` から DISCORD_BOT_TOKEN を読む（process.env には入れない）。
- * 失敗理由に鍵の値は含めない。
+ * 失敗理由に鍵の値は含めない。読み方の本体は src/discord/discord-token.mjs に移した（Discord モード Domain D）。
  * @param {object} [options]
  * @param {string} [options.path=DEFAULT_DISCORD_ENV_PATH]
  * @param {(path: string) => string} [options.readFileImpl]  テスト注入（既定 readFileSync utf8）。
  * @returns {{ ok: true; token: string } | { ok: false; reason: string }}
  */
 export function loadDiscordBotToken(options = {}) {
-  const filePath = options.path ?? DEFAULT_DISCORD_ENV_PATH;
-  const readFileImpl = options.readFileImpl ?? ((/** @type {string} */ p) => readFileSync(p, "utf8"));
-  let text;
-  try {
-    text = readFileImpl(filePath);
-  } catch {
-    return { ok: false, reason: "Discord の鍵のファイルが読めない（apps/soul/agent/.env.discord.local）" };
-  }
-  let parsed;
-  try {
-    parsed = parseEnv(String(text));
-  } catch {
-    return { ok: false, reason: "Discord の鍵のファイルが読めない形になっている（apps/soul/agent/.env.discord.local）" };
-  }
-  const value = parsed[DISCORD_BOT_TOKEN_NAME];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return { ok: false, reason: `Discord の鍵が見つからない（apps/soul/agent/.env.discord.local の ${DISCORD_BOT_TOKEN_NAME}）` };
-  }
-  return { ok: true, token: value.trim() };
+  return readDiscordBotTokenFile({
+    path: options.path ?? DEFAULT_DISCORD_ENV_PATH,
+    label: "apps/soul/agent/.env.discord.local",
+    readFileImpl: options.readFileImpl
+  });
 }
 
 /**
