@@ -45,7 +45,7 @@
  *
  * ── 問いの組（Discord モード Domain C・discord-mode.md §8 の b）──────────────────────────────────
  *  問いの組み立て（問いの文・選択肢・入力の整形・you の行のラベル・相槌の発火の内部指示）は、外から questions で渡せる
- *  （体験の口の判定の組 judgeSet.speakNow。Discord の文面は Domain F）。渡さなければ今の配信の問い（STREAM_SPEAK_NOW_QUESTIONS）。
+ *  （体験の口の判定の組 judgeSet.speakNow。Discord の文面は DISCORD_SPEAK_NOW_QUESTIONS・Domain F）。渡さなければ今の配信の問い（STREAM_SPEAK_NOW_QUESTIONS）。
  *  忙しい間の数え・あとから（after-busy）・並行の判定・相槌の歯止めは、どの問いの組でも同じ（この部品が持つ）。
  *
  * 依存（judge・バッファ・busy・identity・口数・通知先・時計）は全部注入。純ロジックとして fake で
@@ -201,6 +201,70 @@ export const STREAM_SPEAK_NOW_QUESTIONS = Object.freeze({
 
 /** 問いの組の項目（並び）。 */
 export const SPEAK_NOW_QUESTION_KEYS = Object.freeze(["hostLabel", "buildInstructions", "buildChoices", "buildInput", "backchannelInstruction"]);
+
+// ── Discord の問いの組（Discord モード Domain F・discord-mode.md §8・scope §22「誰かが話したあと、今しゃべるか」）────────────
+//  体験の口の判定の組 judgeSet.speakNow に置く（src/discord/discord-experience.mjs）。配信の問いの組は変えない。
+//  - 性格の 1 文（speakNowPersonaLine）・相槌 / 自発 / 画面を見るの選択肢の説明・入力の整形（buildSpeakNowInput）は配信と共有する
+//    （書きっぷりを 1 か所に置く）。替えるのは「配信者」「配信」の語が入っている所だけ（問い・待つ・応答の説明・you の行のラベル・
+//    相槌の内部指示）。
+//  - 選択肢の値は配信と同じ 5 つ（待つ / 相槌 / 応答 / 自発 / 画面を見る）。発火するかは値で決まる（部品が持つ）。
+//  - 名前を呼ばれたかどうかは判定が文脈から見る（器の側で名前の照合をして判定を飛ばさない・scope §23）。
+//  - コメント反応は Discord では作らない（問いの組も無い）。
+
+/** Discord の判定の入力の you の行のラベル（通話に入っている人。名前があれば「参加者(名前)」）。 */
+export const DISCORD_SPEAK_NOW_HOST_LABEL = "参加者";
+
+/** Discord の相槌の発火で、その 1 回だけ ask の先頭に付ける内部指示（配信の SPEAK_NOW_BACKCHANNEL_INSTRUCTION の通話の語）。 */
+export const DISCORD_SPEAK_NOW_BACKCHANNEL_INSTRUCTION = "今は通話の相手の話に相槌を打つタイミング。";
+
+/**
+ * Discord の問い（配信の speakNowQuestion の「ゲーム配信で配信者の隣にいる…」を通話の場にしたもの）。
+ * @param {string} name
+ */
+export function discordSpeakNowQuestion(name) {
+  return `Discord のボイスチャンネルの通話にいる相方の AI「${name}」として、参加者の発言をここまで聞いた今、どう反応するのが自然か？ 参加者の話がまだ途中なら待ち、話し終えていればどう反応するかを選ぶ。`;
+}
+
+/**
+ * Discord の判定の問い（性格の 1 文は配信と同じ + Discord の問い）。
+ * @param {{ name: string; verbosity?: string | null }} p
+ */
+export function buildDiscordSpeakNowInstructions({ name, verbosity }) {
+  return `${speakNowPersonaLine(verbosity, name)} ${discordSpeakNowQuestion(name)}`;
+}
+
+/**
+ * Discord の選択肢（配信の選択肢 v2 + 画面を見る と同じ並び・同じ値。「配信者」の入る待つ・応答の説明だけを通話の語にする。
+ * 待つには「参加者どうしのやりとり」を足し、通話に無い「視聴者への説明」を外す）。
+ * @param {string} name
+ * @returns {Array<{ value: "wait" | "backchannel" | "respond" | "initiate" | "look"; description: string }>}
+ */
+export function buildDiscordSpeakNowChoices(name) {
+  return buildSpeakNowChoices(name).map((choice) => {
+    if (choice.value === "wait") {
+      return {
+        value: choice.value,
+        description: `待つ: 何もしない。参加者がまだ話しそう（言いかけ・考え中・「えーと」の途中）なときや、${name}に向けた発言ではない（独り言・参加者どうしのやりとり・ゲームへの悪態・読み上げ）とき。`
+      };
+    }
+    if (choice.value === "respond") {
+      return {
+        value: choice.value,
+        description: "応答する: 参加者の発言に答える必要がある（質問された・話を振られた・同意や意見を求められた）ので、ちゃんと返事をする。"
+      };
+    }
+    return choice;
+  });
+}
+
+/** Discord の問いの組（体験の口の judgeSet.speakNow）。入力の整形は配信と同じ関数を「参加者」のラベルで使う。 */
+export const DISCORD_SPEAK_NOW_QUESTIONS = Object.freeze({
+  hostLabel: DISCORD_SPEAK_NOW_HOST_LABEL,
+  buildInstructions: buildDiscordSpeakNowInstructions,
+  buildChoices: buildDiscordSpeakNowChoices,
+  buildInput: buildSpeakNowInput,
+  backchannelInstruction: DISCORD_SPEAK_NOW_BACKCHANNEL_INSTRUCTION
+});
 
 /**
  * 問いの組を使う形にする。null / undefined は配信の問いの組。渡された組で欠けている項目は配信の項目で埋める（hostLabel だけを

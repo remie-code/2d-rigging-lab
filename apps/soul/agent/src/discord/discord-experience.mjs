@@ -32,6 +32,12 @@
  *  3. 短すぎる発話（既定 400ms 未満）を捨てる（耳の区切りの minSpeechMs を Discord の耳だけ 400ms にする）。
  *  頭欠けは受け入れる（印は付けない・§6.5）。
  *
+ * ── 言葉と判定の組（Discord モード Domain F・§3.4・§8）───────────────────────────────────
+ *  wording = 通話の語の組（venue-wording.mjs の CALL_WORDING。②④・skills/recall.md・思い出しの結果を①に渡す文面）、
+ *  teaching = ①に足す Discord の教え（`venue-discord` = skills/venue-discord.md）、judgeSet = { speakNow: Discord の speak-now の
+ *  問いの組, recallAvoid: Discord の「避けるか」の問いの組 }。話し始めを speak-now に固定し、自発の発火の予定を作らないのは場の側
+ *  （cockpit-server の venueFixesSpeakNow。体験の種類 "discord" で決まる）。
+ *
  * ── 守り（§10）─────────────────────────────────────────────────────────
  *  鍵はロールの指すファイルからコードの中で読み（discord-token.mjs）、process.env に入れない。理由の文面は決まった短い日本語
  *  （鍵の値・Discord の id・名前・discord.js の生のエラー文を入れない）。ログ（log の口）は数と状態だけ（文字起こしの本文・
@@ -41,6 +47,10 @@
 import { STT_ENGINES } from "../ears/ear-pipeline.mjs";
 import { loadDiscordBotToken, DEFAULT_DISCORD_BOT_KEY_FILE } from "./discord-token.mjs";
 import { loadDiscordLibraries } from "./discord-libraries.mjs";
+import { CALL_WORDING } from "../mind/venue-wording.mjs";
+import { venueTeachingName } from "../mind/soul-skills.mjs";
+import { DISCORD_SPEAK_NOW_QUESTIONS } from "../mind/speak-now.mjs";
+import { DISCORD_RECALL_AVOID_QUESTIONS } from "../mind/recall.mjs";
 import {
   createOpusDecoder16k,
   createSpeakerAudioSource,
@@ -953,9 +963,9 @@ export function createDiscordExperience(deps) {
     prep,
     /** Discord の出口（Domain E）が今の接続を引く口（VC に入っていなければ null）。 */
     voiceConnection: () => (session && !session.closed && session.readyOnce ? session.connection : null),
-    // 言葉と判定の組は Domain F（D では null = 配信の言葉で動く）。
-    wording: null,
-    teaching: null,
-    judgeSet: null
+    // 言葉と判定の組（Discord モード Domain F）: 通話の語の組・①に足す Discord の教え・Discord の判定の組。
+    wording: CALL_WORDING,
+    teaching: venueTeachingName("discord"),
+    judgeSet: Object.freeze({ speakNow: DISCORD_SPEAK_NOW_QUESTIONS, recallAvoid: DISCORD_RECALL_AVOID_QUESTIONS })
   });
 }

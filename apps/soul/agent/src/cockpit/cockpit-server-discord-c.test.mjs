@@ -204,14 +204,14 @@ test("Domain C normalizeVenueWords: 無ければ 3 つとも null（配信の既
   assert.equal(words.teaching, "venue-discord");
   assert.equal(words.judgeSet?.speakNow.hostLabel, "仮の話し手");
   assert.equal(words.judgeSet?.speakNow.buildInput, STREAM_SPEAK_NOW_QUESTIONS.buildInput, "欠けた項目は配信の項目で埋める");
-  assert.deepEqual(normalizeVenueWords({ judgeSet: {} }).judgeSet, { speakNow: null });
+  assert.deepEqual(normalizeVenueWords({ judgeSet: {} }).judgeSet, { speakNow: null, recallAvoid: null });
 });
 
 test("Domain C normalizeVenueWords: 形が崩れていれば投げる（語の組の過不足・教えの名前・判定の組の項目）", () => {
   assert.throws(() => normalizeVenueWords({ wording: { venue: "通話" } }), TypeError);
   assert.throws(() => normalizeVenueWords({ teaching: "discord" }), /venue teaching name/);
   assert.throws(() => normalizeVenueWords({ teaching: "venue-../x" }), /venue teaching name/);
-  assert.throws(() => normalizeVenueWords({ judgeSet: { recallAvoid: {} } }), /unknown items: recallAvoid/);
+  assert.throws(() => normalizeVenueWords({ judgeSet: { commentReact: {} } }), /unknown items: commentReact/);
   assert.throws(() => normalizeVenueWords({ judgeSet: { speakNow: { buildChoices: 1 } } }), TypeError);
   assert.throws(() => normalizeVenueWords({ judgeSet: [] }), TypeError);
 });

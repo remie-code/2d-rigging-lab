@@ -72,9 +72,9 @@ test("createDiscordVenueExperience: 準備は設定ファイルへ・一覧は�
     }
     assert.equal(readFileSync(settingsPath, "utf8").includes(FAKE_TOKEN), false, "鍵は設定に入らない");
     assert.equal(discord.connectionStatus(), null);
-    assert.equal(discord.wording, null);
-    assert.equal(discord.teaching, null);
-    assert.equal(discord.judgeSet, null);
+    assert.equal(discord.wording?.venue, "通話");
+    assert.equal(discord.teaching, "venue-discord");
+    assert.ok(discord.judgeSet?.speakNow && discord.judgeSet?.recallAvoid);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -10,13 +10,13 @@
  *    （固定テスト stream-wording-pin.test.mjs が守る）。
  *  - 項目の並び（VENUE_WORDING_KEYS）は、配信と Discord で同じにする（項目を足すなら両方に足す）。どの項目も 1 行以内の
  *    短い語（VENUE_WORDING_MAX_CHARS 以内・改行なし）。空にしてよいのは VENUE_WORDING_OPTIONAL_KEYS だけ。
- *    この見張りは venue-wording-discord-c.test.mjs が固定する（Domain F が通話の語の組を足すときは assertVenueWording で確かめる）。
+ *    この見張りは wording-discord-c.test.mjs が固定する（Domain F が通話の語の組を足すときは assertVenueWording で確かめる）。
  *  - `skills/recall.md` は語を `{{項目の名前}}` の印で置き、読み込むとき（soul-skills.mjs の listSoulSkills）に applyVenueWording で
  *    差す。
  *
  * 語の組の対象外（同じ語があっても替えない）: fire-orchestrator.mjs の「未配信」、ロールの持ち物の「あなたは配信の相方です」、
  * コメント系（comment-react.mjs・comment-guard.mjs）、`scripts/probe-decisions-*.mjs`、判定の文面（speak-now の問いは判定の組・
- * speak-now.mjs の resolveSpeakNowQuestions。思い出しの「避けるか」の判定は Domain F）。
+ * speak-now.mjs の resolveSpeakNowQuestions。思い出しの「避けるか」の判定は判定の組・recall.mjs の resolveRecallAvoidQuestions）。
  */
 
 /**
@@ -28,7 +28,7 @@
  *  - records: 記憶の呼び名（④の頼み・`skills/recall.md`・思い出しの結果を①に渡す文面の「◯◯から読んだ内容」など）。
  *  - partner: ①が話す相手（`skills/recall.md` の「◯◯に『思い出して』と頼まれたとき」）。
  *  - conventionsNote: ②④の頼みの手順 1（`_conventions.md` を読む）のすぐ後ろに足す 1 文。配信では空（何も足さない）。
- *    Discord では「`_conventions.md` の『配信』は通話にも当てはめる」の 1 文を入れる所（中身は Domain F・scope §23）。
+ *    Discord では「`_conventions.md` の『配信』は通話にも当てはめる」の 1 文を入れる所（中身は CALL_WORDING・Domain F・scope §23）。
  */
 export const VENUE_WORDING_KEYS = Object.freeze([
   "keeper",
@@ -55,6 +55,25 @@ export const STREAM_WORDING = Object.freeze({
   records: "過去の配信の記録",
   partner: "配信者",
   conventionsNote: ""
+});
+
+/**
+ * 通話の語の組（Discord モード Domain F・discord-mode.md §3.4 の表の案・scope §23「配信」→「通話」）。Discord の体験の口
+ * （src/discord/discord-experience.mjs）が wording に置く。最後の言い回しは人間ゲート 2 で見る。
+ *  - keeper: 記憶の置き場は配信と通話で同じ（ロールの置き場）なので、「配信の」を外した呼び名。
+ *  - speakers: Discord ではコメントが無いので viewer の説明を外す。you の行は `you(名前): 本文`（名前つき・②④の整形）。
+ *  - records: ④・`skills/recall.md`・①に渡す結果の文面。置き場には配信と通話の両方の記録がある前提の語。
+ *  - conventionsNote: ②④の頼みの手順「1. `_conventions.md` を読む。」の直後に区切りなしでつながる 1 文（日本語の文の並びなので
+ *    空白も改行も入れない）。`_conventions.md` と種のファイルは変えず、決まりの中の「配信」を通話にも当てはめて読ませる（scope §23）。
+ */
+export const CALL_WORDING = Object.freeze({
+  keeper: "相方の AI の記憶の置き場",
+  venue: "通話",
+  transcriptKind: "Discord の通話の文字起こし",
+  speakers: "you = 通話で話す人（括弧の中はその人の名前）、soul = 相方の AI 自身。",
+  records: "過去の配信や通話の記録",
+  partner: "通話の相手",
+  conventionsNote: "決まりの中の「配信」は、通話にも同じように当てはめて読む。"
 });
 
 /**
@@ -110,7 +129,7 @@ export function resolveVenueWording(wording) {
 const MARK_PATTERN = /\{\{([A-Za-z]+)\}\}/g;
 
 /**
- * 本文の印（`{{records}}` など）を語の組で差す。知らない印はそのまま残す（skills/ の印は venue-wording-discord-c.test.mjs が
+ * 本文の印（`{{records}}` など）を語の組で差す。知らない印はそのまま残す（skills/ の印は wording-discord-c.test.mjs が
  * 知っている印だけであることを確かめる）。
  * @param {string} text
  * @param {unknown} [wording]  null / undefined は配信の語の組。

@@ -108,7 +108,7 @@ import {
   COMMENT_HOLD_MAX_COUNT
 } from "../mind/comment-react.mjs";
 import { createRecallDesk } from "../mind/recall-desk.mjs";
-import { RECALL_JUDGE_TIMEOUT_MS } from "../mind/recall.mjs";
+import { RECALL_JUDGE_TIMEOUT_MS, resolveRecallAvoidQuestions } from "../mind/recall.mjs";
 import { resolveVenueWording } from "../mind/venue-wording.mjs";
 import { isVenueTeachingName } from "../mind/soul-skills.mjs";
 import { composeReplyLatency, resolveLatencyThresholds } from "../mind/fire-latency.mjs";
@@ -163,6 +163,11 @@ export const DEFAULT_VENUE_EXPERIENCE = "stream";
  */
 export const DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE =
   "Discord の体験はまだ使えない（この操縦席には Discord の入口が無い）";
+/**
+ * Discord の場の間に話し始めの方式を替えようとしたときの断り（Discord モード Domain F・409・何も変えない）。Discord では話し始めは
+ * speak-now に固定（scope §23・discord-mode.md §8）。
+ */
+export const DISCORD_SPEAK_START_FIXED_MESSAGE = "Discord の通話では話し始めは speak-now に固定（替えられない）";
 /** 配信のマイクの耳を耳の束に束ねるときの名前（束の中の key）。 */
 const STREAM_EAR_KEY = "mic";
 /**
@@ -250,9 +255,10 @@ export function normalizeVenueExperience(kind, mouth) {
  *  - wording: 語の組（venue-wording.mjs の VENUE_WORDING_KEYS の項目を全部持つ・どれも 1 行以内）。
  *  - teaching: ①に足す体験の教えの名前（`venue-<体験の種類>`・ファイルは `skills/venue-<体験の種類>.md`・soul-skills.mjs の
  *    venueTeachingName）。
- *  - judgeSet: 判定の組 `{ speakNow? }`。speakNow は speak-now の問いの組（speak-now.mjs の resolveSpeakNowQuestions）。
+ *  - judgeSet: 判定の組 `{ speakNow?, recallAvoid? }`。speakNow は speak-now の問いの組（speak-now.mjs の resolveSpeakNowQuestions）、
+ *    recallAvoid は思い出しの「避けるか」の問いの組（recall.mjs の resolveRecallAvoidQuestions・Discord モード Domain F）。
  * @param {any} mouth
- * @returns {{ wording: any; teaching: string | null; judgeSet: { speakNow: any } | null }}
+ * @returns {{ wording: any; teaching: string | null; judgeSet: { speakNow: any; recallAvoid: any } | null }}
  */
 export function normalizeVenueWords(mouth) {
   const wording = mouth && mouth.wording != null ? resolveVenueWording(mouth.wording) : null;
@@ -262,16 +268,17 @@ export function normalizeVenueWords(mouth) {
   }
   const teaching = teachingValue == null ? null : /** @type {string} */ (teachingValue);
   const judgeSetValue = mouth ? mouth.judgeSet : null;
-  /** @type {{ speakNow: any } | null} */
+  /** @type {{ speakNow: any; recallAvoid: any } | null} */
   let judgeSet = null;
   if (judgeSetValue != null) {
     if (typeof judgeSetValue !== "object" || Array.isArray(judgeSetValue)) {
       throw new TypeError("venue experience judgeSet must be an object.");
     }
-    const extra = Object.keys(judgeSetValue).filter((k) => k !== "speakNow");
+    const extra = Object.keys(judgeSetValue).filter((k) => k !== "speakNow" && k !== "recallAvoid");
     if (extra.length > 0) throw new TypeError(`venue experience judgeSet has unknown items: ${extra.join(", ")}.`);
     judgeSet = Object.freeze({
-      speakNow: judgeSetValue.speakNow != null ? resolveSpeakNowQuestions(judgeSetValue.speakNow) : null
+      speakNow: judgeSetValue.speakNow != null ? resolveSpeakNowQuestions(judgeSetValue.speakNow) : null,
+      recallAvoid: judgeSetValue.recallAvoid != null ? resolveRecallAvoidQuestions(judgeSetValue.recallAvoid) : null
     });
   }
   return { wording, teaching, judgeSet };
@@ -758,7 +765,8 @@ const MAX_PORT_REROLLS = 50;
  *   - unexpectedErrorMessage(phase)（場を開く・閉じる途中の想定外の例外の文面。生のエラー文は渡さない）。
  *   - catalog()（POST /api/discord/catalog）・prep = { get, set }（GET / POST /api/discord/prep）。
  *   - wording / teaching / judgeSet（任意・Discord モード Domain C）: 語の組（②④・skills/recall.md・思い出しの結果を①に渡す
- *     文面）・①に足す体験の教えの名前（`venue-<体験の種類>`）・判定の組 `{ speakNow }`（speak-now の問いの組）。無ければ配信の既定。
+ *     文面）・①に足す体験の教えの名前（`venue-<体験の種類>`）・判定の組 `{ speakNow, recallAvoid }`（speak-now の問いの組・
+ *     思い出しの「避けるか」の問いの組。recallAvoid は Domain F）。無ければ配信の既定。
  *     形は normalizeVenueWords が確かめる。渡り方: 判定の組は始める 3（判定を作り直す所）、語の組は思い出しの係（始める 3）と
  *     venueContext()（cockpit.mjs が②の保存を頼んだ時点・①のセッションを作る時点・会話指示の編集画面で読む）、教えは venueContext()。
  * @param {(tokens: number) => void | Promise<void>} [options.onSetCompactThresholdTokens]
@@ -1480,8 +1488,12 @@ export function createCockpitServer(options = {}) {
       bargeIn: bargeInGate ? { enabled: bargeInGate.isEnabled() } : null,
       // 口数モードの現況（scheduler 未生成 = orchestrator 未注入なら null・selfFire と同型）。
       verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
-      // 話し始めの方式（"classic" | "speak-now"・scheduler 未生成なら null・verbosity と同型）。
-      speakStart: fireScheduler ? speakStartMode : null,
+      // 話し始めの方式（"classic" | "speak-now"・scheduler 未生成なら null・verbosity と同型）。Discord モード Domain F: Discord の場
+      // （開きかけ・開いている・閉じかけ）の間は "speak-now"（ロールの方式を読まない・固定。ロールの保存値は替えない）。
+      speakStart: fireScheduler ? effectiveSpeakStartMode() : null,
+      // Discord モード Domain F: 話し始めの方式がその場で固定か（true = Discord の場で speak-now に固定・画面は方式を選ばせない /
+      // false = 選べる・scheduler 未生成なら null・speakStart と同型）。
+      speakStartFixed: fireScheduler ? venueFixesSpeakNow() : null,
       // 忙しい間に届いたコメントの扱い（"hold" = あとで拾う / "drop" = 見逃す・scheduler 未生成なら null・
       // コメント反応の合意 §2）。
       commentBusy: fireScheduler ? commentBusyPolicy : null,
@@ -2288,6 +2300,24 @@ export function createCockpitServer(options = {}) {
     return venueExperience && venueExperience.judgeSet ? venueExperience.judgeSet : null;
   }
 
+  /**
+   * Discord の場（開きかけ・開いている・閉じかけ）か = 話し始めを speak-now に固定し、自発の発火の予定（沈黙・区切り・合いの手・
+   * 呼びかけ）を作らない場か（Discord モード Domain F・discord-mode.md §8・scope §22・§23）。配信の場・閉じている間は false。
+   * 名前を呼ばれたかの照合も発火の予定の中にしか無いので、Discord では器が名前で判定を飛ばす道は無い（判定が文脈から見る）。
+   */
+  function venueFixesSpeakNow() {
+    return discordVenueActive();
+  }
+
+  /**
+   * 今効いている話し始めの方式（Discord モード Domain F）。Discord の場では "speak-now"（ロールの方式 speakStartMode は読まない・
+   * 書き換えない）、それ以外はロールの方式のまま。
+   * @returns {"classic" | "speak-now"}
+   */
+  function effectiveSpeakStartMode() {
+    return venueFixesSpeakNow() ? "speak-now" : speakStartMode;
+  }
+
   // ── 会話の正本（場のもの・Discord モード Domain A・discord-mode.md §3.1）──────────────────────────
   //
   //  場が開くとき（openStream の 4、入口の前）に場の共通の段が作り、入口には積む口として渡す。購読は場が 1 回だけ張る（耳が
@@ -2709,7 +2739,11 @@ export function createCockpitServer(options = {}) {
         // best-effort
       }
       renewJudges();
-      renewFireScheduler();
+      // Discord モード Domain F: Discord の場では発火の予定を作らない（畳んだまま = 場が閉じている間と同じ。自発の ON/OFF と口数の
+      // 置き場としてだけ使い、タイマは張らない・届く VAD・転写・コメントは畳んだ予定が無視する）。自発の ON/OFF は「判定で話し始める
+      // かどうか」のつまみとして speak-now の isActive が読む。配信は今まで通り作り直す。
+      if (venueFixesSpeakNow()) parkFireScheduler();
+      else renewFireScheduler();
       renewRecallDesk();
       // 4. 会話の正本（場の共通の段が作る・Discord モード Domain A）。
       openVenueTranscript();
@@ -3325,6 +3359,11 @@ export function createCockpitServer(options = {}) {
         return;
       }
       const body = await readJsonBody(req);
+      // Discord モード Domain F: Discord の場では話し始めは speak-now に固定（選べない）。何も変えない（ロールの保存値も書かない）。
+      if (venueFixesSpeakNow()) {
+        sendJson(res, 409, { error: DISCORD_SPEAK_START_FIXED_MESSAGE, state: snapshot() });
+        return;
+      }
       // 配信の組み直し 仕上げ: 話し始めもロールの持ち物（POST /api/verbosity と同じ 409・何も変えない）。
       if (streamPhase !== "closed") {
         sendJson(res, 409, { error: "配信の途中は話し始めを替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
@@ -3982,8 +4021,10 @@ export function createCockpitServer(options = {}) {
         questions: speakNowQuestions,
         getEntries: () => (venueTranscript ? venueTranscript.all() : []),
         isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+        // Discord モード Domain F: 方式は今効いている方式（Discord の場では speak-now に固定）。自発の ON/OFF は Discord では「判定で
+        // 話し始めるかどうか」のつまみ（畳んだ発火の予定が値の置き場）。
         isActive: () =>
-          speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
+          effectiveSpeakStartMode() === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
         getName: () => currentSoulName(),
         getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
         nowImpl,
@@ -4051,8 +4092,9 @@ export function createCockpitServer(options = {}) {
       judge: commentReactJudge,
       getEntries: () => (venueTranscript ? venueTranscript.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+      // Discord モード Domain F: コメント反応は Discord では作らない（Discord の場では判定しない・discord-mode.md §8）。
       isActive: () =>
-        speakStartMode === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
+        speakStartMode === "speak-now" && !venueFixesSpeakNow() && fireScheduler != null && fireScheduler.isEnabled() && !killed,
       getName: () => currentSoulName(),
       getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
       getBusyPolicy: () => commentBusyPolicy,
@@ -4118,6 +4160,8 @@ export function createCockpitServer(options = {}) {
       // Discord モード Domain C: その場の語の組（④の頼みと①に渡す結果の文面・始める 3 で作り直すのでその場の体験の語）。
       // 閉じている・配信なら null = 今の配信の文面。
       wording: venueExperience ? venueExperience.wording ?? null : null,
+      // Discord モード Domain F: その場の「避けるか」の問いの組（judgeSet.recallAvoid・閉じている・配信なら null = 今の配信の問い）。
+      recallAvoid: venueJudgeSet()?.recallAvoid ?? null,
       judge: recallJudge,
       getEntries: () => (venueTranscript ? venueTranscript.all() : []),
       isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",

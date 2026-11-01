@@ -55,7 +55,7 @@ test("formatTranscriptForDigest: you/soul/viewer をラベル付き行へ整形�
   );
 });
 
-test("formatTranscriptForDigest: 名前のある viewer 行だけ `viewer(名前):` にする（名前の空白は詰める・名前が無ければ名前なし・viewer 以外には付けない）", () => {
+test("formatTranscriptForDigest: 名前のある行（viewer と you）に名前を付けて `viewer(名前):`・`you(名前):` にする（名前の空白は詰める・名前が無ければ名前なし）", () => {
   const entries = [
     { text: "初見です！", speaker: "viewer", displayName: "とある\n視聴者A" },
     { text: "こんにちは", speaker: "viewer", displayName: "  " },

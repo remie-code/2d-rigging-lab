@@ -42,14 +42,14 @@
  *
  * 場の語の組（Discord モード Domain C・discord-mode.md §3.4）: wording を渡すと、④の頼み（runRecall の job.wording）と①に渡す
  * 結果の文面をその語の組で組む。渡さなければ（null）今の配信の文面。係は場を開くたびに作り直すので、その場の語の組になる。
- * 「避けるか」の判定の文面は語の組の対象外（判定の組・Domain F）。
+ * 「避けるか」の判定の文面は語の組の対象外（判定の組）。Discord モード Domain F: recallAvoid（「避けるか」の問いの組・体験の口の
+ * judgeSet.recallAvoid）を渡すと、判定の問いの文と入力をその組で作る。渡さなければ今の配信の問い。
  *
  * 依存（④の走らせ方・判定・転写・忙しさ・発火・前置き・時計）は全部注入。純ロジックとして fake で全分岐を
  * テストする。
  */
 
 import {
-  buildRecallAvoidInput,
   buildRecallDeferredNote,
   buildRecallFailedDeferredNote,
   buildRecallFailedInstruction,
@@ -59,6 +59,7 @@ import {
   buildRecallSilentFoundNote,
   decideRecallAvoid,
   recallAvoidQuestion,
+  resolveRecallAvoidQuestions,
   RECALL_AVOID_THRESHOLD
 } from "./recall.mjs";
 import { resolveVenueWording } from "./venue-wording.mjs";
@@ -94,6 +95,8 @@ export const RECALL_REQUEST_MAX_CHARS = 200;
  * @param {number} [options.avoidThreshold=RECALL_AVOID_THRESHOLD]
  * @param {() => number} [options.nowImpl=Date.now]
  * @param {unknown} [options.wording]  場の語の組（venue-wording.mjs・Discord モード Domain C）。null / undefined は配信の語の組。
+ * @param {unknown} [options.recallAvoid]  「避けるか」の問いの組（recall.mjs の resolveRecallAvoidQuestions・Discord モード Domain F）。
+ *   null / undefined は配信の問い。作るときに 1 回だけ読む（場を開くたびに係を作り直すので、その場の体験の問いになる）。
  * @returns {{
  *   request: (request: string) => void;
  *   notifyIdle: () => void;
@@ -119,6 +122,8 @@ export function createRecallDesk(options) {
   const nowImpl = options.nowImpl ?? Date.now;
   // 場の語の組（作るときに形を確かめる・崩れていれば投げる）。null は配信の語の組のまま（今の文面）。
   const wording = options.wording == null ? null : resolveVenueWording(options.wording);
+  // 「避けるか」の問いの組（作るときに形を確かめる・崩れていれば投げる）。null は配信の問い（今の文面）。
+  const avoidQuestions = resolveRecallAvoidQuestions(options.recallAvoid);
 
   let disposed = false;
   /** @type {string | null} 走っている④の頼みごと。 */
@@ -271,8 +276,8 @@ export function createRecallDesk(options) {
       try {
         const name = getName();
         const result = await judge({
-          input: buildRecallAvoidInput(getEntries() ?? [], { request: d.request, summary: d.summary, nowMs: nowImpl(), soulName: name }),
-          questions: [recallAvoidQuestion(name)]
+          input: avoidQuestions.buildInput(getEntries() ?? [], { request: d.request, summary: d.summary, nowMs: nowImpl(), soulName: name }),
+          questions: [recallAvoidQuestion(name, avoidQuestions)]
         });
         const decision = decideRecallAvoid(result ? result.answers : null, avoidThreshold);
         avoidProbability = decision.probability;
