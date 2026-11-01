@@ -10,6 +10,7 @@
 > - Domain F 合格(1 ループ・止めた指摘 0・soul 2127/2127・soul-zone・固定テストの fixture 差分 0・配信の期待値の変更 0。Discord の口が null でなくなった・判定の組に `recallAvoid` が増えたことによる Discord 側の既存テスト 5 行の変更は仕様変更として可)。報告 [../waves/discord-mode/domain-f-report.md](../waves/discord-mode/domain-f-report.md)。通話の語の組・Discord の判定の問い・`skills/venue-discord.md` の文面は報告にある(言い回しは人間ゲート 2 で見る)。Undine の追認: (1) speak-now の固定を体験の種類 `"discord"` で決める形は可。(2) Discord の場の間の YouTube の Connect(`POST /api/chat/connect`)は **G で断る形にし、画面でも出さない**(Discord の場にはコメントが無い、設計 §4.3 の表)。コメント反応を Discord の場で判定しない守りのテストも G で付ける。G への持ち越し: 話し始めのメーターが `speakStartFixed` を見る、方式を選ばせない、catalog の断り、ロールの書き戻しで鍵のファイル名を残す、`STREAMER_LABEL`、`chatBufferAbsent` の文面、Discord の場の目の選択、接続の状態の見せ方。
 > - Domain G 合格(1 ループ・止めた指摘 0・soul 2173/2173・soul-zone・`src/mind/`・`skills/`・`src/voice/` の差分 0)。報告 [../waves/discord-mode/domain-g-report.md](../waves/discord-mode/domain-g-report.md)。期待値の変更は、追認していた 2 つ(catalog の断りの結線・鍵のファイル名の書き戻し)、「Discord の準備」タブを足したことによるタブの数と並び、`chatBufferAbsent` の文面(`venue not open`)で、いずれも仕様変更。配信の画面はレビューが HEAD と 1666 通りの入力で比べ、違いは `chatBufferAbsent` のラベルだけ。Undine の追認: (1) **場が閉じている間に Connect した YouTube のコメントが、Discord の場で会話の記録に積まれる隙間**は、案 a(Discord の場の間はコメントの入口で捨てる。ユーザーの Connect は切らない)で直す。設計 §4.3(Discord にはコメントが無い)と計画 §5(配信と通話の記録が混ざらない)に沿う、製品判断の要らない直しなので、全体の突き合わせの直しと一緒に入れる。(2) 「配信の途中はマイク・文字起こしを替えられない」の案内が Discord の場でも同じ文面なのは可(Discord の場では配信の準備のタブを触る理由が薄い。言い回しは人間ゲート 2 で気になれば直す)。(3) D・E のテストに見る窓を選ぶ下準備の 1 行を足した形は可。
 > - 全体の突き合わせ needs_fix → 直して合格。止める指摘は既知の隙間(Discord の場で先に Connect した YouTube のコメントが正本に積まれる)の 1 件だけで、ほかのつなぎ目(場の切り替え・記録の分離・正本と人ごとの耳・鍵・ログ・配信の文字列・期待値の変更の一覧)は問題なし。レビュー [../reviews/discord-mode/final.md](../reviews/discord-mode/final.md)。直しは Gnome が `ingestChatMessage` と `commitComment` に「Discord の場の間は捨てる(何も出さない・Connect は切らない)」を入れ、テスト 3 件(soul 2176/2176・soul-zone)。報告 [../waves/discord-mode/final-gnome.md](../waves/discord-mode/final-gnome.md)。突き合わせの見立てどおり 2 回目は要らない。Undine の追認: 捨てたコメントは何も出さない。人間ゲート 2 に「入り直してすぐ話す」を入れる。止めない指摘(whisper の口の番号の使い回し【推測】・話している途中に抜けたときの `speechEnd`・ENDED の見張りの限界・`startedDelayMs`・ElevenLabs の短い発話)は人間ゲート 2 で見てから決める。
+> - **人間ゲート 2 おおむね合格**(ユーザー 2026-11-01)。結果 [../waves/discord-mode/human-gate-2-result.md](../waves/discord-mode/human-gate-2-result.md)。「VC から抜ける」と「体験を閉じる」を分ける設計の変更が出たので、設計 §13(Accepted 2026-11-01)を追加のドメイン H〜K(§8)で作り、人間ゲート 3 のあとにまとめて master へマージする。
 > 根拠: 設計 [../../architecture/discord-mode.md](../../architecture/discord-mode.md)(Accepted)、決定 [../../discord-vc/scope.md](../../discord-vc/scope.md) §21〜§24、棚卸し [discord-mode-inventory.md](discord-mode-inventory.md)(触るファイル・重なり・テストの土台・§9 の問い)。
 > 進め方(scope §24): 前例 [stream-restructure-wave-plan.md](stream-restructure-wave-plan.md) と同じ。1 本のブランチ、ドメインは**全部順に**、ドメインごとに Orch-Sylph が Gnome と Review-Sylph を回す。開発は今の作業フォルダのまま。**ドメインの途中では配信しない**(ユーザーが配信するときは声をかけてもらい、区切りのよい所で master のきれいな状態に戻す)。push は機能が完成してからまとめて(scope §23)。
 > ドメインの記号は設計 §11 と違う(設計の B を B と C に分け、判定の差し口を C に前倒しした)。下の対応表を正とする。
@@ -163,3 +164,41 @@ Discord の群
 - 全体の突き合わせ: `implementation/reviews/discord-mode/final.md`
 - 人間ゲート: `implementation/waves/discord-mode/human-gate-1.md`・`human-gate-2.md`
 - コミット: ドメインが合格するごとに Undine がブランチへ feat を 1 つ。Gnome と Sylph はコミットしない。
+
+## 8. 追加のドメイン(設計 §13「体験と VC 接続を分ける」、人間ゲート 2 のあと)
+
+> 状態: 着手(ユーザー 2026-11-01「OK、順次進めてくれ」)。根拠: 設計 §13、結果 [../waves/discord-mode/human-gate-2-result.md](../waves/discord-mode/human-gate-2-result.md) §2、棚卸し [../waves/discord-mode/session-split-inventory.md](../waves/discord-mode/session-split-inventory.md)(以下「分け棚」。触る所・切れ目・分かれ道)。体制・モデル・見直しの粒度・機械ゲートは §3・§4 と同じ(機械ゲートの土台は 2176 件)。ドメインは全部順に。
+
+### Domain H — 判定と発火の記録・途中保存のタイマー(設計 §13.6・§13.7)
+
+- `session-usage` に `type:"judgment"`・`"fire-refused"`・`"control"` を足す(中身・名前・id を書かない。エラーは種類だけ)。今どこにも出ない「場が開いていない」で捨てた発火の要求も拾う。つまみ(自発・かぶり判定・KILL)の切り替えを `control` に残す。H のあとのドメインが `control` に入る・抜ける・移る・切れたを足せる口にしておく。
+- 途中保存: 起動時の張り方のまま、「場の始まり、または前の保存(途中・手動)から 20 分」のときだけ頼む(`scripts/cockpit.mjs:3105-3110`・`checkpoint()`)。配信にも効く。
+- 確かめ: 記録の各 type がテストで書かれ、中身・名前・id が載らない(既存の守りのテストの形に合わせる)。入り直して 1 分半で途中保存が走らない。前の保存から 20 分で走る。判定・発火のふるまいは変わらない(既存テストの期待値 0 変更)。session-usage を読む既存のもの(あれば)が知らない type で壊れない。
+- 先にする理由: 配信にも効く小さな直しで、I〜K がこの記録の口を使う。
+
+### Domain I — 体験と VC 接続を分ける(設計 §13.2・§13.3)
+
+- `src/discord/discord-experience.mjs` の塊を体験の分と接続の分に割る。server に「入る / 抜ける / 移る」の口と API(例 `POST /api/discord/vc {action, channelId}`)。移る = 抜ける + 入る(destroy して入り直す)。耳の束は体験の間 1 つ、抜けるときは人の耳を drop、「聞いていない」だけにする口。
+- どの VC にもいない間: `requestSelfFire` と手動の Fire の入口で `not-in-vc` として断る(H の `fire-refused` に残る)。手元のスピーカーで鳴らない。
+- 外から: 4014 は「VC の外で待っている」へ。Discord の画面で動かされたら動いた先を追う。自分で抜けたときに「切れた」と出ない。
+- snapshot: 接続の状態に「VC の外で待っている」(例 `outside`)、今いる VC の名前。id は載せない。
+- 確かめ(偽物の Discord で。偽物に 4014・動かされた・同じ client での入り直しを足してよい): 抜けて入り直しても頭のセッション・正本・判定が同じもの。移ったあとの人の耳と出口が新しい VC につく。VC にいない間の発火が断られ、出口が手元に戻らない。通話を終える(今の 2 回押し)は VC にいてもいなくても場を閉じて記憶を書く。H の `control` に入る・抜ける・移る・切れたが残る。配信の場は変わらない。
+
+### Domain J — 人が気づく出来事(設計 §13.5)
+
+- 正本の行の種類に「出来事」を足す。チャッピー自身の入る・抜ける・移る・切られた、今いる VC の人の入ってきた・出ていった(Bot は除く)。
+- 頭への会話の窓・記憶の書き出し・思い出しの入力に載る。左の「会話」に控えめな 1 行で出す。判定には渡さず、きっかけにもしない。ログ・session-usage には名前を書かない。
+- 確かめ: 出来事の行が窓・②④の入力に載る(Discord の語の組で)。判定の入力に載らず、判定が走らない。**配信の固定テスト(`stream-wording-pin`)の差分 0**。名前がログに出ない。
+- I のあと: 出来事の源(入る・抜ける・移る・動かされた)が I でできるため。
+
+### Domain K — Discord 操作パネルと画面(設計 §13.4)
+
+- Discord の場の間、右の領域(今は `solo` で空)に操作パネル: 接続(サーバー名・今いる VC と「抜ける」・同じサーバーの VC の一覧と人数・「入る」「移る」)、しゃべり方(自発・かぶり判定のトグル、手動の Fire。VC にいない間は押せず「VC に入ると押せる」)、見る窓(選択と「使わない」。場の間の 409 を外し、次の発火から新しい窓を見る)。VC の一覧は体験の client の guild から取る(2 本目のログインはしない)。
+- 下の帯の「VC から抜ける」(2 回押し)を「通話を終える」に。上の帯に「VC の外で待っている」。左の「会話」の表示の形は変えない(J の出来事の 1 行を除く)。準備の `discordChannelId` は書き換えない。
+- 確かめ: view-logic のテスト(パネルの状態ごと: 入っている・外で待っている・切れた・入っています…)。見る窓を場の途中で替えたら次の発火で新しい窓。**配信の画面は HEAD と同じ**(G と同じく多数の入力で比べる)。幅の狭い画面で崩れない。
+
+### 全体の突き合わせ(2 回目)と人間ゲート 3
+
+- K の合格のあと、Sylph(opus)が 1 回、H〜K のつなぎ目を設計 §13 と突き合わせる(体験と接続の寿命・VC にいない間の声・出来事と判定の分離・記録の守り・配信の不変)。止めてよい理由は §4 と同じ。
+- 人間ゲート 3 の手順は Undine が `implementation/waves/discord-mode/human-gate-3.md` に書く。芯は設計 §13.8。合格したら master へ `--no-ff` でマージし、push はユーザーの OK のあと。
+- 置き場は §7 と同じ形(`domain-<h〜k>-report.md`・`reviews/discord-mode/domain-<h〜k>.md`・`final-2.md`)。
