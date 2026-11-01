@@ -85,12 +85,14 @@ import {
   roleIdentity,
   roleToJson,
   roleDiscordBotKeyFile,
+  roleDiscordBotKeyFileRefused,
   writeRole,
   writeRoleInstructions
 } from "../src/roles/role-store.mjs";
 // Discord モード Domain D: Discord の体験の口（discord.js などは使うときに src/discord/discord-libraries.mjs が動的 import する。
 // ここから静的には読まない＝配信だけのときは読み込まない）。
 import { createDiscordExperience } from "../src/discord/discord-experience.mjs";
+import { createDiscordStreamPlayer } from "../src/discord/discord-stream-player.mjs";
 import {
   DEFAULT_MIGRATION_BACKUP_ROOT,
   formatStartupMigrationReport,
@@ -1170,6 +1172,11 @@ export function createStreamVenueHooks(deps) {
  *  - hooks: 場の口 6 つ（createStreamVenueHooks の hooks = 場の記録・頭のセッション・器・記憶の最後の保存）。同じものを渡す。
  *  - voice.prepare(kind): 声の engine を用意する（始める 6・入口を開く前・ElevenLabs のキーはここで読む）。
  *  - voice.startResources(): 再生器と声の差し替え口を起こす（始める 6・待たない）。投げたら警告の 1 行にして場は止めない。
+ *  - voice.openOutlet(info)（Discord モード Domain E・渡したときだけ）: Discord の入口が VC に入った直後に呼ぶ出口
+ *    （`{ connection, voice, groupId }` → `{ dispose }`）。cockpit.mjs は Discord 向けの再生器を作ってこのロールの声に差す
+ *    （§createVenuePlayerSlot）。渡さなければ null（出口なし）。
+ *  - discordBotKeyFileRefused()（Discord モード Domain E・渡したときだけ）: role.json の discordBotKeyFile の形が合わず、Discord の
+ *    入口が断るか（roleDiscordBotKeyFileRefused）。
  *  - recall.run(job): ④思い出し役を走らせる（今のロールの記憶の置き場を読む）。無ければ null。job.wording（場の語の組・
  *    Discord モード Domain C。null = 配信の語）もそのまま渡す。
  *
@@ -1182,16 +1189,23 @@ export function createStreamVenueHooks(deps) {
  * @param {((job: { request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }) => Promise<any>) | null} [deps.recallRunner]
  * @param {(() => string) | null} [deps.discordBotKeyFile]  今のロールの Discord の Bot の鍵のファイル名（Discord モード Domain D・
  *   role.json の discordBotKeyFile・無ければ既定 `.env.discord.local`）。束の discordBotKeyFile() で引く（無ければ null）。
+ * @param {(() => boolean) | null} [deps.discordBotKeyFileRefused]  今のロールの鍵のファイル名の形が合わず断るか（Domain E）。
+ * @param {((info: { connection: any; voice: any; groupId: string }) => ({ dispose: () => void } | null)) | null} [deps.openVoiceOutlet]
+ *   Discord の出口（Domain E）。束の voice.openOutlet で引く（無ければ null）。
  * @param {(line: string) => void} [deps.onWarning]  警告の 1 行（本文・キーは入れない）。
  */
 export function createVenueRoleBundle(deps) {
   const recallRunner = typeof deps.recallRunner === "function" ? deps.recallRunner : null;
   const discordBotKeyFile = typeof deps.discordBotKeyFile === "function" ? deps.discordBotKeyFile : null;
+  const discordBotKeyFileRefused = typeof deps.discordBotKeyFileRefused === "function" ? deps.discordBotKeyFileRefused : null;
+  const openVoiceOutlet = typeof deps.openVoiceOutlet === "function" ? deps.openVoiceOutlet : null;
   return Object.freeze({
     id: () => deps.currentId(),
     identity: () => deps.identity(),
     // Discord モード Domain D: Discord の入口が鍵を読むファイル名（鍵の中身は持たない）。
     discordBotKeyFile: discordBotKeyFile ? () => discordBotKeyFile() : null,
+    // Discord モード Domain E: 鍵のファイル名の形が合わないとき Discord の入口が断る印。
+    discordBotKeyFileRefused: discordBotKeyFileRefused ? () => discordBotKeyFileRefused() === true : null,
     hooks: deps.streamHooks,
     voice: Object.freeze({
       prepare: (/** @type {"aivis" | "elevenlabs"} */ kind) => deps.prepareVoice(kind),
@@ -1205,7 +1219,9 @@ export function createVenueRoleBundle(deps) {
             // 知らせの失敗で場を止めない。
           }
         }
-      }
+      },
+      // Discord モード Domain E: Discord の出口（このロールの Bot の接続に結んだ再生器）。
+      openOutlet: openVoiceOutlet ? (/** @type {any} */ info) => openVoiceOutlet(info) : null
     }),
     recall: recallRunner ? Object.freeze({ run: (/** @type {any} */ job) => recallRunner(job) }) : null
   });
@@ -1239,6 +1255,63 @@ export function createDiscordVenueExperience(deps) {
     log: (/** @type {string} */ line) => deps.write(`[cockpit] discord: ${line}\n`),
     ...(deps.loadLibraries ? { loadLibraries: deps.loadLibraries } : {}),
     ...(deps.loadToken ? { loadToken: deps.loadToken } : {})
+  });
+}
+
+/**
+ * その場の再生器の差し口（Discord モード Domain E・discord-mode.md §4.3「再生器を作る（ロールごと）」・§5・§7）。
+ *
+ * 場の共通の段が体験に応じて再生器を作り分けるための置き場。配信の場では空（null）のままで、声は今の手元の再生器
+ * （createStreamPlayer）から出る。Discord の場では、入口が VC に入った直後にロールの束の voice.openOutlet → open(info) が呼ばれ、
+ * そのロールの Bot の接続に結んだ Discord 向けの再生器（src/discord/discord-stream-player.mjs）をここに置く。main() の
+ * ensureVoiceResources・acquireAcceptedFireResources・playerProxy は、ここに再生器があればそれを使い、手元の再生器は起こさない
+ * （手元のスピーカーから出さない）。入口を閉じると返り値の dispose で再生器を畳んで空に戻す（次の配信の場は手元の再生器）。
+ *
+ * @param {object} [deps]
+ * @param {(info: { connection: any; voice: any; groupId: string }) => any} [deps.createPlayer]  再生器を作る口（既定
+ *   createDiscordStreamPlayer。テストは偽物）。
+ * @param {number} [deps.startedDelayMs]  Discord の `started` に足す遅れ（既定は再生器の既定・設計 §7.4 の a）。
+ * @param {(event: string) => void} [deps.onTrace]  診断（事象の種類だけ）。
+ */
+export function createVenuePlayerSlot(deps = {}) {
+  const createPlayer =
+    typeof deps.createPlayer === "function"
+      ? deps.createPlayer
+      : (/** @type {{ connection: any; voice: any; groupId: string }} */ info) =>
+          createDiscordStreamPlayer({
+            voice: info.voice,
+            connection: info.connection,
+            ...(typeof deps.startedDelayMs === "number" ? { startedDelayMs: deps.startedDelayMs } : {}),
+            ...(typeof deps.onTrace === "function" ? { onTrace: (/** @type {string} */ event) => deps.onTrace?.(event) } : {})
+          });
+  /** @type {any} */
+  let current = null;
+  /** @param {any} p */
+  const release = (p) => {
+    if (current === p) current = null;
+    try {
+      p.dispose?.();
+    } catch {
+      // best-effort
+    }
+  };
+  return Object.freeze({
+    /** 今の場の再生器（無ければ null = 手元の再生器を使う）。 */
+    current: () => current,
+    /**
+     * Discord の出口（ロールの束の voice.openOutlet）。前の場の残りがあれば畳んでから置き換える。
+     * @param {{ connection: any; voice: any; groupId: string }} info
+     */
+    open(info) {
+      if (current) release(current);
+      const p = createPlayer(info);
+      current = p;
+      return Object.freeze({ dispose: () => release(p) });
+    },
+    /** 畳む（サーバを閉じるときなど・冪等）。 */
+    dispose() {
+      if (current) release(current);
+    }
   });
 }
 
@@ -2374,6 +2447,13 @@ async function main() {
   let sessionBody = null;
   /** @type {ReturnType<typeof createStreamPlayer> | null} */
   let player = null;
+  // Discord モード Domain E: その場の再生器（§createVenuePlayerSlot）。Discord の場では Bot の接続に結んだ再生器が入り、
+  // 手元の再生器（player）の代わりに使う。配信の場では空のまま（今のふるまい）。
+  const venuePlayers = createVenuePlayerSlot({
+    onTrace: (event) => fireDiagnostics.record("player.discord", { marker: event })
+  });
+  /** 今の場で声を出す再生器（Discord の場の再生器・無ければ手元の再生器）。 */
+  const activePlayer = () => venuePlayers.current() ?? player;
   let audioRevision = 0;
   let playerAudioRevision = null;
   // 声の差し替え口（Start のときに作る・種類が変われば作り直す）。desiredTtsEngine は最後に Start で選ばれた方式
@@ -2642,6 +2722,11 @@ async function main() {
    * （revision 方式・進行中の発話は accepted snapshot の player を最後まで使う）。
    */
   const ensureVoiceResources = () => {
+    // Discord モード Domain E: Discord の場では手元の再生器を起こさない（声は Bot の接続へ・手元のスピーカーから出さない）。
+    if (venuePlayers.current() != null) {
+      voiceEngines.ensure(desiredTtsEngine);
+      return;
+    }
     if (player != null && !player.isAlive()) {
       try {
         player.dispose();
@@ -2724,24 +2809,27 @@ async function main() {
     /** @param {string} id @param {{ sampleRate: number; channels: number }} format */
     open(id, format) {
       ensureFireResources();
-      return /** @type {any} */ (player).open(id, format);
+      return /** @type {any} */ (activePlayer()).open(id, format);
     },
     /** @param {string} id @param {Uint8Array} pcm */
     write(id, pcm) {
-      return player != null ? player.write(id, pcm) : false;
+      const p = activePlayer();
+      return p != null ? p.write(id, pcm) : false;
     },
     /** @param {string} id */
     end(id) {
-      return player != null ? player.end(id) : false;
+      const p = activePlayer();
+      return p != null ? p.end(id) : false;
     },
     /** barge-in の声止め（S6）。open が走った後にしか呼ばれない = player は生成済み。best-effort。 */
     stop() {
-      if (player != null) player.stop();
+      const p = activePlayer();
+      if (p != null) p.stop();
     },
     /** @param {(event: any) => void} listener */
     onEvent(listener) {
       ensureVoiceResources();
-      return /** @type {any} */ (player).onEvent(listener);
+      return /** @type {any} */ (activePlayer()).onEvent(listener);
     }
   };
   // 既定の AivisSpeech engine の deps（話者は今のロールの声・`--speaker` が上書き）。受理のたびに作る。
@@ -2758,7 +2846,8 @@ async function main() {
     ensureFireResources();
     const acceptedSession = session;
     // 進行中の発話はこの player / engine を最後まで使う（デバイス変更の作り直しは次の Fire の境目）。
-    const acceptedPlayer = player;
+    // Discord モード Domain E: Discord の場ではその場の再生器（Bot の接続に結んだもの）。
+    const acceptedPlayer = activePlayer();
     const acceptedEngine = voiceEngines.current();
     return Object.freeze({
       session: acceptedSession,
@@ -3122,6 +3211,10 @@ async function main() {
     recallRunner,
     // Discord モード Domain D: Discord の入口が鍵を読むファイル名（今のロールの role.json の discordBotKeyFile・無ければ既定）。
     discordBotKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
+    // Discord モード Domain E: 鍵のファイル名の形が合わなければ Discord の入口が断る（既定の鍵で入らない）。
+    discordBotKeyFileRefused: () => roleDiscordBotKeyFileRefused(roleHooks.current()),
+    // Discord モード Domain E: Discord の出口（VC に入った直後にこのロールの Bot の接続に再生器を結ぶ・§createVenuePlayerSlot）。
+    openVoiceOutlet: (info) => venuePlayers.open(info),
     onWarning: (line) => process.stderr.write(`[cockpit] WARN: ${line}\n`)
   });
 

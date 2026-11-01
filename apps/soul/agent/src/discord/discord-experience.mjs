@@ -76,6 +76,8 @@ const PREP_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 export const DISCORD_REASONS = Object.freeze({
   noRole: "VC に入れるロールが無い",
   notPrepared: "Discord の準備でサーバーとボイスチャンネルを選んでいない",
+  // Domain E: role.json の discordBotKeyFile の形が合わない（値は出さない・パスや鍵を含みうる）。
+  keyFileName: "ロールの role.json の discordBotKeyFile が使えない（apps/soul/agent/ 直下の .env.discord*.local の名前だけ・項目を消せば既定 .env.discord.local）",
   sttEngine: "Discord の準備の文字起こしの方式が使えない",
   venue: "Discord の入口を開けない（場の口が無い）",
   libraries: "Discord の部品を読み込めない（apps/soul/agent で依存を入れる）",
@@ -83,6 +85,8 @@ export const DISCORD_REASONS = Object.freeze({
   guild: "選んだサーバーが見つからない（Bot がそのサーバーに入っているか）",
   channel: "選んだボイスチャンネルが見つからない",
   join: "VC に入れない（時間切れ・権限・満員など）",
+  // Domain E: VC に入ったが、声を流す口（Discord 向けの再生器）を作れない。
+  outlet: "VC に声を出す口を作れない（Discord の部品の音の口）",
   closed: "VC に入る途中で場を閉じた",
   catalog: "サーバーとボイスチャンネルの一覧を読めない",
   ear: "Discord の人の耳を起こせない（文字起こしの部品が起きない）",
@@ -160,6 +164,27 @@ export function checkDiscordPrepPatch(current, patch) {
 }
 
 /**
+ * その場のロールの束から Discord の出口を作る口を引く（Domain E・設計 §5: 再生器はロールごと・Bot の接続ごと）。VC の `group` は
+ * ロールの id なので、その id のロールを選ぶ（見つからなければ先頭のロール）。束が口（voice.openOutlet）を持たなければ null。
+ * @param {unknown} roles  場が固めたロールの一覧（openEntrance の venue.roles）。
+ * @param {string} groupId
+ * @returns {((info: { connection: any; voice: any; groupId: string }) => any) | null}
+ */
+export function roleOutletFactory(roles, groupId) {
+  if (!Array.isArray(roles) || roles.length === 0) return null;
+  const idOf = (/** @type {any} */ role) => {
+    try {
+      return typeof role?.id === "function" ? role.id() : null;
+    } catch {
+      return null;
+    }
+  };
+  const role = roles.find((r) => idOf(r) === groupId) ?? roles[0];
+  const open = role?.voice?.openOutlet;
+  return typeof open === "function" ? (info) => open(info) : null;
+}
+
+/**
  * 積む口を包み、その人の行に you + 名前 + id を載せる（ear-pipeline は話者を知らない・耳は積むだけ）。名前は積む時点の値
  * （名前の取得が後から届いても、その後の行には載る）。
  * @param {any} buffer  場の正本（積む口）。
@@ -195,7 +220,8 @@ export function speakerTranscriptMouth(buffer, person) {
  * @param {(line: string) => void} [deps.log]  ログの 1 行（数と状態だけ）。
  * @param {(info: { connection: any; voice: any; groupId: string }) => ({ dispose?: () => any } | null | undefined)} [deps.outletFactory]
  *   Discord の出口（Domain E）の置き場: VC に入ったあと、その接続と @discordjs/voice を渡して呼ぶ（返り値は閉じるときに畳む）。
- *   Domain D では渡さない（声は今の再生器のまま）。
+ *   渡さなければ、その場のロールの束の `voice.openOutlet`（{@link roleOutletFactory}・cockpit.mjs が Discord 向けの再生器を作る）。
+ *   どちらも無ければ出口なし（声は今の手元の再生器のまま）。
  * @param {typeof setTimeout} [deps.setTimeoutImpl]
  * @param {typeof clearTimeout} [deps.clearTimeoutImpl]
  * @param {number} [deps.loginTimeoutMs=DISCORD_LOGIN_TIMEOUT_MS]
@@ -599,6 +625,15 @@ export function createDiscordExperience(deps) {
     }
     if (rawEngine != null && rawEngine !== "" && prep.sttEngine == null) return { ok: false, reason: DISCORD_REASONS.sttEngine };
     const engine = prep.sttEngine ?? DEFAULT_DISCORD_STT_ENGINE;
+    // Domain E（D の持ち越し・設計 §5「パスの区切りを含む値は断る」）: role.json の discordBotKeyFile が書いてあって形が合わない
+    // なら、既定の鍵で入らずに断る（黙って別の Bot でログインしない）。理由に値は入れない（パスや鍵を含みうる）。
+    let keyFileRefused = false;
+    try {
+      keyFileRefused = typeof role.discordBotKeyFileRefused === "function" && role.discordBotKeyFileRefused() === true;
+    } catch {
+      keyFileRefused = true;
+    }
+    if (keyFileRefused) return { ok: false, reason: DISCORD_REASONS.keyFileName };
     let keyFile = null;
     try {
       keyFile = typeof role.discordBotKeyFile === "function" ? role.discordBotKeyFile() : null;
@@ -710,7 +745,12 @@ export function createDiscordExperience(deps) {
       } catch {
         return refuse(DISCORD_REASONS.login);
       }
-      if (s.closed) return refuse(DISCORD_REASONS.closed);
+      if (s.closed) {
+        // Domain E（D の持ち越し）: ログインの途中で閉じられた（closeEntrance・サーバを閉じた）。そのときの teardown はまだ client を
+        // 持っていなかったので、ログインした Bot をここでログアウトさせる（refuse の teardown は閉じた後なので何もしない）。
+        await destroyClient(s.client);
+        return refuse(DISCORD_REASONS.closed);
+      }
       s.botId = s.client.user?.id ?? null;
       try {
         s.guild = await s.client.guilds.fetch(plan.guildId);
@@ -768,13 +808,19 @@ export function createDiscordExperience(deps) {
       listen(s, s.client, libs.discord.Events.VoiceStateUpdate, (/** @type {any} */ o, /** @type {any} */ n) =>
         handleVoiceState(s, o, n)
       );
-      // Discord の出口の置き場（Domain E）。D では渡さない（声は今の再生器のまま）。
-      if (typeof deps.outletFactory === "function") {
+      // Discord の出口（Domain E・設計 §7・§5「再生器はロールごと、Discord では Bot の接続ごと」）。deps.outletFactory が
+      // 渡されていればそれ、無ければその場のロールの束の voice.openOutlet（cockpit.mjs が Discord 向けの再生器を作ってその
+      // ロールの声に差す）。どちらも無ければ出口なし（声は手元の再生器のまま・D のふるまい）。
+      const outletFactory = typeof deps.outletFactory === "function" ? deps.outletFactory : roleOutletFactory(venue.roles, plan.groupId);
+      if (outletFactory) {
         try {
-          s.outlet = deps.outletFactory({ connection: s.connection, voice, groupId: plan.groupId }) ?? null;
+          s.outlet = outletFactory({ connection: s.connection, voice, groupId: plan.groupId }) ?? null;
+          if (s.outlet) say("outlet ready");
         } catch {
+          // 出口を作れなければ場を開かない（VC に入っても声を出せない・手元のスピーカーから出す形に黙って戻さない）。
           s.outlet = null;
           say("outlet failed");
+          return refuse(DISCORD_REASONS.outlet);
         }
       }
       setConnection("joined", venue);

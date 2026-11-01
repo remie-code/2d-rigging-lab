@@ -28,6 +28,10 @@
  *  `discordBotKeyFile` は Discord の Bot の鍵のファイル名だけ(`apps/soul/agent/` 直下の `.env.discord*.local` に合う名前・
  *  discord-mode.md §5)。無い・合わない値なら項目ごと持たない(= 既定 `.env.discord.local`・roleDiscordBotKeyFile)。鍵の中身は
  *  role.json に入れない。操縦席の画面では編集しない(手で書く・最初の的は 1 ロール)。持っているロールは書き戻しでも落とさない。
+ *  Discord モード Domain E: 書いてあるのに形が合わない値(null は「書いていない」と同じ)は、値を持たずに印
+ *  `discordBotKeyFileInvalid: true` だけを持つ。Discord の入口は印があれば断る(roleDiscordBotKeyFileRefused)。書き戻し・編集・
+ *  写しでは印を `"discordBotKeyFile": ""`(形の合わない値)として書き、読み直しても断るままにする(元の値は書き戻さない・パスや
+ *  鍵を含みうるため。画面の編集で黙って既定の鍵に戻らないように)。
  *  `aivisSpeaker` / `elevenLabsVoiceId` の null は「コードの既定」(tts-client の DEFAULT_SPEAKER_ID・ElevenLabs の
  *  既定の声)。`hotwords` の null は「設定ファイル(localSttHotwords)か既定に任せる」。
  *
@@ -112,6 +116,8 @@ const ELEVENLABS_VOICE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
  * @property {boolean} body  体(器)を使うか。
  * @property {string} [discordBotKeyFile]  Discord の Bot の鍵のファイル名(role.json に書いてあって形が合うときだけ持つ・
  *   無ければ既定 `.env.discord.local`・roleDiscordBotKeyFile)。
+ * @property {true} [discordBotKeyFileInvalid]  role.json の discordBotKeyFile が書いてあるのに形が合わなかった印(Discord モード
+ *   Domain E・値は持たない)。Discord の入口はこの印があれば既定の鍵で入らずに断る(roleDiscordBotKeyFileRefused・設計 §5)。
  */
 
 /** @param {unknown} value @returns {string | null} */
@@ -183,8 +189,40 @@ export function normalizeRole(id, raw) {
     speakStartMode: ROLE_SPEAK_START_MODES.includes(r.speakStartMode) ? r.speakStartMode : ROLE_DEFAULTS.speakStartMode,
     body: typeof r.body === "boolean" ? r.body : ROLE_DEFAULTS.body,
     // Discord モード Domain D: 鍵のファイル名(形が合うときだけ持つ・無ければ既定・今の項目の形は変えない)。
-    ...(isDiscordBotKeyFileName(r.discordBotKeyFile) ? { discordBotKeyFile: r.discordBotKeyFile } : {})
+    ...(isDiscordBotKeyFileName(r.discordBotKeyFile) ? { discordBotKeyFile: r.discordBotKeyFile } : {}),
+    // Discord モード Domain E: 書いてあるのに形が合わない(値は持たない・入口で断る印)。
+    ...(isInvalidDiscordBotKeyFile(r.discordBotKeyFile) ? { discordBotKeyFileInvalid: /** @type {const} */ (true) } : {})
   });
+}
+
+/**
+ * role.json の discordBotKeyFile が「書いてあるのに形が合わない」か(undefined と null は書いていない)。
+ * @param {unknown} value
+ */
+function isInvalidDiscordBotKeyFile(value) {
+  return value !== undefined && value !== null && !isDiscordBotKeyFileName(value);
+}
+
+/**
+ * Discord の入口がこのロールで入るのを断るか(Discord モード Domain E・設計 §5)。role.json の discordBotKeyFile が書いてあるのに
+ * 形が合わないとき true(既定の鍵で黙って別の Bot としてログインしない)。書いていない・形が合うときは false。
+ * @param {Readonly<Role> | null | undefined} role
+ * @returns {boolean}
+ */
+export function roleDiscordBotKeyFileRefused(role) {
+  if (!role || typeof role !== "object") return false;
+  return role.discordBotKeyFileInvalid === true && !isDiscordBotKeyFileName(role.discordBotKeyFile);
+}
+
+/**
+ * 書き戻しの形(Discord モード Domain E): 形が合う名前はそのまま、形の合わなかった印は "" (形の合わない値・読み直しても断る)、
+ * どちらでもなければ項目なし。
+ * @param {any} role
+ */
+function discordBotKeyFileJson(role) {
+  if (isDiscordBotKeyFileName(role.discordBotKeyFile)) return { discordBotKeyFile: role.discordBotKeyFile };
+  if (role.discordBotKeyFileInvalid === true) return { discordBotKeyFile: "" };
+  return {};
 }
 
 /**
@@ -220,7 +258,7 @@ export function roleToJson(role) {
     verbosity: role.verbosity,
     speakStartMode: role.speakStartMode,
     body: role.body,
-    ...(isDiscordBotKeyFileName(role.discordBotKeyFile) ? { discordBotKeyFile: role.discordBotKeyFile } : {})
+    ...discordBotKeyFileJson(role)
   };
 }
 
@@ -432,7 +470,7 @@ function roleToJsonLoose(role) {
     verbosity: role.verbosity,
     speakStartMode: role.speakStartMode,
     body: role.body,
-    discordBotKeyFile: role.discordBotKeyFile
+    discordBotKeyFile: discordBotKeyFileJson(role).discordBotKeyFile
   };
 }
 

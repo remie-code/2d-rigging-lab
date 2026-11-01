@@ -13,11 +13,17 @@
  *  - OpusScript: 既定は小さな偽物（decode は 20ms・16kHz・モノラルの PCM を返す・中身はパケットの 1 バイト目から作る）。
  *    本物の opusscript を渡せば本物でデコードする。
  *
+ * Discord モード Domain E: voice の束に音を流す部品（createAudioPlayer / createAudioResource / StreamType / AudioPlayerStatus /
+ * NoSubscriberBehavior・src/test-support/fake-discord-audio.mjs）を足し、偽の接続に `subscribe(player)` を足した。返り値の `audio` で
+ * 20ms の周期を進める（`audio.step(n)`）。D の口とふるまいは変えていない。
+ *
  * ID はどれも明らかに偽の値（`guild-fake-1`・`user-fake-a` など）をテストが決める。
  */
 
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+
+import { createFakeDiscordAudio, fakeSubscribe } from "./fake-discord-audio.mjs";
 
 export const FAKE_VOICE_STATUS = Object.freeze({
   Signalling: "signalling",
@@ -200,6 +206,11 @@ export function createFakeDiscord(options = {}) {
         }
       };
     }
+    /** 音を流すプレイヤーを結ぶ（Domain E）。 @param {any} player */
+    subscribe(player) {
+      if (this.state.status === FAKE_VOICE_STATUS.Destroyed) return undefined;
+      return fakeSubscribe(this, player);
+    }
     /** @param {string} status */
     setStatus(status) {
       const old = this.state;
@@ -247,9 +258,21 @@ export function createFakeDiscord(options = {}) {
     });
   };
 
+  const audio = createFakeDiscordAudio();
   const libraries = {
     discord: { Client, Events: FAKE_EVENTS, GatewayIntentBits: FAKE_INTENTS, ChannelType: FAKE_CHANNEL_TYPE },
-    voice: { joinVoiceChannel, entersState, VoiceConnectionStatus: FAKE_VOICE_STATUS, EndBehaviorType: FAKE_END_BEHAVIOR },
+    voice: {
+      joinVoiceChannel,
+      entersState,
+      VoiceConnectionStatus: FAKE_VOICE_STATUS,
+      EndBehaviorType: FAKE_END_BEHAVIOR,
+      // Domain E: 音を流す部品。
+      createAudioPlayer: audio.createAudioPlayer,
+      createAudioResource: audio.createAudioResource,
+      StreamType: audio.StreamType,
+      AudioPlayerStatus: audio.AudioPlayerStatus,
+      NoSubscriberBehavior: audio.NoSubscriberBehavior
+    },
     OpusScript: options.OpusScript ?? FakeOpusScript
   };
 
@@ -260,6 +283,8 @@ export function createFakeDiscord(options = {}) {
 
   return {
     libraries,
+    /** 音を流す部品（Domain E・`audio.step(n)` で 20ms の周期を進める・`audio.players`・`audio.resources`・`audio.record`）。 */
+    audio,
     /** Discord の体験の口の loadLibraries に渡す口（呼ばれた回数を数える）。 */
     loadLibraries: async () => {
       record.loadCount += 1;
