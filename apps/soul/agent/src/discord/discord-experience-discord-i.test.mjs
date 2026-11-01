@@ -512,6 +512,35 @@ test("Domain I 閉じる: VC にいない間でも冪等に畳む（差し口に
   assert.equal(h.fake.record.destroyedClients, 1, "二重に畳まない");
 });
 
+test("全体の突き合わせ（2 回目）§3-1 抜けるの途中に閉じる: 人の耳の畳み・出口の hold の畳みを待つ間に閉じたら、出口は hold なしで外す（「VC にいない」の口を残さない）", async () => {
+  // (1) 人の耳の畳みを待つ間に閉じた: 出口は hold なしで 1 回だけ畳む。
+  const a = await openWithSpeaker();
+  a.ears[0].dispose = async () => {
+    await tick(80);
+    a.ears[0].disposed = true;
+  };
+  const leavingA = a.discord.vc.leave();
+  await tick(10);
+  await a.discord.closeEntrance({ hadEars: true, shutdown: false }, a.venue);
+  await leavingA;
+  assert.deepEqual(a.outlets[0].disposals.map((d) => d.hold), [false], "閉じたあとは hold で畳まない");
+  assert.equal(a.discord.connectionStatus(), null);
+  // (2) 出口の hold の畳みを待つ間に閉じた: hold で畳んだあと、同じ出口の hold なしの dispose で外す。
+  const b = await openWithSpeaker();
+  const outlet = b.outlets[0];
+  const plainDispose = outlet.dispose;
+  outlet.dispose = async (/** @type {any} */ options) => {
+    plainDispose(options);
+    if (options?.hold) await tick(40);
+  };
+  const leavingB = b.discord.vc.leave();
+  await waitUntil(() => outlet.disposals.length === 1);
+  await b.discord.closeEntrance({ hadEars: true, shutdown: false }, b.venue);
+  await leavingB;
+  assert.deepEqual(outlet.disposals.map((d) => d.hold), [true, false], "hold で残した口を外す");
+  assert.equal(b.fake.record.destroyedClients, 1);
+});
+
 test("Domain I 一覧（Domain K のための口）: 体験の client の guild から同じサーバーの VC だけ（人数は Bot 自身を除く・今いる VC の印）・2 本目のログインはしない", async () => {
   const h = await openWithSpeaker();
   try {

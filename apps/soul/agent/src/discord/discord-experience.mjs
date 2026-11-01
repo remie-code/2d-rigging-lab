@@ -930,12 +930,24 @@ export function createDiscordExperience(deps) {
     if (c.outlet) {
       const outlet = c.outlet;
       c.outlet = null;
+      // 全体の突き合わせ（2 回目）§3-1: 人の耳の畳みを待つ間に場が閉じた（teardown は x.link が null なので、この出口にも
+      // x.heldOutlet にも触れずに終わっている）なら、「VC にいない」の口を残さず hold なしで外す（次の配信の場は手元の再生器）。
+      const hold = how.hold && !x.closed;
       try {
-        await (how.hold ? outlet.dispose?.({ hold: true }) : outlet.dispose?.());
+        await (hold ? outlet.dispose?.({ hold: true }) : outlet.dispose?.());
       } catch {
         // best-effort
       }
-      if (how.hold) x.heldOutlet = outlet;
+      if (hold && x.closed) {
+        // hold で畳む途中に閉じた: 残した口を同じ出口の hold なしの dispose で外す。
+        try {
+          await outlet.dispose?.();
+        } catch {
+          // best-effort
+        }
+      } else if (hold) {
+        x.heldOutlet = outlet;
+      }
     }
     if (c.connection) {
       try {

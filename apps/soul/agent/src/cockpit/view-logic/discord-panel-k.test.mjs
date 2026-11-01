@@ -140,10 +140,23 @@ test("Domain K 手動の Fire: Discord の場で VC にいない間・入って�
   assert.deepEqual(manualFireStreamView(discordStream("joining")), { blocked: true, note: "VC に入ると押せる" });
   assert.deepEqual(manualFireStreamView(discordStream("joined")), { blocked: false, note: "" });
   assert.deepEqual(manualFireStreamView(discordStream("disconnected")), { blocked: false, note: "" }, "切れた間はサーバも断らない");
-  // 場が開いていない間は今までどおり「配信を始めると押せる」（Discord の場の開きかけ・閉じかけも）。
+  // 全体の突き合わせ（2 回目）・K の持ち越し: Discord の場の開きかけ・閉じかけも押せず、注記は「VC に入ると押せる」
+  // （前は「配信を始めると押せる」のままだった）。
   assert.deepEqual(manualFireStreamView({ phase: "opening", experience: "discord", connection: "joining" }), {
     blocked: true,
-    note: "配信を始めると押せる"
+    note: DISCORD_FIRE_NOT_IN_VC_NOTE
+  });
+  assert.deepEqual(manualFireStreamView({ phase: "opening", experience: "discord", connection: null }), {
+    blocked: true,
+    note: "VC に入ると押せる"
+  });
+  assert.deepEqual(manualFireStreamView({ phase: "closing", experience: "discord", connection: "joined" }), {
+    blocked: true,
+    note: "VC に入ると押せる"
+  });
+  assert.deepEqual(manualFireStreamView({ phase: "closing", experience: "discord", connection: "outside" }), {
+    blocked: true,
+    note: "VC に入ると押せる"
   });
   assert.equal(discordFireBlockedByVc(discordStream("outside")), true);
   assert.equal(discordFireBlockedByVc(discordStream("joined")), false);
@@ -154,6 +167,20 @@ test("Domain K 手動の Fire（配信は変わらない）: 配信の場・閉�
   assert.deepEqual(manualFireStreamView({ phase: "open", experience: "stream", connection: "outside" }), { blocked: false, note: "" });
   assert.deepEqual(manualFireStreamView({ phase: "closed" }), { blocked: true, note: "配信を始めると押せる" });
   assert.deepEqual(manualFireStreamView(null), { blocked: false, note: "" });
+  // 全体の突き合わせ（2 回目）: Discord の開きかけ・閉じかけの語を足しても、配信の条件の出力は一字も変わらない。
+  for (const phase of ["closed", "opening", "closing"]) {
+    for (const experience of [undefined, null, "stream"]) {
+      for (const connection of [undefined, null, "joining", "outside"]) {
+        assert.deepEqual(
+          manualFireStreamView(/** @type {any} */ ({ phase, experience, connection })),
+          { blocked: true, note: "配信を始めると押せる" },
+          `${phase}/${experience}/${connection}`
+        );
+      }
+    }
+  }
+  assert.deepEqual(manualFireStreamView({ phase: "open", experience: null, connection: null }), { blocked: false, note: "" });
+  assert.deepEqual(manualFireStreamView({ phase: "open" }), { blocked: false, note: "" });
   assert.equal(discordFireBlockedByVc({ phase: "open", experience: "stream", connection: "outside" }), false);
 });
 
