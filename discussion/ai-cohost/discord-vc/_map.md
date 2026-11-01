@@ -33,7 +33,7 @@
 ## 3. Next Actions
 
 1. 進め方(scope §15): 受信の試し(済み・合格) → 配信の組み直し(済み) → **Discord を足す(実装中、2026-10-31〜)**。
-2. 設計 [../architecture/discord-mode.md](../architecture/discord-mode.md)(Accepted)、wave 計画 [../implementation/orchestration/discord-mode-wave-plan.md](../implementation/orchestration/discord-mode-wave-plan.md)。ブランチ `ai-cohost/discord-mode`。
+2. 設計 [../architecture/discord-mode.md](../architecture/discord-mode.md)(Accepted。人間ゲート 2 のあと §13「体験と VC 接続を分ける」を追加・Accepted 2026-11-01。結果と決まったことは [../implementation/waves/discord-mode/human-gate-2-result.md](../implementation/waves/discord-mode/human-gate-2-result.md))、wave 計画 [../implementation/orchestration/discord-mode-wave-plan.md](../implementation/orchestration/discord-mode-wave-plan.md)。ブランチ `ai-cohost/discord-mode`。
 
 ## 4. Unresolved Questions
 
