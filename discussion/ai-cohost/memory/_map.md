@@ -20,6 +20,7 @@
 | [recall-flow.md](recall-flow.md) | 記憶の役(①チャッピー・②書き出し役・③整理役・④思い出し役)、置き場、思い出す流れ、直近の範囲、git 管理と目印の書式。context-check 前の合意 |
 | [conventions-draft.md](conventions-draft.md) | 記憶の置き場の決まり(`memories/_conventions.md`)の本文。ユーザー確認済み |
 | [../implementation/orchestration/memory-recall-wave-plan.md](../implementation/orchestration/memory-recall-wave-plan.md) | 実装の wave 計画(実装済み・人間ゲート待ち) |
+| [writer-garble-2026-11-01.md](writer-garble-2026-11-01.md) | 2026-11-01 の配信で最初の途中保存が「?」に化けた件。原因の推定(PowerShell 5.1 のパイプが ASCII)・掃除(済み)・直し(指示を足す + 化けたら取り消してやり直す。計画 discord-mode §8 Domain L) |
 | [research/associative-recall-literature-2026-10.md](research/associative-recall-literature-2026-10.md) | 文献調査: 人間はなぜ話題をまたいで思い出せるか(手がかり・表面と構造の類似・きっかけ)と、LLM エージェントの記憶設計の事例 |
 | [research/brain-tools-2026-10.md](research/brain-tools-2026-10.md) | 棚卸し: 頭のツール制限(Codex は read-only + never、Claude は tools:[])と、独自ツールを足す手段(Claude SDK の in-process MCP、Codex の dynamicTools) |
 

@@ -242,6 +242,12 @@ function makeFakeCommit(events, result = { ok: true, committed: true, commit: "a
   return { commitImpl, calls };
 }
 
+/**
+ * 偽物のコミット（ハッシュも偽物）と組む「足された行」の口（化けなし・Discord モード Domain L）。偽物のハッシュを
+ * 本物の git に読ませないため、警告の並びまで確かめるテストで渡す。
+ */
+const cleanAddedLines = async () => /** @type {const} */ ({ ok: true, lines: [] });
+
 const RECORD = Object.freeze({ dateJst: "2026-10-21", baseName: "2026-10-21" });
 
 test("writeStreamRecord: ②を cwd=記憶のフォルダ・workspace-write・最後の答えだけで作り、ask→dispose→commit の順", async (t) => {
@@ -388,6 +394,7 @@ test("writeStreamRecord: 1 回目の保存で②が書かずに答えたら、�
     record: RECORD,
     dir,
     commitImpl: commit.commitImpl,
+    addedLinesImpl: cleanAddedLines,
     onWarning: (w) => warnings.push(w)
   });
   assert.deepEqual(result, { written: true, commit: { ok: true, committed: true, commit: "def5678" } });
@@ -428,6 +435,7 @@ test("writeStreamRecord: 2 回目以降の保存で、コミットが変更な�
     record: RECORD,
     dir,
     commitImpl: commit.commitImpl,
+    addedLinesImpl: cleanAddedLines,
     onWarning: (w) => warnings.push(w)
   });
   assert.deepEqual(result, { written: true, commit: { ok: true, committed: true, commit: "def5678" } });

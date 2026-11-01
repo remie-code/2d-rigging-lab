@@ -1024,6 +1024,39 @@ test("createMemoryRecorder: written:false（空転写など）では onSaved を
   assert.equal(saved.length, 0);
 });
 
+test("createMemoryRecorder + noteSaved: 書き込みが「?」に化けて記録できなかった（written:false・garbled）ときは記録時刻を進めない（Discord モード Domain L）", { timeout: 5000 }, async () => {
+  /** @type {any[]} */
+  const results = [
+    { written: false, garbled: true, commit: { ok: true, committed: true, commit: "abc1234" } },
+    { written: true, commit: { ok: true, committed: true, commit: "def5678" } }
+  ];
+  /** @type {any} */
+  let venue = null;
+  const recorder = createMemoryRecorder({
+    getLiveEntries: () => [],
+    writeImpl: async () => results.shift(),
+    onSaved: (info) => venue.noteSaved(info)
+  });
+  venue = createStreamVenueHooks({
+    memoryPlaces: { beginStream() {}, place: () => null, streamNo: () => 0 },
+    memoryRecorder: recorder,
+    openSession: () => {},
+    closeSession: async () => {},
+    hasBody: () => false,
+    channel: { getUrl: () => null, connect: async () => {}, close: async () => {} }
+  });
+  const entries = [
+    { text: "ダミーA", speaker: "you" },
+    { text: "ダミーB", speaker: "soul" }
+  ];
+  await recorder.record(entries);
+  assert.equal(venue.lastRecordedSeq(), 0, "化けで記録できなかった保存は数えない");
+  assert.equal(venue.lastRecordAtMs(), null);
+  // 次の保存で書けたら、そこで数える（次の定期保存で書き直される）。
+  await recorder.record(entries);
+  assert.equal(venue.lastRecordedSeq(), 2);
+});
+
 test("createMemoryRecorder: entriesOverride 指定時はライブ転写（getLiveEntries）を呼ばない", { timeout: 5000 }, async () => {
   const w = makeControlledWrite();
   let liveCalls = 0;

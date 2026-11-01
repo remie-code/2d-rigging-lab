@@ -16,6 +16,9 @@
  *     `_conventions.md` が無ければ種(conventions-seed.md)から置く。あれば触らない(③整理役が将来書き換える)。
  *  2. commitMemoryChanges: 変更があれば全部を add してコミットする。本文は「誰が(役名)・いつ」だけで、
  *     記憶の中身(ファイル名・差分)は書かない。変更が無ければ何もしない。
+ *  3. readCommitAddedLines / revertMemoryCommit(Discord モード Domain L): 1 つのコミットで足された行を返す・
+ *     そのコミットを `git revert` で取り消す(書き出し役の書き込みが「?」に化けたときの取り消し。化けかどうかの
+ *     見分けは呼び出し側 mind/memory.mjs)。
  *
  * ── 魂は記憶の中身について判断しない ─────────────────────────────────────
  *  ここはフォルダの形(トピック・目次)を知らない。書くのは②③の役、ここは「全部をコミットする」だけ。
@@ -322,4 +325,128 @@ export async function commitMemoryChanges(options) {
   const head = await runGit(pinnedGitArgs(dir, ["rev-parse", "HEAD"]), dir, gitOptions);
   if (head.error) return { ok: false, error: describeFailure("git rev-parse", head) };
   return { ok: true, committed: true, commit: head.stdout.trim() };
+}
+
+/**
+ * 記憶のフォルダのコミットを指す引数として受ける形(`HEAD` か、16 進のハッシュ)。`-` で始まる値などを
+ * git のオプションとして読ませないための入口の縛り。
+ * @param {unknown} commit
+ * @returns {commit is string}
+ */
+function isCommitRef(commit) {
+  return typeof commit === "string" && (commit === "HEAD" || /^[0-9a-f]{4,64}$/i.test(commit));
+}
+
+/**
+ * 記憶のフォルダの準備と引数の確かめ(commitMemoryChanges と同じ入口・git を呼ぶ前に止める)。
+ * @param {unknown} dir
+ * @param {unknown} commit
+ * @returns {string | null}  止める理由(無ければ null)。
+ */
+function checkCommitTarget(dir, commit) {
+  if (typeof dir !== "string" || dir.length === 0) return "dir is required (a role's memory folder)";
+  if (!isCommitRef(commit)) return "commit must be HEAD or a commit hash";
+  // `.git` が無いまま git を呼ぶと親リポジトリを触りうる。呼ぶ前に止める。
+  if (!existsSync(join(dir, ".git"))) return "memory folder is not prepared (no .git)";
+  return null;
+}
+
+/**
+ * unified diff(-U0)から足された行を取り出す純関数。ファイルの見出し(`diff `・`---`・`+++`・`Binary files`)は
+ * 読み飛ばし、`@@` の後ろの `+` 行だけを拾う(本文が `++` で始まる行も見出しと取り違えない)。
+ * @param {string} diff
+ * @returns {string[]}
+ */
+export function parseAddedLines(diff) {
+  /** @type {string[]} */
+  const added = [];
+  let inHunk = false;
+  for (const line of String(diff).split(/\r?\n/)) {
+    if (line.startsWith("diff ")) {
+      inHunk = false;
+      continue;
+    }
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    if (inHunk && line.startsWith("+")) added.push(line.slice(1));
+  }
+  return added;
+}
+
+/**
+ * @typedef {{ ok: true; lines: string[] } | { ok: false; error: string }} AddedLinesResult
+ */
+
+/**
+ * 記憶のフォルダの 1 つのコミットで足された行を返す(書き出し役の書き込みの化けの確かめ・Discord モード Domain L)。
+ * **throw しない**。`dir` は省略できない。`commit` は既定 `HEAD`(ハッシュも受ける)。
+ *  - `git diff-tree --root`(親の無いルートのコミットでも、空の木との差分として動く)で、色・外部 diff・textconv を切り、
+ *    前後の文脈 0 行の差分を取る(ユーザーの global 設定に左右されない)。バイナリのファイルは無視する。
+ *  - `.git` が無ければ git を呼ばずに失敗で返す。
+ * @param {{ dir: string; commit?: string } & GitOptions} options
+ * @returns {Promise<AddedLinesResult>}
+ */
+export async function readCommitAddedLines(options) {
+  const dir = options?.dir;
+  const commit = options?.commit ?? "HEAD";
+  const gitOptions = { gitPath: options?.gitPath, timeoutMs: options?.timeoutMs };
+  const stop = checkCommitTarget(dir, commit);
+  if (stop) return { ok: false, error: stop };
+
+  const diff = await runGit(
+    pinnedGitArgs(/** @type {string} */ (dir), [
+      "diff-tree",
+      "--root",
+      "-r",
+      "-p",
+      "--no-commit-id",
+      "--no-color",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--no-renames",
+      "--unified=0",
+      String(commit),
+      "--"
+    ]),
+    /** @type {string} */ (dir),
+    gitOptions
+  );
+  if (diff.error) return { ok: false, error: describeFailure("git diff-tree", diff) };
+  return { ok: true, lines: parseAddedLines(diff.stdout) };
+}
+
+/**
+ * @typedef {{ ok: true; commit: string } | { ok: false; error: string }} RevertResult
+ */
+
+/**
+ * 記憶のフォルダの 1 つのコミットを `git revert --no-edit` で取り消す(取り消しのコミットを積む・履歴は書き換えない・
+ * Discord モード Domain L)。**throw しない**。`dir` は省略できない。`commit` は既定 `HEAD`(ハッシュも受ける)。
+ *  - 親の無いルートのコミットも取り消せる(足したファイルを消すコミットになる)。
+ *  - 取り消しのコミットの作者・本文は git のまま(作者は prepareMemoryFolder が入れたローカル設定・本文は
+ *    `Revert "<元の本文>"` で、元の本文は役名と日時だけ)。
+ *  - 失敗したら途中の状態を残さないよう `git revert --abort` を試みる(best-effort)。
+ *  - `.git` が無ければ git を呼ばずに失敗で返す。
+ * @param {{ dir: string; commit?: string } & GitOptions} options
+ * @returns {Promise<RevertResult>}
+ */
+export async function revertMemoryCommit(options) {
+  const dir = options?.dir;
+  const commit = options?.commit ?? "HEAD";
+  const gitOptions = { gitPath: options?.gitPath, timeoutMs: options?.timeoutMs };
+  const stop = checkCommitTarget(dir, commit);
+  if (stop) return { ok: false, error: stop };
+  const folder = /** @type {string} */ (dir);
+
+  const revert = await runGit(pinnedGitArgs(folder, ["revert", "--no-edit", String(commit)]), folder, gitOptions);
+  if (revert.error) {
+    await runGit(pinnedGitArgs(folder, ["revert", "--abort"]), folder, gitOptions); // best-effort。
+    return { ok: false, error: describeFailure("git revert", revert) };
+  }
+
+  const head = await runGit(pinnedGitArgs(folder, ["rev-parse", "HEAD"]), folder, gitOptions);
+  if (head.error) return { ok: false, error: describeFailure("git rev-parse", head) };
+  return { ok: true, commit: head.stdout.trim() };
 }
