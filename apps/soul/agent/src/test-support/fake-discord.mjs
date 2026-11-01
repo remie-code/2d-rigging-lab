@@ -83,7 +83,8 @@ export const OPUS_SILENCE_FRAME = Buffer.from([0xf8, 0xff, 0xfe]);
 
 /**
  * @typedef {{ id: string; name: string; type?: number; rawPosition?: number }} FakeChannelSpec
- * @typedef {{ id: string; name: string; channels?: FakeChannelSpec[]; members?: Record<string, string>; voiceStates?: Record<string, string> }} FakeGuildSpec
+ * @typedef {{ id: string; name: string; channels?: FakeChannelSpec[]; members?: Record<string, string>; voiceStates?: Record<string, string>; bots?: string[] }} FakeGuildSpec
+ *   bots（Discord モード Domain K）: Bot の userId。members.fetch がその人の `user.bot` を true で返す（もういる人の行で除く）。
  */
 
 /**
@@ -163,7 +164,8 @@ export function createFakeDiscord(options = {}) {
           record.memberFetches.push(userId);
           const name = spec.members?.[userId];
           if (typeof name !== "string") throw new Error(`Unknown Member ${userId}`);
-          return { id: userId, displayName: name };
+          // Domain K: user.bot を載せる（本物の GuildMember と同じ形・bots に挙げた人だけ true）。
+          return { id: userId, displayName: name, user: { id: userId, bot: (spec.bots ?? []).includes(userId) } };
         }
       }
     };
@@ -365,7 +367,8 @@ export function createFakeDiscord(options = {}) {
           ? { displayName: change.name ?? null, user: { id: change.userId, bot: change.bot === true } }
           : undefined;
       const cache = voiceStateCache(change.guildId);
-      if (change.to) cache.set(change.userId, { id: change.userId, channelId: change.to });
+      // Domain K: member が分かれば voiceStates の項目にも載せる（本物の VoiceState#member と同じく名前・Bot かを引ける）。
+      if (change.to) cache.set(change.userId, { id: change.userId, channelId: change.to, ...(member ? { member } : {}) });
       else cache.delete(change.userId);
       client()?.emit(
         FAKE_EVENTS.VoiceStateUpdate,

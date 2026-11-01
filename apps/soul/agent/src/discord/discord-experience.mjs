@@ -649,6 +649,8 @@ export function createDiscordExperience(deps) {
   //   - "vc-moved"（Discord の画面で動かされた・追った）・"vc-kicked"（外から切られた = 4014 / Bot 自身が VC の外へ）
   //   - "vc-disconnect"（切れた・猶予のあいだ戻らなかった）・"vc-reconnect"（切れたのがつながり直した）
   //   - "person-join" / "person-leave"（今いる VC の人の入ってきた・出ていった。Bot 自身とほかの Bot は除く）
+  //   - "vc-people"（Discord モード Domain K: 入った・移った・動かされた時点でもういる人。`names`〔名前の分かった人〕・`others`
+  //     〔名前の分からない人の数〕。Bot 自身とほかの Bot は除く。誰もいなければ合図しない）
 
   /**
    * 体験を畳んだあと（x.closed）に遅れて終わった VC 操作・届いた知らせは合図しない（Domain J: 閉じたあとの control の 1 行・
@@ -678,6 +680,56 @@ export function createDiscordExperience(deps) {
 
   /** その VoiceState の人が Bot か（分からなければ false）。 @param {any} state */
   const memberIsBot = (state) => state?.member?.user?.bot === true;
+
+  /** もういる人の行で名前を引く人数の上限（これを超えた人は名前を引かずに数だけ・行の側も「ほか N 人」に畳む）。 */
+  const PRESENT_NAME_LOOKUP_MAX = 20;
+
+  /**
+   * 入った・移った・動かされた時点で今いる VC にもういる人を、出来事の 1 行の合図（vc-people）にする（Discord モード Domain K・
+   * J の持ち越し 2）。人は guild の voiceStates から（Bot 自身を除く）。名前は member の displayName（手元に無ければ members.fetch。
+   * 取れなければ名前なしの 1 人に数える）。ほかの Bot は除く。誰もいなければ合図しない。名前は合図の中だけ（ログには書かない）。
+   * 判定・発火には回らない（場の側が出来事の行として正本に足すだけ）。待たない（失敗しても入口の操作を止めない）。
+   * @param {any} x @param {any} c
+   */
+  const announcePresent = async (x, c) => {
+    try {
+      if (!c || !linkLive(x, c)) return;
+      const channelId = c.channelId;
+      const states = [...(x.guild?.voiceStates?.cache?.values?.() ?? [])].filter(
+        (vs) => vs && vs.channelId === channelId && typeof vs.id === "string" && vs.id !== x.botId
+      );
+      if (states.length === 0) return;
+      const looked = await Promise.all(
+        states.slice(0, PRESENT_NAME_LOOKUP_MAX).map(async (vs) => {
+          /** @type {any} */
+          let member = vs.member ?? null;
+          if (!member) {
+            try {
+              member = await x.guild.members.fetch(vs.id);
+            } catch {
+              member = null;
+            }
+          }
+          if (member?.user?.bot === true) return { bot: true, name: null };
+          const raw = member && typeof member.displayName === "string" ? member.displayName.trim() : "";
+          return { bot: false, name: raw.length > 0 ? raw : null };
+        })
+      );
+      if (!linkLive(x, c) || c.channelId !== channelId) return;
+      /** @type {string[]} */
+      const names = [];
+      let others = Math.max(0, states.length - PRESENT_NAME_LOOKUP_MAX);
+      for (const p of looked) {
+        if (p.bot) continue;
+        if (p.name) names.push(p.name);
+        else others += 1;
+      }
+      if (names.length === 0 && others === 0) return;
+      emitVc(x, { kind: "vc-people", channelName: c.channelName, names: Object.freeze(names), others });
+    } catch {
+      // best-effort（もういる人の行の失敗で入口を止めない）。
+    }
+  };
 
   /**
    * VC への入退室（client の VoiceStateUpdate）。**今いる VC**（x.link の channelId）を見る:
@@ -734,7 +786,10 @@ export function createDiscordExperience(deps) {
     const people = [...c.people.values()];
     for (const person of people) void dropPerson(x, c, person);
     say(`moved by someone (dropped speakers ${people.length})`);
-    const notify = () => emitVc(x, { kind: "vc-moved", fromChannelName: fromName, channelName: c.channelName });
+    const notify = () => {
+      emitVc(x, { kind: "vc-moved", fromChannelName: fromName, channelName: c.channelName });
+      void announcePresent(x, c);
+    };
     if (c.channelName != null) {
       notifyChanged(x);
       notify();
@@ -1251,6 +1306,7 @@ export function createDiscordExperience(deps) {
       const joined = await joinLink(x, resolved.channel);
       if (!joined.ok) return refuse(joined.reason);
       emitVc(x, { kind: "vc-join", via: "open", channelName: x.link?.channelName ?? null });
+      void announcePresent(x, x.link);
       return { ok: true, ears: x.ears };
     } catch {
       return refuse(DISCORD_REASONS.unexpectedOpen);
@@ -1329,6 +1385,7 @@ export function createDiscordExperience(deps) {
         return r;
       }
       emitVc(x, { kind: "vc-join", via: "panel", channelName: x.link?.channelName ?? null });
+      void announcePresent(x, x.link);
       return { ok: true };
     });
   }
@@ -1376,6 +1433,7 @@ export function createDiscordExperience(deps) {
         return r;
       }
       emitVc(x, { kind: "vc-move", fromChannelName: fromName, channelName: x.link?.channelName ?? null });
+      void announcePresent(x, x.link);
       return { ok: true };
     });
   }
@@ -1383,7 +1441,8 @@ export function createDiscordExperience(deps) {
   /**
    * 体験の client の guild から、同じサーバーのボイスチャンネルの一覧（名前・人数〔Bot 自身を除く voiceStates の数〕・今いるか）を
    * 取る（Domain K のための口・2 本目のログインはしない）。id は API の応答にだけ載せる（snapshot・ログには載せない）。
-   * @returns {Promise<{ ok: true; channels: Array<{ id: string; name: string; people: number; current: boolean }> } | { ok: false; code: string; reason: string }>}
+   * Domain K: サーバーの名前（guildName・パネルの「サーバー」の欄・取れなければ null）も返す。
+   * @returns {Promise<{ ok: true; channels: Array<{ id: string; name: string; people: number; current: boolean }>; guildName: string | null } | { ok: false; code: string; reason: string }>}
    */
   async function listVoiceChannels() {
     const x = experience;
@@ -1412,7 +1471,8 @@ export function createDiscordExperience(deps) {
       .filter((ch) => ch && typeof ch.isVoiceBased === "function" && ch.isVoiceBased() && (voiceType === undefined || ch.type === voiceType))
       .sort((a, b) => (a.rawPosition ?? a.position ?? 0) - (b.rawPosition ?? b.position ?? 0))
       .map((ch) => ({ id: String(ch.id), name: String(ch.name ?? ""), people: counts.get(String(ch.id)) ?? 0, current: String(ch.id) === current }));
-    return { ok: true, channels };
+    const guildName = typeof x.guild.name === "string" && x.guild.name.trim().length > 0 ? x.guild.name.trim() : null;
+    return { ok: true, channels, guildName };
   }
 
   /** @param {string} phase */
@@ -1420,8 +1480,8 @@ export function createDiscordExperience(deps) {
     return phase === "opening"
       ? "VC に入っている途中（少し待ってからもう一度）"
       : phase === "closing"
-        ? "VC から抜けている途中（記録中・少し待ってからもう一度）"
-        : "VC に入っている（抜けてから始め直す）";
+        ? "通話を終えている途中（記録中・少し待ってからもう一度）"
+        : "Discord の通話の途中（下の帯の「通話を終える」のあとで始め直す）";
   }
 
   /** 場を開く・閉じる途中の想定外の例外の文面（生のエラー文は入れない）。 @param {string} phase */
@@ -1534,7 +1594,7 @@ export function createDiscordExperience(deps) {
       experience && !experience.closed && experience.link && !experience.link.closed ? experience.link.channelName ?? null : null,
     /**
      * 入る / 抜ける / 移る と、同じサーバーの VC の一覧（Domain I・POST / GET /api/discord/vc）。結果は `{ ok:true }` か
-     * `{ ok:false, code, reason }`。一覧は `{ ok:true, channels: [{ id, name, people, current }] }`。
+     * `{ ok:false, code, reason }`。一覧は `{ ok:true, channels: [{ id, name, people, current }], guildName }`（guildName は Domain K）。
      */
     vc: Object.freeze({ join: joinVoice, leave: leaveVoice, move: moveVoice, list: listVoiceChannels }),
     catalog,

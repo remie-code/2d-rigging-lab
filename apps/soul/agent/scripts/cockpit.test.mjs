@@ -930,7 +930,8 @@ test("createMemoryRecorder: 1 回の保存で writeImpl を呼び、成り立て
   assert.deepEqual(w.calls, [["a", "b"]]);
   w.pending[0].resolve({ written: true, commit: { ok: true, committed: true, commit: "abc" } });
   await done;
-  assert.deepEqual(saved, [{ atMs: 4242, entriesLength: 2, commit: { ok: true, committed: true, commit: "abc" } }]);
+  // Discord モード Domain K: 保存の要否の数え（出来事の行を除いた件数）も渡す。
+  assert.deepEqual(saved, [{ atMs: 4242, entriesLength: 2, spokenLength: 2, commit: { ok: true, committed: true, commit: "abc" } }]);
   await recorder.whenIdle();
   assert.equal(recorder.isRecording(), false);
 });

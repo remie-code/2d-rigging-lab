@@ -51,7 +51,9 @@ const LINE_CASES = Object.freeze([
   [{ kind: "vc-disconnect", channelName: "一般" }, "チャッピーの VC「一般」への接続が切れた"],
   [{ kind: "vc-reconnect", channelName: "一般" }, "チャッピーの VC「一般」への接続が戻った"],
   [{ kind: "person-join", channelName: "一般", name: "たろう" }, "たろうが入ってきた"],
-  [{ kind: "person-leave", channelName: "一般", name: "はなこ" }, "はなこが出ていった"]
+  [{ kind: "person-leave", channelName: "一般", name: "はなこ" }, "はなこが出ていった"],
+  // Discord モード Domain K（J の持ち越し 2）: 入った・移った・動かされた時点でもういる人。
+  [{ kind: "vc-people", channelName: "一般", names: ["たろう", "はなこ"], others: 0 }, "VC「一般」にはたろう・はなこがいる"]
 ]);
 
 /** 判定の入力を確かめる転写（人・チャッピー・出来事が混ざる）。 */
@@ -77,7 +79,8 @@ test("Domain J 出来事の行の本文: 種類ごとの全文（チャッピー
     "vc-disconnect",
     "vc-reconnect",
     "person-join",
-    "person-leave"
+    "person-leave",
+    "vc-people"
   ]);
   for (const [event, line] of LINE_CASES) {
     assert.equal(venueEventLineText(event, { soulName: "チャッピー" }), line, JSON.stringify(event));

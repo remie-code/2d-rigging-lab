@@ -89,11 +89,11 @@ test("streamStartView: Discord の場の開きかけ / 閉じかけは「配信�
 
 // ── 2. 入る / 抜ける（下の帯）───────────────────────────────────────────────────
 
-test("endStreamButtonView: Discord の場の間は同じ置き場に「VC から抜ける」（2 回押し）・配信は「配信を終える」のまま", () => {
-  assert.deepEqual(endStreamButtonView({ phase: "open", experience: "discord" }, false), { show: true, text: "VC から抜ける", className: "stream-end" });
+test("endStreamButtonView: Discord の場の間は同じ置き場に「通話を終える」（2 回押し・Domain K で「VC から抜ける」から改めた）・配信は「配信を終える」のまま", () => {
+  assert.deepEqual(endStreamButtonView({ phase: "open", experience: "discord" }, false), { show: true, text: "通話を終える", className: "stream-end" });
   assert.deepEqual(endStreamButtonView({ phase: "open", experience: "discord" }, true), {
     show: true,
-    text: "もう一度押すと VC から抜ける",
+    text: "もう一度押すと通話を終える",
     className: "stream-end armed"
   });
   for (const phase of ["closed", "opening", "closing"]) assert.equal(endStreamButtonView({ phase, experience: "discord" }, false).show, false, phase);

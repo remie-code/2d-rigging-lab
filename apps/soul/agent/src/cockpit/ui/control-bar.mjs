@@ -82,13 +82,14 @@ export function FireButtons({ soulView, localBusy, onFire, onVisionFire, streamB
 
 /**
  * 自発トグル pill（hooks 非使用・vnode 走査テスト対象）。view は selfFireToggleView 導出済み。
+ * label は Discord の操作パネル（Discord モード Domain K）が「自発的にしゃべる」に替える（既定は運転のタブの「自発」）。
  * @param {{ view: { disabled: boolean; checked: boolean; statusText: string; statusClassName: string };
- *           onChange: (ev: any) => void }} props
+ *           onChange: (ev: any) => void; label?: string }} props
  */
-export function SelfFirePill({ view, onChange }) {
+export function SelfFirePill({ view, onChange, label = "自発" }) {
   return html`
     <label class="self-fire-pill">
-      <span class="pill-label">自発</span>
+      <span class="pill-label">${label}</span>
       <input
         type="checkbox"
         class="self-fire-toggle"
@@ -105,13 +106,14 @@ export function SelfFirePill({ view, onChange }) {
  * barge-in トグル pill（「朗読と合いの手」・SelfFirePill の写経・hooks 非使用・vnode 走査テスト対象）。
  * view は bargeInToggleView 導出済み。既定 ON（裁定 1）は server 側 born-disabled の話であり、
  * この部品自体は selfFire pill と同型の controlled component（checked = state 由来・onChange = POST のみ）。
+ * label は Discord の操作パネル（Discord モード Domain K）が「かぶり判定」に替える（既定は運転のタブの「かぶり」）。
  * @param {{ view: { disabled: boolean; checked: boolean; statusText: string; statusClassName: string };
- *           onChange: (ev: any) => void }} props
+ *           onChange: (ev: any) => void; label?: string }} props
  */
-export function BargeInPill({ view, onChange }) {
+export function BargeInPill({ view, onChange, label = "かぶり" }) {
   return html`
     <label class="barge-in-pill">
-      <span class="pill-label">かぶり</span>
+      <span class="pill-label">${label}</span>
       <input
         type="checkbox"
         class="barge-in-toggle"
@@ -203,23 +205,18 @@ export function CommentBusySelect({ commentBusy, onChange }) {
 }
 
 /**
- * 「運転」タブ本体（自発・かぶり・手動の発火）。
- * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
- *           selfFire?: { enabled?: boolean } | null;
- *           bargeIn?: { enabled?: boolean } | null;
- *           stream?: { phase?: string } | null;
- *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
+ * 運転の操作（自発・かぶりのトグルと手動の発火）の POST とローカルの状態（Discord モード Domain K で DrivePanel から切り出した
+ * hook）。運転のタブ（DrivePanel）と Discord の操作パネル（ui/discord-panel.mjs）が同じ API・同じ流れで使う（ふるまいは
+ * 切り出す前の DrivePanel のまま）。
+ * @param {{ setSoul: (s: string) => void; setFireNote: (t: string) => void; applySnapshot: (s: any) => void; fetchImpl?: any }} deps
+ * @returns {{ localBusy: boolean; controlError: string; fireWith: (path: string, kind: "fire" | "vision") => void;
+ *   onToggleSelfFire: (ev: any) => void; onToggleBargeIn: (ev: any) => void }}
  */
-export function DrivePanel({ soul, setSoul, fireNote, setFireNote, selfFire, bargeIn, stream = null, applySnapshot, fetchImpl }) {
+export function useDriveControls({ setSoul, setFireNote, applySnapshot, fetchImpl }) {
   // Fire 連打防止のローカル busy（:556 :574 の即時 disable 相当・応答/失敗で復帰）。
   const [localBusy, setLocalBusy] = useState(false);
   // 自発トグル/barge-in のエラー欄。
   const [controlError, setControlError] = useState("");
-
-  const soulView = soulStatusView(soul);
-  const sfView = selfFireToggleView(selfFire);
-  const biView = bargeInToggleView(bargeIn);
-  const fireStream = manualFireStreamView(stream);
 
   /**
    * Fire / Fire+視覚の共通フロー（:555-570 / :573-589 と同順: 即時 disable → note クリア → POST →
@@ -295,6 +292,31 @@ export function DrivePanel({ soul, setSoul, fireNote, setFireNote, selfFire, bar
       })
       .catch((/** @type {unknown} */ e) => setControlError(bargeInRequestErrorText(e)));
   };
+
+  return { localBusy, controlError, fireWith, onToggleSelfFire, onToggleBargeIn };
+}
+
+/**
+ * 「運転」タブ本体（自発・かぶり・手動の発火）。
+ * @param {{ soul?: string; setSoul: (s: string) => void; fireNote?: string; setFireNote: (t: string) => void;
+ *           selfFire?: { enabled?: boolean } | null;
+ *           bargeIn?: { enabled?: boolean } | null;
+ *           stream?: { phase?: string } | null;
+ *           applySnapshot: (s: any) => void; fetchImpl?: any }} props
+ */
+export function DrivePanel({ soul, setSoul, fireNote, setFireNote, selfFire, bargeIn, stream = null, applySnapshot, fetchImpl }) {
+  const { localBusy, controlError, fireWith, onToggleSelfFire, onToggleBargeIn } = useDriveControls({
+    setSoul,
+    setFireNote,
+    applySnapshot,
+    fetchImpl
+  });
+
+  const soulView = soulStatusView(soul);
+  const sfView = selfFireToggleView(selfFire);
+  const biView = bargeInToggleView(bargeIn);
+  // Discord モード Domain K: Discord の場で VC にいない間・入っている途中も押せない（manualFireStreamView）。
+  const fireStream = manualFireStreamView(stream);
 
   return html`
     <div class="drive-panel">

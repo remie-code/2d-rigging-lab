@@ -18,7 +18,8 @@
  *  - fireNoteFromFireResponse → :561-563 / :580-582 POST /api/fire・/api/vision-fire 応答
  *                                （503 = fire 未結線・fired:false は reason・受理は null = ノートを変えない）
  *  - fireRequestErrorNote     → :566-567 / :585-586 fetch catch（"fire error: e" / "vision fire error: e"）
- *  - manualFireStreamView     → 配信の組み直し Domain E: 場が開いていない間は手動の発火を押せない（サーバも 409）
+ *  - manualFireStreamView     → 配信の組み直し Domain E: 場が開いていない間は手動の発火を押せない（サーバも 409）。
+ *                                Discord モード Domain K: Discord の場で VC にいない間・入っている途中も押せない（注記「VC に入ると押せる」）
  *  - selfFireToggleView       → :324-340 `applySelfFire(sf)`（null = scheduler 未生成 → disable +
  *                                "not available"・それ以外は checked/on/off 導出）
  *  - selfFirePostErrorText    → :645-648 POST /api/self-fire 応答（503 / set failed・成功は null）
@@ -46,6 +47,8 @@
  *  - bargeInRequestErrorText   → POST /api/barge-in の fetch catch（"barge-in error: e"・
  *                                 selfFireRequestErrorText の写経）
  */
+
+import { discordFireBlockedByVc, DISCORD_FIRE_NOT_IN_VC_NOTE } from "./discord.mjs";
 
 /**
  * soul 状態の表示 + Fire/Fire(vision) の busy disable 導出。
@@ -95,7 +98,11 @@ export function fireNoteFromFireResponse(res) {
 export function manualFireStreamView(stream) {
   const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
   const blocked = phase != null && phase !== "open";
-  return { blocked, note: blocked ? "配信を始めると押せる" : "" };
+  if (blocked) return { blocked, note: "配信を始めると押せる" };
+  // Discord モード Domain K（設計 §13.3）: Discord の場で VC にいない間・入っている途中は押せない（サーバも not-in-vc で断る）。
+  // 配信の場は stream.experience が "discord" でないので今のまま。
+  if (discordFireBlockedByVc(/** @type {any} */ (stream))) return { blocked: true, note: DISCORD_FIRE_NOT_IN_VC_NOTE };
+  return { blocked, note: "" };
 }
 
 /**

@@ -67,8 +67,10 @@ function makeFake() {
           { id: TEXT_CHANNEL, name: "文字", type: FAKE_CHANNEL_TYPE.GuildText, rawPosition: 0 },
           { id: STAGE_CHANNEL, name: "舞台", type: FAKE_CHANNEL_TYPE.GuildStageVoice, rawPosition: 4 }
         ],
-        members: { [USER_A]: NAME_A, [USER_B]: NAME_B },
-        voiceStates: { [USER_B]: CHANNEL_2, [BOT_OTHER]: CHANNEL_2 }
+        members: { [USER_A]: NAME_A, [USER_B]: NAME_B, [BOT_OTHER]: "ほかの Bot" },
+        voiceStates: { [USER_B]: CHANNEL_2, [BOT_OTHER]: CHANNEL_2 },
+        // Discord モード Domain K: もういる人の行でほかの Bot を除くため、BOT_OTHER を Bot として引けるようにする。
+        bots: [BOT_OTHER]
       },
       { id: OTHER_GUILD, name: "よそのサーバー", channels: [{ id: OTHER_GUILD_CHANNEL, name: "よその VC" }] }
     ]
@@ -282,7 +284,12 @@ test("Domain I 移る: 抜ける + 入る（destroy して入り直す）・前�
     assert.equal(h.outlets[1].connection, second, "出口は新しい接続に");
     assert.deepEqual(h.calls, ["hushVoice", "pauseEars", "outlet.open", "earsListening"]);
     assert.equal(h.discord.voiceChannelName(), VC_2);
-    assert.deepEqual(h.events.at(-1), { kind: "vc-move", fromChannelName: VC_1, channelName: VC_2 });
+    // Discord モード Domain K（J の持ち越し 2）: 移った合図のあとに、移った先にもういる人（ほかの Bot は除く）の合図。
+    await waitUntil(() => h.events.some((e) => e.kind === "vc-people"));
+    assert.deepEqual(h.events.slice(-2), [
+      { kind: "vc-move", fromChannelName: VC_1, channelName: VC_2 },
+      { kind: "vc-people", channelName: VC_2, names: [NAME_B], others: 0 }
+    ]);
     // 人の耳は新しい接続の receiver から作る。
     h.fake.speak(USER_B);
     await waitUntil(() => h.ears.length === 2 && h.ears[1].started);
@@ -515,7 +522,9 @@ test("Domain I 一覧（Domain K のための口）: 体験の client の guild 
         { id: CHANNEL, name: VC_1, people: 0, current: true },
         { id: CHANNEL_2, name: VC_2, people: 2, current: false },
         { id: CHANNEL_3, name: VC_3, people: 0, current: false }
-      ]
+      ],
+      // Discord モード Domain K: パネルのサーバー名（体験の client の guild の名前）。
+      guildName: "試しのサーバー"
     });
     assert.equal(h.fake.record.clients.length, 1, "ログインし直さない");
     h.fake.voiceState({ userId: USER_A, guildId: GUILD, from: null, to: CHANNEL });
@@ -532,6 +541,8 @@ test("Domain I 守り: ログに VC の名前・人の名前・Discord の id �
   const h = await openWithSpeaker();
   try {
     await h.discord.vc.move(CHANNEL_2);
+    // Discord モード Domain K: 移った先にもういる人の合図（名前は合図の中だけ・id は載せない）を待ってから続ける。
+    await waitUntil(() => h.events.some((e) => e.kind === "vc-people"));
     h.fake.voiceState({ userId: USER_A, guildId: GUILD, from: null, to: CHANNEL_2, name: NAME_A });
     h.fake.moveBot(CHANNEL_3, { closeCode4014: true });
     await waitUntil(() => h.discord.voiceChannelName() === VC_3);
@@ -548,6 +559,6 @@ test("Domain I 守り: ログに VC の名前・人の名前・Discord の id �
   assertNoIds(JSON.stringify(h.events), "合図");
   assert.deepEqual(
     h.events.map((e) => e.kind),
-    ["vc-join", "vc-move", "person-join", "vc-moved", "vc-leave", "vc-join", "vc-kicked"]
+    ["vc-join", "vc-move", "vc-people", "person-join", "vc-moved", "vc-leave", "vc-join", "vc-kicked"]
   );
 });

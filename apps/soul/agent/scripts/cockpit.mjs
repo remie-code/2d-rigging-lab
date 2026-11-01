@@ -126,6 +126,7 @@ import { createVoiceEngine } from "../src/voice/engines/voice-engine.mjs";
 import { createTtsClient } from "../src/voice/tts-client.mjs";
 import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
+import { isEventEntry } from "../src/ears/transcript-buffer.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
 import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
@@ -754,6 +755,21 @@ export function shouldSkipMemoryCheckpoint(currentSeq, lastRecordedSeq) {
 }
 
 /**
+ * 保存するかの数え方に入れる転写の件数（Discord モード Domain K・J の持ち越し 1 = Undine の判断 (1)）。出来事の行
+ * （isEventEntry・入った / 抜けた / 人の出入りなど）は数えない: 誰も話していない通話（出来事の行だけ）で最後の保存・途中保存を
+ * 走らせない。数えるのは保存の要否（行数・増えたか）だけで、②に渡す中身には出来事の行を載せたまま。配信には出来事の行が
+ * 無いので、配信の数えは今と同じ（= 転写の件数）。純関数（I/O ゼロ）。
+ * @param {ReadonlyArray<any> | null | undefined} entries
+ * @returns {number}
+ */
+export function countSpokenEntries(entries) {
+  if (!Array.isArray(entries)) return 0;
+  let n = 0;
+  for (const entry of entries) if (!isEventEntry(entry)) n += 1;
+  return n;
+}
+
+/**
  * 配信間記憶: 途中保存の頃合いか（Discord モード Domain H・discord-mode.md §13.6・gate-2-midwrite-investigation.md §4 の
  * 案 B）。起点 = max(場の始まり, この場で前に保存が成り立った時刻, この場で前に途中保存を頼んだ時刻)（null は数えない）
  * から intervalMs 以上たっていれば true。起点が 1 つも無ければ false（場が始まっていない）。純関数（I/O ゼロ）。
@@ -814,9 +830,10 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  * @param {() => any} [deps.getWording]  保存を頼んだ時点の場の語の組（Discord モード Domain C・本番は cockpit-server の
  *   venueContext().wording）。writeImpl の 3 つ目の引数に渡る。null / 無し / 投げたら null（= 配信の語の組）。置き場は場ごとに
  *   作り直す（beginStream）ので、同じ置き場の頼みは同じ場の語の組（待っている 1 件を差し替えるときも新しい方の値にする）。
- * @param {(info: { atMs: number; entriesLength: number; commit?: any; place?: any }) => void} [deps.onSaved]
+ * @param {(info: { atMs: number; entriesLength: number; spokenLength?: number; commit?: any; place?: any }) => void} [deps.onSaved]
  *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。place は getPlace があるとき
- *   だけ載る（その保存を頼んだ時点の置き場・配信の組み直し Domain D の場ごとの数え方）。
+ *   だけ載る（その保存を頼んだ時点の置き場・配信の組み直し Domain D の場ごとの数え方）。spokenLength は出来事の行を除いた
+ *   件数（Discord モード Domain K・countSpokenEntries。保存の要否はこちらで数える）。
  * @param {(error: unknown) => void} [deps.onError]
  * @param {(recording: boolean) => void} [deps.onRecordingChange]  走り始めと全部終わったとき（操縦席の「記録中」）。
  * @param {() => number} [deps.nowImpl=Date.now]
@@ -869,6 +886,8 @@ export function createMemoryRecorder(deps) {
         callSafely(deps.onSaved, {
           atMs: nowImpl(),
           entriesLength: entries.length,
+          // Discord モード Domain K: 保存の要否の数え（出来事の行を除いた件数・countSpokenEntries）。
+          spokenLength: countSpokenEntries(entries),
           commit: result.commit,
           ...(place !== undefined ? { place } : {})
         });
@@ -1192,8 +1211,11 @@ export function createStreamVenueHooks(deps) {
       },
       /** @param {ReadonlyArray<any>} transcript */
       async saveFinal(transcript) {
+        // Discord モード Domain K（J の持ち越し 1）: 要否は出来事の行を除いた件数で見る（出来事の行だけなら頼まない）。頼むときの
+        // 中身は出来事の行を載せたままの転写。
+        const spoken = countSpokenEntries(transcript);
         const entries =
-          Array.isArray(transcript) && !shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq) ? transcript : [];
+          Array.isArray(transcript) && spoken > 0 && !shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq) ? transcript : [];
         const done = Promise.all([deps.memoryRecorder.record(entries), deps.memoryRecorder.whenIdle()]);
         if (!deps.memoryRecorder.isRecording()) return;
         await waitBounded(done);
@@ -1209,7 +1231,10 @@ export function createStreamVenueHooks(deps) {
     checkpoint() {
       if (typeof deps.isStreamOpen !== "function" || !deps.isStreamOpen()) return false;
       const entries = typeof deps.getEntries === "function" ? deps.getEntries() : [];
-      if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return false; // 空回しでトークンを燃やさない。
+      // 空回しでトークンを燃やさない。Discord モード Domain K: 数えるのは出来事の行を除いた件数（出来事の行だけ・出来事の行が
+      // 増えただけでは頼まない）。頼むときの中身は出来事の行を載せたまま。
+      const spoken = countSpokenEntries(entries);
+      if (spoken === 0 || shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq)) return false;
       const nowMs = nowImpl();
       const since = { startedAtMs: venueStartedAtMs, lastSavedAtMs, lastRequestedAtMs: lastCheckpointRequestedAtMs };
       if (!isMemoryCheckpointDue(nowMs, since, checkpointIntervalMs)) return false; // 場の始まり・前の保存から 20 分たっていない。
@@ -1219,14 +1244,15 @@ export function createStreamVenueHooks(deps) {
     },
     /**
      * 保存の係の onSaved。今の場の保存だけを数える（置き場を持たない保存 = テストの係は数える）。
-     * @param {{ atMs: number; entriesLength: number; place?: any }} info
+     * @param {{ atMs: number; entriesLength: number; spokenLength?: number; place?: any }} info
      * @returns {boolean}  数えたら true。
      */
     noteSaved(info) {
       const place = info ? info.place : undefined;
       if (place && typeof place.streamNo === "number" && place.streamNo !== deps.memoryPlaces.streamNo()) return false;
       lastRecordAtMs = info.atMs;
-      lastRecordedSeq = info.entriesLength;
+      // Discord モード Domain K: 保存の要否の数えは出来事の行を除いた件数（保存の係が spokenLength を渡す・無ければ件数そのもの）。
+      lastRecordedSeq = typeof info.spokenLength === "number" ? info.spokenLength : info.entriesLength;
       // Discord モード Domain H: 途中保存の起点を戻す（途中・手動の「今日を記録」のどちらでも）。info.atMs は保存の係の
       // 時計で保存が終わった時刻（writeImpl が返った直後）。ここでは場の時計（nowImpl）で、受けた時刻を起点にする
       // （onSaved は終わった直後に同期で呼ばれるので同じ時刻・テストで時計を差し替えても起点が揃う）。

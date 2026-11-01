@@ -18,6 +18,9 @@
  *    始める」の横に「Discord の VC に入る」（POST /api/stream/start { experience: "discord" }・Discord の入口があるときだけ）。
  *    Discord の場の間は、下の帯の同じ置き場が「VC から抜ける」（2 回押し）、上の帯に接続の状態、会話の you の行は Discord の
  *    名前、YouTube まわり（コメントの列）は出さない。準備・設定に「Discord の準備」のタブ（settings-drawer.mjs）。
+ *  - Discord モード Domain K（discord-mode.md §13.4）: Discord の場の間、右の領域（配信のコメントの列の置き場）に Discord の操作
+ *    パネル（discord-panel.mjs・接続 / しゃべり方 / 見る窓）。下の帯の同じ置き場の 2 回押しは「通話を終える」（場を閉じる道のまま）。
+ *    配信の場は今のままコメントの列。左の「会話」は変えない。
  *
  * SSE 購読: SSE_EVENT_NAMES（既存 13 本 + 1 回目で足した fireAsk / latency / quota / warnings の 4 本）。
  * 観測フィード（ログのタブ）は rows.mjs の feedAfterSseEvent、会話とコメントは glanceAfterSseEvent、非タイムライン効果
@@ -53,6 +56,7 @@ import {
 } from "../view-logic/glance-timeline.mjs";
 import { latencyBarView, isPreStream, streamStartView, DEFAULT_LATENCY_THRESHOLDS } from "../view-logic/glance-meters.mjs";
 import { discordAvailable, discordJoinView, isDiscordVenue } from "../view-logic/discord.mjs";
+import { DiscordPanel } from "./discord-panel.mjs";
 
 /**
  * 購読する SSE イベントの全リスト（既存 13 本 + 操縦席の作り直し 1 回目で足した 4 本・データの形 §1）。
@@ -471,7 +475,7 @@ export function App(props) {
         onKill=${() => setKilled(true)}
         onRevive=${() => setKilled(false)}
       />
-      <main class=${"glance-main" + (discordVenue ? " solo" : "")}>
+      <main class=${"glance-main" + (discordVenue ? " discord" : "")}>
         <${ConversationPanel}
           rows=${convoRows}
           preStream=${isPreStream(ears, settings.stream)}
@@ -481,8 +485,20 @@ export function App(props) {
           onJoinDiscord=${joinDiscord}
           onOpenSettings=${toggleSettings}
         />
-        ${/* Discord モード Domain G: Discord の場の間は YouTube まわり（コメントの列）を出さない。 */ ""}
-        ${discordVenue ? null : html`<${CommentsPanel} rows=${commentRows} />`}
+        ${/* Discord モード Domain G: Discord の場の間は YouTube まわり（コメントの列）を出さない。Domain K: 同じ置き場に Discord の操作パネル。 */ ""}
+        ${discordVenue
+          ? html`<${DiscordPanel}
+              stream=${settings.stream}
+              soul=${soul}
+              setSoul=${setSoul}
+              fireNote=${fireNote}
+              setFireNote=${setFireNote}
+              selfFire=${settings.selfFire}
+              bargeIn=${settings.bargeIn}
+              applySnapshot=${applySnapshot}
+              fetchImpl=${props.fetchImpl}
+            />`
+          : html`<${CommentsPanel} rows=${commentRows} />`}
       </main>
       <${BottomBar} settings=${settings} settingsOpen=${settingsOpen} onOpenSettings=${toggleSettings}
         endArmed=${endArmed} onEndStream=${endStream} speakStartFixed=${extras.speakStartFixed} />

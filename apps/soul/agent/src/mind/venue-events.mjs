@@ -8,6 +8,9 @@
  *    Discord の画面で動かされた）・外された（vc-kicked・キック / チャンネルの削除 / 外へ出された）・接続が切れた（vc-disconnect・
  *    猶予のあいだ戻らなかった）・接続が戻った（vc-reconnect）。
  *  - 今いる VC の人: 入ってきた（person-join）・出ていった（person-leave）。Bot 自身とほかの Bot は体験の側で除いてある。
+ *  - Discord モード Domain K（J の持ち越し 2 = Undine の判断 (4)）: VC に入った・移った・動かされた時点でもういる人（vc-people・
+ *    `{ channelName, names, others }`。names = 名前の分かった人・others = 名前の分からない人の数。Bot 自身とほかの Bot は体験の側で
+ *    除いてある）。誰もいなければ行にしない（null）。
  * 知らない種類は null（行にしない）。
  *
  * 名前（VC の名前・人の名前）は本文の中にだけ入る。本文は正本（頭への会話の窓・②④の材料・左の「会話」の欄）にだけ載り、ログ・
@@ -24,8 +27,12 @@ export const VENUE_EVENT_LINE_KINDS = Object.freeze([
   "vc-disconnect",
   "vc-reconnect",
   "person-join",
-  "person-leave"
+  "person-leave",
+  "vc-people"
 ]);
+
+/** vc-people の行に名前を並べる上限（これを超えた人は「ほか N 人」に数える）。 */
+export const VENUE_EVENT_PEOPLE_MAX_NAMES = 20;
 
 /** 本文に入れる名前の上限（文字数・VC の名前は体験の側で 100 字に切ってある。人の名前は Discord の表示名の上限より余裕を持たせる）。 */
 export const VENUE_EVENT_NAME_MAX_CHARS = 100;
@@ -52,8 +59,24 @@ function cleanName(raw) {
 const vcOf = (name) => (name ? `VC「${name}」` : "VC ");
 
 /**
+ * もういる人の行（vc-people）の本文。名前は「・」で並べ、上限を超えた人と名前の分からない人は「ほか N 人」に数える。名前が
+ * 1 人も分からなければ「N 人がいる」。誰もいなければ null。
+ * @param {string | null} channel @param {unknown} rawNames @param {unknown} rawOthers
+ * @returns {string | null}
+ */
+function peopleLineText(channel, rawNames, rawOthers) {
+  const cleaned = Array.isArray(rawNames) ? rawNames.map(cleanName).filter((n) => n != null) : [];
+  const names = /** @type {string[]} */ (cleaned).slice(0, VENUE_EVENT_PEOPLE_MAX_NAMES);
+  const extra = typeof rawOthers === "number" && Number.isInteger(rawOthers) && rawOthers > 0 ? rawOthers : 0;
+  const others = extra + (cleaned.length - names.length);
+  const where = `${vcOf(channel)}には`;
+  if (names.length === 0) return others > 0 ? `${where} ${others} 人がいる` : null;
+  return others > 0 ? `${where}${names.join("・")}とほか ${others} 人がいる` : `${where}${names.join("・")}がいる`;
+}
+
+/**
  * 出来事 → 出来事の行の本文（知らない種類・形の崩れた出来事は null）。
- * @param {unknown} event  `{ kind, channelName?, fromChannelName?, name?, via? }`
+ * @param {unknown} event  `{ kind, channelName?, fromChannelName?, name?, via?, names?, others? }`
  * @param {{ soulName?: string | null }} [options]  soulName: チャッピー自身の名前（ロールの名前）。
  * @returns {string | null}
  */
@@ -87,6 +110,8 @@ export function venueEventLineText(event, options = {}) {
       return `${person}が入ってきた`;
     case "person-leave":
       return `${person}が出ていった`;
+    case "vc-people":
+      return peopleLineText(channel, e.names, e.others);
     default:
       return null;
   }

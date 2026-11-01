@@ -3,7 +3,7 @@
  * Discord モード Domain G: 画面が使うサーバの口（discord-mode.md §9・§4.3 の 7・§8、計画 §1 Domain G と D・E・F の追認の持ち越し）—
  * 本物の cockpit-server と本物の src/discord/discord-experience.mjs を、偽の Discord（src/test-support/fake-discord.mjs）でつなぐ。
  *
- *  - Discord の場の見る窓（目）: GET / POST /api/discord/vision-target（配信の見る窓とは別に保存・Discord の場の間は 409・形が違えば
+ *  - Discord の場の見る窓（目）: GET / POST /api/discord/vision-target（配信の見る窓とは別に保存・Discord の場の間も選び直せる〔Domain K で 409 を外した〕・形が違えば
  *    400）。選んでいなければ Discord の場では目を起こさない、選んでいれば起こす。配信の目は今まで通り（いつも起こす）。
  *  - 一覧の読み込み（POST /api/discord/catalog）も、ロールの鍵のファイル名の形が合わなければ鍵を読まずログインせずに断る（E の追認 (1)）。
  *  - YouTube の Connect（POST /api/chat/connect）は Discord の場の間は 409 で断る（F の追認 (2)）。配信の場・閉じている間は今まで通り。
@@ -274,7 +274,7 @@ async function startServer(p = {}) {
 
 // ── 1. Discord の場の見る窓（目）─────────────────────────────────────────────
 
-test("Domain G 見る窓: GET / POST /api/discord/vision-target は配信の見る窓と別に保存（null / \"\" で消す）・形が違えば 400・Discord の場の間は 409", async () => {
+test("Domain G 見る窓: GET / POST /api/discord/vision-target は配信の見る窓と別に保存（null / \"\" で消す）・形が違えば 400・Discord の場の間も選び直せる（Domain K）", async () => {
   const h = await startServer();
   try {
     assert.deepEqual((await get(h.url, "/api/discord/vision-target")).json, { visionTarget: { title: null } });
@@ -290,11 +290,14 @@ test("Domain G 見る窓: GET / POST /api/discord/vision-target は配信の見�
     const long = await post(h.url, "/api/discord/vision-target", { title: "窓".repeat(DISCORD_VISION_TARGET_MAX_CHARS + 1) });
     assert.equal(long.status, 400);
     assert.equal(createFileSettingsStore({ path: h.settingsPath }).getDiscordVisionTarget(), WINDOW);
-    // Discord の場の間は 409（準備と同じく場が閉じている間に選ぶ）。
+    // Discord モード Domain K（設計 §13.4 の 3）: Discord の場の間も選び直せる（G の 409 を外した・仕様変更）。
     assert.equal((await post(h.url, "/api/stream/start", { experience: "discord" })).status, 200);
-    const busy = await post(h.url, "/api/discord/vision-target", { title: null });
-    assert.equal(busy.status, 409);
-    assert.equal(createFileSettingsStore({ path: h.settingsPath }).getDiscordVisionTarget(), WINDOW, "断ったら書かない");
+    const during = await post(h.url, "/api/discord/vision-target", { title: null });
+    assert.equal(during.status, 200);
+    assert.deepEqual(during.json, { visionTarget: { title: null } });
+    assert.equal(createFileSettingsStore({ path: h.settingsPath }).getDiscordVisionTarget(), null, "場の間に選び直した値を保存");
+    assert.equal((await post(h.url, "/api/discord/vision-target", { title: WINDOW })).status, 200);
+    assert.equal(createFileSettingsStore({ path: h.settingsPath }).getDiscordVisionTarget(), WINDOW);
     await post(h.url, "/api/stream/stop");
     // 消す（目を起こさない）。
     assert.deepEqual((await post(h.url, "/api/discord/vision-target", { title: "" })).json, { visionTarget: { title: null } });

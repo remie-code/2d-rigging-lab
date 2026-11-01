@@ -173,7 +173,7 @@ export const DISCORD_SPEAK_START_FIXED_MESSAGE = "Discord の通話では話し�
  * Discord の場の間に YouTube のコメントにつなごうとしたときの断り（Discord モード Domain G・F の追認 (2)・409・何も変えない）。
  * Discord の場にはコメントが無い（discord-mode.md §4.3 の表「開いたあと: なし」・§8 コメント反応は Discord では作らない）。
  */
-export const DISCORD_CHAT_CONNECT_REFUSED_MESSAGE = "Discord の通話の間は YouTube のコメントにつながない（VC から抜けてから）";
+export const DISCORD_CHAT_CONNECT_REFUSED_MESSAGE = "Discord の通話の間は YouTube のコメントにつながない（通話を終えてから）";
 /**
  * 場が閉じていてコメントを積む正本が無いときの診断（chatBufferAbsent）の文面（Discord モード Domain G: 正本は場のもの・
  * discord-mode.md §3.1。「耳が無い」ではなく「場が開いていない」）。
@@ -3199,8 +3199,12 @@ export function createCockpitServer(options = {}) {
   /**
    * Discord の場の見る窓（目）の読み書き（Discord モード Domain G・設計 §9「Discord の準備: 見る窓（目）」・§4.3 の 7）。
    * GET → 200 `{ visionTarget: { title } }`。POST（body `{ title }`・null / "" で消す = Discord の場で目を起こさない）→ 200
-   * `{ visionTarget: { title } }`・形が違えば 400 `{ error }`・Discord の場の間は 409（準備と同じく場が閉じている間に選ぶ）。
+   * `{ visionTarget: { title } }`・形が違えば 400 `{ error }`。
    * 配信の見る窓（POST /api/vision-target・snapshot の visionTarget）とは別に持つ。Discord の入口が無ければ 503。
+   * Discord モード Domain K（設計 §13.4 の 3）: Discord の場の間も選び直せる（G の 409 を外した）。発火が撮る窓は発火のたびに
+   * 読む（cockpit.mjs の createVenueVisionTarget）ので、選び直したら次の発火から新しい窓を撮る。常駐の撮る係は撮るたびに窓の題を
+   * 受け取る（開いたときの窓を持たない）が、窓を選ばずに開いた場では起きていないので、開いている Discord の場で窓を選んだら目を
+   * 起こし（syncDiscordVenueEyes・起こす口は冪等）、「使わない」にしたら止める。
    * @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {string} method
    */
   async function handleDiscordVisionTarget(req, res, method) {
@@ -3221,10 +3225,6 @@ export function createCockpitServer(options = {}) {
       return;
     }
     const body = await readJsonBody(req);
-    if (discordVenueActive()) {
-      sendJson(res, 409, { error: streamBusyMessage() });
-      return;
-    }
     /** @type {any} */
     let result;
     try {
@@ -3236,7 +3236,23 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 400, { error: (result && typeof result.reason === "string" && result.reason) || "見る窓の形が違う" });
       return;
     }
+    syncDiscordVenueEyes();
     sendJson(res, 200, { visionTarget: { title: typeof result.title === "string" ? result.title : null } });
+  }
+
+  /**
+   * 開いている Discord の場の目を、見る窓の選び直しに合わせる（Discord モード Domain K・§13.4 の 3）。窓を選んでいれば起こす
+   * （startVenueEyes が体験の口の eyesWanted を見る・起こす口は冪等 = もう起きていれば何もしない）、「使わない」なら止める。
+   * 開いている途中・閉じる途中・配信の場・閉じている間は触らない（開く段の 7 は保存した窓を読む・閉じる段は目を止める）。
+   */
+  function syncDiscordVenueEyes() {
+    if (!discordVenueActive() || streamPhase !== "open") return;
+    try {
+      if (venueExperience && venueExperience.eyesWanted() === true) startVenueEyes();
+      else stopVenueEyes();
+    } catch {
+      // best-effort（目の失敗で見る窓の保存を止めない）。
+    }
   }
 
   /**
@@ -3276,7 +3292,8 @@ export function createCockpitServer(options = {}) {
    *    サーバー）のボイスチャンネルだけ（形が違えば 400・ほかのサーバー / 文字やステージのチャンネル / 見つからなければ 404）。
    *    準備の discordChannelId は書き換えない。状態が合わない（もう VC にいるのに入る・どこにもいないのに抜ける / 移る・同じ VC へ
    *    移る・ほかの操作の途中）は 409。VC に入れない（時間切れ・権限など）・出口を作れないは 502（どの VC にもいない状態になる）。
-   *  - GET → 200 `{ channels: [{ id, name, people, current }] }`（Domain K のための口・id は応答にだけ・snapshot / ログには載せない）。
+   *  - GET → 200 `{ channels: [{ id, name, people, current }], guildName }`（Domain K のための口・id は応答にだけ・snapshot / ログには
+   *    載せない）。guildName は体験の client の guild の名前（Domain K・パネルのサーバー名・取れなければ null）。
    *  - Discord の場が開いていない（閉じている・開きかけ・閉じかけ・配信の場）なら 409。Discord の入口が無ければ 503。
    * @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {string} method
    */
@@ -3303,7 +3320,7 @@ export function createCockpitServer(options = {}) {
         sendJson(res, 502, { error: (listed && typeof listed.reason === "string" && listed.reason) || "ボイスチャンネルの一覧を読めない" });
         return;
       }
-      sendJson(res, 200, { channels: listed.channels });
+      sendJson(res, 200, { channels: listed.channels, guildName: typeof listed.guildName === "string" && listed.guildName ? listed.guildName : null });
       return;
     }
     const action = body && typeof body.action === "string" ? body.action : null;

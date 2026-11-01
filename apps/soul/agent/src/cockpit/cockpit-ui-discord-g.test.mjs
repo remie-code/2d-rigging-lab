@@ -79,7 +79,7 @@ test("ConversationPanel: 入口があれば「配信を始める」の横に「D
   assert.deepEqual(collectElements(without).filter((n) => n.type === "button").map((b) => b.props.class), ["prestream-start", "prestream-open"]);
 });
 
-test("ConversationPanel: Discord の開きかけは「VC に入っています…」・閉じかけは「VC から抜けています…」と「記録中…」・入れなかった理由は中央に", () => {
+test("ConversationPanel: Discord の開きかけは「VC に入っています…」・閉じかけは「通話を終えています…」（Domain K）と「記録中…」・入れなかった理由は中央に", () => {
   const opening = { phase: "opening", error: null, experience: "discord" };
   const o = ConversationPanel({ rows: [], preStream: true, start: streamStartView(opening), join: discordJoinView(opening, true) });
   const ob = collectElements(o).filter((n) => n.type === "button");
@@ -90,7 +90,7 @@ test("ConversationPanel: Discord の開きかけは「VC に入っています�
   ]);
   const closing = { phase: "closing", error: null, experience: "discord" };
   const c = ConversationPanel({ rows: [], preStream: true, start: streamStartView(closing), join: discordJoinView(closing, true) });
-  assert.deepEqual(collectElements(c).filter((n) => n.type === "button").map((b) => collectText(b).join("")), ["配信を始める", "VC から抜けています…", "準備・設定"]);
+  assert.deepEqual(collectElements(c).filter((n) => n.type === "button").map((b) => collectText(b).join("")), ["配信を始める", "通話を終えています…", "準備・設定"]);
   assert.equal(collectText(collectElements(c).find((n) => n.props && n.props.class === "prestream-note")).join(""), "記録中…");
   const reason = "VC に入れない（時間切れ・権限・満員など）";
   const failed = { phase: "closed", error: reason, experience: null };
@@ -101,7 +101,7 @@ test("ConversationPanel: Discord の開きかけは「VC に入っています�
 
 // ── 2. 下の帯と上の帯 ─────────────────────────────────────────────────────────────
 
-test("BottomBar: Discord の場の間は同じ置き場に「VC から抜ける」（2 回押し）・話し始めは「speak-now（固定）」・忙しい間のコメントは出さない", () => {
+test("BottomBar: Discord の場の間は同じ置き場に「通話を終える」（2 回押し・Domain K で「VC から抜ける」から改めた）・話し始めは「speak-now（固定）」・忙しい間のコメントは出さない", () => {
   let ended = 0;
   const settings = {
     stream: { phase: "open", experience: "discord", connection: "joined" },
@@ -113,7 +113,7 @@ test("BottomBar: Discord の場の間は同じ置き場に「VC から抜ける�
   const bar = BottomBar({ settings, endArmed: false, onEndStream: () => (ended += 1), speakStartFixed: true });
   const buttons = collectElements(bar).filter((n) => n.type === "button");
   assert.deepEqual(buttons.map((b) => b.props.class), ["stream-end", "settings-toggle"]);
-  assert.equal(collectText(buttons[0]).join(""), "VC から抜ける");
+  assert.equal(collectText(buttons[0]).join(""), "通話を終える");
   buttons[0].props.onClick();
   assert.equal(ended, 1);
   const text = collectText(bar).join("");
@@ -121,7 +121,7 @@ test("BottomBar: Discord の場の間は同じ置き場に「VC から抜ける�
   assert.equal(text.includes("従来"), false, "Discord の場で「従来」と出さない");
   assert.equal(text.includes("忙しい間のコメント"), false);
   const armed = BottomBar({ settings, endArmed: true, speakStartFixed: true });
-  assert.equal(collectText(collectElements(armed).find((n) => n.type === "button")).join(""), "もう一度押すと VC から抜ける");
+  assert.equal(collectText(collectElements(armed).find((n) => n.type === "button")).join(""), "もう一度押すと通話を終える");
 });
 
 test("BottomBar（配信は変わらない）: 「配信を終える」・ロールの方式（従来）・忙しい間のコメント", () => {
@@ -250,12 +250,13 @@ test("App: 「Discord の VC に入る」は POST /api/stream/start { experience
   assert.match(app, /doFetch\("\/api\/stream\/start", \{ method: "POST", headers: \{ "content-type": "application\/json" \}, body: "\{\}" \}\)/, "配信は今のまま");
   assert.match(app, /join=\$\{discordJoinView\(settings\.stream, extras\.discordAvailable\)\}/);
   assert.match(app, /onJoinDiscord=\$\{joinDiscord\}/);
-  assert.match(app, /\$\{discordVenue \? null : html`<\$\{CommentsPanel\} rows=\$\{commentRows\} \/>`\}/);
-  assert.match(app, /<main class=\$\{"glance-main" \+ \(discordVenue \? " solo" : ""\)\}>/);
+  // Discord モード Domain K（§13.4）: Discord の場の間は同じ右の領域に Discord の操作パネル（コメントの列は出さない）。
+  assert.match(app, /\$\{discordVenue\n\s+\? html`<\$\{DiscordPanel\}[\s\S]*?\/>`\n\s+: html`<\$\{CommentsPanel\} rows=\$\{commentRows\} \/>`\}/);
+  assert.match(app, /<main class=\$\{"glance-main" \+ \(discordVenue \? " discord" : ""\)\}>/);
   assert.match(app, /experience: settings\.stream \? settings\.stream\.experience \?\? null : null/);
   assert.match(app, /speakStartFixed=\$\{extras\.speakStartFixed\}/);
   assert.match(app, /discordAvailable=\$\{extras\.discordAvailable\}/);
-  assert.match(COCKPIT_CSS, /\.glance-main\.solo \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.doesNotMatch(COCKPIT_CSS, /\.glance-main\.solo/, "Domain K: 会話だけの 1 列はやめた（右にパネル）");
   assert.match(COCKPIT_CSS, /\.glance-main \{[^}]*grid-template-columns: minmax\(0, 60fr\) minmax\(0, 36fr\)/, "配信の割り付けは今のまま");
 });
 
