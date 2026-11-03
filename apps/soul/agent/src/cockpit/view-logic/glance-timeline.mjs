@@ -18,6 +18,12 @@
  *    コメントに「反応」の印。
  *  - きっかけの行が無い発火（手動・沈黙など）は、チャッピーの行に小さく種類。
  *  - 推論の範囲は最新の 1 回分（fireAsk の windowFirstSeq〜windowLastSeq）だけ。開き直しても復元しない。
+ *  - 場の区切り（Discord モード Domain M・gate-3-stale-judgment-chip.md §5）: 正本の seq は場を開くたびに 0 から数え直すので、
+ *    seq での結び付け（判定の札・推論の範囲・きっかけの行）は**同じ場の中だけ**。SSE state（snapshot の stream）で新しい場が
+ *    開いた（開き始めた）と分かったら、場の番号（venue）を 1 つ進め、前の場の札の覚え（judgments）と推論の範囲（window）を捨てる。
+ *    行は積んだときの場の番号を持ち、前の場の行は残すが seq では結ばない（そのチャッピーの行の speak-now のきっかけは、
+ *    きっかけの行が手元に無いときと同じく、チャッピーの行に小さく出す）。fireId の結び付け（きっかけ・遅延・コメント反応）は
+ *    起動の間数え続けるので場をまたいでもそのまま。
  *
  * 会話とコメントの列は入る分だけ最新を表示する（あふれた古い行は画面側で切る）。状態は上限件数だけ持つ
  * （全履歴はログのタブの観測フィードが持つ）。
@@ -60,7 +66,9 @@ export const CAUSE_KIND_LABELS = Object.freeze({
 
 /**
  * @typedef {{ id: number; kind: "you" | "soul" | "note" | "event"; seq: number | null; fireId: number | null; atMs: number;
- *   text: string; choice?: string | null; probability?: number | null; displayName?: string | null }} ConvoRow
+ *   text: string; choice?: string | null; probability?: number | null; displayName?: string | null; venue?: number }} ConvoRow
+ *   venue: 行を積んだときの場の番号（GlanceState.venue・Domain M）。seq で結ぶのは今の場の行だけ。
+ * @typedef {{ phase: string; openedAtMs: number | null }} VenueMark  最後に見た場の状態（snapshot の stream の phase と openedAtMs）。
  * @typedef {{ id: number; kind: "comment" | "rejected"; commentId: string | null; displayName: string | null;
  *   text: string; reject: string | null; atMs: number }} CommentRow
  * @typedef {{
@@ -72,17 +80,75 @@ export const CAUSE_KIND_LABELS = Object.freeze({
  *   reacted: Record<string, true>;
  *   window: { fireId: number | null; firstSeq: number; lastSeq: number } | null;
  *   nextId: number;
+ *   venue: number;
+ *   venueMark: VenueMark | null;
  * }} GlanceState
+ *   venue: 今の場の番号（この画面で新しい場が開くたびに 1 つ進む・Domain M）。venueMark: 最後に見た場の状態（まだ見ていなければ null）。
  */
 
 /** 空の状態。 @returns {GlanceState} */
 export function emptyGlance() {
-  return { convo: [], comments: [], judgments: {}, causes: {}, latencies: {}, reacted: {}, window: null, nextId: 1 };
+  return { convo: [], comments: [], judgments: {}, causes: {}, latencies: {}, reacted: {}, window: null, nextId: 1, venue: 0, venueMark: null };
 }
 
 /** @param {unknown} v @returns {v is number} */
 function isNum(v) {
   return typeof v === "number" && Number.isFinite(v);
+}
+
+/** 今の場の番号（古い形の状態でも 0）。 @param {GlanceState} g */
+function currentVenue(g) {
+  return isNum(g.venue) ? g.venue : 0;
+}
+
+/** 行の場の番号（無ければ 0）。 @param {ConvoRow} r */
+function rowVenue(r) {
+  return isNum(r.venue) ? r.venue : 0;
+}
+
+/**
+ * snapshot の stream（{ phase, openedAtMs, … }）から場の状態の印を取る。形が違えば（古いサーバ・stream が null）null。
+ * @param {any} stream
+ * @returns {VenueMark | null}
+ */
+export function venueMarkOf(stream) {
+  if (!stream || typeof stream !== "object" || typeof stream.phase !== "string") return null;
+  return { phase: stream.phase, openedAtMs: isNum(stream.openedAtMs) ? stream.openedAtMs : null };
+}
+
+/**
+ * 前に見た場の状態 prev から next へ移るとき、新しい場が開いた（開き始めた）か（Domain M）。
+ * サーバは場を開くとき、正本を作る（seq を 0 から数え直す）前に phase "opening" を配る。それを合図にする。
+ * "opening" を取り逃したときの控え: 閉じている・閉じかけを見たあとの "open"、開いた時刻（openedAtMs）の違う "open"。
+ * opening → open（同じ場が開き終えた）・open → closing → closed（同じ場が閉じた）は新しい場ではない。
+ * prev が無い（まだ何も見ていない）ときは "opening" だけを新しい場とする（"open" はその場の途中から見始めただけ）。
+ * @param {VenueMark | null} prev  @param {VenueMark} next
+ */
+export function isNewVenue(prev, next) {
+  if (next.phase !== "opening" && next.phase !== "open") return false;
+  if (!prev) return next.phase === "opening";
+  if (prev.phase === "opening") return false;
+  if (prev.phase === "open" && next.phase === "open") {
+    return prev.openedAtMs != null && next.openedAtMs != null && prev.openedAtMs !== next.openedAtMs;
+  }
+  return true;
+}
+
+/**
+ * 場の状態（SSE state の snapshot の stream）を受ける。新しい場が開いたら場の番号を進め、前の場の札の覚えと推論の範囲を
+ * 捨てる（行・きっかけ・遅延・コメント反応は残す）。場の状態が前と同じ・形が違うときは同じ状態を返す。
+ * @param {GlanceState} g  @param {any} stream
+ * @returns {GlanceState}
+ */
+export function glanceAfterVenueStatus(g, stream) {
+  const next = venueMarkOf(stream);
+  if (!next) return g;
+  const prev = g.venueMark ?? null;
+  if (isNewVenue(prev, next)) {
+    return { ...g, venue: currentVenue(g) + 1, venueMark: next, judgments: {}, window: null };
+  }
+  if (prev && prev.phase === next.phase && prev.openedAtMs === next.openedAtMs) return g;
+  return { ...g, venueMark: next };
 }
 
 /**
@@ -136,7 +202,7 @@ export function glanceWithTranscript(g, d, nowMs) {
   }
   if (speaker === "event") {
     /** @type {ConvoRow} */
-    const eventRow = { id: g.nextId, kind: "event", seq: isNum(d.seq) ? d.seq : null, fireId: null, atMs, text: d.text };
+    const eventRow = { id: g.nextId, kind: "event", seq: isNum(d.seq) ? d.seq : null, fireId: null, atMs, text: d.text, venue: currentVenue(g) };
     return { ...g, convo: appendCapped(g.convo, eventRow, CONVO_KEEP), nextId: g.nextId + 1 };
   }
   if (speaker !== "you" && speaker !== "soul") return g;
@@ -149,7 +215,8 @@ export function glanceWithTranscript(g, d, nowMs) {
     atMs,
     text: d.text,
     // Discord モード Domain G: you の行の名前（Discord の名前・配信では載らない）。表示は体験で選ぶ（conversationRowsView）。
-    ...(speaker === "you" && typeof d.displayName === "string" && d.displayName ? { displayName: d.displayName } : {})
+    ...(speaker === "you" && typeof d.displayName === "string" && d.displayName ? { displayName: d.displayName } : {}),
+    venue: currentVenue(g)
   };
   return { ...g, convo: appendCapped(g.convo, row, CONVO_KEEP), nextId: g.nextId + 1 };
 }
@@ -190,11 +257,15 @@ function glanceWithCause(g, fireId, cause) {
 
 /**
  * snapshot の履歴（GET /api/state の transcripts）から作る（開き直し・推論の範囲と遅延は復元しない）。
- * @param {any[] | null | undefined} transcripts  @param {number} nowMs
+ * Domain M: stream（同じ snapshot の stream）を渡すと、その場の状態を最後に見た状態として覚える（履歴の行は今の場の行。
+ * このあとの SSE state で新しい場が開いたら、履歴の行は前の場の行になる）。省けば今まで通り（まだ何も見ていない）。
+ * @param {any[] | null | undefined} transcripts  @param {number} nowMs  @param {any} [stream]
  * @returns {GlanceState}
  */
-export function glanceFromHistory(transcripts, nowMs) {
+export function glanceFromHistory(transcripts, nowMs, stream) {
   let g = emptyGlance();
+  const mark = venueMarkOf(stream);
+  if (mark) g = { ...g, venueMark: mark };
   for (const entry of transcripts || []) g = glanceWithTranscript(g, entry, nowMs);
   return g;
 }
@@ -206,6 +277,9 @@ export function glanceFromHistory(transcripts, nowMs) {
  */
 export function glanceAfterSseEvent(g, eventName, d, nowMs) {
   switch (eventName) {
+    case "state":
+      // Domain M: 場の状態（snapshot の stream）だけを見る。新しい場が開いたら前の場の札の覚えと推論の範囲を捨てる。
+      return glanceAfterVenueStatus(g, d && d.stream);
     case "transcript":
       return glanceWithTranscript(g, d, nowMs);
     case "chatDiagnostic":
@@ -231,7 +305,8 @@ export function glanceAfterSseEvent(g, eventName, d, nowMs) {
             atMs: nowMs,
             text: "",
             choice: d.choice ?? null,
-            probability: isNum(d.probability) ? d.probability : null
+            probability: isNum(d.probability) ? d.probability : null,
+            venue: currentVenue(g)
           };
           return { ...g, convo: appendCapped(g.convo, row, CONVO_KEEP), nextId: g.nextId + 1 };
         }
@@ -344,7 +419,10 @@ export function commentReactText(commentIds, comments) {
 export function conversationRowsView(g, options = {}) {
   const soulName = options.soulName || "soul";
   const experience = options.experience ?? null;
-  const seqs = new Set(g.convo.filter((r) => r.seq != null).map((r) => r.seq));
+  // Domain M: seq で結ぶのは今の場の行だけ（前の場の行は seq が同じでも別の発言）。
+  const venue = currentVenue(g);
+  const here = (/** @type {ConvoRow} */ r) => rowVenue(r) === venue;
+  const seqs = new Set(g.convo.filter((r) => r.seq != null && here(r)).map((r) => r.seq));
 
   // 推論の範囲（最新の 1 回分）: 範囲に入る最初と最後の行の位置。その間の行（判定の薄い行も）を範囲とする。
   let rangeFrom = -1;
@@ -352,7 +430,7 @@ export function conversationRowsView(g, options = {}) {
   if (g.window) {
     const { firstSeq, lastSeq } = g.window;
     g.convo.forEach((r, i) => {
-      if (r.seq != null && r.seq >= firstSeq && r.seq <= lastSeq) {
+      if (r.seq != null && here(r) && r.seq >= firstSeq && r.seq <= lastSeq) {
         if (rangeFrom < 0) rangeFrom = i;
         rangeTo = i;
       }
@@ -367,7 +445,8 @@ export function conversationRowsView(g, options = {}) {
       break;
     }
   }
-  const latestCause = latestIndex >= 0 && g.convo[latestIndex].fireId != null
+  // 最新の返事が前の場の行なら、きっかけは前の場の seq なので今の場の行とはつながない（Domain M）。
+  const latestCause = latestIndex >= 0 && g.convo[latestIndex].fireId != null && here(g.convo[latestIndex])
     ? g.causes[String(g.convo[latestIndex].fireId)]
     : null;
   const linkedSeq = latestCause && latestCause.type === "speak-now" && isNum(latestCause.triggerSeq) ? latestCause.triggerSeq : null;
@@ -389,7 +468,7 @@ export function conversationRowsView(g, options = {}) {
       rangeStart: inRange && i === rangeFrom,
       rangeEnd: inRange && i === rangeTo,
       latest: i === latestIndex,
-      linked: linkedSeq != null && r.kind === "you" && r.seq === linkedSeq
+      linked: linkedSeq != null && r.kind === "you" && here(r) && r.seq === linkedSeq
     };
     if (r.kind === "note") {
       view.text = skippedJudgmentText(r.choice, r.probability);
@@ -398,7 +477,8 @@ export function conversationRowsView(g, options = {}) {
     // 出来事の行（Domain J）: 時刻と本文だけ（話者名・札・遅延・きっかけは付けない）。
     if (r.kind === "event") return view;
     if (r.kind === "you") {
-      const j = r.seq != null ? g.judgments[String(r.seq)] : null;
+      // 札は今の場の行だけ（前の場の行は seq で結ばない・Domain M）。
+      const j = r.seq != null && here(r) ? g.judgments[String(r.seq)] : null;
       if (j) view.chipText = judgmentChipText(j.choice, j.probability);
       return view;
     }
@@ -408,7 +488,8 @@ export function conversationRowsView(g, options = {}) {
       view.reactText = commentReactText(cause.commentIds, g.comments);
     } else if (cause && cause.type === "speak-now") {
       // 札はきっかけの配信者の行に付く。きっかけの行が手元に無いときだけ、こちらに小さく出す。
-      if (!(isNum(cause.triggerSeq) && seqs.has(cause.triggerSeq))) {
+      // Domain M: 前の場のチャッピーの行は seq で結ばない（前の場の札の覚えは捨てた）ので、こちらに小さく出す。
+      if (!(here(r) && isNum(cause.triggerSeq) && seqs.has(cause.triggerSeq))) {
         view.kindText = judgmentChipText(cause.choice, cause.probability);
       }
     } else {

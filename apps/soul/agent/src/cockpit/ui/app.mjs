@@ -26,6 +26,8 @@
  * 観測フィード（ログのタブ）は rows.mjs の feedAfterSseEvent、会話とコメントは glanceAfterSseEvent、非タイムライン効果
  * （state 適用・discarded・soul・fire-note・usage・chatStatus・quota・warnings）は applyNonFeedSseEvent。
  * 初期化: GET /api/state → 履歴復元（フィードと会話・推論の範囲と遅延は復元しない）→ applyState → SSE 購読。
+ * Discord モード Domain M: 会話の欄は SSE state の stream で新しい場が開いたと知り（glanceAfterSseEvent の "state"）、前の場の
+ * 判定の札と推論の範囲を捨てる（seq は場ごとに 0 から）。初期化では snapshot の stream を glanceFromHistory に渡して覚えさせる。
  *
  * 鉄の設計規律: export function/const のみ・**トップレベル副作用ゼロ**（document/EventSource/window に
  * トップレベルで触れない）。mount(rootElement, options) を呼ぶのは cockpit.html の inline module だけ。
@@ -306,7 +308,8 @@ export function App(props) {
       .then((/** @type {any} */ s) => {
         if (cancelled) return;
         setFeed(feedFromHistory(s.transcripts || [], now())); // 履歴復元（latency 無し・:902）
-        setGlance(glanceFromHistory(s.transcripts || [], now())); // 会話とコメント（範囲・遅延は復元しない）
+        // 会話とコメント（範囲・遅延は復元しない）。場の状態も覚える（このあとの SSE state で新しい場が開いたと分かるように・Domain M）。
+        setGlance(glanceFromHistory(s.transcripts || [], now(), s.stream));
         applyStateRef.current(s);
       })
       .catch(() => {
