@@ -84,9 +84,15 @@ import {
   roleFromIdentity,
   roleIdentity,
   roleToJson,
+  roleDiscordBotKeyFile,
+  roleDiscordBotKeyFileRefused,
   writeRole,
   writeRoleInstructions
 } from "../src/roles/role-store.mjs";
+// Discord モード Domain D: Discord の体験の口（discord.js などは使うときに src/discord/discord-libraries.mjs が動的 import する。
+// ここから静的には読まない＝配信だけのときは読み込まない）。
+import { createDiscordExperience } from "../src/discord/discord-experience.mjs";
+import { createDiscordStreamPlayer } from "../src/discord/discord-stream-player.mjs";
 import {
   DEFAULT_MIGRATION_BACKUP_ROOT,
   formatStartupMigrationReport,
@@ -101,7 +107,15 @@ import {
   DEFAULT_COMPACT_QUIET_MS,
   DEFAULT_COMPACT_MIN_INTERVAL_MS
 } from "../src/mind/context-compactor.mjs";
-import { createSessionUsageLog, fireUsageRecord, compactionUsageRecord, replyLatencyUsageRecord } from "../src/mind/session-usage-log.mjs";
+import {
+  createSessionUsageLog,
+  fireUsageRecord,
+  compactionUsageRecord,
+  replyLatencyUsageRecord,
+  judgmentUsageRecord,
+  fireRefusedUsageRecord,
+  controlUsageRecord
+} from "../src/mind/session-usage-log.mjs";
 import { resolveLatencyThresholds } from "../src/mind/fire-latency.mjs";
 import { createQuotaMonitor, fetchElevenLabsSubscription } from "../src/cockpit/quota.mjs";
 import { createResidentCapture } from "../src/eyes/resident-capture.mjs";
@@ -112,17 +126,34 @@ import { createVoiceEngine } from "../src/voice/engines/voice-engine.mjs";
 import { createTtsClient } from "../src/voice/tts-client.mjs";
 import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
+import { isEventEntry } from "../src/ears/transcript-buffer.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
 import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
 import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
-import { appendSoulSkills, listSoulSkills, loadSoulSkills, soulSkillNamesForBody } from "../src/mind/soul-skills.mjs";
+import {
+  appendSoulSkills,
+  listSoulSkills,
+  loadSoulSkills,
+  soulSkillNamesForBody,
+  soulSkillNamesForVenue
+} from "../src/mind/soul-skills.mjs";
 
 /**
  * 配信間記憶: 定期保存の間隔（裁定4「15〜30分ごと」の中庸・inventory §2-4 の 20 分固定）。
+ * Discord モード Domain H（discord-mode.md §13.6・gate-2-midwrite-investigation.md §4 の案 B）: 「場の始まり、または
+ * 前の保存（途中・手動の「今日を記録」）、またはこの場で前に途中保存を頼んだ時刻」からこの長さがたったときだけ頼む
+ * （isMemoryCheckpointDue・createStreamVenueHooks の checkpoint）。
  */
 export const MEMORY_CHECKPOINT_INTERVAL_MS = 20 * 60 * 1000;
+
+/**
+ * 配信間記憶: 定期保存を確かめる間隔（Discord モード Domain H・discord-mode.md §13.6）。タイマーは起動時に 1 回張る形の
+ * まま、この間隔で checkpoint() を呼び、経過時間で頼むかを決める（場の口で張る・止めるを持たない＝漏れが無い）。
+ * 頼むのは場の始まり・前の保存から 20 分（MEMORY_CHECKPOINT_INTERVAL_MS）たったときで、遅れはこの間隔まで。
+ */
+export const MEMORY_CHECKPOINT_TICK_MS = 60 * 1000;
 
 /**
  * 配信間記憶: Ctrl+C の最後の保存を待つ上限（best-effort・shutdown が固まらない）。
@@ -466,6 +497,34 @@ export function createInstructionRevisionController(initialRevision = 0) {
 }
 
 /**
+ * 場の言葉のうち、①の教えと会話指示の編集画面に効くもの（Discord モード Domain C・discord-mode.md §3.4 ①の側）。場が開いていて、
+ * その体験が語の組か教えを持つときだけ `{ wording, teaching }` を返す。場が閉じている・配信（語の組も教えも null）なら null
+ * （= 今の配信の道をそのまま通す: ①の固定の指示も編集画面の本文も一字も変わらない）。
+ * @param {unknown} context  cockpit-server の venueContext() の値（閉じていれば null）。
+ * @returns {{ wording: any; teaching: string | null } | null}
+ */
+export function venueSoulWords(context) {
+  if (!context || typeof context !== "object") return null;
+  const { wording, teaching } = /** @type {{ wording?: any; teaching?: any }} */ (context);
+  if (wording == null && teaching == null) return null;
+  return { wording: wording ?? null, teaching: typeof teaching === "string" ? teaching : null };
+}
+
+/**
+ * 場の体験の言葉で①に足す教えの一覧（Discord モード Domain C）。体の有無で選ぶ教えの最後に体験の教えを足し、本文の印をその
+ * 体験の語の組で差す。venueSoulWords が null（配信・閉じている）のときは呼ばない（呼び出し側が今の道を通す）。
+ * @param {{ body: boolean; venue: { wording: any; teaching: string | null }; onWarning?: (warning: string) => void; listImpl?: typeof listSoulSkills }} p
+ * @returns {Array<{ name: string; path: string; body: string }>}
+ */
+export function listVenueSoulSkills({ body, venue, onWarning, listImpl = listSoulSkills }) {
+  return listImpl({
+    names: soulSkillNamesForVenue({ body, teaching: venue.teaching }),
+    wording: venue.wording,
+    ...(typeof onWarning === "function" ? { onWarning } : {})
+  });
+}
+
+/**
  * Adapt the file-backed settings store to the dedicated Cockpit instruction
  * surface. Persistence owns validation and durable writes; this thin seam is
  * responsible only for incrementing the effective revision after success.
@@ -480,13 +539,19 @@ export function createInstructionRevisionController(initialRevision = 0) {
  * @param {object} settings  置き場の口（getConversationInstructionProfile / set… / reset…）。
  * @param {() => string} getRoleId  今のロールの id。
  * @param {ReturnType<typeof createInstructionRevisionController>} [revision]
+ * Discord モード Domain C: 場が開いていて、その体験が語の組か教えを持つ（配信でない）ときは、getVenueSoulSkills が返す一覧
+ * （その体験の語で差した本文・体験の教えも含む）を見せる。null を返したら（場が閉じている・配信）getSoulSkills（配信の語）。
+ *
  * @param {() => Array<{ name: string; path: string; body: string }>} [getSoulSkills]  テスト注入（既定 listSoulSkills）。
+ * @param {() => (Array<{ name: string; path: string; body: string }> | null)} [getVenueSoulSkills]  場の体験の言葉で見せる一覧
+ *   （Discord モード Domain C・既定は常に null = getSoulSkills）。
  */
 export function createConversationInstructionHooks(
   settings,
   getRoleId,
   revision = createInstructionRevisionController(),
-  getSoulSkills = () => listSoulSkills()
+  getSoulSkills = () => listSoulSkills(),
+  getVenueSoulSkills = () => null
 ) {
   const store = /** @type {any} */ (settings);
   const currentId = () => getRoleId();
@@ -517,7 +582,7 @@ export function createConversationInstructionHooks(
       return revision.getRevision();
     },
     getSoulSkills() {
-      return getSoulSkills();
+      return getVenueSoulSkills() ?? getSoulSkills();
     }
   };
 }
@@ -549,6 +614,35 @@ export function createVisionTargetHooks(settings) {
     },
     /** cockpit-server の visionTargetStatus（state snapshot に載せる現況）。 */
     visionTargetStatus: () => ({ title: settings.getVisionTarget() })
+  };
+}
+
+/**
+ * 発火が撮る見る窓を、開いている場の体験で選ぶ（Discord モード Domain G・discord-mode.md §4.3 の 7・§9: 見る窓は体験の準備で
+ * 選んだもの）。Discord の場（開きかけ・閉じかけを含む）では Discord の準備の見る窓（選んでいなければ null = 画像なしの発火）、
+ * それ以外（配信の場・閉じている間）は今まで通り配信の見る窓。fire-orchestrator の getVisionTarget に渡す。
+ *
+ * @param {{ stream: () => (string | null); discord: () => (string | null); experience: () => (string | null | undefined) }} deps
+ * @returns {() => (string | null)}
+ */
+export function createVenueVisionTarget(deps) {
+  return () => {
+    /** @type {unknown} */
+    let kind = null;
+    try {
+      kind = deps.experience();
+    } catch {
+      kind = null;
+    }
+    if (kind === "discord") {
+      try {
+        const title = deps.discord();
+        return typeof title === "string" && title.length > 0 ? title : null;
+      } catch {
+        return null;
+      }
+    }
+    return deps.stream();
   };
 }
 
@@ -661,6 +755,41 @@ export function shouldSkipMemoryCheckpoint(currentSeq, lastRecordedSeq) {
 }
 
 /**
+ * 保存するかの数え方に入れる転写の件数（Discord モード Domain K・J の持ち越し 1 = Undine の判断 (1)）。出来事の行
+ * （isEventEntry・入った / 抜けた / 人の出入りなど）は数えない: 誰も話していない通話（出来事の行だけ）で最後の保存・途中保存を
+ * 走らせない。数えるのは保存の要否（行数・増えたか）だけで、②に渡す中身には出来事の行を載せたまま。配信には出来事の行が
+ * 無いので、配信の数えは今と同じ（= 転写の件数）。純関数（I/O ゼロ）。
+ * @param {ReadonlyArray<any> | null | undefined} entries
+ * @returns {number}
+ */
+export function countSpokenEntries(entries) {
+  if (!Array.isArray(entries)) return 0;
+  let n = 0;
+  for (const entry of entries) if (!isEventEntry(entry)) n += 1;
+  return n;
+}
+
+/**
+ * 配信間記憶: 途中保存の頃合いか（Discord モード Domain H・discord-mode.md §13.6・gate-2-midwrite-investigation.md §4 の
+ * 案 B）。起点 = max(場の始まり, この場で前に保存が成り立った時刻, この場で前に途中保存を頼んだ時刻)（null は数えない）
+ * から intervalMs 以上たっていれば true。起点が 1 つも無ければ false（場が始まっていない）。純関数（I/O ゼロ）。
+ *  - 前の保存には途中保存・手動の「今日を記録」のどちらも入る（手動で保存すると起点が戻る）。
+ *  - 前に頼んだ時刻も入れるのは、保存が失敗し続けたときに 1 分ごとに頼み直さないため（頼みの頻度を今の 20 分おきより
+ *    増やさない）。
+ * @param {number} nowMs
+ * @param {{ startedAtMs: number | null; lastSavedAtMs: number | null; lastRequestedAtMs: number | null }} since
+ * @param {number} [intervalMs=MEMORY_CHECKPOINT_INTERVAL_MS]
+ * @returns {boolean}
+ */
+export function isMemoryCheckpointDue(nowMs, since, intervalMs = MEMORY_CHECKPOINT_INTERVAL_MS) {
+  const marks = [since?.startedAtMs, since?.lastSavedAtMs, since?.lastRequestedAtMs].filter(
+    (v) => typeof v === "number" && Number.isFinite(v)
+  );
+  if (marks.length === 0) return false;
+  return nowMs - Math.max(.../** @type {number[]} */ (marks)) >= intervalMs;
+}
+
+/**
  * ②書き出し役・④思い出し役の頭（申し送り 1: Codex に固定）。今の頭が Codex 系ならその頭（①と同じ頭・
  * recall-flow.md §6）、Claude 系なら既定の Codex（Claude の頭は cwd / sandbox / finalAnswerOnly を黙って無視するため
  * 使わない）。④も同じ決め方（記憶の作り直し Wave 2 からの申し送り 1）。
@@ -693,13 +822,18 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  *
  * @param {object} deps
  * @param {() => ReadonlyArray<any>} deps.getLiveEntries  材料の省略時に使うライブの転写（cockpit-server の getTranscript）。
- * @param {(entries: ReadonlyArray<any>, place: any) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
- *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値。
+ * @param {(entries: ReadonlyArray<any>, place: any, wording: any) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
+ *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値、wording は頼んだ時点の
+ *   getWording() の値。
  * @param {() => any} [deps.getPlace]  保存を頼んだ時点の置き場（本番は今のロールの記憶のフォルダ・§createRoleMemoryPlaces）。
  *   同じ置き場には同じ値（=== で比べる）を返すこと。投げたら null。
- * @param {(info: { atMs: number; entriesLength: number; commit?: any; place?: any }) => void} [deps.onSaved]
+ * @param {() => any} [deps.getWording]  保存を頼んだ時点の場の語の組（Discord モード Domain C・本番は cockpit-server の
+ *   venueContext().wording）。writeImpl の 3 つ目の引数に渡る。null / 無し / 投げたら null（= 配信の語の組）。置き場は場ごとに
+ *   作り直す（beginStream）ので、同じ置き場の頼みは同じ場の語の組（待っている 1 件を差し替えるときも新しい方の値にする）。
+ * @param {(info: { atMs: number; entriesLength: number; spokenLength?: number; commit?: any; place?: any }) => void} [deps.onSaved]
  *   保存が成り立ったあと（main() 側がここで lastRecordAtMs / lastRecordedSeq を更新する）。place は getPlace があるとき
- *   だけ載る（その保存を頼んだ時点の置き場・配信の組み直し Domain D の場ごとの数え方）。
+ *   だけ載る（その保存を頼んだ時点の置き場・配信の組み直し Domain D の場ごとの数え方）。spokenLength は出来事の行を除いた
+ *   件数（Discord モード Domain K・countSpokenEntries。保存の要否はこちらで数える）。
  * @param {(error: unknown) => void} [deps.onError]
  * @param {(recording: boolean) => void} [deps.onRecordingChange]  走り始めと全部終わったとき（操縦席の「記録中」）。
  * @param {() => number} [deps.nowImpl=Date.now]
@@ -714,7 +848,7 @@ export function createMemoryRecorder(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   /** @type {Promise<void> | null} 走っている保存の一続き（待たせた分まで含む）。 */
   let chain = null;
-  /** @type {Array<{ entries: ReadonlyArray<any>; place: any; promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
+  /** @type {Array<{ entries: ReadonlyArray<any>; place: any; wording: any; promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
   const waiting = [];
 
   const callSafely = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
@@ -735,14 +869,25 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
+  const wordingNow = () => {
+    if (typeof deps.getWording !== "function") return null;
     try {
-      const result = await deps.writeImpl(entries, place);
+      return deps.getWording() ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place, /** @type {any} */ wording) => {
+    try {
+      const result = await deps.writeImpl(entries, place, wording);
       if (result && result.written) {
         // 置き場（getPlace があるときだけ）も渡す: main() が「頼んだ時点の場」の保存だけを数える（配信の組み直し Domain D）。
         callSafely(deps.onSaved, {
           atMs: nowImpl(),
           entriesLength: entries.length,
+          // Discord モード Domain K: 保存の要否の数え（出来事の行を除いた件数・countSpokenEntries）。
+          spokenLength: countSpokenEntries(entries),
           commit: result.commit,
           ...(place !== undefined ? { place } : {})
         });
@@ -752,7 +897,7 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const start = (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place) => {
+  const start = (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place, /** @type {any} */ wording) => {
     /** @type {() => void} */
     let resolveOwn = () => {};
     const own = new Promise((resolve) => {
@@ -761,11 +906,11 @@ export function createMemoryRecorder(deps) {
     callSafely(deps.onRecordingChange, true);
     chain = (async () => {
       try {
-        await runOnce(entries, place);
+        await runOnce(entries, place, wording);
         resolveOwn();
         while (waiting.length > 0) {
           const next = /** @type {(typeof waiting)[number]} */ (waiting.shift());
-          await runOnce(next.entries, next.place);
+          await runOnce(next.entries, next.place, next.wording);
           next.resolve();
         }
       } finally {
@@ -782,10 +927,14 @@ export function createMemoryRecorder(deps) {
       const entries = entriesOverride ?? deps.getLiveEntries();
       if (!Array.isArray(entries) || entries.length === 0) return Promise.resolve();
       const place = placeNow();
-      if (!chain) return start(entries, place);
+      const wording = wordingNow();
+      if (!chain) return start(entries, place, wording);
       const last = waiting[waiting.length - 1];
       if (last && last.place === place) {
-        if (entries.length >= last.entries.length) last.entries = entries;
+        if (entries.length >= last.entries.length) {
+          last.entries = entries;
+          last.wording = wording;
+        }
         return last.promise;
       }
       /** @type {() => void} */
@@ -793,7 +942,7 @@ export function createMemoryRecorder(deps) {
       const promise = new Promise((r) => {
         resolve = () => r(undefined);
       });
-      waiting.push({ entries, place, promise, resolve });
+      waiting.push({ entries, place, wording, promise, resolve });
       return promise;
     },
     isRecording: () => chain != null,
@@ -974,7 +1123,8 @@ export const BODY_URL_NOT_SET_MESSAGE =
  * @param {{ getUrl: () => string | null; connect: () => Promise<void>; close: () => Promise<void> }} deps.channel  器（lazyChannel）。
  * @param {() => boolean} [deps.isStreamOpen]  場が開いているか（20 分ごとの保存の判定・server.streamStatus）。
  * @param {() => ReadonlyArray<any>} [deps.getEntries]  ライブの転写（server.getTranscript）。
- * @param {() => number} [deps.nowImpl=Date.now]
+ * @param {() => number} [deps.nowImpl=Date.now]  場の始まりの時刻と、途中保存の経過時間（Discord モード Domain H）の時計。
+ * @param {number} [deps.checkpointIntervalMs=MEMORY_CHECKPOINT_INTERVAL_MS]  途中保存を頼むまでの経過（Discord モード Domain H）。
  * @param {number} [deps.memoryTimeoutMs=SHUTDOWN_MEMORY_TIMEOUT_MS]  最後の保存を待つ上限。
  * @param {typeof setTimeout} [deps.setTimeoutImpl]
  * @param {(info: { timeoutMs: number }) => void} [deps.onMemoryWait]  保存を待ち始めたとき（ターミナルに 1 行）。
@@ -983,8 +1133,16 @@ export function createStreamVenueHooks(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   const memoryTimeoutMs = deps.memoryTimeoutMs ?? SHUTDOWN_MEMORY_TIMEOUT_MS;
   const setTimeoutImpl = deps.setTimeoutImpl ?? setTimeout;
+  const checkpointIntervalMs = deps.checkpointIntervalMs ?? MEMORY_CHECKPOINT_INTERVAL_MS;
   /** この場で最後に保存が成り立った時刻（snapshot の memory.lastRecordAtMs）。場の始まりで null に戻す。 @type {number | null} */
   let lastRecordAtMs = null;
+  // Discord モード Domain H（discord-mode.md §13.6）: 途中保存の経過時間の起点（どれも nowImpl の時計・場の始まりで戻す）。
+  /** この場の始まり（renewRecords の時刻）。 @type {number | null} */
+  let venueStartedAtMs = null;
+  /** この場で最後に保存が成り立ったと数えた時刻（noteSaved を受けた時点の nowImpl・途中・手動・最後のどれでも）。 @type {number | null} */
+  let lastSavedAtMs = null;
+  /** この場で最後に途中保存を頼んだ時刻（checkpoint が頼んだ時点・保存が失敗し続けても頼み直しを 20 分おきに保つ）。 @type {number | null} */
+  let lastCheckpointRequestedAtMs = null;
   /** この場で最後に保存が成り立った時点の転写の件数（保存を飛ばす判定）。場の始まりで 0 に戻す。 */
   let lastRecordedSeq = 0;
   /** 保存を待っている間だけ入る「待たずに進む」口。 @type {(() => void) | null} */
@@ -1012,6 +1170,9 @@ export function createStreamVenueHooks(deps) {
         const startedAtMs = nowImpl();
         lastRecordedSeq = 0;
         lastRecordAtMs = null;
+        venueStartedAtMs = startedAtMs;
+        lastSavedAtMs = null;
+        lastCheckpointRequestedAtMs = null;
         deps.renewUsageLog?.(startedAtMs);
         deps.memoryPlaces.beginStream(startedAtMs);
         await deps.memoryPlaces.place()?.ready;
@@ -1050,8 +1211,11 @@ export function createStreamVenueHooks(deps) {
       },
       /** @param {ReadonlyArray<any>} transcript */
       async saveFinal(transcript) {
+        // Discord モード Domain K（J の持ち越し 1）: 要否は出来事の行を除いた件数で見る（出来事の行だけなら頼まない）。頼むときの
+        // 中身は出来事の行を載せたままの転写。
+        const spoken = countSpokenEntries(transcript);
         const entries =
-          Array.isArray(transcript) && !shouldSkipMemoryCheckpoint(transcript.length, lastRecordedSeq) ? transcript : [];
+          Array.isArray(transcript) && spoken > 0 && !shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq) ? transcript : [];
         const done = Promise.all([deps.memoryRecorder.record(entries), deps.memoryRecorder.whenIdle()]);
         if (!deps.memoryRecorder.isRecording()) return;
         await waitBounded(done);
@@ -1059,25 +1223,40 @@ export function createStreamVenueHooks(deps) {
     },
     /**
      * 20 分ごとの保存の 1 回分（場が開いている間だけ・転写が前の保存から増えていなければ頼まない）。
+     * Discord モード Domain H（discord-mode.md §13.6）: main のタイマーは起動時に張ったまま 1 分ごと
+     * （MEMORY_CHECKPOINT_TICK_MS）に呼ぶ。頼むのは、場の始まり・前の保存（途中・手動）・前に頼んだ時刻のうち一番遅い
+     * ものから 20 分たったときだけ（isMemoryCheckpointDue）。体験の種類は見ない（配信の場にも同じく効く）。
      * @returns {boolean}  頼んだら true。
      */
     checkpoint() {
       if (typeof deps.isStreamOpen !== "function" || !deps.isStreamOpen()) return false;
       const entries = typeof deps.getEntries === "function" ? deps.getEntries() : [];
-      if (shouldSkipMemoryCheckpoint(entries.length, lastRecordedSeq)) return false; // 空回しでトークンを燃やさない。
+      // 空回しでトークンを燃やさない。Discord モード Domain K: 数えるのは出来事の行を除いた件数（出来事の行だけ・出来事の行が
+      // 増えただけでは頼まない）。頼むときの中身は出来事の行を載せたまま。
+      const spoken = countSpokenEntries(entries);
+      if (spoken === 0 || shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq)) return false;
+      const nowMs = nowImpl();
+      const since = { startedAtMs: venueStartedAtMs, lastSavedAtMs, lastRequestedAtMs: lastCheckpointRequestedAtMs };
+      if (!isMemoryCheckpointDue(nowMs, since, checkpointIntervalMs)) return false; // 場の始まり・前の保存から 20 分たっていない。
+      lastCheckpointRequestedAtMs = nowMs;
       deps.memoryRecorder.record(entries).catch(() => {});
       return true;
     },
     /**
      * 保存の係の onSaved。今の場の保存だけを数える（置き場を持たない保存 = テストの係は数える）。
-     * @param {{ atMs: number; entriesLength: number; place?: any }} info
+     * @param {{ atMs: number; entriesLength: number; spokenLength?: number; place?: any }} info
      * @returns {boolean}  数えたら true。
      */
     noteSaved(info) {
       const place = info ? info.place : undefined;
       if (place && typeof place.streamNo === "number" && place.streamNo !== deps.memoryPlaces.streamNo()) return false;
       lastRecordAtMs = info.atMs;
-      lastRecordedSeq = info.entriesLength;
+      // Discord モード Domain K: 保存の要否の数えは出来事の行を除いた件数（保存の係が spokenLength を渡す・無ければ件数そのもの）。
+      lastRecordedSeq = typeof info.spokenLength === "number" ? info.spokenLength : info.entriesLength;
+      // Discord モード Domain H: 途中保存の起点を戻す（途中・手動の「今日を記録」のどちらでも）。info.atMs は保存の係の
+      // 時計で保存が終わった時刻（writeImpl が返った直後）。ここでは場の時計（nowImpl）で、受けた時刻を起点にする
+      // （onSaved は終わった直後に同期で呼ばれるので同じ時刻・テストで時計を差し替えても起点が揃う）。
+      lastSavedAtMs = nowImpl();
       return true;
     },
     lastRecordAtMs: () => lastRecordAtMs,
@@ -1097,6 +1276,228 @@ export function createStreamVenueHooks(deps) {
       return true;
     }
   };
+}
+
+/**
+ * 場に入るロールの束（Discord モード Domain B・discord-mode.md §5）。cockpit-server の `roles` に渡す一覧の要素。
+ * main() の今の 1 つずつの変数（今のロール・場の口・声の engine と再生器・④）を包んで 1 つの束にする。束の口はどれも
+ * 呼んだ時点の今のロールを読む（ロールの切り替えで束を作り直さない・場の間はサーバが一覧ごと固め、ロールの選択も断る）。
+ * 「束を作る工場」（main() の結び合った変数をロールごとに作る所）の切り出しは 2 つ目のロールのとき（設計 §5・§12.2）。
+ *
+ *  - id() / identity(): 今のロールの id と名前（名前・whisper の手がかり・呼びかけの照合・判定に渡す名前・soul の行）。
+ *  - hooks: 場の口 6 つ（createStreamVenueHooks の hooks = 場の記録・頭のセッション・器・記憶の最後の保存）。同じものを渡す。
+ *  - voice.prepare(kind): 声の engine を用意する（始める 6・入口を開く前・ElevenLabs のキーはここで読む）。
+ *  - voice.startResources(): 再生器と声の差し替え口を起こす（始める 6・待たない）。投げたら警告の 1 行にして場は止めない。
+ *  - voice.openOutlet(info)（Discord モード Domain E・渡したときだけ）: Discord の入口が VC に入った直後に呼ぶ出口
+ *    （`{ connection, voice, groupId }` → `{ dispose }`）。cockpit.mjs は Discord 向けの再生器を作ってこのロールの声に差す
+ *    （§createVenuePlayerSlot）。渡さなければ null（出口なし）。
+ *  - discordBotKeyFileRefused()（Discord モード Domain E・渡したときだけ）: role.json の discordBotKeyFile の形が合わず、Discord の
+ *    入口が断るか（roleDiscordBotKeyFileRefused）。
+ *  - recall.run(job): ④思い出し役を走らせる（今のロールの記憶の置き場を読む）。無ければ null。job.wording（場の語の組・
+ *    Discord モード Domain C。null = 配信の語）もそのまま渡す。
+ *
+ * @param {object} deps
+ * @param {() => string} deps.currentId
+ * @param {() => any} deps.identity
+ * @param {object} deps.streamHooks
+ * @param {(kind: "aivis" | "elevenlabs") => any} deps.prepareVoice
+ * @param {() => void} deps.startVoiceResources
+ * @param {((job: { request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }) => Promise<any>) | null} [deps.recallRunner]
+ * @param {(() => string) | null} [deps.discordBotKeyFile]  今のロールの Discord の Bot の鍵のファイル名（Discord モード Domain D・
+ *   role.json の discordBotKeyFile・無ければ既定 `.env.discord.local`）。束の discordBotKeyFile() で引く（無ければ null）。
+ * @param {(() => boolean) | null} [deps.discordBotKeyFileRefused]  今のロールの鍵のファイル名の形が合わず断るか（Domain E）。
+ * @param {((info: { connection: any; voice: any; groupId: string }) => ({ dispose: () => void } | null)) | null} [deps.openVoiceOutlet]
+ *   Discord の出口（Domain E）。束の voice.openOutlet で引く（無ければ null）。
+ * @param {(line: string) => void} [deps.onWarning]  警告の 1 行（本文・キーは入れない）。
+ */
+export function createVenueRoleBundle(deps) {
+  const recallRunner = typeof deps.recallRunner === "function" ? deps.recallRunner : null;
+  const discordBotKeyFile = typeof deps.discordBotKeyFile === "function" ? deps.discordBotKeyFile : null;
+  const discordBotKeyFileRefused = typeof deps.discordBotKeyFileRefused === "function" ? deps.discordBotKeyFileRefused : null;
+  const openVoiceOutlet = typeof deps.openVoiceOutlet === "function" ? deps.openVoiceOutlet : null;
+  return Object.freeze({
+    id: () => deps.currentId(),
+    identity: () => deps.identity(),
+    // Discord モード Domain D: Discord の入口が鍵を読むファイル名（鍵の中身は持たない）。
+    discordBotKeyFile: discordBotKeyFile ? () => discordBotKeyFile() : null,
+    // Discord モード Domain E: 鍵のファイル名の形が合わないとき Discord の入口が断る印。
+    discordBotKeyFileRefused: discordBotKeyFileRefused ? () => discordBotKeyFileRefused() === true : null,
+    hooks: deps.streamHooks,
+    voice: Object.freeze({
+      prepare: (/** @type {"aivis" | "elevenlabs"} */ kind) => deps.prepareVoice(kind),
+      startResources: () => {
+        try {
+          deps.startVoiceResources();
+        } catch (error) {
+          try {
+            deps.onWarning?.(`voice resources failed to start: ${error instanceof Error ? error.message : String(error)}`);
+          } catch {
+            // 知らせの失敗で場を止めない。
+          }
+        }
+      },
+      // Discord モード Domain E: Discord の出口（このロールの Bot の接続に結んだ再生器）。
+      openOutlet: openVoiceOutlet ? (/** @type {any} */ info) => openVoiceOutlet(info) : null
+    }),
+    recall: recallRunner ? Object.freeze({ run: (/** @type {any} */ job) => recallRunner(job) }) : null
+  });
+}
+
+/**
+ * Discord の体験の口（Discord モード Domain D・discord-mode.md §4.3・§6・§9）。cockpit-server の `experiences.discord` に渡す。
+ * main() の今の変数（設定の置き場・今のロールの鍵のファイル名・標準出力）を包んで src/discord/discord-experience.mjs の口を作る。
+ *
+ *  - settings: Discord の準備（サーバー・ボイスチャンネル・文字起こしの方式）の get / set（cockpit-settings.local.json）。
+ *  - currentKeyFile(): 今のロールの鍵のファイル名（一覧の読み込みで使う。場を開くときはロールの束の discordBotKeyFile）。
+ *  - currentKeyFileRefused(): 今のロールの鍵のファイル名の形が合わないか（Discord モード Domain G・一覧の読み込みも入口と同じく
+ *    鍵を読まずログインせずに断る）。無ければ断らない。
+ *  - settings の getDiscordVisionTarget / setDiscordVisionTarget（Domain G）: Discord の場の見る窓（目）の置き場（配信の見る窓とは別）。
+ *  - write(line): ログの口（`[cockpit] discord: …` の 1 行・数と状態だけ。文字起こしの本文・名前・Discord の id は書かない）。
+ *  - loadLibraries / loadToken: テスト注入（既定は discord.js などを使うときに動的 import・鍵は role の指すファイルから直に読む）。
+ *
+ * @param {object} deps
+ * @param {{ getDiscordPrep: () => any; setDiscordPrep: (patch: object) => void;
+ *   getDiscordVisionTarget?: () => (string | null); setDiscordVisionTarget?: (title: string | null) => void }} deps.settings
+ * @param {() => string} deps.currentKeyFile
+ * @param {() => boolean} [deps.currentKeyFileRefused]
+ * @param {(line: string) => void} deps.write
+ * @param {() => Promise<any>} [deps.loadLibraries]
+ * @param {(fileName: string) => any} [deps.loadToken]
+ * @param {object} [deps.options]  createDiscordExperience へそのまま渡す追加（待ちの長さ・出口の置き場など）。
+ */
+export function createDiscordVenueExperience(deps) {
+  return createDiscordExperience({
+    ...(deps.options ?? {}),
+    settings: {
+      getDiscordPrep: () => deps.settings.getDiscordPrep(),
+      setDiscordPrep: (/** @type {object} */ patch) => deps.settings.setDiscordPrep(patch),
+      // Discord モード Domain G: Discord の場の見る窓（目）。置き場が無ければ「選んでいない」（目を起こさない）。
+      getDiscordVisionTarget: () =>
+        typeof deps.settings.getDiscordVisionTarget === "function" ? deps.settings.getDiscordVisionTarget() : null,
+      setDiscordVisionTarget: (/** @type {string | null} */ title) => {
+        if (typeof deps.settings.setDiscordVisionTarget !== "function") throw new Error("no place to keep the Discord vision target");
+        deps.settings.setDiscordVisionTarget(title);
+      }
+    },
+    currentKeyFile: () => deps.currentKeyFile(),
+    ...(deps.currentKeyFileRefused ? { currentKeyFileRefused: () => /** @type {() => boolean} */ (deps.currentKeyFileRefused)() } : {}),
+    log: (/** @type {string} */ line) => deps.write(`[cockpit] discord: ${line}\n`),
+    ...(deps.loadLibraries ? { loadLibraries: deps.loadLibraries } : {}),
+    ...(deps.loadToken ? { loadToken: deps.loadToken } : {})
+  });
+}
+
+/** 「VC にいない」の口が投げる文面（Discord モード Domain I・決まった短い文・運び手の play-failed の診断に乗る）。 */
+export const HELD_VENUE_PLAYER_MESSAGE = "venue player held: not in a voice channel (no local playback).";
+
+/**
+ * 「VC にいない」の口（Discord モード Domain I・§13.3）。Discord の場で VC から抜けている間、差し口に置く。鳴らさない（open / write /
+ * end は投げる = 運び手は play-failed で終わる・手元のスピーカーに落とさない）。stop・onEvent・dispose は何もしない。
+ */
+export const HELD_VENUE_PLAYER = Object.freeze({
+  held: true,
+  open() {
+    throw new Error(HELD_VENUE_PLAYER_MESSAGE);
+  },
+  write() {
+    throw new Error(HELD_VENUE_PLAYER_MESSAGE);
+  },
+  end() {
+    throw new Error(HELD_VENUE_PLAYER_MESSAGE);
+  },
+  stop() {},
+  onEvent() {
+    return () => {};
+  },
+  whenReady: () => Promise.resolve(false),
+  current: () => null,
+  isAlive: () => false,
+  dispose() {}
+});
+
+/**
+ * その場の再生器の差し口（Discord モード Domain E・discord-mode.md §4.3「再生器を作る（ロールごと）」・§5・§7）。
+ *
+ * 場の共通の段が体験に応じて再生器を作り分けるための置き場。配信の場では空（null）のままで、声は今の手元の再生器
+ * （createStreamPlayer）から出る。Discord の場では、入口が VC に入った直後にロールの束の voice.openOutlet → open(info) が呼ばれ、
+ * そのロールの Bot の接続に結んだ Discord 向けの再生器（src/discord/discord-stream-player.mjs）をここに置く。main() の
+ * ensureVoiceResources・acquireAcceptedFireResources・playerProxy は、ここに再生器があればそれを使い、手元の再生器は起こさない
+ * （手元のスピーカーから出さない）。入口を閉じると返り値の dispose で再生器を畳んで空に戻す（次の配信の場は手元の再生器）。
+ *
+ * Discord モード Domain I（discord-mode.md §13.3）: VC から抜けた（場は開いたまま）ときは、返り値の `dispose({ hold: true })` で
+ * 再生器を畳み、差し口には「VC にいない」の口（{@link HELD_VENUE_PLAYER}・鳴らさない・open / write / end は投げる）を置く。差し口が
+ * 空でないので、ensureVoiceResources・acquireAcceptedFireResources・playerProxy は手元の再生器を作らない・使わない（抜けた瞬間に
+ * 鳴っている途中の返事・遅れて届いた声が手元のスピーカーに流れない）。次に VC に入れば open が置き換え、場を閉じれば（hold なしの
+ * dispose・サーバを閉じるときの dispose）空に戻る。
+ *
+ * @param {object} [deps]
+ * @param {(info: { connection: any; voice: any; groupId: string }) => any} [deps.createPlayer]  再生器を作る口（既定
+ *   createDiscordStreamPlayer。テストは偽物）。
+ * @param {number} [deps.startedDelayMs]  Discord の `started` に足す遅れ（既定は再生器の既定・設計 §7.4 の a）。
+ * @param {(event: string) => void} [deps.onTrace]  診断（事象の種類だけ）。
+ */
+export function createVenuePlayerSlot(deps = {}) {
+  const held = HELD_VENUE_PLAYER;
+  const createPlayer =
+    typeof deps.createPlayer === "function"
+      ? deps.createPlayer
+      : (/** @type {{ connection: any; voice: any; groupId: string }} */ info) =>
+          createDiscordStreamPlayer({
+            voice: info.voice,
+            connection: info.connection,
+            ...(typeof deps.startedDelayMs === "number" ? { startedDelayMs: deps.startedDelayMs } : {}),
+            ...(typeof deps.onTrace === "function" ? { onTrace: (/** @type {string} */ event) => deps.onTrace?.(event) } : {})
+          });
+  /** @type {any} */
+  let current = null;
+  /** @param {any} p */
+  const release = (p) => {
+    if (current === p) current = null;
+    try {
+      p.dispose?.();
+    } catch {
+      // best-effort
+    }
+  };
+  return Object.freeze({
+    /** 今の場の再生器（無ければ null = 手元の再生器を使う）。 */
+    current: () => current,
+    /**
+     * Discord の出口（ロールの束の voice.openOutlet）。前の場の残り（・VC にいない間の口）があれば置き換えて畳む。作れなければ
+     * 投げ、差し口は今のまま（VC にいない間の口なら、それを残す = 手元のスピーカーに戻さない）。
+     * 返り値の dispose(options): 再生器を畳む。`{ hold: true }`（Domain I・VC から抜けた）なら差し口に「VC にいない」の口を残す。
+     * hold で残した口は、同じ出口の hold なしの dispose で外れる（場を閉じた）。
+     * @param {{ connection: any; voice: any; groupId: string }} info
+     */
+    open(info) {
+      const p = createPlayer(info);
+      if (current) release(current);
+      current = p;
+      let holding = false;
+      return Object.freeze({
+        /** @param {{ hold?: boolean }} [options] */
+        dispose: (options) => {
+          const hold = !!options && options.hold === true;
+          if (current === p) {
+            current = hold ? held : null;
+            holding = hold;
+          } else if (current === held && holding && !hold) {
+            current = null;
+            holding = false;
+          }
+          try {
+            p.dispose?.();
+          } catch {
+            // best-effort
+          }
+        }
+      });
+    },
+    /** 畳む（サーバを閉じるときなど・冪等）。 */
+    dispose() {
+      if (current) release(current);
+    }
+  });
 }
 
 /**
@@ -2187,6 +2588,12 @@ async function main() {
   const roleHooks = createRoleHooks({ rolesDir: DEFAULT_ROLES_DIR, settings });
   // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
   const visionTargetHooks = createVisionTargetHooks(settings);
+  // Discord モード Domain G: 発火が撮る見る窓は開いている場の体験で選ぶ（Discord の場は Discord の準備の見る窓）。
+  const venueVisionTarget = createVenueVisionTarget({
+    stream: visionTargetHooks.getVisionTarget,
+    discord: () => settings.getDiscordVisionTarget(),
+    experience: () => server?.venueContext()?.experience ?? null
+  });
   // S6「会話が続く」: 魂の声の出力デバイス設定（vision target と同型の薄い橋渡し・§createAudioDeviceHooks）。
   const audioDeviceHooks = createAudioDeviceHooks(settings);
   // S6「会話が続く」: 自発発火 ON/OFF の永続トグル（既定 OFF・§createSelfFireHooks）。
@@ -2231,6 +2638,13 @@ async function main() {
   let sessionBody = null;
   /** @type {ReturnType<typeof createStreamPlayer> | null} */
   let player = null;
+  // Discord モード Domain E: その場の再生器（§createVenuePlayerSlot）。Discord の場では Bot の接続に結んだ再生器が入り、
+  // 手元の再生器（player）の代わりに使う。配信の場では空のまま（今のふるまい）。
+  const venuePlayers = createVenuePlayerSlot({
+    onTrace: (event) => fireDiagnostics.record("player.discord", { marker: event })
+  });
+  /** 今の場で声を出す再生器（Discord の場の再生器・無ければ手元の再生器）。 */
+  const activePlayer = () => venuePlayers.current() ?? player;
   let audioRevision = 0;
   let playerAudioRevision = null;
   // 声の差し替え口（Start のときに作る・種類が変われば作り直す）。desiredTtsEngine は最後に Start で選ばれた方式
@@ -2270,11 +2684,17 @@ async function main() {
   const currentBody = () => roleHooks.current().body !== false;
   // 会話指示 = 今のロールの性格の指示（roles/<id>/instructions.md・§createRoleInstructionStore）。
   // 編集画面に読むだけで見せる教えは、①に足すものと同じく今のロールの体に合わせる（体なしは expression を出さない）。
+  // Discord モード Domain C: 場が開いていてその体験が語の組か教えを持つ（配信でない）ときは、その体験の語で差した本文と体験の
+  // 教えを見せる（§venueSoulWords）。場が閉じている・配信なら今の道（配信の語）。
   const conversationInstructionHooks = createConversationInstructionHooks(
     createRoleInstructionStore({ dir: DEFAULT_ROLES_DIR, knownIds: () => roleHooks.knownIds() }),
     () => roleHooks.currentId(),
     instructionRevision,
-    () => listSoulSkills({ names: soulSkillNamesForBody(currentBody()) })
+    () => listSoulSkills({ names: soulSkillNamesForBody(currentBody()) }),
+    () => {
+      const venue = venueSoulWords(server?.venueContext() ?? null);
+      return venue ? listVenueSoulSkills({ body: currentBody(), venue }) : null;
+    }
   );
   // One runtime authority for the current name. All identity seams (prompt, Whisper, scheduler, and public
   // state) read this closure at the appropriate lifecycle boundary. 配信の組み直し Domain A: 名前は今のロールが
@@ -2318,6 +2738,21 @@ async function main() {
   // 圧縮の開始・終了を 1 行ずつ。配信の組み直し Domain D: 場 1 つに 1 ファイル（場の始まりで作り直す・
   // §createStreamVenueHooks の renewRecords）。起動から最初の場までの分は起動の時刻のファイル（書くものが無ければ作られない）。
   let sessionUsageLog = createSessionUsageLog();
+  /**
+   * Discord モード Domain H（discord-mode.md §13.7）: 判定・発火の断り・つまみの行を今の場の記録へ 1 行（本文・名前・id
+   * なし・頭の種類に関係なく書く）。作れなかった行（null = 許す一覧に無い control）は書かない。記録の失敗で判定・発火を
+   * 止めない（append も throw しない）。Domain I〜K は VC の出来事をサーバの reportControl（onControl）から渡すか、
+   * cockpit.mjs 側ならこの口を `recordSessionUsage(controlUsageRecord({ control: "vc-join" }))` の形で呼ぶ。
+   * @param {Record<string, unknown> | null} record
+   */
+  const recordSessionUsage = (record) => {
+    if (record == null) return;
+    try {
+      sessionUsageLog.append(record);
+    } catch {
+      // 記録の失敗で判定・発火を止めない。
+    }
+  };
   // 隙間で手動の圧縮（Codex の頭のみ・context-growth-2026-10.md §6・§8）。目安は settings ファイルのキー
   // （無ければ 20 万トークン / 3 秒 / 10 分）。圧縮を始める大きさは操縦席の設定（頭脳・会話のタブ）からも変えられ、
   // contextCompactionHooks が保存と走っている compactor の差し替えを担う（次の確認から効く）。隙間の材料は
@@ -2355,7 +2790,7 @@ async function main() {
     readCodex: createCodexQuotaReader({ getBrain: () => currentBrain, getSession: () => session }),
     readElevenLabs: () => fetchElevenLabsSubscription()
   });
-  // 画面キャプチャの撮る係（常駐 PowerShell）。耳の Start で立ち上げ、耳の Stop・操縦席の終了で止める
+  // 画面キャプチャの撮る係（常駐 PowerShell）。場を開くとき（場の共通の段・耳の後）に立ち上げ、場を閉じるとき・操縦席の終了で止める
   // （discussion/ai-cohost/research/vision-capture-latency-2026-10.md §4）。使えない間の撮影は今の
   // captureWindow（毎回起動）に戻る。記録は標準出力へ 1 行（数字と種類だけ）。
   const residentCapture = createResidentCapture({
@@ -2382,7 +2817,7 @@ async function main() {
    *
    * S6「会話が続く」: player は起動時（またはデバイス変更後の再生成時）に settings の出力デバイス名を
    * env 経由で渡す（`createStreamPlayer({ deviceName })`）。未記憶なら deviceName 未指定 = 既定デバイス。
-   * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（耳の Start で先に作る）。
+   * 声の差し替え Wave 2: player と声の差し替え口は ensureVoiceResources()（場を開くときに先に作る・ロールの束の voice.startResources）。
    */
   const ensureFireResources = () => {
     ensureSession();
@@ -2404,6 +2839,9 @@ async function main() {
       const sessionBrain = currentBrain;
       // このセッションのロールの体の有無（体なしは表情の教えを①に足さない・配信の組み直し Domain C）。
       const sessionHasBody = currentBody();
+      // このセッションの場の言葉（Discord モード Domain C・§venueSoulWords）。体験の教えと語の組を持つ場（配信でない）だけ
+      // 体験の道で教えを読む。配信・場の外は null で、今の道（①の固定の指示は一字も変わらない）。
+      const sessionVenue = venueSoulWords(server?.venueContext() ?? null);
       // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
       //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
       //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
@@ -2428,7 +2866,11 @@ async function main() {
         systemPrompt: buildRoleSessionSystemPrompt(
           sessionIdentity,
           conversationInstructionHooks.getProfile(roleHooks.currentId()).body,
-          loadSoulSkills({ names: soulSkillNamesForBody(sessionHasBody), onWarning: onBrainWarning })
+          sessionVenue
+            ? listVenueSoulSkills({ body: sessionHasBody, venue: sessionVenue, onWarning: onBrainWarning })
+                .map((skill) => skill.body)
+                .join("\n\n")
+            : loadSoulSkills({ names: soulSkillNamesForBody(sessionHasBody), onWarning: onBrainWarning })
         ),
         onWarning: onBrainWarning,
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
@@ -2481,11 +2923,16 @@ async function main() {
 
   /**
    * 流し込みプレイヤー（常駐 PowerShell + C#・起動に約 0.5 秒）と声の差し替え口を用意する（冪等）。
-   * 耳の Start のときに呼んで先に起こしておく（申し送り 1・最初の Fire に起動を乗せない）。常駐が
+   * 場を開くとき（耳の後・ロールの束の voice.startResources）に呼んで先に起こしておく（申し送り 1・最初の Fire に起動を乗せない）。常駐が
    * 落ちていたら作り直す。出力デバイスの変更は applyDesiredFireSettings が次の Fire の境目で反映する
    * （revision 方式・進行中の発話は accepted snapshot の player を最後まで使う）。
    */
   const ensureVoiceResources = () => {
+    // Discord モード Domain E: Discord の場では手元の再生器を起こさない（声は Bot の接続へ・手元のスピーカーから出さない）。
+    if (venuePlayers.current() != null) {
+      voiceEngines.ensure(desiredTtsEngine);
+      return;
+    }
     if (player != null && !player.isAlive()) {
       try {
         player.dispose();
@@ -2568,24 +3015,27 @@ async function main() {
     /** @param {string} id @param {{ sampleRate: number; channels: number }} format */
     open(id, format) {
       ensureFireResources();
-      return /** @type {any} */ (player).open(id, format);
+      return /** @type {any} */ (activePlayer()).open(id, format);
     },
     /** @param {string} id @param {Uint8Array} pcm */
     write(id, pcm) {
-      return player != null ? player.write(id, pcm) : false;
+      const p = activePlayer();
+      return p != null ? p.write(id, pcm) : false;
     },
     /** @param {string} id */
     end(id) {
-      return player != null ? player.end(id) : false;
+      const p = activePlayer();
+      return p != null ? p.end(id) : false;
     },
     /** barge-in の声止め（S6）。open が走った後にしか呼ばれない = player は生成済み。best-effort。 */
     stop() {
-      if (player != null) player.stop();
+      const p = activePlayer();
+      if (p != null) p.stop();
     },
     /** @param {(event: any) => void} listener */
     onEvent(listener) {
       ensureVoiceResources();
-      return /** @type {any} */ (player).onEvent(listener);
+      return /** @type {any} */ (activePlayer()).onEvent(listener);
     }
   };
   // 既定の AivisSpeech engine の deps（話者は今のロールの声・`--speaker` が上書き）。受理のたびに作る。
@@ -2602,7 +3052,8 @@ async function main() {
     ensureFireResources();
     const acceptedSession = session;
     // 進行中の発話はこの player / engine を最後まで使う（デバイス変更の作り直しは次の Fire の境目）。
-    const acceptedPlayer = player;
+    // Discord モード Domain E: Discord の場ではその場の再生器（Bot の接続に結んだもの）。
+    const acceptedPlayer = activePlayer();
     const acceptedEngine = voiceEngines.current();
     return Object.freeze({
       session: acceptedSession,
@@ -2746,7 +3197,10 @@ async function main() {
   const memoryRecorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
     getPlace: () => memoryPlaces.place(),
-    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place) => {
+    // Discord モード Domain C: 保存を頼んだ時点の場の語の組（定期・手動・「配信を終える」の最後の保存のどれも場が開いている
+    // 間に頼む・閉じる段の最後の保存も場を閉じる前）。場の外・配信は null = 配信の語の組。
+    getWording: () => server?.venueContext()?.wording ?? null,
+    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place, wording) => {
       if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
       await place.ready;
       return writeStreamRecord({
@@ -2754,6 +3208,7 @@ async function main() {
         entries,
         record: place.streamRecord.get(),
         dir: place.dir,
+        wording,
         onWarning: onBrainWarning
       });
     },
@@ -2807,9 +3262,11 @@ async function main() {
 
   // 引き金①: 定期保存(20 分毎・場が開いている間だけ・転写が前回記録から不変ならスキップ=inventory §2-4)。
   // unref() でプロセス生存に寄与させない(ears-cli 等の既存タイマ規律)。
+  // Discord モード Domain H（discord-mode.md §13.6）: 張るのは起動時の 1 回のまま、1 分ごとに確かめる。頼むかは checkpoint
+  // が「場の始まり・前の保存（途中・手動）から 20 分」で決める（起動から 20 分ごとに当たって、入り直した直後に頼む、を直す）。
   const memoryCheckpointTimer = setInterval(() => {
     streamVenue.checkpoint();
-  }, MEMORY_CHECKPOINT_INTERVAL_MS);
+  }, MEMORY_CHECKPOINT_TICK_MS);
   memoryCheckpointTimer.unref();
 
   /** 引き金②: 操縦席(POST /api/memory-record)からの手動「今日を記録」(保存の係の薄いラッパ・場が閉じていればサーバが断る)。 */
@@ -2819,7 +3276,7 @@ async function main() {
    * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
    * 同じ決め方）を cwd = 記憶のフォルダ・read-only・最後の答えだけで作る。警告は①②と同じ onBrainWarning へ。
    * 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（ほかのロールの記憶は読まない）。
-   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number }} job
+   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }} job
    */
   const recallRunner = async (job) => {
     const place = memoryPlaces.place();
@@ -2831,6 +3288,8 @@ async function main() {
       entries: job.entries,
       nowMs: job.nowMs,
       dir: place.dir,
+      // Discord モード Domain C: 思い出しの係が渡すその場の語の組（null = 配信の語の組）。
+      wording: job.wording ?? null,
       onWarning: onBrainWarning
     });
   };
@@ -2905,7 +3364,8 @@ async function main() {
       acquireFireResources: acquireAcceptedFireResources,
       // S5「目が開く」: 対象ウインドウの解決関数（settings 経由）。撮影は常駐の撮る係に頼む
       // （vision-capture-latency §4・使えない間は captureWindow＝毎回起動に戻る）。
-      getVisionTarget: visionTargetHooks.getVisionTarget,
+      // Discord モード Domain G: Discord の場では Discord の準備の見る窓（§createVenueVisionTarget）。
+      getVisionTarget: venueVisionTarget,
       captureImpl: residentCapture.capture,
       speakDeps: productionSpeakDeps(),
       ...(windowMs != null ? { windowMs } : {}),
@@ -2944,15 +3404,48 @@ async function main() {
   // 配信の組み直し Domain D: --channel で起動しても、起動時には頭のセッションを作らない（先充填はやめた）。頭のセッションは
   // 「配信を始める」で今のロールのモデルと指示で作る（§openStreamSession・stream-restructure.md §3 の 5）。
 
+  // Discord モード Domain B: 場に入るロールの束（§createVenueRoleBundle・最初の的では今のロール 1 つ）。今の 1 つずつの変数を
+  // 包む: 今のロールの名前、場の口（場の記録・頭のセッション・器・記憶の最後の保存）、声の engine の用意（耳を開く前・種類が
+  // 変われば作り直す・ElevenLabs のキーはここで読む・用意できなければ場は開かない）と再生器（流し込みプレイヤーと声の差し替え
+  // 口・最初の Fire に乗せない）、④思い出し役。サーバはロールに依る値をこの束から引く。
+  const venueRole = createVenueRoleBundle({
+    currentId: () => roleHooks.currentId(),
+    identity: getCurrentRoleIdentity,
+    streamHooks: streamVenue.hooks,
+    prepareVoice: (kind) => {
+      desiredTtsEngine = kind;
+      return voiceEngines.prepare(kind);
+    },
+    startVoiceResources: ensureVoiceResources,
+    recallRunner,
+    // Discord モード Domain D: Discord の入口が鍵を読むファイル名（今のロールの role.json の discordBotKeyFile・無ければ既定）。
+    discordBotKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
+    // Discord モード Domain E: 鍵のファイル名の形が合わなければ Discord の入口が断る（既定の鍵で入らない）。
+    discordBotKeyFileRefused: () => roleDiscordBotKeyFileRefused(roleHooks.current()),
+    // Discord モード Domain E: Discord の出口（VC に入った直後にこのロールの Bot の接続に再生器を結ぶ・§createVenuePlayerSlot）。
+    openVoiceOutlet: (info) => venuePlayers.open(info),
+    onWarning: (line) => process.stderr.write(`[cockpit] WARN: ${line}\n`)
+  });
+
+  // Discord モード Domain D: Discord の体験の口（§createDiscordVenueExperience）。準備（サーバー・ボイスチャンネル・文字起こしの
+  // 方式）は settings に保存し、鍵は今のロールの指すファイルから読む。ログは数と状態だけ。
+  const discordExperience = createDiscordVenueExperience({
+    settings,
+    currentKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
+    currentKeyFileRefused: () => roleDiscordBotKeyFileRefused(roleHooks.current()),
+    write: (line) => process.stdout.write(line)
+  });
+
   server = createCockpitServer({
     port: args.port ?? DEFAULT_COCKPIT_PORT,
     indexHtmlPath: cockpitHtmlPath,
     settingsStore: settings,
-    // Current identity providers are request/handling-time closures. The
-    // server consumes this same role-backed view for Whisper, scheduler,
-    // and additive public state; changing the role does not require ear or
-    // scheduler recreation.
-    currentRoleIdentity: getCurrentRoleIdentity,
+    // Discord モード Domain B: 場に入るロールの一覧（最初の的では今のロールの束 1 つ・§createVenueRoleBundle）。名前（whisper・
+    // 呼びかけの照合・判定・snapshot）・場の口・声の engine と再生器・④はこの束から引く。束の口は呼んだ時点の今のロールを読む
+    // （ロールの切り替えで耳や予定を作り直さない）。
+    roles: [venueRole],
+    // Discord モード Domain D: 場の体験の口（配信の口はサーバの中・Discord の口はここから渡す）。
+    experiences: { discord: discordExperience },
     // 配信の組み直し Domain A: 起動時の引っ越しの結果（ログのタブに出す・引っ越しが無ければ空）。
     notices: startupNotices,
     fireOrchestratorFactory,
@@ -3014,35 +3507,29 @@ async function main() {
     // 配信の組み直し Domain A: hotwords は今のロールの名前の手がかり（ロールに無ければ設定ファイルか既定）。
     localSttSettings: () => applyRoleHotwords(settings.getLocalStt(), roleHooks.current()),
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
-    // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶し、耳を開く前に engine を用意する
-    // （種類が変われば作り直す・ElevenLabs のキーはここで読む）。用意できなければ Start は理由つきで失敗する。
+    // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶する。engine の用意（耳を開く前・用意
+    // できなければ Start は理由つきで失敗する）と再生器はロールの束（venueRole.voice）が持つ。
     ttsEngineInitial: desiredTtsEngine,
     onSetTtsEngine: ttsEngineHooks.onSetTtsEngine,
-    onPrepareVoiceEngine: (kind) => {
-      desiredTtsEngine = kind;
-      return voiceEngines.prepare(kind);
-    },
-    // 画面キャプチャの撮る係の寿命を耳に合わせる（vision-capture-latency §4 の 2）。close() でも止まる。
-    // 声の差し替え Wave 2: 流し込みプレイヤーと声の差し替え口も Start のときに起こす（最初の Fire に乗せない）。
-    onEarsStarted: () => {
-      residentCapture.start();
-      try {
-        ensureVoiceResources();
-      } catch (error) {
-        process.stderr.write(
-          `[cockpit] WARN: voice resources failed to start: ${error instanceof Error ? error.message : String(error)}\n`
-        );
-      }
-    },
-    onEarsStopped: () => residentCapture.stop(),
-    // 配信の組み直し Domain D: 場（配信を始める / 終える）の口。場の記録の作り直し・頭のセッション・器・記憶の最後の保存。
-    streamHooks: streamVenue.hooks,
+    // 画面キャプチャの撮る係（目）の寿命を場に合わせる（vision-capture-latency §4 の 2・Discord モード Domain B: 場の共通の段）。
+    // close() でも止まる。
+    onEyesStart: () => residentCapture.start(),
+    onEyesStop: () => residentCapture.stop(),
     // speak-now（話し始めの判定）: 方式は settings から復元（初回既定 speak-now）・切替ごとに記憶・判定ごとに
     // 標準出力へ 1 行（遅延・選択・確率のみ）。Decisions API のキーは cockpit-server の既定
     // （.env.decisions.local をコード内で直接読む）に任せる。
     speakStartModeInitial: speakStartHooks.resolveInitialSpeakStartMode(),
     onSetSpeakStartMode: speakStartHooks.onSetSpeakStartMode,
-    onSpeakNowJudgment: (info) => process.stdout.write(formatSpeakNowLine(info)),
+    onSpeakNowJudgment: (info) => {
+      process.stdout.write(formatSpeakNowLine(info));
+      // Discord モード Domain H（discord-mode.md §13.7）: 判定ごとに今の場の記録（session-usage/）へ 1 行（時刻・きっかけ・
+      // 選択・確率・行き先・遅延・エラーの種類だけ・エラー文は書かない）。ターミナルの 1 行はそのまま。
+      recordSessionUsage(judgmentUsageRecord(info));
+    },
+    // Discord モード Domain H: 発火の要求を断った（場が開いていない・KILL・忙しい・耳が無い・窓が空など）を記録へ 1 行。
+    onFireRefused: (info) => recordSessionUsage(fireRefusedUsageRecord(info)),
+    // Discord モード Domain H: つまみ（自発・かぶり判定・KILL）の切り替えを記録へ 1 行（前後の真偽だけ）。
+    onControl: (info) => recordSessionUsage(controlUsageRecord(info)),
     // 相槌どうしの最小間隔は settings ファイルの backchannelMinIntervalSec（無ければ 8 秒・backchannel.md §2）。
     backchannelMinIntervalMs: speakStartHooks.resolveBackchannelMinIntervalMs(),
     // コメント判定（弾く判定は全モード・反応する判定は speak-now の間）: 忙しい間のコメントの扱いは settings から
@@ -3053,9 +3540,8 @@ async function main() {
     commentHoldMaxAgeMs: commentHold.maxAgeMs,
     commentHoldMaxCount: commentHold.maxCount,
     onCommentJudgment: (info) => process.stdout.write(formatCommentJudgmentLine(info)),
-    // 記憶の作り直し Wave 3: 思い出しの係（④は使い捨ての Codex・「避けるか」判定は cockpit-server の既定の Decisions API）。
-    // 係の出来事は標準出力へ 1 行（頼みごと・記憶の中身は書かない）。
-    recallRunner,
+    // 記憶の作り直し Wave 3: 思い出しの係（④は使い捨ての Codex・ロールの束の recall.run・「避けるか」判定は cockpit-server の
+    // 既定の Decisions API）。係の出来事は標準出力へ 1 行（頼みごと・記憶の中身は書かない）。
     onRecallEvent: (event) => process.stdout.write(formatRecallEventLine(event)),
     // 操縦席の作り直し 1 回目（データ側）: 残量・遅延のしきい値（settings の latencyWarnSec / latencyAlertSec・既定 4 / 6 秒）・
     // 返事ごとの遅延の 1 行（数字ときっかけの種類だけ）。
@@ -3122,7 +3608,7 @@ async function main() {
       }
     },
     finalize: async () => {
-      // 撮る係は close() の onEarsStopped で止まっているはずだが、途中で throw しても取り残さない（冪等）。
+      // 撮る係は close() の onEyesStop で止まっているはずだが、途中で throw しても取り残さない（冪等）。
       residentCapture.stop();
       quotaMonitor.stop();
       // 記録の書き残しを少しだけ待つ（固まらないよう上限つき）。

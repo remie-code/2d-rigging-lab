@@ -16,11 +16,13 @@ import { driveSummaryView, endStreamButtonView, LATENCY_SEGMENTS } from "../view
  * 下の帯本体。
  * 配信の組み直し Domain D: 場が開いている間だけ、歯車の左に小さく「配信を終える」（誤って押しにくいよう 2 回押し・
  * 1 回目で「もう一度押すと配信を終える」に変わる。armed は App が持ち、数秒で戻す）。
+ * Discord モード Domain G: Discord の場の間は同じ置き場が「VC から抜ける」（2 回押し・文言は endStreamButtonView）。話し始めは
+ * speakStartFixed（snapshot・Discord の場で true）なら「speak-now（固定）」（driveSummaryView）。
  * @param {{ settings: any; settingsOpen?: boolean; onOpenSettings?: () => void; endArmed?: boolean;
- *   onEndStream?: () => void }} props
+ *   onEndStream?: () => void; speakStartFixed?: boolean | null }} props
  */
-export function BottomBar({ settings, settingsOpen = false, onOpenSettings, endArmed = false, onEndStream }) {
-  const summary = driveSummaryView(settings);
+export function BottomBar({ settings, settingsOpen = false, onOpenSettings, endArmed = false, onEndStream, speakStartFixed = null }) {
+  const summary = driveSummaryView(settings, { speakStartFixed });
   const endView = endStreamButtonView(settings && settings.stream, endArmed);
   return html`
     <footer class="bottom-bar">

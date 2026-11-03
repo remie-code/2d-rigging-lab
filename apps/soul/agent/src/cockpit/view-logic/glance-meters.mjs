@@ -11,7 +11,12 @@
  *  - 状態のピル（statusPillView）: 聞いてる / 考えてる / 喋ってる / 圧縮中（頭の会話の圧縮の最中）。
  *  - 下の帯の運転設定の表示（driveSummaryView）: 自発・口数・話し始め・忙しい間のコメント。
  *  - 配信前（isPreStream）: 耳が止まっている間は会話の場所の中央に「準備・設定を開く」。
+ *  - Discord モード Domain G: 場が Discord の場（snapshot の stream.experience === "discord"）の間は、始める / 終えるの文言を
+ *    体験の語で出す（「VC から抜ける」など・語は view-logic/discord.mjs）。配信の文言は変えない。下の帯の「話し始め」は Discord の
+ *    場では固定（speakStartFixed）を読み、「忙しい間のコメント」は出さない（Discord の場にはコメントが無い）。
  */
+
+import { DISCORD_LEAVE_TEXT, DISCORD_LEAVE_ARMED_TEXT, isDiscordVenue } from "./discord.mjs";
 
 /** 残量が少ない（琥珀）の境目（残り %・cockpit/quota.mjs の QUOTA_LOW_PERCENT と同じ。UI は quota.mjs を import しない）。 */
 export const QUOTA_LOW_PERCENT = 20;
@@ -221,9 +226,14 @@ export function isPreStream(ears, stream) {
 export function streamStartView(stream, requestError = "") {
   const phase = streamPhaseOf(stream, null);
   const serverError = stream && typeof stream.error === "string" ? stream.error : "";
+  // Discord モード Domain G: Discord の場の開きかけ・閉じかけは「配信を始める」を押せないまま出す（途中の文言は「Discord の VC に
+  // 入る」の側・view-logic/discord.mjs の discordJoinView）。配信の場は今まで通り。
+  const discord = isDiscordVenue(/** @type {any} */ (stream));
   return {
     phase,
-    startText: phase === "opening" ? "配信を始めています…" : phase === "closing" ? "配信を終えています…" : "配信を始める",
+    startText: discord
+      ? "配信を始める"
+      : phase === "opening" ? "配信を始めています…" : phase === "closing" ? "配信を終えています…" : "配信を始める",
     startDisabled: phase !== "closed",
     noteText: phase === "closing" ? "記録中…" : "",
     errorText: phase === "closed" ? requestError || serverError : ""
@@ -239,6 +249,10 @@ export function streamStartView(stream, requestError = "") {
  */
 export function endStreamButtonView(stream, armed) {
   const show = streamPhaseOf(stream, null) === "open";
+  // Discord モード Domain G: Discord の場の間は同じ置き場に「VC から抜ける」（今と同じく 2 回押し・設計 §9）。
+  if (isDiscordVenue(/** @type {any} */ (stream))) {
+    return { show, text: armed ? DISCORD_LEAVE_ARMED_TEXT : DISCORD_LEAVE_TEXT, className: "stream-end" + (armed ? " armed" : "") };
+  }
   return {
     show,
     text: armed ? "もう一度押すと配信を終える" : "配信を終える",
@@ -253,13 +267,20 @@ export const SPEAK_START_LABELS = Object.freeze({ classic: "従来", "speak-now"
 /** 忙しい間のコメントの表示名。 */
 export const COMMENT_BUSY_LABELS = Object.freeze({ hold: "あとで拾う", drop: "見逃す" });
 
+/** 話し始めがその場で固定のときに添える印（Discord モード Domain G）。 */
+export const SPEAK_START_FIXED_SUFFIX = "（固定）";
+
 /**
  * 下の帯の運転設定の表示（自発・口数・話し始め・忙しい間のコメント）。使えない（null）は「—」。
+ * Discord モード Domain G: extra.speakStartFixed === true（snapshot の speakStartFixed・Discord の場）なら、話し始めはロールの方式を
+ * 読まずに「speak-now（固定）」（Discord の場で「従来」と出さない）。Discord の場（settings.stream.experience）の間は「忙しい間の
+ * コメント」を出さない（Discord の場にはコメントが無い）。どちらも配信の見え方は変えない。
  * @param {{ selfFire?: { enabled?: boolean } | null; verbosity?: string | null; speakStart?: string | null;
  *   commentBusy?: string | null } | null | undefined} settings
+ * @param {{ speakStartFixed?: boolean | null }} [extra]
  * @returns {Array<{ label: string; value: string }>}
  */
-export function driveSummaryView(settings) {
+export function driveSummaryView(settings, extra = {}) {
   const s = settings || {};
   const pick = (/** @type {Record<string, string>} */ labels, /** @type {any} */ v) =>
     typeof v === "string" ? labels[v] ?? v : "—";
@@ -268,10 +289,12 @@ export function driveSummaryView(settings) {
   const role = /** @type {any} */ (s).role;
   const verbosity = role && typeof role.verbosity === "string" ? role.verbosity : s.verbosity;
   const speakStart = role && typeof role.speakStartMode === "string" ? role.speakStartMode : s.speakStart;
-  return [
+  const fixed = !!(extra && extra.speakStartFixed === true);
+  const items = [
     { label: "自発", value: s.selfFire ? (s.selfFire.enabled ? "ON" : "OFF") : "—" },
     { label: "口数", value: pick(VERBOSITY_LABELS, verbosity) },
-    { label: "話し始め", value: pick(SPEAK_START_LABELS, speakStart) },
-    { label: "忙しい間のコメント", value: pick(COMMENT_BUSY_LABELS, s.commentBusy) }
+    { label: "話し始め", value: fixed ? SPEAK_START_LABELS["speak-now"] + SPEAK_START_FIXED_SUFFIX : pick(SPEAK_START_LABELS, speakStart) }
   ];
+  if (isDiscordVenue(/** @type {any} */ (s).stream)) return items;
+  return [...items, { label: "忙しい間のコメント", value: pick(COMMENT_BUSY_LABELS, s.commentBusy) }];
 }

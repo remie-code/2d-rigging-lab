@@ -1,6 +1,24 @@
 # Discord モードの wave 計画(Undine 2026-10-31)
 
 > Status: 着手(ユーザー 2026-10-31「開始していいよ / ドメインは君の方で順次起動して大丈夫」)。ブランチ `ai-cohost/discord-mode`。
+> - Domain A 合格(1 ループ・止めた指摘 0・soul 1938/1938・soul-zone・期待値を変えた既存テスト 0。`chatBufferAbsent` も正本の寿命を「場が開いている間」にしたので変えずに通った)。報告 [../waves/discord-mode/domain-a-report.md](../waves/discord-mode/domain-a-report.md)。固定テスト `src/mind/stream-wording-pin.test.mjs`(36 件、HEAD の未変更のコードから採取)。Undine の追認: (1) ②④の整形に名前つき you の `you(名前):` を入れるのは **Domain C で行う**(②④を語の組に組み替える所と同じなので)。`memory.test.mjs:58-65` の「you に名前を付けない」の期待値 1 行は、設計 §3.2 による変更として C で認める(配信では you に名前が入らないので配信の文字列は変わらない。固定テストは変えない)。(2) `buildRecallAvoidInput` には名前を付けないままで可。(3) Gnome の裁量 9 つ(耳ごとの口から情報を引く・正本の寿命は場が開いている間・判定の入力は「配信者(名前)」など)は可。
+> - Domain B 合格(1 ループ・止めた指摘 0・soul 1966/1966・soul-zone・期待値を変えた既存テスト 0・既存テストのファイルを 1 つも触らず)。報告 [../waves/discord-mode/domain-b-report.md](../waves/discord-mode/domain-b-report.md)。Undine の追認: (1) 設計 §4.3 の開く・閉じるの番号を実物の順に直す(注記を足した。D 以降はこの順に入口を差す)。(2) 束の深さは設計 §5・§12.2 を満たすとみなす。orchestrator・判定の部品・声の方式・口数をサーバに 1 つ残すのは可(KILL の持ち越しのため)。束へ移すのは 2 つ目のロールを扱うときの最初に置く。(3) 体験の口の `wording` / `teaching` / `judgeSet` の置き場(配信は null)を C がつなぐ。D の持ち越し(入口の失敗時に束を誰が畳むか・`closeEntrance` の冪等・耳の状態と「切れた」)は D で決める。
+> - Domain C 合格(1 ループ・止めた指摘 0・soul 2011/2011・soul-zone・固定テストの fixture 3 本は差分 0・期待値を変えた既存テストは追認どおり `memory.test.mjs` の 1 行だけ)。報告 [../waves/discord-mode/domain-c-report.md](../waves/discord-mode/domain-c-report.md)。レビューが HEAD と今で配信の場面 111 項目の一致を確かめた。Undine の追認: (1) `memory.test.mjs:58` 付近のテストの題名と `venue-wording.mjs` の頭のコメントのテストのファイル名のずれは、F の Gnome がついでに直す(Undine はソースを触らない)。(2) ①と会話指示の編集画面の「配信の道」「体験の道」の 2 本はこのままで可(設計 §3.4 の①の側を満たす。1 本にするのは既存の照合テストの期待値を変えるので今はしない)。(3) ②の語の組を「保存を頼んだ時点」で取るのは計画の意図どおり(場の間の 20 分ごと・手動の保存もその場の語で書くため)。思い出しの「避けるか」の差し口は F で足す。
+> - **人間ゲート 1 合格**(ユーザー 2026-11-01): ブランチの版(`5725f905`)で配信の流れを試し、全部大丈夫そうだった。YouTube のコメントへの反応だけは、コメントを用意する手間のためスキップ(未確認のまま。人間ゲート 2 のあとの配信で見る)。手順 [../waves/discord-mode/human-gate-1.md](../waves/discord-mode/human-gate-1.md)。Discord の群(D〜G)へ進む。
+> - Domain D 合格(1 ループ・止めた指摘 0・soul 2050/2050・soul-zone・期待値を変えた既存テスト 0・既存テストのファイルを触らず)。報告 [../waves/discord-mode/domain-d-report.md](../waves/discord-mode/domain-d-report.md)。Undine の追認: (1) ElevenLabs の耳で 400ms 未満の発話が転写に回りうる件は、関所を足さず人間ゲート 2 で見てから決める。(2) 形の合わない `discordBotKeyFile` を既定の鍵で読む所は、設計 §5(「断る」)に合わせて **E で入口で断る形に直す**(1 ロールの今は害が無いが、黙って別の Bot でログインする道を残さない)。(3) ログイン中に `closeEntrance` が呼ばれると Bot が destroy されない件は E で直す。(4) D の間は声が VC に出ず手元から鳴る(E で直る)。G への持ち越し: Discord の場の目の選択、`STREAMER_LABEL`、`chatBufferAbsent` の文面、接続の状態の見せ方。
+> - Domain E 合格(1 ループ・止めた指摘 0・soul 2099/2099・soul-zone・期待値を変えた既存テスト 0・`src/voice/`・`src/mind/` の差分 0)。報告 [../waves/discord-mode/domain-e-report.md](../waves/discord-mode/domain-e-report.md)。D からの直し 2 つ(合わない鍵のファイル名は入口で断る・ログイン中に閉じたら Bot を destroy)は済み。Undine の追認: (1) 一覧の読み込み(catalog)も合わない鍵のファイル名なら断る形に **G の最初で直す**。D の結線テストの正規表現の期待値 1 か所の変更は仕様変更として認める。(2) 途切れの合計が約 700ms を超えると ENDED の見張りで打ち切られる件、(3) `startedDelayMs` を設定の口にするか、はどちらも人間ゲート 2 で見てから決める。(4) 合わない `discordBotKeyFile` を操縦席がロールを書き戻すときに `""` に置き換える形は**認めない**(ユーザーが手で書いた値を黙って消すため)。書き戻しでは元の値をそのまま残し、使うときに断る形に **G で直す**。出口を作れなければ場を開かずに断る裁量は可。
+> - Domain F 合格(1 ループ・止めた指摘 0・soul 2127/2127・soul-zone・固定テストの fixture 差分 0・配信の期待値の変更 0。Discord の口が null でなくなった・判定の組に `recallAvoid` が増えたことによる Discord 側の既存テスト 5 行の変更は仕様変更として可)。報告 [../waves/discord-mode/domain-f-report.md](../waves/discord-mode/domain-f-report.md)。通話の語の組・Discord の判定の問い・`skills/venue-discord.md` の文面は報告にある(言い回しは人間ゲート 2 で見る)。Undine の追認: (1) speak-now の固定を体験の種類 `"discord"` で決める形は可。(2) Discord の場の間の YouTube の Connect(`POST /api/chat/connect`)は **G で断る形にし、画面でも出さない**(Discord の場にはコメントが無い、設計 §4.3 の表)。コメント反応を Discord の場で判定しない守りのテストも G で付ける。G への持ち越し: 話し始めのメーターが `speakStartFixed` を見る、方式を選ばせない、catalog の断り、ロールの書き戻しで鍵のファイル名を残す、`STREAMER_LABEL`、`chatBufferAbsent` の文面、Discord の場の目の選択、接続の状態の見せ方。
+> - Domain G 合格(1 ループ・止めた指摘 0・soul 2173/2173・soul-zone・`src/mind/`・`skills/`・`src/voice/` の差分 0)。報告 [../waves/discord-mode/domain-g-report.md](../waves/discord-mode/domain-g-report.md)。期待値の変更は、追認していた 2 つ(catalog の断りの結線・鍵のファイル名の書き戻し)、「Discord の準備」タブを足したことによるタブの数と並び、`chatBufferAbsent` の文面(`venue not open`)で、いずれも仕様変更。配信の画面はレビューが HEAD と 1666 通りの入力で比べ、違いは `chatBufferAbsent` のラベルだけ。Undine の追認: (1) **場が閉じている間に Connect した YouTube のコメントが、Discord の場で会話の記録に積まれる隙間**は、案 a(Discord の場の間はコメントの入口で捨てる。ユーザーの Connect は切らない)で直す。設計 §4.3(Discord にはコメントが無い)と計画 §5(配信と通話の記録が混ざらない)に沿う、製品判断の要らない直しなので、全体の突き合わせの直しと一緒に入れる。(2) 「配信の途中はマイク・文字起こしを替えられない」の案内が Discord の場でも同じ文面なのは可(Discord の場では配信の準備のタブを触る理由が薄い。言い回しは人間ゲート 2 で気になれば直す)。(3) D・E のテストに見る窓を選ぶ下準備の 1 行を足した形は可。
+> - 全体の突き合わせ needs_fix → 直して合格。止める指摘は既知の隙間(Discord の場で先に Connect した YouTube のコメントが正本に積まれる)の 1 件だけで、ほかのつなぎ目(場の切り替え・記録の分離・正本と人ごとの耳・鍵・ログ・配信の文字列・期待値の変更の一覧)は問題なし。レビュー [../reviews/discord-mode/final.md](../reviews/discord-mode/final.md)。直しは Gnome が `ingestChatMessage` と `commitComment` に「Discord の場の間は捨てる(何も出さない・Connect は切らない)」を入れ、テスト 3 件(soul 2176/2176・soul-zone)。報告 [../waves/discord-mode/final-gnome.md](../waves/discord-mode/final-gnome.md)。突き合わせの見立てどおり 2 回目は要らない。Undine の追認: 捨てたコメントは何も出さない。人間ゲート 2 に「入り直してすぐ話す」を入れる。止めない指摘(whisper の口の番号の使い回し【推測】・話している途中に抜けたときの `speechEnd`・ENDED の見張りの限界・`startedDelayMs`・ElevenLabs の短い発話)は人間ゲート 2 で見てから決める。
+> - **人間ゲート 2 おおむね合格**(ユーザー 2026-11-01)。結果 [../waves/discord-mode/human-gate-2-result.md](../waves/discord-mode/human-gate-2-result.md)。「VC から抜ける」と「体験を閉じる」を分ける設計の変更が出たので、設計 §13(Accepted 2026-11-01)を追加のドメイン H〜K(§8)で作り、人間ゲート 3 のあとにまとめて master へマージする。
+> - Domain H 合格(1 ループ・止めた指摘 0・soul 2199/2199・soul-zone・固定テストの fixture 差分 0・判定と発火の既存テストの期待値の変更 0)。報告 [../waves/discord-mode/domain-h-report.md](../waves/discord-mode/domain-h-report.md)。期待値を変えた既存テストは `cockpit-stream.test.mjs` の 2 か所(時計を 20 分進める形にした仕様変更)。Undine の追認: (1) 途中保存の起点に「前に頼んだ時刻」も含める(保存が失敗し続けても毎分頼み直さない)のは可。(2) 場の外で断った発火の行が直前の場のファイルに入るのは可。(3) 持ち越しの「判定を呼ばない道(自発オフ・忙しい間など)の記録」と「場の始まりの KILL の自動解除を `control` に残す」は、人間ゲート 3 で足りなければ足す。I への申し送り: `not-in-vc` は `reportFireRefused` で 1 回だけ書く。VC の入る・抜ける・移るで `renewRecords` を呼ばない。
+> - Domain I 合格(1 ループ・止めた指摘 0・soul 2229/2229・soul-zone・固定テストの fixture 差分 0)。報告 [../waves/discord-mode/domain-i-report.md](../waves/discord-mode/domain-i-report.md)。期待値を変えた既存テストは語を足しただけの 2 か所(`cockpit-server-discord-d.test.mjs:329` の `outside`、`session-usage-log.test.mjs:324-334` の `vc-moved`・`vc-kicked`)。Undine の追認(Orch が仮に決めた 4 つ): (1) 話している途中で抜けたら、その行に「(遮られた)」の注記が付くのは可。(2) Bot 自身が VC の外へ出た知らせなら 4014 を待たずに外で待つへ落とすのは可。(3) 入っている途中(joining)も発火を断るのは可(VC にいない間と同じ理由)。(4) 稼働時間を体験を開いた時から数えるのは可。持ち越し(人間ゲート 3 で見る): whisper の口の番号の使い回し、本物の Discord で動かされたときの知らせの順、main の結線の実機での確かめ。J へ: 出来事の合図は `vcEvent` → server の `noteVenueVcEvent`。K へ: `GET/POST /api/discord/vc` と snapshot の `outside`・`vcName`。
+> - Domain J 合格(1 ループ・止めた指摘 0・soul 2246/2246・soul-zone・固定テストの fixture 差分 0。レビューが HEAD と今に配信の入力 900 本を通し 11111 件の比較で不一致 0)。報告 [../waves/discord-mode/domain-j-report.md](../waves/discord-mode/domain-j-report.md)。正本の `speaker` に `"event"` を足し、①②④に `event: 本文` で載る。期待値を変えた既存テストは Discord 側の D・I・F の 3 本(配信側 0)。Undine の判断(Orch の質問 4 つ): (1) 出来事の行だけ(誰も話していない)の通話では最後の保存・途中保存を走らせない。保存するかの数え方から出来事の行を除く(中身の書き出しには載せたまま)。**K の最初に直す**。(2) `vc-moved` の文は「動かされた」のままでよい(人が動かした事実のほうが自然)。(3) `skills/venue-discord.md` は変えない(`event:` の行はチャッピーが読めば分かる)。(4) VC に入った・移った・動かされた時点でもういる人を、出来事の 1 行(「〈VC〉には〈名前〉・〈名前〉がいる」の類。Bot は除く)にする(人が部屋に入れば気づくことなので、設計 §13.5 の趣旨に沿う)。**K の最初に足す**。
+> - Domain K 合格(1 ループ・止めた指摘 0・soul 2277/2277・soul-zone・固定テストの fixture・skills・lockfile の差分 0。配信の画面は HEAD と比べて不一致 0〔Gnome 27222 件・レビュー 1,592,873 件〕)。報告 [../waves/discord-mode/domain-k-report.md](../waves/discord-mode/domain-k-report.md)。J の持ち越し (a) 出来事の行だけでは保存しない(`countSpokenEntries`)・(b) 入った時にいる人の 1 行(`vc-people`)も済み。期待値を変えた既存テストは 7 ファイル 13 項目(仕様変更は見る窓の場の間の 409→200 だけ、残りは語と結線を足した分。削った assert 0)。Undine の追認(Orch の質問 4 つ): (1) `cockpit-server-discord-d.test.mjs:549-550` の `saveFinal:1` は偽の口に渡す材料を見るテストなので戻さない形で可(保存しない判定は本物の口で新しいテストが固定)。(2) 手動の「今日を記録」は出来事の行だけでも走る形で可(ユーザーが明示に頼んだ保存)。(3) 準備のタブの見る窓は通話の間は固めたままで可(通話中はパネルで替える)。(4) 名前の分からない人を「ほか N 人」と出す形で可。持ち越し: 開きかけ・閉じかけの間のパネルの Fire の注記が「配信を始めると押せる」のまま(語だけ)。実ブラウザの見た目・REST の回数・`person-join` と `vc-people` の重なりは人間ゲート 3 で見る。
+> - 全体の突き合わせ 2 回目 pass(止める指摘 0・soul 2277/2277・soul-zone)。レビュー [../reviews/discord-mode/final-2.md](../reviews/discord-mode/final-2.md)。Undine の判断: 止めない指摘 §3-1(抜ける・外から切られるの途中に場を閉じると「VC にいない」の口が差し口に残り、同じ起動の次の配信で声が出ない)は人間ゲート 3 の前に直す。§3-3(開きかけの間の見る窓)はゲート 3 で気になったときだけ直す。直しは Gnome が `foldLink` で場が閉じていれば hold なしで畳む形にし、再現のテスト(落ちる→通る)と、K の持ち越しの語(Discord の場の開きかけ・閉じかけの Fire の注記を「VC に入ると押せる」に。配信の出力は不変)を入れた(soul 2281/2281・soul-zone)。報告 [../waves/discord-mode/final-2-gnome.md](../waves/discord-mode/final-2-gnome.md)。閉じかけの語を分けるかは人間ゲート 3 で決める。手順 [../waves/discord-mode/human-gate-3.md](../waves/discord-mode/human-gate-3.md)。
+> - Domain L 合格(ゲート 3 の間の配信で、最初の途中保存が「?」に化けたため追加。ユーザー OK。1 ループ・止めた指摘 0・soul 2303/2303・soul-zone・固定テストの差分は書き出し役の指示の 1 行だけ・既存テストの期待値の変更 0)。報告 [../waves/discord-mode/domain-l-report.md](../waves/discord-mode/domain-l-report.md)、調べ [../../memory/writer-garble-2026-11-01.md](../../memory/writer-garble-2026-11-01.md)。化けで記録できなかったときは `{ written:false, garbled:true }` で、記録時刻は進まない。Undine の追認: Orch の裁量 5 つ(足された行を見るのは新しいコミットの回だけ・足された行が取れなければ書けた扱いで警告・revert に失敗したらやり直さない・化けの回は書けなかった回に数える・ask の失敗の回でも化けは取り消してから throw)は可。質問(新しいロールの最初の保存で化けると、未コミットの `_conventions.md` の種もルートのコミットごと取り消され、次の場の始まりまで決まりの無いまま書かれる)は**注記のまま持ち越す**(新しいロール・最初の保存・化けの 3 つが重なったときだけで、記録は失われず次の場で戻るため)。指示の文面が効くかは実機で見る。
+> - Domain M 合格(人間ゲート 3 で「応答なのに黙る」が前の場の判定の札だったと分かったため追加。ユーザー OK。1 ループ・止めた指摘 0・soul 2320/2320・soul-zone・`src/mind/`・`scripts/`・`cockpit-server.mjs`・既存テストの差分 0)。報告 [../waves/discord-mode/domain-m-report.md](../waves/discord-mode/domain-m-report.md)、調べ [../waves/discord-mode/gate-3-stale-judgment-chip.md](../waves/discord-mode/gate-3-stale-judgment-chip.md)。新しい場の合図はサーバに足さず、SSE の `state` の phase "opening"(取り逃したときの控えは閉じたあとの "open" と `openedAtMs` の違い)。VC の入る・抜ける・移るでは場は替わらない。Undine の追認: 裁量 4 つ(合図に `state` を使う・捨てるのは新しい場が開いたとき・開き直したあと前の場の返事の行に fireId で結んだきっかけの種類を小さく出す・追補のテストはレビューに出し直さない)は可。質問(前の場の返事の行のきっかけの小さな札の見た目)は、人間ゲートで気になれば直す。持ち越し(SSE が切れている間の取りこぼし・再起動で fireId が数え直しになり再読み込みしていない画面で重なりうる)は元からの挙動で範囲外。
+> - **人間ゲート 3 合格**(ユーザー 2026-11-03「コミットして master にマージ、push までしちゃおうか」)。手順 [../waves/discord-mode/human-gate-3.md](../waves/discord-mode/human-gate-3.md) の 16 まで(抜けて入り直しても同じチャッピー・移る・動かされる・切られる・通話を終える・記録)をユーザーが確かめ、16 の `session-usage` は Undine が見た(中身・名前・VC の名前・id なし。VC の出入り 7 行がそろう。応答 36 回はすべて声が出た。`not-in-vc` が出ないのは、VC の外では Fire が押せず耳も止まっているので正しい動き。つまみはユーザーが触っていないので control に無いのは正しい)。途中で L(記憶の「?」化け)と M(前の場の判定の札)を足した。M の画面の確かめはユーザー判断で省略(運用上、起動したまま次の場へ移らない)。人間ゲート 2 の「応答なのに黙る」は M の札のずれだった見込みが高い([../waves/discord-mode/gate-3-stale-judgment-chip.md](../waves/discord-mode/gate-3-stale-judgment-chip.md) §4)。持ち越し(ゲート 2 からのかぶり判定の早い確定・判定が待つに傾く・ENDED の打ち切り・ElevenLabs の短い発話、閉じかけの語、final-2 §3-3)は、実運用で気になったら扱う。master へ `--no-ff` でマージして push。
 > 根拠: 設計 [../../architecture/discord-mode.md](../../architecture/discord-mode.md)(Accepted)、決定 [../../discord-vc/scope.md](../../discord-vc/scope.md) §21〜§24、棚卸し [discord-mode-inventory.md](discord-mode-inventory.md)(触るファイル・重なり・テストの土台・§9 の問い)。
 > 進め方(scope §24): 前例 [stream-restructure-wave-plan.md](stream-restructure-wave-plan.md) と同じ。1 本のブランチ、ドメインは**全部順に**、ドメインごとに Orch-Sylph が Gnome と Review-Sylph を回す。開発は今の作業フォルダのまま。**ドメインの途中では配信しない**(ユーザーが配信するときは声をかけてもらい、区切りのよい所で master のきれいな状態に戻す)。push は機能が完成してからまとめて(scope §23)。
 > ドメインの記号は設計 §11 と違う(設計の B を B と C に分け、判定の差し口を C に前倒しした)。下の対応表を正とする。
@@ -154,3 +172,53 @@ Discord の群
 - 全体の突き合わせ: `implementation/reviews/discord-mode/final.md`
 - 人間ゲート: `implementation/waves/discord-mode/human-gate-1.md`・`human-gate-2.md`
 - コミット: ドメインが合格するごとに Undine がブランチへ feat を 1 つ。Gnome と Sylph はコミットしない。
+
+## 8. 追加のドメイン(設計 §13「体験と VC 接続を分ける」、人間ゲート 2 のあと)
+
+> 状態: 着手(ユーザー 2026-11-01「OK、順次進めてくれ」)。根拠: 設計 §13、結果 [../waves/discord-mode/human-gate-2-result.md](../waves/discord-mode/human-gate-2-result.md) §2、棚卸し [../waves/discord-mode/session-split-inventory.md](../waves/discord-mode/session-split-inventory.md)(以下「分け棚」。触る所・切れ目・分かれ道)。体制・モデル・見直しの粒度・機械ゲートは §3・§4 と同じ(機械ゲートの土台は 2176 件)。ドメインは全部順に。
+
+### Domain H — 判定と発火の記録・途中保存のタイマー(設計 §13.6・§13.7)
+
+- `session-usage` に `type:"judgment"`・`"fire-refused"`・`"control"` を足す(中身・名前・id を書かない。エラーは種類だけ)。今どこにも出ない「場が開いていない」で捨てた発火の要求も拾う。つまみ(自発・かぶり判定・KILL)の切り替えを `control` に残す。H のあとのドメインが `control` に入る・抜ける・移る・切れたを足せる口にしておく。
+- 途中保存: 起動時の張り方のまま、「場の始まり、または前の保存(途中・手動)から 20 分」のときだけ頼む(`scripts/cockpit.mjs:3105-3110`・`checkpoint()`)。配信にも効く。
+- 確かめ: 記録の各 type がテストで書かれ、中身・名前・id が載らない(既存の守りのテストの形に合わせる)。入り直して 1 分半で途中保存が走らない。前の保存から 20 分で走る。判定・発火のふるまいは変わらない(既存テストの期待値 0 変更)。session-usage を読む既存のもの(あれば)が知らない type で壊れない。
+- 先にする理由: 配信にも効く小さな直しで、I〜K がこの記録の口を使う。
+
+### Domain I — 体験と VC 接続を分ける(設計 §13.2・§13.3)
+
+- `src/discord/discord-experience.mjs` の塊を体験の分と接続の分に割る。server に「入る / 抜ける / 移る」の口と API(例 `POST /api/discord/vc {action, channelId}`)。移る = 抜ける + 入る(destroy して入り直す)。耳の束は体験の間 1 つ、抜けるときは人の耳を drop、「聞いていない」だけにする口。
+- どの VC にもいない間: `requestSelfFire` と手動の Fire の入口で `not-in-vc` として断る(H の `fire-refused` に残る)。手元のスピーカーで鳴らない。
+- 外から: 4014 は「VC の外で待っている」へ。Discord の画面で動かされたら動いた先を追う。自分で抜けたときに「切れた」と出ない。
+- snapshot: 接続の状態に「VC の外で待っている」(例 `outside`)、今いる VC の名前。id は載せない。
+- 確かめ(偽物の Discord で。偽物に 4014・動かされた・同じ client での入り直しを足してよい): 抜けて入り直しても頭のセッション・正本・判定が同じもの。移ったあとの人の耳と出口が新しい VC につく。VC にいない間の発火が断られ、出口が手元に戻らない。通話を終える(今の 2 回押し)は VC にいてもいなくても場を閉じて記憶を書く。H の `control` に入る・抜ける・移る・切れたが残る。配信の場は変わらない。
+
+### Domain J — 人が気づく出来事(設計 §13.5)
+
+- 正本の行の種類に「出来事」を足す。チャッピー自身の入る・抜ける・移る・切られた、今いる VC の人の入ってきた・出ていった(Bot は除く)。
+- 頭への会話の窓・記憶の書き出し・思い出しの入力に載る。左の「会話」に控えめな 1 行で出す。判定には渡さず、きっかけにもしない。ログ・session-usage には名前を書かない。
+- 確かめ: 出来事の行が窓・②④の入力に載る(Discord の語の組で)。判定の入力に載らず、判定が走らない。**配信の固定テスト(`stream-wording-pin`)の差分 0**。名前がログに出ない。
+- I のあと: 出来事の源(入る・抜ける・移る・動かされた)が I でできるため。
+
+### Domain K — Discord 操作パネルと画面(設計 §13.4)
+
+- Discord の場の間、右の領域(今は `solo` で空)に操作パネル: 接続(サーバー名・今いる VC と「抜ける」・同じサーバーの VC の一覧と人数・「入る」「移る」)、しゃべり方(自発・かぶり判定のトグル、手動の Fire。VC にいない間は押せず「VC に入ると押せる」)、見る窓(選択と「使わない」。場の間の 409 を外し、次の発火から新しい窓を見る)。VC の一覧は体験の client の guild から取る(2 本目のログインはしない)。
+- 下の帯の「VC から抜ける」(2 回押し)を「通話を終える」に。上の帯に「VC の外で待っている」。左の「会話」の表示の形は変えない(J の出来事の 1 行を除く)。準備の `discordChannelId` は書き換えない。
+- 確かめ: view-logic のテスト(パネルの状態ごと: 入っている・外で待っている・切れた・入っています…)。見る窓を場の途中で替えたら次の発火で新しい窓。**配信の画面は HEAD と同じ**(G と同じく多数の入力で比べる)。幅の狭い画面で崩れない。
+
+### Domain L — 書き出し役の書き込みが「?」に化けたら取り消してやり直す(ゲート 3 中の配信で発覚・ユーザー OK 2026-11-01)
+
+- 根拠: [../../memory/writer-garble-2026-11-01.md](../../memory/writer-garble-2026-11-01.md) §5。Discord とは独立だが、このブランチに足す(ユーザー OK)。
+- 書き出し役の固定の指示に「ファイルは直接書き換える道具で書き、シェルのパイプやスクリプトに日本語を通さない」旨を足す(配信・通話の両方)。`writeStreamRecord` のコミットのあと、足された行が化けていたら `git revert` で取り消し、1 回だけやり直す(書き損じのやり直しと合わせて 1 回)。やり直しでも化けたら取り消して「記録できなかった」扱い。
+- 確かめ: 化けの見分けの純関数(化けの行・ふつうの日本語の「??」・英数字だけの行・ルートのコミット)。偽物の書き出し役で、化け → 取り消し → やり直しで正常、化け → 化けで記録できなかった扱い、記録時刻を進めない。警告に中身が載らない。**配信の固定テストの差分は書き出し役の指示の 1 か所だけ**。実の記憶のフォルダは触らない(一時フォルダの git で)。
+
+### Domain M — 判定の札を同じ場の中だけで結ぶ(人間ゲート 3 で発覚・ユーザー OK 2026-11-03)
+
+- 根拠: [../waves/discord-mode/gate-3-stale-judgment-chip.md](../waves/discord-mode/gate-3-stale-judgment-chip.md) §5。
+- 画面の「会話」の欄で、場が新しく開いたら、前の場の判定の札の覚えと推論の範囲を捨て、前の場の行は seq で結ばない。見た目だけ。
+- 確かめ: 場を開き直したあと、同じ seq の新しい判定が「待つ」でも前の場の札が出ない。前の場の行に新しい場の札が付かない。1 つの場の中の札・推論の範囲・遅延・きっかけの結び付けは今と同じ(既存テストの期待値 0 変更)。サーバ・mind の差分 0。配信の画面は 1 つの場の中では HEAD と同じ。
+
+### 全体の突き合わせ(2 回目)と人間ゲート 3
+
+- K の合格のあと、Sylph(opus)が 1 回、H〜K のつなぎ目を設計 §13 と突き合わせる(体験と接続の寿命・VC にいない間の声・出来事と判定の分離・記録の守り・配信の不変)。止めてよい理由は §4 と同じ。
+- 人間ゲート 3 の手順は Undine が `implementation/waves/discord-mode/human-gate-3.md` に書く。芯は設計 §13.8。合格したら master へ `--no-ff` でマージし、push はユーザーの OK のあと。
+- 置き場は §7 と同じ形(`domain-<h〜k>-report.md`・`reviews/discord-mode/domain-<h〜k>.md`・`final-2.md`)。

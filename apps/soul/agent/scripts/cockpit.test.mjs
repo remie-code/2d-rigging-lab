@@ -41,6 +41,8 @@ import {
   formatRecallEventLine,
   raceMemoryRecordWithTimeout,
   MEMORY_CHECKPOINT_INTERVAL_MS,
+  MEMORY_CHECKPOINT_TICK_MS,
+  isMemoryCheckpointDue,
   SHUTDOWN_MEMORY_TIMEOUT_MS
 } from "./cockpit.mjs";
 import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
@@ -928,7 +930,8 @@ test("createMemoryRecorder: 1 回の保存で writeImpl を呼び、成り立て
   assert.deepEqual(w.calls, [["a", "b"]]);
   w.pending[0].resolve({ written: true, commit: { ok: true, committed: true, commit: "abc" } });
   await done;
-  assert.deepEqual(saved, [{ atMs: 4242, entriesLength: 2, commit: { ok: true, committed: true, commit: "abc" } }]);
+  // Discord モード Domain K: 保存の要否の数え（出来事の行を除いた件数）も渡す。
+  assert.deepEqual(saved, [{ atMs: 4242, entriesLength: 2, spokenLength: 2, commit: { ok: true, committed: true, commit: "abc" } }]);
   await recorder.whenIdle();
   assert.equal(recorder.isRecording(), false);
 });
@@ -1021,6 +1024,39 @@ test("createMemoryRecorder: written:false（空転写など）では onSaved を
   assert.equal(saved.length, 0);
 });
 
+test("createMemoryRecorder + noteSaved: 書き込みが「?」に化けて記録できなかった（written:false・garbled）ときは記録時刻を進めない（Discord モード Domain L）", { timeout: 5000 }, async () => {
+  /** @type {any[]} */
+  const results = [
+    { written: false, garbled: true, commit: { ok: true, committed: true, commit: "abc1234" } },
+    { written: true, commit: { ok: true, committed: true, commit: "def5678" } }
+  ];
+  /** @type {any} */
+  let venue = null;
+  const recorder = createMemoryRecorder({
+    getLiveEntries: () => [],
+    writeImpl: async () => results.shift(),
+    onSaved: (info) => venue.noteSaved(info)
+  });
+  venue = createStreamVenueHooks({
+    memoryPlaces: { beginStream() {}, place: () => null, streamNo: () => 0 },
+    memoryRecorder: recorder,
+    openSession: () => {},
+    closeSession: async () => {},
+    hasBody: () => false,
+    channel: { getUrl: () => null, connect: async () => {}, close: async () => {} }
+  });
+  const entries = [
+    { text: "ダミーA", speaker: "you" },
+    { text: "ダミーB", speaker: "soul" }
+  ];
+  await recorder.record(entries);
+  assert.equal(venue.lastRecordedSeq(), 0, "化けで記録できなかった保存は数えない");
+  assert.equal(venue.lastRecordAtMs(), null);
+  // 次の保存で書けたら、そこで数える（次の定期保存で書き直される）。
+  await recorder.record(entries);
+  assert.equal(venue.lastRecordedSeq(), 2);
+});
+
 test("createMemoryRecorder: entriesOverride 指定時はライブ転写（getLiveEntries）を呼ばない", { timeout: 5000 }, async () => {
   const w = makeControlledWrite();
   let liveCalls = 0;
@@ -1046,8 +1082,9 @@ test("配信を終えると保存される: 終えるときの転写が②の材
   const { createTranscriptBuffer: makeBuffer } = await import("../src/ears/transcript-buffer.mjs");
   /** @type {any} */
   let buffer = null;
-  const pipelineFactory = () => {
-    buffer = makeBuffer({ nowImpl: () => 1000 });
+  // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+  const pipelineFactory = (/** @type {any} */ options) => {
+    buffer = options?.transcriptBuffer ?? makeBuffer({ nowImpl: () => 1000 });
     return {
       transcriptBuffer: buffer,
       async start() {},
@@ -2745,8 +2782,9 @@ test("声の選択の結線: Start で ttsEngine の engine を用意し・作�
   /** @type {string | null} */
   let stored = null;
   const hooks = createTtsEngineHooks({ getTtsEngine: () => stored, setTtsEngine: (e) => { stored = e; } });
-  const pipelineFactory = () => {
-    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+  // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+  const pipelineFactory = (/** @type {any} */ options) => {
+    const buffer = options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 });
     return {
       transcriptBuffer: buffer,
       async start() {},
@@ -3151,4 +3189,42 @@ test("formatReplyLatencyLine（体なし）: 体なしの返事は末尾に body
   const base = { fireId: 6, cause: null, spoken: true, segments: { ttsMs: 130, voiceMs: 20 }, totalMs: 900, level: "ok", voice: "aivis" };
   assert.match(formatReplyLatencyLine({ ...base, bodyless: true }), /voiceEngine=aivis body=none\n$/);
   assert.equal(formatReplyLatencyLine(base).includes("body="), false);
+});
+
+// ── Discord モード Domain H: 判定・発火の断り・つまみの記録の結線と、途中保存の頃合いの純関数 ──────────────────────
+
+test("判定と発火の記録の結線（main・Domain H）: 判定は今のターミナルの 1 行のまま記録にも 1 行・断りとつまみは server の口から記録へ（頭の種類を見ない）", async () => {
+  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source.slice(source.indexOf("async function main()"));
+  assert.match(
+    main,
+    /onSpeakNowJudgment: \(info\) => \{\n\s+process\.stdout\.write\(formatSpeakNowLine\(info\)\);\n(?:\s+\/\/.*\n)*\s+recordSessionUsage\(judgmentUsageRecord\(info\)\);\n\s+\},/,
+    "ターミナルの 1 行は残し、記録にも 1 行"
+  );
+  assert.match(main, /onFireRefused: \(info\) => recordSessionUsage\(fireRefusedUsageRecord\(info\)\),/);
+  assert.match(main, /onControl: \(info\) => recordSessionUsage\(controlUsageRecord\(info\)\),/);
+  // 書くのは今の場の記録（場ごとに作り直す sessionUsageLog）・作れなかった行（null）は書かない・失敗で止めない。
+  assert.match(main, /const recordSessionUsage = \(record\) => \{\n\s+if \(record == null\) return;\n\s+try \{\n\s+sessionUsageLog\.append\(record\);/);
+  // 頭が Codex のときだけ、の条件は fire の行だけ（判定・断り・つまみには付けない）。
+  for (const line of main.split("\n").filter((l) => l.includes("recordSessionUsage("))) {
+    assert.equal(line.includes("isCodexBrainId"), false, line);
+  }
+});
+
+test("isMemoryCheckpointDue（Domain H）: 起点 = 場の始まり・前の保存・前に頼んだ時刻のうち一番遅いもの。そこから 20 分で true・起点が無ければ false", () => {
+  const since = (/** @type {any} */ o) => ({ startedAtMs: null, lastSavedAtMs: null, lastRequestedAtMs: null, ...o });
+  const M = 60_000;
+  assert.equal(isMemoryCheckpointDue(20 * M, since({ startedAtMs: 0 })), true);
+  assert.equal(isMemoryCheckpointDue(20 * M - 1, since({ startedAtMs: 0 })), false);
+  assert.equal(isMemoryCheckpointDue(30 * M, since({ startedAtMs: 0, lastSavedAtMs: 15 * M })), false, "前の保存から 15 分");
+  assert.equal(isMemoryCheckpointDue(35 * M, since({ startedAtMs: 0, lastSavedAtMs: 15 * M })), true);
+  assert.equal(isMemoryCheckpointDue(39 * M, since({ startedAtMs: 0, lastSavedAtMs: 10 * M, lastRequestedAtMs: 20 * M })), false, "前に頼んだ時刻からも数える");
+  assert.equal(isMemoryCheckpointDue(40 * M, since({ startedAtMs: 0, lastSavedAtMs: 10 * M, lastRequestedAtMs: 20 * M })), true);
+  assert.equal(isMemoryCheckpointDue(99 * M, since({})), false, "場が始まっていない");
+  assert.equal(isMemoryCheckpointDue(5, since({ startedAtMs: 0 }), 5), true, "間隔は差し替えられる");
+});
+
+test("配信間記憶の決め打ち定数（Domain H）: 途中保存を確かめる間隔 MEMORY_CHECKPOINT_TICK_MS = 1 分（頼むのは 20 分の経過で）", () => {
+  assert.equal(MEMORY_CHECKPOINT_TICK_MS, 60_000);
+  assert.ok(MEMORY_CHECKPOINT_TICK_MS < MEMORY_CHECKPOINT_INTERVAL_MS);
 });

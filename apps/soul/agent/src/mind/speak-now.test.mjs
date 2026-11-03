@@ -497,3 +497,20 @@ test("きっかけの seq: after-busy は判定する時点で最後の配信者
   await flush();
   assert.deepEqual(h.errors, [{ trigger: "after-busy", triggerSeq: 1, message: "タイムアウト（3 秒）", latencyMs: 3000 }]);
 });
+
+// ── Discord モード Domain H: 失敗の種類を onError に渡す（判定の記録用・discord-mode.md §13.7）──────────────
+
+test("判定の失敗: 失敗が種類（kind・status）を持っていれば onError に errorKind・errorStatus を足す（無ければ今の形）・発火しない", async () => {
+  const h = makeHarness();
+  h.say("失敗する");
+  h.calls[0].reject(Object.assign(new Error("HTTP 429: quota"), { latencyMs: 640, kind: "http", status: 429 }));
+  await flush();
+  assert.deepEqual(h.errors, [
+    { trigger: "transcript", triggerSeq: 0, message: "HTTP 429: quota", latencyMs: 640, errorKind: "http", errorStatus: 429 }
+  ]);
+  h.say("また失敗");
+  h.calls[1].reject(Object.assign(new Error("タイムアウト（3 秒）"), { latencyMs: 3000, kind: "timeout", status: null }));
+  await flush();
+  assert.deepEqual(h.errors[1], { trigger: "transcript", triggerSeq: 1, message: "タイムアウト（3 秒）", latencyMs: 3000, errorKind: "timeout" });
+  assert.equal(h.fires.length, 0);
+});

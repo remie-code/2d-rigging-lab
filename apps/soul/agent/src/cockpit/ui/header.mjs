@@ -27,6 +27,7 @@ import {
 import { statusPillView, quotaGaugeView, warningsView } from "../view-logic/glance-meters.mjs";
 import { killSwitchView } from "../view-logic/control.mjs";
 import { isRoleIdShape } from "../view-logic/role.mjs";
+import { venueConnectionView } from "../view-logic/discord.mjs";
 
 /**
  * Current public identity is supplied by the server. The UI validates the
@@ -114,11 +115,14 @@ export function QuotaGauge({ view }) {
  * 上の細い帯（hooks 非使用・vnode 走査テスト対象）。
  * compacting は snapshot の compacting（頭の会話の圧縮の最中・状態のピルの「圧縮中」）。stream は snapshot の stream
  * （配信の組み直し Domain E: 開きかけ・閉じかけ（記録中）だけ状態のピルに出す）。名前（identity）はロールの名前。
+ * Discord モード Domain G: Discord の場の間だけ、状態のピルの横に接続の状態（VC に入っている途中 / 入っている / 切れた・
+ * snapshot の stream.connection）を名指しで出す。配信の場では何も足さない。
  * @param {{ identity?: unknown; modelText?: string; soul?: string; ears?: string; compacting?: boolean; stream?: any; warnings?: any[]; quota?: any;
  *   killed?: boolean; killError?: string; nowMs: number; onKill?: () => void; onRevive?: () => void }} props
  */
 export function TopBar({ identity, modelText = "", soul, ears, compacting = false, stream = null, warnings, quota, killed = false, killError = "", nowMs, onKill, onRevive }) {
   const pill = statusPillView(soul, ears, compacting, stream);
+  const connection = venueConnectionView(stream);
   const warn = warningsView(warnings, nowMs);
   const killView = killSwitchView(killed);
   const codex = quotaGaugeView("Codex 週", quota && quota.codex);
@@ -128,6 +132,7 @@ export function TopBar({ identity, modelText = "", soul, ears, compacting = fals
       <h1 class="top-name">${identityDisplayName(identity)}</h1>
       ${modelText ? html`<span class="top-model">${modelText}</span>` : null}
       <span class=${pill.className}><span class="pill-dot"></span>${pill.text}</span>
+      ${connection ? html`<span class=${connection.className} title=${connection.title} role="status">${connection.text}</span>` : null}
       ${killView.killed ? html`<span class=${killView.statusClassName}>${killView.statusText}</span>` : null}
       <div class="top-warnings" role="status" aria-live="polite">
         ${warn.items.map((w) => html`<span key=${w.key} class=${w.className} title=${w.title}>${w.text}</span>`)}

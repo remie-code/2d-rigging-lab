@@ -40,12 +40,16 @@
  *  言えなかった）は not-found / deferred に failed:true を付ける（失敗した時点の failed の行とは別）。
  *  記憶の中身（要約）は onEvent に載せない（頼みごとだけ）。
  *
+ * 場の語の組（Discord モード Domain C・discord-mode.md §3.4）: wording を渡すと、④の頼み（runRecall の job.wording）と①に渡す
+ * 結果の文面をその語の組で組む。渡さなければ（null）今の配信の文面。係は場を開くたびに作り直すので、その場の語の組になる。
+ * 「避けるか」の判定の文面は語の組の対象外（判定の組）。Discord モード Domain F: recallAvoid（「避けるか」の問いの組・体験の口の
+ * judgeSet.recallAvoid）を渡すと、判定の問いの文と入力をその組で作る。渡さなければ今の配信の問い。
+ *
  * 依存（④の走らせ方・判定・転写・忙しさ・発火・前置き・時計）は全部注入。純ロジックとして fake で全分岐を
  * テストする。
  */
 
 import {
-  buildRecallAvoidInput,
   buildRecallDeferredNote,
   buildRecallFailedDeferredNote,
   buildRecallFailedInstruction,
@@ -55,8 +59,10 @@ import {
   buildRecallSilentFoundNote,
   decideRecallAvoid,
   recallAvoidQuestion,
+  resolveRecallAvoidQuestions,
   RECALL_AVOID_THRESHOLD
 } from "./recall.mjs";
+import { resolveVenueWording } from "./venue-wording.mjs";
 
 /** 頼みごとの長さの上限（①の目印の引数・ログと④への頼みに使う）。 */
 export const RECALL_REQUEST_MAX_CHARS = 200;
@@ -70,8 +76,8 @@ export const RECALL_REQUEST_MAX_CHARS = 200;
 /**
  * 思い出しの係を作る。
  * @param {object} options
- * @param {(job: { request: string; entries: ReadonlyArray<any>; nowMs: number }) => Promise<{ found: boolean; summary: string }>} options.runRecall
- *   ④を 1 回走らせる（本番は recall.mjs の runRecall を Codex の頭で）。
+ * @param {(job: { request: string; entries: ReadonlyArray<any>; nowMs: number; wording: unknown }) => Promise<{ found: boolean; summary: string }>} options.runRecall
+ *   ④を 1 回走らせる（本番は recall.mjs の runRecall を Codex の頭で）。job.wording はこの係の語の組（null = 配信の語）。
  * @param {(request: { input: string; questions: ReadonlyArray<any> }) => Promise<{ answers: Record<string, any>; latencyMs?: number }>} options.judge
  *   「避けるか」判定（本番は Decisions API の createDecisionsQuestionsJudge・タイムアウト 5 秒）。
  * @param {() => ReadonlyArray<any>} options.getEntries  転写バッファの全エントリ（耳未起動なら空）。
@@ -88,6 +94,9 @@ export const RECALL_REQUEST_MAX_CHARS = 200;
  * @param {(message: string) => void} [options.onRecallError]  思い出し役の失敗（④）。
  * @param {number} [options.avoidThreshold=RECALL_AVOID_THRESHOLD]
  * @param {() => number} [options.nowImpl=Date.now]
+ * @param {unknown} [options.wording]  場の語の組（venue-wording.mjs・Discord モード Domain C）。null / undefined は配信の語の組。
+ * @param {unknown} [options.recallAvoid]  「避けるか」の問いの組（recall.mjs の resolveRecallAvoidQuestions・Discord モード Domain F）。
+ *   null / undefined は配信の問い。作るときに 1 回だけ読む（場を開くたびに係を作り直すので、その場の体験の問いになる）。
  * @returns {{
  *   request: (request: string) => void;
  *   notifyIdle: () => void;
@@ -111,6 +120,10 @@ export function createRecallDesk(options) {
   const avoidThreshold =
     typeof options.avoidThreshold === "number" && Number.isFinite(options.avoidThreshold) ? options.avoidThreshold : RECALL_AVOID_THRESHOLD;
   const nowImpl = options.nowImpl ?? Date.now;
+  // 場の語の組（作るときに形を確かめる・崩れていれば投げる）。null は配信の語の組のまま（今の文面）。
+  const wording = options.wording == null ? null : resolveVenueWording(options.wording);
+  // 「避けるか」の問いの組（作るときに形を確かめる・崩れていれば投げる）。null は配信の問い（今の文面）。
+  const avoidQuestions = resolveRecallAvoidQuestions(options.recallAvoid);
 
   let disposed = false;
   /** @type {string | null} 走っている④の頼みごと。 */
@@ -170,7 +183,7 @@ export function createRecallDesk(options) {
     /** @type {Promise<{ found: boolean; summary: string }>} */
     let p;
     try {
-      p = Promise.resolve(runRecall({ request, entries, nowMs }));
+      p = Promise.resolve(runRecall({ request, entries, nowMs, wording }));
     } catch (error) {
       p = Promise.reject(error);
     }
@@ -217,9 +230,10 @@ export function createRecallDesk(options) {
    * @param {RecallDelivery} d  @param {boolean} silent  自発 OFF で黙って渡すときの文か（見つかったときだけ文が違う）。
    */
   const noteFor = (d, silent) => {
-    if (d.failed) return buildRecallFailedDeferredNote(d);
-    if (!d.found) return buildRecallNotFoundDeferredNote(d);
-    return silent ? buildRecallSilentFoundNote(d) : buildRecallDeferredNote(d);
+    const w = { ...d, wording };
+    if (d.failed) return buildRecallFailedDeferredNote(w);
+    if (!d.found) return buildRecallNotFoundDeferredNote(w);
+    return silent ? buildRecallSilentFoundNote(w) : buildRecallDeferredNote(w);
   };
 
   /**
@@ -262,8 +276,8 @@ export function createRecallDesk(options) {
       try {
         const name = getName();
         const result = await judge({
-          input: buildRecallAvoidInput(getEntries() ?? [], { request: d.request, summary: d.summary, nowMs: nowImpl(), soulName: name }),
-          questions: [recallAvoidQuestion(name)]
+          input: avoidQuestions.buildInput(getEntries() ?? [], { request: d.request, summary: d.summary, nowMs: nowImpl(), soulName: name }),
+          questions: [recallAvoidQuestion(name, avoidQuestions)]
         });
         const decision = decideRecallAvoid(result ? result.answers : null, avoidThreshold);
         avoidProbability = decision.probability;
@@ -290,11 +304,12 @@ export function createRecallDesk(options) {
       // 判定の間に別の発火が先に出たら、手が空いてから判定し直す。
       if (busyNow()) return false;
     }
+    const worded = { ...d, wording };
     const instruction = d.failed
-      ? buildRecallFailedInstruction(d)
+      ? buildRecallFailedInstruction(worded)
       : d.found
-        ? buildRecallFoundInstruction(d)
-        : buildRecallNotFoundInstruction(d);
+        ? buildRecallFoundInstruction(worded)
+        : buildRecallNotFoundInstruction(worded);
     /** @type {any} */
     let result;
     try {

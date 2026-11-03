@@ -33,29 +33,33 @@ export const FIRE_WINDOW_MS = 5 * 60 * 1000;
 export const FIRE_MAX_CHARS = 4000;
 
 /**
- * 話者ラベルを返す（未知話者は "you" に寄せる・防御的）。soul→"soul"・viewer→"viewer"・その他→"you"。
+ * 話者ラベルを返す（未知話者は "you" に寄せる・防御的）。soul→"soul"・viewer→"viewer"・event→"event"（出来事の行・
+ * Discord モード Domain J）・その他→"you"。
  * @param {unknown} speaker
- * @returns {"you" | "soul" | "viewer"}
+ * @returns {"you" | "soul" | "viewer" | "event"}
  */
 function labelOf(speaker) {
   if (speaker === "soul") return "soul";
   if (speaker === "viewer") return "viewer";
+  if (speaker === "event") return "event";
   return "you";
 }
 
 /**
  * 会話ログの 1 エントリを話者ラベル付きの 1 行へ整形する。
- *  you  → `you: 本文`
- *  soul → `soul: 本文`
+ *  you  → `you: 本文`（名前があれば `you(名前): 本文`・Discord モード Domain A。配信では you に名前を入れない）
+ *  soul → `soul: 本文`（ロールの名前を持っていても付けない・ロールが 1 つの間は今のまま・discord-mode.md §3.2 a）
  *  viewer → `viewer(名前): 本文`（displayName 欠落/空なら `viewer: 本文` に劣化・S7 視聴者コメント）
+ *  event → `event: 本文`（出来事の行・名前は本文の中にある・Discord モード Domain J。配信には出来事の行が無い）
+ * speakerId（場の中の記録にだけ持つ id）は読まない。
  * @param {{ text: string; speaker?: string; displayName?: string }} e
  * @returns {string}
  */
 function formatLine(e) {
   const label = labelOf(e.speaker);
-  if (label === "viewer") {
+  if (label === "viewer" || label === "you") {
     const name = typeof e.displayName === "string" ? e.displayName.trim() : "";
-    return name.length > 0 ? `viewer(${name}): ${e.text}` : `viewer: ${e.text}`;
+    return name.length > 0 ? `${label}(${name}): ${e.text}` : `${label}: ${e.text}`;
   }
   return `${label}: ${e.text}`;
 }

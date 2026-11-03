@@ -128,6 +128,13 @@ html, body { overflow: hidden; }
 .status-pill.compacting { color: var(--compacting); }
 /* 配信の組み直し Domain E: 場の閉じかけ（記憶の最後の保存を待つ間）の「記録中」（中央の「記録中…」と同じ琥珀色）。 */
 .status-pill.recording { color: var(--amber); }
+/* Discord モード Domain G: Discord の場の接続の状態（入っている途中 / 入っている / 切れた）。配信の場では出ない。 */
+.venue-connection { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; }
+.venue-connection.joined { color: var(--up); }
+.venue-connection.joining { color: var(--amber); }
+.venue-connection.disconnected { color: var(--alert-text); border-color: var(--down); background: var(--alert-bg); font-weight: 600; }
+/* Discord モード Domain K: どの VC にもいない（通話は続いている）。切れたほど強くなく、入っているとは見分ける（点線の枠・琥珀）。 */
+.venue-connection.outside { color: var(--amber); border-style: dashed; border-color: var(--amber-dim); background: var(--amber-bg); }
 .kill-status.killed {
   color: #fff;
   background: var(--down);
@@ -186,6 +193,53 @@ html, body { overflow: hidden; }
 }
 .glance-panel { display: flex; flex-direction: column; min-height: 0; padding: 14px 18px 10px 0; }
 .comments-panel { padding: 14px 0 10px 22px; border-left: 1px solid var(--border); }
+/* Discord モード Domain K（§13.4）: Discord の場の間、右の領域（コメントの列と同じ割り付け）に Discord の操作パネル。
+   上から 接続・しゃべり方・見る窓。縦に入りきらなければパネルの中だけスクロールする（会話は今のまま）。 */
+.discord-panel { padding: 14px 0 10px 22px; border-left: 1px solid var(--border); min-width: 0; }
+.discord-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
+.discord-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; min-width: 0; }
+.discord-section-title { font-size: 12px; margin: 0 0 6px; color: var(--teal); letter-spacing: 0.06em; }
+.discord-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 3px 0; min-width: 0; }
+.discord-label { color: var(--muted); font-size: 12px; flex: 0 0 auto; }
+.discord-server-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.discord-current { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: var(--fg-soft); }
+.discord-current.joined { color: var(--up); }
+.discord-current.joining { color: var(--amber); }
+.discord-current.disconnected { color: var(--alert-text); }
+.discord-current.outside { color: var(--amber); }
+.discord-list-head { justify-content: space-between; }
+.discord-channels { list-style: none; margin: 4px 0 0; padding: 0; }
+.discord-channel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 34px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--row-line);
+}
+.discord-channel.current { background: var(--latest-bg); border-radius: 8px; }
+.discord-channel-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.discord-channel-people { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.discord-here { color: var(--teal); font-size: 12px; white-space: nowrap; }
+.discord-note { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.discord-note.err { color: var(--alert-text); }
+.discord-panel button {
+  background: var(--panel-raised);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.discord-panel button:hover:not(:disabled) { border-color: var(--teal); }
+.discord-panel button:disabled { opacity: 0.45; cursor: default; }
+.discord-panel .btn-fire { color: var(--marker-fire); font-weight: 600; letter-spacing: 0.04em; }
+.discord-panel .btn-vision-fire { color: var(--marker-vision); font-weight: 600; letter-spacing: 0.04em; }
+.discord-panel .drawer-select { min-width: 0; flex: 1 1 180px; max-width: 100%; }
 .panel-title { font-size: 14px; font-weight: 700; margin: 0 0 8px; color: var(--fg); }
 
 /* 会話: 最新が下。入らない古い行は上で切る（スクロールしない・上端は淡く消す）。 */
@@ -238,6 +292,9 @@ html, body { overflow: hidden; }
 /* 相槌の間隔で流れた判定の薄い 1 行 */
 .convo-row.note { min-height: 30px; color: var(--ghost); font-size: 12px; }
 .convo-row.note > .text { color: var(--ghost); }
+/* 出来事の行（入った・抜けた・人の出入り・Discord モード Domain J）: 時刻つきの控えめな 1 行 */
+.convo-row.event { min-height: 30px; color: var(--ghost); font-size: 12px; }
+.convo-row.event > .text { color: var(--ghost); }
 /* 最新の返事の行と、そのきっかけの配信者の行（同じ色で淡くつなぐ） */
 .convo-row.latest { background: var(--latest-bg); }
 .convo-row.linked { background: var(--linked-bg); }
@@ -405,6 +462,10 @@ html, body { overflow: hidden; }
   .gauge-track { width: 80px; }
   .glance-main { padding: 0 14px; }
   .convo-row { grid-template-columns: 14px 76px 92px minmax(0, 1fr) auto; }
+  /* Discord モード Domain K: 狭い幅（操縦席の最小幅 1200px まで）では右のパネルの余白を詰め、トグルの pill は 1 行に 1 つ。 */
+  .discord-panel { padding-left: 14px; }
+  .discord-section { padding: 8px 10px; }
+  .discord-toggles > label { flex: 1 1 100%; }
   .lat-bar { width: 110px; }
 }
 
@@ -513,6 +574,8 @@ html, body { overflow: hidden; }
 .row.speaker-soul .who { color: var(--speaker-soul); }
 .row.speaker-viewer .who { color: var(--speaker-viewer); }
 .row.speaker-viewer .text { color: var(--viewer-text); }
+.row.speaker-event .who { color: var(--ghost); }
+.row.speaker-event .text { color: var(--ghost); }
 /* speaking 行（VAD 連動・出現消滅） */
 .row.speaking .text { color: var(--speaking); font-style: italic; }
 /* ゴースト行（§7: グレー斜体） */

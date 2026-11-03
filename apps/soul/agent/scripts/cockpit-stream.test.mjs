@@ -18,7 +18,8 @@ import {
   createCockpitShutdown,
   BODY_CONNECT_FAILED_MESSAGE,
   BODY_URL_NOT_SET_MESSAGE,
-  SHUTDOWN_MEMORY_TIMEOUT_MS
+  SHUTDOWN_MEMORY_TIMEOUT_MS,
+  MEMORY_CHECKPOINT_INTERVAL_MS
 } from "./cockpit.mjs";
 import { createCockpitServer, createInMemorySettingsStore } from "../src/cockpit/cockpit-server.mjs";
 import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
@@ -45,7 +46,8 @@ function makeEars(events = []) {
   const factory = (/** @type {any} */ options) => {
     record.created += 1;
     record.options = options;
-    const buffer = createTranscriptBuffer({ nowImpl: () => 1000 });
+    // Discord モード Domain A: 正本は場が作って渡す（積む口）。渡されなければ従来どおり自分で作る。
+    const buffer = options?.transcriptBuffer ?? createTranscriptBuffer({ nowImpl: () => 1000 });
     record.buffer = buffer;
     buffer.onAppend((entry) => options.onTranscript(entry, { latencyMs: 10, audioCtx: null }));
     return {
@@ -267,6 +269,13 @@ function makeVenue(over = {}) {
     /** @param {any} s */
     attach(s) {
       server = s;
+    },
+    /**
+     * 場の時計を進める（Discord モード Domain H: 途中保存は場の始まり・前の保存から 20 分たってから頼む）。
+     * @param {number} ms
+     */
+    advance(ms) {
+      clock += ms;
     }
   };
 }
@@ -869,6 +878,9 @@ test("場が閉じている間: 「今日を記録」は断る（409・保存を
     assert.deepEqual(v.written.map((w) => w.entries), [["一言目"]]);
     assert.equal(v.venue.checkpoint(), false, "前の保存から増えていなければ頼まない");
     ears.record.buffer.append({ startMs: 1000, endMs: 2000, text: "二言目" });
+    // Discord モード Domain H: 手動の保存から 20 分たつまでは頼まない（手動の保存で起点が戻る）。
+    assert.equal(v.venue.checkpoint(), false, "前の保存（手動）から 20 分たっていない");
+    v.advance(MEMORY_CHECKPOINT_INTERVAL_MS);
     assert.equal(v.venue.checkpoint(), true);
     await v.recorder.whenIdle();
     assert.deepEqual(v.written.map((w) => w.entries), [["一言目"], ["一言目", "二言目"]]);
@@ -1155,6 +1167,8 @@ test("2 つ目の場: 前の場の lastRecordedSeq で新しい場の保存が�
     assert.equal((await state(url)).memory.lastRecordAtMs, null);
     // 前の場と同じ件数（3 件）でも、新しい場の転写なので保存する。
     for (const text of ["B1", "B2", "B3"]) ears.record.buffer.append({ startMs: 0, endMs: 1000, text });
+    // Discord モード Domain H: 途中保存は新しい場の始まりから 20 分たってから。
+    v.advance(MEMORY_CHECKPOINT_INTERVAL_MS);
     assert.equal(v.venue.checkpoint(), true, "20 分ごとの保存も飛ばさない");
     await v.recorder.whenIdle();
     await post(url, "/api/stream/stop");
@@ -1312,4 +1326,238 @@ test("設定のダイアログの「配信を始める」は場の関数（/api/
   assert.match(app, /doFetch\("\/api\/stream\/start", \{ method: "POST"/, "メイン画面の「配信を始める」");
   assert.match(app, /doFetch\("\/api\/stream\/stop", \{ method: "POST"/, "下の帯の「配信を終える」");
   assert.match(app, /preStream=\$\{isPreStream\(ears, settings\.stream\)\}/);
+});
+
+// ── Discord モード Domain H: 途中保存のタイマー（discord-mode.md §13.6・gate-2-midwrite-investigation.md §4 の案 B）──────
+//  main のタイマーは起動時に 1 回張ったまま 1 分ごとに checkpoint() を呼ぶ。頼むのは「場の始まり・前の保存（途中・手動）・
+//  前に途中保存を頼んだ時刻」のうち一番遅いものから 20 分たったときだけ。偽の保存の係・置き場・時計（nowImpl）だけで固める。
+
+const MIN = 60_000;
+
+/**
+ * 途中保存を確かめる最小の場（本物の createStreamVenueHooks・偽の保存の係・置き場・時計）。
+ * @param {{ failSaves?: boolean }} [opts]  failSaves = 保存が成り立たない（noteSaved が来ない）。
+ */
+function makeCheckpointVenue(opts = {}) {
+  let now = 0;
+  let open = false;
+  /** @type {Array<{ text: string }>} */
+  let entries = [];
+  let streamNo = 0;
+  /** @type {Array<{ atMin: number; n: number }>} */
+  const requests = [];
+  /** @type {any} */
+  let venue = null;
+  const recorder = {
+    record: async (/** @type {ReadonlyArray<any>} */ list = []) => {
+      requests.push({ atMin: now / MIN, n: list.length });
+      // 保存が成り立ったら保存の係の onSaved（= noteSaved）が来る。頼んだ時点の置き場を載せる。
+      if (!opts.failSaves) venue.noteSaved({ atMs: now, entriesLength: list.length, place: { streamNo } });
+    },
+    whenIdle: async () => {},
+    isRecording: () => false
+  };
+  venue = createStreamVenueHooks({
+    memoryPlaces: {
+      beginStream: () => {
+        streamNo += 1;
+      },
+      place: () => ({ streamNo, ready: Promise.resolve() }),
+      streamNo: () => streamNo
+    },
+    memoryRecorder: recorder,
+    openSession: () => {},
+    closeSession: async () => {},
+    hasBody: () => false,
+    channel: { getUrl: () => null, connect: async () => {}, close: async () => {} },
+    isStreamOpen: () => open,
+    getEntries: () => entries,
+    nowImpl: () => now
+  });
+  return {
+    venue,
+    requests,
+    /** 時計を分で合わせる（小数の誤差を残さない）。 @param {number} minutes */
+    at(minutes) {
+      now = Math.round(minutes * MIN);
+    },
+    /** 場を開く（始める 2 の renewRecords → 開いた）。 */
+    async openVenue() {
+      await venue.hooks.renewRecords();
+      entries = [];
+      open = true;
+    },
+    /** 場を閉じる（閉じかけ → 最後の保存 → 閉じた）。 */
+    async closeVenue() {
+      open = false;
+      await venue.hooks.saveFinal(entries);
+    },
+    /** 転写を n 行足す。 @param {number} [n] */
+    hear(n = 1) {
+      for (let i = 0; i < n; i += 1) entries = [...entries, { text: `行${entries.length + 1}` }];
+    },
+    /** 手動の「今日を記録」（onMemoryRecord = 保存の係の record をそのまま・飛ばす判定を通らない）。 */
+    manualSave() {
+      return recorder.record(entries);
+    },
+    /**
+     * 起動時に張ったタイマーの当たりを from〜to 分の毎分で回す（grow なら毎分の前に転写を 1 行足す）。
+     * @param {number} from @param {number} to @param {{ grow?: boolean }} [o]
+     * @returns {number[]}  頼んだ分。
+     */
+    tickEveryMinute(from, to, o = {}) {
+      /** @type {number[]} */
+      const hits = [];
+      for (let m = from; m <= to; m += 1) {
+        this.at(m);
+        if (o.grow) this.hear(1);
+        if (venue.checkpoint()) hits.push(m);
+      }
+      return hits;
+    }
+  };
+}
+
+test("途中保存（Domain H）: 入り直して 1 分半では走らない（midwrite §4 の再現: 4.6 分で開く・18.6 分で閉じる・18.65 分に入り直す）・38.65 分で走る", async () => {
+  const c = makeCheckpointVenue();
+  c.at(4.6);
+  await c.openVenue();
+  c.hear(3);
+  c.at(18.6);
+  await c.closeVenue();
+  assert.deepEqual(c.requests, [{ atMin: 18.6, n: 3 }], "1 回目の場は閉じたときの最後の保存だけ");
+  c.at(18.65);
+  await c.openVenue();
+  c.hear(5);
+  c.at(20);
+  assert.equal(c.venue.checkpoint(), false, "起動から 20 分の当たり（入り直して 1 分 21 秒）では頼まない（直す前は true）");
+  c.at(38.64);
+  assert.equal(c.venue.checkpoint(), false, "場の始まりから 20 分の手前");
+  c.at(38.65);
+  assert.equal(c.venue.checkpoint(), true, "場の始まりから 20 分で頼む");
+  assert.deepEqual(c.requests.at(-1), { atMin: 38.65, n: 5 });
+  // 毎分のタイマーで回しても同じ（2 回目の場の最初の途中保存は 39 分の当たり）。
+  const d = makeCheckpointVenue();
+  d.at(4.6);
+  await d.openVenue();
+  d.hear(3);
+  assert.deepEqual(d.tickEveryMinute(5, 18, { grow: true }), [], "1 回目の場（14 分）の間は頼まない");
+  d.at(18.6);
+  await d.closeVenue();
+  d.at(18.65);
+  await d.openVenue();
+  d.hear(5);
+  assert.deepEqual(d.tickEveryMinute(19, 60, { grow: true }), [39, 59]);
+});
+
+test("途中保存（Domain H）: 場の始まりから 20 分で走り、そのあとは前の保存から 20 分ごと（毎分の当たりで）", async () => {
+  const c = makeCheckpointVenue();
+  c.at(0);
+  await c.openVenue();
+  c.hear(1);
+  c.at(19.99);
+  assert.equal(c.venue.checkpoint(), false);
+  c.at(20);
+  assert.equal(c.venue.checkpoint(), true);
+  c.hear(1);
+  c.at(21);
+  assert.equal(c.venue.checkpoint(), false, "保存したばかり");
+  assert.deepEqual(c.tickEveryMinute(22, 61, { grow: true }), [40, 60]);
+});
+
+test("途中保存（Domain H）: 手動の「今日を記録」で起点が戻る（手動の保存から 20 分たつまで途中保存を頼まない）", async () => {
+  const c = makeCheckpointVenue();
+  c.at(0);
+  await c.openVenue();
+  c.hear(2);
+  c.at(15);
+  await c.manualSave();
+  c.hear(1);
+  c.at(20);
+  assert.equal(c.venue.checkpoint(), false, "場の始まりから 20 分でも、手動の保存から 5 分");
+  c.at(34.99);
+  assert.equal(c.venue.checkpoint(), false);
+  c.at(35);
+  assert.equal(c.venue.checkpoint(), true, "手動の保存から 20 分");
+  assert.deepEqual(c.requests.map((r) => r.atMin), [15, 35]);
+});
+
+test("途中保存（Domain H）: 保存が成り立たなくても、毎分は頼み直さない（前に頼んだ時刻からも 20 分・今の 20 分おきの頻度を超えない）", async () => {
+  const c = makeCheckpointVenue({ failSaves: true });
+  c.at(0);
+  await c.openVenue();
+  c.hear(1);
+  assert.deepEqual(c.tickEveryMinute(1, 61, { grow: true }), [20, 40, 60]);
+});
+
+test("途中保存（Domain H）: 転写が前の保存から増えていなければ 20 分たっても頼まない・転写が無い場も頼まない・閉じた場は頼まない", async () => {
+  const c = makeCheckpointVenue();
+  c.at(0);
+  await c.openVenue();
+  c.at(25);
+  assert.equal(c.venue.checkpoint(), false, "転写が 0 行");
+  c.hear(3);
+  assert.equal(c.venue.checkpoint(), true);
+  c.at(50);
+  assert.equal(c.venue.checkpoint(), false, "前の保存から増えていない");
+  c.at(90);
+  assert.equal(c.venue.checkpoint(), false);
+  c.hear(1);
+  await c.closeVenue();
+  c.at(200);
+  assert.equal(c.venue.checkpoint(), false, "閉じた場は頼まない");
+  // 場を開く前（起動した直後）は起点が無いので頼まない。
+  const fresh = makeCheckpointVenue();
+  assert.equal(fresh.venue.checkpoint(), false);
+});
+
+test("途中保存（Domain H）: 配信の場でも Discord の場でも同じ（本物の server・体験の種類を見ない）", async () => {
+  for (const experience of ["stream", "discord"]) {
+    const v = makeVenue();
+    /** @type {any} */
+    let hear = null;
+    const discord = {
+      prepareEntrance: () => ({ ok: true, plan: null, voiceKind: "aivis" }),
+      openEntrance: async (/** @type {any} */ _plan, /** @type {any} */ venue) => {
+        const ears = venue.createEars();
+        ears.add("p1", { vad: null, async start() {}, async dispose() {} });
+        hear = (/** @type {string} */ text) =>
+          venue.transcriptBuffer.append({ startMs: 0, endMs: 900, text, displayName: "たろう", speakerId: "id-p1" });
+        await ears.start();
+        return { ok: true, ears };
+      },
+      closeEntrance: () => {}
+    };
+    const { server, url, ears } = await startServer(v, { experiences: { discord } });
+    try {
+      const started = await post(url, "/api/stream/start", experience === "discord" ? { experience: "discord" } : { device: "Mic" });
+      assert.equal(started.status, 200, experience);
+      assert.equal(started.json.stream.experience, experience);
+      const say = (/** @type {string} */ text) =>
+        experience === "discord" ? hear(text) : ears.record.buffer.append({ startMs: 0, endMs: 1000, text });
+      say("一言目");
+      say("二言目");
+      assert.equal(v.venue.checkpoint(), false, `${experience}: 開いてすぐは頼まない`);
+      v.advance(MEMORY_CHECKPOINT_INTERVAL_MS);
+      assert.equal(v.venue.checkpoint(), true, `${experience}: 場の始まりから 20 分で頼む`);
+      await v.recorder.whenIdle();
+      assert.deepEqual(v.written.map((w) => w.entries), [["一言目", "二言目"]]);
+      await post(url, "/api/stream/stop");
+    } finally {
+      await server.close();
+    }
+  }
+});
+
+test("途中保存の結線（main・Domain H）: タイマーは起動時に 1 回張ったまま 1 分ごと（MEMORY_CHECKPOINT_TICK_MS）・頼むかは checkpoint が決める", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source.slice(source.indexOf("async function main()"));
+  assert.match(
+    main,
+    /const memoryCheckpointTimer = setInterval\(\(\) => \{\n\s+streamVenue\.checkpoint\(\);\n\s+\}, MEMORY_CHECKPOINT_TICK_MS\);\n\s+memoryCheckpointTimer\.unref\(\);/
+  );
+  assert.equal((main.match(/streamVenue\.checkpoint\(\);/g) ?? []).length, 1, "張るのは 1 か所");
+  assert.doesNotMatch(main, /clearInterval\(memoryCheckpointTimer\)/, "場の口で張る・止めるはしない");
+  assert.doesNotMatch(main, /\}, MEMORY_CHECKPOINT_INTERVAL_MS\);/, "20 分の間隔で張らない（起動から 20 分ごとの当たりをやめた）");
 });

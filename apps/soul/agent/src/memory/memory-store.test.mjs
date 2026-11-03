@@ -26,7 +26,10 @@ import {
   formatJst,
   memoryDirForRole,
   pinnedGitArgs,
-  prepareMemoryFolder
+  parseAddedLines,
+  prepareMemoryFolder,
+  readCommitAddedLines,
+  revertMemoryCommit
 } from "./memory-store.mjs";
 
 function makeTemp() {
@@ -314,4 +317,150 @@ test("prepareMemoryFolder / commitMemoryChanges: dir が無ければ git を呼�
   const committed = await commitMemoryChanges(/** @type {any} */ ({ role: "test-role" }));
   assert.equal(committed.ok, false);
   assert.match(committed.ok ? "" : committed.error, /dir is required/);
+});
+
+// ── Discord モード Domain L: 足された行・取り消し(書き出し役の書き込みが「?」に化けたとき)──────────────
+
+test("parseAddedLines: `@@` の後ろの `+` 行だけを拾う(見出しの `+++`・`---`・Binary は拾わず、本文の `++` 行は拾う)", () => {
+  const diff = [
+    "diff --git a/a.md b/a.md",
+    "new file mode 100644",
+    "--- /dev/null",
+    "+++ b/a.md",
+    "@@ -0,0 +1,3 @@",
+    "+one",
+    "+++ two",
+    "+",
+    "diff --git a/b.md b/b.md",
+    "--- a/b.md",
+    "+++ b/b.md",
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+    "\ No newline at end of file",
+    "diff --git a/c.png b/c.png",
+    "Binary files a/c.png and b/c.png differ",
+    ""
+  ].join("\n");
+  assert.deepEqual(parseAddedLines(diff), ["one", "++ two", "", "new"]);
+  assert.deepEqual(parseAddedLines(""), []);
+});
+
+test("readCommitAddedLines: ルートのコミット(親なし)でも、そのコミットで足された行を返す(HEAD もハッシュも)", async (t) => {
+  const dir = makeTemp();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  await prepareMemoryFolder({ dir });
+  writeFileSync(join(dir, "a.md"), "first line\n?????\n", "utf8");
+  const first = await commitMemoryChanges({ dir, role: "test-role" });
+  assert.equal(first.ok && first.committed, true);
+  const hash = first.ok && first.committed ? first.commit : "";
+
+  const byHash = await readCommitAddedLines({ dir, commit: hash });
+  assert.equal(byHash.ok, true);
+  const lines = byHash.ok ? byHash.lines : [];
+  assert.ok(lines.includes("first line"));
+  assert.ok(lines.includes("?????"));
+  assert.ok(lines.includes("# 記憶の置き場の決まり"), "未コミットだった _conventions.md もルートのコミットに入る");
+  assert.deepEqual(await readCommitAddedLines({ dir }), byHash, "既定は HEAD");
+
+  // 2 つ目のコミットでは、そのコミットで足された行だけ(変えた行の古い側・変えていない行は入らない)。
+  writeFileSync(join(dir, "a.md"), "first line\nreplaced\nadded\n", "utf8");
+  await commitMemoryChanges({ dir, role: "test-role" });
+  assert.deepEqual(await readCommitAddedLines({ dir }), { ok: true, lines: ["replaced", "added"] });
+  assert.equal(commitCount(dir), 2);
+});
+
+test("revertMemoryCommit: コミットを取り消すコミットを積み(履歴は書き換えない)、中身が前の状態に戻る", async (t) => {
+  const dir = makeTemp();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  await prepareMemoryFolder({ dir });
+  writeFileSync(join(dir, "a.md"), "before\n", "utf8");
+  await commitMemoryChanges({ dir, role: "test-role" });
+  writeFileSync(join(dir, "a.md"), "????\n", "utf8");
+  writeFileSync(join(dir, "b.md"), "????\n", "utf8");
+  const bad = await commitMemoryChanges({ dir, role: "test-role" });
+  const badHash = bad.ok && bad.committed ? bad.commit : "";
+
+  const reverted = await revertMemoryCommit({ dir, commit: badHash });
+  assert.equal(reverted.ok, true);
+  assert.match(reverted.ok ? reverted.commit : "", /^[0-9a-f]{40}$/);
+  assert.equal(readFileSync(join(dir, "a.md"), "utf8"), "before\n");
+  assert.equal(existsSync(join(dir, "b.md")), false);
+  assert.equal(commitCount(dir), 3, "取り消しのコミットが 1 つ積まれる");
+  assert.equal(git(dir, ["rev-parse", "HEAD~1"]).trim(), badHash, "取り消したコミットは履歴に残る");
+  assert.equal(git(dir, ["status", "--porcelain"]).trim(), "");
+  assert.equal(git(dir, ["log", "-1", "--format=%an <%ae>"]).trim(), `${MEMORY_GIT_USER_NAME} <${MEMORY_GIT_USER_EMAIL}>`);
+});
+
+test("revertMemoryCommit: ルートのコミットも取り消せる(足したファイルが消える・既定は HEAD)", async (t) => {
+  const dir = makeTemp();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  await prepareMemoryFolder({ dir });
+  writeFileSync(join(dir, "a.md"), "????\n", "utf8");
+  await commitMemoryChanges({ dir, role: "test-role" });
+
+  const reverted = await revertMemoryCommit({ dir });
+  assert.equal(reverted.ok, true);
+  assert.equal(existsSync(join(dir, "a.md")), false);
+  assert.equal(commitCount(dir), 2);
+  assert.equal(git(dir, ["ls-files"]).trim(), "");
+  assert.equal(git(dir, ["status", "--porcelain"]).trim(), "");
+});
+
+test("revertMemoryCommit: 失敗しても throw せず、途中の状態を残さない(無いコミット)", async (t) => {
+  const dir = makeTemp();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  await prepareMemoryFolder({ dir });
+  writeFileSync(join(dir, "a.md"), "x\n", "utf8");
+  await commitMemoryChanges({ dir, role: "test-role" });
+
+  const reverted = await revertMemoryCommit({ dir, commit: "0123456789abcdef0123456789abcdef01234567" });
+  assert.equal(reverted.ok, false);
+  assert.match(reverted.ok ? "" : reverted.error, /^git revert:/);
+  assert.equal(commitCount(dir), 1);
+  assert.equal(git(dir, ["status", "--porcelain"]).trim(), "");
+  assert.equal(existsSync(join(dir, ".git", "REVERT_HEAD")), false);
+});
+
+test("readCommitAddedLines / revertMemoryCommit: .git が無い・dir が無い・コミットの形でなければ git を呼ばずに失敗で返す", async (t) => {
+  const dir = makeTemp();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, "a.md"), "x\n", "utf8");
+  // 無い git を指しても「git not found」にならない = git を呼ぶ前に止まっている。
+  const gitPath = join(dir, "no-such-git-binary");
+
+  const added = await readCommitAddedLines({ dir, gitPath });
+  assert.equal(added.ok, false);
+  assert.match(added.ok ? "" : added.error, /no \.git/);
+  const reverted = await revertMemoryCommit({ dir, gitPath });
+  assert.equal(reverted.ok, false);
+  assert.match(reverted.ok ? "" : reverted.error, /no \.git/);
+  assert.equal(existsSync(join(dir, ".git")), false);
+
+  for (const call of [readCommitAddedLines, revertMemoryCommit]) {
+    const noDir = await call(/** @type {any} */ ({ gitPath }));
+    assert.equal(noDir.ok, false);
+    assert.match(noDir.ok ? "" : noDir.error, /dir is required/);
+    const noOptions = await call(/** @type {any} */ (undefined));
+    assert.equal(noOptions.ok, false);
+    for (const commit of ["--hard", "HEAD~1", "", "main"]) {
+      const bad = await call({ dir, commit, gitPath });
+      assert.equal(bad.ok, false);
+      assert.match(bad.ok ? "" : bad.error, /commit must be/);
+    }
+  }
+});
+
+test("readCommitAddedLines / revertMemoryCommit: git が無いときは throw せず失敗で返す", async (t) => {
+  const dir = makeTemp();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  await prepareMemoryFolder({ dir });
+  await commitMemoryChanges({ dir, role: "test-role" });
+  const gitPath = join(dir, "no-such-git-binary");
+  const added = await readCommitAddedLines({ dir, gitPath });
+  assert.equal(added.ok, false);
+  assert.match(added.ok ? "" : added.error, /git not found/);
+  const reverted = await revertMemoryCommit({ dir, gitPath });
+  assert.equal(reverted.ok, false);
+  assert.match(reverted.ok ? "" : reverted.error, /git not found/);
 });

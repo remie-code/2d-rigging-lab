@@ -742,6 +742,11 @@ export function createFireScheduler(options) {
       disarmTurnEnd();
       return;
     }
+    if (entry.speaker === "event") {
+      // Discord モード Domain J（§13.5）: 出来事の行（入った・抜けた・人の出入り）は発火のきっかけにも活動にもしない（no-op）。
+      // 場の購読もここへ回さない（守りの二重化）。
+      return;
+    }
     if (entry.speaker === "viewer") {
       // ★ S7 二重発火の断ち: viewer コメントは同じ転写バッファへ append されるため handleTranscript も
       // 通るが、発火・活動反映は handleChatMessage が担う。ここで you 経路（call 照合/armSilence）を

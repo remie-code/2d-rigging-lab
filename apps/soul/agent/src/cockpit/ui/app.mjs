@@ -14,11 +14,20 @@
  *    の 5 タブ。運転は control-bar.mjs DrivePanel（自発・かぶり・手動の発火）、ログは今の観測フィード feed.mjs + 旧ヘッダの
  *    一目の健康。初回の自動展開はやめた（§7・§9.2）。
  *  - 上の帯の名前はロールの名前（snapshot の role。無い古いサーバは brain.identity）。
+ *  - Discord モード Domain G（discord-mode.md §9・scope §21）: 体験は場を開くときに選ぶ。場が閉じている間、メイン画面の「配信を
+ *    始める」の横に「Discord の VC に入る」（POST /api/stream/start { experience: "discord" }・Discord の入口があるときだけ）。
+ *    Discord の場の間は、下の帯の同じ置き場が「VC から抜ける」（2 回押し）、上の帯に接続の状態、会話の you の行は Discord の
+ *    名前、YouTube まわり（コメントの列）は出さない。準備・設定に「Discord の準備」のタブ（settings-drawer.mjs）。
+ *  - Discord モード Domain K（discord-mode.md §13.4）: Discord の場の間、右の領域（配信のコメントの列の置き場）に Discord の操作
+ *    パネル（discord-panel.mjs・接続 / しゃべり方 / 見る窓）。下の帯の同じ置き場の 2 回押しは「通話を終える」（場を閉じる道のまま）。
+ *    配信の場は今のままコメントの列。左の「会話」は変えない。
  *
  * SSE 購読: SSE_EVENT_NAMES（既存 13 本 + 1 回目で足した fireAsk / latency / quota / warnings の 4 本）。
  * 観測フィード（ログのタブ）は rows.mjs の feedAfterSseEvent、会話とコメントは glanceAfterSseEvent、非タイムライン効果
  * （state 適用・discarded・soul・fire-note・usage・chatStatus・quota・warnings）は applyNonFeedSseEvent。
  * 初期化: GET /api/state → 履歴復元（フィードと会話・推論の範囲と遅延は復元しない）→ applyState → SSE 購読。
+ * Discord モード Domain M: 会話の欄は SSE state の stream で新しい場が開いたと知り（glanceAfterSseEvent の "state"）、前の場の
+ * 判定の札と推論の範囲を捨てる（seq は場ごとに 0 から）。初期化では snapshot の stream を glanceFromHistory に渡して覚えさせる。
  *
  * 鉄の設計規律: export function/const のみ・**トップレベル副作用ゼロ**（document/EventSource/window に
  * トップレベルで触れない）。mount(rootElement, options) を呼ぶのは cockpit.html の inline module だけ。
@@ -48,6 +57,8 @@ import {
   commentRowsView
 } from "../view-logic/glance-timeline.mjs";
 import { latencyBarView, isPreStream, streamStartView, DEFAULT_LATENCY_THRESHOLDS } from "../view-logic/glance-meters.mjs";
+import { discordAvailable, discordJoinView, isDiscordVenue } from "../view-logic/discord.mjs";
+import { DiscordPanel } from "./discord-panel.mjs";
 
 /**
  * 購読する SSE イベントの全リスト（既存 13 本 + 操縦席の作り直し 1 回目で足した 4 本・データの形 §1）。
@@ -130,6 +141,20 @@ export function settingsFromSnapshot(s) {
 }
 
 /**
+ * Discord の場まわりの snapshot の値（Discord モード Domain G）。settingsFromSnapshot（設定系現況の正本・項目の並びはテストが固定）
+ * とは別に取り出す。discordAvailable = この操縦席に Discord の入口があるか（snapshot の discord = { available: true }）、
+ * speakStartFixed = 話し始めがその場で固定か（Discord の場で true・配信は false・scheduler 未生成 / 古いサーバは null）。
+ * @param {any} s
+ * @returns {{ discordAvailable: boolean; speakStartFixed: boolean | null }}
+ */
+export function venueExtrasFromSnapshot(s) {
+  return {
+    discordAvailable: discordAvailable(s && s.discord),
+    speakStartFixed: s && typeof s.speakStartFixed === "boolean" ? s.speakStartFixed : null
+  };
+}
+
+/**
  * 上の帯・題に出す名前の元（配信の組み直し Domain E: ロールの名前）。snapshot の role（{ id, displayName }）があればそれ、
  * 無い古いサーバは brain.identity。形の確かめは header.mjs の identityDisplayName が行う（形が違えば中立の題）。
  * @param {any} settings  settingsFromSnapshot の値。
@@ -191,6 +216,8 @@ export function App(props) {
   const [fireNote, setFireNote] = useState(""); //        SSE fire accepted:false + Fire 応答（setFireNote :442-444）
   const [chatDisplay, setChatDisplay] = useState(/** @type {string | null} */ (null)); // renderChatStatus 入力（:294-306）
   const [settings, setSettings] = useState(() => settingsFromSnapshot(null));
+  // Discord モード Domain G: Discord の入口の有無と、話し始めの固定（venueExtrasFromSnapshot）。
+  const [extras, setExtras] = useState(() => venueExtrasFromSnapshot(null));
   // 準備・設定の開閉（歯車・配信前の「準備・設定を開く」。初回の自動展開はしない・§7・§9.2）。
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsCloseRequestRef = useRef(/** @type {() => void} */ (() => setSettingsOpen(false)));
@@ -214,6 +241,7 @@ export function App(props) {
     setNowTick(now()); //                                        :278 renderUptime 即時反映
     setChatDisplay(chatDisplayState(s.chat)); //                 applyChat :307-315 の表示部
     setSettings(settingsFromSnapshot(s)); //                     設定系現況（表示は Domain C）
+    setExtras(venueExtrasFromSnapshot(s)); //                    Discord の入口の有無・話し始めの固定（Discord モード Domain G）
     // 操縦席の作り直し 1 回目のキー（無い古いサーバでは前値のまま）。
     if ("quota" in s) setQuota(s.quota ?? null);
     if (Array.isArray(s.warnings)) setWarnings(s.warnings);
@@ -280,7 +308,8 @@ export function App(props) {
       .then((/** @type {any} */ s) => {
         if (cancelled) return;
         setFeed(feedFromHistory(s.transcripts || [], now())); // 履歴復元（latency 無し・:902）
-        setGlance(glanceFromHistory(s.transcripts || [], now())); // 会話とコメント（範囲・遅延は復元しない）
+        // 会話とコメント（範囲・遅延は復元しない）。場の状態も覚える（このあとの SSE state で新しい場が開いたと分かるように・Domain M）。
+        setGlance(glanceFromHistory(s.transcripts || [], now(), s.stream));
         applyStateRef.current(s);
       })
       .catch(() => {
@@ -367,6 +396,28 @@ export function App(props) {
       .catch((/** @type {unknown} */ e) => setStreamRequestError(`配信を始められない（${String(e)}）`));
   };
 
+  /**
+   * 「Discord の VC に入る」（メイン画面の中央・Discord モード Domain G）。Discord の準備（サーバー・ボイスチャンネル・見る窓・
+   * 文字起こしの方式）はサーバが保存した値で入る（選び直すのは準備・設定の「Discord の準備」）。入れなかった理由は stream.error。
+   */
+  const joinDiscord = () => {
+    const doFetch = props.fetchImpl || globalThis.fetch;
+    setStreamRequestError("");
+    doFetch("/api/stream/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ experience: "discord" }) })
+      .then((/** @type {any} */ r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, status: r.status, j })))
+      .then((/** @type {any} */ res) => {
+        if (res.ok) {
+          applySnapshot(res.j);
+          return;
+        }
+        if (res.j && res.j.state) applySnapshot(res.j.state);
+        if (!(res.j && res.j.state && res.j.state.stream && res.j.state.stream.error)) {
+          setStreamRequestError((res.j && res.j.error) || "Discord の VC に入れない");
+        }
+      })
+      .catch((/** @type {unknown} */ e) => setStreamRequestError(`Discord の VC に入れない（${String(e)}）`));
+  };
+
   /** 「配信を終える」（下の帯・2 回押し）。1 回目は armed にするだけ（4 秒で戻す）、続けて押したら終える。 */
   const endStream = () => {
     if (endArmTimerRef.current) clearTimeout(endArmTimerRef.current);
@@ -400,9 +451,12 @@ export function App(props) {
     computeUptimeMs({ listening, baseMs: uptime.baseMs, anchorMs: uptime.anchorMs, nowMs: nowTick })
   );
   const soulName = identityDisplayName(currentIdentity);
+  const discordVenue = isDiscordVenue(settings.stream);
   const convoRows = conversationRowsView(glance, {
     soulName: soulName === NEUTRAL_COCKPIT_TITLE ? "soul" : soulName,
-    latencyView: (rec) => latencyBarView(rec, latencyThresholds)
+    latencyView: (rec) => latencyBarView(rec, latencyThresholds),
+    // Discord モード Domain G: Discord の場では you の行を Discord の名前で出す（配信は「配信者」のまま）。
+    experience: settings.stream ? settings.stream.experience ?? null : null
   });
   const commentRows = commentRowsView(glance);
   const modelText = settings.brain && settings.brain.brain ? brainLabel(settings.brain) : "";
@@ -424,23 +478,40 @@ export function App(props) {
         onKill=${() => setKilled(true)}
         onRevive=${() => setKilled(false)}
       />
-      <main class="glance-main">
+      <main class=${"glance-main" + (discordVenue ? " discord" : "")}>
         <${ConversationPanel}
           rows=${convoRows}
           preStream=${isPreStream(ears, settings.stream)}
           start=${streamStartView(settings.stream, streamRequestError)}
+          join=${discordJoinView(settings.stream, extras.discordAvailable)}
           onStartStream=${startStream}
+          onJoinDiscord=${joinDiscord}
           onOpenSettings=${toggleSettings}
         />
-        <${CommentsPanel} rows=${commentRows} />
+        ${/* Discord モード Domain G: Discord の場の間は YouTube まわり（コメントの列）を出さない。Domain K: 同じ置き場に Discord の操作パネル。 */ ""}
+        ${discordVenue
+          ? html`<${DiscordPanel}
+              stream=${settings.stream}
+              soul=${soul}
+              setSoul=${setSoul}
+              fireNote=${fireNote}
+              setFireNote=${setFireNote}
+              selfFire=${settings.selfFire}
+              bargeIn=${settings.bargeIn}
+              applySnapshot=${applySnapshot}
+              fetchImpl=${props.fetchImpl}
+            />`
+          : html`<${CommentsPanel} rows=${commentRows} />`}
       </main>
       <${BottomBar} settings=${settings} settingsOpen=${settingsOpen} onOpenSettings=${toggleSettings}
-        endArmed=${endArmed} onEndStream=${endStream} />
+        endArmed=${endArmed} onEndStream=${endStream} speakStartFixed=${extras.speakStartFixed} />
       ${/* ── 準備・設定（歯車で開閉・普段は畳む）。運転とログのタブの中身はここで組んで渡す。── */ ""}
       <${CockpitSettingsModal}
         open=${settingsOpen}
         onClose=${() => setSettingsOpen(false)}
         settings=${settings}
+        discordAvailable=${extras.discordAvailable}
+        speakStartFixed=${extras.speakStartFixed}
         sttEngine=${stt ? stt.engine : null}
         chatDisplay=${chatDisplay}
         applySnapshot=${applySnapshot}

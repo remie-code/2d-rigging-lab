@@ -10,6 +10,11 @@ import {
   fireUsageRecord,
   compactionUsageRecord,
   replyLatencyUsageRecord,
+  judgmentUsageRecord,
+  fireRefusedUsageRecord,
+  controlUsageRecord,
+  JUDGMENT_ERROR_KINDS,
+  USAGE_CONTROL_KINDS,
   sessionUsageFileName,
   SESSION_USAGE_RETENTION,
   SESSION_USAGE_SCHEMA
@@ -201,4 +206,151 @@ test("遅延の 1 行（体なし・配信の組み直し Domain C）: bodyless 
   assert.equal("bodyless" in withBody, false, "体ありはキーを足さない");
   assert.deepEqual({ ...bodyless, bodyless: undefined }, { ...withBody, bodyless: undefined });
   assert.equal("bodyless" in replyLatencyUsageRecord({ ...base, bodyless: "yes" }), false, "true だけを印と読む");
+});
+
+// ── Discord モード Domain H: 判定・発火の断り・つまみの行（discord-mode.md §13.7）──────────────────────────
+
+test("判定の 1 行（成功）: きっかけ・選択・確率・行き先・遅延だけを拾う（本文・名前・id は落とす）", () => {
+  const record = judgmentUsageRecord({
+    ok: true,
+    trigger: "after-busy",
+    triggerSeq: 12,
+    choice: "respond",
+    probability: 0.72,
+    probs: { wait: 0.1, backchannel: 0.05, respond: 0.72, initiate: 0.08, look: 0.05, "たろう": 0.9 },
+    latencyMs: 812,
+    action: "drop-busy",
+    input: "たろう: 本文は拾わない",
+    displayName: "たろう",
+    speakerId: "123456789012345678"
+  });
+  assert.deepEqual(record, {
+    type: "judgment",
+    ok: true,
+    trigger: "after-busy",
+    triggerSeq: 12,
+    choice: "respond",
+    p: 0.72,
+    probs: { wait: 0.1, backchannel: 0.05, respond: 0.72, initiate: 0.08, look: 0.05 },
+    action: "drop-busy",
+    latencyMs: 812,
+    errorKind: null,
+    errorStatus: null
+  });
+  const text = JSON.stringify(record);
+  for (const leak of ["本文", "たろう", "123456789012345678"]) assert.equal(text.includes(leak), false, leak);
+  // 欠けた値は null（確率の無い選択肢も null）。
+  const sparse = judgmentUsageRecord({ ok: true, trigger: "transcript", choice: "wait", probs: { wait: 0.9 }, action: "none" });
+  assert.equal(sparse.p, null);
+  assert.equal(sparse.triggerSeq, null);
+  assert.deepEqual(sparse.probs, { wait: 0.9, backchannel: null, respond: null, initiate: null, look: null });
+  // 決まった語でないもの（文・知らない選択肢）は null に落とす。
+  const odd = judgmentUsageRecord({ ok: true, trigger: "本文の文", choice: "なにか", action: "Fire Now", probs: null });
+  assert.equal(odd.trigger, null);
+  assert.equal(odd.choice, null);
+  assert.equal(odd.action, null);
+  assert.equal(odd.probs, null);
+});
+
+test("判定の 1 行（失敗）: エラーの種類と HTTP の状態の数だけ（エラー文・相手の返した文は書かない）", () => {
+  const record = judgmentUsageRecord({
+    ok: false,
+    trigger: "transcript",
+    error: "HTTP 429: You exceeded your current quota, たろう [credit_balance_exhausted]",
+    latencyMs: 640,
+    errorKind: "http",
+    errorStatus: 429
+  });
+  assert.deepEqual(record, {
+    type: "judgment",
+    ok: false,
+    trigger: "transcript",
+    triggerSeq: null,
+    choice: null,
+    p: null,
+    probs: null,
+    action: null,
+    latencyMs: 640,
+    errorKind: "http",
+    errorStatus: 429
+  });
+  const text = JSON.stringify(record);
+  for (const leak of ["quota", "たろう", "credit_balance_exhausted", "HTTP 429"]) assert.equal(text.includes(leak), false, leak);
+  for (const kind of JUDGMENT_ERROR_KINDS) {
+    assert.equal(judgmentUsageRecord({ ok: false, error: "x", errorKind: kind }).errorKind, kind);
+  }
+  assert.deepEqual([...JUDGMENT_ERROR_KINDS], ["no-key", "network", "auth", "http", "timeout", "shape"]);
+  // 種類を持たない失敗（判定エンジンの外の throw など）は unknown・文は書かない。
+  const unknown = judgmentUsageRecord({ ok: false, trigger: "transcript", error: "通信失敗: getaddrinfo ENOTFOUND たろう", latencyMs: null });
+  assert.equal(unknown.errorKind, "unknown");
+  assert.equal(JSON.stringify(unknown).includes("ENOTFOUND"), false);
+  assert.equal(judgmentUsageRecord({ ok: false, errorKind: "通信失敗の文" }).errorKind, "unknown", "一覧に無い種類は unknown");
+  assert.equal(judgmentUsageRecord(null).ok, false);
+});
+
+test("発火の断りの 1 行: きっかけの種類・断った理由・視覚か だけ（ほかの欄は拾わない・文は null に落とす）", () => {
+  assert.deepEqual(fireRefusedUsageRecord({ cause: "speak-now", reason: "stream-not-open", vision: false }), {
+    type: "fire-refused",
+    cause: "speak-now",
+    reason: "stream-not-open",
+    vision: false
+  });
+  assert.deepEqual(fireRefusedUsageRecord({ cause: "manual", reason: "busy", vision: true, commentIds: ["yt-123"], displayName: "たろう" }), {
+    type: "fire-refused",
+    cause: "manual",
+    reason: "busy",
+    vision: true
+  });
+  const odd = fireRefusedUsageRecord({ cause: "コメントの本文", reason: "Error: boom at たろう", vision: "yes" });
+  assert.deepEqual(odd, { type: "fire-refused", cause: null, reason: null, vision: false });
+  for (const reason of ["killed", "busy", "ears-not-running", "empty-window", "vision-no-target", "not-in-vc"]) {
+    assert.equal(fireRefusedUsageRecord({ cause: "recall", reason }).reason, reason);
+  }
+});
+
+test("つまみの 1 行: 許す一覧の名前と前後の真偽だけ（一覧に無い名前は null = 書かない・VC の名前や id は載らない）", () => {
+  assert.deepEqual(controlUsageRecord({ control: "self-fire", from: true, to: false }), {
+    type: "control",
+    control: "self-fire",
+    from: true,
+    to: false
+  });
+  assert.deepEqual(controlUsageRecord({ control: "kill", from: false, to: true }), { type: "control", control: "kill", from: false, to: true });
+  // Domain I〜K の VC の出来事（真偽を持たない・名前・id を渡されても載せない）。
+  const join = controlUsageRecord({ control: "vc-join", channelName: "雑談部屋", channelId: "123456789012345678", guildId: "987654321098765432" });
+  assert.deepEqual(join, { type: "control", control: "vc-join", from: null, to: null });
+  const text = JSON.stringify(join);
+  for (const leak of ["雑談部屋", "123456789012345678", "987654321098765432"]) assert.equal(text.includes(leak), false, leak);
+  assert.deepEqual([...USAGE_CONTROL_KINDS], [
+    "self-fire",
+    "barge-in",
+    "kill",
+    "vc-join",
+    "vc-leave",
+    "vc-move",
+    "vc-disconnect",
+    "vc-moved",
+    "vc-kicked"
+  ]);
+  for (const control of USAGE_CONTROL_KINDS) assert.equal(controlUsageRecord({ control })?.control, control);
+  assert.equal(controlUsageRecord({ control: "雑談部屋" }), null);
+  assert.equal(controlUsageRecord({ control: "verbosity" }), null, "一覧に無いつまみは書かない");
+  assert.equal(controlUsageRecord(null), null);
+  assert.equal(controlUsageRecord({ control: "barge-in", from: "on", to: 1 })?.from, null, "真偽でなければ null");
+});
+
+test("判定・断り・つまみの行は既存の行と同じ場のファイルに type を分けて足される（時刻は wallTimeMs）", async () => {
+  await withDir(async (dir) => {
+    let now = 100;
+    const log = createSessionUsageLog({ dir, startedAtMs: Date.UTC(2026, 10, 1, 3, 0, 0, 0), nowImpl: () => (now += 1) });
+    log.append(judgmentUsageRecord({ ok: true, trigger: "transcript", choice: "respond", probability: 0.8, probs: { respond: 0.8 }, action: "fire", latencyMs: 700 }));
+    log.append(fireUsageRecord({ fireId: 1, brain: "codex" }));
+    log.append(fireRefusedUsageRecord({ cause: "speak-now", reason: "stream-not-open" }));
+    log.append(/** @type {any} */ (controlUsageRecord({ control: "barge-in", from: false, to: true })));
+    await log.flush();
+    const lines = readLines(log.path);
+    assert.deepEqual(lines.map((l) => l.type), ["judgment", "fire", "fire-refused", "control"]);
+    assert.deepEqual(lines.map((l) => l.wallTimeMs), [101, 102, 103, 104]);
+    assert.ok(lines.every((l) => l.schema === SESSION_USAGE_SCHEMA));
+  });
 });

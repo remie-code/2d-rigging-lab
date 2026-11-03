@@ -43,7 +43,7 @@ test("diagnosticGhostLabel: 表示する型のラベル（cockpit.html:831-849�
   );
   assert.equal(
     diagnosticGhostLabel({ type: "chatBufferAbsent" }),
-    "(chat: ears not running — comment did not merge)"
+    "(chat: venue not open — comment did not merge)"
   );
 });
 
