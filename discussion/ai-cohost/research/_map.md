@@ -20,6 +20,8 @@
 | [quota-sources-2026-10.md](quota-sources-2026-10.md) | 各サービス(Codex / Claude / OpenAI API / ElevenLabs)の残量を割合で取る手段。OpenAI は残高 API なし、ElevenLabs は user_read が要る | Recorded(2026-10-17) |
 | [vision-capture-latency-2026-10.md](vision-capture-latency-2026-10.md) | 画面キャプチャ約 0.6 秒の内訳(PowerShell 起動 330ms + 毎回のコンパイル 110ms)、代替方式。OBS 窓タイトルの完全一致で撮影が全部失敗していた疑い | Recorded(2026-10-17) |
 | [context-growth-2026-10.md](context-growth-2026-10.md) | 長い配信で応答が遅くなる件: 会話の窓の重複・画像の残留・圧縮手段(Codex thread/compact/start、Claude /compact)・ユーザーの方針・Codex の fast と実配信の使用量(§10–§11) | Recorded(2026-10-28) |
+| [codex-429-stall-2026-11-03.md](codex-429-stall-2026-11-03.md) | 2026-11-03 の配信で頭が 8 分前後止まり続けた件: OpenAI の 429 を Codex が次の 10 分の区切りまで黙って待っていた(Codex のログで確定)。11:27 から 10 分に約 5 回の枠。書き出し役も待たされ、最後の保存は入っていない見込み。KILL は効く。直しの候補 5 つ | Recorded(2026-11-03)。直しは見送り(ユーザー判断) |
+| [codex-429-conditions-2026-11.md](codex-429-conditions-2026-11.md) | Codex が 429 を返す条件の調査(公式・ソース・報告)。5 時間・週の上限とは別物。10/20 以降 Plus・Pro で同じ形の報告多数(`turn_rate_limit_exceeded`)。条件の公式記述は無し。App Server は最初のやり直しを知らせない(待ち検知はクライアント側で) | Recorded(2026-11-03) |
 | [stt-candidates-2026-10.md](stt-candidates-2026-10.md) | 耳(STT)の候補の洗い出し。ローカル化が動機(ElevenLabs の消費のほぼ全部が文字起こし)。本命は Parakeet-ja(sherpa-onnx-node・CPU)、比較に ReazonSpeech K2。「いろどり」は TTS(Irodori-TTS)だった。Zipformer を採用し、実配信で合格(§7) | Recorded(2026-10-28) |
 
 ## 注意
