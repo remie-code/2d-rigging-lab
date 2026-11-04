@@ -22,6 +22,7 @@
 | [context-growth-2026-10.md](context-growth-2026-10.md) | 長い配信で応答が遅くなる件: 会話の窓の重複・画像の残留・圧縮手段(Codex thread/compact/start、Claude /compact)・ユーザーの方針・Codex の fast と実配信の使用量(§10–§11) | Recorded(2026-10-28) |
 | [codex-429-stall-2026-11-03.md](codex-429-stall-2026-11-03.md) | 2026-11-03 の配信で頭が 8 分前後止まり続けた件: OpenAI の 429 を Codex が次の 10 分の区切りまで黙って待っていた(Codex のログで確定)。11:27 から 10 分に約 5 回の枠。書き出し役も待たされ、最後の保存は入っていない見込み。KILL は効く。直しの候補 5 つ | Recorded(2026-11-03)。直しは見送り(ユーザー判断) |
 | [codex-429-conditions-2026-11.md](codex-429-conditions-2026-11.md) | Codex が 429 を返す条件の調査(公式・ソース・報告)。5 時間・週の上限とは別物。10/20 以降 Plus・Pro で同じ形の報告多数(`turn_rate_limit_exceeded`)。条件の公式記述は無し。App Server は最初のやり直しを知らせない(待ち検知はクライアント側で)。§7: 10/14 以降 5〜7 日おきに報告が固まって出る(週 5〜6 件・横ばい・11/02 に山)。公式の認知なし | Recorded(2026-11-03) |
+| [cough-filter-audio-tagging-2026-11.md](cough-filter-audio-tagging-2026-11.md) | 咳払いが「うん」に化ける件: sherpa-onnx の音の分類(CED-tiny・6 MB・1 回約 15 ms)で Cough / Throat clearing を見る案は条件付きで可。5 秒まで無音で埋める要あり・確率が低めでしきい値は実音で合わせる必要。差し込みは local-stt の子プロセスで分類、親の ear-pipeline で捨てる。声の高さ案は「残す」補助どまり | Recorded(2026-11-03)。実装はユーザー判断待ち |
 | [stt-candidates-2026-10.md](stt-candidates-2026-10.md) | 耳(STT)の候補の洗い出し。ローカル化が動機(ElevenLabs の消費のほぼ全部が文字起こし)。本命は Parakeet-ja(sherpa-onnx-node・CPU)、比較に ReazonSpeech K2。「いろどり」は TTS(Irodori-TTS)だった。Zipformer を採用し、実配信で合格(§7) | Recorded(2026-10-28) |
 
 ## 注意
