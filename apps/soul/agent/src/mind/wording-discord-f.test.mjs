@@ -111,7 +111,7 @@ test("Domain F ②: 通話の語で組んだ固定の指示と頼み（手順 1 
   assert.ok(system.startsWith("あなたは、相方の AI の記憶の置き場の「書き出し役」です。"));
   assert.equal(system.includes(CALL_WORDING.conventionsNote), false, "決まりの 1 文は固定の指示には出さない（頼みにだけ）");
   const transcriptText = formatTranscriptForDigest(CALL_ENTRIES);
-  const request = buildWriterRequest({ transcriptText, dateJst: "2026-11-01", baseName: "2026-11-01-2", existingFiles: [], wording: CALL_WORDING });
+  const request = buildWriterRequest({ transcriptText, dateJst: "2026-11-01", existingFiles: [], wording: CALL_WORDING });
   const lines = request.split("\n");
   assert.equal(lines[0], "今回の通話の記録を書いてください。");
   assert.ok(lines.includes("- 通話の日付（日本時間）: 2026-11-01"));

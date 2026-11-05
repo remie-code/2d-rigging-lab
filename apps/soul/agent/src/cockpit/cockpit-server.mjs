@@ -801,12 +801,14 @@ const MAX_PORT_REROLLS = 50;
  * }} [options.streamHooks]
  *   場（配信を始める / 終える）の cockpit.mjs 側の口（配信の組み直し Domain D・stream-restructure.md §3）。
  *   **cockpit-server は記録・頭のセッション・器・記憶の中身を知らない**（実体は cockpit.mjs の createStreamVenueHooks）。
- *   - renewRecords: 始める 2（場の記録を作り直す: 記憶の本体のファイル名・頭の文脈の記録のファイル・置き場の準備）。
+ *   - renewRecords: 始める 2（場の記録を作り直す: この場の記憶の保存の持ち回り・頭の文脈の記録のファイル・置き場の準備）。
  *   - openSession: 始める 5（頭のセッションをロールのモデルと指示で作る）。`ok:false` なら場を開かない。
  *   - connectBody: 始める 6（ロールに体があれば器につなぐ。体なしは何もしない）。`ok:false` なら場を開かない
  *     （reason は「runtime-player が起動していないか、channel が開いていない」の知らせ）。
  *   - closeSession / closeBody: 畳む（頭のセッション・器。器は体の有無に関わらず畳む）。始めるの途中の失敗の巻き戻しでも呼ぶ。
- *   - saveFinal: 終える 3（写した転写で記憶の最後の保存をして待つ。待つ上限と打ち切りは cockpit.mjs が持つ）。
+ *   - saveFinal: 終える 3（写した転写で記憶の最後の保存をして待つ。待つ上限と打ち切りは cockpit.mjs が持つ）。記憶の整理
+ *     Domain C から、整理の時期なら続けて③整理役を走らせ、終わるまで待つ（上限なし・Ctrl+C で打ち切る）。その間
+ *     cockpit.mjs が setMemoryOrganising(true) で知らせる（snapshot の stream.organising）。
  *   どれも任意（無ければ飛ばす）。throw は握る（始める口の throw は失敗として扱う）。
  *   Discord モード Domain B: 6 つの口は「ロールごとの束」の口（discord-mode.md §4.4・§5）。options.roles を渡さないときは、
  *   この streamHooks・currentRoleIdentity・onPrepareVoiceEngine・recallRunner から束を 1 つ作る（今のテストと互換）。
@@ -1004,6 +1006,7 @@ const MAX_PORT_REROLLS = 50;
  *   venueContext: () => { experience: string; wording: any; teaching: string | null } | null;
  *   startStream: (request?: object) => Promise<object>;
  *   endStream: () => Promise<object>;
+ *   setMemoryOrganising: (organising: boolean) => void;
  *   fireState: () => string | null;
  *   setSelfFireEnabled: (enabled: boolean) => boolean;
  *   selfFireStatus: () => { enabled: boolean } | null;
@@ -1404,6 +1407,11 @@ export function createCockpitServer(options = {}) {
   let streamError = null;
   /** @type {number | null} */
   let streamOpenedAtMs = null;
+  /**
+   * 閉じかけの間に③整理役が走っているか（記憶の整理 Domain C・cockpit.mjs が setMemoryOrganising で知らせる）。snapshot の
+   * stream.organising（閉じかけの間だけ true になりうる）。場を閉じたら false に戻す。
+   */
+  let memoryOrganising = false;
   /** 進行中の始める / 終える（Ctrl+C の終えるが待つ）。 @type {Promise<any> | null} */
   let streamTransition = null;
   /**
@@ -1564,6 +1572,7 @@ export function createCockpitServer(options = {}) {
       ears: earsState,
       // 配信の組み直し Domain D: 場の状態（phase = closed / opening / open / closing・error = 直近の始められなかった
       // 理由・openedAtMs = 開いた時刻）。closing の間は記憶の最後の保存を待っている（画面の「記録中」）。
+      // 記憶の整理 Domain C: organising = 閉じかけの間に③整理役が走っている（画面の「整理中」・closing のときだけ true）。
       // Discord モード Domain B: experience = 開いている（開きかけ・閉じかけを含む）場の体験の種類（"stream" | "discord"）。
       // 閉じている間は null（どの体験も開いていない）。
       // Discord モード Domain D: connection = Discord の場の接続の状態（"joining" | "joined" | "disconnected"・VENUE_CONNECTION_STATES）。
@@ -1575,7 +1584,8 @@ export function createCockpitServer(options = {}) {
         experience: venueExperienceKind(),
         connection: venueConnectionStatus(),
         // Discord モード Domain I: 今いる VC の名前（Discord の場の間だけ・どこにもいなければ null・Discord の id は載せない）。
-        vcName: venueVoiceChannelName()
+        vcName: venueVoiceChannelName(),
+        organising: streamPhase === "closing" && memoryOrganising
       },
       // Discord モード Domain D: Discord の体験が使えるか（この操縦席に Discord の入口が渡されていれば { available: true }・無ければ null）。
       // 準備の中身（サーバー・チャンネルの id）は snapshot に載せない（GET /api/discord/prep で読む）。
@@ -2950,6 +2960,7 @@ export function createCockpitServer(options = {}) {
   function markVenueClosed() {
     streamPhase = "closed";
     streamOpenedAtMs = null;
+    memoryOrganising = false;
     venueExperience = null;
     venueRoles = null;
     // Discord モード Domain D: 場の間だけの文字起こしの方式も手放す（配信の選択に戻る）。
@@ -3007,7 +3018,7 @@ export function createCockpitServer(options = {}) {
       return { ok: /** @type {const} */ (false), status: 500, error: reason, state: snapshot() };
     };
     const steps = async () => {
-      // 2. 場の記録を作り直す（ロールごと: 記憶の本体のファイル名・頭の文脈の記録のファイル・そのロールの置き場の準備）。
+      // 2. 場の記録を作り直す（ロールごと: この場の記憶の保存の持ち回り・頭の文脈の記録のファイル・そのロールの置き場の準備）。
       const renewed = await runRoleHooks("renewRecords");
       if (!renewed.ok) return fail(`場の記録を作り直せない（${renewed.reason}）`, {});
       // 3. KILL を OFF に戻す。判定・発火の予定・コメント反応・思い出しの係の積み残しを捨てる。
@@ -5215,6 +5226,20 @@ export function createCockpitServer(options = {}) {
     },
     /** 記憶の現況（memoryStatus）が変わったことを知らせる口（記録中の始まり・終わり）。SSE "state" で押す。 */
     memoryStatusChanged() {
+      if (closed) return;
+      broadcastState();
+    },
+    /**
+     * 閉じかけの間の③整理役の始まり・終わりを知らせる口（記憶の整理 Domain C・cockpit.mjs の整理の係が呼ぶ）。snapshot の
+     * stream.organising（閉じかけの間だけ載る）を切り替えて SSE "state" で押す。場の段階は closing のまま（始める・ロールの
+     * 切り替えは今どおり断る）。サーバは整理の中身を知らない。
+     * @param {boolean} organising
+     */
+    setMemoryOrganising(organising) {
+      // 閉じかけの外の true は持たない（次の閉じかけに古い印を持ち越さない）。
+      const next = organising === true && streamPhase === "closing";
+      if (memoryOrganising === next) return;
+      memoryOrganising = next;
       if (closed) return;
       broadcastState();
     },

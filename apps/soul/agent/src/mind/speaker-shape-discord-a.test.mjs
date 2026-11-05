@@ -87,7 +87,7 @@ test("Domain A 整形(②④): id と soul の名前は②の材料・頼み、�
   const digest = formatTranscriptForDigest(entries);
   assertNoIdsOrSoulName(digest);
   assert.ok(digest.includes("soul: こんにちは"));
-  assertNoIdsOrSoulName(buildWriterRequest({ transcriptText: digest, dateJst: "2026-10-31", baseName: "2026-10-31", existingFiles: [] }));
+  assertNoIdsOrSoulName(buildWriterRequest({ transcriptText: digest, dateJst: "2026-10-31", existingFiles: [] }));
   const recent = formatRecentConversation(entries, { nowMs: NOW });
   assertNoIdsOrSoulName(recent);
   assert.ok(recent.includes("soul: こんにちは"));

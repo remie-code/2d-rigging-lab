@@ -24,6 +24,24 @@
 export const DISCORD_JOIN_TEXT = "Discord の VC に入る";
 /** 開きかけ（Discord の場）の文言。 */
 export const DISCORD_JOINING_TEXT = "VC に入っています…";
+/**
+ * 閉じかけの間に③整理役が走っているときの文言（記憶の整理 Domain C・snapshot の stream.organising）。配信の場の
+ * 「配信を終えています…」と Discord の場の「通話を終えています…」に代えて出す（どちらの場も同じ語）。glance-meters.mjs も
+ * ここから読む（glance-meters → discord の一方向の import のまま）。
+ */
+export const MEMORY_ORGANISING_TEXT = "記憶を整理しています…";
+/** 閉じかけの間の「整理中」の短い語（状態のピル）。メイン画面の中央の添え書きは「整理中…」。 */
+export const MEMORY_ORGANISING_SHORT_TEXT = "整理中";
+
+/**
+ * 閉じかけの間に③整理役が走っているか（記憶の整理 Domain C・snapshot の stream.organising）。閉じかけでなければ false。
+ * @param {{ phase?: string; organising?: boolean } | null | undefined} stream
+ * @returns {boolean}
+ */
+export function isMemoryOrganising(stream) {
+  return !!(stream && stream.phase === "closing" && stream.organising === true);
+}
+
 /** 閉じかけ（Discord の場・記憶の最後の保存を待つ間）の文言（Domain K: 「通話を終える」の途中）。 */
 export const DISCORD_LEAVING_TEXT = "通話を終えています…";
 /**
@@ -102,7 +120,15 @@ export function discordAvailable(discord) {
 export function discordJoinView(stream, available) {
   const phase = phaseOf(stream);
   const discord = isDiscordVenue(stream);
-  const text = discord && phase === "opening" ? DISCORD_JOINING_TEXT : discord && phase === "closing" ? DISCORD_LEAVING_TEXT : DISCORD_JOIN_TEXT;
+  const text =
+    discord && phase === "opening"
+      ? DISCORD_JOINING_TEXT
+      : discord && phase === "closing"
+        ? // 記憶の整理 Domain C: 閉じかけの間に③整理役が走っていれば「記憶を整理しています…」。
+          isMemoryOrganising(stream)
+          ? MEMORY_ORGANISING_TEXT
+          : DISCORD_LEAVING_TEXT
+        : DISCORD_JOIN_TEXT;
   return { show: !!available, text, disabled: phase !== "closed" };
 }
 

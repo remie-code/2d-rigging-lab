@@ -74,12 +74,12 @@ export function streamWordingPinCases() {
     ["writer.transcript", () => digest()],
     [
       "writer.request.new",
-      () => buildWriterRequest({ transcriptText: digest(), dateJst: "2026-10-31", baseName: "2026-10-31", existingFiles: [] })
+      () => buildWriterRequest({ transcriptText: digest(), dateJst: "2026-10-31", existingFiles: [] })
     ],
     [
       "writer.request.existing",
       () =>
-        buildWriterRequest({ transcriptText: digest(), dateJst: "2026-10-31", baseName: "2026-10-31-2", existingFiles: PIN_EXISTING_FILES })
+        buildWriterRequest({ transcriptText: digest(), dateJst: "2026-10-31", existingFiles: PIN_EXISTING_FILES })
     ],
     // ④ の固定の指示と頼みと結果の文面
     ["recall.systemPrompt", () => RECALL_SYSTEM_PROMPT],

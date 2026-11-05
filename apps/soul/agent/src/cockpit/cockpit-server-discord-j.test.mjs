@@ -432,7 +432,7 @@ test("Domain J ①②④に載る: 頭への会話の窓・記憶の最後の保
     assert.equal(h.role.saved.length, 1);
     const transcriptText = formatTranscriptForDigest(h.role.saved[0]);
     assert.equal(transcriptText, window.text);
-    const request = buildWriterRequest({ transcriptText, dateJst: "2026-11-01", baseName: "2026-11-01", existingFiles: [], wording });
+    const request = buildWriterRequest({ transcriptText, dateJst: "2026-11-01", existingFiles: [], wording });
     assert.ok(request.includes("event = 通話の中の出来事（入った・抜けたなど）。"));
     assert.ok(request.includes(`event: ${NAME_B}が入ってきた`));
   } finally {

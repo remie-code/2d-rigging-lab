@@ -26,7 +26,8 @@ import {
   WRITER_GARBLED_REVERT_FAILED_WARNING,
   WRITER_GARBLE_CHECK_FAILED_WARNING,
   WRITER_MISS_RETRY_WARNING,
-  WRITER_MISS_WARNING
+  WRITER_MISS_WARNING,
+  createStreamRecordLog
 } from "./memory.mjs";
 import { CALL_WORDING } from "./venue-wording.mjs";
 import { commitMemoryChanges, pinnedGitArgs, prepareMemoryFolder } from "../memory/memory-store.mjs";
@@ -38,7 +39,13 @@ const WRITER_SENTENCE =
 const GARBLED_BODY = "# ????????\n\n- ??????????????\n- ?? 2 ????????\n";
 const GOOD_BODY = "# ダミーの配信\n\n- ダミーの出来事があった。\n";
 
-const RECORD = Object.freeze({ dateJst: "2026-11-01", baseName: "2026-11-01" });
+/** 偽物の②が書く本体のファイル名（魂は名前を決めないので、偽物が自分で決める・記憶の整理 Domain A）。 */
+const BODY_NAME = "2026-11-01";
+/** 2026-11-01（日本時間）に始まった場の持ち回り（createStreamRecordLog）。 */
+const newRecord = () => createStreamRecordLog({ startedAtMs: Date.UTC(2026, 10, 1, 3, 0, 0) });
+/** 偽物のコミットと組む口（捨てる・変わったファイル）。偽物のハッシュを本物の git に読ませない。 */
+const fakeDiscard = async () => /** @type {const} */ ({ ok: true });
+const fakeChanged = async () => /** @type {const} */ ({ ok: true, files: [{ status: "A", path: `dummy-topic/${BODY_NAME}.md` }] });
 const ENTRIES = Object.freeze([{ text: "ダミーの話", speaker: "you" }]);
 
 // ── 1. 化けの見分け（純関数）──────────────────────────────────────────
@@ -118,7 +125,7 @@ async function prepareDir(t, options = {}) {
  */
 function makeWriter(bodies, options = {}) {
   const topic = options.topic ?? "dummy-topic";
-  const baseName = options.baseName ?? RECORD.baseName;
+  const baseName = options.baseName ?? BODY_NAME;
   const calls = { create: 0, ask: 0, dispose: 0 };
   const create = (/** @type {any} */ createOptions) => {
     calls.create += 1;
@@ -149,23 +156,25 @@ test("writeStreamRecord: 1 回目が化け → 取り消しのコミット → �
   const writer = makeWriter([GARBLED_BODY, GOOD_BODY]);
   /** @type {string[]} */
   const warnings = [];
-  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record: RECORD, dir, onWarning: (w) => warnings.push(w) });
+  const record = newRecord();
+  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record, dir, onWarning: (w) => warnings.push(w) });
   assert.equal(result.written, true);
   assert.equal(writer.calls.create, 2);
   assert.equal(writer.calls.dispose, 2);
   assert.deepEqual(warnings, [WRITER_GARBLED_RETRY_WARNING]);
   const log = subjects();
-  assert.equal(log.length, 3);
-  assert.match(log[0], WRITER_SUBJECT);
-  assert.match(log[1], REVERT_SUBJECT, "化けたコミットを取り消すコミットが積まれる（履歴は書き換えない）");
-  assert.match(log[2], WRITER_SUBJECT);
+  assert.equal(log.length, 4);
+  assert.match(log[0], /^魂 /, "準備で種だけがコミットされている（記憶の整理 Domain A）");
+  assert.match(log[1], WRITER_SUBJECT);
+  assert.match(log[2], REVERT_SUBJECT, "化けたコミットを取り消すコミットが積まれる（履歴は書き換えない）");
+  assert.match(log[3], WRITER_SUBJECT);
   const body = readFileSync(path.join(dir, "dummy-topic", "2026-11-01.md"), "utf8");
   assert.equal(body, GOOD_BODY);
   assert.equal(body.includes("?"), false);
   assert.equal(git(["status", "--porcelain"]).trim(), "");
-  // 限界（注記）: 最初の保存はルートのコミットで、未コミットだった `_conventions.md` の種も一緒に取り消される
-  // （次の場の始まりの prepareMemoryFolder で置き直される）。
-  assert.equal(existsSync(path.join(dir, "_conventions.md")), false);
+  // 種は準備でコミット済みなので、化けの取り消しで消えない（前は最初の保存がルートのコミットで、種も一緒に消えていた）。
+  assert.equal(existsSync(path.join(dir, "_conventions.md")), true);
+  assert.deepEqual(record.files(), ["dummy-topic/2026-11-01.md"]);
 });
 
 test("writeStreamRecord: やり直しでも化けたら、それも取り消して written:false（garbled）・本体は化けていない（前の状態のまま）・警告は RETRY → 最終", async (t) => {
@@ -174,18 +183,20 @@ test("writeStreamRecord: やり直しでも化けたら、それも取り消し�
   const writer = makeWriter([GARBLED_BODY, GARBLED_BODY]);
   /** @type {string[]} */
   const warnings = [];
-  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record: RECORD, dir, onWarning: (w) => warnings.push(w) });
+  const record = newRecord();
+  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record, dir, onWarning: (w) => warnings.push(w) });
   assert.equal(result.written, false);
   assert.equal(/** @type {any} */ (result).garbled, true);
   assert.equal(/** @type {any} */ (result).missing, undefined);
   assert.equal(writer.calls.create, 2, "やり直しは 1 回だけ");
   assert.deepEqual(warnings, [WRITER_GARBLED_RETRY_WARNING, WRITER_GARBLED_WARNING]);
+  assert.deepEqual(record.files(), [], "取り消したコミットのファイルは持ち回りに足さない");
   const log = subjects();
-  assert.equal(log.length, 5);
-  assert.match(log[1], WRITER_SUBJECT);
-  assert.match(log[2], REVERT_SUBJECT);
-  assert.match(log[3], WRITER_SUBJECT);
-  assert.match(log[4], REVERT_SUBJECT);
+  assert.equal(log.length, 6);
+  assert.match(log[2], WRITER_SUBJECT);
+  assert.match(log[3], REVERT_SUBJECT);
+  assert.match(log[4], WRITER_SUBJECT);
+  assert.match(log[5], REVERT_SUBJECT);
   // 中身は前の状態のまま（今回の本体は無く、前の配信の記録と目次はそのまま・作業ツリーは clean）。
   assert.equal(existsSync(path.join(dir, "dummy-topic", "2026-11-01.md")), false);
   assert.equal(readFileSync(path.join(dir, "old-topic", "2026-10-31.md"), "utf8"), "# ダミーの前の配信\n");
@@ -198,15 +209,15 @@ test("writeStreamRecord: 1 回目が書き損じ → 2 回目が化けなら、�
   const writer = makeWriter([null, GARBLED_BODY]);
   /** @type {string[]} */
   const warnings = [];
-  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record: RECORD, dir, onWarning: (w) => warnings.push(w) });
+  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record: newRecord(), dir, onWarning: (w) => warnings.push(w) });
   assert.equal(result.written, false);
   assert.equal(/** @type {any} */ (result).garbled, true);
   assert.equal(writer.calls.create, 2);
   assert.equal(writer.calls.ask, 2);
   assert.deepEqual(warnings, [WRITER_MISS_RETRY_WARNING, WRITER_GARBLED_WARNING]);
   const log = subjects();
-  assert.equal(log.length, 3, "前の記録 + 化けたコミット + その取り消し（書き損じの回はコミットなし）");
-  assert.match(log[2], REVERT_SUBJECT);
+  assert.equal(log.length, 4, "種 + 前の記録 + 化けたコミット + その取り消し（書き損じの回はコミットなし）");
+  assert.match(log[3], REVERT_SUBJECT);
   assert.equal(existsSync(path.join(dir, "dummy-topic", "2026-11-01.md")), false);
   assert.equal(git(["status", "--porcelain"]).trim(), "");
 });
@@ -216,7 +227,7 @@ test("writeStreamRecord: 1 回目が化け → 2 回目が書き損じでも、�
   const writer = makeWriter([GARBLED_BODY, null]);
   /** @type {string[]} */
   const warnings = [];
-  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record: RECORD, dir, onWarning: (w) => warnings.push(w) });
+  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record: newRecord(), dir, onWarning: (w) => warnings.push(w) });
   assert.equal(result.written, false);
   assert.equal(/** @type {any} */ (result).missing, true);
   assert.equal(writer.calls.create, 2);
@@ -237,22 +248,24 @@ test("writeStreamRecord: 2 回目以降の保存（今回の本体あり）で�
   });
   /** @type {string[]} */
   const warnings = [];
-  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record: RECORD, dir, onWarning: (w) => warnings.push(w) });
+  const record = newRecord();
+  record.note(["dummy-topic/2026-11-01.md"]);
+  const result = await writeStreamRecord({ create: writer.create, entries: ENTRIES, record, dir, onWarning: (w) => warnings.push(w) });
   assert.equal(result.written, true);
   assert.equal(writer.calls.create, 2);
   assert.deepEqual(seenAtAsk, [prevBody, prevBody], "やり直しの②は、取り消しで戻った前の本体を見る");
   assert.deepEqual(warnings, [WRITER_GARBLED_RETRY_WARNING]);
   const log = subjects();
-  assert.equal(log.length, 5);
-  assert.match(log[3], REVERT_SUBJECT);
+  assert.equal(log.length, 6);
+  assert.match(log[4], REVERT_SUBJECT);
   assert.equal(readFileSync(path.join(dir, "dummy-topic", "2026-11-01.md"), "utf8"), GOOD_BODY);
   assert.equal(git(["status", "--porcelain"]).trim(), "");
 });
 
 test("writeStreamRecord: 警告に中身（本文・ファイル名・トピック名・材料）が載らない（固定文だけ）", async (t) => {
   const { dir } = await prepareDir(t, { baseCommit: true });
-  const record = { dateJst: "2026-11-01", baseName: "2026-11-01-7" };
-  const writer = makeWriter(["secret-marker ????????\n", "secret-marker ????????\n"], { topic: "secret-topic", baseName: record.baseName });
+  const record = newRecord();
+  const writer = makeWriter(["secret-marker ????????\n", "secret-marker ????????\n"], { topic: "secret-topic", baseName: "2026-11-01-7" });
   /** @type {string[]} */
   const warnings = [];
   const result = await writeStreamRecord({
@@ -296,10 +309,11 @@ test("writeStreamRecord: コミットが変更なし・コミットの失敗の�
     await writeStreamRecord({
       create: writer.create,
       entries: ENTRIES,
-      record: RECORD,
+      record: newRecord(),
       dir,
       commitImpl: /** @type {any} */ (async () => commitResult),
-      addedLinesImpl
+      addedLinesImpl,
+      discardImpl: fakeDiscard
     });
   }
   assert.equal(reads, 0);
@@ -317,9 +331,11 @@ test("writeStreamRecord: 足された行が読めないときは、判断でき�
   const result = await writeStreamRecord({
     create: writer.create,
     entries: ENTRIES,
-    record: RECORD,
+    record: newRecord(),
     dir,
     commitImpl: fakeCommit(events),
+    changedFilesImpl: fakeChanged,
+    discardImpl: fakeDiscard,
     addedLinesImpl: async () => ({ ok: false, error: "git diff-tree: exit 128 (fatal: secret-topic)" }),
     revertImpl: async () => {
       reverts += 1;
@@ -343,12 +359,15 @@ test("writeStreamRecord: 化けを取り消せなかったら、その上に重�
   const writer = makeWriter([GARBLED_BODY, GOOD_BODY]);
   /** @type {string[]} */
   const warnings = [];
+  const record = newRecord();
   const result = await writeStreamRecord({
     create: writer.create,
     entries: ENTRIES,
-    record: RECORD,
+    record,
     dir,
     commitImpl: fakeCommit(events),
+    changedFilesImpl: fakeChanged,
+    discardImpl: fakeDiscard,
     addedLinesImpl: async () => ({ ok: true, lines: ["????????"] }),
     revertImpl: async (options) => {
       revertCalls.push(options);
@@ -361,6 +380,7 @@ test("writeStreamRecord: 化けを取り消せなかったら、その上に重�
   assert.equal(writer.calls.create, 1);
   assert.deepEqual(revertCalls, [{ dir, commit: "abc1234" }], "化けたそのコミットを取り消す");
   assert.deepEqual(warnings, [WRITER_GARBLED_REVERT_FAILED_WARNING]);
+  assert.deepEqual(record.files(), ["dummy-topic/2026-11-01.md"], "取り消せなかったコミットは HEAD に残るので、そのファイルは持ち回りに足す");
 });
 
 test("writeStreamRecord: ask が失敗した回でも、化けていれば取り消してから throw する（やり直さない）", async (t) => {
@@ -378,14 +398,36 @@ test("writeStreamRecord: ask が失敗した回でも、化けていれば取り
   };
   /** @type {string[]} */
   const warnings = [];
+  const record = newRecord();
   await assert.rejects(
-    () => writeStreamRecord({ create, entries: ENTRIES, record: RECORD, dir, onWarning: (w) => warnings.push(w) }),
+    () => writeStreamRecord({ create, entries: ENTRIES, record, dir, onWarning: (w) => warnings.push(w) }),
     /ask failed \(fake\)/
   );
   assert.equal(creates, 1);
   assert.deepEqual(warnings, [WRITER_GARBLED_WARNING]);
   const log = subjects();
-  assert.equal(log.length, 3);
-  assert.match(log[2], REVERT_SUBJECT);
+  assert.equal(log.length, 4);
+  assert.match(log[3], REVERT_SUBJECT);
   assert.equal(existsSync(path.join(dir, "dummy-topic", "2026-11-01.md")), false);
+  assert.deepEqual(record.files(), [], "取り消したコミットのファイルは持ち回りに足さない");
+});
+
+test("writeStreamRecord: 化けて取り消した回のファイルは持ち回りに足さず、やり直しで書いたファイルだけを足す（本物の git）", async (t) => {
+  const { dir } = await prepareDir(t, { baseCommit: true });
+  let asks = 0;
+  const create = (/** @type {any} */ options) => ({
+    async ask() {
+      asks += 1;
+      if (asks === 1) put(options.cwd, "garbled-topic/2026-11-01.md", GARBLED_BODY);
+      else put(options.cwd, "good-topic/2026-11-01.md", GOOD_BODY);
+      return { replyText: "済み" };
+    },
+    async dispose() {}
+  });
+  const record = newRecord();
+  const result = await writeStreamRecord({ create, entries: ENTRIES, record, dir });
+  assert.equal(result.written, true);
+  assert.equal(asks, 2);
+  assert.deepEqual(record.files(), ["good-topic/2026-11-01.md"]);
+  assert.equal(existsSync(path.join(dir, "garbled-topic")), false);
 });

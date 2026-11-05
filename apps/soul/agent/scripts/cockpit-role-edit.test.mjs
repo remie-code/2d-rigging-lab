@@ -301,7 +301,7 @@ test("createRoleMemoryPlaces.placeInfo: 今のロールの roleId / dir を返�
       prepared.push(options.dir);
       return { ok: true };
     },
-    createIdentityImpl: () => ({ get: () => ({}) })
+    createRecordLogImpl: () => ({ dateJst: "x", files: () => [], note: () => {} })
   });
   assert.deepEqual(places.placeInfo(), { roleId: "chappy", dir: join("C:", "tmp", "placeinfo-test", "chappy") });
   role = { id: "mio", name: { canonical: "ミオ" } };

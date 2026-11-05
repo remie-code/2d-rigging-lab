@@ -83,7 +83,8 @@ test("runRecall: 頼みには頼みごと・直近 1 分の会話（視聴者名
   const content = calls.asked[0];
   assert.match(content, /頼みごと: 「エルデンリング 前回どこまで」/);
   assert.match(content, /`_conventions\.md` を読む/);
-  assert.match(content, /全体の目次 `_map\.md` → トピックの目次 → 本体/);
+  assert.match(content, /\n2\. `_conventions\.md` のたどり方に従って、目次からたどって探す。/);
+  assert.ok(!content.includes("→ トピックの目次 →"), "たどり方は `_conventions.md` に一本化（記憶の整理 Domain D）");
   assert.match(content, /短い要約（数行）/);
   assert.match(content, /「見つかった」/);
   assert.match(content, /「見つからなかった」とだけ答える/);

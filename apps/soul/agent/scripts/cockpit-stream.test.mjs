@@ -202,9 +202,9 @@ function makeVenue(over = {}) {
       events.push(`memory.prepare:${options.dir.split(/[\\/]/).pop()}`);
       return { ok: true };
     },
-    createIdentityImpl: (/** @type {any} */ options) => {
-      identities.push({ dir: options.dir, startedAtMs: options.startedAtMs });
-      return { get: () => ({ dateJst: "2026-10-31", baseName: `base-${options.startedAtMs}` }) };
+    createRecordLogImpl: (/** @type {any} */ options) => {
+      identities.push({ startedAtMs: options.startedAtMs });
+      return { dateJst: "2026-10-31", files: () => [], note: () => {} };
     }
   });
   /** @type {any} */
@@ -369,7 +369,7 @@ test("配信を始める: ロールを固める → 場の記録を作り直す 
   }
 });
 
-test("配信を始める: 記憶の本体のファイル名・頭の文脈の記録のファイルは場ごとに新しくなる（置き場の準備も場の始まりで待つ）", async () => {
+test("配信を始める: 記憶の場の保存の持ち回り・頭の文脈の記録のファイルは場ごとに新しくなる（置き場の準備も場の始まりで待つ）", async () => {
   const v = makeVenue();
   const { server, url } = await startServer(v);
   try {
@@ -385,8 +385,8 @@ test("配信を始める: 記憶の本体のファイル名・頭の文脈の記
     assert.notEqual(second, first);
     assert.equal(second.streamNo, 2);
     assert.equal(v.identities.length, 2);
-    assert.notEqual(v.identities[0].startedAtMs, v.identities[1].startedAtMs, "本体のファイル名は場の始まりの時刻から作る");
-    assert.notEqual(first.streamRecord.get().baseName, second.streamRecord.get().baseName);
+    assert.notEqual(v.identities[0].startedAtMs, v.identities[1].startedAtMs, "場の保存の持ち回りは場の始まりの時刻から作る");
+    assert.notEqual(first.streamRecord, second.streamRecord, "場ごとに別の持ち回り");
     assert.equal(v.usageLogs.length, 2, "頭の文脈の記録も場ごとに作り直す");
     assert.notEqual(v.usageLogs[0], v.usageLogs[1]);
     assert.deepEqual(v.events.filter((e) => e.startsWith("memory.prepare")), ["memory.prepare:chappy", "memory.prepare:chappy"]);
@@ -1228,7 +1228,7 @@ test("2 つ目の場: ロールを替えてから始めると、新しいロー�
   }
 });
 
-test("createRoleMemoryPlaces.beginStream: 場の始まりで置き場を作り直す（場の番号・本体のファイル名・準備はもう一度＝冪等）", async () => {
+test("createRoleMemoryPlaces.beginStream: 場の始まりで置き場を作り直す（場の番号・場の保存の持ち回り・準備はもう一度＝冪等）", async () => {
   /** @type {any[]} */
   const prepared = [];
   /** @type {any[]} */
@@ -1242,9 +1242,9 @@ test("createRoleMemoryPlaces.beginStream: 場の始まりで置き場を作り�
       prepared.push(o.dir);
       return { ok: true };
     },
-    createIdentityImpl: (/** @type {any} */ o) => {
+    createRecordLogImpl: (/** @type {any} */ o) => {
       identities.push(o.startedAtMs);
-      return { get: () => ({ dateJst: "x", baseName: String(o.startedAtMs) }) };
+      return { dateJst: "x", files: () => [], note: () => {} };
     }
   });
   assert.equal(places.streamNo(), 0);
