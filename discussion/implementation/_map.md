@@ -18,6 +18,22 @@ discussion/implementation/
 
 ## Current State
 
+### 「Editorの開発はどこまで進んでいる？」から辿る
+
+2026-11-06 に入口・限定した実装端点と Git を照合。以下は実装・確認記録への道であり、現 HEAD の全機能を今回再試験した一覧ではない。
+
+| 利用者の作業・知りたいこと | 根拠への入口と確認範囲 |
+|---|---|
+| PSDからパーツを取り込み、Canvasで見て構造を編集する | [W58](waves/wave58/_map.md) / [W59](waves/wave59/_map.md) / [W60](waves/wave60/_map.md)。取り込み・表示・Parts Tree/Inspector/DnDの証拠。現行ElectronのPSD E2E残債は下記の別入口 |
+| メッシュとWarp/Rotationを作り、パラメータ・keyformで変形する | [W62](waves/wave62/_map.md) / [W64](waves/wave64/_map.md) / [W65](waves/wave65/_map.md) / [W66](waves/wave66/_map.md) / [W72](waves/wave72/_map.md) / [W75](waves/wave75/_map.md)。現行メッシュのv6D default・v7比較と品質保留は [mesh-generation](../mesh-generation/_map.md) |
+| 保存して再開し、Viewerで動き・見た目を確認する | [W73](waves/wave73/_map.md) / [W79](waves/wave79/_map.md) / [W83](waves/wave83/_map.md) / [W84](waves/wave84/_map.md)。現行のワークスペース保存は [Electron persistence](../editor-electron-migration/persistence/_map.md)、dynamicsの現行意味論は [W106](waves/wave106/_map.md) |
+| Atlas・Variantを編集し、Runtime Playerへ渡す | [W99](waves/wave99/_map.md) / [W100](waves/wave100/_map.md) / [W101](waves/wave101/_map.md) / [W102](waves/wave102/_map.md)。Variant Manager/Viewer、Skyline packing、export visibility。受け手と実機・OBSゲートは [Runtime Player](../runtime-player/_map.md) |
+| Wave102停止後に何が進んだか | 番号付きW103–109だけでなく [mesh-generation](../mesh-generation/_map.md)、[render-performance](../render-performance/_map.md)、[editor-electron-migration](../editor-electron-migration/_map.md) を辿る。Editor性能は実モデルでユーザー受け入れ済み、Electron WS1–4/packaging完了。各topicの残債を保持 |
+
+**計画停止の意味**: Wave102はEditor mainlineの次Waveを自動で計画しない境界であり、以後Editorコードが変わっていないという意味ではない。Gitの `d6d99010` (2026-09-08) はCanvasのgrid keyform/keyed scale評価を修正し、現在の [parameter-keyform-state.ts](../../apps/editor/src/features/editor-session/model/parameter-keyform-state.ts) と [canvas-evaluation.ts](../../apps/editor/src/workspace/canvas/canvas-evaluation.ts) に対応する。`a2267e91` (2026-10-20) は共通コア/hostを横断して操作ログを撤去し、EditorではAtlasのテスト期待値を更新した。新しいEditor画面機能の追加とは区別する。詳細な観測・未確認範囲は [今回の夢](../development_convention/dreams/2026-11-06-editor-development.md)。
+
+### 計画・履歴の位置付け
+
 - The previous `/goal`-oriented development convention policy has been discarded.
 - Active implementation orchestration should use `.agents/skills/implementation-orchestration/SKILL.md` plus wave-specific plans stored here.
 - The accepted Editor mainline planning stop is Wave102. Route current implementation decisions through [orchestration/_map.md](orchestration/_map.md), the indexed Wave102 leaf maps, and the separately indexed post-102 specialized tracks below; do not treat this parent as a wave plan.
@@ -517,5 +533,5 @@ The existing detailed rows above remain the primary historical summaries. This c
 2. Use [../design/mesh-rendering/mesh-image-rendering-architecture.md](../design/mesh-rendering/mesh-image-rendering-architecture.md) and the Wave108/109 specialized maps for renderer/data-contract follow-up; retain the separate visual/device gates.
 3. Treat Wave56 as abandoned except for the Domain B/C headless baseline / package separation fact.
 4. Use [../design/screen-design/react-editor-foundation-oracle.md](../design/screen-design/react-editor-foundation-oracle.md), [../design/screen-design/editor-rebuild-purge-policy.md](../design/screen-design/editor-rebuild-purge-policy.md), and target screen-design docs only when a future Editor mainline scope is explicitly re-authorized.
-5. Keep Texture Atlas UI / atlas packing, Variant Manager, all-layer one-click import, recursive group auto import, group-as-artmesh import, drag/drop/filesystem/archive intake, Cubism, public demo assets, persisted source PSD bytes/raw parser objects, external HTTP/WebSocket/MCP transport, LLM provider integration, repo-side proposal generation/ranking, semantic recognition, auto-rigging, and auto-fix out of the current proven scope unless a later plan explicitly adds them.
+5. Texture Atlas UI / packing and Variant Manager are implemented evidence, not blanket exclusions: [W99](waves/wave99/_map.md) covers Manager authoring and Canvas preview, [W100](waves/wave100/_map.md) Viewer-local switching, [W101](waves/wave101/_map.md) single-page Skyline packing and Blocking Issues UI, and [W102](waves/wave102/_map.md) Runtime Export visibility foundation. Keep their boundaries: those closeouts did not run browser visual/E2E verification, and W102 does not prove external Runtime Player switching UI/protocol. For other historical exclusions (all-layer/recursive/group-as-artmesh import, drag/drop/archive intake, persisted raw PSD bytes/parser objects, public demo assets, external API/LLM integration, semantic recognition, auto-rigging/auto-fix), consult the relevant later topic before claiming either implementation or continued exclusion; Electron filesystem persistence and AI-cohost exceptions are separately owned by their topic maps. Cubism remains outside the project scope.
 6. Continue passing [../development_convention/source-file-organization-policy.md](../development_convention/source-file-organization-policy.md) to implementation domains that write authored source, and pass [../development_convention/ux-backed-package-logic-authority.md](../development_convention/ux-backed-package-logic-authority.md) when UX-backed work may require `packages/**` changes.
