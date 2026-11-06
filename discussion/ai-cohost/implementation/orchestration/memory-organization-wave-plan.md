@@ -1,6 +1,6 @@
 # 記憶の整理(③整理役)の実装計画
 
-> Status: 着手(ユーザー 2026-11-04「OK、ブランチ切って実装に入ってくれ」)。ブランチ `ai-cohost/memory-organization`(master `a305eaa8` から)。
+> Status: **master へマージ済み・人間ゲート 2 回目待ち**(2026-11-06)。着手はユーザー 2026-11-04「OK、ブランチ切って実装に入ってくれ」。ブランチ `ai-cohost/memory-organization`。
 > 根拠: 設計 [../../memory/organization.md](../../memory/organization.md)、決定 [../../memory/_map.md](../../memory/_map.md) §4、コードの棚卸し [../../memory/organization-code-inventory-2026-11.md](../../memory/organization-code-inventory-2026-11.md)(以下「コード棚」。file:line はこちら)。
 
 ## 1. 体制
@@ -157,3 +157,4 @@
   - 残るリスク: 頭が固まると Ctrl+C まで「整理中」のまま(上限なしの設計どおり)。Codex の App Server 自身の上限は確かめられない(あれば失敗として走る前へ戻る)。
   - 確かめは来週の閉じで自然に走るのを待つ(ユーザー「来週まで待つでOK」)。手順は [human-gate.md](../waves/memory-organization/human-gate.md) §3c。
 - A の質問への Undine の裁定: 範囲外の古いコメントと `stream-wording-pin-calls.mjs` の使われない `baseName` 引数は C で片付ける。②が同じ場の中で本体を動かした(`D`)ときは、持ち回りから外す。これも C で入れる(小さな直し)。
+- **master へマージ**(2026-11-06・ユーザー「これもマージしちゃっていい気がするな / 確認できるのは来週だし、そのままブランチにぶら下がってるのも不健全な気がする / pushもしちゃっていいよ」)。咳払いの落とし(`bf08afd5`)の上に rebase してからマージした。来週の自然な整理での確かめ(human-gate.md §3c)は、マージのあとで行う。
