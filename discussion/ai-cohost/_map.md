@@ -23,13 +23,15 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 | [experiments/](experiments/) | 魂の実測(枠消費・レイテンシ・会話品質)。S系列の常設計器 | **Created(2026-07-12、S1 Domain C)**。初回=[experiments/s1-first-light.md](experiments/s1-first-light.md)(tools:[]無効実証・apiKeySource=none・常駐初期化≈1.9s・warm ask~3.2s・synthesis~1s) |
 | [decisions/](decisions/_map.md) | 子トピック群: OpenAI Decisions API 等で知覚・演出を判定する(視線注視先・反応判定・音声タグ選び) | **Created(2026-10-12)**。gaze-target は一区切り(4x3粒度で推定可)、reaction-trigger は合意済み・未着手 |
 | [elevenlabs/](elevenlabs/_map.md) | 子トピック: ElevenLabs 一式(STT/TTS)への差し替え評価。発端は STT 確定遅延の短縮 | **Created(2026-10-12)**。TTS 調査のみ。STT 調査と全体構想の合意は後日 |
-| [memory/](memory/_map.md) | 子トピック: 配信をまたぐ記憶(構造化・オンデマンドの思い出し・きっかけで思い出す・記憶の整理) | **Created(2026-10-21)**。直近は構造化とオンデマンド化。文献調査と頭のツール制限の棚卸し中 |
+| [memory/](memory/_map.md) | 子トピック: 配信をまたぐ記憶(構造化・オンデマンドの思い出し・きっかけで思い出す・記憶の整理) | **2026-11-06 確認**。思い出す流れは人間ゲート合格。整理役 A〜D は実装・マージ済み、Domain D 後の自然実行と目次の確認を来週へ残す |
 | [discord-vc/](discord-vc/_map.md) | 子トピック: 配信の外で、仲間内の Discord VC にチャッピーが Bot として参加する | **Created(2026-10-30)**。調査と体験の整理(配信モードの組み直しを含む)は一区切り。進め方は受信の試し → 配信の組み直し → Discord(scope §15)。受信の試しは合格(2026-10-31)、次は組み直しの設計 |
 
 AIのキャラクター・声・身体の設計を始める段階で `persona/` を、ユーザー合意のうえ追加する。
 
 ## 3. Reading Routes
 
+- 「記憶整理はもう動いている？」は [memory/_map.md](memory/_map.md) から実装・マージ判断と自然実行の確認結果を読む。下記 8 月の状態要約だけで現在の記憶方式を答えない。
+- 「咳払いが文字起こしに出る対処はどこまで？」は [research/_map.md](research/_map.md) の咳払いの導線から、実測・採用条件・実装と人のゲートを辿る(2026-11-06 更新)。
 - なぜやるのか・何ができたら成功かを確認する場合は [concept/](concept/) を読む。
 - 決定済みの前提(LLM品質要件、費用前提、決定性境界)を確認する場合は [premises/](premises/) を読む。
 - 技術的な裏付け(先例、選定材料、統合点)を確認する場合は [research/](research/) を読む。
@@ -37,6 +39,8 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 - 長発話時のControl Channel切断と、`fired`表示から音声再生開始までの遅延inventoryは [../reports/ai-cohost-fire-diagnostics/](../reports/ai-cohost-fire-diagnostics/) を読む。
 
 ## 4. Current State Summary
+
+> 記憶についての以下の「直近3件の自動搭載」「人間ゲート未記録」は8月の旧方式の記録。現行方式は [memory/_map.md](memory/_map.md) を優先する。オンデマンドの思い出しは10/25人間ゲート合格、整理役は11/06マージ済みで、Domain D 後の自然実行を待つ。Directory Map の implementation/soul 行の stream-memory ゲート表記もこの旧時点に属する。
 
 > **Current routing (2026-08-08):** C1〜C7は全閉鎖。S1〜S7は実装済みで、S7は `/live/<id>` 実配信30分ノーブレイクにより実ゲート実質合格。S8安全弁は実装済み(764/764緑・9レーンPASS)だが kill 実射/通常発話無退行の人間ゲート待ち。朗読と合いの手は887/887緑・1時間40分実配信の4点合格。多頭化(4頭)と配信間記憶は実装・機械ゲート済みだが最終人間ゲート記録待ち。実装の存在をゲート完了と混同しない。
 
@@ -63,7 +67,7 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 
 1. S8 kill human gate: 発話中即時停止・全発火拒否・一クリック復帰・通常発話無退行 ([implementation/orchestration/s8-wave-plan.md](implementation/orchestration/s8-wave-plan.md))。
 2. 多頭化最終3点: 4頭の速度/品質体感、Claude無退行、配信後rollout掃除 ([implementation/orchestration/brain-swap-wave-plan.md](implementation/orchestration/brain-swap-wave-plan.md))。
-3. 配信間記憶4点: 保存/秘匿、次回自動搭載、OFF、手動/定期更新 ([implementation/orchestration/stream-memory-wave-plan.md](implementation/orchestration/stream-memory-wave-plan.md))。
+3. 記憶の現行確認は [memory/_map.md](memory/_map.md) → 整理役の人間ゲート §3c。旧 [stream-memory 計画](implementation/orchestration/stream-memory-wave-plan.md) の保存/秘匿・次回自動搭載・OFF・手動/定期更新は、旧方式の確認項目として読む。
 4. persona/S9: 声・人格の確定時期をユーザーが決める。身体/リグは model-authoring 責務。
 5. 文字起こしの選択(whisper / ElevenLabs)を操縦席に入れる。耳の取り込み 50ms 化(現行は約 500ms ずつ届く。[research/ears-capture-buffer-2026-10.md](research/ears-capture-buffer-2026-10.md))と起動中表示の修正も同じ作業で行う。体験は合意済み → [implementation/screens/cockpit-stt-selection.md](implementation/screens/cockpit-stt-selection.md)。**実装済み・ユーザー確認合格(2026-10-16)**。
 
@@ -88,7 +92,7 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 | **魂の知性のアクセス経路**(API従量 vs Max枠/Agent SDK) | **裁定済み(2026-07-12): 主経路=Max 20x+Agent SDK**。実効枠/レイテンシは `experiments/` で監視し、制度変更・費用枠は再確認する([soul/llm-access-path.md](soul/llm-access-path.md) §6) |
 | S8 kill human gate | **未実施**。機械実装/764緑・9レーンPASS。即時停止・全発火拒否・復帰・通常発話無退行の実射を残す |
 | 多頭化の最終人間ゲート | **未記録**。4頭実装・初回体感あり。速度/品質・Claude無退行・配信後rollout掃除を確認する |
-| 配信間記憶の人間ゲート | **未記録**。957緑・6レーンPASS。保存/秘匿・次回搭載・OFF・手動/定期更新を確認する |
+| 配信間記憶の人間ゲート | 旧 stream-memory 方式は8月時点で未記録(957緑・6レーンPASS)。現行の思い出す流れは10/25合格。整理役の残る確認は [memory/_map.md](memory/_map.md) から人間ゲート §3cへ |
 | persona / S9 相槌の声 | **未着手**。自己名「コーディ」は実装済み。声・人格の確定時期をユーザーが決め、身体はmodel-authoringへ渡す |
 | 役割別userData分離・ポート割当の具体方式 | **解決: プロファイルスロット方式+スロットごと自動採番(2026-07-10)**([implementation/orchestration/c1-wave-plan.md](implementation/orchestration/c1-wave-plan.md) Status) |
 | **話し始めの判定(区切り応答・呼びかけ)の全面改定** | 未着手。ユーザー構想(2026-10-16)。ElevenLabs 選択時に区切り応答がほぼ出ない既知の影響を含めて扱う([implementation/screens/cockpit-stt-selection.md](implementation/screens/cockpit-stt-selection.md) §7)。Decisions API の「今喋るべきか」([decisions/_map.md](decisions/_map.md) speak-now)と関連 |

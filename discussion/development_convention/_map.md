@@ -7,6 +7,7 @@
 | Path | Role | Status |
 |---|---|---|
 | [development-memory-dream.md](development-memory-dream.md) | 開発記録の導線を育てる「夢」の判断基準、シルフへの委譲、各回の記録とコミット | 初回前の合意。実行時は [discussion-dreaming](../../.codex/skills/discussion-dreaming/SKILL.md) を参照 |
+| [dreams/](dreams/_map.md) | 各回の夢。話題・現象から観測と辿った根拠へ戻る入口 | 初回(2026-11-06): 全体を浅く見渡し、記憶整理・咳払いの導線を更新 |
 | [../implementation/_map.md](../implementation/_map.md) | Active implementation orchestration entry。capability map、backlog、orchestration mapと合わせて現在wave planを探す | Active handoff |
 | [source-file-organization-policy.md](source-file-organization-policy.md) | Source file responsibility, `index.ts` barrel rule, oversized-file guardrail | Accepted |
 | [ux-backed-package-logic-authority.md](ux-backed-package-logic-authority.md) | Authority for implementation agents to modify `packages/**` logic when accepted UX/AC is blocked by stale package constraints | Accepted |

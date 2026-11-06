@@ -13,14 +13,16 @@
 
 | Path | Content |
 |---|---|
-| [../soul/stream-memory.md](../soul/stream-memory.md) | 今の配信間記憶の設計(1 配信 1 まとめ・起動時に直近 3 件を搭載・視聴者名は残さない・OFF の止水栓) |
-| [../implementation/orchestration/stream-memory-wave-plan.md](../implementation/orchestration/stream-memory-wave-plan.md) | 今の配信間記憶の実装計画。人間ゲート 4 点は記録上「未確認」 |
+| [../soul/stream-memory.md](../soul/stream-memory.md) | 旧方式の設計(1 配信 1 まとめ・起動時直近 3 件搭載・視聴者名を残さない)。現行方式は recall-flow と §4 の後続決定へ |
+| [../implementation/orchestration/stream-memory-wave-plan.md](../implementation/orchestration/stream-memory-wave-plan.md) | 旧方式の実装計画。当時の人間ゲート 4 点は「未確認」。現行の確認先は memory-recall と memory-organization |
 | [../implementation/waves/stream-memory/followup.md](../implementation/waves/stream-memory/followup.md) | 持ち越し(日記への合本、記憶の個別選択 UI など) |
 | [../decisions/research/talk-avatar-patterns-2026-10.md](../decisions/research/talk-avatar-patterns-2026-10.md) | 知人のトークアバターの判定の組み立て方(参考) |
 | [recall-flow.md](recall-flow.md) | 記憶の役(①チャッピー・②書き出し役・③整理役・④思い出し役)、置き場、思い出す流れ、直近の範囲、git 管理と目印の書式。context-check 前の合意 |
 | [conventions-draft.md](conventions-draft.md) | 記憶の置き場の決まり(`memories/_conventions.md`)の本文。ユーザー確認済み |
 | [../implementation/orchestration/memory-recall-wave-plan.md](../implementation/orchestration/memory-recall-wave-plan.md) | 実装の wave 計画(実装済み・人間ゲート合格 2026-10-25) |
-| [organization.md](organization.md) | 記憶の整理(③整理役)の設計: 棚と目次の作り直しだけ・年と月の棚・週 1 で閉じに続けて・名前はチャッピーの裁量・見張り 2 つ・控え・閉じの流れ | 設計の案(2026-11-04)。ユーザー確認待ち |
+| [organization.md](organization.md) | 記憶の整理(③整理役)の設計。11/05 にサブトピック必須・月の目次・待つ上限撤去を反映 | 本文冒頭は案の表記を残す。実装・確認の現在地は下記 wave 計画と人間ゲートへ |
+| [../implementation/orchestration/memory-organization-wave-plan.md](../implementation/orchestration/memory-organization-wave-plan.md) | 整理役の実装・レビュー・1 回目の所見・Domain D の追撃・マージ判断 | A〜D 合格、master マージ済み(2026-11-06)。2 回目の自然実行は未確認 |
+| [../implementation/waves/memory-organization/human-gate.md](../implementation/waves/memory-organization/human-gate.md) | 実運用の確認結果と次に見る項目 | **現行手順は §3c**。冒頭〜§3 は A〜C 時点の初回用手順(30分上限・直下への書き出し等)。§3b が初回結果、§3c が Domain D 後の上限なし・話題/月の目次と月の棚への書き出しの確認 |
 | [organization-inventory-2026-11.md](organization-inventory-2026-11.md) | 記憶の整理(③整理役)の議論がどこまで進んでいたかの棚卸し(2026-11-04)。決まっていること・案のまま・先送り・設計と今の置き場の食い違い | Recorded(2026-11-04)。整理フェーズの議論の出発点 |
 | [organization-code-inventory-2026-11.md](organization-code-inventory-2026-11.md) | 整理役の前のコードの棚卸し: 平たい置き場を前提にした所(memory.mjs の 4 関数・cockpit.mjs の名前の持ち回り・種の決まり)、閉じの流れ(90 秒で待ちを打ち切る・Ctrl+C)、頭の縛り(Codex でなければ Terra)、コミットで足されたファイルを読む口(未実装)、変わる文面の固定 | Recorded(2026-11-04) |
 | [writer-garble-2026-11-01.md](writer-garble-2026-11-01.md) | 2026-11-01 の配信で最初の途中保存が「?」に化けた件。原因の推定(PowerShell 5.1 のパイプが ASCII)・掃除(済み)・直し(指示を足す + 化けたら取り消してやり直す。計画 discord-mode §8 Domain L) |
@@ -29,12 +31,13 @@
 
 ## 3. Current State Summary
 
-- 今の置き場(2026-11-04): トピック 5 つ・本体 40 件(25 回分)・約 46 万字。トピックをまたぐ索引はまだ無い。③整理役は置き場と権限だけ決まっている([organization-inventory-2026-11.md](organization-inventory-2026-11.md))。
+- **整理役の現在地(2026-11-06)**: [実装計画 §6](../implementation/orchestration/memory-organization-wave-plan.md) の A〜D は合格・master マージ済み。1 回目は本体 43 件を中身そのままで年/月へ移し、控えも作成したが、話題の目次は作られなかった。Domain D で必須にしたサブトピックと月の目次、新しい書き出しの確認は、前の整理(11/05 18:15)から 7 日後の自然な閉じを待つ([人間ゲート §3c](../implementation/waves/memory-organization/human-gate.md))。マージ済みと全項目の実運用確認済みを分ける。
+- 過去の棚卸し(2026-11-04): トピック 5 つ・本体 40 件(25 回分)・約 46 万字。当時の「③は置き場と権限だけ決定」は [organization-inventory-2026-11.md](organization-inventory-2026-11.md) の観測で、実装前の状態。
 - 今の仕組み(棚卸し 2026-10-21。以下は再構成前の記述):
   - 保存: 1 配信 1 つの md まとめを `apps/soul/agent/memories/` に置く(現在 8 件、全部残っている)。20 分ごと・手動・Ctrl+C で保存。
   - 搭載: 起動時に直近 3 件(4500 字まで)を人格の指示の後ろに付けて、頭の最初のメッセージで渡す。配信中に作ったまとめは、その配信では使われない。
   - 穴: 耳を Stop すると文字起こしの帳面が消え、Stop 後の終了では最後のまとめが作られない。
-- 記憶とは(うちの言い方・ユーザー OK): 整理を通って残ったもの。中身は「出来事の本体」「話題ごとの地図」「話題をまたぐ索引」の 3 つ。思い出すとは「きっかけ → 索引 → 本体」をたどること。
+- 記憶とは(うちの言い方・ユーザー OK): 整理を通って残ったもの。「本体と地図を分ける」を引き継ぎ、11/04〜05 の決定では本体は年/月の棚、話題はサブトピックの目次で引く。以前の「抽象的な索引を付ける」は §4 で上書き済み。
 - discussion-management の「地図と本体を分ける」考え方を、記憶の構造に当てはめる方針(ユーザーも有用と見ている)。
 
 ## 4. Decisions(ユーザー 2026-10-21)
@@ -79,11 +82,11 @@
 
 ## 5. Next Actions
 
-1. 実装は 3 wave とも済み、思い出す流れは人間ゲート合格(2026-10-25、[../implementation/waves/memory-recall/human-gate.md](../implementation/waves/memory-recall/human-gate.md))。次は長い目でやる③整理役と、きっかけで思い出すこと。
+1. 思い出す流れは人間ゲート合格(2026-10-25、[memory-recall](../implementation/waves/memory-recall/human-gate.md))。整理役も A〜D 実装・マージ済み。次は [整理役の人間ゲート §3c](../implementation/waves/memory-organization/human-gate.md) に従い来週の自然実行を確認する(時期を早める設定や記憶の巻き戻しはしない)。
 
 ## 6. Unresolved Questions
 
 - ~~何をもって「似ている」とするか~~ → 抽象的な索引は作らないので解消(2026-11-04、§4)。以下は当時の記述: 文献では、人間も自然には話題をまたがず、構図で思い出すには整理の段階で抽象的な索引を付ける必要がある。この割り切りでよい(ユーザー)。どの観点で索引するかは未決。
 - 自分から思い出して話題に出すのを、自然な形で実現できるか。
 - 目次・索引をどこまで配信前に読ませるか(地図が育ったときの大きさ)。
-- 記憶の整理を誰がどう行うか(専用の会話の中身・頻度)。
+- 整理役の役割・頻度・専用セッションは §4 と [実装計画](../implementation/orchestration/memory-organization-wave-plan.md) で決定済み。残るのは Domain D 後の自然実行と目次の探しやすさの確認。

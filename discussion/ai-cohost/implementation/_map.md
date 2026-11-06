@@ -6,6 +6,8 @@
 
 > 番号付き履歴は各wave時点の記録。下記を現在statusとして読む。実装・機械ゲート・レビュー合格は、人間/製品ゲートの完了を意味しない。
 
+- **記憶整理(2026-11-06)**: [計画 §6](orchestration/memory-organization-wave-plan.md) に A〜D の合格と master マージを記録。[人間ゲート §3b/3c](waves/memory-organization/human-gate.md) は、1 回目の棚への移動と、Domain D 後に来週確認する話題/月の目次を分ける。記憶方式の現在の入口は [memory map](../memory/_map.md)。
+- **咳払いの落とし(2026-11-06)**: [段階 2 計画 §7](orchestration/cough-filter-stage2-plan.md) に A/B の実装・レビュー、人のゲート合格と master マージを記録。調査時の候補から採用条件に至る道は [research map](../research/_map.md)。
 - **C1〜C7**: 全閉鎖。器の完成(C7はwaveなしのOBS二体並走検証)。
 - **S1〜S7**: 実装済み。S7は `/live/<id>` 実配信30分ノーブレイクでコメント読み上げ/視聴者名認識を確認し、実ゲート実質合格。
 - **S8**: kill/NG/開示を実装(764/764緑・9レーンPASS)。発話中kill→全発火拒否→復帰、通常発話無退行の人間ゲート未実施。

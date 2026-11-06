@@ -2,6 +2,16 @@
 
 > `ai-cohost/research/` の地図。調査事実(出典付き)を保持する。仮説・設計判断は architecture/ に分離する。
 
+## 咳払いが文字起こしに出る対処を辿る
+
+「調査した」で止めず、次の順で読む(2026-11-06 確認)。
+
+1. [音の分類の調査 §9](cough-filter-audio-tagging-2026-11.md): 1 人・1 回の実測。咳/咳払いのラベル確率は弱く、本物の「うーん」の Speech も低く出る。候補と測定の限界を確認する。
+2. [段階 2 の計画 §1/§7](../implementation/orchestration/cough-filter-stage2-plan.md): 採用したのは「空白を除き 4 文字以下、Speech < 0.1」。Zipformer/Parakeet のローカル・Discord の耳が対象。A/B 合格・人のゲート合格・master マージ済み。ユーザーは本物の「うん」が入り、咳払いは弾かれ、札が出て体感遅延もないと報告した。ゲート結果は会場別・全チェック項目別には記録されていない。
+3. 実装根拠は計画から [Domain A 報告](../implementation/waves/cough-filter-stage2/domain-a-report.md) / [レビュー](../implementation/reviews/cough-filter-stage2/domain-a.md)、[Domain B 報告](../implementation/waves/cough-filter-stage2/domain-b-report.md) / [レビュー](../implementation/reviews/cough-filter-stage2/domain-b.md) へ。札の消え方は時計の刻みで 8〜9 秒。すべての短い発話の無損失を確認した記録ではない。
+
+## 調査記録
+
 | Path | Content | Status |
 |---|---|---|
 | [gpt-6-astra-cli-compatibility-probe.md](gpt-6-astra-cli-compatibility-probe.md) | 隔離CLI 0.153.4でAstra low画像入力・同thread継続・deltaを実測 | Recorded(2026-09-08)。2ターン完了、最小対応版や意味的記憶品質の証明ではない。製品導入はimplementation計画へ |
@@ -22,7 +32,9 @@
 | [context-growth-2026-10.md](context-growth-2026-10.md) | 長い配信で応答が遅くなる件: 会話の窓の重複・画像の残留・圧縮手段(Codex thread/compact/start、Claude /compact)・ユーザーの方針・Codex の fast と実配信の使用量(§10–§11) | Recorded(2026-10-28) |
 | [codex-429-stall-2026-11-03.md](codex-429-stall-2026-11-03.md) | 2026-11-03 の配信で頭が 8 分前後止まり続けた件: OpenAI の 429 を Codex が次の 10 分の区切りまで黙って待っていた(Codex のログで確定)。11:27 から 10 分に約 5 回の枠。書き出し役も待たされ、最後の保存は入っていない見込み。KILL は効く。直しの候補 5 つ | Recorded(2026-11-03)。直しは見送り(ユーザー判断) |
 | [codex-429-conditions-2026-11.md](codex-429-conditions-2026-11.md) | Codex が 429 を返す条件の調査(公式・ソース・報告)。5 時間・週の上限とは別物。10/20 以降 Plus・Pro で同じ形の報告多数(`turn_rate_limit_exceeded`)。条件の公式記述は無し。App Server は最初のやり直しを知らせない(待ち検知はクライアント側で)。§7: 10/14 以降 5〜7 日おきに報告が固まって出る(週 5〜6 件・横ばい・11/02 に山)。公式の認知なし | Recorded(2026-11-03) |
-| [cough-filter-audio-tagging-2026-11.md](cough-filter-audio-tagging-2026-11.md) | 咳払いが「うん」に化ける件: sherpa-onnx の音の分類(CED-tiny・6 MB・1 回約 15 ms)で Cough / Throat clearing を見る案は条件付きで可。5 秒まで無音で埋める要あり・確率が低めでしきい値は実音で合わせる必要。差し込みは local-stt の子プロセスで分類、親の ear-pipeline で捨てる。声の高さ案は「残す」補助どまり | Recorded(2026-11-03)。実装はユーザー判断待ち |
+| [cough-filter-audio-tagging-2026-11.md](cough-filter-audio-tagging-2026-11.md) | 咳払いが「うん」などに化ける件の調査と §9 の実測。最初の咳ラベル案から Speech の低さに着目するまで | Recorded。後続は上の導線へ(段階 2 は実装・人のゲート合格・マージ済み 2026-11-06) |
+| [cough-filter-stage2-inventory-2026-11.md](cough-filter-stage2-inventory-2026-11.md) | 本番の耳へ落としを入れる前の経路・境界・テストの棚卸し | 実装前の観測。現在の実装結果は段階 2 計画へ |
+| [cough-drop-indicator-ui-2026-11.md](cough-drop-indicator-ui-2026-11.md) | 落としたことを知らせる札の置き場の候補 | 採用は候補 A。実装・人のゲート結果は段階 2 計画へ |
 | [stt-candidates-2026-10.md](stt-candidates-2026-10.md) | 耳(STT)の候補の洗い出し。ローカル化が動機(ElevenLabs の消費のほぼ全部が文字起こし)。本命は Parakeet-ja(sherpa-onnx-node・CPU)、比較に ReazonSpeech K2。「いろどり」は TTS(Irodori-TTS)だった。Zipformer を採用し、実配信で合格(§7) | Recorded(2026-10-28) |
 
 ## 注意
