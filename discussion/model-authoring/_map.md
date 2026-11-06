@@ -8,7 +8,8 @@
 
 ## Entry Points
 
-- 2026-09-25の参照画像rigging試作: [reference-guided-rigging/_map.md](reference-guided-rigging/_map.md)（Astra、将来craft v2へ蒸留）
+- **エージェントによる2Dモデリングの craft はどう育ったか**: [craft/_map.md](craft/_map.md) の「制作知の現在地」から、実行レシピ・参照を読む造形・外部技法の採用を分けて辿る。
+- 参照画像からの制作: [reference-guided-rigging/_map.md](reference-guided-rigging/_map.md)（通常衣装の Face X/Y/Z・Body X/Z 両方向を受領。craft v2への蒸留候補）
 
 - 前提のオラクル: [premises/](premises/) の 5 文書（下記）
 - 現在の作業: [closed-problems/_map.md](closed-problems/_map.md)
@@ -22,8 +23,8 @@
 | [closed-problems/](closed-problems/) | 閉問題の連続。1 問題 = 1 ディレクトリ | **01〜19 すべて通過 = 1周目完了**（2026-07-06。追従5軸・揺れ4系統・口パク・別衣装・差分管理——配信導線一周をユーザー実機確認） |
 | [research/](research/) | 調査事実の置き場（Sylph 報告の L0 統合、較正ログ、Wave107 母音/キャリブレーション調査) | 較正ログ Round 16 まで（**Fable 委任32代 reject 累計ゼロで1周目完了**）。player calibration / iFacialMocap / mapping-strength / variant の調査を収録 |
 | [craft/](craft/) | 閉問題から蒸留したレシピと不変量 = 制作定石（設計は [premises/craft-design.md](premises/craft-design.md)) | **レシピ 11 枚（00-10）+ 不変量 20 種 + 周回指揮書（[_conductor.md](craft/_conductor.md)）**。回転射影の統一原理・2周目実施事項4件・遡及の物差しを焼き込み済み |
-| [reference-guided-rigging/](reference-guided-rigging/_map.md) | 参照生成・格子への変換・動作評価、および実験記録 | 方針合意、Face-X参照2候補の位置合わせ承認済み・隣接フロー試作へ |
-| [technique-catalog/](technique-catalog/_map.md) | 外部の玄人モデリング技法の収集・加工・実践（craft とは独立） | 2026-10-19 開設。フェーズ 1（集める）進行中 |
+| [reference-guided-rigging/](reference-guided-rigging/_map.md) | 参照生成・格子への変換・動作評価、および実験記録 | 2026-09-27 通常衣装の主要5軸・両方向の姿勢造形を受領。帽子・髪・Body の教訓は craft v2候補。全機能・現行exportの最終確認は別 |
+| [technique-catalog/](technique-catalog/_map.md) | 外部の玄人モデリング技法の収集・加工・実践（craft とは独立） | 第1巡の全体像はDraft。実践した顎下の影は2026-10-20ユーザー採用。カタログ全体の加工・実証とは区別 |
 
 ## Key Files
 
