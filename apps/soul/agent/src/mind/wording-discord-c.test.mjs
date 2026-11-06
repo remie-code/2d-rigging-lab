@@ -36,7 +36,8 @@ import {
   buildWriterSystemPrompt,
   buildWriterRequest,
   formatTranscriptForDigest,
-  writeStreamRecord
+  writeStreamRecord,
+  createStreamRecordLog
 } from "./memory.mjs";
 import {
   RECALL_SYSTEM_PROMPT,
@@ -117,7 +118,7 @@ const ASSEMBLIES = [
   ["②の固定の指示", (w) => buildWriterSystemPrompt(w)],
   [
     "②の頼み（新しく書く）",
-    (w) => buildWriterRequest({ transcriptText: "you: やあ", dateJst: "2026-10-31", baseName: "2026-10-31", existingFiles: [], wording: w })
+    (w) => buildWriterRequest({ transcriptText: "you: やあ", dateJst: "2026-10-31", existingFiles: [], wording: w })
   ],
   [
     "②の頼み（本体がすでにある）",
@@ -125,7 +126,6 @@ const ASSEMBLIES = [
       buildWriterRequest({
         transcriptText: "you: やあ",
         dateJst: "2026-10-31",
-        baseName: "2026-10-31-2",
         existingFiles: ["a/2026-10-31-2.md"],
         wording: w
       })
@@ -220,7 +220,7 @@ test("Domain C 組み立て: 仮の語を配信の語に戻すと配信の文面
 });
 
 test("Domain C 組み立て: 語の組の項目がそれぞれの所に差さる（決まりの 1 文は②④の頼みの手順 1 の後ろ・固定の指示には入らない）", () => {
-  const writer = buildWriterRequest({ transcriptText: "t", dateJst: "2026-10-31", baseName: "2026-10-31", existingFiles: [], wording: FAKE_WORDING });
+  const writer = buildWriterRequest({ transcriptText: "t", dateJst: "2026-10-31", existingFiles: [], wording: FAKE_WORDING });
   assert.ok(writer.startsWith("今回の〈仮の場〉の記録を書いてください。"));
   assert.ok(writer.includes("- 〈仮の場〉の日付（日本時間）: 2026-10-31"));
   assert.ok(writer.includes("1. `_conventions.md` を読む。〈仮の決まりの一文〉\n2. "));
@@ -234,7 +234,7 @@ test("Domain C 組み立て: 語の組の項目がそれぞれの所に差さる
   assert.ok(!buildWriterSystemPrompt(FAKE_WORDING).includes("〈仮の決まりの一文〉"));
   assert.ok(!buildRecallSystemPrompt(FAKE_WORDING).includes("〈仮の決まりの一文〉"));
   // 配信では手順 1 の後ろに何も足さない。
-  assert.ok(buildWriterRequest({ transcriptText: "t", dateJst: "d", baseName: "b", existingFiles: [] }).includes("1. `_conventions.md` を読む。\n2. "));
+  assert.ok(buildWriterRequest({ transcriptText: "t", dateJst: "d", existingFiles: [] }).includes("1. `_conventions.md` を読む。\n2. "));
 });
 
 test("Domain C 組み立て: 形の崩れた語の組は文面を作らずに投げる（黙って配信の語に混ぜない）", () => {
@@ -382,12 +382,12 @@ test("Domain C ②: writeStreamRecord は語の組で固定の指示と頼みを
   };
   const commitImpl = async () => ({ ok: true, committed: true, commit: "abc" });
   const entries = [{ text: "やあ", speaker: "you", displayName: "たろう" }];
-  const record = { dateJst: "2026-10-31", baseName: "2026-10-31" };
+  const record = createStreamRecordLog({ startedAtMs: Date.UTC(2026, 9, 31, 3, 0, 0) });
   await writeStreamRecord({ create, entries, record, dir, wording: FAKE_WORDING, commitImpl: /** @type {any} */ (commitImpl) });
   assert.equal(created[0].systemPrompt, buildWriterSystemPrompt(FAKE_WORDING));
   assert.equal(
     asked[0],
-    buildWriterRequest({ transcriptText: "you(たろう): やあ", dateJst: "2026-10-31", baseName: "2026-10-31", existingFiles: [], wording: FAKE_WORDING })
+    buildWriterRequest({ transcriptText: "you(たろう): やあ", dateJst: "2026-10-31", existingFiles: [], wording: FAKE_WORDING })
   );
   created.length = 0;
   asked.length = 0;

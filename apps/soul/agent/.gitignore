@@ -76,3 +76,6 @@ cockpit-settings.local.json.bak*
 # わざとの声の文字が残るローカルの記録であって成果物ではない（cough-experiment-plan.md §1）。
 # 先頭の / で apps/soul/agent/ 直下だけに留める。
 /cough-experiments/
+
+# ── 記憶の控え（記憶の整理 Domain B・非コミット）── ③整理役の前の git bundle（memory-backups/<role-id>/・直近 4 個）。
+/memory-backups/

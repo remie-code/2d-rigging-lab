@@ -9,31 +9,38 @@
  *
  * ── この器官がやること ─────────────────────────────────────────────────
  *  1. 全量転写を、視聴者名つきの 1 本のダイアログに整形する（formatTranscriptForDigest）。
- *  2. 今回の配信の本体のファイル名（日付と `-n`）を、配信の最初の保存で一度だけ決めて持ち回る
- *     （createStreamRecordIdentity・申し送り 2）。トピックは②が決めるので、魂が決めるのは「どのトピックでも
- *     使うファイル名」だけ。`-n` は全トピックを通して同じ日付の本体の最大の番号の次にする（どのトピックに
- *     置かれても、前の配信の本体とぶつからない）。
+ *  2. 場の保存のたびに、そのコミットで足された・変わった本体（名前が `_` で始まらない `.md`・深さは問わない）を
+ *     git から読んでためる（createStreamRecordLog・記憶の整理 Domain A・organization.md §4）。次の保存の頼みで
+ *     「この場の前回までの保存では、このファイルに書いた」と伝える。本体の名前と置き場所は②が `_conventions.md` に
+ *     従って決める（魂は名前を決めない）。日付は場の始まりの日本時間の日付。
  *  3. ②書き出し役の使い捨てセッションを、cwd = 記憶のフォルダ・workspace-write・最後の答えだけで作り、
  *     「`_conventions.md` を読み、今回の配信の本体を書き、目次を更新する」を頼む（writeStreamRecord）。
+ *     頼む前に、記憶のフォルダのコミットされていない変更を捨てる（organization.md §6「始める前」）。
  *     終わったら（失敗しても）記憶のフォルダの git にコミットする（commitMemoryChanges・役名「書き出し役」）。
- *     ②が書かずに答えたら、同じ材料で新しいセッションを作って 1 回だけやり直す。
+ *     ②が書かずに答えたら（そのコミットで本体が 1 つも足されても変わってもいない）、同じ材料で新しいセッションを
+ *     作って 1 回だけやり直す。
  *     ②の書き込みが「?」に化けていたら（コミットで足された行を見る）、そのコミットを `git revert` で取り消して、
  *     同じ枠で 1 回だけやり直す（Discord モード Domain L・writer-garble-2026-11-01.md §5）。
  *
  * ②の頭は Codex に固定する（申し送り 1。Claude の頭は cwd / sandbox / finalAnswerOnly を黙って無視するため）。
  * どの Codex の頭を使うかは呼び出し側（scripts/cockpit.mjs）が決める。
  *
- * 魂は記憶の中身を判断しない。本体の書き方・トピックの決め方・目次の形は②が `_conventions.md` に従って決める。
- * 魂がここで知っている置き場の形は「`<topic>/<ファイル名>.md`」だけ（ファイル名を持ち回るため）。
+ * 魂は記憶の中身を判断しない。本体の書き方・名前・置き場所・トピックの決め方・目次の形は②が `_conventions.md` に
+ * 従って決める。魂がここで知っている形は「本体 = 名前が `_` で始まらない `.md`」だけ（isMemoryBodyPath・
+ * 書いたかどうかの判定と、前回までに書いたファイルを伝えるため）。
  *
  * 視聴者の名前: 名前を記憶に残してよい（recall-flow.md §10）ので、②への頼みにも `_conventions.md` にも
  * 名前の縛りは置かない。②に渡す整形（formatTranscriptForDigest）は viewer 行に displayName を付ける。
  * 記憶の中身・会話本文はログや戻り値の診断に入れない（戻り値はコミットの結果だけ）。
  */
 
-import { readdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { commitMemoryChanges, readCommitAddedLines, revertMemoryCommit } from "../memory/memory-store.mjs";
+import {
+  commitMemoryChanges,
+  discardUncommittedChanges,
+  readCommitAddedLines,
+  readCommitChangedFiles,
+  revertMemoryCommit
+} from "../memory/memory-store.mjs";
 import { resolveVenueWording } from "./venue-wording.mjs";
 
 /** ②のコミットの役名（memory-store の buildCommitMessage に渡す固定の語）。 */
@@ -95,80 +102,55 @@ export function formatJstDate(ms) {
 }
 
 /**
- * 記憶のフォルダ直下のトピックのフォルダ名（`.` と `_` で始まるものは除く）。読めなければ空。
- * @param {string} dir
- * @returns {string[]}
+ * 記憶のフォルダの中のパス（根からの相対・区切り `/`・git の名前のまま）が本体か（純関数・記憶の整理 Domain A）。
+ * 本体 = ファイル名が `.md` で終わり、`_` で始まらないもの（深さは問わない。`_map.md`・`_conventions.md` などの
+ * 目次・決まりは本体でない）。
+ * @param {unknown} path
+ * @returns {boolean}
  */
-function topicDirs(dir) {
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && !d.name.startsWith(".") && !d.name.startsWith("_"))
-      .map((d) => d.name)
-      .sort();
-  } catch {
-    return [];
-  }
+export function isMemoryBodyPath(path) {
+  if (typeof path !== "string" || path.length === 0) return false;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return name.endsWith(".md") && !name.startsWith("_");
 }
 
 /**
- * 今回の配信の本体のファイル名（拡張子なし）を決める。全トピックを通して、同じ日付の本体
- * （`<日付>.md` を 1、`<日付>-n.md` を n）の最大の番号を探し、無ければ `<日付>`、あれば `<日付>-<最大+1>`。
- * ファイル名は日付（制御された値）と数字だけから作る（外部入力をパスに使わない）。
- * @param {{ dir: string; dateJst: string }} options
- * @returns {string}
+ * 場の保存の持ち回り（記憶の整理 Domain A・organization.md §4）。
+ * @typedef {{ dateJst: string; files: () => string[]; note: (paths: ReadonlyArray<string>, removed?: ReadonlyArray<string>) => void }} StreamRecordLog
  */
-export function resolveStreamRecordBaseName({ dir, dateJst }) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateJst)) {
-    throw new TypeError(`resolveStreamRecordBaseName: dateJst must be YYYY-MM-DD; got ${dateJst}.`);
-  }
-  const re = new RegExp(`^${dateJst}(?:-(\\d+))?\\.md$`);
-  let max = 0;
-  for (const topic of topicDirs(dir)) {
-    let names;
-    try {
-      names = readdirSync(join(dir, topic));
-    } catch {
-      continue;
-    }
-    for (const name of names) {
-      const m = re.exec(name);
-      if (!m) continue;
-      const n = m[1] ? Number(m[1]) : 1;
-      if (Number.isFinite(n) && n > max) max = n;
-    }
-  }
-  return max === 0 ? dateJst : `${dateJst}-${max + 1}`;
-}
 
 /**
- * 今回の配信の本体がすでにあるトピック（前回までの保存で②が書いたもの）の相対パス（`<topic>/<名前>.md`）。
- * @param {{ dir: string; baseName: string }} options
- * @returns {string[]}
+ * 1 つの場（配信・通話）の保存の持ち回りを作る。場の間、操縦席の置き場（createRoleMemoryPlaces）が持ち、場が閉じたら
+ * （次の場の始まりで）捨てる。
+ *  - dateJst: 場の始まりの日本時間の日付（②への頼みの日付の行）。
+ *  - files(): この場の②のコミットで足された・変わった本体（isMemoryBodyPath）のパス。重なりは除き、最初に見た順。
+ *  - note(paths, removed): そのコミットで足された・変わった本体のパスを足す（本体でないもの・文字列でないものは足さない）。
+ *    removed（そのコミットで消えた `D` の本体のパス）は先に外す（同じ場の②が本体を動かしたとき、古いパスを次の頼みに
+ *    載せない・記憶の整理 Domain C）。
+ * 魂は名前を決めない。並べるのは git から読んだ名前そのもの。
+ * @param {{ startedAtMs: number }} options
+ * @returns {Readonly<StreamRecordLog>}
  */
-export function findStreamRecordFiles({ dir, baseName }) {
-  return topicDirs(dir)
-    .filter((topic) => existsSync(join(dir, topic, `${baseName}.md`)))
-    .map((topic) => `${topic}/${baseName}.md`);
-}
-
-/**
- * 今回の配信の識別（日付と本体のファイル名）を、最初に聞かれたときに一度だけ決めて持ち回る（申し送り 2）。
- * 日付はプロセスの起動（= 配信の始まり）の日本時間の日付。`-n` は最初の保存のときのフォルダの中身で決める。
- * @param {{ dir: string; startedAtMs: number }} options
- * @returns {{ get: () => { dateJst: string; baseName: string } }}
- */
-export function createStreamRecordIdentity({ dir, startedAtMs }) {
-  /** @type {{ dateJst: string; baseName: string } | null} */
-  let decided = null;
-  return {
-    get() {
-      if (!decided) {
-        const dateJst = formatJstDate(startedAtMs);
-        decided = Object.freeze({ dateJst, baseName: resolveStreamRecordBaseName({ dir, dateJst }) });
+export function createStreamRecordLog({ startedAtMs }) {
+  const dateJst = formatJstDate(startedAtMs);
+  /** @type {string[]} */
+  const seen = [];
+  return Object.freeze({
+    dateJst,
+    files: () => [...seen],
+    note(/** @type {ReadonlyArray<string>} */ paths, /** @type {ReadonlyArray<string> | undefined} */ removed) {
+      if (Array.isArray(removed)) {
+        for (const path of removed) {
+          const at = seen.indexOf(path);
+          if (at !== -1) seen.splice(at, 1);
+        }
       }
-      return decided;
+      if (!Array.isArray(paths)) return;
+      for (const path of paths) {
+        if (isMemoryBodyPath(path) && !seen.includes(path)) seen.push(path);
+      }
     }
-  };
+  });
 }
 
 /**
@@ -196,33 +178,30 @@ export const WRITER_SYSTEM_PROMPT = buildWriterSystemPrompt();
 /**
  * ②への頼みの本文（ask の内容）を組む純関数。手順・答えの形・書きっぷりの指示はここ 1 か所だけにあり、体験ごとに替わるのは
  * 語の組（wording）の語だけ（Discord モード Domain C）。語の組を渡さなければ今の配信の文面。
- * @param {{ transcriptText: string; dateJst: string; baseName: string; existingFiles: ReadonlyArray<string>; wording?: unknown }} input
+ * 本体の名前と置き場所は②が `_conventions.md` に従って決める（魂は名前を決めない・記憶の整理 Domain A）。existingFiles は
+ * この場の前回までの保存のコミットで足された・変わった本体（createStreamRecordLog の files()）。
+ * @param {{ transcriptText: string; dateJst: string; existingFiles: ReadonlyArray<string>; wording?: unknown }} input
  * @returns {string}
  */
-export function buildWriterRequest({ transcriptText, dateJst, baseName, existingFiles, wording }) {
+export function buildWriterRequest({ transcriptText, dateJst, existingFiles, wording }) {
   const w = resolveVenueWording(wording);
-  const fileName = `${baseName}.md`;
+  const files = existingFiles.join(", ");
   const existing =
     existingFiles.length > 0
-      ? `- 今回の${w.venue}の本体は、前回の保存ですでにあります: ${existingFiles.join(", ")}。` +
-        "作り直さず、今ある内容を残したまま、下の材料をもとに書き足し・直してください。" +
-        "新しい話題で別のトピックに分けるときだけ、そのトピックに同じファイル名で本体を足します。"
+      ? `- 今回の${w.venue}の前回までの保存では、次のファイルに書きました: ${files}。作り直さず、今ある内容を残したまま、下の材料をもとに書き足し・直してください。新しい話題で別のトピックに分けるときだけ、そのトピックに同じファイル名で本体を足します。`
       : `- 今回の${w.venue}の本体はまだありません。新しく書きます。`;
   return [
     `今回の${w.venue}の記録を書いてください。`,
     "",
     `- ${w.venue}の日付（日本時間）: ${dateJst}`,
-    `- 今回の${w.venue}の本体のファイル名: \`${fileName}\`。` +
-      "置くトピックのフォルダは、全体の目次を見てあなたが決めます（既存のトピックを使うか、新しく作るか）。" +
-      "話題が複数あってトピックを分けるときも、どのトピックでもこのファイル名にします。" +
-      "このファイル名は魂が決めたもので、`_conventions.md` の `-2` の付け方よりこちらを優先します。",
+    `- 本体のファイル名と置き場所は、\`_conventions.md\` の決まりに従ってあなたが決めます。置くトピックのフォルダは、全体の目次を見てあなたが決めます（既存のトピックを使うか、新しく作るか）。話題が複数あってトピックを分けるときも、どのトピックでも同じファイル名にします。`,
     existing,
     "",
     "手順:",
     `1. \`_conventions.md\` を読む。${w.conventionsNote}`,
     "2. 全体の目次 `_map.md` を見て、トピックを決める。",
     `3. 今回の${w.venue}の本体を書く。`,
-    `4. トピックの目次と全体の目次の、今回の${w.venue}に当たる行を更新する（新しいトピックなら行を足す。記録の数と最後の日付も直す）。`,
+    `4. \`_conventions.md\` の決まりに従って、今回の${w.venue}に当たる目次の行を更新する（新しいトピックなら行を足す。記録の数と最後の日付も直す）。`,
     "ほかの日の本体は変えないでください。",
     "",
     "本体と目次を実際にファイルへ書き終えてから、短く「済み」とだけ答えてください。",
@@ -288,24 +267,59 @@ function warnSafely(onWarning, message) {
 }
 
 /**
- * ②が書かずに答えたか（魂は中身を判断せず、ファイルの有無とコミットの有無だけを見る）。
- *  - 1 回目の保存（頼む前に今回の本体が無かった）: 終わったあとも、どのトピックにも `<baseName>.md` が無い。
- *  - 2 回目以降の保存（頼む前に今回の本体があった）: コミットが「変更なし」（committed:false）。保存は転写件数が
- *    変わったときだけ走るので、何も変わらないのは書き損じとみなす。コミットに失敗したときは判断できないので、
- *    書けたものとして扱う（失敗は別に警告済み）。
- * @param {{ dir: string; baseName: string; hadRecordBefore: boolean; commit: Awaited<ReturnType<typeof commitMemoryChanges>> }} args
- * @returns {null | "missing" | "unchanged"}
+ * ②が書かずに答えたか（魂は中身を判断せず、コミットの有無と、そのコミットで足された・変わったファイルの名前だけを見る・
+ * 記憶の整理 Domain A・organization.md §4）。保存のたびに同じ決まりで見る（1 回目・2 回目以降を分けない）:
+ *  - コミットが「変更なし」（committed:false）: 書き損じ（保存は転写件数が変わったときだけ走るので、何も変わらないのは
+ *    書き損じとみなす）。
+ *  - コミットが積まれた: そのコミットで本体（isMemoryBodyPath）が 1 つも足されても変わってもいなければ書き損じ
+ *    （目次だけを書いた回など）。
+ *  - コミットに失敗した・そのコミットのファイルの一覧が読めなかった: 判断できないので、書けたものとして扱う
+ *    （失敗は別に警告済み）。
+ * @param {{ commit: Awaited<ReturnType<typeof commitMemoryChanges>>; bodyFiles: ReadonlyArray<string> | null }} args
+ *   bodyFiles: そのコミットで足された・変わった本体（一覧が読めなかった・コミットが無いときは null）。
+ * @returns {null | "missing"}
  */
-function detectWriterMiss({ dir, baseName, hadRecordBefore, commit }) {
-  if (!hadRecordBefore) {
-    return findStreamRecordFiles({ dir, baseName }).length === 0 ? "missing" : null;
-  }
-  return commit.ok && commit.committed === false ? "unchanged" : null;
+function detectWriterMiss({ commit, bodyFiles }) {
+  if (!commit.ok) return null;
+  if (commit.committed === false) return "missing";
+  if (bodyFiles === null) return null;
+  return bodyFiles.length === 0 ? "missing" : null;
 }
 
 /** 書き損じを見つけたときの警告（中身は書かない）。 */
 export const WRITER_MISS_RETRY_WARNING = "memory: the writer finished without writing this stream's record; retrying once";
 export const WRITER_MISS_WARNING = "memory: the writer finished without writing this stream's record";
+/** ②のコミットのファイルの一覧が読めず、書いたかを確かめられなかったときの警告（書けたものとして扱う・git の stderr は載せない）。 */
+export const WRITER_CHANGED_FILES_FAILED_WARNING =
+  "memory: could not read the writer's commit to see which records it wrote; keeping it as written";
+/** ②を呼ぶ前に、コミットされていない変更を捨てられなかったときの警告（そのまま書く・git の stderr は載せない）。 */
+export const WRITER_DISCARD_FAILED_WARNING =
+  "memory: could not discard uncommitted changes before the writer; writing anyway";
+
+/**
+ * そのコミットで足された・変わった本体（isMemoryBodyPath かつ状態が `A`・`M`）と、消えた本体（状態が `D`）を読む。
+ * **throw しない**。一覧が読めなければ null（固定文で警告）。
+ * @param {{ dir: string; commitId: string; onWarning?: (warning: string) => void; changedFilesImpl: typeof readCommitChangedFiles }} args
+ * @returns {Promise<{ changed: string[]; removed: string[] } | null>}
+ */
+async function readWriterBodyFiles({ dir, commitId, onWarning, changedFilesImpl }) {
+  /** @type {Awaited<ReturnType<typeof readCommitChangedFiles>>} */
+  let changed;
+  try {
+    changed = await changedFilesImpl({ dir, commit: commitId });
+  } catch {
+    changed = { ok: false, error: "threw" };
+  }
+  if (!changed || !changed.ok || !Array.isArray(changed.files)) {
+    warnSafely(onWarning, WRITER_CHANGED_FILES_FAILED_WARNING);
+    return null;
+  }
+  const bodies = changed.files.filter((file) => file && isMemoryBodyPath(file.path));
+  return {
+    changed: bodies.filter((file) => file.status === "A" || file.status === "M").map((file) => file.path),
+    removed: bodies.filter((file) => file.status === "D").map((file) => file.path)
+  };
+}
 
 /**
  * 1 行が「?」に化けた行か（純関数・Discord モード Domain L・writer-garble-2026-11-01.md §5）。
@@ -378,22 +392,29 @@ async function checkWriterGarble({ dir, commit, onWarning, addedLinesImpl, rever
 /**
  * ②書き出し役を走らせる（書かずに答えたとき・書き込みが「?」に化けたときは、その場で合わせて 1 回だけやり直す）。
  *
- * - 空転写なら何もしない（セッションを作らない・コミットもしない）。戻り値 `{ written: false }`。
+ * - 空転写なら何もしない（セッションを作らない・コミットもしない・変更を捨てない）。戻り値 `{ written: false }`。
+ * - **始める前に捨てる**（記憶の整理 Domain A・organization.md §6「始める前」）: 最初の回の前に 1 回だけ、記憶のフォルダの
+ *   コミットされていない変更を捨てる（discardUncommittedChanges・追跡済みは HEAD に戻し、追跡外は消す・`.gitignore`
+ *   されたものは残す）。捨てられなくても固定文で警告して、そのまま書く。回の間では捨てない。
  * - `create({ systemPrompt, cwd: dir, sandbox: "workspace-write", finalAnswerOnly: true, ephemeral: true, onWarning })` →
  *   ask 1 回 → dispose（ask が失敗しても dispose する）→ コミット（ask が失敗しても、書きかけを残すためにコミットする）。
- * - ask の失敗は、コミット（と下の化けの確かめ・取り消し）のあとで throw する（呼び出し側が握る）。やり直しはしない。
- *   コミットの失敗は throw せず、戻り値と onWarning で知らせる。
+ * - ask の失敗は、コミット（と下の化けの確かめ・取り消し・書いたファイルの記録）のあとで throw する（呼び出し側が握る）。
+ *   やり直しはしない。コミットの失敗は throw せず、戻り値と onWarning で知らせる。
  * - ②の答え（replyText）は使わない（中身をログに出さない）。
+ * - **前回までに書いたファイル**（記憶の整理 Domain A・organization.md §4）: 頼みには、この場の前回までの保存で足された・
+ *   変わった本体（record.files()）を載せる。②のコミットが HEAD に残るたびに（化けで取り消した回は除く。取り消しに
+ *   失敗した回・ask が失敗した回は残るので数える）、そのコミットで足された・変わった本体（readCommitChangedFiles の
+ *   `A`・`M` のうち isMemoryBodyPath）を record.note() に足す。そのコミットで消えた本体（`D`）は持ち回りから外す
+ *   （記憶の整理 Domain C）。一覧が読めなければ固定文で警告する。
  * - **書き込みが「?」に化けたとき**（Discord モード Domain L・writer-garble-2026-11-01.md §5）: コミットが新しく積まれたら、
  *   そのコミットで足された行を見て（readCommitAddedLines）、化けていれば（hasGarbledLines）そのコミットを `git revert` で
  *   取り消し（履歴は書き換えない・revertMemoryCommit）、その回を「書けなかった回」として数える。化けの回は下の書き損じの
  *   判定をしない。足された行が読めないときは判断できないので書けたものとして扱い、取り消しに失敗したときはやり直さずに
  *   `{ written: false, garbled: true }` を返す（どちらも固定文で警告）。
- *   限界: そのコミットに②以外の未コミットの手直し（まだコミットしていない `_conventions.md` の種など）が混ざっていたら、
- *   それも一緒に取り消される（全部をコミットする今のしかたと同じ限界）。
- * - **書かずに答えたとき**（detectWriterMiss: 1 回目の保存は「今回の本体が無い」、2 回目以降は「コミットが変更なし」）は、
- *   onWarning で知らせて、同じ材料で新しい使い捨てセッションを作り 1 回だけやり直す（Undine 裁定 2026-10-21・
- *   実機で 4 回に 1 回、書かずに「済み」と答えたことがあった。Stop・Ctrl+C の最後の保存で記録が抜けないように）。
+ * - **書かずに答えたとき**（detectWriterMiss: 保存のたびに同じ決まりで、コミットが変更なし、またはそのコミットで本体が
+ *   1 つも足されても変わってもいない）は、onWarning で知らせて、同じ材料で新しい使い捨てセッションを作り 1 回だけ
+ *   やり直す（Undine 裁定 2026-10-21・実機で 4 回に 1 回、書かずに「済み」と答えたことがあった。Stop・Ctrl+C の最後の
+ *   保存で記録が抜けないように）。
  * - やり直しは、化け・書き損じの理由を問わず合わせて 1 回（最初の 1 回と合わせて 2 回で打ち止め）。やり直しでもだめなら、
  *   書き損じは `{ written: false, missing: true }`、化けは（取り消してから）`{ written: false, garbled: true }` を返して
  *   onWarning で知らせる。呼び出し側は `written` だけを見て「記録できた」扱いにしない（記録時刻を進めない）ので、
@@ -403,7 +424,7 @@ async function checkWriterGarble({ dir, commit, onWarning, addedLinesImpl, rever
  * @param {object} options
  * @param {BrainCreateFn} options.create  ②の頭（Codex）の create。
  * @param {ReadonlyArray<{ text: string; speaker?: string; displayName?: string }>} options.entries  全量転写。
- * @param {{ dateJst: string; baseName: string }} options.record  今回の配信の識別（createStreamRecordIdentity の get()）。
+ * @param {StreamRecordLog} options.record  この場の保存の持ち回り（createStreamRecordLog）。
  * @param {string} options.dir  記憶のフォルダ（絶対パス・今のロールの `memories/<role-id>/`）。省略できない（配信の組み直し
  *   Domain B: 記憶の根や、ほかのロールのフォルダへ書かないように、呼び出し側が保存の引き金のときのロールのフォルダを渡す）。
  * @param {(warning: string) => void} [options.onWarning]
@@ -412,6 +433,8 @@ async function checkWriterGarble({ dir, commit, onWarning, addedLinesImpl, rever
  * @param {typeof commitMemoryChanges} [options.commitImpl]  差し替え口（テスト用）。
  * @param {typeof readCommitAddedLines} [options.addedLinesImpl]  差し替え口（テスト用・Domain L）。
  * @param {typeof revertMemoryCommit} [options.revertImpl]  差し替え口（テスト用・Domain L）。
+ * @param {typeof readCommitChangedFiles} [options.changedFilesImpl]  差し替え口（テスト用・記憶の整理 Domain A）。
+ * @param {typeof discardUncommittedChanges} [options.discardImpl]  差し替え口（テスト用・記憶の整理 Domain A）。
  * @returns {Promise<
  *   | { written: false; missing?: true; garbled?: true; commit?: Awaited<ReturnType<typeof commitMemoryChanges>> }
  *   | { written: true; commit: Awaited<ReturnType<typeof commitMemoryChanges>> }
@@ -427,35 +450,57 @@ export async function writeStreamRecord(options) {
     wording,
     commitImpl = commitMemoryChanges,
     addedLinesImpl = readCommitAddedLines,
-    revertImpl = revertMemoryCommit
+    revertImpl = revertMemoryCommit,
+    changedFilesImpl = readCommitChangedFiles,
+    discardImpl = discardUncommittedChanges
   } = options;
   const transcriptText = formatTranscriptForDigest(entries ?? []);
   if (transcriptText.length === 0) return { written: false };
   if (typeof create !== "function") {
     throw new TypeError("writeStreamRecord: options.create must be a function.");
   }
-  if (!record || typeof record.dateJst !== "string" || typeof record.baseName !== "string") {
-    throw new TypeError("writeStreamRecord: options.record must have dateJst and baseName.");
+  if (!record || typeof record.dateJst !== "string" || typeof record.files !== "function" || typeof record.note !== "function") {
+    throw new TypeError("writeStreamRecord: options.record must have dateJst, files() and note() (createStreamRecordLog).");
   }
   if (typeof dir !== "string" || dir.length === 0) {
     throw new TypeError("writeStreamRecord: options.dir is required.");
   }
 
-  const existingFiles = findStreamRecordFiles({ dir, baseName: record.baseName });
-  const hadRecordBefore = existingFiles.length > 0;
+  const existingFiles = record.files();
   const request = buildWriterRequest({
     transcriptText,
     dateJst: record.dateJst,
-    baseName: record.baseName,
     existingFiles,
     wording
   });
   const systemPrompt = buildWriterSystemPrompt(wording);
 
+  // 始める前に、コミットされていない変更を捨てる（最初の回の前に 1 回だけ）。
+  /** @type {Awaited<ReturnType<typeof discardUncommittedChanges>>} */
+  let discarded;
+  try {
+    discarded = await discardImpl({ dir });
+  } catch {
+    discarded = { ok: false, error: "threw" };
+  }
+  if (!discarded || !discarded.ok) warnSafely(onWarning, WRITER_DISCARD_FAILED_WARNING);
+
   const MAX_ATTEMPTS = 2; // 最初の 1 回 + 書き損じ・化けのときのやり直し 1 回（理由を問わず合わせて 1 回）。
   for (let attempt = 1; ; attempt += 1) {
     const { askError, commit } = await runWriterOnce({ create, request, systemPrompt, dir, onWarning, commitImpl });
     const garble = await checkWriterGarble({ dir, commit, onWarning, addedLinesImpl, revertImpl });
+    // HEAD に残った②のコミット（化けで取り消した回を除く）で足された・変わった本体を、この場の記録に足す（ask の失敗の
+    // throw より前）。
+    /** @type {string[] | null} */
+    let bodyFiles = null;
+    if (commit.ok && commit.committed === true && garble !== "reverted") {
+      const read = await readWriterBodyFiles({ dir, commitId: commit.commit, onWarning, changedFilesImpl });
+      if (read) {
+        bodyFiles = read.changed;
+        // 消えた本体（`D`・同じ場の②が動かした古いパス）は持ち回りから外す（記憶の整理 Domain C）。
+        record.note(read.changed, read.removed);
+      }
+    }
     if (askError) {
       // ask の失敗はやり直さない。化けていたら取り消しを済ませてから throw する（取り消しの失敗は警告済み）。
       if (garble === "reverted") warnSafely(onWarning, WRITER_GARBLED_WARNING);
@@ -464,8 +509,7 @@ export async function writeStreamRecord(options) {
     // 取り消せなかった化けは、その上に重ねてやり直さない（記録できなかった扱い・次の定期保存で書き直す）。
     if (garble === "revert-failed") return { written: false, garbled: true, commit };
     /** @type {"garbled" | "missing" | null} */
-    const failure =
-      garble === "reverted" ? "garbled" : detectWriterMiss({ dir, baseName: record.baseName, hadRecordBefore, commit }) ? "missing" : null;
+    const failure = garble === "reverted" ? "garbled" : detectWriterMiss({ commit, bodyFiles });
     if (!failure) return { written: true, commit };
     if (attempt >= MAX_ATTEMPTS) {
       if (failure === "garbled") {

@@ -1,6 +1,7 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,6 +59,7 @@ import {
   writeRole,
   writeRoleInstructions
 } from "../src/roles/role-store.mjs";
+import { pinnedGitArgs } from "../src/memory/memory-store.mjs";
 
 // 起動導線のうち注入可能な純関数部分のテスト（S3 Domain B）。
 // 実 SDK / 実 TTS / 実器 / 実マイクは使わない（fake connectImpl のみ）。
@@ -2948,15 +2950,15 @@ function makeFakePlaceDeps(roleRef, { prepareResult = { ok: true } } = {}) {
         prepared.push(options);
         return typeof prepareResult === "function" ? prepareResult(options) : prepareResult;
       },
-      createIdentityImpl: (/** @type {any} */ options) => {
+      createRecordLogImpl: (/** @type {any} */ options) => {
         identities.push(options);
-        return { get: () => ({ dateJst: "2026-10-31", baseName: `${options.dir}-base` }) };
+        return { dateJst: "2026-10-31", files: () => [], note: () => {} };
       }
     }
   };
 }
 
-test("createRoleMemoryPlaces: 今のロールの置き場（memories/<role-id>/・準備は呼び名の種・本体のファイル名）をロールごとに 1 回だけ作る", async () => {
+test("createRoleMemoryPlaces: 今のロールの置き場（memories/<role-id>/・準備は呼び名の種・場の保存の持ち回り）をロールごとに 1 回だけ作る", async () => {
   const chappy = roleFromIdentity(MODEL_IDENTITIES.chappy);
   const cody = roleFromIdentity(MODEL_IDENTITIES.cody);
   const ref = { current: chappy };
@@ -2968,8 +2970,8 @@ test("createRoleMemoryPlaces: 今のロールの置き場（memories/<role-id>/�
   assert.equal(a.dir, join(fake.deps.root, "chappy"));
   await a.ready;
   assert.deepEqual(fake.prepared, [{ dir: join(fake.deps.root, "chappy"), soulName: "チャッピー" }]);
-  assert.deepEqual(fake.identities, [{ dir: join(fake.deps.root, "chappy"), startedAtMs: 1234 }]);
-  assert.equal(places.place(), a, "同じロールなら同じ置き場（準備も本体のファイル名も作り直さない）");
+  assert.deepEqual(fake.identities, [{ startedAtMs: 1234 }]);
+  assert.equal(places.place(), a, "同じロールなら同じ置き場（準備も場の保存の持ち回りも作り直さない）");
   ref.current = cody;
   const b = places.place();
   assert.ok(b);
@@ -2978,7 +2980,7 @@ test("createRoleMemoryPlaces: 今のロールの置き場（memories/<role-id>/�
   await b.ready;
   assert.deepEqual(fake.prepared[1], { dir: join(fake.deps.root, "cody"), soulName: "コーディ" });
   ref.current = chappy;
-  assert.equal(places.place(), a, "戻したロールは前の置き場（同じ本体のファイル名）");
+  assert.equal(places.place(), a, "戻したロールは前の置き場（同じ場の保存の持ち回り）");
   assert.equal(fake.prepared.length, 2);
 });
 
@@ -3028,7 +3030,46 @@ test("createRoleMemoryPlaces: 本物の git で、ロールごとのフォルダ
   assert.ok(seed.includes("チャッピー"));
   assert.ok(!mioConventions.includes("チャッピー"));
   assert.equal(mioConventions.split("ミオ").join("チャッピー"), seed);
-  assert.deepEqual(mioPlace?.streamRecord.get(), { dateJst: "2026-10-31", baseName: "2026-10-31" });
+  assert.equal(mioPlace?.streamRecord.dateJst, "2026-10-31");
+  assert.deepEqual(mioPlace?.streamRecord.files(), []);
+  // 準備で種だけがコミットされる（記憶の整理 Domain A・書き出し役の前に未コミットの変更を捨てても種が消えない）。
+  const gitLog = (/** @type {string} */ roleDir) =>
+    execFileSync("git", pinnedGitArgs(roleDir, ["log", "--format=%s"]), { cwd: roleDir, encoding: "utf8" }).trim().split("\n");
+  assert.equal(gitLog(join(memoriesRoot, "mio")).length, 1);
+  assert.match(gitLog(join(memoriesRoot, "mio"))[0], /^魂 /);
+});
+
+test("createRoleMemoryPlaces: 場の保存の持ち回り（本物の createStreamRecordLog）はロールごと・場ごと。場の中でロールを戻せば同じ持ち回り、場の始まりで捨てる", () => {
+  const chappy = roleFromIdentity(MODEL_IDENTITIES.chappy);
+  const cody = roleFromIdentity(MODEL_IDENTITIES.cody);
+  const ref = { current: chappy };
+  // 2026-10-31 の日本時間 12:00 に起動し、同じ日の 23:30 と翌日 00:30 に場を始める。
+  const places = createRoleMemoryPlaces({
+    root: join("C:", "tmp", "memories-root"),
+    currentRole: () => ref.current,
+    startedAtMs: Date.UTC(2026, 9, 31, 3, 0, 0),
+    prepareImpl: async () => ({ ok: true })
+  });
+  places.beginStream(Date.UTC(2026, 9, 31, 14, 30, 0));
+  const chappyRecord = places.place()?.streamRecord;
+  assert.ok(chappyRecord);
+  assert.equal(chappyRecord.dateJst, "2026-10-31");
+  chappyRecord.note(["topic-a/2026-10-31.md"]);
+  ref.current = cody;
+  const codyRecord = places.place()?.streamRecord;
+  assert.ok(codyRecord);
+  assert.notEqual(codyRecord, chappyRecord, "ロールごとに別の持ち回り");
+  assert.deepEqual(codyRecord.files(), []);
+  ref.current = chappy;
+  assert.equal(places.place()?.streamRecord, chappyRecord, "場の中でロールを戻せば同じ持ち回り");
+  assert.deepEqual(places.place()?.streamRecord.files(), ["topic-a/2026-10-31.md"]);
+
+  places.beginStream(Date.UTC(2026, 9, 31, 15, 30, 0));
+  const next = places.place()?.streamRecord;
+  assert.ok(next);
+  assert.notEqual(next, chappyRecord, "場の始まりで捨てる");
+  assert.deepEqual(next.files(), [], "前の場で書いたファイルは次の場の頼みに載らない");
+  assert.equal(next.dateJst, "2026-11-01", "日付は場の始まりの日本時間");
 });
 
 test("記憶をロールごとにの結線: 引っ越し（写しのフォルダを共有）→ 置き場の準備の順、記憶の 4 か所は今のロールの置き場", async () => {
@@ -3050,10 +3091,10 @@ test("記憶をロールごとにの結線: 引っ越し（写しのフォルダ
   assert.match(main, /available: startupMigration\.memories\.status !== "failed"/);
   // 記憶の根をそのまま記憶のフォルダとして渡さない（準備・本体のファイル名・②・④）。
   assert.doesNotMatch(source, /dir: DEFAULT_MEMORY_DIR/);
-  assert.doesNotMatch(source, /createStreamRecordIdentity\(\{ dir: DEFAULT_MEMORY_DIR/);
+  assert.doesNotMatch(source, /createStreamRecordIdentity|createStreamRecordLog\(\{ dir: DEFAULT_MEMORY_DIR/);
   const writer = source.slice(source.indexOf("const memoryRecorder = createMemoryRecorder"), source.indexOf("const memoryStatus = () =>"));
   assert.match(writer, /getPlace: \(\) => memoryPlaces\.place\(\)/);
-  assert.match(writer, /record: place\.streamRecord\.get\(\),\s*dir: place\.dir,/);
+  assert.match(writer, /record: place\.streamRecord,\s*dir: place\.dir,/, "場の保存の持ち回りそのものを渡す（記憶の整理 Domain A）");
   assert.match(writer, /const recallRunner = async \(job\) => \{\s*const place = memoryPlaces\.place\(\);[\s\S]*?dir: place\.dir,/);
   // 配信の組み直し Domain D: ロールの切り替えでは置き場の準備を待たない（応答を git init で遅らせない・場の始まりで待つ）。
   const onSetRole = main.slice(main.indexOf("const onSetRole = async (id) =>"), main.indexOf("const roleStatus = () =>"));

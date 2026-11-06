@@ -174,7 +174,7 @@ test("Domain J ②: 記憶の書き出しの材料に `event: 本文` で載る�
       "event: たろうが出ていった"
     ].join("\n")
   );
-  const request = buildWriterRequest({ transcriptText, dateJst: "2026-11-01", baseName: "2026-11-01", existingFiles: [], wording: CALL_WORDING });
+  const request = buildWriterRequest({ transcriptText, dateJst: "2026-11-01", existingFiles: [], wording: CALL_WORDING });
   const lines = request.split("\n");
   assert.ok(
     lines.includes(

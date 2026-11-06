@@ -16,7 +16,14 @@
  *    場では固定（speakStartFixed）を読み、「忙しい間のコメント」は出さない（Discord の場にはコメントが無い）。
  */
 
-import { DISCORD_LEAVE_TEXT, DISCORD_LEAVE_ARMED_TEXT, isDiscordVenue } from "./discord.mjs";
+import {
+  DISCORD_LEAVE_TEXT,
+  DISCORD_LEAVE_ARMED_TEXT,
+  MEMORY_ORGANISING_SHORT_TEXT,
+  MEMORY_ORGANISING_TEXT,
+  isDiscordVenue,
+  isMemoryOrganising
+} from "./discord.mjs";
 
 /** 残量が少ない（琥珀）の境目（残り %・cockpit/quota.mjs の QUOTA_LOW_PERCENT と同じ。UI は quota.mjs を import しない）。 */
 export const QUOTA_LOW_PERCENT = 20;
@@ -175,7 +182,8 @@ export function warningsView(list, nowMs) {
  * @param {string | null | undefined} ears  snapshot の ears。
  * @param {boolean | null | undefined} [compacting]  snapshot の compacting（頭の会話の圧縮の最中か）。
  * @param {{ phase?: string } | null | undefined} [stream]  snapshot の stream（配信の組み直し Domain E: 考えてる の次に
- *   開きかけ「始めてる」・閉じかけ「記録中」を出す。開いている・閉じている・無いときは今のまま）。
+ *   開きかけ「始めてる」・閉じかけ「記録中」を出す。開いている・閉じている・無いときは今のまま。記憶の整理 Domain C: 閉じかけ
+ *   の間に③整理役が走っている（stream.organising）なら「記録中」に代えて「整理中」）。
  * @returns {{ text: string; className: string }}
  */
 export function statusPillView(soul, ears, compacting, stream) {
@@ -185,7 +193,9 @@ export function statusPillView(soul, ears, compacting, stream) {
   // 配信の組み直し Domain E: 場の開きかけ・閉じかけ（記憶の最後の保存を待つ間）だけ場の状態を出す（それ以外は今のまま）。
   const phase = stream && typeof stream.phase === "string" ? stream.phase : null;
   if (phase === "opening") return { text: "始めてる", className: "status-pill starting" };
-  if (phase === "closing") return { text: "記録中", className: "status-pill recording" };
+  if (phase === "closing") {
+    return { text: isMemoryOrganising(stream) ? MEMORY_ORGANISING_SHORT_TEXT : "記録中", className: "status-pill recording" };
+  }
   if (ears === "listening") return { text: "聞いてる", className: "status-pill listening" };
   if (ears === "starting") return { text: "起動中", className: "status-pill starting" };
   return { text: "止まってる", className: "status-pill stopped" };
@@ -218,7 +228,8 @@ export function isPreStream(ears, stream) {
 /**
  * 場が開いていない間のメイン画面の中央（配信の組み直し Domain D・stream-restructure.md §6）。閉じているときは「配信を始める」
  * （押せる）と始められなかった理由、開きかけは押せない「配信を始めています…」、閉じかけ（記憶の最後の保存を待つ間）は
- * 押せない「配信を終えています…」と「記録中…」。「準備・設定」はいつも横に出す（描く側）。
+ * 押せない「配信を終えています…」と「記録中…」（記憶の整理 Domain C: ③整理役が走っている間は「記憶を整理しています…」と
+ * 「整理中…」）。「準備・設定」はいつも横に出す（描く側）。
  * @param {{ phase?: string; error?: string | null } | null | undefined} stream  snapshot の stream。
  * @param {string} [requestError]  始めるの要求そのものの失敗（通信の失敗・409 など・サーバの stream.error に残らないもの）。
  * @returns {{ phase: "closed" | "opening" | "open" | "closing"; startText: string; startDisabled: boolean; noteText: string; errorText: string }}
@@ -229,13 +240,21 @@ export function streamStartView(stream, requestError = "") {
   // Discord モード Domain G: Discord の場の開きかけ・閉じかけは「配信を始める」を押せないまま出す（途中の文言は「Discord の VC に
   // 入る」の側・view-logic/discord.mjs の discordJoinView）。配信の場は今まで通り。
   const discord = isDiscordVenue(/** @type {any} */ (stream));
+  // 記憶の整理 Domain C: 閉じかけの間に③整理役が走っていれば、閉じの文言に代えて「記憶を整理しています…」と「整理中…」。
+  const organising = isMemoryOrganising(/** @type {any} */ (stream));
   return {
     phase,
     startText: discord
       ? "配信を始める"
-      : phase === "opening" ? "配信を始めています…" : phase === "closing" ? "配信を終えています…" : "配信を始める",
+      : phase === "opening"
+        ? "配信を始めています…"
+        : phase === "closing"
+          ? organising
+            ? MEMORY_ORGANISING_TEXT
+            : "配信を終えています…"
+          : "配信を始める",
     startDisabled: phase !== "closed",
-    noteText: phase === "closing" ? "記録中…" : "",
+    noteText: phase === "closing" ? (organising ? "整理中…" : "記録中…") : "",
     errorText: phase === "closed" ? requestError || serverError : ""
   };
 }

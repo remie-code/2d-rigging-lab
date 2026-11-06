@@ -128,8 +128,9 @@ import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
 import { isEventEntry } from "../src/ears/transcript-buffer.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
-import { writeStreamRecord, createStreamRecordIdentity } from "../src/mind/memory.mjs";
-import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder } from "../src/memory/memory-store.mjs";
+import { writeStreamRecord, createStreamRecordLog } from "../src/mind/memory.mjs";
+import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder, readMemoryHead } from "../src/memory/memory-store.mjs";
+import { checkOrganiseDue, startMemoryOrganiser, DEFAULT_MEMORY_BACKUP_ROOT } from "../src/mind/memory-organizer.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
 import {
@@ -165,6 +166,17 @@ export const MEMORY_CHECKPOINT_TICK_MS = 60 * 1000;
  * ②が書かずに答えたときの 1 回だけのやり直し（writeStreamRecord）もこの枠の中で走り、収まらなければ打ち切りが優先する。
  */
 export const SHUTDOWN_MEMORY_TIMEOUT_MS = 90_000;
+
+/**
+ * ③整理役の控えの置き場の根（記憶の整理 Domain C・organization.md §6「控え」）。本番は `apps/soul/agent/memory-backups/`
+ * （DEFAULT_MEMORY_BACKUP_ROOT・.gitignore 済み）。整理の係には main() がこれを明示して渡す（係は既定値を持たない）。
+ */
+export const MEMORY_BACKUP_ROOT = DEFAULT_MEMORY_BACKUP_ROOT;
+
+/** 閉じの書き出し（②）が上限を過ぎてもまだ走っていて、整理を見送ったときの 1 行（中身なし・記憶の整理 Domain C）。 */
+export const ORGANISER_WRITER_BUSY_WARNING = "memory: organising skipped: the writer is still saving";
+/** 整理の係を始められなかった（引数の誤りなど・想定外）ときの 1 行（中身なし）。 */
+export const ORGANISER_START_FAILED_WARNING = "memory: organising skipped: could not start the organiser";
 
 /**
  * Compose the system prompt for one newly-created brain session.
@@ -955,7 +967,8 @@ export function createMemoryRecorder(deps) {
  * @property {string} roleId  この置き場のロール。
  * @property {string} dir  ロールの記憶のフォルダ（`memories/<role-id>/`・②④の作業フォルダ）。
  * @property {Promise<void>} ready  準備（git init・ローカル設定・`_conventions.md` の種）が終わったら解決する（失敗しても reject しない）。
- * @property {{ get: () => { dateJst: string; baseName: string } }} streamRecord  このロールの今回の配信の本体のファイル名。
+ * @property {import("../src/mind/memory.mjs").StreamRecordLog} streamRecord  このロールのこの場の保存の持ち回り（場の日付と、
+ *   この場の②のコミットで足された・変わった本体のファイル・createStreamRecordLog・記憶の整理 Domain A）。
  * @property {number} streamNo  この置き場を作った場の番号（beginStream のたびに 1 つ進む・まだ場が無ければ 0）。
  */
 
@@ -964,10 +977,10 @@ export function createMemoryRecorder(deps) {
  *
  *  - place(): 今のロールの置き場を返す。ロールごとに 1 回だけ作って持ち回る（同じロールなら同じ値）。作るときに
  *    そのロールのフォルダの準備（prepareMemoryFolder・`_conventions.md` が無ければ種の「チャッピー」をロールの呼び名に
- *    差し替えて書く）を始め、本体のファイル名（createStreamRecordIdentity・最初の保存で 1 回だけ決める）を作る。
- *    同じ場の中でロールを戻したときは前に作った置き場（同じ本体のファイル名）を使う。
+ *    差し替えて書く）を始め、この場の保存の持ち回り（createStreamRecordLog・場の始まりの日付と、この場で書いた本体の
+ *    ファイル）を作る。同じ場の中でロールを戻したときは前に作った置き場（同じ持ち回り）を使う。
  *  - beginStream(startedAtMs): 配信の組み直し Domain D。場の始まりで置き場を作り直す（作った置き場を捨て、場の番号を
- *    進め、次の place() でそのときのロールの置き場を新しい本体のファイル名で作る・準備もそこでもう一度走らせる =
+ *    進め、次の place() でそのときのロールの置き場を新しい持ち回りで作る・準備もそこでもう一度走らせる =
  *    冪等）。場の始まりで place() を呼び、その ready を待てば「場の始まりでそのロールの置き場が用意されている」。
  *  - available が false（記憶の引っ越しが失敗した起動）のときは、どのロールのフォルダも準備せず、place() は null
  *    （前の形の記録が残る根の中に、ロールのフォルダや git を作らない）。
@@ -976,20 +989,20 @@ export function createMemoryRecorder(deps) {
  * @param {object} deps
  * @param {string} deps.root  記憶の根（本番は DEFAULT_MEMORY_DIR）。
  * @param {() => { id: string; name: { canonical: string } }} deps.currentRole  今のロール（roleHooks.current）。
- * @param {number} deps.startedAtMs  配信の始まり（本体のファイル名の日付）。
+ * @param {number} deps.startedAtMs  配信の始まり（場の日付）。
  * @param {boolean} [deps.available=true]
  * @param {(options: { dir: string; soulName: string }) => Promise<{ ok: boolean; error?: string }>} [deps.prepareImpl]
- * @param {(options: { dir: string; startedAtMs: number }) => { get: () => { dateJst: string; baseName: string } }} [deps.createIdentityImpl]
+ * @param {(options: { startedAtMs: number }) => import("../src/mind/memory.mjs").StreamRecordLog} [deps.createRecordLogImpl]
  * @param {(info: { roleId: string; error: string }) => void} [deps.onPrepareFailed]
  * @returns {{ place: () => Readonly<RoleMemoryPlace> | null; beginStream: (startedAtMs: number) => void; streamNo: () => number }}
  */
 export function createRoleMemoryPlaces(deps) {
   const prepareImpl = deps.prepareImpl ?? ((/** @type {any} */ options) => prepareMemoryFolder(options));
-  const createIdentityImpl = deps.createIdentityImpl ?? createStreamRecordIdentity;
+  const createRecordLogImpl = deps.createRecordLogImpl ?? createStreamRecordLog;
   const available = deps.available !== false;
   /** @type {Map<string, Readonly<RoleMemoryPlace>>} */
   const places = new Map();
-  // 今の場の始まり（本体のファイル名の日付）と番号（配信の組み直し Domain D）。まだ場が無ければ起動の時刻と 0。
+  // 今の場の始まり（場の日付）と番号（配信の組み直し Domain D）。まだ場が無ければ起動の時刻と 0。
   let startedAtMs = deps.startedAtMs;
   let streamNo = 0;
   const reportFailure = (/** @type {string} */ roleId, /** @type {string} */ error) => {
@@ -1024,7 +1037,7 @@ export function createRoleMemoryPlaces(deps) {
         roleId: role.id,
         dir,
         ready,
-        streamRecord: createIdentityImpl({ dir, startedAtMs }),
+        streamRecord: createRecordLogImpl({ startedAtMs }),
         streamNo
       });
       places.set(role.id, place);
@@ -1055,6 +1068,156 @@ export function createRoleMemoryPlaces(deps) {
     streamNo: () => streamNo
   };
 }
+
+/**
+ * ③整理役の係（記憶の整理 Domain C・organization.md §5「きっかけ」・§7「閉じの流れ」）。場を閉じる道
+ * （createStreamVenueHooks の saveFinal・配信を終える / 通話を終える / Ctrl+C の終える）が、閉じの書き出し（②）のあとに
+ * organiseIfDue(place) を呼ぶ。置き場（createRoleMemoryPlaces の place = ロールの id と記憶のフォルダ）ごとに別の整理を
+ * 走らせる（場にいるロールごとに saveFinal が呼ばれ、それぞれのロールの置き場を整理する）。
+ *
+ * organiseIfDue(place, { writerBusy }) の順:
+ *  1. 止めた（stop() = Ctrl+C）あとは何もしない（何も出さない）。置き場が無い（記憶の引っ越しの失敗）も何もしない。
+ *  2. 記憶のフォルダに git の先頭が無い（`.git` が無い・まだ 1 つもコミットが無い・git が読めない）なら何もしない（何も
+ *     出さない・控えの置き場も作らない）。準備の失敗は起動・場の始まりで警告済みで、②の保存のたびにも出る。
+ *  3. 整理の時期か（checkOrganiseDue）。時期でなければ何もしない（何も出さない = 今の閉じと同じ）。履歴が読めなければ
+ *     B の固定の 1 行（onWarning）だけ。
+ *  4. 閉じの書き出し（②）が上限（90 秒）を過ぎてもまだ走っていれば（writerBusy）、整理は見送る（1 行・次の閉じでやり直す）。
+ *     ③は始めにコミットされていない変更を捨て、git を使うので、同じフォルダで②と同時に走らせない。
+ *  5. 走らせる（startMemoryOrganiser・頭は書き出し役と同じ決め方 getCreate・控えの置き場は backupRoot）。始まりで 1 行
+ *     （`memory: organising (role <id>)`）、終わるまで上限なしで待つ（③の頼みにも待つ上限は無い・止めるのは stop() の
+ *     打ち切りだけ・記憶の整理 Domain D）。走っている間は
+ *     onRunningChange(true)（snapshot の stream.organising）。
+ *  6. 終わりの 1 行: コミットしたら `memory: organised (commit <短いハッシュ>)`（変更なしの空のコミットは
+ *     `memory: organised (no changes, commit <短いハッシュ>)`）。走らなかった・取り消した（skipped）ときは B が onWarning で
+ *     出す固定の 1 行がその回の 1 行（ここでは重ねて出さない・打ち切りの `memory: organiser stopped; nothing committed` も）。
+ * stop(): 止める（Ctrl+C）。これからの整理を始めず、走っている整理はすぐ打ち切る（B の abort・セッションを閉じて変更を
+ * 捨てる・時刻は進めない）。打ち切った整理の終わりは organiseIfDue の呼び出し側（閉じの道）が待つ（すぐ終わる）。
+ * どの失敗も throw しない（閉じの道を止めない）。
+ *
+ * @param {object} deps
+ * @param {() => Function} deps.getCreate  ③の頭の create（本番は resolveWriterBrainDef(currentBrain).create・書き出し役と同じ）。
+ * @param {string} deps.backupRoot  控えの置き場の根（絶対パス・本番は MEMORY_BACKUP_ROOT）。
+ * @param {(line: string) => void} [deps.onLine]  始まりと終わりの 1 行（本番は標準出力）。
+ * @param {(line: string) => void} [deps.onWarning]  B の警告と、見送りの 1 行（本番は onBrainWarning = 標準エラー）。
+ * @param {(running: boolean) => void} [deps.onRunningChange]  走り始めと全部終わったとき（本番は server.setMemoryOrganising）。
+ * @param {() => Date} [deps.now]
+ * @param {typeof readMemoryHead} [deps.headImpl]
+ * @param {typeof checkOrganiseDue} [deps.checkDueImpl]
+ * @param {typeof startMemoryOrganiser} [deps.startImpl]
+ * @returns {MemoryOrganiserRunner}
+ */
+export function createMemoryOrganiserRunner(deps) {
+  const headImpl = deps.headImpl ?? readMemoryHead;
+  const checkDueImpl = deps.checkDueImpl ?? checkOrganiseDue;
+  const startImpl = deps.startImpl ?? startMemoryOrganiser;
+  let stopped = false;
+  /** @type {Map<string, { abort: () => Promise<any> }>} 走っている整理（記憶のフォルダごと）。 */
+  const running = new Map();
+  const call = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
+    if (typeof fn !== "function") return;
+    try {
+      fn(arg);
+    } catch {
+      // 知らせ先の失敗で閉じの道を止めない。
+    }
+  };
+  const warn = (/** @type {string} */ line) => call(deps.onWarning, line);
+  const setRunning = (/** @type {string} */ dir, /** @type {{ abort: () => Promise<any> } | null} */ handle) => {
+    const before = running.size > 0;
+    if (handle) running.set(dir, handle);
+    else running.delete(dir);
+    const after = running.size > 0;
+    if (before !== after) call(deps.onRunningChange, after);
+  };
+
+  return {
+    async organiseIfDue(place, options = {}) {
+      if (stopped) return "stopped";
+      if (!place || typeof place.dir !== "string" || typeof place.roleId !== "string") return "unavailable";
+      const { dir, roleId } = place;
+      try {
+        await place.ready;
+      } catch {
+        // 準備の失敗は起動・場の始まりで知らせ済み（下の先頭の確かめで止まる）。
+      }
+      /** @type {any} */
+      let head;
+      try {
+        head = await headImpl({ dir });
+      } catch {
+        head = null;
+      }
+      if (!head || !head.ok || typeof head.head !== "string") return "not-prepared";
+      /** @type {any} */
+      let due;
+      try {
+        due = await checkDueImpl({ dir, ...(deps.now ? { now: deps.now } : {}), onWarning: warn });
+      } catch {
+        due = null;
+      }
+      if (!due || due.due !== true) return "not-due";
+      if (stopped) return "stopped";
+      if (typeof options.writerBusy === "function" && options.writerBusy()) {
+        warn(ORGANISER_WRITER_BUSY_WARNING);
+        return "writer-busy";
+      }
+      /** @type {{ done: Promise<any>; abort: () => Promise<any> }} */
+      let handle;
+      try {
+        handle = startImpl({
+          create: /** @type {any} */ (deps.getCreate()),
+          dir,
+          backupRoot: deps.backupRoot,
+          roleId,
+          onWarning: warn,
+          ...(deps.now ? { now: deps.now } : {})
+        });
+      } catch {
+        warn(ORGANISER_START_FAILED_WARNING);
+        return "start-failed";
+      }
+      setRunning(dir, handle);
+      call(deps.onLine, `memory: organising (role ${roleId})`);
+      /** @type {any} */
+      let result;
+      try {
+        result = await handle.done;
+      } catch {
+        result = null;
+      } finally {
+        setRunning(dir, null);
+      }
+      if (result && result.status === "organised") {
+        const short = String(result.commit).slice(0, 7);
+        call(deps.onLine, result.changed === false ? `memory: organised (no changes, commit ${short})` : `memory: organised (commit ${short})`);
+        return "organised";
+      }
+      // skipped は B が理由の 1 行を onWarning で出し済み（重ねない）。done が想定外に投げたときだけここで 1 行。
+      if (!result || result.status !== "skipped") warn(ORGANISER_START_FAILED_WARNING);
+      return "skipped";
+    },
+    stop() {
+      stopped = true;
+      for (const handle of running.values()) {
+        try {
+          void Promise.resolve(handle.abort()).catch(() => {});
+        } catch {
+          // best-effort
+        }
+      }
+    },
+    isRunning: () => running.size > 0
+  };
+}
+
+/**
+ * @typedef {{
+ *   organiseIfDue: (place: { roleId: string; dir: string; ready?: Promise<void> } | null | undefined, options?: { writerBusy?: () => boolean }) =>
+ *     Promise<"stopped" | "unavailable" | "not-prepared" | "not-due" | "writer-busy" | "start-failed" | "organised" | "skipped">;
+ *   stop: () => void;
+ *   isRunning: () => boolean;
+ * }} MemoryOrganiserRunner
+ */
 
 /**
  * 起動時の引っ越しの失敗を、操縦席の上の帯の警告にする（配信の組み直し Domain E・Undine の追認: ログだけでなく上の帯
@@ -1098,7 +1261,8 @@ export const BODY_URL_NOT_SET_MESSAGE =
  * 場（配信を始める / 終える）の cockpit.mjs 側の口と、場ごとの記録（配信の組み直し Domain D・stream-restructure.md §3）。
  * cockpit-server の openStream / closeStream が `hooks` を順に呼ぶ（server の `streamHooks`）。
  *
- *  - hooks.renewRecords（始める 2）: 場の記録を作り直す。場の番号を進め、記憶の本体のファイル名（memoryPlaces.beginStream）と
+ *  - hooks.renewRecords（始める 2）: 場の記録を作り直す。場の番号を進め、この場の記憶の保存の持ち回り（場の日付と、この場で
+ *    ②が書いた本体のファイル・memoryPlaces.beginStream → createStreamRecordLog）と
  *    頭の文脈の記録のファイル（renewUsageLog）を新しくし、保存の数え（lastRecordedSeq / lastRecordAtMs）を 0 / null に
  *    戻す（新しい場の転写は 0 から始まるので、前の場の seq と比べて保存を飛ばさない）。そのロールの置き場の準備
  *    （git init・種）もここで待つ（ロールの切り替えの応答を git init で待たせない・場の始まりで用意されている）。
@@ -1108,6 +1272,10 @@ export const BODY_URL_NOT_SET_MESSAGE =
  *  - hooks.closeSession / hooks.closeBody（畳む）: 頭のセッションを畳む・器を畳む（器は体の有無に関わらず）。
  *  - hooks.saveFinal（終える 3）: 写した転写が前の保存から増えていれば最後の保存を頼み、走っている保存の終わりまで待つ
  *    （上限 memoryTimeoutMs・skipMemoryWait で打ち切れる = もう一度の Ctrl+C）。増えていなければ頼まない。
+ *    記憶の整理 Domain C: そのあと（頼まなかった閉じでも）、organiser があれば、閉じたロールの置き場（saveFinal を呼んだ
+ *    時点の memoryPlaces.place()）の整理の時期を見て、時期なら③整理役を走らせ、終わるまで上限なしで待つ
+ *    （createMemoryOrganiserRunner・その間も場は closing のまま）。②が上限を過ぎてもまだ走っていれば整理は見送る。
+ *  - stopOrganising(): Ctrl+C。これからの整理を始めず、走っている整理はすぐ打ち切る（organiser.stop）。
  *  - checkpoint(): 20 分ごとの保存の 1 回分。場が開いている間だけ、前の保存から転写が増えていれば頼む。
  *  - noteSaved(info): 保存の係の onSaved。頼んだ時点の場（置き場の streamNo）が今の場のときだけ数える（前の場の
  *    遅れて終わった保存で、新しい場の数えを上書きしない）。
@@ -1128,6 +1296,8 @@ export const BODY_URL_NOT_SET_MESSAGE =
  * @param {number} [deps.memoryTimeoutMs=SHUTDOWN_MEMORY_TIMEOUT_MS]  最後の保存を待つ上限。
  * @param {typeof setTimeout} [deps.setTimeoutImpl]
  * @param {(info: { timeoutMs: number }) => void} [deps.onMemoryWait]  保存を待ち始めたとき（ターミナルに 1 行）。
+ * @param {Pick<MemoryOrganiserRunner, "organiseIfDue" | "stop">} [deps.organiser]  ③整理役の係（記憶の整理 Domain C・
+ *   createMemoryOrganiserRunner）。無ければ閉じで整理しない（今までのふるまい）。
  */
 export function createStreamVenueHooks(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
@@ -1211,14 +1381,29 @@ export function createStreamVenueHooks(deps) {
       },
       /** @param {ReadonlyArray<any>} transcript */
       async saveFinal(transcript) {
+        // 記憶の整理 Domain C: 整理するのは、閉じの保存を頼むのと同じ時点のロールの置き場（保存の係の getPlace と同じ）。
+        /** @type {any} */
+        let place = null;
+        if (deps.organiser) {
+          try {
+            place = deps.memoryPlaces.place();
+          } catch {
+            place = null;
+          }
+        }
         // Discord モード Domain K（J の持ち越し 1）: 要否は出来事の行を除いた件数で見る（出来事の行だけなら頼まない）。頼むときの
         // 中身は出来事の行を載せたままの転写。
         const spoken = countSpokenEntries(transcript);
         const entries =
           Array.isArray(transcript) && spoken > 0 && !shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq) ? transcript : [];
         const done = Promise.all([deps.memoryRecorder.record(entries), deps.memoryRecorder.whenIdle()]);
-        if (!deps.memoryRecorder.isRecording()) return;
-        await waitBounded(done);
+        if (deps.memoryRecorder.isRecording()) await waitBounded(done);
+        // 記憶の整理 Domain C: 閉じの書き出しのあと（新しい文字起こしが無く頼まなかった閉じでも）、時期なら③整理役を走らせて
+        // 終わるまで待つ（上限なし）。②がまだ走っていれば（上限を過ぎた・もう一度の Ctrl+C）整理は見送る（同じフォルダの git で
+        // ②と③を同時に走らせない）。
+        if (deps.organiser) {
+          await deps.organiser.organiseIfDue(place, { writerBusy: () => deps.memoryRecorder.isRecording() });
+        }
       }
     },
     /**
@@ -1274,6 +1459,17 @@ export function createStreamVenueHooks(deps) {
       if (!skipWait) return false;
       skipWait();
       return true;
+    },
+    /**
+     * Ctrl+C（記憶の整理 Domain C・organization.md §7）: これからの整理を始めず、走っている③整理役はすぐ打ち切る
+     * （organiser.stop）。②の待ちはそのまま（今どおり最大 90 秒・もう一度の Ctrl+C で打ち切る）。
+     */
+    stopOrganising() {
+      try {
+        deps.organiser?.stop();
+      } catch {
+        // best-effort（終わりの手順を止めない）。
+      }
     }
   };
 }
@@ -2486,6 +2682,9 @@ export function formatReplyLatencyLine(record) {
 /**
  * 操縦席の終わり（Ctrl+C / stdin の EOF）の手順（配信の組み直し Domain D・stream-restructure.md §3「Ctrl+C」）。
  *  1. もう一度呼ばれたら（2 回目の Ctrl+C）、記録の待ちを打ち切るだけ（待っていなければ何もしない）。
+ *  （2 の前に）記憶の整理 Domain C: 最初の 1 回で、③整理役を止める（venue.stopOrganising・走っていればすぐ打ち切り、これからは
+ *     始めない）。閉じかけの整理の最中に押されても、2 の終える（閉じかけの終わりを待つ）は整理を待たずに進む。②の書き出しの
+ *     最中に押されたら、②は今どおり最大 90 秒待ち、そのあとの整理は始めない。
  *  2. 場が閉じていなければ「配信を終える」と同じ道（server.endStream = 写し → 畳む → 記憶の最後の保存を待つ → 閉じる）を
  *     通る。開きかけ・閉じかけなら終わるのを待つ。閉じていれば保存は頼まない（場の外では記録しない）。
  *  3. server.close() → 場が閉じていたときだけ、走っている保存（前の場の最後の保存の残りなど）を待つ（頼まない・
@@ -2495,7 +2694,7 @@ export function formatReplyLatencyLine(record) {
  * @param {(line: string) => void} deps.write
  * @param {() => void} [deps.beforeClose]  最初に畳むもの（隙間の圧縮の見張り）。
  * @param {{ streamStatus: () => { phase: string }; endStream: () => Promise<any>; close: () => Promise<void> }} deps.server
- * @param {{ skipMemoryWait: () => boolean; waitForRunningSaves: () => Promise<void> }} deps.venue
+ * @param {{ skipMemoryWait: () => boolean; waitForRunningSaves: () => Promise<void>; stopOrganising?: () => void }} deps.venue
  * @param {() => Promise<void>} deps.disposeRest
  * @param {() => Promise<void>} deps.finalize
  * @returns {() => Promise<void>}
@@ -2510,6 +2709,12 @@ export function createCockpitShutdown(deps) {
     closing = true;
     deps.write("\n[cockpit] closing…\n");
     try {
+      // 記憶の整理 Domain C: ③整理役はすぐ打ち切る（閉じかけの整理の最中でも、下の終えるが整理を待たない）。
+      try {
+        deps.venue.stopOrganising?.();
+      } catch {
+        // best-effort
+      }
       try {
         deps.beforeClose?.();
       } catch {
@@ -2703,10 +2908,11 @@ async function main() {
 
   // 配信間記憶（記憶の作り直し Wave 2）: 起動時に記憶を①へ載せることはしない（①は思い出したいときに頼む・
   // recall-flow.md §7）。記憶のフォルダを準備し（無ければ作る・git init・`_conventions.md` の種）、
-  // 今回の配信の本体のファイル名を最初の保存で一度だけ決めて持ち回る（申し送り 2）。
+  // 場の保存の持ち回り（場の日付と、この場で②が書いた本体のファイル・createStreamRecordLog）を場の間持ち回る。本体の
+  // 名前と置き場所は②が `_conventions.md` に従って決める（魂は決めない・記憶の整理 Domain A）。
   // 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（memories/<role-id>/・§createRoleMemoryPlaces）。
-  // 準備・本体のファイル名・②・④はどれも今のロールの置き場を使う。記憶の引っ越しが失敗した起動では、記憶を読み書き
-  // しない（前の形の記録が残る根を触らない）。配信の組み直し Domain D: 置き場（本体のファイル名）は場の始まりで作り直し、
+  // 準備・場の保存の持ち回り・②・③・④はどれも今のロールの置き場を使う。記憶の引っ越しが失敗した起動では、記憶を読み書き
+  // しない（前の形の記録が残る根を触らない）。配信の組み直し Domain D: 置き場（場の保存の持ち回り）は場の始まりで作り直し、
   // そのロールの置き場の準備もそこで待つ（§createStreamVenueHooks の renewRecords・起動時とロールの切り替えでは待たない）。
   const memoryStartedAtMs = Date.now();
   const memoryPlaces = createRoleMemoryPlaces({
@@ -3191,7 +3397,7 @@ async function main() {
   //  1 回の保存 = ②書き出し役（使い捨ての Codex・cwd = 記憶のフォルダ・workspace-write）が本体と目次を書き、
   //  魂が記憶のフォルダの git にコミットする（writeStreamRecord）。②の頭は Codex に固定（resolveWriterBrainDef）。
   //  server は下方の createCockpitServer(...) で代入される前方参照(sessionProxy の getSession と同型)。
-  //  配信の組み直し Domain B: 記憶のフォルダ（と本体のファイル名）は保存を頼んだ時点のロールの置き場（getPlace）。
+  //  配信の組み直し Domain B: 記憶のフォルダ（と場の保存の持ち回り）は保存を頼んだ時点のロールの置き場（getPlace）。
   //  配信の組み直し Domain D: 引き金は 20 分ごと・手動「今日を記録」（どちらも場が開いている間だけ）・「配信を終える」
   //  （Ctrl+C も同じ道）。耳の Stop の引き金は「配信を終える」に 1 本化した。
   const memoryRecorder = createMemoryRecorder({
@@ -3206,7 +3412,7 @@ async function main() {
       return writeStreamRecord({
         create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
         entries,
-        record: place.streamRecord.get(),
+        record: place.streamRecord,
         dir: place.dir,
         wording,
         onWarning: onBrainWarning
@@ -3227,6 +3433,18 @@ async function main() {
     },
     // 「記録中」の表示を操縦席へ（走り始めと全部終わったとき）。
     onRecordingChange: () => server?.memoryStatusChanged()
+  });
+
+  // 記憶の整理 Domain C: ③整理役の係（§createMemoryOrganiserRunner）。場を閉じる道（配信を終える・通話を終える・Ctrl+C の
+  // 終える）で、閉じの書き出しのあと、そのロールの置き場の整理の時期なら走らせて待つ。頭は②と同じ決め方
+  // （resolveWriterBrainDef）。控えは apps/soul/agent/memory-backups/（MEMORY_BACKUP_ROOT）。始まりと終わりはターミナルに
+  // 1 行（中身なし）、B の警告と見送りは①②と同じ onBrainWarning へ。走っている間は snapshot の stream.organising（画面の「整理中」）。
+  const memoryOrganiser = createMemoryOrganiserRunner({
+    getCreate: () => resolveWriterBrainDef(currentBrain).create,
+    backupRoot: MEMORY_BACKUP_ROOT,
+    onLine: (line) => process.stdout.write(`[cockpit] ${line}\n`),
+    onWarning: onBrainWarning,
+    onRunningChange: (running) => server?.setMemoryOrganising(running)
   });
 
   // 配信の組み直し Domain D: 場（配信を始める / 終える）の cockpit.mjs 側の口と場ごとの記録（§createStreamVenueHooks）。
@@ -3257,7 +3475,8 @@ async function main() {
     isStreamOpen: () => server?.streamStatus().phase === "open",
     getEntries: () => (server ? server.getTranscript() : []),
     onMemoryWait: ({ timeoutMs }) =>
-      process.stdout.write(`[cockpit] 記録を書き出し中…（最大 ${timeoutMs / 1000} 秒・Ctrl+C で終了中ならもう一度 Ctrl+C で待たずに終了）\n`)
+      process.stdout.write(`[cockpit] 記録を書き出し中…（最大 ${timeoutMs / 1000} 秒・Ctrl+C で終了中ならもう一度 Ctrl+C で待たずに終了）\n`),
+    organiser: memoryOrganiser
   });
 
   // 引き金①: 定期保存(20 分毎・場が開いている間だけ・転写が前回記録から不変ならスキップ=inventory §2-4)。
