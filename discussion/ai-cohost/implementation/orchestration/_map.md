@@ -59,3 +59,4 @@
 | [stream-restructure-wave-plan.md](stream-restructure-wave-plan.md) | **完了(2026-10-31、人間ゲート合格、master へマージ `e1e77f75`)** | 配信の組み直し。A ロールと引っ越し → B 記憶をロールごとに → C 体なしの声 → D 場 → E 画面 → 全体の突き合わせ → 人間ゲート 6 点。ドメインごとに Orch-Sylph(opus)・Gnome(opus)・Review-Sylph(sonnet)。見直しは止めてよい理由を 4 つに絞る。 |
 | [discord-mode-inventory.md](discord-mode-inventory.md) | **棚卸し済み(2026-10-31)** | Discord モードの棚卸し。ドメインごとに触るファイルと重なり、テストの土台 1884 件、配信の文字列の固定テストの置き場、discord.js の偽物の形、言葉の差し口の今の文字列の在りか。 |
 | [discord-mode-wave-plan.md](discord-mode-wave-plan.md) | **実装中(2026-10-31)** | Discord モード。A 正本と話者 → B 場と体験 → C 言葉と判定の差し口 → 人間ゲート 1 → D 入口 → E 出口 → F Discord の判定と言葉 → G 画面 → 突き合わせ → 人間ゲート 2(おおむね合格・2026-11-01)→ 設計 §13 の追加のドメイン → 人間ゲート 3 → マージ。体制は前例と同じ。 |
+| [cough-experiment-plan.md](cough-experiment-plan.md) | **段階 1 済み・段階 2 相談中(2026-11-06)** | 咳払いの聞き取り実験(段階 1)。本番の耳は変えず、合図どおりに咳払い・「うん」などを出して、文字起こしと音の種類の確率を取る試作の道具。結果は調査 §9。段階 2(落とす)で決まったことは §6。単独ドメイン。 |
