@@ -11,6 +11,8 @@
  *
  * 中身:
  *  - 音の種類の判定（CED-tiny int8）のモデルの置き場・存在の確かめ・設定・結果の要約・無音でのばす
+ *    （置き場・設定・のばし方・文字数は本番の src/ears/local-stt/audio-tagging.mjs の re-export。
+ *    存在の確かめの文言（取得の仕方つき）と結果の要約は実験のもの）
  *  - 合図（4 種類 × 10 回を混ぜた順）
  *  - 合図の進め方（区間を合図に結びつける・区間なし・複数）の状態機械
  *  - 記録の 1 行の形・終わりのまとめ
@@ -18,40 +20,39 @@
 
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { DEFAULT_LOCAL_STT_MODELS_DIR, LOCAL_STT_SAMPLE_RATE } from "../src/ears/local-stt/local-stt-engines.mjs";
+import {
+  AUDIO_TAGGING_LABEL_INDEX,
+  AUDIO_TAGGING_TARGET_MS,
+  AUDIOSET_CLASS_COUNT,
+  CED_TINY_MODEL_LAYOUT,
+  buildAudioTaggingConfig,
+  countChars,
+  countLabels,
+  padToDuration,
+  resolveCedTinyModel
+} from "../src/ears/local-stt/audio-tagging.mjs";
 
 // ── 音の種類の判定（CED-tiny）のモデル ───────────────────────────────────────
+// 置き場の決まり・設定・のばし方・文字数は本番の場所（src/ears/local-stt/audio-tagging.mjs・咳払いの落とし 段階 2
+// cough-filter-stage2-plan.md §2 の 7）にあり、ここは実験の道具のために re-export する。
 
-/**
- * CED-tiny（int8）の置き場（`vendor/models/` の下・git 外）。取得は
- * `scripts/fetch-local-stt-models.mjs --only ced-tiny`（配布元 k2-fsa/sherpa-onnx の Releases `audio-tagging-models`
- * の `sherpa-onnx-ced-tiny-audio-tagging-2024-04-19.tar.bz2` から 2 つだけ取り出す）。
- */
-export const CED_TINY_MODEL_LAYOUT = Object.freeze({
-  dir: "ced-tiny-audio-tagging-2024-04-19-int8",
-  files: Object.freeze({ model: "model.int8.onnx", labels: "class_labels_indices.csv" })
-});
+export {
+  AUDIO_TAGGING_LABEL_INDEX,
+  AUDIO_TAGGING_TARGET_MS,
+  AUDIOSET_CLASS_COUNT,
+  CED_TINY_MODEL_LAYOUT,
+  buildAudioTaggingConfig,
+  countChars,
+  countLabels,
+  padToDuration,
+  resolveCedTinyModel
+};
 
 /** 取得のコマンド（モデルが無いときに 1 行で出す）。 */
 export const CED_TINY_FETCH_COMMAND = "node apps/soul/agent/scripts/fetch-local-stt-models.mjs --only ced-tiny";
 
 /**
- * @param {{ modelsDir?: string }} [opts]
- * @returns {{ dir: string; files: { model: string; labels: string } }}
- */
-export function resolveCedTinyModel(opts = {}) {
-  const dir = path.join(opts.modelsDir ?? DEFAULT_LOCAL_STT_MODELS_DIR, CED_TINY_MODEL_LAYOUT.dir);
-  return {
-    dir,
-    files: {
-      model: path.join(dir, CED_TINY_MODEL_LAYOUT.files.model),
-      labels: path.join(dir, CED_TINY_MODEL_LAYOUT.files.labels)
-    }
-  };
-}
-
-/**
- * CED-tiny が揃っているか（無ければ取得の仕方を含む 1 行の理由）。
+ * CED-tiny が揃っているか（無ければ取得の仕方を含む 1 行の理由・実験の道具の文言）。
  * @param {{ modelsDir?: string; existsImpl?: (p: string) => boolean }} [opts]
  * @returns {{ ok: true } | { ok: false; reason: string; missing: string[] }}
  */
@@ -75,56 +76,6 @@ function fileHasBytes(p) {
   } catch {
     return false;
   }
-}
-
-/** AudioSet のラベルの番号（調査 §3・class_labels_indices.csv）。 */
-export const AUDIO_TAGGING_LABEL_INDEX = Object.freeze({ speech: 0, cough: 47, throatClearing: 48 });
-
-/** AudioSet の種類の数（ラベルの表が読めないときの既定）。 */
-export const AUDIOSET_CLASS_COUNT = 527;
-
-/** 判定に渡す前にのばす長さ（調査 §1・§7: 1 秒未満のまま渡すと壊れる・2 秒は揺れた・5 秒で意味のある結果）。 */
-export const AUDIO_TAGGING_TARGET_MS = 5000;
-
-/**
- * class_labels_indices.csv の本文 → ラベルの数（見出しの行を除く空でない行）。
- * @param {string} text
- * @returns {number}
- */
-export function countLabels(text) {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  const body = lines.length > 0 && /^index\s*,/i.test(lines[0]) ? lines.slice(1) : lines;
-  return body.length;
-}
-
-/**
- * sherpa の AudioTagging の設定（CED）。
- * @param {{ model: string; labels: string }} files
- * @param {{ threads: number; topK: number }} opts
- * @returns {Record<string, any>}
- */
-export function buildAudioTaggingConfig(files, opts) {
-  return {
-    model: { ced: files.model, numThreads: opts.threads, provider: "cpu", debug: 0 },
-    labels: files.labels,
-    topK: opts.topK
-  };
-}
-
-/**
- * 前後に同じだけ作り物の無音（0）を足して targetMs にのばす（もとから長ければそのまま）。
- * @param {Float32Array} samples
- * @param {number} [targetMs=AUDIO_TAGGING_TARGET_MS]
- * @param {number} [sampleRate=16000]
- * @returns {Float32Array}
- */
-export function padToDuration(samples, targetMs = AUDIO_TAGGING_TARGET_MS, sampleRate = LOCAL_STT_SAMPLE_RATE) {
-  if (!(samples instanceof Float32Array)) throw new TypeError("padToDuration: samples must be a Float32Array");
-  const target = Math.max(0, Math.round((targetMs / 1000) * sampleRate));
-  if (samples.length >= target) return samples;
-  const out = new Float32Array(target);
-  out.set(samples, Math.floor((target - samples.length) / 2));
-  return out;
 }
 
 /**
@@ -244,14 +195,6 @@ export function seededRng(seed) {
 }
 
 // ── 記録 ─────────────────────────────────────────────────────────────
-
-/**
- * 文字数（空白を除いたコードポイントの数）。
- * @param {string} text
- */
-export function countChars(text) {
-  return [...String(text).replace(/\s+/g, "")].length;
-}
 
 /**
  * @typedef {{

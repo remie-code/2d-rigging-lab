@@ -4,11 +4,11 @@
  * ローカルの文字起こし（Parakeet / Zipformer）のモデルを公式の配布元から取得して `vendor/models/` に置く
  * — apps/soul/agent（local-stt-wave-plan.md §1 の 7）。
  *
- *   node apps/soul/agent/scripts/fetch-local-stt-models.mjs              # 足りないものだけ取る
+ *   node apps/soul/agent/scripts/fetch-local-stt-models.mjs              # 足りないものだけ取る（CED-tiny も含む）
  *   node apps/soul/agent/scripts/fetch-local-stt-models.mjs --only zipformer
  *   node apps/soul/agent/scripts/fetch-local-stt-models.mjs --dry-run    # 取るものを表示するだけ
  *   node apps/soul/agent/scripts/fetch-local-stt-models.mjs --models-dir <dir>
- *   node apps/soul/agent/scripts/fetch-local-stt-models.mjs --only ced-tiny   # 咳払いの実験の判定モデル（既定では取らない）
+ *   node apps/soul/agent/scripts/fetch-local-stt-models.mjs --only ced-tiny   # 音の種類の判定（CED-tiny）だけ取る
  *
  * 配布元:
  *  - Parakeet: Hugging Face `csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8`
@@ -17,15 +17,16 @@
  *    `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01.tar.bz2` から int8 の encoder / decoder / joiner と
  *    tokens.txt（と README.md）だけを取り出す → `vendor/models/zipformer-ja-reazonspeech-2024-08-01-int8/`。
  *    展開は OS の tar（Windows 10 以降は System32 の tar.exe・bz2 対応）を使う。
- *  - CED-tiny（音の種類の判定・咳払いの聞き取り実験 cough-experiment-plan.md §3 の 6）: k2-fsa/sherpa-onnx の GitHub Releases
+ *  - CED-tiny（音の種類の判定・咳払いの落とし cough-filter-stage2-plan.md §1・§4 A の 7）: k2-fsa/sherpa-onnx の GitHub Releases
  *    （タグ `audio-tagging-models`）の `sherpa-onnx-ced-tiny-audio-tagging-2024-04-19.tar.bz2`（約 28.5MB）から
  *    `model.int8.onnx`（約 6.1MB）と `class_labels_indices.csv`（と README.md）だけを取り出す
- *    → `vendor/models/ced-tiny-audio-tagging-2024-04-19-int8/`。耳の本番では使わないので、`--only ced-tiny` のときだけ取る
- *    （--only なしの既定は従来どおり Parakeet と Zipformer だけ）。
+ *    → `vendor/models/ced-tiny-audio-tagging-2024-04-19-int8/`。`--only` なしの既定で、足りなければ取る。
+ *    `--only` を付けたときは、そこに `ced-tiny` があるときだけ取る（`--only ced-tiny` で CED だけ）。
+ *    置き場の決まりは src/ears/local-stt/audio-tagging.mjs。
  *
  * 既に揃っていれば何もしない（ファイルがあり、0 byte でなければ揃っているとみなす）。途中で落ちても
- * `.part` のまま残るだけで、揃った扱いにはならない。耳の Start は自分では取得しない（モデルが無ければ
- * 理由つきで失敗する）。
+ * `.part` のまま残るだけで、揃った扱いにはならない。耳の Start は自分では取得しない（文字起こしのモデルが
+ * 無ければ理由つきで失敗する。CED-tiny が無ければ判定なしで動く）。
  */
 
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync, copyFileSync, mkdtempSync } from "node:fs";
@@ -41,7 +42,7 @@ import {
   LOCAL_STT_MODEL_LAYOUT,
   resolveLocalSttModel
 } from "../src/ears/local-stt/local-stt-engines.mjs";
-import { CED_TINY_MODEL_LAYOUT, resolveCedTinyModel } from "./cough-experiment-lib.mjs";
+import { CED_TINY_MODEL_LAYOUT, resolveCedTinyModel } from "../src/ears/local-stt/audio-tagging.mjs";
 
 export const PARAKEET_HF_BASE =
   "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8/resolve/main";
@@ -58,7 +59,7 @@ export const CED_TINY_ARCHIVE_URL =
 /** アーカイブの中のフォルダ名。 */
 export const CED_TINY_ARCHIVE_DIR = "sherpa-onnx-ced-tiny-audio-tagging-2024-04-19";
 
-/** `--only` で選べるもの。--only なしの既定は文字起こしのエンジン（LOCAL_STT_ENGINES）だけ。 */
+/** `--only` で選べるもの。--only なしの既定はこの全部（足りないものだけ）。 */
 export const FETCH_TARGETS = Object.freeze([...LOCAL_STT_ENGINES, "ced-tiny"]);
 
 /** アーカイブから取り出すもの（engine → 配布元・中のフォルダ・あれば取り出すもの）。 */
@@ -77,7 +78,8 @@ function hasBytes(p) {
 }
 
 /**
- * 取るものの一覧（揃っているエンジンは載らない）。CED-tiny は `only` に "ced-tiny" があるときだけ載る。
+ * 取るものの一覧（揃っているものは載らない）。`only` が無い・空なら全部（文字起こしのエンジンと CED-tiny）、
+ * あればそこに挙がったものだけ。
  * @param {{ modelsDir?: string; only?: string[]; existsImpl?: (p: string) => boolean }} [opts]
  * @returns {Array<{ engine: "parakeet" | "zipformer" | "ced-tiny"; dir: string; missing: Array<{ role: string; name: string; path: string }> }>}
  */
@@ -95,7 +97,7 @@ export function planLocalSttModelFetch(opts = {}) {
       .map(([role, p]) => ({ role, name: /** @type {any} */ (layout.files)[role], path: p }));
     if (missing.length > 0) plan.push({ engine, dir, missing });
   }
-  if (opts.only && opts.only.includes("ced-tiny")) {
+  if (!opts.only || opts.only.length === 0 || opts.only.includes("ced-tiny")) {
     const { dir, files } = resolveCedTinyModel({ modelsDir: opts.modelsDir });
     const missing = Object.entries(files)
       .filter(([, p]) => !existsImpl(p))

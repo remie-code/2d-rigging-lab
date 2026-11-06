@@ -246,7 +246,7 @@ export function feedFromHistory(transcripts, nowMs) {
  *  - vad（:817-821）: speechStart → speaking 出現 / speechEnd・speechCancel → 消滅。
  *  - transcript（:822）: 転写行。
  *  - expression（:824）: 演出行。
- *  - discard（:825-829）: ゴースト行 "(discarded)"（カウンタ更新は app.mjs）。
+ *  - discard（:825-829）: ゴースト行 "(discarded)"・reason "cough" は "(咳として落とした)"（カウンタ更新と上の帯の札は app.mjs）。
  *  - diagnostic（:830-855）: **type=="bargeIn" を先に専用マーカー行へ分流**（L0 裁定・:842）。
  *    それ以外は diagnosticGhostLabel 経由（null = 意図的非表示 = 行を作らない）。
  *  - fire（:860-864）: accepted:true のみマーカー行（fire-note は app.mjs）。
@@ -277,7 +277,7 @@ export function feedAfterSseEvent(feed, eventName, d, nowMs) {
     case "expression":
       return feedWithExpression(feed, d, nowMs);
     case "discard":
-      return feedWithGhost(feed, discardGhostLabel(), nowMs);
+      return feedWithGhost(feed, discardGhostLabel(d), nowMs);
     case "diagnostic":
       if (d && d.type === "bargeIn") return feedWithBargeInMarker(feed, d, nowMs);
       return feedWithGhost(feed, diagnosticGhostLabel(d), nowMs);

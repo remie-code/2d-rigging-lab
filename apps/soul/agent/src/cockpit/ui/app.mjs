@@ -24,7 +24,7 @@
  *
  * SSE 購読: SSE_EVENT_NAMES（既存 13 本 + 1 回目で足した fireAsk / latency / quota / warnings の 4 本）。
  * 観測フィード（ログのタブ）は rows.mjs の feedAfterSseEvent、会話とコメントは glanceAfterSseEvent、非タイムライン効果
- * （state 適用・discarded・soul・fire-note・usage・chatStatus・quota・warnings）は applyNonFeedSseEvent。
+ * （state 適用・discarded と上の帯の咳の札・soul・fire-note・usage・chatStatus・quota・warnings）は applyNonFeedSseEvent。
  * 初期化: GET /api/state → 履歴復元（フィードと会話・推論の範囲と遅延は復元しない）→ applyState → SSE 購読。
  * Discord モード Domain M: 会話の欄は SSE state の stream で新しい場が開いたと知り（glanceAfterSseEvent の "state"）、前の場の
  * 判定の札と推論の範囲を捨てる（seq は場ごとに 0 から）。初期化では snapshot の stream を glanceFromHistory に渡して覚えさせる。
@@ -59,6 +59,7 @@ import {
 import { latencyBarView, isPreStream, streamStartView, DEFAULT_LATENCY_THRESHOLDS } from "../view-logic/glance-meters.mjs";
 import { discordAvailable, discordJoinView, isDiscordVenue } from "../view-logic/discord.mjs";
 import { DiscordPanel } from "./discord-panel.mjs";
+import { emptyCoughChip, coughChipAfterDiscard } from "../view-logic/cough-chip.mjs";
 
 /**
  * 購読する SSE イベントの全リスト（既存 13 本 + 操縦席の作り直し 1 回目で足した 4 本・データの形 §1）。
@@ -208,6 +209,9 @@ export function App(props) {
   const [tts, setTts] = useState(/** @type {any} */ (null));
   const [device, setDevice] = useState(/** @type {string | null} */ (null));
   const [discarded, setDiscarded] = useState(/** @type {number | string} */ (0));
+  // 咳払いの落とし 段階 2（Domain B）: 上の帯の「咳 ×N」の札（SSE discard の reason "cough" だけを数える・client だけの状態）。
+  // 消すのは nowTick との比較（view-logic/cough-chip.mjs の coughChipView）で、setTimeout は使わない。保存も送り返しもしない。
+  const [coughChip, setCoughChip] = useState(emptyCoughChip);
   const [uptime, setUptime] = useState(() => ({ baseMs: 0, anchorMs: now() }));
   const [nowTick, setNowTick] = useState(() => now());
   const [usageNote, setUsageNote] = useState("");
@@ -251,13 +255,14 @@ export function App(props) {
   };
 
   // SSE の非タイムライン効果（タイムライン行は feedAfterSseEvent が単一経路で担う）。
-  const applyNonFeedSseEvent = (eventName, d) => {
+  const applyNonFeedSseEvent = (eventName, d, nowMs) => {
     switch (eventName) {
       case "state": //   :816
         applyStateRef.current(d);
         return;
-      case "discard": // :825-829 カウンタ（ゴースト行は feed 側）
+      case "discard": // :825-829 カウンタ（ゴースト行は feed 側）+ reason "cough" は上の帯の札（期限切れなら ×1 から）
         setDiscarded(d && d.discarded);
+        if (d && d.reason === "cough") setCoughChip((c) => coughChipAfterDiscard(c, d, nowMs));
         return;
       case "soul": //    :857-859（applySoulState は運転バー = Domain C の描画へ）
         setSoul(d && d.state);
@@ -298,7 +303,7 @@ export function App(props) {
           const nowMs = now();
           setFeed((f) => feedAfterSseEvent(f, name, d, nowMs));
           setGlance((g) => glanceAfterSseEvent(g, name, d, nowMs));
-          applyNonFeedSseEvent(name, d);
+          applyNonFeedSseEvent(name, d, nowMs);
         });
       }
       return source;
@@ -472,6 +477,7 @@ export function App(props) {
         stream=${settings.stream}
         warnings=${warnings}
         quota=${quota}
+        coughChip=${coughChip}
         killed=${settings.killed}
         killError=${killError}
         nowMs=${nowTick}

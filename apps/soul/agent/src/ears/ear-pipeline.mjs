@@ -70,6 +70,18 @@
  *     （既定 300ms）足してから encode する。転写の startMs/endMs はセグメンタの範囲のまま（余白を含めない）。
  *     子が落ちたら whisper の死と同じく ASR を止めて診断（localSttDown）を出し、再起動しない。
  *
+ * ── 咳払いの落とし（ローカルの文字起こしだけ・cough-filter-stage2-plan.md §1・§2 の 3〜6）──────────────
+ *  子は、文字起こしが stt.local.coughMaxChars（既定 4）文字以下の区間だけを音の種類の判定（CED-tiny）にかけ、Speech の
+ *  確率（speech）を返す（local-stt-worker-core.mjs）。落とすか通すかを比べるのはここ（transcribeAndAppend・正本に積む前）:
+ *  speech が有限の数で、線 stt.local.coughSpeechThreshold（既定 0.1）が 0 より大きく、speech < 線なら、正本に積まずに
+ *  `buffer.discard({ ..., reason: "cough", speech })` で捨て、診断 transcriptDiscarded（reason "cough"）を出す。線が 0・speech が
+ *  null（判定にかけていない・失敗した・上限を超えた）なら今までどおり積む。whisper / ElevenLabs には掛けない（子を持たない）。
+ *  **診断に文字起こしの文字と確率を載せない**（診断は ears-cli が丸ごと stderr に出す・画面のログにも流れる）。文字と確率が
+ *  行くのは正本の onDiscard（場の SSE discard）だけ。
+ *  判定なし（CED-tiny が無い・読み込めない）でも Start は失敗しない。子の ready の理由は診断 audioTaggingOff の reason に
+ *  決まった 4 つの語（not-configured / disabled / model-not-found / failed-to-load）にして渡す（子の理由の文言〔sherpa の
+ *  エラー文・パスを含みうる〕は出さない）。警告にするかは場（cockpit-server）が決める。
+ *
  * ── クリーンシャットダウン ─────────────────────────────────────────
  *  dispose() 一発で ffmpeg・VAD セッション・whisper-server（または ElevenLabs 接続）・キュー・タイマが全部畳まれる。
  *  見張りタイマは各発話処理の finally で必ず clear（unref しない規律は S2 §6.1 の教訓）。
@@ -88,9 +100,38 @@ import { createElevenLabsRealtimeStt } from "./elevenlabs-stt.mjs";
 // 親で読むのは fork する係と純関数だけ（sherpa-onnx-node は子プロセスの local-stt-worker.mjs だけが読む）。
 import { createLocalSttClient } from "./local-stt/local-stt-client.mjs";
 import { isLocalSttEngine, normalizeLocalSttSettings, padWithSilence } from "./local-stt/local-stt-engines.mjs";
+import { shouldTagTranscript } from "./local-stt/audio-tagging.mjs";
 
 /** 文字起こしの方式（操縦席の選択肢）。既定は whisper（従来どおり）。parakeet / zipformer はローカル（子プロセス）。 */
 export const STT_ENGINES = Object.freeze(["whisper", "elevenlabs", "parakeet", "zipformer"]);
+
+/**
+ * 咳払いの落としの比べ方（純関数・ヘッダの「咳払いの落とし」）。落とすなら Speech の確率、通すなら null。
+ * @param {{ text: string; speech?: unknown }} transcribed  文字起こしの戻り（ローカルの子は speech を持つ）。
+ * @param {{ coughMaxChars: number; coughSpeechThreshold: number }} settings  normalizeLocalSttSettings の値。
+ * @returns {number | null}
+ */
+export function coughSpeechToDrop(transcribed, settings) {
+  const threshold = settings.coughSpeechThreshold;
+  if (!(typeof threshold === "number" && threshold > 0)) return null;
+  const speech = transcribed ? transcribed.speech : null;
+  if (typeof speech !== "number" || !Number.isFinite(speech)) return null;
+  // 判定にかける長さの区間だけ（子と同じ数え方。上限を超えた区間は子も判定しないが、ここでも通す側に倒す）。
+  if (!shouldTagTranscript(typeof transcribed.text === "string" ? transcribed.text : "", settings.coughMaxChars)) return null;
+  return speech < threshold ? speech : null;
+}
+
+/**
+ * 子の ready の判定なしの理由 → 決まった語（診断 audioTaggingOff の reason）。理由の文言そのものは外へ出さない。
+ * @param {unknown} reason  local-stt-client の `ready.audioTagging.reason`。
+ * @returns {"not-configured" | "disabled" | "model-not-found" | "failed-to-load"}
+ */
+export function audioTaggingOffCause(reason) {
+  if (reason === "not configured") return "not-configured";
+  if (typeof reason === "string" && reason.startsWith("disabled")) return "disabled";
+  if (typeof reason === "string" && reason.startsWith("audio tagging model not found")) return "model-not-found";
+  return "failed-to-load";
+}
 
 /** 常駐の既定（根拠は上記ヘッダと experiments/s2-ears.md）。 */
 export const EAR_DEFAULTS = Object.freeze({
@@ -120,7 +161,7 @@ export const EAR_DEFAULTS = Object.freeze({
  *   dynamicAudioCtx=true, audioCtxOptions }。
  * @param {number} [options.ringMs=40000]  PCM リングバッファ保持長。
  * @param {{ engine?: "whisper" | "elevenlabs" | "parakeet" | "zipformer"; apiKey?: string; elevenLabs?: object;
- *   local?: { threads?: number; preRollMs?: number; silencePadMs?: number; hotwords?: string[]; hotwordsScore?: number; modelsDir?: string; client?: object } }} [options.stt]
+ *   local?: { threads?: number; preRollMs?: number; silencePadMs?: number; hotwords?: string[]; hotwordsScore?: number; coughMaxChars?: number; coughSpeechThreshold?: number; modelsDir?: string; client?: object } }} [options.stt]
  *   文字起こしの方式（既定 whisper）。elevenlabs のときは apiKey が要り（呼び出し側が env ファイルから
  *   読んで渡す）、elevenLabs は createElevenLabsRealtimeStt への追加設定（WebSocketImpl 等）。
  *   parakeet / zipformer のときは local（範囲外は既定・normalizeLocalSttSettings）。local.client は
@@ -144,7 +185,7 @@ export const EAR_DEFAULTS = Object.freeze({
  * @param {typeof createSileroVad} [options.vadFactory]           テスト注入。
  * @param {typeof createWhisperServer} [options.serverFactory]    テスト注入。
  * @param {typeof createElevenLabsRealtimeStt} [options.sttFactory]  テスト注入（既定 createElevenLabsRealtimeStt）。
- * @param {(wavBytes: Uint8Array, opts?: { audioCtx?: number }) => Promise<{ text: string; rawText: string }>} [options.transcribeImpl]
+ * @param {(wavBytes: Uint8Array, opts?: { audioCtx?: number }) => Promise<{ text: string; rawText: string; speech?: number | null }>} [options.transcribeImpl]
  *   転写呼び出しの差し替え（テスト注入。既定は whisper-inference を server.baseUrl で構築）。
  * @returns {{
  *   start: () => Promise<void>;
@@ -217,7 +258,7 @@ export function createEarPipeline(options = {}) {
   /** ElevenLabs: 直前の commit 以降で最後の speechEnd の壁時計（遅延の物差しの起点）。 */
   /** @type {number | null} */
   let lastSpeechEndWallMs = null;
-  /** @type {(wavBytes: Uint8Array, opts?: { audioCtx?: number }) => Promise<{ text: string; rawText: string }>} */
+  /** @type {(wavBytes: Uint8Array, opts?: { audioCtx?: number }) => Promise<{ text: string; rawText: string; speech?: number | null }>} */
   let transcribe = options.transcribeImpl ?? (() => Promise.reject(new Error("not started")));
 
   /** VAD 推論の直列化チェーン（フレームは到着順に 1 個ずつモデルへ）。 */
@@ -237,7 +278,8 @@ export function createEarPipeline(options = {}) {
     asrDropped: 0,
     asrSkipped: 0,
     vadErrors: 0,
-    sttCommits: 0
+    sttCommits: 0,
+    coughDropped: 0
   };
 
   /** 現在処理中ジョブのメタ（ワーカーは直列なので 1 個で足りる）。 */
@@ -383,9 +425,16 @@ export function createEarPipeline(options = {}) {
     const audioCtx = asrOptions.dynamicAudioCtx && !useLocal
       ? computeAudioCtx(job.durationMs, asrOptions.audioCtxOptions)
       : null;
-    const { text } = await transcribe(job.wav, audioCtx != null ? { audioCtx } : undefined);
+    const transcribed = await transcribe(job.wav, audioCtx != null ? { audioCtx } : undefined);
+    const { text } = transcribed;
     if (disposed) return;
     currentMeta = { latencyMs: nowImpl() - job.endWallMs, audioCtx };
+    // 咳払いの落とし（ローカルの文字起こしだけ・ヘッダ参照）: 正本に積む前に比べる。
+    const coughSpeech = useLocal ? coughSpeechToDrop(transcribed, localSettings) : null;
+    if (coughSpeech !== null) {
+      dropCough(job, text, coughSpeech, currentMeta.latencyMs);
+      return;
+    }
     /** @type {ReturnType<typeof buffer.append>} */
     let result;
     try {
@@ -413,6 +462,30 @@ export function createEarPipeline(options = {}) {
       return;
     }
     notifyOwnAppend(result, currentMeta, job);
+  }
+
+  /**
+   * 咳払いと判じた区間を正本に積まずに捨てる（正本の discard = blank と同じ口・discarded の数と onDiscard）。
+   * 診断には文字と確率を載せない（ヘッダ参照）。
+   * @param {{ startMs: number; endMs: number }} job  @param {string} text  @param {number} speech  @param {number} latencyMs
+   */
+  function dropCough(job, text, speech, latencyMs) {
+    counters.coughDropped += 1;
+    try {
+      if (typeof buffer.discard === "function") {
+        buffer.discard({ startMs: job.startMs, endMs: job.endMs, text, reason: "cough", speech });
+      }
+    } catch (error) {
+      // 外部購読者の listener 契約違反（append の throw と同じ扱い）。
+      onDiagnostic({
+        type: "listenerError",
+        message: error instanceof Error ? error.message : String(error),
+        startMs: job.startMs,
+        endMs: job.endMs
+      });
+      return;
+    }
+    onDiagnostic({ type: "transcriptDiscarded", reason: "cough", startMs: job.startMs, endMs: job.endMs, latencyMs });
   }
 
   /**
@@ -564,18 +637,27 @@ export function createEarPipeline(options = {}) {
           threads: localSettings.threads,
           hotwords: localSettings.hotwords,
           hotwordsScore: localSettings.hotwordsScore,
+          // 咳払いの落とし: 判定にかける文字数の上限（0 = 判定しない・子に AudioTagging を作らせない）。
+          audioTaggingMaxChars: localSettings.coughMaxChars,
           setTimeoutImpl,
           clearTimeoutImpl,
           onExit: handleLocalSttExit,
-          onReady: (info) =>
+          onReady: (info) => {
+            const tagging = info && typeof info.audioTagging === "object" && info.audioTagging ? info.audioTagging : null;
             onDiagnostic({
               type: "localSttReady",
               engine: sttEngine,
               loadMs: info.loadMs,
               decodingMethod: info.decodingMethod,
               hotwordsUsed: info.hotwordsUsed.length,
-              hotwordsDropped: info.hotwordsDropped
-            })
+              hotwordsDropped: info.hotwordsDropped,
+              audioTagging: tagging ? tagging.enabled === true : false
+            });
+            // 判定なし: 理由は決まった語だけ（子の文言は出さない）。警告にするかは場が決める。
+            if (tagging && tagging.enabled !== true) {
+              onDiagnostic({ type: "audioTaggingOff", engine: sttEngine, reason: audioTaggingOffCause(tagging.reason) });
+            }
+          }
         });
         try {
           await vad.init();

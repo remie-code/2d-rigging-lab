@@ -1023,13 +1023,29 @@ test("settings store: getLocalStt はローカルの文字起こしの設定（�
   const path = join(dir, "settings.json");
   try {
     const store = createFileSettingsStore({ path });
-    assert.deepEqual(store.getLocalStt(), { threads: 2, preRollMs: 200, silencePadMs: 300, hotwords: ["チャッピー", "コーディ"], hotwordsScore: 1.5 });
+    assert.deepEqual(store.getLocalStt(), {
+      threads: 2,
+      preRollMs: 200,
+      silencePadMs: 300,
+      hotwords: ["チャッピー", "コーディ"],
+      hotwordsScore: 1.5,
+      coughMaxChars: 4,
+      coughSpeechThreshold: 0.1
+    });
     writeFileSync(
       path,
       JSON.stringify({ localSttThreads: 4, localSttPreRollMs: 100, localSttSilencePadMs: 0, localSttHotwords: ["ラビ"], localSttHotwordsScore: 3 }),
       "utf8"
     );
-    assert.deepEqual(store.getLocalStt(), { threads: 4, preRollMs: 100, silencePadMs: 0, hotwords: ["ラビ"], hotwordsScore: 3 });
+    assert.deepEqual(store.getLocalStt(), {
+      threads: 4,
+      preRollMs: 100,
+      silencePadMs: 0,
+      hotwords: ["ラビ"],
+      hotwordsScore: 3,
+      coughMaxChars: 4,
+      coughSpeechThreshold: 0.1
+    });
     store.setSttEngine("zipformer");
     assert.equal(store.getLocalStt().threads, 4, "他のキーの set で消えない");
     writeFileSync(
@@ -1037,7 +1053,42 @@ test("settings store: getLocalStt はローカルの文字起こしの設定（�
       JSON.stringify({ localSttThreads: 99, localSttPreRollMs: "200", localSttSilencePadMs: 5000, localSttHotwords: [], localSttHotwordsScore: 50 }),
       "utf8"
     );
-    assert.deepEqual(store.getLocalStt(), { threads: 2, preRollMs: 200, silencePadMs: 300, hotwords: [], hotwordsScore: 1.5 });
+    assert.deepEqual(store.getLocalStt(), {
+      threads: 2,
+      preRollMs: 200,
+      silencePadMs: 300,
+      hotwords: [],
+      hotwordsScore: 1.5,
+      coughMaxChars: 4,
+      coughSpeechThreshold: 0.1
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("settings store: getLocalStt は咳払いの落としの 2 つの数（localSttCoughMaxChars / localSttCoughSpeechThreshold）を読む・範囲外と型違いは既定・他のキーの set で消えない", () => {
+  const dir = tmpDir();
+  const path = join(dir, "settings.json");
+  try {
+    const store = createFileSettingsStore({ path });
+    writeFileSync(path, JSON.stringify({ localSttCoughMaxChars: 6, localSttCoughSpeechThreshold: 0.25 }), "utf8");
+    assert.equal(store.getLocalStt().coughMaxChars, 6);
+    assert.equal(store.getLocalStt().coughSpeechThreshold, 0.25);
+    store.setSttEngine("zipformer");
+    assert.equal(store.getLocalStt().coughMaxChars, 6, "他のキーの set で消えない");
+    assert.equal(store.getLocalStt().coughSpeechThreshold, 0.25);
+    // 0 はどちらも有効（0 = 判定しない / 落とさない）。
+    writeFileSync(path, JSON.stringify({ localSttCoughMaxChars: 0, localSttCoughSpeechThreshold: 0 }), "utf8");
+    assert.equal(store.getLocalStt().coughMaxChars, 0);
+    assert.equal(store.getLocalStt().coughSpeechThreshold, 0);
+    // 範囲外・型違いは既定（4 / 0.1）。
+    writeFileSync(path, JSON.stringify({ localSttCoughMaxChars: 11, localSttCoughSpeechThreshold: 2 }), "utf8");
+    assert.equal(store.getLocalStt().coughMaxChars, 4);
+    assert.equal(store.getLocalStt().coughSpeechThreshold, 0.1);
+    writeFileSync(path, JSON.stringify({ localSttCoughMaxChars: "4", localSttCoughSpeechThreshold: "0.1" }), "utf8");
+    assert.equal(store.getLocalStt().coughMaxChars, 4);
+    assert.equal(store.getLocalStt().coughSpeechThreshold, 0.1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

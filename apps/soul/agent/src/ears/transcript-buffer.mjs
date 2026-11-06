@@ -21,6 +21,12 @@
  *  自体は診断上意味がある（無音幻聴の頻度 = VAD 閾値調整の材料）ので、onDiscard 購読と
  *  stats().discarded で観測可能にする。判断は isBlankTranscript 純関数に閉じる。
  *
+ * ── 咳払いの落とし（段階 2・cough-filter-stage2-plan.md §2 の 3〜5）【設計判断】────────────────
+ *  耳（ear-pipeline.mjs の transcribeAndAppend）が「咳や咳払いが短い言葉に化けた」と判じた区間は、積まずに
+ *  `discard({ startMs, endMs, text, reason: "cough", speech })` で捨てる。空転写と同じ口（discarded の数・onDiscard）に
+ *  乗せ、info に reason "cough" と Speech の確率（speech）を載せる。空転写の info の形（`{startMs,endMs,text,reason:"blank"}`）は
+ *  変えない。discard は人の名前・id を受け取らない（Discord の人ごとの口は append だけを包むので、誰の咳かは載らない）。
+ *
  * ── S3 が消費する形 ───────────────────────────────────────────────
  *  - `all()` 全件 / `last(n)` 直近 n 件 / `inRange({fromMs,toMs})` ストリーム時刻範囲（重なり判定）
  *  - `onAppend(listener)` 追加購読（S3 の発火判定はこれを入口にできる）
@@ -105,6 +111,13 @@ export function isEventEntry(entry) {
   return entry != null && typeof entry === "object" && /** @type {any} */ (entry).speaker === EVENT_SPEAKER;
 }
 
+/** 正本の外から渡せる破棄の理由（空転写の "blank" は append が決める）。 */
+const EXTERNAL_DISCARD_REASONS = new Set(["cough"]);
+
+/**
+ * @typedef {Readonly<{ startMs: number; endMs: number; text: string; reason: "blank" }> | Readonly<{ startMs: number; endMs: number; text: string; reason: "cough"; speech: number }>} DiscardInfo
+ */
+
 /** 許容する話者ラベル（既定 you = S2 挙動不変・soul = S3 の魂発話・viewer = S7 の視聴者コメント・event = 出来事の行〔Domain J〕）。 */
 const VALID_SPEAKERS = new Set(["you", "soul", "viewer", EVENT_SPEAKER]);
 
@@ -118,9 +131,10 @@ const VALID_SPEAKERS = new Set(["you", "soul", "viewer", EVENT_SPEAKER]);
  *   last: (n: number) => TranscriptEntry[];
  *   inRange: (range: { fromMs?: number; toMs?: number }) => TranscriptEntry[];
  *   size: () => number;
+ *   discard: (input: { startMs: number; endMs: number; text: string; reason: "cough"; speech: number }) => { appended: false; entry: null; reason: "cough" };
  *   stats: () => { appended: number; discarded: number };
  *   onAppend: (listener: (entry: TranscriptEntry) => void) => () => void;
- *   onDiscard: (listener: (info: Readonly<{ startMs: number; endMs: number; text: string; reason: "blank" }>) => void) => () => void;
+ *   onDiscard: (listener: (info: DiscardInfo) => void) => () => void;
  * }}
  */
 export function createTranscriptBuffer(options = {}) {
@@ -213,6 +227,43 @@ export function createTranscriptBuffer(options = {}) {
       return { appended: true, entry, reason: "appended" };
     },
 
+    /**
+     * 正本の外で判じた区間を積まずに捨てる（咳払いの落とし・段階 2）。空転写と同じく discarded を数え、onDiscard に流す。
+     * 不正な入力は throw（呼び出し側のバグを黙殺しない）。
+     * @param {{ startMs: number; endMs: number; text: string; reason: "cough"; speech: number }} input
+     * @returns {{ appended: false; entry: null; reason: "cough" }}
+     */
+    discard(input) {
+      if (input == null || typeof input !== "object") {
+        throw new TypeError("transcriptBuffer.discard: input must be an object { startMs, endMs, text, reason, speech }.");
+      }
+      const { startMs, endMs, text, reason, speech } = input;
+      if (typeof startMs !== "number" || !Number.isFinite(startMs)) {
+        throw new TypeError(`transcriptBuffer.discard: startMs must be a finite number; got ${startMs}.`);
+      }
+      if (typeof endMs !== "number" || !Number.isFinite(endMs)) {
+        throw new TypeError(`transcriptBuffer.discard: endMs must be a finite number; got ${endMs}.`);
+      }
+      if (endMs < startMs) {
+        throw new RangeError(`transcriptBuffer.discard: endMs ${endMs} must be >= startMs ${startMs}.`);
+      }
+      if (typeof text !== "string") {
+        throw new TypeError(`transcriptBuffer.discard: text must be a string; got ${typeof text}.`);
+      }
+      if (!EXTERNAL_DISCARD_REASONS.has(reason)) {
+        throw new RangeError(`transcriptBuffer.discard: reason must be "cough"; got ${JSON.stringify(reason)}.`);
+      }
+      if (typeof speech !== "number" || !Number.isFinite(speech)) {
+        throw new TypeError(`transcriptBuffer.discard: speech must be a finite number; got ${speech}.`);
+      }
+      discarded += 1;
+      const info = Object.freeze({ startMs, endMs, text, reason: /** @type {const} */ ("cough"), speech });
+      for (const listener of discardListeners) {
+        listener(info);
+      }
+      return { appended: false, entry: null, reason: "cough" };
+    },
+
     /** 全件（append 順）。配列は防御的コピー・エントリは frozen。 */
     all() {
       return entries.slice();
@@ -276,8 +327,8 @@ export function createTranscriptBuffer(options = {}) {
     },
 
     /**
-     * 空転写破棄の購読（診断用）。返り値は購読解除関数。
-     * @param {(info: Readonly<{ startMs: number; endMs: number; text: string; reason: "blank" }>) => void} listener
+     * 破棄の購読（空転写 "blank" と咳払いの落とし "cough"・診断用）。返り値は購読解除関数。
+     * @param {(info: DiscardInfo) => void} listener
      */
     onDiscard(listener) {
       if (typeof listener !== "function") {

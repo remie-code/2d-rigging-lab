@@ -63,13 +63,20 @@ export const LOCAL_STT_MODEL_LAYOUT = Object.freeze({
   })
 });
 
-/** 既定（合意 §0: スレッド 2・本物の音を前に 0.2 秒・作り物の無音を前後に 0.3 秒・hotwords 2 語）。 */
+/**
+ * 既定（合意 §0: スレッド 2・本物の音を前に 0.2 秒・作り物の無音を前後に 0.3 秒・hotwords 2 語）。
+ * 咳払いの落とし（段階 2・cough-filter-stage2-plan.md §1・§2 の 8）: 文字起こしが coughMaxChars 文字以下の区間だけを
+ * 音の種類の判定（CED-tiny）にかけ、Speech の確率が coughSpeechThreshold より低ければ正本に積まずに落とす。
+ * coughMaxChars 0 = 判定しない（子に AudioTagging を作らせない）・coughSpeechThreshold 0 = 落とさない。
+ */
 export const LOCAL_STT_DEFAULTS = Object.freeze({
   threads: 2,
   preRollMs: 200,
   silencePadMs: 300,
   hotwords: Object.freeze(["チャッピー", "コーディ"]),
-  hotwordsScore: 1.5
+  hotwordsScore: 1.5,
+  coughMaxChars: 4,
+  coughSpeechThreshold: 0.1
 });
 
 /** 設定ファイルの値の範囲（範囲外は既定）。 */
@@ -78,6 +85,8 @@ export const LOCAL_STT_LIMITS = Object.freeze({
   preRollMs: Object.freeze({ min: 0, max: 1000 }),
   silencePadMs: Object.freeze({ min: 0, max: 1000 }),
   hotwordsScore: Object.freeze({ min: 0.1, max: 10 }),
+  coughMaxChars: Object.freeze({ min: 0, max: 10 }),
+  coughSpeechThreshold: Object.freeze({ min: 0, max: 1 }),
   hotwordsMaxCount: 50,
   hotwordMaxChars: 32
 });
@@ -95,8 +104,8 @@ export function isLocalSttEngine(engine) {
 
 /**
  * 設定ファイルの生の値を正規化する（範囲外・型違いは既定）。
- * @param {{ threads?: unknown; preRollMs?: unknown; silencePadMs?: unknown; hotwords?: unknown; hotwordsScore?: unknown } | null | undefined} raw
- * @returns {{ threads: number; preRollMs: number; silencePadMs: number; hotwords: string[]; hotwordsScore: number }}
+ * @param {{ threads?: unknown; preRollMs?: unknown; silencePadMs?: unknown; hotwords?: unknown; hotwordsScore?: unknown; coughMaxChars?: unknown; coughSpeechThreshold?: unknown } | null | undefined} raw
+ * @returns {{ threads: number; preRollMs: number; silencePadMs: number; hotwords: string[]; hotwordsScore: number; coughMaxChars: number; coughSpeechThreshold: number }}
  */
 export function normalizeLocalSttSettings(raw) {
   const r = raw && typeof raw === "object" ? raw : {};
@@ -109,7 +118,9 @@ export function normalizeLocalSttSettings(raw) {
     preRollMs: numIn(r.preRollMs, LOCAL_STT_LIMITS.preRollMs, LOCAL_STT_DEFAULTS.preRollMs),
     silencePadMs: numIn(r.silencePadMs, LOCAL_STT_LIMITS.silencePadMs, LOCAL_STT_DEFAULTS.silencePadMs),
     hotwords: normalizeHotwords(r.hotwords),
-    hotwordsScore: numIn(r.hotwordsScore, LOCAL_STT_LIMITS.hotwordsScore, LOCAL_STT_DEFAULTS.hotwordsScore)
+    hotwordsScore: numIn(r.hotwordsScore, LOCAL_STT_LIMITS.hotwordsScore, LOCAL_STT_DEFAULTS.hotwordsScore),
+    coughMaxChars: intIn(r.coughMaxChars, LOCAL_STT_LIMITS.coughMaxChars, LOCAL_STT_DEFAULTS.coughMaxChars),
+    coughSpeechThreshold: numIn(r.coughSpeechThreshold, LOCAL_STT_LIMITS.coughSpeechThreshold, LOCAL_STT_DEFAULTS.coughSpeechThreshold)
   };
 }
 

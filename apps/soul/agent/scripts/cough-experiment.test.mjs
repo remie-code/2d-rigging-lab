@@ -405,3 +405,37 @@ test("cough-experiment: 実験の子が落ちたらそこで終わる（それ�
     h.cleanup();
   }
 });
+
+test("cough-experiment: 本番の咳払いの落とし（段階 2）は実験では切る（上限 0・線 0・設定ファイルに書いてあっても）", async () => {
+  /** @type {any} */
+  let seen = null;
+  const outDir = mkdtempSync(path.join(tmpdir(), "cough-experiment-"));
+  try {
+    await runCoughExperiment({
+      device: "audio=Mic",
+      inputFormat: "dshow",
+      localStt: { threads: 2, coughMaxChars: 4, coughSpeechThreshold: 0.1 },
+      modelsDir: "/fake-models",
+      outDir,
+      existsImpl: () => true,
+      pipelineFactory: /** @type {any} */ (
+        (/** @type {any} */ opts) => {
+          seen = opts;
+          return {
+            start: async () => {
+              throw new Error("stop here");
+            },
+            dispose: async () => {}
+          };
+        }
+      ),
+      write: () => {}
+    });
+    assert.ok(seen);
+    assert.equal(seen.stt.local.coughMaxChars, 0, "内側の本番の中身に AudioTagging を作らせない");
+    assert.equal(seen.stt.local.coughSpeechThreshold, 0, "親で落とさない（区間の記録は段階 1 のまま）");
+    assert.equal(seen.stt.local.threads, 2);
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});

@@ -215,6 +215,10 @@ export async function runCoughExperiment(deps = {}) {
         engine: "zipformer",
         local: {
           ...(deps.localStt && typeof deps.localStt === "object" ? deps.localStt : {}),
+          // 本番の咳払いの落とし（段階 2）は実験では切る: 実験の子が判定を持つので、内側の本番の中身に AudioTagging を
+          // 二重に作らせない（上限 0）・親で落とさない（線 0。落とすと区間の記録が変わる）。実験の振る舞いは段階 1 のまま。
+          coughMaxChars: 0,
+          coughSpeechThreshold: 0,
           modelsDir,
           client: {
             workerPath: COUGH_EXPERIMENT_WORKER_PATH,

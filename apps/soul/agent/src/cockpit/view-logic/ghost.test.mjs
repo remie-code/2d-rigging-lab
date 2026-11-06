@@ -13,6 +13,13 @@ test("discardGhostLabel: (discarded)（cockpit.html:828）", () => {
   assert.equal(discardGhostLabel(), "(discarded)");
 });
 
+test("discardGhostLabel: reason cough は咳と分かるラベル・blank と reason 無しは今のまま（文字・確率は出さない）", () => {
+  assert.equal(discardGhostLabel({ reason: "cough", text: "うん", speech: 0.05 }), "(咳として落とした)");
+  assert.equal(discardGhostLabel({ reason: "blank" }), "(discarded)");
+  assert.equal(discardGhostLabel({}), "(discarded)");
+  assert.equal(discardGhostLabel(null), "(discarded)");
+});
+
 test("diagnosticGhostLabel: 表示する型のラベル（cockpit.html:831-849）", () => {
   assert.equal(diagnosticGhostLabel({ type: "asrFailure" }), "(asr failed)");
   assert.equal(diagnosticGhostLabel({ type: "fireEmptyReply" }), "(fire: empty reply)");

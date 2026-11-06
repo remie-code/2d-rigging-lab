@@ -92,7 +92,9 @@
  *     操縦席にツマミは置かず、このファイルのキー `localSttThreads`（整数 1〜16）/ `localSttPreRollMs`（本物の音を
  *     前に含める長さ・0〜1000）/ `localSttSilencePadMs`（前後に足す作り物の無音・0〜1000）/ `localSttHotwords`
  *     （文字列の配列・Zipformer のみ効く・空配列 = なし）/ `localSttHotwordsScore`（hotwords の強さ・0.1〜10・既定 1.5）
- *     を手で書き換える。範囲外・型違いは既定。耳の Start ごとに
+ *     を手で書き換える。咳払いの落とし（段階 2・cough-filter-stage2-plan.md §1・§2 の 8）の `localSttCoughMaxChars`
+ *     （判定にかける文字数の上限・整数 0〜10・既定 4・0 = 判定しない）/ `localSttCoughSpeechThreshold`（Speech の確率の線・
+ *     0〜1・既定 0.1・0 = 落とさない）も同じ扱い（画面には出さない）。範囲外・型違いは既定。耳の Start ごとに
  *     読むので、次の Start から効く。
  *
  * ── read-modify-write（S3 追撃 domain-c・S5 で visionTarget・S6 で audioDevice/selfFireEnabled・
@@ -173,7 +175,7 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   setDiscordPrep: (patch: { guildId?: string | null; channelId?: string | null; sttEngine?: string | null }) => void;
  *   getDiscordVisionTarget: () => string | null;
  *   setDiscordVisionTarget: (title: string | null) => void;
- *   getLocalStt: () => { threads: number; preRollMs: number; silencePadMs: number; hotwords: string[]; hotwordsScore: number };
+ *   getLocalStt: () => { threads: number; preRollMs: number; silencePadMs: number; hotwords: string[]; hotwordsScore: number; coughMaxChars: number; coughSpeechThreshold: number };
  *   getConversationInstructionOverrides: () => Record<string, string>;
  *   getConversationInstruction: (brainId: string) => string | null;
  *   getConversationInstructionProfile: (brainId: string) => object;
@@ -434,7 +436,9 @@ export function createFileSettingsStore(options = {}) {
         preRollMs: all.localSttPreRollMs,
         silencePadMs: all.localSttSilencePadMs,
         hotwords: all.localSttHotwords,
-        hotwordsScore: all.localSttHotwordsScore
+        hotwordsScore: all.localSttHotwordsScore,
+        coughMaxChars: all.localSttCoughMaxChars,
+        coughSpeechThreshold: all.localSttCoughSpeechThreshold
       });
     },
     getConversationInstructionOverrides() {

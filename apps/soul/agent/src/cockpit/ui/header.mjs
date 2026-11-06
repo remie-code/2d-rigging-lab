@@ -28,6 +28,7 @@ import { statusPillView, quotaGaugeView, warningsView } from "../view-logic/glan
 import { killSwitchView } from "../view-logic/control.mjs";
 import { isRoleIdShape } from "../view-logic/role.mjs";
 import { venueConnectionView } from "../view-logic/discord.mjs";
+import { coughChipView } from "../view-logic/cough-chip.mjs";
 
 /**
  * Current public identity is supplied by the server. The UI validates the
@@ -117,11 +118,15 @@ export function QuotaGauge({ view }) {
  * （配信の組み直し Domain E: 開きかけ・閉じかけ（記録中）だけ状態のピルに出す）。名前（identity）はロールの名前。
  * Discord モード Domain G: Discord の場の間だけ、状態のピルの横に接続の状態（VC に入っている途中 / 入っている / 切れた・
  * snapshot の stream.connection）を名指しで出す。配信の場では何も足さない。
+ * 咳払いの落とし 段階 2（Domain B）: 状態のピルのすぐ隣に、咳として落とした区間の薄いグレーの札「咳 ×N」
+ * （coughChip = view-logic/cough-chip.mjs の状態・最後の咳から 8 秒で nowMs が消す）。札の置き場（.cough-slot）は
+ * 札が無いときも同じ幅で残し、札の出入りで帯の並びが動かないようにする。文字と確率は札の title だけ。
  * @param {{ identity?: unknown; modelText?: string; soul?: string; ears?: string; compacting?: boolean; stream?: any; warnings?: any[]; quota?: any;
- *   killed?: boolean; killError?: string; nowMs: number; onKill?: () => void; onRevive?: () => void }} props
+ *   coughChip?: any; killed?: boolean; killError?: string; nowMs: number; onKill?: () => void; onRevive?: () => void }} props
  */
-export function TopBar({ identity, modelText = "", soul, ears, compacting = false, stream = null, warnings, quota, killed = false, killError = "", nowMs, onKill, onRevive }) {
+export function TopBar({ identity, modelText = "", soul, ears, compacting = false, stream = null, warnings, quota, coughChip = null, killed = false, killError = "", nowMs, onKill, onRevive }) {
   const pill = statusPillView(soul, ears, compacting, stream);
+  const cough = coughChipView(coughChip, nowMs);
   const connection = venueConnectionView(stream);
   const warn = warningsView(warnings, nowMs);
   const killView = killSwitchView(killed);
@@ -132,6 +137,7 @@ export function TopBar({ identity, modelText = "", soul, ears, compacting = fals
       <h1 class="top-name">${identityDisplayName(identity)}</h1>
       ${modelText ? html`<span class="top-model">${modelText}</span>` : null}
       <span class=${pill.className}><span class="pill-dot"></span>${pill.text}</span>
+      <span class="cough-slot">${cough ? html`<span class=${cough.className} title=${cough.title}>${cough.text}</span>` : null}</span>
       ${connection ? html`<span class=${connection.className} title=${connection.title} role="status">${connection.text}</span>` : null}
       ${killView.killed ? html`<span class=${killView.statusClassName}>${killView.statusText}</span>` : null}
       <div class="top-warnings" role="status" aria-live="polite">

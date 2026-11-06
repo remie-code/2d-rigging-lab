@@ -33,7 +33,9 @@ test("local-stt-engines: 語彙と既定（スレッド 2・前 200ms・無音 3
     preRollMs: 200,
     silencePadMs: 300,
     hotwords: ["チャッピー", "コーディ"],
-    hotwordsScore: 1.5
+    hotwordsScore: 1.5,
+    coughMaxChars: 4,
+    coughSpeechThreshold: 0.1
   });
   assert.deepEqual([...LOCAL_STT_DEFAULTS.hotwords], ["チャッピー", "コーディ"]);
 });
@@ -44,10 +46,20 @@ test("local-stt-engines: 範囲外・型違いは既定に戻す（範囲内は�
     preRollMs: 0,
     silencePadMs: 1000,
     hotwords: [],
-    hotwordsScore: 3
+    hotwordsScore: 3,
+    coughMaxChars: 4,
+    coughSpeechThreshold: 0.1
   });
   const bad = normalizeLocalSttSettings({ threads: 0, preRollMs: -1, silencePadMs: 1001, hotwords: "チャッピー" });
-  assert.deepEqual(bad, { threads: 2, preRollMs: 200, silencePadMs: 300, hotwords: ["チャッピー", "コーディ"], hotwordsScore: 1.5 });
+  assert.deepEqual(bad, {
+    threads: 2,
+    preRollMs: 200,
+    silencePadMs: 300,
+    hotwords: ["チャッピー", "コーディ"],
+    hotwordsScore: 1.5,
+    coughMaxChars: 4,
+    coughSpeechThreshold: 0.1
+  });
   // hotwords の強さ（localSttHotwordsScore）: 0.1〜10・範囲外と数でない値は既定 1.5。
   assert.equal(normalizeLocalSttSettings({ hotwordsScore: 0.1 }).hotwordsScore, 0.1);
   assert.equal(normalizeLocalSttSettings({ hotwordsScore: 10 }).hotwordsScore, 10);
@@ -58,6 +70,28 @@ test("local-stt-engines: 範囲外・型違いは既定に戻す（範囲内は�
   assert.equal(normalizeLocalSttSettings({ threads: 17 }).threads, 2);
   assert.equal(normalizeLocalSttSettings({ threads: "4" }).threads, 2);
   assert.equal(normalizeLocalSttSettings({ preRollMs: Number.NaN }).preRollMs, 200);
+});
+
+test("local-stt-engines: 咳払いの落としの 2 つの数（文字数の上限 整数 0〜10・既定 4 / Speech の線 0〜1・既定 0.1）・範囲外と型違いは既定", () => {
+  assert.equal(LOCAL_STT_DEFAULTS.coughMaxChars, 4);
+  assert.equal(LOCAL_STT_DEFAULTS.coughSpeechThreshold, 0.1);
+  // 文字数の上限: 0（判定しない）と 10 は範囲内。整数でない・範囲外・文字列は既定 4。
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: 0 }).coughMaxChars, 0);
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: 10 }).coughMaxChars, 10);
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: 6 }).coughMaxChars, 6);
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: 11 }).coughMaxChars, 4);
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: -1 }).coughMaxChars, 4);
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: 3.5 }).coughMaxChars, 4);
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: "3" }).coughMaxChars, 4);
+  assert.equal(normalizeLocalSttSettings({ coughMaxChars: null }).coughMaxChars, 4);
+  // Speech の線: 0（落とさない）と 1 は範囲内。範囲外・NaN・文字列は既定 0.1。
+  assert.equal(normalizeLocalSttSettings({ coughSpeechThreshold: 0 }).coughSpeechThreshold, 0);
+  assert.equal(normalizeLocalSttSettings({ coughSpeechThreshold: 1 }).coughSpeechThreshold, 1);
+  assert.equal(normalizeLocalSttSettings({ coughSpeechThreshold: 0.25 }).coughSpeechThreshold, 0.25);
+  assert.equal(normalizeLocalSttSettings({ coughSpeechThreshold: 1.01 }).coughSpeechThreshold, 0.1);
+  assert.equal(normalizeLocalSttSettings({ coughSpeechThreshold: -0.1 }).coughSpeechThreshold, 0.1);
+  assert.equal(normalizeLocalSttSettings({ coughSpeechThreshold: Number.NaN }).coughSpeechThreshold, 0.1);
+  assert.equal(normalizeLocalSttSettings({ coughSpeechThreshold: "0.2" }).coughSpeechThreshold, 0.1);
 });
 
 test("local-stt-engines: hotwords の正規化（空白を落とす・重複なし・使える語が無い非空配列は既定）", () => {

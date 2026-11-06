@@ -29,6 +29,8 @@ const PARENT_MODULES = [
   "src/ears/local-stt/local-stt-client.mjs",
   "src/ears/local-stt/local-stt-engines.mjs",
   "src/ears/local-stt/local-stt-worker-core.mjs",
+  // 音の種類の判定（CED-tiny）の置き場と純関数（咳払いの落とし 段階 2・親と子の両方が読む）。
+  "src/ears/local-stt/audio-tagging.mjs",
   "src/cli/ears-cli.mjs",
   // 咳払いの聞き取り実験の親（耳の VAD を動かす側）と、子と共有する純関数・子の中身。
   "scripts/cough-experiment.mjs",
