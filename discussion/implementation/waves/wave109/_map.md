@@ -21,5 +21,5 @@
 
 ## Scope Boundary
 
-- This is specialized post-Wave102 render/export-contract evidence. It does not reopen or extend the accepted Wave102 Editor mainline stop.
+- This is later specialized render/export-contract evidence, indexed separately from the temporary Wave102 completion milestone.
 - The change is authoring-core-only and reconciles Wave108's content-sub-rect `uvRect` contract; package schema, renderers, Editor UI, and Runtime Player behavior were reported unchanged.

@@ -16,4 +16,4 @@
 ## Historical / Current Boundary
 
 - The review report records Wave109-time evidence and a pending wave gate in its source text. Later Git history records commit `899cb2e`; this index does not add an unrecorded final clean review or device acceptance claim.
-- Wave109 remains a specialized post-Wave102 contract correction and does not reopen the accepted Editor mainline stopping decision.
+- Wave109 is a later specialized render/export contract correction; its evidence does not establish final completion of the whole wave.

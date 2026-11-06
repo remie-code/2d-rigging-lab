@@ -44,4 +44,4 @@
 ## Next Actions
 
 1. Orch-Sylph should accept this Domain D closeout refresh and report Wave61 final `pass` to Undine.
-2. Historical note: Wave61 was the implementation-proven Editor GUI baseline at its 2026-06-10 closeout. The accepted Editor mainline stopping baseline is Wave102; consult the root/implementation maps for current planning scope.
+2. Historical note: Wave61 was the implementation-proven Editor GUI baseline at its 2026-06-10 closeout. The 2026-07-02 map recorded temporary completion at Wave102; consult the root/implementation maps for current planning scope.

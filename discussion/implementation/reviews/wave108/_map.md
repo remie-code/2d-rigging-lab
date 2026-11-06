@@ -2,7 +2,7 @@
 
 > Lightweight map for Wave108 `boundary-transparent-margin` (A1, Option E) Review-Sylph artifacts.
 
-> Historical review index: gate and residual wording is frozen at Wave108 closeout; later Wave109 evidence is indexed separately and does not reopen the Wave102 Editor mainline stop.
+> Historical review index: gate and residual wording is frozen at Wave108 closeout; later Wave109 evidence is indexed separately.
 
 ## Entries
 

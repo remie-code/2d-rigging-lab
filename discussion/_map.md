@@ -17,6 +17,10 @@
 - Live2D Feature Proposal。
 - Future Public Clean Subset。
 
+## Editorの開発はどこまで進んでいる？
+
+PSD取込・Canvas/構造編集、mesh/deformer/parameter/keyform、保存再開・Viewer、Atlas/Variant/exportまで実装・レビュー記録がある。Wave102で一旦完成・停止と記録した後も、mesh改修・描画性能改善・Electron移行、Canvas評価修正などを継続した。現在の能力と各確認範囲は [implementationの問い別入口](implementation/_map.md#editorの開発はどこまで進んでいるから辿る) から辿る。現HEADの全機能を再認証した一覧ではなく、ElectronのPSD E2Eや実機/GPU等の残債は各topicに残る。
+
 ## 直下のファイル
 
 | Path | Role | Status |
@@ -35,7 +39,7 @@
 | [demo/](demo/) | Streaming Demo Surfaceの表示範囲、避けるもの、preflight、disclaimer | policy は current。rights-clean fixture、最終 disclaimer/UI、preflight は user/legal gate |
 | [proposal/](proposal/) | Live2D Feature Proposalのテンプレート、提案draft、非目標 | template は current。最初の proposal target は未決 |
 | [development_convention/](development_convention/) | P0/P1開発規約、source file organization規約、basis、統合レビュー成果物 | 旧 `/goal` 向け orchestration policy は破棄済み。現行規約は実装・review に適用 |
-| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | **Wave102 を Editor mainline の計画停止点として維持**。W103–109 は specialized evidence として別索引。詳細は下層mapへ委譲 |
+| [implementation/](implementation/) | 実装オーケストレーション、wave計画、domain completion、review、integration、final report | Wave102で一旦完成・停止した後も、mesh/performance/Electron等で部分的に開発を継続。W103–109 は specialized evidence として別索引。詳細は下層mapへ委譲 |
 | [runtime-player/](runtime-player/) | Editor外のRuntime Player / Capture Host appの調査、UX、設計、未決事項 | W1–20 source/review pass、W21 Domain A/B pass・C pending、W22/23 source/test pass。real-device/OBS/製品 gate は未完了 |
 | [model-authoring/](model-authoring/) | LLM(Fable)によるモデル制作挑戦の前提合意、閉問題、制作定石 | 装備と閉問題01–19・craft second cycle は完了。PNG再認証、strict-ref/sidecar portability、次scopeは user gate |
 | [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | v6D default + v7 comparison toggle。v6/v7品質 hold と Wave2/v6削除は未決。W108/109 render/data contract は完了 |
@@ -60,8 +64,8 @@
 | Demo / Proposal | `demo/streaming-demo-policy.md` と `proposal/live2d-feature-proposal-template.md` を追加済み |
 | Codex-friendly automation | [design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) で、Editor/repoは提案・推論・自動分類を行わず、外部Codex/LLMが人間同等操作をdeterministic API経由で実行する方針をAccepted user decisionとして記録済み |
 | Development Convention | `development_convention/` にP0/P1規約16本とsource file organization規約を追加済み。旧 `implementation-orchestration-policy.md` と `/goal` companion文書は破棄済み |
-| Implementation baseline | **Editor mainline は Wave102 をもって計画停止（ユーザー決定、2026-07-02記録）**。修復済みの [implementation/_map.md](implementation/_map.md) / [implementation/orchestration/_map.md](implementation/orchestration/_map.md) が W0–109 の索引を所有し、W103–109 は specialized evidence として別扱い。`current-capability-map.md` / `remaining-work-backlog.md` は dated snapshot |
-| Current implementation work | Editor mainline の計画は Wave102 で停止。以後もmesh/performance/Electronのtopic実装と9月Canvas評価修正・10月共通操作ログ撤去がある。「利用者が何をできるか」と停止後の進展は [implementation地図の問い別入口](implementation/_map.md#editorの開発はどこまで進んでいるから辿る) へ。主戦場は [model-authoring/](model-authoring/) と [runtime-player/](runtime-player/) の topic family |
+| Implementation baseline | 2026-07-02の地図には **Editor実装はWave102で一旦完成・停止** と記録（Git `3b4ed2de`）。恒久的な計画停止・再承認条件を定めた原記録ではない。修復済みの [implementation/_map.md](implementation/_map.md) / [implementation/orchestration/_map.md](implementation/orchestration/_map.md) が W0–109 の索引を所有し、W103–109 は specialized evidence として別扱い。`current-capability-map.md` / `remaining-work-backlog.md` は dated snapshot |
+| Current implementation work | Wave102で一旦完成・停止と記録した後も、Editorの開発は部分的に続いている。以後もmesh/performance/Electronのtopic実装と9月Canvas評価修正・10月共通操作ログ撤去がある。「利用者が何をできるか」と停止後の進展は [implementation地図の問い別入口](implementation/_map.md#editorの開発はどこまで進んでいるから辿る) へ。Editorで作ったモデルの制作・利用を追う先は [model-authoring/](model-authoring/) と [runtime-player/](runtime-player/) |
 | Implementation maps | 次Wave判断は [implementation/_map.md](implementation/_map.md)、[implementation/orchestration/_map.md](implementation/orchestration/_map.md)、各 specialized map を basis とする。Wave54-era capability/backlog は単独の current oracle ではない |
 | Runtime Player topic | 現在の入口は [runtime-player/_map.md](runtime-player/_map.md) と [runtime-player/implementation/_map.md](runtime-player/implementation/_map.md)。W1–20 source/review pass、W21 Domain A/B pass・C pending、W22/23 source/test passを索引し、W11/W20/W21/W22/W23 の実機・製品 gate（iFacialMocap/OBS/ライフサイクル/母音）は未完了 |
 | memo/new_concept.md対応 | `discussion/`文書移行は完了扱い。実装・法務・素材・提案テーマ・Future公開subsetは別課題 |
@@ -73,7 +77,7 @@
 
 ## 次の行動
 
-1. 次の実装判断では [implementation/_map.md](implementation/_map.md)、[implementation/orchestration/_map.md](implementation/orchestration/_map.md)、各 specialized W103–109 map、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) を basis とし、Editor mainline は Wave102 停止として扱う。`current-capability-map.md` / `remaining-work-backlog.md` は dated snapshot。
+1. 次の実装判断では [implementation/_map.md](implementation/_map.md)、[implementation/orchestration/_map.md](implementation/orchestration/_map.md)、各 specialized W103–109 map、[design/codex-friendly-automation-policy.md](design/codex-friendly-automation-policy.md) を basis とし、Wave102時点の一旦完成・停止と、その後の部分再開を分けて読む。`current-capability-map.md` / `remaining-work-backlog.md` は dated snapshot。
 2. external HTTP / WebSocket / MCP API work と LLM provider integration の Future scope 指定は、[ai-cohost/concept/mvp-boundary-amendment.md](ai-cohost/concept/mvp-boundary-amendment.md)(**改定二号=特区憲章 2026-07-11**)に従う。runtime-player の loopback 操縦チャネルと生理層生成器は解禁、LLM provider integration・知覚は `apps/soul` 特区内のみ許可、特区外は禁止。それ以外の external API は Future scope。
 3. Dynamics v3/profile-v2 の Domain-09 AC/scenario traceability・cardinality 表現は user decision として [acceptance-criteria/](acceptance-criteria/) / [scenarios/](scenarios/) / [design/dynamics-world-frame-chain.md](design/dynamics-world-frame-chain.md) を照合する。
 4. Runtime Player は [runtime-player/_map.md](runtime-player/_map.md) と [runtime-player/implementation/_map.md](runtime-player/implementation/_map.md) を入口にし、W21 Domain C、W11/W20/W22/W23 の iFacialMocap/OBS/ライフサイクル/母音 gate を実機で確認する。
