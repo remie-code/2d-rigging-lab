@@ -241,3 +241,43 @@ test("displayName: 非文字列は throw（軽い型検証・呼び出し側の�
   );
   assert.equal(buffer.size(), 0); // 失敗 append は何も残さない
 });
+
+// ── 咳払いの落とし（段階 2・cough-filter-stage2-plan.md §2 の 4）──────────────────────────────
+
+test("discard(cough): 積まずに discarded を数え、onDiscard に reason cough と speech を流す（blank と同じ口）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
+  /** @type {any[]} */
+  const seen = [];
+  buffer.onDiscard((info) => seen.push(info));
+  /** @type {any[]} */
+  const appended = [];
+  buffer.onAppend((e) => appended.push(e));
+  const r = buffer.discard({ startMs: 100, endMs: 400, text: "うん", reason: "cough", speech: 0.05 });
+  assert.deepEqual(r, { appended: false, entry: null, reason: "cough" });
+  assert.equal(buffer.size(), 0, "正本に積まない");
+  assert.equal(appended.length, 0, "onAppend は呼ばない");
+  assert.deepEqual(buffer.stats(), { appended: 0, discarded: 1 });
+  assert.deepEqual(seen, [{ startMs: 100, endMs: 400, text: "うん", reason: "cough", speech: 0.05 }]);
+  assert.ok(Object.isFrozen(seen[0]));
+  // 空転写の形は今のまま（speech を持たない）。数は 1 つの数え方で続く。
+  buffer.append({ startMs: 500, endMs: 600, text: "  " });
+  assert.deepEqual(seen[1], { startMs: 500, endMs: 600, text: "  ", reason: "blank" });
+  assert.deepEqual(buffer.stats(), { appended: 0, discarded: 2 });
+});
+
+test("discard: 不正な入力は throw して何も数えない（理由は cough だけ・speech は有限の数・範囲の確かめ）", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 0 });
+  /** @type {any[]} */
+  const seen = [];
+  buffer.onDiscard((info) => seen.push(info));
+  const ok = { startMs: 0, endMs: 10, text: "うん", reason: "cough", speech: 0.05 };
+  assert.throws(() => buffer.discard(/** @type {any} */ (null)), TypeError);
+  assert.throws(() => buffer.discard(/** @type {any} */ ({ ...ok, reason: "blank" })), RangeError);
+  assert.throws(() => buffer.discard(/** @type {any} */ ({ ...ok, reason: "other" })), RangeError);
+  assert.throws(() => buffer.discard(/** @type {any} */ ({ ...ok, speech: null })), TypeError);
+  assert.throws(() => buffer.discard(/** @type {any} */ ({ ...ok, speech: Number.NaN })), TypeError);
+  assert.throws(() => buffer.discard(/** @type {any} */ ({ ...ok, text: 1 })), TypeError);
+  assert.throws(() => buffer.discard(/** @type {any} */ ({ ...ok, startMs: 20 })), RangeError);
+  assert.deepEqual(buffer.stats(), { appended: 0, discarded: 0 });
+  assert.equal(seen.length, 0);
+});

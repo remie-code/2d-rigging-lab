@@ -10,7 +10,10 @@ import {
   fetchLocalSttModels,
   parseFetchArgs,
   PARAKEET_HF_BASE,
-  ZIPFORMER_ARCHIVE_URL
+  ZIPFORMER_ARCHIVE_URL,
+  CED_TINY_ARCHIVE_URL,
+  CED_TINY_ARCHIVE_DIR,
+  FETCH_TARGETS
 } from "./fetch-local-stt-models.mjs";
 
 // 取得のコマンドの機械テスト。ネットワークには出ない（fetch は偽物・揃っている場合は fetch を呼ばない）。
@@ -110,5 +113,68 @@ test("fetch-local-stt-models: 引数（--only / --models-dir / --dry-run・未�
     modelsDir: "/x"
   });
   assert.throws(() => parseFetchArgs(["--only", "whisper"]), /unknown engine/);
+  assert.deepEqual(parseFetchArgs(["--only", "zipformer,ced-tiny"]).only, ["zipformer", "ced-tiny"]);
   assert.throws(() => parseFetchArgs(["--bogus"]), /unknown argument/);
+});
+
+test("fetch-local-stt-models: CED-tiny（音の種類の判定）は既定で足りなければ取る・--only ced-tiny で CED だけ・配布元は audio-tagging-models", async () => {
+  assert.deepEqual([...FETCH_TARGETS], ["parakeet", "zipformer", "ced-tiny"]);
+  assert.equal(
+    CED_TINY_ARCHIVE_URL,
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/audio-tagging-models/sherpa-onnx-ced-tiny-audio-tagging-2024-04-19.tar.bz2"
+  );
+  assert.equal(CED_TINY_ARCHIVE_DIR, "sherpa-onnx-ced-tiny-audio-tagging-2024-04-19");
+  // 既定（--only なし・空）は文字起こしのエンジンと CED-tiny（咳払いの落とし 段階 2 §4 A の 7）。
+  assert.deepEqual(
+    planLocalSttModelFetch({ modelsDir: "/m", existsImpl: () => false }).map((p) => p.engine),
+    ["parakeet", "zipformer", "ced-tiny"]
+  );
+  assert.deepEqual(
+    planLocalSttModelFetch({ modelsDir: "/m", only: [], existsImpl: () => false }).map((p) => p.engine),
+    ["parakeet", "zipformer", "ced-tiny"]
+  );
+  // 既定でも揃っているものは載らない（文字起こしのモデルが揃っていて CED だけ無ければ CED だけ）。
+  const cedOnlyMissing = planLocalSttModelFetch({ modelsDir: "/m", existsImpl: (p) => !p.includes("ced-tiny") });
+  assert.deepEqual(cedOnlyMissing.map((p) => p.engine), ["ced-tiny"]);
+  assert.deepEqual(cedOnlyMissing[0].missing.map((m) => m.name), ["model.int8.onnx", "class_labels_indices.csv"]);
+  assert.deepEqual(
+    planLocalSttModelFetch({ modelsDir: "/m", existsImpl: (p) => p.includes("ced-tiny") }).map((p) => p.engine),
+    ["parakeet", "zipformer"]
+  );
+  // --only に文字起こしのエンジンだけを挙げたら CED は取らない。
+  assert.deepEqual(
+    planLocalSttModelFetch({ modelsDir: "/m", only: ["parakeet", "zipformer"], existsImpl: () => false }).map((p) => p.engine),
+    ["parakeet", "zipformer"]
+  );
+  const plan = planLocalSttModelFetch({ modelsDir: "/m", only: ["ced-tiny"], existsImpl: () => false });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].engine, "ced-tiny");
+  assert.equal(plan[0].dir, path.join("/m", "ced-tiny-audio-tagging-2024-04-19-int8"));
+  assert.deepEqual(plan[0].missing.map((m) => m.name), ["model.int8.onnx", "class_labels_indices.csv"]);
+  assert.deepEqual(planLocalSttModelFetch({ modelsDir: "/m", only: ["ced-tiny"], existsImpl: () => true }), []);
+
+  // 取得はアーカイブ 1 つ（偽物の fetch が 404 → throw・揃った扱いにしない）。
+  const dir = mkdtempSync(path.join(tmpdir(), "fetch-local-stt-"));
+  try {
+    /** @type {string[]} */
+    const urls = [];
+    await assert.rejects(
+      fetchLocalSttModels({
+        modelsDir: dir,
+        only: ["ced-tiny"],
+        fetchImpl: /** @type {any} */ (
+          async (/** @type {string} */ url) => {
+            urls.push(url);
+            return new Response("nope", { status: 404, statusText: "Not Found" });
+          }
+        ),
+        log: () => {}
+      }),
+      /download failed: 404/
+    );
+    assert.deepEqual(urls, [CED_TINY_ARCHIVE_URL]);
+    assert.equal(planLocalSttModelFetch({ modelsDir: dir, only: ["ced-tiny"] })[0].missing.length, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createEarPipeline, EAR_DEFAULTS } from "./ear-pipeline.mjs";
+import { createEarPipeline, EAR_DEFAULTS, coughSpeechToDrop, audioTaggingOffCause } from "./ear-pipeline.mjs";
+import { createTranscriptBuffer } from "./transcript-buffer.mjs";
 import { sinePcm, silencePcm, concatInt16, int16ToBytesLE } from "./fixtures-audio.mjs";
 import { wavDurationSec } from "../voice/wav-duration.mjs";
 import { DEFAULT_WHISPER_PROMPT } from "./whisper-inference.mjs";
@@ -890,4 +891,272 @@ test("ear-pipeline(local): ready の失敗（モデル読み込みの失敗）�
   assert.equal(h.record.captureOptions, null);
   assert.equal(h.record.disposed.vad, true);
   assert.equal(local.rec.disposed, true);
+});
+
+// ── 咳払いの落とし（段階 2・cough-filter-stage2-plan.md §4 A の 2・4・5・6）──────────────────────────
+//  子プロセスの係は偽物（localSttFactory）。判定の結果（speech）と ready の audioTagging を偽物が返す。本物の sherpa・CED-tiny は使わない。
+
+/**
+ * 咳の判定の結果を返す偽物のローカル文字起こしの係。
+ * @param {{ results?: Array<{ text: string; speech: number | null; tagged?: boolean }>; audioTagging?: any }} [p]
+ */
+function makeCoughLocalStt({ results = [], audioTagging = { enabled: true, reason: null } } = {}) {
+  const rec = { /** @type {any[]} */ options: [], calls: 0 };
+  const factory = (/** @type {any} */ opts) => {
+    rec.options.push(opts);
+    const info = {
+      loadMs: 10,
+      decodingMethod: "greedy_search",
+      hotwordsUsed: [],
+      hotwordsDropped: [],
+      ...(audioTagging === null ? {} : { audioTagging })
+    };
+    opts.onReady?.(info);
+    return {
+      ready: Promise.resolve(info),
+      async transcribe() {
+        const r = results[rec.calls] ?? { text: "ふつうの話", speech: null };
+        rec.calls += 1;
+        const tagged = r.tagged ?? r.speech !== null;
+        return { text: r.text, rawText: r.text, ms: 5, tagged, speech: r.speech, tagMs: tagged ? 12 : null };
+      },
+      hasExited: () => false,
+      isDisposed: () => false,
+      pending: () => 0,
+      dispose() {}
+    };
+  };
+  return { factory: /** @type {any} */ (factory), rec };
+}
+
+/**
+ * ローカルの耳（transcribeImpl を渡さない = 子の係の transcribe を使う）で発話を流し、捨てた / 積んだを集める。
+ * @param {{ local?: object; results: Array<{ text: string; speech: number | null; tagged?: boolean }>; transcriptBuffer?: any }} p
+ */
+async function runCoughEar({ local = {}, results, transcriptBuffer }) {
+  const fake = makeCoughLocalStt({ results });
+  const record = { /** @type {any} */ captureOptions: null };
+  /** @type {any[]} */
+  const transcripts = [];
+  /** @type {any[]} */
+  const diagnostics = [];
+  const pipeline = createEarPipeline({
+    segmenter: { minSpeechMs: 100, minSilenceMs: 64, speechPadMs: 0 },
+    stt: { engine: "zipformer", local },
+    localSttFactory: fake.factory,
+    ...(transcriptBuffer ? { transcriptBuffer } : {}),
+    captureFactory: /** @type {any} */ (
+      (/** @type {any} */ o) => {
+        record.captureOptions = o;
+        return { dispose() {} };
+      }
+    ),
+    vadFactory: /** @type {any} */ (
+      () => ({
+        async init() {},
+        async process(/** @type {Float32Array} */ f) {
+          let s = 0;
+          for (let i = 0; i < f.length; i += 1) s += f[i] * f[i];
+          return Math.sqrt(s / f.length) > 0.1 ? 0.9 : 0.05;
+        },
+        reset() {},
+        async dispose() {}
+      })
+    ),
+    onTranscript: (entry) => transcripts.push(entry),
+    onDiagnostic: (d) => diagnostics.push(d)
+  });
+  const buffer = pipeline.transcriptBuffer;
+  /** @type {any[]} */
+  const discards = [];
+  buffer.onDiscard((info) => discards.push(info));
+  await pipeline.start();
+  try {
+    for (let i = 0; i < results.length; i += 1) {
+      record.captureOptions.onPcm(int16ToBytesLE(longLeadPcm()));
+      await until(() => fake.rec.calls === i + 1, 3000, `transcribe ${i + 1}`);
+      await until(() => pipeline.stats().asrDone === i + 1, 3000, `asr done ${i + 1}`);
+    }
+    return { pipeline, fake, transcripts, diagnostics, discards, stats: pipeline.stats(), buffer };
+  } finally {
+    await pipeline.dispose();
+  }
+}
+
+test("coughSpeechToDrop: 線より低いときだけ落とす（線ちょうど・null・線 0・上限超え・上限 0 は通す）", () => {
+  const s = { coughMaxChars: 4, coughSpeechThreshold: 0.1 };
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: 0.05 }, s), 0.05);
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: 0 }, s), 0);
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: 0.1 }, s), null, "線ちょうどは通す");
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: 0.5 }, s), null);
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: null }, s), null, "判定にかけていない");
+  assert.equal(coughSpeechToDrop({ text: "うん" }, s), null, "whisper / ElevenLabs の戻り（speech を持たない）");
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: Number.NaN }, s), null);
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: 0.05 }, { ...s, coughSpeechThreshold: 0 }), null, "線 0 は落とさない");
+  assert.equal(coughSpeechToDrop({ text: "こんにちは", speech: 0.01 }, s), null, "上限（4 文字）を超えた区間は通す");
+  assert.equal(coughSpeechToDrop({ text: "う ん ん ん", speech: 0.01 }, s), 0.01, "空白は数えない（4 文字）");
+  assert.equal(coughSpeechToDrop({ text: "うん", speech: 0.01 }, { ...s, coughMaxChars: 0 }), null, "上限 0 は判定しない");
+  assert.equal(coughSpeechToDrop({ text: "   ", speech: 0.01 }, s), null, "空は blank の側");
+});
+
+test("audioTaggingOffCause: 子の理由 → 決まった語（理由の文言は外へ出さない）", () => {
+  assert.equal(audioTaggingOffCause("not configured"), "not-configured");
+  assert.equal(audioTaggingOffCause("disabled (max chars is 0)"), "disabled");
+  assert.equal(audioTaggingOffCause("audio tagging model not found (missing model.int8.onnx)"), "model-not-found");
+  assert.equal(audioTaggingOffCause("failed to load: C:\\Users\\someone\\vendor\\models\\x.onnx"), "failed-to-load");
+  assert.equal(audioTaggingOffCause("worker did not report audio tagging"), "failed-to-load");
+  assert.equal(audioTaggingOffCause(undefined), "failed-to-load");
+});
+
+test("ear-pipeline(local・咳): 文字数の上限と線が子の係へ・既定 4 / 範囲外は既定 / 0 は 0", async () => {
+  for (const [local, expected] of /** @type {Array<[object, number]>} */ ([
+    [{}, 4],
+    [{ coughMaxChars: 6 }, 6],
+    [{ coughMaxChars: 0 }, 0],
+    [{ coughMaxChars: 11 }, 4]
+  ])) {
+    const fake = makeCoughLocalStt();
+    const h = makeHarness({ pipelineOptions: { stt: { engine: "zipformer", local }, localSttFactory: fake.factory } });
+    await h.pipeline.start();
+    await h.pipeline.dispose();
+    assert.equal(fake.rec.options[0].audioTaggingMaxChars, expected, JSON.stringify(local));
+  }
+  // client の上書き（テスト注入の口）より上限が後に来る（client で消せない）。
+  const fake = makeCoughLocalStt();
+  const h = makeHarness({
+    pipelineOptions: { stt: { engine: "zipformer", local: { coughMaxChars: 3, client: { audioTaggingMaxChars: 9 } } }, localSttFactory: fake.factory }
+  });
+  await h.pipeline.start();
+  await h.pipeline.dispose();
+  assert.equal(fake.rec.options[0].audioTaggingMaxChars, 3);
+});
+
+test("ear-pipeline(local・咳): Speech が線より低ければ正本に積まずに落とす（reason cough・discarded に数える・診断に文字と確率を載せない）", async () => {
+  const r = await runCoughEar({ results: [{ text: "うん", speech: 0.05 }] });
+  assert.equal(r.buffer.size(), 0, "正本に積まない");
+  assert.equal(r.transcripts.length, 0, "onTranscript を呼ばない");
+  assert.deepEqual(r.buffer.stats(), { appended: 0, discarded: 1 });
+  assert.equal(r.stats.coughDropped, 1);
+  assert.equal(r.stats.asrDone, 1, "発話としては成功");
+  assert.equal(r.discards.length, 1);
+  assert.equal(r.discards[0].reason, "cough");
+  assert.equal(r.discards[0].text, "うん");
+  assert.equal(r.discards[0].speech, 0.05);
+  const disc = r.diagnostics.filter((d) => d.type === "transcriptDiscarded");
+  assert.equal(disc.length, 1);
+  assert.deepEqual(Object.keys(disc[0]).sort(), ["endMs", "latencyMs", "reason", "startMs", "type"]);
+  assert.equal(disc[0].reason, "cough");
+  // 診断のどれにも文字と確率が載らない（ears-cli は診断を丸ごと stderr に出す）。
+  const wire = JSON.stringify(r.diagnostics);
+  assert.equal(wire.includes("うん"), false);
+  assert.equal(wire.includes("0.05"), false);
+  assert.equal(r.diagnostics.some((d) => "speech" in d || "text" in d), false);
+});
+
+test("ear-pipeline(local・咳): 境界 — 線ちょうど・null・線 0・上限超え・上限 0 は今までどおり積む", async () => {
+  const pass = await runCoughEar({
+    results: [
+      { text: "うん", speech: 0.1 }, // 線ちょうど
+      { text: "うん", speech: null }, // 判定にかけていない（失敗も同じ）
+      { text: "こんにちは", speech: 0.01, tagged: true } // 上限超え（子は判定しないはずだが、親でも通す側）
+    ]
+  });
+  assert.deepEqual(pass.buffer.all().map((e) => e.text), ["うん", "うん", "こんにちは"]);
+  assert.equal(pass.stats.coughDropped, 0);
+  assert.equal(pass.discards.length, 0);
+  assert.equal(pass.transcripts.length, 3);
+
+  const zeroLine = await runCoughEar({ local: { coughSpeechThreshold: 0 }, results: [{ text: "うん", speech: 0 }] });
+  assert.deepEqual(zeroLine.buffer.all().map((e) => e.text), ["うん"], "線 0 は落とさない");
+
+  const zeroMax = await runCoughEar({ local: { coughMaxChars: 0 }, results: [{ text: "うん", speech: 0.01 }] });
+  assert.deepEqual(zeroMax.buffer.all().map((e) => e.text), ["うん"], "上限 0 は判定しない");
+
+  const higherLine = await runCoughEar({ local: { coughSpeechThreshold: 0.5 }, results: [{ text: "うん", speech: 0.3 }] });
+  assert.equal(higherLine.buffer.size(), 0, "線は設定で変わる");
+  assert.equal(higherLine.discards[0].speech, 0.3);
+});
+
+test("ear-pipeline(local・咳): 外から渡された正本（場・Discord）でも同じ口で落ちる（その耳の onTranscript は呼ばない）", async () => {
+  const external = createTranscriptBuffer({ nowImpl: () => 0 });
+  /** @type {any[]} */
+  const seen = [];
+  external.onDiscard((info) => seen.push(info));
+  const r = await runCoughEar({ results: [{ text: "ん", speech: 0.02 }, { text: "はい", speech: 0.9 }], transcriptBuffer: external });
+  assert.deepEqual(external.all().map((e) => e.text), ["はい"]);
+  assert.deepEqual(external.stats(), { appended: 1, discarded: 1 });
+  assert.deepEqual(seen, [{ startMs: seen[0].startMs, endMs: seen[0].endMs, text: "ん", reason: "cough", speech: 0.02 }]);
+  assert.deepEqual(r.transcripts.map((e) => e.text), ["はい"]);
+});
+
+test("ear-pipeline(whisper・ElevenLabs): 咳の比べはしない（speech を返す偽物の whisper でも・線を 1 にしても積む）", async () => {
+  const w = makeHarness({
+    pipelineOptions: { stt: { engine: "whisper", local: { coughSpeechThreshold: 1 } } },
+    transcribeImpl: async () => ({ text: "うん", rawText: "うん", speech: 0.01 })
+  });
+  await w.pipeline.start();
+  try {
+    w.feedUtterance(480);
+    await until(() => w.pipeline.transcriptBuffer.size() === 1, 3000, "whisper appended");
+    assert.equal(w.pipeline.transcriptBuffer.all()[0].text, "うん");
+    assert.equal(w.pipeline.stats().coughDropped, 0);
+    assert.equal(w.record.diagnostics.some((d) => d.type === "transcriptDiscarded" || d.type === "audioTaggingOff"), false);
+  } finally {
+    await w.pipeline.dispose();
+  }
+
+  const wsClass = createFakeWebSocketClass();
+  const e = makeHarness({
+    pipelineOptions: {
+      stt: {
+        engine: "elevenlabs",
+        apiKey: "sk_fake",
+        elevenLabs: { WebSocketImpl: wsClass.FakeWebSocket },
+        local: { coughSpeechThreshold: 1 }
+      }
+    }
+  });
+  const p = e.pipeline.start();
+  await until(() => wsClass.sockets.length === 1, 3000, "websocket created");
+  wsClass.last().serverSessionStarted();
+  await p;
+  try {
+    wsClass.last().serverCommit("うん");
+    assert.deepEqual(e.pipeline.transcriptBuffer.all().map((x) => x.text), ["うん"]);
+    assert.equal(e.pipeline.stats().coughDropped, 0);
+    assert.equal(e.record.diagnostics.some((d) => d.type === "transcriptDiscarded" || d.type === "audioTaggingOff"), false);
+  } finally {
+    await e.pipeline.dispose();
+  }
+});
+
+test("ear-pipeline(local・咳): 判定なしでも Start は成功・audioTaggingOff は決まった語だけ（子の理由の文言・パスを出さない）・判定ありなら出さない", async () => {
+  /** @param {any} audioTagging */
+  const startWith = async (audioTagging) => {
+    const fake = makeCoughLocalStt({ audioTagging });
+    const h = makeHarness({ pipelineOptions: { stt: { engine: "zipformer" }, localSttFactory: fake.factory } });
+    await h.pipeline.start();
+    await h.pipeline.dispose();
+    return h.record.diagnostics;
+  };
+  const on = await startWith({ enabled: true, reason: null });
+  assert.equal(on.find((d) => d.type === "localSttReady").audioTagging, true);
+  assert.equal(on.some((d) => d.type === "audioTaggingOff"), false);
+
+  const missing = await startWith({ enabled: false, reason: "audio tagging model not found (missing model.int8.onnx)" });
+  assert.equal(missing.find((d) => d.type === "localSttReady").audioTagging, false);
+  assert.deepEqual(missing.find((d) => d.type === "audioTaggingOff"), { type: "audioTaggingOff", engine: "zipformer", reason: "model-not-found" });
+
+  const secretPath = "C:\\Users\\someone\\secret-dir\\model.int8.onnx";
+  const failed = await startWith({ enabled: false, reason: `failed to load: cannot open ${secretPath}` });
+  assert.deepEqual(failed.find((d) => d.type === "audioTaggingOff"), { type: "audioTaggingOff", engine: "zipformer", reason: "failed-to-load" });
+  assert.equal(JSON.stringify(failed).includes("secret-dir"), false, "子の理由の文言（パス）を診断に出さない");
+
+  const disabled = await startWith({ enabled: false, reason: "disabled (max chars is 0)" });
+  assert.equal(disabled.find((d) => d.type === "audioTaggingOff").reason, "disabled");
+
+  // 古い偽物（audioTagging を知らせない）は判定なしの診断を出さない。
+  const legacy = await startWith(null);
+  assert.equal(legacy.find((d) => d.type === "localSttReady").audioTagging, false);
+  assert.equal(legacy.some((d) => d.type === "audioTaggingOff"), false);
 });

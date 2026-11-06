@@ -12,8 +12,13 @@
  * ── 形 ─────────────────────────────────────────────────────────────────
  *  - fork 直後に init を送り、子の `ready`（読み込み時間つき）で `ready` Promise が解決する。
  *    ready 前の `fatal` / 終了 / readyTimeoutMs 超過は `ready` の reject（= 耳の Start 失敗）。
- *  - `transcribe(wavBytes)` → `{ text, rawText, ms }`。WAV（encodeWav の出力）から PCM を取り出し、
- *    Int16Array のまま送る（advanced serialization）。要求ごとに id を振り、応答の id で突き合わせる。
+ *  - `transcribe(wavBytes)` → `{ text, rawText, ms, tagged, speech, tagMs }`。WAV（encodeWav の出力）から PCM を
+ *    取り出し、Int16Array のまま送る（advanced serialization）。要求ごとに id を振り、応答の id で突き合わせる。
+ *    tagged / speech / tagMs は子の音の種類の判定（咳払いの落とし 段階 2・local-stt-worker-core.mjs のヘッダ）:
+ *    tagged = 判定にかけたか、speech = Speech の確率（かけない・失敗は null）。落とすか通すかは呼び出し側が決める。
+ *  - 判定（`audioTaggingMaxChars` が正の整数のときだけ）: CED-tiny のファイル（既定 `<modelsDir>/ced-tiny-…`）が
+ *    揃っていれば init に載せる。揃っていなければ載せず「判定なし」（ready は失敗させない）。判定あり/なしと
+ *    理由は `ready`（と onReady）の `audioTagging: { enabled, reason }` で呼び出し側が受け取る。
  *  - ready 後の子の終了（落ちた）は `onExit({ code, signal })`（dispose で畳んだときは呼ばない）。
  *    応答待ちの要求は全部 reject（= その発話の転写の失敗）。再起動はしない（whisper と同じ設計判断:
  *    モデルの読み込みを自動で繰り返して配信中の CPU を荒らさない・人間の Stop→Start に委ねる）。
@@ -25,6 +30,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readWavPcm } from "../../voice/wav-pcm.mjs";
 import { resolveLocalSttModel, LOCAL_STT_SAMPLE_RATE } from "./local-stt-engines.mjs";
+import { checkCedTinyModel } from "./audio-tagging.mjs";
 
 /** 子プロセスの入口（sherpa を読み込む唯一のファイル）。 */
 export const DEFAULT_LOCAL_STT_WORKER_PATH = path.join(
@@ -33,15 +39,34 @@ export const DEFAULT_LOCAL_STT_WORKER_PATH = path.join(
 );
 
 /**
+ * 判定あり/なし（`ready` の `audioTagging`）。reason は判定なしの理由（英語の短い 1 行・文字起こしの文字は入れない）。
+ * @typedef {{ enabled: boolean; reason: string | null }} LocalSttAudioTaggingInfo
+ */
+
+/**
+ * @typedef {{ loadMs: number; decodingMethod: string; hotwordsUsed: string[]; hotwordsDropped: string[]; audioTagging: LocalSttAudioTaggingInfo }} LocalSttReadyInfo
+ */
+
+/**
+ * transcribe の戻り。tagged = 子が判定にかけたか、speech = Speech の確率（かけない・失敗は null）、tagMs = 判定の時間。
+ * @typedef {{ text: string; rawText: string; ms: number; tagged: boolean; speech: number | null; tagMs: number | null }} LocalSttTranscribeResult
+ */
+
+/** 判定なしの理由の長さの上限。 */
+const REASON_MAX_CHARS = 200;
+
+/**
  * @param {object} options
  * @param {"parakeet" | "zipformer"} options.engine
- * @param {string} [options.modelsDir]  モデル置き場（既定 vendor/models）。
+ * @param {string} [options.modelsDir]  モデル置き場（既定 vendor/models）。CED-tiny もここから探す。
  * @param {number} options.threads
  * @param {string[]} [options.hotwords]  Zipformer のみ効く（Parakeet では使わない）。
  * @param {number} [options.hotwordsScore]  hotwords の強さ（省略時は子の既定 1.5）。
+ * @param {number} [options.audioTaggingMaxChars]  判定にかける文字数の上限（正の整数で判定あり・省略や 0 は判定なし）。
+ * @param {(p: string) => boolean} [options.existsImpl]  テスト注入（CED-tiny のファイルの有無・既定はファイルがあり 0 byte でない）。
  * @param {number} [options.readyTimeoutMs=120000]
  * @param {(info: { code: number | null; signal: string | null }) => void} [options.onExit]  ready 後に落ちた。
- * @param {(info: { loadMs: number; decodingMethod: string; hotwordsUsed: string[]; hotwordsDropped: string[] }) => void} [options.onReady]
+ * @param {(info: LocalSttReadyInfo) => void} [options.onReady]
  * @param {(line: string) => void} [options.onStderr]  子の標準エラー（省略時も必ず読み捨てる）。
  * @param {typeof fork} [options.forkImpl]  テスト注入。
  * @param {string} [options.workerPath]  テスト注入（偽物の子プロセス）。
@@ -49,8 +74,8 @@ export const DEFAULT_LOCAL_STT_WORKER_PATH = path.join(
  * @param {typeof setTimeout} [options.setTimeoutImpl]
  * @param {typeof clearTimeout} [options.clearTimeoutImpl]
  * @returns {{
- *   ready: Promise<{ loadMs: number; decodingMethod: string; hotwordsUsed: string[]; hotwordsDropped: string[] }>;
- *   transcribe: (wavBytes: Uint8Array) => Promise<{ text: string; rawText: string; ms: number }>;
+ *   ready: Promise<LocalSttReadyInfo>;
+ *   transcribe: (wavBytes: Uint8Array) => Promise<LocalSttTranscribeResult>;
  *   hasExited: () => boolean;
  *   isDisposed: () => boolean;
  *   pending: () => number;
@@ -65,12 +90,13 @@ export function createLocalSttClient(options) {
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
   const { files } = resolveLocalSttModel(engine, { modelsDir: options.modelsDir });
+  const tagPlan = planAudioTagging(options);
 
   let disposed = false;
   let exited = false;
   let isReady = false;
   let nextId = 1;
-  /** @type {Map<number, { resolve: (v: { text: string; rawText: string; ms: number }) => void; reject: (e: Error) => void }>} */
+  /** @type {Map<number, { resolve: (v: LocalSttTranscribeResult) => void; reject: (e: Error) => void }>} */
   const pendingMap = new Map();
 
   /** @type {(v: any) => void} */
@@ -125,11 +151,13 @@ export function createLocalSttClient(options) {
       if (isReady || disposed) return;
       isReady = true;
       clearReadyTimer();
+      /** @type {LocalSttReadyInfo} */
       const info = {
         loadMs: typeof msg.loadMs === "number" ? msg.loadMs : NaN,
         decodingMethod: typeof msg.decodingMethod === "string" ? msg.decodingMethod : "unknown",
         hotwordsUsed: Array.isArray(msg.hotwordsUsed) ? msg.hotwordsUsed : [],
-        hotwordsDropped: Array.isArray(msg.hotwordsDropped) ? msg.hotwordsDropped : []
+        hotwordsDropped: Array.isArray(msg.hotwordsDropped) ? msg.hotwordsDropped : [],
+        audioTagging: tagPlan.init ? readyAudioTagging(msg.audioTagging) : { enabled: false, reason: tagPlan.reason }
       };
       try {
         options.onReady?.(info);
@@ -146,7 +174,15 @@ export function createLocalSttClient(options) {
       pendingMap.delete(msg.id);
       if (msg.type === "result") {
         const text = typeof msg.text === "string" ? msg.text : "";
-        p.resolve({ text: text.trim(), rawText: text, ms: typeof msg.ms === "number" ? msg.ms : NaN });
+        const tagged = msg.tagged === true;
+        p.resolve({
+          text: text.trim(),
+          rawText: text,
+          ms: typeof msg.ms === "number" ? msg.ms : NaN,
+          tagged,
+          speech: tagged && typeof msg.speech === "number" && Number.isFinite(msg.speech) ? msg.speech : null,
+          tagMs: tagged && typeof msg.tagMs === "number" && Number.isFinite(msg.tagMs) ? msg.tagMs : null
+        });
       } else {
         p.reject(new Error(`local STT (${engine}) failed: ${String(msg.message ?? "unknown")}`));
       }
@@ -186,7 +222,15 @@ export function createLocalSttClient(options) {
   });
 
   try {
-    child.send({ type: "init", engine, files, threads: options.threads, hotwords: options.hotwords ?? [], hotwordsScore: options.hotwordsScore });
+    child.send({
+      type: "init",
+      engine,
+      files,
+      threads: options.threads,
+      hotwords: options.hotwords ?? [],
+      hotwordsScore: options.hotwordsScore,
+      ...(tagPlan.init ? { audioTagging: tagPlan.init } : {})
+    });
   } catch (error) {
     rejectReady(new Error(`local STT (${engine}) init send failed: ${error instanceof Error ? error.message : String(error)}`));
   }
@@ -260,6 +304,34 @@ export function createLocalSttClient(options) {
       killChild();
     }
   };
+}
+
+/**
+ * 判定を init に載せるか（載せない理由つき）。CED-tiny が揃っていなければ載せない（Start は失敗させない）。
+ * @param {{ modelsDir?: string; audioTaggingMaxChars?: number; existsImpl?: (p: string) => boolean }} options
+ * @returns {{ init: { model: string; labels: string; maxChars: number } | null; reason: string | null }}
+ */
+export function planAudioTagging(options) {
+  const maxChars = options.audioTaggingMaxChars;
+  if (maxChars === undefined || maxChars === null) return { init: null, reason: "not configured" };
+  if (!(typeof maxChars === "number" && Number.isInteger(maxChars) && maxChars > 0)) {
+    return { init: null, reason: "disabled (max chars is 0)" };
+  }
+  const check = checkCedTinyModel({ modelsDir: options.modelsDir, existsImpl: options.existsImpl });
+  if (!check.ok) return { init: null, reason: check.reason };
+  return { init: { model: check.files.model, labels: check.files.labels, maxChars }, reason: null };
+}
+
+/**
+ * 子の ready の audioTagging → 呼び出し側の形（子が知らせなければ判定なし）。
+ * @param {any} raw
+ * @returns {LocalSttAudioTaggingInfo}
+ */
+function readyAudioTagging(raw) {
+  if (!raw || typeof raw !== "object") return { enabled: false, reason: "worker did not report audio tagging" };
+  if (raw.enabled === true) return { enabled: true, reason: null };
+  const reason = typeof raw.reason === "string" && raw.reason.length > 0 ? raw.reason.replace(/\s+/g, " ").slice(0, REASON_MAX_CHARS) : "unknown";
+  return { enabled: false, reason };
 }
 
 /**

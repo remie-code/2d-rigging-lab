@@ -199,6 +199,32 @@ export const DISCORD_VC_NOT_OPEN_MESSAGE = "Discord の場が開いていない�
 /** VC の外の間の手動の Fire の断りの文面（Discord モード Domain I・§13.3）。 */
 export const NOT_IN_VC_FIRE_MESSAGE = "VC に入ってから押す（VC の外では発火しない）";
 
+/** 咳払いの落とし（段階 2）の「判定なし」の警告の id（上の帯・一回きりの出来事・場ごとに 1 回）。 */
+export const COUGH_FILTER_OFF_WARNING_ID = "cough-filter-off";
+
+/**
+ * 咳払いの落としの「判定なし」の警告の文言（cough-filter-stage2-plan.md §1・§2 の 6）。ear-pipeline の診断 audioTaggingOff の
+ * reason（決まった語）ごとに 1 つ。上の帯の既存の警告（「文字起こしが止まっている」など）に揃えた日本語の決まった 1 行
+ * （文字起こしの文字・名前・id・子の理由〔sherpa のエラー文・パス〕は入れない・Domain B で英語から直した）。
+ * not-configured / disabled（利用者が切った・ローカル以外）は警告しないので載せない。
+ */
+export const COUGH_FILTER_OFF_WARNINGS = Object.freeze(
+  /** @type {Record<string, { kind: string; severity: "warn"; message: string; detail: string | null }>} */ ({
+    "model-not-found": Object.freeze({
+      kind: "cough-filter-off",
+      severity: "warn",
+      message: "咳の聞き分けが止まっている（モデルが無い）",
+      detail: "取得: node apps/soul/agent/scripts/fetch-local-stt-models.mjs --only ced-tiny"
+    }),
+    "failed-to-load": Object.freeze({
+      kind: "cough-filter-off",
+      severity: "warn",
+      message: "咳の聞き分けが止まっている（モデルを読み込めない）",
+      detail: null
+    })
+  })
+);
+
 /**
  * 場が開きかけ・閉じかけ・開いているときの断りの文面（体験の口が文面を持たないときの既定・配信は配信の文面を持つ）。
  * @param {string} phase
@@ -1333,6 +1359,8 @@ export function createCockpitServer(options = {}) {
   let venueTranscript = null;
   /** 正本に張った購読（追記 1 本・破棄 1 本）の解除。 @type {Array<() => void>} */
   let venueTranscriptUnsubs = [];
+  /** この場で咳払いの落としの「判定なし」を警告したか（場ごとに 1 回・openVenueTranscript で数え直す）。 */
+  let coughFilterOffWarned = false;
   /** @type {"stopped" | "starting" | "listening"} */
   let earsState = "stopped";
   /**
@@ -1758,6 +1786,21 @@ export function createCockpitServer(options = {}) {
     broadcastState();
   }
 
+  /**
+   * 咳払いの落としの「判定なし」の警告（場ごとに 1 回・Discord で人数ぶんの耳が知らせても 1 回）。利用者が切った・ローカル以外
+   * （not-configured / disabled）は警告しない。文言は決まった英語の 1 行（子の理由・sherpa のエラー文・パス・名前・id は入れない）。
+   * @param {any} d  診断 audioTaggingOff（reason は ear-pipeline の決まった語）。
+   */
+  function warnCoughFilterOff(d) {
+    const spec = d && typeof d.reason === "string" ? COUGH_FILTER_OFF_WARNINGS[d.reason] : undefined;
+    if (!spec || coughFilterOffWarned) return;
+    coughFilterOffWarned = true;
+    warningBoard.pushEvent(COUGH_FILTER_OFF_WARNING_ID, {
+      ...spec,
+      source: typeof d.engine === "string" && isLocalSttEngine(d.engine) ? d.engine : null
+    });
+  }
+
   /** @param {any} d  pipeline の診断イベント。 */
   function handleDiagnostic(d) {
     if (d && d.type === "whisperDown") {
@@ -1775,6 +1818,8 @@ export function createCockpitServer(options = {}) {
       // willRestart=true は capture が自己回復するため up のまま（transient blip）。
       setHealth("ffmpeg", "down", `ffmpeg exited (code=${d.code ?? "?"}, signal=${d.signal ?? "?"})`);
     }
+    // 咳払いの落としの判定なし（CED-tiny が無い・読み込めない）は場ごとに 1 回の警告（Start は止めない）。
+    if (d && d.type === "audioTaggingOff") warnCoughFilterOff(d);
     // 頭のエラー（発火の失敗）は一回きりの警告にも出す（cockpit-glance-redesign.md §9.2）。
     if (d && d.type === "fireError") {
       warningBoard.pushEvent("brain-error", {
@@ -2537,6 +2582,8 @@ export function createCockpitServer(options = {}) {
    */
   function openVenueTranscript() {
     releaseVenueTranscript();
+    // 咳払いの落としの「判定なし」の警告は場ごとに 1 回（新しい場で数え直す）。
+    coughFilterOffWarned = false;
     // 時計は場の時計（窓を切る判定と同じ・本番はどちらも Date.now で、耳が自前で作っていたときと同じ）。
     const buffer = createTranscriptBuffer({ nowImpl });
     venueTranscript = buffer;
@@ -2553,6 +2600,9 @@ export function createCockpitServer(options = {}) {
         if (speakNow) speakNow.handleTranscript(entry);
       }),
       // 破棄の購読（正本の破棄を footer の diagnostic 材料に）。
+      // 咳払いの落とし（段階 2・cough-filter-stage2-plan.md §2 の 5）: reason "cough" のときだけ、耳が積むはずだった文字（text）と
+      // Speech の確率（speech）を足す（画面の札のホバーの材料）。文字と確率が出るのはこの放送だけ（診断・警告・ログ・ファイルには
+      // 出さない）。誰の咳か（名前・id・耳の key）は載せない。blank の形は今のまま（文字を載せない）。
       buffer.onDiscard((info) => {
         const stats = buffer.stats();
         broadcast("discard", {
@@ -2560,7 +2610,8 @@ export function createCockpitServer(options = {}) {
           endMs: info.endMs,
           reason: info.reason,
           appended: stats.appended,
-          discarded: stats.discarded
+          discarded: stats.discarded,
+          ...(info.reason === "cough" ? { text: info.text, speech: /** @type {any} */ (info).speech } : {})
         });
       })
     ];

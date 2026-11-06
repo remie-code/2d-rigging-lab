@@ -16,6 +16,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_ROOT = path.resolve(HERE, "..", "..", "..");
 const WORKER = path.join(HERE, "local-stt-worker.mjs");
+// 咳払いの聞き取り実験（cough-experiment-plan.md §3）の子の入口。本番の子を変えずに、本番と同じ文字起こしに
+// 音の種類の判定（sherpa の AudioTagging）を足すための実験専用の子。親の道具 scripts/cough-experiment.mjs は fork するだけ。
+const EXPERIMENT_WORKER = path.join(AGENT_ROOT, "scripts", "cough-experiment-worker.mjs");
 
 const PARENT_MODULES = [
   "scripts/cockpit.mjs",
@@ -26,7 +29,13 @@ const PARENT_MODULES = [
   "src/ears/local-stt/local-stt-client.mjs",
   "src/ears/local-stt/local-stt-engines.mjs",
   "src/ears/local-stt/local-stt-worker-core.mjs",
-  "src/cli/ears-cli.mjs"
+  // 音の種類の判定（CED-tiny）の置き場と純関数（咳払いの落とし 段階 2・親と子の両方が読む）。
+  "src/ears/local-stt/audio-tagging.mjs",
+  "src/cli/ears-cli.mjs",
+  // 咳払いの聞き取り実験の親（耳の VAD を動かす側）と、子と共有する純関数・子の中身。
+  "scripts/cough-experiment.mjs",
+  "scripts/cough-experiment-lib.mjs",
+  "scripts/cough-experiment-worker-core.mjs"
 ];
 
 test("親で sherpa を読まない（実行時）: 親側のモジュールを読み込んでも sherpa-onnx の解決が起きない", { timeout: 60000 }, () => {
@@ -74,8 +83,8 @@ function specifiers(/** @type {string} */ text) {
   return out;
 }
 
-test("親で sherpa を読まない（静的）: 操縦席・耳 CLI の入口から辿れる import に sherpa も子の入口も無い", () => {
-  const entries = ["scripts/cockpit.mjs", "src/cli/ears-cli.mjs"].map((m) => path.join(AGENT_ROOT, m));
+test("親で sherpa を読まない（静的）: 操縦席・耳 CLI・咳払いの実験の道具の入口から辿れる import に sherpa も子の入口も無い", () => {
+  const entries = ["scripts/cockpit.mjs", "src/cli/ears-cli.mjs", "scripts/cough-experiment.mjs"].map((m) => path.join(AGENT_ROOT, m));
   const seen = new Set();
   const stack = [...entries];
   /** @type {string[]} */
@@ -94,10 +103,11 @@ test("親で sherpa を読まない（静的）: 操縦席・耳 CLI の入口�
   }
   assert.deepEqual(offenders, []);
   assert.equal(seen.has(WORKER), false, "子の入口が親の import から辿れてしまう");
+  assert.equal(seen.has(EXPERIMENT_WORKER), false, "実験の子の入口が親の import から辿れてしまう");
   assert.ok(seen.has(path.join(HERE, "local-stt-client.mjs")), "fork する係は親から辿れる（前提の確認）");
 });
 
-test("ソースの中で sherpa-onnx-node を読み込むのは子の入口（local-stt-worker.mjs）だけ", () => {
+test("ソースの中で sherpa-onnx-node を読み込むのは子の入口（local-stt-worker.mjs と実験の子 cough-experiment-worker.mjs）だけ", () => {
   /** @type {string[]} */
   const found = [];
   /** @param {string} dir */
@@ -112,5 +122,5 @@ test("ソースの中で sherpa-onnx-node を読み込むのは子の入口（lo
   };
   walk(path.join(AGENT_ROOT, "src"));
   walk(path.join(AGENT_ROOT, "scripts"));
-  assert.deepEqual(found, [WORKER]);
+  assert.deepEqual(found.sort(), [WORKER, EXPERIMENT_WORKER].sort());
 });

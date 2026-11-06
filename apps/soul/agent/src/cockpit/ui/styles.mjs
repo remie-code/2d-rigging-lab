@@ -128,6 +128,20 @@ html, body { overflow: hidden; }
 .status-pill.compacting { color: var(--compacting); }
 /* 配信の組み直し Domain E: 場の閉じかけ（記憶の最後の保存を待つ間）の「記録中」（中央の「記録中…」と同じ琥珀色）。 */
 .status-pill.recording { color: var(--amber); }
+/* 咳払いの落とし 段階 2（Domain B）: 状態のピルの隣の「咳 ×N」（咳として落とした区間・最後の咳から 8 秒で消える）。
+   置き場（.cough-slot）は札が無いときも同じ幅で残し、札の出入りで帯の並びを動かさない。色は「+N」と同じ薄いグレー。
+   出入りは即時（アニメーションは付けない）。 */
+.cough-slot { flex: 0 0 auto; display: inline-flex; align-items: center; width: 68px; overflow: hidden; }
+.cough-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
 /* Discord モード Domain G: Discord の場の接続の状態（入っている途中 / 入っている / 切れた）。配信の場では出ない。 */
 .venue-connection { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; }
 .venue-connection.joined { color: var(--up); }

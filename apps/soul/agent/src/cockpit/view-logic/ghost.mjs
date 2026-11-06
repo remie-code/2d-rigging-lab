@@ -8,7 +8,7 @@
  * （該当型は null を返す＝行を作らない）。
  *
  * 対応（現 cockpit.html）:
- *  - discardGhostLabel        → :828 `addGhostRow("(discarded)")`
+ *  - discardGhostLabel        → :828 `addGhostRow("(discarded)")`（reason "cough" は「(咳として落とした)」）
  *  - diagnosticGhostLabel     → :831-855 の diagnostic ハンドラ全分岐
  *  - selfFireGhostLabel       → :877 selfFire fired:false のゴースト行
  *  - chatDiagnosticGhostLabel → :888-897 chatDiagnostic の取得死分類ゴースト行
@@ -26,8 +26,15 @@
  *   ここでは null を返す（診断ハンドラが type=="bargeIn" を先に分岐して marker に振る）。
  */
 
-/** 破棄（空転写破棄・SSE discard）のゴースト行ラベル。 */
-export function discardGhostLabel() {
+/**
+ * 破棄（SSE discard）のゴースト行ラベル。reason "cough"（咳払いの落とし 段階 2・耳が咳として落とした区間）は
+ * 「(咳として落とした)」、それ以外（空転写破棄の "blank"・reason の無い古いサーバ）は今までどおり「(discarded)」。
+ * 落とした区間の文字・確率はここには出さない（文字は上の帯の札の title だけ・view-logic/cough-chip.mjs）。
+ * @param {{ reason?: string | null } | null | undefined} [d]  SSE discard の data。
+ * @returns {string}
+ */
+export function discardGhostLabel(d) {
+  if (d && d.reason === "cough") return "(咳として落とした)";
   return "(discarded)";
 }
 
