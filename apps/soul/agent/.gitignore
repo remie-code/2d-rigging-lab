@@ -77,5 +77,8 @@ cockpit-settings.local.json.bak*
 # 先頭の / で apps/soul/agent/ 直下だけに留める。
 /cough-experiments/
 
+# Haas/Zipformer の比較結果。転写を含むので Git に入れない。
+/haas-experiments/
+
 # ── 記憶の控え（記憶の整理 Domain B・非コミット）── ③整理役の前の git bundle（memory-backups/<role-id>/・直近 4 個）。
 /memory-backups/
