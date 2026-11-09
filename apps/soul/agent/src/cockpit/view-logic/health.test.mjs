@@ -142,7 +142,7 @@ test("brainCredentialHealthLabel: 健康/未検出/未指定の3分岐（credent
 // ── 操縦席の文字起こし選択（cockpit-stt-selection.md §4.2・§8）──
 
 test("sttStatusView: `ElevenLabs up` / `whisper up` / reconnecting は黄色クラス / down は reason 併記", () => {
-  assert.deepEqual(STT_ENGINE_LABELS, { whisper: "whisper", elevenlabs: "ElevenLabs", parakeet: "Parakeet", zipformer: "Zipformer" });
+  assert.deepEqual(STT_ENGINE_LABELS, { whisper: "whisper", elevenlabs: "ElevenLabs", parakeet: "Parakeet", zipformer: "Zipformer", haas: "Haas-ja" });
   assert.equal(sttStatusView({ engine: "zipformer", status: "up", reason: null })?.text, "Zipformer up");
   // whisper の死活の項目は whisper のときだけ出す（stt が無い・engine が無いときは既定の whisper とみなす）。
   assert.equal(whisperHealthVisible({ engine: "zipformer" }), false);

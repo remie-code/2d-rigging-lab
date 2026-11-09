@@ -265,6 +265,20 @@ const tagInit = (audioTagging) => ({
   ...(audioTagging === undefined ? {} : { audioTagging })
 });
 
+test("worker-core Haas: 同じCEDで短い認識結果だけ分類し、sherpa認識器を作らない", async () => {
+  const fake = makeFakeSherpaWithTagger({ throwOnCreate: new Error("do not create a recognizer") });
+  const w = makeTagCore(fake);
+  await w.core.handle({ ...tagInit({ model: "/ced", labels: "/labels", maxChars: 4 }), engine: "haas" });
+  assert.equal(w.sent[0].audioTagging.enabled, true);
+  await w.core.handle({ type: "transcribe", id: 1, pcm: new Int16Array(800), text: "ぐっ" });
+  await w.core.handle({ type: "transcribe", id: 2, pcm: new Int16Array(800), text: "長い発話です" });
+  assert.deepEqual(w.sent.slice(1).map((m) => [m.id, m.text, m.tagged]), [
+    [1, "ぐっ", true],
+    [2, "長い発話です", false]
+  ]);
+  assert.equal(typeof w.sent[1].speech, "number");
+});
+
 test("worker-core 判定: init に CED-tiny と上限があれば AudioTagging を作り（ラベルの数を topK に・1 スレッド）、ready に判定ありを載せる", async () => {
   const fake = makeFakeSherpaWithTagger();
   const w = makeTagCore(fake);

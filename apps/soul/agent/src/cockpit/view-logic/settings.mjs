@@ -432,7 +432,8 @@ export const STT_ENGINE_OPTIONS = Object.freeze([
   Object.freeze({ value: "elevenlabs", label: "ElevenLabs" }),
   // ローカルの文字起こし（子プロセスの sherpa-onnx・local-stt-wave-plan.md §1 の 4）。本命は Zipformer（速さ）。
   Object.freeze({ value: "zipformer", label: "Zipformer（ローカル）" }),
-  Object.freeze({ value: "parakeet", label: "Parakeet（ローカル）" })
+  Object.freeze({ value: "parakeet", label: "Parakeet（ローカル）" }),
+  Object.freeze({ value: "haas", label: "Haas-ja（ローカル）" })
 ]);
 
 /**

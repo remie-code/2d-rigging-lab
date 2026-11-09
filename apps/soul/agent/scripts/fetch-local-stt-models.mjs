@@ -38,7 +38,6 @@ import { pipeline } from "node:stream/promises";
 import { pathToFileURL } from "node:url";
 import {
   DEFAULT_LOCAL_STT_MODELS_DIR,
-  LOCAL_STT_ENGINES,
   LOCAL_STT_MODEL_LAYOUT,
   resolveLocalSttModel
 } from "../src/ears/local-stt/local-stt-engines.mjs";
@@ -60,7 +59,8 @@ export const CED_TINY_ARCHIVE_URL =
 export const CED_TINY_ARCHIVE_DIR = "sherpa-onnx-ced-tiny-audio-tagging-2024-04-19";
 
 /** `--only` で選べるもの。--only なしの既定はこの全部（足りないものだけ）。 */
-export const FETCH_TARGETS = Object.freeze([...LOCAL_STT_ENGINES, "ced-tiny"]);
+const FETCH_STT_ENGINES = Object.keys(LOCAL_STT_MODEL_LAYOUT);
+export const FETCH_TARGETS = Object.freeze([...FETCH_STT_ENGINES, "ced-tiny"]);
 
 /** アーカイブから取り出すもの（engine → 配布元・中のフォルダ・あれば取り出すもの）。 */
 const ARCHIVES = Object.freeze({
@@ -86,7 +86,7 @@ function hasBytes(p) {
 export function planLocalSttModelFetch(opts = {}) {
   const existsImpl = opts.existsImpl ?? hasBytes;
   const engines = /** @type {Array<"parakeet" | "zipformer">} */ (
-    LOCAL_STT_ENGINES.filter((e) => !opts.only || opts.only.length === 0 || opts.only.includes(e))
+    FETCH_STT_ENGINES.filter((e) => !opts.only || opts.only.length === 0 || opts.only.includes(e))
   );
   const plan = [];
   for (const engine of engines) {

@@ -204,7 +204,7 @@ test("咳の SSE discard: reason cough のときだけ text と speech が載る
 
 // ── 2. 本物の耳を通す: Start ごとの設定・落とし・文字の漏れ（§4 A の 2・4・6）──────────────────
 
-test("配信の耳（本物の createEarPipeline）: 設定は Start ごとに読まれて子の係と比べに届く・咳は落ちて SSE discard だけに文字と確率が出る", async () => {
+for (const engine of ["zipformer", "haas"]) test(`配信の耳（${engine}）: 設定は Start ごとに読まれて子の係と比べに届く・咳は落ちて SSE discard だけに文字と確率が出る`, async () => {
   /** @type {any[]} */
   let settingsNow = [{ coughMaxChars: 4, coughSpeechThreshold: 0.1 }];
   let reads = 0;
@@ -219,6 +219,7 @@ test("配信の耳（本物の createEarPipeline）: 設定は Start ごとに�
   const captures = [];
   /** @type {any[]} */
   const sttLogs = [];
+  const savedEngines = [];
   const stdio = captureStdio();
   const server = createCockpitServer({
     onSttLatency: (/** @type {any} */ info) => sttLogs.push(info),
@@ -227,7 +228,8 @@ test("配信の耳（本物の createEarPipeline）: 設定は Start ごとに�
       reads += 1;
       return settingsNow[0];
     },
-    sttEngineInitial: "zipformer",
+    sttEngineInitial: engine,
+    onSetSttEngine: (value) => { savedEngines.push(value); },
     pipelineOptions: {
       segmenter: { minSpeechMs: 100, minSilenceMs: 64, speechPadMs: 0 },
       vadFactory: fakeVadFactory,
@@ -242,10 +244,12 @@ test("配信の耳（本物の createEarPipeline）: 設定は Start ごとに�
   const sse = openEvents(url);
   try {
     await waitUntil(() => sse.events.some((e) => e.event === "state"));
-    const start = await post(url, "/api/stream/start", { device: "Mic" });
+    const start = await post(url, "/api/stream/start", { device: "Mic", sttEngine: engine });
     assert.equal(start.status, 200, JSON.stringify(start.json.error));
     assert.equal(reads, 1, "Start で読む");
     assert.equal(local.rec.options[0].audioTaggingMaxChars, 4, "文字数の上限は子の係へ");
+    assert.equal(local.rec.options[0].engine, engine);
+    assert.deepEqual(savedEngines, [engine]);
     captures.at(-1).onPcm(int16ToBytesLE(utterancePcm()));
     await waitUntil(() => local.rec.calls === 1);
     captures.at(-1).onPcm(int16ToBytesLE(utterancePcm()));
@@ -444,13 +448,13 @@ function makeRole() {
 }
 
 /**
- * 本物の server + 本物の Discord の体験の口 + 偽の Discord + 本物の耳（偽の VAD とローカルの文字起こしの係）。Zipformer を選ぶ。
- * @param {{ OpusScript: any; local: ReturnType<typeof makeFakeLocalStt> }} p
+ * 本物の server + 本物の Discord の体験の口 + 偽の Discord + 本物の耳（偽の VAD とローカルの文字起こしの係）。
+ * @param {{ OpusScript: any; local: ReturnType<typeof makeFakeLocalStt>; engine?: string }} p
  */
-async function startDiscordCoughServer({ OpusScript, local }) {
+async function startDiscordCoughServer({ OpusScript, local, engine = "zipformer" }) {
   const dir = mkdtempSync(join(tmpdir(), "cough-discord-"));
   const settings = createFileSettingsStore({ path: join(dir, "cockpit-settings.local.json") });
-  settings.setDiscordPrep({ guildId: GUILD, channelId: CHANNEL, sttEngine: "zipformer" });
+  settings.setDiscordPrep({ guildId: GUILD, channelId: CHANNEL, sttEngine: engine });
   const fake = createFakeDiscord({
     guilds: [{ id: GUILD, name: "試しのサーバー", channels: [{ id: CHANNEL, name: "一般", rawPosition: 1 }], members: { [USER_A]: NAME_A, [USER_B]: NAME_B } }],
     OpusScript
@@ -535,6 +539,41 @@ test("Discord（2 人・人ごとの本物の耳）: どちらの咳も落ちて
     for (const w of ["うん", "\"ん\""]) assert.equal(notDiscard.includes(w), false, `discard 以外の放送に ${w}`);
     assert.equal(h.logs.join("\n").includes("うん"), false);
     assert.equal(sse.events.filter((e) => e.event === "diagnostic").filter((e) => e.data.type === "transcriptDiscarded").length, 2);
+    await post(h.url, "/api/stream/stop");
+  } finally {
+    sse.close();
+    await h.cleanup();
+  }
+});
+
+test("Discord Haas（2人）: 1ワーカーを共有し、転写は各話者に帰属し、咳払いだけを棄却", async () => {
+  const o = /** @type {any} */ (await import("opusscript"));
+  const OpusScript = o.default ?? o;
+  const local = makeFakeLocalStt({
+    results: [
+      { text: "相づちA", speech: 0.9 },
+      { text: "相づちB", speech: 0.9 },
+      { text: "ぐっ", speech: 0.05 }
+    ]
+  });
+  const h = await startDiscordCoughServer({ OpusScript, local });
+  const sse = openEvents(h.url);
+  try {
+    const saved = await post(h.url, "/api/discord/prep", { sttEngine: "haas" });
+    assert.equal(saved.status, 200);
+    assert.equal((await get(h.url, "/api/discord/prep")).json.prep.sttEngine, "haas");
+    const start = await post(h.url, "/api/stream/start", { experience: "discord" });
+    assert.equal(start.status, 200, JSON.stringify(start.json.error));
+    await speakOnce(h, OpusScript, USER_A);
+    await waitUntil(() => local.rec.calls === 1, 5000);
+    await speakOnce(h, OpusScript, USER_B);
+    await waitUntil(() => local.rec.calls === 2, 5000);
+    await speakOnce(h, OpusScript, USER_A);
+    await waitUntil(() => sse.events.some((e) => e.event === "discard" && e.data.reason === "cough"), 5000);
+    const transcript = h.server.getTranscript().filter((e) => e.speaker !== "event");
+    assert.deepEqual(transcript.map((e) => [e.speakerId, e.text]), [[USER_A, "相づちA"], [USER_B, "相づちB"]]);
+    assert.equal(local.rec.options.length, 1);
+    assert.equal(local.rec.options[0].engine, "haas");
     await post(h.url, "/api/stream/stop");
   } finally {
     sse.close();

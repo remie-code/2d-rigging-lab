@@ -57,7 +57,7 @@ const REASON_MAX_CHARS = 200;
 
 /**
  * @param {object} options
- * @param {"parakeet" | "zipformer"} options.engine
+ * @param {"parakeet" | "zipformer" | "haas"} options.engine
  * @param {string} [options.modelsDir]  モデル置き場（既定 vendor/models）。CED-tiny もここから探す。
  * @param {number} options.threads
  * @param {string[]} [options.hotwords]  Zipformer のみ効く（Parakeet では使わない）。
@@ -75,7 +75,7 @@ const REASON_MAX_CHARS = 200;
  * @param {typeof clearTimeout} [options.clearTimeoutImpl]
  * @returns {{
  *   ready: Promise<LocalSttReadyInfo>;
- *   transcribe: (wavBytes: Uint8Array) => Promise<LocalSttTranscribeResult>;
+ *   transcribe: (wavBytes: Uint8Array, text?: string) => Promise<LocalSttTranscribeResult>;
  *   hasExited: () => boolean;
  *   isDisposed: () => boolean;
  *   pending: () => number;
@@ -89,7 +89,7 @@ export function createLocalSttClient(options) {
   const readyTimeoutMs = options.readyTimeoutMs ?? 120000;
   const setTimeoutImpl = options.setTimeoutImpl ?? setTimeout;
   const clearTimeoutImpl = options.clearTimeoutImpl ?? clearTimeout;
-  const { files } = resolveLocalSttModel(engine, { modelsDir: options.modelsDir });
+  const files = engine === "haas" ? {} : resolveLocalSttModel(engine, { modelsDir: options.modelsDir }).files;
   const tagPlan = planAudioTagging(options);
 
   let disposed = false;
@@ -265,7 +265,7 @@ export function createLocalSttClient(options) {
     isDisposed: () => disposed,
     pending: () => pendingMap.size,
 
-    transcribe(wavBytes) {
+    transcribe(wavBytes, text) {
       if (disposed) return Promise.reject(new Error(`local STT (${engine}) disposed.`));
       if (exited) return Promise.reject(new Error(`local STT (${engine}) process is not running.`));
       if (!isReady) return Promise.reject(new Error(`local STT (${engine}) is not ready.`));
@@ -287,7 +287,7 @@ export function createLocalSttClient(options) {
       return new Promise((resolve, reject) => {
         pendingMap.set(id, { resolve, reject });
         try {
-          child.send({ type: "transcribe", id, pcm });
+          child.send({ type: "transcribe", id, pcm, ...(engine === "haas" ? { text } : {}) });
         } catch (error) {
           pendingMap.delete(id);
           reject(error instanceof Error ? error : new Error(String(error)));

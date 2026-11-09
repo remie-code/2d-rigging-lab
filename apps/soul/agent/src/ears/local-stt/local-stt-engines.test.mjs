@@ -24,7 +24,10 @@ import {
 // ローカルの文字起こしの純関数（設定の正規化・モデルの場所と存在確認・hotwords の token 化・認識器の設定・無音の余白）。
 
 test("local-stt-engines: 語彙と既定（スレッド 2・前 200ms・無音 300ms・hotwords 2 語）", () => {
-  assert.deepEqual([...LOCAL_STT_ENGINES], ["parakeet", "zipformer"]);
+  assert.deepEqual([...LOCAL_STT_ENGINES], ["parakeet", "zipformer", "haas"]);
+  const haas = checkLocalSttModel("haas", { existsImpl: (file) => !file.endsWith("speech.dll") });
+  assert.equal(haas.ok, false);
+  assert.match(haas.reason, /speech\.dll/);
   assert.equal(isLocalSttEngine("zipformer"), true);
   assert.equal(isLocalSttEngine("whisper"), false);
   assert.equal(isLocalSttEngine(undefined), false);

@@ -94,7 +94,8 @@ export const STT_ENGINE_LABELS = Object.freeze({
   elevenlabs: "ElevenLabs",
   // ローカルの文字起こし（子プロセス）。ヘッダは `stt: Zipformer up` / 子が落ちたら `stt: Zipformer down — 理由`。
   parakeet: "Parakeet",
-  zipformer: "Zipformer"
+  zipformer: "Zipformer",
+  haas: "Haas-ja"
 });
 
 /**

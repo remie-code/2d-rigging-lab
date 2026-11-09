@@ -60,6 +60,8 @@ export function createLocalSttWorkerCore(deps) {
   const exit = deps.exit ?? (() => {});
   /** @type {any} */
   let recognizer = null;
+  // Haasの認識は別のネイティブワーカー。ここでは同じCED分類だけを担当する。
+  let tagOnly = false;
   /** @type {string | undefined} */
   let hotwordsArg;
   /** 音の種類の判定（CED-tiny の AudioTagging・判定なしなら null）。 */
@@ -81,6 +83,20 @@ export function createLocalSttWorkerCore(deps) {
     try {
       const t0 = nowImpl();
       const engine = msg.engine;
+      if (engine === "haas") {
+        tagOnly = true;
+        let audioTagging;
+        try {
+          audioTagging = initTagger(msg.audioTagging ? deps.loadSherpa() : null, msg.audioTagging);
+        } catch (error) {
+          audioTagging = { enabled: false, reason: oneLine(errMessage(error)), loadMs: null };
+        }
+        deps.send({
+          type: "ready", loadMs: Math.round(nowImpl() - t0), decodingMethod: "haas",
+          hotwordsUsed: [], hotwordsDropped: [], audioTagging
+        });
+        return;
+      }
       const threads = msg.threads;
       /** @type {string[]} */
       let used = [];
@@ -180,11 +196,15 @@ export function createLocalSttWorkerCore(deps) {
   async function transcribe(msg) {
     const id = msg.id;
     try {
-      if (!recognizer) throw new Error("recognizer is not ready");
+      if (!recognizer && !tagOnly) throw new Error("recognizer is not ready");
       const pcm = msg.pcm;
       if (!(pcm instanceof Int16Array)) throw new TypeError("pcm must be an Int16Array");
       const samples = new Float32Array(pcm.length);
       for (let i = 0; i < pcm.length; i += 1) samples[i] = pcm[i] / 32768;
+      if (tagOnly) {
+        sendResult(id, typeof msg.text === "string" ? msg.text : "", samples, 0);
+        return;
+      }
       const stream = hotwordsArg !== undefined ? recognizer.createStream(hotwordsArg) : recognizer.createStream();
       stream.acceptWaveform({ samples, sampleRate: LOCAL_STT_SAMPLE_RATE });
       const t0 = nowImpl();
@@ -197,17 +217,21 @@ export function createLocalSttWorkerCore(deps) {
         result = recognizer.getResult(stream);
       }
       const ms = Math.round(nowImpl() - t0);
-      const text = result && typeof result.text === "string" ? result.text : "";
-      /** @type {{ tagged: boolean; speech: number | null; tagMs: number | null }} */
-      let tag = { tagged: false, speech: null, tagMs: null };
-      if (tagger && shouldTagTranscript(text, tagMaxChars)) {
-        const t = tagSpeech(samples);
-        tag = { tagged: true, speech: t.speech, tagMs: t.tagMs };
-      }
-      deps.send({ type: "result", id, text, ms, ...tag });
+      sendResult(id, result && typeof result.text === "string" ? result.text : "", samples, ms);
     } catch (error) {
       deps.send({ type: "error", id, message: errMessage(error) });
     }
+  }
+
+  /** @param {number} id @param {string} text @param {Float32Array} samples @param {number} ms */
+  function sendResult(id, text, samples, ms) {
+    /** @type {{ tagged: boolean; speech: number | null; tagMs: number | null }} */
+    let tag = { tagged: false, speech: null, tagMs: null };
+    if (tagger && shouldTagTranscript(text, tagMaxChars)) {
+      const t = tagSpeech(samples);
+      tag = { tagged: true, speech: t.speech, tagMs: t.tagMs };
+    }
+    deps.send({ type: "result", id, text, ms, ...tag });
   }
 
   return {

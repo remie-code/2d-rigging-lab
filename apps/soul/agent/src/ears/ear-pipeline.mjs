@@ -99,11 +99,12 @@ import { createTranscriptBuffer } from "./transcript-buffer.mjs";
 import { createElevenLabsRealtimeStt } from "./elevenlabs-stt.mjs";
 // 親で読むのは fork する係と純関数だけ（sherpa-onnx-node は子プロセスの local-stt-worker.mjs だけが読む）。
 import { createLocalSttClient } from "./local-stt/local-stt-client.mjs";
+import { createHaasLocalSttClient } from "./local-stt/haas-local-stt.mjs";
 import { isLocalSttEngine, normalizeLocalSttSettings, padWithSilence } from "./local-stt/local-stt-engines.mjs";
 import { shouldTagTranscript } from "./local-stt/audio-tagging.mjs";
 
 /** 文字起こしの方式（操縦席の選択肢）。既定は whisper（従来どおり）。parakeet / zipformer はローカル（子プロセス）。 */
-export const STT_ENGINES = Object.freeze(["whisper", "elevenlabs", "parakeet", "zipformer"]);
+export const STT_ENGINES = Object.freeze(["whisper", "elevenlabs", "parakeet", "zipformer", "haas"]);
 
 /**
  * 咳払いの落としの比べ方（純関数・ヘッダの「咳払いの落とし」）。落とすなら Speech の確率、通すなら null。
@@ -160,7 +161,7 @@ export const EAR_DEFAULTS = Object.freeze({
  * @param {object} [options.asr]      { queueMax=4, utteranceTimeoutMs=45000, timeoutMs=30000,
  *   dynamicAudioCtx=true, audioCtxOptions }。
  * @param {number} [options.ringMs=40000]  PCM リングバッファ保持長。
- * @param {{ engine?: "whisper" | "elevenlabs" | "parakeet" | "zipformer"; apiKey?: string; elevenLabs?: object;
+ * @param {{ engine?: "whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas"; apiKey?: string; elevenLabs?: object;
  *   local?: { threads?: number; preRollMs?: number; silencePadMs?: number; hotwords?: string[]; hotwordsScore?: number; coughMaxChars?: number; coughSpeechThreshold?: number; modelsDir?: string; client?: object } }} [options.stt]
  *   文字起こしの方式（既定 whisper）。elevenlabs のときは apiKey が要り（呼び出し側が env ファイルから
  *   読んで渡す）、elevenLabs は createElevenLabsRealtimeStt への追加設定（WebSocketImpl 等）。
@@ -227,7 +228,7 @@ export function createEarPipeline(options = {}) {
   const useElevenLabs = sttEngine === "elevenlabs";
   const useLocal = isLocalSttEngine(sttEngine);
   const localSettings = normalizeLocalSttSettings(options.stt?.local ?? null);
-  const localSttFactory = options.localSttFactory ?? createLocalSttClient;
+  const localSttFactory = options.localSttFactory ?? (sttEngine === "haas" ? createHaasLocalSttClient : createLocalSttClient);
   const onSttStatus = options.onSttStatus ?? (() => {});
 
   const onVadEvent = options.onVadEvent ?? (() => {});
@@ -401,6 +402,7 @@ export function createEarPipeline(options = {}) {
     try {
       const guarded = new Promise((_resolve, reject) => {
         watchdog = setTimeoutImpl(() => {
+          if (sttEngine === "haas") job.expired = true;
           reject(new Error(`utterance transcription exceeded ${asrOptions.utteranceTimeoutMs}ms (outer watchdog).`));
         }, asrOptions.utteranceTimeoutMs);
       });
@@ -427,7 +429,7 @@ export function createEarPipeline(options = {}) {
       : null;
     const transcribed = await transcribe(job.wav, audioCtx != null ? { audioCtx } : undefined);
     const { text } = transcribed;
-    if (disposed) return;
+    if (disposed || (sttEngine === "haas" && (asrDown || job.expired))) return;
     currentMeta = { latencyMs: nowImpl() - job.endWallMs, audioCtx };
     // 咳払いの落とし（ローカルの文字起こしだけ・ヘッダ参照）: 正本に積む前に比べる。
     const coughSpeech = useLocal ? coughSpeechToDrop(transcribed, localSettings) : null;
@@ -632,7 +634,7 @@ export function createEarPipeline(options = {}) {
         vad = vadFactory(options.vad ?? {});
         localStt = localSttFactory({
           ...(/** @type {any} */ (options.stt?.local?.client) ?? {}),
-          engine: /** @type {"parakeet" | "zipformer"} */ (sttEngine),
+          engine: /** @type {"parakeet" | "zipformer" | "haas"} */ (sttEngine),
           modelsDir: options.stt?.local?.modelsDir,
           threads: localSettings.threads,
           hotwords: localSettings.hotwords,

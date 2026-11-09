@@ -86,6 +86,7 @@ import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
 import { DEFAULT_WHISPER_PORT } from "../ears/whisper-server.mjs";
 // ローカルの文字起こしの語彙とモデルの存在確認だけ（sherpa-onnx-node は子プロセスだけが読む）。
 import { isLocalSttEngine, checkLocalSttModel, LOCAL_STT_ENGINE_TITLES } from "../ears/local-stt/local-stt-engines.mjs";
+import { createHaasSttPool } from "../ears/local-stt/haas-local-stt.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
@@ -2280,6 +2281,8 @@ export function createCockpitServer(options = {}) {
     health.sttReason = null;
   }
 
+  const haasPools = new WeakMap();
+
   /**
    * 耳を 1 本作る（配信のマイクの耳と Discord の人ごとの耳の共通の組み立て・Discord モード Domain D で配信の入口から出した）。
    * whisper / ElevenLabs / ローカルの選び分け・whisper の名前の手がかり・ElevenLabs の状態を stt の死活へ・場の正本（積む口）と
@@ -2301,6 +2304,14 @@ export function createCockpitServer(options = {}) {
     const { engine, elevenLabs, localStt } = spec.earPlan;
     const ears = spec.ears;
     const baseOptions = options.pipelineOptions ?? {};
+    let haasPool;
+    if (engine === "haas") {
+      haasPool = haasPools.get(ears);
+      if (!haasPool) {
+        haasPool = createHaasSttPool(baseOptions.localSttFactory);
+        haasPools.set(ears, haasPool);
+      }
+    }
     // Resolve the Whisper lexical-bias prompt at request time. The injected
     // provider observes cockpit.mjs の今のロール, so switching roles does not
     // require restarting the ear pipeline. 手がかりが空なら渡さない。
@@ -2322,6 +2333,7 @@ export function createCockpitServer(options = {}) {
     }
     return pipelineFactory({
       ...baseOptions,
+      ...(haasPool ? { localSttFactory: haasPool } : {}),
       whisper: whisperOptions,
       // ElevenLabs のときだけ stt を渡す（whisper は pipeline の既定＝従来と同じ options 形）。
       ...(elevenLabs ? { stt: { ...(/** @type {any} */ (baseOptions).stt ?? {}), ...elevenLabs } } : {}),

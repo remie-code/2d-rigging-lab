@@ -107,6 +107,15 @@ node apps/soul/agent/src/cli/cli.mjs "ws://127.0.0.1:<port>/channel?token=<token
   `localSttThreads`（既定 2）/ `localSttPreRollMs`（本物の音を前に含める長さ・既定 200）/ `localSttSilencePadMs`
   （前後に足す無音・既定 300）/ `localSttHotwords`（Zipformer のみ・既定 `["チャッピー", "コーディ"]`）/ `localSttHotwordsScore`（hotwords の強さ・
   0.1〜10・既定 1.5）。
+- **Haas-ja（Windows x64 / Vulkan）**: 比較実験で取得済みなら、同じ配置を使える。未配置なら
+  [speech.cpp v0.10.1](https://github.com/nyosegawa/speech.cpp/releases/tag/v0.10.1) の Windows x64 Vulkan 版を展開し、
+  `speech.exe` と `speech.dll` を `apps/soul/agent/vendor/haas-ja-experiment/` に置く。
+  [Haas-ja-v1.0 の GGUF 配布元](https://huggingface.co/sakasegawa/Haas-ja-v1.0-GGUF) の
+  `Haas-616M-ja-v1.0-Q8_0.gguf` も同じ場所に置く。Start 時は置いたファイルを使う。
+  操縦席の「文字起こし」で **Haas-ja（ローカル）** を選び、配信または通話を始める。
+  別の方式に戻すには、その場を終了し、以前の方式を選んで開始する。
+  咳払い対策は既存の CED-tiny モデルを使う（未配置なら上のモデル取得コマンドで準備）。
+  Haas-ja では語彙補助を渡さない。
 - **レイテンシ既定**（実測根拠は `discussion/ai-cohost/experiments/s2-ears.md`）:
   whisper-server 6 スレッド + **発話長比例の動的 `audio_ctx`**（`src/ears/whisper-inference.mjs`）で
   発話終了→転写 ≈1.5〜2s（全窓のままだと ≈6.6〜9.5s）。

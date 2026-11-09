@@ -34,13 +34,14 @@ const AGENT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 
 /** ローカルの文字起こしのモデル置き場の既定（git 外）。 */
 export const DEFAULT_LOCAL_STT_MODELS_DIR = path.join(AGENT_ROOT, "vendor", "models");
+export const DEFAULT_HAAS_DIR = path.join(AGENT_ROOT, "vendor", "haas-ja-experiment");
 
 /** ローカルの文字起こしの方式（ear-pipeline の STT_ENGINES の部分集合）。 */
-export const LOCAL_STT_ENGINES = Object.freeze(["parakeet", "zipformer"]);
+export const LOCAL_STT_ENGINES = Object.freeze(["parakeet", "zipformer", "haas"]);
 
 /** 表示名（警告・理由の文言に使う）。 */
 export const LOCAL_STT_ENGINE_TITLES = Object.freeze(
-  /** @type {Record<string, string>} */ ({ parakeet: "Parakeet", zipformer: "Zipformer" })
+  /** @type {Record<string, string>} */ ({ parakeet: "Parakeet", zipformer: "Zipformer", haas: "Haas-ja" })
 );
 
 /**
@@ -96,7 +97,7 @@ export const LOCAL_STT_SAMPLE_RATE = 16000;
 
 /**
  * @param {unknown} engine
- * @returns {engine is "parakeet" | "zipformer"}
+ * @returns {engine is "parakeet" | "zipformer" | "haas"}
  */
 export function isLocalSttEngine(engine) {
   return typeof engine === "string" && LOCAL_STT_ENGINES.includes(engine);
@@ -163,15 +164,22 @@ export function resolveLocalSttModel(engine, opts = {}) {
 
 /**
  * モデルが揃っているか（無ければ Start を失敗にする理由の文言を返す・ElevenLabs のキー切れと同じ流儀）。
- * @param {"parakeet" | "zipformer"} engine
+ * @param {"parakeet" | "zipformer" | "haas"} engine
  * @param {{ modelsDir?: string; existsImpl?: (p: string) => boolean }} [opts]
  * @returns {{ ok: true } | { ok: false; reason: string; missing: string[] }}
  */
 export function checkLocalSttModel(engine, opts = {}) {
   const existsImpl = opts.existsImpl ?? fileHasBytes;
-  const { dir, files } = resolveLocalSttModel(engine, opts);
+  const { dir, files } = engine === "haas" ? resolveHaasFiles() : resolveLocalSttModel(engine, opts);
   const missing = Object.values(files).filter((p) => !existsImpl(p));
   if (missing.length === 0) return { ok: true };
+  if (engine === "haas") {
+    return {
+      ok: false,
+      missing,
+      reason: `Haas-ja の実行に必要なファイルが無い（${missing.map((p) => path.basename(p)).join(", ")}）。apps/soul/README.md の Haas-ja 導入手順を参照`
+    };
+  }
   const title = LOCAL_STT_ENGINE_TITLES[engine] ?? engine;
   const names = missing.map((p) => path.basename(p)).join(", ");
   return {
@@ -180,6 +188,17 @@ export function checkLocalSttModel(engine, opts = {}) {
     reason:
       `${title} のモデルが見つからない（${dir} に ${names} が無い）。` +
       "`node apps/soul/agent/scripts/fetch-local-stt-models.mjs` で取得できる"
+  };
+}
+
+export function resolveHaasFiles(dir = DEFAULT_HAAS_DIR) {
+  return {
+    dir,
+    files: {
+      executable: path.join(dir, "speech.exe"),
+      library: path.join(dir, "speech.dll"),
+      model: path.join(dir, "Haas-616M-ja-v1.0-Q8_0.gguf")
+    }
   };
 }
 
