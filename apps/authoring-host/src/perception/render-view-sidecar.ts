@@ -1,3 +1,4 @@
+import type { ReferenceImageMode, ReferenceImageState } from "@private-2d-rigging-lab/contracts";
 import type {
   RenderViewSidecar,
   RenderViewSweepLayout,
@@ -35,6 +36,8 @@ export const buildRenderViewSidecar = (input: {
   readonly pngPath: string;
   readonly parameterOverrides: Readonly<Record<string, number>>;
   readonly resolvedView: ResolvedSoftwareRenderView;
+  readonly referenceMode?: ReferenceImageMode;
+  readonly referenceImage?: ReferenceImageState;
   readonly sweep?: RenderViewSweepLayout;
   /**
    * Per-texture dimension-source records (§3.4 revised ladder: declared /
@@ -68,6 +71,8 @@ export const buildRenderViewSidecar = (input: {
       pixelsPerStageX: input.resolvedView.pixelsPerStageX,
       pixelsPerStageY: input.resolvedView.pixelsPerStageY
     },
+    ...(input.referenceMode === undefined ? {} : { referenceMode: input.referenceMode }),
+    ...(input.referenceImage === undefined ? {} : { referenceImage: input.referenceImage }),
     ...(input.sweep === undefined ? {} : { sweep: input.sweep }),
     ...(input.textureDimensionSources === undefined
       ? {}

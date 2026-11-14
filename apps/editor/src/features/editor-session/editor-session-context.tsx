@@ -1,3 +1,4 @@
+import type { EditorReferenceImage } from "../workspace-storage/model/workspace-reference-image";
 import type {
   AuthoringSession,
   DrawableGeneratedMeshResult,
@@ -331,12 +332,16 @@ function getMeshGenerationV6MultiIslandDiagnostics(
 }
 
 interface EditorSessionState {
+  readonly referenceImage?: EditorReferenceImage | null | undefined;
+  readonly savedReferenceImage?: EditorReferenceImage | null | undefined;
   readonly session: AuthoringSession;
   readonly history: EditorSessionHistoryState;
   readonly baseDocument: unknown;
 }
 
 interface EditorSessionContextValue {
+  readonly referenceImage: EditorReferenceImage | null;
+  readonly commitReferenceImage: (reference: EditorReferenceImage | null) => void;
   readonly session: AuthoringSession;
   readonly selection: EditorSelection | null;
   readonly collapsedPartIds: ReadonlySet<PartId>;
@@ -361,6 +366,7 @@ interface EditorSessionContextValue {
   readonly workspaceIdentityLabel: string;
   readonly workspaceSaveStatusLabel: string;
   readonly hasOpenWorkspace: boolean;
+  readonly workspaceDirectory: WorkspaceDirectoryHandleLike | undefined;
   readonly psdImportOpen: boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
@@ -590,11 +596,15 @@ export function EditorSessionProvider({
     };
   });
   const editorStateRef = useRef(editorState);
+  const workspaceSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const latestSaveRequestRef = useRef(0);
   const setEditorSessionState = useCallback((nextState: EditorSessionState) => {
-    editorStateRef.current = nextState;
-    setEditorState(nextState);
+    const next = { ...editorStateRef.current, ...nextState };
+    editorStateRef.current = next;
+    setEditorState(next);
   }, []);
-  const { baseDocument, history, session } = editorState;
+  const { baseDocument, history, referenceImage, savedReferenceImage, session } = editorState;
+  const referenceDirty = (referenceImage ?? null) !== (savedReferenceImage ?? null);
   const [selection, setSelection] = useState<EditorSelection | null>(() => initialSelection);
   const [selectionAnchorDrawableId, setSelectionAnchorDrawableId] =
     useState<DrawableId | null>(() => getSingleSelectedDrawableId(initialSelection) ?? null);
@@ -707,9 +717,10 @@ export function EditorSessionProvider({
       createWorkspaceSaveStatusLabel({
         session,
         storageState: workspaceStorage,
+        referenceDirty,
         hasOpenWorkspace
       }),
-    [hasOpenWorkspace, session, workspaceStorage]
+    [hasOpenWorkspace, referenceDirty, session, workspaceStorage]
   );
   useEffect(() => {
     if (activeParameterId !== resolvedActiveParameterId) {
@@ -842,6 +853,26 @@ export function EditorSessionProvider({
     [requireOpenWorkspace, setEditorSessionState]
   );
 
+  const commitReferenceImage = useCallback((reference: EditorReferenceImage | null) => {
+    if (!requireOpenWorkspace("editing the reference image")) return;
+    const current = editorStateRef.current;
+    if (
+      (current.referenceImage ?? null) === reference ||
+      (reference !== null && current.referenceImage !== null && current.referenceImage !== undefined &&
+        JSON.stringify(current.referenceImage.state) === JSON.stringify(reference.state))
+    ) return;
+    setEditorSessionState({
+      ...current,
+      referenceImage: reference,
+      history: recordEditorSessionCommit(current.history, {
+        before: current.session,
+        after: current.session,
+        referenceChange: { before: current.referenceImage, after: reference },
+        label: "Reference Image"
+      })
+    });
+  }, [requireOpenWorkspace, setEditorSessionState]);
+
   const undo = useCallback(() => {
     const currentState = editorStateRef.current;
     const outcome = undoEditorSessionHistory(currentState.history);
@@ -850,7 +881,10 @@ export function EditorSessionProvider({
     }
 
     setEditorSessionState({
-      session: outcome.session,
+      session: outcome.entry.referenceChange === undefined ? outcome.session : currentState.session,
+      ...(outcome.entry.referenceChange === undefined
+        ? {}
+        : { referenceImage: outcome.entry.referenceChange.before ?? null }),
       history: outcome.history,
       baseDocument: currentState.baseDocument
     });
@@ -865,7 +899,10 @@ export function EditorSessionProvider({
     }
 
     setEditorSessionState({
-      session: outcome.session,
+      session: outcome.entry.referenceChange === undefined ? outcome.session : currentState.session,
+      ...(outcome.entry.referenceChange === undefined
+        ? {}
+        : { referenceImage: outcome.entry.referenceChange.after }),
       history: outcome.history,
       baseDocument: currentState.baseDocument
     });
@@ -889,7 +926,6 @@ export function EditorSessionProvider({
     async (input: {
       readonly target: EditorWorkspaceTarget | null;
       readonly sessionToSave: AuthoringSession;
-      readonly history: EditorSessionHistoryState;
       readonly baseDocument: unknown;
       readonly message?: string;
     }) => {
@@ -898,24 +934,38 @@ export function EditorSessionProvider({
         return null;
       }
 
+      const currentReference = editorStateRef.current.referenceImage;
+      const previousSave = workspaceSaveQueueRef.current;
+      const request = ++latestSaveRequestRef.current;
+      let finishSave!: () => void;
+      workspaceSaveQueueRef.current = new Promise((resolve) => { finishSave = resolve; });
       setWorkspaceStorage(createSavingWorkspaceStorageState(input.target.workspaceName));
 
       try {
+        await previousSave;
+        const previousReference = editorStateRef.current.savedReferenceImage;
+        const referenceToSave = (currentReference ?? null) === (previousReference ?? null)
+          ? undefined
+          : currentReference ?? null;
         const result = await saveEditorWorkspace({
           target: input.target,
           session: input.sessionToSave,
+          ...(referenceToSave === undefined ? {} : { referenceImage: referenceToSave }),
           baseDocument: input.baseDocument,
           editorHiddenPartIds
         });
 
-        if (editorStateRef.current.session === input.sessionToSave) {
-          const savedSession = structuredClone(input.sessionToSave);
-          savedSession.dirty = false;
-          setEditorSessionState({
-            session: savedSession,
-            history: input.history,
-            baseDocument: result.packageDocument
-          });
+        const current = editorStateRef.current;
+        const savedModel = current.session.graph === input.sessionToSave.graph &&
+          current.session.authoringRevision === input.sessionToSave.authoringRevision &&
+          current.session.packageRevision === input.sessionToSave.packageRevision;
+        setEditorSessionState({
+          session: current.session.dirty === !savedModel ? current.session : { ...current.session, dirty: !savedModel },
+          savedReferenceImage: referenceToSave === undefined ? previousReference : referenceToSave,
+          history: current.history,
+          baseDocument: result.packageDocument
+        });
+        if (request === latestSaveRequestRef.current) {
           setWorkspaceStorage(
             createSavedWorkspaceStorageState({
               workspaceName: result.workspaceName,
@@ -929,8 +979,12 @@ export function EditorSessionProvider({
 
         return result;
       } catch (error) {
-        applyWorkspaceStorageError(error, input.target.workspaceName);
+        if (request === latestSaveRequestRef.current) {
+          applyWorkspaceStorageError(error, input.target.workspaceName);
+        }
         return null;
+      } finally {
+        finishSave();
       }
     },
     [applyWorkspaceStorageError, editorHiddenPartIds, setEditorSessionState]
@@ -939,7 +993,9 @@ export function EditorSessionProvider({
   const prepareDirtyWorkspaceReplacement = useCallback(
     async (reason: DirtyWorkspaceReplacementReason): Promise<boolean> => {
       const currentState = editorStateRef.current;
-      if (!hasOpenWorkspace || !currentState.session.dirty) {
+      const referenceChanged =
+        (currentState.referenceImage ?? null) !== (currentState.savedReferenceImage ?? null);
+      if (!hasOpenWorkspace || (!currentState.session.dirty && !referenceChanged)) {
         return true;
       }
 
@@ -959,7 +1015,6 @@ export function EditorSessionProvider({
       const saved = await persistSessionToWorkspace({
         target: workspaceTarget,
         sessionToSave: currentState.session,
-        history: currentState.history,
         baseDocument: currentState.baseDocument,
         message: "Saved current workspace before replacing it."
       });
@@ -981,6 +1036,7 @@ export function EditorSessionProvider({
     try {
       const result = await createEditorWorkspace({
         session: currentState.session,
+        ...(currentState.referenceImage === undefined ? {} : { referenceImage: currentState.referenceImage }),
         baseDocument: currentState.baseDocument,
         editorHiddenPartIds,
         ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
@@ -991,6 +1047,7 @@ export function EditorSessionProvider({
       setActiveEntry("workspace");
       setEditorSessionState({
         session: result.session,
+        savedReferenceImage: result.referenceImage,
         history: currentState.history,
         baseDocument: result.packageDocument
       });
@@ -1038,6 +1095,8 @@ export function EditorSessionProvider({
       setActiveEntry("workspace");
       setEditorSessionState({
         session: result.session,
+        referenceImage: result.referenceImage,
+        savedReferenceImage: result.referenceImage,
         history: createEmptyEditorSessionHistory(),
         baseDocument: result.packageDocument
       });
@@ -1073,7 +1132,6 @@ export function EditorSessionProvider({
     await persistSessionToWorkspace({
       target: workspaceTarget,
       sessionToSave: currentState.session,
-      history: currentState.history,
       baseDocument: currentState.baseDocument
     });
   }, [persistSessionToWorkspace, workspaceTarget]);
@@ -1085,6 +1143,7 @@ export function EditorSessionProvider({
     try {
       const result = await saveEditorWorkspaceAs({
         session: currentState.session,
+        referenceImage: currentState.referenceImage ?? null,
         baseDocument: currentState.baseDocument,
         editorHiddenPartIds,
         ...(workspaceDirectoryPicker === undefined ? {} : { picker: workspaceDirectoryPicker }),
@@ -1095,6 +1154,7 @@ export function EditorSessionProvider({
       setActiveEntry("workspace");
       setEditorSessionState({
         session: result.session,
+        savedReferenceImage: result.referenceImage,
         history: currentState.history,
         baseDocument: result.packageDocument
       });
@@ -1152,7 +1212,6 @@ export function EditorSessionProvider({
       void persistSessionToWorkspace({
         target: workspaceTarget,
         sessionToSave: result.session,
-        history: nextHistory,
         baseDocument: currentState.baseDocument,
         message: "Saved PSD import to workspace."
       });
@@ -1206,7 +1265,6 @@ export function EditorSessionProvider({
       await persistSessionToWorkspace({
         target: workspaceTarget,
         sessionToSave: result.session,
-        history: nextHistory,
         baseDocument: currentState.baseDocument,
         message: "Saved Texture Atlas artifact to workspace."
       });
@@ -2269,6 +2327,8 @@ export function EditorSessionProvider({
 
   const value = useMemo<EditorSessionContextValue>(
     () => ({
+      referenceImage: referenceImage ?? null,
+      commitReferenceImage,
       collapsedPartIds,
       editorHiddenPartIds,
       session,
@@ -2293,6 +2353,7 @@ export function EditorSessionProvider({
       workspaceIdentityLabel,
       workspaceSaveStatusLabel,
       hasOpenWorkspace,
+      workspaceDirectory: workspaceTarget?.directory,
       psdImportOpen,
       canUndo: canUndoEditorSessionHistory(history),
       canRedo: canRedoEditorSessionHistory(history),
@@ -2397,6 +2458,8 @@ export function EditorSessionProvider({
       applyTextureAtlasPreview
     }),
     [
+      referenceImage,
+      commitReferenceImage,
       applyCommand,
       applyTextureAtlasPreview,
       advanceDynamicsToolPreviewSimulation,
@@ -2447,6 +2510,7 @@ export function EditorSessionProvider({
       workspaceIdentityLabel,
       workspaceSaveStatusLabel,
       hasOpenWorkspace,
+      workspaceTarget,
       psdImportOpen,
       previewMeshDraft,
       previewMeshDrafts,

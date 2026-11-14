@@ -17,6 +17,7 @@
     "pixelsPerStageX": 3.0917874396135265,
     "pixelsPerStageY": 3.092185592185592
   },
+  "referenceMode": "model",
   "textureDimensionSources": [
     {
       "textureId": "tex_r0_1cea4f6f_030b7f85_eyelash-r",

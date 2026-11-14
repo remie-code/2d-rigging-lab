@@ -3,6 +3,7 @@ import type { RenderScene } from "@private-2d-rigging-lab/render-core";
 import { encodeRgba8ToPng } from "./png/png-encoder.js";
 import {
   renderSceneToRgba8,
+  type SoftwareRenderForeground,
   type SoftwareRenderResult
 } from "./software-renderer.js";
 import type { SoftwareRenderView } from "./view/view-transform.js";
@@ -27,9 +28,10 @@ export interface SoftwareRenderPngResult {
  */
 export const renderSceneToPng = (
   scene: RenderScene,
-  view: SoftwareRenderView
+  view: SoftwareRenderView,
+  foreground?: SoftwareRenderForeground
 ): SoftwareRenderPngResult => {
-  const render = renderSceneToRgba8(scene, view);
+  const render = renderSceneToRgba8(scene, view, foreground);
   const png = encodeRgba8ToPng(render.straightRgba8, render.width, render.height);
   return { render, png };
 };

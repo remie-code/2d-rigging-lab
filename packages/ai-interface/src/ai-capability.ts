@@ -6,6 +6,7 @@ export const AiCapabilitySchema = z.enum([
   "commitWithApproval",
   "validate",
   "runScenario",
-  "render"
+  "render",
+  "editReference"
 ]);
 export type AiCapability = z.infer<typeof AiCapabilitySchema>;

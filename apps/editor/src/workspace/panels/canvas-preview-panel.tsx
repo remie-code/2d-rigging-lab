@@ -1,8 +1,10 @@
-import { createVariantVisibilityPredicate } from "@private-2d-rigging-lab/authoring-core";
+import type { ReferenceImageState, ReferenceImageUpdate } from "@private-2d-rigging-lab/contracts";
+import { createVariantVisibilityPredicate, updateReferenceImageState } from "@private-2d-rigging-lab/authoring-core";
 import {
   CircleOff,
   Focus,
   Grid3x3,
+  Image as ImageIcon,
   Maximize2,
   MousePointer2,
   Move,
@@ -25,6 +27,8 @@ import {
 } from "react";
 
 import { useEditorSession } from "../../features/editor-session/editor-session-context";
+import { decodeEditorReferenceImage, type EditorReferenceImage } from "../../features/workspace-storage/model/workspace-reference-image";
+import { isWorkspaceStorageBusy } from "../../features/workspace-storage/model/workspace-storage-state";
 import { cn } from "../../lib/class-name";
 import { useEditorUiStore, type WorkspaceToolId } from "../../state/editor-ui-store";
 import { IconButton } from "../../ui/icon-button";
@@ -61,6 +65,8 @@ import type {
 } from "../canvas/canvas-evaluation";
 import { useRotationDeformerInteraction } from "../canvas/use-rotation-deformer-interaction";
 import { useWarpDeformerControlPointInteraction } from "../canvas/use-warp-deformer-control-point-interaction";
+import { getReferenceImageGesture, previewReferenceImageGesture, type ReferenceImageGesture } from "../canvas/canvas-reference-image";
+import { ReferenceImageControls } from "./reference-image-controls";
 import { WorkspacePanel } from "./panel-frame";
 
 interface CanvasPreviewProjectionPreview {
@@ -68,7 +74,16 @@ interface CanvasPreviewProjectionPreview {
   readonly rotationPreview?: CanvasEvaluationRotationPreview | null;
 }
 
+interface ReferenceDrag {
+  readonly mode: "reference";
+  readonly pointerId: number;
+  readonly reference: EditorReferenceImage;
+  readonly gesture: ReferenceImageGesture;
+  readonly start: CanvasPoint;
+}
+
 type PointerDragState =
+  | ReferenceDrag
   | {
       readonly mode: "select";
       readonly pointerId: number;
@@ -101,6 +116,11 @@ export function isCanvasAuthoringSelectionEnabled(activeTool: WorkspaceToolId): 
 export function CanvasPreviewPanel() {
   const {
     activeParameterId,
+    commitReferenceImage,
+    hasOpenWorkspace,
+    referenceImage,
+    workspaceDirectory,
+    workspaceStorage,
     commitGestureController,
     dynamicsToolPreviewEvaluation,
     editorHiddenPartIds,
@@ -131,6 +151,28 @@ export function CanvasPreviewPanel() {
   const [view, setView] = useState<CanvasViewState>(DEFAULT_VIEW);
   const [spacePressed, setSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [referenceControlsOpen, setReferenceControlsOpen] = useState(false);
+  const [adjustingReference, setAdjustingReference] = useState(false);
+  const [placingPivot, setPlacingPivot] = useState(false);
+  const [referencePreview, setReferencePreview] = useState<ReferenceImageState | null>(null);
+  const [referenceOpacityPreview, setReferenceOpacityPreview] = useState<number>();
+  const [decodedReference, setDecodedReference] = useState<{
+    bytes: EditorReferenceImage["bytes"];
+    bitmap: ImageBitmap | null;
+    error?: string;
+  } | null>(null);
+  const referenceBytes = referenceImage?.bytes;
+  const referenceState = referencePreview ?? referenceImage?.state;
+  const displayReferenceState = referenceOpacityPreview === undefined || referenceState === undefined
+    ? referenceState
+    : { ...referenceState, opacity: referenceOpacityPreview };
+  const referenceBitmap = referenceBytes !== undefined && decodedReference?.bytes === referenceBytes &&
+    decodedReference.bitmap?.width ? decodedReference.bitmap : null;
+  const referenceDecodeError = referenceBytes !== undefined && decodedReference?.bytes === referenceBytes
+    ? decodedReference.error : undefined;
+  const editingReference = adjustingReference && referenceImage !== null;
+  const modelInteractionEnabled = !editingReference && referenceState?.displayMode !== "reference";
+  const [referenceUpdateError, setReferenceUpdateError] = useState<string>();
   const [overlays, setOverlays] = useState<Omit<CanvasOverlayState, "mesh" | "deformer">>({
     grid: true,
     canvasBounds: true,
@@ -190,7 +232,7 @@ export function CanvasPreviewPanel() {
   const warpControlPoints = useWarpDeformerControlPointInteraction({
     activeParameterId,
     commitGestureController,
-    enabled: activeTool === "rig" && deformerOverlayVisible,
+    enabled: modelInteractionEnabled && activeTool === "rig" && deformerOverlayVisible,
     parameterValues,
     projection,
     createPreviewProjection: (controlPointPreview) => createProjection({ controlPointPreview }),
@@ -200,7 +242,7 @@ export function CanvasPreviewPanel() {
   const rotationDeformer = useRotationDeformerInteraction({
     activeParameterId,
     commitGestureController,
-    enabled: activeTool === "rig" && deformerOverlayVisible,
+    enabled: modelInteractionEnabled && activeTool === "rig" && deformerOverlayVisible,
     parameterValues,
     projection: warpControlPoints.renderProjection,
     createPreviewProjection: (rotationPreview) => createProjection({ rotationPreview }),
@@ -285,6 +327,73 @@ export function CanvasPreviewPanel() {
     setView(fitArtworkView(projection, viewport));
   }, [projection, viewport]);
 
+  const resetReferenceAdjustment = useCallback(() => {
+    setAdjustingReference(false);
+    setPlacingPivot(false);
+    setReferencePreview(null);
+    setReferenceOpacityPreview(undefined);
+    setReferenceUpdateError(undefined);
+  }, []);
+
+  useEffect(() => {
+    resetReferenceAdjustment();
+    setReferenceControlsOpen(false);
+  }, [resetReferenceAdjustment, workspaceDirectory]);
+
+  useEffect(() => {
+    if (referenceBytes === undefined) return;
+    let cancelled = false;
+    let bitmap: ImageBitmap | undefined;
+    void decodeEditorReferenceImage(referenceBytes).then((decoded) => {
+      if (cancelled) {
+        decoded.close();
+      } else {
+        bitmap = decoded;
+        setDecodedReference({ bytes: referenceBytes, bitmap: decoded });
+      }
+    }, () => {
+      if (!cancelled) setDecodedReference({
+        bytes: referenceBytes,
+        bitmap: null,
+        error: "The saved reference PNG could not be decoded."
+      });
+    });
+    return () => {
+      cancelled = true;
+      bitmap?.close();
+    };
+  }, [referenceBytes]);
+
+  const replaceReference = useCallback((image: EditorReferenceImage | null) => {
+    resetReferenceAdjustment();
+    commitReferenceImage(image);
+  }, [commitReferenceImage, resetReferenceAdjustment]);
+
+  const updateReference = useCallback((update: ReferenceImageUpdate) => {
+    if (referenceImage === null) return;
+    try {
+      const state = updateReferenceImageState(referenceImage.state, update);
+      setReferenceUpdateError(undefined);
+      commitReferenceImage({ ...referenceImage, state });
+    } catch {
+      setReferenceUpdateError("The reference adjustment is outside the supported numeric range.");
+    }
+  }, [commitReferenceImage, referenceImage]);
+
+  const previewReferenceDrag = useCallback((drag: ReferenceDrag, point: CanvasPoint) => {
+    if (!editingReference || drag.reference !== referenceImage) return undefined;
+    try {
+      return previewReferenceImageGesture({
+        state: drag.reference.state,
+        gesture: drag.gesture,
+        start: drag.start,
+        current: screenToCanvasPoint(point, view)
+      });
+    } catch {
+      return undefined;
+    }
+  }, [editingReference, referenceImage, view]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) {
@@ -297,10 +406,16 @@ export function CanvasPreviewPanel() {
       view,
       overlays: renderOverlays,
       cache: bitmapCacheRef.current,
+      ...(displayReferenceState === undefined ? {} : {
+        referenceImage: { state: displayReferenceState, bitmap: referenceBitmap, adjusting: editingReference }
+      }),
       warpDeformerInteraction: warpControlPoints.rendererState,
       rotationDeformerInteraction: rotationDeformer.rendererState
     });
   }, [
+    displayReferenceState,
+    editingReference,
+    referenceBitmap,
     renderOverlays,
     renderProjection,
     rotationDeformer.rendererState,
@@ -393,6 +508,8 @@ export function CanvasPreviewPanel() {
     const localPoint = toLocalPoint(event.currentTarget, event.clientX, event.clientY);
     const startsPan = event.button === 1 || (event.button === 0 && spacePressedRef.current);
 
+    if (pointerDragRef.current !== undefined) return;
+
     if (startsPan) {
       event.preventDefault();
       pointerDragRef.current = {
@@ -409,7 +526,24 @@ export function CanvasPreviewPanel() {
       return;
     }
 
-    if (!isCanvasAuthoringSelectionEnabled(activeTool)) {
+    if (editingReference && referenceImage !== null) {
+      event.preventDefault();
+      const gesture = getReferenceImageGesture(referenceImage.state, view, localPoint, placingPivot);
+      if (gesture === undefined) return;
+      const drag: ReferenceDrag = {
+        mode: "reference",
+        pointerId: event.pointerId,
+        reference: referenceImage,
+        gesture,
+        start: screenToCanvasPoint(localPoint, view)
+      };
+      pointerDragRef.current = drag;
+      setReferencePreview(previewReferenceDrag(drag, localPoint) ?? null);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (!modelInteractionEnabled || !isCanvasAuthoringSelectionEnabled(activeTool)) {
       event.preventDefault();
       return;
     }
@@ -444,12 +578,16 @@ export function CanvasPreviewPanel() {
       moved: false
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-  }, [activeTool, rotationDeformer, warpControlPoints]);
+  }, [
+    activeTool, editingReference, modelInteractionEnabled, placingPivot, previewReferenceDrag,
+    referenceImage, rotationDeformer, view, warpControlPoints
+  ]);
 
   const onPointerMove = useCallback((event: ReactPointerEvent<HTMLCanvasElement>) => {
     const localPoint = toLocalPoint(event.currentTarget, event.clientX, event.clientY);
     const drag = pointerDragRef.current;
     if (drag === undefined) {
+      if (!modelInteractionEnabled) return;
       if (
         rotationDeformer.handlePointerMove({
           pointerId: event.pointerId,
@@ -466,6 +604,11 @@ export function CanvasPreviewPanel() {
     }
 
     if (drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (drag.mode === "reference") {
+      setReferencePreview(previewReferenceDrag(drag, localPoint) ?? null);
       return;
     }
 
@@ -496,7 +639,7 @@ export function CanvasPreviewPanel() {
         Math.abs(localPoint.x - drag.start.x) > POINTER_CLICK_SLOP ||
         Math.abs(localPoint.y - drag.start.y) > POINTER_CLICK_SLOP
     };
-  }, [rotationDeformer, warpControlPoints]);
+  }, [modelInteractionEnabled, previewReferenceDrag, rotationDeformer, warpControlPoints]);
 
   const finishPointerDrag = useCallback((
     event: ReactPointerEvent<HTMLCanvasElement>,
@@ -530,7 +673,19 @@ export function CanvasPreviewPanel() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
 
-    if (drag.mode !== "select" || drag.moved) {
+    if (drag.mode === "reference") {
+      setReferencePreview(null);
+      if (!options.commit) return;
+      const point = toLocalPoint(event.currentTarget, event.clientX, event.clientY);
+      const state = previewReferenceDrag(drag, point);
+      if (state !== undefined && state !== drag.reference.state) {
+        commitReferenceImage({ ...drag.reference, state });
+        setPlacingPivot(false);
+      }
+      return;
+    }
+
+    if (!options.commit || drag.mode !== "select" || drag.moved) {
       return;
     }
 
@@ -543,7 +698,10 @@ export function CanvasPreviewPanel() {
     if (hitDrawableId !== undefined) {
       selectDrawable(hitDrawableId);
     }
-  }, [activeTool, renderProjection, rotationDeformer, selectDrawable, view, warpControlPoints]);
+  }, [
+    activeTool, commitReferenceImage, previewReferenceDrag, renderProjection,
+    rotationDeformer, selectDrawable, view, warpControlPoints
+  ]);
 
   const rotationHoveredLocked =
     rotationDeformer.hoveredHandle === "pivot"
@@ -626,6 +784,17 @@ export function CanvasPreviewPanel() {
         >
           <Spline aria-hidden="true" size={15} strokeWidth={1.8} />
         </ToolbarButton>
+        <ToolbarButton
+          disabled={!hasOpenWorkspace}
+          label="Reference Image"
+          onClick={() => {
+            if (referenceControlsOpen) resetReferenceAdjustment();
+            setReferenceControlsOpen(!referenceControlsOpen);
+          }}
+          pressed={referenceControlsOpen}
+        >
+          <ImageIcon aria-hidden="true" size={15} strokeWidth={1.8} />
+        </ToolbarButton>
       </div>
     </>
   );
@@ -641,6 +810,25 @@ export function CanvasPreviewPanel() {
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
         data-testid="canvas-preview-panel"
       >
+        {referenceControlsOpen ? (
+          <ReferenceImageControls
+            adjusting={editingReference}
+            disabled={isWorkspaceStorageBusy(workspaceStorage)}
+            onAdjust={() => {
+              if (editingReference) resetReferenceAdjustment();
+              else setAdjustingReference(true);
+            }}
+            onPlacePivot={() => setPlacingPivot(!placingPivot)}
+            onReplace={replaceReference}
+            onUpdate={updateReference}
+            onPreviewOpacity={setReferenceOpacityPreview}
+            placingPivot={placingPivot}
+            reference={referenceState ?? null}
+          />
+        ) : null}
+        {referenceDecodeError === undefined && referenceUpdateError === undefined ? null : (
+          <p className="px-3 py-1 text-xs text-red-300" role="alert">{referenceUpdateError ?? referenceDecodeError}</p>
+        )}
         <div
           className="relative min-h-0 flex-1 overflow-hidden bg-[#101110]"
           ref={frameRef}
@@ -651,6 +839,8 @@ export function CanvasPreviewPanel() {
               "block size-full touch-none outline-none",
               isPanning
                 ? "cursor-grabbing"
+                : editingReference
+                  ? placingPivot ? "cursor-crosshair" : "cursor-move"
                 : rotationDeformer.hoveredHandle !== undefined && rotationHoveredLocked
                   ? "cursor-not-allowed"
                   : rotationDeformer.hoveredHandle !== undefined
@@ -767,6 +957,9 @@ export function CanvasPreviewPanel() {
             }
             data-rotation-deformer-translation-mode={rotationDeformer.translationEditMode}
             data-testid="canvas-renderer-surface"
+            data-pan-x={view.pan.x}
+            data-pan-y={view.pan.y}
+            data-zoom={view.zoom}
             data-zoom-percent={formatZoomPercent(view.zoom)}
             onBlur={() => {
               focusedRef.current = false;
@@ -784,6 +977,7 @@ export function CanvasPreviewPanel() {
               rotationDeformer.clearHover();
               warpControlPoints.clearHover();
             }}
+            onLostPointerCapture={(event) => finishPointerDrag(event, { commit: false })}
             onPointerMove={onPointerMove}
             onPointerUp={(event) => finishPointerDrag(event, { commit: true })}
             onWheel={onWheel}
@@ -802,7 +996,7 @@ export function CanvasPreviewPanel() {
               }}
             />
           )}
-          {renderProjection.hasRenderableArtwork ? null : (
+          {renderProjection.hasRenderableArtwork || referenceState !== undefined ? null : (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950/88 px-3 py-2 text-xs font-medium text-neutral-300">
                 <Move aria-hidden="true" size={15} strokeWidth={1.8} />

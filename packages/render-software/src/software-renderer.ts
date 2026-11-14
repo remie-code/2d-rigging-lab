@@ -43,6 +43,12 @@ export interface SoftwareRenderResult {
   readonly straightRgba8: Uint8Array;
 }
 
+/** A single unmasked foreground pass, isolated from the model scene's IDs and masks. */
+export interface SoftwareRenderForeground {
+  readonly drawable: RenderDrawable;
+  readonly texture: RenderRgba8TextureSource;
+}
+
 function isDrawableRenderable(drawable: RenderDrawable): boolean {
   return drawable.visible && drawable.opacity > 0;
 }
@@ -149,10 +155,14 @@ function compositeScene(
  */
 export const renderSceneToRgba8 = (
   scene: RenderScene,
-  view: SoftwareRenderView
+  view: SoftwareRenderView,
+  foreground?: SoftwareRenderForeground
 ): SoftwareRenderResult => {
   const resolvedView = resolveSoftwareRenderView(view);
   const framebuffer = compositeScene(scene, resolvedView);
+  if (foreground !== undefined && isDrawableRenderable(foreground.drawable)) {
+    rasterizeDrawable(framebuffer, foreground.drawable, prepareTexture(foreground.texture), resolvedView);
+  }
   return {
     width: resolvedView.outputWidth,
     height: resolvedView.outputHeight,

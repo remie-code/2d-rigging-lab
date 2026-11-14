@@ -18,6 +18,8 @@ discussion/implementation/
 
 ## Current State
 
+- **参照画像表示 (2026-11-12)**: [2 Wave計画](orchestration/reference-image-overlay-wave-plan.md)の実装・独立レビュー合格。Editorのpivot拡縮/回転・opacity・固定後のRig編集・保存再開、Host共有と片目編集比較、最終portable起動を確認。[本人確認の手順](waves/reference-image-overlay/human-gate.md)へ。操作感と笑み造形は本人確認待ち。
+
 ### 「Editorの開発はどこまで進んでいる？」から辿る
 
 2026-11-06 に入口・限定した実装端点と Git を照合。以下は実装・確認記録への道であり、現 HEAD の全機能を今回再試験した一覧ではない。

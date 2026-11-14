@@ -5,7 +5,8 @@ import {
   createAuthoringWorkspaceSavePlan,
   getAuthoringSessionBinaryFileEntries,
   hydrateAuthoringWorkspaceSessionBinaryAssets,
-  openAuthoringWorkspaceFromTextFileSet
+  openAuthoringWorkspaceFromTextFileSet,
+  REFERENCE_IMAGE_STATE_PATH
 } from "@private-2d-rigging-lab/authoring-core";
 import type {
   AuthoringSession,
@@ -166,6 +167,9 @@ const collectJsonFiles = async (
     const childRelativePath = relativePrefix.length === 0
       ? directoryEntry.name
       : posix.join(relativePrefix, directoryEntry.name);
+
+    // Authoring-only adjuncts are read and validated by their own storage adapter.
+    if (childRelativePath === REFERENCE_IMAGE_STATE_PATH) continue;
 
     if (directoryEntry.isDirectory()) {
       await collectJsonFiles(rootDirectory, childRelativePath, entries);

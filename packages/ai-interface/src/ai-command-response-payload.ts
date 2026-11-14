@@ -8,6 +8,7 @@ import {
 } from "./ai-inspection-command.js";
 import { InspectEvaluatedGeometryResultSchema } from "./ai-measurement-command.js";
 import { AiPsdImportPlanCommandResultSchema } from "./ai-psd-import-plan-command.js";
+import { ReferenceImageCommandResultSchema } from "./ai-reference-image-command.js";
 import { RenderViewResultSchema } from "./ai-render-view-command.js";
 import { ValidatePackageResultSchema } from "./ai-validation-command.js";
 
@@ -21,6 +22,7 @@ export type EditorStatePayload = z.infer<typeof EditorStatePayloadSchema>;
 
 export const AiCommandResponsePayloadSchema = z.discriminatedUnion("command", [
   ...MaterialCommandResponseOptions,
+  z.object({ command: z.literal("referenceImage"), payload: z.object({ result: ReferenceImageCommandResultSchema.optional() }) }),
   z.object({
     command: z.literal("getEditorState"),
     payload: z.object({

@@ -151,6 +151,7 @@ export const createWorkspaceIdentityLabel = (input: {
 
 export const createWorkspaceSaveStatusLabel = (input: {
   readonly session: AuthoringSession;
+  readonly referenceDirty?: boolean;
   readonly storageState: WorkspaceStorageState;
   readonly hasOpenWorkspace: boolean;
 }): string => {
@@ -178,7 +179,7 @@ export const createWorkspaceSaveStatusLabel = (input: {
     return "Save failed";
   }
 
-  return input.session.dirty ? "Unsaved changes" : "Saved";
+  return input.session.dirty || input.referenceDirty ? "Unsaved changes" : "Saved";
 };
 
 export const isWorkspaceStorageBusy = (state: WorkspaceStorageState): boolean =>

@@ -5,7 +5,11 @@ import type {
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   createInitialAuthoringRevision,
-  registerAuthoringSessionBinaryBytes
+  createReferenceImageState,
+  describeReferenceImageBytes,
+  registerAuthoringSessionBinaryBytes,
+  serializeWorkspaceReferenceImage,
+  REFERENCE_IMAGE_STATE_PATH
 } from "@private-2d-rigging-lab/authoring-core";
 import {
   DrawableIdSchema,
@@ -61,6 +65,7 @@ import {
   createEditorWorkspace,
   type WorkspaceDirectoryPicker
 } from "../workspace-storage/model/workspace-session-storage";
+import { writeWorkspaceTextEntries } from "../workspace-storage/model/workspace-directory-io";
 import {
   createTextureAtlasTaskPreviewState
 } from "../../workspace/atlas/atlas-task-projection";
@@ -651,6 +656,62 @@ describe("EditorSessionProvider history integration", () => {
       expect(workspaceDirectory.readTextFile("model/parameters.json")).toContain(
         "param_custom_history"
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("interleaves reference and model history and preserves newer Host-only reference settings", async () => {
+    const directory = createFakeWorkspaceDirectoryHandle({ name: "reference.ail2d-workspace" });
+    const harness = await renderEditorSessionProbe({ initialWorkspaceDirectory: directory });
+    const bytes = new Uint8Array([0x61, 0x62, 0x63]);
+    const state = createReferenceImageState(await describeReferenceImageBytes(bytes, { width: 1, height: 1 }));
+
+    try {
+      await act(async () => harness.context().commitReferenceImage({ state, bytes }));
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Unsaved changes");
+      expect(directory.readTextFile(REFERENCE_IMAGE_STATE_PATH)).toBeUndefined();
+      await act(async () => {
+        expect(harness.context().createCustomParameter(createCustomParameterPayload()).committed).toBe(true);
+        harness.context().undo();
+      });
+      expect(harness.context().referenceImage?.state).toEqual(state);
+      expect(hasCustomParameter(harness.context())).toBe(false);
+      await act(async () => harness.context().undo());
+      expect(harness.context().referenceImage).toBeNull();
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Saved");
+      await act(async () => harness.context().redo());
+      await act(async () => harness.context().saveProject());
+      expect(JSON.parse(directory.readTextFile(REFERENCE_IMAGE_STATE_PATH)!).reference).toEqual(state);
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Saved");
+
+      const hostState = { ...state, opacity: 0.29 };
+      await writeWorkspaceTextEntries({ directory, entries: [serializeWorkspaceReferenceImage(hostState)] });
+      await act(async () => {
+        expect(harness.context().createCustomParameter(createCustomParameterPayload()).committed).toBe(true);
+        await harness.context().saveProject();
+      });
+      expect(JSON.parse(directory.readTextFile(REFERENCE_IMAGE_STATE_PATH)!).reference).toEqual(hostState);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("ends saving and keeps changes made after the save snapshot dirty", async () => {
+    const directory = createFakeWorkspaceDirectoryHandle({ name: "save-overlap.ail2d-workspace" });
+    const harness = await renderEditorSessionProbe({ initialWorkspaceDirectory: directory });
+    try {
+      await act(async () => {
+        const pendingSave = harness.context().saveProject();
+        expect(harness.context().createCustomParameter(createCustomParameterPayload()).committed).toBe(true);
+        await pendingSave;
+      });
+      expect(harness.context().workspaceStorage.status).toBe("saved");
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Unsaved changes");
+      expect(directory.readTextFile("model/parameters.json")).not.toContain("param_custom_history");
+      await act(async () => harness.context().saveProject());
+      expect(harness.context().workspaceSaveStatusLabel).toBe("Saved");
+      expect(directory.readTextFile("model/parameters.json")).toContain("param_custom_history");
     } finally {
       await harness.cleanup();
     }

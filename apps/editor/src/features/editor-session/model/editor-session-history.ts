@@ -8,10 +8,12 @@ import {
 } from "@private-2d-rigging-lab/render-core";
 
 import type { EditorSessionCommandResult } from "./editor-session-commands";
+import type { EditorReferenceImage } from "../../workspace-storage/model/workspace-reference-image";
 
 export const EDITOR_SESSION_HISTORY_DEFAULT_MAX_DEPTH = 50;
 
 export interface EditorSessionHistoryEntry {
+  readonly referenceChange?: EditorReferenceHistoryChange;
   readonly entryId: string;
   readonly label: string;
   readonly before: AuthoringSession;
@@ -26,9 +28,15 @@ export interface EditorSessionHistoryState {
 }
 
 export interface EditorSessionHistoryCommitInput {
+  readonly referenceChange?: EditorReferenceHistoryChange;
   readonly before: AuthoringSession;
   readonly after: AuthoringSession;
   readonly label?: string;
+}
+
+interface EditorReferenceHistoryChange {
+  readonly before: EditorReferenceImage | null | undefined;
+  readonly after: EditorReferenceImage | null;
 }
 
 export interface EditorSessionHistoryTransition {
@@ -67,8 +75,9 @@ export function recordEditorSessionCommit(
   const entry: EditorSessionHistoryEntry = {
     entryId: `editor_history_${history.nextEntryIndex}`,
     label: input.label ?? "Editor command",
-    before: cloneSession(input.before),
-    after: cloneSession(input.after)
+    before: input.referenceChange === undefined ? cloneSession(input.before) : input.before,
+    after: input.referenceChange === undefined ? cloneSession(input.after) : input.after,
+    ...(input.referenceChange === undefined ? {} : { referenceChange: input.referenceChange })
   };
   const undoStack = [...history.undoStack, entry].slice(-history.maxDepth);
 

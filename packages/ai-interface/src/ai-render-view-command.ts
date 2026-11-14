@@ -1,4 +1,4 @@
-import { ParameterIdSchema } from "@private-2d-rigging-lab/contracts";
+import { ParameterIdSchema, ReferenceImageModeSchema, ReferenceImageStateSchema } from "@private-2d-rigging-lab/contracts";
 import { z } from "zod";
 
 import {
@@ -74,6 +74,8 @@ export const RenderViewPayloadSchema = z.object({
    * by the host resolver.
    */
   variantSelections: VariantSelectionsPayloadSchema,
+  /** Omitted uses the saved reference display mode, or model when no reference exists. */
+  referenceMode: ReferenceImageModeSchema.optional(),
   outDir: z.string().min(1),
   /** Base filename (without extension) for produced artifacts. */
   outputName: z.string().min(1).default("render")
@@ -153,6 +155,8 @@ export const RenderViewSidecarSchema = z.object({
   pngPath: z.string().min(1),
   parameterOverrides: z.array(RenderViewResolvedOverrideSchema),
   resolvedView: RenderViewResolvedViewSchema,
+  referenceMode: ReferenceImageModeSchema.optional(),
+  referenceImage: ReferenceImageStateSchema.optional(),
   sweep: RenderViewSweepLayoutSchema.optional(),
   /**
    * Per-texture dimension-source records (sorted by textureId). Optional so

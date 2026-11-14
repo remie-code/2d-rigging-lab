@@ -13,6 +13,7 @@ import {
   PreflightPsdImportPlanIntakePayloadSchema,
   SetPsdImportPlanApprovalPayloadSchema
 } from "./ai-psd-import-plan-command.js";
+import { ReferenceImageCommandPayloadSchema } from "./ai-reference-image-command.js";
 import { RenderViewPayloadSchema } from "./ai-render-view-command.js";
 import { ValidatePackagePayloadSchema } from "./ai-validation-command.js";
 
@@ -38,6 +39,7 @@ export type CommitOperationPayload = z.infer<typeof CommitOperationPayloadSchema
 
 export const AiCommandPayloadSchema = z.discriminatedUnion("command", [
   ...MaterialCommandPayloadOptions,
+  z.object({ command: z.literal("referenceImage"), payload: ReferenceImageCommandPayloadSchema }),
   z.object({
     command: z.literal("getEditorState"),
     payload: GetEditorStatePayloadSchema

@@ -29,3 +29,4 @@ export * from "./material-intent.js";
 export * from "./material-package-ref.js";
 export * from "./material-artifacts.js";
 export * from "./material-contract-fixtures.js";
+export * from "./reference-image.js";

@@ -1,3 +1,4 @@
+import type { ReferenceImageState } from "@private-2d-rigging-lab/contracts";
 import { WebGl2Renderer, type WebGl2Like } from "@private-2d-rigging-lab/render-webgl2";
 
 import type {
@@ -7,6 +8,7 @@ import type {
   CanvasViewState
 } from "./canvas-projection";
 import { hasIsolatableCanvasSelection, isRenderableDrawable } from "./canvas-projection";
+import { drawReferenceImage, drawReferenceImageHandles } from "./canvas-reference-image";
 import { createRenderSceneFromCanvasProjection } from "./canvas-render-scene-adapter";
 import { resolveTriangleTextureWarpTransform } from "./canvas-triangle-texture-warp";
 import {
@@ -75,6 +77,11 @@ export function disposeCanvasBitmapCache(cache: CanvasBitmapCache): void {
 }
 
 export function renderCanvasProjection(input: {
+  readonly referenceImage?: {
+    readonly state: ReferenceImageState;
+    readonly bitmap: ImageBitmap | null;
+    readonly adjusting: boolean;
+  };
   readonly canvas: HTMLCanvasElement;
   readonly projection: CanvasRenderProjection;
   readonly view: CanvasViewState;
@@ -106,23 +113,25 @@ export function renderCanvasProjection(input: {
   context.clearRect(0, 0, viewport.width, viewport.height);
   fillPanelBackground(context, viewport.width, viewport.height, input.backgroundColor);
 
+  const reference = input.referenceImage;
+  const modelVisible = reference?.state.displayMode !== "reference";
   context.save();
   applyStageTransform(context, input.view);
 
-  if (input.overlays.grid) {
+  if (modelVisible && input.overlays.grid) {
     drawGrid(context, input.projection, input.view.zoom);
   }
 
-  if (input.overlays.originGuide ?? true) {
+  if (modelVisible && (input.overlays.originGuide ?? true)) {
     drawOrigin(context, input.projection, input.view.zoom);
   }
 
-  if (input.overlays.canvasBounds) {
+  if (modelVisible && input.overlays.canvasBounds) {
     drawCanvasBounds(context, input.projection, input.view.zoom);
   }
   context.restore();
 
-  const drewDrawableStackWithWebGl = drawDrawableStackWithWebGl({
+  const drewDrawableStackWithWebGl = modelVisible && drawDrawableStackWithWebGl({
     context,
     projection: input.projection,
     view: input.view,
@@ -134,15 +143,19 @@ export function renderCanvasProjection(input: {
 
   context.save();
   applyStageTransform(context, input.view);
-  if (!drewDrawableStackWithWebGl) {
+  if (modelVisible && !drewDrawableStackWithWebGl) {
     drawDrawableStack(context, input.projection, input.overlays, input.cache);
   }
+  if (reference !== undefined && reference.bitmap !== null && reference.state.displayMode !== "model") {
+    drawReferenceImage(context, reference.state, reference.bitmap);
+  }
 
-  if (input.overlays.selectionBounds) {
+  const showModelHandles = modelVisible && !reference?.adjusting;
+  if (showModelHandles && input.overlays.selectionBounds) {
     drawSelectionOverlay(context, input.projection, input.view.zoom);
   }
 
-  if (input.overlays.deformer) {
+  if (showModelHandles && input.overlays.deformer) {
     drawDeformerOverlay(
       context,
       input.projection,
@@ -152,11 +165,14 @@ export function renderCanvasProjection(input: {
     );
   }
 
-  if (input.overlays.mesh) {
+  if (showModelHandles && input.overlays.mesh) {
     drawMeshOverlay(context, input.projection, input.view.zoom);
   }
 
   context.restore();
+  if (reference?.adjusting) {
+    drawReferenceImageHandles(context, reference.state, input.view);
+  }
 }
 
 function applyStageTransform(context: CanvasRenderingContext2D, view: CanvasViewState): void {

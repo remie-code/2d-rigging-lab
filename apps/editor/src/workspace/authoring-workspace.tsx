@@ -85,13 +85,19 @@ export function AuthoringWorkspaceContent({
             </Group>
           </div>
 
-          <div className="grid min-h-0 flex-1 gap-2 overflow-auto p-2 xl:hidden">
-            <div className="h-24 overflow-hidden rounded-md border border-neutral-800">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2 xl:hidden">
+            <div className="h-24 shrink-0 overflow-hidden rounded-md border border-neutral-800">
               <WorkspaceToolbox layout="horizontal" />
             </div>
-            <StructureTreePanel />
-            <CanvasPreviewPanel />
-            <InspectorPanel />
+            <div className="h-40 shrink-0">
+              <StructureTreePanel />
+            </div>
+            <div className="h-[420px] shrink-0">
+              <CanvasPreviewPanel />
+            </div>
+            <div className="h-48 shrink-0">
+              <InspectorPanel />
+            </div>
           </div>
         </>
       )}

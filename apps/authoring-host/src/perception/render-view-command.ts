@@ -1,3 +1,4 @@
+import { createRenderScene } from "@private-2d-rigging-lab/render-core";
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 import type {
   RenderViewPayload,
@@ -13,6 +14,7 @@ import {
 import { composeContactSheet } from "./contact-sheet.js";
 import { evaluatePerceptionSnapshot } from "./evaluation-adapter.js";
 import { computeSweptParameterValues } from "./parameter-sweep.js";
+import { createReferenceImageForeground, type PerceptionReferenceImage } from "./reference-image-foreground.js";
 import { createPerceptionRenderScene } from "./render-scene-adapter.js";
 import { buildRenderViewSidecar } from "./render-view-sidecar.js";
 import { resolveTextureDimensionSources } from "./texture-resolution.js";
@@ -48,8 +50,26 @@ export interface RenderViewArtifacts {
 export const renderPerceptionView = (input: {
   readonly session: AuthoringSession;
   readonly payload: RenderViewPayload;
+  readonly referenceImage?: PerceptionReferenceImage;
 }): RenderViewArtifacts => {
   const { session, payload } = input;
+  const referenceMode = payload.referenceMode ?? input.referenceImage?.state.displayMode ?? "model";
+  const referenceImage = referenceMode === "model" ? undefined : input.referenceImage;
+  if (referenceMode !== "model" && referenceImage === undefined) {
+    throw new Error(`Render mode "${referenceMode}" requires a registered reference PNG.`);
+  }
+  const foreground = referenceImage === undefined ? undefined : createReferenceImageForeground(referenceImage);
+  const emptyScene = createRenderScene({ drawables: [], textureSources: [] });
+  const sceneFor = (evaluation: ReturnType<typeof evaluatePerceptionSnapshot>) =>
+    referenceMode === "reference" ? emptyScene : createPerceptionRenderScene({
+      session,
+      graph: evaluation.graph,
+      snapshot: evaluation.snapshot
+    });
+  const referenceEvidence = {
+    referenceMode,
+    ...(referenceImage === undefined ? {} : { referenceImage: referenceImage.state })
+  };
   const packageRevision = session.packageRevision;
   const packageId = session.packageIdentity.packageId;
 
@@ -80,18 +100,13 @@ export const renderPerceptionView = (input: {
   // (declared / derived-verified). Runs the exact resolution ladder the scene
   // adapter uses, so an unresolvable texture rejects here with the same
   // deterministic TextureResolutionError instead of rendering silently.
-  const textureDimensionSources = resolveTextureDimensionSources({
+  const textureDimensionSources = referenceMode === "reference" ? [] : resolveTextureDimensionSources({
     session,
     textureIds: collectSnapshotTextureIds(session, base.snapshot)
   });
 
   if (payload.sweep === undefined) {
-    const scene = createPerceptionRenderScene({
-      session,
-      graph: base.graph,
-      snapshot: base.snapshot
-    });
-    const { png } = renderSceneToPng(scene, view);
+    const { png } = renderSceneToPng(sceneFor(base), view, foreground);
 
     return {
       png,
@@ -107,6 +122,7 @@ export const renderPerceptionView = (input: {
           pngPath,
           parameterOverrides: payload.parameterOverrides,
           resolvedView,
+          ...referenceEvidence,
           textureDimensionSources,
           variantSelections: variant.resolved
         })
@@ -129,12 +145,7 @@ export const renderPerceptionView = (input: {
       },
       variantSelections: variant.activeSelections
     });
-    const scene = createPerceptionRenderScene({
-      session,
-      graph: evaluated.graph,
-      snapshot: evaluated.snapshot
-    });
-    const { render } = renderSceneToPng(scene, view);
+    const { render } = renderSceneToPng(sceneFor(evaluated), view, foreground);
     return { rgba8: render.straightRgba8 };
   });
 
@@ -176,6 +187,7 @@ export const renderPerceptionView = (input: {
         pngPath,
         parameterOverrides: payload.parameterOverrides,
         resolvedView,
+        ...referenceEvidence,
         sweep: sweepLayout,
         textureDimensionSources,
         variantSelections: variant.resolved

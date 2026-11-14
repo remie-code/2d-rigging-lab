@@ -8,6 +8,7 @@ import type {
 } from "@private-2d-rigging-lab/ai-interface";
 import { RenderViewResultSchema } from "@private-2d-rigging-lab/ai-interface";
 
+import type { PerceptionReferenceImage } from "./reference-image-foreground.js";
 import { renderPerceptionView } from "./render-view-command.js";
 import { serializeRenderViewSidecar } from "./render-view-sidecar.js";
 
@@ -24,6 +25,7 @@ import { serializeRenderViewSidecar } from "./render-view-sidecar.js";
 export interface WriteRenderViewInput {
   readonly session: AuthoringSession;
   readonly payload: RenderViewPayload;
+  readonly referenceImage?: PerceptionReferenceImage;
   /** Absolute path to the loaded package directory (recorded in the sidecar). */
   readonly packagePath: string;
 }
@@ -33,7 +35,8 @@ export const writeRenderView = async (
 ): Promise<RenderViewResult> => {
   const artifacts = renderPerceptionView({
     session: input.session,
-    payload: input.payload
+    payload: input.payload,
+    ...(input.referenceImage === undefined ? {} : { referenceImage: input.referenceImage })
   });
 
   const pngRelativePath = `${input.payload.outputName}.png`;

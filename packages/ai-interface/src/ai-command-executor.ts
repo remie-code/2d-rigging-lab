@@ -108,6 +108,18 @@ export class AiCommandExecutor {
       appendAiCommandResponseToTranscript({ transcript: this.#transcript, request, response });
       return response;
     }
+    if (request.command === "referenceImage") {
+      const capability = request.payload.action === "get" ? "read" : "editReference";
+      const response = AiCommandResponseSchema.parse({
+        schemaVersion: "ai-command-response-v1",
+        commandId: request.commandId,
+        command: request.command,
+        status: hasCapability(request, capability) ? "not_implemented" : "permission_denied",
+        payload: {}
+      });
+      appendAiCommandResponseToTranscript({ transcript: this.#transcript, request, response });
+      return response;
+    }
     switch (request.command) {
       case "dryRunOperation":
         return this.#executeDryRun(request);

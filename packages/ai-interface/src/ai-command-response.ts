@@ -34,6 +34,12 @@ export const AiCommandResponseSchema = z.intersection(
   }),
   AiCommandResponsePayloadSchema
 ).superRefine((response, context) => {
+  if (response.command === "referenceImage") {
+    if ((response.status === "ok") !== (response.payload.result !== undefined)) {
+      context.addIssue({ code: "custom", message: "A reference image command carries a result exactly when its status is ok." });
+    }
+    return;
+  }
   if (!isMaterialCommandName(response.command)) return;
   // Read-only material commands carry a result exactly when they completed.
   const payload = response.payload as import("./ai-material-command.js").AiMaterialCommandResponsePayload;

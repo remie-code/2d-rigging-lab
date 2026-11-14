@@ -5,6 +5,7 @@ import {
 import type { AuthoringSession } from "@private-2d-rigging-lab/authoring-core";
 
 import type { AuthoringHostCommandResponse } from "./authoring-host-response.js";
+import { loadWorkspaceReferencePng, readReferenceImageState } from "./workspace-reference-image-io.js";
 import { writeRenderView } from "./perception/render-view-file-output.js";
 
 /**
@@ -54,9 +55,16 @@ export const runRenderViewCommand = async (
   }
 
   const payload = RenderViewPayloadSchema.parse(request.payload);
+  const state = payload.referenceMode === "model" ? null : await readReferenceImageState(input.packageDirectory);
+  const referenceMode = payload.referenceMode ?? state?.displayMode ?? "model";
+  const referenceImage = state === null || referenceMode === "model" ? undefined : {
+    state,
+    png: await loadWorkspaceReferencePng(input.packageDirectory, state)
+  };
   const result = await writeRenderView({
     session: input.session,
-    payload,
+    payload: { ...payload, referenceMode },
+    ...(referenceImage === undefined ? {} : { referenceImage }),
     packagePath: input.packageDirectory
   });
 

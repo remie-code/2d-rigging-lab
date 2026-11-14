@@ -27,3 +27,4 @@ export * from "./ai-psd-import-plan-command.js";
 export * from "./ai-psd-import-plan-command-executor.js";
 
 export * from "./ai-material-command.js";
+export * from "./ai-reference-image-command.js";

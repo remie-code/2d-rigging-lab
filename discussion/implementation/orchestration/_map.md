@@ -6,6 +6,7 @@
 
 | Path | Role | Status |
 |---|---|---|
+| [reference-image-overlay-wave-plan.md](reference-image-overlay-wave-plan.md) | 参照PNGをモデル座標へ固定し、基準点による拡縮/回転・opacity・保存復帰をEditor/Hostで共有。2 Wave簡易オーケストレーション | 2 Wave内部・独立レビュー合格 (2026-11-12)。実UI・Host共有・最終portable確認済み、本人の制作体験確認待ち |
 | [wave0-plan.md](wave0-plan.md) | Wave 0 implementation foundation plan | Completed / implementation-proven |
 | [wave1-plan.md](wave1-plan.md) | Wave 1 contracts-foundation dependency and parallelism plan | Completed / implementation-proven |
 | [wave2-plan.md](wave2-plan.md) | Wave 2 package/runtime/validator foundation dependency and parallelism plan | Completed / implementation-proven |

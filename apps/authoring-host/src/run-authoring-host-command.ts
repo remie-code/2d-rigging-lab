@@ -29,6 +29,7 @@ import {
   isRenderViewCommand,
   runRenderViewCommand
 } from "./run-render-view-command.js";
+import { isReferenceImageCommand, runReferenceImageCommand } from "./run-reference-image-command.js";
 import { isStateDirectoryInsidePackageDirectory } from "./state-directory-guard.js";
 
 export class AuthoringHostStateDirectoryError extends Error {
@@ -74,6 +75,10 @@ const runUnlockedAuthoringHostCommand = async (
   const stateStore = input.stateStore ?? createHostStateStore(input.stateDirectory);
 
   const loaded = await loadAuthoringPackageDirectory(input.packageDirectory);
+
+  if (isReferenceImageCommand(input.command)) {
+    return runReferenceImageCommand({ command: input.command, packageDirectory: input.packageDirectory, loaded });
+  }
 
   // renderView is a non-mutating perception command handled entirely in the
   // authoring-host (the ai-interface executor is renderer/filesystem-free). It

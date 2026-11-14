@@ -1,4 +1,7 @@
 import {
+  createReferenceImageState,
+  describeReferenceImageBytes,
+  referenceImageBinaryPath,
   registerAuthoringSessionBinaryBytes,
   type AuthoringSession,
   type RegisterAuthoringSessionBinaryBytesInput
@@ -38,6 +41,22 @@ const SOURCE_ORIGINAL_BYTES_SHA256_HEX =
 type BinaryAssetReference = RegisterAuthoringSessionBinaryBytesInput["binaryAssetRef"];
 
 describe("workspace session storage", () => {
+  it("round trips a content-addressed reference and clears it when creating over a selected directory", async () => {
+    const directory = createFakeWorkspaceDirectoryHandle({ name: "reference.ail2d-workspace" });
+    const picker = { pickDirectory: async () => directory };
+    const bytes = Uint8Array.from(Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aFioAAAAASUVORK5CYII=",
+      "base64"
+    ));
+    const state = createReferenceImageState(await describeReferenceImageBytes(bytes, { width: 1, height: 1 }));
+    const session = createEmptyAuthoringSession();
+    await createEditorWorkspace({ session, picker, referenceImage: { state, bytes } });
+    expect(directory.readBinaryFile(referenceImageBinaryPath(state.image))).toEqual(bytes);
+    expect((await openEditorWorkspace({ picker })).referenceImage).toEqual({ state, bytes });
+    await createEditorWorkspace({ session, picker });
+    expect((await openEditorWorkspace({ picker })).referenceImage).toBeNull();
+  });
+
   it("creates, opens, and hydrates a fake directory workspace roundtrip", async () => {
     const directory = createFakeWorkspaceDirectoryHandle({ name: "roundtrip.ail2d-workspace" });
     const session = createTextureSession();

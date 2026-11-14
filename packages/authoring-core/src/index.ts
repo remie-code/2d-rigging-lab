@@ -73,3 +73,6 @@ export * from "./to-runtime-graph.js";
 export { analyzeMaterialImpact } from "./material-impact-analysis.js";
 export * from "./material-image-drawable.js";
 export { MATERIAL_RGBA_MEDIA_TYPE, planMaterialImageAssets, registerMaterialImageBytes, type MaterialImageAssetPlan, type MaterialImageSubject, type RegisterMaterialImageBytesInput } from "./material-image-assets.js";
+export * from "./reference-image-transform.js";
+export * from "./workspace-reference-image.js";
+export * from "./reference-png-intake.js";

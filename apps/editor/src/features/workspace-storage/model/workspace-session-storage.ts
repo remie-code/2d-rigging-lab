@@ -5,7 +5,13 @@ import type {
 import {
   createAuthoringWorkspaceSavePlan,
   hydrateAuthoringWorkspaceSessionBinaryAssets,
-  openAuthoringWorkspaceFromTextFileSet
+  openAuthoringWorkspaceFromTextFileSet,
+  parseWorkspaceReferenceImage,
+  readReferencePngDimensions,
+  REFERENCE_IMAGE_STATE_PATH,
+  referenceImageBinaryPath,
+  serializeWorkspaceReferenceImage,
+  verifyWorkspaceReferenceImageBytes
 } from "@private-2d-rigging-lab/authoring-core";
 import type { PartId } from "@private-2d-rigging-lab/contracts";
 
@@ -15,18 +21,21 @@ import {
   readWorkspaceBinaryEntriesForRefs,
   readWorkspaceTextFileSet,
   writeWorkspaceBinaryDecisions,
+  writeWorkspaceBinaryEntry,
   writeWorkspaceTextEntries,
   WorkspaceDirectoryIoError,
   type WorkspaceBinaryFileEntry,
   type WorkspaceDirectoryHandleLike
 } from "./workspace-directory-io";
 import type { EditorWorkspaceTarget } from "./workspace-storage-state";
+import type { EditorReferenceImage } from "./workspace-reference-image";
 
 export interface WorkspaceDirectoryPicker {
   readonly pickDirectory: () => Promise<WorkspaceDirectoryHandleLike>;
 }
 
 export interface EditorWorkspaceSaveInput {
+  readonly referenceImage?: EditorReferenceImage | null;
   readonly target: EditorWorkspaceTarget;
   readonly session: AuthoringSession;
   readonly baseDocument?: unknown;
@@ -42,6 +51,7 @@ export interface EditorWorkspaceSaveResult {
 }
 
 export interface EditorWorkspaceOpenResult {
+  readonly referenceImage?: EditorReferenceImage | null;
   readonly target: EditorWorkspaceTarget;
   readonly session: AuthoringSession;
   readonly packageDocument: unknown;
@@ -74,6 +84,7 @@ export class EditorWorkspaceStorageError extends Error {
 }
 
 export async function createEditorWorkspace(input: {
+  readonly referenceImage?: EditorReferenceImage | null;
   readonly session: AuthoringSession;
   readonly baseDocument?: unknown;
   readonly editorHiddenPartIds?: Iterable<PartId>;
@@ -85,6 +96,7 @@ export async function createEditorWorkspace(input: {
   const saved = await saveEditorWorkspace({
     target,
     session: input.session,
+    referenceImage: input.referenceImage ?? null,
     ...(input.baseDocument === undefined ? {} : { baseDocument: input.baseDocument }),
     ...(input.editorHiddenPartIds === undefined
       ? {}
@@ -93,6 +105,7 @@ export async function createEditorWorkspace(input: {
 
   return {
     target,
+    referenceImage: input.referenceImage ?? null,
     session: markSessionSaved(input.session),
     packageDocument: saved.packageDocument,
     editorHiddenPartIds: Array.from(input.editorHiddenPartIds ?? []),
@@ -110,6 +123,8 @@ export async function openEditorWorkspace(input: {
   await ensureWorkspaceDirectoryPermission({ directory, mode: "readwrite" });
 
   const fileSet = await readWorkspaceTextFileSet(directory);
+  const referenceText = fileSet.find((entry) => entry.path === REFERENCE_IMAGE_STATE_PATH)?.text;
+  const referenceImage = await readEditorWorkspaceReferenceImage(directory, referenceText);
   const opened = openAuthoringWorkspaceFileSet(fileSet);
   const binaryTargets = opened.binaryRegistrationTargets;
   const requiredBinaryTargets = binaryTargets.filter((target) => target.requiredForWorkspaceOpen);
@@ -133,6 +148,7 @@ export async function openEditorWorkspace(input: {
 
   return {
     target: createEditorWorkspaceTarget(directory),
+    ...(referenceText === undefined ? {} : { referenceImage }),
     session: opened.session,
     packageDocument: opened.packageDocument,
     editorHiddenPartIds: opened.editorHiddenPartIds,
@@ -140,6 +156,28 @@ export async function openEditorWorkspace(input: {
     openedAt: new Date().toISOString(),
     warnings: opened.warnings
   };
+}
+
+async function readEditorWorkspaceReferenceImage(
+  directory: WorkspaceDirectoryHandleLike,
+  text: string | undefined
+): Promise<EditorReferenceImage | null> {
+  const state = parseWorkspaceReferenceImage(text);
+  if (state === null) return null;
+  const path = referenceImageBinaryPath(state.image);
+  const [entry] = await readWorkspaceBinaryEntriesForRefs(directory, [
+    { packageRelativePath: path, mediaType: "image/png" }
+  ]);
+  const bytes = await verifyWorkspaceReferenceImageBytes(state.image, entry?.bytes);
+  const dimensions = readReferencePngDimensions(bytes);
+  if (dimensions.width !== state.image.width || dimensions.height !== state.image.height) {
+    throw new EditorWorkspaceStorageError({
+      code: "workspace.reference.dimensionsMismatch",
+      path,
+      message: "Reference PNG dimensions do not match the workspace reference metadata."
+    });
+  }
+  return { state, bytes: new Uint8Array(bytes) };
 }
 
 export async function saveEditorWorkspace(
@@ -188,6 +226,20 @@ export async function saveEditorWorkspace(
     decisions: result.savePlan.binaryDecisions
   });
 
+  if (input.referenceImage !== undefined) {
+    if (input.referenceImage !== null) {
+      await writeWorkspaceBinaryEntry(input.target.directory, {
+        path: referenceImageBinaryPath(input.referenceImage.state.image),
+        mediaType: "image/png",
+        bytes: input.referenceImage.bytes
+      });
+    }
+    await writeWorkspaceTextEntries({
+      directory: input.target.directory,
+      entries: [serializeWorkspaceReferenceImage(input.referenceImage?.state ?? null)]
+    });
+  }
+
   return {
     packageDocument: result.packageDocument,
     workspaceName: input.target.workspaceName,
@@ -200,6 +252,7 @@ export async function saveEditorWorkspace(
 }
 
 export async function saveEditorWorkspaceAs(input: {
+  readonly referenceImage?: EditorReferenceImage | null;
   readonly session: AuthoringSession;
   readonly baseDocument?: unknown;
   readonly editorHiddenPartIds?: Iterable<PartId>;

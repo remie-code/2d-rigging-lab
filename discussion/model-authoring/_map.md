@@ -43,6 +43,7 @@
 | [research/player-calibration-survey.md](research/player-calibration-survey.md) | Wave107 母音キャリブレーションの調査 | Facts recorded; human gate remains |
 | [research/player-mapping-strength-survey.md](research/player-mapping-strength-survey.md) | 母音 mapping strength と実機評価の調査 | Facts recorded; human gate remains |
 | [research/variant-feature-survey.md](research/variant-feature-survey.md) | Variant feature の調査 | Facts recorded |
+| [research/see-through-update-survey-2026-11.md](research/see-through-update-survey-2026-11.md) | See-through の公式更新と手元の Windows WebUI、閉じ目素材での NF4 / bf16 比較案 | Facts recorded |
 
 ## 現在の状態サマリ
 
