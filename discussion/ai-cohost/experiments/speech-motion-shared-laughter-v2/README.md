@@ -1,5 +1,7 @@
 # 一緒に笑う v2 — 瞳の固定による切り分け
 
+2026-11-14構成管理更新: 動画・比較画像・全フレーム375枚は、保存入力からの再生成で全バイト一致を確認してGit追跡から外した。下記の動画リンクはローカル再生成後の閲覧先。定義・手順・採用判断を正本とする。[規約と再現条件](../../../model-authoring/asset-versioning-cleanup-2026-11-14.md)
+
 2026-11-12。ユーザーはv1の身体の動きを高評価する一方、閉眼時に瞳が上へ吸い込まれる印象を指摘。表情移行中に視線や瞬きを重ねない方向を議論し、まず瞳を表情制作時の位置に固定した比較を依頼した。
 
 提示後、ユーザーが「これでいこう」と採用。視聴者向け・画面向けの両方にこの版を使う方針。製品登録や汎用的な目元制御の実装を受領したものではない。
@@ -23,3 +25,5 @@ rootが比較画像を目視したところ、初期の上方への瞳の偏り�
 v1 READMEと同じNode resolver環境を用いる。`SHARED_LAUGHTER_OUT`に出力先を指定し、このディレクトリの`render.mjs`、`verify.mjs`を実行。その出力先を第一引数として`assemble.py`を実行する。既定出力先は`tmp/speech-motion/shared-laughter-v2-reproduction`。
 
 `compare.py`はこのディレクトリのframesと、repoの`tmp/speech-motion/shared-laughter-v1/frames`を比較する。v1のフレームがなければv1の保存定義・render.mjsから同パスへ再生成できる。
+
+旧リンク先とcompare.pyをそのまま使って再生成する場合は、v1を `SHARED_LAUGHTER_OUT=tmp/speech-motion/shared-laughter-v1`、v2を `SHARED_LAUGHTER_OUT=discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2` として描画する（PowerShellでは `$env:SHARED_LAUGHTER_OUT` に文字列を代入）。v2のassemble.pyへ後者のパスを第一引数で渡し、続いてcompare.pyを実行する。生成先の動画・比較画像・3つのframeディレクトリはignore済み。再現には上記saved-r824の外部snapshotが必要。

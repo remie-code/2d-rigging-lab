@@ -1,5 +1,7 @@
 # Model Authoring Map
 
+- 資産の配置・Git管理: [モデルと演技の構成管理規約](asset-versioning-policy.md)（2026-11-14合意。再現できる動画・フレーム列等は追跡しない）。
+
 > LLM（Fable）によるモデル制作挑戦の外部記憶の入口地図。
 
 ## 位置付け

@@ -8,9 +8,9 @@
 
 ## 第一稿
 
-[保存した正面画像](shared-laughter-expression/neutral-r804.png)を編集対象に、内蔵imagegenで[驚きの参照v1](startled-expression/startled-front-v1.png)を作成。元の正面姿勢・衣装・髪飾りを保ち、開いた目と持ち上がる眉、小さく開いた口を描いた。透過PNG。rootが生成画像を目視し、口に頼らず目元で驚きを読める相談用候補として提示する。
+[保存した正面画像](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/neutral-r804.png)を編集対象に、内蔵imagegenで[驚きの参照v1](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/startled-expression/startled-front-v1.png)を作成。元の正面姿勢・衣装・髪飾りを保ち、開いた目と持ち上がる眉、小さく開いた口を描いた。透過PNG。rootが生成画像を目視し、口に頼らず目元で驚きを読める相談用候補として提示する。
 
-本人の参照採用済み。[生成prompt](startled-expression/generation.md)。次に下記の表情試作へ進む。驚いて引く身体モーションと製品登録は別段階。
+本人の参照採用済み。[生成prompt](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/startled-expression/generation.md)。次に下記の表情試作へ進む。驚いて引く身体モーションと製品登録は別段階。
 
 元の228区間では驚き系18件、そのうち身/顔を引く意図13件という分析見積もりがあるが、今回の一表情で13件に対応できると確定したものではない。[分類と実例](../experiments/speech-motion-coverage-2026-11-12.md)。
 
@@ -36,11 +36,11 @@ see-throughで左右のまつ毛・白目・虹彩・眉の8パーツを抽出�
 
 ユーザーは試作の目が大きすぎ、参照と縮尺・左右バランスが合わない印象を指摘。rootも顔全体に対する目元の比率と髪による隠れを見直し、モデル修正前に縮尺を合わせた重ね合わせを提示する依頼を受けた。
 
-[比較HTML](startled-expression/alignment-v1/index.html)と[表示画像](startled-expression/alignment-v1/overlay-comparison.png)を保存。r837保存描画を固定し、既存参照描画だけを一様96%・移動(10,20)pxで再配置した。鼻先・顎・頭頂を目安にした視覚上の仮位置合わせで、眼を基準に個別変形してはいない。参照opacityを変え、単独表示・重ね合わせ・目元拡大を見られる。画像生成とモデルの輪郭差があるため全点の一致を保証する配置ではない。入力経路と変換は[inputs.json](startled-expression/alignment-v1/inputs.json)に保存。source・現用Exportは変更なし。本人とこの比較から認知を合わせる段階。
+[比較HTML](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/startled-expression/alignment-v1/index.html)と[表示画像](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/startled-expression/alignment-v1/overlay-comparison.png)を保存。r837保存描画を固定し、既存参照描画だけを一様96%・移動(10,20)pxで再配置した。鼻先・顎・頭頂を目安にした視覚上の仮位置合わせで、眼を基準に個別変形してはいない。参照opacityを変え、単独表示・重ね合わせ・目元拡大を見られる。画像生成とモデルの輪郭差があるため全点の一致を保証する配置ではない。入力経路と変換は[inputs.json](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/startled-expression/alignment-v1/inputs.json)に保存。source・現用Exportは変更なし。本人とこの比較から認知を合わせる段階。
 
 ユーザーが比較対象を訂正。意図は「驚き参照と、変形前の元の通常顔」を重ね、驚きパーツの縮尺と配置を考えること。上記はrootが驚き試作と比較してしまったため、その目的の比較にはなっていなかった。
 
-[通常顔との比較HTML](startled-expression/alignment-neutral-v1/index.html)と[表示画像](startled-expression/alignment-neutral-v1/overlay-comparison.png)を作成。通常顔は驚き0・笑み0・瞳XY0・開眼1のframe000で、編集前r825との一致確認済み。通常顔を固定し、参照全体の縮尺・横位置・縦位置・濃さを変更できる。初期値96%/(10,20)は検討用の仮配置であり、採用したパーツ配置ではない。モデル変更なし。以後はこの通常顔との比較から基準を相談する。
+[通常顔との比較HTML](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/startled-expression/alignment-neutral-v1/index.html)と[表示画像](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/startled-expression/alignment-neutral-v1/overlay-comparison.png)を作成。通常顔は驚き0・笑み0・瞳XY0・開眼1のframe000で、編集前r825との一致確認済み。通常顔を固定し、参照全体の縮尺・横位置・縦位置・濃さを変更できる。初期値96%/(10,20)は検討用の仮配置であり、採用したパーツ配置ではない。モデル変更なし。以後はこの通常顔との比較から基準を相談する。
 
 ## 仮配置の採用とv2制作
 

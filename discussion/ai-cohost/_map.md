@@ -1,5 +1,7 @@
 # AI Cohost Map
 
+- 資産の配置・Git管理: [モデルと演技の構成管理規約](../model-authoring/asset-versioning-policy.md)（2026-11-14合意。再現できる動画・フレーム列等は追跡しない）。
+
 > ユーザー×自律AIの共演配信構想(ai-cohost)に関する外部記憶の入口地図。
 
 ## 1. Scope

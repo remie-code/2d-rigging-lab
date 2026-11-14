@@ -1,5 +1,7 @@
 # Discussion Map (Private 2D Rigging Lab / Prototype)
 
+- 資産の配置・Git管理: [モデルと演技の構成管理規約](model-authoring/asset-versioning-policy.md)（2026-11-14合意。再現できる動画・フレーム列等は追跡しない）。
+
 > `discussion/` 直下のファイル・ディレクトリだけを示す入口地図。下層の詳細は各ディレクトリ内の `_map.md` に委譲する。
 
 ---

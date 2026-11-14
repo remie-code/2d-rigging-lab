@@ -26,3 +26,21 @@ test_data/sample_model.psd
 .tmp-editor-vite*.log
 apps/editor/.dev-server.*.log
 apps/editor/test-results/
+
+# Model-specific reference originals now belong to astra-chan/workspace-notes.
+# Old local paths are compatibility copies; keep only the relocation pointer.
+/discussion/ai-cohost/concept/shared-laughter-expression/*
+!/discussion/ai-cohost/concept/shared-laughter-expression/README.md
+/discussion/ai-cohost/concept/startled-expression/*
+!/discussion/ai-cohost/concept/startled-expression/README.md
+/discussion/ai-cohost/concept/wry-smile-expression/*
+!/discussion/ai-cohost/concept/wry-smile-expression/README.md
+
+# Reproducible motion previews, not source assets (asset-versioning-policy.md).
+/discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/frames/
+/discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/video-frames/
+/discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/comparison-frames/
+/discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/viewers.mp4
+/discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/gaze-comparison.mp4
+/discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/contact-sheet.png
+/discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/closing-comparison.png

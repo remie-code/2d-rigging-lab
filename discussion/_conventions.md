@@ -254,3 +254,7 @@ Dynamics関連のmachine-readable identifierも、`dynamicsGroup`、`computedDyn
 ## 11. 参照画像に基づくriggingの記録（2026-09-25合意）
 
 model-authoring/reference-guided-rigging/ は、ユーザーとAstraの議論・実験を保存する。共通の合意、参照生成、デフォーマへの変換、動作評価の3主題、および個々の実験を分ける。本文は現在の方針・仮説・未決事項、experiments/ は入力・手順・観測・ユーザー判断を所有する。将来のcraft v2は、確認した内容を蒸留する段階で構成する。画像・スクリプトは当面ユーザー指定のsecond-rigging-6-sol workspaceに置き、実験記録から参照する。命名・map・主題追加・情報種別分離は本規約に従う。担当はユーザーとAstra。
+
+## 12. モデル・演技の構成管理（2026-11-14合意）
+
+[資産配置とGit管理](model-authoring/asset-versioning-policy.md)を適用する。モデル本体はモデルworkspace、モデル固有の参照原本・造形手順はworkspace-notes、演技定義・製品実装・共通craftはrigging-labが所有する。一意に再生成できる重い成果物は採用動画を含めGit管理しない。再現入力・版・手順・採用判断を残し、画像生成原本のような再生成できない入力と区別する。移管後は正本へリンクし、履歴は書き換えない。

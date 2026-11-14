@@ -15,7 +15,7 @@
 
 ## 参照 v1
 
-[正面参照](wry-smile-expression/wry-front-v1.png)を内蔵image_genで生成。[入力とprompt](wry-smile-expression/generation.md)。rootは浅い困り眉と開いた半眼、小さな笑みを確認した。本人の絵の採用判断待ち。口角の形は通常口パクとの共存を考慮し、参照の見え方と実装する部位を混同しない。
+[正面参照](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/wry-smile-expression/wry-front-v1.png)を内蔵image_genで生成。[入力とprompt](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/wry-smile-expression/generation.md)。rootは浅い困り眉と開いた半眼、小さな笑みを確認した。本人の絵の採用判断待ち。口角の形は通常口パクとの共存を考慮し、参照の見え方と実装する部位を混同しない。
 
 モデルの通常顔は現在r840。生成入力は従来の正面参照neutral-r804であり、過去の通常顔互換を保った参照画像。キーフォームによる変形が有力だが、元パーツで十分か、切り替え部品が必要かは目標絵の採用後に判断する。モデル/Export/登録には未着手。
 

@@ -1,5 +1,7 @@
 # AI Cohost Experiments Map
 
+- 資産の配置・Git管理: [モデルと演技の構成管理規約](../../model-authoring/asset-versioning-policy.md)（2026-11-14合意。再現できる動画・フレーム列等は追跡しない）。
+
 > AI Cohostの実サービス・実器・会話経路を用いた観測記録の入口。各ファイルの事実、推論、未確認事項を混同しない。
 
 | Path | Scope | Status |

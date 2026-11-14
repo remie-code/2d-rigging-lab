@@ -17,11 +17,11 @@
 
 ## 2. 画像で合わせた笑み
 
-内蔵imagegenで、[r804正面](shared-laughter-expression/neutral-r804.png)を参照して作成した相談用画像。モデルに適用済みの絵・キーフォームではない。画像原本はこの文書とともに保存し、[生成条件](shared-laughter-expression/generation.md)から辿れる。
+内蔵imagegenで、[r804正面](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/neutral-r804.png)を参照して作成した相談用画像。モデルに適用済みの絵・キーフォームではない。画像原本はastra-chanのworkspace-notesへ移管し、[生成条件](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/generation.md)から辿れる。
 
-1. [初稿](shared-laughter-expression/laugh-v1.png): 開いた笑い口、頬の上がり、細まった目。ユーザーは笑いとして認知できたが、目元に微かな違和感があり、第一印象は「ちょっと怖い」。笑いきった瞬間を静止して見ている影響かもしれない、という仮説も挙がった。
+1. [初稿](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/laugh-v1.png): 開いた笑い口、頬の上がり、細まった目。ユーザーは笑いとして認知できたが、目元に微かな違和感があり、第一印象は「ちょっと怖い」。笑いきった瞬間を静止して見ている影響かもしれない、という仮説も挙がった。
 2. エージェントは、口は明るく笑う一方、狭い目から瞳が強く見えて、力を入れてじっと見る印象が混じる可能性を示した。ユーザーは「力が入っているように感じている可能性がある」と応答。原因の確定ではない。
-3. [目元と口元の力を抜いた第二稿](shared-laughter-expression/laugh-relaxed-v2.png): ユーザー評価は「こっちのがそれっぽい」。この方向を参照にする。ただし全細部を最終承認した、または開いた口の形を固定再現すると合意したものではない。
+3. [目元と口元の力を抜いた第二稿](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/laugh-relaxed-v2.png): ユーザー評価は「こっちのがそれっぽい」。この方向を参照にする。ただし全細部を最終承認した、または開いた口の形を固定再現すると合意したものではない。
 
 ## 3. 技術的な課題と棚卸し
 
@@ -155,15 +155,15 @@ r818復元資料をbefore-r818へ保存。今回のsource差分はmanifest/keyfo
 
 ユーザーのv3評価は「なんか違う。にっこりというより穏やかに何かしている印象」。半眼の笑顔について望む印象を十分に言語化しにくく、共有できる目標を持つことが難しいため、両目をにっこり閉じ切る動作へ問題を簡単化する提案があった。rootは賛成し、閉じた笑顔の参照を先に合わせ、その後craftの閉眼手順を確認して造形する順番を提案。ユーザーが参照画像の作成を指示した。
 
-内蔵imagegenで前の参照の目元を変更した [閉眼の笑顔v1](shared-laughter-expression/laugh-closed-eyes-v1.png) を作成。[生成条件と原文prompt](shared-laughter-expression/closed-eyes-generation.md)。両目を完全に閉じた柔らかな弧と開いた笑い口の案で、本人の印象確認待ち。モデルはr819のまま。画像の口をモデルへ新造形する合意ではなく、B方針の口パク維持は継続。
+内蔵imagegenで前の参照の目元を変更した [閉眼の笑顔v1](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/laugh-closed-eyes-v1.png) を作成。[生成条件と原文prompt](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/closed-eyes-generation.md)。両目を完全に閉じた柔らかな弧と開いた笑い口の案で、本人の印象確認待ち。モデルはr819のまま。画像の口をモデルへ新造形する合意ではなく、B方針の口パク維持は継続。
 
-ユーザーはv1の口が大きく笑いすぎており、通常の口パクで動く実モデルと印象がずれると指摘。目元は維持して口を落ち着かせるよう依頼した。モデルの通常閉口を補助参照に、内蔵imagegenで [控えめな閉口のv2](shared-laughter-expression/laugh-closed-eyes-quiet-mouth-v2.png) を作成。閉じた目の笑う弧と小さな口を組み合わせた参照として、本人確認待ち。モデルへの閉眼笑み造形はまだ開始していない。
+ユーザーはv1の口が大きく笑いすぎており、通常の口パクで動く実モデルと印象がずれると指摘。目元は維持して口を落ち着かせるよう依頼した。モデルの通常閉口を補助参照に、内蔵imagegenで [控えめな閉口のv2](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/laugh-closed-eyes-quiet-mouth-v2.png) を作成。閉じた目の笑う弧と小さな口を組み合わせた参照として、本人確認待ち。モデルへの閉眼笑み造形はまだ開始していない。
 
 ### 採用目標: 元の正面画像から再構成した閉眼笑顔v3
 
-ユーザーはv2に対し、意図は「口を閉じる」ではなく「口の開き方を抑えめにしたうえで、元の正面参照画像から笑みを再構成する」ことだと訂正した。元のneutral-r804のみを入力に内蔵imagegenで [閉眼笑顔v3](shared-laughter-expression/laugh-closed-eyes-from-neutral-v3.png) を生成。ユーザーは **「いい感じだ。これをゴールにしよう。めちゃくちゃ解釈一致」** と採用を明示した。
+ユーザーはv2に対し、意図は「口を閉じる」ではなく「口の開き方を抑えめにしたうえで、元の正面参照画像から笑みを再構成する」ことだと訂正した。元のneutral-r804のみを入力に内蔵imagegenで [閉眼笑顔v3](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/laugh-closed-eyes-from-neutral-v3.png) を生成。ユーザーは **「いい感じだ。これをゴールにしよう。めちゃくちゃ解釈一致」** と採用を明示した。
 
-**以後の造形目標はこの閉眼参照v3。** 柔らかな弧で閉じた目と、控えめに開いた口を伴うにっこり笑顔の印象を共有できた。以前の半眼や直線的な閉口の参照を採用目標と混同しない。[生成条件・原文prompt・制作時の扱い](shared-laughter-expression/closed-eyes-v3-generation.md)へ。B方針の通常口パクは維持する。次はcraftの閉眼手順を確認し、目標の形を実際のモデルへ造形する段階。現source r819/現用Export r804はこの参照作成では変更していない。
+**以後の造形目標はこの閉眼参照v3。** 柔らかな弧で閉じた目と、控えめに開いた口を伴うにっこり笑顔の印象を共有できた。以前の半眼や直線的な閉口の参照を採用目標と混同しない。[生成条件・原文prompt・制作時の扱い](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/closed-eyes-v3-generation.md)へ。B方針の通常口パクは維持する。次はcraftの閉眼手順を確認し、目標の形を実際のモデルへ造形する段階。現source r819/現用Export r804はこの参照作成では変更していない。
 
 ### 閉眼笑顔の試作開始
 
@@ -199,7 +199,7 @@ rootは比較画像・22状態シート・動画抜粋を目視し、終端の�
 
 ユーザーは動画でモーションと瞬きが重なっていることを確認した。共存確認用として移行中/復帰中にも瞬きを入れていたと説明すると、「それなら多分大丈夫」との暫定評価のうえ、念のため移行単体の動画を希望した。saved-r823を読み、同じ笑み曲線・6秒20fpsで両EyeOpenを常時1、口/視線/顔向きを固定した [瞬きなしの顔拡大動画](C:/workspace/remie/rigging/astra-chan/workspace-notes/shared-laughter-closed-eyes-v1/smile-only/smile-transition-only-face.mp4) を作成。全120frameの固定入力と動画デコードを確認し、抜粋を目視した。モデルは変更せず、再現script/recipe/全体版も同所へ保存。単独動画に対する本人の確認はこれから。
 
-単独動画に対し、ユーザーが「開始時に眉が細くなる印象」の詳しい説明を求めた。[開始時の診断](shared-laughter-expression/closed-eyes-onset-diagnosis.md)で、眉自体は持ち上げのみである一方、上まつ毛の遷移用複製が白目・虹彩の後ろへ描かれ、交代時に線の一部が隠れる不整合を確認。描画順だけを補正した診断画像で通常側とほぼ同じ見た目へ戻った。モデル修正は未実施、ユーザーの指す部位との対応は説明で区別する。
+単独動画に対し、ユーザーが「開始時に眉が細くなる印象」の詳しい説明を求めた。[開始時の診断](C:/workspace/remie/rigging/astra-chan/workspace-notes/expression-references/shared-laughter-expression/closed-eyes-onset-diagnosis.md)で、眉自体は持ち上げのみである一方、上まつ毛の遷移用複製が白目・虹彩の後ろへ描かれ、交代時に線の一部が隠れる不整合を確認。描画順だけを補正した診断画像で通常側とほぼ同じ見た目へ戻った。モデル修正は未実施、ユーザーの指す部位との対応は説明で区別する。
 
 ユーザーが診断に同意し補正後に違和感がないと評価、モデル修正と動画再作成を指示した。Part childrenの順序を正式操作で修正し **source r824** へ保存。形/キーは不変、通常・終端・左右向き等5条件はr823とPNG一致。修正後の [瞬きなし動画v2](C:/workspace/remie/rigging/astra-chan/workspace-notes/shared-laughter-closed-eyes-v1/smile-only-v2/smile-transition-only-face.mp4) を作成した。詳細は上の診断記録の追記と [v2制作記録](C:/workspace/remie/rigging/astra-chan/workspace-notes/shared-laughter-closed-eyes-v1/smile-only-v2/README.md)へ。修正後動画は本人確認待ち、現用Export不変。
 
