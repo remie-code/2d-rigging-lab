@@ -1,0 +1,20 @@
+{
+  "reference": "C:\\workspace\\remie\\rigging\\astra-chan\\workspace-notes\\startled-expression-v1\\aligned-face-reference.png",
+  "neutral": "C:\\workspace\\remie\\rigging\\astra-chan\\workspace-notes\\startled-expression-v1\\frames\\000.png",
+  "neutralInputs": {
+    "param_startled": 0,
+    "param_shared_laughter": 0,
+    "param_eyeball_x": 0,
+    "param_eyeball_y": 0,
+    "param_eye_left_open": 1,
+    "param_eye_right_open": 1,
+    "param_mouth_open": 0
+  },
+  "baselineComparison": "before-r825 normal identical per review-report.json",
+  "referenceTransform": {
+    "scale": 0.96,
+    "translateX": 10,
+    "translateY": 20
+  },
+  "status": "provisional visual alignment for user discussion, not approved part placement"
+}

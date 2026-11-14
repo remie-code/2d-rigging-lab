@@ -31,6 +31,7 @@ export type RuntimePlayerControlChannelDiagnosticEvent = {
   readonly terminalEvent?: string;
   readonly connectionDurationMs?: number;
   readonly port?: number;
+  readonly speechMotionAssetDiagnostic?: string;
 };
 
 export type RuntimePlayerControlChannelDiagnosticSink = {

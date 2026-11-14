@@ -1,0 +1,330 @@
+[
+  {
+    "keyformSetId": "keyset_startled_draw_startled_eyelash_l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_startled_eyewhite_l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_startled_irides_l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_startled_eyebrow_l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_r0_1cea4f6f_09a3a7e6_eyelash-l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.82,
+        "statePatch": 0
+      },
+      {
+        "value": 0.96,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_r0_1cea4f6f_09a3a724_eyewhite-l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.82,
+        "statePatch": 0
+      },
+      {
+        "value": 0.96,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_r0_1cea4f6f_dbc30743_eyebrow-l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.82,
+        "statePatch": 0
+      },
+      {
+        "value": 0.96,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_transition_irides_l_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.03,
+        "statePatch": 1
+      },
+      {
+        "value": 1,
+        "statePatch": 1
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_startled_eyelash_r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_startled_eyewhite_r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_startled_irides_r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_startled_eyebrow_r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.8,
+        "statePatch": 0
+      },
+      {
+        "value": 0.86,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_r0_1cea4f6f_09a3a705_eyelash-r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.82,
+        "statePatch": 0
+      },
+      {
+        "value": 0.96,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_r0_1cea4f6f_09a3a843_eyewhite-r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.82,
+        "statePatch": 0
+      },
+      {
+        "value": 0.96,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_draw_r0_1cea4f6f_dbc306a0_eyebrow-r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.82,
+        "statePatch": 0
+      },
+      {
+        "value": 0.96,
+        "statePatch": 0
+      },
+      {
+        "value": 1,
+        "statePatch": 0
+      }
+    ]
+  },
+  {
+    "keyformSetId": "keyset_startled_transition_irides_r_opacity",
+    "keys": [
+      {
+        "value": 0,
+        "statePatch": 0
+      },
+      {
+        "value": 0.03,
+        "statePatch": 1
+      },
+      {
+        "value": 1,
+        "statePatch": 1
+      }
+    ]
+  }
+]

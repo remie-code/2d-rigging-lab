@@ -48,6 +48,9 @@ import {
 } from "./cockpit.mjs";
 import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
 import { createFireOrchestrator, resolveConversationInstructionProfile } from "../src/mind/fire-orchestrator.mjs";
+import { createSpeechIntentMotion } from "../src/mind/speech-intent-motion.mjs";
+import { loadDistributionSpeechMotionCatalog } from "../src/test-support/distribution-speech-motion-catalog.mjs";
+const speechMotions = await loadDistributionSpeechMotionCatalog();
 import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
 import { listSoulSkills, loadSoulSkills } from "../src/mind/soul-skills.mjs";
 import { MODEL_IDENTITIES } from "../src/mind/model-identity.mjs";
@@ -132,6 +135,67 @@ test("parseCockpitArgs: S3 fire flags are parsed (channel / tts / window / maxCh
 });
 
 // ── createLazyChannel（初回 fire 時接続・成功キャッシュ・失敗は再試行）──────────
+
+test("speech motion is pinned to the connection that owned the Fire", async () => {
+  const decide = [];
+  const requests = [];
+  const connections = [];
+  const advertisedDescriptions = [];
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=fixture", {
+    async connectImpl(_url, { onTrace, connectionGeneration }) {
+      connections.push(onTrace);
+      return {
+        speechMotions: { ...speechMotions, performances: { ...speechMotions.performances, receive: `世代${connectionGeneration}` } },
+        async sendMotion(request) {
+          requests.push({ connectionGeneration, ...request });
+          return { result: "accepted" };
+        },
+        async close() {}
+      };
+    },
+    createMotion({ channel, getCatalog }) {
+      return createSpeechIntentMotion({
+        channel,
+        getCatalog,
+        judge({ questions }) {
+          advertisedDescriptions.push(questions[0].choices.find(({ value }) => value === "receive").description);
+          const reply = Promise.withResolvers();
+          decide.push(() => reply.resolve({ answers: {
+            speech_intent_performance: { type: "choice", choice: "receive" },
+            speech_intent_attention: { type: "choice", choice: "partner" }
+          } }));
+          return reply.promise;
+        }
+      });
+    }
+  });
+  const section = {
+    sceneId: "one", utteranceId: "one", sectionId: "one", generation: 0, sectionIndex: 0,
+    intent: "受け取る", text: "なるほど。", context: {}
+  };
+  await lazy.connect();
+  const old = lazy.speechIntentMotion();
+  void old.prepare(section);
+  const oldStart = old.start(section);
+  await oldStart.begin;
+  connections[0]("channel.close");
+  assert.equal(old.isActive(), false);
+  assert.deepEqual(await old.prepare({ ...section, sectionIndex: 1 }), { kind: "failure", reason: "stale" });
+  const fresh = lazy.speechIntentMotion();
+  await lazy.connect();
+  void fresh.prepare(section);
+  const freshStart = fresh.start(section);
+  await freshStart.begin;
+  decide[1]();
+  assert.deepEqual(await freshStart.playback, { kind: "accepted" });
+  decide[0]();
+  assert.deepEqual(await oldStart.playback, { kind: "skipped" });
+  assert.deepEqual(requests.map(({ op, connectionGeneration }) => [op, connectionGeneration]),
+    [["begin", 1], ["begin", 2], ["play", 2]]);
+  assert.deepEqual(advertisedDescriptions, ["世代1", "世代2"]);
+  await lazy.close();
+  assert.equal(fresh.isActive(), false);
+});
 
 test("createLazyChannel: connects on first sendSpeech and reuses the connection", { timeout: 5000 }, async () => {
   let connects = 0;

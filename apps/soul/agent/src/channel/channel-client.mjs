@@ -67,6 +67,7 @@ const SPEECH_ENVELOPE_UTF8_CAP = 64 * 1024;
  *   Passive local diagnostics hook. It receives no payload/body text.
  * @param {number} [options.connectionGeneration] lazy connection generation for correlation.
  * @returns {Promise<{
+ *   sendMotion: (intent: unknown) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   sendSpeech: (timeline: unknown) => Promise<{ result: string; error: unknown; rttMs: number; requestId: string; serializedUtf8Bytes: number }>;
  *   sendEnvelope: (intent: { slotId: string; peak: number; attackMs: number; sustainMs: number; decayMs: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
  *   sendSet: (intent: { slotId: string; value: number; ttlMs?: number }) => Promise<{ result: string; error: unknown; rttMs: number }>;
@@ -76,6 +77,7 @@ const SPEECH_ENVELOPE_UTF8_CAP = 64 * 1024;
  *   close: () => Promise<void>;
  *   consumeUnknownEventCount: () => number;
  *   supportedKinds: string[];
+ *   speechMotions: ReturnType<typeof readSpeechMotionCatalog>;
  * }>}
  */
 export async function connectChannel(url, options = {}) {
@@ -249,6 +251,14 @@ export async function connectChannel(url, options = {}) {
   };
 
   return {
+    speechMotions: readSpeechMotionCatalog(helloPayload?.speechMotions),
+    async sendMotion(intent) {
+      if (!supported.has("intent.motion")) {
+        throw diagnosticError("Runtime Player does not support speech motion.", "channel_motion_unsupported", "control_channel.preflight");
+      }
+      if (socket.readyState !== 1) throw closedError;
+      return sendRequest("intent.motion", intent, "speech motion reply");
+    },
     /**
      * intent.speech を 1 本送り、replyTo 相関で accepted/rejected を受ける。
      * @param {unknown} timeline  buildSpeechTimeline の返り timeline（`{timeMs,vowel,s}[]`）。
@@ -349,6 +359,22 @@ export async function connectChannel(url, options = {}) {
       await withTimeout(closed, replyTimeoutMs, "socket close", "channel_close_timeout", "control_channel.close_timeout");
     }
   };
+}
+
+function readSpeechMotionCatalog(value) {
+  const isDescriptionMap = (map) => map && typeof map === "object" && !Array.isArray(map) &&
+    Object.values(map).every((description) => typeof description === "string" && description.trim());
+  if (!isDescriptionMap(value?.performances) || !isDescriptionMap(value?.attentionTargets) ||
+      !Array.isArray(value?.pairs) || Object.hasOwn(value.performances, "none") ||
+      Object.hasOwn(value.attentionTargets, "unknown") || !value.pairs.every((pair) =>
+        pair && typeof pair.performanceId === "string" && typeof pair.attentionTargetId === "string" &&
+        Object.hasOwn(value.performances, pair.performanceId) &&
+        Object.hasOwn(value.attentionTargets, pair.attentionTargetId))) return null;
+  return Object.freeze({
+    performances: Object.freeze(value.performances),
+    attentionTargets: Object.freeze(value.attentionTargets),
+    pairs: Object.freeze(value.pairs.map(Object.freeze))
+  });
 }
 
 /** 返りに requestId / serializedUtf8Bytes を載せ、送信前サイズ上限を通す kind（発話系）。 */

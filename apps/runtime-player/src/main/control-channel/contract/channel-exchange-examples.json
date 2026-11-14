@@ -17,7 +17,8 @@
               "intent.set",
               "intent.envelope",
               "intent.speech",
-              "intent.speechStream"
+              "intent.speechStream",
+              "intent.motion"
             ]
           }
         }
@@ -319,6 +320,25 @@
         "error": {
           "code": "slotNotWritable",
           "message": "Slot body-z is not writable on the loaded model."
+        }
+      }
+    },
+    {
+      "code": "motionModelMismatch",
+      "note": "The selected clip is produced, but the loaded model or its gesture slot bindings do not match the clip.",
+      "request": {
+        "v": 1,
+        "id": "req-106",
+        "kind": "intent.motion",
+        "payload": { "op": "play", "generation": 1, "sectionIndex": 0, "performanceId": "brief-relief", "attentionTargetId": "partner" }
+      },
+      "response": {
+        "v": 1,
+        "replyTo": "req-106",
+        "result": "rejected",
+        "error": {
+          "code": "motionModelMismatch",
+          "message": "The speech motion requires a compatible model and gesture slot bindings."
         }
       }
     },

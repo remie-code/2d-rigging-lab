@@ -66,6 +66,8 @@ export type AutonomousFrameHeartStartInput = {
 export type AutonomousStageMotionSignal = {
   readonly horizontal: number | null;
   readonly depth: number | null;
+  readonly stageYOffsetPx: number;
+  readonly speechStageScale?: number;
   readonly timestampMs: number;
 };
 
@@ -140,6 +142,13 @@ export type CreateAutonomousFrameHeartInput = {
     baseValues: Record<string, number>,
     prevResolved: Record<string, number>
   ) => Record<string, number> | null;
+  readonly getSpeechStageYOffsetPx?: (nowMs: number) => number;
+  readonly getSpeechStageScale?: (nowMs: number) => number;
+  readonly resolveSpeechMotionModelParameters?: (
+    nowMs: number,
+    parameters: Record<string, number>
+  ) => Record<string, number>;
+  readonly getSpeechPresenceInput?: (nowMs: number, channel: "horizontal" | "depth", base: number | null) => number | null;
 };
 
 type Heartbeat = {
@@ -247,9 +256,14 @@ export function createAutonomousFrameHeart(
     // (blink-only config) ⇒ null ⇒ no Stage offset. The strength convex-gain手当て
     // (`deriveStagePresenceStageMotionSettings`) is input-source-independent, so this
     // pure→effective swap does not reopen the二重適用 (§2.4).
+    const speechStageScale = deps.getSpeechStageScale?.(wallNowMs) ?? 1;
+    const horizontal = readSignedActivation(resolvedActivations[BODY_X_SLOT_ID]);
+    const depth = readSignedActivation(resolvedActivations[BODY_Z_SLOT_ID]);
     latestStageMotionSignal = {
-      horizontal: readSignedActivation(resolvedActivations[BODY_X_SLOT_ID]),
-      depth: readSignedActivation(resolvedActivations[BODY_Z_SLOT_ID]),
+      horizontal: deps.getSpeechPresenceInput?.(wallNowMs, "horizontal", horizontal) ?? horizontal,
+      depth: deps.getSpeechPresenceInput?.(wallNowMs, "depth", depth) ?? depth,
+      stageYOffsetPx: deps.getSpeechStageYOffsetPx?.(wallNowMs) ?? 0,
+      ...(speechStageScale === 1 ? {} : { speechStageScale }),
       timestampMs: wallNowMs
     };
     const parameterValues = resolveSemanticSlotParameterValues({
@@ -268,7 +282,7 @@ export function createAutonomousFrameHeart(
       sequence,
       producedAtIso: new Date(wallNowMs).toISOString(),
       sourceFrameTimestampMs: wallNowMs,
-      parameterValues
+      parameterValues: deps.resolveSpeechMotionModelParameters?.(wallNowMs, parameterValues) ?? parameterValues
     };
 
     deps.liveParameters.publishFrame(frame);
@@ -320,6 +334,7 @@ export function createAutonomousFrameHeart(
 const EMPTY_STAGE_MOTION_SIGNAL: AutonomousStageMotionSignal = {
   horizontal: null,
   depth: null,
+  stageYOffsetPx: 0,
   timestampMs: 0
 };
 

@@ -4,13 +4,14 @@
   "title": "Runtime Player Control Channel envelope (C4 outer shell)",
   "description": "The transport-neutral outer shell of the control channel (C4 §3). New request kinds are added additively without changing this envelope. v0 owned intent.set; C5 adds intent.envelope additively (see channel-intent-envelope-payload-schema.json); C6 adds intent.speech additively (see channel-intent-speech-payload-schema.json); the voice swap adds intent.speechStream additively (see channel-intent-speech-stream-payload-schema.json).",
   "protocolVersion": 1,
-  "supportedKinds": ["intent.set", "intent.envelope", "intent.speech", "intent.speechStream"],
+  "supportedKinds": ["intent.set", "intent.envelope", "intent.speech", "intent.speechStream", "intent.motion"],
   "rejectionCodes": [
     "unknownKind",
     "invalidPayload",
     "unknownSlot",
     "slotValueOutOfRange",
     "slotNotWritable",
+    "motionModelMismatch",
     "channelClosed"
   ],
   "$defs": {
@@ -28,10 +29,10 @@
         },
         "kind": {
           "type": "string",
-          "description": "Additive-extension slot. The 器 understands intent.set, intent.envelope, intent.speech, and intent.speechStream; any other kind is rejected with unknownKind but the connection is kept."
+          "description": "Additive-extension slot. The 器 understands intent.set, intent.envelope, intent.speech, intent.speechStream, and intent.motion; any other kind is rejected with unknownKind but the connection is kept."
         },
         "payload": {
-          "description": "Kind-specific payload. For intent.set see channel-intent-set-payload-schema.json; for intent.envelope see channel-intent-envelope-payload-schema.json; for intent.speech see channel-intent-speech-payload-schema.json; for intent.speechStream see channel-intent-speech-stream-payload-schema.json."
+          "description": "Kind-specific payload. For intent.set see channel-intent-set-payload-schema.json; for intent.envelope see channel-intent-envelope-payload-schema.json; for intent.speech see channel-intent-speech-payload-schema.json; for intent.speechStream see channel-intent-speech-stream-payload-schema.json; for intent.motion see channel-intent-motion-payload-schema.json."
         }
       }
     },
@@ -68,6 +69,7 @@
                 "unknownSlot",
                 "slotValueOutOfRange",
                 "slotNotWritable",
+                "motionModelMismatch",
                 "channelClosed"
               ]
             },
@@ -93,6 +95,34 @@
             "supportedKinds": {
               "type": "array",
               "items": { "type": "string" }
+            },
+            "speechMotions": {
+              "type": "object",
+              "description": "Speech motion catalog from the Player startup snapshot.",
+              "required": ["performances", "attentionTargets", "pairs"],
+              "additionalProperties": false,
+              "properties": {
+                "performances": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string", "minLength": 1 }
+                },
+                "attentionTargets": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string", "minLength": 1 }
+                },
+                "pairs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["performanceId", "attentionTargetId"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "performanceId": { "type": "string", "minLength": 1 },
+                      "attentionTargetId": { "type": "string", "minLength": 1 }
+                    }
+                  }
+                }
+              }
             }
           }
         }

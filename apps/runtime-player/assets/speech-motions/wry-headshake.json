@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "id": "wry-headshake",
+  "description": "一緒に困った状況を少しおかしがり、やれやれと苦笑しながら小さく首を振る。強い拒絶や、怒って否定する反応は含まない。",
+  "targets": {
+    "game": "wry-headshake-v1",
+    "viewers": "wry-headshake-v1"
+  },
+  "clips": {
+    "wry-headshake-v1": {
+      "entry": "preserve-clock",
+      "durationMs": 6000,
+      "tracks": {
+        "param_wry_smile": [
+          [0, 0],
+          [400, 0],
+          [1050, 1],
+          [3300, 1],
+          [4600, 0],
+          [6000, 0]
+        ],
+        "param_face_angle_x": [
+          [0, 0],
+          [1050, 0],
+          [1700, -10],
+          [2350, 6.5],
+          [2920, -2.5],
+          [3500, 0],
+          [6000, 0]
+        ],
+        "param_face_angle_z": [
+          [0, 0],
+          [650, 0],
+          [1400, -4],
+          [2400, -3.4],
+          [3300, -2.8],
+          [4650, 0],
+          [6000, 0]
+        ],
+        "param_face_angle_y": [
+          [0, 0],
+          [800, 0],
+          [1550, -1.6],
+          [3050, -1.1],
+          [4400, 0],
+          [6000, 0]
+        ],
+        "param_body_angle_x": [
+          [0, 0],
+          [1200, 0],
+          [1850, -1.8],
+          [2520, 1],
+          [3150, -0.3],
+          [3750, 0],
+          [6000, 0]
+        ],
+        "param_body_angle_z": [
+          [0, 0],
+          [850, 0],
+          [1650, -0.9],
+          [3250, -0.6],
+          [4500, 0],
+          [6000, 0]
+        ]
+      },
+      "fixed": {
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "defaults": {
+        "param_wry_smile": 0,
+        "param_face_angle_x": 0,
+        "param_face_angle_z": 0,
+        "param_face_angle_y": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "stage": {
+        "y": [
+          [0, 0],
+          [6000, 0]
+        ]
+      }
+    }
+  }
+}

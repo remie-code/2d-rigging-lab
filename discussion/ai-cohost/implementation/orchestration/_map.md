@@ -4,6 +4,12 @@
 
 | Path | Status | Content |
 |---|---|---|
+| [external-motion-assets-wave-plan.md](external-motion-assets-wave-plan.md) | 両Wave・配布後の独立レビュー合格 (2026-11-13) | 外部7演技13組、通常版/portable、現用r844配布済み。固定実行物で追加/説明編集/削除と再起動を実証。11/14本人が笑み・困り顔の実運用動作を確認 |
+| [startled-recoil-registration-plan.md](startled-recoil-registration-plan.md) | 実装・独立レビュー・配布確認合格／実会話待ち (2026-11-13) | 強い驚きを画面/視聴者へ共用登録。元パーツ表情r840、演技Stage奥行き、現用Export/普段のexe反映済み。相方は未制作記録。[完了](../waves/startled-recoil-registration/completion.md) |
+| [shared-laughter-registration-plan.md](shared-laughter-registration-plan.md) | 実装・独立レビュー・配布確認合格／実会話待ち (2026-11-12) | 笑い2原本を3対象へ登録、現用モデルr825。瞳固定/blink抑制と口パク共存。普段のexe/portableを更新し9組再生確認。[完了](../waves/shared-laughter-registration/completion.md) |
+| [performance-attention-wave-plan.md](performance-attention-wave-plan.md) | 2 Wave実装・独立レビュー・配布合格／本人確認待ち (2026-11-12) | 演技/対象の独立二問→6組lookup、原本再現、理由付き未対応記録。通常版/portable更新・隔離起動済み。2 Wave簡易レビュー・Sol |
+| [stage-vertical-motion-wave-plan.md](stage-vertical-motion-wave-plan.md) | 機械・独立レビュー・配布合格／本人確認待ち (2026-11-11) | Presence Offでも発話モーションの上下指定可。Native/Browser実表示、win-unpacked/portable更新・隔離起動確認済み。次は本人確認と安堵制作へ。 |
+| [intent-motion-wave-plan.md](intent-motion-wave-plan.md) | 2 wave機械gate・独立レビュー合格／実会話待ち (2026-11-10) | 自由な区間意図→DecisionAPI→既存モーション/未対応記録を実装。Haas型簡易レビュー・Orch以下GPT-6.1 Sol。発話速度優先、横向き80%。起動と未対応記録の読み返しは計画内human-gateへ。 |
 | [gpt-6-astra-wave-plan.md](gpt-6-astra-wave-plan.md) | BOUNDED MACHINE / HUMAN PASS (2026-09-08) | CLI 0.153.4導入とAstra low追加。focused 461/461・実3turn・独立review一巡合格、ユーザーが動作と自然な会話を確認。[completion](../waves/gpt-6-astra-completion.md)。broad21件未分類・DB cleanup未確認を保持。 |
 | [c1-planning-inventory.md](c1-planning-inventory.md) | 完了(2026-07-10)。Verdict needs_design → ユーザー裁定で解消 | C1のコード接地棚卸し(合成ルート、userData DI、port/token、UDP、ライフサイクル、テスト流儀) |
 | [c1-wave-plan.md](c1-wave-plan.md) | **完全閉鎖(2026-07-10)**: 実装+3レーンレビューPASS+パッケージ版手動ゲート全項目合格+§14裁定済み | C1「二体が同居できる」wave計画: スロット基盤(Domain A)→役割合成と身元表示(Domain B)→最終統合(Domain C)。既知制限: dev引数なし起動(Status参照) |

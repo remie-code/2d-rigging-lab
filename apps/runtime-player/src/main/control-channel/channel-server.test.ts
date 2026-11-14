@@ -90,7 +90,8 @@ describe("RuntimePlayerControlChannelServer", () => {
             "intent.set",
             "intent.envelope",
             "intent.speech",
-            "intent.speechStream"
+            "intent.speechStream",
+            "intent.motion"
           ]
         }
       });

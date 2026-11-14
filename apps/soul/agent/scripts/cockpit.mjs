@@ -71,6 +71,7 @@ import { assertSubscriptionAuthEnv } from "../src/mind/env-guard.mjs";
 import { createLlmSession } from "../src/mind/llm-session.mjs";
 import { BRAINS } from "../src/mind/brains.mjs";
 import { buildFireSystemPrompt, createFireOrchestrator } from "../src/mind/fire-orchestrator.mjs";
+import { createSpeechIntentMotion } from "../src/mind/speech-intent-motion.mjs";
 import { MODEL_IDENTITIES } from "../src/mind/model-identity.mjs";
 import {
   DEFAULT_ROLES_DIR,
@@ -253,6 +254,7 @@ export function openCockpitBrowser(url, execFileImpl = execFile, warn = (message
  *   未設定（null/undefined/空）なら操縦席から setUrl されるまで sendSpeech はエラー。
  * @param {object} [options]
  * @param {typeof connectChannel} [options.connectImpl]  接続実装（テスト注入・既定 connectChannel）。
+ * @param {typeof createSpeechIntentMotion} [options.createMotion]  発話モーション判定のテスト差し替え口。
  * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace] passive diagnostics hook.
  * @returns {{
  *   sendSpeech: (timeline: unknown) => Promise<any>;
@@ -266,12 +268,14 @@ export function openCockpitBrowser(url, execFileImpl = execFile, warn = (message
  *   connectionStatus: () => string;
  *   connectionGeneration: () => number;
  *   acceptedConnectionGeneration: () => number;
+ *   speechIntentMotion: () => ReturnType<typeof createSpeechIntentMotion>;
  *   connect: () => Promise<void>;
  *   close: () => Promise<void>;
  * }}
  */
 export function createLazyChannel(url, options = {}) {
   const connectImpl = options.connectImpl ?? connectChannel;
+  const createMotion = options.createMotion ?? createSpeechIntentMotion;
   const onTrace = options.onTrace;
   let currentUrl = typeof url === "string" && url.length > 0 ? url : null;
   /** @type {Promise<{ sendSpeech: Function; sendEnvelope: Function; close: () => Promise<void> }> | null} */
@@ -279,6 +283,12 @@ export function createLazyChannel(url, options = {}) {
   /** @type {"unset" | "idle" | "connecting" | "connected" | "error"} */
   let connState = currentUrl == null ? "unset" : "idle";
   let connectionGeneration = 0;
+  let speechMotion = null;
+  const retireSpeechMotion = () => {
+    const previous = speechMotion;
+    speechMotion = null;
+    void previous?.retire();
+  };
 
   const ensure = () => {
     if (currentUrl == null) {
@@ -290,7 +300,16 @@ export function createLazyChannel(url, options = {}) {
     if (channelPromise == null) {
       connState = "connecting";
       connectionGeneration += 1;
-      const pending = Promise.resolve(connectImpl(currentUrl, { onTrace, connectionGeneration }))
+      const generation = connectionGeneration;
+      const pending = Promise.resolve(connectImpl(currentUrl, {
+        connectionGeneration: generation,
+        onTrace(event, fields) {
+          if (event === "channel.close" && channelPromise && connectionGeneration === generation) {
+            invalidateExact(channelPromise, { code: "channel_closed" });
+          }
+          onTrace?.(event, fields);
+        }
+      }))
         .then((channel) => {
           if (channelPromise === pending) connState = "connected";
           return channel;
@@ -300,6 +319,7 @@ export function createLazyChannel(url, options = {}) {
           if (channelPromise === pending) {
             channelPromise = null; // 失敗は非キャッシュ = 次回 fire で再接続を試みる。
             connState = "error";
+            retireSpeechMotion();
           }
           throw error;
         });
@@ -318,6 +338,7 @@ export function createLazyChannel(url, options = {}) {
     if (channelPromise !== pending || !terminalConnectionCodes.has(error?.code)) return;
     channelPromise = null;
     connState = "error";
+    retireSpeechMotion();
     Promise.resolve(pending)
       .then((channel) => channel.close())
       .catch(() => {});
@@ -381,6 +402,7 @@ export function createLazyChannel(url, options = {}) {
       if (normalized === currentUrl) return;
       const previous = channelPromise;
       channelPromise = null;
+      retireSpeechMotion();
       currentUrl = normalized;
       connState = normalized == null ? "unset" : "idle";
       if (previous) {
@@ -409,6 +431,34 @@ export function createLazyChannel(url, options = {}) {
     acceptedConnectionGeneration() {
       return channelPromise == null ? connectionGeneration + 1 : connectionGeneration;
     },
+    speechIntentMotion() {
+      if (!speechMotion) {
+        const motion = createMotion({
+          async getCatalog() {
+            if (speechMotion !== motion) return null;
+            const pending = ensure();
+            const channel = await pending;
+            return speechMotion === motion && channelPromise === pending ? channel.speechMotions : null;
+          },
+          channel: {
+            async sendMotion(intent) {
+              const pending = channelPromise ?? (intent.op === "begin" && speechMotion === motion ? ensure() : null);
+              if (!pending || speechMotion !== motion) return { result: "rejected" };
+              const channel = await pending;
+              if (speechMotion !== motion || channelPromise !== pending) return { result: "rejected" };
+              try {
+                return await channel.sendMotion(intent);
+              } catch (error) {
+                invalidateExact(pending, error);
+                throw error;
+              }
+            }
+          }
+        });
+        speechMotion = motion;
+      }
+      return speechMotion;
+    },
     /**
      * 今の URL で器につないでおく（配信の組み直し Domain D:「配信を始める」で体のあるロールの器を確かめる口）。
      * つながっていればそのまま。URL が無い・つながらない（runtime-player が起動していない・channel が開いていない・
@@ -423,6 +473,7 @@ export function createLazyChannel(url, options = {}) {
      * 次の場の始まりでつなぐ）。
      */
     async close() {
+      retireSpeechMotion();
       if (channelPromise == null) return;
       const pending = channelPromise;
       channelPromise = null;
@@ -3267,6 +3318,10 @@ async function main() {
       body: fireChannel.body,
       player: acceptedPlayer,
       engine: acceptedEngine,
+      ...(fireChannel.body && acceptedEngine?.kind === "elevenlabs" ? {
+        speechIntentMotion: lazyChannel.speechIntentMotion(),
+        speechIntentScene: server?.venueGeneration()
+      } : {}),
       speakDeps: productionSpeakDeps(),
       configuration: Object.freeze({
         brain: currentBrain,

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "id": "interest",
+  "description": "関心を向ける",
+  "targets": {
+    "partner": "interest"
+  },
+  "clips": {
+    "interest": {
+      "entry": "lead-in",
+      "durationMs": 1170,
+      "tracks": {
+        "param_face_angle_x": [
+          [0, -3.555555555],
+          [940, -19.555555556999998]
+        ],
+        "param_face_angle_y": [
+          [0, -0.9999999989999999],
+          [970, 2.000000001]
+        ],
+        "param_eyeball_x": [
+          [0, -0.12],
+          [280, -0.65],
+          [1060, -0.4]
+        ],
+        "param_body_angle_x": [
+          [0, -0.175],
+          [1170, -1.4]
+        ]
+      },
+      "defaults": {
+        "param_face_angle_x": 0,
+        "param_face_angle_y": 0,
+        "param_eyeball_x": 0,
+        "param_body_angle_x": 0
+      },
+      "hold": {
+        "ms": 450
+      },
+      "stage": {
+        "horizontal": [
+          [0, -0.05],
+          [1170, -0.4]
+        ]
+      }
+    }
+  }
+}

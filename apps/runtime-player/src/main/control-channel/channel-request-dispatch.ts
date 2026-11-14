@@ -15,6 +15,12 @@ import {
   createControlChannelRejectedResponse,
   parseControlChannelRequestEnvelope
 } from "./channel-protocol-messages";
+import {
+  parseSpeechMotionRequest,
+  type SpeechMotionRequest
+} from "./speech-motion-state";
+import { speechMotionModelIssue, type SpeechMotionSnapshot } from "./speech-motion-assets";
+import type { RuntimePlayerMappingTarget } from "../../preload/model-mapping-bridge-contract";
 import type { SpeechMora } from "./speech-timeline-state";
 
 /**
@@ -87,6 +93,7 @@ export type ControlChannelRequestDispatch =
       readonly envelope?: ControlChannelEnvelopeWrite;
       readonly speech?: ControlChannelSpeechWrite;
       readonly speechStream?: ControlChannelSpeechStreamWrite;
+      readonly motion?: SpeechMotionRequest;
     };
 
 export type DispatchControlChannelRequestInput = {
@@ -97,6 +104,8 @@ export type DispatchControlChannelRequestInput = {
    */
   readonly accepting: boolean;
   readonly getCurrentSlots: () => readonly RuntimePlayerMappingSlot[] | null;
+  readonly getMotionParameters?: () => readonly RuntimePlayerMappingTarget[] | null;
+  readonly speechMotionSnapshot?: SpeechMotionSnapshot;
   /** Wall-clock instant the request was received (overlay expiry anchor). */
   readonly receivedAtMs: number;
   /** Default TTL window applied when the intent omits `ttlMs` (C4 §4). */
@@ -140,7 +149,37 @@ export function dispatchControlChannelRequest(
     };
   }
 
-  // Branch on the (now four) supported kinds. intent.set → overlay write (C4 path,
+  if (envelope.kind === "intent.motion") {
+    let selectionReason: string | undefined;
+    let motion = parseSpeechMotionRequest(
+      envelope.payload, (reason) => { selectionReason = reason; },
+      input.speechMotionSnapshot
+    );
+    if (motion === null) {
+      return {
+        kind: "reply",
+        reply: createControlChannelRejectedResponse({
+          replyTo: envelope.id, code: "invalidPayload", message: selectionReason ?? "Invalid speech motion request."
+        })
+      };
+    }
+    if (motion.op === "play" && "clip" in motion) {
+      const parameters = input.getMotionParameters?.() ?? null;
+      const issue = speechMotionModelIssue(motion.clip, parameters, input.getCurrentSlots());
+      if (issue) {
+        return {
+          kind: "reply",
+          reply: createControlChannelRejectedResponse({
+            replyTo: envelope.id, code: "motionModelMismatch", message: issue
+          })
+        };
+      }
+      motion = { ...motion, parameters: parameters ?? [] };
+    }
+    return { kind: "reply", reply: createControlChannelAcceptedResponse(envelope.id), motion };
+  }
+
+  // Existing slot and mouth requests. intent.set → overlay write (C4 path,
   // UNCHANGED); intent.envelope → envelope write into the per-slot curve machine;
   // intent.speech → speech write into the Domain A group timeline evaluator;
   // intent.speechStream → streamed-utterance write into the same evaluator.

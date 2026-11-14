@@ -1,0 +1,346 @@
+{
+  "id": "shared-laughter-viewers-v1",
+  "modelRevision": 824,
+  "durationMs": 6200,
+  "fps": 20,
+  "target": "viewers",
+  "intent": "面白さに乗る→笑いがこぼれる→共有したまま収まる",
+  "audio": "silent; placeholder small lip motion, not speech synchronized",
+  "interpolation": "quintic-smoothstep",
+  "tracks": {
+    "param_shared_laughter": [
+      [
+        0,
+        0
+      ],
+      [
+        280,
+        0
+      ],
+      [
+        840,
+        0.5
+      ],
+      [
+        1350,
+        1
+      ],
+      [
+        2850,
+        1
+      ],
+      [
+        3150,
+        0.95
+      ],
+      [
+        4650,
+        0
+      ],
+      [
+        6200,
+        0
+      ]
+    ],
+    "param_eyeball_y": [
+      [
+        0,
+        0
+      ],
+      [
+        250,
+        0
+      ],
+      [
+        780,
+        0.44
+      ],
+      [
+        1200,
+        0.3
+      ],
+      [
+        2800,
+        0.3
+      ],
+      [
+        3800,
+        0.38
+      ],
+      [
+        4900,
+        0.34
+      ],
+      [
+        6200,
+        0.34
+      ]
+    ],
+    "param_face_angle_y": [
+      [
+        0,
+        0
+      ],
+      [
+        350,
+        0
+      ],
+      [
+        1100,
+        3.8
+      ],
+      [
+        1350,
+        3.8
+      ],
+      [
+        1640,
+        -3.5
+      ],
+      [
+        1890,
+        4.6
+      ],
+      [
+        2160,
+        -0.9
+      ],
+      [
+        2450,
+        3.8
+      ],
+      [
+        2950,
+        2.8
+      ],
+      [
+        4300,
+        3.5
+      ],
+      [
+        6200,
+        3.5
+      ]
+    ],
+    "param_face_angle_z": [
+      [
+        0,
+        0
+      ],
+      [
+        500,
+        0
+      ],
+      [
+        1250,
+        1.2
+      ],
+      [
+        1650,
+        3.0
+      ],
+      [
+        1920,
+        1.3
+      ],
+      [
+        2200,
+        2.1
+      ],
+      [
+        2850,
+        0.7
+      ],
+      [
+        4400,
+        0.5
+      ],
+      [
+        6200,
+        0.5
+      ]
+    ],
+    "param_body_angle_z": [
+      [
+        0,
+        0
+      ],
+      [
+        600,
+        0
+      ],
+      [
+        1400,
+        1.4
+      ],
+      [
+        1710,
+        -0.5
+      ],
+      [
+        1990,
+        0.8
+      ],
+      [
+        2260,
+        0.1
+      ],
+      [
+        2800,
+        0.4
+      ],
+      [
+        6200,
+        0.4
+      ]
+    ],
+    "param_face_angle_x": [
+      [
+        0,
+        0
+      ],
+      [
+        6200,
+        0
+      ]
+    ],
+    "param_body_angle_x": [
+      [
+        0,
+        0
+      ],
+      [
+        6200,
+        0
+      ]
+    ],
+    "param_eyeball_x": [
+      [
+        0,
+        0
+      ],
+      [
+        6200,
+        0
+      ]
+    ],
+    "param_eye_left_open": [
+      [
+        0,
+        1
+      ],
+      [
+        6200,
+        1
+      ]
+    ],
+    "param_eye_right_open": [
+      [
+        0,
+        1
+      ],
+      [
+        6200,
+        1
+      ]
+    ]
+  },
+  "stageY": [
+    [
+      0,
+      0
+    ],
+    [
+      820,
+      0
+    ],
+    [
+      1090,
+      4
+    ],
+    [
+      1330,
+      -12
+    ],
+    [
+      1570,
+      5
+    ],
+    [
+      1800,
+      -6
+    ],
+    [
+      2040,
+      2
+    ],
+    [
+      2520,
+      0
+    ],
+    [
+      3020,
+      0
+    ]
+  ],
+  "stageYTimeOrigin": "SpeechMotionState ENTRY_MS=180 after play",
+  "view": {
+    "stageViewport": {
+      "minX": 540,
+      "minY": -40,
+      "width": 1040,
+      "height": 1100
+    },
+    "outputWidth": 624,
+    "outputHeight": 660
+  },
+  "lipPulses": [
+    [
+      850,
+      1120,
+      1380,
+      "a",
+      0.22
+    ],
+    [
+      1580,
+      1760,
+      1960,
+      "a",
+      0.32
+    ],
+    [
+      2040,
+      2200,
+      2420,
+      "i",
+      0.18
+    ],
+    [
+      2750,
+      3030,
+      3320,
+      "u",
+      0.16
+    ],
+    [
+      3400,
+      3610,
+      3880,
+      "e",
+      0.24
+    ],
+    [
+      4050,
+      4290,
+      4590,
+      "o",
+      0.2
+    ]
+  ],
+  "notes": [
+    "Normal blink is disabled; Eye Open stays 1.",
+    "Stage px refer to the 624x660 preview viewport; small view scales the result.",
+    "End attention pose is held after expression and stage have settled. No product clip registration."
+  ]
+}

@@ -33,6 +33,7 @@
 
 import { EXPRESSION_WORDS } from "./expression-table.mjs";
 import { scanRecallTag, normalizeRecallRequest, RECALL_WORD } from "./recall-tag.mjs";
+import { scanSpeechIntentTag } from "./speech-intent-tag.mjs";
 
 /** 既知語彙集合（表が正）。 */
 const KNOWN_WORDS = new Set(EXPRESSION_WORDS);
@@ -71,7 +72,7 @@ export function parseExpressionTags(replyText) {
   const recalls = [];
 
   let speech = "";
-  let unclosedRecalls = 0;
+  let unclosedControls = 0;
   let cursor = 0;
   while (cursor < input.length) {
     const open = input.indexOf("<", cursor);
@@ -93,8 +94,14 @@ export function parseExpressionTags(replyText) {
     }
     if (recall && recall.kind === "unclosed") {
       // 閉じていない目印: 頼みにせず、声にも出さない。
-      unclosedRecalls += 1;
+      unclosedControls += 1;
       cursor = recall.end;
+      continue;
+    }
+    const intent = scanSpeechIntentTag(input, open);
+    if (intent) {
+      if (intent.kind === "broken") unclosedControls += 1;
+      cursor = intent.end;
       continue;
     }
 
@@ -123,7 +130,7 @@ export function parseExpressionTags(replyText) {
   }
 
   // 壊れ括弧の掃除: well-formed タグ除去後に残る `<` `>` は無条件に剥ぐ（性質不変条件）。
-  const strayCount = countStray(speech) + unclosedRecalls;
+  const strayCount = countStray(speech) + unclosedControls;
   if (strayCount > 0) {
     diagnostics.push({ type: "brokenTag", count: strayCount });
     speech = speech.replace(/[<>]/g, "");

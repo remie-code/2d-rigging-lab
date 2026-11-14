@@ -16,6 +16,35 @@ import {
 } from "../presence/stage-presence-drive";
 
 describe("RuntimePlayerStageMotionRuntime", () => {
+  it.each([false, true])("composes speech Stage Y and scale with Presence enabled=%s", (enabled) => {
+    const runtime = new RuntimePlayerStageMotionRuntime();
+    const settings = deriveStagePresenceStageMotionSettings({ enabled, strength: 1 });
+    function frame(y: number, zoomScale: number, stageYOffsetPx: number, speechStageScale = 1) {
+      return runtime.update({
+        baseTransform: createTransform({ zoomScale, pan: { x: 15, y } }),
+        settings: runtimePlayerDefaultStageMotionSettings,
+        trackingFrame: null,
+        inputProfile: null,
+        sessionNeutral: null,
+        drive: { settings, horizontalInput: 1, depthInput: 1, timestampMs: 1000, stageYOffsetPx, speechStageScale }
+      });
+    }
+
+    const offset = frame(40, 2, -65);
+    expect(offset.browserSourceTransform).toEqual(createTransform({
+      zoomScale: 2 * (enabled ? 1.15 : 1),
+      pan: { x: enabled ? 215 : 15, y: -25 }
+    }));
+    expect(offset.nativeDisplayTransform).toEqual(offset.browserSourceTransform);
+    expect(frame(-20, 0.75, -65).browserSourceTransform.pan.y).toBe(-85);
+    const depthOnly = frame(-20, 0.75, 0, 0.948);
+    expect(depthOnly.browserSourceTransform.zoomScale).toBeCloseTo(0.75 * (enabled ? 1.15 : 1) * 0.948);
+    expect(depthOnly.nativeDisplayTransform).toEqual(depthOnly.browserSourceTransform);
+    const restored = frame(-20, 0.75, 0);
+    expect(restored.browserSourceTransform.pan.y).toBe(-20);
+    expect(restored.nativeDisplayTransform).toEqual(enabled ? restored.browserSourceTransform : null);
+  });
+
   it("composes base Stage transform with calibrated horizontal and near depth input", () => {
     const runtime = new RuntimePlayerStageMotionRuntime();
     const result = runtime.update({

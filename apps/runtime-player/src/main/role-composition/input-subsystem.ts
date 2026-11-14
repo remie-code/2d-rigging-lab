@@ -251,6 +251,12 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
     // absolute `expiresAtMs` the server stamps — never the generator's logical time.
     getChannelOverlay: (nowMs, baseValues, prevResolved) =>
       controlChannelOverlayStore.snapshot(nowMs, baseValues, prevResolved),
+    getSpeechStageYOffsetPx: (nowMs) =>
+      controlChannelOverlayStore.sampleStageYOffsetPx(nowMs),
+    getSpeechStageScale: (nowMs) => controlChannelOverlayStore.sampleStageScale(nowMs),
+    getSpeechPresenceInput: (nowMs, channel, base) => controlChannelOverlayStore.sampleSpeechPresenceInput(nowMs, channel, base),
+    resolveSpeechMotionModelParameters: (nowMs, parameters) =>
+      controlChannelOverlayStore.resolveSpeechMotionModelParameters(nowMs, parameters),
     ...(deps.physiologyConfigProvider !== undefined
       ? { getPhysiologyConfig: deps.physiologyConfigProvider }
       : {})
@@ -266,17 +272,19 @@ export const composeStaticInputSubsystem: RuntimePlayerInputSubsystemComposer = 
     // Stage Presence supply (C3 Domain D). Reads the current `stagePresence` config
     // (既定 Off) and the heart's latest posture signal, then derives Stage Motion
     // settings from strength (別意味論・別フィールド; never the window-state settings).
-    // Absent config provider / stagePresence ⇒ null ⇒ Stage Motion stays inert.
+    // Speech Stage Y can drive the display even without Stage Presence settings.
     getStageMotionDrive: (): RuntimePlayerStageMotionDrive | null => {
       const stagePresence = deps.physiologyConfigProvider?.().stagePresence;
-      if (stagePresence === undefined) {
+      const signal = heart.getLatestStageMotionSignal();
+      if (stagePresence === undefined && signal.stageYOffsetPx === 0 && signal.speechStageScale === undefined) {
         return null;
       }
-      const signal = heart.getLatestStageMotionSignal();
       return {
-        settings: deriveStagePresenceStageMotionSettings(stagePresence),
+        settings: deriveStagePresenceStageMotionSettings(stagePresence ?? { enabled: false, strength: 0 }),
         horizontalInput: signal.horizontal,
         depthInput: signal.depth,
+        stageYOffsetPx: signal.stageYOffsetPx,
+        ...(signal.speechStageScale === undefined ? {} : { speechStageScale: signal.speechStageScale }),
         timestampMs: signal.timestampMs
       };
     },

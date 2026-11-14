@@ -1,0 +1,43 @@
+{
+  "game": {
+    "codec_type": "video",
+    "width": 520,
+    "height": 548,
+    "r_frame_rate": "24/1",
+    "duration": "5.208008",
+    "nb_read_frames": "125",
+    "sha256": "0f8bca0083ef23838c6d159807ee134b8417321b9ae4e8b6ac9821870ba4bd02",
+    "allFramesDecoded": true
+  },
+  "partner": {
+    "codec_type": "video",
+    "width": 520,
+    "height": 548,
+    "r_frame_rate": "24/1",
+    "duration": "5.208008",
+    "nb_read_frames": "125",
+    "sha256": "264e694c85c99558ac639b106158fb8a302f2c4a1f3d2e5ba69428caea7095e5",
+    "allFramesDecoded": true
+  },
+  "viewers": {
+    "codec_type": "video",
+    "width": 520,
+    "height": 548,
+    "r_frame_rate": "24/1",
+    "duration": "5.208008",
+    "nb_read_frames": "125",
+    "sha256": "e4ed78373e16cedea319a360dc0876470fc7feea8d183df5a5d22ff2018d458c",
+    "allFramesDecoded": true
+  },
+  "comparison": {
+    "codec_type": "video",
+    "width": 1560,
+    "height": 548,
+    "r_frame_rate": "24/1",
+    "duration": "5.208333",
+    "nb_read_frames": "125",
+    "sha256": "1547067676f4c63d44094b9237b8a8149bed37dba7a33d134e35aaf7e4ad2c25",
+    "allFramesDecoded": true
+  },
+  "approvedPartnerByteIdentical": true
+}

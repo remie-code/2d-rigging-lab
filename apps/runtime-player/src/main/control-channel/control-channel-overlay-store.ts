@@ -58,6 +58,7 @@ import {
   slotCurveDriveEndMs,
   type SlotCurveState
 } from "./slot-curve-state";
+import { SpeechMotionState, type SpeechMotionRequest } from "./speech-motion-state";
 import { runtimePlayerControlChannelSpeechStreamMaxUtteranceLength } from "./contract/channel-protocol-contract";
 import {
   isSpeechMouthGroupSlot,
@@ -138,6 +139,27 @@ type SpeechStreamUtterance = {
 };
 
 export class RuntimePlayerControlChannelOverlayStore {
+  readonly #motion = new SpeechMotionState();
+
+  applySpeechMotion(request: SpeechMotionRequest, owner: number, nowMs: number): void {
+    this.#motion.apply(request, owner, nowMs);
+  }
+
+  sampleStageYOffsetPx(nowMs: number): number {
+    return this.#motion.sampleStageY(nowMs);
+  }
+
+  sampleStageScale(nowMs: number): number {
+    return this.#motion.sampleStageScale(nowMs);
+  }
+
+  sampleSpeechPresenceInput(nowMs: number, channel: "horizontal" | "depth", base: number | null): number | null {
+    return this.#motion.samplePresenceInput(nowMs, channel, base);
+  }
+
+  resolveSpeechMotionModelParameters(nowMs: number, base: Record<string, number>): Record<string, number> {
+    return this.#motion.sampleModelParameters(nowMs, base);
+  }
   readonly #curves = new Map<string, SlotCurveState>();
   /** The single live speech timeline (C6, 一発話=一タイムライン §7 裁定4), or null. */
   #speech: SpeechTimelineState | null = null;
@@ -314,6 +336,7 @@ export class RuntimePlayerControlChannelOverlayStore {
    * (runtime-player-main.ts). Client disconnect uses {@link releaseAll} instead.
    */
   clearAll(): void {
+    this.#motion.clear();
     this.#curves.clear();
     this.#speech = null;
     this.#stream = null;
@@ -327,7 +350,8 @@ export class RuntimePlayerControlChannelOverlayStore {
    * forced-released the same way — the 6 mouth slots ease from their current values to
    * base (口がすっと閉じる, §2.8). An open streamed utterance is stopped with it.
    */
-  releaseAll(nowMs: number): void {
+  releaseAll(nowMs: number, motionOwner?: number): void {
+    this.#motion.disconnect(nowMs, motionOwner);
     this.#lastNowMs = nowMs;
     for (const [slotId, curve] of this.#curves) {
       const sample = sampleSlotCurve(curve, nowMs, this.#livingBase(slotId));
@@ -385,7 +409,7 @@ export class RuntimePlayerControlChannelOverlayStore {
     }
 
     for (const [slotId, curve] of this.#curves) {
-      const sample = sampleSlotCurve(curve, nowMs, this.#livingBase(slotId));
+      const sample = sampleSlotCurve(curve, nowMs, live[slotId] ?? this.#livingBase(slotId));
       if (sample.done) {
         this.#curves.delete(slotId);
         continue;

@@ -25,6 +25,7 @@
  */
 
 import { EXPRESSION_WORDS } from "./expression-table.mjs";
+import { SPEECH_INTENT_WORD } from "./speech-intent-tag.mjs";
 
 /** 思い出しの目印の語。 */
 export const RECALL_WORD = "recall";
@@ -33,7 +34,7 @@ export const RECALL_WORD = "recall";
 export const CONTROL_TAG_WORDS = Object.freeze([RECALL_WORD]);
 
 /** 目印の終わりを探すのをやめる「既知のタグ」の語（表情の 6 語 + 目印の語）。 */
-const KNOWN_TAG_WORDS = new Set([...EXPRESSION_WORDS, ...CONTROL_TAG_WORDS]);
+const KNOWN_TAG_WORDS = new Set([...EXPRESSION_WORDS, ...CONTROL_TAG_WORDS, SPEECH_INTENT_WORD]);
 
 const RECALL_OPEN = `<${RECALL_WORD}`;
 const WORD_START = /^[A-Za-z]$/;

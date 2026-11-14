@@ -487,6 +487,7 @@ describe("Autonomous frame heart — physiology config seam (裁定3)", () => {
     expect(harness.heart.getLatestStageMotionSignal()).toEqual({
       horizontal: null,
       depth: null,
+      stageYOffsetPx: 0,
       timestampMs: 0
     });
 
@@ -499,6 +500,7 @@ describe("Autonomous frame heart — physiology config seam (裁定3)", () => {
     expect(harness.heart.getLatestStageMotionSignal()).toEqual({
       horizontal: 0.4,
       depth: -0.2,
+      stageYOffsetPx: 0,
       timestampMs: 1016
     });
 
@@ -507,6 +509,7 @@ describe("Autonomous frame heart — physiology config seam (裁定3)", () => {
     expect(harness.heart.getLatestStageMotionSignal()).toEqual({
       horizontal: null,
       depth: null,
+      stageYOffsetPx: 0,
       timestampMs: 0
     });
   });

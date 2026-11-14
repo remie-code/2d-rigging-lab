@@ -22,6 +22,7 @@
 
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { scanRecallTag } from "./recall-tag.mjs";
+import { scanSpeechIntentTag } from "./speech-intent-tag.mjs";
 
 const SENTENCE_END = new Set(["。", "！", "？", "!", "?"]);
 const TAG_WORD_START = /^[A-Za-z]$/;
@@ -41,7 +42,7 @@ const RECALL_OPEN = "<recall";
  */
 
 /**
- * @typedef {{ sentences: string[]; tags: CompletedExpressionTag[] }} SentenceTagDelta
+ * @typedef {{ sentences: string[]; tags: CompletedExpressionTag[]; ordered?: Array<{text: string} | {intent: string | null; rawIntentTag: string}> }} SentenceTagDelta
  */
 
 /**
@@ -51,7 +52,7 @@ const RECALL_OPEN = "<recall";
  *   pendingText: () => string;
  * }}
  */
-export function createIncrementalSentenceTagBuffer() {
+export function createIncrementalSentenceTagBuffer({ includeIntents = false } = {}) {
   /** Text which is known not to be an incomplete expression tag. */
   let plain = "";
   /** Raw source waiting to be scanned. It starts at `sourceStart`. */
@@ -60,14 +61,19 @@ export function createIncrementalSentenceTagBuffer() {
   let receivedChars = 0;
 
   /** @returns {SentenceTagDelta} */
-  const empty = () => ({ sentences: [], tags: [] });
+  const empty = () => ({ sentences: [], tags: [], ...(includeIntents ? { ordered: [] } : {}) });
+
+  const pushSentence = (out, text) => {
+    out.sentences.push(text);
+    out.ordered?.push({ text });
+  };
 
   /** @param {string} text @param {SentenceTagDelta} out */
   const appendPlain = (text, out) => {
     plain += text;
     let boundary;
     while ((boundary = findSentenceBoundary(plain)) >= 0) {
-      out.sentences.push(plain.slice(0, boundary + 1));
+      pushSentence(out, plain.slice(0, boundary + 1));
       plain = plain.slice(boundary + 1);
     }
   };
@@ -78,7 +84,7 @@ export function createIncrementalSentenceTagBuffer() {
    */
   const endSentenceBeforeTag = (out) => {
     if (SPEAKABLE_CHAR.test(plain)) {
-      out.sentences.push(plain);
+      pushSentence(out, plain);
       plain = "";
     }
   };
@@ -139,6 +145,20 @@ export function createIncrementalSentenceTagBuffer() {
         cursor = tagStart;
         break;
       }
+      const intent = scanSpeechIntentTag(source, tagStart, final);
+      if (intent) {
+        if (intent.kind === "incomplete") {
+          cursor = tagStart;
+          break;
+        }
+        if (intent.kind === "tag" && includeIntents) {
+          if (plain.length > 0) pushSentence(out, plain);
+          plain = "";
+          out.ordered?.push({ intent: intent.intent, rawIntentTag: source.slice(tagStart, intent.end) });
+        }
+        cursor = intent.end;
+        continue;
+      }
       const candidate = classifyTag(source, tagStart);
       if (candidate.kind === "valid") {
         const raw = source.slice(tagStart, candidate.end + 1);
@@ -165,7 +185,7 @@ export function createIncrementalSentenceTagBuffer() {
       sourceStart += source.length;
       source = "";
       if (plain.length > 0) {
-        out.sentences.push(plain);
+        pushSentence(out, plain);
         plain = "";
       }
     }

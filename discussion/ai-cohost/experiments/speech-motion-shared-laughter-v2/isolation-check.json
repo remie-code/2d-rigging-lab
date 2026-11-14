@@ -1,0 +1,7 @@
+{
+  "frames": 125,
+  "onlyChangedModelInput": "param_eyeball_y",
+  "eyeballYAlwaysZero": true,
+  "allOtherModelInputsIdentical": true,
+  "stageIdentical": true
+}

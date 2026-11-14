@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "id": "ask",
+  "description": "問いかける",
+  "targets": {
+    "partner": "ask"
+  },
+  "clips": {
+    "ask": {
+      "entry": "lead-in",
+      "durationMs": 1420,
+      "tracks": {
+        "param_face_angle_x": [
+          [0, -19.555555556999998],
+          [740, -24]
+        ],
+        "param_face_angle_y": [
+          [0, 2.000000001],
+          [720, 5.000000001],
+          [1270, 3]
+        ],
+        "param_face_angle_z": [
+          [0, 0],
+          [780, -3.999999999],
+          [1320, -3]
+        ],
+        "param_body_angle_x": [
+          [0, -1.4],
+          [870, -2.0999999999999996]
+        ],
+        "param_body_angle_z": [
+          [0, 0],
+          [840, -4],
+          [1420, -3]
+        ],
+        "param_eyeball_x": [
+          [0, -0.4],
+          [420, -0.52]
+        ]
+      },
+      "defaults": {
+        "param_face_angle_x": 0,
+        "param_face_angle_y": 0,
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0
+      },
+      "hold": {
+        "ms": 1500,
+        "untilSpeechEnd": true
+      },
+      "stage": {
+        "horizontal": [
+          [0, -0.4],
+          [870, -0.6]
+        ],
+        "depth": [
+          [0, 0],
+          [840, -0.4],
+          [1420, -0.3]
+        ]
+      }
+    }
+  }
+}

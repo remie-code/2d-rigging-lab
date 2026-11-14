@@ -1,0 +1,18 @@
+{
+  "frames": 145,
+  "durationSecondsIncludingLastFrame": 6.041666666666667,
+  "mp4Decoded": true,
+  "stageScaleRange": [
+    0.9482081318473564,
+    1
+  ],
+  "stageYRange": [
+    0,
+    3.998591604938272
+  ],
+  "target": "front/game",
+  "originalExpressionOnly": true,
+  "noBlink": true,
+  "gazeXY0": true,
+  "silentMouthStatic": true
+}

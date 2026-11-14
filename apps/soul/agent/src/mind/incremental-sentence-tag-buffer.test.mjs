@@ -1,8 +1,47 @@
 // @ts-check
 import { test } from "node:test";
 import assert from "node:assert/strict";
-
+import { parseExpressionTags } from "./expression-parser.mjs";
 import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
+
+test("intent markers preserve ordered multi-sentence groups across every delta split", () => {
+  const reply = "前置き<intent 自由な間を作る>一文。<smile>二文。<intent>地の文<recall 続きを探す>\n<intent 終わりを示す>おしまい";
+  const expected = [
+    { text: "前置き" }, { intent: "自由な間を作る", rawIntentTag: "<intent 自由な間を作る>" },
+    { text: "一文。" }, { text: "二文。" }, { intent: null, rawIntentTag: "<intent>" },
+    { text: "地の文" }, { text: "\n" },
+    { intent: "終わりを示す", rawIntentTag: "<intent 終わりを示す>" }, { text: "おしまい" }
+  ];
+  for (let split = 0; split <= reply.length; split += 1) {
+    const buffer = createIncrementalSentenceTagBuffer({ includeIntents: true });
+    const outputs = [buffer.append(reply.slice(0, split)), buffer.append(reply.slice(split)), buffer.flush()];
+    assert.deepEqual(outputs.flatMap(({ ordered }) => ordered), expected, `split=${split}`);
+    assert.equal(outputs.flatMap(({ sentences }) => sentences).join(""), parseExpressionTags(reply).speechText);
+    assert.deepEqual(outputs.flatMap(({ tags }) => tags.flatMap(({ events }) => events.map(({ word }) => word))), ["smile"]);
+  }
+});
+
+test("a recognized unfinished intent never reaches progressive or final speech", () => {
+  for (const tag of ["<int", "<intent", "<intent 途中までの意図"]) {
+    const reply = "ここだけ。" + tag;
+    const buffer = createIncrementalSentenceTagBuffer({ includeIntents: true });
+    assert.deepEqual(buffer.append(reply).ordered, [{ text: "ここだけ。" }]);
+    assert.deepEqual(buffer.flush().ordered, []);
+    assert.equal(parseExpressionTags(reply).speechText, "ここだけ。");
+  }
+});
+
+test("an intent with a stray prefix is suppressed even across split deltas", () => {
+  for (const tag of ["< intent>", "< సintent 小さな芽を一緒に喜ぶように少し身を寄せる>"]) {
+    const reply = tag + "もう芽が出たんだ。<smile>";
+    for (let split = 0; split <= reply.length; split += 1) {
+      const buffer = createIncrementalSentenceTagBuffer({ includeIntents: true });
+      const outputs = [buffer.append(reply.slice(0, split)), buffer.append(reply.slice(split)), buffer.flush()];
+      assert.deepEqual(outputs.flatMap(({ ordered }) => ordered), [{ text: "もう芽が出たんだ。" }], `split=${split}`);
+      assert.equal(parseExpressionTags(reply).speechText, "もう芽が出たんだ。");
+    }
+  }
+});
 
 test("任意の delta 分割でも完結文は一度ずつ、flush は未終端 remainder を一度だけ出す", () => {
   const source = "最初です。次です！最後";

@@ -515,6 +515,7 @@ describe("Frame heart × Control Channel curve store (C5 Domain A)", () => {
     expect(harness.heart.getLatestStageMotionSignal()).toEqual({
       horizontal: 0.4,
       depth: -0.2,
+      stageYOffsetPx: 0,
       timestampMs: 16
     });
 
@@ -533,6 +534,7 @@ describe("Frame heart × Control Channel curve store (C5 Domain A)", () => {
     expect(harness.heart.getLatestStageMotionSignal()).toEqual({
       horizontal: 0.9,
       depth: -0.2,
+      stageYOffsetPx: 0,
       timestampMs: 200
     });
   });

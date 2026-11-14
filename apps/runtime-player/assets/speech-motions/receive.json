@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "id": "receive",
+  "description": "受け取る",
+  "targets": {
+    "partner": "receive"
+  },
+  "clips": {
+    "receive": {
+      "entry": "lead-in",
+      "durationMs": 1050,
+      "tracks": {
+        "param_face_angle_y": [
+          [0, 0],
+          [360, -8.000000001],
+          [460, -8.000000001],
+          [980, -0.9999999989999999]
+        ],
+        "param_face_angle_z": [
+          [0, 0],
+          [360, 0.650000001],
+          [460, 0.650000001],
+          [1050, 0]
+        ],
+        "param_eyeball_y": [
+          [0, 0],
+          [360, 0.08],
+          [460, 0.08],
+          [980, 0]
+        ]
+      },
+      "defaults": {
+        "param_face_angle_y": 0,
+        "param_face_angle_z": 0,
+        "param_eyeball_y": 0
+      },
+      "hold": {
+        "ms": 0
+      }
+    }
+  }
+}

@@ -15,6 +15,8 @@ import { dispatchControlChannelRequest } from "./channel-request-dispatch";
 import { createControlChannelServerHello } from "./channel-protocol-messages";
 import type { RuntimePlayerControlChannelOverlayStore } from "./control-channel-overlay-store";
 import { RUNTIME_PLAYER_SPEECH_MOUTH_OPEN_SLOT } from "./speech-timeline-state";
+import type { SpeechMotionSnapshot } from "./speech-motion-assets";
+import type { RuntimePlayerMappingTarget } from "../../preload/model-mapping-bridge-contract";
 import { createControlChannelToken, isControlChannelTokenMatch } from "./channel-token";
 import { runtimePlayerControlChannelDefaultPort } from "./channel-slot-ports";
 import {
@@ -105,6 +107,8 @@ export type RuntimePlayerControlChannelServerOptions = {
    * Returns null when no model is loaded → every write is slotNotWritable.
    */
   readonly getCurrentSlots?: () => readonly RuntimePlayerMappingSlot[] | null;
+  readonly getMotionParameters?: () => readonly RuntimePlayerMappingTarget[] | null;
+  readonly speechMotionSnapshot?: SpeechMotionSnapshot;
   readonly defaultWindowMs?: number;
   readonly nowMs?: () => number;
   /** Passive local diagnostics only; absent in focused legacy tests. */
@@ -121,6 +125,8 @@ export class RuntimePlayerControlChannelServer {
   readonly #overlayStore: RuntimePlayerControlChannelOverlayStore;
   readonly #getCurrentSlots: () =>
     readonly RuntimePlayerMappingSlot[] | null;
+  readonly #getMotionParameters: () => readonly RuntimePlayerMappingTarget[] | null;
+  readonly #speechMotionSnapshot: SpeechMotionSnapshot | undefined;
   readonly #defaultWindowMs: number;
   readonly #nowMs: () => number;
   readonly #diagnosticSink: RuntimePlayerControlChannelDiagnosticSink;
@@ -142,6 +148,8 @@ export class RuntimePlayerControlChannelServer {
     this.#port = options.port ?? runtimePlayerControlChannelDefaultPort;
     this.#overlayStore = options.overlayStore;
     this.#getCurrentSlots = options.getCurrentSlots ?? (() => null);
+    this.#getMotionParameters = options.getMotionParameters ?? (() => null);
+    this.#speechMotionSnapshot = options.speechMotionSnapshot;
     this.#defaultWindowMs =
       options.defaultWindowMs ?? runtimePlayerControlChannelDefaultWindowMs;
     this.#nowMs = options.nowMs ?? (() => Date.now());
@@ -308,7 +316,9 @@ export class RuntimePlayerControlChannelServer {
       }
     });
     this.#connections.add(connection);
-    connection.send(createControlChannelServerHello());
+    connection.send(createControlChannelServerHello(
+      this.#speechMotionSnapshot?.catalog
+    ));
     this.#diagnosticSink.record({
       event: "connection.connected",
       connectionId,
@@ -330,6 +340,8 @@ export class RuntimePlayerControlChannelServer {
       text,
       accepting: this.#server !== null,
       getCurrentSlots: this.#getCurrentSlots,
+      getMotionParameters: this.#getMotionParameters,
+      ...(this.#speechMotionSnapshot ? { speechMotionSnapshot: this.#speechMotionSnapshot } : {}),
       receivedAtMs: this.#nowMs(),
       defaultWindowMs: this.#defaultWindowMs,
       getSpeechStreamCursor: () => this.#overlayStore.speechStreamCursor()
@@ -345,7 +357,9 @@ export class RuntimePlayerControlChannelServer {
       return;
     }
 
-    if (dispatch.overlay !== undefined) {
+    if (dispatch.motion !== undefined) {
+      this.#overlayStore.applySpeechMotion(dispatch.motion, connectionInfo.connectionGeneration, this.#nowMs());
+    } else if (dispatch.overlay !== undefined) {
       // intent.set → degenerate curve write (C4 path, UNCHANGED).
       this.#overlayStore.setOverlay(
         dispatch.overlay.slotId,
@@ -452,7 +466,7 @@ export class RuntimePlayerControlChannelServer {
     }
     // Disconnect → 全スロット同時release (C5 §2.3): the体 eases to the生理 baseline over
     // the universal release instead of snapping — 魂を殺しても表情がすっと解けて呼吸が残る.
-    this.#overlayStore.releaseAll(this.#nowMs());
+    this.#overlayStore.releaseAll(this.#nowMs(), connectionInfo.connectionGeneration);
     this.#emitEvent({ kind: "disconnected" });
     this.#refreshConnectedState();
   }

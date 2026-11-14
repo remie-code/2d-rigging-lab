@@ -91,6 +91,7 @@ let nextGenerationNumber = 0;
  * @param {(event: string, fields?: Record<string, unknown>) => void} [options.onTrace]  診断（本文なし）。
  * @param {(info: { jobId: string; index: number; playbackId: string; atMs: number }) => void} [options.onPlaybackStarted]
  * @param {(info: { jobId: string; index: number; playbackId: string }) => void} [options.onPlaybackActivated]
+ * @param {(info: { index: number; playbackId: string; cause: string; started: boolean; ended: boolean; playerOpened: boolean }) => void} [options.onJobTerminal]
  *   器が open を受理して player.open した時点（器が無いときは player.open した時点・一括の読み上げの「鳴らし始めた」）。
  * @param {number} [options.playbackStartTimeoutMs]
  * @param {number} [options.playbackCompletionMarginMs]
@@ -287,6 +288,10 @@ export function createSpeechStreamer(options) {
       completedSentenceCount,
       failureName: error instanceof Error ? error.name : error == null ? null : typeof error,
       failureCode: typeof (/** @type {any} */ (error)?.code) === "string" ? /** @type {any} */ (error).code : null
+    });
+    notify(options.onJobTerminal, {
+      index: job.index, playbackId: job.playbackId, cause, started: job.started, ended: cause === "completed",
+      playerOpened: job.phase === "open" || job.phase === "ending"
     });
   };
 

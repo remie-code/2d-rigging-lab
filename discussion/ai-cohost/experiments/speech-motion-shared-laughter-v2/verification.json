@@ -1,0 +1,40 @@
+{
+  "modelRevision": 824,
+  "frameCount": 125,
+  "durationSeconds": 6.25,
+  "normalBlinkDisabled": true,
+  "yawWithin24": true,
+  "stageRange": [
+    -11.98913724922839,
+    5
+  ],
+  "stageAtEnd": 0,
+  "heldAttentionAtEnd": {
+    "param_shared_laughter": 0,
+    "param_eyeball_y": 0,
+    "param_face_angle_y": 3.5,
+    "param_face_angle_z": 0.5,
+    "param_body_angle_z": 0.4,
+    "param_face_angle_x": 0,
+    "param_body_angle_x": 0,
+    "param_eyeball_x": 0,
+    "param_eye_left_open": 1,
+    "param_eye_right_open": 1,
+    "param_mouth_open": 0
+  },
+  "hostPathChecks": [
+    {
+      "frame": 0,
+      "hostPngIdentical": true
+    },
+    {
+      "frame": 30,
+      "hostPngIdentical": true
+    },
+    {
+      "frame": 124,
+      "hostPngIdentical": true
+    }
+  ],
+  "sourceHashUnchanged": true
+}

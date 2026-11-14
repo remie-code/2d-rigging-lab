@@ -37,7 +37,8 @@ import { RuntimePlayerControlChannelServer } from "./control-channel/channel-ser
 import { RuntimePlayerControlChannelConfigStore } from "./control-channel/channel-config-store";
 import { RuntimePlayerControlChannelDiagnosticLog } from "./control-channel/fire-diagnostics";
 import { runtimePlayerControlChannelDefaultPort } from "./control-channel/channel-slot-ports";
-import { createAutoMappingSlots } from "./live-mapping/runtime-export-auto-mapping";
+import { createAutoMappingSlots, createDirectTargetCandidates } from "./live-mapping/runtime-export-auto-mapping";
+import { loadSpeechMotionSnapshot } from "./control-channel/speech-motion-assets";
 import type {
   RuntimePlayerMappingSlot
 } from "../preload/model-mapping-bridge-contract";
@@ -514,6 +515,7 @@ export function startRuntimePlayerMain(): void {
     // slotNotWritable (Domain A validation).
     let currentControlChannelSlots:
       readonly RuntimePlayerMappingSlot[] | null = null;
+    let currentMotionParameters: ReturnType<typeof createDirectTargetCandidates> | null = null;
     let controlChannelServer: RuntimePlayerControlChannelServer | null = null;
     if (controlChannelOverlayStore !== null) {
       // Fire diagnostics are automatic and local to this Runtime Player slot.
@@ -522,6 +524,10 @@ export function startRuntimePlayerMain(): void {
         await RuntimePlayerControlChannelDiagnosticLog.create({
           userDataPath: app.getPath("userData")
         });
+      const speechMotionSnapshot = await loadSpeechMotionSnapshot(app.getPath("userData"), (message) => {
+        console.info(message);
+        controlChannelDiagnosticLog.record({ event: "speech_motion.assets", speechMotionAssetDiagnostic: message });
+      });
       const channelConfigStore = new RuntimePlayerControlChannelConfigStore({
         userDataPath: app.getPath("userData"),
         // autonomous-default → fixed 17310; a custom autonomous slot auto-assigns a
@@ -537,6 +543,8 @@ export function startRuntimePlayerMain(): void {
         token: channelConfig.token,
         port: channelConfig.preferredPort,
         getCurrentSlots: () => currentControlChannelSlots,
+        getMotionParameters: () => currentMotionParameters,
+        speechMotionSnapshot,
         diagnosticSink: controlChannelDiagnosticLog
       });
     }
@@ -571,6 +579,7 @@ export function startRuntimePlayerMain(): void {
         // drop any live overlays now so the体 falls to the生理 baseline immediately,
         // rather than waiting for each overlay's TTL (Domain A 引き継ぎ #3).
         currentControlChannelSlots = null;
+        currentMotionParameters = null;
         controlChannelOverlayStore?.clearAll();
         controlChannelBridge.publishStatus();
         browserSourceServer.clearRuntimeExport("Runtime Export changing");
@@ -589,6 +598,7 @@ export function startRuntimePlayerMain(): void {
         // The channel's writability check reads the loaded model's auto-mapping
         // slots (same pure derivation the heart uses).
         currentControlChannelSlots = createAutoMappingSlots(payload);
+        currentMotionParameters = createDirectTargetCandidates(payload);
         inputSubsystem.clearLiveParameterFrame();
         browserSourceServer.publishRuntimeExportLoaded(
           payload,
@@ -613,6 +623,7 @@ export function startRuntimePlayerMain(): void {
         runtimeVariantBridge.clearRuntimeExport();
         inputSubsystem.clearLiveParameterFrame();
         currentControlChannelSlots = null;
+        currentMotionParameters = null;
         controlChannelOverlayStore?.clearAll();
         controlChannelBridge.publishStatus();
         browserSourceServer.clearRuntimeExport("No Runtime Export loaded");

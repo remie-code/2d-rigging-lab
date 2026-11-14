@@ -174,10 +174,14 @@ import {
 } from "./barge-in.mjs";
 import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
+import { createSpeechIntentDelivery } from "./speech-intent-delivery.mjs";
 import { DEFAULT_MODEL_IDENTITY, normalizeModelIdentity } from "./model-identity.mjs";
 import { createFireTiming } from "./fire-latency.mjs";
 import { appendSoulSkills, loadSoulSkills } from "./soul-skills.mjs";
 import { performance } from "node:perf_hooks";
+import { randomUUID } from "node:crypto";
+
+const SPEECH_INTENT_TEACHING = loadSoulSkills({ names: ["speech-intent"] });
 
 /** 視覚発火の最小指示文（wave 計画 §2 裁定・人格の作り込みはしない＝persona の領分）。 */
 const VISION_INSTRUCTION_TEXT = "今の画面を見て、直近の会話と合わせて自然に反応してください。";
@@ -481,6 +485,8 @@ export function createFireOrchestrator(options) {
   let currentProgressiveBoundary = null;
   let currentFireResources = null;
   let nextProgressiveGeneration = 0;
+  const intentSessionId = randomUUID();
+  let lastIntentMotion = null;
   const reportedProgressiveGenerations = new Set();
   /** Exact generation -> accepted Fire transcript owner. */
   const progressiveProjectionOwners = new Map();
@@ -652,6 +658,8 @@ export function createFireOrchestrator(options) {
       body,
       player: supplied?.player ?? player,
       engine: supplied?.engine ?? options.engine ?? null,
+      speechIntentMotion: supplied?.speechIntentMotion,
+      speechIntentScene: supplied?.speechIntentScene,
       speakDeps: Object.freeze({ ...speakDeps, ...(supplied?.speakDeps ?? {}) }),
       configuration: Object.freeze({ ...(supplied?.configuration ?? {}) }),
       metadata: Object.freeze({ ...(supplied?.metadata ?? {}) })
@@ -816,16 +824,18 @@ export function createFireOrchestrator(options) {
    * immediately through a synchronous enqueue seam; playback ownership remains
    * intentionally outside C1.
    */
-  const createProgressiveBoundary = (delivery = null) => {
-    const incremental = createIncrementalSentenceTagBuffer();
+  const createProgressiveBoundary = (delivery = null, intents = null) => {
+    const incremental = createIncrementalSentenceTagBuffer({ includeIntents: intents !== null });
     let sawDelta = false;
     let flushed = false;
     let stopped = false;
+    let sealed = false;
     let blocked = false;
     let sentenceCount = 0;
     let safeChars = 0;
+    let intentSpeechText = "";
 
-    /** @param {{ sentences: string[]; tags?: Array<{ recalls?: Array<{ request: string }> }> }} output @param {boolean} final */
+    /** @param {ReturnType<ReturnType<typeof createIncrementalSentenceTagBuffer>["append"]>} output @param {boolean} final */
     const enqueue = (output, final) => {
       // 思い出しの目印（逐次の部品が読んだ tags）。声とは別に、この発火の拾い場所へ積む。
       if (currentFire && Array.isArray(output.tags)) {
@@ -833,22 +843,37 @@ export function createFireOrchestrator(options) {
           for (const recall of tag.recalls ?? []) currentFire.recall.streamed.push({ request: recall.request });
         }
       }
-      for (const text of output.sentences) {
+      for (const item of output.ordered ?? output.sentences.map((text) => ({ text }))) {
         if (stopped) break;
+        if ("intent" in item) {
+          intents.tag(item.intent, item.rawIntentTag);
+          continue;
+        }
+        const { text } = item;
         // The sentence was assembled by the pure buffer, so this catches an NG
         // word even when the source word was fragmented across transport deltas.
         if (containsNgWord(text)) {
           stopped = true;
           blocked = true;
+          intents?.interrupt();
           delivery?.abort("ng-blocked");
+          intents?.close();
           trace("progressive.boundary.blocked", { sentenceCount, safeChars });
           break;
+        }
+        if (intents) {
+          intentSpeechText += text;
+          if (!text.trim()) {
+            intents.text(text);
+            continue;
+          }
         }
         const index = sentenceCount;
         sentenceCount += 1;
         safeChars += text.length;
         if (index === 0) trace("progressive.first_safe_sentence", { speechChars: text.length, final });
         trace("progressive.sentence.enqueued", { index, speechChars: text.length, final });
+        intents?.text(text, index);
         delivery?.enqueue({ text, index, final });
         if (typeof onProgressiveSentence === "function") {
           onProgressiveSentence({ text, index, final });
@@ -859,6 +884,7 @@ export function createFireOrchestrator(options) {
     return {
       /** @param {string} delta */
       append(delta) {
+        if (stopped || sealed) return;
         if (!sawDelta) trace("llm.first_delta", { deltaChars: delta.length });
         sawDelta = true;
         // 締めた（本文の揃った agentMessage で flush した）後に本文が続いた（次の agentMessage）。最後にもう一度締める。
@@ -871,15 +897,72 @@ export function createFireOrchestrator(options) {
         if (flushed) return;
         flushed = true;
         enqueue(incremental.flush(), true);
+        if (!stopped) intents?.endMessage();
         trace("progressive.boundary.flushed", { sentenceCount, safeChars, blocked });
       },
       stop() {
+        if (stopped) return;
         stopped = true;
+        intents?.interrupt();
+        for (const text of incremental.flush().sentences) {
+          if (!containsNgWord(text)) intents?.text(text);
+        }
+        intents?.close();
+      },
+      close() {
+        sealed = true;
+        intents?.close();
       },
       snapshot() {
         return { sawDelta, flushed, stopped, blocked, sentenceCount, safeChars };
+      },
+      outcome(outcome) {
+        return intents ? { ...outcome, intentSpeechText } : outcome;
       }
     };
+  };
+
+  const resolveIntentMotion = (resources) =>
+    resources?.body && resources.engine?.kind === "elevenlabs" ? resources.speechIntentMotion ?? null : null;
+
+  const cancelledFire = (reason) => {
+    if (currentFire) currentFire.recall.discard = true;
+    if (reason === "killed-inflight") emit(onDiagnostic, { type: "killDiscarded" });
+    trace("fire.completed", { fired: false, reason });
+    return { fired: false, reason };
+  };
+
+  const makeDelivery = (resources, motion, intentContext, batch = false) => {
+    const generation = ++nextProgressiveGeneration;
+    const generationId = `fire-${generation}`;
+    const originFireId = currentFire?.fireId ?? null;
+    const intents = motion ? createSpeechIntentDelivery({
+      motion,
+      sceneId: `${intentSessionId}:${resources.speechIntentScene ?? "local"}`,
+      utteranceId: generationId,
+      generation,
+      context: intentContext,
+      batch,
+      trace: (event, fields) => trace(event, { ...fields, originFireId })
+    }) : null;
+    if (motion) lastIntentMotion = motion;
+    const delivery = speechStreamerFactory({
+      generationId,
+      engine: resolveEngine(resources),
+      channel: resources.channel,
+      player: resources.player,
+      releaseMouth: streamReleaseMouth(resources),
+      onTrace: (event, fields) => trace(event, fields),
+      onPlaybackStarted: (info) => {
+        setState("speaking");
+        intents?.started(info);
+      },
+      ...(intents ? { onJobTerminal: (info) => intents.terminal(info) } : {}),
+      nowImpl,
+      setTimeoutImpl,
+      clearTimeoutImpl
+    });
+    return { delivery, intents };
   };
 
   /**
@@ -895,20 +978,18 @@ export function createFireOrchestrator(options) {
     // Claude 既定と同じ one-shot 経路に倒す。
     const configuredBrain = resources.configuration?.brain;
     const progressiveEligible = configuredBrain !== "claude" && configuredBrain !== "claude-opus-55";
-    const delivery = progressivePlayback && progressiveEligible
-      ? speechStreamerFactory({
-          generationId: `fire-${++nextProgressiveGeneration}`,
-          engine: resolveEngine(resources),
-          channel: resources.channel,
-          player: resources.player,
-          releaseMouth: streamReleaseMouth(resources),
-          onTrace: (event, fields) => trace(event, fields),
-          onPlaybackStarted: () => setState("speaking"),
-          nowImpl,
-          setTimeoutImpl,
-          clearTimeoutImpl
-        })
+    const motion = resolveIntentMotion(resources);
+    const intentContext = motion
+      ? { transcript: formatFireInjection(buffer.all(), { nowMs: nowImpl(), windowMs, maxChars }).text }
       : null;
+    // Acquiring resources and capturing a window can both outlive this Fire.
+    if (motion) {
+      if (currentFire?.intentCancelled || killed) return { cancellation: "killed-inflight" };
+      if (disposed || !motion.isActive()) return { cancellation: "disposed" };
+    }
+    const { delivery, intents } = progressivePlayback && progressiveEligible
+      ? makeDelivery(resources, motion, intentContext)
+      : { delivery: null, intents: null };
     currentProgressiveDelivery = delivery;
     if (delivery) {
       progressiveProjectionOwners.set(delivery.snapshot().generationId, { buffer, fireId: currentFire?.fireId ?? null });
@@ -916,8 +997,11 @@ export function createFireOrchestrator(options) {
     if (delivery && typeof delivery.whenSettled === "function") {
       void delivery.whenSettled().then(emitProgressiveTerminalOnce);
     }
-    const boundary = createProgressiveBoundary(delivery);
+    const boundary = createProgressiveBoundary(delivery, intents);
     currentProgressiveBoundary = boundary;
+    if (intents) void delivery.whenSettled().then(({ status }) => {
+      if (status !== "completed") boundary.stop();
+    });
     try {
       // 先頭から: progressive correction → 黙って渡す前置き（思い出し）→ この 1 発の内部指示（コメント反応・
       // 思い出しの結果）→ 会話窓（+ 画像）。
@@ -931,7 +1015,9 @@ export function createFireOrchestrator(options) {
       const configuredServiceTier =
         typeof resources.configuration?.serviceTier === "string" ? resources.configuration.serviceTier : null;
       const askFire = currentFire;
-      const asked = await resources.session.ask(askContent, {
+      const asked = await resources.session.ask(motion && SPEECH_INTENT_TEACHING
+        ? prependInstruction(askContent, SPEECH_INTENT_TEACHING)
+        : askContent, {
         onTextDelta: (delta) => boundary.append(delta),
         onTextDone: () => boundary.flush(),
         ...(configuredServiceTier
@@ -949,17 +1035,20 @@ export function createFireOrchestrator(options) {
       // （二重に flush しない）。合図の後に本文が続いたときだけ、その残りをここで締める。
       boundary.flush();
       const progressive = boundary.snapshot();
+      boundary.close();
       if (currentFire) currentFire.recall.sawDelta = progressive.sawDelta;
-      const deliveryOutcome = delivery ? await delivery.finish() : null;
-      return { asked, progressive, deliveryOutcome };
+      const deliveryOutcome = delivery ? boundary.outcome(await delivery.finish()) : null;
+      return { asked, progressive, deliveryOutcome, intentContext };
     } catch (error) {
       if (delivery) {
         delivery.abort("llm-failed");
+        boundary.stop();
         const deliveryOutcome = await delivery.finish();
         if (error instanceof Error) /** @type {any} */ (error).progressiveDelivery = deliveryOutcome;
       }
       throw error;
     } finally {
+      intents?.retire();
       if (currentProgressiveBoundary === boundary) currentProgressiveBoundary = null;
       if (currentProgressiveDelivery === delivery) currentProgressiveDelivery = null;
     }
@@ -1044,9 +1133,11 @@ export function createFireOrchestrator(options) {
    * @param {boolean} vision  onUsage に載せる区別フラグ。
    * @param {object} extra  戻り値へマージする付随情報（injectedChars/includedCount・視覚発火は vision:true も）。
    * @param {any} [progressiveDelivery] C2 settled queue outcome; null keeps legacy one-shot delivery.
+   * @param {any} [resources]
+   * @param {{ transcript: string } | null} [intentContext] Conversation window at ask time.
    * @returns {Promise<object>}
    */
-  const processAskedReply = async (buffer, asked, vision, extra, progressiveDelivery = null, resources = currentFireResources) => {
+  const processAskedReply = async (buffer, asked, vision, extra, progressiveDelivery = null, resources = currentFireResources, intentContext = null) => {
     // usage 計器（wave 計画 §2 裁定 2・blocking）: 通常 Fire・視覚発火の両方で通知する。
     if (asked && asked.usage != null) {
       emit(onUsage, { usage: asked.usage, vision });
@@ -1075,10 +1166,15 @@ export function createFireOrchestrator(options) {
     }
     // S8: in-flight キル検査（ask を撃った後にキルされたケース）。speak せず・soul 追記せず・演出も
     // 適用せず畳む。診断は破棄した「事実」のみ（type だけ）——speechText 本文はどこにも載せない（秘匿）。
-    if (killed) {
+    if (killed || (currentFire?.intentCancelled && resolveIntentMotion(resources))) {
       emit(onDiagnostic, { type: "killDiscarded" });
       if (currentFire) currentFire.recall.discard = true;
       return { fired: false, reason: "killed-inflight", ...extra };
+    }
+    const replyMotion = resolveIntentMotion(resources);
+    if (replyMotion && (disposed || (!progressiveDelivery && !replyMotion.isActive()))) {
+      if (currentFire) currentFire.recall.discard = true;
+      return { fired: false, reason: "disposed", ...extra };
     }
 
     // S8: NG 最終検査（Domain C・キル検査と同じ検問所）。命中したら丸ごと没にする——speak せず・
@@ -1105,8 +1201,44 @@ export function createFireOrchestrator(options) {
       return { fired: false, reason: "ng-blocked", ...extra };
     }
 
-    const hasSpeech = speechText.length > 0;
+    const hasSpeech = replyMotion ? speechText.trim().length > 0 : speechText.length > 0;
     const hasEvents = events.length > 0;
+
+    let earlyExpressions = null;
+    // A full-result brain can keep the original one-shot path for ordinary replies.
+    // An intentional section needs job boundaries, even when the whole reply arrived at once.
+    const fullMotion = (!progressiveDelivery || progressiveDelivery.status === "completed") &&
+      !(progressiveDelivery?.enqueuedSentenceCount > 0) && hasSpeech ? replyMotion : null;
+    if (fullMotion && replyText.includes("<intent")) {
+      const probe = createIncrementalSentenceTagBuffer({ includeIntents: true });
+      const markers = [...probe.append(replyText).ordered, ...probe.flush().ordered];
+      if (markers.some((item) => "intent" in item && item.intent !== null)) {
+        earlyExpressions = hasEvents ? applyExpressions(events, resources) : Promise.resolve([]);
+        const { delivery, intents } = makeDelivery(resources, fullMotion, intentContext, true);
+        const boundary = createProgressiveBoundary(delivery, intents);
+        currentProgressiveDelivery = delivery;
+        currentProgressiveBoundary = boundary;
+        progressiveProjectionOwners.set(delivery.snapshot().generationId, { buffer, fireId: currentFire?.fireId ?? null });
+        let outcome;
+        try {
+          boundary.append(replyText);
+          boundary.flush();
+          boundary.close();
+          outcome = boundary.outcome(await delivery.finish());
+          emitProgressiveTerminalOnce(outcome);
+        } catch (error) {
+          delivery.abort("llm-failed");
+          boundary.stop();
+          emitProgressiveTerminalOnce(await delivery.finish());
+          throw error;
+        } finally {
+          intents.retire();
+          currentProgressiveBoundary = null;
+          currentProgressiveDelivery = null;
+        }
+        progressiveDelivery = outcome;
+      }
+    }
 
     // C3 zero-spoken failures retain the established Fire error projection so
     // Cockpit's existing fireError ghost remains visible. Keep this deliberately
@@ -1134,10 +1266,11 @@ export function createFireOrchestrator(options) {
       };
     }
     const hasProgressiveAudio = progressiveDelivery && progressiveDelivery.enqueuedSentenceCount > 0;
-    if (hasProgressiveAudio && progressiveDelivery.playedText !== speechText) {
+    const deliveredText = progressiveDelivery?.intentSpeechText ?? progressiveDelivery?.playedText;
+    if (hasProgressiveAudio && deliveredText !== speechText) {
       throw withDiagnostic(
         new Error(
-          `progressive delivery/final speech mismatch (${progressiveDelivery.playedText.length} != ${speechText.length}).`
+          `progressive delivery/final speech mismatch (${deliveredText.length} != ${speechText.length}).`
         ),
         "progressive_speech_mismatch",
         "progressive.delivery.verify"
@@ -1157,7 +1290,7 @@ export function createFireOrchestrator(options) {
     }
 
     if (hasProgressiveAudio) {
-      const expressions = hasEvents ? await applyExpressions(events, resources) : [];
+      const expressions = earlyExpressions ? await earlyExpressions : hasEvents ? await applyExpressions(events, resources) : [];
       if (!hasSpeech) {
         return { fired: false, reason: "expression-only", expressed: true, expressions, ...extra };
       }
@@ -1198,6 +1331,9 @@ export function createFireOrchestrator(options) {
       generationId: `fire-${++nextProgressiveGeneration}`,
       releaseMouth: streamReleaseMouth(resources),
       onTrace: (event, fields) => trace(event, fields),
+      ...(resolveIntentMotion(resources) ? {
+        onPlaybackStarted: () => { void resources.speechIntentMotion.releaseCurrent(); }
+      } : {}),
       nowImpl,
       setTimeoutImpl,
       clearTimeoutImpl
@@ -1466,6 +1602,8 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
    */
   const kill = async (atMs) => {
     killed = true;
+    if (currentFire) currentFire.intentCancelled = true;
+    void lastIntentMotion?.releaseCurrent();
     const progressive = currentProgressiveDelivery;
     if (progressive) {
       const before = progressive.snapshot();
@@ -1541,8 +1679,11 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     let asked;
     let progressive;
     let deliveryOutcome;
+    let intentContext;
     try {
-      ({ asked, progressive, deliveryOutcome } = await askIncrementally(contentBlocks, resources, buffer));
+      const attempt = await askIncrementally(contentBlocks, resources, buffer);
+      if (attempt.cancellation) return cancelledFire(attempt.cancellation);
+      ({ asked, progressive, deliveryOutcome, intentContext } = attempt);
     } catch (error) {
       throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
     }
@@ -1563,7 +1704,8 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
       true,
       { injectedChars, includedCount, vision: true },
       progressive.sawDelta ? deliveryOutcome : null,
-      resources
+      resources,
+      intentContext
     );
     trace("fire.completed", { fired: result.fired === true, reason: result.reason ?? null });
     return result;
@@ -1625,8 +1767,11 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
       let asked;
       let progressive;
       let deliveryOutcome;
+      let intentContext;
       try {
-        ({ asked, progressive, deliveryOutcome } = await askIncrementally(injectedText, resources, buffer));
+        const attempt = await askIncrementally(injectedText, resources, buffer);
+        if (attempt.cancellation) return cancelledFire(attempt.cancellation);
+        ({ asked, progressive, deliveryOutcome, intentContext } = attempt);
       } catch (error) {
         throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
       }
@@ -1647,7 +1792,8 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
         false,
         { injectedChars, includedCount },
         progressive.sawDelta ? deliveryOutcome : null,
-        resources
+        resources,
+        intentContext
       );
       trace("fire.completed", { fired: result.fired === true, reason: result.reason ?? null });
       return result;
@@ -1859,6 +2005,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
         cause,
         vision: false,
         body: defaultBody,
+        intentCancelled: false,
         timing: createFireTiming({ nowImpl: monotonicNowImpl }),
         latencyEmitted: false,
         /** @type {string | null} その返事の turn/start に送った速さの段（Codex の頭・onTurnStarted で知る）。 */
@@ -1939,6 +2086,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     /** 畳む（以後の fire を拒否）。session/channel/player は所有しない = ここでは畳まない。 */
     dispose() {
       disposed = true;
+      void lastIntentMotion?.releaseCurrent();
       if (currentProgressiveDelivery?.dispose()) currentProgressiveBoundary?.stop();
       // 発話再生中に畳まれたら、await 中の processAskedReply を安全に解放する（詰まりを残さない）。
       // 鳴っている一括の読み上げは止める（SpeechStreamer が player.stop → 口の release）。

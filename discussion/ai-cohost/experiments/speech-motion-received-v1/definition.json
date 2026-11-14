@@ -1,0 +1,29 @@
+{
+  "format": "speech-motion-experiment-v1",
+  "id": "received-v1",
+  "intent": "received: one small nod, brief settling, attention stays forward",
+  "durationSeconds": 3.2,
+  "evaluationFps": 60,
+  "renderEveryFrames": 3,
+  "interpolation": "quintic-smoothstep",
+  "strengthKeys": [[0,0],[0.5,0],[0.86,1],[0.96,1],[1.46,0.12],[1.9,0],[3.2,0]],
+  "parameters": {
+    "param_face_angle_x": {"base":0,"gain":0},
+    "param_face_angle_y": {"base":0,"gain":-8},
+    "param_face_angle_z": {"base":0,"gain":0.65},
+    "param_body_angle_x": {"base":0,"gain":0},
+    "param_body_angle_z": {"base":0,"gain":0},
+    "param_eye_left_open": {"base":1,"gain":-0.09},
+    "param_eye_right_open": {"base":1,"gain":-0.09},
+    "param_eyeball_x": {"base":0,"gain":0},
+    "param_eyeball_y": {"base":0,"gain":0.08},
+    "param_brow_left_y": {"base":0,"gain":0},
+    "param_brow_right_y": {"base":0,"gain":0},
+    "param_mouth_open": {"base":0,"gain":0},
+    "param_mouth_vowel_i": {"base":0,"gain":0},
+    "param_mouth_vowel_u": {"base":0,"gain":0},
+    "param_mouth_vowel_e": {"base":0,"gain":0},
+    "param_mouth_vowel_o": {"base":0,"gain":0}
+  },
+  "view": {"stageViewport":{"minX":540,"minY":-40,"width":1040,"height":880},"outputWidth":650,"outputHeight":550}
+}

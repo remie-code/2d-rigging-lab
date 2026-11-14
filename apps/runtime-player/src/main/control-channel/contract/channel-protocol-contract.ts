@@ -36,7 +36,8 @@ export const runtimePlayerControlChannelSupportedKinds = [
   "intent.set",
   "intent.envelope",
   "intent.speech",
-  "intent.speechStream"
+  "intent.speechStream",
+  "intent.motion"
 ] as const;
 
 export type RuntimePlayerControlChannelRequestKind =
@@ -53,6 +54,7 @@ export type RuntimePlayerControlChannelRequestKind =
  *  - `unknownSlot`          : `slotId` is not a semantic-slot vocabulary member.
  *  - `slotValueOutOfRange`  : `value` is outside the slot's normalized domain.
  *  - `slotNotWritable`      : the loaded model has no enabled+targeted slot here.
+ *  - `motionModelMismatch`  : a produced model-unit clip requires a different model or bindings.
  *  - `channelClosed`        : the channel is not accepting intents right now.
  */
 export const runtimePlayerControlChannelRejectionCodes = [
@@ -61,6 +63,7 @@ export const runtimePlayerControlChannelRejectionCodes = [
   "unknownSlot",
   "slotValueOutOfRange",
   "slotNotWritable",
+  "motionModelMismatch",
   "channelClosed"
 ] as const;
 
@@ -112,6 +115,7 @@ export type RuntimePlayerControlChannelServerHello = {
   readonly payload: {
     readonly protocol: RuntimePlayerControlChannelProtocolVersion;
     readonly supportedKinds: readonly RuntimePlayerControlChannelRequestKind[];
+    readonly speechMotions?: SpeechMotionCatalog;
   };
 };
 
@@ -277,3 +281,4 @@ export type RuntimePlayerControlChannelIntentSpeechStreamPayload =
       readonly timeline: readonly RuntimePlayerControlChannelSpeechMoraPayload[];
     }
   | { readonly op: "end"; readonly utteranceId: string };
+import type { SpeechMotionCatalog } from "../speech-motion-assets";

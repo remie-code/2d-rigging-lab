@@ -4,6 +4,18 @@
 
 ## 現在の到達と残るゲート
 
+- **演技資産の外部化 (2026-11-13)**: [2 Wave計画](orchestration/external-motion-assets-wave-plan.md)は両Wave・配布後の独立レビュー合格。外部JSONと起動snapshotをPlayer/Soulで共用し、追加/説明編集/削除は再ビルド不要・再起動で反映。苦笑を含む7演技13組、普段の通常版/portable、現用r844配布済み。11/14本人が笑み・困り顔の実運用動作を確認。[完了](waves/external-motion-assets/wave2-completion.md)・[編集と本人確認](waves/external-motion-assets/human-gate.md)。
+
+- **驚いて思わず身を引く登録 (2026-11-13)**: [計画](orchestration/startled-recoil-registration-plan.md)の実装・独立レビュー・配布確認合格。画面/視聴者共用、相方は未制作記録。元パーツ表情を保存したr840とStage奥行きを接続し、現用Export・普段のexe/portableへ反映済み。Player/起動済みSoulを開き直して実会話へ。[完了](waves/startled-recoil-registration/completion.md)。
+
+- **一緒に笑う登録 (2026-11-12)**: [計画](orchestration/shared-laughter-registration-plan.md)の実装・独立レビュー・配布確認合格。相方専用版と視聴者/ゲーム共通版を3対象へ接続し、現用モデルは笑顔素材を含むr825。瞳固定・瞬き抑制・口パク共存、旧6組との互換を確認。通常exe/portable更新済み。Playerと起動済み操縦席を再起動して本人の実会話へ。[完了記録](waves/shared-laughter-registration/completion.md)。
+
+- **演技×注意対象 (2026-11-12)**: [2 Wave計画](orchestration/performance-attention-wave-plan.md) の実装・独立レビュー・配布確認は合格。旧3演技×相方＋短い安堵×3対象の6組へ、意図/本文/文脈から独立二問で接続。原本再現・Native/Browser実表示・未対応3理由の記録を確認。通常終了は自然に完走、対象不明は無演技で記録。普段のwin-unpackedとportableを更新済み。[本人の実会話確認](waves/performance-attention/human-gate.md)待ち。
+
+- **ステージ上下動 (2026-11-11)**: [1 Wave計画](orchestration/stage-vertical-motion-wave-plan.md) の機械ゲート・簡易独立レビュー合格。Presence Offでも上下指定可。Native/Browser実表示、普段のwin-unpackedとportable更新・隔離起動確認済み。[本人確認](waves/stage-vertical-motion/human-gate.md) は待ち。安堵モーションの制作は機能確認後。
+
+- **意図から発話モーション (2026-11-10)**: [計画](orchestration/intent-motion-wave-plan.md) の2 waveは実装・機械gate・独立レビュー合格。自由な意図を既存モーションへ分類し、未対応は文脈付きで残して後日育てる。[実会話と記録の読み返し](waves/intent-motion/human-gate.md) はユーザー確認待ち。実際の会話初動とタグ出力の安定性は未確認。
+
 > 番号付き履歴は各wave時点の記録。下記を現在statusとして読む。実装・機械ゲート・レビュー合格は、人間/製品ゲートの完了を意味しない。
 
 - **記憶整理(2026-11-06)**: [計画 §6](orchestration/memory-organization-wave-plan.md) に A〜D の合格と master マージを記録。[人間ゲート §3b/3c](waves/memory-organization/human-gate.md) は、1 回目の棚への移動と、Domain D 後に来週確認する話題/月の目次を分ける。記憶方式の現在の入口は [memory map](../memory/_map.md)。

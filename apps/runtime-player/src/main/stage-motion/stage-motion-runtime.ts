@@ -115,7 +115,7 @@ export class RuntimePlayerStageMotionRuntime {
    * from the drive (derived from the Physiology `stagePresence` config), NEVER the
    * window-state settings. When Stage Presence is off (settings.enabled === false)
    * the pure calculator returns the base transform + a reset state; we clear the
-   * native override (null) so「off で base に戻る」matches the tracking disabled case.
+   * native override (null) when neither speech motion axis applies.
    */
   private updateFromDrive(
     baseTransform: RuntimePlayerStageViewTransform,
@@ -136,9 +136,17 @@ export class RuntimePlayerStageMotionRuntime {
     this.runtimeState = result.runtimeState;
     this.previousFrameTimestampMs = drive.timestampMs;
 
+    const stageYOffsetPx = drive.stageYOffsetPx ?? 0;
+    const speechStageScale = drive.speechStageScale ?? 1;
+    const hasSpeechMotion = stageYOffsetPx !== 0 || speechStageScale !== 1;
+    const transform = hasSpeechMotion ? {
+      ...result.transform,
+      zoomScale: result.transform.zoomScale * speechStageScale,
+      pan: { ...result.transform.pan, y: result.transform.pan.y + stageYOffsetPx }
+    } : result.transform;
     return {
-      browserSourceTransform: result.transform,
-      nativeDisplayTransform: drive.settings.enabled ? result.transform : null
+      browserSourceTransform: transform,
+      nativeDisplayTransform: drive.settings.enabled || hasSpeechMotion ? transform : null
     };
   }
 }

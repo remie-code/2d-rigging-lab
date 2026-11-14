@@ -1,0 +1,271 @@
+{
+  "id": "startled-recoil-game-v1",
+  "modelRevision": 839,
+  "durationMs": 6000,
+  "fps": 24,
+  "target": "game/front",
+  "intent": "不意を突かれて一度引ける。対象を見たまま間を置き、姿勢から戻り見開きが遅れて緩む",
+  "audio": "silent; mouth static; no speech synchronization",
+  "interpolation": "quintic-smoothstep",
+  "tracks": {
+    "param_startled": [
+      [
+        0,
+        0
+      ],
+      [
+        650,
+        0
+      ],
+      [
+        900,
+        1
+      ],
+      [
+        1750,
+        1
+      ],
+      [
+        2650,
+        0.55
+      ],
+      [
+        3500,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_shared_laughter": [
+      [
+        0,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_face_angle_x": [
+      [
+        0,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_face_angle_y": [
+      [
+        0,
+        0
+      ],
+      [
+        750,
+        0
+      ],
+      [
+        980,
+        7
+      ],
+      [
+        1190,
+        5.2
+      ],
+      [
+        1510,
+        5.2
+      ],
+      [
+        2850,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_face_angle_z": [
+      [
+        0,
+        0
+      ],
+      [
+        780,
+        0
+      ],
+      [
+        1040,
+        -1.2
+      ],
+      [
+        1480,
+        -0.8
+      ],
+      [
+        3000,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_body_angle_x": [
+      [
+        0,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_body_angle_z": [
+      [
+        0,
+        0
+      ],
+      [
+        840,
+        0
+      ],
+      [
+        1150,
+        -0.8
+      ],
+      [
+        1540,
+        -0.6
+      ],
+      [
+        3100,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_eyeball_x": [
+      [
+        0,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_eyeball_y": [
+      [
+        0,
+        0
+      ],
+      [
+        6000,
+        0
+      ]
+    ],
+    "param_eye_left_open": [
+      [
+        0,
+        1
+      ],
+      [
+        6000,
+        1
+      ]
+    ],
+    "param_eye_right_open": [
+      [
+        0,
+        1
+      ],
+      [
+        6000,
+        1
+      ]
+    ]
+  },
+  "stageY": [
+    [
+      0,
+      0
+    ],
+    [
+      620,
+      0
+    ],
+    [
+      870,
+      4
+    ],
+    [
+      1100,
+      3
+    ],
+    [
+      1370,
+      3
+    ],
+    [
+      2750,
+      0
+    ],
+    [
+      3200,
+      0
+    ]
+  ],
+  "stageYTimeOrigin": "SpeechMotionState ENTRY_MS=180 after play",
+  "view": {
+    "stageViewport": {
+      "minX": 540,
+      "minY": -40,
+      "width": 1040,
+      "height": 1100
+    },
+    "outputWidth": 624,
+    "outputHeight": 660
+  },
+  "lipPulses": [],
+  "notes": [
+    "Adopted original-texture-only expression via exact stored opacity overrides.",
+    "Stage depthInput uses existing StageMotionRuntime scale via an offline authored drive, not a registered speech-motion depth channel; center-anchored viewport projection.",
+    "Research motivates discussion; timing is an artistic hypothesis."
+  ],
+  "stageDepth": [
+    [
+      0,
+      0
+    ],
+    [
+      780,
+      0
+    ],
+    [
+      1000,
+      -0.4
+    ],
+    [
+      1450,
+      -0.34
+    ],
+    [
+      2850,
+      0
+    ],
+    [
+      6000,
+      0
+    ]
+  ],
+  "stagePresence": {
+    "enabled": true,
+    "strength": 1
+  }
+}

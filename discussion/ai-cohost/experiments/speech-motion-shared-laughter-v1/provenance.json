@@ -1,0 +1,240 @@
+{
+  "sourceModel": "C:/workspace/remie/rigging/astra-chan/workspace-notes/shared-laughter-closed-eyes-v1/saved-r824",
+  "revision": 824,
+  "files": [
+    {
+      "path": "assets/provenance.json",
+      "sha256": "e8f6036d6573caf6e523aece3d6edf236ba9d1412192442a6191dd56ee630f81"
+    },
+    {
+      "path": "assets/rights.json",
+      "sha256": "886da4da3a598fa3c49a5ee21f67dc20f60c117232cbae7d3bd722dc07b1f076"
+    },
+    {
+      "path": "assets/sources/source-manifest.json",
+      "sha256": "b9c848e2310db6710c4dd48804961e884493e1dbbb2cac6a755d630853e4d466"
+    },
+    {
+      "path": "assets/textures/generated_atlas_page_0.raw-rgba",
+      "sha256": "683ad760a7b92d59992c240fe7ecdd7a7594e09c94ac84449229d7c5ad35053b"
+    },
+    {
+      "path": "assets/textures/material_ornament_hair_r781_0.rgba",
+      "sha256": "ec63b3e4524d966698c8db36225ac8467d7f6b2f1ad4cc42023f613edcb46885"
+    },
+    {
+      "path": "assets/textures/material_side_hair_r763_0.rgba",
+      "sha256": "6137b8d6d6112cf8e2eff562151e73e51791b9620d88c13e34dc45704c723af1"
+    },
+    {
+      "path": "assets/textures/material_smile_seethrough_l_r819.rgba",
+      "sha256": "f9445a41ebdf0117f7d8a0dca45fc325140cec7b8b68b390ac5aec646e05de22"
+    },
+    {
+      "path": "assets/textures/material_smile_seethrough_r_r820.rgba",
+      "sha256": "28adeecad542373549ef9bedadfcf22f3c623878bb388cd7aaf9acf6ead56e10"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_0_layer_0.raw-rgba",
+      "sha256": "99c317e09fcc00637a0747ef74beba4b23eb9f9edce2e19a7f666cee2630b19c"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_1_layer_0.raw-rgba",
+      "sha256": "906119c05ed03221a802c424c4243559bb66b5636f5460ddecf35b790c335499"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_0.raw-rgba",
+      "sha256": "d1ac8745dda56a6b37c64354499b226eff6e1b73d0ce016a2c961a4f7fba1355"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_1.raw-rgba",
+      "sha256": "d7f0f07df0725b25b5fba70140902b22bbcfcf2d0635a48ebe87f287a3e83a3e"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_10.raw-rgba",
+      "sha256": "c27d19c7920000c64b1ee5d3245b8a5d0e018f216ed236822b6398f8e2c24ead"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_11.raw-rgba",
+      "sha256": "a06a06e7cef7869df8060e216c979b04ec08061967e41c8abd0a0391550eefde"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_2.raw-rgba",
+      "sha256": "9e35c671b9247e3a62f4d0d04aac806bacbaf6b1165e4d54d61b820c2ff9d77a"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_3.raw-rgba",
+      "sha256": "7131eeb7eea626e1302061fab7e7beff4239a006c36085ab95fd90de40123be4"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_4.raw-rgba",
+      "sha256": "c1194e4618f0edc5167e86293751c596e64c9433e161ac904f31371741c1997e"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_5.raw-rgba",
+      "sha256": "3560d9a653dbf03e94dc3b215a2a45959abdd8b6965aab63ea4fd5f1476fc35e"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_6.raw-rgba",
+      "sha256": "a97790dfd18684ee22ed049c69d174f459dbffec4389c97b867afc1aad5083af"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_7.raw-rgba",
+      "sha256": "10d9da6488a0724530929e71426399a7ecf0b4c472f5293fbbe792dbe1bec5c7"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_8.raw-rgba",
+      "sha256": "2d78c5c9f73b195724baec7d877af03118afa5e19c39e93c564c01a8964ae197"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_0_layer_9.raw-rgba",
+      "sha256": "1c879aa14c69a65f543b33dde27dac13374be6eaf5d8e52167ea1940eed995db"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_1_layer_0.raw-rgba",
+      "sha256": "2c89aadbf77daca707dc10e8947eca8386081f47533007ccae7596e116e1afbd"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_2_group_1_layer_1.raw-rgba",
+      "sha256": "fea740bffea1f89e0c6d60d3380f098119f1e28909b19e086f297cbe91ba5050"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_3_layer_0.raw-rgba",
+      "sha256": "b362bdd5907d3e829c1562fdcc8405e24246d6078ff6d563ab086f606080bb74"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_3_layer_1.raw-rgba",
+      "sha256": "2ebad8bcd787f0d39b70caa7f313be2cd93b6b77475d30ac7dfcb7163dc75770"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_3_layer_2.raw-rgba",
+      "sha256": "b9671eddca644df14dc200e4ca894426e8649ae774f049b4a0763c914cc09bf3"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_3_layer_3.raw-rgba",
+      "sha256": "10088955a634b66b77b75dc54182157a483c46ce348caf5110b668be12360280"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_3_layer_4.raw-rgba",
+      "sha256": "02b155c99891e0869a4a386e193b0cc06cca6f39f552474d8913ca5303939b0f"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_3_layer_5.raw-rgba",
+      "sha256": "562e7ca1a8a97852ce845177ae61ed3d30065496fb4c627b0e24c62c8e26ee27"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_4_layer_0.raw-rgba",
+      "sha256": "3caac8ae2773e644180e36050e6b211b78e85a87d43453cc65d1336640774b2b"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_4_layer_1.raw-rgba",
+      "sha256": "49c7bb36f1ec24de4cd01c10bd75b9615817b36e9cd3f7516a015ccf1dfcf7ed"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_4_layer_2.raw-rgba",
+      "sha256": "733b46fa5173f0e7639851c7c6e2a740300283d1e95c155bc901105a0070da31"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_4_layer_3.raw-rgba",
+      "sha256": "7bb5aa2c7f0f14c3541c4df07e9bdeaacf518979e6577b150a5b2835e80b5ca3"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_5_group_0_layer_0.raw-rgba",
+      "sha256": "6bcf409f45811b1c0a573dc8f7c3e1cded6ef87582ee4654209b6afce6ca9739"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_5_layer_1.raw-rgba",
+      "sha256": "021309de23c606e2a7b352aee14d83ff8ddba66cd18e67097e06653a9244d43f"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_6_layer_0.raw-rgba",
+      "sha256": "4f2a7f96a82f932cddb7897e07b1878f9d6b1cfa62b4ae7b53f3bc8fa1569333"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_6_layer_1.raw-rgba",
+      "sha256": "ccdf4f82af6362d34a5da5207d672ceee327192c2686b065ebd68e383f1c36aa"
+    },
+    {
+      "path": "assets/textures/psd/r0_1cea4f6f/psd_root_group_7_layer_0.raw-rgba",
+      "sha256": "7eab14f48b3478be6cc60281880b54059424b55271d1b30eeb690da6481d68b2"
+    },
+    {
+      "path": "assets/textures/texture-atlas.json",
+      "sha256": "e31a582ef46462d60c92968e3f8a174db86d7c1d4b35f995aebea6677f230bac"
+    },
+    {
+      "path": "authoring/reference-image.json",
+      "sha256": "3296f4035be5293477cdec8ac38eed7d388ed5f51c55aac2ea21d62ab8350f0c"
+    },
+    {
+      "path": "authoring/reference-images/784990d8c816c1dfcb338800a8aa1b6d1fca223102552c2c3f1c53e62ae77160.png",
+      "sha256": "784990d8c816c1dfcb338800a8aa1b6d1fca223102552c2c3f1c53e62ae77160"
+    },
+    {
+      "path": "authoring/reference-images/a70db738c3c42fd5d73000df1f56d76216bc8858d7e5c7b43c2ce83ab7b923c0.png",
+      "sha256": "a70db738c3c42fd5d73000df1f56d76216bc8858d7e5c7b43c2ce83ab7b923c0"
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "8b4c3a06618f994da7d986ef954d0e909c78be5ee0c8f50a376e6c15fb5cedb5"
+    },
+    {
+      "path": "model/draw-order.json",
+      "sha256": "75556f55f213e6716fc58fcb7253581531d6f1b7781d4139a9248b3a3b703543"
+    },
+    {
+      "path": "model/drawables.json",
+      "sha256": "296b2dd89189bd587e57f20c1be759b71e65cdbfcc3429c141eb395f435cca01"
+    },
+    {
+      "path": "model/dynamics.json",
+      "sha256": "aa0ab5f351381b504bc19b23c8ddcfe9048871e216eefe253d350f9d292f9371"
+    },
+    {
+      "path": "model/editor-state.json",
+      "sha256": "0d8631fdebf4259b7e221fabc2a539508a851330f57e9213924da2fe5091f3a9"
+    },
+    {
+      "path": "model/graph.json",
+      "sha256": "673e3558f87dbbabceae2e3078c6297c63ca37e0e78693254358c0aea3ff7dba"
+    },
+    {
+      "path": "model/keyforms.json",
+      "sha256": "dfbb5c645957467da455e9299b12f8b073300b38d8a44b141f2bdc8e74d0eb60"
+    },
+    {
+      "path": "model/masks.json",
+      "sha256": "82053ebff02cce5c676ca414a62c5d6d6c7faf94573560a844d3ab148f9ef3e6"
+    },
+    {
+      "path": "model/meshes.json",
+      "sha256": "8eab6246835032edc9f09deb4f399b1857777975b953edff843ebd3b369c6459"
+    },
+    {
+      "path": "model/parameters.json",
+      "sha256": "cbe8b57cd29c0fe2b0e0a758a0448959bebf2ea10121f4b50a4f2ce7de1290d9"
+    },
+    {
+      "path": "model/rig-controls.json",
+      "sha256": "e704be4386a3a06e09fbda0c59ce2885499c668983cc7bf05b1d3b5b5eebff1b"
+    },
+    {
+      "path": "model/variants.json",
+      "sha256": "750d011a3e008f7a6425c4d04c8563d96b341a8d7ffdaf0fa3af0d001913713b"
+    },
+    {
+      "path": "workspace.json",
+      "sha256": "de9b6f292d1f47ff7d513f0bf0f65abfa0799add9e422956d392a75a46bd3c5d"
+    }
+  ],
+  "sourceUnchanged": true,
+  "definitionSha256": "58aaf87b616242e378fe73255c55cc4bde8818260ed3a136880afd945449cbba",
+  "productExportUnchangedByThisScript": true,
+  "liveExportCheck": {
+    "path": "C:/workspace/remie/rigging/astra-chan/exports/astra-chan-runtime",
+    "revision": 804,
+    "baseline": "C:/workspace/remie/rigging/astra-chan/workspace-notes/shared-laughter-closed-eyes-v1/provenance-final.json",
+    "allFilesUnchanged": true,
+    "fileCount": 4
+  }
+}

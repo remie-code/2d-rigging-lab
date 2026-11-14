@@ -121,7 +121,7 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
     });
   });
 
-  it("emits a server.hello that matches the schema and examples (announces all four kinds, voice swap additive)", () => {
+  it("emits a server.hello that matches the schema and examples (announces all supported kinds)", () => {
     const hello = createControlChannelServerHello();
 
     expect(hello).toStrictEqual({
@@ -133,7 +133,8 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
           "intent.set",
           "intent.envelope",
           "intent.speech",
-          "intent.speechStream"
+          "intent.speechStream",
+          "intent.motion"
         ]
       }
     });

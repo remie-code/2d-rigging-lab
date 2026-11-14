@@ -7,6 +7,7 @@ import {
   type RuntimePlayerControlChannelRequestEnvelope,
   type RuntimePlayerControlChannelServerHello
 } from "./contract/channel-protocol-contract";
+import type { SpeechMotionCatalog } from "./speech-motion-assets";
 
 /**
  * Wire (de)serialization for the Control Channel envelopes (C4 §3). Parsing a
@@ -47,14 +48,15 @@ export function parseControlChannelRequestEnvelope(
   };
 }
 
-export function createControlChannelServerHello():
+export function createControlChannelServerHello(speechMotions?: SpeechMotionCatalog):
   RuntimePlayerControlChannelServerHello {
   return {
     v: runtimePlayerControlChannelProtocolVersion,
     kind: "server.hello",
     payload: {
       protocol: runtimePlayerControlChannelProtocolVersion,
-      supportedKinds: runtimePlayerControlChannelSupportedKinds
+      supportedKinds: runtimePlayerControlChannelSupportedKinds,
+      ...(speechMotions ? { speechMotions } : {})
     }
   };
 }

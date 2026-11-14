@@ -1,0 +1,78 @@
+{
+  "appAsarSha256": "0fe4446ec62346c202a5fd88f2b6585c5e29fa2cb8d5b2a91b7f68049fc894f4",
+  "packageRevision": 804,
+  "stagePresenceEnabled": false,
+  "transforms": {
+    "native-baseline": {
+      "viewport": {
+        "width": 600,
+        "height": 720,
+        "pixelRatio": 1
+      },
+      "transform": {
+        "zoomScale": 0.85,
+        "pan": {
+          "x": 21,
+          "y": 34
+        },
+        "coordinateSpace": "stage-viewport-px-v1"
+      }
+    },
+    "native-preset-only": {
+      "unchangedSamples": 18,
+      "transform": {
+        "coordinateSpace": "stage-viewport-px-v1",
+        "pan": {
+          "x": 21,
+          "y": 34
+        },
+        "zoomScale": 0.85
+      }
+    },
+    "native-up": {
+      "viewport": {
+        "width": 600,
+        "height": 720,
+        "pixelRatio": 1
+      },
+      "transform": {
+        "zoomScale": 0.85,
+        "pan": {
+          "x": 21,
+          "y": -56
+        },
+        "coordinateSpace": "stage-viewport-px-v1"
+      }
+    },
+    "native-down": {
+      "viewport": {
+        "width": 600,
+        "height": 720,
+        "pixelRatio": 1
+      },
+      "transform": {
+        "zoomScale": 0.85,
+        "pan": {
+          "x": 21,
+          "y": 99
+        },
+        "coordinateSpace": "stage-viewport-px-v1"
+      }
+    },
+    "native-returned": {
+      "viewport": {
+        "width": 600,
+        "height": 720,
+        "pixelRatio": 1
+      },
+      "transform": {
+        "zoomScale": 0.85,
+        "pan": {
+          "x": 21,
+          "y": 34
+        },
+        "coordinateSpace": "stage-viewport-px-v1"
+      }
+    }
+  }
+}

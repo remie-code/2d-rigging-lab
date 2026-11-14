@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runtime-player/control-channel/intent-motion-payload",
+  "title": "Speech intent motion lifecycle",
+  "type": "object",
+  "required": [
+    "op",
+    "generation",
+    "sectionIndex"
+  ],
+  "properties": {
+    "op": {
+      "enum": [
+        "begin",
+        "play",
+        "end",
+        "cancel"
+      ]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "sectionIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "stageY": {
+      "description": "Stage viewport logical pixels (stage-viewport-px-v1), relative to the current manual position. Positive values move down. The first time must be zero and times must strictly increase.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/stageYPoint",
+          "prefixItems": [
+            {
+              "const": 0
+            }
+          ]
+        }
+      ],
+      "items": {
+        "$ref": "#/$defs/stageYPoint"
+      }
+    },
+    "performanceId": {
+      "type": "string"
+    },
+    "attentionTargetId": {
+      "type": "string"
+    }
+  },
+  "if": {
+    "properties": {
+      "op": {
+        "const": "play"
+      }
+    }
+  },
+  "then": {
+    "oneOf": [
+      {
+        "required": [
+          "performanceId",
+          "attentionTargetId"
+        ],
+        "not": {
+          "required": [
+            "stageY"
+          ]
+        }
+      },
+      {
+        "required": [
+          "stageY"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "performanceId"
+              ]
+            },
+            {
+              "required": [
+                "attentionTargetId"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "else": {
+    "not": {
+      "anyOf": [
+        {
+          "required": [
+            "stageY"
+          ]
+        },
+        {
+          "required": [
+            "performanceId"
+          ]
+        },
+        {
+          "required": [
+            "attentionTargetId"
+          ]
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "stageYPoint": {
+      "type": "array",
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        {
+          "type": "number",
+          "minimum": -200,
+          "maximum": 200
+        }
+      ],
+      "items": false
+    }
+  },
+  "additionalProperties": false
+}

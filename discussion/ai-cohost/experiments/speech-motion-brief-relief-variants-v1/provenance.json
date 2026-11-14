@@ -1,0 +1,26 @@
+{
+  "sourceModel": "C:/workspace/remie/rigging/astra-chan/exports/astra-chan-runtime",
+  "sourceRevision": 804,
+  "files": [
+    {
+      "path": "runtime-export.json",
+      "bytes": 2115,
+      "sha256": "3fcbb699aa376477294eb0086bcd32ba1658569a197b3d43caef1098527aacb5"
+    },
+    {
+      "path": "runtime/model.json",
+      "bytes": 41741090,
+      "sha256": "a31cf71d5af08ae0ad872c2f73ee6c7f8ef0d88fb4ee36f0d2065e18168d0408"
+    },
+    {
+      "path": "runtime/atlas.json",
+      "bytes": 34731,
+      "sha256": "de420f60cad1cd3585fb9f86d98fd954446fdb375d8046668a2f57a675b42c41"
+    },
+    {
+      "path": "assets/textures/atlas_page_0.raw-rgba",
+      "bytes": 67108864,
+      "sha256": "683ad760a7b92d59992c240fe7ecdd7a7594e09c94ac84449229d7c5ad35053b"
+    }
+  ]
+}

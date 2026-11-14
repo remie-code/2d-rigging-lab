@@ -34,6 +34,10 @@ export type RuntimePlayerStageMotionDrive = {
   readonly horizontalInput: number | null;
   /** body-z posture activation (-1..1) or null when absent. */
   readonly depthInput: number | null;
+  /** Speech motion offset in logical viewport pixels, independent of Presence settings. */
+  readonly stageYOffsetPx?: number;
+  /** Speech motion zoom multiplier, independent of Presence settings. */
+  readonly speechStageScale?: number;
   /** Wall-clock timestamp of the posture sample; drives frame-rate-independent smoothing. */
   readonly timestampMs: number;
 };

@@ -1,0 +1,120 @@
+{
+  "source": {
+    "sceneId": "5446aa19-499b-461e-be96-b1b4bc10165f:1",
+    "sourceSetSha256": "22a599b6f8e80c9def5dee8951a5cdd9f6ece0f8124d20f81c822a0b96515696",
+    "sourceFileCount": 228,
+    "uniqueIntentStrings": 206,
+    "firstRecordedAt": "2026-11-11T10:52:55.755Z",
+    "lastRecordedAt": "2026-11-11T12:57:37.473Z"
+  },
+  "registrySha256": "e17ab54015eab078b6e6bad7fdce3e52258d6ca77cf3f48464d48d03ca3c9a7b",
+  "registryPairs": 9,
+  "distinctPresets": 8,
+  "byAssessment": {
+    "remaining": 180,
+    "legacy-reconsider": 6,
+    "clear": 10,
+    "unproduced": 7,
+    "target-unknown": 4,
+    "partial": 15,
+    "near": 6
+  },
+  "byFamily": {
+    "1": 19,
+    "2": 21,
+    "3": 15,
+    "4": 12,
+    "5": 14,
+    "6": 18,
+    "7": 19,
+    "8": 48,
+    "9": 19,
+    "10": 6,
+    "11": 14,
+    "12": 7,
+    "13": 5,
+    "14": 2,
+    "15": 7,
+    "other": 2
+  },
+  "uncoveredByFamily": {
+    "1": 19,
+    "2": 21,
+    "3": 15,
+    "4": 12,
+    "5": 14,
+    "6": 18,
+    "7": 19,
+    "8": 48,
+    "9": 14,
+    "10": 6,
+    "11": 9,
+    "12": 7,
+    "13": 5,
+    "14": 2,
+    "15": 7,
+    "other": 2
+  },
+  "byTarget": {
+    "partner": 46,
+    "viewers": 53,
+    "game": 107,
+    "unknown": 22
+  },
+  "byTargetReading": {
+    "explicit": 103,
+    "context": 103,
+    "unknown": 22
+  },
+  "byCandidateMovementSubtype": {
+    "dismayedShrug": 11,
+    "surpriseRecoil": 13,
+    "dismayedHeadShake": 15
+  },
+  "byPerformance": {
+    "no-candidate": {
+      "remaining": 180
+    },
+    "receive": {
+      "legacy-reconsider": 4,
+      "unproduced": 2
+    },
+    "brief-relief": {
+      "clear": 5,
+      "near": 2,
+      "target-unknown": 2,
+      "partial": 7
+    },
+    "interest": {
+      "unproduced": 3,
+      "legacy-reconsider": 1
+    },
+    "ask": {
+      "unproduced": 2,
+      "legacy-reconsider": 1
+    },
+    "shared-laughter": {
+      "target-unknown": 2,
+      "partial": 8,
+      "clear": 5,
+      "near": 4
+    }
+  },
+  "coverage": {
+    "conservative": {
+      "total": 10,
+      "percent": 4.39,
+      "remaining": 218
+    },
+    "includingNearNew": {
+      "total": 16,
+      "percent": 7.02,
+      "remaining": 212
+    },
+    "includingLegacyReconsideration": {
+      "total": 22,
+      "percent": 9.65,
+      "remaining": 206
+    }
+  }
+}

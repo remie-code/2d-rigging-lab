@@ -1,0 +1,22 @@
+{
+  "frames": 121,
+  "durationSecondsIncludingLastFrame": 6.05,
+  "mp4Decoded": true,
+  "stageYRange": [
+    0,
+    0
+  ],
+  "target": "front / game and viewers common",
+  "modelRevision": 843,
+  "noBlink": true,
+  "gazeXY0": true,
+  "silentMouthStatic": true,
+  "neutralFirstLastPngIdentical": true,
+  "yawRange": [
+    -10,
+    6.5
+  ],
+  "snapshotUnchanged": true,
+  "liveSourceUnchanged": true,
+  "liveExportUnchanged": true
+}

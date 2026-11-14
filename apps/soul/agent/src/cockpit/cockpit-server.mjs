@@ -1005,6 +1005,7 @@ const MAX_PORT_REROLLS = 50;
  *   earsStatus: () => string;
  *   streamStatus: () => { phase: string; error: string | null; openedAtMs: number | null; experience: string | null };
  *   venueContext: () => { experience: string; wording: any; teaching: string | null } | null;
+ *   venueGeneration: () => number | null;
  *   startStream: (request?: object) => Promise<object>;
  *   endStream: () => Promise<object>;
  *   setMemoryOrganising: (organising: boolean) => void;
@@ -5163,6 +5164,7 @@ export function createCockpitServer(options = {}) {
      * 既定。cockpit.mjs が②の保存を頼んだ時点（語の組）・①のセッションを作る時点と会話指示の編集画面（教えと語の組）で読む。
      */
     venueContext: () => venueContext(),
+    venueGeneration: () => venueExperience ? streamGeneration : null,
     /** 配信を始める（POST /api/stream/start と同じ関数・テストと内部用）。 */
     startStream: (/** @type {{ device?: string | null; sttEngine?: any; ttsEngine?: any; experience?: any }} */ request = {}) => openStream(request),
     /**

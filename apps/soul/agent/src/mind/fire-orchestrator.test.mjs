@@ -21,6 +21,9 @@ import { createSpeechStreamer } from "../voice/speech-streamer.mjs";
 import { createFakeStreamPlayer } from "../test-support/fake-stream-player.mjs";
 import { createFakeVoiceEngine, defaultFakeChunks } from "../test-support/fake-voice-engine.mjs";
 import { formatTranscriptForDigest } from "./memory.mjs";
+import { createSpeechIntentMotion } from "./speech-intent-motion.mjs";
+import { loadDistributionSpeechMotionCatalog } from "../test-support/distribution-speech-motion-catalog.mjs";
+const speechMotions = await loadDistributionSpeechMotionCatalog();
 
 // 発火オーケストレータの縦貫通テスト（S3 Domain A）。実 SDK・実 TTS・実器は一切使わない
 // （人間ゲートの領分）。fake session（ask がカナ応答）・fake speakImpl（テキスト記録）・
@@ -118,6 +121,151 @@ function streamChannel(channel) {
 function progressiveStreamer(prepare) {
   return (options) =>
     createSpeechStreamer({ ...options, engine: makeProgressiveEngine(prepare), channel: streamChannel(options.channel) });
+}
+
+test("full-result ElevenLabs replies use the same section lifecycle and retain the existing smile", { timeout: 5000 }, async () => {
+  const buffer = bufferWithYou();
+  const player = makeProgressivePlayer();
+  const ready = [Promise.withResolvers(), Promise.withResolvers()];
+  const motionPlayed = Promise.withResolvers();
+  const spoken = [];
+  const expressions = [];
+  const motionOps = [];
+  const decisionInputs = [];
+  const channel = streamChannel({
+    async sendEnvelope(envelope) {
+      expressions.push(envelope);
+      return { result: "accepted" };
+    },
+    async sendMotion(request) {
+      motionOps.push(request.op);
+      return { result: "accepted" };
+    }
+  });
+  const engine = { ...makeProgressiveEngine((text) => spoken.push(text)), kind: "elevenlabs" };
+  const motion = createSpeechIntentMotion({
+    channel,
+    getCatalog: () => speechMotions,
+    judge: async ({ input }) => {
+      decisionInputs.push(JSON.parse(input));
+      return { answers: {
+        speech_intent_performance: { type: "choice", choice: "ask" },
+        speech_intent_attention: { type: "choice", choice: "partner" }
+      } };
+    }
+  });
+  const session = {
+    async ask(content) {
+      assert.match(content, /<intent/);
+      return { replyText: "<smile><intent 相手の答えを待ちたい>一文目。二文目。\n<intent>" };
+    }
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session, player, channel,
+    progressivePlayback: true,
+    acquireFireResources: () => ({ engine, speechIntentMotion: motion, configuration: { brain: "claude" } }),
+    speakImpl: () => assert.fail("a tagged full-result reply must use the section queue"),
+    onTrace({ event, kind, jobId }) {
+      if (event === "speech.playback.input_completed") ready[jobId.endsWith("-1") ? 0 : 1].resolve();
+      if (event === "intent.motion.reply") motionPlayed.resolve(kind);
+    }
+  });
+  const firing = orch.fire();
+  await ready[0].promise;
+  emitProgressiveOwned(player, "STARTED", 0);
+  assert.equal(await motionPlayed.promise, "accepted");
+  assert.ok(expressions.some(({ slotId }) => slotId === "mouth-smile"));
+  emitProgressiveOwned(player, "ENDED", 0);
+  await ready[1].promise;
+  emitProgressiveOwned(player, "STARTED", 1);
+  emitProgressiveOwned(player, "ENDED", 1);
+  assert.equal((await firing).replyText, "一文目。二文目。\n");
+  assert.deepEqual(spoken, ["一文目。", "二文目。"]);
+  assert.equal(decisionInputs.length, 1);
+  assert.equal(decisionInputs[0].intent, "<intent 相手の答えを待ちたい>");
+  assert.equal(decisionInputs[0].text, "一文目。二文目。\n");
+  assert.match(decisionInputs[0].context.transcript, /ねえ、今日の予定は？/);
+  assert.deepEqual(motionOps, ["begin", "play", "end"]);
+  orch.dispose();
+});
+
+test("non-ElevenLabs one-shot replies keep the same voice path and strip residual intent markers", async () => {
+  const fakeSpeak = makeFakeSpeak();
+  const orch = createFireOrchestrator({
+    getBuffer: () => bufferWithYou(),
+    session: {
+      async ask(content) {
+        assert.doesNotMatch(content, /<intent/);
+        return { replyText: "<intent 相手の答えを待ちたい>一文目。二文目。" };
+      }
+    },
+    channel: fakeChannel,
+    player: fakePlayer,
+    acquireFireResources: () => ({
+      engine: { kind: "aivis" },
+      speechIntentMotion: { prepare() { assert.fail("non-ElevenLabs must not prepare motion"); } }
+    }),
+    speakImpl: fakeSpeak.speakImpl
+  });
+  assert.equal((await orch.fire()).replyText, "一文目。二文目。");
+  assert.deepEqual(fakeSpeak.spoken.map(({ text }) => text), ["一文目。二文目。"]);
+  orch.dispose();
+});
+
+for (const awaiting of ["resource acquisition", "visual capture"]) {
+  test(`kill/revive while awaiting ${awaiting} cannot restart an old Fire's intent or audio`, { timeout: 5000 }, async () => {
+    const waiting = Promise.withResolvers();
+    const resume = Promise.withResolvers();
+    const player = makeProgressivePlayer();
+    const channel = streamChannel({});
+    const engine = { ...makeProgressiveEngine(), kind: "elevenlabs" };
+    let asked = 0;
+    let judged = 0;
+    const motion = createSpeechIntentMotion({
+      channel,
+      getCatalog: () => speechMotions,
+      async judge() { judged += 1; return { answers: {} }; }
+    });
+    const orch = createFireOrchestrator({
+      getBuffer: () => bufferWithYou(),
+      channel,
+      player,
+      session: {
+        async ask(_content, { onTextDelta }) {
+          asked += 1;
+          onTextDelta("<intent 答えを待つ>どう思う？");
+          return { replyText: "<intent 答えを待つ>どう思う？" };
+        }
+      },
+      progressivePlayback: true,
+      async acquireFireResources() {
+        if (awaiting === "resource acquisition") {
+          waiting.resolve();
+          await resume.promise;
+        }
+        return { engine, speechIntentMotion: motion };
+      },
+      getVisionTarget: () => "Fixture",
+      async captureImpl() {
+        if (awaiting === "visual capture") {
+          waiting.resolve();
+          await resume.promise;
+        }
+        return { jpegBase64: "AAAA", width: 1, height: 1, elapsedMs: 0 };
+      }
+    });
+    const firing = orch.fire({ vision: awaiting === "visual capture" });
+    await waiting.promise;
+    await orch.kill();
+    orch.revive();
+    resume.resolve();
+    assert.equal((await firing).reason, "killed-inflight");
+    assert.equal(asked, 0);
+    assert.equal(judged, 0);
+    assert.equal(player.plays.length, 0);
+    orch.dispose();
+  });
 }
 
 test("FIRE_SYSTEM_PROMPT: 最小仮面が export される", () => {

@@ -43,6 +43,7 @@ function createFakeHeart() {
     getLatestStageMotionSignal: vi.fn(() => ({
       horizontal: 0.5,
       depth: -0.5,
+      stageYOffsetPx: 0,
       timestampMs: 1234
     }))
   };
@@ -225,7 +226,11 @@ describe("Runtime Player input subsystem composition", () => {
     expect(harness.createAutonomousFrameHeart.mock.calls[0]?.[0]).toEqual({
       liveParameters: harness.deps.liveParameters,
       getPhysiologyConfig: undefined,
-      getChannelOverlay: expect.any(Function)
+      getChannelOverlay: expect.any(Function),
+      getSpeechStageYOffsetPx: expect.any(Function),
+      getSpeechStageScale: expect.any(Function),
+      getSpeechPresenceInput: expect.any(Function),
+      resolveSpeechMotionModelParameters: expect.any(Function)
     });
 
     // Load = heartbeat start, with auto-mapping slots and a non-exposed seed.
@@ -262,7 +267,11 @@ describe("Runtime Player input subsystem composition", () => {
     expect(harness.createAutonomousFrameHeart.mock.calls[0]?.[0]).toEqual({
       liveParameters: harness.deps.liveParameters,
       getPhysiologyConfig: physiologyConfigProvider,
-      getChannelOverlay: expect.any(Function)
+      getChannelOverlay: expect.any(Function),
+      getSpeechStageYOffsetPx: expect.any(Function),
+      getSpeechStageScale: expect.any(Function),
+      getSpeechPresenceInput: expect.any(Function),
+      resolveSpeechMotionModelParameters: expect.any(Function)
     });
   });
 
@@ -318,6 +327,21 @@ describe("Runtime Player input subsystem composition", () => {
     // The role difference is expressed HERE as data: the tracking subsystem returns
     // null so the composition root keeps its existing head-position Stage Motion.
     expect(subsystem.getStageMotionDrive()).toBeNull();
+  });
+
+  it("supplies speech Stage Y when there is no Stage Presence config", () => {
+    const harness = createDependencies();
+    harness.heart.getLatestStageMotionSignal.mockReturnValue({
+      horizontal: 0.5,
+      depth: -0.5,
+      stageYOffsetPx: -32,
+      timestampMs: 1234
+    });
+    const subsystem = composeRuntimePlayerInputSubsystem("autonomousHost", harness.deps);
+    expect(subsystem.getStageMotionDrive()).toMatchObject({
+      settings: { enabled: false },
+      stageYOffsetPx: -32
+    });
   });
 
   it("Autonomous Host supplies a Stage Presence drive from posture + config (Domain D)", () => {
