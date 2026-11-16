@@ -38,3 +38,7 @@
 ## 4. Unresolved Questions
 
 - [scope.md](scope.md) §4 を参照。
+
+## 5. 関連する新しい体験
+
+- [外出先・家でチャッピーと過ごす](../real-world-companion/_map.md)(2026-11-16)：外出時のVC参加と各参加者の視界共有、家でのチャッピー自身の視界。Discord専用にはしない。既存機能の限定棚卸しもこちらにある。

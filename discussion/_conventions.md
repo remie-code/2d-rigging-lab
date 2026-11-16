@@ -88,6 +88,10 @@ discussion/
     persistence/        # WS2: 永続化のnode:fs/IPC化(本丸)
   ai-cohost/            # ユーザー×自律AIの共演配信構想。コンセプト、前提合意、調査事実、設計判断
     _map.md
+    real-world-companion/ # 外出先・家でチャッピーと過ごす体験。デバイス・視界・会話の共通境界(2026-11-16)
+      _map.md
+      scope-and-decisions.md
+      repository-inventory-2026-11-16.md
     concept/
     premises/
     research/
@@ -165,6 +169,10 @@ discussion/
 | `reports/` | 技術調査、成立性調査、外部仕様・実装状況のレポート | Undine | 調査担当サブエージェントが作成し、Undine が統合・地図管理する |
 
 新しいトピックが必要になった場合は、ユーザーと合意してからディレクトリを作り、この規約と関連 `_map.md` を更新する。
+
+2026-11-16、ユーザーの新トピック作成指示により `ai-cohost/real-world-companion/` を追加。Undine / ユーザーが体験・前提を管理し、調査担当が根拠を参照・追記する。Discord VC の子にはせず、外出時の参加者からの視界共有と、家でのチャッピー自身の視界を扱う。合意・未決は `scope-and-decisions.md`、コード棚卸しは日付付き `repository-inventory-YYYY-MM-DD.md` に分け、機器の外部調査や実験は必要時に地図へ追加する。
+
+同日の追加指示により、個人向けのデバイス選定記録 `ai-cohost/real-world-companion/audio-devices-*.md` はローカル保持・Git追跡対象外とする。端末情報・装着の好み・機器候補比較を追跡対象の地図や設計文書へ転載しない。会話の経路など製品側の判断は追跡対象文書へ分離して残す。チャットの添付原本 `.codex-attachments/` もローカル保持とする。
 
 ## 5. シナリオの配置
 
