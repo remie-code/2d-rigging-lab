@@ -1,9 +1,10 @@
 {
   "version": 1,
   "id": "interest",
-  "description": "関心を向ける",
+  "description": "関心を向ける。ゲーム画面では気になるものを見つけ、少し寄って見ようとする。",
   "targets": {
-    "partner": "interest"
+    "partner": "interest",
+    "game": "game-curiosity-v1"
   },
   "clips": {
     "interest": {
@@ -41,6 +42,66 @@
         "horizontal": [
           [0, -0.05],
           [1170, -0.4]
+        ]
+      }
+    },
+    "game-curiosity-v1": {
+      "entry": "preserve-clock",
+      "durationMs": 6400,
+      "tracks": {
+        "param_face_angle_y": [
+          [0, 0],
+          [650, 0],
+          [1400, -2.8],
+          [2650, -2.8],
+          [4000, -2.2],
+          [5750, 0],
+          [6400, 0]
+        ],
+        "param_face_angle_z": [
+          [0, 0],
+          [1650, 0],
+          [2450, 4.5],
+          [3700, 4.5],
+          [5650, 0],
+          [6400, 0]
+        ],
+        "param_body_angle_z": [
+          [0, 0],
+          [2050, 0],
+          [2900, 0.65],
+          [3950, 0.65],
+          [5750, 0],
+          [6400, 0]
+        ]
+      },
+      "fixed": {
+        "param_face_angle_x": 0,
+        "param_body_angle_x": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0
+      },
+      "stage": {
+        "scale": [
+          [0, 1],
+          [1000, 1],
+          [2200, 1.02125],
+          [3850, 1.02125],
+          [5750, 1],
+          [6400, 1]
+        ],
+        "y": [
+          [0, 0],
+          [1050, 0],
+          [2300, 1.75],
+          [3800, 1.75],
+          [5750, 0],
+          [6400, 0]
         ]
       }
     }

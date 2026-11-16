@@ -1,0 +1,18 @@
+{
+  "id": "nod-comparison-receive-v1",
+  "modelRevision": 843,
+  "durationMs": 4200,
+  "fps": 20,
+  "performanceFile": "performance.json",
+  "view": {
+    "stageViewport": {
+      "minX": 540,
+      "minY": -40,
+      "width": 1040,
+      "height": 1100
+    },
+    "outputWidth": 624,
+    "outputHeight": 660
+  },
+  "lipPulses": []
+}

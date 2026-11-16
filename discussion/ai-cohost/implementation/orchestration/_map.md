@@ -4,6 +4,8 @@
 
 | Path | Status | Content |
 |---|---|---|
+| [wry-nuances-registration-plan.md](wry-nuances-registration-plan.md) | 登録・独立レビュー・現用配置／実会話未確認 (2026-11-16) | 苦笑の新5案をgame/viewers向け外部JSONで追加。既存やれやれを保持、再ビルド不要。[完了記録](../waves/wry-nuances-registration/completion.md) |
+| [smile-nuances-registration-plan.md](smile-nuances-registration-plan.md) | 登録・独立レビュー・現用配置完了／実会話未確認 (2026-11-16) | 笑み5子を外部JSONで追加。照れはv2、partnerのみ、既存exeで読み込み・選択経路確認。[完了記録](../waves/smile-nuances-registration/completion.md) |
 | [search-nuances-registration-wave-plan.md](search-nuances-registration-wave-plan.md) | 実装・独立レビュー・実配布完了／実会話未確認 (2026-11-16) | 探す・確かめる6案の登録。階層形式、既存Decisionでの独立選択、親定義の版追跡、現用配布。[完了記録](../waves/search-nuances-registration/completion.md) |
 | [all-motion-recording-wave-plan.md](all-motion-recording-wave-plan.md) | 実装・独立レビュー・実配布合格／実会話確認待ち (2026-11-14) | 選択済みを含む意図区間全件の文脈記録、演技定義の版保存。単一Sol Orch・簡易構成、独立レビューと普段のexe配布まで |
 | [external-motion-assets-wave-plan.md](external-motion-assets-wave-plan.md) | 両Wave・配布後の独立レビュー合格 (2026-11-13) | 外部7演技13組、通常版/portable、現用r844配布済み。固定実行物で追加/説明編集/削除と再起動を実証。11/14本人が笑み・困り顔の実運用動作を確認 |

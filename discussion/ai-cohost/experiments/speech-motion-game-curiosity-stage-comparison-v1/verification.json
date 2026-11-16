@@ -1,0 +1,65 @@
+{
+  "variants": {
+    "A": {
+      "frames": 129,
+      "sameNonStageInputs": true,
+      "sameEnvelopeTiming": true,
+      "firstLastIdentical": true,
+      "scaleRange": [
+        1,
+        1
+      ],
+      "yRange": [
+        0,
+        0
+      ]
+    },
+    "B": {
+      "frames": 129,
+      "sameNonStageInputs": true,
+      "sameEnvelopeTiming": true,
+      "firstLastIdentical": true,
+      "scaleRange": [
+        1,
+        1.02125
+      ],
+      "yRange": [
+        0,
+        1.75
+      ]
+    },
+    "C": {
+      "frames": 129,
+      "sameNonStageInputs": true,
+      "sameEnvelopeTiming": true,
+      "firstLastIdentical": true,
+      "scaleRange": [
+        1,
+        1.0425
+      ],
+      "yRange": [
+        0,
+        3.5
+      ]
+    },
+    "D": {
+      "frames": 129,
+      "sameNonStageInputs": true,
+      "sameEnvelopeTiming": true,
+      "firstLastIdentical": true,
+      "scaleRange": [
+        1,
+        1.085
+      ],
+      "yRange": [
+        0,
+        7
+      ]
+    }
+  },
+  "originalDAllPngIdentical": true,
+  "snapshotUnchanged": true,
+  "liveSourceUnchanged": true,
+  "liveExportUnchanged": true,
+  "fiveVideosDecodedByAssemble": true
+}

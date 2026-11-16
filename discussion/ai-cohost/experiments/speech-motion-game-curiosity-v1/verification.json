@@ -1,0 +1,20 @@
+{
+  "frames": 129,
+  "durationSeconds": 6.45,
+  "mp4AllFramesDecoded": true,
+  "sourceSnapshotUnchanged": true,
+  "liveSourceUnchanged": true,
+  "liveExportUnchanged": true,
+  "firstLastPngIdentical": true,
+  "stageScaleRange": [
+    1,
+    1.085
+  ],
+  "stageYRange": [
+    0,
+    7
+  ],
+  "gazeXYFixed0": true,
+  "yawFixed0": true,
+  "stageEvaluation": "offline viewport scale and y; not Player scheduling validation"
+}

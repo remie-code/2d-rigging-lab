@@ -1,0 +1,13 @@
+{
+  "framesPerSide": 85,
+  "fps": 20,
+  "reusedRightFramesAllHashesMatch": true,
+  "matchingViewportAndOutputSize": true,
+  "startEndNeutralIdenticalAcrossBothSides": true,
+  "snapshotUnchanged": true,
+  "liveSourceUnchanged": true,
+  "liveExportUnchanged": true,
+  "finiteGeometry": "checked by renderer",
+  "videoFullDecodePassed": true,
+  "videoSha256": "5ca958e8645e08741df74c293b59788f9eb1c1fb78c54752663f1e4b33487d66"
+}

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "id": "understanding-nod",
+  "description": "「なるほど、そういうことか」と、ゲームの仕組み・説明・関係がつながって納得し、画面を見たまま一度うなずく。例「なるほど、吸い込ませて向こうのスイッチを押すんだ。」 相方の話を聞いて受け取る相づち、強い同意、勝利を喜ぶ反応、驚きとは別の演技。",
+  "targets": {
+    "game": "understanding-nod-v1"
+  },
+  "clips": {
+    "understanding-nod-v1": {
+      "entry": "preserve-clock",
+      "durationMs": 4200,
+      "tracks": {
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            1100,
+            0
+          ],
+          [
+            1720,
+            -13
+          ],
+          [
+            1840,
+            -13
+          ],
+          [
+            2690,
+            0
+          ],
+          [
+            4200,
+            0
+          ]
+        ]
+      },
+      "fixed": {
+        "param_face_angle_x": 0,
+        "param_body_angle_x": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_face_angle_z": 0,
+        "param_body_angle_z": 0
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            4200,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            4200,
+            0
+          ]
+        ]
+      }
+    }
+  }
+}
