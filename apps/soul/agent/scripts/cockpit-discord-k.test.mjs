@@ -73,8 +73,6 @@ function makeVenue() {
     isStreamOpen: () => open,
     getEntries: () => entries,
     nowImpl: () => clock,
-    // 最後の保存を待つ上限のタイマ（既定 90 秒）でテストの終わりを待たせない。
-    memoryTimeoutMs: 200
   });
   return {
     venue,

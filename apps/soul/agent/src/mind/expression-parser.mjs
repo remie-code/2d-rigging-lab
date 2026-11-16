@@ -32,7 +32,7 @@
  */
 
 import { EXPRESSION_WORDS } from "./expression-table.mjs";
-import { scanRecallTag, normalizeRecallRequest, RECALL_WORD } from "./recall-tag.mjs";
+import { scanControlTag, normalizeRecallRequest, RECALL_WORD } from "./recall-tag.mjs";
 import { scanSpeechIntentTag } from "./speech-intent-tag.mjs";
 
 /** 既知語彙集合（表が正）。 */
@@ -60,6 +60,7 @@ const TAG_RE = /<([A-Za-z][\w-]*)(\s[^<>]*)?>/y;
  *   events: Array<{ word: string; args?: string; position: number }>;
  *   diagnostics: Array<{ type: string; [k: string]: unknown }>;
  *   recalls: Array<{ request: string; position: number }>;
+ *   localTasks?: Array<{ request: string; position: number }>;
  * }}
  */
 export function parseExpressionTags(replyText) {
@@ -70,6 +71,7 @@ export function parseExpressionTags(replyText) {
   const diagnostics = [];
   /** @type {Array<{ request: string; position: number }>} */
   const recalls = [];
+  const localTasks = [];
 
   let speech = "";
   let unclosedControls = 0;
@@ -83,10 +85,11 @@ export function parseExpressionTags(replyText) {
     // タグ前の素テキストを積む。
     speech += input.slice(cursor, open);
 
-    const recall = scanRecallTag(input, open, true);
+    const recall = scanControlTag(input, open, true);
     if (recall && recall.kind === "valid") {
-      recalls.push({
-        request: normalizeRecallRequest(input.slice(open + RECALL_WORD.length + 1, recall.end)),
+      const requests = recall.word === RECALL_WORD ? recalls : localTasks;
+      requests.push({
+        request: normalizeRecallRequest(input.slice(open + recall.word.length + 1, recall.end)),
         position: open
       });
       cursor = recall.end + 1;
@@ -136,7 +139,7 @@ export function parseExpressionTags(replyText) {
     speech = speech.replace(/[<>]/g, "");
   }
 
-  return { speechText: speech, events, diagnostics, recalls };
+  return { speechText: speech, events, diagnostics, recalls, ...(localTasks.length ? { localTasks } : {}) };
 }
 
 /**

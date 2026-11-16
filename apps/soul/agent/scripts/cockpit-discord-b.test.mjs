@@ -195,7 +195,7 @@ test("場の結線（main）: ロールの束を 1 つ作って roles で渡し�
   const main = source.slice(source.indexOf("async function main()"));
   assert.match(main, /const venueRole = createVenueRoleBundle\(\{\n\s+currentId: \(\) => roleHooks\.currentId\(\),\n\s+identity: getCurrentRoleIdentity,\n\s+streamHooks: streamVenue\.hooks,/);
   assert.match(main, /prepareVoice: \(kind\) => \{\n\s+desiredTtsEngine = kind;\n\s+return voiceEngines\.prepare\(kind\);\n\s+\},/, "声の engine の用意は耳を開く前（方式を覚えてから）");
-  assert.match(main, /startVoiceResources: ensureVoiceResources,\n\s+recallRunner,/);
+  assert.match(main, /startVoiceResources: ensureVoiceResources,\n\s+recallRunner: async \(job\) => prepareRecall\(job\)\(\),\n\s+prepareRecall,/);
   const call = main.slice(main.indexOf("server = createCockpitServer({"), main.indexOf("const url = await server.listen();"));
   assert.ok(call.length > 0);
   assert.match(call, /roles: \[venueRole\],/);

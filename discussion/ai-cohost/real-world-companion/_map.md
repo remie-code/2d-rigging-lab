@@ -4,6 +4,10 @@
 
 ## 入口
 
+現在の実装: [小タスクセッション共通基盤の3 Wave](../implementation/orchestration/local-task-sessions-wave-plan.md)は実装・独立レビュー合格。記憶参照と共通の基盤から毎依頼新規sessionを起動し、PDF後半をローカル小タスクで調べられる。仕事の進め方は担当LLM、Cockpitは実行・配送・場の寿命管理。資料は記憶保存・必要整理後に片付ける。2026-11-16、本人確認待ち。[本人確認手順](../implementation/waves/local-task-sessions/human-gate.md)へ。
+
+前段: [Discordチャット資料・モバイルVC操作の2 Wave計画](../implementation/orchestration/discord-companion-inputs-wave-plan.md)。読むチャットの設定とDiscordからの参加／退出を追加。初版のPDF先頭3ページ方式は上記小タスク方式へ置換。Botの設定・コマンドは[Discord初期手順](../implementation/waves/discord-companion-inputs/human-gate.md)を参照し、PDFの古い上限説明は現行仕様として読まない。
+
 | File | 内容 | 状態 |
 |---|---|---|
 | [scope-and-decisions.md](scope-and-decisions.md) | 二つの体験、安全に使えるデバイスの条件、共通にしたい境界、未決事項 | 体験の方向を合意。機器・方式・実装は未決 |
@@ -15,9 +19,8 @@
 ## 次の議論
 
 - その際、家の固定カメラ＋PCでも成立する共通部分を、外出側の条件で狭めない。
-- Discordベースで進める。映像の受け渡し方の実装調査は未着手で、Discord Botの映像受信可否を断定しない。
-- スマホで安全に立ち止まって撮った写真をVC付属チャットで共有する案を議論中。現行チャッピーの写真受信は未対応。添付の取り込み方と会話に反映するタイミングは未決。
-- 開いているDiscordの場の中で、スマホからチャッピーのVC参加・退出を操作したい。操作方法・権限・他のVCで会話中の場合の扱いを今後具体化する。
+- Discordチャットの新規テキスト・画像・PDFを取り込み、VCで「今チャットに貼った、見れる？」と話せる体験を作る。読む先はCockpitで指定・変更。ライブ映像配信は今回の対象外。
+- 開いているDiscordの場に対するVC参加・退出をDiscord側から操作する。権限はDiscord標準に準拠。具体手順・実証結果は上記計画から辿る。
 
 ## 関連
 

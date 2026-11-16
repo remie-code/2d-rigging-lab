@@ -15,7 +15,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,12 +25,20 @@ import { createDiscordExperience, DISCORD_REASONS, DISCORD_VC_REFUSALS } from ".
 import { createFakeDiscord, FAKE_CHANNEL_TYPE } from "../test-support/fake-discord.mjs";
 import { controlUsageRecord, fireRefusedUsageRecord } from "../mind/session-usage-log.mjs";
 import { MODEL_IDENTITIES } from "../mind/model-identity.mjs";
+import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
+import { runLocalTask } from "../mind/local-task.mjs";
+import { makeLocalTaskPdf } from "../test-support/local-task-pdf.mjs";
 
 const GUILD = "guild-fake-1";
 const OTHER_GUILD = "guild-fake-2";
 const CHANNEL = "channel-fake-1";
 const CHANNEL_2 = "channel-fake-2";
 const TEXT_CHANNEL = "channel-fake-text";
+const CHAT_TEXT = "100000000000000001";
+const CHAT_VOICE = "100000000000000002";
+const CHAT_DENIED = "100000000000000003";
+const CHAT_COMMAND = "100000000000000004";
+const CHAT_HIDDEN = "100000000000000005";
 const OTHER_GUILD_CHANNEL = "channel-fake-other";
 const USER_A = "user-fake-a";
 const NAME_A = "たろう";
@@ -177,8 +185,112 @@ function makeRole(events) {
   };
 }
 
+/** @param {ReturnType<typeof createFakeDiscord>} fake @param {{intent?: boolean; denyOnLogin?: boolean; commands?: any[]}} options */
+function companionGateway(fake, { intent = true, denyOnLogin = false, commands = [] }) {
+  const { Client, Events, GatewayIntentBits } = fake.libraries.discord;
+  const denied = new Set([CHAT_DENIED]);
+  const requests = [];
+  const replies = [];
+  const route = `/applications/fake-app/guilds/${GUILD}/commands`;
+  const storedCommands = [...commands];
+  class CompanionClient extends Client {
+    application = { id: "fake-app" };
+    rest = {
+      get: async (/** @type {string} */ path) => {
+        assert.equal(path, route);
+        requests.push({ method: "GET", path });
+        return storedCommands.slice();
+      },
+      post: async (/** @type {string} */ path, /** @type {any} */ input) => {
+        assert.equal(path, route);
+        requests.push({ method: "POST", path, body: input.body });
+        const command = { ...input.body, id: CHAT_COMMAND };
+        storedCommands.push(command);
+        return command;
+      }
+    };
+
+    /** @param {any} clientOptions */
+    constructor(clientOptions) {
+      super(clientOptions);
+      const loadGuild = this.guilds.fetch;
+      this.guilds.fetch = async (id) => {
+        const guild = await loadGuild(id);
+        if (id === undefined) return guild;
+        guild.client = this;
+        guild.members.me = this.user;
+        guild.channels.cache = await guild.channels.fetch();
+        for (const channel of guild.channels.cache.values()) {
+          channel.flags = { has: (/** @type {number} */ flag) => channel.id === CHAT_HIDDEN && flag === 131072 };
+          channel.permissionsFor = (/** @type {any} */ member) => ({
+            has: (/** @type {bigint} */ flag) => member === this.user && flag === 1024n && !denied.has(channel.id)
+          });
+        }
+        return guild;
+      };
+    }
+
+    /** @param {string} token */
+    async login(token) {
+      if (denyOnLogin && this.options.intents.includes(GatewayIntentBits.MessageContent)) {
+        fake.record.logins.push(token);
+        this.emit("shardDisconnect", { code: 4014 });
+        return token;
+      }
+      return super.login(token);
+    }
+  }
+  return {
+    denied, requests, replies,
+    async loadLibraries() {
+      const libs = await fake.loadLibraries();
+      return {
+        ...libs,
+        discord: {
+          ...libs.discord,
+          Client: CompanionClient,
+          Events: { ...Events, MessageCreate: "messageCreate", InteractionCreate: "interactionCreate", ShardDisconnect: "shardDisconnect" },
+          PermissionFlagsBits: { ViewChannel: 1024n },
+          ChannelFlags: { ChannelObfuscated: 131072 },
+          MessageFlags: { Ephemeral: 64 },
+          ApplicationCommandType: { ChatInput: 1 },
+          ApplicationCommandOptionType: { Subcommand: 1 },
+          ApplicationFlags: { GatewayMessageContent: 1 << 18, GatewayMessageContentLimited: 1 << 19 },
+          Routes: { currentApplication: () => "/applications/@me", applicationGuildCommands: (app, guild) => `/applications/${app}/guilds/${guild}/commands` },
+          REST: class {
+            setToken(/** @type {string} */ token) { assert.equal(token, FAKE_TOKEN); return this; }
+            async get(/** @type {string} */ path) {
+              assert.equal(path, "/applications/@me");
+              return { flags: intent ? 1 << 19 : 0 };
+            }
+          }
+        }
+      };
+    },
+    message(/** @type {any} */ override = {}) {
+      fake.client()?.emit("messageCreate", {
+        id: "fixture-message", guildId: GUILD, channelId: CHAT_TEXT, createdTimestamp: Date.now() + 1,
+        author: { id: USER_A, username: NAME_A }, content: "合成のチャット本文", ...override
+      });
+    },
+    interact(/** @type {string} */ action, /** @type {any} */ override = {}, client = fake.client()) {
+      const result = Promise.withResolvers();
+      client?.emit("interactionCreate", {
+        isChatInputCommand: () => true, commandName: "soul-vc", commandId: CHAT_COMMAND,
+        guildId: GUILD, commandGuildId: GUILD, user: { id: USER_A }, options: { getSubcommand: () => action },
+        async reply(/** @type {any} */ response) { replies.push(response); result.resolve(response.content); },
+        async deferReply(/** @type {any} */ response) { replies.push(response); },
+        async editReply(/** @type {string} */ content) { result.resolve(content); },
+        ...override
+      });
+      return result.promise;
+    }
+  };
+}
+
 /**
- * @param {{ discord?: boolean; graceMs?: number }} [p]
+ * @param {{ discord?: boolean; graceMs?: number; companion?: { intent?: boolean; denyOnLogin?: boolean; commands?: any[]; openSession?: Promise<any> };
+ *   localTasks?: { ask: (content: any, callbacks: any) => Promise<any>; spoken: string[]; run: NonNullable<Parameters<typeof createCockpitServer>[0]["localTaskRunner"]> } }} [p]
  */
 async function startServer(p = {}) {
   const dir = mkdtempSync(join(tmpdir(), "discord-i-server-"));
@@ -194,21 +306,30 @@ async function startServer(p = {}) {
         channels: [
           { id: CHANNEL, name: VC_1, rawPosition: 1 },
           { id: CHANNEL_2, name: VC_2, rawPosition: 2 },
-          { id: TEXT_CHANNEL, name: "文字", type: FAKE_CHANNEL_TYPE.GuildText, rawPosition: 0 }
+          { id: TEXT_CHANNEL, name: "文字", type: FAKE_CHANNEL_TYPE.GuildText, rawPosition: 0 },
+          ...(p.companion ? [
+            { id: CHAT_TEXT, name: "共有資料", type: FAKE_CHANNEL_TYPE.GuildText },
+            { id: CHAT_VOICE, name: "資料部屋" },
+            { id: CHAT_DENIED, name: "閲覧不可", type: FAKE_CHANNEL_TYPE.GuildText },
+            { id: CHAT_HIDDEN, name: "___hidden___", type: FAKE_CHANNEL_TYPE.GuildText }
+          ] : [])
         ],
         members: { [USER_A]: NAME_A }
       },
       { id: OTHER_GUILD, name: "よそ", channels: [{ id: OTHER_GUILD_CHANNEL, name: "よその VC" }] }
     ]
   });
+  const gateway = p.companion ? companionGateway(fake, p.companion) : null;
   /** @type {string[]} */
   const events = [];
   /** @type {string[]} */
   const logs = [];
+  let server;
   const discord = createDiscordExperience({
     settings,
+    getTaskResources: () => server?.getActiveVenueTaskResources() ?? null,
     loadToken: () => ({ ok: true, token: FAKE_TOKEN }),
-    loadLibraries: fake.loadLibraries,
+    loadLibraries: gateway?.loadLibraries ?? fake.loadLibraries,
     log: (line) => logs.push(line),
     loginTimeoutMs: 500,
     readyTimeoutMs: 500,
@@ -227,15 +348,39 @@ async function startServer(p = {}) {
   /** @type {string[]} */
   const answers = [];
   let now = 1_000_000;
-  const server = createCockpitServer({
+  const role = makeRole(events);
+  const openSession = role.hooks.openSession;
+  if (p.companion?.openSession) {
+    role.hooks.openSession = async () => {
+      const result = await openSession();
+      await p.companion?.openSession;
+      return result;
+    };
+  }
+  const local = p.localTasks;
+  server = createCockpitServer({
     pipelineFactory: /** @type {any} */ (ears.factory),
-    fireOrchestratorFactory: /** @type {any} */ (orchestrator.factory),
+    fireOrchestratorFactory: local ? (hooks) => {
+      orchestrator.record.hooks = hooks;
+      return createFireOrchestrator({
+        ...hooks,
+        nowImpl: () => now,
+        session: { ask: local.ask },
+        speakImpl: async (text) => {
+          local.spoken.push(text);
+          return { timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "fake.wav" };
+        },
+        channel: { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
+        player: { play() {} }
+      });
+    } : /** @type {any} */ (orchestrator.factory),
+    localTaskRunner: local?.run,
     commentGuard: () => ({ pass: true, kind: "ok" }),
-    roles: [makeRole(events)],
+    roles: [role],
     ...(p.discord === false ? {} : { experiences: { discord } }),
     elevenLabsApiKeyProvider: () => ({ ok: true, apiKey: "fake-elevenlabs-key" }),
     localSttModelCheck: () => ({ ok: true }),
-    selfFireInitialEnabled: true,
+    selfFireInitialEnabled: !local,
     backchannelMinIntervalMs: 0,
     nowImpl: () => now,
     speakNowJudge: (/** @type {any} */ request) => {
@@ -257,6 +402,7 @@ async function startServer(p = {}) {
     settings,
     settingsPath,
     fake,
+    gateway,
     ears,
     orchestrator,
     refused,
@@ -285,6 +431,362 @@ async function openDiscord(h) {
   assert.equal(r.status, 200, JSON.stringify(r.json.error));
   return r.json;
 }
+
+test("Discord の Bot が読めるテキスト・VC 付属チャットを切替、投稿は会話資料だけに届く", async () => {
+  const h = await startServer({ companion: {} });
+  const events = openEvents(h.url);
+  try {
+    assert.equal((await get(h.url, "/api/discord/chat")).status, 409);
+    await openDiscord(h);
+    await waitUntil(() => events.events.some((event) => event.event === "state"));
+    const state = (await get(h.url, "/api/discord/chat")).json;
+    assert.equal(state.intentStatus, "enabled");
+    assert.equal(state.selectedId, null);
+    assert.equal(state.channels.find(({ id }) => id === CHAT_TEXT).kind, "text");
+    assert.equal(state.channels.find(({ id }) => id === CHAT_VOICE).kind, "voice");
+    assert.equal(state.channels.some(({ id }) => id === CHAT_DENIED || id === CHAT_HIDDEN), false);
+    for (const channelId of [CHAT_DENIED, CHAT_HIDDEN]) {
+      assert.equal((await post(h.url, "/api/discord/chat", { channelId })).status, 403);
+    }
+    assert.equal((await post(h.url, "/api/discord/chat", {})).status, 400);
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_TEXT })).json.selectedId, CHAT_TEXT);
+    assert.deepEqual(h.settings.getDiscordChatChannel(), { guildId: GUILD, channelId: CHAT_TEXT });
+    assert.equal(h.settings.getDiscordPrep().channelId, CHANNEL);
+    const materials = () => h.orchestrator.record.hooks.getChatMaterials(h.orchestrator.record.hooks.getBuffer());
+    h.gateway.message({ guildId: OTHER_GUILD });
+    h.gateway.message({ channelId: CHAT_VOICE });
+    h.gateway.message({ author: { id: "bot-fake-1" } });
+    assert.deepEqual(materials(), []);
+    const url = "https://example.invalid/attachments/1/2/fixture.pdf?token=添付秘密";
+    const attachments = new Map([["pdf", { id: "pdf", name: "fixture.pdf", contentType: "application/pdf", url }]]);
+    h.gateway.message({ attachments });
+    h.gateway.message({ content: "重複は追加しない" });
+    await waitUntil(() => materials()?.[0]?.attachments[0]?.state === "unavailable");
+    assert.equal(materials().length, 1);
+    assert.equal(materials()[0].text, "合成のチャット本文");
+    assert.equal(materials()[0].attachments[0].reason, "取得失敗");
+    assert.equal(h.orchestrator.record.fires.length, 0);
+    assert.equal((await post(h.url, "/api/discord/vc", { action: "leave" })).status, 200);
+    h.gateway.message({ id: "outside", content: "退出後の資料" });
+    assert.ok(materials().some(({ text }) => text === "退出後の資料"));
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_VOICE })).json.selectedId, CHAT_VOICE);
+    assert.deepEqual(materials(), []);
+    h.gateway.message();
+    assert.deepEqual(materials(), []);
+    h.gateway.message({ channelId: CHAT_VOICE, id: "fixture-voice-message" });
+    assert.equal(materials()[0].channelName, "資料部屋");
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_TEXT })).json.selectedId, CHAT_TEXT);
+    h.gateway.message({ attachments });
+    assert.deepEqual(materials(), [], "A → B → A でも受信済み投稿の再配送は無視する");
+    h.gateway.message({ id: "fresh-in-text", content: "再選択後の新規資料" });
+    assert.equal(materials()[0].text, "再選択後の新規資料");
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_VOICE })).json.selectedId, CHAT_VOICE);
+    h.gateway.denied.add(CHAT_VOICE);
+    assert.equal((await get(h.url, "/api/discord/chat")).json.selectionStatus, "unreadable");
+    assert.deepEqual(materials(), []);
+    h.gateway.denied.delete(CHAT_VOICE);
+    const leaked = JSON.stringify([events.events, h.logs]);
+    for (const value of ["合成のチャット本文", "退出後の資料", "再選択後の新規資料", "fixture.pdf", url, FAKE_TOKEN]) {
+      assert.equal(leaked.includes(value), false);
+    }
+    assert.equal((await post(h.url, "/api/stream/stop")).status, 200);
+    assert.equal(materials(), null);
+    await openDiscord(h);
+    assert.equal((await get(h.url, "/api/discord/chat")).json.selectedId, CHAT_VOICE);
+    assert.deepEqual(materials(), []);
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: null })).json.selectedId, null);
+    assert.equal(h.settings.getDiscordChatChannel(), null);
+  } finally {
+    events.close();
+    await h.cleanup();
+  }
+});
+
+test("Message Content 未設定と Gateway 4014 の両方で準備・音声・Discord コマンドが使える", async () => {
+  for (const companion of [{ intent: false }, { denyOnLogin: true }]) {
+    const h = await startServer({ companion });
+    try {
+      assert.equal((await post(h.url, "/api/discord/catalog")).status, 200);
+      assert.deepEqual(h.fake.record.clients[0].options.intents, [1, 128]);
+      await openDiscord(h);
+      const state = (await get(h.url, "/api/discord/chat")).json;
+      assert.equal(state.intentStatus, "intent-required");
+      assert.equal(state.commandStatus, "ready");
+      assert.deepEqual(h.fake.client().options.intents, [1, 128]);
+      if (companion.denyOnLogin) {
+        assert.equal(h.fake.record.clients[1].destroyed, true);
+        assert.deepEqual(h.fake.record.clients[1].options.intents, [1, 128, 512, 32768]);
+      }
+      assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_TEXT })).status, 200);
+      assert.match(await h.gateway.interact("leave"), /退出しました/u);
+    } finally {
+      await h.cleanup();
+    }
+  }
+});
+
+test("Discord チャット切替は前のソースで処理中の画像と PDF を中断する", async (t) => {
+  const h = await startServer({ companion: {} });
+  const fetchLocal = globalThis.fetch;
+  const requested = new Map();
+  t.mock.method(globalThis, "fetch", async (input, init) => {
+    if (!(input instanceof URL) || input.hostname !== "cdn.discordapp.com") return fetchLocal(input, init);
+    const signal = init.signal;
+    requested.set(input.pathname, signal);
+    return new Response(new ReadableStream({
+      start(stream) { signal.addEventListener("abort", () => stream.error(signal.reason), { once: true }); }
+    }));
+  });
+  try {
+    await openDiscord(h);
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_TEXT })).status, 200);
+    h.gateway.message({
+      attachments: new Map([
+        ["image", { id: "image", name: "fixture.png", contentType: "image/png", url: "https://cdn.discordapp.com/attachments/1/2/fixture.png" }],
+        ["pdf", { id: "pdf", name: "fixture.pdf", contentType: "application/pdf", url: "https://cdn.discordapp.com/attachments/1/3/fixture.pdf" }]
+      ])
+    });
+    await waitUntil(() => requested.size === 2);
+    const { getChatMaterials, getBuffer } = h.orchestrator.record.hooks;
+    assert.deepEqual(getChatMaterials(getBuffer())[0].attachments.map(({ kind, state }) => [kind, state]),
+      [["image", "pending"], ["pdf", "pending"]]);
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_VOICE })).status, 200);
+    assert.ok([...requested.values()].every((signal) => signal.aborted));
+    assert.deepEqual(getChatMaterials(getBuffer()), []);
+    h.gateway.message({ channelId: CHAT_VOICE, id: "fixture-voice-message" });
+    assert.equal(getChatMaterials(getBuffer())[0].channelId, CHAT_VOICE);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("Discord PDF: a progressive request starts an isolated task, live chat continues, and late replies return after rejoin", async (t) => {
+  const main = [];
+  const spoken = [];
+  const workers = [];
+  const { bytes } = makeLocalTaskPdf();
+  const fetchLocal = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", async (input, init) => {
+    if (input instanceof URL && input.hostname === "cdn.discordapp.com") return new Response(bytes);
+    return fetchLocal(input, init);
+  });
+  const h = await startServer({ companion: {}, localTasks: {
+    spoken,
+    async ask(content, callbacks) {
+      main.push(content);
+      if (main.length === 1) {
+        const id = h.server.getActiveVenueTaskResources().listDocuments()[0].id;
+        const parts = ["見てくるね。<loc", "al_task " + id, " 第4ページを読んで>"];
+        for (const part of parts) callbacks.onTextDelta(part);
+        return { replyText: parts.join("") };
+      }
+      if (main.length === 2) return { replyText: "会話を続けよう。" };
+      if (main.length === 3) return { replyText: "確認できたよ。" };
+      return { replyText: "同じ資料を調べるね。<local_task 同じ資料の第5ページ>" };
+    },
+    run({ resources, request }) {
+      return runLocalTask({
+        resources, request,
+        create(options) {
+          const answer = Promise.withResolvers();
+          const worker = { options, answer, content: "", disposed: false };
+          workers.push(worker);
+          return {
+            ask(content) { worker.content = content; return answer.promise; },
+            async dispose() { worker.disposed = true; }
+          };
+        }
+      });
+    }
+  } });
+  const manual = () => post(h.url, "/api/fire");
+  try {
+    await openDiscord(h);
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_TEXT })).status, 200);
+    h.gateway.message({ attachments: new Map([["pdf", {
+      id: "pdf", name: "fixture.pdf", contentType: "application/pdf",
+      url: "https://cdn.discordapp.com/attachments/1/3/fixture.pdf"
+    }]]) });
+    const access = h.server.getActiveVenueTaskResources();
+    await waitUntil(() => access.listDocuments().length === 1);
+    const [document] = access.listDocuments();
+    assert.deepEqual(readFileSync(document.path), bytes);
+    h.orchestrator.record.hooks.getBuffer().append({ startMs: 0, endMs: 900, text: "今貼った資料を見て" });
+    assert.equal((await manual()).status, 202);
+    await waitUntil(() => workers.length === 1);
+    assert.equal(workers.length, 1);
+    assert.equal(workers[0].options.ephemeral, true);
+    assert.match(workers[0].content, new RegExp(document.id));
+    assert.match(String(main[0]), /合成のチャット本文/);
+    assert.deepEqual(spoken, ["見てくるね。"]);
+    assert.equal((await manual()).status, 202);
+    await waitUntil(() => spoken.includes("会話を続けよう。") && h.server.fireState() === "idle");
+    assert.equal(workers[0].disposed, false);
+    assert.deepEqual(spoken, ["見てくるね。", "会話を続けよう。"]);
+
+    assert.equal((await post(h.url, "/api/discord/chat", { channelId: CHAT_VOICE })).status, 200);
+    assert.equal((await post(h.url, "/api/discord/vc", { action: "leave" })).status, 200);
+    workers[0].answer.resolve({ replyText: "第4ページの合成識別子は C94F。" });
+    await waitUntil(() => workers[0].disposed);
+    assert.equal(main.length, 2);
+    assert.equal(existsSync(document.path), true);
+    assert.equal((await post(h.url, "/api/discord/vc", { action: "join", channelId: CHANNEL })).status, 200);
+    await waitUntil(() => spoken.includes("確認できたよ。") && h.server.fireState() === "idle");
+    assert.match(String(main[2]), /C94F/);
+    assert.match(String(main[2]), new RegExp(document.id));
+    assert.doesNotMatch(String(main[2]), /合成のチャット本文/);
+
+    assert.equal((await manual()).status, 202);
+    await waitUntil(() => workers.length === 2);
+    assert.equal(workers.length, 2);
+    assert.notEqual(workers[0].options.cwd, workers[1].options.cwd);
+    assert.match(workers[1].content, new RegExp(document.id));
+    assert.ok(JSON.parse(workers[1].content.split("（参照用）\n").at(-1)).includes(workers[0].options.cwd));
+    const closing = post(h.url, "/api/stream/stop");
+    await waitUntil(() => h.server.streamStatus().phase === "closing");
+    assert.equal(existsSync(document.path), true);
+    workers[1].answer.resolve({ replyText: "閉場中の返事。" });
+    assert.equal((await closing).status, 200);
+    assert.equal(main.length, 4);
+    assert.equal(existsSync(document.path), false);
+    assert.ok(!spoken.some((text) => text.includes("local_task") || text.includes(document.id)));
+  } finally {
+    for (const { answer } of workers) answer.resolve({ replyText: "試験終了" });
+    await h.cleanup();
+  }
+});
+
+test("the next Fire receives a local result after the automatic result ask fails", async () => {
+  const asks = [];
+  const spoken = [];
+  const h = await startServer({ localTasks: {
+    spoken,
+    async ask(content) {
+      asks.push(content);
+      if (asks.length === 1) throw new Error("synthetic model connection failure");
+      return { replyText: "担当の結果を受け取ったよ。" };
+    },
+    async run({ resources, request }) {
+      return runLocalTask({ resources, request, create: () => ({
+        ask: async () => ({ replyText: "合成結果 ZJ92" }), dispose: async () => {}
+      }) });
+    }
+  } });
+  try {
+    await openDiscord(h);
+    const { getBuffer, onLocalTaskRequest } = h.orchestrator.record.hooks;
+    getBuffer().append({ startMs: 0, endMs: 900, text: "答えは出た？" });
+    onLocalTaskRequest({ request: "合成依頼", fireId: 1 });
+    await waitUntil(() => asks.length === 1 && h.server.fireState() === "idle");
+    assert.deepEqual(spoken, []);
+    assert.equal((await post(h.url, "/api/fire")).status, 202);
+    await waitUntil(() => spoken.length === 1);
+    assert.equal(asks.length, 2);
+    assert.ok(asks.every((input) => String(input).includes("合成結果 ZJ92")));
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("Discord の join・leave・再参加は PC と排他で、別 guild・opening・古い場の defer を拒む", async () => {
+  const ready = Promise.withResolvers();
+  const h = await startServer({ companion: { openSession: ready.promise } });
+  try {
+    const opened = openDiscord(h);
+    await waitUntil(() => h.events.includes("openSession"));
+    void h.gateway.interact("leave", { commandId: "unrelated-in-opening" });
+    assert.equal(h.gateway.requests.length, 0);
+    assert.equal((await get(h.url, "/api/discord/chat")).status, 409);
+    assert.deepEqual(h.gateway.replies, []);
+    ready.resolve();
+    await opened;
+    assert.equal((await get(h.url, "/api/discord/chat")).json.commandStatus, "ready");
+    assert.deepEqual(h.fake.client().options.intents, [1, 128, 512, 32768]);
+    assert.deepEqual(h.gateway.requests.map(({ method }) => method), ["GET", "POST"]);
+    const registration = h.gateway.requests[1].body;
+    assert.equal(registration.name, "soul-vc");
+    assert.deepEqual(registration.options.map(({ name }) => name), ["join", "leave"]);
+    assert.equal("default_member_permissions" in registration, false);
+    void h.gateway.interact("leave", { guildId: OTHER_GUILD, commandGuildId: OTHER_GUILD, commandId: "unrelated-in-other-guild" });
+    assert.match(await h.gateway.interact("leave", { guildId: OTHER_GUILD, commandGuildId: OTHER_GUILD }), /このサーバー/u);
+    assert.equal(h.gateway.replies.length, 1, "未知 ID には別 guild でも返信しない");
+    assert.match(await h.gateway.interact("leave", { commandGuildId: OTHER_GUILD }), /このサーバー/u);
+    assert.equal(h.fake.record.joins.length, 1);
+    h.fake.voiceState({ guildId: GUILD, userId: USER_A, from: null, to: CHANNEL_2 });
+    assert.equal(await h.gateway.interact("join"), DISCORD_VC_REFUSALS.inVc);
+    assert.match(await h.gateway.interact("leave", { commandGuildId: null }), /退出しました/u);
+    h.fake.voiceState({ guildId: GUILD, userId: USER_A, from: CHANNEL_2, to: null });
+    assert.match(await h.gateway.interact("join"), /先に/u);
+    h.fake.voiceState({ guildId: GUILD, userId: USER_A, from: null, to: CHANNEL_2 });
+
+    const entered = Promise.withResolvers();
+    const unblock = Promise.withResolvers();
+    const voice = h.fake.libraries.voice;
+    const originalEntersState = voice.entersState;
+    voice.entersState = async (...args) => {
+      entered.resolve();
+      await unblock.promise;
+      return await originalEntersState(...args);
+    };
+    const join = h.gateway.interact("join");
+    await entered.promise;
+    try {
+      assert.equal((await post(h.url, "/api/discord/vc", { action: "leave" })).status, 409);
+      assert.equal(await h.gateway.interact("leave"), DISCORD_VC_REFUSALS.busy);
+    } finally {
+      unblock.resolve();
+    }
+    assert.match(await join, /参加しました/u);
+    assert.equal(h.fake.record.joins.at(-1).channelId, CHANNEL_2);
+    assert.equal(h.events.filter((event) => event === "openSession").length, 1);
+    assert.ok(h.gateway.replies.every(({ flags }) => flags === 64));
+
+    const deferred = Promise.withResolvers();
+    const resume = Promise.withResolvers();
+    const old = h.gateway.interact("leave", { async deferReply() { deferred.resolve(); await resume.promise; } });
+    await deferred.promise;
+    const oldClient = h.fake.client();
+    assert.equal((await post(h.url, "/api/stream/stop")).status, 200);
+    assert.equal(oldClient.listenerCount("interactionCreate"), 0);
+    await openDiscord(h);
+    resume.resolve();
+    assert.equal(await old, DISCORD_VC_REFUSALS.notOpen);
+    assert.equal(h.fake.connection().joinConfig.channelId, CHANNEL);
+    assert.equal(h.fake.connection().destroyCount, 0);
+    assert.deepEqual(h.gateway.requests.map(({ method }) => method), ["GET", "POST", "GET"]);
+  } finally {
+    ready.resolve();
+    await h.cleanup();
+  }
+});
+
+test("既存の /soul-vc は型・説明文・引数構造が一致するときだけ再利用する", async () => {
+  const join = { name: "join", type: 1, description: "今いるボイスチャンネルに呼ぶ" };
+  const leave = { name: "leave", type: 1, description: "ボイスチャンネルから退出させる" };
+  const owned = { name: "soul-vc", type: 1, id: CHAT_COMMAND, description: "チャッピーのVC参加と退出", options: [join, leave] };
+  for (const mismatch of [
+    { type: 2 },
+    { description: "別用途のコマンド" },
+    { options: [join, { ...leave, description: "別用途のサブコマンド" }] },
+    { options: [join, { ...leave, options: [{ name: "fixture", type: 3, description: "追加の引数" }] }] }
+  ]) {
+    const h = await startServer({ companion: { commands: [
+      { name: "fixture", type: 1, id: "unrelated" },
+      { ...owned, ...mismatch }
+    ] } });
+    try {
+      await openDiscord(h);
+      assert.equal((await get(h.url, "/api/discord/chat")).json.commandStatus, "name-conflict");
+      assert.deepEqual(h.gateway.requests.map(({ method }) => method), ["GET"]);
+      void h.gateway.interact("leave");
+      await tick();
+      assert.equal(h.fake.connection().destroyCount, 0);
+      assert.deepEqual(h.gateway.replies, []);
+    } finally {
+      await h.cleanup();
+    }
+  }
+});
 
 /** その人に話させて耳を起こし、1 行聞かせる。 @param {any} h @param {string} text */
 async function speakLine(h, text) {

@@ -4,6 +4,10 @@
 
 ## 現在の到達と残るゲート
 
+- **小タスクセッション共通基盤 (2026-11-16)**: [3 Wave計画](orchestration/local-task-sessions-wave-plan.md)は実装・横断独立レビュー合格。記憶参照とローカル小タスクが共通基盤から毎依頼新規sessionを起動。PDF後半読取をSol/Terraで実証、writerの90秒待機上限を撤去し記憶保存後に場領域を解放。Soul全2,573件・独立492件成功。実Discord本人確認待ち。[完了](waves/local-task-sessions/wave3-completion.md)・[本人手順](waves/local-task-sessions/human-gate.md)。
+
+- **Discordチャット資料・モバイルVC操作 (2026-11-16)**: [2 Wave計画](orchestration/discord-companion-inputs-wave-plan.md)の読む先設定、テキスト／画像共有、Discordの `/soul-vc join`・`leave` を維持。初版のPDF先頭3頁方式は上記小タスク経路へ置換済み。[初版完了](waves/discord-companion-inputs/wave2-completion.md)・[Discord初期設定](waves/discord-companion-inputs/human-gate.md)。Player変更なし、実Discord本人確認待ち。
+
 - **苦笑の新5ニュアンス (2026-11-16)**。同調・報われなさ・茶化し・自分への苦笑・柔らかな限界説明を正面のゲーム画面／視聴者向けに追加。既存「やれやれ」は保持。外部JSONを現用配置し、既存exeの隔離起動で10組の再生要求と記録参照を確認。相方版未制作、実会話未確認。 [完了記録](waves/wry-nuances-registration/completion.md)
 
 - **笑み5ニュアンス (2026-11-16)**。柔らかい微笑み・弾む喜び・照れ・得意・安堵後の笑みを相方向けに登録。照れは顔をそらして戻る改訂v2を採用。既存exeの隔離起動確認と独立レビューを経て外部JSONを現用スロットへ配置、再ビルド不要。次回起動から有効、実会話未確認。 [完了記録](waves/smile-nuances-registration/completion.md)

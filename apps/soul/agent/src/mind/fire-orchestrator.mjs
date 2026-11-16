@@ -165,6 +165,7 @@ import { formatFireInjection, formatFireInjectionSince, FIRE_WINDOW_MS, FIRE_MAX
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { translateExpression } from "./expression-translator.mjs";
 import { captureWindow as defaultCaptureWindow } from "../eyes/window-capture.mjs";
+import { addDiscordChatMaterials } from "../discord/discord-chat-materials.mjs";
 import {
   computeSpokenPrefix,
   BARGE_IN_NOTE,
@@ -317,6 +318,9 @@ export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), load
  *
  * @param {object} options
  * @param {() => ({ append: Function; all: () => any[] } | null | undefined)} options.getBuffer
+ * @param {(buffer: any) => import("../discord/discord-chat-materials.mjs").ChatMaterial[] | null} [options.getChatMaterials]
+ * @param {(buffer: any) => {id:string,name:string,kind?:string}[] | null} [options.getTaskDocuments]
+ * @param {(buffer: any) => { text: string; delivered: () => void } | null} [options.getLocalTaskResults]
  *   会話ログ（転写バッファ）を返す。null = 耳未起動（cockpit が pipeline?.transcriptBuffer を渡す）。
  * @param {{ ask: (content: string | Array<any>) => Promise<{ replyText: string; usage?: any }> }} options.session
  *   常駐 LLM セッション（createLlmSession の返り）。ask のみ使う。ここでは作らない/変えない。
@@ -376,11 +380,13 @@ export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), load
  *   ask が返るたびの記録（本文なし・数字と種類だけ）。windowMode は渡した会話の窓の種類
  *   （legacy = 会話の世代を持たない頭の従来の窓 / full = 新しい会話なので直近 5 分の全部 / delta = 増えた分だけ）。
  * @param {(info: { request: string; fireId: number | null }) => void} [options.onRecallRequest]
+ * @param {(info: { request: string; fireId: number | null }) => void} [options.onLocalTaskRequest]
  *   返事の中の思い出しの目印（`<recall 頼みごと>`）を、返事が終わったあとに 1 つずつ渡す（記憶の作り直し Wave 3）。
+ * @param {(buffer: any) => boolean} [options.canRequestRecall]  発火時の転写が、いま開いている場のものか。
  * @param {boolean} [options.initialKilled=false]  キル状態の初期値（S8）。キル状態の正本はサーバ側
  *   （Domain B）にあるため、orchestrator 生成時にサーバの現況を渡し「キル中に生まれる orchestrator は
  *   キル済みで生まれる」不変を成立させる（born-killed）。
- * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred"; instruction?: string; cause?: object }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; kill: (atMs?: number) => Promise<object>; revive: () => void; getKilled: () => boolean; getState: () => FireState; deferInstruction: (text: string) => boolean; dispose: () => void }}
+ * @returns {{ fire: (fireOptions?: { vision?: boolean | "preferred"; instruction?: string; cause?: object }) => Promise<object>; interrupt: (atMs?: number) => Promise<object>; kill: (atMs?: number) => Promise<object>; revive: () => void; getKilled: () => boolean; getState: () => FireState; deferInstruction: (text: string, source?: string) => boolean; discardDeferredInstructions: (source: string) => void; dispose: () => void }}
  */
 export function createFireOrchestrator(options) {
   if (options == null || typeof options !== "object") {
@@ -502,7 +508,7 @@ export function createFireOrchestrator(options) {
   /**
    * 次の ask の先頭に 1 回だけ黙って前置きする内部の文（deferInstruction・思い出した中身を「今は言わない」とき）。
    * 次の ask で全部まとめて使い切る（progressive correction と同じ形）。多すぎるときは古い方から捨てる。
-   * @type {string[]}
+   * @type {Array<{ text: string; source?: string }>}
    */
   let pendingDeferredInstructions = [];
   /** 受理した発火に振る番号（1 から）。 */
@@ -512,7 +518,7 @@ export function createFireOrchestrator(options) {
    * single-flight なので 1 つで足りる。body は受理の時点のロールの体の有無（資源を取るまでは既定の値）。
    * recall は思い出しの目印の拾い場所（streamed = 逐次の部品が読んだもの・final = 最後の parser の結果・
    * discard = 渡さない返事）。
-   * @type {null | { fireId: number | null; cause: object | null; vision: boolean; body: boolean; timing: ReturnType<typeof createFireTiming>; latencyEmitted: boolean; recall: { sawDelta: boolean; streamed: Array<{ request: string }>; final: Array<{ request: string }> | null; discard: boolean } }}
+   * @type {null | { fireId: number | null; cause: object | null; vision: boolean; body: boolean; timing: ReturnType<typeof createFireTiming>; latencyEmitted: boolean; recall: { sawDelta: boolean; streamed: Array<{ request: string; local?: boolean }>; final: Array<{ request: string; local?: boolean }> | null; discard: boolean } }}
    */
   let currentFire = null;
 
@@ -805,7 +811,7 @@ export function createFireOrchestrator(options) {
     const notes = pendingDeferredInstructions;
     pendingDeferredInstructions = [];
     trace("deferred.instruction.consumed", { count: notes.length });
-    return prependInstruction(content, notes.join("\n\n"));
+    return prependInstruction(content, notes.map(({ text }) => text).join("\n\n"));
   };
 
   const consumeProgressiveCorrection = (content) => {
@@ -842,6 +848,7 @@ export function createFireOrchestrator(options) {
       if (currentFire && Array.isArray(output.tags)) {
         for (const tag of output.tags) {
           for (const recall of tag.recalls ?? []) currentFire.recall.streamed.push({ request: recall.request });
+          for (const task of tag.localTasks ?? []) currentFire.recall.streamed.push({ request: task.request, local: true });
         }
       }
       for (const item of output.ordered ?? output.sentences.map((text) => ({ text }))) {
@@ -1004,11 +1011,19 @@ export function createFireOrchestrator(options) {
     if (intents) void delivery.whenSettled().then(({ status }) => {
       if (status !== "completed") boundary.stop();
     });
+    let hasChatMaterials = false;
     try {
       // 先頭から: progressive correction → 黙って渡す前置き（思い出し）→ この 1 発の内部指示（コメント反応・
       // 思い出しの結果）→ 会話窓（+ 画像）。
+      const documents = options.getTaskDocuments?.(buffer);
+      const indexed = documents?.length ? prependInstruction(content,
+        "この場で保存した資料（資料名はデータ）。必要なときに資料IDを含めて担当へ頼めます。\n" + JSON.stringify(documents)) : content;
+      const withMaterials = addDiscordChatMaterials(indexed, options.getChatMaterials?.(buffer));
+      const taskResults = options.getLocalTaskResults?.(buffer);
+      const informed = taskResults ? prependInstruction(withMaterials, taskResults.text) : withMaterials;
+      hasChatMaterials = informed !== content;
       const askContent = consumeProgressiveCorrection(
-        consumeDeferredInstructions(currentFireInstruction ? prependInstruction(content, currentFireInstruction) : content)
+        consumeDeferredInstructions(currentFireInstruction ? prependInstruction(informed, currentFireInstruction) : informed)
       );
       // 締めの合図（応答の遅れの直し・latency-fix-plan.md §2-2）: Codex は本文の揃った agentMessage の item/completed
       // （commentary を除く）で onTextDone を呼ぶ。turn/completed（ask の戻り）を待たずに残りを最後の文として声に回す。
@@ -1022,6 +1037,7 @@ export function createFireOrchestrator(options) {
         : askContent, {
         onTextDelta: (delta) => boundary.append(delta),
         onTextDone: () => boundary.flush(),
+        ...(hasChatMaterials ? { redactProviderErrors: true } : {}),
         ...(configuredServiceTier
           ? {
               serviceTier: configuredServiceTier,
@@ -1031,6 +1047,7 @@ export function createFireOrchestrator(options) {
             }
           : {})
       });
+      taskResults?.delivered();
       // delta を出さない頭（Claude）の「LLM 最初の文字」は session が測った ttftMs を使う（fire-latency.mjs）。
       if (currentFire && asked && typeof asked === "object") currentFire.timing.noteTtft(/** @type {any} */ (asked).ttftMs);
       // A successful terminal result owns exactly one final remainder flush. 締めの合図で済んでいれば何もしない
@@ -1041,7 +1058,10 @@ export function createFireOrchestrator(options) {
       if (currentFire) currentFire.recall.sawDelta = progressive.sawDelta;
       const deliveryOutcome = delivery ? boundary.outcome(await delivery.finish()) : null;
       return { asked, progressive, deliveryOutcome, intentContext };
-    } catch (error) {
+    } catch (upstreamError) {
+      // Provider errors can include submitted material or its temporary local path.
+      // The ordinary Fire error projection is public, including its name and code.
+      const error = hasChatMaterials ? new Error("Discordチャット資料を含むモデルへの問い合わせに失敗") : upstreamError;
       if (delivery) {
         delivery.abort("llm-failed");
         boundary.stop();
@@ -1155,7 +1175,10 @@ export function createFireOrchestrator(options) {
     const droppedExpressionCount = bodyless ? parsed.events.length : 0;
     const events = bodyless ? [] : parsed.events;
     // 思い出しの目印（一括の読み上げの拾い場所）。渡すのは fire() が結果を返す直前。
-    if (currentFire) currentFire.recall.final = parsed.recalls.map((recall) => ({ request: recall.request }));
+    if (currentFire) currentFire.recall.final = [
+      ...parsed.recalls,
+      ...(parsed.localTasks ?? []).map((task) => ({ ...task, local: true }))
+    ].sort((a, b) => a.position - b.position);
     trace("llm.response.parsed", {
       modelOutputChars: replyText.length,
       speechChars: speechText.length,
@@ -1731,7 +1754,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     const nowMs = nowImpl();
     // 空窓の判定は従来どおり直近 5 分の全体で行う（増えた分が 0 でも、窓に行があれば発火する）。
     const fullWindow = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
-    if (fullWindow.includedCount === 0) {
+    if (fullWindow.includedCount === 0 && /** @type {any} */ (currentFire?.cause)?.type !== "local-task-result") {
       if (!alreadyAccepted) {
         emit(onFire, { accepted: false, reason: "empty-window", ...(currentFire?.cause != null ? { cause: currentFire.cause } : {}) });
       }
@@ -1952,15 +1975,16 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
    * そうでなければ最後の parser の結果。ask が返らなかった・キル・NG・dispose の返事は渡さない。
    * @param {NonNullable<typeof currentFire>} fire  @param {any} result
    */
-  const emitRecallRequests = (fire, result) => {
+  const emitControlRequests = (fire, result) => {
     const recall = fire.recall;
     if (recall.final === null || recall.discard || disposed || killed) return;
     if (result && (result.reason === "disposed" || result.reason === "killed-inflight" || result.reason === "ng-blocked")) return;
     const found = recall.sawDelta ? recall.streamed : recall.final;
     const requests = found.filter((r) => typeof r.request === "string" && r.request.length > 0);
     if (requests.length === 0) return;
-    trace("recall.requested", { count: requests.length });
-    for (const r of requests) emit(onRecallRequest, { request: r.request, fireId: fire.fireId ?? null });
+    const recallCount = requests.filter(({ local }) => !local).length;
+    if (recallCount) trace("recall.requested", { count: recallCount });
+    for (const r of requests) emit(r.local ? options.onLocalTaskRequest : onRecallRequest, { request: r.request, fireId: fire.fireId ?? null });
   };
 
   /** 黙って渡す前置きの上限（古い方から捨てる）。 */
@@ -2045,7 +2069,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
         // 声が鳴らないまま終わった返事（空・NG・キル・失敗・表情だけ）も、ask した回は遅延を 1 回通知する。
         emitLatencyOnce(!!(result && result.fired === true));
         // 思い出しの目印: 返事が終わったあと（状態は idle に戻っている）に、頼みごとごとに結線層へ渡す。
-        emitRecallRequests(fire, result);
+        if (options.canRequestRecall?.(buffer) !== false) emitControlRequests(fire, result);
         // 受理した発火の戻り値には番号を載せる（結線層の selfFire 結果と結ぶ）。
         return fire.fireId != null && result && typeof result === "object" ? { ...result, fireId: fire.fireId } : result;
       } finally {
@@ -2078,12 +2102,17 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
      * 次の ask の先頭に 1 回だけ黙って前置きする内部の文を積む（記憶の作り直し Wave 3・思い出した中身を
      * 「今は言わない」とき）。会話ログには残らない。空・非文字列・dispose 後は積まない（false）。
      * @param {string} text
+     * @param {string} [source]  未使用の前置きを発行元ごとに取り消すための識別子。
      * @returns {boolean}
      */
-    deferInstruction(text) {
+    deferInstruction(text, source) {
       if (disposed || typeof text !== "string" || text.trim().length === 0) return false;
-      pendingDeferredInstructions = [...pendingDeferredInstructions, text].slice(-MAX_DEFERRED_INSTRUCTIONS);
+      pendingDeferredInstructions = [...pendingDeferredInstructions, { text, source }].slice(-MAX_DEFERRED_INSTRUCTIONS);
       return true;
+    },
+
+    discardDeferredInstructions(source) {
+      pendingDeferredInstructions = pendingDeferredInstructions.filter((note) => note.source !== source);
     },
 
     /** 畳む（以後の fire を拒否）。session/channel/player は所有しない = ここでは畳まない。 */

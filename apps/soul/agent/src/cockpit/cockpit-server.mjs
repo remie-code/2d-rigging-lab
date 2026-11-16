@@ -108,6 +108,7 @@ import {
   COMMENT_HOLD_MAX_AGE_MS,
   COMMENT_HOLD_MAX_COUNT
 } from "../mind/comment-react.mjs";
+import { createVenueTaskResources } from "./venue-task-resources.mjs";
 import { createRecallDesk } from "../mind/recall-desk.mjs";
 import { RECALL_JUDGE_TIMEOUT_MS, resolveRecallAvoidQuestions } from "../mind/recall.mjs";
 import { resolveVenueWording } from "../mind/venue-wording.mjs";
@@ -272,6 +273,15 @@ export function normalizeVenueExperience(kind, mouth) {
       const value = typeof mouth.voiceChannelName === "function" ? mouth.voiceChannelName() : null;
       return typeof value === "string" && value.length > 0 ? value : null;
     },
+    getChatMaterials: kind === "discord" && typeof mouth.getChatMaterials === "function"
+      ? () => mouth.getChatMaterials()
+      : null,
+    chat: kind === "discord" && typeof mouth.chat?.list === "function" && typeof mouth.chat?.select === "function"
+      ? Object.freeze({
+        list: () => mouth.chat.list(),
+        select: (/** @type {unknown} */ channelId) => mouth.chat.select(channelId)
+      })
+      : null,
     // Discord モード Domain I: 入る / 抜ける / 移る と同じサーバーの VC の一覧（POST / GET /api/discord/vc）。無ければ null（409）。
     vc:
       mouth.vc &&
@@ -652,6 +662,9 @@ const MAX_PORT_REROLLS = 50;
  *   audioDevice:null。
  * @param {(hooks: {
  *   getBuffer: () => any;
+ *   getChatMaterials: (buffer: any) => import("../discord/discord-chat-materials.mjs").ChatMaterial[] | null;
+ *   getTaskDocuments: (buffer: any) => Array<{id:string,name:string,kind?:string}> | null;
+ *   getLocalTaskResults: (buffer: any) => { text: string; delivered: () => void } | null;
  *   onState: (state: string) => void;
  *   onFire: (info: object) => void;
  *   onDiagnostic: (diag: object) => void;
@@ -662,10 +675,13 @@ const MAX_PORT_REROLLS = 50;
  *   onAsk: (info: object) => void;
  *   onLatency: (info: object) => void;
  *   onRecallRequest: (info: { request: string; fireId: number | null }) => void;
+ *   onLocalTaskRequest: (info: { request: string; fireId: number | null }) => void;
+ *   canRequestRecall: (buffer: any) => boolean;
  *   initialKilled: boolean;
  * }) => { fire: (fireOptions?: object) => Promise<object>; getState: () => string; dispose: () => void;
- *   kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean;
- *   deferInstruction?: (text: string) => boolean }} [options.fireOrchestratorFactory]
+ *   interrupt?: (atMs?: number) => Promise<object>; kill?: (atMs?: number) => Promise<object>; revive?: () => void; getKilled?: () => boolean;
+ *   deferInstruction?: (text: string, source?: string) => boolean;
+ *   discardDeferredInstructions?: (source: string) => void }} [options.fireOrchestratorFactory]
  *   発火オーケストレータのファクトリ（S3 Domain A の追加的結線・未注入時は POST /api/fire・/api/vision-fire
  *   が 503）。cockpit が握る getBuffer（= 場の会話の正本・場が閉じていれば null）と broadcast フックを渡し、
  *   返った orchestrator の fire()/fire({vision:true}) を POST /api/fire・POST /api/vision-fire で await
@@ -798,7 +814,7 @@ const MAX_PORT_REROLLS = 50;
  *   connectBody?: () => ({ ok: boolean; reason?: string } | void | Promise<{ ok: boolean; reason?: string } | void>);
  *   closeSession?: () => (void | Promise<void>);
  *   closeBody?: () => (void | Promise<void>);
- *   saveFinal?: (transcript: Array<any>) => (void | Promise<void>);
+ *   saveFinal?: (transcript: Array<any>, materials?: import("./venue-task-resources.mjs").VenueWriterMaterials, onUnconfirmedExit?: () => void) => (void | Promise<void>);
  * }} [options.streamHooks]
  *   場（配信を始める / 終える）の cockpit.mjs 側の口（配信の組み直し Domain D・stream-restructure.md §3）。
  *   **cockpit-server は記録・頭のセッション・器・記憶の中身を知らない**（実体は cockpit.mjs の createStreamVenueHooks）。
@@ -807,7 +823,7 @@ const MAX_PORT_REROLLS = 50;
  *   - connectBody: 始める 6（ロールに体があれば器につなぐ。体なしは何もしない）。`ok:false` なら場を開かない
  *     （reason は「runtime-player が起動していないか、channel が開いていない」の知らせ）。
  *   - closeSession / closeBody: 畳む（頭のセッション・器。器は体の有無に関わらず畳む）。始めるの途中の失敗の巻き戻しでも呼ぶ。
- *   - saveFinal: 終える 3（写した転写で記憶の最後の保存をして待つ。待つ上限と打ち切りは cockpit.mjs が持つ）。記憶の整理
+ *   - saveFinal: 終える 3（写した転写と資料で記憶の最後の保存をして待つ）。記憶の整理
  *     Domain C から、整理の時期なら続けて③整理役を走らせ、終わるまで待つ（上限なし・Ctrl+C で打ち切る）。その間
  *     cockpit.mjs が setMemoryOrganising(true) で知らせる（snapshot の stream.organising）。
  *   どれも任意（無ければ飛ばす）。throw は握る（始める口の throw は失敗として扱う）。
@@ -818,7 +834,7 @@ const MAX_PORT_REROLLS = 50;
  *   identity?: () => any;
  *   hooks?: object;
  *   voice?: { prepare?: (engine: "aivis" | "elevenlabs") => any; startResources?: () => void };
- *   recall?: { run: (job: { request: string; entries: ReadonlyArray<any>; nowMs: number }) => Promise<{ found: boolean; summary: string }> } | null;
+ *   recall?: { run: (job: import("../mind/recall-desk.mjs").RecallJob) => Promise<{ found: boolean; summary: string }>; prepare?: (job: import("../mind/recall-desk.mjs").RecallJob) => () => Promise<{ found: boolean; summary: string }> } | null;
  * }> | (() => ReadonlyArray<any>)} [options.roles]
  *   場に入るロールの一覧（Discord モード Domain B・discord-mode.md §5）。要素は「ロールごとの束」: identity（名前・whisper の
  *   手がかり・呼びかけの照合・判定に渡す名前・soul の行の id と名前）、hooks（場の口 6 つ = streamHooks と同じ形）、voice
@@ -989,7 +1005,8 @@ const MAX_PORT_REROLLS = 50;
  * @param {(record: object) => void} [options.onReplyLatency]  1 返事の遅延レコード（数字ときっかけの種類だけ・本文なし）。
  *   cockpit.mjs が標準出力に 1 行書く。
  * @param {number} [options.warningEventTtlMs=WARNING_EVENT_TTL_MS]  一回きりの警告が消えるまで（テスト注入用）。
- * @param {(job: { request: string; entries: ReadonlyArray<any>; nowMs: number }) => Promise<{ found: boolean; summary: string }>} [options.recallRunner]
+ * @param {(job: import("../mind/recall-desk.mjs").RecallJob) => Promise<{ found: boolean; summary: string }>} [options.recallRunner]
+ * @param {(job: {resources: import("./venue-task-resources.mjs").VenueTaskAccess; request: string}) => Promise<string|undefined>} [options.localTaskRunner]
  *   ④思い出し役を 1 回走らせる口（記憶の作り直し Wave 3・cockpit.mjs が recall.mjs の runRecall を Codex の頭で渡す）。
  *   未注入なら思い出しの係を作らない（①の目印は捨てる）。
  * @param {(request: { input: string; questions: ReadonlyArray<any> }) => Promise<{ answers: Record<string, any>; latencyMs?: number }>} [options.recallJudge]
@@ -1327,13 +1344,13 @@ export function createCockpitServer(options = {}) {
   }
   /**
    * ④思い出し役を先頭のロールの口で走らせる（そのロールの記憶の置き場を読む）。
-   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number }} job
+   * @param {import("../mind/recall-desk.mjs").RecallJob} job
    */
-  function runLeadRecall(job) {
+  function prepareLeadRecall(job) {
     const role = leadRole();
     const recall = role && role.recall && typeof role.recall.run === "function" ? role.recall : null;
-    if (!recall) return Promise.reject(new Error("recall is not available for this role"));
-    return recall.run(job);
+    if (!recall) return () => Promise.reject(new Error("recall is not available for this role"));
+    return recall.prepare?.(job) ?? (() => recall.run(job));
   }
 
   // 操縦席の作り直し 1 回目（データ側）: 遅延のしきい値・残量の正本・遅延ログの口。
@@ -1455,6 +1472,16 @@ export function createCockpitServer(options = {}) {
   let recallDesk = null;
   /** 思い出しの係を作る口（配信を始めるたびに作り直す）。 @type {(() => ReturnType<typeof createRecallDesk>) | null} */
   let makeRecallDesk = null;
+  /** @type {ReturnType<typeof createVenueTaskResources> | null} */
+  let venueTaskResources = null;
+  /** @type {object[]} */
+  const localTaskResults = [];
+  let localResultFirePending = false;
+  let localResultDeliveryCount = 0;
+
+  function getActiveVenueTaskResources() {
+    return !closed && streamPhase === "open" ? venueTaskResources?.access ?? null : null;
+  }
   // 弾く判定の待ち行列。判定は並行に走らせるが、転写バッファへは届いた順に積む（先のコメントの判定完了を
   // 待つ・合意 §1-5）。decision が付いた先頭から順に取り出す。
   /** @type {Array<{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }>} */
@@ -1929,7 +1956,9 @@ export function createCockpitServer(options = {}) {
 
   /** 体験の入口に渡す場の口（入口を開くときに 1 回作る）。 */
   function venueEntranceContext() {
+    const isVenueOpen = venueOpenGate();
     return Object.freeze({
+      isVenueOpen,
       // 会話の正本（積む口）。場が作ったもの（開く段の 4）。
       transcriptBuffer: venueTranscript,
       /** @param {{ engine?: string }} [info] */
@@ -2035,6 +2064,7 @@ export function createCockpitServer(options = {}) {
   /** 外から渡された体験の口の状態が変わった（snapshot を放送し直す）。 */
   function venueExperienceChanged() {
     if (!closed) broadcastState();
+    deliverLocalTaskResult();
   }
 
   /**
@@ -2778,14 +2808,29 @@ export function createCockpitServer(options = {}) {
   }
 
   /** 思い出しの係を畳む（走っている④の結果が後から返っても無視する・届ける列も捨てる）。 */
-  function parkRecallDesk() {
+  function parkRecallDesk(drainAccepted = false) {
     if (!recallDesk) return;
     try {
-      recallDesk.dispose();
+      if (drainAccepted) recallDesk.stopAccepting();
+      else recallDesk.dispose();
+      fireOrchestrator?.discardDeferredInstructions?.("recall");
     } catch {
       // best-effort
     }
     recallDesk = null;
+  }
+
+  /** 受付済みの仕事だけを待つ。会話への配送は parkRecallDesk で止めてある。 */
+  async function drainVenueTasks(desk = recallDesk) {
+    await Promise.all([desk?.waitForIdle(), venueTaskResources?.waitForIdle()]);
+    if (desk?.getCleanupFailures().length) venueTaskResources?.retainOnUnconfirmedExit();
+  }
+
+  async function releaseVenueTasks() {
+    const resources = venueTaskResources;
+    venueTaskResources = null;
+    const result = await resources?.release();
+    if (result?.retained) throw new Error(`場の作業領域を保持しました（プロセスの終了を確認できません）: ${result.retained}`);
   }
 
   /** 思い出しの係を作り直す（積み残しを捨てる・reset が無いので作り直す）。 */
@@ -2819,7 +2864,6 @@ export function createCockpitServer(options = {}) {
     if (what.chat) await step(() => experience.foldAfterOpen());
     await step(() => parkJudges());
     await step(() => parkFireScheduler());
-    await step(() => parkRecallDesk());
     // 鳴っている・考えている返事を止める（キルと同じ切り方）。KILL の表示（killed）は替えない＝次の始めるで revive する。
     await step(async () => {
       if (fireOrchestrator && typeof (/** @type {any} */ (fireOrchestrator).kill) === "function" && fireOrchestrator.getState() !== "idle") {
@@ -2971,6 +3015,7 @@ export function createCockpitServer(options = {}) {
 
   /** 場を閉じた状態に戻す（体験とロールの一覧も手放す）。 */
   function markVenueClosed() {
+    localTaskResults.length = 0;
     streamPhase = "closed";
     streamOpenedAtMs = null;
     memoryOrganising = false;
@@ -3014,10 +3059,12 @@ export function createCockpitServer(options = {}) {
     venueExperience = experience;
     venueRoles = Object.freeze(configuredRoles());
     streamGeneration += 1;
+    venueTaskResources = createVenueTaskResources();
     streamError = null;
     broadcastState();
     /** @param {string} reason @param {{ ears?: boolean; session?: boolean }} started */
     const fail = async (reason, started) => {
+      parkRecallDesk();
       try {
         await foldStream({ chat: false, ears: started.ears === true, session: started.session === true });
       } catch {
@@ -3025,6 +3072,11 @@ export function createCockpitServer(options = {}) {
       }
       // 会話の正本も手放す（入口を開く前・入口が開かなかったときも。場が閉じている間は正本が無い＝従来どおり）。
       releaseVenueTranscript();
+      try {
+        await releaseVenueTasks();
+      } catch (error) {
+        reason += `（${errMessage(error)}）`;
+      }
       markVenueClosed();
       streamError = reason;
       broadcastState();
@@ -3119,7 +3171,15 @@ export function createCockpitServer(options = {}) {
     if (streamPhase === "closed") return { ok: true, state: snapshot() };
     if (streamPhase !== "open") return { ok: false, status: 409, error: streamBusyMessage(), state: snapshot() };
     streamPhase = "closing";
+    const desk = recallDesk;
+    venueTaskResources?.stopAccepting();
+    parkRecallDesk(true);
     broadcastState();
+    const saveFinal = async (/** @type {ReadonlyArray<any>} */ transcript) => {
+      await drainVenueTasks(desk);
+      const resources = venueTaskResources;
+      await runRoleHooksAll("saveFinal", transcript, resources?.writerMaterials(), resources?.retainOnUnconfirmedExit);
+    };
     const run = (async () => {
       /** @type {{ ok: true } | { ok: false; status: number; error: string }} */
       let outcome = { ok: true };
@@ -3135,7 +3195,7 @@ export function createCockpitServer(options = {}) {
         await foldStream({ chat: true, ears: true, session: true });
         // 3. 記憶の最後の保存をして待つ（この間 stream.phase は "closing" = 画面の「記録中」）。
         finalSaveRequested = true;
-        await runRoleHooksAll("saveFinal", transcript);
+        await saveFinal(transcript);
       } catch (error) {
         // 想定外の例外でも closing のまま固めない: 畳み残しをもう一度畳んで（best-effort）から閉じる。
         // 配信の組み直し 仕上げ・Undine の追認: 記憶を落とさない側に倒す。最後の保存がまだ頼まれていなければ 1 回だけ
@@ -3155,12 +3215,18 @@ export function createCockpitServer(options = {}) {
         if (!finalSaveRequested) {
           finalSaveRequested = true;
           try {
-            await runRoleHooksAll("saveFinal", transcript);
+            await saveFinal(transcript);
           } catch {
             // best-effort（保存の口を引くこと自体が投げても閉じる）。
           }
         }
         outcome = { ok: false, status: 500, error: unexpectedVenueErrorMessage(venueExperience ?? streamExperience, "closing", error) };
+      }
+      try {
+        await releaseVenueTasks();
+      } catch (error) {
+        outcome = { ok: false, status: 500, error: errMessage(error) };
+        streamError = outcome.error;
       }
       // 4. 場を閉じる（ロールを選び直せる・固めたロールの一覧と体験も手放す）。途中で投げても閉じる。
       markVenueClosed();
@@ -3377,9 +3443,10 @@ export function createCockpitServer(options = {}) {
       sendJson(res, 503, { error: DISCORD_EXPERIENCE_UNAVAILABLE_MESSAGE });
       return;
     }
+    const isVenueOpen = venueOpenGate();
     const body = method === "POST" ? await readJsonBody(req) : {};
     const ops = venueExperience && venueExperience.kind === "discord" ? venueExperience.vc : null;
-    if (streamPhase !== "open" || !ops) {
+    if (!isVenueOpen() || !ops) {
       sendJson(res, 409, { error: DISCORD_VC_NOT_OPEN_MESSAGE, state: snapshot() });
       return;
     }
@@ -3390,6 +3457,10 @@ export function createCockpitServer(options = {}) {
         listed = ops.list ? await ops.list() : null;
       } catch {
         listed = null;
+      }
+      if (!isVenueOpen()) {
+        sendJson(res, 409, { error: DISCORD_VC_NOT_OPEN_MESSAGE, state: snapshot() });
+        return;
       }
       if (!listed || listed.ok !== true || !Array.isArray(listed.channels)) {
         sendJson(res, 502, { error: (listed && typeof listed.reason === "string" && listed.reason) || "ボイスチャンネルの一覧を読めない" });
@@ -3418,6 +3489,35 @@ export function createCockpitServer(options = {}) {
     const code = result && typeof result.code === "string" ? result.code : "join";
     const status = code === "shape" ? 400 : code === "channel" ? 404 : code === "join" || code === "outlet" ? 502 : 409;
     sendJson(res, status, { error: (result && typeof result.reason === "string" && result.reason) || "VC の操作ができない", state: snapshot() });
+  }
+
+  function venueOpenGate() {
+    const generation = streamGeneration;
+    const experience = venueExperience;
+    return () => !closed && streamPhase === "open" && experience === venueExperience && generation === streamGeneration;
+  }
+
+  /** @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {string} method */
+  async function handleDiscordChat(req, res, method) {
+    const isVenueOpen = venueOpenGate();
+    const body = method === "POST" ? await readJsonBody(req) : {};
+    const chat = venueExperience?.chat;
+    if (!isVenueOpen() || !chat) {
+      sendJson(res, 409, { error: DISCORD_VC_NOT_OPEN_MESSAGE });
+      return;
+    }
+    if (method === "GET") {
+      const state = chat.list();
+      sendJson(res, state ? 200 : 409, state ?? { error: DISCORD_VC_NOT_OPEN_MESSAGE });
+      return;
+    }
+    const result = chat.select(body?.channelId);
+    if (result?.ok) {
+      sendJson(res, 200, result.state);
+      return;
+    }
+    const status = result?.code === "shape" ? 400 : result?.code === "unreadable" ? 403 : result?.code === "save" ? 500 : 409;
+    sendJson(res, status, { error: result?.reason ?? DISCORD_VC_NOT_OPEN_MESSAGE });
   }
 
   /**
@@ -3614,6 +3714,10 @@ export function createCockpitServer(options = {}) {
     // Discord モード Domain I: 入る / 抜ける / 移る（POST）と同じサーバーの VC の一覧（GET）。
     if (pathname === "/api/discord/vc" && (method === "GET" || method === "POST")) {
       await handleDiscordVc(req, res, method);
+      return;
+    }
+    if (pathname === "/api/discord/chat" && (method === "GET" || method === "POST")) {
+      await handleDiscordChat(req, res, method);
       return;
     }
     // Discord モード Domain G: Discord の場の見る窓（目）の読み書き（配信の見る窓 /api/vision-target とは別）。
@@ -3882,6 +3986,7 @@ export function createCockpitServer(options = {}) {
         // best-effort（失敗しても操作は止めない・killed フラグはサーバ側で既に反映済み）。
       }
       broadcastState();
+      if (!killed) deliverLocalTaskResult();
       sendJson(res, 200, snapshot());
       return;
     }
@@ -4307,11 +4412,32 @@ export function createCockpitServer(options = {}) {
     }
   }
 
-  /** @type {{ fire: () => Promise<object>; interrupt?: (atMs?: number) => Promise<object>; getState: () => string; dispose: () => void } | null} */
+  /** @type {ReturnType<NonNullable<typeof options.fireOrchestratorFactory>> | null} */
   let fireOrchestrator = null;
   if (typeof options.fireOrchestratorFactory === "function") {
     fireOrchestrator = options.fireOrchestratorFactory({
       getBuffer: () => venueTranscript,
+      canRequestRecall: (buffer) => streamPhase === "open" && buffer === venueTranscript,
+      getChatMaterials: (buffer) => buffer === venueTranscript && streamPhase === "open" && venueExperience?.kind === "discord"
+        ? venueExperience.getChatMaterials?.() ?? null
+        : null,
+      getTaskDocuments: (buffer) => options.localTaskRunner && buffer === venueTranscript
+        ? getActiveVenueTaskResources()?.listDocuments().map(({ id, name, kind }) => ({ id, name, kind })) ?? null
+        : null,
+      getLocalTaskResults: (buffer) => {
+        const resources = getActiveVenueTaskResources();
+        const count = localTaskResults.length;
+        if (buffer !== venueTranscript || !resources || !count) return null;
+        return {
+          text: "前に担当へ頼んだ作業から返事が届きました。以下は依頼と結果のデータです。" +
+            "会話と話す相手に応じて、どう答えるか判断してください。\n" + JSON.stringify(localTaskResults),
+          delivered: () => {
+            if (getActiveVenueTaskResources() !== resources) return;
+            localTaskResults.splice(0, count);
+            localResultDeliveryCount++;
+          }
+        };
+      },
       // soul の行に載せるロールの id と名前（Discord モード Domain A・discord-mode.md §3.2 a）。今のロールの identity から引く
       // （名前は判定に渡す名前 currentSoulName と同じ canonicalName・ロールの口が無ければ載せない）。正本にだけ残り、
       // ①②④・判定・放送には出ない（ロールが 1 つの間は整形が `soul: 本文` のまま）。
@@ -4368,7 +4494,22 @@ export function createCockpitServer(options = {}) {
       onUsage: (info) => broadcast("usage", { ...info, brain: typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null }),
       // 記憶の作り直し Wave 3: 返事の中の思い出しの目印（返事が終わったあとに 1 つずつ）を思い出しの係へ。
       onRecallRequest: (info) => {
-        if (recallDesk && info && typeof info.request === "string") recallDesk.request(info.request);
+        if (!closed && streamPhase === "open" && recallDesk && typeof info?.request === "string") recallDesk.request(info.request);
+      },
+      onLocalTaskRequest: (info) => {
+        const resources = getActiveVenueTaskResources();
+        if (!options.localTaskRunner || !resources || killed || typeof info?.request !== "string") return;
+        const { request } = info;
+        const deliver = (result) => {
+          if (getActiveVenueTaskResources() !== resources) return;
+          localTaskResults.push({ request, ...result });
+          deliverLocalTaskResult();
+        };
+        // runTask registers the task with the venue synchronously before its first await.
+        void options.localTaskRunner({ resources, request }).then(
+          (reply) => deliver(typeof reply === "string" ? { reply } : { executionFailed: true }),
+          () => deliver({ executionFailed: true })
+        );
       },
       // S8「キルスイッチ」born-killed: orchestrator 生成時にサーバの現況キル状態を渡す。killed 変数は
       // 上（:435 付近）で宣言済みゆえここより前に存在する。「キル中に生まれる orchestrator はキル済みで
@@ -4622,53 +4763,69 @@ export function createCockpitServer(options = {}) {
     typeof (/** @type {any} */ (fireOrchestrator).getState) === "function"
   ) {
     // 配信の組み直し Domain D: 思い出しの係も「配信を始める」のたびに作り直す（recall-desk は reset を持たない）。
-    makeRecallDesk = () => createRecallDesk({
-      // Discord モード Domain B: ④は先頭のロールの束の口で走らせる（そのロールの記憶の置き場を読む）。
-      runRecall: /** @type {any} */ (runLeadRecall),
-      // Discord モード Domain C: その場の語の組（④の頼みと①に渡す結果の文面・始める 3 で作り直すのでその場の体験の語）。
-      // 閉じている・配信なら null = 今の配信の文面。
-      wording: venueExperience ? venueExperience.wording ?? null : null,
-      // Discord モード Domain F: その場の「避けるか」の問いの組（judgeSet.recallAvoid・閉じている・配信なら null = 今の配信の問い）。
-      recallAvoid: venueJudgeSet()?.recallAvoid ?? null,
-      judge: recallJudge,
-      getEntries: () => (venueTranscript ? venueTranscript.all() : []),
-      isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
-      isKilled: () => killed,
-      isSelfFireOn: () => fireScheduler != null && fireScheduler.isEnabled(),
-      getName: () => currentSoulName(),
-      nowImpl,
-      // 避けない・見つからなかった・④の失敗（見つからなかったと同じ扱い）: 括った指示で①を発火させる（結果は selfFire kind:"recall" でフィードへ）。
-      fire: (fireOptions) => requestSelfFire("recall", fireOptions),
-      // 避けた・発火できなかった・自発 OFF: 次の ask の先頭に 1 回だけ黙って前置きする。
-      defer: (text) => {
-        const target = /** @type {any} */ (fireOrchestrator);
-        return typeof target.deferInstruction === "function" ? target.deferInstruction(text) : false;
-      },
-      onEvent: (event) => {
-        // 画面のログには頼みごとを出してよい（記憶の中身は係が載せない）。ターミナルには頼みごとを渡さない。
-        // 新しい SSE は足さず、selfFire に kind:"recall-step" で相乗りする（判定行と同じ流儀）。
-        broadcast("selfFire", { kind: "recall-step", ...event });
-        if (onRecallEvent) {
-          const { request: _request, ...rest } = event;
-          try {
-            onRecallEvent(rest);
-          } catch {
-            // ログの失敗で係を止めない。
+    makeRecallDesk = () => {
+      const resources = venueTaskResources;
+      return createRecallDesk({
+        // Discord モード Domain B: ④は先頭のロールの束の口で走らせる（そのロールの記憶の置き場を読む）。
+        runRecall: (job) => prepareLeadRecall(job)(),
+        prepareRecall: prepareLeadRecall,
+        onResult: ({ request, reply }) => resources?.noteReply({ kind: "recall", request, reply }),
+        // Discord モード Domain C: その場の語の組（④の頼みと①に渡す結果の文面・始める 3 で作り直すのでその場の体験の語）。
+        // 閉じている・配信なら null = 今の配信の文面。
+        wording: venueExperience ? venueExperience.wording ?? null : null,
+        // Discord モード Domain F: その場の「避けるか」の問いの組（judgeSet.recallAvoid・閉じている・配信なら null = 今の配信の問い）。
+        recallAvoid: venueJudgeSet()?.recallAvoid ?? null,
+        judge: recallJudge,
+        getEntries: () => (venueTranscript ? venueTranscript.all() : []),
+        isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
+        isKilled: () => killed,
+        isSelfFireOn: () => fireScheduler != null && fireScheduler.isEnabled(),
+        getName: () => currentSoulName(),
+        nowImpl,
+        // 避けない・見つからなかった・④の失敗（見つからなかったと同じ扱い）: 括った指示で①を発火させる（結果は selfFire kind:"recall" でフィードへ）。
+        fire: (fireOptions) => requestSelfFire("recall", fireOptions),
+        // 避けた・発火できなかった・自発 OFF: 次の ask の先頭に 1 回だけ黙って前置きする。
+        defer: (text) => {
+          return fireOrchestrator?.deferInstruction?.(text, "recall") ?? false;
+        },
+        onEvent: (event) => {
+          // 画面のログには頼みごとを出してよい（記憶の中身は係が載せない）。ターミナルには頼みごとを渡さない。
+          // 新しい SSE は足さず、selfFire に kind:"recall-step" で相乗りする（判定行と同じ流儀）。
+          broadcast("selfFire", { kind: "recall-step", ...event });
+          if (onRecallEvent) {
+            const { request: _request, ...rest } = event;
+            try {
+              onRecallEvent(rest);
+            } catch {
+              // ログの失敗で係を止めない。
+            }
           }
+        },
+        onJudgeError: (message) => warnJudgeError("recall", message),
+        onRecallError: (message) => {
+          warningBoard.pushEvent("recall-error", {
+            kind: "recall-error",
+            severity: "warn",
+            message: "思い出しの失敗",
+            detail: typeof message === "string" ? message.slice(0, 200) : null,
+            source: "recall"
+          });
         }
-      },
-      onJudgeError: (message) => warnJudgeError("recall", message),
-      onRecallError: (message) => {
-        warningBoard.pushEvent("recall-error", {
-          kind: "recall-error",
-          severity: "warn",
-          message: "思い出しの失敗",
-          detail: typeof message === "string" ? message.slice(0, 200) : null,
-          source: "recall"
-        });
-      }
-    });
+      });
+    };
     recallDesk = makeRecallDesk();
+  }
+
+  function deliverLocalTaskResult() {
+    if (localResultFirePending || !localTaskResults.length || !getActiveVenueTaskResources() || killed || fireInFlight > 0 ||
+        fireOrchestrator?.getState() !== "idle" || venueOutsideVoice() || venueConnectionStatus() === "disconnected") return;
+    localResultFirePending = true;
+    const previousDelivery = localResultDeliveryCount;
+    // A refused Fire or failed ask leaves the result for the next ask.
+    void requestSelfFire("local-task-result", { cause: { type: "local-task-result" } }).finally(() => {
+      localResultFirePending = false;
+      if (localResultDeliveryCount !== previousDelivery) deliverLocalTaskResult();
+    });
   }
 
   /**
@@ -4758,6 +4915,7 @@ export function createCockpitServer(options = {}) {
       if (speakNow) speakNow.notifyIdle();
       if (commentReact) commentReact.notifyIdle();
       if (recallDesk) recallDesk.notifyIdle();
+      deliverLocalTaskResult();
     });
   }
 
@@ -5165,6 +5323,8 @@ export function createCockpitServer(options = {}) {
      */
     venueContext: () => venueContext(),
     venueGeneration: () => venueExperience ? streamGeneration : null,
+    getActiveVenueTaskResources,
+    getVenueTaskResourcePath: () => venueTaskResources?.retainedPath() ?? null,
     /** 配信を始める（POST /api/stream/start と同じ関数・テストと内部用）。 */
     startStream: (/** @type {{ device?: string | null; sttEngine?: any; ttsEngine?: any; experience?: any }} */ request = {}) => openStream(request),
     /**
@@ -5335,6 +5495,12 @@ export function createCockpitServer(options = {}) {
     async close() {
       if (closed) return;
       closed = true;
+      // CLI shutdown uses endStream before server teardown. If HTTP close is already
+      // writing, let it finish before tearing down anything it may still use.
+      if (streamPhase === "closing") await endStreamForShutdown();
+      const desk = recallDesk;
+      venueTaskResources?.stopAccepting();
+      parkRecallDesk(true);
       // S7: 稼働中のチャット器官も畳む（stop()+購読解除・タイマ/プロセスを残さない）。
       foldChatClient();
       if (bargeInGate) {
@@ -5361,10 +5527,6 @@ export function createCockpitServer(options = {}) {
         commentReact.dispose(); // speakNow と同じ（取っておいたコメントも捨てる）。
         commentReact = null;
       }
-      if (recallDesk) {
-        recallDesk.dispose(); // 走っている④の結果が後から返っても無視する（届ける列も捨てる）。
-        recallDesk = null;
-      }
       guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が closed で無視する。
       warningBoard.dispose(); // 一回きりの警告の消えるタイマを残さない。
       if (quotaUnsub) {
@@ -5390,7 +5552,7 @@ export function createCockpitServer(options = {}) {
         }
       }
       sseClients.clear();
-      // Discord モード Domain B: 場の共通の段と同じ口で畳む（正本を手放す → 耳の束 → 入口（体験）→ 目）。
+      // Discord モード Domain B: 正本を手放す → 耳の束 → 入口（体験）→ 目。
       releaseVenueTranscript();
       const hadEars = await foldVenueEars();
       try {
@@ -5400,7 +5562,12 @@ export function createCockpitServer(options = {}) {
       }
       earsState = "stopped";
       startedAtMs = null;
-      // 場も閉じる（記憶の保存は頼まない。Ctrl+C の保存は cockpit.mjs が close の前に endStream で済ませる）。
+      try {
+        await drainVenueTasks(desk);
+        await releaseVenueTasks();
+      } catch (error) {
+        streamError = errMessage(error);
+      }
       markVenueClosed();
       stopVenueEyes();
       await new Promise((resolve) => {

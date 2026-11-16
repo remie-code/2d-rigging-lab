@@ -13,7 +13,7 @@ import { EXPRESSION_WORDS } from "./expression-table.mjs";
 // ── 語彙 ──
 
 test("recall は表情の語彙表（6 語）とは別の語彙集合", () => {
-  assert.deepEqual(CONTROL_TAG_WORDS, ["recall"]);
+  assert.deepEqual(CONTROL_TAG_WORDS, ["recall", "local_task"]);
   assert.equal(RECALL_WORD, "recall");
   assert.equal(EXPRESSION_WORDS.length, 6, "表情の 6 語は変わらない");
   assert.ok(!EXPRESSION_WORDS.includes("recall"));

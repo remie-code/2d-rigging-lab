@@ -62,6 +62,7 @@ import {
   resolveRecallAvoidQuestions,
   RECALL_AVOID_THRESHOLD
 } from "./recall.mjs";
+import { createTaskSessionScope } from "./task-session.mjs";
 import { resolveVenueWording } from "./venue-wording.mjs";
 
 /** 頼みごとの長さの上限（①の目印の引数・ログと④への頼みに使う）。 */
@@ -70,14 +71,17 @@ export const RECALL_REQUEST_MAX_CHARS = 200;
 /**
  * @typedef {{ request: string; found: boolean; failed: boolean; summary: string; requestedAtMs: number }} RecallDelivery
  * @typedef {"started" | "queued" | "dropped" | "found" | "not-found" | "avoided" | "deferred" | "failed"} RecallPhase
+ * @typedef {{ request: string; entries: ReadonlyArray<any>; nowMs: number; wording: unknown; taskSessions: import("./task-session.mjs").TaskSessionScope; onReply?: (reply: string) => void }} RecallJob
  * @typedef {{ phase: RecallPhase; request: string; avoidProbability?: number | null; judgeFailed?: boolean; reason?: string | null; silent?: boolean; failed?: boolean; atMs: number }} RecallEvent
  */
 
 /**
  * 思い出しの係を作る。
  * @param {object} options
- * @param {(job: { request: string; entries: ReadonlyArray<any>; nowMs: number; wording: unknown }) => Promise<{ found: boolean; summary: string }>} options.runRecall
+ * @param {(job: RecallJob) => Promise<{ found: boolean; summary: string }>} options.runRecall
  *   ④を 1 回走らせる（本番は recall.mjs の runRecall を Codex の頭で）。job.wording はこの係の語の組（null = 配信の語）。
+ * @param {(job: RecallJob) => () => Promise<{ found: boolean; summary: string }>} [options.prepareRecall]
+ * @param {(result: { request: string; reply: string }) => void} [options.onResult]
  * @param {(request: { input: string; questions: ReadonlyArray<any> }) => Promise<{ answers: Record<string, any>; latencyMs?: number }>} options.judge
  *   「避けるか」判定（本番は Decisions API の createDecisionsQuestionsJudge・タイムアウト 5 秒）。
  * @param {() => ReadonlyArray<any>} options.getEntries  転写バッファの全エントリ（耳未起動なら空）。
@@ -104,6 +108,9 @@ export const RECALL_REQUEST_MAX_CHARS = 200;
  *   waiting: () => string | null;
  *   pendingDeliveries: () => number;
  *   dispose: () => void;
+ *   stopAccepting: () => void;
+ *   waitForIdle: () => Promise<void>;
+ *   getCleanupFailures: () => unknown[];
  * }}
  */
 export function createRecallDesk(options) {
@@ -124,11 +131,15 @@ export function createRecallDesk(options) {
   const wording = options.wording == null ? null : resolveVenueWording(options.wording);
   // 「避けるか」の問いの組（作るときに形を確かめる・崩れていれば投げる）。null は配信の問い（今の文面）。
   const avoidQuestions = resolveRecallAvoidQuestions(options.recallAvoid);
+  const taskSessions = createTaskSessionScope();
 
   let disposed = false;
+  /** @type {Promise<void> | null} */
+  let runningJob = null;
+  /** @typedef {{ job: RecallJob; reply: () => string | undefined; run: () => Promise<{ found: boolean; summary: string }> }} AcceptedRecall */
   /** @type {string | null} 走っている④の頼みごと。 */
   let runningRequest = null;
-  /** @type {string | null} 待たせている 1 件。 */
+  /** @type {AcceptedRecall | null} 待たせている 1 件。 */
   let waitingRequest = null;
   /** @type {RecallDelivery[]} 届ける列（④が終わった順）。 */
   let deliveries = [];
@@ -168,48 +179,58 @@ export function createRecallDesk(options) {
     }
   };
 
-  /** ④を走らせる（終わったら届ける列へ・待たせた 1 件を続けて走らせる）。 @param {string} request */
-  const start = (request) => {
-    runningRequest = request;
-    emit({ phase: "started", request });
+  /** @param {string} request @returns {AcceptedRecall} */
+  const prepare = (request) => {
     const nowMs = nowImpl();
-    /** @type {ReadonlyArray<any>} */
     let entries = [];
     try {
-      entries = getEntries() ?? [];
+      entries = (getEntries() ?? []).slice();
     } catch {
-      entries = [];
+      // 転写を取得できなければ依頼文だけで思い出す。
     }
+    /** @type {string | undefined} */
+    let replyText;
+    const job = { request, entries, nowMs, wording, taskSessions, onReply: (/** @type {string} */ text) => { replyText = text; } };
+    const reply = () => replyText;
+    try {
+      return { job, reply, run: options.prepareRecall?.(job) ?? (() => runRecall(job)) };
+    } catch (error) {
+      return { job, reply, run: () => Promise.reject(error) };
+    }
+  };
+
+  /** @param {AcceptedRecall} accepted */
+  const start = ({ job: { request, nowMs }, reply, run }) => {
+    runningRequest = request;
+    if (!disposed) emit({ phase: "started", request });
     /** @type {Promise<{ found: boolean; summary: string }>} */
     let p;
     try {
-      p = Promise.resolve(runRecall({ request, entries, nowMs, wording }));
+      p = Promise.resolve(run());
     } catch (error) {
       p = Promise.reject(error);
     }
-    void p
-      .then(
-        (result) => {
-          if (disposed) return;
-          const found = !!(result && result.found && typeof result.summary === "string" && result.summary.trim().length > 0);
-          deliveries.push({ request, found, failed: false, summary: found ? result.summary : "", requestedAtMs: nowMs });
-        },
-        (error) => {
-          if (disposed) return;
-          emit({ phase: "failed", request, reason: "recall-error" });
-          safe(() => onRecallError(errText(error)));
-          // 「見つからなかった」と同じ扱いで①に届ける（Wave 3 仕上げ・ユーザー決定 2026-10-21）。
-          deliveries.push({ request, found: false, failed: true, summary: "", requestedAtMs: nowMs });
-        }
-      )
-      .finally(() => {
+    runningJob = p.then(
+      (result) => {
+        const found = !!(result && result.found && typeof result.summary === "string" && result.summary.trim().length > 0);
+        const delivery = { request, found, failed: false, summary: found ? result.summary : "", requestedAtMs: nowMs };
+        safe(() => options.onResult?.({ request, reply: reply() ?? result?.summary ?? "" }));
+        if (!disposed) deliveries.push(delivery);
+      },
+      (error) => {
         if (disposed) return;
-        runningRequest = null;
-        const next = waitingRequest;
-        waitingRequest = null;
-        if (next != null) start(next);
-        void drain();
-      });
+        emit({ phase: "failed", request, reason: "recall-error" });
+        safe(() => onRecallError(errText(error)));
+        deliveries.push({ request, found: false, failed: true, summary: "", requestedAtMs: nowMs });
+      }
+    ).finally(() => {
+      runningJob = null;
+      runningRequest = null;
+      const next = waitingRequest;
+      waitingRequest = null;
+      if (next != null) start(next);
+      if (!disposed) void drain();
+    });
   };
 
   /** 黙って前置きで渡す（失敗しても係は止めない）。 @param {string} text */
@@ -361,11 +382,11 @@ export function createRecallDesk(options) {
       if (text.length === 0) return;
       const req = text.length > RECALL_REQUEST_MAX_CHARS ? `${text.slice(0, RECALL_REQUEST_MAX_CHARS)}…` : text;
       if (runningRequest == null) {
-        start(req);
+        start(prepare(req));
         return;
       }
       if (waitingRequest == null) {
-        waitingRequest = req;
+        waitingRequest = prepare(req);
         emit({ phase: "queued", request: req });
         return;
       }
@@ -377,11 +398,23 @@ export function createRecallDesk(options) {
       void drain();
     },
     running: () => runningRequest,
-    waiting: () => waitingRequest,
+    waiting: () => waitingRequest?.job.request ?? null,
     pendingDeliveries: () => deliveries.length,
-    /** 畳む（以後の頼み・返ってきた結果は無視）。 */
+    /** 受付と会話配送を止める。待機していた依頼は続ける。 */
+    stopAccepting() {
+      disposed = true;
+      deliveries = [];
+    },
+    async waitForIdle() {
+      while (runningJob) await runningJob;
+      taskSessions.stopAccepting();
+      await taskSessions.waitForIdle();
+    },
+    getCleanupFailures: taskSessions.getCleanupFailures,
+    /** 畳む（待機の依頼と配送は破棄する）。 */
     dispose() {
       disposed = true;
+      taskSessions.stopAccepting();
       waitingRequest = null;
       deliveries = [];
     }

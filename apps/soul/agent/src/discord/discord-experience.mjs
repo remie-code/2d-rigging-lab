@@ -62,6 +62,7 @@
 import { STT_ENGINES } from "../ears/ear-pipeline.mjs";
 import { loadDiscordBotToken, DEFAULT_DISCORD_BOT_KEY_FILE } from "./discord-token.mjs";
 import { loadDiscordLibraries } from "./discord-libraries.mjs";
+import { createDiscordChatReceiver, discordMessageContentStatus, registerSoulVcCommand, SOUL_VC_COMMAND } from "./discord-companion-gateway.mjs";
 import { CALL_WORDING } from "../mind/venue-wording.mjs";
 import { venueTeachingName } from "../mind/soul-skills.mjs";
 import { DISCORD_SPEAK_NOW_QUESTIONS } from "../mind/speak-now.mjs";
@@ -292,6 +293,7 @@ export function speakerTranscriptMouth(buffer, person) {
  *
  * @param {object} deps
  * @param {{ getDiscordPrep: () => any; setDiscordPrep: (patch: object) => void }} deps.settings  Discord の準備の置き場
+ * @param {() => import("../cockpit/venue-task-resources.mjs").VenueTaskAccess|null} [deps.getTaskResources]
  *   （cockpit-settings-store.mjs の get / set。テストは一時フォルダの設定ファイル）。
  * @param {() => (string | null | undefined)} [deps.currentKeyFile]  今のロールの鍵のファイル名（一覧の読み込みと、場のロールの束が
  *   指していないときに使う）。無ければ既定 `.env.discord.local`。
@@ -407,20 +409,34 @@ export function createDiscordExperience(deps) {
   };
 
   /**
-   * Bot をログインさせる（Intent は Guilds と GuildVoiceStates だけ）。失敗は投げる（呼び出し側が決まった理由にする）。
-   * @param {any} discord @param {string} token
+   * 準備は基本の Intent でログインする。場の client は設定済みならチャットも受ける。
+   * @param {any} discord @param {string} token @param {boolean} [chat]
    */
-  const loginClient = async (discord, token) => {
+  const loginClient = async (discord, token, chat = false) => {
     const { Client, Events, GatewayIntentBits } = discord;
-    const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
+    const intents = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates];
+    if (chat) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+    const client = new Client({ intents });
     // client の error は数えるだけ（生のエラー文は出さない）。
     client.on("error", () => say("client error"));
-    const ready = new Promise((resolve) => client.once(Events.ClientReady, resolve));
+    /** @type {((event: {code: number}) => void) | undefined} */
+    let onShardDisconnect;
+    const ready = new Promise((resolve, reject) => {
+      client.once(Events.ClientReady, resolve);
+      if (chat && Events.ShardDisconnect) {
+        onShardDisconnect = (event) => {
+          if (event.code === 4014) reject(new Error("Used disallowed intents"));
+        };
+        client.on(Events.ShardDisconnect, onShardDisconnect);
+      }
+    });
     try {
       await withTimeout(Promise.all([client.login(token), ready]), loginTimeoutMs, setTimeoutImpl, clearTimeoutImpl);
     } catch (error) {
       await destroyClient(client);
       throw error;
+    } finally {
+      if (onShardDisconnect) client.off(Events.ShardDisconnect, onShardDisconnect);
     }
     return client;
   };
@@ -645,7 +661,7 @@ export function createDiscordExperience(deps) {
   //
   //  体験から場（server）へ VC の出来事を知らせる（場の口 vcEvent）。中身は種類と VC の名前・人の名前だけ（Discord の id は渡さない）。
   //  場はここから `control` の記録を書き、Domain J が会話の正本の出来事の行にする（I では正本に行を足さない）。
-  //   - "vc-join"（入った・via: "open" = 体験を開いた / "panel" = API）・"vc-leave"（自分で抜けた）・"vc-move"（自分で移った）
+  //   - "vc-join"（入った・via: "open" = 体験を開いた / "panel" = API / "discord" = コマンド）・"vc-leave"（自分で抜けた）・"vc-move"（自分で移った）
   //   - "vc-moved"（Discord の画面で動かされた・追った）・"vc-kicked"（外から切られた = 4014 / Bot 自身が VC の外へ）
   //   - "vc-disconnect"（切れた・猶予のあいだ戻らなかった）・"vc-reconnect"（切れたのがつながり直した）
   //   - "person-join" / "person-leave"（今いる VC の人の入ってきた・出ていった。Bot 自身とほかの Bot は除く）
@@ -1029,9 +1045,10 @@ export function createDiscordExperience(deps) {
    * VC に入る（接続の分を作る）: joinVoiceChannel → Ready を待つ →（最初だけ）耳の束・client の購読 → speaking の購読 → 出口。
    * 失敗したら作りかけの接続の分を畳み、理由を返す（呼び出し側が状態を決める）。
    * @param {any} x @param {any} channel  resolveVoiceChannel で確かめたチャンネル。
+   * @param {() => boolean} [isCurrent]
    * @returns {Promise<{ ok: true } | { ok: false; reason: string; code: "join" | "outlet" | "closed" }>}
    */
-  const joinLink = async (x, channel) => {
+  const joinLink = async (x, channel, isCurrent = () => !x.closed) => {
     const voice = x.voice;
     const c = {
       channelId: String(channel.id),
@@ -1071,9 +1088,10 @@ export function createDiscordExperience(deps) {
     try {
       await voice.entersState(c.connection, voice.VoiceConnectionStatus.Ready, readyTimeoutMs);
     } catch {
-      return fail(x.closed || c.closed ? "closed" : "join", x.closed || c.closed ? DISCORD_REASONS.closed : DISCORD_REASONS.join);
+      const closed = c.closed || !isCurrent();
+      return fail(closed ? "closed" : "join", closed ? DISCORD_REASONS.closed : DISCORD_REASONS.join);
     }
-    if (!linkLive(x, c)) return fail("closed", DISCORD_REASONS.closed);
+    if (!isCurrent() || !linkLive(x, c)) return fail("closed", DISCORD_REASONS.closed);
     c.readyOnce = true;
     // 耳の束（体験の間 1 つ・人ごとの耳は話し始めたときに束ねる）。
     if (!x.ears) x.ears = x.venue.createEars();
@@ -1120,6 +1138,8 @@ export function createDiscordExperience(deps) {
   const teardown = async (x) => {
     if (!x || x.closed) return;
     x.closed = true;
+    x.companionAbort.abort();
+    x.chat?.clear();
     for (const off of x.offs.splice(0)) {
       try {
         off();
@@ -1259,6 +1279,12 @@ export function createDiscordExperience(deps) {
       OpusScript: null,
       botId: null,
       closed: false,
+      ready: false,
+      companionAbort: new AbortController(),
+      chat: null,
+      chatIntent: "unavailable",
+      commandStatus: "pending",
+      commandId: null,
       seq: 0,
       /** @type {any} */ link: null,
       /** @type {any} */ heldOutlet: null,
@@ -1295,7 +1321,15 @@ export function createDiscordExperience(deps) {
       x.OpusScript = libs.OpusScript;
       say("logging in");
       try {
-        x.client = await loginClient(libs.discord, plan.token);
+        x.chatIntent = await discordMessageContentStatus(libs.discord, plan.token, x.companionAbort.signal);
+        if (x.closed) return refuse(DISCORD_REASONS.closed);
+        try {
+          x.client = await loginClient(libs.discord, plan.token, x.chatIntent === "enabled");
+        } catch (error) {
+          if (x.closed || x.chatIntent !== "enabled" || error?.message !== "Used disallowed intents") throw error;
+          x.chatIntent = "intent-required";
+          x.client = await loginClient(libs.discord, plan.token);
+        }
       } catch {
         return refuse(DISCORD_REASONS.login);
       }
@@ -1312,17 +1346,80 @@ export function createDiscordExperience(deps) {
         x.guild = null;
       }
       if (!x.guild) return refuse(DISCORD_REASONS.guild);
+      if (x.discord.Events.InteractionCreate) {
+        listen(x.offs, x.client, x.discord.Events.InteractionCreate, (/** @type {any} */ interaction) => {
+          void handleSoulVcCommand(x, interaction).catch(() => {});
+        });
+      }
       const resolved = await resolveVoiceChannel(x, plan.channelId);
       if (!resolved.ok) return refuse(resolved.code === "closed" ? DISCORD_REASONS.closed : DISCORD_REASONS.channel);
       if (x.closed) return refuse(DISCORD_REASONS.closed);
       const joined = await joinLink(x, resolved.channel);
       if (!joined.ok) return refuse(joined.reason);
+      x.ready = true;
       emitVc(x, { kind: "vc-join", via: "open", channelName: x.link?.channelName ?? null });
       void announcePresent(x, x.link);
       return { ok: true, ears: x.ears };
     } catch {
       return refuse(DISCORD_REASONS.unexpectedOpen);
     }
+  }
+
+  /** @param {any} x */
+  const isVenueOpen = (x) => Boolean(x && experience === x && !x.closed && x.ready && (x.venue.isVenueOpen?.() ?? true));
+
+  function afterOpen() {
+    const x = experience;
+    if (!isVenueOpen(x) || x.chat) return;
+    x.chat = createDiscordChatReceiver(x, settings, () => isVenueOpen(x), deps.getTaskResources);
+    if (x.chatIntent === "enabled" && x.discord.Events.MessageCreate) {
+      const { Events } = x.discord;
+      listen(x.offs, x.client, Events.MessageCreate, (/** @type {any} */ message) => x.chat.accept(message));
+      for (const event of [Events.ChannelUpdate, Events.ChannelDelete, Events.GuildRoleUpdate, Events.GuildRoleDelete,
+        Events.GuildMemberUpdate, Events.GuildUnavailable, Events.GuildAvailable]) {
+        if (event) listen(x.offs, x.client, event, x.chat.refreshPermissions);
+      }
+    }
+    void registerSoulVcCommand(x.guild, x.discord, x.companionAbort.signal)
+      .then(({ status, id }) => {
+        x.commandStatus = status;
+        x.commandId = id ?? null;
+      })
+      .catch(() => { x.commandStatus = "unavailable"; });
+  }
+
+  /** @param {any} x @param {any} interaction */
+  async function handleSoulVcCommand(x, interaction) {
+    if (!interaction.isChatInputCommand() || interaction.commandName !== SOUL_VC_COMMAND ||
+        !x.commandId || interaction.commandId !== x.commandId) return;
+    const flags = x.discord.MessageFlags.Ephemeral;
+    if (interaction.guildId !== x.plan.guildId ||
+        (interaction.commandGuildId != null && interaction.commandGuildId !== x.plan.guildId)) {
+      await interaction.reply({ flags, content: "このサーバーでは Discord の場を開いていない" });
+      return;
+    }
+    if (!isVenueOpen(x)) {
+      await interaction.reply({ flags, content: DISCORD_VC_REFUSALS.notOpen });
+      return;
+    }
+    await interaction.deferReply({ flags });
+    if (!isVenueOpen(x)) {
+      await interaction.editReply(DISCORD_VC_REFUSALS.notOpen);
+      return;
+    }
+    const action = interaction.options.getSubcommand(false);
+    let result;
+    if (action === "join") {
+      const channelId = x.guild.voiceStates.cache.get(interaction.user.id)?.channelId;
+      result = channelId ? await joinVoice(channelId, "discord") : { ok: false, reason: "先にボイスチャンネルに入ってください" };
+    } else if (action === "leave") {
+      result = await leaveVoice();
+    } else {
+      result = { ok: false, reason: "使える操作は join と leave です" };
+    }
+    await interaction.editReply(result.ok
+      ? (action === "join" ? "ボイスチャンネルに参加しました" : "ボイスチャンネルから退出しました")
+      : result.reason);
   }
 
   /**
@@ -1359,15 +1456,16 @@ export function createDiscordExperience(deps) {
    */
   const runOp = async (run) => {
     const x = experience;
-    if (!x || x.closed || !x.guild) return { ok: false, code: "not-open", reason: DISCORD_VC_REFUSALS.notOpen };
+    if (!isVenueOpen(x)) return { ok: false, code: "not-open", reason: DISCORD_VC_REFUSALS.notOpen };
     if (x.op) return { ok: false, code: "busy", reason: DISCORD_VC_REFUSALS.busy };
-    const p = (async () => {
+    const p = Promise.resolve().then(async () => {
       try {
+        if (!isVenueOpen(x)) return { ok: /** @type {const} */ (false), code: "closed", reason: DISCORD_REASONS.closed };
         return await run(x);
       } catch {
         return { ok: /** @type {const} */ (false), code: "join", reason: DISCORD_REASONS.unexpectedOpen };
       }
-    })();
+    });
     x.op = p;
     try {
       return await p;
@@ -1378,25 +1476,26 @@ export function createDiscordExperience(deps) {
 
   /** @param {any} x @param {any} r */
   const afterFailedJoin = (x, r) => {
-    if (!x.closed && x.link == null) settleOutside(x);
+    if (isVenueOpen(x) && x.link == null) settleOutside(x);
     say(`could not join (${r.reason})`);
   };
 
   /**
    * どの VC にもいない間に、同じサーバーの VC に入る。
-   * @param {unknown} channelId
+   * @param {unknown} channelId @param {"panel" | "discord"} [via]
    */
-  function joinVoice(channelId) {
+  function joinVoice(channelId, via = "panel") {
     return runOp(async (x) => {
       if (x.link) return { ok: false, code: "in-vc", reason: DISCORD_VC_REFUSALS.inVc };
       const resolved = await resolveVoiceChannel(x, channelId);
       if (!resolved.ok) return resolved;
-      const r = await joinLink(x, resolved.channel);
+      if (!isVenueOpen(x)) return { ok: false, code: "closed", reason: DISCORD_REASONS.closed };
+      const r = await joinLink(x, resolved.channel, () => isVenueOpen(x));
       if (!r.ok) {
         afterFailedJoin(x, r);
         return r;
       }
-      emitVc(x, { kind: "vc-join", via: "panel", channelName: x.link?.channelName ?? null });
+      emitVc(x, { kind: "vc-join", via, channelName: x.link?.channelName ?? null });
       void announcePresent(x, x.link);
       return { ok: true };
     });
@@ -1409,6 +1508,7 @@ export function createDiscordExperience(deps) {
       if (!c) return { ok: false, code: "not-in-vc", reason: DISCORD_VC_REFUSALS.notInVc };
       const channelName = c.channelName;
       await foldLink(x, c, { hold: true });
+      if (!isVenueOpen(x)) return { ok: false, code: "closed", reason: DISCORD_REASONS.closed };
       settleOutside(x);
       say("left voice channel");
       emitVc(x, { kind: "vc-leave", channelName });
@@ -1427,17 +1527,18 @@ export function createDiscordExperience(deps) {
       if (channelId === c.channelId) return { ok: false, code: "same", reason: DISCORD_VC_REFUSALS.same };
       const resolved = await resolveVoiceChannel(x, channelId);
       if (!resolved.ok) return resolved;
+      if (!isVenueOpen(x)) return { ok: false, code: "closed", reason: DISCORD_REASONS.closed };
       if (x.link !== c) return { ok: false, code: "not-in-vc", reason: DISCORD_VC_REFUSALS.notInVc };
       const fromName = c.channelName;
       await foldLink(x, c, { hold: true });
-      if (x.closed) return { ok: false, code: "closed", reason: DISCORD_REASONS.closed };
+      if (!isVenueOpen(x)) return { ok: false, code: "closed", reason: DISCORD_REASONS.closed };
       // 移る間は聞いていない（入れれば聞いているに戻る）。
       try {
         x.venue.pauseEars?.();
       } catch {
         // best-effort
       }
-      const r = await joinLink(x, resolved.channel);
+      const r = await joinLink(x, resolved.channel, () => isVenueOpen(x));
       if (!r.ok) {
         afterFailedJoin(x, r);
         // 前の VC からは抜けた（入れなかった）。
@@ -1597,6 +1698,16 @@ export function createDiscordExperience(deps) {
     abortEntrance,
     openEntrance,
     closeEntrance,
+    afterOpen,
+    foldAfterOpen: () => {
+      experience?.companionAbort.abort();
+      experience?.chat?.clear();
+    },
+    getChatMaterials: () => experience?.chat?.getChatMaterials() ?? [],
+    chat: Object.freeze({
+      list: () => isVenueOpen(experience) ? experience.chat?.list() ?? null : null,
+      select: (/** @type {unknown} */ channelId) => isVenueOpen(experience) ? experience.chat?.select(channelId) ?? null : null
+    }),
     busyMessage,
     unexpectedErrorMessage,
     /** snapshot の `stream.connection`（"joining" | "joined" | "disconnected" | "outside" | null）。 */

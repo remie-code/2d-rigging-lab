@@ -189,6 +189,63 @@ function createTestSession(harness, scratch, extra = {}) {
   });
 }
 
+test("codex-session: a local task restricts Windows TEMP writes and only dispatches the declared tool for its live turn", async () => {
+  await withScratch(async (scratch) => {
+    const started = Promise.withResolvers();
+    const harness = makeSpawnHarness(() => ({
+      onTurn(request, api) {
+        api.response(request, { turn: { id: "task-turn", status: "inProgress" } });
+        started.resolve({ api, threadId: request.params.threadId });
+      }
+    }));
+    const calls = [];
+    const spec = { type: "function", name: "render_page", description: "Render one page", inputSchema: { type: "object" } };
+    const session = createTestSession(harness, scratch, {
+      cwd: scratch.homeDir,
+      sandbox: "workspace-write",
+      exclusiveWorkdir: true,
+      ephemeral: true,
+      localTool: {
+        spec,
+        async run(args) {
+          calls.push(args);
+          return { success: true, contentItems: [{ type: "inputText", text: "one page" }] };
+        }
+      }
+    });
+    try {
+      const ask = session.ask("read page");
+      const { api, threadId } = await started.promise;
+      await new Promise(setImmediate);
+      const params = { threadId, turnId: "task-turn", tool: "render_page", arguments: { page: 4 } };
+      api.message({ id: "wrong-turn", method: "item/tool/call", params: { ...params, turnId: "earlier" } });
+      api.message({ id: "wrong-tool", method: "item/tool/call", params: { ...params, tool: "other" } });
+      api.message({ id: "render", method: "item/tool/call", params });
+      await new Promise(setImmediate);
+      const messages = harness.children[0].messages;
+      assert.equal(messages[0].params.capabilities.experimentalApi, true);
+      assert.deepEqual(harness.threadRequests[0].params.dynamicTools, [spec]);
+      assert.equal(harness.threadRequests[0].params.approvalPolicy, "never");
+      assert.deepEqual(harness.turnRequests[0].params.sandboxPolicy, {
+        type: "workspaceWrite", writableRoots: [scratch.homeDir],
+        networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true
+      });
+      assert.deepEqual(calls, [{ page: 4 }]);
+      for (const id of ["wrong-turn", "wrong-tool", "render"]) {
+        assert.equal(messages.find((message) => message.id === id)?.result.success, id === "render");
+      }
+      const turn = { threadId, turnId: "task-turn" };
+      api.notification("item/started", { ...turn, item: { id: "reply", type: "agentMessage" } });
+      api.notification("item/agentMessage/delta", { ...turn, itemId: "reply", delta: "Read page." });
+      api.notification("item/completed", { ...turn, item: { id: "reply", type: "agentMessage", text: "Read page." } });
+      api.notification("turn/completed", { threadId, turn: { id: turn.turnId, status: "completed" } });
+      assert.equal((await ask).replyText, "Read page.");
+    } finally {
+      await session.dispose();
+    }
+  });
+});
+
 test("codex-session: initialize/initialized once, one persistent process/thread, ordered fragmented deltas and exact final", async () => {
   await withScratch(async (scratch) => {
     const usage = { last: { inputTokens: 10, cachedInputTokens: 2, outputTokens: 4, reasoningOutputTokens: 1, totalTokens: 14 }, total: {} };

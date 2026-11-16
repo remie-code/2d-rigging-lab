@@ -58,6 +58,18 @@ const LIST = Object.freeze({
 /** @param {string} connection */
 const stream = (connection) => ({ phase: "open", experience: "discord", connection, vcName: "一般" });
 
+test("Discord チャットの選択は開いた場に出る。VC 付属、解除、閲覧権限と Intent の状態を表示する", () => {
+  const panel = read("discord-panel.mjs");
+  assert.match(panel, /phase === "open" && html`<\$\{DiscordChatSection\}/u);
+  assert.match(panel, /doFetch\("\/api\/discord\/chat", selection \? \{/u);
+  assert.match(panel, /void load\(\{ channelId: value \|\| null \}\)/u);
+  assert.match(panel, /discord-chat-select">読むチャット/u);
+  assert.match(panel, /<option value="">選ばない<\/option>/u);
+  assert.match(panel, /channel\.kind === "voice" \? "VC 付属/u);
+  assert.match(panel, /selectionStatus === "unreadable"/u);
+  assert.match(panel, /"intent-required": "[^"]*Message Content Intent/u);
+});
+
 /** @param {any} vnode */
 const buttonsOf = (vnode) => collectElements(vnode).filter((n) => n.type === "button");
 

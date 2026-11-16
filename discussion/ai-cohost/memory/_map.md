@@ -31,6 +31,8 @@
 
 ## 3. Current State Summary
 
+- **小タスク共通基盤への移行 (2026-11-16)**: [3 Wave計画](../implementation/orchestration/local-task-sessions-wave-plan.md)は実装・独立レビュー合格。記憶固有の振る舞いを保ち共通実行基盤へ移行、毎依頼新規session。writerの90秒待機上限を撤去し、資料／返答だけの増分も書出し材料に渡す。片付けは保存・必要整理後。[完了](../implementation/waves/local-task-sessions/wave3-completion.md)・[本人確認](../implementation/waves/local-task-sessions/human-gate.md)。本人確認待ち。
+
 - **整理役の現在地(2026-11-06)**: [実装計画 §6](../implementation/orchestration/memory-organization-wave-plan.md) の A〜D は合格・master マージ済み。1 回目は本体 43 件を中身そのままで年/月へ移し、控えも作成したが、話題の目次は作られなかった。Domain D で必須にしたサブトピックと月の目次、新しい書き出しの確認は、前の整理(11/05 18:15)から 7 日後の自然な閉じを待つ([人間ゲート §3c](../implementation/waves/memory-organization/human-gate.md))。マージ済みと全項目の実運用確認済みを分ける。
 - 過去の棚卸し(2026-11-04): トピック 5 つ・本体 40 件(25 回分)・約 46 万字。当時の「③は置き場と権限だけ決定」は [organization-inventory-2026-11.md](organization-inventory-2026-11.md) の観測で、実装前の状態。
 - 今の仕組み(棚卸し 2026-10-21。以下は再構成前の記述):

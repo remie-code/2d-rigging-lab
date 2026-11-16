@@ -51,6 +51,92 @@ import {
 /** VC の一覧を読み直す間隔（ms・人数の移り変わりを拾う。読むのは体験の client の guild から）。 */
 export const DISCORD_PANEL_LIST_REFRESH_MS = 20000;
 
+const CHAT_INTENT_MESSAGES = {
+  "intent-required": "チャットを受信するには Developer Portal の Message Content Intent を有効にし、場を開き直してください。",
+  unavailable: "チャット受信の設定を確認できませんでした。Bot の設定を確認し、場を開き直してください。"
+};
+const VC_COMMAND_MESSAGES = {
+  pending: "Discord コマンドを確認中",
+  ready: "Discord から /soul-vc join と /soul-vc leave が使えます。",
+  "name-conflict": "このサーバーには別の /soul-vc コマンドがあります。",
+  unavailable: "Discord コマンドを登録できませんでした。Bot のインストール設定を確認してください。"
+};
+
+/** @param {{ doFetch: typeof fetch; setIntervalImpl: typeof setInterval; clearIntervalImpl: typeof clearInterval }} props */
+export function DiscordChatSection({ doFetch, setIntervalImpl, clearIntervalImpl }) {
+  const [state, setState] = useState(/** @type {any} */ (null));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const activeRequest = useRef(/** @type {AbortController | null} */ (null));
+
+  /** @param {{channelId: string | null}} [selection] */
+  async function load(selection) {
+    if (!selection && activeRequest.current) return;
+    activeRequest.current?.abort();
+    const request = new AbortController();
+    activeRequest.current = request;
+    if (selection) setSaving(true);
+    try {
+      const response = await doFetch("/api/discord/chat", selection ? {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify(selection), signal: request.signal
+      } : { signal: request.signal });
+      const body = await response.json();
+      if (request.signal.aborted) return;
+      if (!response.ok) {
+        setError(body.error || "読むチャットを取得できない");
+        return;
+      }
+      if (!Array.isArray(body.channels)) throw new Error("invalid Discord chat state");
+      setState(body);
+      setError("");
+    } catch {
+      if (!request.signal.aborted) setError(selection ? "読むチャットを保存できない" : "読むチャットを取得できない");
+    } finally {
+      if (activeRequest.current === request) {
+        activeRequest.current = null;
+        if (selection) setSaving(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    const timer = setIntervalImpl(() => void load(), DISCORD_PANEL_LIST_REFRESH_MS);
+    return () => {
+      activeRequest.current?.abort();
+      activeRequest.current = null;
+      clearIntervalImpl(timer);
+    };
+  }, []);
+
+  function onChange(/** @type {Event} */ event) {
+    const select = /** @type {HTMLSelectElement} */ (event.currentTarget);
+    const value = select.value;
+    select.value = state?.selectedId ?? "";
+    void load({ channelId: value || null });
+  }
+
+  return html`
+    <section class="discord-section" aria-label="Discord チャット">
+      <div class="discord-row">
+        <label class="discord-label" for="discord-chat-select">読むチャット</label>
+        <select id="discord-chat-select" class="drawer-select" value=${state?.selectedId ?? ""} disabled=${!state || saving} onChange=${onChange}>
+          <option value="">選ばない</option>
+          ${state?.selectionStatus === "unreadable" && html`<option value=${state.selectedId} disabled>Bot が閲覧できない設定先</option>`}
+          ${state?.channels.map((/** @type {any} */ channel) => html`
+            <option value=${channel.id} key=${channel.id}>${channel.kind === "voice" ? "VC 付属 · " : "# "}${channel.name}</option>`)}
+        </select>
+        <button type="button" onClick=${() => void load()} disabled=${saving}>読み直す</button>
+      </div>
+      ${state?.selectionStatus === "unreadable" && html`<p class="discord-note" role="status">Bot の閲覧権限を確認するか、別のチャットを選んでください。</p>`}
+      ${CHAT_INTENT_MESSAGES[state?.intentStatus] && html`<p class="discord-note" role="status">${CHAT_INTENT_MESSAGES[state.intentStatus]}</p>`}
+      ${VC_COMMAND_MESSAGES[state?.commandStatus] && html`<p class="discord-note" role="status">${VC_COMMAND_MESSAGES[state.commandStatus]}</p>`}
+      ${error && html`<p class="discord-note err" role="alert">${error}</p>`}
+    </section>
+  `;
+}
+
 /**
  * 接続の区切り（hooks 非使用・vnode 走査テスト対象）。view は discordPanelView の値。
  * @param {{ view: NonNullable<ReturnType<typeof discordPanelView>>; error?: string; onLeave?: () => void;
@@ -326,6 +412,11 @@ export function DiscordPanel(props) {
           onChannel=${(/** @type {"join" | "move"} */ action, /** @type {string} */ channelId) => vcOp(action, channelId)}
           onRefresh=${loadList}
         />
+        ${phase === "open" && html`<${DiscordChatSection}
+          doFetch=${doFetch}
+          setIntervalImpl=${props.setIntervalImpl || globalThis.setInterval}
+          clearIntervalImpl=${props.clearIntervalImpl || globalThis.clearInterval}
+        />`}
         <${DiscordSpeakingSection}
           sfView=${selfFireToggleView(selfFire)}
           biView=${bargeInToggleView(bargeIn)}

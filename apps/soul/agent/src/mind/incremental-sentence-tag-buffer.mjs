@@ -21,7 +21,7 @@
  */
 
 import { parseExpressionTags } from "./expression-parser.mjs";
-import { scanRecallTag } from "./recall-tag.mjs";
+import { scanControlTag, CONTROL_TAG_OPENINGS, CONTROL_TAG_WORDS } from "./recall-tag.mjs";
 import { scanSpeechIntentTag } from "./speech-intent-tag.mjs";
 
 const SENTENCE_END = new Set(["。", "！", "？", "!", "?"]);
@@ -29,7 +29,6 @@ const TAG_WORD_START = /^[A-Za-z]$/;
 const TAG_WORD_CHAR = /^[\w-]$/;
 /** 声にする文字（文字か数字）。タグの前で文を区切るかの判定に使う。 */
 const SPEAKABLE_CHAR = /[\p{L}\p{N}]/u;
-const RECALL_OPEN = "<recall";
 
 /**
  * @typedef {{
@@ -38,6 +37,7 @@ const RECALL_OPEN = "<recall";
  *   events: Array<{ word: string; args?: string; position: number }>;
  *   diagnostics: Array<{ type: string; [k: string]: unknown }>;
  *   recalls: Array<{ request: string; position: number }>;
+ *   localTasks?: Array<{ request: string; position: number }>;
  * }} CompletedExpressionTag
  */
 
@@ -95,13 +95,14 @@ export function createIncrementalSentenceTagBuffer({ includeIntents = false } = 
     // diagnostic shape. The raw tag remains available even when it is unknown.
     const parsed = parseExpressionTags(raw);
     // 完結した表情タグ・思い出しの目印は文の区切り: 前に溜まった声の文字を 1 文として出す（タグは含めない）。
-    if (parsed.events.length > 0 || parsed.recalls.length > 0) endSentenceBeforeTag(out);
+    if (parsed.events.length > 0 || parsed.recalls.length > 0 || parsed.localTasks?.length) endSentenceBeforeTag(out);
     out.tags.push({
       raw,
       position,
       events: parsed.events.map((event) => ({ ...event, position: position + event.position })),
       diagnostics: parsed.diagnostics,
-      recalls: parsed.recalls.map((recall) => ({ ...recall, position: position + recall.position }))
+      recalls: parsed.recalls.map((recall) => ({ ...recall, position: position + recall.position })),
+      ...(parsed.localTasks ? { localTasks: parsed.localTasks.map((task) => ({ ...task, position: position + task.position })) } : {})
     });
   };
 
@@ -125,7 +126,7 @@ export function createIncrementalSentenceTagBuffer({ includeIntents = false } = 
         continue;
       }
       // 思い出しの目印は parser と同じ読み方（引数に `<` `>` が混ざっても声に出さない）。
-      const recall = scanRecallTag(source, tagStart, final);
+      const recall = scanControlTag(source, tagStart, final);
       if (recall && recall.kind === "valid") {
         appendTag(source.slice(tagStart, recall.end + 1), sourceStart + tagStart, out);
         cursor = recall.end + 1;
@@ -139,7 +140,8 @@ export function createIncrementalSentenceTagBuffer({ includeIntents = false } = 
       }
       if (recall && recall.kind === "incomplete") {
         // 目印だと決まった（`<recall` の後ろに語の文字でないもの）なら、終わりを待たずにその前で文を区切る。
-        if (source.startsWith(RECALL_OPEN, tagStart) && source.length > tagStart + RECALL_OPEN.length) {
+        const opening = CONTROL_TAG_OPENINGS[CONTROL_TAG_WORDS.indexOf(recall.word)];
+        if (source.length > tagStart + opening.length) {
           endSentenceBeforeTag(out);
         }
         cursor = tagStart;
