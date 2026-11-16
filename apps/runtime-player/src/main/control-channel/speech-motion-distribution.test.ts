@@ -1,4 +1,5 @@
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadSpeechMotionSnapshot, type SpeechMotionSnapshot } from "./speech-motion-assets";
@@ -9,6 +10,9 @@ import recoilDefinition from "../../../../../discussion/ai-cohost/experiments/sp
 import recoilEvidence from "../../../../../discussion/ai-cohost/experiments/speech-motion-startled-recoil-v1/evidence.json";
 import partnerLaughter from "../../../../../discussion/ai-cohost/experiments/speech-motion-shared-laughter-partner-v1/definition.json";
 import viewersLaughter from "../../../../../discussion/ai-cohost/experiments/speech-motion-shared-laughter-v2/definition.json";
+import understandingNod from "../../../../../discussion/ai-cohost/experiments/speech-motion-understanding-nod-v1/performance.json";
+import searchNuances from "../../../../../discussion/ai-cohost/experiments/speech-motion-search-nuances-v1/performance.json";
+import searchAsset from "../../../assets/speech-motions/search-nuances.json";
 import { parseSpeechMotionRequest, SpeechMotionState } from "./speech-motion-state";
 
 let snapshot: SpeechMotionSnapshot;
@@ -19,6 +23,7 @@ beforeAll(async () => {
   snapshot = await loadSpeechMotionSnapshot(profile, () => {});
 });
 afterAll(async () => {
+  await snapshot?.archiveSettled;
   await rm(profile, { recursive: true, force: true });
 });
 
@@ -26,6 +31,17 @@ function clipFor(performanceId: string, attentionTargetId: string) {
   const resolved = snapshot.resolve(performanceId, attentionTargetId);
   if ("reason" in resolved) throw new Error(resolved.reason);
   return resolved.clip;
+}
+
+function sampleOriginalTrack(points: number[][], time: number) {
+  for (let index = 1; index < points.length; index++) {
+    const [start, from] = points[index - 1]!;
+    const [end, to] = points[index]!;
+    if (time > end!) continue;
+    const t = (time - start!) / (end! - start!);
+    return from! + (to! - from!) * (t * t * t * (t * (t * 6 - 15) + 10));
+  }
+  return points.at(-1)![1];
 }
 
 const key = { generation: 1, sectionIndex: 0 };
@@ -42,12 +58,72 @@ function fixture() {
 }
 
 describe("speech motion distribution assets", () => {
-  it("resolves thirteen adopted pairs from seven performances", () => {
-    expect(snapshot.catalog.pairs).toHaveLength(13);
-    expect(Object.keys(snapshot.catalog.performances)).toHaveLength(7);
+  it("resolves 36 adopted pairs from 11 sources with 24 selectable performances", async () => {
+    expect(await readdir(join(profile, "speech-motions"))).toHaveLength(11);
+    expect(snapshot.catalog.pairs).toHaveLength(36);
+    expect(Object.keys(snapshot.catalog.performances)).toHaveLength(24);
     expect(new Set(snapshot.catalog.pairs.map(({ performanceId, attentionTargetId }) =>
-      clipFor(performanceId, attentionTargetId))).size).toBe(10);
+      clipFor(performanceId, attentionTargetId))).size).toBe(28);
     expect(parseSpeechMotionRequest({ ...key, op: "play", presetId: "receive" }, undefined, snapshot)).toBeNull();
+  });
+
+  it("publishes all six search variations for game and archives their parent once", async () => {
+    const selectionIds = Object.keys(searchAsset.nuances).map((nuanceId) => `search-nuances--${nuanceId}`);
+    expect(snapshot.catalog.performances).not.toHaveProperty("search-nuances");
+    expect(snapshot.resolve("search-nuances", "game")).toEqual({ reason: "unsupported-performance" });
+    for (const [nuanceId, nuance] of Object.entries(searchAsset.nuances)) {
+      const performanceId = `search-nuances--${nuanceId}`;
+      expect(snapshot.catalog.performances[performanceId]).toBe(`${searchAsset.description}\n${nuance.description}`);
+      expect(snapshot.catalog.pairs.filter((pair) => pair.performanceId === performanceId))
+        .toEqual([{ performanceId, attentionTargetId: "game", clipId: nuance.targets.game }]);
+      expect(snapshot.resolve(performanceId, "partner")).toEqual({ reason: "unproduced-pair" });
+      expect(snapshot.resolve(performanceId, "viewers")).toEqual({ reason: "unproduced-pair" });
+    }
+    await snapshot.archiveSettled;
+    const archive = snapshot.catalog.definitionArchive!;
+    const entries = selectionIds.map((id) => archive.definitions[id]!);
+    const { sha256 } = entries[0]!;
+    expect(entries).toEqual(selectionIds.map(() => ({ sha256, status: "saved" })));
+    expect(await readdir(archive.directory)).toHaveLength(11);
+    const content = await readFile(join(archive.directory, sha256 + ".json"), "utf8");
+    expect(createHash("sha256").update(content).digest("hex")).toBe(sha256);
+    expect(JSON.parse(content)).toEqual(searchAsset);
+  });
+
+  it.each(Object.entries(searchNuances.clips))("preserves the original effective controls and timing for %s", (clipId, original) => {
+    const performanceId = `search-nuances--${clipId.slice(3)}`;
+    const clip = clipFor(performanceId, "game");
+    // Both samplers use the same quintic interpolation. Identical tracks and
+    // precedence also preserve the effective input between the keyframes.
+    expect(clip).toEqual({
+      entry: original.entry, durationMs: original.durationMs, tracks: original.tracks,
+      fixed: Object.fromEntries(Object.entries(original.fixed).filter(([id]) => !Object.hasOwn(original.tracks, id))),
+      stage: original.stage
+    });
+    const { state, send } = fixture();
+    const base = { param_mouth_open: 0.6, param_mouth_vowel_a: 0.24 };
+    send("begin", 0);
+    send("play", 0, { performanceId, attentionTargetId: "game" });
+    send("end", 200);
+    for (let time = 0; time <= original.durationMs; time += 50) {
+      expect(state.sampleModelParameters(time, base)).toEqual({
+        ...base, ...original.fixed,
+        ...Object.fromEntries(Object.entries(original.tracks)
+          .map(([id, points]) => [id, sampleOriginalTrack(points, time)]))
+      });
+      expect(state.sampleStageScale(time)).toBe(1);
+      expect(state.sampleStageY(time)).toBe(0);
+    }
+    expect(state.sampleModelParameters(original.durationMs + 400, base)).toEqual(base);
+  });
+
+  it("exposes the adopted understanding nod to Decision for the game only", () => {
+    expect(snapshot.catalog.performances["understanding-nod"]).toContain("仕組み・説明・関係がつながって納得");
+    expect(snapshot.catalog.pairs.filter(({ performanceId }) => performanceId === "understanding-nod"))
+      .toEqual([{ performanceId: "understanding-nod", attentionTargetId: "game", clipId: "understanding-nod-v1" }]);
+    expect(clipFor("understanding-nod", "game")).toEqual(understandingNod.clips["understanding-nod-v1"]);
+    expect(snapshot.resolve("understanding-nod", "partner")).toEqual({ reason: "unproduced-pair" });
+    expect(snapshot.resolve("understanding-nod", "viewers")).toEqual({ reason: "unproduced-pair" });
   });
 
   it("preserves the adopted wry headshake with one clip for game and viewers", () => {

@@ -1,0 +1,22 @@
+{
+  "model": "C:/workspace/remie/rigging/astra-chan/workspace-notes/wry-smile-expression-v2/saved-r843",
+  "revision": 843,
+  "externalSnapshotRequired": true,
+  "rendererBase": "../speech-motion-game-curiosity-v1/render.mjs",
+  "repoHead": "e4f67106e099b25e6aa1f3f0fa41152f03709811",
+  "entrypointSha256": {
+    "apps/authoring-host/src/package-directory-io.ts": "43698469ba8369eaa940fc2f896bee5da529c01aae286b45bd763d06acb62e40",
+    "apps/authoring-host/src/perception/evaluation-adapter.ts": "46d45aaebe2ec25be11f822a25fa9de1bedece64796b3527a0baf34a9f045271",
+    "apps/authoring-host/src/perception/render-scene-adapter.ts": "538dc0107731f719f48586310530eecb396588ad42bf043590120c20625bd494",
+    "packages/runtime-core/src/runtime-core.ts": "a086e231b8456d5dad324d2dc621d26b16e7f903497039baad693488c06dbf1e",
+    "packages/render-software/src/render-scene-to-png.ts": "fcb27146785ae5a482a179e7195e125993022e50c12ec2bfa8044a344106f534"
+  },
+  "sourceSha256": {
+    "assemble.py": "3519f0b9593d613f3ad49300602ac668e39dbf72d13c61d0f20c34ef5e821e90",
+    "definition.json": "4379962878a71046220ab9c0aa911b3352571f592e71272728499b8531163922",
+    "performance.json": "53071d1b0ae6eac2de9e15729b85082e7e64d86bd4a8e41580cf1d19e2abea52",
+    "render.mjs": "ef49c85a497188a5b7a71e490aba1563e9b6e80fe1845480edcb4a88f4645bd1"
+  },
+  "snapshotInventorySha256": "dd3b6298810bddb1318348006c5a164db7e877cb52d50d80d5df9d313a773c22",
+  "completeInventory": "tmp/speech-motion/understanding-nod-v1/provenance.json"
+}

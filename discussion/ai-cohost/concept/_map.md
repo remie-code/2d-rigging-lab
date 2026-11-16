@@ -4,6 +4,7 @@
 
 | Path | Content | Status |
 |---|---|---|
+| [speech-motion-next-candidates-2026-11-15.md](speech-motion-next-candidates-2026-11-15.md) | 次の制作候補の意味分解11群と既存集計による頻度、現行8演技・対象別の不足との区別 | 旅行中の制作相談用。厳密な452件再集計は今は不要と合意。関心ゲーム版・理解頷き登録後、次の一本は未決 |
 | [wry-smile-expression.md](wry-smile-expression.md) | 苦笑・呆れの首振りに向けた文脈と表情の相談 | 2026-11-13: 表情r843/首振りv1本人採用。画面/視聴者共通の外部資産として登録、現用r844と通常版/portableへ配布。11/14本人が笑み・困り顔の実運用動作を確認 |
 | [startled-expression.md](startled-expression.md) | ⑥驚いて思わず身を引く表情とモーション | 2026-11-13: 本人採用・r840製品登録/配布済み。画面/視聴者で共用、相方は未制作記録。Stage奥行き接続済み、実会話確認待ち |
 | [shared-laughter-expression.md](shared-laughter-expression.md) | ⑨一緒に笑う実例、半眼試作と閉眼笑顔への目標変更 | 2026-11-12: 笑顔・共用v2・相方版を本人採用。3対象を製品登録、現用r825と普段のexe/portable更新済み。実会話待ち |

@@ -133,6 +133,26 @@ export function createFireDiagnostics(options = {}) {
     },
     /** @param {string} event @param {Record<string, unknown>} [fields] */
     record(event, fields = {}) {
+      if (event === "intent.recording.completed" && fields.kind === "failure") {
+        // A decision, request reply or storage operation can outlive its Fire.
+        // Keep recording failures in a dedicated journal keyed by the originating Fire number.
+        const failure = {
+          schema: "soul-fire-diagnostic-v1",
+          event,
+          wallTimeMs: nowImpl(),
+          monotonicMs: monotonicNowImpl(),
+          originFireId: typeof fields.originFireId === "number" ? fields.originFireId : null,
+          generation: typeof fields.generation === "number" ? fields.generation : null,
+          sectionIndex: typeof fields.sectionIndex === "number" ? fields.sectionIndex : null,
+          kind: "failure",
+          reason: typeof fields.reason === "string" ? fields.reason : null
+        };
+        enqueue(async () => {
+          await fs.mkdir(dir, { recursive: true });
+          await fs.appendFile(join(dir, "speech-intent-recording-errors.jsonl"), `${JSON.stringify(failure)}\n`, "utf8");
+        });
+        return;
+      }
       write(event, fields);
     },
     /** @param {string} stage @param {unknown} error */

@@ -141,6 +141,28 @@ describe("Control Channel contract JSON ↔ TS sync", () => {
     expect(exchangeExamples.happyPath.messages[0]?.message).toStrictEqual(hello);
   });
 
+  it("advertises optional archive entries and clip IDs without changing protocol version", () => {
+    const speechMotions = {
+      performances: { ask: "Ask" },
+      attentionTargets: { partner: "Partner" },
+      pairs: [{ performanceId: "ask", attentionTargetId: "partner", clipId: "ask-partner" }],
+      definitionArchive: { directory: "archive", definitions: { ask: { sha256: "a".repeat(64), status: "saved" as const } } }
+    };
+    const { payload } = createControlChannelServerHello(speechMotions);
+    const schema = envelopeSchema.$defs.serverHello.properties.payload.properties.speechMotions;
+    expect(payload.protocol).toBe(1);
+    expect(payload.speechMotions).toStrictEqual(speechMotions);
+    expect(schema.required).toStrictEqual(["performances", "attentionTargets", "pairs"]);
+    expect(schema.properties.pairs.items.required).toStrictEqual(["performanceId", "attentionTargetId"]);
+    const clipId = new RegExp(schema.properties.pairs.items.properties.clipId.pattern);
+    expect(clipId.test(speechMotions.pairs[0]!.clipId)).toBe(true);
+    expect(clipId.test("../outside")).toBe(false);
+    const { sha256, status } = schema.properties.definitionArchive.properties.definitions.additionalProperties.properties;
+    expect(new RegExp(sha256.pattern).test(speechMotions.definitionArchive.definitions.ask.sha256)).toBe(true);
+    expect(new RegExp(sha256.pattern).test("invalid")).toBe(false);
+    expect(status.enum).toStrictEqual(["pending", "saved", "failed"]);
+  });
+
   it("parses every worked example request envelope", () => {
     const requestExamples = [
       ...exchangeExamples.happyPath.messages

@@ -14,6 +14,7 @@
 
 | Path | Content | Status |
 |---|---|---|
+| [embarrassed-smile-2026-11-16.md](embarrassed-smile-2026-11-16.md) | 照れ笑いの笑顔抑制・顔をそらす順序、認識の条件依存。既存モデルでの改善候補を分離 | 本人が顔をそらすv2を採用。新規表情は追加せず、相方向けに登録 |
 | [human-conversational-motion-2026-11.md](human-conversational-motion-2026-11.md) | 人間の呼吸・瞬き・姿勢・視線と会話の関係、行動実現と連続軌跡生成の研究10本。「自然な動きと反応の重ね合わせ」の足場と限界 | Recorded(2026-11-10)。一次研究の調査。2Dへの転用・合成方式は未決 |
 | [shizuku-ai-motion-2026-11.md](shizuku-ai-motion-2026-11.md) | Shizuku-DuplexのAction HeadによるLive2Dモーション選択。公式設計、動作生成・同期の未公開範囲、チャッピーとの比較論点 | Recorded(2026-11-10)。外部公開資料の調査。実行・採用判断は未実施 |
 | [gpt-6-astra-cli-compatibility-probe.md](gpt-6-astra-cli-compatibility-probe.md) | 隔離CLI 0.153.4でAstra low画像入力・同thread継続・deltaを実測 | Recorded(2026-09-08)。2ターン完了、最小対応版や意味的記憶品質の証明ではない。製品導入はimplementation計画へ |

@@ -1,0 +1,786 @@
+{
+  "source": {
+    "sceneId": "ef9bff58-5a48-440e-8bb2-3cb8882881c3:1",
+    "selection": {
+      "performanceId": "interest",
+      "attentionTargetId": "game",
+      "reason": "unproduced-pair"
+    },
+    "count": 112,
+    "sourceDirectory": "apps/soul/agent/tmp/speech-intent-none",
+    "setSha256": "d4e507268e5656387defe09b698aeb73b05e015cfb77935fa32a3ae75d66dcd5"
+  },
+  "method": "2026-11-14 rootによる原意図・本文112件の手動分類。曖昧な6件は直前会話も参照。中心となる応答の働きを一件一分類。Decision再判定・正解ラベル・演技カバー率ではない。secondaryは集計しない。",
+  "contextReadRecordIds": [
+    "a3c4493d187029bf679bbda23af1228b89c46c843e12c49b805188bbe52d1cb6",
+    "63cf6ff05efc3daff2ef4682792705fd75cdbc83525d50f9610e7d973230bcb4",
+    "b802950384ceb612e78b8cc3b98279a0dc94e8dbe434e84b029986c32153a36f",
+    "a84f79cafdce5a8ef4c877868b8326c765a8987047220b5002c405c4b676cead",
+    "31dd3983aab59cba33ee02558708ca23a772c2654765426d7c731c50611fe4f9",
+    "a761421d1ef00a0ba8b2e3cc9f83faf8ab73748a9f89c44fa98c213b17d440b1"
+  ],
+  "families": [
+    {
+      "id": "orient",
+      "name": "対象へ注意を合わせる・示す",
+      "count": 15
+    },
+    {
+      "id": "curiosity",
+      "name": "興味を持ち、もっと見たくなる",
+      "count": 20
+    },
+    {
+      "id": "inspect",
+      "name": "探す・見比べて確かめる",
+      "count": 16
+    },
+    {
+      "id": "follow",
+      "name": "動きや成り行きを追う・待つ",
+      "count": 15
+    },
+    {
+      "id": "understand",
+      "name": "仕組みや説明が分かり、納得する",
+      "count": 18
+    },
+    {
+      "id": "discovery",
+      "name": "発見・成果に明るく反応する",
+      "count": 16
+    },
+    {
+      "id": "concern",
+      "name": "気がかり・難しさ・危険を受け止める",
+      "count": 9
+    },
+    {
+      "id": "conversational",
+      "name": "会話への同意・共感・嬉しさを返す",
+      "count": 3
+    }
+  ],
+  "records": [
+    {
+      "order": 1,
+      "recordId": "d4c04d8dac901cffe6aab78f8fa44139cd4b82ba960b5b775d1a0eec9640bdef",
+      "sha256": "3833c0aaab62d03306883299ad06220d3ecc63e24bb3a979aa64dbcbe69b2fee",
+      "primary": "follow"
+    },
+    {
+      "order": 2,
+      "recordId": "eb173362fdf53a1bfc0c8228609b403c9552baa847344dcbe02fa5555696515d",
+      "sha256": "322984b4edd03476d5fd6fed91bf219163d3748b1471343125fb8990403e0a11",
+      "primary": "orient"
+    },
+    {
+      "order": 3,
+      "recordId": "7935439da98aa8bd095c70d801dcc348e8df9bdd50b29fdc2b07b817e7d5f222",
+      "sha256": "184c663109dbec08ad25c1d2c95c85e9fa61514822fed2188a0c58a16f19b6e6",
+      "primary": "curiosity"
+    },
+    {
+      "order": 4,
+      "recordId": "a3c4493d187029bf679bbda23af1228b89c46c843e12c49b805188bbe52d1cb6",
+      "sha256": "a723e9b0544a972eda1863b6164d3171e025a1e13239f4f0549da46b64d2a47e",
+      "primary": "conversational",
+      "secondary": "discovery",
+      "note": "自身の姿の記憶についての会話。gameは保存されたDecision結果で、分類者が対象の正しさを認定したものではない。"
+    },
+    {
+      "order": 5,
+      "recordId": "8eb0ef4361af23fbc7040c1bc396327dbc77449947b51ba460209fb135587c7b",
+      "sha256": "9fbcca7de4fde12b23d787b0382ee7dfdebefcf3a3c2a2cc26a7637314ae7f04",
+      "primary": "orient"
+    },
+    {
+      "order": 6,
+      "recordId": "60f0f7e239c588534961c935e17ef40245bf4618276ea3af84e13191668437d3",
+      "sha256": "60c26151063eafa7e123340446b4ec26b072399476ca06c3c551629685cb1506",
+      "primary": "orient"
+    },
+    {
+      "order": 7,
+      "recordId": "a6b396224ab3ae2cd852fec798077ecaf442a0c687aa7ed1653c053703113315",
+      "sha256": "80d961532612289590223d43de75a1fd0227cc37dfa32bba3b885299f3c0b41c",
+      "primary": "curiosity"
+    },
+    {
+      "order": 8,
+      "recordId": "de3e3edfc30b2ad9d2f7cf909d3cb1fd9d2eac921962a28fc96407b6830069c5",
+      "sha256": "f1ebb14867e77003d9852d2379fbe1d212501928855528198d449d1f94b30ee4",
+      "primary": "discovery",
+      "secondary": "orient",
+      "note": "操作表示への注目もあるが、「ほんとだ」「ボール役」の楽しさを主とした。"
+    },
+    {
+      "order": 9,
+      "recordId": "bac58482c0845fe9996cc7342fb925a44aa953aabfb35b0aa37a53b62408cc5a",
+      "sha256": "f5565792525794667a65551fa27dea6c6eb402a8a32a46ff582889a94b8de71f",
+      "primary": "curiosity"
+    },
+    {
+      "order": 10,
+      "recordId": "56c887746b9e44f734c6a2a6d5fe6bcf47568e9543d71087ab6d83635ddb8800",
+      "sha256": "add1d5923422a77dcdd7ef9ea4834668049f7db18dbd18bfe04394f24c3d926d",
+      "primary": "follow"
+    },
+    {
+      "order": 11,
+      "recordId": "cedfbfed1a7b85e45676ae6823bcd4cf4cdb74bc95cd6e263fd6377dbeec9c58",
+      "sha256": "ba44ddcabbb0f4b939290dd2a175a14559c4850043a6d333ab6babdedb732657",
+      "primary": "orient"
+    },
+    {
+      "order": 12,
+      "recordId": "77a2fbeb6aaf9be60c2d0d5ffd0caee1ca903ff7cd273c851a43585f1b4a7308",
+      "sha256": "96e6ddac29f5e67ff466f856ec250fbb0e96cf8550e44c71b0769db356d85d25",
+      "primary": "understand",
+      "secondary": "inspect",
+      "note": "見比べる動作を含むが、発話は仕組みの理解を共有している。"
+    },
+    {
+      "order": 13,
+      "recordId": "af095a90bca8bdd8b019f3dfb8ab51e7b13d1e628023e7790abb217dc822c509",
+      "sha256": "338b8f6db8da3260602e02e79897b824681350709bee2107475e87265621ce3a",
+      "primary": "discovery"
+    },
+    {
+      "order": 14,
+      "recordId": "679ffecad52733465fe3cd287a12b8fd55f184c4c80f9486f0b294342023bd4a",
+      "sha256": "291d269343204fe073e5da597f7d40d62f89d0d584acb60b924900cc0f571074",
+      "primary": "curiosity"
+    },
+    {
+      "order": 15,
+      "recordId": "9b7bd838107469377377b160009849a9f8e41191d8b37a4e1bafc7734f8ee4d2",
+      "sha256": "0d1a712b0809c15e47259b86bd78f29d8981615aed9baee44341835d4b4c104b",
+      "primary": "curiosity"
+    },
+    {
+      "order": 16,
+      "recordId": "20dd20647f27eccd6db4e4fd0d2208993dc2373ee110a3ca90826d220ed8f6df",
+      "sha256": "bbdf7b3d5d2c677b727df4ce9c7def150d9627313ec7212183dbe0091433a6aa",
+      "primary": "inspect"
+    },
+    {
+      "order": 17,
+      "recordId": "98c208568437306be09cbd984a66dddd31f880996d410bea0cbe492f5487e199",
+      "sha256": "67985e8b446c2eb97c09f6461dec4563aa0a43b647e1933de6c75d732e8876bc",
+      "primary": "discovery"
+    },
+    {
+      "order": 18,
+      "recordId": "e8d8babc368778f4e5f43c91b1e1f86e2b042818059786a213af234a1b5eef90",
+      "sha256": "7b7b0dd4d4c39d87081c14804204acae2823c718b0704fbbfcf7e38fbd9b23c0",
+      "primary": "inspect"
+    },
+    {
+      "order": 19,
+      "recordId": "83382b9950b6dc532648446075f7a0f54c2f042bb028103fbcce71d695f83dc9",
+      "sha256": "ed7d6d2a6f05fc42e08a0bc13c642172ec84c4a00dc148ba995a96205d25ff43",
+      "primary": "curiosity"
+    },
+    {
+      "order": 20,
+      "recordId": "b0757a980c9c2445bfbe7deba2af6e8a4c15867e759208929cd63a57f46604be",
+      "sha256": "9fb7d5a0b6a2acb0f2efc5d22a847059da2f4885b23c573e9ac5aa8503bd47a0",
+      "primary": "understand"
+    },
+    {
+      "order": 21,
+      "recordId": "bbf8223157068c5ce886744f2082d8a14a9688c7cf7c87932253d2b77f961af3",
+      "sha256": "3e9f5813b68754adaeb87eb0600c100d039da361de828f68e20bb6efcb5df761",
+      "primary": "orient"
+    },
+    {
+      "order": 22,
+      "recordId": "585a94ef83bb233da3cbacdd8ca17cba29c50ae17a1aed53bbca80366229d0b7",
+      "sha256": "24aa4597ee90a84aa1571d25d227bc52533b7e88883b881daa9ebcc50917c890",
+      "primary": "curiosity"
+    },
+    {
+      "order": 23,
+      "recordId": "a4a3066a1fe814b0e53850ed321391ee5d251ed2464df558174b59c589cfc145",
+      "sha256": "3d57c82c95dbee87aa33aebddf7f12f1ca05d859549d7e6aa779ae3c11f029a3",
+      "primary": "inspect"
+    },
+    {
+      "order": 24,
+      "recordId": "bdf112ffa651be130733079a45ad31c2fbcfa603a0cca066662f54b87de697c6",
+      "sha256": "6294f59d8d9022c5221df6bd635d0e232022d512fa1f6f999648dd8b610fdd29",
+      "primary": "orient"
+    },
+    {
+      "order": 25,
+      "recordId": "a7165b1321d47f101afd44d4696f4ccb6ca83aa5ad0f2c221c55cd3c60f0b8ea",
+      "sha256": "13ba26c17108978d41b1aa37eca6c0f38b5ca57c0faf03594d98956cdb9e6fc0",
+      "primary": "understand",
+      "secondary": "follow",
+      "note": "仕掛けを見守る意図だが、二回でよいと分かったことを主とした。"
+    },
+    {
+      "order": 26,
+      "recordId": "d47e41f70698d6e2645a46831c3070c585c9dd802b2d2abaa9115cb7dd678935",
+      "sha256": "a1d259437277504863ae73c3f6b79523c7a8d1b4032c7e829b971efc95da3200",
+      "primary": "inspect",
+      "secondary": "concern",
+      "note": "使えそうなのに使えないという違和感から、候補装置を確かめる。"
+    },
+    {
+      "order": 27,
+      "recordId": "90417e8c8d5e6c2aeb74a1bc9ddadda05ba56cd6605e3d8ab6cb232a48629f9f",
+      "sha256": "56b13ac30620bac7a51f93a5232ef5f939cadce639378fa53b1d9ddd5ed6ef8a",
+      "primary": "understand"
+    },
+    {
+      "order": 28,
+      "recordId": "73c6ed4b32829f100c326f1d487eb22a5c49918a318e4539e1dd693b5c18dd1b",
+      "sha256": "fcd3e471d48dc4f83aa7ab96f606d596bbdf2f55c9474f4904ae75e6e7974530",
+      "primary": "discovery"
+    },
+    {
+      "order": 29,
+      "recordId": "8dd2ed4c5940460fda90b48bfd4b3da8555447060be192f40f1d92f5f7fbca1d",
+      "sha256": "6c1190968c27311fd0da45e690e219787b81141be3196bc2c1ce7293029c16cb",
+      "primary": "understand",
+      "secondary": "orient",
+      "note": "先へ注意を移す動作を含むが、確認を終えて先へ進む合意を主とした。"
+    },
+    {
+      "order": 30,
+      "recordId": "68b35b32e919db7a9a795b0fd4108c1ed34d7ed7568d75409671e6fbcd2b0055",
+      "sha256": "c621b47b62979dfa2cd4b1615fa2443fe82e6aaaa5060abed58f185424c6690f",
+      "primary": "follow"
+    },
+    {
+      "order": 31,
+      "recordId": "67f5709e3057f111168f7c2dd9aa78c0d48dfeff35dddd1e2870e11525e41382",
+      "sha256": "1a272310d60aa12134dc193b8d8f29efd4a938e2a90c427019ee21ae8769f931",
+      "primary": "discovery"
+    },
+    {
+      "order": 32,
+      "recordId": "8d6ba986e2df44c2b968b3d01fa09f5a1ec3012bac2849d52936c56bfc5f51f0",
+      "sha256": "ec70cf08aa1850fbf9b0cca87376e8e6133160347dd34dbea9db33154e9c68e4",
+      "primary": "understand"
+    },
+    {
+      "order": 33,
+      "recordId": "4b5e0bbda4b6facdffcbbfeab44707dd97cc03d1cd996435d77a978a14607821",
+      "sha256": "ea02bcc3734591e1674edf52bbf4a076a51e29731a3fed54aedf51944bafe140",
+      "primary": "follow"
+    },
+    {
+      "order": 34,
+      "recordId": "af9ecc804fa7956b6b27529c51e2c68e05dc42ee9f8dc27bb1ccfc1ce8a7b936",
+      "sha256": "b4eea64933033df8ae7952f85e35872d60ecd03f9148f29b5c787c2eb8ee8387",
+      "primary": "curiosity"
+    },
+    {
+      "order": 35,
+      "recordId": "0bd1202aa14d7dedb81b0ce9fe48f24962a0cdd9f5d9e4828d145be6d71b0831",
+      "sha256": "69ced158661b5a907a77a54ad6f38ccf93ea575f396daf410dd9c3ec852daae0",
+      "primary": "follow",
+      "secondary": "discovery",
+      "note": "一個入った反応もあるが、跳ね方・結果の読めなさを追うことを主とした。"
+    },
+    {
+      "order": 36,
+      "recordId": "cda108c0c6086a9c2bc9a526c2a073a202d6205bee7fbc27e798d1b563e5ceb6",
+      "sha256": "c4e2e3ca621727371f23b97eee438798c66a249a79bcde772c8b9061b4011fdd",
+      "primary": "follow"
+    },
+    {
+      "order": 37,
+      "recordId": "b04c562e362cee67bf10c3d8ea9d9e73deae52d4dad4193fea23b387c702727a",
+      "sha256": "5ee7e3ae5943731ee828290a34502b5121d029fdbf2b79dfb7cba28f925f97cc",
+      "primary": "inspect"
+    },
+    {
+      "order": 38,
+      "recordId": "73a19cd1ec3ccfc91e685b71afc549db3291c68425cc63a278be852bf0c44768",
+      "sha256": "a271f365730bd59a1754959519139cdb6203f10f76758adc551f5d2fa76c1253",
+      "primary": "curiosity"
+    },
+    {
+      "order": 39,
+      "recordId": "84740a625c916140a937ee9bd6dc36423d5dbecfc543105e4d1153094051569e",
+      "sha256": "b57199544ea18946e03909947e0d83d09a7b3586479bc3bc21f6f34b39cc5f97",
+      "primary": "orient"
+    },
+    {
+      "order": 40,
+      "recordId": "042078edcf6a1a170a185af969211934f9734148ca2e9fae13eec6dc0a937410",
+      "sha256": "fd2c463a85f5f153342ded05904b6170c96fa1ed23e47261162a84f2e327100d",
+      "primary": "curiosity"
+    },
+    {
+      "order": 41,
+      "recordId": "43ed17da436972560e90c2c81054719b425ebacf51924a5ed88387269dee5add",
+      "sha256": "34b061db415e4f98053dca624ca3182f901eafb8e180186d209555e72b4a9bc1",
+      "primary": "understand"
+    },
+    {
+      "order": 42,
+      "recordId": "2946fd4e243e82361f5b5ce90d853b6265996317b92a4008ec7ef5a0a3b95430",
+      "sha256": "de852d04cf4b18e0e3b875206fde505a31961b1b48c5d950e55fdf56b24a5f18",
+      "primary": "understand"
+    },
+    {
+      "order": 43,
+      "recordId": "63cf6ff05efc3daff2ef4682792705fd75cdbc83525d50f9610e7d973230bcb4",
+      "sha256": "c23fc36c45d078c10223cfe6f11d5b53f2c350855e97c86bba980f22fd284734",
+      "primary": "conversational",
+      "secondary": "understand",
+      "note": "協力している感じがあるという直前発言への共感を主とした。"
+    },
+    {
+      "order": 44,
+      "recordId": "f0a7c309d996e9fc50b9526d217c24703025cd6603c92b9c32106f94f6d7268d",
+      "sha256": "6efe351ab28560cb1dd73bbe8a6dae8abab286faba7a74e830061a0b759947be",
+      "primary": "discovery"
+    },
+    {
+      "order": 45,
+      "recordId": "2c9f0ea5ce22c84219f01edd4e7e3e991ff204618d680a9e88f6024ae993a645",
+      "sha256": "20b3b2ff268148b018d39cccf4fdf690f62b220c1433ca5bcc1923a72c6646a5",
+      "primary": "discovery"
+    },
+    {
+      "order": 46,
+      "recordId": "fe3ac57e493c55fc60e23b790dde29ab22294bbd868806d804dff72466cb9820",
+      "sha256": "6ac59a23570c4345f917506c8a51f6bb091505e7015f0ada4b9fa64b829e0d4c",
+      "primary": "follow"
+    },
+    {
+      "order": 47,
+      "recordId": "12c7e061267f31e364e057a5cdc7365dd0fef7a76a3d0023db2fdd7b876d28ba",
+      "sha256": "b738f6be1edbb83d3f1d4e15d5af54c5a35ff018adc24de75c5c06c75967be8e",
+      "primary": "understand"
+    },
+    {
+      "order": 48,
+      "recordId": "5d2af376dfbb01091718224ed9d428a0bb3878f0a34c4a27bb93f1af1c71b2d2",
+      "sha256": "c00261e1f2b3bc997597fbbd04e5d297a7b3527ffc894a4f84bc191b76a6f0e9",
+      "primary": "follow"
+    },
+    {
+      "order": 49,
+      "recordId": "ea1a5f7ef11d3717efa2c668f4e0e8023d524cffc4c54e7395e12ab08863b289",
+      "sha256": "8aa702cf20b2135e3703234f887764b24b25d9f7a748f52a220d273963d3c2b4",
+      "primary": "curiosity"
+    },
+    {
+      "order": 50,
+      "recordId": "a13b8912cb85c02c3d84481a48ba5fda4830f77b90675fa6de0a329db49f47be",
+      "sha256": "868191cb7158f083dad725c6a6039ab10d88403966dbd56e267e6ead25c22c85",
+      "primary": "orient"
+    },
+    {
+      "order": 51,
+      "recordId": "3f130ca919d53b2d60d876e40e7828a3ea1a7f07c884d678f001a14ab6eb9e41",
+      "sha256": "c88253c4e022a51d2807caf4af18b3fa044f7ba87b7681e538bdada61137500b",
+      "primary": "curiosity",
+      "secondary": "concern",
+      "note": "道を塞ぐ塊への懸念より、脇の青い光への関心を主とした。"
+    },
+    {
+      "order": 52,
+      "recordId": "229de6810390d1a485df818b2ac529c74d023e24b7f061ded281177c6c3722c4",
+      "sha256": "d8b5185268e8e2b7dca68633464a12d2ba9ee4f9bc9b1f769da1ac4fe7e10969",
+      "primary": "curiosity",
+      "secondary": "discovery",
+      "note": "埋まった物への気づきを伴うが、顔を寄せて中を見ようとする働きを主とした。"
+    },
+    {
+      "order": 53,
+      "recordId": "0c478dadadf3ea474e7bc32fb574f8321afef75198fa863bb61911ce36d287b2",
+      "sha256": "45e1d093ad9335826b3ed26492aed3a1381053877da87cd1d010e97cff9b2133",
+      "primary": "orient"
+    },
+    {
+      "order": 54,
+      "recordId": "99f51c5e560c4355bf359240b1e60ff19b7eae287273350692ee78f0bbedfc5e",
+      "sha256": "2b551bcc70b0b0558b3d5b10c8436b0e2bfdede9f33e75270a439033fb2b86f9",
+      "primary": "orient"
+    },
+    {
+      "order": 55,
+      "recordId": "50f2297d212d57ef5e06f75885a6b05c525a2ac9a2fead4d8962b5a9225ede64",
+      "sha256": "16918f1cf962635255cb3bdb1df3340a1d955193dad1181567b48aa4c6e14a23",
+      "primary": "inspect"
+    },
+    {
+      "order": 56,
+      "recordId": "d47665305765dfcbeaea7d47ffd98221aea72edd11607524ed72a1f7cce633cb",
+      "sha256": "fc8023628453ad6db900bbffafb066cdfe865cb363d63a4ae54343f10dd9aa76",
+      "primary": "orient"
+    },
+    {
+      "order": 57,
+      "recordId": "9548833ffdd0975390c4740a6ddc4f6a7e770143f05da5b437286568579f60e5",
+      "sha256": "f5a8c341390fa7cae6acb903c1f20fb90ef6f86b9652323a62eaba49be3ac37b",
+      "primary": "discovery"
+    },
+    {
+      "order": 58,
+      "recordId": "9bb5413b94d6a65f64b698d5d0f41b6cb0405987392695866c06022bd1dc692c",
+      "sha256": "cb197a9c59187786bb8d3040ee9ddd004dc84233df9ade992a0bb0791354965f",
+      "primary": "inspect"
+    },
+    {
+      "order": 59,
+      "recordId": "c2e825c9b840f686eb0931dd5ecd8b418b2a58cc94c4196ef89e236ec2d4967e",
+      "sha256": "6d39edd86616d04a40f128f3494bf7313f0bedb10c5e92c66bc7eb4adfab48a8",
+      "primary": "follow"
+    },
+    {
+      "order": 60,
+      "recordId": "3f1903764a477c46747c8b84367ba84da9e2a6d3e90154f7ba3d7cadcabec163",
+      "sha256": "be6feb502177d20f0be02f445b16f2898c73d9c5e1df532e4de57462bc4124c3",
+      "primary": "curiosity"
+    },
+    {
+      "order": 61,
+      "recordId": "8cc027bab1cec8d6dad5ad2f054992b9dea288ab6f230290f44106db40ab6658",
+      "sha256": "7a7588404e02a60fc218c6d6b217f83de4ea11241149ddbdafecc8a5d1f00330",
+      "primary": "orient"
+    },
+    {
+      "order": 62,
+      "recordId": "cc2bd7332bca5761c0e1da4dd90ee75640a78b5cdd67bf6f70d65e39752b6675",
+      "sha256": "6349043819bd1dcf9bf73cbe7da6f510a70525dda7a4607ea0f77f8ae8e79fe8",
+      "primary": "inspect",
+      "secondary": "orient",
+      "note": "遠方の対象を示す発話だが、目を凝らして視認する働きを主とした。"
+    },
+    {
+      "order": 63,
+      "recordId": "c2ff86512f02f528bbfced8ca4ee89fa3ff9839953697727cbedd1f1dc5d091f",
+      "sha256": "68b5b382fd32692725a04dab86a2ff3649a0177b0524274025c74abf2c88a69e",
+      "primary": "discovery",
+      "secondary": "concern",
+      "note": "見つかって表情が緩むので安堵も含む。発見の反応へ置いた。"
+    },
+    {
+      "order": 64,
+      "recordId": "4dc495f95b8250db43a1db688d00a5402130ef54b0f081534178b2ed9daa428b",
+      "sha256": "3cd8db161a39a15df8669a63db375948fcacf2d6b582605c549e3bbdad2c830f",
+      "primary": "understand"
+    },
+    {
+      "order": 65,
+      "recordId": "584efb887b7b602ebe88b544f2a4f39259f265446a878c60a70319c6221150c0",
+      "sha256": "2c1f85f613ebeef3794ecf693f07ea4eecd6edc8e52457e836a23a6860fa99c0",
+      "primary": "orient"
+    },
+    {
+      "order": 66,
+      "recordId": "18430cff7512d620cec3374b731d4134b5cb863f93ba902fe51257d06ce9d798",
+      "sha256": "d70f41bd49285134993262c4a8fd80b1e81706e07db3a2c8738c9da3d730db9c",
+      "primary": "understand"
+    },
+    {
+      "order": 67,
+      "recordId": "0e1fed30f5fe90151307e92c56cda50a03c0367351d4c0c49a39ed88c479da27",
+      "sha256": "8af8bda07e6f2fba2b644abbdc59165693ab117596425bdd6cdf12b2a5e1c3ae",
+      "primary": "inspect"
+    },
+    {
+      "order": 68,
+      "recordId": "b802950384ceb612e78b8cc3b98279a0dc94e8dbe434e84b029986c32153a36f",
+      "sha256": "4efb8439751827f781634af326ecb64e34e65e78119d26981215cb45d7149c79",
+      "primary": "concern",
+      "secondary": "inspect",
+      "note": "宝箱探索の文脈だが、この区間では見逃しへの気がかりを表している。"
+    },
+    {
+      "order": 69,
+      "recordId": "5f78575ea01bb9b3e04b3d09eee79f4b91906c2d2f72c417e8d419c3a61a713e",
+      "sha256": "a1b7e7d6bf4b15be08dcf2df2918ea5fb017295c9d3e2f6073861b6f3887cd29",
+      "primary": "inspect"
+    },
+    {
+      "order": 70,
+      "recordId": "5b4d5900d6158fcf1749313492bdd240b87393a1893f0a13fc106d86376171fe",
+      "sha256": "772206ad00206532b3b1f09b4aff2af68ea1c53ac2cb3a8652a7b4da95b9a140",
+      "primary": "inspect"
+    },
+    {
+      "order": 71,
+      "recordId": "cccb5da55b2c12ef1eb760e6c5008b1cab42706ef05035cbdee4861f0a510be0",
+      "sha256": "9eef8cb39038aa2ee17bfa981277878ee9ca852136342e2cb18df94b5365c9e6",
+      "primary": "discovery",
+      "secondary": "inspect",
+      "note": "目を凝らす動作を含むが「見えた」という発見を主とした。"
+    },
+    {
+      "order": 72,
+      "recordId": "7af301511ee12daf3a548f00e8604e5512eb2bba5168ab3517a3405a6ae979ef",
+      "sha256": "55663be5d00742d180b6f5eb56d277de21c9dcdf08746d7594535ad48bab96e8",
+      "primary": "inspect"
+    },
+    {
+      "order": 73,
+      "recordId": "38a5434ddfea0721dcdd521f3688010bead5a6bbe6574f8650d0eb59701099fd",
+      "sha256": "bee060515385417ba1427313f34e6bc388b7d646753e883147d72cb6c9d29fe4",
+      "primary": "follow"
+    },
+    {
+      "order": 74,
+      "recordId": "b7b61b7f60ac156bcb55d7d34eda110a8ec62a4b94cf1d5f9f3cbd568c0c523a",
+      "sha256": "0ef138d797120afe176a35d0e654cfd904e941f989a121343d7b649a93bda6fb",
+      "primary": "inspect",
+      "secondary": "follow",
+      "note": "灯りの進行を見守る読みもあるが、左右を見比べて残りを確かめることを主とした。"
+    },
+    {
+      "order": 75,
+      "recordId": "bbc35f2deecd6570d08b787b860ac10afa493c0ded681a4938028ef2ec655b23",
+      "sha256": "29aedde533c5ef50004e6be82ec2709fd38aa5c3087fec5488b1f80b192c650b",
+      "primary": "orient"
+    },
+    {
+      "order": 76,
+      "recordId": "9b3e57f4fbadfd61bbdb2fe4be284ce0f874e83b0ee8e4f6703f246583f42a5d",
+      "sha256": "12d23f8f00c3825673a918e79d225a5270d90dc82118988fd83e9352ebf629f4",
+      "primary": "understand"
+    },
+    {
+      "order": 77,
+      "recordId": "1f7e62ddd1b75008c2337edff2cc760648ea71c50ee24d6b6ab27bc4f36a1df3",
+      "sha256": "8e91ab073f96d2d988fe3249908f7e5c52d2619f89ea5ec9c3a422d63919384b",
+      "primary": "inspect",
+      "secondary": "curiosity",
+      "note": "笑顔で身を乗り出すが、再探索開始を宣言する区間として分類した。"
+    },
+    {
+      "order": 78,
+      "recordId": "83b2e69230b81ff6fde4d8f5ba48c08827d16ed91b72006d3a645953e35a0a29",
+      "sha256": "17c07ac423332e6325347489b0cd178fefb6d33e093cc3c581b04f10e83a9eaa",
+      "primary": "inspect"
+    },
+    {
+      "order": 79,
+      "recordId": "a84f79cafdce5a8ef4c877868b8326c765a8987047220b5002c405c4b676cead",
+      "sha256": "1c5a914cfa88d50b0280a0e4556ed08f00abb42b1909820c037a39578dab97d4",
+      "primary": "inspect",
+      "secondary": "discovery",
+      "note": "箱の発見を伴うが、未取得かどうかを確認している。"
+    },
+    {
+      "order": 80,
+      "recordId": "8709788c67f817824f2e3822ba4d075e26cedcc81639acdbdb449f0c2cdafbaa",
+      "sha256": "d81fdb87dc2347d200ee4e8c42b61d88be75b5fc26acc69dc062ae05348e45aa",
+      "primary": "discovery"
+    },
+    {
+      "order": 81,
+      "recordId": "2be411f3af8ebd271ee955ef21755b0a0a8453e3db923b1636ec3ca6fa33c726",
+      "sha256": "db3349d0341598b54d823f4c86bc3e8aac8fa12d92a0af578f707071eb920b6e",
+      "primary": "follow"
+    },
+    {
+      "order": 82,
+      "recordId": "35bca18b657661e972e20661ec0181474c5b4b802a4e890a3a3671b10fb71859",
+      "sha256": "b0e5dbe4eb7ecb01be33116c5259e4e22d7905ebc5c4e1ae304fd9a7b38dbea6",
+      "primary": "follow"
+    },
+    {
+      "order": 83,
+      "recordId": "e8e7932d8520ec299c87652b857ec9e0b96bacd75c1b85dfb22d4e44e6186017",
+      "sha256": "c1ba10bf0831cfc062cec9b8ef649bba6bbc0a8b9bf940993ead907e92de1e37",
+      "primary": "understand"
+    },
+    {
+      "order": 84,
+      "recordId": "71ea6111fe336a6a7fc72d91c78848025b5e3be65eb2a438935e77fceecfff73",
+      "sha256": "4e42365eb364a446967ce7688503d81353b10c2f3fb5aef29832f9cdfacbb9cd",
+      "primary": "concern"
+    },
+    {
+      "order": 85,
+      "recordId": "0d55c6745b3628e75d851214d84bf1071e3d6e66efb2ca29c735c66ca4ac8934",
+      "sha256": "a89f13bc4df5135e7d5fd0b1363652b74cce5c3f271dac8fddbdd9b49f0c4aba",
+      "primary": "concern"
+    },
+    {
+      "order": 86,
+      "recordId": "41beebdd6f7017b3f649e5c94037b93a245b64a40644c517d4bb28f0e1edce45",
+      "sha256": "93c92fb36fbaa16c3329663180715fcaf22db74ed7e902bcccc42132ac577d21",
+      "primary": "understand",
+      "secondary": "concern",
+      "note": "ロックの不都合を含むが、引っかかる理由が分かったという理解を主とした。"
+    },
+    {
+      "order": 87,
+      "recordId": "2e746ef4841ef22b2d595c7682cbe2a9505e1377b564f9da71c740241e4b1319",
+      "sha256": "a5a33f9506e7a287ef027385bb5f893d86751b346eddbf85d5608e07076b148f",
+      "primary": "follow"
+    },
+    {
+      "order": 88,
+      "recordId": "31dd3983aab59cba33ee02558708ca23a772c2654765426d7c731c50611fe4f9",
+      "sha256": "be13345a41c99be3fae7effb80d5abe1da5c9a0ef4b483970807a5076a26259a",
+      "primary": "concern",
+      "secondary": "follow",
+      "note": "直前の「うわやべえ」と足元の範囲への反応。落ち着いた関心とは分け、危険への注意として扱う。"
+    },
+    {
+      "order": 89,
+      "recordId": "e5b41029db78d555de550932cb87cd6e7f318f0f5a80d19b8bf762c04007127a",
+      "sha256": "91ab729a52dc28ab809aafb66f0e9ef5512be1da3def0be72b15bdcd58a8a9be",
+      "primary": "understand"
+    },
+    {
+      "order": 90,
+      "recordId": "7de35bc1af3c69f26967567bd8f779512d4109e4fbf82737fcec1bd146d4cbfc",
+      "sha256": "f4a612d742fc7e653617df6272ac8ded31aeb32f623cc60f4dcbb014f02ee12b",
+      "primary": "curiosity"
+    },
+    {
+      "order": 91,
+      "recordId": "a72c0801194a9c563a3c2a9ae2a9739c9805a26af2354694859eb1cdf468846c",
+      "sha256": "5dfd850a547c4b8fc5453141aaff41a316aa6df9f94c01a3285b3f56b92640ce",
+      "primary": "orient"
+    },
+    {
+      "order": 92,
+      "recordId": "8292c4cab85b961ec0a18dfb7d3d11c16e80654ac1f114171c52931e3316f9d6",
+      "sha256": "de4a690e9c8e8cbd0c6458c2a4dd22c41a6d5d21d34c5fc6eb7bb300d3c588ed",
+      "primary": "discovery"
+    },
+    {
+      "order": 93,
+      "recordId": "8eeeca1120b773719d4648d0bfaf267b9bf076f4e3cae1695560c781c7ec3a21",
+      "sha256": "60656547c219090a764d4f139b12b453ef848bbfb9645dbc3fe691c140e3d111",
+      "primary": "curiosity"
+    },
+    {
+      "order": 94,
+      "recordId": "989f55e424281022cb3ac645ac1775aee35918b58ccf09577d02603f75187ca4",
+      "sha256": "fb7ac3ab25346aef5783520ee1b3822400fcc7c0bb63d742e600e6590f10d72c",
+      "primary": "follow",
+      "secondary": "discovery",
+      "note": "楽しさはあるが、連携が次々出るテンポを追う働きを主とした。"
+    },
+    {
+      "order": 95,
+      "recordId": "3b612fe179c5a340f48d6ea10240c8223cf0b53cfdc25103e36ae6459e1ab6c4",
+      "sha256": "35205ae4fb51c088d055ed6a641f0313eff05d09429e1744fe7f23a3645bbd8d",
+      "primary": "discovery"
+    },
+    {
+      "order": 96,
+      "recordId": "0fa99c6d2b3de394bac71fa7d92565cca9585868b9844f9329df977e7161eb5c",
+      "sha256": "5b3d271e92a67b132bd95f31855f48128bb76ec04f93051d34a3ebfca56dffc6",
+      "primary": "concern"
+    },
+    {
+      "order": 97,
+      "recordId": "244643bc742974858bca6783a31fb08802ff300bc7abe6b993c4c25fa9dc5627",
+      "sha256": "68325a3dd275395ae943e476a535677e6bb5c40de90e355069fbad9efb30ec62",
+      "primary": "discovery"
+    },
+    {
+      "order": 98,
+      "recordId": "391c17ef6fbab979640e194af8f03fa38e9f610541e9860f95ea6dd8ef7d28ab",
+      "sha256": "b778aea11007944965bbd79a1fcadb2ee81493362d3cfea37f1b0b08622e3518",
+      "primary": "curiosity"
+    },
+    {
+      "order": 99,
+      "recordId": "c633b04fd06cb6db9334a8fd16be5e90645e517fa9f309d1e146323cfc1a6c92",
+      "sha256": "b1909fe007123c3a9bbaeee93740021e5c96cb6e589abd1b644eb7ace769dda3",
+      "primary": "understand",
+      "secondary": "discovery",
+      "note": "目を見開く驚きはあるが、消費と回収の計算がつながったことを主とした。"
+    },
+    {
+      "order": 100,
+      "recordId": "536e1b12d8155296fdfbd049dcc3854a8dc23520305b924c7640d891af24ea21",
+      "sha256": "5938355ba7450dca5711b206eece8db287dbd1c7fe18b1b7158d858b2d35f888",
+      "primary": "curiosity"
+    },
+    {
+      "order": 101,
+      "recordId": "c3df8d0c26ca612f2e92e15fe527b4c5b5875e16d550c13b972f5eda766c17d4",
+      "sha256": "308f1761604f47f8794fcefdcb6f30bcc9c912064731d620bb4fd8df783a37c9",
+      "primary": "understand"
+    },
+    {
+      "order": 102,
+      "recordId": "0a9186d83a588b52afcd3b71640de63f60317574d923de386054e3730242c66d",
+      "sha256": "fcb78c8c5db94e1a734372c87eaaaa96dcb64b4af1f84e4e56cd79fe918118ae",
+      "primary": "understand"
+    },
+    {
+      "order": 103,
+      "recordId": "0002a0b4b933ac8e9a95930b4417ae92f8dd949bf338274ae15a263a539b69b8",
+      "sha256": "72caf637c9abbbf63144dd3d4b8131ab3e3853af2b483d9810ccebb39157c212",
+      "primary": "follow"
+    },
+    {
+      "order": 104,
+      "recordId": "7df712d9e1c12ed18bc3c327247095b6c09a36b241744aefe2a19619ae067767",
+      "sha256": "e2e135d25c7c87540fe6d16002d0f91b89a9f74925045eceb198b2a987fbc47b",
+      "primary": "curiosity",
+      "secondary": "discovery",
+      "note": "強さへの感心もあるが、将来その組み合わせを使う期待を主とした。"
+    },
+    {
+      "order": 105,
+      "recordId": "2c9d8e8d0bee23175c5b2b6f697d4504f5c092a41ee88fe14e0f0cf74712b7ee",
+      "sha256": "82911626ff7aaf5519b9e2734deaca3eb5f3f36765c9936816969e31f6a2cfff",
+      "primary": "discovery"
+    },
+    {
+      "order": 106,
+      "recordId": "8ca078407e6b6b14a50572a5c68885a69bc5db16c37cd88d74943254cf534b65",
+      "sha256": "bb23e89ec7ca8d79055909367cf8e45fb868ce6df64205363bb5a434d2f9bc2b",
+      "primary": "curiosity"
+    },
+    {
+      "order": 107,
+      "recordId": "58df16dce3a6cf6309097d812fa9527c14e1a1ff9115e8ca17ce87cbc5c6ae69",
+      "sha256": "1fcbaf8875c2c0a656c16219cf8ba5c545fea472ce3bd746c0f30992e1ea2d11",
+      "primary": "concern"
+    },
+    {
+      "order": 108,
+      "recordId": "8f7cf5a1a2974661710f67bd6cf3522f62b22b9fdc1897346120d377e964cdcf",
+      "sha256": "8bbe624ed6a7c599eb54e00270a3b28780af5628fe04e647a90ba0e747d4d323",
+      "primary": "concern"
+    },
+    {
+      "order": 109,
+      "recordId": "e90b38d9c92d594d478626da4fdaf48f4643c93964c3b807d5a8171010be6469",
+      "sha256": "3ce884c1cb77840d3e1c2c16f841511e325cde5780fe289bdb74734e5ce5d1c1",
+      "primary": "concern"
+    },
+    {
+      "order": 110,
+      "recordId": "2e625db2415aa62f27d92f95fe3e200015d25da996ec9de190d97459a310bc30",
+      "sha256": "90eec69e5d0c34c355e6ac5ab7534d0a7d564123e7cec03fd2d175c79d6c7616",
+      "primary": "concern"
+    },
+    {
+      "order": 111,
+      "recordId": "174d945dfe9369776ed7890beeb9eaac6a55f23ef8aae11f959d930a9a1f7d2f",
+      "sha256": "849bab9d86aaf22321a657dab0667052d97659b2db7f59b4e3551315e7c09c3f",
+      "primary": "discovery",
+      "secondary": "orient",
+      "note": "表示数字への注目に、予想より多いという軽い驚きが加わる。"
+    },
+    {
+      "order": 112,
+      "recordId": "a761421d1ef00a0ba8b2e3cc9f83faf8ab73748a9f89c44fa98c213b17d440b1",
+      "sha256": "9133fa585cad076ff6ae3b916935aafeb7132b09b830984fcffde326e2512472",
+      "primary": "conversational",
+      "secondary": "understand",
+      "note": "ゲームの条件が話題でも、主な働きは配信者の遊び方への共感。"
+    }
+  ]
+}

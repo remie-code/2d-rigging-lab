@@ -1,0 +1,18 @@
+{
+  "id": "wry-nuances-v1",
+  "modelRevision": 843,
+  "fps": 20,
+  "comparisonDurationMs": 6500,
+  "performanceFile": "performance.json",
+  "view": {
+    "stageViewport": {
+      "minX": 540,
+      "minY": -40,
+      "width": 1040,
+      "height": 1100
+    },
+    "outputWidth": 624,
+    "outputHeight": 660
+  },
+  "lipPulses": []
+}

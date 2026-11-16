@@ -1,0 +1,816 @@
+{
+  "version": 1,
+  "id": "smile-nuances-study-v1",
+  "clips": {
+    "01-soft": {
+      "label": "柔らかく微笑む",
+      "utterance": "それが伝わるの、僕もうれしい。",
+      "durationMs": 6500,
+      "entry": "preserve-clock",
+      "intent": "Slow gentle smile and small inclination; intermediate smile is deliberately tested.",
+      "target": "partner-screen-left; common comparison direction",
+      "previewTimesMs": [
+        0,
+        1000,
+        1600,
+        2400,
+        4000,
+        6500
+      ],
+      "fixed": {
+        "param_face_angle_x": 0,
+        "param_face_angle_y": 0,
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_shared_laughter": [
+          [
+            0,
+            0
+          ],
+          [
+            850,
+            0
+          ],
+          [
+            2000,
+            0.72
+          ],
+          [
+            3800,
+            0.72
+          ],
+          [
+            5250,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            700,
+            0
+          ],
+          [
+            2100,
+            3
+          ],
+          [
+            3900,
+            3
+          ],
+          [
+            5800,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            800,
+            0
+          ],
+          [
+            2100,
+            -1.5
+          ],
+          [
+            3900,
+            -1.5
+          ],
+          [
+            5800,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            400,
+            0
+          ],
+          [
+            1350,
+            -10
+          ],
+          [
+            4600,
+            -10
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6500,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      }
+    },
+    "02-joy": {
+      "label": "嬉しさが弾む",
+      "utterance": "やった！ ちゃんと隙を見つけて倒したね。",
+      "durationMs": 6500,
+      "entry": "preserve-clock",
+      "intent": "Quick smile, a single buoyant head accent settling without repeated laughter bounce; no pretend clap.",
+      "target": "partner-screen-left; common comparison direction",
+      "previewTimesMs": [
+        0,
+        700,
+        1050,
+        1600,
+        2700,
+        6500
+      ],
+      "fixed": {
+        "param_face_angle_x": 0,
+        "param_face_angle_y": 0,
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_shared_laughter": [
+          [
+            0,
+            0
+          ],
+          [
+            450,
+            0
+          ],
+          [
+            1050,
+            1
+          ],
+          [
+            2700,
+            1
+          ],
+          [
+            4650,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            500,
+            0
+          ],
+          [
+            1050,
+            5
+          ],
+          [
+            1600,
+            -2
+          ],
+          [
+            2250,
+            1
+          ],
+          [
+            3400,
+            1
+          ],
+          [
+            5600,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_body_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            550,
+            0
+          ],
+          [
+            1100,
+            -1.5
+          ],
+          [
+            1850,
+            0.5
+          ],
+          [
+            2700,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            400,
+            0
+          ],
+          [
+            1350,
+            -10
+          ],
+          [
+            4600,
+            -10
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6500,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      }
+    },
+    "03-shy": {
+      "label": "照れながら笑う",
+      "utterance": "あ、作るの僕だった。楽しみに待つ側になってた。",
+      "durationMs": 6500,
+      "entry": "preserve-clock",
+      "intent": "Brief neutral realization, delayed smile and lowered chin; no blush or eye diversion invented.",
+      "target": "partner-screen-left; common comparison direction",
+      "previewTimesMs": [
+        0,
+        1000,
+        1500,
+        2400,
+        3800,
+        6500
+      ],
+      "fixed": {
+        "param_face_angle_x": 0,
+        "param_face_angle_y": 0,
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_shared_laughter": [
+          [
+            0,
+            0
+          ],
+          [
+            1500,
+            0
+          ],
+          [
+            2350,
+            0.95
+          ],
+          [
+            3900,
+            0.95
+          ],
+          [
+            5200,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            550,
+            0
+          ],
+          [
+            1000,
+            2
+          ],
+          [
+            1500,
+            2
+          ],
+          [
+            2500,
+            -5
+          ],
+          [
+            3800,
+            -5
+          ],
+          [
+            5700,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            1500,
+            0
+          ],
+          [
+            2600,
+            -4
+          ],
+          [
+            3800,
+            -4
+          ],
+          [
+            5700,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            400,
+            0
+          ],
+          [
+            1350,
+            -10
+          ],
+          [
+            4600,
+            -10
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6500,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      }
+    },
+    "04-proud": {
+      "label": "少し得意げに笑う",
+      "utterance": "道には迷うけど、足りないルーンは見失わないよ。",
+      "durationMs": 6500,
+      "entry": "preserve-clock",
+      "intent": "Small raised chin held steadily; confidence comes from posture, not a new smirk.",
+      "target": "partner-screen-left; common comparison direction",
+      "previewTimesMs": [
+        0,
+        900,
+        1700,
+        2700,
+        4000,
+        6500
+      ],
+      "fixed": {
+        "param_face_angle_x": 0,
+        "param_face_angle_y": 0,
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_shared_laughter": [
+          [
+            0,
+            0
+          ],
+          [
+            900,
+            0
+          ],
+          [
+            1700,
+            0.85
+          ],
+          [
+            3650,
+            0.85
+          ],
+          [
+            4950,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            650,
+            0
+          ],
+          [
+            1700,
+            5
+          ],
+          [
+            3650,
+            5
+          ],
+          [
+            5600,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            900,
+            0
+          ],
+          [
+            1850,
+            -2
+          ],
+          [
+            3650,
+            -2
+          ],
+          [
+            5600,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            400,
+            0
+          ],
+          [
+            1350,
+            -10
+          ],
+          [
+            4600,
+            -10
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6500,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      }
+    },
+    "05-relief": {
+      "label": "息を抜いてから微笑む",
+      "utterance": "よかった、声届いたね！ 教えてくれてありがとう。",
+      "durationMs": 6500,
+      "entry": "preserve-clock",
+      "intent": "Release posture first while eyes remain normal; then smile. Breath is implied, not simulated.",
+      "target": "partner-screen-left; common comparison direction",
+      "previewTimesMs": [
+        0,
+        750,
+        1500,
+        2400,
+        3300,
+        6500
+      ],
+      "fixed": {
+        "param_face_angle_x": 0,
+        "param_face_angle_y": 0,
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_shared_laughter": [
+          [
+            0,
+            0
+          ],
+          [
+            2000,
+            0
+          ],
+          [
+            2900,
+            0.9
+          ],
+          [
+            4150,
+            0.9
+          ],
+          [
+            5300,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            450,
+            0
+          ],
+          [
+            1350,
+            -4
+          ],
+          [
+            1850,
+            -4
+          ],
+          [
+            2900,
+            -1
+          ],
+          [
+            4150,
+            -1
+          ],
+          [
+            5800,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_body_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            400,
+            0
+          ],
+          [
+            1500,
+            1.2
+          ],
+          [
+            2850,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            400,
+            0
+          ],
+          [
+            1350,
+            -10
+          ],
+          [
+            4600,
+            -10
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6500,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      }
+    }
+  }
+}

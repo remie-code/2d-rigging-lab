@@ -1,0 +1,10 @@
+{
+  "leftSource": "apps/runtime-player/assets/speech-motions/receive.json",
+  "leftSourceSha256": "c78660bc7ed6ed5fd6f423406d28cc5921acfbeb763185434d9a81323dca44a1",
+  "clip": "receive",
+  "clipDurationMs": 1050,
+  "entryLeadInMsExcluded": 180,
+  "releaseMs": 400,
+  "rightSource": "../speech-motion-understanding-nod-v1/performance.json",
+  "commonClipStartMs": 0
+}

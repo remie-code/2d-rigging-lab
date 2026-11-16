@@ -6,6 +6,15 @@
 
 | Path | Scope | Status |
 |---|---|---|
+| [speech-motion-wry-nuances-v1/README.md](speech-motion-wry-nuances-v1/README.md) | 既存の苦笑表情で、登録済み「やれやれ」を基準に同調・報われなさ・茶化し・自分への苦笑・柔らかな限界説明を6面比較。原発話・再現定義を保存 | 2026-11-16本人採用。①を保持し②〜⑥を正面のgame/viewers共用で[登録・配置済み](../implementation/waves/wry-nuances-registration/completion.md)。相方版未制作、実会話未確認 |
+| [speech-motion-shy-aversion-v2/README.md](speech-motion-shy-aversion-v2/README.md) | 照れ笑い原案と「相手から一度顔をそらして戻る」改訂の左右比較。既存表情・瞳固定のまま研究を参考に順序を変更 | 2026-11-16本人が改訂を採用。相方向け笑み5案の一つとして[登録済み](../implementation/waves/smile-nuances-registration/completion.md)、実会話未確認 |
+| [speech-motion-smile-nuances-v1/README.md](speech-motion-smile-nuances-v1/README.md) | 既存笑顔で「柔らかい微笑み・弾む喜び・照れ・得意・息を抜いてから微笑む」の5案を同期比較。相方向き統一・Stage固定、再現定義を保存 | 2026-11-16本人採用。照れだけ改訂v2に差し替え、相方向け5案を[登録済み](../implementation/waves/smile-nuances-registration/completion.md)。原試作を保持 |
+| [speech-motion-search-nuances-v1/README.md](speech-motion-search-nuances-v1/README.md) | 「探す・確かめる」6ニュアンスの試作。画面向け、Stageなし、同じモデルで3×2同期比較と個別動画。再現定義・手順を保存 | 本人が六案を採用。11月16日、ゲーム画面向けに[登録・配布済み](../implementation/waves/search-nuances-registration/completion.md)。次回起動から有効、実会話は未確認 |
+| [speech-motion-nod-comparison-v1/README.md](speech-motion-nod-comparison-v1/README.md) | 登録済み「受け取る」と「腑に落ちる」試作を同じモデル・縮尺で左右比較。定義時刻を揃え、受領の接続用lead-inのみ除外 | 2026-11-15比較提示。動きと間の本人評価待ち、製品変更なし |
+| [speech-motion-understanding-nod-v1/README.md](speech-motion-understanding-nod-v1/README.md) | ゲーム画面を正面に見て、理解の間から一度うなずく演技。Stageなし、大小表示の無音動画と再現手順 | 2026-11-15本人採用。外部資産の `understanding-nod × game` に登録し、現用スロットに配置済み。次回Player起動から有効、実会話は未確認 |
+| [speech-motion-game-curiosity-stage-comparison-v1/README.md](speech-motion-game-curiosity-stage-comparison-v1/README.md) | 好奇心試作のStageだけをなし・25%・50%・元の強さで同期比較。再現定義を保存、動画/PNGはtmp | 2026-11-15本人がB（25%）を採用。外部資産の `interest × game` に登録し、現用スロットに配置済み。次回Player起動から有効、実会話は未確認 |
+| [speech-motion-game-curiosity-v1/README.md](speech-motion-game-curiosity-v1/README.md) | 正面の対象へ少し寄り、小さく首を傾けて見る間を置く好奇心の試作。定義・再現手順を保存、動画/PNGはtmp | 元のStage強度の試作を保存。2026-11-15に強度比較のBを採用 |
+| [game-interest-classification-2026-11-14.md](game-interest-classification-2026-11-14.md) | 今回のinterest×game未制作112件を、元意図・発話から8つの働きへ手動分類。全ID/hashを併記 | 好奇心20、納得18、確認16など。分類は仮説、最初の一本は相談中。Decision変更・カバー率推定ではない |
 | [speech-motion-wry-headshake-v1/README.md](speech-motion-wry-headshake-v1/README.md) | 採用済み苦笑r843で小さく首を振る。正面の画面/視聴者共通版 | 2026-11-13本人採用。外部資産として登録・現用r844と通常版/portableへ配布済み。試作原本を保持、11/14本人が笑み・困り顔の実運用動作を確認 |
 | [speech-motion-startled-recoil-v1/README.md](speech-motion-startled-recoil-v1/README.md) | 正面へ驚いて思わず身を引く。元パーツの表情と頭の反応・Stage奥行きの時間差 | 2026-11-13本人採用・r840登録配布済み。画面/視聴者共用。試作Stage実出力を製品へ接続、実会話確認待ち |
 | [speech-motion-coverage-2026-11-12.md](speech-motion-coverage-2026-11-12.md) | 元の未対応228区間を現行5演技・9組へ照合。記録別判定、主15系統、次の制作候補 | 分析見積もり（2026-11-12）：十分に合う10、近接込み16、既存再候補込み22。Decision再判定・実配信の対応率ではない |

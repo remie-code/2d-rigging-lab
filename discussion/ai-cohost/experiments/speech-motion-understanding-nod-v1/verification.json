@@ -1,0 +1,15 @@
+{
+  "frames": 85,
+  "finiteGeometry": "checked for every drawable vertex in renderer",
+  "videoDecode": "ffmpeg full decode passed",
+  "neutralStartEndPngIdentical": true,
+  "stageScaleAlways1": true,
+  "stageYAlways0": true,
+  "snapshotUnchanged": true,
+  "liveSourceUnchanged": true,
+  "liveExportUnchanged": true,
+  "videoSha256": "0ae3fc4234b31e390b4554dd00d0e80fd9e59f0c8bfe5d46693f7f9180ac5b69",
+  "contactSheetSha256": "d3fe761030b26e01dd42e5c485387c8ba4453516406558c6a806250f43e99b4e",
+  "visualInspection": "Contact sheet and large/small nadir pose inspected. A restrained single downward head pose is visible; no zoom or lateral drift. Temporal naturalness and intended understanding versus receiving meaning require user video judgment.",
+  "productRegistered": false
+}

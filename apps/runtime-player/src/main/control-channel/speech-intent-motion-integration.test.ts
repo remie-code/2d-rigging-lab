@@ -189,7 +189,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     expect(await drive("result", { id: "none" })).toMatchObject({ kind: "no-motion", reason: "unsupported-performance" });
     expect(tick(200).param_face_angle_x).toBeCloseTo(-10.5);
     expect(tick(200).param_face_angle_x).toBeCloseTo(3);
-    const files = await readdir(directory);
+    const files = (await readdir(directory)).filter((name) => name.endsWith(".json"));
     expect(files).toHaveLength(1);
     expect(JSON.parse(await readFile(join(directory, files[0]!), "utf8"))).toMatchObject({
       ...none, version: 3, result: "unsupported", playbackState: "playing",
@@ -246,7 +246,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       kind: "failure", source: "channel-reply", op: "play", reason: "motionModelMismatch"
     });
     expect(await next("finalize", { id: "mismatch", text: mismatch.text })).toBeNull();
-    expect(await readdir(directory)).toEqual(files);
+    expect((await readdir(directory)).filter((name) => name.endsWith(".json"))).toEqual(files);
 
     const unsupportedPairs = [
       { attention: "unknown", reason: "unknown-attention-target" },
@@ -266,7 +266,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
         version: 3, result: "unsupported", reason, performanceId: "ask", attentionTargetId: attention,
         finalPlaybackState: "ended"
       });
-      files.push(...(await readdir(directory)).filter((name) => !files.includes(name)));
+      files.push(...(await readdir(directory)).filter((name) => name.endsWith(".json") && !files.includes(name)));
     }
 
     parameters = mappingTargets();
@@ -344,7 +344,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     expect(await next("fireDone")).toMatchObject({ fired: false, reason: "killed-inflight" });
     expect(await next("fireTrace", { event: "intent.recording.completed", fields: { sectionIndex: 1 } }))
       .toMatchObject({ kind: "saved" });
-    const recordedFile = (await readdir(directory)).find((name) => !files.includes(name));
+    const recordedFile = (await readdir(directory)).find((name) => name.endsWith(".json") && !files.includes(name));
     expect(recordedFile).toBeDefined();
     expect(JSON.parse(await readFile(join(directory, recordedFile!), "utf8"))).toMatchObject({
       version: 3,
@@ -365,6 +365,29 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
         { start: 13, end: 19, state: "not-started" },
         { start: 19, end: 23, state: "not-enqueued" }
       ] }
+    });
+    const newLogDirectory = join(directory, "all-sections");
+    await next("fireTrace", { event: "intent.recording.completed", fields: { sectionIndex: 0 } });
+    const recordedSections = await Promise.all((await readdir(newLogDirectory))
+      .filter((name) => name.endsWith(".json"))
+      .map(async (name) => JSON.parse(await readFile(join(newLogDirectory, name), "utf8"))));
+    const selected = recordedSections.find((entry) => entry.intent === tagged);
+    expect(selected).toMatchObject({
+      version: 1,
+      text: "最初の文。二文目。",
+      rawIntentTag: `<intent ${tagged}>`,
+      context: { transcript: expect.stringContaining("合成入力の会話文脈") },
+      decisionInput: { text: "最初の文。" },
+      decision: { kind: "selected", performanceId: "ask", attentionTargetId: "partner" },
+      definition: { archiveDirectory: join(assetProfile, "speech-motion-archive"), clipId: expect.any(String) },
+      motionPlayback: { result: "accepted", visibility: "unobserved",
+        requests: expect.arrayContaining([{ op: "play", status: "accepted" }]) },
+      audioPlayback: { ranges: [{ state: "completed" }, { state: "completed" }] }
+    });
+    expect(recordedSections.find((entry) => entry.intent === unmatched)).toMatchObject({
+      decision: { kind: "unsupported", performanceId: "none", attentionTargetId: "partner" },
+      definition: null,
+      interrupted: true
     });
 
     // A full response has the whole section available, including its final
@@ -395,6 +418,16 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     await next("firePlayer", { type: "started", id: batchSecond.playbackId });
     await next("firePlayer", { type: "ended", id: batchSecond.playbackId });
     expect(await next("fireDone")).toMatchObject({ fired: true, replyText: "間に合った。ふぅ" });
+    await next("fireTrace", { event: "intent.recording.completed", fields: { generation: 3, sectionIndex: 0 } });
+    const batchRecords = await Promise.all((await readdir(newLogDirectory))
+      .filter((name) => name.endsWith(".json"))
+      .map(async (name) => JSON.parse(await readFile(join(newLogDirectory, name), "utf8"))));
+    expect(batchRecords.find((entry) => entry.intent === "本文なし")).toMatchObject({
+      text: "",
+      decisionInput: null,
+      decision: { kind: "undecided", reason: "empty-text" },
+      audioPlayback: { ranges: [] }
+    });
     await next("expression");
     expect(tick(1340).param_face_angle_y).toBeCloseTo(-7.6);
     expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(12.5);
@@ -555,6 +588,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       child.kill();
       await exited;
     }));
+    await speechMotionSnapshot.archiveSettled;
     await rm(assetProfile, { recursive: true, force: true });
     await rm(directory, { recursive: true, force: true });
   }

@@ -118,7 +118,28 @@
                     "additionalProperties": false,
                     "properties": {
                       "performanceId": { "type": "string", "minLength": 1 },
-                      "attentionTargetId": { "type": "string", "minLength": 1 }
+                      "attentionTargetId": { "type": "string", "minLength": 1 },
+                      "clipId": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$" }
+                    }
+                  }
+                },
+                "definitionArchive": {
+                  "type": "object",
+                  "required": ["directory", "definitions"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "directory": { "type": "string", "minLength": 1 },
+                    "definitions": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["sha256", "status"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                          "status": { "enum": ["pending", "saved", "failed"] }
+                        }
+                      }
                     }
                   }
                 }

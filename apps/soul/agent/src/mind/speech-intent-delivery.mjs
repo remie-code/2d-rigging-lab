@@ -10,7 +10,7 @@ export function createSpeechIntentDelivery({ motion, sceneId, utteranceId, gener
   let active = null;
 
   function prepare(state) {
-    if (state.prepared || !accepting || !state.text.trim()) return;
+    if (state.prepared || !accepting || !motion.isActive() || !state.text.trim()) return;
     state.prepared = true;
     const text = state.text;
     void motion.prepare(state.id, { text, context }).then((decision) => {
@@ -24,7 +24,10 @@ export function createSpeechIntentDelivery({ motion, sceneId, utteranceId, gener
     state.wake?.();
     void motion.finish(state.id, { interrupted });
     void motion.finalize(state.id, {
-      text: state.text, audioPlayback: { ranges: state.ranges }
+      text: state.text,
+      audioPlayback: { ranges: state.ranges },
+      interrupted,
+      skippedReason: interrupted ? "interrupted-before-decision" : !motion.isActive() ? "channel-retired" : "empty-text"
     }).then((result) => {
       trace("intent.recording.completed", {
         generation, sectionIndex: state.id.sectionIndex, kind: result?.kind ?? null, reason: result?.reason
@@ -49,11 +52,12 @@ export function createSpeechIntentDelivery({ motion, sceneId, utteranceId, gener
     tag(intent, rawIntentTag) {
       if (!accepting) return;
       closeSection();
-      if (intent === null || !motion.isActive()) return;
+      if (intent === null) return;
       const id = {
         sceneId, utteranceId, generation, sectionIndex, sectionId: `section-${sectionIndex++}`, intent, rawIntentTag
       };
       section = { id, text: "", ranges: [], pending: 0, activePlaybackId: null, closed: false, finalized: false };
+      motion.capture(id, context);
       trace("intent.tag.ready", { generation, sectionIndex: id.sectionIndex });
     },
     text(text, index) {
@@ -129,6 +133,7 @@ export function createSpeechIntentDelivery({ motion, sceneId, utteranceId, gener
     },
     interrupt() {
       accepting = false;
+      if (section) section.interrupted = true;
       if (active) {
         active.activePlaybackId = null;
         active.interrupted = true;

@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +19,16 @@ const asset = {
   version: 1, id: "new-performance", description: "First description", targets: { game: "clip" },
   clips: { clip: { entry: "lead-in", durationMs: 400, tracks: { param_test: [[0, 0], [400, 1]] },
     defaults: { param_test: 0 }, stage: { y: [[0, 0], [400, 10]], scale: [[0, 1], [400, 0.95]] } } }
+};
+const hierarchicalAsset = {
+  version: 2,
+  id: "search",
+  description: "Search",
+  nuances: {
+    inspect: { description: "Inspect one place", targets: { game: "clip" } },
+    compare: { description: "Compare two places", targets: { game: "clip" } }
+  },
+  clips: asset.clips
 };
 const parameter = { parameterId: "param_test", displayName: "Test", min: 0, max: 1, default: 0 };
 const key = { generation: 1, sectionIndex: 0 };
@@ -44,9 +55,10 @@ it("supplies live Soul decisions and playback from one startup snapshot across s
   let parameters: RuntimePlayerMappingTarget[] = [parameter];
   const serve = async (run: (query: () => Promise<unknown>, overlay: RuntimePlayerControlChannelOverlayStore) => Promise<void>) => {
     const overlay = new RuntimePlayerControlChannelOverlayStore();
+    const snapshot = await loadSpeechMotionSnapshot(profile, () => {});
     const server = new RuntimePlayerControlChannelServer({
       port: 0, token, overlayStore: overlay, nowMs: () => now,
-      speechMotionSnapshot: await loadSpeechMotionSnapshot(profile, () => {}),
+      speechMotionSnapshot: snapshot,
       getCurrentSlots: () => mouthSlots,
       getMotionParameters: () => parameters,
     });
@@ -66,6 +78,7 @@ it("supplies live Soul decisions and playback from one startup snapshot across s
     } finally {
       await server.close();
       for (const fixture of fixtures) fixture.kill();
+      await snapshot.archiveSettled;
     }
   };
   try {
@@ -74,7 +87,13 @@ it("supplies live Soul decisions and playback from one startup snapshot across s
     await serve(async (query, overlay) => {
       await writeFile(path, JSON.stringify({ ...asset, description: "Edited description" }));
       const first = await query();
-      expect(first).toMatchObject({ description: asset.description, decision: { kind: "selected", ...selection }, result: "accepted" });
+      expect(first).toMatchObject({
+        description: asset.description, decision: { kind: "selected", ...selection }, result: "accepted",
+        archive: { directory: join(profile, "speech-motion-archive"), definitions: {
+          [asset.id]: { sha256: expect.stringMatching(/^[0-9a-f]{64}$/) }
+        } },
+        pair: { ...selection, clipId: "clip" }
+      });
       expect(overlay.resolveSpeechMotionModelParameters(580, { param_test: 0, param_mouth_open: 0.7 }))
         .toEqual({ param_test: 1, param_mouth_open: 0.7 });
       expect(overlay.sampleStageYOffsetPx(580)).toBe(10);
@@ -115,6 +134,7 @@ it("excludes invalid and duplicate files while keeping independent assets", asyn
       writeFile(join(directory, "independent.json"), JSON.stringify({ ...asset, id: "independent" }))
     ]);
     const snapshot = await loadSpeechMotionSnapshot(profile, (line) => diagnostics.push(line));
+    await snapshot.archiveSettled;
     expect(snapshot.catalog.performances).toEqual({ independent: asset.description });
     expect(snapshot.resolve("independent", "viewers")).toEqual({ reason: "unproduced-pair" });
     expect(diagnostics.join("\n")).toContain(directory);
@@ -124,6 +144,105 @@ it("excludes invalid and duplicate files while keeping independent assets", asyn
     const clip = asset.clips.clip as unknown as MotionClip;
     expect(speechMotionModelIssue(clip, [{ ...parameter, max: 0.5 }], [])).toContain("insufficient range");
     expect(speechMotionModelIssue(clip, [{ ...parameter, default: 0.5 }], [])).toContain("requires default");
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+it("rejects malformed parents and excludes all sources with colliding selection IDs before merging", async () => {
+  const profile = await mkdtemp(join(tmpdir(), "speech-motion-nuances-"));
+  const directory = join(profile, "speech-motions");
+  await mkdir(directory);
+  const invalid = {
+    empty: { ...hierarchicalAsset, nuances: {} },
+    unknown: { ...hierarchicalAsset, targets: { game: "clip" } },
+    child: { ...hierarchicalAsset, nuances: { inspect: { ...hierarchicalAsset.nuances.inspect, extra: true } } },
+    length: { ...hierarchicalAsset, nuances: { ["x".repeat(96)]: hierarchicalAsset.nuances.inspect } },
+    reference: { ...hierarchicalAsset, nuances: { inspect: { description: "Own clip only", targets: { game: "toString" } } } },
+    target: { ...hierarchicalAsset, nuances: { inspect: { description: "Own target only", targets: { constructor: "clip" } } } },
+    invalidClip: { ...hierarchicalAsset, clips: { clip: { ...asset.clips.clip, label: "display metadata" } } },
+    unused: { ...hierarchicalAsset, clips: { ...asset.clips, unused: asset.clips.clip } }
+  };
+  try {
+    const fixtures = {
+      ...Object.fromEntries(Object.entries(invalid).map(([id, value]) => [id, { ...value, id }])),
+      search: hierarchicalAsset,
+      "search--inspect": { ...asset, id: "search--inspect" },
+      "another-parent": { ...hierarchicalAsset, id: "another-parent", nuances: {
+        "inspect--more": hierarchicalAsset.nuances.compare
+      } },
+      "another-parent--inspect": { ...hierarchicalAsset, id: "another-parent--inspect", nuances: {
+        more: hierarchicalAsset.nuances.compare
+      } },
+      independent: asset
+    };
+    await Promise.all(Object.entries(fixtures).map(([name, value]) =>
+      writeFile(join(directory, name + ".json"), JSON.stringify(value))));
+    const diagnostics: string[] = [];
+    const snapshot = await loadSpeechMotionSnapshot(profile, (line) => diagnostics.push(line));
+    await snapshot.archiveSettled;
+    expect(Object.keys(snapshot.catalog.performances)).toEqual([asset.id]);
+    expect(Object.keys(snapshot.catalog.definitionArchive!.definitions).sort())
+      .toEqual(Object.keys(snapshot.catalog.performances).sort());
+    for (const name of Object.keys(invalid)) {
+      expect(diagnostics.some((line) => line.includes(join(directory, name + ".json")))).toBe(true);
+    }
+    for (const id of ["search--inspect", "another-parent--inspect--more"]) {
+      expect(diagnostics.some((line) => line.includes(`Duplicate speech motion selection id ${id}:`))).toBe(true);
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+it("archives the loaded definition once per content and retains prior versions after source deletion", async () => {
+  const profile = await mkdtemp(join(tmpdir(), "speech-motion-archive-"));
+  const sourceDirectory = join(profile, "speech-motions");
+  const source = join(sourceDirectory, "asset.json");
+  const diagnostics: string[] = [];
+  const load = () => loadSpeechMotionSnapshot(profile, (line) => diagnostics.push(line));
+  try {
+    await mkdir(sourceDirectory);
+    await writeFile(source, JSON.stringify(asset));
+    const first = await load();
+    const firstArchive = first.catalog.definitionArchive!;
+    const original = firstArchive.definitions[asset.id]!;
+    expect(original.status).toBe("pending");
+    const edited = { ...asset, description: "Edited description" };
+    await writeFile(source, JSON.stringify(edited));
+    const [second, equivalent] = await Promise.all([load(), load()]);
+    await Promise.all([first.archiveSettled, second.archiveSettled, equivalent.archiveSettled]);
+    expect(first.catalog.definitionArchive!.definitions[asset.id]).toEqual({ sha256: original.sha256, status: "saved" });
+    const revision = second.catalog.definitionArchive!.definitions[asset.id]!;
+    expect(revision.sha256).not.toBe(original.sha256);
+    expect(equivalent.catalog.definitionArchive).toEqual(second.catalog.definitionArchive);
+    await rm(source);
+    const removed = await load();
+    expect(removed.catalog.performances).toEqual({});
+    expect((await readdir(firstArchive.directory)).sort()).toEqual([original.sha256, revision.sha256].map((sha) => sha + ".json").sort());
+    for (const [digest, expected] of [[original.sha256, asset], [revision.sha256, edited]] as const) {
+      const content = await readFile(join(firstArchive.directory, digest + ".json"), "utf8");
+      expect(createHash("sha256").update(content).digest("hex")).toBe(digest);
+      expect(JSON.parse(content)).toEqual(expected);
+    }
+    expect(diagnostics.filter((line) => line.includes("Speech motion archive:"))).toEqual([]);
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+it("reports an archive failure and keeps the loaded motion usable", async () => {
+  const profile = await mkdtemp(join(tmpdir(), "speech-motion-archive-error-"));
+  const diagnostics: string[] = [];
+  try {
+    await mkdir(join(profile, "speech-motions"));
+    await writeFile(join(profile, "speech-motions", "asset.json"), JSON.stringify(asset));
+    await writeFile(join(profile, "speech-motion-archive"), "blocked");
+    const snapshot = await loadSpeechMotionSnapshot(profile, (line) => diagnostics.push(line));
+    expect(snapshot.resolve(asset.id, "game")).toEqual({ clip: asset.clips.clip });
+    await snapshot.archiveSettled;
+    expect(snapshot.catalog.definitionArchive!.definitions[asset.id]?.status).toBe("failed");
+    expect(diagnostics.find((line) => line.includes("Speech motion archive:"))).toContain(asset.id);
   } finally {
     await rm(profile, { recursive: true, force: true });
   }

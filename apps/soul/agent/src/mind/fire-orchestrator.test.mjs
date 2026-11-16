@@ -128,6 +128,9 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
   const player = makeProgressivePlayer();
   const ready = [Promise.withResolvers(), Promise.withResolvers()];
   const motionPlayed = Promise.withResolvers();
+  const recordStarted = Promise.withResolvers();
+  const allowRecord = Promise.withResolvers();
+  const recordCompleted = Promise.withResolvers();
   const spoken = [];
   const expressions = [];
   const motionOps = [];
@@ -146,6 +149,11 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
   const motion = createSpeechIntentMotion({
     channel,
     getCatalog: () => speechMotions,
+    async recordSection(section) {
+      recordStarted.resolve(section);
+      await allowRecord.promise;
+      throw Object.assign(new Error("fixture storage failure"), { code: "EACCES" });
+    },
     judge: async ({ input }) => {
       decisionInputs.push(JSON.parse(input));
       return { answers: {
@@ -166,9 +174,10 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
     progressivePlayback: true,
     acquireFireResources: () => ({ engine, speechIntentMotion: motion, configuration: { brain: "claude" } }),
     speakImpl: () => assert.fail("a tagged full-result reply must use the section queue"),
-    onTrace({ event, kind, jobId }) {
+    onTrace({ event, kind, jobId, reason }) {
       if (event === "speech.playback.input_completed") ready[jobId.endsWith("-1") ? 0 : 1].resolve();
       if (event === "intent.motion.reply") motionPlayed.resolve(kind);
+      if (event === "intent.recording.completed") recordCompleted.resolve({ kind, reason });
     }
   });
   const firing = orch.fire();
@@ -181,6 +190,9 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
   emitProgressiveOwned(player, "STARTED", 1);
   emitProgressiveOwned(player, "ENDED", 1);
   assert.equal((await firing).replyText, "一文目。二文目。\n");
+  assert.equal((await recordStarted.promise).decision.kind, "selected");
+  allowRecord.resolve();
+  assert.deepEqual(await recordCompleted.promise, { kind: "failure", reason: "EACCES" });
   assert.deepEqual(spoken, ["一文目。", "二文目。"]);
   assert.equal(decisionInputs.length, 1);
   assert.equal(decisionInputs[0].intent, "<intent 相手の答えを待ちたい>");

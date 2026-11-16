@@ -100,6 +100,29 @@ test("Fire diagnostics: async success/failure are incremental, bounded, and writ
   await nonfatal.flush();
 });
 
+test("Fire diagnostics keep a late intent storage failure attributed to its originating Fire", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-intent-diagnostics-"));
+  const diagnostics = createFireDiagnostics({ dir });
+  const first = diagnostics.begin({ fireNo: 1 });
+  diagnostics.finish({ fired: true });
+  const second = diagnostics.begin({ fireNo: 2 });
+  assert.equal(diagnostics.record("intent.recording.completed", {
+    originFireId: 1, generation: 17, sectionIndex: 2, kind: "failure", reason: "EACCES", text: "private"
+  }), undefined);
+  diagnostics.finish({ fired: true });
+  await diagnostics.flush();
+  const journal = readFileSync(join(dir, "speech-intent-recording-errors.jsonl"), "utf8");
+  const { wallTimeMs, monotonicMs, ...failure } = JSON.parse(journal);
+  assert.equal(typeof wallTimeMs, "number");
+  assert.equal(typeof monotonicMs, "number");
+  assert.deepEqual(failure, {
+    schema: "soul-fire-diagnostic-v1", event: "intent.recording.completed",
+    originFireId: 1, generation: 17, sectionIndex: 2, kind: "failure", reason: "EACCES"
+  });
+  assert.doesNotMatch(readFileSync(first.path, "utf8"), /EACCES/);
+  assert.doesNotMatch(readFileSync(second.path, "utf8"), /EACCES/);
+});
+
 test("Fire diagnostics: injected success reaches the parent playback proxy and persisted failure keeps its boundary", async () => {
   const dir = mkdtempSync(join(tmpdir(), "soul-fire-trace-"));
   const diagnostics = createFireDiagnostics({ dir });
