@@ -6,6 +6,7 @@
 
 | Path | Scope | Status |
 |---|---|---|
+| [speech-motion-search-nuances-v1/README.md](speech-motion-search-nuances-v1/README.md) | 「探す・確かめる」6ニュアンスの試作。画面向け、Stageなし、同じモデルで3×2同期比較と個別動画。再現定義・手順を保存 | 本人が六案を採用。11月16日、ゲーム画面向けに[登録・配布済み](../implementation/waves/search-nuances-registration/completion.md)。次回起動から有効、実会話は未確認 |
 | [speech-motion-wry-headshake-v1/README.md](speech-motion-wry-headshake-v1/README.md) | 採用済み苦笑r843で小さく首を振る。正面の画面/視聴者共通版 | 2026-11-13本人採用。外部資産として登録・現用r844と通常版/portableへ配布済み。試作原本を保持、11/14本人が笑み・困り顔の実運用動作を確認 |
 | [speech-motion-startled-recoil-v1/README.md](speech-motion-startled-recoil-v1/README.md) | 正面へ驚いて思わず身を引く。元パーツの表情と頭の反応・Stage奥行きの時間差 | 2026-11-13本人採用・r840登録配布済み。画面/視聴者共用。試作Stage実出力を製品へ接続、実会話確認待ち |
 | [speech-motion-coverage-2026-11-12.md](speech-motion-coverage-2026-11-12.md) | 元の未対応228区間を現行5演技・9組へ照合。記録別判定、主15系統、次の制作候補 | 分析見積もり（2026-11-12）：十分に合う10、近接込み16、既存再候補込み22。Decision再判定・実配信の対応率ではない |

@@ -30,12 +30,14 @@ const attentionTargets = Object.freeze({
   "viewers": "視聴者（上）"
 });
 type Target = keyof typeof attentionTargets;
-type MotionAsset = {
-  readonly version: 1;
-  readonly id: string;
+type MotionCandidate = {
   readonly description: string;
   readonly targets: Readonly<Partial<Record<Target, string>>>;
   readonly clips: Readonly<Record<string, MotionClip>>;
+};
+type MotionAsset = {
+  readonly definition: Record<string, unknown>;
+  readonly candidates: ReadonlyMap<string, MotionCandidate>;
 };
 type DefinitionArchiveEntry = {
   readonly sha256: string;
@@ -137,25 +139,52 @@ function validateClip(value: unknown, label: string): void {
   }
 }
 
-function parseAsset(value: unknown): MotionAsset {
-  if (!fields(value, "version id description targets clips") || value.version !== 1 ||
-      !id(value.id) || value.id === "none" || typeof value.description !== "string" ||
-      !value.description.trim() || value.description.length > 1000 || !record(value.clips) ||
-      !record(value.targets) || Object.keys(value.targets).length === 0) {
-    throw new Error("invalid asset version, id, description, targets or clips");
-  }
-  const used = new Set<string>();
-  for (const [target, clip] of Object.entries(value.targets)) {
-    if (!Object.hasOwn(attentionTargets, target) || !id(clip) || !Object.hasOwn(value.clips, clip)) {
+function description(value: unknown): value is string {
+  return typeof value === "string" && !!value.trim() && value.length <= 1000;
+}
+
+function validateTargets(
+  targets: unknown, clips: Record<string, unknown>, used: Set<string>
+): asserts targets is MotionCandidate["targets"] {
+  if (!record(targets) || Object.keys(targets).length === 0) throw new Error("invalid targets");
+  for (const [target, clip] of Object.entries(targets)) {
+    if (!Object.hasOwn(attentionTargets, target) || !id(clip) || !Object.hasOwn(clips, clip)) {
       throw new Error(`invalid clip reference for target ${target}`);
     }
     used.add(clip);
+  }
+}
+
+function parseAsset(value: unknown): MotionAsset {
+  if (!record(value) || !id(value.id) || value.id === "none" ||
+      !description(value.description) || !record(value.clips)) {
+    throw new Error("invalid asset id, description or clips");
+  }
+  const candidates = new Map<string, MotionCandidate>();
+  const clips = value.clips as MotionCandidate["clips"];
+  const used = new Set<string>();
+  if (value.version === 1 && fields(value, "version id description targets clips")) {
+    validateTargets(value.targets, clips, used);
+    candidates.set(value.id, { description: value.description, targets: value.targets, clips });
+  } else if (value.version === 2 && fields(value, "version id description nuances clips")) {
+    if (!record(value.nuances) || Object.keys(value.nuances).length === 0) throw new Error("invalid nuances");
+    for (const [nuanceId, nuance] of Object.entries(value.nuances)) {
+      const selectionId = `${value.id}--${nuanceId}`;
+      if (!id(nuanceId) || !id(selectionId) || !fields(nuance, "description targets") ||
+          !description(nuance.description)) throw new Error(`invalid nuance ${nuanceId}`);
+      const combinedDescription = `${value.description}\n${nuance.description}`;
+      if (!description(combinedDescription)) throw new Error(`invalid combined description for ${selectionId}`);
+      validateTargets(nuance.targets, clips, used);
+      candidates.set(selectionId, { description: combinedDescription, targets: nuance.targets, clips });
+    }
+  } else {
+    throw new Error("invalid asset version or fields");
   }
   for (const [name, clip] of Object.entries(value.clips)) {
     if (!used.has(name)) throw new Error(`unreferenced clip ${name}`);
     validateClip(clip, name);
   }
-  return value as MotionAsset;
+  return { definition: value, candidates };
 }
 
 async function publishDefinition(directory: string, sha256: string, content: string): Promise<void> {
@@ -216,29 +245,49 @@ export async function loadSpeechMotionSnapshot(
       report(`${filename}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  const assets = new Map<string, MotionAsset>();
+  const uniqueSources = new Map<string, MotionAsset>();
+  for (const [parentId, entries] of sources) {
+    if (entries.length > 1) {
+      report(`Duplicate speech motion id ${parentId}: ${entries.map(({ filename }) => filename).join(", ")}`);
+    } else if (entries[0]?.asset) {
+      uniqueSources.set(parentId, entries[0].asset);
+    }
+  }
+  const owners = new Map<string, string[]>();
+  for (const [parentId, asset] of uniqueSources) {
+    for (const selectionId of asset.candidates.keys()) {
+      const parents = owners.get(selectionId) ?? [];
+      parents.push(parentId);
+      owners.set(selectionId, parents);
+    }
+  }
+  const conflictingParents = new Set<string>();
+  for (const [selectionId, parents] of owners) {
+    if (parents.length > 1) {
+      report(`Duplicate speech motion selection id ${selectionId}: ${parents.join(", ")}`);
+      for (const parentId of parents) conflictingParents.add(parentId);
+    }
+  }
+  const assets = new Map<string, MotionCandidate>();
   const archiveDirectory = resolve(userData, "speech-motion-archive");
   const definitions = new Map<string, DefinitionArchiveEntry>();
   const archiveWrites: Promise<void>[] = [];
-  for (const [performanceId, entries] of sources) {
-    if (entries.length > 1) {
-      report(`Duplicate speech motion id ${performanceId}: ${entries.map(({ filename }) => filename).join(", ")}`);
-      continue;
-    }
-    const asset = entries[0]?.asset;
-    if (!asset) continue;
-    assets.set(performanceId, asset);
-    const content = JSON.stringify(asset, (_key, value: unknown) =>
+  for (const [parentId, asset] of uniqueSources) {
+    if (conflictingParents.has(parentId)) continue;
+    const content = JSON.stringify(asset.definition, (_key, value: unknown) =>
       record(value) ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, value[key]])) : value,
     2) + "\n";
     const sha256 = createHash("sha256").update(content).digest("hex");
     const entry: DefinitionArchiveEntry = { sha256, status: "pending" };
-    definitions.set(performanceId, entry);
+    for (const [selectionId, candidate] of asset.candidates) {
+      assets.set(selectionId, candidate);
+      definitions.set(selectionId, entry);
+    }
     archiveWrites.push(publishDefinition(archiveDirectory, sha256, content).then(() => {
       entry.status = "saved";
     }, (error: unknown) => {
       entry.status = "failed";
-      report(`Speech motion archive: ${performanceId} ${join(archiveDirectory, sha256 + ".json")}: ${error instanceof Error ? error.message : String(error)}`);
+      report(`Speech motion archive: ${parentId} ${join(archiveDirectory, sha256 + ".json")}: ${error instanceof Error ? error.message : String(error)}`);
     }));
   }
   const candidates = Object.freeze({

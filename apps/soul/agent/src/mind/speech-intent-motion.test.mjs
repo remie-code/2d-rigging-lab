@@ -61,6 +61,42 @@ test("one decision request uses two independent questions and preserves both sel
   assert.equal(called, false);
 });
 
+test("all six search nuances remain independent choices with only game produced", async () => {
+  const nuances = [
+    ["search", "場所を探す"], ["discern", "一か所を見極める"], ["compare", "関係を見比べる"],
+    ["recheck", "状態・残りを確認する"], ["follow-cue", "相方の気づきに追いつく"],
+    ["cautious", "安全を確かめながらうかがう"]
+  ];
+  const expectedIds = nuances.map(([id]) => `search-nuances--${id}`);
+  for (const performanceId of expectedIds) {
+    for (const attentionTargetId of ["game", "partner", "viewers", "unknown"]) {
+      let calls = 0;
+      const result = await decideSpeechIntentMotion(section, async ({ input, questions }) => {
+        calls++;
+        assert.deepEqual(JSON.parse(input), { intent: section.intent, text: section.text, context: section.context });
+        const [performance, attention] = questions;
+        const searchChoices = performance.choices.filter(({ value }) => value.startsWith("search-nuances"));
+        assert.deepEqual(searchChoices.map(({ value }) => value), expectedIds);
+        searchChoices.forEach(({ description }, index) => {
+          assert.ok(description.includes("探す・確かめる"));
+          assert.ok(description.includes(nuances[index][1]));
+        });
+        assert.equal(performance.choices.at(-1).value, "none");
+        assert.deepEqual(attention.choices.map(({ value }) => value), ["partner", "game", "viewers", "unknown"]);
+        return { answers: answers(answer(performanceId), answer(attentionTargetId)), latencyMs: 5 };
+      }, catalog);
+      assert.equal(calls, 1);
+      assert.deepEqual(result, {
+        performanceId, attentionTargetId, latencyMs: 5,
+        ...(attentionTargetId === "game" ? { kind: "selected" } : {
+          kind: "unsupported",
+          reason: attentionTargetId === "unknown" ? "unknown-attention-target" : "unproduced-pair"
+        })
+      });
+    }
+  }
+});
+
 test("an unresolved decision cannot block start or play after reset", async () => {
   const decision = Promise.withResolvers();
   const requests = [];

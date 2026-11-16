@@ -20,6 +20,16 @@ const asset = {
   clips: { clip: { entry: "lead-in", durationMs: 400, tracks: { param_test: [[0, 0], [400, 1]] },
     defaults: { param_test: 0 }, stage: { y: [[0, 0], [400, 10]], scale: [[0, 1], [400, 0.95]] } } }
 };
+const hierarchicalAsset = {
+  version: 2,
+  id: "search",
+  description: "Search",
+  nuances: {
+    inspect: { description: "Inspect one place", targets: { game: "clip" } },
+    compare: { description: "Compare two places", targets: { game: "clip" } }
+  },
+  clips: asset.clips
+};
 const parameter = { parameterId: "param_test", displayName: "Test", min: 0, max: 1, default: 0 };
 const key = { generation: 1, sectionIndex: 0 };
 const token = "external_speech_motion_test";
@@ -134,6 +144,52 @@ it("excludes invalid and duplicate files while keeping independent assets", asyn
     const clip = asset.clips.clip as unknown as MotionClip;
     expect(speechMotionModelIssue(clip, [{ ...parameter, max: 0.5 }], [])).toContain("insufficient range");
     expect(speechMotionModelIssue(clip, [{ ...parameter, default: 0.5 }], [])).toContain("requires default");
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+it("rejects malformed parents and excludes all sources with colliding selection IDs before merging", async () => {
+  const profile = await mkdtemp(join(tmpdir(), "speech-motion-nuances-"));
+  const directory = join(profile, "speech-motions");
+  await mkdir(directory);
+  const invalid = {
+    empty: { ...hierarchicalAsset, nuances: {} },
+    unknown: { ...hierarchicalAsset, targets: { game: "clip" } },
+    child: { ...hierarchicalAsset, nuances: { inspect: { ...hierarchicalAsset.nuances.inspect, extra: true } } },
+    length: { ...hierarchicalAsset, nuances: { ["x".repeat(96)]: hierarchicalAsset.nuances.inspect } },
+    reference: { ...hierarchicalAsset, nuances: { inspect: { description: "Own clip only", targets: { game: "toString" } } } },
+    target: { ...hierarchicalAsset, nuances: { inspect: { description: "Own target only", targets: { constructor: "clip" } } } },
+    invalidClip: { ...hierarchicalAsset, clips: { clip: { ...asset.clips.clip, label: "display metadata" } } },
+    unused: { ...hierarchicalAsset, clips: { ...asset.clips, unused: asset.clips.clip } }
+  };
+  try {
+    const fixtures = {
+      ...Object.fromEntries(Object.entries(invalid).map(([id, value]) => [id, { ...value, id }])),
+      search: hierarchicalAsset,
+      "search--inspect": { ...asset, id: "search--inspect" },
+      "another-parent": { ...hierarchicalAsset, id: "another-parent", nuances: {
+        "inspect--more": hierarchicalAsset.nuances.compare
+      } },
+      "another-parent--inspect": { ...hierarchicalAsset, id: "another-parent--inspect", nuances: {
+        more: hierarchicalAsset.nuances.compare
+      } },
+      independent: asset
+    };
+    await Promise.all(Object.entries(fixtures).map(([name, value]) =>
+      writeFile(join(directory, name + ".json"), JSON.stringify(value))));
+    const diagnostics: string[] = [];
+    const snapshot = await loadSpeechMotionSnapshot(profile, (line) => diagnostics.push(line));
+    await snapshot.archiveSettled;
+    expect(Object.keys(snapshot.catalog.performances)).toEqual([asset.id]);
+    expect(Object.keys(snapshot.catalog.definitionArchive!.definitions).sort())
+      .toEqual(Object.keys(snapshot.catalog.performances).sort());
+    for (const name of Object.keys(invalid)) {
+      expect(diagnostics.some((line) => line.includes(join(directory, name + ".json")))).toBe(true);
+    }
+    for (const id of ["search--inspect", "another-parent--inspect--more"]) {
+      expect(diagnostics.some((line) => line.includes(`Duplicate speech motion selection id ${id}:`))).toBe(true);
+    }
   } finally {
     await rm(profile, { recursive: true, force: true });
   }

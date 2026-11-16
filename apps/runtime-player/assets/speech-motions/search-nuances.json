@@ -1,0 +1,903 @@
+{
+  "version": 2,
+  "id": "search-nuances",
+  "description": "探す・確かめる。ゲームの状況にまだ確信がなく、見つけたり見定めたりしようとする発話。Chappyの原意図と発話、直前の文脈から読み取る。",
+  "nuances": {
+    "search": {
+      "description": "場所を探す。どこにあるか見当がつかず、画面内の複数箇所を短く探る。例「この辺には見当たらないね。階段の先はどうだろう。」",
+      "targets": {
+        "game": "01-search"
+      }
+    },
+    "discern": {
+      "description": "一か所を見極める。すでに見つけた一点に注意を留め、遮りや曖昧さのある細部を見定めようとする。例「鎧を着た兵士っぽいけど、手すりで武器がよく見えないね。」",
+      "targets": {
+        "game": "02-discern"
+      }
+    },
+    "compare": {
+      "description": "関係を見比べる。画面内の二つの箇所を見比べ、違いやつながりを探る。例「今度はスイッチが二つあるんだね。動かす場所を分けてるのかな。」",
+      "targets": {
+        "game": "03-compare"
+      }
+    },
+    "recheck": {
+      "description": "状態・残りを確認する。同じ場所に注意を戻し、すでに済んだか、まだ残っているかなどを確かめようとする。例「あ、奥の台の上に金色の箱が見える。あれ、まだ取ってないやつかな。」",
+      "targets": {
+        "game": "04-recheck"
+      }
+    },
+    "follow-cue": {
+      "description": "相方の気づきに追いつく。相方の発見を手がかりに、相方からゲーム画面へ注意を移して同じものを確かめようとする。例「お、見つけた？ どこにあった？」",
+      "targets": {
+        "game": "05-follow-cue"
+      }
+    },
+    "cautious": {
+      "description": "安全を確かめながらうかがう。危険が去ったか、やり過ごせそうかを、間を置きながら慎重に見守る。例「ここで見失ってくれるかな。いったん落ち着きたいね。」",
+      "targets": {
+        "game": "06-cautious"
+      }
+    }
+  },
+  "clips": {
+    "01-search": {
+      "entry": "preserve-clock",
+      "durationMs": 6600,
+      "fixed": {
+        "param_face_angle_z": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            600,
+            0
+          ],
+          [
+            1200,
+            -15
+          ],
+          [
+            1650,
+            -15
+          ],
+          [
+            2350,
+            12
+          ],
+          [
+            2750,
+            12
+          ],
+          [
+            3350,
+            18
+          ],
+          [
+            3850,
+            18
+          ],
+          [
+            4500,
+            -7
+          ],
+          [
+            5000,
+            -7
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6600,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            700,
+            0
+          ],
+          [
+            1300,
+            -3
+          ],
+          [
+            1700,
+            -3
+          ],
+          [
+            2400,
+            2
+          ],
+          [
+            2800,
+            2
+          ],
+          [
+            3400,
+            6
+          ],
+          [
+            3900,
+            6
+          ],
+          [
+            4600,
+            -1
+          ],
+          [
+            5000,
+            -1
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6600,
+            0
+          ]
+        ],
+        "param_body_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            850,
+            0
+          ],
+          [
+            1500,
+            -2
+          ],
+          [
+            1850,
+            -2
+          ],
+          [
+            2650,
+            1.5
+          ],
+          [
+            3700,
+            2
+          ],
+          [
+            4900,
+            -0.8
+          ],
+          [
+            6100,
+            0
+          ],
+          [
+            6600,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6600,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6600,
+            0
+          ]
+        ]
+      }
+    },
+    "02-discern": {
+      "entry": "preserve-clock",
+      "durationMs": 6500,
+      "fixed": {
+        "param_body_angle_x": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            650,
+            0
+          ],
+          [
+            1450,
+            8
+          ],
+          [
+            2000,
+            8
+          ],
+          [
+            2850,
+            12
+          ],
+          [
+            4700,
+            12
+          ],
+          [
+            5900,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            700,
+            0
+          ],
+          [
+            1500,
+            -2
+          ],
+          [
+            2100,
+            -2
+          ],
+          [
+            2900,
+            -4
+          ],
+          [
+            4700,
+            -4
+          ],
+          [
+            5900,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_face_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            1750,
+            0
+          ],
+          [
+            2800,
+            -4
+          ],
+          [
+            4700,
+            -4
+          ],
+          [
+            5900,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ],
+        "param_body_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            2000,
+            0
+          ],
+          [
+            3000,
+            -0.7
+          ],
+          [
+            4650,
+            -0.7
+          ],
+          [
+            6000,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6500,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6500,
+            0
+          ]
+        ]
+      }
+    },
+    "03-compare": {
+      "entry": "preserve-clock",
+      "durationMs": 6900,
+      "fixed": {
+        "param_face_angle_z": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            600,
+            0
+          ],
+          [
+            1300,
+            -16
+          ],
+          [
+            2000,
+            -16
+          ],
+          [
+            2850,
+            16
+          ],
+          [
+            3650,
+            16
+          ],
+          [
+            4450,
+            -16
+          ],
+          [
+            5200,
+            -16
+          ],
+          [
+            6200,
+            0
+          ],
+          [
+            6900,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            650,
+            0
+          ],
+          [
+            1300,
+            -2
+          ],
+          [
+            5200,
+            -2
+          ],
+          [
+            6200,
+            0
+          ],
+          [
+            6900,
+            0
+          ]
+        ],
+        "param_body_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            900,
+            0
+          ],
+          [
+            1600,
+            -1.6
+          ],
+          [
+            2150,
+            -1.6
+          ],
+          [
+            3150,
+            1.6
+          ],
+          [
+            3800,
+            1.6
+          ],
+          [
+            4750,
+            -1.6
+          ],
+          [
+            5250,
+            -1.6
+          ],
+          [
+            6300,
+            0
+          ],
+          [
+            6900,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6900,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6900,
+            0
+          ]
+        ]
+      }
+    },
+    "04-recheck": {
+      "entry": "preserve-clock",
+      "durationMs": 6200,
+      "fixed": {
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            650,
+            0
+          ],
+          [
+            1400,
+            10
+          ],
+          [
+            2100,
+            10
+          ],
+          [
+            2750,
+            4
+          ],
+          [
+            3050,
+            4
+          ],
+          [
+            3650,
+            10
+          ],
+          [
+            4650,
+            10
+          ],
+          [
+            5600,
+            0
+          ],
+          [
+            6200,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            700,
+            0
+          ],
+          [
+            1450,
+            3
+          ],
+          [
+            4650,
+            3
+          ],
+          [
+            5600,
+            0
+          ],
+          [
+            6200,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            6200,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            6200,
+            0
+          ]
+        ]
+      }
+    },
+    "05-follow-cue": {
+      "entry": "preserve-clock",
+      "durationMs": 5700,
+      "fixed": {
+        "param_face_angle_z": 0,
+        "param_body_angle_x": 0,
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            500,
+            0
+          ],
+          [
+            950,
+            -13
+          ],
+          [
+            1200,
+            -13
+          ],
+          [
+            1950,
+            5
+          ],
+          [
+            2500,
+            5
+          ],
+          [
+            3000,
+            8
+          ],
+          [
+            4150,
+            8
+          ],
+          [
+            5100,
+            0
+          ],
+          [
+            5700,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            1150,
+            0
+          ],
+          [
+            1950,
+            3
+          ],
+          [
+            2500,
+            3
+          ],
+          [
+            3000,
+            2
+          ],
+          [
+            4150,
+            2
+          ],
+          [
+            5100,
+            0
+          ],
+          [
+            5700,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            5700,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            5700,
+            0
+          ]
+        ]
+      }
+    },
+    "06-cautious": {
+      "entry": "preserve-clock",
+      "durationMs": 7200,
+      "fixed": {
+        "param_body_angle_z": 0,
+        "param_eyeball_x": 0,
+        "param_eyeball_y": 0,
+        "param_shared_laughter": 0,
+        "param_startled": 0,
+        "param_wry_smile": 0,
+        "param_eye_left_open": 1,
+        "param_eye_right_open": 1
+      },
+      "tracks": {
+        "param_face_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            1250,
+            0
+          ],
+          [
+            2150,
+            5
+          ],
+          [
+            2550,
+            5
+          ],
+          [
+            3550,
+            13
+          ],
+          [
+            5550,
+            13
+          ],
+          [
+            6650,
+            0
+          ],
+          [
+            7200,
+            0
+          ]
+        ],
+        "param_face_angle_y": [
+          [
+            0,
+            0
+          ],
+          [
+            900,
+            0
+          ],
+          [
+            1600,
+            -3
+          ],
+          [
+            5550,
+            -3
+          ],
+          [
+            6650,
+            0
+          ],
+          [
+            7200,
+            0
+          ]
+        ],
+        "param_face_angle_z": [
+          [
+            0,
+            0
+          ],
+          [
+            2400,
+            0
+          ],
+          [
+            3700,
+            -2
+          ],
+          [
+            5550,
+            -2
+          ],
+          [
+            6650,
+            0
+          ],
+          [
+            7200,
+            0
+          ]
+        ],
+        "param_body_angle_x": [
+          [
+            0,
+            0
+          ],
+          [
+            2500,
+            0
+          ],
+          [
+            3850,
+            1
+          ],
+          [
+            5550,
+            1
+          ],
+          [
+            6750,
+            0
+          ],
+          [
+            7200,
+            0
+          ]
+        ]
+      },
+      "stage": {
+        "scale": [
+          [
+            0,
+            1
+          ],
+          [
+            7200,
+            1
+          ]
+        ],
+        "y": [
+          [
+            0,
+            0
+          ],
+          [
+            7200,
+            0
+          ]
+        ]
+      }
+    }
+  }
+}

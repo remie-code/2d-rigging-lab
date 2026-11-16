@@ -5,10 +5,17 @@ export async function loadDistributionSpeechMotionCatalog() {
   const filenames = (await readdir(directory)).filter((name) => name.endsWith(".json")).sort();
   const assets = await Promise.all(filenames.map(async (name) =>
     JSON.parse(await readFile(new URL(name, directory), "utf8"))));
+  const candidates = assets.flatMap((asset) => asset.version === 2
+    ? Object.entries(asset.nuances).map(([nuanceId, nuance]) => ({
+      id: `${asset.id}--${nuanceId}`,
+      description: `${asset.description}\n${nuance.description}`,
+      targets: nuance.targets
+    }))
+    : [asset]);
   return {
-    performances: Object.fromEntries(assets.map(({ id, description }) => [id, description])),
+    performances: Object.fromEntries(candidates.map(({ id, description }) => [id, description])),
     attentionTargets: { partner: "相方", game: "ゲーム画面", viewers: "視聴者" },
-    pairs: assets.flatMap(({ id, targets }) => Object.entries(targets)
+    pairs: candidates.flatMap(({ id, targets }) => Object.entries(targets)
       .map(([attentionTargetId, clipId]) => ({ performanceId: id, attentionTargetId, clipId })))
   };
 }

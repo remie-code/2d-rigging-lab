@@ -4,6 +4,8 @@
 
 ## 現在の到達と残るゲート
 
+- **探す・確かめる6ニュアンス (2026-11-16)**。採用した六案をゲーム画面向けに登録。階層の親定義から6候補を展開し、区間記録から選ばれた親の版とクリップを辿れる。通常版・portableと現用スロットへ配布済み。次回起動から有効、実会話は未確認。 [完了記録](waves/search-nuances-registration/completion.md) · [外部形式](waves/search-nuances-registration/contract.md)
+
 - **全件ログの後続補強候補 (2026-11-15)**: [アーカイブ診断と候補一覧の版参照](waves/all-motion-recording/completion.md#アーカイブからの診断と後続の補強候補2026-11-15)。発話検索で場面を探せればよく、時刻自動対応は必須ではない。候補全体の版保存・区間からの参照は今回は見送り、次の機能追加時に併せて検討する候補（着手未決）。
 
 - **意図モーション全件記録 (2026-11-14)**: [1 Wave計画](orchestration/all-motion-recording-wave-plan.md)は実装・独立レビュー・通常版/portableの実配布検証が合格。全件ログは `apps/soul/agent/tmp/speech-intent-motion`、演技の版はPlayerスロットの `speech-motion-archive`。旧452件は不変。[完了](waves/all-motion-recording/completion.md)・[起動と読み返し](waves/all-motion-recording/human-gate.md)。選択済み/未対応/失敗等の文脈と演技の版を保存し、後日のニュアンス制作に使う。単一Sol Orch・簡易構成、独立レビューと通常版/portable反映まで。
