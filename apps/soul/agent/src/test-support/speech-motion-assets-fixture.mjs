@@ -17,4 +17,8 @@ const decision = await decideSpeechIntentMotion({
 await channel.sendMotion({ ...key, op: "begin" });
 const { result, error } = await channel.sendMotion({ ...key, op: "play", performanceId, attentionTargetId: "game" });
 const { result: speech } = await channel.openSpeech("external-motion-test");
-process.send({ description, decision, result, error, speech });
+process.send({
+  description, decision, result, error, speech,
+  archive: channel.speechMotions?.definitionArchive,
+  pair: channel.speechMotions?.pairs.find((candidate) => candidate.performanceId === performanceId)
+});

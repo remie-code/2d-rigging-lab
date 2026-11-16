@@ -31,6 +31,7 @@ const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B39";
  * @param {string[]} [options.supportedKinds]  server.hello で広告する kinds（既定 4 種＝実器と同じ。
  *   声の差し替え Wave 1 で intent.speechStream を足した）。
  * @param {number} [options.protocol]  server.hello の protocol（既定 1）。
+ * @param {unknown} [options.speechMotions] Optional hello speech motion metadata.
  * @param {boolean} [options.sendHello]  接続時に server.hello を送るか（既定 true）。false で hello 不着を再現。
  * @param {(payload: any, message: any) => { result: string; error?: unknown }} [options.onSpeech]
  *   intent.speech を受けたときの返答判断（既定 accepted）。rejected を返せば拒否も再現できる。
@@ -102,7 +103,8 @@ export function createChannelServerDouble(options = {}) {
           JSON.stringify({
             v: 1,
             kind: "server.hello",
-            payload: { protocol, supportedKinds }
+            payload: { protocol, supportedKinds,
+              ...(options.speechMotions === undefined ? {} : { speechMotions: options.speechMotions }) }
           })
         )
       );

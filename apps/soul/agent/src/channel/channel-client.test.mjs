@@ -49,6 +49,37 @@ test("connectChannel: hello 照合 → intent.speech accepted（実 WS 配線）
   }
 });
 
+test("connectChannel ignores malformed optional archive metadata without losing legacy candidates", async () => {
+  const server = createChannelServerDouble({ speechMotions: {
+    performances: { ask: "Ask", receive: "Receive" },
+    attentionTargets: { partner: "Partner" },
+    pairs: [
+      { performanceId: "ask", attentionTargetId: "partner", clipId: "ask-partner" },
+      { performanceId: "receive", attentionTargetId: "partner", clipId: "../invalid" }
+    ],
+    definitionArchive: { directory: "archive", definitions: {
+      ask: { status: "saved", sha256: "a".repeat(64) },
+      receive: { status: "bogus", sha256: "invalid" }
+    } }
+  } });
+  const channel = await connectChannel(await server.listen(), { WebSocketImpl: WS });
+  try {
+    assert.deepEqual(channel.speechMotions, {
+      performances: { ask: "Ask", receive: "Receive" },
+      attentionTargets: { partner: "Partner" },
+      pairs: [
+        { performanceId: "ask", attentionTargetId: "partner", clipId: "ask-partner" },
+        { performanceId: "receive", attentionTargetId: "partner" }
+      ],
+      definitionArchive: { directory: "archive", definitions: { ask: { status: "saved", sha256: "a".repeat(64) } } }
+    });
+    assert.equal((await channel.sendSpeech(SPEECH_TIMELINE)).result, "accepted");
+  } finally {
+    await channel.close();
+    await server.close();
+  }
+});
+
 test("connectChannel diagnostics: speech の実 envelope UTF-8 bytes と request identity を記録する", async () => {
   const server = createChannelServerDouble();
   const url = await server.listen();

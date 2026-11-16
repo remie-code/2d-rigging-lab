@@ -834,6 +834,7 @@ export function createFireOrchestrator(options) {
     let sentenceCount = 0;
     let safeChars = 0;
     let intentSpeechText = "";
+    let capturedIntent = false;
 
     /** @param {ReturnType<ReturnType<typeof createIncrementalSentenceTagBuffer>["append"]>} output @param {boolean} final */
     const enqueue = (output, final) => {
@@ -846,6 +847,7 @@ export function createFireOrchestrator(options) {
       for (const item of output.ordered ?? output.sentences.map((text) => ({ text }))) {
         if (stopped) break;
         if ("intent" in item) {
+          capturedIntent ||= item.intent !== null;
           intents.tag(item.intent, item.rawIntentTag);
           continue;
         }
@@ -917,7 +919,7 @@ export function createFireOrchestrator(options) {
         return { sawDelta, flushed, stopped, blocked, sentenceCount, safeChars };
       },
       outcome(outcome) {
-        return intents ? { ...outcome, intentSpeechText } : outcome;
+        return intents ? { ...outcome, intentSpeechText, capturedIntent } : outcome;
       }
     };
   };
@@ -1208,7 +1210,8 @@ export function createFireOrchestrator(options) {
     // A full-result brain can keep the original one-shot path for ordinary replies.
     // An intentional section needs job boundaries, even when the whole reply arrived at once.
     const fullMotion = (!progressiveDelivery || progressiveDelivery.status === "completed") &&
-      !(progressiveDelivery?.enqueuedSentenceCount > 0) && hasSpeech ? replyMotion : null;
+      !(progressiveDelivery?.enqueuedSentenceCount > 0) &&
+      (hasSpeech || !progressiveDelivery?.capturedIntent) ? replyMotion : null;
     if (fullMotion && replyText.includes("<intent")) {
       const probe = createIncrementalSentenceTagBuffer({ includeIntents: true });
       const markers = [...probe.append(replyText).ordered, ...probe.flush().ordered];

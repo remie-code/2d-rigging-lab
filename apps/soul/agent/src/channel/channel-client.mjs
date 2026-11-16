@@ -256,7 +256,10 @@ export async function connectChannel(url, options = {}) {
       if (!supported.has("intent.motion")) {
         throw diagnosticError("Runtime Player does not support speech motion.", "channel_motion_unsupported", "control_channel.preflight");
       }
-      if (socket.readyState !== 1) throw closedError;
+      if (socket.readyState !== 1) {
+        throw diagnosticError("Control Channel socket is closed before the motion request.",
+          "channel_closed", "control_channel.preflight");
+      }
       return sendRequest("intent.motion", intent, "speech motion reply");
     },
     /**
@@ -370,10 +373,26 @@ function readSpeechMotionCatalog(value) {
         pair && typeof pair.performanceId === "string" && typeof pair.attentionTargetId === "string" &&
         Object.hasOwn(value.performances, pair.performanceId) &&
         Object.hasOwn(value.attentionTargets, pair.attentionTargetId))) return null;
+  const archive = value.definitionArchive;
+  const definitions = archive?.definitions;
+  const definitionArchive = typeof archive?.directory === "string" && archive.directory &&
+    definitions && typeof definitions === "object" && !Array.isArray(definitions)
+    ? Object.freeze({
+      directory: archive.directory,
+      definitions: Object.freeze(Object.fromEntries(Object.entries(definitions)
+        .filter(([id, entry]) => Object.hasOwn(value.performances, id) &&
+          typeof entry?.sha256 === "string" && /^[0-9a-f]{64}$/.test(entry.sha256) &&
+          ["pending", "saved", "failed"].includes(entry.status))
+        .map(([id, { sha256, status }]) => [id, Object.freeze({ sha256, status })])))
+    }) : null;
   return Object.freeze({
     performances: Object.freeze(value.performances),
     attentionTargets: Object.freeze(value.attentionTargets),
-    pairs: Object.freeze(value.pairs.map(Object.freeze))
+    pairs: Object.freeze(value.pairs.map(({ performanceId, attentionTargetId, clipId }) => Object.freeze({
+      performanceId, attentionTargetId,
+      ...(typeof clipId === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}$/.test(clipId) ? { clipId } : {})
+    }))),
+    ...(definitionArchive ? { definitionArchive } : {})
   });
 }
 

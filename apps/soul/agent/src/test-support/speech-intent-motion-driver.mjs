@@ -1,11 +1,13 @@
+import { join } from "node:path";
 import { connectChannel } from "../channel/channel-client.mjs";
 import { EXPRESSION_TABLE } from "../mind/expression-table.mjs";
 import { createSpeechIntentMotion } from "../mind/speech-intent-motion.mjs";
 import { createSpeechIntentNoneRecorder } from "../mind/speech-intent-none-recorder.mjs";
+import { createSpeechIntentSectionRecorder } from "../mind/speech-intent-section-recorder.mjs";
 import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 
-const [url, directory] = process.argv.slice(2);
+const [url, directory, sectionDirectory = join(directory, "all-sections")] = process.argv.slice(2);
 let motion;
 const channel = await connectChannel(url, {
   onTrace(event) {
@@ -18,7 +20,8 @@ const sections = new Map();
 const active = new Map();
 motion = createSpeechIntentMotion({
   channel,
-  recordUnsupported: createSpeechIntentNoneRecorder({ directory }),
+  recordUnsupported: directory === "-" ? undefined : createSpeechIntentNoneRecorder({ directory }),
+  recordSection: createSpeechIntentSectionRecorder({ directory: sectionDirectory }),
   judge: ({ input, questions }) => {
     const { promise, resolve, reject } = Promise.withResolvers();
     const parsed = JSON.parse(input);

@@ -8,7 +8,7 @@ export async function loadDistributionSpeechMotionCatalog() {
   return {
     performances: Object.fromEntries(assets.map(({ id, description }) => [id, description])),
     attentionTargets: { partner: "相方", game: "ゲーム画面", viewers: "視聴者" },
-    pairs: assets.flatMap(({ id, targets }) => Object.keys(targets)
-      .map((attentionTargetId) => ({ performanceId: id, attentionTargetId })))
+    pairs: assets.flatMap(({ id, targets }) => Object.entries(targets)
+      .map(([attentionTargetId, clipId]) => ({ performanceId: id, attentionTargetId, clipId })))
   };
 }

@@ -4,6 +4,10 @@
 
 ## 現在の到達と残るゲート
 
+- **全件ログの後続補強候補 (2026-11-15)**: [アーカイブ診断と候補一覧の版参照](waves/all-motion-recording/completion.md#アーカイブからの診断と後続の補強候補2026-11-15)。発話検索で場面を探せればよく、時刻自動対応は必須ではない。候補全体の版保存・区間からの参照は今回は見送り、次の機能追加時に併せて検討する候補（着手未決）。
+
+- **意図モーション全件記録 (2026-11-14)**: [1 Wave計画](orchestration/all-motion-recording-wave-plan.md)は実装・独立レビュー・通常版/portableの実配布検証が合格。全件ログは `apps/soul/agent/tmp/speech-intent-motion`、演技の版はPlayerスロットの `speech-motion-archive`。旧452件は不変。[完了](waves/all-motion-recording/completion.md)・[起動と読み返し](waves/all-motion-recording/human-gate.md)。選択済み/未対応/失敗等の文脈と演技の版を保存し、後日のニュアンス制作に使う。単一Sol Orch・簡易構成、独立レビューと通常版/portable反映まで。
+
 - **演技資産の外部化 (2026-11-13)**: [2 Wave計画](orchestration/external-motion-assets-wave-plan.md)は両Wave・配布後の独立レビュー合格。外部JSONと起動snapshotをPlayer/Soulで共用し、追加/説明編集/削除は再ビルド不要・再起動で反映。苦笑を含む7演技13組、普段の通常版/portable、現用r844配布済み。11/14本人が笑み・困り顔の実運用動作を確認。[完了](waves/external-motion-assets/wave2-completion.md)・[編集と本人確認](waves/external-motion-assets/human-gate.md)。
 
 - **驚いて思わず身を引く登録 (2026-11-13)**: [計画](orchestration/startled-recoil-registration-plan.md)の実装・独立レビュー・配布確認合格。画面/視聴者共用、相方は未制作記録。元パーツ表情を保存したr840とStage奥行きを接続し、現用Export・普段のexe/portableへ反映済み。Player/起動済みSoulを開き直して実会話へ。[完了](waves/startled-recoil-registration/completion.md)。

@@ -19,6 +19,7 @@ beforeAll(async () => {
   snapshot = await loadSpeechMotionSnapshot(profile, () => {});
 });
 afterAll(async () => {
+  await snapshot?.archiveSettled;
   await rm(profile, { recursive: true, force: true });
 });
 

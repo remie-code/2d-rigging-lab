@@ -1,4 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { link, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { RuntimePlayerMappingSlot, RuntimePlayerMappingTarget } from "../../preload/model-mapping-bridge-contract";
 
@@ -36,13 +37,26 @@ type MotionAsset = {
   readonly targets: Readonly<Partial<Record<Target, string>>>;
   readonly clips: Readonly<Record<string, MotionClip>>;
 };
+type DefinitionArchiveEntry = {
+  readonly sha256: string;
+  status: "pending" | "saved" | "failed";
+};
 export type SpeechMotionCatalog = {
   readonly performances: Readonly<Record<string, string>>;
   readonly attentionTargets: Readonly<Record<string, string>>;
-  readonly pairs: readonly { readonly performanceId: string; readonly attentionTargetId: string }[];
+  readonly pairs: readonly {
+    readonly performanceId: string;
+    readonly attentionTargetId: string;
+    readonly clipId?: string;
+  }[];
+  readonly definitionArchive?: {
+    readonly directory: string;
+    readonly definitions: Readonly<Record<string, Readonly<DefinitionArchiveEntry>>>;
+  };
 };
 export type SpeechMotionSnapshot = {
   readonly catalog: SpeechMotionCatalog;
+  readonly archiveSettled: Promise<void>;
   resolve(performanceId: string, attentionTargetId: string): { clip: MotionClip } | { reason: string };
 };
 
@@ -144,6 +158,37 @@ function parseAsset(value: unknown): MotionAsset {
   return value as MotionAsset;
 }
 
+async function publishDefinition(directory: string, sha256: string, content: string): Promise<void> {
+  const path = join(directory, sha256 + ".json");
+  const verify = async () => {
+    if (await readFile(path, "utf8") !== content) throw new Error("existing archive bytes differ");
+  };
+  try {
+    await verify();
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const staging = join(directory, randomUUID() + ".tmp");
+  await mkdir(directory, { recursive: true });
+  await writeFile(staging, content, { encoding: "utf8", flag: "wx", mode: 0o600 }).catch(async (error: NodeJS.ErrnoException) => {
+    if (error.code !== "EEXIST") await unlink(staging).catch(() => {});
+    throw error;
+  });
+  try {
+    try {
+      await link(staging, path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      await verify();
+    }
+  } finally {
+    await unlink(staging).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+  }
+}
+
 export async function loadSpeechMotionSnapshot(
   userData: string,
   report: (message: string) => void
@@ -172,27 +217,55 @@ export async function loadSpeechMotionSnapshot(
     }
   }
   const assets = new Map<string, MotionAsset>();
+  const archiveDirectory = resolve(userData, "speech-motion-archive");
+  const definitions = new Map<string, DefinitionArchiveEntry>();
+  const archiveWrites: Promise<void>[] = [];
   for (const [performanceId, entries] of sources) {
     if (entries.length > 1) {
       report(`Duplicate speech motion id ${performanceId}: ${entries.map(({ filename }) => filename).join(", ")}`);
-    } else if (entries[0]?.asset) {
-      assets.set(performanceId, entries[0].asset);
+      continue;
     }
+    const asset = entries[0]?.asset;
+    if (!asset) continue;
+    assets.set(performanceId, asset);
+    const content = JSON.stringify(asset, (_key, value: unknown) =>
+      record(value) ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, value[key]])) : value,
+    2) + "\n";
+    const sha256 = createHash("sha256").update(content).digest("hex");
+    const entry: DefinitionArchiveEntry = { sha256, status: "pending" };
+    definitions.set(performanceId, entry);
+    archiveWrites.push(publishDefinition(archiveDirectory, sha256, content).then(() => {
+      entry.status = "saved";
+    }, (error: unknown) => {
+      entry.status = "failed";
+      report(`Speech motion archive: ${performanceId} ${join(archiveDirectory, sha256 + ".json")}: ${error instanceof Error ? error.message : String(error)}`);
+    }));
   }
-  const catalog = Object.freeze({
+  const candidates = Object.freeze({
     performances: Object.freeze(Object.fromEntries(Array.from(assets, ([key, asset]) => [key, asset.description]))),
     attentionTargets,
     pairs: Object.freeze(Array.from(assets, ([performanceId, asset]) =>
-      Object.keys(asset.targets).map((attentionTargetId) => Object.freeze({ performanceId, attentionTargetId }))).flat())
+      Object.entries(asset.targets).map(([attentionTargetId, clipId]) =>
+        Object.freeze({ performanceId, attentionTargetId, clipId }))).flat())
   });
   return {
-    catalog,
+    archiveSettled: Promise.all(archiveWrites).then(() => {}),
+    get catalog() {
+      return {
+        ...candidates,
+        definitionArchive: {
+          directory: archiveDirectory,
+          definitions: Object.fromEntries(Array.from(definitions, ([id, entry]) => [id, { ...entry }]))
+        }
+      };
+    },
     resolve(performanceId, attentionTargetId) {
       const asset = assets.get(performanceId);
       if (!asset) return { reason: "unsupported-performance" };
       if (!Object.hasOwn(attentionTargets, attentionTargetId)) return { reason: "unknown-attention-target" };
-      const clip = asset.targets[attentionTargetId as Target];
-      return clip === undefined ? { reason: "unproduced-pair" } : { clip: asset.clips[clip]! };
+      const target = attentionTargetId as Target;
+      if (!Object.hasOwn(asset.targets, target)) return { reason: "unproduced-pair" };
+      return { clip: asset.clips[asset.targets[target]!]! };
     }
   };
 }

@@ -443,9 +443,15 @@ export function createLazyChannel(url, options = {}) {
           channel: {
             async sendMotion(intent) {
               const pending = channelPromise ?? (intent.op === "begin" && speechMotion === motion ? ensure() : null);
-              if (!pending || speechMotion !== motion) return { result: "rejected" };
-              const channel = await pending;
-              if (speechMotion !== motion || channelPromise !== pending) return { result: "rejected" };
+              const retiredError = () => Object.assign(new Error("Speech motion connection retired."), { code: "channel_motion_retired" });
+              if (!pending || speechMotion !== motion) throw retiredError();
+              const channel = await pending.catch((error) => {
+                throw Object.assign(new Error("Speech motion connection did not open.", { cause: error }), {
+                  code: typeof error?.code === "string" ? error.code : "channel_motion_connect_failed",
+                  diagnosticStage: "control_channel.preflight"
+                });
+              });
+              if (speechMotion !== motion || channelPromise !== pending) throw retiredError();
               try {
                 return await channel.sendMotion(intent);
               } catch (error) {

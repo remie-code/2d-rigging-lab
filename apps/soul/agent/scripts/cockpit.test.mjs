@@ -197,6 +197,29 @@ test("speech motion is pinned to the connection that owned the Fire", async () =
   assert.equal(fresh.isActive(), false);
 });
 
+test("speech motion records a failed lazy connection as not sent", async () => {
+  const records = [];
+  const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=fixture", {
+    async connectImpl() { throw new Error("fixture connection refused"); },
+    createMotion(options) {
+      return createSpeechIntentMotion({
+        ...options,
+        async recordSection(record) { records.push(record); return "fixture.json"; }
+      });
+    }
+  });
+  const section = {
+    sceneId: "one", utteranceId: "one", sectionId: "one", generation: 0, sectionIndex: 0,
+    intent: "受け取る", text: "なるほど。", context: {}
+  };
+  const motion = lazy.speechIntentMotion();
+  void motion.prepare(section);
+  await motion.start(section)?.playback;
+  await motion.finalize(section, { text: section.text });
+  assert.deepEqual(records[0].motionPlayback.requests[0],
+    { op: "begin", status: "not-sent", reason: "channel_motion_connect_failed" });
+});
+
 test("createLazyChannel: connects on first sendSpeech and reuses the connection", { timeout: 5000 }, async () => {
   let connects = 0;
   /** @type {unknown[]} */
