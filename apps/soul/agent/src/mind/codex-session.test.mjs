@@ -568,6 +568,47 @@ test("codex-session: env guard rejects API-key billing variables", () => {
   assert.throws(() => createCodexSession({ env: { CODEX_API_KEY: "secret" }, codexPath: "fake" }), /CODEX_API_KEY/);
 });
 
+test("codex-session: only the bundled Windows executable with inherited env drops the registered Core flag", async () => {
+  await withScratch(async (scratch) => {
+    const core = "CODEX_WINDOWS_REGISTERED_CORE";
+    const family = "CODEX_WINDOWS_SANDBOX_PACKAGE_FAMILY";
+    const previous = { [core]: process.env[core], [family]: process.env[family] };
+    const explicitEnv = { [core]: "1", [family]: "test-package-family" };
+    Object.assign(process.env, explicitEnv);
+    try {
+      for (const { codexPath, env, replaceOptions, filtersCore } of [
+        { codexPath: undefined, env: undefined, filtersCore: process.platform === "win32" },
+        { codexPath: undefined, env: explicitEnv, filtersCore: false },
+        { codexPath: "fake-codex", env: undefined, filtersCore: false },
+        { codexPath: undefined, env: undefined, replaceOptions: { codexPath: "other-codex", env: explicitEnv }, filtersCore: process.platform === "win32" },
+        { codexPath: "fake-codex", env: explicitEnv, replaceOptions: { codexPath: undefined, env: undefined }, filtersCore: false }
+      ]) {
+        const harness = makeSpawnHarness();
+        const options = { ...scratch, skipEnvGuard: true, spawnImpl: harness.spawnImpl, codexPath, env };
+        const session = createCodexSession(options);
+        try {
+          Object.assign(options, replaceOptions);
+          await session.ask("start");
+          if (codexPath) assert.equal(harness.spawnCalls[0].command, codexPath);
+          const expectedEnv = { ...(env ?? process.env) };
+          if (filtersCore) delete expectedEnv[core];
+          assert.ok(!filtersCore || harness.spawnCalls[0].options.env !== process.env);
+          assert.deepEqual({ ...harness.spawnCalls[0].options.env }, expectedEnv);
+          assert.equal(process.env[core], "1");
+          assert.equal(process.env[family], "test-package-family");
+        } finally {
+          await session.dispose();
+        }
+      }
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+});
+
 test("codex-session: invalid input/concurrent ask/disposed ask fail deterministically", async () => {
   await withScratch(async (scratch) => {
     let pendingTurn;

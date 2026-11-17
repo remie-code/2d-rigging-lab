@@ -4,6 +4,8 @@
 
 ## 現在の到達と残るゲート
 
+- **Windowsでの小タスク起動 (2026-11-18)**。Desktopの環境を引き継いだCockpitからSoulのnpm版Codexを起動し、資料を読んで担当先に書き戻せる。原本・別担当先への書き込み拒否を実機確認。Soul全2,574件成功。[完了記録](waves/windows-codex-launch/completion.md)・[計画](orchestration/windows-codex-launch-wave-plan.md)。
+
 - **小タスクセッション共通基盤 (2026-11-16)**: [3 Wave計画](orchestration/local-task-sessions-wave-plan.md)は実装・横断独立レビュー合格。記憶参照とローカル小タスクが共通基盤から毎依頼新規sessionを起動。PDF後半読取をSol/Terraで実証、writerの90秒待機上限を撤去し記憶保存後に場領域を解放。Soul全2,573件・独立492件成功。実Discord本人確認待ち。[完了](waves/local-task-sessions/wave3-completion.md)・[本人手順](waves/local-task-sessions/human-gate.md)。
 
 - **Discordチャット資料・モバイルVC操作 (2026-11-16)**: [2 Wave計画](orchestration/discord-companion-inputs-wave-plan.md)の読む先設定、テキスト／画像共有、Discordの `/soul-vc join`・`leave` を維持。初版のPDF先頭3頁方式は上記小タスク経路へ置換済み。[初版完了](waves/discord-companion-inputs/wave2-completion.md)・[Discord初期設定](waves/discord-companion-inputs/human-gate.md)。Player変更なし、実Discord本人確認待ち。

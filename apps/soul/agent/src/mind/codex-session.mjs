@@ -681,14 +681,16 @@ export function createCodexSession(options = {}) {
   const localToolCalls = new Set();
   const finalAnswerOnly = options.finalAnswerOnly === true;
   const ephemeral = options.ephemeral === true;
-  const env = options.env ?? process.env;
+  const { env: explicitEnv, codexPath: explicitCodexPath } = options;
+  const env = explicitEnv ?? process.env;
+  const filterRegisteredCore = process.platform === "win32" && explicitCodexPath == null && explicitEnv == null;
   const spawnImpl = options.spawnImpl ?? defaultSpawn;
   const homeDir = options.homeDir ?? os.homedir();
   const ledgerPath = options.ledgerPath ?? DEFAULT_LEDGER_PATH;
   const rpcTimeoutMs = options.rpcTimeoutMs ?? 15_000;
   const disposeRpcTimeoutMs = options.disposeRpcTimeoutMs ?? 300;
   const shutdownTimeoutMs = options.shutdownTimeoutMs ?? 1_000;
-  const codexPath = options.codexPath ?? resolveBundledCodexPath();
+  const codexPath = explicitCodexPath ?? resolveBundledCodexPath();
 
   if (!options.skipEnvGuard) {
     const { warnings } = assertSubscriptionAuthEnvOpenAI(env);
@@ -949,11 +951,16 @@ export function createCodexSession(options = {}) {
     if (disposed) throw new Error("codex-session already disposed.");
     if (!connection) {
       const generation = ++connectionGeneration;
+      let childEnv = env;
+      if (filterRegisteredCore) {
+        // The npm executable is unpackaged. Keep FAMILY for sandbox service discovery.
+        childEnv = Object.fromEntries(Object.entries(env).filter(([key]) => key.toUpperCase() !== "CODEX_WINDOWS_REGISTERED_CORE"));
+      }
       const fresh = new AppServerConnection({
         spawnImpl,
         command: codexPath,
         args: [...APP_SERVER_ARGS],
-        spawnOptions: { cwd: workingDirectory, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
+        spawnOptions: { cwd: workingDirectory, env: childEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
         rpcTimeoutMs,
         shutdownTimeoutMs,
         onNotification: (message) => dispatchNotification(generation, message),
