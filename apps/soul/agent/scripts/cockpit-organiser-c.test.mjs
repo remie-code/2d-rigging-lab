@@ -29,7 +29,6 @@ import {
   startMemoryOrganiser,
   checkOrganiseDue,
   DEFAULT_MEMORY_BACKUP_ROOT,
-  ORGANISER_ABORTED_WARNING,
   ORGANISER_BACKUP_FAILED_WARNING,
   ORGANISER_LOG_FAILED_WARNING,
   ORGANISE_INTERVAL_MS
@@ -219,7 +218,6 @@ function openEvents(url) {
  * @param {boolean} [over.hang]  ③の頼みを release() まで答えさせない。
  * @param {boolean} [over.backupFails]
  * @param {(entries: any[]) => Promise<any>} [over.writeImpl]
- * @param {number} [over.memoryTimeoutMs]
  * @param {string} [over.roleId="chappy"]
  * @param {{ roleRef: any; recorder: any; runner: any; server: () => any }} [over.shared]  ロールを 2 つ並べるとき。
  */
@@ -285,7 +283,6 @@ function makeVenue(over = {}) {
     channel: { getUrl: () => null, connect: async () => {}, close: async () => {} },
     isStreamOpen: () => server != null && server.streamStatus().phase === "open",
     getEntries: () => (server ? server.getTranscript() : []),
-    ...(over.memoryTimeoutMs != null ? { memoryTimeoutMs: over.memoryTimeoutMs } : {}),
     // ②の待ちの上限のタイマーでテストのプロセスを引き留めない。
     setTimeoutImpl: unrefTimeout,
     organiser: runner
@@ -334,6 +331,7 @@ async function startServer(v, extra = {}) {
 function makeShutdown(v, server, log) {
   return createCockpitShutdown({
     write: (line) => log.push(line.trim()),
+    forceExit: () => assert.fail("unexpected forced exit"),
     server,
     venue: v.venue,
     disposeRest: async () => {
@@ -445,29 +443,21 @@ test("配信を終える（時期でない）: ③を呼ばない・何も出さ
   }
 });
 
-test("配信を終える: ②が上限を過ぎてもまだ走っていれば③は走らせない（同じフォルダで同時に走らせない・見送りの 1 行）", async () => {
-  /** @type {Array<() => void>} */
-  const releases = [];
+test("配信を終える: ②の終了を確認できなければ③を見送る", async () => {
   const v = makeVenue({
-    memoryTimeoutMs: 20,
-    writeImpl: () =>
-      new Promise((resolve) => {
-        releases.push(() => resolve({ written: true }));
-      })
+    writeImpl: async (_entries, _place, _wording, _materials, onUnconfirmedExit) => {
+      onUnconfirmedExit();
+      throw new Error("writer process still running");
+    }
   });
   const { server, url, ears } = await startServer(v);
   try {
     await post(url, "/api/stream/start", { device: "Mic" });
-    ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "長い書き出し" });
+    ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "合成転写" });
     const stopped = await post(url, "/api/stream/stop");
-    assert.equal(stopped.json.stream.phase, "closed", "②の上限（今どおり）で閉じる");
-    assert.equal(v.recorder.isRecording(), true, "②はまだ走っている");
-    assert.equal(v.organiserStart.starts.length, 0, "③は始めない");
+    assert.equal(stopped.json.stream.phase, "closed");
+    assert.equal(v.organiserStart.starts.length, 0);
     assert.deepEqual(v.warnings, [ORGANISER_WRITER_BUSY_WARNING]);
-    assert.deepEqual(v.lines, []);
-    releases[0]();
-    await v.recorder.whenIdle();
-    assert.equal(v.organiserStart.starts.length, 0, "②が終わっても③は後から走らない（次の閉じでやり直す）");
   } finally {
     await server.close();
     v.cleanup();
@@ -608,114 +598,47 @@ test("場にロールが 2 つ: ロールごとの置き場に別々の③（sav
 
 // ── 2. Ctrl+C ───────────────────────────────────────────────────────────
 
-test("Ctrl+C（閉じかけの整理の最中）: ③はすぐ打ち切り（abort）、終えるは整理を待たずに進む・打ち切りの 1 行は B の 1 行だけ", async () => {
+test("Ctrl+C（閉じかけの整理の最中）: ③の終了とコミットを待つ", async () => {
   const v = makeVenue({ hang: true });
   const { server, url } = await startServer(v);
-  /** @type {string[]} */
   const log = [];
-  await post(url, "/api/stream/start", { device: "Mic" });
-  const stopping = post(url, "/api/stream/stop");
-  await until(() => v.brain.rec.asks.length === 1, "organiser ask");
-  assert.equal(v.runner.isRunning(), true);
-  // 頼みは答えないまま（release しない）。Ctrl+C で終わりまで進む。
-  await makeShutdown(v, server, log)();
-  const stopped = await stopping.catch(() => null);
-  assert.ok(stopped === null || stopped.json.stream.phase === "closed");
-  assert.equal(v.runner.isRunning(), false);
-  assert.equal(v.brain.rec.disposed, 1, "セッションを閉じる");
-  assert.ok(v.events.includes("organiser.reset"), "走る前の先頭へ戻す");
-  assert.equal(v.events.includes("organiser.commit"), false, "コミットしない");
-  assert.deepEqual(v.lines, ["memory: organising (role chappy)"], "終わりの 1 行は C からは出さない");
-  assert.deepEqual(v.warnings, [ORGANISER_ABORTED_WARNING], "打ち切りの 1 行は B の 1 行だけ");
-  assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
-  assert.equal(server.streamStatus().phase, "closed");
-  v.cleanup();
+  try {
+    await post(url, "/api/stream/start", { device: "Mic" });
+    const stopping = post(url, "/api/stream/stop");
+    await until(() => v.brain.rec.asks.length === 1, "organiser ask");
+    const shutdown = makeShutdown(v, server, log)();
+    await settle();
+    assert.equal(log.includes("finalize"), false);
+    assert.equal(v.brain.rec.disposed, 0);
+    v.brain.rec.release();
+    await stopping.catch(() => null);
+    await shutdown;
+    assert.equal(v.runner.isRunning(), false);
+    assert.equal(v.brain.rec.disposed, 1);
+    assert.ok(v.events.includes("organiser.commit"));
+    assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
+  } finally {
+    v.brain.rec.release();
+    await server.close();
+    v.cleanup();
+  }
 });
 
-test("Ctrl+C（閉じの書き出しの最中）: ②は今どおり待ち、そのあと③は始めない", async () => {
-  /** @type {Array<() => void>} */
-  const releases = [];
-  const v = makeVenue({
-    writeImpl: (entries) =>
-      new Promise((resolve) => {
-        v.events.push(`memory.write:${entries.length}`);
-        releases.push(() => resolve({ written: true }));
-      })
-  });
-  const { server, url, ears } = await startServer(v);
-  /** @type {string[]} */
-  const log = [];
-  await post(url, "/api/stream/start", { device: "Mic" });
-  ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "一言" });
-  const stopping = post(url, "/api/stream/stop");
-  await until(() => releases.length === 1, "writer");
-  const shutdown = makeShutdown(v, server, log)();
-  await settle();
-  assert.equal(log.includes("finalize"), false, "②を待っている");
-  releases[0]();
-  await shutdown;
-  await stopping.catch(() => null);
-  assert.equal(v.organiserStart.starts.length, 0, "③は始めない");
-  assert.equal(v.brain.rec.created, 0);
-  assert.deepEqual(v.lines, []);
-  assert.deepEqual(v.warnings, []);
-  assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
-  v.cleanup();
-});
-
-test("Ctrl+C（場が開いている）: 終えると同じ道で②は書くが、③は走らせない（整理は場を閉じる操作のときだけ）", async () => {
+test("Ctrl+C（場が開いている）: ②のあとに必要な③を走らせてから終了する", async () => {
   const v = makeVenue();
   const { server, url, ears } = await startServer(v);
-  /** @type {string[]} */
   const log = [];
-  await post(url, "/api/stream/start", { device: "Mic" });
-  ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "最後の一言" });
-  await makeShutdown(v, server, log)();
-  assert.deepEqual(v.events, ["memory.write:1"]);
-  assert.equal(v.organiserStart.starts.length, 0);
-  assert.deepEqual(v.lines, []);
-  assert.deepEqual(v.warnings, []);
-  assert.equal(log[0], "[cockpit] closing…");
-  assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
-  v.cleanup();
-});
-
-test("createCockpitShutdown: 最初の 1 回で venue.stopOrganising を終えるより前に呼ぶ（2 回目は呼ばない）", async () => {
-  /** @type {string[]} */
-  const calls = [];
-  let release = () => {};
-  const shutdown = createCockpitShutdown({
-    write: () => {},
-    server: {
-      streamStatus: () => ({ phase: "closing" }),
-      endStream: () => {
-        calls.push("endStream");
-        return new Promise((r) => {
-          release = () => r(undefined);
-        });
-      },
-      close: async () => {
-        calls.push("close");
-      }
-    },
-    venue: {
-      skipMemoryWait: () => {
-        calls.push("skipMemoryWait");
-        return false;
-      },
-      waitForRunningSaves: async () => {},
-      stopOrganising: () => calls.push("stopOrganising")
-    },
-    disposeRest: async () => {},
-    finalize: async () => {
-      calls.push("finalize");
-    }
-  });
-  const first = shutdown();
-  await shutdown();
-  release();
-  await first;
-  assert.deepEqual(calls, ["stopOrganising", "endStream", "skipMemoryWait", "close", "finalize"]);
+  try {
+    await post(url, "/api/stream/start", { device: "Mic" });
+    ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "最後の一言" });
+    await makeShutdown(v, server, log)();
+    assert.equal(v.events[0], "memory.write:1");
+    assert.ok(v.events.includes("organiser.commit"));
+    assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
+  } finally {
+    await server.close();
+    v.cleanup();
+  }
 });
 
 // ── 3. 整理の係（createMemoryOrganiserRunner）の単体 ─────────────────────

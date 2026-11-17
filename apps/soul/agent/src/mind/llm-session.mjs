@@ -154,7 +154,7 @@ function extractAssistantText(assistantMessage) {
  * @param {(init: any) => void} [options.onInit]  system/init メッセージ観測（tools[]/apiKeySource 記録用）。
  * @param {(warning: string) => void} [options.onWarning]  env ガードの warning（BASE_URL 非既定等）。
  * @returns {{
- *   ask: (content: string | Array<any>) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>;
+ *   ask: (content: string | Array<any>, options?: {redactProviderErrors?:boolean}) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>;
  *   dispose: () => Promise<void>;
  *   getInit: () => any;
  * }}
@@ -206,9 +206,10 @@ export function createLlmSession(options = {}) {
      * 一文（または content ブロック配列）を投げ、応答全文を得る。usage・TTFT・往復所要も返す。
      * @param {string | Array<any>} content  非空文字列、または非空の content ブロック配列
      *   （S5: 視覚発火が `[{type:'image',...}, {type:'text',...}]` を渡す）。
+     * @param {{redactProviderErrors?:boolean}} [askOptions]
      * @returns {Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>}
      */
-    async ask(content) {
+    async ask(content, askOptions) {
       const isNonEmptyString = typeof content === "string" && content.length > 0;
       const isNonEmptyBlocks = Array.isArray(content) && content.length > 0;
       if (!isNonEmptyString && !isNonEmptyBlocks) {
@@ -234,6 +235,7 @@ export function createLlmSession(options = {}) {
       let ttftMs = null;
       /** @type {number | null} */
       let resultTtftMs = null;
+      let providerFailed = false;
 
       for (;;) {
         const { value: message, done } = await q.next();
@@ -260,10 +262,14 @@ export function createLlmSession(options = {}) {
           continue;
         }
         if (message.type === "assistant") {
+          if (message.error) providerFailed = true;
           replyText += extractAssistantText(message);
           continue;
         }
         if (message.type === "result") {
+          if (askOptions?.redactProviderErrors && (providerFailed || message.is_error)) {
+            throw new Error("llm-session: provider request failed");
+          }
           usage = message.usage ?? null;
           if (typeof message.ttft_ms === "number") {
             resultTtftMs = message.ttft_ms;

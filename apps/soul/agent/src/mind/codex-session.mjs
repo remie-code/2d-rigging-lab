@@ -153,9 +153,16 @@ const QUIET_TOOL_NOTIFICATIONS = new Set([
   "item/mcpToolCall/progress",
   "serverRequest/resolved"
 ]);
+const QUIET_LOCAL_TOOL_NOTIFICATIONS = new Set([
+  "remoteControl/status/changed", "account/updated", "thread/started", "thread/status/changed",
+  "turn/moderationMetadata", "skills/changed"
+]);
 
 /** turn/start の sandboxPolicy（thread/start の sandbox と揃える・実機の thread/start 応答の実効値と同じ形）。 */
-function turnSandboxPolicy(sandbox) {
+function turnSandboxPolicy(sandbox, exclusiveWorkdir) {
+  if (exclusiveWorkdir) {
+    return { type: "workspaceWrite", writableRoots: [exclusiveWorkdir], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true };
+  }
   if (sandbox === "workspace-write") {
     return { type: "workspaceWrite", writableRoots: [], networkAccess: false, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
   }
@@ -401,6 +408,7 @@ class AppServerConnection {
     this.rpcTimeoutMs = options.rpcTimeoutMs;
     this.shutdownTimeoutMs = options.shutdownTimeoutMs;
     this.onNotification = options.onNotification;
+    this.onToolCall = options.onToolCall;
     this.onFatal = options.onFatal;
     this.onDiagnostic = options.onDiagnostic;
     this.child = null;
@@ -468,7 +476,7 @@ class AppServerConnection {
     if (this.initialized) return;
     await this.request("initialize", {
       clientInfo: { name: "ai-native-live2d-editor-soul", title: "AI Cohost Soul", version: "1" },
-      capabilities: { experimentalApi: false }
+      capabilities: { experimentalApi: !!this.onToolCall }
     });
     this.notify("initialized");
     this.initialized = true;
@@ -519,6 +527,14 @@ class AppServerConnection {
       return;
     }
     if (Object.hasOwn(message, "id") && typeof message.method === "string") {
+      if (message.method === "item/tool/call" && this.onToolCall && !this.closing) {
+        void this.onToolCall(message.params).then((result) => {
+          if (!this.closed && !this.closing) this.write({ jsonrpc: "2.0", id: message.id, result });
+        }).catch((error) => {
+          if (!this.closed && !this.closing) this.fail(error);
+        });
+        return;
+      }
       this.write({ jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Client does not support server requests." } });
       return;
     }
@@ -633,6 +649,8 @@ function turnIdFromNotification(message) {
  *   turn を始める・context-growth-2026-10.md §6）。
  * @param {number} [options.compactionTimeoutMs=300000]  圧縮の turn の完了を待つ上限（超えたら失敗として畳む）。
  * @param {string} [options.cwd]  役のセッションの作業フォルダ（絶対パス）。thread/start・turn/start に渡す。
+ * @param {boolean} [options.exclusiveWorkdir] Restrict workspace writes to cwd, including on Windows.
+ * @param {{ spec: { type: "function"; name: string; description: string; inputSchema: object }; run: (args: unknown) => Promise<{ success: boolean; contentItems: object[] }> }} [options.localTool]
  *   既定は使い捨ての一時フォルダ。指定したフォルダは dispose で消さない。
  * @param {"read-only" | "workspace-write"} [options.sandbox="read-only"]  thread/start の sandbox と turn/start の
  *   sandboxPolicy を揃えて指定する。approval は常に never。
@@ -655,16 +673,24 @@ export function createCodexSession(options = {}) {
   if (options.cwd !== undefined && (typeof options.cwd !== "string" || !path.isAbsolute(options.cwd))) {
     throw new TypeError("codex-session: cwd must be an absolute path.");
   }
+  if (options.exclusiveWorkdir && (sandbox !== "workspace-write" || !options.cwd)) {
+    throw new TypeError("codex-session: exclusiveWorkdir requires a writable workspace and explicit cwd.");
+  }
+  const exclusiveWorkdir = options.exclusiveWorkdir ? options.cwd : undefined;
+  const localTool = options.localTool;
+  const localToolCalls = new Set();
   const finalAnswerOnly = options.finalAnswerOnly === true;
   const ephemeral = options.ephemeral === true;
-  const env = options.env ?? process.env;
+  const { env: explicitEnv, codexPath: explicitCodexPath } = options;
+  const env = explicitEnv ?? process.env;
+  const filterRegisteredCore = process.platform === "win32" && explicitCodexPath == null && explicitEnv == null;
   const spawnImpl = options.spawnImpl ?? defaultSpawn;
   const homeDir = options.homeDir ?? os.homedir();
   const ledgerPath = options.ledgerPath ?? DEFAULT_LEDGER_PATH;
   const rpcTimeoutMs = options.rpcTimeoutMs ?? 15_000;
   const disposeRpcTimeoutMs = options.disposeRpcTimeoutMs ?? 300;
   const shutdownTimeoutMs = options.shutdownTimeoutMs ?? 1_000;
-  const codexPath = options.codexPath ?? resolveBundledCodexPath();
+  const codexPath = explicitCodexPath ?? resolveBundledCodexPath();
 
   if (!options.skipEnvGuard) {
     const { warnings } = assertSubscriptionAuthEnvOpenAI(env);
@@ -813,7 +839,7 @@ export function createCodexSession(options = {}) {
       return;
     }
     if (routeCompactionNotification(generation, message)) return;
-    if (QUIET_TOOL_NOTIFICATIONS.has(method)) return;
+    if (QUIET_TOOL_NOTIFICATIONS.has(method) || (localTool && QUIET_LOCAL_TOOL_NOTIFICATIONS.has(method))) return;
     // turn/start の serviceTier 等で thread の設定が変わった知らせ。魂は送った値を自分で持つので黙って受ける。
     if (method === "thread/settings/updated") return;
     const turnScoped = method === "turn/started" || method === "turn/completed" || method === "item/started" ||
@@ -925,14 +951,36 @@ export function createCodexSession(options = {}) {
     if (disposed) throw new Error("codex-session already disposed.");
     if (!connection) {
       const generation = ++connectionGeneration;
+      let childEnv = env;
+      if (filterRegisteredCore) {
+        // The npm executable is unpackaged. Keep FAMILY for sandbox service discovery.
+        childEnv = Object.fromEntries(Object.entries(env).filter(([key]) => key.toUpperCase() !== "CODEX_WINDOWS_REGISTERED_CORE"));
+      }
       const fresh = new AppServerConnection({
         spawnImpl,
         command: codexPath,
         args: [...APP_SERVER_ARGS],
-        spawnOptions: { cwd: workingDirectory, env, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
+        spawnOptions: { cwd: workingDirectory, env: childEnv, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
         rpcTimeoutMs,
         shutdownTimeoutMs,
         onNotification: (message) => dispatchNotification(generation, message),
+        onToolCall: localTool ? async (params) => {
+          const active = activeAsk;
+          if (!active || active.settled || disposed || active.generation !== generation ||
+              params?.threadId !== active.threadId || !active.turnId || params?.turnId !== active.turnId ||
+              params?.tool !== localTool.spec.name || params?.namespace != null) {
+            return { success: false, contentItems: [{ type: "inputText", text: "Tool unavailable for this turn." }] };
+          }
+          const call = Promise.resolve().then(() => localTool.run(params.arguments));
+          localToolCalls.add(call);
+          try {
+            return await call;
+          } catch {
+            return { success: false, contentItems: [{ type: "inputText", text: "Material tool failed." }] };
+          } finally {
+            localToolCalls.delete(call);
+          }
+        } : undefined,
         onDiagnostic: diagnose,
         onFatal: (error) => {
           invalidateConnection(error, fresh);
@@ -963,6 +1011,7 @@ export function createCodexSession(options = {}) {
       live.mcpOverrides = live.request("config/read", { includeLayers: false, cwd: threadCwd }).then(
         (result) => mcpServerDisableOverrides(result),
         () => {
+          if (localTool) throw new Error("codex-session: could not isolate the task from user MCP servers.");
           if (live.closed || live.closing) return null; // 接続ごと落ちた。thread/start 側の失敗に任せる。
           try { options.onWarning?.(MCP_CONFIG_READ_FAILED_WARNING); } catch {}
           return null;
@@ -1035,7 +1084,14 @@ export function createCodexSession(options = {}) {
       const result = await ready.connection.request("thread/start", {
         model, cwd: threadCwd, approvalPolicy: "never", sandbox,
         ...(ephemeral ? { ephemeral: true } : {}),
-        config: { forced_login_method: "chatgpt", web_search: "disabled", ...(mcpOverrides ? { mcp_servers: mcpOverrides } : {}) }
+        ...(localTool ? { dynamicTools: [localTool.spec] } : {}),
+        config: {
+          forced_login_method: "chatgpt", web_search: "disabled",
+          ...(exclusiveWorkdir ? { sandbox_workspace_write: {
+            writable_roots: [exclusiveWorkdir], network_access: false, exclude_tmpdir_env_var: true, exclude_slash_tmp: true
+          } } : {}),
+          ...(mcpOverrides ? { mcp_servers: mcpOverrides } : {})
+        }
       });
       const id = result?.thread?.id;
       if (typeof id !== "string" || id.length === 0) throw protocolError("thread/start response is missing thread.id");
@@ -1147,7 +1203,7 @@ export function createCodexSession(options = {}) {
         try {
           startResult = await ready.connection.request("turn/start", {
             threadId: ready.threadId, input, model, effort, cwd: threadCwd, approvalPolicy: "never",
-            sandboxPolicy: turnSandboxPolicy(sandbox),
+            sandboxPolicy: turnSandboxPolicy(sandbox, exclusiveWorkdir),
             ...(serviceTier ? { serviceTier } : {})
           });
         } catch (error) {
@@ -1316,6 +1372,7 @@ export function createCodexSession(options = {}) {
       const liveThreadId = threadId;
       const active = activeAsk;
       if (active) rejectActive(new Error("codex-session disposed during turn."));
+      await Promise.allSettled(localToolCalls);
       if (live && active?.turnId) {
         try { await live.request("turn/interrupt", { threadId: active.threadId, turnId: active.turnId }, disposeRpcTimeoutMs); } catch {}
       }

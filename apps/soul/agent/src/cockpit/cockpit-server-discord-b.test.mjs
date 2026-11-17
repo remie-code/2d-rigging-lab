@@ -503,12 +503,13 @@ test("Domain B ロールの束の④: 思い出しの係は先頭のロールの
   const runs = [];
   /** @type {string[]} */
   const events = [];
+  const recall = Promise.withResolvers();
   const h = await startServer({
     roles: [
       makeRole("chappy", events, {
         recall: (/** @type {any} */ job) => {
           runs.push(job.request);
-          return new Promise(() => {});
+          return recall.promise;
         }
       })
     ],
@@ -520,6 +521,7 @@ test("Domain B ロールの束の④: 思い出しの係は先頭のロールの
     await waitUntil(() => runs.length === 1);
     assert.deepEqual(runs, ["前の配信の話"]);
   } finally {
+    recall.resolve({ found: false, summary: "" });
     await h.server.close();
   }
   const none = await startServer({ roles: [makeRole("chappy", [])] });

@@ -35,6 +35,7 @@
  */
 
 import { formatTranscriptForDigest } from "./memory.mjs";
+import { createTaskSessionScope } from "./task-session.mjs";
 import { resolveVenueWording } from "./venue-wording.mjs";
 
 /** ④に渡す直近の会話の幅（1 分・recall-flow.md §4）。「避けるか」判定の入力も同じ幅。 */
@@ -154,13 +155,14 @@ export function parseRecallAnswer(replyText) {
 
 /**
  * セッションを作る口（brains registry の create と同じ形）。
- * @typedef {(options?: object) => { ask: (content: string) => Promise<{ replyText: string }>; dispose: () => Promise<void> }} BrainCreateFn
+ * @typedef {import("./task-session.mjs").TaskSessionCreate} BrainCreateFn
  */
 
 /**
  * ④思い出し役を 1 回走らせる（create → ask（打ち切り付き）→ dispose）。
  * @param {object} options
  * @param {BrainCreateFn} options.create  ④の頭（Codex）の create。
+ * @param {import("./task-session.mjs").TaskSessionScope} [options.taskSessions]  この場の別セッション実行口。
  * @param {string} options.request  頼みごと（①の目印の引数）。
  * @param {ReadonlyArray<any>} options.entries  転写（直近 1 分を取り出して渡す）。
  * @param {number} options.nowMs  直近 1 分の基準（頼みを受けた時刻）。
@@ -171,6 +173,7 @@ export function parseRecallAnswer(replyText) {
  * @param {typeof setTimeout} [options.setTimeoutImpl]
  * @param {typeof clearTimeout} [options.clearTimeoutImpl]
  * @param {unknown} [options.wording]  場の語の組（venue-wording.mjs・Discord モード Domain C）。null / undefined は配信の語の組。
+ * @param {(reply: string) => void} [options.onReply]
  * @returns {Promise<{ found: boolean; summary: string }>}
  */
 export async function runRecall(options) {
@@ -183,31 +186,25 @@ export async function runRecall(options) {
   const recentText = formatRecentConversation(entries ?? [], { nowMs, windowMs: options.windowMs ?? RECALL_CONTEXT_MS });
   const content = buildRecallRequest({ request: String(request ?? ""), recentText, wording: options.wording });
 
-  const session = create({
-    systemPrompt: buildRecallSystemPrompt(options.wording),
-    cwd: dir,
-    sandbox: "read-only",
-    finalAnswerOnly: true,
-    // 使い捨て（記録ファイルを作らない・掃除しない・生きている①の記録を消さない・latency-fix-plan.md §2-1）。
-    ephemeral: true,
-    ...(typeof onWarning === "function" ? { onWarning } : {})
-  });
-  /** @type {any} */
-  let timer = null;
-  try {
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeoutImpl(() => reject(new Error(`recall timed out (${Math.round(timeoutMs / 1000)} s)`)), timeoutMs);
-    });
-    const asked = /** @type {any} */ (await Promise.race([session.ask(content), timeout]));
-    return parseRecallAnswer(asked && asked.replyText);
-  } finally {
-    clearTimeoutImpl(timer);
-    try {
-      await session.dispose();
-    } catch {
-      // best-effort（片付けの失敗で思い出しの結果を捨てない）。
+  const taskSessions = options.taskSessions ?? createTaskSessionScope();
+  const replyText = await taskSessions.run({
+    create,
+    sessionOptions: {
+      systemPrompt: buildRecallSystemPrompt(options.wording),
+      cwd: dir,
+      sandbox: "read-only",
+      ...(typeof onWarning === "function" ? { onWarning } : {})
+    },
+    content,
+    timeout: {
+      ms: timeoutMs,
+      error: new Error(`recall timed out (${Math.round(timeoutMs / 1000)} s)`),
+      set: setTimeoutImpl,
+      clear: clearTimeoutImpl
     }
-  }
+  });
+  if (typeof replyText === "string") options.onReply?.(replyText);
+  return parseRecallAnswer(replyText);
 }
 
 // ── 「避けるか」判定 ──────────────────────────────────────────────────────────

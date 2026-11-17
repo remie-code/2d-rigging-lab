@@ -15,6 +15,8 @@ import {
 import { MODEL_IDENTITIES } from "./model-identity.mjs";
 import { appendSoulSkills, loadSoulSkills } from "./soul-skills.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
+import { createDiscordChatMaterials } from "../discord/discord-chat-materials.mjs";
+import { decodeDiscordImage } from "../discord/discord-image-decoder.mjs";
 import { createBargeInGate, BARGE_IN_GRACE_MS, BARGE_IN_NOTE, KILL_NOTE, MOUTH_CLOSE_TTL_MS } from "./barge-in.mjs";
 import { NG_WORDS, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 import { createSpeechStreamer } from "../voice/speech-streamer.mjs";
@@ -985,6 +987,132 @@ test("fire(vision): 成功時は [image(先行), text] を session.ask へ渡し
 
   assert.equal(orch.getState(), "idle");
   orch.dispose();
+});
+
+test("通常と視覚FireはDiscordの資料スナップショットを待たずにaskへ付け、文字起こしや画面通知に積まない", {
+  timeout: 5000
+}, async () => {
+  const buffer = bufferWithYou("チャットに貼った資料見られる？");
+  const share = { guildId: "1", channelId: "2", channelName: "資料" };
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const testImage = Buffer.concat([png, Buffer.from("fake decoded pixels")]);
+  const materials = createDiscordChatMaterials({
+    decodeImage: (bytes, mime, options) => bytes === testImage
+      ? Promise.resolve("ok")
+      : decodeDiscordImage(bytes, mime, options)
+  });
+  const pending = deferred();
+  materials.setChannel(share);
+  materials.acceptPost({
+    ...share, messageId: "3", authorName: "投稿者", authorId: "4", postedAtMs: Date.now(),
+    text: "共有資料の検索語",
+    attachments: [{
+      id: "5", name: "shape.png", contentType: "image/png",
+      load: () => pending.promise
+    }, {
+      id: "6", name: "broken.png", contentType: "image/png",
+      load: async () => png
+    }]
+  });
+  const asked = [];
+  const notified = [];
+  const capture = makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 8, height: 6, elapsedMs: 1 });
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    getChatMaterials: (askedBuffer) => {
+      assert.equal(askedBuffer, buffer);
+      return materials.getChatMaterials();
+    },
+    session: {
+      async ask(input) {
+        asked.push(input);
+        return { replyText: "返事" };
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: capture.captureImpl,
+    getVisionTarget: () => "テストゲーム",
+    onVisionCaptured: (info) => notified.push(info)
+  });
+  try {
+    assert.equal((await orch.fire()).fired, true);
+    assert.equal(typeof asked[0], "string");
+    assert.match(asked[0], /共有資料の検索語/);
+    assert.match(asked[0], /shape\.png.+準備中/);
+    pending.resolve(testImage);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await orch.fire({ vision: true })).fired, true);
+    assert.equal(asked[1][0].source.data, "ZmFrZQ==");
+    assert.match(asked[1][1].text, /今の画面を見て/);
+    assert.equal(asked[1].filter((block) => block.type === "image").length, 2);
+    assert.equal(asked[1].at(-2).source.data, testImage.toString("base64"));
+    assert.match(asked[1].at(-3).text, /shape\.png.+共有画像.+利用可能/);
+    assert.match(asked[1].at(-1).text, /broken\.png.+利用不可.+画像読み込み失敗/);
+    assert.equal(notified.length, 1);
+    assert.equal(notified[0].jpegBase64, "ZmFrZQ==");
+    assert.doesNotMatch(JSON.stringify(buffer.all()), /共有資料の検索語|shape\.png/);
+  } finally {
+    orch.dispose();
+    materials.clear();
+  }
+});
+
+test("資料付きのモデル失敗は通常・視覚Fireの返却と公開診断からprovider詳細を除く", {
+  timeout: 5000
+}, async () => {
+  const buffer = bufferWithYou("資料見られる？");
+  const materials = createDiscordChatMaterials();
+  const share = { guildId: "1", channelId: "2" };
+  const secret = "sentinel-shared-post";
+  materials.setChannel(share);
+  materials.acceptPost({ ...share, messageId: "3", authorId: "4", authorName: "投稿者",
+    postedAtMs: Date.now(), text: secret });
+  const record = [];
+  const traces = [];
+  let state = "fail";
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    getChatMaterials: () => materials.getChatMaterials(),
+    session: {
+      async ask(input) {
+        if (state === "success") return { replyText: "返事" };
+        if (state === "no-material") throw new Error("usual error");
+        assert.match(JSON.stringify(input), /sentinel-shared-post/);
+        throw Object.assign(new Error(`provider C:/tmp/sentinel.png ${secret}`), {
+          name: "sentinel-name", code: "sentinel-code", diagnosticStage: "sentinel-stage"
+        });
+      }
+    },
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    captureImpl: makeFakeCapture({ jpegBase64: "ZmFrZQ==", width: 8, height: 6, elapsedMs: 1 }).captureImpl,
+    getVisionTarget: () => "テストゲーム",
+    onDiagnostic: (diagnostic) => record.push(diagnostic),
+    onTrace: (event) => traces.push(event)
+  });
+  try {
+    for (const vision of [false, true]) {
+      const failed = await orch.fire({ vision });
+      assert.equal(failed.fired, false);
+      assert.match(JSON.stringify(failed), /Discordチャット資料を含むモデルへの問い合わせに失敗/);
+      assert.doesNotMatch(JSON.stringify(failed), /sentinel/);
+    }
+    assert.equal(record.filter(({ type }) => type === "fireError").length, 2);
+    assert.equal(traces.filter(({ failureCode }) => failureCode === "llm_ask_failed").length, 2);
+    assert.doesNotMatch(JSON.stringify(record), /sentinel/);
+    assert.doesNotMatch(JSON.stringify(traces), /sentinel/);
+    state = "success";
+    assert.equal((await orch.fire()).fired, true);
+    materials.clear();
+    state = "no-material";
+    assert.match(JSON.stringify(await orch.fire()), /usual error/);
+  } finally {
+    orch.dispose();
+    materials.clear();
+  }
 });
 
 for (const kind of ["notFound", "minimized", "failed", "timeout"]) {

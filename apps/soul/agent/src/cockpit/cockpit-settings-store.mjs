@@ -429,6 +429,16 @@ export function createFileSettingsStore(options = {}) {
     setDiscordVisionTarget(title) {
       writeMerged({ discordVisionTarget: typeof title === "string" && title.length > 0 ? title : null });
     },
+    getDiscordChatChannel() {
+      const channel = readAll().discordChatChannel;
+      return channel && typeof channel.guildId === "string" && typeof channel.channelId === "string"
+        ? { guildId: channel.guildId, channelId: channel.channelId }
+        : null;
+    },
+    /** @param {{ guildId: string; channelId: string } | null} channel */
+    setDiscordChatChannel(channel) {
+      return writeMergedStrict({ discordChatChannel: channel });
+    },
     getLocalStt() {
       const all = readAll();
       return normalizeLocalSttSettings({

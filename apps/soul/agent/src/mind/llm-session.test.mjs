@@ -88,6 +88,29 @@ test("llm-session: ask は応答全文・usage・TTFT・elapsed を返す（残�
   }
 });
 
+test("llm-session: 資料を含むaskではSDKの失敗メッセージを返答にせず、次のaskに進める", async () => {
+  /** @type {any} */
+  async function* queryImpl({ prompt }) {
+    for await (const { message } of prompt) {
+      if (message.content === "error") {
+        yield { type: "assistant", error: "invalid_request",
+          message: { content: [{ type: "text", text: "private sentinel request data" }] } };
+        yield { type: "result", is_error: true, result: "private sentinel result" };
+      } else {
+        yield { type: "result", is_error: false, result: "次の返事" };
+      }
+    }
+  }
+  const session = createLlmSession({ skipEnvGuard: true, queryImpl });
+  try {
+    await assert.rejects(session.ask("error", { redactProviderErrors: true }), /^Error: llm-session: provider request failed$/);
+    assert.equal((await session.ask("after", { redactProviderErrors: true })).replyText, "次の返事");
+    assert.equal((await session.ask("error")).replyText, "private sentinel request data");
+  } finally {
+    await session.dispose();
+  }
+});
+
 test("llm-session: 複数 ask が同一常駐 generator を共有する（for-await-break でセッションを殺さない）", async () => {
   const { fakeQuery, calls } = makeFakeQuery();
   const session = createLlmSession({ skipEnvGuard: true, queryImpl: fakeQuery });

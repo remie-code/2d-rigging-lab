@@ -3,6 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { createFireOrchestrator, PROGRESSIVE_CONTINUITY_INSTRUCTION } from "./fire-orchestrator.mjs";
+import { runRecall } from "./recall.mjs";
+import { createRecallDesk } from "./recall-desk.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
 import { createSpeechStreamer } from "../voice/speech-streamer.mjs";
 import { createFakeStreamPlayer } from "../test-support/fake-stream-player.mjs";
@@ -72,6 +74,89 @@ test("一括: 目印が 2 つなら 2 回渡す・目印なしなら渡さない
   await orch.fire();
   assert.deepEqual(recalls.map((r) => r.request), ["A", "B"]);
   orch.dispose();
+});
+
+test("発話を待っている間に場が切り替わった Fire の recall は渡さない", { timeout: 5000 }, async () => {
+  let buffer = bufferWithYou();
+  const asked = Promise.withResolvers();
+  const answer = Promise.withResolvers();
+  const { orch, recalls } = makeOrch(() => {
+    asked.resolve();
+    return answer.promise;
+  }, {
+    getBuffer: () => buffer,
+    canRequestRecall: (origin) => origin === buffer
+  });
+  try {
+    const fire = orch.fire();
+    await asked.promise;
+    buffer = bufferWithYou("次の場");
+    answer.resolve({ replyText: "探すね<recall 前の場の話>" });
+    assert.equal((await fire).fired, true);
+    assert.deepEqual(recalls, []);
+  } finally {
+    orch.dispose();
+  }
+});
+
+test("recall 担当を待たず次の Fire が会話し、待機分は新規担当で実行され結果が戻る", { timeout: 5000 }, async () => {
+  const inputs = [];
+  const replies = ["探すね<recall 宝箱><recall ボス>", "話を続けよう", "記録を読んだよ"];
+  const { orch, buffer } = makeOrch(async (input) => {
+    inputs.push(input);
+    return { replyText: replies.shift() };
+  }, { onRecallRequest: ({ request }) => desk.request(request) });
+  const workers = [];
+  const desk = createRecallDesk({
+    runRecall: (job) => runRecall({
+      ...job,
+      dir: "C:/memory",
+      create(options) {
+        const reply = Promise.withResolvers();
+        const worker = { options, reply, content: "", disposed: false };
+        workers.push(worker);
+        return {
+          ask(content) {
+            worker.content = content;
+            return reply.promise;
+          },
+          async dispose() { worker.disposed = true; }
+        };
+      }
+    }),
+    isBusy: () => orch.getState() !== "idle",
+    isSelfFireOn: () => false,
+    getEntries: () => buffer.all(),
+    getName: () => "チャッピー",
+    judge: async () => { throw new Error("自発 OFF では判定しない"); },
+    fire: () => { throw new Error("自発 OFF では発火しない"); },
+    defer: (text) => { orch.deferInstruction(text); }
+  });
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.equal((await orch.fire()).replyText, "探すね");
+    await settle();
+    assert.equal(workers.length, 1);
+    assert.match(workers[0].content, /頼みごと: 「宝箱」/);
+    assert.equal(workers[0].options.ephemeral, true);
+    assert.equal((await orch.fire()).replyText, "話を続けよう");
+    assert.equal(workers[0].disposed, false);
+    workers[0].reply.resolve({ replyText: "見つかった\n宝箱は右の部屋。" });
+    await settle();
+    assert.equal(workers[0].disposed, true);
+    assert.equal(workers.length, 2);
+    assert.match(workers[1].content, /頼みごと: 「ボス」/);
+    workers[1].reply.resolve({ replyText: "見つかった\nボスは火山館。" });
+    await settle();
+    assert.equal(workers[1].disposed, true);
+    await orch.fire();
+    assert.match(inputs[2], /宝箱は右の部屋。/);
+    assert.match(inputs[2], /ボスは火山館。/);
+  } finally {
+    for (const worker of workers) worker.reply.resolve({ replyText: "見つからなかった" });
+    desk.dispose();
+    orch.dispose();
+  }
 });
 
 test("逐次: delta で読んだ tags から目印を拾う（最後の replyText に無くても逐次の部品が読んだものを使う）", { timeout: 5000 }, async () => {

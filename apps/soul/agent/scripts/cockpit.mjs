@@ -129,11 +129,12 @@ import { loadElevenLabsApiKey } from "../src/ears/elevenlabs-stt.mjs";
 import { STT_ENGINES } from "../src/ears/ear-pipeline.mjs";
 import { isEventEntry } from "../src/ears/transcript-buffer.mjs";
 import { createLiveChatClient } from "../src/chat/live-chat-client.mjs";
-import { writeStreamRecord, createStreamRecordLog } from "../src/mind/memory.mjs";
+import { writeStreamRecord, createStreamRecordLog, hasWriterMaterials } from "../src/mind/memory.mjs";
 import { DEFAULT_MEMORY_DIR, memoryDirForRole, prepareMemoryFolder, readMemoryHead } from "../src/memory/memory-store.mjs";
 import { checkOrganiseDue, startMemoryOrganiser, DEFAULT_MEMORY_BACKUP_ROOT } from "../src/mind/memory-organizer.mjs";
 import { MCP_CONFIG_READ_FAILED_WARNING, sweepCodexRollouts } from "../src/mind/codex-session.mjs";
 import { runRecall } from "../src/mind/recall.mjs";
+import { runLocalTask } from "../src/mind/local-task.mjs";
 import {
   appendSoulSkills,
   listSoulSkills,
@@ -157,16 +158,6 @@ export const MEMORY_CHECKPOINT_INTERVAL_MS = 20 * 60 * 1000;
  */
 export const MEMORY_CHECKPOINT_TICK_MS = 60 * 1000;
 
-/**
- * 配信間記憶: Ctrl+C の最後の保存を待つ上限（best-effort・shutdown が固まらない）。
- * ②書き出し役は使い捨ての Codex のセッションを起こし、`_conventions.md`・目次・本体をツールで読み書きする。
- * 実機の参考は、書き出しの turn だけで約 21 秒、セッションの起動から後片付けまでで約 41 秒（短いダミーの材料・
- * memory-recall-inventory.md §6・Wave 1 Domain A 報告 §2.2）。配信 1 本分の材料ではもう少し延びうるうえ、
- * Ctrl+C の時点で定期保存などが走っていれば、その終わりを待ってから最後の 1 回が走る（保存は直列）。
- * そこで 1 回分の約 2 倍の 90 秒にする。待っている間にもう一度 Ctrl+C を押せば待たずに終わる。
- * ②が書かずに答えたときの 1 回だけのやり直し（writeStreamRecord）もこの枠の中で走り、収まらなければ打ち切りが優先する。
- */
-export const SHUTDOWN_MEMORY_TIMEOUT_MS = 90_000;
 
 /**
  * ③整理役の控えの置き場の根（記憶の整理 Domain C・organization.md §6「控え」）。本番は `apps/soul/agent/memory-backups/`
@@ -873,6 +864,8 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
   return brains.codex;
 }
 
+/** @typedef {import("../src/cockpit/venue-task-resources.mjs").VenueWriterMaterials} WriterMaterials */
+/** @typedef {{ entries: ReadonlyArray<any>; place: any; wording: any; materials?: WriterMaterials; onUnconfirmedExit?: () => void }} MemoryRecordJob */
 /**
  * 配信間記憶: 保存の係（定期・手動「今日を記録」・耳の Stop・Ctrl+C のどれもこれを通る）。
  *
@@ -891,7 +884,7 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  *
  * @param {object} deps
  * @param {() => ReadonlyArray<any>} deps.getLiveEntries  材料の省略時に使うライブの転写（cockpit-server の getTranscript）。
- * @param {(entries: ReadonlyArray<any>, place: any, wording: any) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
+ * @param {(entries: ReadonlyArray<any>, place: any, wording: any, materials?: WriterMaterials, onUnconfirmedExit?: () => void) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
  *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値、wording は頼んだ時点の
  *   getWording() の値。
  * @param {() => any} [deps.getPlace]  保存を頼んだ時点の置き場（本番は今のロールの記憶のフォルダ・§createRoleMemoryPlaces）。
@@ -907,9 +900,10 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  * @param {(recording: boolean) => void} [deps.onRecordingChange]  走り始めと全部終わったとき（操縦席の「記録中」）。
  * @param {() => number} [deps.nowImpl=Date.now]
  * @returns {{
- *   record: (entriesOverride?: ReadonlyArray<any>) => Promise<void>;
+ *   record: (entriesOverride?: ReadonlyArray<any>, materials?: WriterMaterials, onUnconfirmedExit?: () => void) => Promise<void>;
  *   isRecording: () => boolean;
  *   whenIdle: () => Promise<void>;
+ *   hasUnconfirmedWriter: (place: any) => boolean;
  * }}
  *   record の戻りは、その頼みを受け持った 1 回の保存が終わったら解決する（失敗しても reject しない）。
  */
@@ -917,8 +911,10 @@ export function createMemoryRecorder(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   /** @type {Promise<void> | null} 走っている保存の一続き（待たせた分まで含む）。 */
   let chain = null;
-  /** @type {Array<{ entries: ReadonlyArray<any>; place: any; wording: any; promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
+  /** @type {Array<MemoryRecordJob & { promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
   const waiting = [];
+  /** @type {Set<string | undefined>} */
+  const unconfirmedWriterDirs = new Set();
 
   const callSafely = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
     if (typeof fn !== "function") return;
@@ -947,9 +943,17 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const runOnce = async (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place, /** @type {any} */ wording) => {
+  /** @param {MemoryRecordJob} job */
+  const runOnce = async ({ entries, place, wording, materials, onUnconfirmedExit }) => {
     try {
-      const result = await deps.writeImpl(entries, place, wording);
+      const writerDir = place?.dir;
+      if (unconfirmedWriterDirs.has(writerDir)) {
+        throw new Error("前の書き出し役の終了を確認できていません。");
+      }
+      const result = await deps.writeImpl(entries, place, wording, materials, () => {
+        unconfirmedWriterDirs.add(writerDir);
+        onUnconfirmedExit?.();
+      });
       if (result && result.written) {
         // 置き場（getPlace があるときだけ）も渡す: main() が「頼んだ時点の場」の保存だけを数える（配信の組み直し Domain D）。
         callSafely(deps.onSaved, {
@@ -966,7 +970,8 @@ export function createMemoryRecorder(deps) {
     }
   };
 
-  const start = (/** @type {ReadonlyArray<any>} */ entries, /** @type {any} */ place, /** @type {any} */ wording) => {
+  /** @param {MemoryRecordJob} job */
+  const start = (job) => {
     /** @type {() => void} */
     let resolveOwn = () => {};
     const own = new Promise((resolve) => {
@@ -975,11 +980,11 @@ export function createMemoryRecorder(deps) {
     callSafely(deps.onRecordingChange, true);
     chain = (async () => {
       try {
-        await runOnce(entries, place, wording);
+        await runOnce(job);
         resolveOwn();
         while (waiting.length > 0) {
           const next = /** @type {(typeof waiting)[number]} */ (waiting.shift());
-          await runOnce(next.entries, next.place, next.wording);
+          await runOnce(next);
           next.resolve();
         }
       } finally {
@@ -992,18 +997,21 @@ export function createMemoryRecorder(deps) {
   };
 
   return {
-    record(entriesOverride) {
+    record(entriesOverride, materials, onUnconfirmedExit) {
       const entries = entriesOverride ?? deps.getLiveEntries();
-      if (!Array.isArray(entries) || entries.length === 0) return Promise.resolve();
+      if (!Array.isArray(entries) || (entries.length === 0 && !hasWriterMaterials(materials))) return Promise.resolve();
       const place = placeNow();
       const wording = wordingNow();
-      if (!chain) return start(entries, place, wording);
+      const job = { entries, place, wording, materials, onUnconfirmedExit };
+      if (!chain) return start(job);
       const last = waiting[waiting.length - 1];
       if (last && last.place === place) {
         if (entries.length >= last.entries.length) {
           last.entries = entries;
           last.wording = wording;
         }
+        if (materials) last.materials = materials;
+        if (onUnconfirmedExit) last.onUnconfirmedExit = onUnconfirmedExit;
         return last.promise;
       }
       /** @type {() => void} */
@@ -1011,11 +1019,12 @@ export function createMemoryRecorder(deps) {
       const promise = new Promise((r) => {
         resolve = () => r(undefined);
       });
-      waiting.push({ entries, place, wording, promise, resolve });
+      waiting.push({ ...job, promise, resolve });
       return promise;
     },
     isRecording: () => chain != null,
-    whenIdle: () => chain ?? Promise.resolve()
+    whenIdle: () => chain ?? Promise.resolve(),
+    hasUnconfirmedWriter: (place) => unconfirmedWriterDirs.has(place?.dir)
   };
 }
 
@@ -1138,7 +1147,7 @@ export function createRoleMemoryPlaces(deps) {
  *     出さない・控えの置き場も作らない）。準備の失敗は起動・場の始まりで警告済みで、②の保存のたびにも出る。
  *  3. 整理の時期か（checkOrganiseDue）。時期でなければ何もしない（何も出さない = 今の閉じと同じ）。履歴が読めなければ
  *     B の固定の 1 行（onWarning）だけ。
- *  4. 閉じの書き出し（②）が上限（90 秒）を過ぎてもまだ走っていれば（writerBusy）、整理は見送る（1 行・次の閉じでやり直す）。
+ *  4. 書き出し役（②）がまだ記憶を使用している可能性があれば（writerBusy）、整理は見送る。
  *     ③は始めにコミットされていない変更を捨て、git を使うので、同じフォルダで②と同時に走らせない。
  *  5. 走らせる（startMemoryOrganiser・頭は書き出し役と同じ決め方 getCreate・控えの置き場は backupRoot）。始まりで 1 行
  *     （`memory: organising (role <id>)`）、終わるまで上限なしで待つ（③の頼みにも待つ上限は無い・止めるのは stop() の
@@ -1327,12 +1336,10 @@ export const BODY_URL_NOT_SET_MESSAGE =
  *  - hooks.connectBody（始める 6）: ロールに体があれば器につなぐ（resolveFireChannel と同じく今のロールの body を見る）。
  *    URL が無い・つながらないなら `{ ok:false, reason }`（場は開かない）。体なしは器を見ない・つながない。
  *  - hooks.closeSession / hooks.closeBody（畳む）: 頭のセッションを畳む・器を畳む（器は体の有無に関わらず）。
- *  - hooks.saveFinal（終える 3）: 写した転写が前の保存から増えていれば最後の保存を頼み、走っている保存の終わりまで待つ
- *    （上限 memoryTimeoutMs・skipMemoryWait で打ち切れる = もう一度の Ctrl+C）。増えていなければ頼まない。
+ *  - hooks.saveFinal（終える 3）: 転写や追加の材料が増えていれば最後の保存を頼み、保存の完了または失敗を待つ。
  *    記憶の整理 Domain C: そのあと（頼まなかった閉じでも）、organiser があれば、閉じたロールの置き場（saveFinal を呼んだ
  *    時点の memoryPlaces.place()）の整理の時期を見て、時期なら③整理役を走らせ、終わるまで上限なしで待つ
- *    （createMemoryOrganiserRunner・その間も場は closing のまま）。②が上限を過ぎてもまだ走っていれば整理は見送る。
- *  - stopOrganising(): Ctrl+C。これからの整理を始めず、走っている整理はすぐ打ち切る（organiser.stop）。
+ *    （createMemoryOrganiserRunner・その間も場は closing のまま）。②の終了を確認できていなければ整理は見送る。
  *  - checkpoint(): 20 分ごとの保存の 1 回分。場が開いている間だけ、前の保存から転写が増えていれば頼む。
  *  - noteSaved(info): 保存の係の onSaved。頼んだ時点の場（置き場の streamNo）が今の場のときだけ数える（前の場の
  *    遅れて終わった保存で、新しい場の数えを上書きしない）。
@@ -1340,7 +1347,7 @@ export const BODY_URL_NOT_SET_MESSAGE =
  *
  * @param {object} deps
  * @param {{ beginStream: (startedAtMs: number) => void; place: () => any; streamNo: () => number }} deps.memoryPlaces
- * @param {{ record: (entries?: ReadonlyArray<any>) => Promise<void>; whenIdle: () => Promise<void>; isRecording: () => boolean }} deps.memoryRecorder
+ * @param {{ record: (entries?: ReadonlyArray<any>, materials?: WriterMaterials, onUnconfirmedExit?: () => void) => Promise<void>; whenIdle: () => Promise<void>; isRecording: () => boolean; hasUnconfirmedWriter?: (place: any) => boolean }} deps.memoryRecorder
  * @param {(startedAtMs: number) => void} [deps.renewUsageLog]  頭の文脈の記録のファイルを新しくする（本番は createSessionUsageLog の作り直し）。
  * @param {() => (void | Promise<void>)} deps.openSession  頭のセッションを作り直す（前のセッションを畳んでから作る）。
  * @param {() => (void | Promise<void>)} deps.closeSession  頭のセッションを畳む（冪等）。
@@ -1350,16 +1357,12 @@ export const BODY_URL_NOT_SET_MESSAGE =
  * @param {() => ReadonlyArray<any>} [deps.getEntries]  ライブの転写（server.getTranscript）。
  * @param {() => number} [deps.nowImpl=Date.now]  場の始まりの時刻と、途中保存の経過時間（Discord モード Domain H）の時計。
  * @param {number} [deps.checkpointIntervalMs=MEMORY_CHECKPOINT_INTERVAL_MS]  途中保存を頼むまでの経過（Discord モード Domain H）。
- * @param {number} [deps.memoryTimeoutMs=SHUTDOWN_MEMORY_TIMEOUT_MS]  最後の保存を待つ上限。
- * @param {typeof setTimeout} [deps.setTimeoutImpl]
- * @param {(info: { timeoutMs: number }) => void} [deps.onMemoryWait]  保存を待ち始めたとき（ターミナルに 1 行）。
- * @param {Pick<MemoryOrganiserRunner, "organiseIfDue" | "stop">} [deps.organiser]  ③整理役の係（記憶の整理 Domain C・
+ * @param {() => void} [deps.onMemoryWait]  保存を待ち始めたとき（ターミナルに 1 行）。
+ * @param {Pick<MemoryOrganiserRunner, "organiseIfDue">} [deps.organiser]  ③整理役の係（記憶の整理 Domain C・
  *   createMemoryOrganiserRunner）。無ければ閉じで整理しない（今までのふるまい）。
  */
 export function createStreamVenueHooks(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
-  const memoryTimeoutMs = deps.memoryTimeoutMs ?? SHUTDOWN_MEMORY_TIMEOUT_MS;
-  const setTimeoutImpl = deps.setTimeoutImpl ?? setTimeout;
   const checkpointIntervalMs = deps.checkpointIntervalMs ?? MEMORY_CHECKPOINT_INTERVAL_MS;
   /** この場で最後に保存が成り立った時刻（snapshot の memory.lastRecordAtMs）。場の始まりで null に戻す。 @type {number | null} */
   let lastRecordAtMs = null;
@@ -1372,23 +1375,14 @@ export function createStreamVenueHooks(deps) {
   let lastCheckpointRequestedAtMs = null;
   /** この場で最後に保存が成り立った時点の転写の件数（保存を飛ばす判定）。場の始まりで 0 に戻す。 */
   let lastRecordedSeq = 0;
-  /** 保存を待っている間だけ入る「待たずに進む」口。 @type {(() => void) | null} */
-  let skipWait = null;
-
-  /** 走っている保存を、上限つき・打ち切れる形で待つ。 @param {Promise<any>} done */
-  const waitBounded = async (done) => {
+  /** @param {Promise<unknown>} done */
+  const waitForSave = async (done) => {
     try {
-      deps.onMemoryWait?.({ timeoutMs: memoryTimeoutMs });
+      deps.onMemoryWait?.();
     } catch {
       // 知らせの失敗で待ちを止めない。
     }
-    await Promise.race([
-      raceMemoryRecordWithTimeout(done, memoryTimeoutMs, setTimeoutImpl),
-      new Promise((resolve) => {
-        skipWait = () => resolve(undefined);
-      })
-    ]);
-    skipWait = null;
+    await done;
   };
 
   return {
@@ -1436,8 +1430,8 @@ export function createStreamVenueHooks(deps) {
           // best-effort
         }
       },
-      /** @param {ReadonlyArray<any>} transcript */
-      async saveFinal(transcript) {
+      /** @param {ReadonlyArray<any>} transcript @param {WriterMaterials} [materials] @param {() => void} [onUnconfirmedExit] */
+      async saveFinal(transcript, materials, onUnconfirmedExit) {
         // 記憶の整理 Domain C: 整理するのは、閉じの保存を頼むのと同じ時点のロールの置き場（保存の係の getPlace と同じ）。
         /** @type {any} */
         let place = null;
@@ -1452,14 +1446,14 @@ export function createStreamVenueHooks(deps) {
         // 中身は出来事の行を載せたままの転写。
         const spoken = countSpokenEntries(transcript);
         const entries =
-          Array.isArray(transcript) && spoken > 0 && !shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq) ? transcript : [];
-        const done = Promise.all([deps.memoryRecorder.record(entries), deps.memoryRecorder.whenIdle()]);
-        if (deps.memoryRecorder.isRecording()) await waitBounded(done);
+          hasWriterMaterials(materials) || (spoken > 0 && !shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq)) ? transcript : [];
+        const done = Promise.all([deps.memoryRecorder.record(entries, materials, onUnconfirmedExit), deps.memoryRecorder.whenIdle()]);
+        if (deps.memoryRecorder.isRecording()) await waitForSave(done);
+        else await done;
         // 記憶の整理 Domain C: 閉じの書き出しのあと（新しい文字起こしが無く頼まなかった閉じでも）、時期なら③整理役を走らせて
-        // 終わるまで待つ（上限なし）。②がまだ走っていれば（上限を過ぎた・もう一度の Ctrl+C）整理は見送る（同じフォルダの git で
-        // ②と③を同時に走らせない）。
+        // 終わるまで待つ。同じフォルダの git で②と③を同時に走らせない。
         if (deps.organiser) {
-          await deps.organiser.organiseIfDue(place, { writerBusy: () => deps.memoryRecorder.isRecording() });
+          await deps.organiser.organiseIfDue(place, { writerBusy: () => deps.memoryRecorder.isRecording() || deps.memoryRecorder.hasUnconfirmedWriter?.(place) === true });
         }
       }
     },
@@ -1503,30 +1497,10 @@ export function createStreamVenueHooks(deps) {
     },
     lastRecordAtMs: () => lastRecordAtMs,
     lastRecordedSeq: () => lastRecordedSeq,
-    /** 走っている保存を待つ（頼まない・上限つき・打ち切れる）。走っていなければすぐ返る。 */
+    /** 走っている保存を待つ。 */
     async waitForRunningSaves() {
       if (!deps.memoryRecorder.isRecording()) return;
-      await waitBounded(deps.memoryRecorder.whenIdle());
-    },
-    /**
-     * 保存の待ちを打ち切る（もう一度の Ctrl+C）。待っていなければ false。
-     * @returns {boolean}
-     */
-    skipMemoryWait() {
-      if (!skipWait) return false;
-      skipWait();
-      return true;
-    },
-    /**
-     * Ctrl+C（記憶の整理 Domain C・organization.md §7）: これからの整理を始めず、走っている③整理役はすぐ打ち切る
-     * （organiser.stop）。②の待ちはそのまま（今どおり最大 90 秒・もう一度の Ctrl+C で打ち切る）。
-     */
-    stopOrganising() {
-      try {
-        deps.organiser?.stop();
-      } catch {
-        // best-effort（終わりの手順を止めない）。
-      }
+      await waitForSave(deps.memoryRecorder.whenIdle());
     }
   };
 }
@@ -1555,7 +1529,8 @@ export function createStreamVenueHooks(deps) {
  * @param {object} deps.streamHooks
  * @param {(kind: "aivis" | "elevenlabs") => any} deps.prepareVoice
  * @param {() => void} deps.startVoiceResources
- * @param {((job: { request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }) => Promise<any>) | null} [deps.recallRunner]
+ * @param {((job: import("../src/mind/recall-desk.mjs").RecallJob) => Promise<any>) | null} [deps.recallRunner]
+ * @param {(job: import("../src/mind/recall-desk.mjs").RecallJob) => () => Promise<any>} [deps.prepareRecall]
  * @param {(() => string) | null} [deps.discordBotKeyFile]  今のロールの Discord の Bot の鍵のファイル名（Discord モード Domain D・
  *   role.json の discordBotKeyFile・無ければ既定 `.env.discord.local`）。束の discordBotKeyFile() で引く（無ければ null）。
  * @param {(() => boolean) | null} [deps.discordBotKeyFileRefused]  今のロールの鍵のファイル名の形が合わず断るか（Domain E）。
@@ -1565,6 +1540,7 @@ export function createStreamVenueHooks(deps) {
  */
 export function createVenueRoleBundle(deps) {
   const recallRunner = typeof deps.recallRunner === "function" ? deps.recallRunner : null;
+  const prepareRecall = deps.prepareRecall;
   const discordBotKeyFile = typeof deps.discordBotKeyFile === "function" ? deps.discordBotKeyFile : null;
   const discordBotKeyFileRefused = typeof deps.discordBotKeyFileRefused === "function" ? deps.discordBotKeyFileRefused : null;
   const openVoiceOutlet = typeof deps.openVoiceOutlet === "function" ? deps.openVoiceOutlet : null;
@@ -1592,7 +1568,7 @@ export function createVenueRoleBundle(deps) {
       // Discord モード Domain E: Discord の出口（このロールの Bot の接続に結んだ再生器）。
       openOutlet: openVoiceOutlet ? (/** @type {any} */ info) => openVoiceOutlet(info) : null
     }),
-    recall: recallRunner ? Object.freeze({ run: (/** @type {any} */ job) => recallRunner(job) }) : null
+    recall: recallRunner ? Object.freeze({ run: recallRunner, prepare: prepareRecall }) : null
   });
 }
 
@@ -1624,6 +1600,9 @@ export function createDiscordVenueExperience(deps) {
     settings: {
       getDiscordPrep: () => deps.settings.getDiscordPrep(),
       setDiscordPrep: (/** @type {object} */ patch) => deps.settings.setDiscordPrep(patch),
+      getDiscordChatChannel: () => deps.settings.getDiscordChatChannel?.() ?? null,
+      setDiscordChatChannel: (/** @type {{ guildId: string; channelId: string } | null} */ channel) =>
+        deps.settings.setDiscordChatChannel?.(channel) ?? false,
       // Discord モード Domain G: Discord の場の見る窓（目）。置き場が無ければ「選んでいない」（目を起こさない）。
       getDiscordVisionTarget: () =>
         typeof deps.settings.getDiscordVisionTarget === "function" ? deps.settings.getDiscordVisionTarget() : null,
@@ -1780,23 +1759,6 @@ export function formatRecallEventLine(event) {
   if (event?.silent === true) parts.push("silent");
   if (event?.failed === true) parts.push("failed");
   return `${parts.join(" ")}\n`;
-}
-
-/**
- * 配信間記憶: shutdown 最終生成の best-effort + timeout（blocking #3・shutdown が固まらない）。
- * promise が timeoutMs 以内に解決/棄却しなければ待たずに進む。promise 自体の例外は握って捨てる
- * （呼び出し元へ伝播させない・best-effort の意味そのもの）。setTimeoutImpl はテスト注入用
- * （既定は setTimeout・fire-scheduler.mjs/barge-in.mjs のタイマ注入規律を踏襲）。
- * @param {Promise<any>} promise
- * @param {number} timeoutMs
- * @param {typeof setTimeout} [setTimeoutImpl]
- * @returns {Promise<void>}
- */
-export function raceMemoryRecordWithTimeout(promise, timeoutMs, setTimeoutImpl = setTimeout) {
-  return Promise.race([
-    Promise.resolve(promise).catch(() => {}),
-    new Promise((resolve) => setTimeoutImpl(resolve, timeoutMs))
-  ]).then(() => undefined);
 }
 
 /**
@@ -2737,54 +2699,42 @@ export function formatReplyLatencyLine(record) {
 }
 
 /**
- * 操縦席の終わり（Ctrl+C / stdin の EOF）の手順（配信の組み直し Domain D・stream-restructure.md §3「Ctrl+C」）。
- *  1. もう一度呼ばれたら（2 回目の Ctrl+C）、記録の待ちを打ち切るだけ（待っていなければ何もしない）。
- *  （2 の前に）記憶の整理 Domain C: 最初の 1 回で、③整理役を止める（venue.stopOrganising・走っていればすぐ打ち切り、これからは
- *     始めない）。閉じかけの整理の最中に押されても、2 の終える（閉じかけの終わりを待つ）は整理を待たずに進む。②の書き出しの
- *     最中に押されたら、②は今どおり最大 90 秒待ち、そのあとの整理は始めない。
- *  2. 場が閉じていなければ「配信を終える」と同じ道（server.endStream = 写し → 畳む → 記憶の最後の保存を待つ → 閉じる）を
- *     通る。開きかけ・閉じかけなら終わるのを待つ。閉じていれば保存は頼まない（場の外では記録しない）。
- *  3. server.close() → 場が閉じていたときだけ、走っている保存（前の場の最後の保存の残りなど）を待つ（頼まない・
- *     上限つき・打ち切れる。2 で終えたときはそこで待ったので待たない）→ 残りの常駐を畳む（disposeRest）。どこで
- *     失敗しても finalize（プロセスの終わり）は必ず走る。
+ * Ctrl+C と EOF は通常の閉場を待つ。閉場中の Ctrl+C はプロセス全体の終了を要求する。
  * @param {object} deps
  * @param {(line: string) => void} deps.write
- * @param {() => void} [deps.beforeClose]  最初に畳むもの（隙間の圧縮の見張り）。
- * @param {{ streamStatus: () => { phase: string }; endStream: () => Promise<any>; close: () => Promise<void> }} deps.server
- * @param {{ skipMemoryWait: () => boolean; waitForRunningSaves: () => Promise<void>; stopOrganising?: () => void }} deps.venue
+ * @param {() => void} [deps.beforeClose]
+ * @param {{ streamStatus: () => { phase: string }; endStream: () => Promise<any>; close: () => Promise<void>; getVenueTaskResourcePath?: () => string|null }} deps.server
+ * @param {{ waitForRunningSaves: () => Promise<void> }} deps.venue
  * @param {() => Promise<void>} deps.disposeRest
  * @param {() => Promise<void>} deps.finalize
- * @returns {() => Promise<void>}
+ * @param {() => void} deps.forceExit
  */
 export function createCockpitShutdown(deps) {
   let closing = false;
-  return async function shutdown() {
+  return async function shutdown(signal = "SIGINT") {
     if (closing) {
-      if (deps.venue.skipMemoryWait()) deps.write("[cockpit] 記録の書き出しを待たずに終了します。\n");
+      if (signal === "SIGINT") {
+        const path = deps.server.getVenueTaskResourcePath?.();
+        deps.write(`[cockpit] 強制終了します。${path ? `保持する作業領域: ${path}` : "閉場途中の作業領域は保持します。"}\n`);
+        deps.forceExit();
+      }
       return;
     }
     closing = true;
     deps.write("\n[cockpit] closing…\n");
     try {
-      // 記憶の整理 Domain C: ③整理役はすぐ打ち切る（閉じかけの整理の最中でも、下の終えるが整理を待たない）。
-      try {
-        deps.venue.stopOrganising?.();
-      } catch {
-        // best-effort
-      }
       try {
         deps.beforeClose?.();
       } catch {
         // best-effort
       }
-      let ended = false;
-      if (deps.server.streamStatus().phase !== "closed") {
-        deps.write("[cockpit] 配信を終えます（記録してから畳みます・もう一度 Ctrl+C で記録を待たずに終了）。\n");
-        await deps.server.endStream();
-        ended = true;
+      const ended = deps.server.streamStatus().phase !== "closed";
+      if (ended) {
+        deps.write("[cockpit] 場を終えます（記録してから畳みます・Ctrl+C で強制終了）。\n");
+        const state = await deps.server.endStream();
+        if (state?.stream?.error) deps.write(`[cockpit] WARN: ${state.stream.error}\n`);
       }
-      await deps.server.close(); // orchestrator.dispose を含む（cockpit-server の close 契約）。
-      // 終えるを通ったときは、そこで走っている保存の終わりまで待った（か打ち切った）ので、もう一度は待たない。
+      await deps.server.close();
       if (!ended) await deps.venue.waitForRunningSaves();
       await deps.disposeRest();
     } finally {
@@ -3467,7 +3417,7 @@ async function main() {
     // Discord モード Domain C: 保存を頼んだ時点の場の語の組（定期・手動・「配信を終える」の最後の保存のどれも場が開いている
     // 間に頼む・閉じる段の最後の保存も場を閉じる前）。場の外・配信は null = 配信の語の組。
     getWording: () => server?.venueContext()?.wording ?? null,
-    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place, wording) => {
+    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place, wording, materials, onUnconfirmedExit) => {
       if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
       await place.ready;
       return writeStreamRecord({
@@ -3476,6 +3426,8 @@ async function main() {
         record: place.streamRecord,
         dir: place.dir,
         wording,
+        materials,
+        onUnconfirmedExit,
         onWarning: onBrainWarning
       });
     },
@@ -3535,8 +3487,7 @@ async function main() {
     },
     isStreamOpen: () => server?.streamStatus().phase === "open",
     getEntries: () => (server ? server.getTranscript() : []),
-    onMemoryWait: ({ timeoutMs }) =>
-      process.stdout.write(`[cockpit] 記録を書き出し中…（最大 ${timeoutMs / 1000} 秒・Ctrl+C で終了中ならもう一度 Ctrl+C で待たずに終了）\n`),
+    onMemoryWait: () => process.stdout.write("[cockpit] 記録を書き出し中…\n"),
     organiser: memoryOrganiser
   });
 
@@ -3556,22 +3507,26 @@ async function main() {
    * ④思い出し役を 1 回走らせる（記憶の作り直し Wave 3・思い出しの係が呼ぶ）。使い捨ての Codex（resolveWriterBrainDef と
    * 同じ決め方）を cwd = 記憶のフォルダ・read-only・最後の答えだけで作る。警告は①②と同じ onBrainWarning へ。
    * 配信の組み直し Domain B: 記憶のフォルダは今のロールのフォルダ（ほかのロールの記憶は読まない）。
-   * @param {{ request: string; entries: ReadonlyArray<any>; nowMs: number; wording?: any }} job
+   * @param {import("../src/mind/recall-desk.mjs").RecallJob} job
    */
-  const recallRunner = async (job) => {
+  const prepareRecall = (job) => {
     const place = memoryPlaces.place();
     if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
-    await place.ready;
-    return runRecall({
-      create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
-      request: job.request,
-      entries: job.entries,
-      nowMs: job.nowMs,
-      dir: place.dir,
-      // Discord モード Domain C: 思い出しの係が渡すその場の語の組（null = 配信の語の組）。
-      wording: job.wording ?? null,
-      onWarning: onBrainWarning
-    });
+    const brain = resolveWriterBrainDef(currentBrain);
+    return async () => {
+      await place.ready;
+      return runRecall({
+        create: /** @type {any} */ (brain.create),
+        taskSessions: job.taskSessions,
+        request: job.request,
+        entries: job.entries,
+        nowMs: job.nowMs,
+        dir: place.dir,
+        wording: job.wording ?? null,
+        onReply: job.onReply,
+        onWarning: onBrainWarning
+      });
+    };
   };
 
   /** state snapshot に載せる記憶の現況（この場で最後に記録した時刻と、今記録中か）。 */
@@ -3697,7 +3652,8 @@ async function main() {
       return voiceEngines.prepare(kind);
     },
     startVoiceResources: ensureVoiceResources,
-    recallRunner,
+    recallRunner: async (job) => prepareRecall(job)(),
+    prepareRecall,
     // Discord モード Domain D: Discord の入口が鍵を読むファイル名（今のロールの role.json の discordBotKeyFile・無ければ既定）。
     discordBotKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
     // Discord モード Domain E: 鍵のファイル名の形が合わなければ Discord の入口が断る（既定の鍵で入らない）。
@@ -3713,7 +3669,8 @@ async function main() {
     settings,
     currentKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
     currentKeyFileRefused: () => roleDiscordBotKeyFileRefused(roleHooks.current()),
-    write: (line) => process.stdout.write(line)
+    write: (line) => process.stdout.write(line),
+    options: { getTaskResources: () => server?.getActiveVenueTaskResources() ?? null }
   });
 
   server = createCockpitServer({
@@ -3726,6 +3683,9 @@ async function main() {
     roles: [venueRole],
     // Discord モード Domain D: 場の体験の口（配信の口はサーバの中・Discord の口はここから渡す）。
     experiences: { discord: discordExperience },
+    localTaskRunner: async ({ resources, request }) => runLocalTask({
+      resources, request, create: resolveWriterBrainDef(currentBrain).create, onWarning: onBrainWarning
+    }),
     // 配信の組み直し Domain A: 起動時の引っ越しの結果（ログのタブに出す・引っ越しが無ければ空）。
     notices: startupNotices,
     fireOrchestratorFactory,
@@ -3863,7 +3823,7 @@ async function main() {
   process.stdout.write("[cockpit] Ctrl+C / EOF で終了します（配信中なら「配信を終える」と同じ道で記録してから畳みます）。\n");
 
   // 配信の組み直し Domain D: Ctrl+C は、場が開いていれば「配信を終える」と同じ道（server.endStream）を通ってから畳む
-  // （§createCockpitShutdown）。閉じていれば保存は頼まない。もう一度の Ctrl+C で記録の待ちを打ち切る。
+  // （§createCockpitShutdown）。閉じていれば保存は頼まない。終了中の Ctrl+C はプロセスを強制終了し、閉場途中の作業領域はそのまま残す。
   const shutdown = createCockpitShutdown({
     write: (line) => process.stdout.write(line),
     beforeClose: () => contextCompactor.dispose(),
@@ -3887,6 +3847,7 @@ async function main() {
         // best-effort
       }
     },
+    forceExit: () => process.exit(130),
     finalize: async () => {
       // 撮る係は close() の onEyesStop で止まっているはずだが、途中で throw しても取り残さない（冪等）。
       residentCapture.stop();
@@ -3899,7 +3860,7 @@ async function main() {
   process.on("SIGINT", shutdown);
   // stdin EOF（Ctrl+Z→Enter / パイプ終端）でも畳む（ears-cli.mjs の型）。
   const rl = createInterface({ input: process.stdin });
-  rl.on("close", shutdown);
+  rl.on("close", () => void shutdown("EOF"));
   if (args.open) openCockpitBrowser(`${url}/`);
 }
 

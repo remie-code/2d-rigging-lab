@@ -230,6 +230,34 @@ test("Domain C 体験の口: normalizeVenueExperience は言葉と判定の組�
 
 // ── 2. venueContext ──────────────────────────────────────────────────────
 
+test("Discordの資料取得フックは開いている同じ場のFireだけにスナップショットを返す", async () => {
+  const discord = makeDiscordMouth({});
+  const snapshot = [{ text: "共有資料の検索語" }];
+  let reads = 0;
+  const h = await startServer({ extra: { experiences: { discord: {
+    ...discord.mouth,
+    getChatMaterials: () => { reads++; return snapshot; }
+  } } } });
+  try {
+    const hooks = h.orchestrator.record.hooks;
+    assert.equal(hooks.getChatMaterials(hooks.getBuffer()), null);
+    assert.equal((await post(h.url, "/api/stream/start", { device: "Mic" })).status, 200);
+    const streamBuffer = hooks.getBuffer();
+    assert.equal(hooks.getChatMaterials(streamBuffer), null);
+    await post(h.url, "/api/stream/stop");
+    assert.equal((await post(h.url, "/api/stream/start", { experience: "discord" })).status, 200);
+    const discordBuffer = hooks.getBuffer();
+    assert.equal(hooks.getChatMaterials(streamBuffer), null);
+    assert.equal(hooks.getChatMaterials(discordBuffer), snapshot);
+    assert.doesNotMatch(await (await fetch(new URL("/api/state", h.url))).text(), /共有資料の検索語/);
+    await post(h.url, "/api/stream/stop");
+    assert.equal(hooks.getChatMaterials(discordBuffer), null);
+    assert.equal(reads, 1);
+  } finally {
+    await h.server.close();
+  }
+});
+
 test("Domain C venueContext: 閉じていれば null・配信は語の組も教えも null・Discord の場はその口の言葉・閉じたら null", async () => {
   const discord = makeDiscordMouth({ wording: FAKE_WORDING, teaching: "venue-discord" });
   const h = await startServer({ extra: { experiences: { discord: discord.mouth } } });

@@ -40,11 +40,9 @@ import {
   resolveWriterBrainDef,
   isMcpConfigReadFailureWarning,
   formatRecallEventLine,
-  raceMemoryRecordWithTimeout,
   MEMORY_CHECKPOINT_INTERVAL_MS,
   MEMORY_CHECKPOINT_TICK_MS,
   isMemoryCheckpointDue,
-  SHUTDOWN_MEMORY_TIMEOUT_MS
 } from "./cockpit.mjs";
 import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
 import { createFireOrchestrator, resolveConversationInstructionProfile } from "../src/mind/fire-orchestrator.mjs";
@@ -1228,54 +1226,9 @@ test("配信を終えると保存される: 終えるときの転写が②の材
   }
 });
 
-// ── raceMemoryRecordWithTimeout（配信間記憶: Ctrl+C の最後の保存の best-effort + timeout）──
-
-test("raceMemoryRecordWithTimeout: promise が先に解決すれば timeout を待たず即座に返る", { timeout: 5000 }, async () => {
-  const start = Date.now();
-  await raceMemoryRecordWithTimeout(Promise.resolve("done"), 5000);
-  assert.ok(Date.now() - start < 1000, "解決済み promise で 5000ms の timeout を待ってはいけない");
-});
-
-test("raceMemoryRecordWithTimeout: promise が解決しなくても timeoutMs で必ず返る（shutdown が固まらない）", { timeout: 5000 }, async () => {
-  const neverResolves = new Promise(() => {});
-  const start = Date.now();
-  await raceMemoryRecordWithTimeout(neverResolves, 30);
-  assert.ok(Date.now() - start < 1000, "timeoutMs 経過後は待たずに返らねばならない");
-});
-
-test("raceMemoryRecordWithTimeout: promise が reject しても握って捨てる（呼び出し元に伝播しない）", { timeout: 5000 }, async () => {
-  const rejecting = Promise.reject(new Error("record failed"));
-  await assert.doesNotReject(() => raceMemoryRecordWithTimeout(rejecting, 5000));
-});
-
-test("raceMemoryRecordWithTimeout: setTimeoutImpl を注入できる（fire-scheduler/barge-in と同型のタイマ注入規律）", { timeout: 5000 }, async () => {
-  /** @type {any[]} */
-  const calls = [];
-  const fakeSetTimeout = (/** @type {any} */ cb, /** @type {any} */ ms) => {
-    calls.push(ms);
-    cb(); // 即時発火（実タイマを使わない決定論テスト）。
-    return 0;
-  };
-  const neverResolves = new Promise(() => {});
-  await raceMemoryRecordWithTimeout(neverResolves, 12345, /** @type {any} */ (fakeSetTimeout));
-  assert.deepEqual(calls, [12345]);
-});
-
-// ── 決め打った定数の値の固定（回帰ガード）───────────────────
-
-test("配信間記憶の決め打ち定数: MEMORY_CHECKPOINT_INTERVAL_MS=20分・SHUTDOWN_MEMORY_TIMEOUT_MS=90秒（②の所要時間に合わせた）", { timeout: 5000 }, () => {
+test("配信間記憶の途中保存は 20 分", () => {
   assert.equal(MEMORY_CHECKPOINT_INTERVAL_MS, 20 * 60 * 1000);
-  assert.equal(SHUTDOWN_MEMORY_TIMEOUT_MS, 90_000);
 });
-
-// ── shutdown 型ハーネス（配信間記憶・★重要な配管事実 + 固まらない）─────────────────────────
-//
-//  main() の shutdown 相当を、実 server/session/player を使わない最小ハーネスで再現する。固定する不変条件:
-//  (a) 転写スナップショットは server.close() より前に確保する（close 後は pipeline が dispose されて転写が取れない）、
-//  (b) 最後の保存は走っている保存の終わりも待つ（直列）、(c) ハング/失敗しても timeout に束縛され、後続の dispose は必ず走る。
-//  配信の組み直し Domain D: main() の shutdown そのものは createCockpitShutdown（場が開いていれば server.endStream =
-//  closeStream が写し → 畳む → 最後の保存の順を受け持つ）になった。その並びは scripts/cockpit-stream.test.mjs が本物の
-//  server と場の口で固定する。ここは保存の待ち方（直列・上限）の不変条件として残す。
 
 test("shutdown 型ハーネス: 転写は close() より前に確保し、最後の保存は走っている保存の後に走り、後続 dispose は必ず走る", { timeout: 5000 }, async () => {
   /** @type {string[]} */
@@ -1301,7 +1254,6 @@ test("shutdown 型ハーネス: 転写は close() より前に確保し、最後
   events.push(`finalEntries:${finalEntries.length}`);
   await fakeServer.close();
   const memoryDone = Promise.all([recorder.record(finalEntries), recorder.whenIdle()]);
-  const raced = raceMemoryRecordWithTimeout(memoryDone, 1000);
   await tick();
   assert.equal(w.calls.length, 1, "走っている保存が終わるまで最後の保存は始めない");
   w.pending[0].resolve({ written: true });
@@ -1309,21 +1261,11 @@ test("shutdown 型ハーネス: 転写は close() より前に確保し、最後
   await tick();
   assert.deepEqual(w.calls[1], ["a", "b", "c"]);
   w.pending[1].resolve({ written: true });
-  await raced;
+  await memoryDone;
   events.push("memory.done");
   await fakeSession.dispose();
 
   assert.deepEqual(events, ["finalEntries:3", "server.close", "memory.done", "session.dispose"]);
-});
-
-test("shutdown 型ハーネス: 最後の保存がハングしても timeout で抜け、後続 dispose は必ず走る", { timeout: 5000 }, async () => {
-  /** @type {string[]} */
-  const events = [];
-  const recorder = createMemoryRecorder({ getLiveEntries: () => [], writeImpl: () => new Promise(() => {}) });
-  const fakeSession = { dispose: async () => events.push("session.dispose") };
-  await raceMemoryRecordWithTimeout(Promise.all([recorder.record(["x"]), recorder.whenIdle()]), 20);
-  await fakeSession.dispose();
-  assert.deepEqual(events, ["session.dispose"]);
 });
 
 // ── createVerbosityHooks（wave 計画「口数配線」§2 裁定 A: 口数モードの settings 橋渡し）───────────
@@ -3182,7 +3124,7 @@ test("記憶をロールごとにの結線: 引っ越し（写しのフォルダ
   const writer = source.slice(source.indexOf("const memoryRecorder = createMemoryRecorder"), source.indexOf("const memoryStatus = () =>"));
   assert.match(writer, /getPlace: \(\) => memoryPlaces\.place\(\)/);
   assert.match(writer, /record: place\.streamRecord,\s*dir: place\.dir,/, "場の保存の持ち回りそのものを渡す（記憶の整理 Domain A）");
-  assert.match(writer, /const recallRunner = async \(job\) => \{\s*const place = memoryPlaces\.place\(\);[\s\S]*?dir: place\.dir,/);
+  assert.match(writer, /const prepareRecall = \(job\) => \{\s*const place = memoryPlaces\.place\(\);[\s\S]*?dir: place\.dir,/);
   // 配信の組み直し Domain D: ロールの切り替えでは置き場の準備を待たない（応答を git init で遅らせない・場の始まりで待つ）。
   const onSetRole = main.slice(main.indexOf("const onSetRole = async (id) =>"), main.indexOf("const roleStatus = () =>"));
   assert.doesNotMatch(onSetRole, /memoryPlaces\.place\(\)/);

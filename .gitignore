@@ -21,6 +21,9 @@ tmp/
 # Kept locally, never published: private notes, the author's avatar source,
 # and generated dev/test output.
 memo/
+# Personal device-selection notes and raw chat attachments stay local.
+/discussion/ai-cohost/real-world-companion/audio-devices-*.md
+/.codex-attachments/
 test_data/sample_model.psd
 .github.zip
 .tmp-editor-vite*.log

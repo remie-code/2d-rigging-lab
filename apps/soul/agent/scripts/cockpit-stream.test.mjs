@@ -6,9 +6,9 @@
 // （ファイルを書くのは OS の一時フォルダだけ）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   createStreamVenueHooks,
@@ -18,12 +18,13 @@ import {
   createCockpitShutdown,
   BODY_CONNECT_FAILED_MESSAGE,
   BODY_URL_NOT_SET_MESSAGE,
-  SHUTDOWN_MEMORY_TIMEOUT_MS,
   MEMORY_CHECKPOINT_INTERVAL_MS
 } from "./cockpit.mjs";
 import { createCockpitServer, createInMemorySettingsStore } from "../src/cockpit/cockpit-server.mjs";
 import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
 import { createFireScheduler } from "../src/mind/fire-scheduler.mjs";
+import { writeStreamRecord } from "../src/mind/memory.mjs";
+import { createFireOrchestrator } from "../src/mind/fire-orchestrator.mjs";
 import { createSessionUsageLog } from "../src/mind/session-usage-log.mjs";
 
 // ── 偽物 ─────────────────────────────────────────────────────────────
@@ -177,9 +178,9 @@ async function state(url) {
  * @param {object} [over]
  * @param {string[]} [over.events]
  * @param {{ current: any }} [over.roleRef]  今のロール（{ id, name: { canonical }, body }）。
+ * @param {string} [over.memoryRoot]
  * @param {any} [over.channel]  器（{ getUrl, connect, close }）。
- * @param {(entries: any[], place: any) => Promise<any>} [over.writeImpl]  ②（既定はすぐ書いたことにする）。
- * @param {number} [over.memoryTimeoutMs]
+ * @param {Parameters<typeof createMemoryRecorder>[0]["writeImpl"]} [over.writeImpl]  ②（既定はすぐ書いたことにする）。
  */
 function makeVenue(over = {}) {
   const events = over.events ?? [];
@@ -195,7 +196,7 @@ function makeVenue(over = {}) {
   /** @type {any} */
   let server = null;
   const memoryPlaces = createRoleMemoryPlaces({
-    root: join("C:", "tmp", "stream-venue-test"),
+    root: over.memoryRoot ?? join("C:", "tmp", "stream-venue-test"),
     currentRole: () => roleRef.current,
     startedAtMs: clock,
     prepareImpl: async (/** @type {any} */ options) => {
@@ -253,8 +254,7 @@ function makeVenue(over = {}) {
     },
     isStreamOpen: () => server != null && server.streamStatus().phase === "open",
     getEntries: () => (server ? server.getTranscript() : []),
-    nowImpl: () => (clock += 60_000),
-    ...(over.memoryTimeoutMs != null ? { memoryTimeoutMs: over.memoryTimeoutMs } : {})
+    nowImpl: () => (clock += 60_000)
   });
   return {
     events,
@@ -486,10 +486,12 @@ test("配信を始める: 思い出しの係は作り直す（前の場で走っ
     orchestrator.record.hooks.onRecallRequest({ request: "前に話した宝箱の話", fireId: 1 });
     await settle();
     assert.equal(runs.length, 1);
-    await post(url, "/api/stream/stop");
-    await post(url, "/api/stream/start", { device: "Mic" });
+    const stopping = server.endStream();
     const firesBefore = orchestrator.record.fireCount;
+    assert.equal(server.streamStatus().phase, "closing");
     runs[0]({ found: true, summary: "宝箱は右の部屋にあった" });
+    await stopping;
+    await post(url, "/api/stream/start", { device: "Mic" });
     await settle();
     await settle();
     assert.equal(orchestrator.record.fireCount, firesBefore, "前の場の④の結果で発火しない");
@@ -497,6 +499,289 @@ test("配信を始める: 思い出しの係は作り直す（前の場で走っ
     orchestrator.record.hooks.onRecallRequest({ request: "新しい頼み", fireId: 2 });
     await settle();
     assert.equal(runs.length, 2);
+    runs[1]({ found: false, summary: "" });
+  } finally {
+    await server.close();
+  }
+});
+
+test("閉場は受付済みの recall と小タスクを待ち、資料と返答を writer に渡して整理のあとで削除する", async () => {
+  const worker = Promise.withResolvers();
+  const writer = Promise.withResolvers();
+  const organising = Promise.withResolvers();
+  const workerStarted = Promise.withResolvers();
+  const writerStarted = Promise.withResolvers();
+  const organiserStarted = Promise.withResolvers();
+  const recalls = Array.from({ length: 3 }, () => Promise.withResolvers());
+  const completed = [];
+  const accepted = [];
+  const persistent = mkdtempSync(join(tmpdir(), "writer-persistent-test-"));
+  const v = makeVenue({
+    memoryRoot: persistent,
+    writeImpl: (entries, place, wording, materials, onUnconfirmedExit) => writeStreamRecord({
+      entries, dir: place.dir, record: place.streamRecord, wording, materials, onUnconfirmedExit,
+      discardImpl: async () => ({ ok: true }),
+      async commitImpl() { completed.push("commit"); return { ok: true, committed: true, commit: "abc123" }; },
+      addedLinesImpl: async () => ({ ok: true, lines: [] }),
+      changedFilesImpl: async () => ({ ok: true, files: [{ status: "A", path: "fixture.md" }] }),
+      create: ({ cwd }) => ({
+        async ask(prompt) {
+          assert.equal(cwd, join(persistent, "chappy"));
+          writerStarted.resolve({ entries, prompt, materials });
+          await writer.promise;
+          assert.equal(readFileSync(materials.documents[0].path, "utf8"), "synthetic PDF");
+          return { replyText: "済み" };
+        },
+        async dispose() { completed.push("writer disposed"); }
+      })
+    })
+  });
+  let setting = "initial";
+  let running = 0;
+  const roles = [{ id: "chappy", hooks: {
+    ...v.venue.hooks,
+    async saveFinal(...args) {
+      await v.venue.hooks.saveFinal(...args);
+      organiserStarted.resolve();
+      await organising.promise;
+      completed.push("organised");
+    }
+  }, recall: {
+    run: async () => { throw new Error("expected prepared recall"); },
+    prepare(job) {
+      accepted.push([job.request, setting, job.entries.length]);
+      return async () => {
+        const result = await recalls[running++].promise;
+        job.onReply(result);
+        return { found: true, summary: result };
+      };
+    }
+  } }];
+  const { server, orchestrator } = await startServer(v, { roles, selfFireInitialEnabled: false });
+  const memoryFile = join(persistent, "chappy", "memory.md");
+  mkdirSync(dirname(memoryFile));
+  writeFileSync(memoryFile, "synthetic memory");
+  try {
+    assert.equal((await server.startStream({ device: "Mic" })).ok, true);
+    const resources = server.getActiveVenueTaskResources();
+    const document = resources.storeDocument({ name: "../fixture.pdf", bytes: Buffer.from("synthetic PDF") });
+    assert.equal(resources.getDocument(document.id), document);
+    assert.equal(resources.listDocuments().length, 1);
+
+    const runTask = (request, answer) => resources.runTask({
+      kind: "local", request, sessionOptions: { sandbox: "workspace-write" }, content: request,
+      create(options) {
+        return {
+          async ask() {
+            assert.equal(readFileSync(resources.getDocument(document.id).path, "utf8"), "synthetic PDF");
+            writeFileSync(join(options.cwd, "notes.txt"), request);
+            if (request === "delayed") workerStarted.resolve(options.cwd);
+            return { replyText: await answer };
+          },
+          async dispose() { completed.push(request); }
+        };
+      }
+    });
+    const delayed = runTask("delayed", worker.promise);
+    const firstCwd = await workerStarted.promise;
+    await runTask("later", "later reply");
+    orchestrator.record.hooks.onRecallRequest({ request: "first recall", fireId: 1 });
+    setting = "updated";
+    orchestrator.record.hooks.onRecallRequest({ request: "accepted recall", fireId: 2 });
+    setting = "future";
+    let saved = false;
+    void writerStarted.promise.then(() => { saved = true; });
+    const stopping = server.endStream();
+    orchestrator.record.hooks.onRecallRequest({ request: "too late", fireId: 3 });
+    assert.deepEqual(accepted, [["first recall", "initial", 0], ["accepted recall", "updated", 0]]);
+    assert.equal(server.getActiveVenueTaskResources(), null);
+    await assert.rejects(runTask("too late", "unused"), /intake is closed/);
+    assert.throws(() => resources.storeDocument({ name: "late.txt", bytes: Buffer.alloc(0) }), /intake is closed/);
+    recalls[0].resolve("first recall reply");
+    await settle();
+    assert.equal(running, 2);
+    assert.equal(saved, false);
+    recalls[1].resolve("accepted recall reply");
+    await settle();
+    assert.equal(saved, false);
+    assert.equal(existsSync(document.path), true);
+    worker.resolve("delayed reply");
+    assert.equal(await delayed, "delayed reply");
+
+    const { entries, prompt, materials } = await writerStarted.promise;
+    assert.deepEqual(entries, []);
+    assert.match(prompt, /accepted recall reply/);
+    assert.match(prompt, /delayed reply/);
+    assert.ok(prompt.includes(JSON.stringify(document.path)));
+    assert.deepEqual(materials.workdirs, [firstCwd, materials.replies.find((result) => result.request === "later").workdir]);
+    assert.notEqual(materials.workdirs[0], materials.workdirs[1]);
+    assert.equal(orchestrator.record.fireCount, 0);
+    writer.resolve();
+    await organiserStarted.promise;
+    assert.deepEqual(completed, ["later", "delayed", "writer disposed", "commit"]);
+    assert.equal(existsSync(document.path), true);
+    organising.resolve();
+    await stopping;
+    assert.equal(completed.at(-1), "organised");
+    assert.equal(existsSync(dirname(document.path)), false);
+    assert.equal(resources.getDocument(document.id), undefined);
+    assert.equal(readFileSync(memoryFile, "utf8"), "synthetic memory");
+    assert.equal((await server.startStream({ device: "Mic" })).ok, true);
+    assert.equal(server.getActiveVenueTaskResources().getDocument(document.id), undefined);
+  } finally {
+    for (const recall of recalls) recall.resolve("released");
+    worker.resolve("released");
+    writer.resolve();
+    organising.resolve();
+    await server.close();
+    rmSync(persistent, { recursive: true, force: true });
+  }
+});
+
+test("終了未確認の小タスクは領域を保持し、確定した実行失敗では解放する", async () => {
+  const v = makeVenue();
+  const { server } = await startServer(v);
+  const paths = [];
+  try {
+    for (const unconfirmed of [true, false]) {
+      assert.equal((await server.startStream({ device: "Mic" })).ok, true);
+      const resources = server.getActiveVenueTaskResources();
+      const document = resources.storeDocument({ name: "fixture.txt", bytes: Buffer.from("synthetic") });
+      paths.push(dirname(document.path));
+      await assert.rejects(resources.runTask({
+        kind: "local", request: "read", content: "read", sessionOptions: {},
+        create: () => ({
+          async ask() { throw new Error("ask failed"); },
+          async dispose() { if (unconfirmed) throw new Error("process exit unknown"); }
+        })
+      }), /ask failed/);
+      const state = await server.endStream();
+      assert.equal(state.stream.phase, "closed");
+      assert.equal(existsSync(document.path), unconfirmed);
+      if (unconfirmed) assert.match(state.stream.error, /終了を確認できません/);
+      assert.equal(resources.getDocument(document.id), undefined);
+    }
+  } finally {
+    await server.close();
+    for (const path of paths) rmSync(path, { recursive: true, force: true });
+  }
+});
+
+test("新しい返答だけでも最後に書き出し、writer の停止が未確認なら領域を保持する", async () => {
+  const prompts = [];
+  let commits = 0;
+  const v = makeVenue({
+    writeImpl: (entries, place, wording, materials, onUnconfirmedExit) => writeStreamRecord({
+      entries, dir: place.dir, record: place.streamRecord, wording, materials, onUnconfirmedExit,
+      discardImpl: async () => ({ ok: true }),
+      async commitImpl() { commits += 1; return { ok: true, committed: false }; },
+      create: () => ({
+        async ask(prompt) { prompts.push(prompt); return { replyText: "済み" }; },
+        async dispose() { throw new Error("writer exit unknown"); }
+      })
+    })
+  });
+  const { server } = await startServer(v);
+  let workdir;
+  try {
+    assert.equal((await server.startStream({ device: "Mic" })).ok, true);
+    const resources = server.getActiveVenueTaskResources();
+    assert.equal(await resources.runTask({
+      kind: "local", request: "collect", content: "collect", sessionOptions: {},
+      create({ cwd }) {
+        workdir = cwd;
+        return {
+          async ask() { return { replyText: "合成の返答だけ" }; },
+          async dispose() {}
+        };
+      }
+    }), "合成の返答だけ");
+    const state = await server.endStream();
+    assert.equal(state.stream.phase, "closed");
+    assert.equal(prompts.length, 1);
+    assert.match(prompts[0], /合成の返答だけ/);
+    assert.equal(commits, 0);
+    assert.equal(existsSync(workdir), true);
+    assert.match(state.stream.error, /終了を確認できません/);
+  } finally {
+    await server.close();
+    if (workdir) rmSync(dirname(workdir), { recursive: true, force: true });
+  }
+});
+
+test("recall プロセスの停止が未確認なら共通 scope の結果を受けて場の領域を残す", async () => {
+  const v = makeVenue();
+  const { server, orchestrator } = await startServer(v, {
+    recallRunner: async ({ taskSessions }) => {
+      await taskSessions.run({
+        sessionOptions: { sandbox: "read-only" }, content: "fixture",
+        create: () => ({
+          async ask() { return { replyText: "合成の返答" }; },
+          async dispose() { throw new Error("recall exit unknown"); }
+        })
+      });
+      return { found: true, summary: "合成の返答" };
+    }
+  });
+  let document;
+  try {
+    assert.equal((await server.startStream({ device: "Mic" })).ok, true);
+    document = server.getActiveVenueTaskResources().storeDocument({ name: "fixture.txt", bytes: Buffer.from("synthetic") });
+    orchestrator.record.hooks.onRecallRequest({ request: "fixture", fireId: 1 });
+    const state = await server.endStream();
+    assert.equal(state.stream.phase, "closed");
+    assert.equal(existsSync(document.path), true);
+    assert.match(state.stream.error, /終了を確認できません/);
+  } finally {
+    await server.close();
+    if (document) rmSync(dirname(document.path), { recursive: true, force: true });
+  }
+});
+
+test("場を閉じると未使用の recall 前置きを捨て、同じ場では次の ask に届ける", async () => {
+  const v = makeVenue();
+  const replies = ["探すね<recall 同じ場>", "探すね<recall 古い場>", "新しい場だね"];
+  const inputs = [];
+  const deferred = [];
+  /** @type {ReturnType<typeof createFireOrchestrator> | undefined} */
+  let fire;
+  const { server, url, ears } = await startServer(v, {
+    streamHooks: { ...v.venue.hooks, saveFinal: async () => {} },
+    selfFireInitialEnabled: false,
+    recallRunner: async ({ request }) => ({ found: true, summary: `${request}の記憶` }),
+    onRecallEvent: (event) => { if (event.silent) deferred.push(event.phase); },
+    fireOrchestratorFactory(hooks) {
+      fire = createFireOrchestrator({
+        ...hooks,
+        session: {
+          async ask(input) {
+            inputs.push(input);
+            return { replyText: replies.shift() };
+          }
+        },
+        speakImpl: async () => ({ timeline: [], rttMs: 0, wavDurationSec: 0, wavPath: "C:/tmp/fake.wav" }),
+        channel: { sendSpeech: async () => ({ result: "accepted", error: null, rttMs: 0 }) },
+        player: { play() {} }
+      });
+      return fire;
+    }
+  });
+  try {
+    assert.equal((await post(url, "/api/stream/start", { device: "Mic" })).status, 200);
+    ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "思い出して" });
+    assert.equal((await post(url, "/api/fire")).json.fired, true);
+    await settle();
+    assert.equal((await post(url, "/api/fire")).json.fired, true);
+    assert.match(inputs[1], /同じ場の記憶/);
+    await settle();
+    assert.deepEqual(deferred, ["found", "found"]);
+    assert.equal(fire?.deferInstruction("他の内部指示"), true);
+    assert.equal((await post(url, "/api/stream/stop")).status, 200);
+    assert.equal((await post(url, "/api/stream/start", { device: "Mic" })).status, 200);
+    ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "次の場" });
+    assert.equal((await post(url, "/api/fire")).json.fired, true);
+    assert.doesNotMatch(inputs[2], /同じ場の記憶|古い場の記憶/);
+    assert.match(inputs[2], /他の内部指示/);
   } finally {
     await server.close();
   }
@@ -1013,6 +1298,7 @@ test("配信を終える: 最後の保存は頼んだ時点のロールの置き
 function makeShutdown(v, server, log) {
   return createCockpitShutdown({
     write: (line) => log.push(line.trim()),
+    forceExit: () => log.push("forceExit"),
     beforeClose: () => log.push("compactor.dispose"),
     server,
     venue: v.venue,
@@ -1058,55 +1344,40 @@ test("Ctrl+C: 場が閉じていれば保存を頼まない（場の外では記
   assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
 });
 
-test("Ctrl+C: 2 回目の Ctrl+C で記録の待ちを打ち切る（保存がハングしても畳むところまで進む）", async () => {
-  const v = makeVenue({ writeImpl: () => new Promise(() => {}), memoryTimeoutMs: 60_000 });
-  const { server, url, ears } = await startServer(v);
-  /** @type {string[]} */
+test("終了中の EOF は通常閉場を待ち、Ctrl+C は使用中の領域を残したまま強制終了を要求する", async () => {
+  const writer = Promise.withResolvers();
+  const started = Promise.withResolvers();
+  const v = makeVenue({ writeImpl: async () => {
+    started.resolve();
+    return writer.promise;
+  } });
+  const { server, url } = await startServer(v);
   const log = [];
-  await post(url, "/api/stream/start", { device: "Mic" });
-  ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "書き出しがハングする" });
-  const shutdown = makeShutdown(v, server, log);
-  const first = shutdown();
-  while (!v.recorder.isRecording()) await settle();
-  await settle();
-  await shutdown(); // 2 回目の Ctrl+C。
-  await first;
-  assert.ok(log.includes("[cockpit] 記録の書き出しを待たずに終了します。"));
-  assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
-  assert.equal(server.streamStatus().phase, "closed");
-});
-
-test("Ctrl+C: 待ちが無いときの 2 回目は何もしない・保存の待ちの上限は SHUTDOWN_MEMORY_TIMEOUT_MS（既定）", async () => {
-  const venue = createStreamVenueHooks({
-    memoryPlaces: { beginStream() {}, place: () => null, streamNo: () => 0 },
-    memoryRecorder: { record: async () => {}, whenIdle: async () => {}, isRecording: () => false },
-    openSession: () => {},
-    closeSession: async () => {},
-    hasBody: () => false,
-    channel: { getUrl: () => null, connect: async () => {}, close: async () => {} }
-  });
-  assert.equal(venue.skipMemoryWait(), false);
-  /** @type {number[]} */
-  const waited = [];
-  let recording = true;
-  const venue2 = createStreamVenueHooks({
-    memoryPlaces: { beginStream() {}, place: () => null, streamNo: () => 0 },
-    memoryRecorder: { record: async () => {}, whenIdle: () => new Promise(() => {}), isRecording: () => recording },
-    openSession: () => {},
-    closeSession: async () => {},
-    hasBody: () => false,
-    channel: { getUrl: () => null, connect: async () => {}, close: async () => {} },
-    setTimeoutImpl: /** @type {any} */ ((/** @type {() => void} */ fn, /** @type {number} */ ms) => {
-      waited.push(ms);
-      fn();
-      return 0;
-    })
-  });
-  await venue2.waitForRunningSaves();
-  assert.deepEqual(waited, [SHUTDOWN_MEMORY_TIMEOUT_MS]);
-  recording = false;
-  await venue2.waitForRunningSaves();
-  assert.deepEqual(waited, [SHUTDOWN_MEMORY_TIMEOUT_MS], "走っていなければ待たない");
+  let first;
+  try {
+    await post(url, "/api/stream/start", { device: "Mic" });
+    const document = server.getActiveVenueTaskResources().storeDocument({ name: "fixture.pdf", bytes: Buffer.from("synthetic") });
+    const shutdown = makeShutdown(v, server, log);
+    first = shutdown("EOF");
+    await started.promise;
+    await shutdown("EOF");
+    assert.equal(log.includes("forceExit"), false);
+    assert.equal(server.streamStatus().phase, "closing");
+    assert.equal(existsSync(document.path), true);
+    await shutdown("SIGINT");
+    assert.equal(log.at(-1), "forceExit");
+    assert.ok(log.at(-2).includes(dirname(document.path)));
+    assert.equal(log.includes("disposeRest"), false);
+    assert.equal(existsSync(document.path), true);
+    // The injected force exit records the call and leaves this test process running.
+    writer.resolve({ written: true });
+    await first;
+    assert.equal(existsSync(document.path), false);
+  } finally {
+    writer.resolve({ written: true });
+    await first;
+    await server.close();
+  }
 });
 
 // ── 7. 場の終わりのあとに発火の予定のタイマが発火を頼まない（棚卸し §5・設計 §9）─────────────────────
@@ -1178,28 +1449,30 @@ test("2 つ目の場: 前の場の lastRecordedSeq で新しい場の保存が�
   }
 });
 
-test("2 つ目の場: 前の場の最後の保存が遅れて終わっても、新しい場の数え（lastRecordedSeq）を上書きしない", async () => {
-  /** @type {Array<() => void>} */
-  const releases = [];
-  const v = makeVenue({
-    writeImpl: () =>
-      new Promise((resolve) => {
-        releases.push(() => resolve({ written: true }));
-      }),
-    memoryTimeoutMs: 1
-  });
-  const { server, url, ears } = await startServer(v);
+test("書き出しが終わるまで次の場を開けず、次の場に保存の数えを引き継がない", async (t) => {
+  const writer = Promise.withResolvers();
+  const started = Promise.withResolvers();
+  const v = makeVenue({ writeImpl: async () => {
+    started.resolve();
+    return writer.promise;
+  } });
+  const { server, ears } = await startServer(v);
   try {
-    await post(url, "/api/stream/start", { device: "Mic" });
-    for (const text of ["A1", "A2"]) ears.record.buffer.append({ startMs: 0, endMs: 1000, text });
-    await post(url, "/api/stream/stop"); // 待ちの上限（1ms）で閉じる。保存はまだ走っている。
-    assert.equal(v.recorder.isRecording(), true);
-    await post(url, "/api/stream/start", { device: "Mic" });
-    releases[0](); // 前の場の保存がいま終わる。
-    await v.recorder.whenIdle();
-    assert.equal(v.venue.lastRecordedSeq(), 0, "前の場の保存は新しい場の数えにしない");
+    assert.equal((await server.startStream({ device: "Mic" })).ok, true);
+    ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "A" });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const stopping = server.endStream();
+    await started.promise;
+    t.mock.timers.tick(91_000);
+    await settle();
+    assert.equal((await server.startStream({ device: "Mic" })).status, 409);
+    writer.resolve({ written: true });
+    await stopping;
+    assert.equal((await server.startStream({ device: "Mic" })).ok, true);
+    assert.equal(v.venue.lastRecordedSeq(), 0);
     assert.equal(v.venue.lastRecordAtMs(), null);
   } finally {
+    writer.resolve({ written: true });
     await server.close();
   }
 });
@@ -1280,35 +1553,33 @@ test("場の結線（main）: 場の口を cockpit-server へ渡し、頭のセ�
   assert.match(main, /isStreamOpen: \(\) => server\?\.streamStatus\(\)\.phase === "open",/);
   assert.match(main, /const shutdown = createCockpitShutdown\(\{/);
   assert.match(main, /process\.on\("SIGINT", shutdown\);/);
+  assert.match(main, /rl\.on\("close", \(\) => void shutdown\("EOF"\)\)/);
   assert.match(main, /renewUsageLog: \(startedAtMs\) => \{\n\s+const previous = sessionUsageLog;\n\s+sessionUsageLog = createSessionUsageLog\(\{ startedAtMs \}\);/, "頭の文脈の記録は場ごとに作り直す");
   assert.match(main, /lastRecordAtMs: streamVenue\.lastRecordAtMs\(\)/, "記憶の現況は場ごとの数え");
 });
 
-test("Ctrl+C: 場が閉じていても、走っている保存（前の場の最後の保存の残り）は待つ（新しく頼まない・上限つき）", async () => {
-  /** @type {Array<() => void>} */
-  const releases = [];
-  const v = makeVenue({
-    writeImpl: () =>
-      new Promise((resolve) => {
-        releases.push(() => resolve({ written: true }));
-      }),
-    memoryTimeoutMs: 1
-  });
-  const { server, url, ears } = await startServer(v);
-  /** @type {string[]} */
+test("Ctrl+C: 場が閉じていても、走っている保存があれば追加せず終端を待つ", async () => {
+  const writer = Promise.withResolvers();
+  let writes = 0;
+  const v = makeVenue({ writeImpl: async () => {
+    writes += 1;
+    return writer.promise;
+  } });
+  const { server } = await startServer(v);
   const log = [];
-  await post(url, "/api/stream/start", { device: "Mic" });
-  ears.record.buffer.append({ startMs: 0, endMs: 1000, text: "長い書き出し" });
-  await post(url, "/api/stream/stop"); // 待ちの上限（1ms）で閉じる。保存はまだ走っている。
-  assert.equal(v.recorder.isRecording(), true);
-  const shutdown = makeShutdown(v, server, log);
-  const done = shutdown();
-  await settle();
-  releases[0]();
-  await done;
-  assert.equal(releases.length, 1, "新しい保存は頼まない");
-  assert.equal(v.recorder.isRecording(), false);
-  assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
+  try {
+    v.recorder.record([{ text: "合成転写" }]);
+    const done = makeShutdown(v, server, log)();
+    await settle();
+    assert.equal(log.includes("finalize"), false);
+    writer.resolve({ written: true });
+    await done;
+    assert.equal(writes, 1);
+    assert.deepEqual(log.slice(-2), ["disposeRest", "finalize"]);
+  } finally {
+    writer.resolve({ written: true });
+    await server.close();
+  }
 });
 
 // ── 9. メイン画面（view-logic・設定のダイアログの結線） ─────────────────────────

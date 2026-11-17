@@ -29,14 +29,15 @@ import { SPEECH_INTENT_WORD } from "./speech-intent-tag.mjs";
 
 /** 思い出しの目印の語。 */
 export const RECALL_WORD = "recall";
+export const LOCAL_TASK_WORD = "local_task";
 
 /** 表情とは別の語彙集合（魂への頼みになる目印）。 */
-export const CONTROL_TAG_WORDS = Object.freeze([RECALL_WORD]);
+export const CONTROL_TAG_WORDS = Object.freeze([RECALL_WORD, LOCAL_TASK_WORD]);
 
 /** 目印の終わりを探すのをやめる「既知のタグ」の語（表情の 6 語 + 目印の語）。 */
 const KNOWN_TAG_WORDS = new Set([...EXPRESSION_WORDS, ...CONTROL_TAG_WORDS, SPEECH_INTENT_WORD]);
 
-const RECALL_OPEN = `<${RECALL_WORD}`;
+export const CONTROL_TAG_OPENINGS = Object.freeze(CONTROL_TAG_WORDS.map((word) => `<${word}`));
 const WORD_START = /^[A-Za-z]$/;
 const WORD_CHAR = /^[\w-]$/;
 const SPACE = /^\s$/;
@@ -69,13 +70,27 @@ function knownTagStartAt(input, at, final) {
  * @returns {null | { kind: "valid"; end: number } | { kind: "unclosed"; end: number } | { kind: "incomplete" }}
  */
 export function scanRecallTag(input, start, final = true) {
+  return scanTag(input, start, final, CONTROL_TAG_OPENINGS[0]);
+}
+
+/** @param {string} input @param {number} start @param {boolean} [final] */
+export function scanControlTag(input, start, final = true) {
+  for (const [index, opening] of CONTROL_TAG_OPENINGS.entries()) {
+    const tag = scanTag(input, start, final, opening);
+    if (tag) return { ...tag, word: CONTROL_TAG_WORDS[index] };
+  }
+  return null;
+}
+
+/** @param {string} input @param {number} start @param {boolean} final @param {string} opening */
+function scanTag(input, start, final, opening) {
   if (input[start] !== "<") return null;
-  for (let k = 1; k < RECALL_OPEN.length; k += 1) {
+  for (let k = 1; k < opening.length; k += 1) {
     const i = start + k;
     if (i >= input.length) return final ? null : { kind: "incomplete" };
-    if (input[i] !== RECALL_OPEN[k]) return null;
+    if (input[i] !== opening[k]) return null;
   }
-  const p = start + RECALL_OPEN.length;
+  const p = start + opening.length;
   if (p >= input.length) return final ? { kind: "unclosed", end: input.length } : { kind: "incomplete" };
   const c = input[p];
   if (WORD_CHAR.test(c)) return null; // `<recallx>`・`<recall-x>` は別の語。
