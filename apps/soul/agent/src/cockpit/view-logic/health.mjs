@@ -187,7 +187,9 @@ export const BRAIN_LABELS = Object.freeze({
   codex: "Codex (GPT-5.6 Terra)",
   "codex-56-sol": "Codex (GPT-5.6 Sol)",
   "codex-astra": "GPT-6 Astra",
-  "codex-61-sol": "GPT-6.1 Sol"
+  "codex-61-sol": "GPT-6.1 Sol",
+  "codex-62-astra": "GPT-6.2 Astra",
+  "codex-62-sol": "GPT-6.2 Sol"
 });
 
 /**

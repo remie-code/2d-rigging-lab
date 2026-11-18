@@ -119,14 +119,16 @@ test("引っ越し: 指示の優先順(チャッピー: 61 Sol → ほかの GPT
       assert.equal(read.body, text ?? DEFAULT_CONVERSATION_INSTRUCTION_BODY);
     }
   }
-  assert.deepEqual(chappyInstructionBrains("codex-56-sol"), ["codex-61-sol", "codex-56-sol", "codex", "codex-astra"]);
-  assert.deepEqual(chappyInstructionBrains(null), ["codex-61-sol", "codex", "codex-56-sol", "codex-astra"]);
+  assert.deepEqual(chappyInstructionBrains("codex-56-sol"), ["codex-61-sol", "codex-56-sol", "codex", "codex-astra", "codex-62-astra", "codex-62-sol"]);
+  assert.deepEqual(chappyInstructionBrains(null), ["codex-61-sol", "codex", "codex-56-sol", "codex-astra", "codex-62-astra", "codex-62-sol"]);
 });
 
 test("引っ越し: モデルの決め方(今の頭が GPT 系ならそれ・そうでなければ GPT-6.1 Sol・こーでぃーはいつも Opus 5.5)", (t) => {
   for (const [brainChoice, chappyBrain] of [
     ["codex-56-sol", "codex-56-sol"],
     ["codex-61-sol", "codex-61-sol"],
+    ["codex-62-astra", "codex-62-astra"],
+    ["codex-62-sol", "codex-62-sol"],
     ["claude", "codex-61-sol"],
     ["claude-opus-55", "codex-61-sol"],
     ["codex-55", "codex-61-sol"], // 削除済みの頭は GPT 系として扱わない。

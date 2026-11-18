@@ -25,7 +25,7 @@
  *
  * ── 頭の表のエントリ形 ─────────────────────────────────────────────────
  * @typedef {object} BrainEntry
- * @property {string} id  registry のキーと同じ一意識別子（"claude" | "claude-opus-55" | "codex" | "codex-56-sol" | "codex-astra" | "codex-61-sol"）。
+ * @property {string} id  registry のキーと同じ一意識別子。
  * @property {string} label  操縦席の表示札（設定層「頭脳」区画の select 表記）。
  * @property {(options?: object) => MindSession} create  頭セッションを起動する（Domain B が options に
  *   systemPrompt 等を渡す）。**ここでは呼ばない**（health test は実 create を呼ばない＝実 SDK 消費ゼロ）。
@@ -100,6 +100,18 @@ export const BRAINS = Object.freeze({
     // 2026-10-16 追加。@openai/codex-sdk 0.163.0 同梱 App Server の model/list 実測で gpt-6.1-sol は
     // supportedReasoningEfforts = low..ultra（none なし・default low）。Sol/Astra と同じく最小の low。
     create: (options) => createCodexSession({ ...options, model: "gpt-6.1-sol", effort: "low" }),
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
+  }),
+  "codex-62-astra": Object.freeze({
+    id: "codex-62-astra",
+    label: "GPT-6.2 Astra",
+    create: (options) => createCodexSession({ ...options, model: "gpt-6.2-astra", effort: "low" }),
+    credentialPath: path.join(os.homedir(), ".codex", "auth.json")
+  }),
+  "codex-62-sol": Object.freeze({
+    id: "codex-62-sol",
+    label: "GPT-6.2 Sol",
+    create: (options) => createCodexSession({ ...options, model: "gpt-6.2-sol", effort: "low" }),
     credentialPath: path.join(os.homedir(), ".codex", "auth.json")
   })
 });

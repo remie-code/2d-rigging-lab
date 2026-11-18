@@ -105,8 +105,8 @@ test("voiceOutputLabel: name があれば name・なければ default（applyAud
 
 // ── 多頭化 Domain C: 設定引き出し「頭脳」区画の表示導出（brain-swap-wave-plan.md §3）──────────
 
-test("BRAIN_LABELS: Claude 2 頭 + Codex 4 頭の 6 項目（BRAINS[*].label 相当・GPT-5.5 は削除済み）", () => {
-  assert.deepEqual(Object.keys(BRAIN_LABELS), ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
+test("BRAIN_LABELS: Claude 2 頭 + Codex 6 頭の 8 項目（BRAINS[*].label 相当・GPT-5.5 は削除済み）", () => {
+  assert.deepEqual(Object.keys(BRAIN_LABELS), ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol", "codex-62-astra", "codex-62-sol"]);
   assert.equal(BRAIN_LABELS.claude, "Claude (Opus 4.8)");
   assert.equal(BRAIN_LABELS["claude-opus-55"], "Claude (Opus 5.5)");
   assert.equal(BRAIN_LABELS.codex, "Codex (GPT-5.6 Terra)");

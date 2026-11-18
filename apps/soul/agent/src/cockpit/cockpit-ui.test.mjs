@@ -937,16 +937,16 @@ test("SettingsSelect vnode: view-logic の option 列（{value,label}）を機�
   assert.equal(collectText(vnode).join(""), "MV7+FooGame (foo.exe)");
 });
 
-test("SettingsSelect vnode: 頭脳区画の6選択肢（BRAIN_LABELS 由来・settings-drawer.mjs の BRAIN_OPTIONS と同型）", () => {
+test("SettingsSelect vnode: モデル欄の8選択肢（BRAIN_LABELS 由来）", () => {
   const options = Object.keys(BRAIN_LABELS).map((id) => ({ value: id, label: BRAIN_LABELS[id] }));
   const vnode = SettingsSelect({ options, value: "codex", onChange: () => {} });
   const select = collectElements(vnode).find((n) => n.type === "select");
   assert.equal(select.props.value, "codex");
   const opts = collectElements(vnode).filter((n) => n.type === "option");
-  assert.deepEqual(opts.map((o) => o.props.value), ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"]);
+  assert.deepEqual(opts.map((o) => o.props.value), ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol", "codex-62-astra", "codex-62-sol"]);
   assert.equal(
     collectText(vnode).join(""),
-    "Claude (Opus 4.8)Claude (Opus 5.5)Codex (GPT-5.6 Terra)Codex (GPT-5.6 Sol)GPT-6 AstraGPT-6.1 Sol"
+    "Claude (Opus 4.8)Claude (Opus 5.5)Codex (GPT-5.6 Terra)Codex (GPT-5.6 Sol)GPT-6 AstraGPT-6.1 SolGPT-6.2 AstraGPT-6.2 Sol"
   );
 });
 
