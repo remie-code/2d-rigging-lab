@@ -440,6 +440,7 @@ async function checkWriterGarble({ dir, commit, onWarning, addedLinesImpl, rever
  * @param {string} options.dir  記憶のフォルダ（絶対パス・今のロールの `memories/<role-id>/`）。省略できない（配信の組み直し
  *   Domain B: 記憶の根や、ほかのロールのフォルダへ書かないように、呼び出し側が保存の引き金のときのロールのフォルダを渡す）。
  * @param {WriterMaterials} [options.materials] 場の資料・担当の返答・作業先。
+ * @param {boolean} [options.strictOutcome] 書き直し前に人が状態を確認する必要がある失敗を返す。
  * @param {() => void} [options.onUnconfirmedExit] 書き出し役の停止を確認できなかったときの通知。
  * @param {(warning: string) => void} [options.onWarning]
  * @param {unknown} [options.wording]  場の語の組（venue-wording.mjs・Discord モード Domain C）。null / undefined は配信の語の組
@@ -450,7 +451,7 @@ async function checkWriterGarble({ dir, commit, onWarning, addedLinesImpl, rever
  * @param {typeof readCommitChangedFiles} [options.changedFilesImpl]  差し替え口（テスト用・記憶の整理 Domain A）。
  * @param {typeof discardUncommittedChanges} [options.discardImpl]  差し替え口（テスト用・記憶の整理 Domain A）。
  * @returns {Promise<
- *   | { written: false; missing?: true; garbled?: true; commit?: Awaited<ReturnType<typeof commitMemoryChanges>> }
+ *   | { written: false; missing?: true; garbled?: true; needsReview?: true; commit?: Awaited<ReturnType<typeof commitMemoryChanges>> }
  *   | { written: true; commit: Awaited<ReturnType<typeof commitMemoryChanges>> }
  * >}
  */
@@ -464,6 +465,7 @@ export async function writeStreamRecord(options) {
     wording,
     materials,
     onUnconfirmedExit,
+    strictOutcome = false,
     commitImpl = commitMemoryChanges,
     addedLinesImpl = readCommitAddedLines,
     revertImpl = revertMemoryCommit,
@@ -500,7 +502,10 @@ export async function writeStreamRecord(options) {
   } catch {
     discarded = { ok: false, error: "threw" };
   }
-  if (!discarded || !discarded.ok) warnSafely(onWarning, WRITER_DISCARD_FAILED_WARNING);
+  if (!discarded || !discarded.ok) {
+    warnSafely(onWarning, WRITER_DISCARD_FAILED_WARNING);
+    if (strictOutcome) return { written: false, needsReview: true };
+  }
 
   const MAX_ATTEMPTS = 2; // 最初の 1 回 + 書き損じ・化けのときのやり直し 1 回（理由を問わず合わせて 1 回）。
   for (let attempt = 1; ; attempt += 1) {
@@ -517,6 +522,10 @@ export async function writeStreamRecord(options) {
         // 消えた本体（`D`・同じ場の②が動かした古いパス）は持ち回りから外す（記憶の整理 Domain C）。
         record.note(read.changed, read.removed);
       }
+    }
+    if (strictOutcome && (!commit.ok || garble === "revert-failed" ||
+        (garble !== "reverted" && commit.committed && (askError || bodyFiles === null)))) {
+      return { written: false, needsReview: true, commit };
     }
     if (askError) {
       // ask の失敗はやり直さない。化けていたら取り消しを済ませてから throw する（取り消しの失敗は警告済み）。

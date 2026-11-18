@@ -24,6 +24,8 @@ import { createFileSettingsStore } from "./cockpit-settings-store.mjs";
 import { createDiscordExperience, DISCORD_REASONS, DISCORD_VC_REFUSALS } from "../discord/discord-experience.mjs";
 import { createFakeDiscord, FAKE_CHANNEL_TYPE } from "../test-support/fake-discord.mjs";
 import { controlUsageRecord, fireRefusedUsageRecord } from "../mind/session-usage-log.mjs";
+import { createRoleHooks, resolveWriterBrainDef } from "../../scripts/cockpit.mjs";
+import { normalizeRole, roleIdentity, writeRole } from "../roles/role-store.mjs";
 import { MODEL_IDENTITIES } from "../mind/model-identity.mjs";
 import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
 import { runLocalTask } from "../mind/local-task.mjs";
@@ -290,6 +292,7 @@ function companionGateway(fake, { intent = true, denyOnLogin = false, commands =
 
 /**
  * @param {{ discord?: boolean; graceMs?: number; companion?: { intent?: boolean; denyOnLogin?: boolean; commands?: any[]; openSession?: Promise<any> };
+ *   remote?: { failBody?: boolean };
  *   localTasks?: { ask: (content: any, callbacks: any) => Promise<any>; spoken: string[]; run: NonNullable<Parameters<typeof createCockpitServer>[0]["localTaskRunner"]> } }} [p]
  */
 async function startServer(p = {}) {
@@ -328,7 +331,7 @@ async function startServer(p = {}) {
   const discord = createDiscordExperience({
     settings,
     getTaskResources: () => server?.getActiveVenueTaskResources() ?? null,
-    loadToken: () => ({ ok: true, token: FAKE_TOKEN }),
+    loadToken: (file) => { tokenFiles.push(file); return { ok: true, token: FAKE_TOKEN }; },
     loadLibraries: gateway?.loadLibraries ?? fake.loadLibraries,
     log: (line) => logs.push(line),
     loginTimeoutMs: 500,
@@ -349,6 +352,30 @@ async function startServer(p = {}) {
   const answers = [];
   let now = 1_000_000;
   const role = makeRole(events);
+  let roleHooks;
+  const seenVenue = [];
+  const tokenFiles = [];
+  if (p.remote) {
+    const rolesDir = join(dir, "roles");
+    writeRole({ dir: rolesDir, role: normalizeRole("chappy", { brain: "codex-56-sol", voice: { engine: "aivis" } }) });
+    writeRole({ dir: rolesDir, role: normalizeRole("visitor", {
+      brain: "codex-astra", name: { canonical: "Visitor", display: "ビジター" }, verbosity: "chatty",
+      discordBotKeyFile: ".env.discord-visitor.local", voice: { engine: "elevenlabs" }
+    }) });
+    settings.setRoleChoice("chappy");
+    settings.setDiscordChatChannel({ guildId: GUILD, channelId: CHAT_TEXT });
+    roleHooks = createRoleHooks({ rolesDir, settings });
+    const activeRole = () => server.discordVenueRole() ?? roleHooks.current();
+    role.id = () => activeRole().id;
+    role.identity = () => roleIdentity(activeRole());
+    role.discordBotKeyFile = () => activeRole().discordBotKeyFile;
+    const observe = (step) => seenVenue.push([step, activeRole().id, activeRole().brain]);
+    role.hooks.renewRecords = () => void observe("records");
+    role.hooks.openSession = async () => { observe("session"); return { ok: true }; };
+    role.hooks.connectBody = () => ({ ok: !(p.remote.failBody && server.discordVenueRole()), reason: "fixture body failure" });
+    role.hooks.saveFinal = () => void observe("save");
+    role.voice.prepare = (kind) => { observe(kind); return { ok: true }; };
+  }
   const openSession = role.hooks.openSession;
   if (p.companion?.openSession) {
     role.hooks.openSession = async () => {
@@ -377,10 +404,12 @@ async function startServer(p = {}) {
     localTaskRunner: local?.run,
     commentGuard: () => ({ pass: true, kind: "ok" }),
     roles: [role],
+    resolveDiscordVenueRole: roleHooks?.resolveForVenue,
+    brainStatus: roleHooks ? () => ({ brain: (server?.discordVenueRole() ?? roleHooks.current()).brain }) : undefined,
     ...(p.discord === false ? {} : { experiences: { discord } }),
     elevenLabsApiKeyProvider: () => ({ ok: true, apiKey: "fake-elevenlabs-key" }),
     localSttModelCheck: () => ({ ok: true }),
-    selfFireInitialEnabled: !local,
+    selfFireInitialEnabled: !p.remote && !local,
     backchannelMinIntervalMs: 0,
     nowImpl: () => now,
     speakNowJudge: (/** @type {any} */ request) => {
@@ -401,6 +430,8 @@ async function startServer(p = {}) {
     url,
     settings,
     settingsPath,
+    seenVenue,
+    tokenFiles,
     fake,
     gateway,
     ears,
@@ -431,6 +462,139 @@ async function openDiscord(h) {
   assert.equal(r.status, 200, JSON.stringify(r.json.error));
   return r.json;
 }
+
+test("出先から指定した場では初回の接続・チャット・自発に場の設定を使い、次の通常開場では保存値を使う", async () => {
+  const h = await startServer({ companion: {}, remote: {} });
+  const saved = readFileSync(h.settingsPath, "utf8");
+  try {
+    const opened = await post(h.url, "/api/stream/start", { experience: "discord", discordVenue: {
+      guildId: GUILD, channelId: CHAT_VOICE, roleId: "visitor", model: "codex-62-sol"
+    } });
+    assert.equal(opened.status, 200, opened.json.error);
+    assert.equal(h.fake.record.joins[0].channelId, CHAT_VOICE);
+    assert.equal(opened.json.stream.vcName, "資料部屋");
+    assert.equal(opened.json.brain.brain, "codex-62-sol");
+    assert.equal(resolveWriterBrainDef(h.server.discordVenueRole().brain).id, "codex-62-sol");
+    assert.equal(opened.json.brain.identity.id, "visitor");
+    assert.equal(opened.json.tts.engine, "elevenlabs");
+    assert.equal(opened.json.stt.engine, "elevenlabs");
+    assert.equal(opened.json.selfFire.enabled, true);
+    assert.equal(opened.json.verbosity, "chatty");
+    assert.equal(h.tokenFiles[0], ".env.discord-visitor.local");
+    assert.equal(h.events.includes("eyes.start"), false);
+    assert.deepEqual(h.seenVenue, ["records", "elevenlabs", "session"].map((step) => [step, "visitor", "codex-62-sol"]));
+
+    const chat = await get(h.url, "/api/discord/chat");
+    assert.equal(chat.json.selectedId, CHAT_VOICE);
+    assert.equal(chat.json.selectionStatus, "available");
+    assert.equal(chat.json.intentStatus, "enabled");
+    assert.equal((await get(h.url, "/api/discord/vision-target")).json.visionTarget.title, null);
+    const hooks = h.orchestrator.record.hooks;
+    h.gateway.message({ content: "以前の読む先" });
+    h.gateway.message({ channelId: CHAT_VOICE, content: "今回の読む先" });
+    assert.deepEqual(hooks.getChatMaterials(hooks.getBuffer()).map(({ text }) => text), ["今回の読む先"]);
+    h.answers.push("respond");
+    await speakLine(h, "最初の発話");
+    await waitUntil(() => h.orchestrator.record.fires.length === 1);
+
+    await post(h.url, "/api/self-fire", { enabled: false });
+    await post(h.url, "/api/discord/chat", { channelId: null });
+    await post(h.url, "/api/discord/vision-target", { title: "今回の窓" });
+    assert.equal(h.events.includes("eyes.start"), true);
+    assert.equal((await post(h.url, "/api/stream/stop")).status, 200);
+    assert.deepEqual(h.seenVenue.at(-1), ["save", "visitor", "codex-62-sol"]);
+    assert.equal(readFileSync(h.settingsPath, "utf8"), saved);
+
+    const normal = await openDiscord(h);
+    assert.equal(h.fake.record.joins[1].channelId, CHANNEL);
+    assert.equal(normal.selfFire.enabled, false);
+    assert.equal(normal.verbosity, "normal");
+    assert.equal(normal.brain.brain, "codex-56-sol");
+    assert.equal(normal.tts.engine, "aivis");
+    assert.equal((await get(h.url, "/api/discord/chat")).json.selectedId, CHAT_TEXT);
+    assert.equal((await get(h.url, "/api/discord/vision-target")).json.visionTarget.title, "偽のゲームの窓");
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("出先の明示指定が会話・小タスク・最終保存に届く", async () => {
+  const spoken = [];
+  const models = [];
+  const h = await startServer({ companion: {}, remote: {}, localTasks: {
+    spoken,
+    async ask(content) {
+      models.push(["conversation", h.server.discordVenueRole().brain]);
+      if (models.length === 1) {
+        assert.match(String(content), /明示されたチャット/u);
+        return { replyText: "確認するね。<local_task 提示された数を確認して>" };
+      }
+      return { replyText: "確認したよ。" };
+    },
+    run({ resources, request }) {
+      const model = resolveWriterBrainDef(h.server.discordVenueRole().brain);
+      return runLocalTask({ resources, request, create: () => {
+        models.push(["task", model.id]);
+        return {
+          async ask() { return { replyText: "試験の結果。" }; },
+          async dispose() {}
+        };
+      } });
+    }
+  } });
+  try {
+    const opened = await post(h.url, "/api/stream/start", { experience: "discord", discordVenue: {
+      guildId: GUILD, channelId: CHAT_VOICE, chatChannelId: CHAT_TEXT, selfFire: false, visionTarget: "試験の窓", model: "codex-62-astra"
+    } });
+    assert.equal(opened.status, 200, opened.json.error);
+    assert.equal(opened.json.brain.identity.id, "chappy");
+    assert.equal(opened.json.selfFire.enabled, false);
+    assert.equal(h.server.discordVisionTitle(), "試験の窓");
+    assert.equal(h.events.includes("eyes.start"), true);
+    h.gateway.message({ content: "明示されたチャット" });
+    await speakLine(h, "読んで");
+    assert.equal(h.judgeRequests.length, 0);
+    assert.equal((await post(h.url, "/api/fire")).status, 202);
+    await waitUntil(() => spoken.includes("確認したよ。"));
+    assert.deepEqual(models, [
+      ["conversation", "codex-62-astra"], ["task", "codex-62-astra"], ["conversation", "codex-62-astra"]
+    ]);
+    assert.equal((await post(h.url, "/api/stream/stop")).status, 200);
+    assert.deepEqual(h.seenVenue.at(-1), ["save", "chappy", "codex-62-astra"]);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("出先の不一致と部分開場を畳み、次の通常開場に指定を漏らさない", async () => {
+  const h = await startServer({ companion: {}, remote: { failBody: true } });
+  const saved = readFileSync(h.settingsPath, "utf8");
+  const start = (patch) => post(h.url, "/api/stream/start", { experience: "discord", discordVenue: {
+    guildId: GUILD, channelId: CHAT_VOICE, roleId: "visitor", model: "codex-62-sol", ...patch
+  } });
+  try {
+    assert.equal((await start({ roleId: "missing" })).status, 400);
+    assert.equal((await start({ model: "toString" })).status, 400);
+    assert.equal(h.fake.record.logins.length, 0);
+    assert.equal((await start({ guildId: OTHER_GUILD })).status, 500);
+    assert.equal((await start({ channelId: TEXT_CHANNEL })).status, 500);
+    assert.equal(h.fake.record.joins.length, 0);
+    const partial = await start({ visionTarget: "今回の窓", chatChannelId: null, selfFire: false });
+    assert.equal(partial.status, 500);
+    assert.match(partial.json.error, /fixture body failure/u);
+    assert.equal(partial.json.state.stream.phase, "closed");
+    assert.equal(h.fake.record.joins.length, 1);
+    assert.equal(h.fake.connection().destroyCount, 1);
+    assert.equal(h.server.discordVenueRole(), null);
+    assert.equal(readFileSync(h.settingsPath, "utf8"), saved);
+    const normal = await openDiscord(h);
+    assert.equal(h.fake.record.joins[1].channelId, CHANNEL);
+    assert.equal(normal.brain.brain, "codex-56-sol");
+    assert.equal((await get(h.url, "/api/discord/chat")).json.selectedId, CHAT_TEXT);
+  } finally {
+    await h.cleanup();
+  }
+});
 
 test("Discord の Bot が読めるテキスト・VC 付属チャットを切替、投稿は会話資料だけに届く", async () => {
   const h = await startServer({ companion: {} });

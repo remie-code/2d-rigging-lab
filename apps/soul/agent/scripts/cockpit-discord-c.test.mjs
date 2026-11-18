@@ -202,7 +202,7 @@ test("場の言葉の結線（main）: ②は頼んだ時点の語の組・④�
   const main = source.slice(source.indexOf("async function main()"));
   const writer = main.slice(main.indexOf("const memoryRecorder = createMemoryRecorder"), main.indexOf("const memoryStatus = () =>"));
   assert.match(writer, /getWording: \(\) => server\?\.venueContext\(\)\?\.wording \?\? null,/);
-  assert.match(writer, /writeImpl: async \(entries, \/\*\* @type \{ReturnType<typeof memoryPlaces\.place>\} \*\/ place, wording, materials, onUnconfirmedExit\) => \{/);
+  assert.match(writer, /writeImpl: async \(entries, \/\*\* @type \{ReturnType<typeof memoryPlaces\.place>\} \*\/ place, wording, materials, onUnconfirmedExit, writerBrain\) => \{/);
   assert.match(writer, /dir: place\.dir,\n\s+wording,\n\s+materials,\n\s+onUnconfirmedExit,\n\s+onWarning: onBrainWarning/);
   assert.match(writer, /const prepareRecall = \(job\) => \{[\s\S]*?wording: job\.wording \?\? null,/);
   assert.match(main, /const sessionVenue = venueSoulWords\(server\?\.venueContext\(\) \?\? null\);/);

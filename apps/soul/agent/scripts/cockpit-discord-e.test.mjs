@@ -333,11 +333,11 @@ test("場の結線（main）: Discord の場では手元の再生器を起こさ
   assert.match(main, /const activePlayer = \(\) => venuePlayers\.current\(\) \?\? player;/);
   assert.match(
     main,
-    /const ensureVoiceResources = \(\) => \{\n(?:\s*\/\/[^\n]*\n)*\s+if \(venuePlayers\.current\(\) != null\) \{\n\s+voiceEngines\.ensure\(desiredTtsEngine\);\n\s+return;\n\s+\}/,
+    /const ensureVoiceResources = \(\) => \{\n(?:\s*\/\/[^\n]*\n)*\s+if \(venuePlayers\.current\(\) != null\) \{\n\s+voiceEngines\.ensure\(effectiveTtsEngine\(\)\);\n\s+return;\n\s+\}/,
     "Discord の場では手元の再生器（常駐 PowerShell）を作らない"
   );
   assert.match(main, /const acceptedPlayer = activePlayer\(\);/);
-  assert.match(main, /discordBotKeyFileRefused: \(\) => roleDiscordBotKeyFileRefused\(roleHooks\.current\(\)\),/);
+  assert.match(main, /discordBotKeyFileRefused: \(\) => roleDiscordBotKeyFileRefused\(effectiveRole\(\)\),/);
   assert.match(main, /openVoiceOutlet: \(info\) => venuePlayers\.open\(info\),/);
   // playerProxy も今の場の再生器へ。
   const proxy = main.slice(main.indexOf("const playerProxy = {"), main.indexOf("const productionSpeakDeps"));

@@ -133,11 +133,11 @@ test("createVenueRoleBundle: 鍵のファイル名の口（呼んだ時点の今
 test("場の結線（main）: Discord の体験の口を作って experiences で渡す・鍵は今のロールの指すファイル名", () => {
   const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const main = source.slice(source.indexOf("async function main()"));
-  assert.match(main, /discordBotKeyFile: \(\) => roleDiscordBotKeyFile\(roleHooks\.current\(\)\),/);
+  assert.match(main, /discordBotKeyFile: \(\) => roleDiscordBotKeyFile\(effectiveRole\(\)\),/);
   assert.match(
     main,
     // Discord モード Domain G（E の追認 (1)）: 一覧の読み込みも鍵のファイル名の形が合わなければ断る口（currentKeyFileRefused）を足した。
-    /const discordExperience = createDiscordVenueExperience\(\{\n\s+settings,\n\s+currentKeyFile: \(\) => roleDiscordBotKeyFile\(roleHooks\.current\(\)\),\n\s+currentKeyFileRefused: \(\) => roleDiscordBotKeyFileRefused\(roleHooks\.current\(\)\),\n\s+write: \(line\) => process\.stdout\.write\(line\),\n\s+options: \{ getTaskResources: \(\) => server\?\.getActiveVenueTaskResources\(\) \?\? null \}\n\s+\}\);/
+    /const discordExperience = createDiscordVenueExperience\(\{\n\s+settings,\n\s+currentKeyFile: \(\) => roleDiscordBotKeyFile\(effectiveRole\(\)\),\n\s+currentKeyFileRefused: \(\) => roleDiscordBotKeyFileRefused\(effectiveRole\(\)\),\n\s+write: \(line\) => process\.stdout\.write\(line\),\n\s+options: \{ getTaskResources: \(\) => server\?\.getActiveVenueTaskResources\(\) \?\? null, acquireGuildLease: acquireDiscordGuildLease \}\n\s+\}\);/
   );
   const call = main.slice(main.indexOf("server = createCockpitServer({"), main.indexOf("const url = await server.listen();"));
   assert.match(call, /experiences: \{ discord: discordExperience \},/);

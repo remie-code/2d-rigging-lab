@@ -4,6 +4,7 @@
 
 | Path | Status | Content |
 |---|---|---|
+| [discord-remote-venue-wave-plan.md](discord-remote-venue-wave-plan.md) | 両Wave合格・実Discordで音声会話と閉場を確認 (2026-11-18) | Codexから場を都度起動し退出・閉場。Windows別呼び出しと隔離記憶保存を確認。[操作手順](../waves/discord-remote-venue/wave2-operation.md) |
 | [chappy-gpt-62-models-wave-plan.md](chappy-gpt-62-models-wave-plan.md) | 実機・全回帰合格 (2026-11-18) | SDK 0.169.1で6.2 Astra/Solの選択・再起動後の会話・Windows小タスクを確認 |
 | [windows-codex-launch-wave-plan.md](windows-codex-launch-wave-plan.md) | Windows実機・全回帰合格 (2026-11-18) | Cockpitの既定起動で子の登録済みCore指定だけを除外。担当ごとの書き込み制限を実機確認 |
 | [wry-nuances-registration-plan.md](wry-nuances-registration-plan.md) | 登録・独立レビュー・現用配置／実会話未確認 (2026-11-16) | 苦笑の新5案をgame/viewers向け外部JSONで追加。既存やれやれを保持、再ビルド不要。[完了記録](../waves/wry-nuances-registration/completion.md) |

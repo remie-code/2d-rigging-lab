@@ -121,6 +121,8 @@ import {
   quotaLowWarning,
   WARNING_EVENT_TTL_MS
 } from "./warnings.mjs";
+import { checkDiscordVisionTarget, normalizeDiscordPrep } from "../discord/discord-experience.mjs";
+import { BRAIN_IDS } from "../mind/brains.mjs";
 import { DEFAULT_MODEL_IDENTITY, isRoleId, normalizeModelIdentity } from "../mind/model-identity.mjs";
 import { normalizeCompactThresholdTokens } from "../mind/context-compactor.mjs";
 
@@ -261,7 +263,7 @@ export function normalizeVenueExperience(kind, mouth) {
     },
     /** @param {any} plan @param {any} venue */
     openEntrance: (plan, venue) => mouth.openEntrance(plan, venue),
-    /** @param {{ hadEars: boolean; shutdown: boolean }} info @param {any} [control] */
+    /** @param {{ hadEars: boolean; shutdown: boolean; retainGuildLease?: boolean }} info @param {any} [control] */
     closeEntrance: (info, control) => mouth.closeEntrance(info, control),
     // Discord モード Domain D: 接続の状態（snapshot の stream.connection・知らない値は null）。
     connectionStatus: () => {
@@ -292,7 +294,8 @@ export function normalizeVenueExperience(kind, mouth) {
             join: (/** @type {unknown} */ channelId) => mouth.vc.join(channelId),
             leave: () => mouth.vc.leave(),
             move: (/** @type {unknown} */ channelId) => mouth.vc.move(channelId),
-            list: typeof mouth.vc.list === "function" ? () => mouth.vc.list() : null
+            list: typeof mouth.vc.list === "function" ? () => mouth.vc.list() : null,
+            current: typeof mouth.vc.current === "function" ? () => mouth.vc.current() : null
           })
         : null,
     // Discord モード Domain D: 場を開く・閉じる途中の想定外の例外の文面。口が文面を持てば生のエラー文を渡さない。
@@ -614,6 +617,8 @@ const MAX_PORT_REROLLS = 50;
  * コクピット・サーバを作る（listen() で開き・close() で全畳み）。
  *
  * @param {object} [options]
+ * @param {import("node:http").Server} [options.reservedServer]
+ * @param {{id: string, finish: (outcome: object) => Promise<void>}} [options.remoteVenue]
  * @param {number} [options.port=DEFAULT_COCKPIT_PORT]  0 で自動割当（テスト用）。
  * @param {string} [options.host=DEFAULT_COCKPIT_HOST]  loopback リテラルのみ許容。
  * @param {string} [options.indexHtml]      配信する HTML 文字列（最優先）。
@@ -814,7 +819,7 @@ const MAX_PORT_REROLLS = 50;
  *   connectBody?: () => ({ ok: boolean; reason?: string } | void | Promise<{ ok: boolean; reason?: string } | void>);
  *   closeSession?: () => (void | Promise<void>);
  *   closeBody?: () => (void | Promise<void>);
- *   saveFinal?: (transcript: Array<any>, materials?: import("./venue-task-resources.mjs").VenueWriterMaterials, onUnconfirmedExit?: () => void) => (void | Promise<void>);
+ *   saveFinal?: (transcript: ReadonlyArray<any>, materials?: import("./venue-task-resources.mjs").VenueWriterMaterials, onUnconfirmedExit?: () => void, strict?: boolean, previous?: {recording?: string|null; organising?: string|null}) => (void | {recording?: string|null; organising?: string|null} | Promise<void | {recording?: string|null; organising?: string|null}>);
  * }} [options.streamHooks]
  *   場（配信を始める / 終える）の cockpit.mjs 側の口（配信の組み直し Domain D・stream-restructure.md §3）。
  *   **cockpit-server は記録・頭のセッション・器・記憶の中身を知らない**（実体は cockpit.mjs の createStreamVenueHooks）。
@@ -843,6 +848,8 @@ const MAX_PORT_REROLLS = 50;
  *   1）に一覧ごと固め、閉じるまで同じ一覧を使う。最初の的では長さ 1（cockpit.mjs の createVenueRoleBundle が今のロールを包む）。
  *   関数なら呼んだ時点の一覧。渡さなければ上の個別の口から束を 1 つ作る。orchestrator・判定の部品・声の方式の値は今はサーバに
  *   1 つ（ロールの切り替えをまたいで生きる今のふるまいのまま・2 つ目のロールのときに束へ）。
+ * @param {(roleId: string | undefined, model: string | undefined) => import("../roles/role-store.mjs").Role | null} [options.resolveDiscordVenueRole]
+ * @param {() => void} [options.releaseDiscordVenueVoice]
  * @param {{ discord?: object }} [options.experiences]
  *   場の体験の口（Discord モード Domain B・discord-mode.md §4.2 案 A・§4.3）。配信（"stream"）の口はサーバの中にある（マイクの耳
  *   と YouTube を包む）。Discord の口は Domain D で `src/discord/` の部品が作り、cockpit.mjs が `experiences.discord` として渡す。
@@ -1039,6 +1046,16 @@ const MAX_PORT_REROLLS = 50;
 export function createCockpitServer(options = {}) {
   const host = assertLoopbackHost(options.host ?? DEFAULT_COCKPIT_HOST);
   const defaultPort = options.port ?? DEFAULT_COCKPIT_PORT;
+  const remoteVenue = options.remoteVenue;
+  let remoteStartClaimed = false;
+  let remoteStartRunning = false;
+  let remoteFinishing = false;
+  let remoteCloseRunning = false;
+  let remoteVcRunning = false;
+  /** @type {null | {steps: Array<[string, () => Promise<void>]>; recording: string | null; organising: string | null; blocked: boolean}} */
+  let remoteClose = null;
+  /** @type {string | null} */
+  let remoteCloseError = null;
   const inputFormat = options.inputFormat ?? (process.platform === "win32" ? "dshow" : "");
   const transcriptHistory = options.transcriptHistory ?? DEFAULT_TRANSCRIPT_HISTORY;
   const settings = options.settingsStore ?? createInMemorySettingsStore();
@@ -1298,7 +1315,8 @@ export function createCockpitServer(options = {}) {
       if (typeof hook !== "function") continue;
       try {
         await hook(...args);
-      } catch {
+      } catch (error) {
+        if (remoteVenue && !thrown) thrown = { error };
         // 畳む口の失敗は握る（従来の runStreamHook と同じ）。
       }
     }
@@ -1422,6 +1440,22 @@ export function createCockpitServer(options = {}) {
   let venueExperience = null;
   /** 場の間だけ固めたロールの一覧（始める 1 で固め、閉じたら null）。 @type {ReadonlyArray<any> | null} */
   let venueRoles = null;
+  /** @type {{ selfFire: boolean; visionTarget: string | null; voicePrepared: boolean; role: import("../roles/role-store.mjs").Role | null } | null} */
+  let discordVenueOptions = null;
+  const effectiveSelfFire = () => discordVenueOptions?.selfFire ?? fireScheduler?.isEnabled() ?? false;
+  const effectiveVerbosity = () => discordVenueOptions?.role?.verbosity ?? fireScheduler?.getVerbosity() ?? "normal";
+  /** @param {boolean} enabled */
+  function setSelfFireEnabled(enabled) {
+    if (discordVenueOptions) discordVenueOptions.selfFire = enabled === true;
+    else fireScheduler?.setEnabled(enabled === true);
+    return effectiveSelfFire();
+  }
+  const discordVisionTitle = () => discordVenueOptions
+    ? discordVenueOptions.visionTarget
+    : discordExperience?.visionTarget?.get() ?? null;
+  const venueEyesWanted = () => discordVenueOptions
+    ? discordVenueOptions.visionTarget !== null
+    : typeof venueExperience?.eyesWanted !== "function" || venueExperience.eyesWanted() === true;
   /** 直近の「配信を始める」が始められなかった理由（次の始めるで消す）。 @type {string | null} */
   let streamError = null;
   /** @type {number | null} */
@@ -1630,7 +1664,7 @@ export function createCockpitServer(options = {}) {
       stt: { engine: activeSttEngine(), status: health.stt, reason: health.sttReason },
       // 声の方式（前回 Start の選択・起動直後は記憶の値）と、今の engine の状態（キーは載せない）。
       // 設定の選択肢の復元と、ログのタブの健康 1 行の `tts:` に使う。
-      tts: { engine: ttsEngine, status: voice.status, reason: voice.reason },
+      tts: { engine: discordVenueOptions?.role?.voice.engine ?? ttsEngine, status: voice.status, reason: voice.reason },
       appended: bufStats.appended,
       discarded: bufStats.discarded,
       uptimeMs: earsState === "listening" && startedAtMs != null ? Math.max(0, nowImpl() - startedAtMs) : 0,
@@ -1640,12 +1674,12 @@ export function createCockpitServer(options = {}) {
       // S5「目が開く」: 視覚発火の対象ウインドウの現況（未注入なら null）。
       visionTarget: typeof visionTargetStatusImpl === "function" ? (visionTargetStatusImpl() ?? null) : null,
       // S6「会話が続く」: 自発発火の現況（scheduler 未生成 = orchestrator 未注入なら null）。
-      selfFire: fireScheduler ? { enabled: fireScheduler.isEnabled() } : null,
+      selfFire: fireScheduler ? { enabled: effectiveSelfFire() } : null,
       // 「朗読と合いの手」: barge-in トグルの現況（gate 未生成 = orchestrator.interrupt 未対応なら null・
       // selfFire と同型）。
       bargeIn: bargeInGate ? { enabled: bargeInGate.isEnabled() } : null,
       // 口数モードの現況（scheduler 未生成 = orchestrator 未注入なら null・selfFire と同型）。
-      verbosity: fireScheduler ? fireScheduler.getVerbosity() : null,
+      verbosity: fireScheduler ? effectiveVerbosity() : null,
       // 話し始めの方式（"classic" | "speak-now"・scheduler 未生成なら null・verbosity と同型）。Discord モード Domain F: Discord の場
       // （開きかけ・開いている・閉じかけ）の間は "speak-now"（ロールの方式を読まない・固定。ロールの保存値は替えない）。
       speakStart: fireScheduler ? effectiveSpeakStartMode() : null,
@@ -2692,7 +2726,7 @@ export function createCockpitServer(options = {}) {
    * （今まで通り起こす）。止める口は冪等なので、閉じる段では今まで通り呼ぶ。
    */
   function startVenueEyes() {
-    if (venueExperience && typeof venueExperience.eyesWanted === "function" && venueExperience.eyesWanted() !== true) return;
+    if (!venueEyesWanted()) return;
     callEarsHook(onEarsStarted);
     callEarsHook(onEyesStart);
   }
@@ -2728,7 +2762,10 @@ export function createCockpitServer(options = {}) {
     // 正本は場のもの。配信では耳を畳むのと同じ時に手放す（畳んだ後は正本が読めない＝従来どおり）。
     releaseVenueTranscript();
     const hadEars = await foldVenueEars();
-    await experience.closeEntrance({ hadEars, shutdown: false }, venueControlContext());
+    await experience.closeEntrance({
+      hadEars, shutdown: false,
+      ...(remoteVenue && streamPhase === "closing" ? { retainGuildLease: true } : {})
+    }, venueControlContext());
   }
 
   // ── 場（配信を始める / 終える・配信の組み直し Domain D・stream-restructure.md §3）──────────────
@@ -3021,6 +3058,17 @@ export function createCockpitServer(options = {}) {
     memoryOrganising = false;
     venueExperience = null;
     venueRoles = null;
+    if (discordVenueOptions?.voicePrepared) {
+      try {
+        options.releaseDiscordVenueVoice?.();
+      } catch {
+        // best-effort
+      }
+      voice.engine = null;
+      voice.status = "unknown";
+      voice.reason = null;
+    }
+    discordVenueOptions = null;
     // Discord モード Domain D: 場の間だけの文字起こしの方式も手放す（配信の選択に戻る）。
     venueSttEngine = null;
     venueEarsPaused = false;
@@ -3045,7 +3093,7 @@ export function createCockpitServer(options = {}) {
    * 閉じた状態に戻し、理由を返す（snapshot の stream.error にも残す・メイン画面から押したときにも見える）。
    * Discord モード Domain B: request.experience で体験を選ぶ（省けば配信）。Discord の口が無ければ 503 で断る（場は開かない・
    * stream.error には残さない）。知らない体験は 400。
-   * @param {{ device?: string | null; sttEngine?: any; ttsEngine?: any; experience?: any }} [request]
+   * @param {{ device?: string | null; sttEngine?: any; ttsEngine?: any; experience?: any; discordVenue?: any }} [request]
    * @returns {Promise<{ ok: true; state: object } | { ok: false; status: number; error: string; state: object }>}
    */
   async function openStream(request = {}) {
@@ -3054,6 +3102,39 @@ export function createCockpitServer(options = {}) {
     const chosen = chooseVenueExperience(request.experience);
     if (!chosen.ok) return { ok: false, status: chosen.status, error: chosen.error, state: snapshot() };
     const experience = chosen.experience;
+    if (request.discordVenue !== undefined) {
+      const invalid = (/** @type {string} */ error) => ({ ok: /** @type {const} */ (false), status: 400, error, state: snapshot() });
+      const input = request.discordVenue;
+      if (experience !== discordExperience || !input || typeof input !== "object" || Array.isArray(input)) {
+        return invalid("invalid Discord venue options");
+      }
+      const target = normalizeDiscordPrep(input);
+      if (!target.guildId || !target.channelId) return invalid("指定のサーバーと VC が必要です");
+      const chatChannelId = input.chatChannelId === undefined ? target.channelId : input.chatChannelId;
+      if (chatChannelId !== null && !normalizeDiscordPrep({ channelId: chatChannelId }).channelId) {
+        return invalid("読むチャットの指定が正しくない");
+      }
+      const vision = checkDiscordVisionTarget(input.visionTarget);
+      if (!vision.ok) return invalid(vision.reason);
+      if (input.selfFire !== undefined && typeof input.selfFire !== "boolean") return invalid("invalid self-fire setting");
+      if (input.noBody !== undefined && typeof input.noBody !== "boolean") return invalid("invalid body setting");
+      if (input.roleId !== undefined && !isRoleId(input.roleId)) return invalid("invalid role id");
+      if (input.model !== undefined && !BRAIN_IDS.includes(input.model)) return invalid("invalid model");
+      const role = options.resolveDiscordVenueRole?.(input.roleId, input.model) ?? null;
+      if (!role && (options.resolveDiscordVenueRole || input.roleId !== undefined || input.model !== undefined)) {
+        return invalid("指定のロールを読めません");
+      }
+      if (remoteVenue && (!role || role.id !== input.expectedRole?.id || role.brain !== input.expectedRole?.model ||
+          typeof input.expectedBotId !== "string" || !input.expectedBotId)) {
+        return invalid("候補照合からロールやモデルが変わりました。開場前にもう一度照合してください");
+      }
+      request = { ...request, discordVenue: {
+        guildId: target.guildId, channelId: target.channelId, chatChannelId,
+        ...(remoteVenue ? { expectedBotId: input.expectedBotId } : {})
+      } };
+      const venueRole = role && input.noBody ? Object.freeze({ ...role, body: false }) : role;
+      discordVenueOptions = { selfFire: input.selfFire ?? true, visionTarget: vision.title, voicePrepared: false, role: venueRole };
+    }
     // 1. ロールの一覧を固める（ここから閉じるまで POST /api/role は断る・一覧も替えない）。
     streamPhase = "opening";
     venueExperience = experience;
@@ -3108,7 +3189,8 @@ export function createCockpitServer(options = {}) {
       if (!prepared.ok) return fail(prepared.reason, {});
       // 6 の前半. 声の engine の用意（場の共通の段・ロールごと）。今も入口を開く前（配信: 耳を起こす前・文字起こしのキー
       //    切れの後）。用意できなければ入口を開かずに場を開かない（文字起こしのキー切れと同じ流儀・自動で AivisSpeech に戻さない）。
-      const voiceKind = prepared.voiceKind === "aivis" || prepared.voiceKind === "elevenlabs" ? prepared.voiceKind : ttsEngine;
+      const voiceKind = prepared.voiceKind === "aivis" || prepared.voiceKind === "elevenlabs" ? prepared.voiceKind : (discordVenueOptions?.role?.voice.engine ?? ttsEngine);
+      if (discordVenueOptions) discordVenueOptions.voicePrepared = true;
       const voiced = await prepareVenueVoices(voiceKind);
       if (!voiced.ok) {
         experience.abortEntrance(prepared, venueControlContext());
@@ -3264,13 +3346,17 @@ export function createCockpitServer(options = {}) {
    * @param {import("node:http").ServerResponse} res
    * @param {URL} url
    */
-  async function handleStreamStart(req, res, url) {
+  async function handleStreamStart(req, res, url, remote = false) {
     if (streamPhase !== "closed") {
       // 場が開いている間はマイク・文字起こしを替えない（始め直すには終えてから）。
       sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
       return;
     }
     const body = await readJsonBody(req);
+    if (remote && (body.experience !== "discord" || body.discordVenue === undefined || body.sttEngine !== undefined || body.ttsEngine !== undefined)) {
+      sendJson(res, 400, { error: "Discord の場に必要な指定がありません" });
+      return;
+    }
     // 文字起こしの方式（任意・省略時は現在の選択）。未知値は 400（誤 POST を早期に弾く）。
     if (body.sttEngine !== undefined && body.sttEngine !== null && !STT_ENGINES.includes(body.sttEngine)) {
       sendJson(res, 400, { error: "invalid stt engine", state: snapshot() });
@@ -3297,7 +3383,8 @@ export function createCockpitServer(options = {}) {
       device: deviceRaw ?? null,
       sttEngine: body.sttEngine ?? undefined,
       ttsEngine: body.ttsEngine ?? undefined,
-      experience: body.experience ?? undefined
+      experience: body.experience ?? undefined,
+      discordVenue: body.discordVenue
     });
     sendJson(res, result.ok ? 200 : result.status, result.ok ? result.state : { error: result.error, state: result.state });
   }
@@ -3358,18 +3445,28 @@ export function createCockpitServer(options = {}) {
       /** @type {unknown} */
       let title = null;
       try {
-        title = store.get();
+        title = discordVisionTitle();
       } catch {
         title = null;
       }
       sendJson(res, 200, { visionTarget: { title: typeof title === "string" ? title : null } });
       return;
     }
+    const scope = discordVenueOptions;
     const body = await readJsonBody(req);
+    if (scope !== discordVenueOptions) {
+      sendJson(res, 409, { error: "操作中に場が切り替わりました" });
+      return;
+    }
     /** @type {any} */
     let result;
     try {
-      result = store.set(body.title);
+      if (discordVenueOptions) {
+        result = checkDiscordVisionTarget(body.title);
+        if (result.ok) discordVenueOptions.visionTarget = result.title;
+      } else {
+        result = store.set(body.title);
+      }
     } catch {
       result = { ok: false, reason: "見る窓を保存できない" };
     }
@@ -3389,7 +3486,7 @@ export function createCockpitServer(options = {}) {
   function syncDiscordVenueEyes() {
     if (!discordVenueActive() || streamPhase !== "open") return;
     try {
-      if (venueExperience && venueExperience.eyesWanted() === true) startVenueEyes();
+      if (venueEyesWanted()) startVenueEyes();
       else stopVenueEyes();
     } catch {
       // best-effort（目の失敗で見る窓の保存を止めない）。
@@ -3577,9 +3674,167 @@ export function createCockpitServer(options = {}) {
     }
   }
 
+  function remoteVenueStatus() {
+    const role = discordVenueOptions?.role;
+    let chat = null;
+    if (streamPhase === "open") {
+      try {
+        chat = discordExperience?.chat?.list();
+      } catch {
+        // A chat observation failure must not prevent the venue from closing.
+      }
+    }
+    const selected = chat?.channels?.find((/** @type {any} */ channel) => channel.id === chat.selectedId);
+    return {
+      venueId: remoteVenue?.id,
+      stream: snapshot().stream,
+      voice: streamPhase === "open" && !remoteVcRunning ? discordExperience?.vc?.current?.() ?? null : null,
+      starting: remoteStartRunning,
+      role: role ? { id: role.id, name: role.name.display, model: role.brain } : null,
+      chat: chat ? {
+        selectedId: chat.selectedId, selectedName: selected?.name ?? null,
+        selection: chat.selectionStatus, intent: chat.intentStatus,
+        listening: Boolean(chat.selectedId && chat.selectionStatus === "available" && chat.intentStatus === "enabled")
+      } : null,
+      closing: remoteFinishing || remoteCloseRunning ? "in-progress" : remoteCloseError ? "failed" : null,
+      closeError: remoteCloseError,
+      retryable: remoteCloseError ? !remoteClose?.blocked : null
+    };
+  }
+
+  /** Normal folding and save hooks, with each successful step retained for a retry. */
+  async function finishRemoteVenue() {
+    if (!remoteVenue || remoteCloseRunning || remoteFinishing) return;
+    remoteCloseRunning = true;
+    remoteCloseError = null;
+    try {
+      if (streamPhase === "open") {
+        const transcript = venueTranscript?.all() ?? [];
+        const desk = recallDesk;
+        streamPhase = "closing";
+        venueTaskResources?.stopAccepting();
+        parkRecallDesk(true);
+        const state = /** @type {NonNullable<typeof remoteClose>} */ ({
+          steps: [], recording: null, organising: null, blocked: false
+        });
+        remoteClose = state;
+        state.steps.push(
+          ["退出", () => foldStream({ chat: true, ears: true, session: true })],
+          ["進行中の小タスク", () => drainVenueTasks(desk)],
+          ["記憶の保存・整理", async () => {
+            const resources = venueTaskResources;
+            for (const role of venueRoleList()) {
+              const result = await role.hooks?.saveFinal?.(
+                transcript, resources?.writerMaterials(), resources?.retainOnUnconfirmedExit, true,
+                { recording: state.recording, organising: state.organising }
+              );
+              state.recording = result?.recording ?? null;
+              state.organising = result?.organising ?? null;
+              if (state.recording === "needs-review" || state.organising === "needs-review") state.blocked = true;
+              if (!["saved", "not-needed"].includes(state.recording ?? "") ||
+                  !["organised", "not-due"].includes(state.organising ?? "")) {
+                throw new Error(`記憶: ${state.recording ?? "未確認"} / 整理: ${state.organising ?? "未確認"}`);
+              }
+            }
+          }],
+          ["資料の解放", async () => {
+            try {
+              await releaseVenueTasks();
+            } catch (error) {
+              state.blocked = true;
+              throw error;
+            }
+          }]
+        );
+        broadcastState();
+      }
+      if (!remoteClose && remoteStartClaimed && streamError) {
+        await discordExperience?.closeEntrance({ hadEars: false, shutdown: true, retainGuildLease: true }, venueControlContext());
+      }
+      if (remoteClose) {
+        while (remoteClose.steps.length > 0) {
+          const [label, step] = remoteClose.steps[0];
+          try {
+            await step();
+          } catch (error) {
+            throw new Error(`${label}で停止: ${errMessage(error)}`);
+          }
+          remoteClose.steps.shift();
+        }
+        markVenueClosed();
+      }
+      remoteFinishing = true;
+    } catch (error) {
+      remoteCloseError = errMessage(error);
+    } finally {
+      remoteCloseRunning = false;
+    }
+    if (remoteFinishing) {
+      await remoteVenue.finish({
+        recording: remoteClose?.recording ?? "not-needed",
+        organising: remoteClose?.organising ?? "not-needed"
+      });
+    }
+  }
+
+  /** @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {URL} url */
+  async function handleRemoteVenue(req, res, url) {
+    const pathname = url.pathname;
+    if (req.headers.host !== `127.0.0.1:${boundPort}` || req.headers.origin != null || req.headers["sec-fetch-site"] != null) {
+      return sendJson(res, 403, { error: "ローカル操作コマンドから実行してください" });
+    }
+    if (req.method === "GET" && pathname === "/api/remote-venue") {
+      return sendJson(res, 200, remoteVenueStatus());
+    }
+    if (req.method !== "POST" || req.headers["x-soul-venue-id"] !== remoteVenue?.id) {
+      return sendJson(res, 409, { error: "この場の所有IDが一致しません" });
+    }
+    if (pathname === "/api/stream/start") {
+      if (remoteStartClaimed || remoteFinishing) return sendJson(res, 409, { error: "このプロセスには開場操作が発行済みです" });
+      remoteStartClaimed = true;
+      remoteStartRunning = true;
+      try {
+        await handleStreamStart(req, res, url, true);
+      } finally {
+        remoteStartRunning = false;
+      }
+      return;
+    }
+    if (pathname === "/api/remote-venue/leave") {
+      if (remoteVcRunning || streamPhase !== "open") return sendJson(res, 409, { error: "場または VC を操作中です" });
+      if (venueConnectionStatus() === "outside") return sendJson(res, 200, remoteVenueStatus());
+      remoteVcRunning = true;
+      try {
+        const result = await discordExperience?.vc?.leave();
+        if (!result?.ok || venueConnectionStatus() !== "outside") {
+          return sendJson(res, 502, { error: result?.reason ?? "VC 退出を確認できません", state: remoteVenueStatus() });
+        }
+        return sendJson(res, 200, remoteVenueStatus());
+      } finally {
+        remoteVcRunning = false;
+      }
+    }
+    if (pathname === "/api/remote-venue/close") {
+      if (remoteClose?.blocked) return sendJson(res, 409, remoteVenueStatus());
+      if (remoteStartRunning || streamPhase === "opening" || remoteVcRunning) return sendJson(res, 409, { error: "場または VC を操作中です" });
+      if (!remoteCloseRunning && !remoteFinishing) {
+        res.once("finish", () => {
+          void finishRemoteVenue().catch(() => {
+            remoteFinishing = false;
+            remoteCloseError = "Cockpit の終了処理に失敗しました";
+            if (remoteClose) remoteClose.blocked = true;
+          });
+        });
+      }
+      return sendJson(res, 202, { venueId: remoteVenue?.id, closing: "in-progress" });
+    }
+    return sendJson(res, 404, { error: "unknown remote venue operation" });
+  }
+
   // ── HTTP ルーティング ─────────────────────────────────────────────
 
-  const server = createServer((req, res) => {
+  const server = options.reservedServer ?? createServer();
+  server.on("request", (req, res) => {
     handleRequest(req, res).catch((error) => {
       sendJson(res, 500, { error: `internal error: ${errMessage(error)}` });
     });
@@ -3597,6 +3852,15 @@ export function createCockpitServer(options = {}) {
     const method = req.method ?? "GET";
     const url = new URL(req.url ?? "/", `http://${host}`);
     const pathname = url.pathname;
+
+    if (remoteVenue && (pathname.startsWith("/api/remote-venue") || method !== "GET" && pathname === "/api/stream/start")) {
+      await handleRemoteVenue(req, res, url);
+      return;
+    }
+    if (remoteVenue && method !== "GET") {
+      sendJson(res, 409, { error: "この場はローカル操作コマンドで操作してください" });
+      return;
+    }
 
     const conversationRoute = pathname.match(/^\/api\/conversation-instructions\/([^/]+)$/);
     if (conversationRoute && (method === "GET" || method === "PUT" || method === "DELETE")) {
@@ -3819,13 +4083,18 @@ export function createCockpitServer(options = {}) {
         sendJson(res, 503, { error: "self-fire control not available" });
         return;
       }
+      const scope = discordVenueOptions;
       const body = await readJsonBody(req);
+      if (scope !== discordVenueOptions) {
+        sendJson(res, 409, { error: "操作中に場が切り替わりました" });
+        return;
+      }
       const enabled = body.enabled === true;
-      const selfFireBefore = fireScheduler.isEnabled();
-      fireScheduler.setEnabled(enabled);
+      const selfFireBefore = effectiveSelfFire();
+      setSelfFireEnabled(enabled);
       // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
-      reportControl({ control: "self-fire", from: selfFireBefore, to: fireScheduler.isEnabled() });
-      if (typeof onSetSelfFireEnabled === "function") {
+      reportControl({ control: "self-fire", from: selfFireBefore, to: effectiveSelfFire() });
+      if (!discordVenueOptions && typeof onSetSelfFireEnabled === "function") {
         try {
           await onSetSelfFireEnabled(fireScheduler.isEnabled());
         } catch {
@@ -4625,9 +4894,9 @@ export function createCockpitServer(options = {}) {
         // Discord モード Domain F: 方式は今効いている方式（Discord の場では speak-now に固定）。自発の ON/OFF は Discord では「判定で
         // 話し始めるかどうか」のつまみ（畳んだ発火の予定が値の置き場）。
         isActive: () =>
-          effectiveSpeakStartMode() === "speak-now" && fireScheduler != null && fireScheduler.isEnabled() && !killed,
+          effectiveSpeakStartMode() === "speak-now" && fireScheduler != null && effectiveSelfFire() && !killed,
         getName: () => currentSoulName(),
-        getVerbosity: () => (fireScheduler ? fireScheduler.getVerbosity() : "normal"),
+        getVerbosity: effectiveVerbosity,
         nowImpl,
         backchannelMinIntervalMs,
         onFire: ({ choice, probability, trigger, triggerSeq, latencyMs }) => {
@@ -4779,7 +5048,7 @@ export function createCockpitServer(options = {}) {
         getEntries: () => (venueTranscript ? venueTranscript.all() : []),
         isBusy: () => fireInFlight > 0 || /** @type {any} */ (fireOrchestrator).getState() !== "idle",
         isKilled: () => killed,
-        isSelfFireOn: () => fireScheduler != null && fireScheduler.isEnabled(),
+        isSelfFireOn: effectiveSelfFire,
         getName: () => currentSoulName(),
         nowImpl,
         // 避けない・見つからなかった・④の失敗（見つからなかったと同じ扱い）: 括った指示で①を発火させる（結果は selfFire kind:"recall" でフィードへ）。
@@ -5286,6 +5555,14 @@ export function createCockpitServer(options = {}) {
 
   return {
     listen(port = defaultPort) {
+      if (options.reservedServer) {
+        const address = server.address();
+        if (!address || typeof address !== "object" || address.address !== host || address.port !== port) {
+          return Promise.reject(new Error("reserved Cockpit address does not match"));
+        }
+        boundPort = address.port;
+        return Promise.resolve(`http://${host}:${boundPort}`);
+      }
       return new Promise((resolve, reject) => {
         const onError = (/** @type {Error} */ err) => reject(err);
         server.once("error", onError);
@@ -5322,11 +5599,13 @@ export function createCockpitServer(options = {}) {
      * 既定。cockpit.mjs が②の保存を頼んだ時点（語の組）・①のセッションを作る時点と会話指示の編集画面（教えと語の組）で読む。
      */
     venueContext: () => venueContext(),
+    discordVenueRole: () => discordVenueOptions?.role ?? null,
+    discordVisionTitle,
     venueGeneration: () => venueExperience ? streamGeneration : null,
     getActiveVenueTaskResources,
     getVenueTaskResourcePath: () => venueTaskResources?.retainedPath() ?? null,
     /** 配信を始める（POST /api/stream/start と同じ関数・テストと内部用）。 */
-    startStream: (/** @type {{ device?: string | null; sttEngine?: any; ttsEngine?: any; experience?: any }} */ request = {}) => openStream(request),
+    startStream: (/** @type {{ device?: string | null; sttEngine?: any; ttsEngine?: any; experience?: any; discordVenue?: any }} */ request = {}) => openStream(request),
     /**
      * Ctrl+C の「配信を終える」（cockpit.mjs の shutdown）。開きかけ・閉じかけなら終わるのを待ち、開いていれば終える
      * （POST /api/stream/stop と同じ closeStream を通る）。閉じていれば何もしない（記憶の保存を頼まない）。
@@ -5465,12 +5744,9 @@ export function createCockpitServer(options = {}) {
      * （orchestrator 未注入）なら no-op。返り値は反映後の enabled（scheduler 無しは false）。
      * @param {boolean} enabled
      */
-    setSelfFireEnabled(enabled) {
-      if (fireScheduler) fireScheduler.setEnabled(enabled === true);
-      return fireScheduler ? fireScheduler.isEnabled() : false;
-    },
+    setSelfFireEnabled,
     /** 自発発火の現況（enabled）。scheduler 未生成なら null。 */
-    selfFireStatus: () => (fireScheduler ? { enabled: fireScheduler.isEnabled() } : null),
+    selfFireStatus: () => (fireScheduler ? { enabled: effectiveSelfFire() } : null),
     /** barge-in トグルの現況（enabled）。gate 未生成なら null（selfFireStatus と同型）。 */
     bargeInStatus: () => (bargeInGate ? { enabled: bargeInGate.isEnabled() } : null),
     /**

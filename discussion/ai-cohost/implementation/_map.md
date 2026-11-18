@@ -4,6 +4,8 @@
 
 ## 現在の到達と残るゲート
 
+- **CodexからDiscordの場を開く・閉じる (2026-11-18)**。[操作手順](waves/discord-remote-venue/wave2-operation.md)はスクショとロールから参加先を照合し、今回だけの設定で開き、次の依頼で退出または記憶保存・終了まで行う。合成DiscordとWindowsの別プロセスで存続・閉場・失敗時の状態を検証、Soul全2,591件成功。実Discordで音声会話・記憶保存・閉場を確認。[完了記録](waves/discord-remote-venue/wave2-completion.md)・[計画](orchestration/discord-remote-venue-wave-plan.md)。
+
 - **チャッピーのGPT-6.2モデル選択 (2026-11-18)**。CockpitでAstraまたはSolを選択・保存し、再起動後に各モデルの実応答を会話欄で確認した。SoulのSDKは0.169.1。Windowsの担当ごとの書き込み制限とSoul全2,580件の回帰に合格。[完了記録](waves/chappy-gpt-62-models/completion.md)・[計画](orchestration/chappy-gpt-62-models-wave-plan.md)。
 
 - **Windowsでの小タスク起動 (2026-11-18)**。Desktopの環境を引き継いだCockpitからSoulのnpm版Codexを起動し、資料を読んで担当先に書き戻せる。原本・別担当先への書き込み拒否を実機確認。Soul全2,574件成功。[完了記録](waves/windows-codex-launch/completion.md)・[計画](orchestration/windows-codex-launch-wave-plan.md)。

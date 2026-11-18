@@ -1025,6 +1025,30 @@ test("createMemoryRecorder: 1 回の保存で writeImpl を呼び、成り立て
   assert.equal(recorder.isRecording(), false);
 });
 
+test("createMemoryRecorder: 保存待ちの依頼も受付時のモデルを使う", async () => {
+  let brain = "codex-62-sol";
+  const started = [];
+  const firstSave = Promise.withResolvers();
+  const place = { dir: "fixture" };
+  const recorder = createMemoryRecorder({
+    getLiveEntries: () => ["合成転写"],
+    getPlace: () => place,
+    getWriterBrain: () => brain,
+    async writeImpl(_entries, _place, _wording, _materials, _onUnconfirmedExit, writerBrain) {
+      started.push(writerBrain);
+      if (started.length === 1) await firstSave.promise;
+      return { written: true };
+    }
+  });
+  const first = recorder.record();
+  const second = recorder.record();
+  brain = "codex-astra";
+  const third = recorder.record();
+  firstSave.resolve();
+  await Promise.all([first, second, third]);
+  assert.deepEqual(started, ["codex-62-sol", "codex-62-sol", "codex-astra"]);
+});
+
 test("createMemoryRecorder: 空の転写では走らせない（writeImpl を呼ばない）", { timeout: 5000 }, async () => {
   const w = makeControlledWrite();
   const recorder = createMemoryRecorder({ getLiveEntries: () => [], writeImpl: w.writeImpl });
@@ -2298,7 +2322,7 @@ test("圧縮の目安の結線: 設定画面の口（onSetCompactThresholdTokens
   assert.match(source, /createContextCompactionHooks\(settings, contextCompactor\)/);
   assert.match(source, /onSetCompactThresholdTokens: contextCompactionHooks\.onSetCompactThresholdTokens/);
   assert.match(source, /contextCompactionStatus: contextCompactionHooks\.contextCompactionStatus/);
-  assert.match(source, /sessionUsageLog\.append\(contextCompactionUsageRecord\(event, currentBrain\)\)/);
+  assert.match(source, /sessionUsageLog\.append\(contextCompactionUsageRecord\(event, effectiveBrain\(\)\)\)/);
   assert.match(source, /phase: "started", inputTokens: event\.lastInputTokens, thresholdTokens: event\.thresholdTokens/);
 });
 
@@ -2346,12 +2370,12 @@ test("Codex の fast の結線: 受理の configuration に段・①のセッシ
   const { readFileSync } = await import("node:fs");
   const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
   assert.match(source, /const codexFastHooks = createCodexFastHooks\(settings, false\);/);
-  assert.match(source, /serviceTier: codexFastHooks\.serviceTierFor\(currentBrain\)/, "受理の時点の設定 = 次の返事から効く");
+  assert.match(source, /serviceTier: codexFastHooks\.serviceTierFor\(effectiveBrain\(\)\)/, "受理の時点の設定 = 次の返事から効く");
   assert.match(
     source,
     /onServiceTiers: \(\/\*\* @type \{any\} \*\/ info\) => \{\s*if \(codexFastHooks\.noteServiceTiers\(sessionBrain, info\?\.serviceTiers\)\) server\?\.codexFastStatusChanged\(\);/
   );
-  assert.match(source, /onSetCodexFastMode,\s*codexFastStatus: \(\) => codexFastHooks\.codexFastStatus\(currentBrain\)/);
+  assert.match(source, /onSetCodexFastMode,\s*codexFastStatus: \(\) => codexFastHooks\.codexFastStatus\(effectiveBrain\(\)\)/);
   // ②書き出し役・④思い出し役は段を渡さない（通常のまま）。
   const writer = source.slice(source.indexOf("const memoryRecorder = createMemoryRecorder"), source.indexOf("const memoryStatus = () =>"));
   assert.ok(writer.length > 0);
@@ -3220,7 +3244,7 @@ test("体なしの受理（本番の器の取り方 + 本物の orchestrator）:
 test("体なしの結線（main）: 体は使う時点で今のロールから読む（受理・頭に聞く・セッション作り・器の差し替え・器の状態・教え）", async () => {
   // 作業コピーの改行（CRLF / LF）に依らず読む。
   const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  assert.match(source, /const currentBody = \(\) => roleHooks\.current\(\)\.body !== false;/);
+  assert.match(source, /const currentBody = \(\) => effectiveRole\(\)\.body !== false;/);
   assert.match(source, /hasBody: currentBody,/, "頭に聞くたびに体を読む");
   assert.match(source, /const fireChannel = resolveFireChannel\(\{ body: currentBody\(\), channel: lazyChannel \}\);/, "受理のたびに体を読む");
   assert.match(source, /channel: fireChannel\.channel,\n\s+body: fireChannel\.body,/);

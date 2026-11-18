@@ -355,9 +355,9 @@ test("ロールの編集の結線（main）: onUpdateRole / onCreateRole / start
   assert.match(main, /onCreateRole: roleEditHooks\.onCreateRole,/);
   assert.match(main, /startupWarnings: startupMigrationWarnings\(startupMigration\),/);
   assert.match(main, /selectRole: \(id\) => onSetRole\(id\),/, "新しいロールは onSetRole と同じ道で選ぶ");
-  assert.match(main, /onRoleEdited: \(role\) => \{\n\s+currentBrain = role\.brain;\n\s+desiredTtsEngine = role\.voice\.engine;\n\s+sessionContextRevision \+= 1;/, "編集したら頭の文脈の revision を進める");
+  assert.match(main, /onRoleEdited: \(role\) => \{\n\s+desiredTtsEngine = role\.voice\.engine;\n\s+sessionContextRevision \+= 1;/, "編集したら頭の文脈の revision を進める");
   assert.match(main, /voice: \{ engine: role\.voice\.engine, aivisSpeaker: role\.voice\.aivisSpeaker, elevenLabsVoiceId: role\.voice\.elevenLabsVoiceId \},/);
   assert.match(main, /editable: roleHooks\.isPersisted\(\),/);
   assert.match(main, /const info = memoryPlaces\.placeInfo\(\);/, "記憶のタブは置き場を作らずに roleId / dir を出す");
-  assert.match(main, /const currentBody = \(\) => roleHooks\.current\(\)\.body !== false;/, "体は持ち回らず今のロールから読む（編集がすぐ効く）");
+  assert.match(main, /const currentBody = \(\) => effectiveRole\(\)\.body !== false;/, "体は持ち回らず今のロールから読む（編集がすぐ効く）");
 });
