@@ -83,8 +83,9 @@ export function createDiscordChatReceiver(x, settings, isOpen, getTaskResources)
   // Gateway redelivery can follow a channel switch. Keep only IDs for the life of this venue.
   /** @type {Map<string, number>} */
   const seen = new Map();
-  const saved = settings.getDiscordChatChannel?.();
-  let selectedId = saved?.guildId === x.plan.guildId ? saved.channelId ?? null : null;
+  const scoped = x.plan.chatChannelId !== undefined;
+  const saved = scoped ? null : settings.getDiscordChatChannel?.();
+  let selectedId = scoped ? x.plan.chatChannelId : saved?.guildId === x.plan.guildId ? saved.channelId ?? null : null;
   /** @type {string | null} */
   let activeId = null;
   /** @type {number | null} */
@@ -145,7 +146,7 @@ export function createDiscordChatReceiver(x, settings, isOpen, getTaskResources)
         return { ok: false, code: "unreadable", reason: "Bot がそのチャットを閲覧できない" };
       }
       try {
-        if (settings.setDiscordChatChannel?.(channelId === null ? null : { guildId: x.plan.guildId, channelId }) !== true) {
+        if (!scoped && settings.setDiscordChatChannel?.(channelId === null ? null : { guildId: x.plan.guildId, channelId }) !== true) {
           return { ok: false, code: "save", reason: "読むチャットを保存できない" };
         }
       } catch {

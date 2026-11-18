@@ -193,8 +193,8 @@ test("束を cockpit-server に渡す: 配信を始める・終えるの並び�
 test("場の結線（main）: ロールの束を 1 つ作って roles で渡し、目は onEyesStart / onEyesStop・個別のロールの口は渡さない", () => {
   const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const main = source.slice(source.indexOf("async function main()"));
-  assert.match(main, /const venueRole = createVenueRoleBundle\(\{\n\s+currentId: \(\) => roleHooks\.currentId\(\),\n\s+identity: getCurrentRoleIdentity,\n\s+streamHooks: streamVenue\.hooks,/);
-  assert.match(main, /prepareVoice: \(kind\) => \{\n\s+desiredTtsEngine = kind;\n\s+return voiceEngines\.prepare\(kind\);\n\s+\},/, "声の engine の用意は耳を開く前（方式を覚えてから）");
+  assert.match(main, /const venueRole = createVenueRoleBundle\(\{\n\s+currentId: effectiveRoleId,\n\s+identity: getCurrentRoleIdentity,\n\s+streamHooks: streamVenue\.hooks,/);
+  assert.match(main, /prepareVoice: \(kind\) => \{\n\s+if \(!server\?\.discordVenueRole\(\)\) desiredTtsEngine = kind;\n\s+return voiceEngines\.prepare\(kind\);\n\s+\},/, "声の engine の用意は耳を開く前（方式を覚えてから）");
   assert.match(main, /startVoiceResources: ensureVoiceResources,\n\s+recallRunner: async \(job\) => prepareRecall\(job\)\(\),\n\s+prepareRecall,/);
   const call = main.slice(main.indexOf("server = createCockpitServer({"), main.indexOf("const url = await server.listen();"));
   assert.ok(call.length > 0);

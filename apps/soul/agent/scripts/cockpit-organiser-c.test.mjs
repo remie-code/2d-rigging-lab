@@ -738,6 +738,17 @@ test("整理の係: 時期を見ている間に止めたら始めない・始め
   assert.deepEqual(bad.running, []);
 });
 
+test("出先の閉場では整理の取り消し失敗を要確認として返す", async () => {
+  const r = makeRunner({
+    startImpl: /** @type {any} */ (() => ({
+      done: Promise.resolve({ status: "skipped", reason: "ask-failed", cleanupFailed: true }),
+      abort: async () => {}
+    }))
+  });
+  assert.equal(await r.runner.organiseIfDue(PLACE), "skipped");
+  assert.equal(await r.runner.organiseIfDue(PLACE, { strict: true }), "needs-review");
+});
+
 test("整理の係: 本物の git — .git の無いフォルダ・まだコミットの無いフォルダでは何もしない（控えの置き場を作らない・警告しない）", async () => {
   const base = mkdtempSync(join(tmpdir(), "organiser-c-git-"));
   try {
@@ -813,7 +824,7 @@ test("本番の控えの置き場は DEFAULT_MEMORY_BACKUP_ROOT（apps/soul/agen
   assert.equal(resolve(MEMORY_BACKUP_ROOT), resolve(here, "..", "memory-backups"));
   const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const main = source.slice(source.indexOf("async function main()"));
-  assert.match(main, /const memoryOrganiser = createMemoryOrganiserRunner\(\{\n\s+getCreate: \(\) => resolveWriterBrainDef\(currentBrain\)\.create,\n\s+backupRoot: MEMORY_BACKUP_ROOT,/);
+  assert.match(main, /const memoryOrganiser = createMemoryOrganiserRunner\(\{\n\s+getCreate: \(\) => resolveWriterBrainDef\(effectiveBrain\(\)\)\.create,\n\s+backupRoot: MEMORY_BACKUP_ROOT,/);
   assert.match(main, /onRunningChange: \(running\) => server\?\.setMemoryOrganising\(running\)/);
   assert.match(main, /onWarning: onBrainWarning,/);
   assert.match(main, /organiser: memoryOrganiser\n\s+\}\);/);

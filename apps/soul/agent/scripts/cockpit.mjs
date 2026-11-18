@@ -62,6 +62,8 @@
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
+import { acquireDiscordGuildLease } from "../src/discord/discord-guild-lease.mjs";
+import { isRemoteVenueId, remoteVenueLedgerPath, reserveRemoteVenuePort, writeRemoteVenueReceipt } from "../src/cockpit/remote-discord-venue.mjs";
 import { execFile } from "node:child_process";
 
 import { createCockpitServer, DEFAULT_COCKPIT_PORT } from "../src/cockpit/cockpit-server.mjs";
@@ -865,7 +867,7 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
 }
 
 /** @typedef {import("../src/cockpit/venue-task-resources.mjs").VenueWriterMaterials} WriterMaterials */
-/** @typedef {{ entries: ReadonlyArray<any>; place: any; wording: any; materials?: WriterMaterials; onUnconfirmedExit?: () => void }} MemoryRecordJob */
+/** @typedef {{ entries: ReadonlyArray<any>; place: any; wording: any; writerBrain?: string; materials?: WriterMaterials; onUnconfirmedExit?: () => void }} MemoryRecordJob */
 /**
  * 配信間記憶: 保存の係（定期・手動「今日を記録」・耳の Stop・Ctrl+C のどれもこれを通る）。
  *
@@ -884,9 +886,10 @@ export function resolveWriterBrainDef(currentBrain, brains = BRAINS) {
  *
  * @param {object} deps
  * @param {() => ReadonlyArray<any>} deps.getLiveEntries  材料の省略時に使うライブの転写（cockpit-server の getTranscript）。
- * @param {(entries: ReadonlyArray<any>, place: any, wording: any, materials?: WriterMaterials, onUnconfirmedExit?: () => void) => Promise<{ written: boolean; commit?: any }>} deps.writeImpl
+ * @param {(entries: ReadonlyArray<any>, place: any, wording: any, materials?: WriterMaterials, onUnconfirmedExit?: () => void, writerBrain?: string) => Promise<{ written: boolean; commit?: any; needsReview?: boolean }>} deps.writeImpl
  *   1 回の保存（本番は②書き出し役 writeStreamRecord + コミット）。place は頼んだ時点の getPlace() の値、wording は頼んだ時点の
  *   getWording() の値。
+ * @param {() => string} [deps.getWriterBrain] 保存を頼んだ時点の有効モデル。
  * @param {() => any} [deps.getPlace]  保存を頼んだ時点の置き場（本番は今のロールの記憶のフォルダ・§createRoleMemoryPlaces）。
  *   同じ置き場には同じ値（=== で比べる）を返すこと。投げたら null。
  * @param {() => any} [deps.getWording]  保存を頼んだ時点の場の語の組（Discord モード Domain C・本番は cockpit-server の
@@ -911,10 +914,12 @@ export function createMemoryRecorder(deps) {
   const nowImpl = deps.nowImpl ?? Date.now;
   /** @type {Promise<void> | null} 走っている保存の一続き（待たせた分まで含む）。 */
   let chain = null;
-  /** @type {Array<MemoryRecordJob & { promise: Promise<void>; resolve: () => void }>} 待っている保存（置き場ごと）。 */
+  /** @type {Array<MemoryRecordJob & { promise: Promise<string>; resolve: (result: string) => void }>} 待っている保存（置き場ごと）。 */
   const waiting = [];
   /** @type {Set<string | undefined>} */
   const unconfirmedWriterDirs = new Set();
+  /** @type {Set<string | undefined>} */
+  const needsReviewDirs = new Set();
 
   const callSafely = (/** @type {Function | undefined} */ fn, /** @type {any} */ arg) => {
     if (typeof fn !== "function") return;
@@ -944,16 +949,21 @@ export function createMemoryRecorder(deps) {
   };
 
   /** @param {MemoryRecordJob} job */
-  const runOnce = async ({ entries, place, wording, materials, onUnconfirmedExit }) => {
+  const runOnce = async ({ entries, place, wording, writerBrain, materials, onUnconfirmedExit }) => {
     try {
       const writerDir = place?.dir;
+      if (needsReviewDirs.has(writerDir)) return "needs-review";
       if (unconfirmedWriterDirs.has(writerDir)) {
         throw new Error("前の書き出し役の終了を確認できていません。");
       }
       const result = await deps.writeImpl(entries, place, wording, materials, () => {
         unconfirmedWriterDirs.add(writerDir);
         onUnconfirmedExit?.();
-      });
+      }, writerBrain);
+      if (result?.needsReview) {
+        needsReviewDirs.add(writerDir);
+        return "needs-review";
+      }
       if (result && result.written) {
         // 置き場（getPlace があるときだけ）も渡す: main() が「頼んだ時点の場」の保存だけを数える（配信の組み直し Domain D）。
         callSafely(deps.onSaved, {
@@ -965,30 +975,30 @@ export function createMemoryRecorder(deps) {
           ...(place !== undefined ? { place } : {})
         });
       }
+      if (result?.written && result.commit?.ok) return "saved";
+      return result?.commit?.ok === false || result?.garbled && result.commit?.committed ? "needs-review" : "failed";
     } catch (error) {
       callSafely(deps.onError, error);
+      return unconfirmedWriterDirs.has(place?.dir) ? "needs-review" : "failed";
     }
   };
 
   /** @param {MemoryRecordJob} job */
   const start = (job) => {
-    /** @type {() => void} */
+    /** @type {(result: string) => void} */
     let resolveOwn = () => {};
-    const own = new Promise((resolve) => {
-      resolveOwn = () => resolve(undefined);
-    });
+    /** @type {Promise<string>} */
+    const own = new Promise((resolve) => { resolveOwn = resolve; });
     callSafely(deps.onRecordingChange, true);
     chain = (async () => {
       try {
-        await runOnce(job);
-        resolveOwn();
+        resolveOwn(await runOnce(job));
         while (waiting.length > 0) {
           const next = /** @type {(typeof waiting)[number]} */ (waiting.shift());
-          await runOnce(next);
-          next.resolve();
+          next.resolve(await runOnce(next));
         }
       } finally {
-        resolveOwn();
+        resolveOwn("failed");
         chain = null;
         callSafely(deps.onRecordingChange, false);
       }
@@ -999,13 +1009,14 @@ export function createMemoryRecorder(deps) {
   return {
     record(entriesOverride, materials, onUnconfirmedExit) {
       const entries = entriesOverride ?? deps.getLiveEntries();
-      if (!Array.isArray(entries) || (entries.length === 0 && !hasWriterMaterials(materials))) return Promise.resolve();
+      if (!Array.isArray(entries) || (entries.length === 0 && !hasWriterMaterials(materials))) return Promise.resolve("not-needed");
       const place = placeNow();
       const wording = wordingNow();
-      const job = { entries, place, wording, materials, onUnconfirmedExit };
+      const writerBrain = deps.getWriterBrain?.();
+      const job = { entries, place, wording, writerBrain, materials, onUnconfirmedExit };
       if (!chain) return start(job);
       const last = waiting[waiting.length - 1];
-      if (last && last.place === place) {
+      if (last && last.place === place && last.writerBrain === writerBrain) {
         if (entries.length >= last.entries.length) {
           last.entries = entries;
           last.wording = wording;
@@ -1014,11 +1025,10 @@ export function createMemoryRecorder(deps) {
         if (onUnconfirmedExit) last.onUnconfirmedExit = onUnconfirmedExit;
         return last.promise;
       }
-      /** @type {() => void} */
+      /** @type {(result: string) => void} */
       let resolve = () => {};
-      const promise = new Promise((r) => {
-        resolve = () => r(undefined);
-      });
+      /** @type {Promise<string>} */
+      const promise = new Promise((r) => { resolve = r; });
       waiting.push({ ...job, promise, resolve });
       return promise;
     },
@@ -1221,6 +1231,7 @@ export function createMemoryOrganiserRunner(deps) {
       } catch {
         due = null;
       }
+      if ((!due || due.reason === "unreadable") && options.strict) return "due-check-failed";
       if (!due || due.due !== true) return "not-due";
       if (stopped) return "stopped";
       if (typeof options.writerBusy === "function" && options.writerBusy()) {
@@ -1260,6 +1271,7 @@ export function createMemoryOrganiserRunner(deps) {
       }
       // skipped は B が理由の 1 行を onWarning で出し済み（重ねない）。done が想定外に投げたときだけここで 1 行。
       if (!result || result.status !== "skipped") warn(ORGANISER_START_FAILED_WARNING);
+      if (options.strict && (!result || result.cleanupFailed === true)) return "needs-review";
       return "skipped";
     },
     stop() {
@@ -1278,7 +1290,7 @@ export function createMemoryOrganiserRunner(deps) {
 
 /**
  * @typedef {{
- *   organiseIfDue: (place: { roleId: string; dir: string; ready?: Promise<void> } | null | undefined, options?: { writerBusy?: () => boolean }) =>
+ *   organiseIfDue: (place: { roleId: string; dir: string; ready?: Promise<void> } | null | undefined, options?: { writerBusy?: () => boolean; strict?: boolean }) =>
  *     Promise<"stopped" | "unavailable" | "not-prepared" | "not-due" | "writer-busy" | "start-failed" | "organised" | "skipped">;
  *   stop: () => void;
  *   isRunning: () => boolean;
@@ -1347,7 +1359,7 @@ export const BODY_URL_NOT_SET_MESSAGE =
  *
  * @param {object} deps
  * @param {{ beginStream: (startedAtMs: number) => void; place: () => any; streamNo: () => number }} deps.memoryPlaces
- * @param {{ record: (entries?: ReadonlyArray<any>, materials?: WriterMaterials, onUnconfirmedExit?: () => void) => Promise<void>; whenIdle: () => Promise<void>; isRecording: () => boolean; hasUnconfirmedWriter?: (place: any) => boolean }} deps.memoryRecorder
+ * @param {{ record: (entries?: ReadonlyArray<any>, materials?: WriterMaterials, onUnconfirmedExit?: () => void) => Promise<string | void>; whenIdle: () => Promise<void>; isRecording: () => boolean; hasUnconfirmedWriter?: (place: any) => boolean }} deps.memoryRecorder
  * @param {(startedAtMs: number) => void} [deps.renewUsageLog]  頭の文脈の記録のファイルを新しくする（本番は createSessionUsageLog の作り直し）。
  * @param {() => (void | Promise<void>)} deps.openSession  頭のセッションを作り直す（前のセッションを畳んでから作る）。
  * @param {() => (void | Promise<void>)} deps.closeSession  頭のセッションを畳む（冪等）。
@@ -1431,7 +1443,7 @@ export function createStreamVenueHooks(deps) {
         }
       },
       /** @param {ReadonlyArray<any>} transcript @param {WriterMaterials} [materials] @param {() => void} [onUnconfirmedExit] */
-      async saveFinal(transcript, materials, onUnconfirmedExit) {
+      async saveFinal(transcript, materials, onUnconfirmedExit, strict = false, previous = /** @type {{recording?: string|null}} */ ({})) {
         // 記憶の整理 Domain C: 整理するのは、閉じの保存を頼むのと同じ時点のロールの置き場（保存の係の getPlace と同じ）。
         /** @type {any} */
         let place = null;
@@ -1447,14 +1459,20 @@ export function createStreamVenueHooks(deps) {
         const spoken = countSpokenEntries(transcript);
         const entries =
           hasWriterMaterials(materials) || (spoken > 0 && !shouldSkipMemoryCheckpoint(spoken, lastRecordedSeq)) ? transcript : [];
-        const done = Promise.all([deps.memoryRecorder.record(entries, materials, onUnconfirmedExit), deps.memoryRecorder.whenIdle()]);
+        const recorded = previous.recording === "saved" || previous.recording === "not-needed"
+          ? Promise.resolve(previous.recording)
+          : deps.memoryRecorder.record(entries, materials, onUnconfirmedExit);
+        const done = Promise.all([recorded, deps.memoryRecorder.whenIdle()]);
         if (deps.memoryRecorder.isRecording()) await waitForSave(done);
-        else await done;
+        const [recording] = await done;
+        if (strict && recording !== "saved" && recording !== "not-needed") return { recording, organising: null };
+        let organising = "not-due";
         // 記憶の整理 Domain C: 閉じの書き出しのあと（新しい文字起こしが無く頼まなかった閉じでも）、時期なら③整理役を走らせて
         // 終わるまで待つ。同じフォルダの git で②と③を同時に走らせない。
         if (deps.organiser) {
-          await deps.organiser.organiseIfDue(place, { writerBusy: () => deps.memoryRecorder.isRecording() || deps.memoryRecorder.hasUnconfirmedWriter?.(place) === true });
+          organising = await deps.organiser.organiseIfDue(place, { ...(strict ? { strict } : {}), writerBusy: () => deps.memoryRecorder.isRecording() || deps.memoryRecorder.hasUnconfirmedWriter?.(place) === true });
         }
+        return { recording, organising };
       }
     },
     /**
@@ -1863,6 +1881,13 @@ export function createRoleHooks(options) {
   };
 
   return {
+    /** @param {string | undefined} id @param {string | undefined} model */
+    resolveForVenue(id, model) {
+      const selected = id === undefined ? { ok: true, role: current } : readRole({ dir: rolesDir, id });
+      if (!selected.ok || !("role" in selected)) return null;
+      const role = selected.role;
+      return model === undefined ? role : Object.freeze({ ...role, brain: model });
+    },
     /** 今のロール（凍っている）。 */
     current: () => current,
     currentId: () => current.id,
@@ -2759,6 +2784,8 @@ const HELP = `usage: node scripts/cockpit.mjs [--port N] [--channel <ws-url>] [o
 `;
 
 async function main() {
+  const remoteVenueId = process.env.SOUL_REMOTE_VENUE_ID;
+  if (remoteVenueId && !isRemoteVenueId(remoteVenueId)) throw new Error("invalid Discord venue id");
   const args = parseCockpitArgs(process.argv.slice(2));
   if (args.help) {
     process.stdout.write(HELP);
@@ -2766,10 +2793,12 @@ async function main() {
     return;
   }
 
+  const reservedServer = remoteVenueId ? await reserveRemoteVenuePort(args.port ?? DEFAULT_COCKPIT_PORT) : undefined;
+
   // 前回の起動で取り残した Codex の記録ファイル（台帳 codex-rollouts.local.json の分）を、起動時に 1 回だけ消す。
   // 以後のセッション（①・②書き出し役・④思い出し役）を作っても掃除は走らない（応答の遅れの直し・latency-fix-plan.md §2-1）。
   try {
-    sweepCodexRollouts();
+    sweepCodexRollouts(remoteVenueId ? { ledgerPath: remoteVenueLedgerPath } : undefined);
   } catch {
     // 掃除は best effort（起動を止めない）。
   }
@@ -2798,12 +2827,17 @@ async function main() {
   // 配信の組み直し Domain A: ロールの選択（頭の選択の置き換え・§createRoleHooks）。名前・性格の指示・動かすモデル・
   // 声・口数・話し始め・hotwords は今のロールから引く。
   const roleHooks = createRoleHooks({ rolesDir: DEFAULT_ROLES_DIR, settings });
+  /** @type {ReturnType<typeof createCockpitServer> | undefined} */
+  let server;
+  const effectiveRole = () => server?.discordVenueRole() ?? roleHooks.current();
+  const effectiveRoleId = () => effectiveRole().id;
+  const effectiveBrain = () => effectiveRole().brain;
   // S5「目が開く」: 視覚発火の対象ウインドウ設定（Channel URL と同型の薄い橋渡し・§createVisionTargetHooks）。
   const visionTargetHooks = createVisionTargetHooks(settings);
   // Discord モード Domain G: 発火が撮る見る窓は開いている場の体験で選ぶ（Discord の場は Discord の準備の見る窓）。
   const venueVisionTarget = createVenueVisionTarget({
     stream: visionTargetHooks.getVisionTarget,
-    discord: () => settings.getDiscordVisionTarget(),
+    discord: () => server ? server.discordVisionTitle() : settings.getDiscordVisionTarget(),
     experience: () => server?.venueContext()?.experience ?? null
   });
   // S6「会話が続く」: 魂の声の出力デバイス設定（vision target と同型の薄い橋渡し・§createAudioDeviceHooks）。
@@ -2864,7 +2898,8 @@ async function main() {
   let desiredTtsEngine = ttsEngineHooks.resolveInitialTtsEngine();
   // 配信の組み直し Domain A: 声（AivisSpeech の話者・ElevenLabs の声の id）は今のロールから引く。`--speaker` は
   // ロールの話者を上書きする（§resolveRoleVoice）。話者・声の id が替われば engine を作り直す（voiceKey）。
-  const roleVoice = () => resolveRoleVoice(roleHooks.current(), args);
+  const roleVoice = () => resolveRoleVoice(effectiveRole(), server?.discordVenueRole() ? {} : args);
+  const effectiveTtsEngine = () => server?.discordVenueRole()?.voice.engine ?? desiredTtsEngine;
   const voiceEngines = createVoiceEngineManager({
     aivisDeps: () => ({ ttsBaseUrl: args.ttsBaseUrl, speaker: roleVoice().speaker }),
     // D と E の接点（voice-swap-wave-plan.md §3）: 読みは AivisSpeech の /accent_phrases（tts-client の口）から取る。
@@ -2881,26 +2916,16 @@ async function main() {
     onStatus: (info) => server?.setVoiceEngineStatus(info),
     onReadingsFallback: () => server?.reportVoiceReadingsFallback()
   });
-  // 配信間記憶: cockpit-server の実体（createCockpitServer 呼び出しは本ファイル下方）。保存の係が
-  // ライブ転写取得（server.getTranscript）に使うための前方参照（let・sessionProxy が session を forward
-  // 参照するのと同型 = 実際の呼び出しは起動完了後にしか起きないため安全）。
-  /** @type {ReturnType<typeof createCockpitServer> | undefined} */
-  let server;
-  // 多頭化 Domain B: 現在の頭。session let と同格の main() スコープ let。ensureFireResources がこの値で頭を分岐する。
-  // 配信の組み直し Domain A: 頭は今のロールが指す（role.json の brain）。onSetRole がロールを替えたときに更新する
-  // （切替は現 session を次の Fire の境目で dispose→null にし、次の ensureFireResources が新しい頭を生成する）。
-  // KILL 状態は orchestrator 側にあり切替を跨いで生存する（頭非依存・触らない）。
-  let currentBrain = roleHooks.current().brain;
   // 配信の組み直し Domain C: 今のロールに体があるか（role.json の body）。値は持ち回らず、使う時点でいつも今のロールから
   // 読む（受理のたび・頭に聞くたび・セッションを作るとき）。耳が止まっている間にロールを替えても古い値が残らない。
-  const currentBody = () => roleHooks.current().body !== false;
+  const currentBody = () => effectiveRole().body !== false;
   // 会話指示 = 今のロールの性格の指示（roles/<id>/instructions.md・§createRoleInstructionStore）。
   // 編集画面に読むだけで見せる教えは、①に足すものと同じく今のロールの体に合わせる（体なしは expression を出さない）。
   // Discord モード Domain C: 場が開いていてその体験が語の組か教えを持つ（配信でない）ときは、その体験の語で差した本文と体験の
   // 教えを見せる（§venueSoulWords）。場が閉じている・配信なら今の道（配信の語）。
   const conversationInstructionHooks = createConversationInstructionHooks(
     createRoleInstructionStore({ dir: DEFAULT_ROLES_DIR, knownIds: () => roleHooks.knownIds() }),
-    () => roleHooks.currentId(),
+    effectiveRoleId,
     instructionRevision,
     () => listSoulSkills({ names: soulSkillNamesForBody(currentBody()) }),
     () => {
@@ -2911,7 +2936,7 @@ async function main() {
   // One runtime authority for the current name. All identity seams (prompt, Whisper, scheduler, and public
   // state) read this closure at the appropriate lifecycle boundary. 配信の組み直し Domain A: 名前は今のロールが
   // 持つ（頭からは引かない）。
-  const getCurrentRoleIdentity = () => roleHooks.identity();
+  const getCurrentRoleIdentity = () => roleIdentity(effectiveRole());
 
   // 配信間記憶（記憶の作り直し Wave 2）: 起動時に記憶を①へ載せることはしない（①は思い出したいときに頼む・
   // recall-flow.md §7）。記憶のフォルダを準備し（無ければ作る・git init・`_conventions.md` の種）、
@@ -2924,7 +2949,7 @@ async function main() {
   const memoryStartedAtMs = Date.now();
   const memoryPlaces = createRoleMemoryPlaces({
     root: DEFAULT_MEMORY_DIR,
-    currentRole: () => roleHooks.current(),
+    currentRole: effectiveRole,
     startedAtMs: memoryStartedAtMs,
     available: startupMigration.memories.status !== "failed",
     onPrepareFailed: ({ roleId, error }) => {
@@ -2974,7 +2999,7 @@ async function main() {
   const contextCompactor = createContextCompactor({
     ...resolveContextCompactionOptions(settings),
     getSession: () => {
-      if (!isCodexBrainId(currentBrain) || session == null) return null;
+      if (!isCodexBrainId(effectiveBrain()) || session == null) return null;
       const stale =
         sessionInstructionRevision !== instructionRevision.getRevision() ||
         sessionAcceptedContextRevision !== sessionContextRevision;
@@ -2983,7 +3008,7 @@ async function main() {
     getQuietGap: () => (server ? server.getQuietGap() : null),
     onEvent: (event) => {
       process.stdout.write(formatContextCompactionLine(event));
-      sessionUsageLog.append(contextCompactionUsageRecord(event, currentBrain));
+      sessionUsageLog.append(contextCompactionUsageRecord(event, effectiveBrain()));
       server?.broadcastContextCompaction(
         event.type === "started"
           ? { phase: "started", inputTokens: event.lastInputTokens, thresholdTokens: event.thresholdTokens, ratio: event.ratio }
@@ -3000,7 +3025,7 @@ async function main() {
   // 残量ゲージの材料（Codex は頭が Codex のときに App Server から・ElevenLabs は 10 分おき・cockpit-glance-redesign.md §9.2）。
   // 監視は listen の後に始め、終了時に止める。キーやアカウント情報は状態にもログにも載せない。
   const quotaMonitor = createQuotaMonitor({
-    readCodex: createCodexQuotaReader({ getBrain: () => currentBrain, getSession: () => session }),
+    readCodex: createCodexQuotaReader({ getBrain: effectiveBrain, getSession: () => session }),
     readElevenLabs: () => fetchElevenLabsSubscription()
   });
   // 画面キャプチャの撮る係（常駐 PowerShell）。場を開くとき（場の共通の段・耳の後）に立ち上げ、場を閉じるとき・操縦席の終了で止める
@@ -3044,19 +3069,19 @@ async function main() {
   const ensureSession = () => {
     if (session == null) {
       // 多頭化 Domain B: 頭の生成は registry 経由（brains.mjs の BRAINS）。未知値は防御的に Claude へ。
-      const brainDef = BRAINS[currentBrain] ?? BRAINS.claude;
+      const sessionBrain = effectiveBrain();
+      const brainDef = BRAINS[sessionBrain] ?? BRAINS.claude;
       // Resolve once for this newly-created session. A later role selection
       // disposes this session; the next Fire resolves the new identity again.
       const sessionIdentity = getCurrentRoleIdentity();
       // このセッションの頭（fast の対応の有無をどの頭のものとして覚えるか）。
-      const sessionBrain = currentBrain;
       // このセッションのロールの体の有無（体なしは表情の教えを①に足さない・配信の組み直し Domain C）。
       const sessionHasBody = currentBody();
       // このセッションの場の言葉（Discord モード Domain C・§venueSoulWords）。体験の教えと語の組を持つ場（配信でない）だけ
       // 体験の道で教えを読む。配信・場の外は null で、今の道（①の固定の指示は一字も変わらない）。
       const sessionVenue = venueSoulWords(server?.venueContext() ?? null);
       // ── Claude 既定経路は現状と完全同一（blocking #2「1 ビット不変」）───────────────────────
-      //  currentBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
+      //  sessionBrain === "claude" のとき: 起動経路でも Anthropic env ガードを明示的に通す（llm-session
       //  内でも呼ばれるが二重の防波堤・cli.mjs の型）→ 従来と同じ warnings 出力順序。BRAINS.claude.create は
       //  `(o) => createLlmSession(o)` の薄いラッパゆえ、下の create({...}) は従来の createLlmSession({...})
       //  と同じ引数・同じ呼び出しになりバイト等価。
@@ -3064,7 +3089,7 @@ async function main() {
       //  onWarning 経由で走らせるため、ここで Anthropic ガードは呼ばない（別 provider へ Anthropic ガードを
       //  当てると誤った拒否/検査になる）。
       //  2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session 経路なので同じガードを通す。
-      if (currentBrain === "claude" || currentBrain === "claude-opus-55") {
+      if (sessionBrain === "claude" || sessionBrain === "claude-opus-55") {
         const { warnings } = assertSubscriptionAuthEnv(process.env);
         for (const warning of warnings) {
           process.stderr.write(`[cockpit] WARN: ${warning}\n`);
@@ -3073,12 +3098,13 @@ async function main() {
       // onInit は createCodexSession では余剰プロパティとして単に無視される（JS の余剰プロパティ・
       // Domain A 確認済み）。createLlmSession は従来どおり onInit/onWarning を使う。
       session = brainDef.create({
+        ...(remoteVenueId && isCodexBrainId(sessionBrain) ? { ledgerPath: remoteVenueLedgerPath } : {}),
         // 人格の指示は「名前 + 会話指示」+ 魂の教え（`<recall>` の使い方・skills/）。起動時の記憶の搭載は撤去
         // （記憶の作り直し Wave 2）。教えは会話指示とは別の固定の部分で、会話指示を書き換えても消えない（Wave 3）。
         // 配信の組み直し Domain A: 名前と性格の指示は今のロールから（§buildRoleSessionSystemPrompt）。
         systemPrompt: buildRoleSessionSystemPrompt(
           sessionIdentity,
-          conversationInstructionHooks.getProfile(roleHooks.currentId()).body,
+          conversationInstructionHooks.getProfile(effectiveRoleId()).body,
           sessionVenue
             ? listVenueSoulSkills({ body: sessionHasBody, venue: sessionVenue, onWarning: onBrainWarning })
                 .map((skill) => skill.body)
@@ -3088,7 +3114,7 @@ async function main() {
         onWarning: onBrainWarning,
         // Codex の使用率の差分（account/rateLimits/updated）を残量にマージする。Claude のセッションは無視する。
         onRateLimits: (/** @type {any} */ rateLimits) => {
-          if (isCodexBrainId(currentBrain)) quotaMonitor.mergeCodexUpdate(rateLimits);
+          if (isCodexBrainId(sessionBrain)) quotaMonitor.mergeCodexUpdate(rateLimits);
         },
         // 今のモデルが fast（priority）を持つか（codex-session が model/list で読んだ段）。操縦席の
         // 「このモデルは fast 非対応」の表示に使う。Claude のセッションは無視する。
@@ -3143,7 +3169,7 @@ async function main() {
   const ensureVoiceResources = () => {
     // Discord モード Domain E: Discord の場では手元の再生器を起こさない（声は Bot の接続へ・手元のスピーカーから出さない）。
     if (venuePlayers.current() != null) {
-      voiceEngines.ensure(desiredTtsEngine);
+      voiceEngines.ensure(effectiveTtsEngine());
       return;
     }
     if (player != null && !player.isAlive()) {
@@ -3169,7 +3195,7 @@ async function main() {
       playerAudioRevision = audioRevision;
     }
     // 声の engine（Start で用意済みならそれ・Start より前の Fire は今の方式で作る。用意できなければ理由で投げる）。
-    voiceEngines.ensure(desiredTtsEngine);
+    voiceEngines.ensure(effectiveTtsEngine());
   };
 
   const applyDesiredFireSettings = async () => {
@@ -3280,7 +3306,7 @@ async function main() {
       } : {}),
       speakDeps: productionSpeakDeps(),
       configuration: Object.freeze({
-        brain: currentBrain,
+        brain: effectiveBrain(),
         sessionContextRevision,
         instructionRevision: instructionRevision.getRevision(),
         audioDevice: audioDeviceHooks.getAudioDevice(),
@@ -3288,7 +3314,7 @@ async function main() {
         channelUrl: fireChannel.channelUrl,
         channelRevision,
         // ①の turn/start に送る速さの段（Codex の頭のときだけ・受理の時点の fast の設定・Claude は null）。
-        serviceTier: codexFastHooks.serviceTierFor(currentBrain)
+        serviceTier: codexFastHooks.serviceTierFor(effectiveBrain())
       }),
       metadata: Object.freeze({
         sessionContextRevision,
@@ -3335,11 +3361,10 @@ async function main() {
     const selected = roleHooks.select(id);
     if (!selected.ok) return selected;
     const role = selected.role;
-    currentBrain = role.brain;
     desiredTtsEngine = role.voice.engine;
     sessionContextRevision += 1;
     // Codex の残量は頭が Codex のときだけ（Codex でなくなったら不明に戻す・Codex 同士の切替は同じアカウントなので保つ）。
-    if (!isCodexBrainId(currentBrain)) quotaMonitor.clearCodex();
+    if (!isCodexBrainId(effectiveBrain())) quotaMonitor.clearCodex();
     // 配信の組み直し Domain B・D: 記憶の置き場は替えたロールのフォルダ。準備（git init・種）は場の始まりで待つ
     // （ロールの切り替えの応答を待たせない・§createStreamVenueHooks の renewRecords）。走っている・待っている保存は、
     // 頼んだときのロールの置き場に書く（createMemoryRecorder の getPlace）。
@@ -3357,10 +3382,9 @@ async function main() {
     roleHooks,
     selectRole: (id) => onSetRole(id),
     onRoleEdited: (role) => {
-      currentBrain = role.brain;
       desiredTtsEngine = role.voice.engine;
       sessionContextRevision += 1;
-      if (!isCodexBrainId(currentBrain)) quotaMonitor.clearCodex();
+      if (!isCodexBrainId(effectiveBrain())) quotaMonitor.clearCodex();
       process.stdout.write(`[cockpit] role edited: ${role.id} (brain ${role.brain}, body ${role.body ? "on" : "off"})\n`);
     }
   });
@@ -3370,7 +3394,7 @@ async function main() {
    * 読む持ち物（名前・声・口数・話し始め・体）も載せる。性格の指示の本文は載せない（専用の API だけ）。
    */
   const roleStatus = () => {
-    const role = roleHooks.current();
+    const role = effectiveRole();
     return {
       id: role.id,
       displayName: role.name.display,
@@ -3400,8 +3424,9 @@ async function main() {
    * （blocking #4）——auth.json / .credentials.json の中身は絶対に読まない・ログ/SSE にも出さない。
    */
   const brainStatus = () => {
-    const def = BRAINS[currentBrain] ?? BRAINS.claude;
-    return { brain: currentBrain, credentialHealth: existsSync(def.credentialPath) };
+    const brain = effectiveBrain();
+    const def = BRAINS[brain] ?? BRAINS.claude;
+    return { brain, credentialHealth: existsSync(def.credentialPath) };
   };
 
   // ── 配信間記憶: 保存の係（定期・手動「今日を記録」・配信を終える（Ctrl+C）のどれもここを通る・直列）──────────
@@ -3414,26 +3439,28 @@ async function main() {
   const memoryRecorder = createMemoryRecorder({
     getLiveEntries: () => (server ? server.getTranscript() : []),
     getPlace: () => memoryPlaces.place(),
+    getWriterBrain: effectiveBrain,
     // Discord モード Domain C: 保存を頼んだ時点の場の語の組（定期・手動・「配信を終える」の最後の保存のどれも場が開いている
     // 間に頼む・閉じる段の最後の保存も場を閉じる前）。場の外・配信は null = 配信の語の組。
     getWording: () => server?.venueContext()?.wording ?? null,
-    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place, wording, materials, onUnconfirmedExit) => {
+    writeImpl: async (entries, /** @type {ReturnType<typeof memoryPlaces.place>} */ place, wording, materials, onUnconfirmedExit, writerBrain) => {
       if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
       await place.ready;
       return writeStreamRecord({
-        create: /** @type {any} */ (resolveWriterBrainDef(currentBrain).create),
+        create: /** @type {any} */ (resolveWriterBrainDef(writerBrain).create),
         entries,
         record: place.streamRecord,
         dir: place.dir,
         wording,
         materials,
         onUnconfirmedExit,
-        onWarning: onBrainWarning
+        onWarning: onBrainWarning,
+        strictOutcome: Boolean(remoteVenueId)
       });
     },
     onSaved: (info) => {
       // 配信の組み直し Domain D: 頼んだ時点の場の保存だけを、その場の数えにする（§createStreamVenueHooks の noteSaved）。
-      streamVenue.noteSaved(info);
+      if (!remoteVenueId || info.commit?.ok) streamVenue.noteSaved(info);
       const { commit } = info;
       // 本文・トピック名は出さない（コミットの有無だけ）。
       const what = commit && commit.ok ? (commit.committed ? `commit ${String(commit.commit).slice(0, 7)}` : "no changes") : "commit failed";
@@ -3453,7 +3480,7 @@ async function main() {
   // （resolveWriterBrainDef）。控えは apps/soul/agent/memory-backups/（MEMORY_BACKUP_ROOT）。始まりと終わりはターミナルに
   // 1 行（中身なし）、B の警告と見送りは①②と同じ onBrainWarning へ。走っている間は snapshot の stream.organising（画面の「整理中」）。
   const memoryOrganiser = createMemoryOrganiserRunner({
-    getCreate: () => resolveWriterBrainDef(currentBrain).create,
+    getCreate: () => resolveWriterBrainDef(effectiveBrain()).create,
     backupRoot: MEMORY_BACKUP_ROOT,
     onLine: (line) => process.stdout.write(`[cockpit] ${line}\n`),
     onWarning: onBrainWarning,
@@ -3512,7 +3539,7 @@ async function main() {
   const prepareRecall = (job) => {
     const place = memoryPlaces.place();
     if (!place) throw new Error("memory folder is not available (the memory move failed; see the startup log)");
-    const brain = resolveWriterBrainDef(currentBrain);
+    const brain = resolveWriterBrainDef(effectiveBrain());
     return async () => {
       await place.ready;
       return runRecall({
@@ -3538,7 +3565,7 @@ async function main() {
       recording: memoryRecorder.isRecording(),
       available: info != null,
       roleId: info ? info.roleId : null,
-      roleName: info ? roleHooks.current().name.display : null,
+      roleName: info ? effectiveRole().name.display : null,
       dir: info ? info.dir : null
     };
   };
@@ -3569,7 +3596,7 @@ async function main() {
       },
       // 頭の文脈の記録: ask が返るたびに 1 行（Codex の頭のときだけ・本文なし）。
       onAskRecord: (info) => {
-        if (isCodexBrainId(info?.brain ?? currentBrain)) sessionUsageLog.append(fireUsageRecord(info));
+        if (isCodexBrainId(info?.brain ?? effectiveBrain())) sessionUsageLog.append(fireUsageRecord(info));
       },
       onTrace: (trace) => {
         // 発火のたびに Codex の使用率を読む（ask が済んだ直後・失敗したとき。App Server の起動後にしか読めない）。
@@ -3644,20 +3671,20 @@ async function main() {
   // 変われば作り直す・ElevenLabs のキーはここで読む・用意できなければ場は開かない）と再生器（流し込みプレイヤーと声の差し替え
   // 口・最初の Fire に乗せない）、④思い出し役。サーバはロールに依る値をこの束から引く。
   const venueRole = createVenueRoleBundle({
-    currentId: () => roleHooks.currentId(),
+    currentId: effectiveRoleId,
     identity: getCurrentRoleIdentity,
     streamHooks: streamVenue.hooks,
     prepareVoice: (kind) => {
-      desiredTtsEngine = kind;
+      if (!server?.discordVenueRole()) desiredTtsEngine = kind;
       return voiceEngines.prepare(kind);
     },
     startVoiceResources: ensureVoiceResources,
     recallRunner: async (job) => prepareRecall(job)(),
     prepareRecall,
     // Discord モード Domain D: Discord の入口が鍵を読むファイル名（今のロールの role.json の discordBotKeyFile・無ければ既定）。
-    discordBotKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
+    discordBotKeyFile: () => roleDiscordBotKeyFile(effectiveRole()),
     // Discord モード Domain E: 鍵のファイル名の形が合わなければ Discord の入口が断る（既定の鍵で入らない）。
-    discordBotKeyFileRefused: () => roleDiscordBotKeyFileRefused(roleHooks.current()),
+    discordBotKeyFileRefused: () => roleDiscordBotKeyFileRefused(effectiveRole()),
     // Discord モード Domain E: Discord の出口（VC に入った直後にこのロールの Bot の接続に再生器を結ぶ・§createVenuePlayerSlot）。
     openVoiceOutlet: (info) => venuePlayers.open(info),
     onWarning: (line) => process.stderr.write(`[cockpit] WARN: ${line}\n`)
@@ -3667,14 +3694,15 @@ async function main() {
   // 方式）は settings に保存し、鍵は今のロールの指すファイルから読む。ログは数と状態だけ。
   const discordExperience = createDiscordVenueExperience({
     settings,
-    currentKeyFile: () => roleDiscordBotKeyFile(roleHooks.current()),
-    currentKeyFileRefused: () => roleDiscordBotKeyFileRefused(roleHooks.current()),
+    currentKeyFile: () => roleDiscordBotKeyFile(effectiveRole()),
+    currentKeyFileRefused: () => roleDiscordBotKeyFileRefused(effectiveRole()),
     write: (line) => process.stdout.write(line),
-    options: { getTaskResources: () => server?.getActiveVenueTaskResources() ?? null }
+    options: { getTaskResources: () => server?.getActiveVenueTaskResources() ?? null, acquireGuildLease: acquireDiscordGuildLease }
   });
 
   server = createCockpitServer({
     port: args.port ?? DEFAULT_COCKPIT_PORT,
+    reservedServer,
     indexHtmlPath: cockpitHtmlPath,
     settingsStore: settings,
     // Discord モード Domain B: 場に入るロールの一覧（最初の的では今のロールの束 1 つ・§createVenueRoleBundle）。名前（whisper・
@@ -3683,8 +3711,15 @@ async function main() {
     roles: [venueRole],
     // Discord モード Domain D: 場の体験の口（配信の口はサーバの中・Discord の口はここから渡す）。
     experiences: { discord: discordExperience },
+    resolveDiscordVenueRole: roleHooks.resolveForVenue,
+    ...(remoteVenueId ? { remoteVenue: { id: remoteVenueId, finish: async (outcome) => {
+      await shutdown("remote");
+      await writeRemoteVenueReceipt(remoteVenueId, outcome);
+      process.exit(0);
+    } } } : {}),
+    releaseDiscordVenueVoice: () => voiceEngines.dispose(),
     localTaskRunner: async ({ resources, request }) => runLocalTask({
-      resources, request, create: resolveWriterBrainDef(currentBrain).create, onWarning: onBrainWarning
+      resources, request, create: resolveWriterBrainDef(effectiveBrain()).create, onWarning: onBrainWarning
     }),
     // 配信の組み直し Domain A: 起動時の引っ越しの結果（ログのタブに出す・引っ越しが無ければ空）。
     notices: startupNotices,
@@ -3711,7 +3746,7 @@ async function main() {
     onSetVerbosity: verbosityHooks.onSetVerbosity,
     // 配信の組み直し Domain A: ロールの選択（旧 頭脳選択）。POST /api/role で onSetRole（選択の永続化 + 次の Fire の
     // 境目でのセッションの作り直し）を呼び、snapshot に roleStatus()（今のロール・一覧）と brainStatus()（ロールが
-    // 指す頭の札 + 資格情報の存在確認）を載せる。状態の正本は cockpit.mjs 側（roleHooks・currentBrain）。
+    // 指す頭の札 + 資格情報の存在確認）を載せる。状態の正本は cockpit.mjs 側（roleHooks と場の設定）。
     onSetRole,
     roleStatus,
     // 配信の組み直し Domain E: ロールの編集（POST /api/role/edit）と、今のロールを写して新しいロール（POST /api/role/new）。
@@ -3737,7 +3772,7 @@ async function main() {
     contextCompactionStatus: contextCompactionHooks.contextCompactionStatus,
     // ①の Codex の頭の fast（設定の「頭脳・会話」タブ・POST /api/codex-fast と snapshot の codexFast）。
     onSetCodexFastMode,
-    codexFastStatus: () => codexFastHooks.codexFastStatus(currentBrain),
+    codexFastStatus: () => codexFastHooks.codexFastStatus(effectiveBrain()),
     // 操縦席の文字起こし選択: 起動時に前回の選択を復元・Start ごとに記憶・遅延は標準出力へ 1 行（数字のみ）。
     // ElevenLabs のキーは cockpit-server の既定（.env.elevenlabs.local をコード内で直接読む）に任せる。
     sttEngineInitial: sttEngineHooks.resolveInitialSttEngine(),
@@ -3745,7 +3780,7 @@ async function main() {
     // ローカルの文字起こし（Parakeet / Zipformer）の設定（画面なし・設定ファイルのキー）。Start ごとに読む。
     // モデルの存在確認は cockpit-server の既定（vendor/models）に任せる。
     // 配信の組み直し Domain A: hotwords は今のロールの名前の手がかり（ロールに無ければ設定ファイルか既定）。
-    localSttSettings: () => applyRoleHotwords(settings.getLocalStt(), roleHooks.current()),
+    localSttSettings: () => applyRoleHotwords(settings.getLocalStt(), effectiveRole()),
     onSttLatency: (info) => process.stdout.write(formatSttLatencyLine(info)),
     // 声の方式（声の差し替え Wave 3）: 起動時に前回の選択を復元・Start ごとに記憶する。engine の用意（耳を開く前・用意
     // できなければ Start は理由つきで失敗する）と再生器はロールの束（venueRole.voice）が持つ。
@@ -3804,7 +3839,7 @@ async function main() {
   if (!currentBody()) {
     // 配信の組み直し Domain C: 体の無いロールは器を使わない（URL の有無を案内しない）。
     process.stdout.write(
-      `[cockpit] fire wired: ロール ${roleHooks.currentId()} は体なし — 器（Channel）にはつながず、手元の再生器だけで声を出します` +
+      `[cockpit] fire wired: ロール ${effectiveRoleId()} は体なし — 器（Channel）にはつながず、手元の再生器だけで声を出します` +
         "（表情タグは使いません）。LLM セッションは「配信を始める」で作ります。\n"
     );
   } else if (startupUrl) {
@@ -3854,13 +3889,15 @@ async function main() {
       quotaMonitor.stop();
       // 記録の書き残しを少しだけ待つ（固まらないよう上限つき）。
       await Promise.race([sessionUsageLog.flush(), new Promise((resolve) => setTimeout(resolve, 1000))]);
-      process.exit(0);
+      if (!remoteVenueId) process.exit(0);
     }
   });
-  process.on("SIGINT", shutdown);
   // stdin EOF（Ctrl+Z→Enter / パイプ終端）でも畳む（ears-cli.mjs の型）。
-  const rl = createInterface({ input: process.stdin });
-  rl.on("close", () => void shutdown("EOF"));
+  if (!remoteVenueId) {
+    process.on("SIGINT", shutdown);
+    const rl = createInterface({ input: process.stdin });
+    rl.on("close", () => void shutdown("EOF"));
+  }
   if (args.open) openCockpitBrowser(`${url}/`);
 }
 

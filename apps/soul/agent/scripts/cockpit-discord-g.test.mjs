@@ -141,11 +141,11 @@ test("場の結線（main・Domain G）: 発火の見る窓は venueVisionTarget
   const main = source.slice(source.indexOf("async function main()"));
   assert.match(
     main,
-    /const venueVisionTarget = createVenueVisionTarget\(\{\n\s+stream: visionTargetHooks\.getVisionTarget,\n\s+discord: \(\) => settings\.getDiscordVisionTarget\(\),\n\s+experience: \(\) => server\?\.venueContext\(\)\?\.experience \?\? null\n\s+\}\);/
+    /const venueVisionTarget = createVenueVisionTarget\(\{\n\s+stream: visionTargetHooks\.getVisionTarget,\n\s+discord: \(\) => server \? server\.discordVisionTitle\(\) : settings\.getDiscordVisionTarget\(\),\n\s+experience: \(\) => server\?\.venueContext\(\)\?\.experience \?\? null\n\s+\}\);/
   );
   assert.match(main, /getVisionTarget: venueVisionTarget,/);
   assert.doesNotMatch(main, /getVisionTarget: visionTargetHooks\.getVisionTarget,/, "発火は場の体験で選ぶ口を通る");
-  assert.match(main, /currentKeyFileRefused: \(\) => roleDiscordBotKeyFileRefused\(roleHooks\.current\(\)\),/);
+  assert.match(main, /currentKeyFileRefused: \(\) => roleDiscordBotKeyFileRefused\(effectiveRole\(\)\),/);
   // 配信の見る窓の口（POST /api/vision-target・snapshot の visionTarget）は今まで通り。
   assert.match(main, /onSetVisionTarget: visionTargetHooks\.onSetVisionTarget,/);
   assert.match(main, /visionTargetStatus: visionTargetHooks\.visionTargetStatus,/);

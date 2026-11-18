@@ -412,6 +412,26 @@ test("writeStreamRecord: ask が失敗した回でも、化けていれば取り
   assert.deepEqual(record.files(), [], "取り消したコミットのファイルは持ち回りに足さない");
 });
 
+test("strict writer close reports a commit made after an interrupted ask for review", async (t) => {
+  const { dir, subjects } = await prepareDir(t, { baseCommit: true });
+  let asks = 0;
+  const result = await writeStreamRecord({
+    create: (options) => ({
+      async ask() {
+        asks += 1;
+        put(options.cwd, "dummy-topic/2026-11-01.md", GOOD_BODY);
+        throw new Error("writer interrupted after modifying memory");
+      },
+      async dispose() {}
+    }),
+    entries: ENTRIES, record: newRecord(), dir, strictOutcome: true
+  });
+  assert.equal(result.written, false);
+  assert.equal("needsReview" in result && result.needsReview, true);
+  assert.equal(asks, 1);
+  assert.match(subjects().at(-1), WRITER_SUBJECT);
+});
+
 test("writeStreamRecord: 化けて取り消した回のファイルは持ち回りに足さず、やり直しで書いたファイルだけを足す（本物の git）", async (t) => {
   const { dir } = await prepareDir(t, { baseCommit: true });
   let asks = 0;

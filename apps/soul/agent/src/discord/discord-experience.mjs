@@ -62,7 +62,7 @@
 import { STT_ENGINES } from "../ears/ear-pipeline.mjs";
 import { loadDiscordBotToken, DEFAULT_DISCORD_BOT_KEY_FILE } from "./discord-token.mjs";
 import { loadDiscordLibraries } from "./discord-libraries.mjs";
-import { createDiscordChatReceiver, discordMessageContentStatus, registerSoulVcCommand, SOUL_VC_COMMAND } from "./discord-companion-gateway.mjs";
+import { createDiscordChatReceiver, readableDiscordChat, discordMessageContentStatus, registerSoulVcCommand, SOUL_VC_COMMAND } from "./discord-companion-gateway.mjs";
 import { CALL_WORDING } from "../mind/venue-wording.mjs";
 import { venueTeachingName } from "../mind/soul-skills.mjs";
 import { DISCORD_SPEAK_NOW_QUESTIONS } from "../mind/speak-now.mjs";
@@ -310,6 +310,7 @@ export function speakerTranscriptMouth(buffer, person) {
  *   Discord の出口（Domain E）の置き場: VC に入ったあと、その接続と @discordjs/voice を渡して呼ぶ（返り値は閉じるときに畳む）。
  *   渡さなければ、その場のロールの束の `voice.openOutlet`（{@link roleOutletFactory}・cockpit.mjs が Discord 向けの再生器を作る）。
  *   どちらも無ければ出口なし（声は今の手元の再生器のまま）。
+ * @param {(botId: string, guildId: string) => Promise<() => Promise<void>>} [deps.acquireGuildLease]
  * @param {typeof setTimeout} [deps.setTimeoutImpl]
  * @param {typeof clearTimeout} [deps.clearTimeoutImpl]
  * @param {number} [deps.loginTimeoutMs=DISCORD_LOGIN_TIMEOUT_MS]
@@ -906,6 +907,28 @@ export function createDiscordExperience(deps) {
     setConnection("disconnected", x.venue);
   };
 
+  /** @param {any} x @param {any} link */
+  function destroyVoiceConnection(x, link) {
+    const conn = link?.connection;
+    if (!conn) return true;
+    const destroyed = x.voice?.VoiceConnectionStatus?.Destroyed ?? "destroyed";
+    try {
+      if (conn.state?.status !== destroyed) conn.destroy();
+    } catch {
+      // The state can already be terminal if discord.js threw after destruction.
+    }
+    return conn.state?.status === destroyed;
+  }
+
+  /** @param {any} x */
+  function retryPendingVoiceDestroy(x) {
+    const pending = x.pendingVoiceDestroy;
+    if (!pending) return true;
+    if (!destroyVoiceConnection(x, pending)) return false;
+    x.pendingVoiceDestroy = null;
+    return true;
+  }
+
   /**
    * 接続の分を畳む（冪等）: 接続の購読を先に外す（自分で抜けたときに「切れた」と出さない）→ 鳴っている返事を止める → 人の耳を
    * 束から drop → 出口を畳む（hold なら差し口に「VC にいない」の口を残す = 手元のスピーカーに戻さない）→ connection を destroy。
@@ -965,12 +988,9 @@ export function createDiscordExperience(deps) {
         x.heldOutlet = outlet;
       }
     }
-    if (c.connection) {
-      try {
-        if (c.connection.state?.status !== x.voice?.VoiceConnectionStatus?.Destroyed) c.connection.destroy();
-      } catch {
-        // best-effort（既に壊れていても畳む）。
-      }
+    if (!destroyVoiceConnection(x, c) && x.strictVoiceExit) {
+      x.pendingVoiceDestroy = c;
+      setConnection("disconnected", x.venue);
     }
   };
 
@@ -1049,6 +1069,7 @@ export function createDiscordExperience(deps) {
    * @returns {Promise<{ ok: true } | { ok: false; reason: string; code: "join" | "outlet" | "closed" }>}
    */
   const joinLink = async (x, channel, isCurrent = () => !x.closed) => {
+    if (!retryPendingVoiceDestroy(x)) return { ok: false, code: "join", reason: "前の VC の退出を確認できません" };
     const voice = x.voice;
     const c = {
       channelId: String(channel.id),
@@ -1133,39 +1154,44 @@ export function createDiscordExperience(deps) {
 
   /**
    * 体験の分を畳む（冪等）: client の購読 → 接続の分 → 差し口に残した出口 → 耳の束 → ログアウト。
-   * @param {any} x
+   * @param {any} x @param {boolean} [retainGuildLease]
    */
-  const teardown = async (x) => {
-    if (!x || x.closed) return;
-    x.closed = true;
-    x.companionAbort.abort();
-    x.chat?.clear();
-    for (const off of x.offs.splice(0)) {
-      try {
-        off();
-      } catch {
-        // best-effort
+  const teardown = async (x, retainGuildLease = false) => {
+    if (!x || (x.closed && !x.pendingVoiceDestroy)) return;
+    if (!x.closed) {
+      x.closed = true;
+      x.companionAbort.abort();
+      x.chat?.clear();
+      for (const off of x.offs.splice(0)) {
+        try {
+          off();
+        } catch {
+          // best-effort
+        }
+      }
+      if (x.link) await foldLink(x, x.link, { hold: false });
+      if (x.heldOutlet) {
+        // 抜けたときに差し口に残した「VC にいない」の口を外す（場を閉じたら次の配信の場は手元の再生器）。
+        const held = x.heldOutlet;
+        x.heldOutlet = null;
+        try {
+          await held.dispose?.();
+        } catch {
+          // best-effort
+        }
+      }
+      if (x.ears) {
+        try {
+          await x.ears.dispose();
+        } catch {
+          // best-effort
+        }
       }
     }
-    if (x.link) await foldLink(x, x.link, { hold: false });
-    if (x.heldOutlet) {
-      // 抜けたときに差し口に残した「VC にいない」の口を外す（場を閉じたら次の配信の場は手元の再生器）。
-      const held = x.heldOutlet;
-      x.heldOutlet = null;
-      try {
-        await held.dispose?.();
-      } catch {
-        // best-effort
-      }
-    }
-    if (x.ears) {
-      try {
-        await x.ears.dispose();
-      } catch {
-        // best-effort
-      }
-    }
+    if (!retryPendingVoiceDestroy(x)) throw new Error("VC の退出を確認できません");
     await destroyClient(x.client);
+    // A managed closing process owns the reservation through save and exit.
+    if (!retainGuildLease) await x.releaseGuildLease?.();
     if (experience === x) experience = null;
   };
 
@@ -1176,7 +1202,7 @@ export function createDiscordExperience(deps) {
    * @param {any} _request  POST の始めるの body（Discord は保存した準備から読む・body の文字起こしの方式は配信のもの）。
    * @param {any} control  場の口（roles・prepareEars・stopEars・changed）。
    */
-  function prepareEntrance(_request, control) {
+  function prepareEntrance(request, control) {
     if (!control || typeof control.prepareEars !== "function") return { ok: false, reason: DISCORD_REASONS.venue };
     const role = Array.isArray(control.roles) ? control.roles[0] ?? null : null;
     if (!role) return { ok: false, reason: DISCORD_REASONS.noRole };
@@ -1188,7 +1214,8 @@ export function createDiscordExperience(deps) {
     }
     if (typeof groupId !== "string" || groupId.length === 0) return { ok: false, reason: DISCORD_REASONS.noRole };
     const prep = readPrep();
-    if (!prep.guildId || !prep.channelId) return { ok: false, reason: DISCORD_REASONS.notPrepared };
+    const target = request?.discordVenue ?? prep;
+    if (!target.guildId || !target.channelId) return { ok: false, reason: DISCORD_REASONS.notPrepared };
     // 文字起こしの方式: 選んでいなければ既定。選んだ値が知らない方式なら断る（黙って既定に替えない）。
     let rawEngine = null;
     try {
@@ -1230,8 +1257,10 @@ export function createDiscordExperience(deps) {
       ok: true,
       plan: Object.freeze({
         token: token.token,
-        guildId: prep.guildId,
-        channelId: prep.channelId,
+        guildId: target.guildId,
+        channelId: target.channelId,
+        chatChannelId: request?.discordVenue?.chatChannelId,
+        expectedBotId: request?.discordVenue?.expectedBotId,
         groupId,
         earPlan: ears.earPlan
       })
@@ -1269,7 +1298,7 @@ export function createDiscordExperience(deps) {
     /** @type {any} */
     const x = {
       // 鍵は持ち回らない（ログインに 1 回使うだけ・plan の外に写さない）。channelId は準備の VC（開くときに入る先・書き換えない）。
-      plan: Object.freeze({ guildId: plan.guildId, channelId: plan.channelId, groupId: plan.groupId, earPlan: plan.earPlan }),
+      plan: Object.freeze({ guildId: plan.guildId, channelId: plan.channelId, chatChannelId: plan.chatChannelId, groupId: plan.groupId, earPlan: plan.earPlan }),
       venue,
       client: null,
       guild: null,
@@ -1278,6 +1307,8 @@ export function createDiscordExperience(deps) {
       discord: null,
       OpusScript: null,
       botId: null,
+      strictVoiceExit: plan.expectedBotId !== undefined,
+      pendingVoiceDestroy: null,
       closed: false,
       ready: false,
       companionAbort: new AbortController(),
@@ -1340,12 +1371,15 @@ export function createDiscordExperience(deps) {
         return refuse(DISCORD_REASONS.closed);
       }
       x.botId = x.client.user?.id ?? null;
+      if (plan.expectedBotId !== undefined && x.botId !== plan.expectedBotId) {
+        return refuse("候補照合から Bot が変わりました。開場前にもう一度照合してください");
+      }
       try {
         x.guild = await x.client.guilds.fetch(plan.guildId);
       } catch {
         x.guild = null;
       }
-      if (!x.guild) return refuse(DISCORD_REASONS.guild);
+      if (!x.guild || (plan.chatChannelId !== undefined && x.guild.id !== plan.guildId)) return refuse(DISCORD_REASONS.guild);
       if (x.discord.Events.InteractionCreate) {
         listen(x.offs, x.client, x.discord.Events.InteractionCreate, (/** @type {any} */ interaction) => {
           void handleSoulVcCommand(x, interaction).catch(() => {});
@@ -1353,7 +1387,21 @@ export function createDiscordExperience(deps) {
       }
       const resolved = await resolveVoiceChannel(x, plan.channelId);
       if (!resolved.ok) return refuse(resolved.code === "closed" ? DISCORD_REASONS.closed : DISCORD_REASONS.channel);
+      if (plan.chatChannelId !== undefined && resolved.channel.id !== plan.channelId) return refuse(DISCORD_REASONS.channel);
       if (x.closed) return refuse(DISCORD_REASONS.closed);
+      if (deps.acquireGuildLease) {
+        let release;
+        try {
+          release = await deps.acquireGuildLease(x.botId, x.guild.id);
+        } catch {
+          return refuse("同じ Bot とサーバーの場が使用中か、重複起動を防ぐ予約を取れません");
+        }
+        if (x.closed) {
+          await release();
+          return refuse(DISCORD_REASONS.closed);
+        }
+        x.releaseGuildLease = release;
+      }
       const joined = await joinLink(x, resolved.channel);
       if (!joined.ok) return refuse(joined.reason);
       x.ready = true;
@@ -1430,7 +1478,7 @@ export function createDiscordExperience(deps) {
     const x = experience;
     if (x) {
       const c = x.counters;
-      await teardown(x);
+      await teardown(x, _info?.retainGuildLease === true);
       say(
         `left (utterances ${c.utterances}, packets ${c.packets}, silence frames ${c.silenceFrames}, decode errors ${c.decodeErrors})`
       );
@@ -1476,7 +1524,7 @@ export function createDiscordExperience(deps) {
 
   /** @param {any} x @param {any} r */
   const afterFailedJoin = (x, r) => {
-    if (isVenueOpen(x) && x.link == null) settleOutside(x);
+    if (isVenueOpen(x) && x.link == null && !x.pendingVoiceDestroy) settleOutside(x);
     say(`could not join (${r.reason})`);
   };
 
@@ -1504,10 +1552,12 @@ export function createDiscordExperience(deps) {
   /** 今いる VC から抜ける（体験は閉じない・頭と会話は残る）。 */
   function leaveVoice() {
     return runOp(async (x) => {
-      const c = x.link;
+      const c = x.link ?? x.pendingVoiceDestroy;
       if (!c) return { ok: false, code: "not-in-vc", reason: DISCORD_VC_REFUSALS.notInVc };
       const channelName = c.channelName;
-      await foldLink(x, c, { hold: true });
+      if (x.link) await foldLink(x, c, { hold: true });
+      else retryPendingVoiceDestroy(x);
+      if (x.pendingVoiceDestroy) return { ok: false, code: "join", reason: "VC の退出を確認できません" };
       if (!isVenueOpen(x)) return { ok: false, code: "closed", reason: DISCORD_REASONS.closed };
       settleOutside(x);
       say("left voice channel");
@@ -1605,9 +1655,9 @@ export function createDiscordExperience(deps) {
   /**
    * サーバーとボイスチャンネルの一覧を読み込む（今のロールの鍵でログイン → 取得 → ログアウト）。同時に 2 回はログインしない
    * （読み込み中ならその結果を待つ）。
-   * @returns {Promise<{ ok: true; guilds: Array<{ id: string; name: string; channels: Array<{ id: string; name: string }> }> } | { ok: false; reason: string }>}
+   * @returns {Promise<{ ok: true; guilds: Array<{ id: string; name: string; channels: Array<{ id: string; name: string }> }>; botId?: string | null } | { ok: false; reason: string }>}
    */
-  function catalog() {
+  function catalog({ includeChats = false } = {}) {
     if (catalogInFlight) return catalogInFlight;
     const run = (async () => {
       // Domain G（E の追認 (1)）: ロールの鍵のファイル名の形が合わなければ、鍵を読まずログインせずに断る（入口と同じ文面・値は出さない）。
@@ -1643,11 +1693,20 @@ export function createDiscordExperience(deps) {
           const channels = [...all.values()]
             .filter((ch) => ch && typeof ch.isVoiceBased === "function" && ch.isVoiceBased() && (voiceType === undefined || ch.type === voiceType))
             .sort((a, b) => (a.rawPosition ?? a.position ?? 0) - (b.rawPosition ?? b.position ?? 0))
-            .map((ch) => ({ id: String(ch.id), name: String(ch.name ?? "") }));
-          guilds.push({ id: String(guild.id), name: String(guild.name ?? ""), channels });
+            .filter((ch) => !includeChats || readableDiscordChat({ discord: libs.discord, guild, plan: { guildId: guild.id } }, ch))
+            .map((ch) => ({
+              id: String(ch.id), name: String(ch.name ?? ""),
+              ...(includeChats ? { category: ch.parent?.name ?? null } : {})
+            }));
+          const chats = includeChats
+            ? [...all.values()]
+                .filter((ch) => readableDiscordChat({ discord: libs.discord, guild, plan: { guildId: guild.id } }, ch))
+                .map((ch) => ({ id: String(ch.id), name: String(ch.name ?? "") }))
+            : undefined;
+          guilds.push({ id: String(guild.id), name: String(guild.name ?? ""), channels, ...(chats ? { chats } : {}) });
         }
         say(`catalog loaded (guilds ${guilds.length}, channels ${guilds.reduce((n, g) => n + g.channels.length, 0)})`);
-        return { ok: /** @type {const} */ (true), guilds };
+        return { ok: /** @type {const} */ (true), guilds, ...(includeChats ? { botId: client.user?.id ?? null } : {}) };
       } catch {
         say("catalog: could not read");
         return { ok: /** @type {const} */ (false), reason: DISCORD_REASONS.catalog };
@@ -1719,7 +1778,18 @@ export function createDiscordExperience(deps) {
      * 入る / 抜ける / 移る と、同じサーバーの VC の一覧（Domain I・POST / GET /api/discord/vc）。結果は `{ ok:true }` か
      * `{ ok:false, code, reason }`。一覧は `{ ok:true, channels: [{ id, name, people, current }], guildName }`（guildName は Domain K）。
      */
-    vc: Object.freeze({ join: joinVoice, leave: leaveVoice, move: moveVoice, list: listVoiceChannels }),
+    vc: Object.freeze({
+      join: joinVoice, leave: leaveVoice, move: moveVoice, list: listVoiceChannels,
+      current: () => {
+        const x = experience;
+        if (!isVenueOpen(x)) return null;
+        const link = x.link && !x.link.closed ? x.link : x.pendingVoiceDestroy;
+        return {
+          guildId: x.guild.id, guildName: x.guild.name,
+          channelId: link?.channelId ?? null, channelName: link?.channelName ?? null
+        };
+      }
+    }),
     catalog,
     prep,
     visionTarget,
