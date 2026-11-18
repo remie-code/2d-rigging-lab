@@ -4,6 +4,8 @@
 
 ## 現在の到達と残るゲート
 
+- **チャッピーのGPT-6.2モデル選択 (2026-11-18)**。CockpitでAstraまたはSolを選択・保存し、再起動後に各モデルの実応答を会話欄で確認した。SoulのSDKは0.169.1。Windowsの担当ごとの書き込み制限とSoul全2,580件の回帰に合格。[完了記録](waves/chappy-gpt-62-models/completion.md)・[計画](orchestration/chappy-gpt-62-models-wave-plan.md)。
+
 - **Windowsでの小タスク起動 (2026-11-18)**。Desktopの環境を引き継いだCockpitからSoulのnpm版Codexを起動し、資料を読んで担当先に書き戻せる。原本・別担当先への書き込み拒否を実機確認。Soul全2,574件成功。[完了記録](waves/windows-codex-launch/completion.md)・[計画](orchestration/windows-codex-launch-wave-plan.md)。
 
 - **小タスクセッション共通基盤 (2026-11-16)**: [3 Wave計画](orchestration/local-task-sessions-wave-plan.md)は実装・横断独立レビュー合格。記憶参照とローカル小タスクが共通基盤から毎依頼新規sessionを起動。PDF後半読取をSol/Terraで実証、writerの90秒待機上限を撤去し記憶保存後に場領域を解放。Soul全2,573件・独立492件成功。実Discord本人確認待ち。[完了](waves/local-task-sessions/wave3-completion.md)・[本人手順](waves/local-task-sessions/human-gate.md)。

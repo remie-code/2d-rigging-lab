@@ -15,10 +15,10 @@ import path from "node:path";
 
 import { BRAINS, BRAIN_IDS } from "./brains.mjs";
 
-const EXPECTED_IDS = ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol"];
-const CODEX_IDS = ["codex", "codex-56-sol", "codex-astra", "codex-61-sol"];
+const EXPECTED_IDS = ["claude", "claude-opus-55", "codex", "codex-56-sol", "codex-astra", "codex-61-sol", "codex-62-astra", "codex-62-sol"];
+const CODEX_IDS = ["codex", "codex-56-sol", "codex-astra", "codex-61-sol", "codex-62-astra", "codex-62-sol"];
 
-test("brains: registry はフラット 6 項目（Claude 2 頭 + Codex 4 頭・GPT-5.5 は削除済み）", () => {
+test("brains: registry はフラット 8 項目（Claude 2 頭 + Codex 6 頭・GPT-5.5 は削除済み）", () => {
   assert.deepEqual(Object.keys(BRAINS).sort(), [...EXPECTED_IDS].sort());
   assert.deepEqual([...BRAIN_IDS].sort(), [...EXPECTED_IDS].sort());
 });
@@ -143,7 +143,9 @@ for (const [brainId, expectedModel, expectedEffort] of [
   ["codex", "gpt-5.6-terra", "none"],
   ["codex-56-sol", "gpt-5.6-sol", "low"],
   ["codex-astra", "gpt-6-astra", "low"],
-  ["codex-61-sol", "gpt-6.1-sol", "low"]
+  ["codex-61-sol", "gpt-6.1-sol", "low"],
+  ["codex-62-astra", "gpt-6.2-astra", "low"],
+  ["codex-62-sol", "gpt-6.2-sol", "low"]
 ]) {
 test(`brains: ${brainId}.create は共通 App Server route で model=${expectedModel}, effort=${expectedEffort}`, async () => {
   await withScratchHome(async ({ homeDir, ledgerPath }) => {

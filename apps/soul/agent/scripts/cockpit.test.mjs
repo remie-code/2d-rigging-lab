@@ -931,6 +931,8 @@ test("resolveWriterBrainDef: Codex の頭ならその頭、Claude の頭や不�
   assert.equal(resolveWriterBrainDef(undefined, brains).id, "codex");
   // 本物の registry でも Codex の行が返る。
   assert.equal(resolveWriterBrainDef("claude").id, "codex");
+  assert.equal(resolveWriterBrainDef("codex-62-astra").id, "codex-62-astra");
+  assert.equal(resolveWriterBrainDef("codex-62-sol").id, "codex-62-sol");
 });
 
 // ── isMcpConfigReadFailureWarning（config/read の失敗を alert にする判定）────────────────────
