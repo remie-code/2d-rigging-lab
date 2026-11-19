@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { renderDiscordPdfPage } from "../discord/discord-pdf-renderer.mjs";
 
-/** @typedef {import("../cockpit/venue-task-resources.mjs").VenueTaskAccess} VenueTaskAccess */
+/** @typedef {import("../cockpit/venue/task-resources.mjs").VenueTaskAccess} VenueTaskAccess */
 
 const SYSTEM_PROMPT = [
   "あなたは会話相手から依頼されたローカル作業の担当です。依頼に沿って必要な資料を調べ、会話相手の判断に使える返答を書いてください。",

@@ -293,7 +293,7 @@ export function speakerTranscriptMouth(buffer, person) {
  *
  * @param {object} deps
  * @param {{ getDiscordPrep: () => any; setDiscordPrep: (patch: object) => void }} deps.settings  Discord の準備の置き場
- * @param {() => import("../cockpit/venue-task-resources.mjs").VenueTaskAccess|null} [deps.getTaskResources]
+ * @param {() => import("../cockpit/venue/task-resources.mjs").VenueTaskAccess|null} [deps.getTaskResources]
  *   （cockpit-settings-store.mjs の get / set。テストは一時フォルダの設定ファイル）。
  * @param {() => (string | null | undefined)} [deps.currentKeyFile]  今のロールの鍵のファイル名（一覧の読み込みと、場のロールの束が
  *   指していないときに使う）。無ければ既定 `.env.discord.local`。

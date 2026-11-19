@@ -1541,8 +1541,8 @@ test("createRoleMemoryPlaces.beginStream: 場の始まりで置き場を作り�
 
 test("場の結線（main）: 場の口を cockpit-server へ渡し、頭のセッションは「配信を始める」で作る（--channel の先充填はやめた）・Ctrl+C は終えると同じ道", async () => {
   const { readFileSync } = await import("node:fs");
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(main, /streamHooks: streamVenue\.hooks,/);
   assert.match(main, /openSession: openStreamSession,\n\s+closeSession: disposeSession,\n\s+hasBody: currentBody,/, "器につなぐかは今のロールの体（resolveFireChannel と同じ）");
   assert.match(main, /const openStreamSession = async \(\) => \{\n\s+await disposeSession\(\);\n\s+ensureSession\(\);\n\s+\};/, "前のセッションを畳んでから作る");
@@ -1822,8 +1822,8 @@ test("途中保存（Domain H）: 配信の場でも Discord の場でも同じ�
 
 test("途中保存の結線（main・Domain H）: タイマーは起動時に 1 回張ったまま 1 分ごと（MEMORY_CHECKPOINT_TICK_MS）・頼むかは checkpoint が決める", async () => {
   const { readFileSync } = await import("node:fs");
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(
     main,
     /const memoryCheckpointTimer = setInterval\(\(\) => \{\n\s+streamVenue\.checkpoint\(\);\n\s+\}, MEMORY_CHECKPOINT_TICK_MS\);\n\s+memoryCheckpointTimer\.unref\(\);/

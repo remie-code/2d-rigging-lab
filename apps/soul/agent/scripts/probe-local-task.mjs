@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { createVenueTaskResources } from "../src/cockpit/venue-task-resources.mjs";
+import { createVenueTaskResources } from "../src/cockpit/venue/task-resources.mjs";
 import { runLocalTask } from "../src/mind/local-task.mjs";
 import { makeLocalTaskPdf } from "../src/test-support/local-task-pdf.mjs";
 import { resolveWriterBrainDef } from "./cockpit.mjs";

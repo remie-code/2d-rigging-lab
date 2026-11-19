@@ -4,6 +4,8 @@
 
 ## 現在の到達と残るゲート
 
+- **Soul全体の責務と配置 (2026-11-19)**。[全5 Wave](orchestration/soul-structure-refactor-wave-plan.md)が合格し、実配信とDiscord通話も本人確認済み。配信とDiscordの正規閉場で隔離したロールの記憶保存を検証し、最終回帰はSoul 2,594件・器1,095件成功。現在の構造は[Soulの案内](../../../apps/soul/README.md)、可読性・残る制約は[最終記録](waves/soul-structure-refactor/wave5-completion.md)を参照。
+
 - **CodexからDiscordの場を開く・閉じる (2026-11-18)**。[操作手順](waves/discord-remote-venue/wave2-operation.md)はスクショとロールから参加先を照合し、今回だけの設定で開き、次の依頼で退出または記憶保存・終了まで行う。合成DiscordとWindowsの別プロセスで存続・閉場・失敗時の状態を検証、Soul全2,591件成功。実Discordで音声会話・記憶保存・閉場を確認。[完了記録](waves/discord-remote-venue/wave2-completion.md)・[計画](orchestration/discord-remote-venue-wave-plan.md)。
 
 - **チャッピーのGPT-6.2モデル選択 (2026-11-18)**。CockpitでAstraまたはSolを選択・保存し、再起動後に各モデルの実応答を会話欄で確認した。SoulのSDKは0.169.1。Windowsの担当ごとの書き込み制限とSoul全2,580件の回帰に合格。[完了記録](waves/chappy-gpt-62-models/completion.md)・[計画](orchestration/chappy-gpt-62-models-wave-plan.md)。

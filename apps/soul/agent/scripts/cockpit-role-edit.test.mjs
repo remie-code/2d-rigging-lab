@@ -349,8 +349,8 @@ test("startupMigrationWarnings: 記憶・ロールの引っ越しの失敗を上
 // ── main() の結線（ソースの文字列の照合）─────────────────────────────────────
 
 test("ロールの編集の結線（main）: onUpdateRole / onCreateRole / startupWarnings を server へ渡し、編集したら sessionContextRevision を進める・snapshot の role に編集の持ち物・memory に placeInfo", () => {
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(main, /onUpdateRole: roleEditHooks\.onUpdateRole,/);
   assert.match(main, /onCreateRole: roleEditHooks\.onCreateRole,/);
   assert.match(main, /startupWarnings: startupMigrationWarnings\(startupMigration\),/);

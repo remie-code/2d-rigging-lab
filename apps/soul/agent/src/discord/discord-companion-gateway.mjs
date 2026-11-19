@@ -77,7 +77,7 @@ export function readableDiscordChat(x, channel) {
 }
 
 /** @param {any} x @param {any} settings @param {() => boolean} isOpen
- * @param {() => import("../cockpit/venue-task-resources.mjs").VenueTaskAccess|null} [getTaskResources] */
+ * @param {() => import("../cockpit/venue/task-resources.mjs").VenueTaskAccess|null} [getTaskResources] */
 export function createDiscordChatReceiver(x, settings, isOpen, getTaskResources) {
   const materials = createDiscordChatMaterials();
   // Gateway redelivery can follow a channel switch. Keep only IDs for the life of this venue.

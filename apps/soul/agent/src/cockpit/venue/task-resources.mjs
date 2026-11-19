@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { createTaskSessionScope } from "../mind/task-session.mjs";
+import { createTaskSessionScope } from "../../mind/task-session.mjs";
 
 /** @typedef {{ id: string; name: string; path: string; kind?: "pdf" | "image" }} VenueMaterial */
 /** @typedef {{ kind: string; request: string; reply: string; workdir?: string }} VenueTaskReply */
@@ -57,7 +57,7 @@ export function createVenueTaskResources() {
       writeFileSync(path, png, { flag: "wx" });
       return path;
     },
-    /** @param {import("../mind/task-session.mjs").TaskSessionRequest & { kind: string; request: string }} task */
+    /** @param {import("../../mind/task-session.mjs").TaskSessionRequest & { kind: string; request: string }} task */
     async runTask({ kind, request, create, sessionOptions, content, timeout }) {
       requireOpen();
       const workdir = join(directory(), randomUUID());

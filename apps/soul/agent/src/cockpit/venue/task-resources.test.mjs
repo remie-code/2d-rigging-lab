@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { test } from "node:test";
-import { createVenueTaskResources } from "./venue-task-resources.mjs";
+import { createVenueTaskResources } from "./task-resources.mjs";
 
 test("相対指定の一時フォルダでも、別の作業先から資料の絶対参照を使える", async () => {
   const envKey = process.platform === "win32" ? "TEMP" : "TMPDIR";

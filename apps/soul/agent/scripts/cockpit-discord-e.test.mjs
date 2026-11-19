@@ -327,8 +327,8 @@ test("直し (a): role.json の discordBotKeyFile の形が合わなければ入
 // ── main() の結線（ソースの並び）────────────────────────────────────────────
 
 test("場の結線（main）: Discord の場では手元の再生器を起こさない・受理の player はその場の再生器・ロールの束に出口と断りの印", () => {
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(main, /const venuePlayers = createVenuePlayerSlot\(\{/);
   assert.match(main, /const activePlayer = \(\) => venuePlayers\.current\(\) \?\? player;/);
   assert.match(

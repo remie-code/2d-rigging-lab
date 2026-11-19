@@ -121,3 +121,8 @@ export const BRAINS = Object.freeze({
  * @type {ReadonlyArray<string>}
  */
 export const BRAIN_IDS = Object.freeze(Object.keys(BRAINS));
+
+/** @param {unknown} brainId */
+export function isCodexBrainId(brainId) {
+  return typeof brainId === "string" && (brainId === "codex" || brainId.startsWith("codex-"));
+}

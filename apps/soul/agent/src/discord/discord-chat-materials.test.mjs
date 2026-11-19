@@ -7,7 +7,7 @@ import { crc32, deflateSync, inflateSync } from "node:zlib";
 import { addDiscordChatMaterials, createDiscordChatMaterials, DISCORD_ATTACHMENT_SIZE_ERROR } from "./discord-chat-materials.mjs";
 import { decodeDiscordImage } from "./discord-image-decoder.mjs";
 import { MAX_ATTACHMENT_BYTES, renderDiscordPdfPage } from "./discord-pdf-renderer.mjs";
-import { createVenueTaskResources } from "../cockpit/venue-task-resources.mjs";
+import { createVenueTaskResources } from "../cockpit/venue/task-resources.mjs";
 import { makeLocalTaskPdf } from "../test-support/local-task-pdf.mjs";
 
 const first = { guildId: "1", channelId: "11", channelName: "共有" };
