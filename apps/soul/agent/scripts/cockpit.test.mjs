@@ -2318,7 +2318,7 @@ test("contextCompactionUsageRecord: 開始の記録に、そのときの目安 t
 
 test("圧縮の目安の結線: 設定画面の口（onSetCompactThresholdTokens / contextCompactionStatus）を cockpit-server へ渡し、SSE に量を載せる", async () => {
   const { readFileSync } = await import("node:fs");
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8");
   assert.match(source, /createContextCompactionHooks\(settings, contextCompactor\)/);
   assert.match(source, /onSetCompactThresholdTokens: contextCompactionHooks\.onSetCompactThresholdTokens/);
   assert.match(source, /contextCompactionStatus: contextCompactionHooks\.contextCompactionStatus/);
@@ -2368,7 +2368,7 @@ test("createCodexFastHooks: 既定 OFF・記憶を復元・切り替えを保存
 
 test("Codex の fast の結線: 受理の configuration に段・①のセッションに onServiceTiers・cockpit-server に口を渡す", async () => {
   const { readFileSync } = await import("node:fs");
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8");
   assert.match(source, /const codexFastHooks = createCodexFastHooks\(settings, false\);/);
   assert.match(source, /serviceTier: codexFastHooks\.serviceTierFor\(effectiveBrain\(\)\)/, "受理の時点の設定 = 次の返事から効く");
   assert.match(
@@ -2384,7 +2384,7 @@ test("Codex の fast の結線: 受理の configuration に段・①のセッシ
 
 test("頭の作り直しの結線: 古い頭を畳んだら操縦席の「圧縮中」を戻す（resetContextCompaction）", async () => {
   const { readFileSync } = await import("node:fs");
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8");
   assert.match(
     source,
     /await stale\.dispose\(\);[\s\S]{0,400}?server\?\.resetContextCompaction\(\);[\s\S]{0,80}?if \(session === stale\)/,
@@ -3128,8 +3128,8 @@ test("createRoleMemoryPlaces: 場の保存の持ち回り（本物の createStre
 });
 
 test("記憶をロールごとにの結線: 引っ越し（写しのフォルダを共有）→ 置き場の準備の順、記憶の 4 か所は今のロールの置き場", async () => {
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8");
+  const main = source;
   // 写しのフォルダは 1 つの値を設定の分と記憶の分で共有する。
   assert.match(main, /const migrationBackup = migrationBackupDir\(DEFAULT_MIGRATION_BACKUP_ROOT, Date\.now\(\)\);/);
   assert.match(main, /runStartupMigration\(\{[\s\S]{0,200}?memoriesDir: DEFAULT_MEMORY_DIR,\s*backupDir: migrationBackup\s*\}\)/);
@@ -3141,7 +3141,7 @@ test("記憶をロールごとにの結線: 引っ越し（写しのフォルダ
   assert.ok(migrateAt > 0 && migrateAt < placesAt && placesAt < venueAt);
   assert.doesNotMatch(main, /await memoryPlaces\.place\(\)\?\.ready;/, "起動時には準備を待たない");
   assert.match(main, /streamHooks: streamVenue\.hooks,/);
-  const venueFn = source.slice(source.indexOf("export function createStreamVenueHooks"), source.indexOf("export function isMcpConfigReadFailureWarning"));
+  const venueFn = readFileSync(new URL("../src/cockpit/venue/role-hooks.mjs", import.meta.url), "utf8");
   assert.match(venueFn, /deps\.memoryPlaces\.beginStream\(startedAtMs\);\s*await deps\.memoryPlaces\.place\(\)\?\.ready;/, "場の始まりで置き場を作り直して準備を待つ");
   assert.match(main, /available: startupMigration\.memories\.status !== "failed"/);
   // 記憶の根をそのまま記憶のフォルダとして渡さない（準備・本体のファイル名・②・④）。
@@ -3243,7 +3243,7 @@ test("体なしの受理（本番の器の取り方 + 本物の orchestrator）:
 
 test("体なしの結線（main）: 体は使う時点で今のロールから読む（受理・頭に聞く・セッション作り・器の差し替え・器の状態・教え）", async () => {
   // 作業コピーの改行（CRLF / LF）に依らず読む。
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(source, /const currentBody = \(\) => effectiveRole\(\)\.body !== false;/);
   assert.match(source, /hasBody: currentBody,/, "頭に聞くたびに体を読む");
   assert.match(source, /const fireChannel = resolveFireChannel\(\{ body: currentBody\(\), channel: lazyChannel \}\);/, "受理のたびに体を読む");
@@ -3290,8 +3290,8 @@ test("formatReplyLatencyLine（体なし）: 体なしの返事は末尾に body
 // ── Discord モード Domain H: 判定・発火の断り・つまみの記録の結線と、途中保存の頃合いの純関数 ──────────────────────
 
 test("判定と発火の記録の結線（main・Domain H）: 判定は今のターミナルの 1 行のまま記録にも 1 行・断りとつまみは server の口から記録へ（頭の種類を見ない）", async () => {
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(
     main,
     /onSpeakNowJudgment: \(info\) => \{\n\s+process\.stdout\.write\(formatSpeakNowLine\(info\)\);\n(?:\s+\/\/.*\n)*\s+recordSessionUsage\(judgmentUsageRecord\(info\)\);\n\s+\},/,

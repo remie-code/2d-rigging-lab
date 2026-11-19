@@ -25,7 +25,7 @@ export const DISCORD_ATTACHMENT_SIZE_ERROR = "ERR_DISCORD_ATTACHMENT_SIZE";
 /** @typedef {{id:string, name:string, kind:"image"|"pdf"|"other", state:MaterialState, reason?:string, materialId?:string, images:MaterialImage[]}} Material */
 /** @typedef {{generation:number, guildId:string, channelId:string, channelName:string, messageId:string, authorId:string, authorName:string, postedAtMs:number, text:string, textOmitted:boolean, attachmentsOmitted:number, attachments:Material[]}} ChatMaterial */
 /** @typedef {{material:Material, load:Attachment["load"], mime:string|null}} Job */
-/** @typedef {import("../cockpit/venue-task-resources.mjs").VenueTaskAccess} VenueTaskAccess */
+/** @typedef {import("../cockpit/venue/task-resources.mjs").VenueTaskAccess} VenueTaskAccess */
 /** @typedef {{post:ChatMaterial, controller:AbortController, jobs:Job[], expiresAt:number, resources?:VenueTaskAccess|null}} Entry */
 /** @typedef {Pick<ChatMaterial,"postedAtMs"|"messageId">} PostOrder */
 

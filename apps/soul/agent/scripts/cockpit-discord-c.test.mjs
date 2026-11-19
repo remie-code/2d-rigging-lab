@@ -198,8 +198,8 @@ test("createVenueRoleBundle: ④の job（語の組を含む）をそのまま�
 // ── main() の結線（ソースの並び）────────────────────────────────────────
 
 test("場の言葉の結線（main）: ②は頼んだ時点の語の組・④は job.wording・①と編集画面は venueContext から（配信は今の道）", () => {
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   const writer = main.slice(main.indexOf("const memoryRecorder = createMemoryRecorder"), main.indexOf("const memoryStatus = () =>"));
   assert.match(writer, /getWording: \(\) => server\?\.venueContext\(\)\?\.wording \?\? null,/);
   assert.match(writer, /writeImpl: async \(entries, \/\*\* @type \{ReturnType<typeof memoryPlaces\.place>\} \*\/ place, wording, materials, onUnconfirmedExit, writerBrain\) => \{/);

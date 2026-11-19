@@ -822,8 +822,8 @@ test("整理の係: 本物の checkOrganiseDue — 履歴が読めないとき�
 test("本番の控えの置き場は DEFAULT_MEMORY_BACKUP_ROOT（apps/soul/agent/memory-backups）を main が明示して渡す・頭は②と同じ決め方", () => {
   assert.equal(MEMORY_BACKUP_ROOT, DEFAULT_MEMORY_BACKUP_ROOT);
   assert.equal(resolve(MEMORY_BACKUP_ROOT), resolve(here, "..", "memory-backups"));
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(main, /const memoryOrganiser = createMemoryOrganiserRunner\(\{\n\s+getCreate: \(\) => resolveWriterBrainDef\(effectiveBrain\(\)\)\.create,\n\s+backupRoot: MEMORY_BACKUP_ROOT,/);
   assert.match(main, /onRunningChange: \(running\) => server\?\.setMemoryOrganising\(running\)/);
   assert.match(main, /onWarning: onBrainWarning,/);

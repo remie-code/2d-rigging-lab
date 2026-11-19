@@ -137,8 +137,8 @@ test("createRoleHooks: 形の合わない discordBotKeyFile のロールを画�
 });
 
 test("場の結線（main・Domain G）: 発火の見る窓は venueVisionTarget（Discord の場は Discord の見る窓）・一覧の読み込みにも鍵のファイル名の断り", () => {
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(
     main,
     /const venueVisionTarget = createVenueVisionTarget\(\{\n\s+stream: visionTargetHooks\.getVisionTarget,\n\s+discord: \(\) => server \? server\.discordVisionTitle\(\) : settings\.getDiscordVisionTarget\(\),\n\s+experience: \(\) => server\?\.venueContext\(\)\?\.experience \?\? null\n\s+\}\);/

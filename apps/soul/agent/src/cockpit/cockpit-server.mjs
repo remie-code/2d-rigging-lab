@@ -7,11 +7,9 @@
  * マイクを選び・耳を起動し・喋ると転写がタイムラインに積もるのを見る。器（runtime-player）には
  * 一切作らない（憲章「器は魂を知らない」）。
  *
- * ── このモジュールの守備範囲（Domain A）─────────────────────────────────
- *  cockpit の**土台**: HTTP 静的 1 ページ配信 + 制御 API（デバイス列挙 / 耳 start/stop / 状態取得）
- *  + ライブ更新チャネル（転写 append・discard・VAD イベント・死活変化を push）+ 耳パイプラインの
- *  結線 + クリーンシャットダウン。**ページ本体の HTML・設定の永続化実体・起動スクリプト・docs は
- *  Domain B が乗せる**。ここは「B が消費するワイヤ契約」を確定させ、waves/s2.5/domain-a.md に明文化する。
+ *  HTTP の受付は http/cockpit-http-server.mjs、画面資産と SSE の配信は同じ http/ にある。
+ *  このモジュールは、操作ハンドラと状態の読み出しを、場・ロール・器官・設定の各実装に結ぶ。
+ *  場の状態と開閉順序は venue/lifecycle.mjs、遠隔閉場の再試行は venue/remote-close.mjs が所有する。
  *
  * ── ライブ更新は SSE（Server-Sent Events）を選ぶ【設計判断】────────────────────
  *  転送は server→client の一方向 push（転写・VAD・死活）だけで足り、制御は HTTP POST が担う。
@@ -73,11 +71,11 @@
  *  stats()）で足りる。
  */
 
-import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createCockpitAssets } from "./http/cockpit-assets.mjs";
+import { createCockpitHttpServer } from "./http/cockpit-http-server.mjs";
+import { createCockpitSse } from "./http/cockpit-sse.mjs";
+import { errMessage, readJsonBody, readJsonBodyStrict, sendJson } from "./http/http-messages.mjs";
 
 import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
 import { createTranscriptBuffer, EVENT_SPEAKER, isEventEntry } from "../ears/transcript-buffer.mjs";
@@ -91,6 +89,8 @@ import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
 import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-devices.mjs";
+import { createYouTubeComments } from "../chat/youtube-comments.mjs";
+import { toWireEntry } from "./cockpit-public-transcript.mjs";
 import { createBargeInGate } from "../mind/barge-in.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
 import {
@@ -102,13 +102,15 @@ import { createDecisionsJudge, createDecisionsQuestionsJudge, loadDecisionsApiKe
 import { createCommentGuard, COMMENT_JUDGE_TIMEOUT_MS } from "../mind/comment-guard.mjs";
 import {
   createCommentReactController,
-  buildCommentReactFireInstruction,
   COMMENT_BUSY_POLICIES,
   DEFAULT_COMMENT_BUSY_POLICY,
   COMMENT_HOLD_MAX_AGE_MS,
   COMMENT_HOLD_MAX_COUNT
 } from "../mind/comment-react.mjs";
-import { createVenueTaskResources } from "./venue-task-resources.mjs";
+import { commentReactionFireOptions, scheduledFireOptions, speakNowFireOptions } from "../mind/self-fire-request.mjs";
+import { createRemoteVenueClose } from "./venue/remote-close.mjs";
+import { createVenueLifecycle } from "./venue/lifecycle.mjs";
+import { createVenueTaskResources } from "./venue/task-resources.mjs";
 import { createRecallDesk } from "../mind/recall-desk.mjs";
 import { RECALL_JUDGE_TIMEOUT_MS, resolveRecallAvoidQuestions } from "../mind/recall.mjs";
 import { resolveVenueWording } from "../mind/venue-wording.mjs";
@@ -182,7 +184,7 @@ export const DISCORD_CHAT_CONNECT_REFUSED_MESSAGE = "Discord の通話の間は 
  * 場が閉じていてコメントを積む正本が無いときの診断（chatBufferAbsent）の文面（Discord モード Domain G: 正本は場のもの・
  * discord-mode.md §3.1。「耳が無い」ではなく「場が開いていない」）。
  */
-export const CHAT_BUFFER_ABSENT_MESSAGE = "venue not open; viewer comment cannot merge into transcript buffer (no fire).";
+export { CHAT_BUFFER_ABSENT_MESSAGE } from "../chat/youtube-comments.mjs";
 /** 配信のマイクの耳を耳の束に束ねるときの名前（束の中の key）。 */
 const STREAM_EAR_KEY = "mic";
 /**
@@ -398,18 +400,6 @@ function normalizeEntranceResult(result, fallback) {
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 
 /**
- * このモジュール（src/cockpit/cockpit-server.mjs）が置かれたディレクトリ = 操縦席 UI アセットの既定ルート。
- * 操縦席 UI 改定（コントロールルーム化・preact+htm no-build）で、cockpit.html の inline module が読む
- * `vendor/*.mjs`・`ui/*.mjs`・`view-logic/*.mjs` を配る静的ルートのルートに使う。
- */
-const COCKPIT_DIR = path.dirname(fileURLToPath(import.meta.url));
-/**
- * 静的配信を許可する UI アセットのサブツリー（この 3 つ配下の `.mjs` のみ配る）。cockpit-server.mjs 本体・
- * テスト・settings-store 等（UI ルート直下の他 `.mjs`）は配らない（配信は UI アセットに限定する）。
- */
-const UI_ASSET_SUBDIRS = new Set(["vendor", "ui", "view-logic"]);
-
-/**
  * host が loopback であることを保証する（非 loopback は throw）。
  * @param {string} host
  * @returns {string}
@@ -423,14 +413,6 @@ export function assertLoopbackHost(host) {
   }
   return host;
 }
-
-/** Domain A 既定の最小プレースホルダ HTML（Domain B が本体に差し替える）。 */
-const PLACEHOLDER_HTML = `<!doctype html>
-<meta charset="utf-8">
-<title>Soul Cockpit</title>
-<h1>Soul Cockpit</h1>
-<p>Domain A placeholder. The real page is served by Domain B.</p>
-<p>State: <code>GET /api/state</code> — Live: <code>GET /api/events</code> (SSE).</p>`;
 
 /**
  * dshow の `-list_devices true` 出力からデバイス名を構造化抽出する純関数。
@@ -819,7 +801,7 @@ const MAX_PORT_REROLLS = 50;
  *   connectBody?: () => ({ ok: boolean; reason?: string } | void | Promise<{ ok: boolean; reason?: string } | void>);
  *   closeSession?: () => (void | Promise<void>);
  *   closeBody?: () => (void | Promise<void>);
- *   saveFinal?: (transcript: ReadonlyArray<any>, materials?: import("./venue-task-resources.mjs").VenueWriterMaterials, onUnconfirmedExit?: () => void, strict?: boolean, previous?: {recording?: string|null; organising?: string|null}) => (void | {recording?: string|null; organising?: string|null} | Promise<void | {recording?: string|null; organising?: string|null}>);
+ *   saveFinal?: (transcript: ReadonlyArray<any>, materials?: import("./venue/task-resources.mjs").VenueWriterMaterials, onUnconfirmedExit?: () => void, strict?: boolean, previous?: {recording?: string|null; organising?: string|null}) => (void | {recording?: string|null; organising?: string|null} | Promise<void | {recording?: string|null; organising?: string|null}>);
  * }} [options.streamHooks]
  *   場（配信を始める / 終える）の cockpit.mjs 側の口（配信の組み直し Domain D・stream-restructure.md §3）。
  *   **cockpit-server は記録・頭のセッション・器・記憶の中身を知らない**（実体は cockpit.mjs の createStreamVenueHooks）。
@@ -1013,7 +995,7 @@ const MAX_PORT_REROLLS = 50;
  *   cockpit.mjs が標準出力に 1 行書く。
  * @param {number} [options.warningEventTtlMs=WARNING_EVENT_TTL_MS]  一回きりの警告が消えるまで（テスト注入用）。
  * @param {(job: import("../mind/recall-desk.mjs").RecallJob) => Promise<{ found: boolean; summary: string }>} [options.recallRunner]
- * @param {(job: {resources: import("./venue-task-resources.mjs").VenueTaskAccess; request: string}) => Promise<string|undefined>} [options.localTaskRunner]
+ * @param {(job: {resources: import("./venue/task-resources.mjs").VenueTaskAccess; request: string}) => Promise<string|undefined>} [options.localTaskRunner]
  *   ④思い出し役を 1 回走らせる口（記憶の作り直し Wave 3・cockpit.mjs が recall.mjs の runRecall を Codex の頭で渡す）。
  *   未注入なら思い出しの係を作らない（①の目印は捨てる）。
  * @param {(request: { input: string; questions: ReadonlyArray<any> }) => Promise<{ answers: Record<string, any>; latencyMs?: number }>} [options.recallJudge]
@@ -1049,13 +1031,7 @@ export function createCockpitServer(options = {}) {
   const remoteVenue = options.remoteVenue;
   let remoteStartClaimed = false;
   let remoteStartRunning = false;
-  let remoteFinishing = false;
-  let remoteCloseRunning = false;
   let remoteVcRunning = false;
-  /** @type {null | {steps: Array<[string, () => Promise<void>]>; recording: string | null; organising: string | null; blocked: boolean}} */
-  let remoteClose = null;
-  /** @type {string | null} */
-  let remoteCloseError = null;
   const inputFormat = options.inputFormat ?? (process.platform === "win32" ? "dshow" : "");
   const transcriptHistory = options.transcriptHistory ?? DEFAULT_TRANSCRIPT_HISTORY;
   const settings = options.settingsStore ?? createInMemorySettingsStore();
@@ -1376,13 +1352,9 @@ export function createCockpitServer(options = {}) {
   const quotaSource =
     options.quotaSource && typeof options.quotaSource.snapshot === "function" ? options.quotaSource : null;
   const onReplyLatency = typeof options.onReplyLatency === "function" ? options.onReplyLatency : null;
-  // 操縦席 UI アセット（vendor/ui/view-logic の .mjs ツリー）の静的配信ルート。既定は本モジュール
-  // ディレクトリ（= 実際の UI ツリーの場所）。テストは fixture ルートを差し込める（既定で無指定なら
-  // scripts/cockpit.mjs は無改変で動く）。
-  const uiRootPath = options.uiRootPath ?? COCKPIT_DIR;
-
-  /** @type {Set<import("node:http").ServerResponse>} */
-  const sseClients = new Set();
+  const assets = createCockpitAssets(options);
+  const sse = createCockpitSse(snapshot);
+  const { broadcast } = sse;
 
   /**
    * 場の耳（Discord モード Domain B: 耳の束 = createEarBundle。配信はマイクの耳 1 本の束）。場が使うのは寿命（dispose）と
@@ -1428,11 +1400,6 @@ export function createCockpitServer(options = {}) {
   /** @type {number | null} */
   let startedAtMs = null;
   let closed = false;
-  // 配信の組み直し Domain D: 場（配信を始める / 終える・stream-restructure.md §3）。closed → opening → open →
-  // closing → closed。opening / closing の間は次の始める・終えるを断る（旧 transitioning の型）。場が閉じていない間は
-  // ロールを替えない（opening から = ロールを固める）・マイクと文字起こしを替えない（始める口だけが替える）。
-  /** @type {"closed" | "opening" | "open" | "closing"} */
-  let streamPhase = "closed";
   /**
    * 開いている（開きかけ・閉じかけを含む）場の体験の口（Discord モード Domain B）。閉じている間は null。
    * @type {any}
@@ -1456,22 +1423,11 @@ export function createCockpitServer(options = {}) {
   const venueEyesWanted = () => discordVenueOptions
     ? discordVenueOptions.visionTarget !== null
     : typeof venueExperience?.eyesWanted !== "function" || venueExperience.eyesWanted() === true;
-  /** 直近の「配信を始める」が始められなかった理由（次の始めるで消す）。 @type {string | null} */
-  let streamError = null;
-  /** @type {number | null} */
-  let streamOpenedAtMs = null;
   /**
    * 閉じかけの間に③整理役が走っているか（記憶の整理 Domain C・cockpit.mjs が setMemoryOrganising で知らせる）。snapshot の
    * stream.organising（閉じかけの間だけ true になりうる）。場を閉じたら false に戻す。
    */
   let memoryOrganising = false;
-  /** 進行中の始める / 終える（Ctrl+C の終えるが待つ）。 @type {Promise<any> | null} */
-  let streamTransition = null;
-  /**
-   * 場の世代（「配信を始める」で場を開きかけるたびに 1 つ進む）。後ろでつなぐ YouTube（始める 7）が、つながった時点で
-   * まだ同じ場が開いているかを確かめる材料（配信の組み直し 人間ゲート前の直し）。
-   */
-  let streamGeneration = 0;
   // S8「キルスイッチ」: キル状態の正本（サーバ側に一つ）。POST /api/kill が設定・snapshot() に露出・
   // fireOrchestrator 生成時（initialKilled）+ 遷移時（kill()/revive()）の両方へ伝播する（domain-b.md §）。
   let killed = false;
@@ -1514,14 +1470,18 @@ export function createCockpitServer(options = {}) {
   let localResultDeliveryCount = 0;
 
   function getActiveVenueTaskResources() {
-    return !closed && streamPhase === "open" ? venueTaskResources?.access ?? null : null;
+    return !closed && venueLifecycle.phase === "open" ? venueTaskResources?.access ?? null : null;
   }
-  // 弾く判定の待ち行列。判定は並行に走らせるが、転写バッファへは届いた順に積む（先のコメントの判定完了を
-  // 待つ・合意 §1-5）。decision が付いた先頭から順に取り出す。
-  /** @type {Array<{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }>} */
-  let guardQueue = [];
-  // チャット器官が ID を持たないコメント（テスト・旧器官）に振る操縦席内の ID。
-  let localCommentSeq = 0;
+  const youtubeComments = createYouTubeComments({
+    chatClientFactory, onSetChatSource, chatSourceStatus: chatSourceStatusImpl,
+    commentGuard, currentSoulName, isClosed: () => closed,
+    getPhase: () => venueLifecycle.phase, getGeneration: () => venueLifecycle.generation,
+    discordVenueActive, getTranscript: () => venueTranscript,
+    onSchedulerComment: (message) => fireScheduler?.handleChatMessage(message),
+    onReactionComment: (message) => commentReact?.handleComment(message),
+    toWireEntry, nowImpl, errMessage, handleDiagnostic, reportComment, warnJudgeError,
+    broadcast, broadcastState, refreshStateWarnings
+  });
   // サーバが呼んだ fire() のうち、まだ Promise が片付いていない数。orchestrator は fire() の受理直後
   // （fireClaimed）から thinking に入るまで getState() が idle のままなので、speak-now の「忙しい」は
   // この数も見る（最小の安全側: 受理の窓も忙しいとみなす）。
@@ -1536,25 +1496,6 @@ export function createCockpitServer(options = {}) {
   // 耳の束が耳ごとに覚える（pipeline.userSpeaking() = どれか 1 本でも喋っている）。喋り終わりの時刻は場が持つ。
   /** @type {number | null} */
   let lastSpeechEndAtMs = null;
-  // S7「視聴者が混ざる」チャット器官（cockpit-server 所有・POST 駆動遅延起動＝ear-pipeline の流儀）。
-  // POST /api/chat/connect で chatClientFactory から生成し start()・onMessage/onStatus/onDiagnostic を
-  // 取り込み経路（ingestChatMessage/broadcastChatStatus/broadcastChatDiagnostic）へ繋ぐ。POST
-  // /api/chat/disconnect と close() で stop()+破棄（タイマ/プロセスを残さない）。
-  /** @type {{ start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string } | null} */
-  let chatClient = null;
-  /** @type {Array<() => void>} チャット器官フックの購読解除（破棄時に全撤去）。 */
-  let chatUnsubs = [];
-  /** チャット器官が最後に知らせた状態（connect / 畳むときに戻す・警告の材料）。 */
-  /** @type {string | null} */
-  let lastChatStatus = null;
-  /**
-   * この起動で入れた YouTube の source（配信の組み直し 仕上げ・体験の素描 場面 3 の注記）。POST /api/chat/source で
-   * 保存した値か、Connect した値。「配信を始める」はこの source へつなぐ（startChatForStream）。起動時に設定から読み戻した
-   * だけの前回の source（chatSourceStatus の値）はここに入らない＝つなぎにいかない（配信ごとに URL が替わるため）。
-   * 欄を空にして保存したとき・Disconnect を押したときは null に戻す（つながない）。
-   * @type {string | null}
-   */
-  let chatSourceThisBoot = null;
   /**
    * 配信者の行の文字起こしの遅延（seq → ms・遅延の「文字起こし」区間の材料）。直近だけ持つ。
    * @type {Map<number, number | null>}
@@ -1597,21 +1538,6 @@ export function createCockpitServer(options = {}) {
 
   // ── 状態スナップショット ───────────────────────────────────────────
 
-  /** @param {any} entry */
-  const toWireEntry = (entry) => ({
-    seq: entry.seq,
-    startMs: entry.startMs,
-    endMs: entry.endMs,
-    text: entry.text,
-    appendedAtMs: entry.appendedAtMs,
-    speaker: entry.speaker ?? "you", // S3 で会話ログへ昇格（you/soul）。既定は you（S2 挙動不変）。
-    // S7「視聴者が混ざる」: viewer コメントの投稿者名（Domain C が `viewer(名前):` を描く材料）。
-    // 名前の無い行では null（追加フィールド・既存の購読者は無視）。Discord モード Domain A: soul の行はロールの名前を
-    // 正本に持つが、放送には載せない（配信で出ていなかった名前を新たに出さない・ロールが 1 つの間は `soul` のまま）。
-    // speakerId（場の中の記録にだけ持つ id）はここで拾わない＝放送に出ない。
-    displayName: entry.speaker === "soul" ? null : entry.displayName ?? null
-  });
-
   function snapshot() {
     const bufStats = venueTranscript ? venueTranscript.stats() : { appended: 0, discarded: 0 };
     const rawBrain = typeof brainStatusImpl === "function" ? brainStatusImpl() ?? null : null;
@@ -1641,14 +1567,14 @@ export function createCockpitServer(options = {}) {
       // Discord モード Domain D: connection = Discord の場の接続の状態（"joining" | "joined" | "disconnected"・VENUE_CONNECTION_STATES）。
       // 配信の場・閉じている間は null。Domain I: "outside"（どの VC にもいない・場は開いたまま）と vcName（今いる VC の名前）。
       stream: {
-        phase: streamPhase,
-        error: streamError,
-        openedAtMs: streamOpenedAtMs,
+        phase: venueLifecycle.phase,
+        error: venueLifecycle.error,
+        openedAtMs: venueLifecycle.openedAtMs,
         experience: venueExperienceKind(),
         connection: venueConnectionStatus(),
         // Discord モード Domain I: 今いる VC の名前（Discord の場の間だけ・どこにもいなければ null・Discord の id は載せない）。
         vcName: venueVoiceChannelName(),
-        organising: streamPhase === "closing" && memoryOrganising
+        organising: venueLifecycle.phase === "closing" && memoryOrganising
       },
       // Discord モード Domain D: Discord の体験が使えるか（この操縦席に Discord の入口が渡されていれば { available: true }・無ければ null）。
       // 準備の中身（サーバー・チャンネルの id）は snapshot に載せない（GET /api/discord/prep で読む）。
@@ -1703,14 +1629,7 @@ export function createCockpitServer(options = {}) {
       audioDevice: typeof audioDeviceStatusImpl === "function" ? (audioDeviceStatusImpl() ?? null) : null,
       // S7「視聴者が混ざる」: チャット器官の現況。source は settings 由来（Connect 前でも入力欄の既定に
       // 復元できる・切断後も残る）。connected/state は live client 由来（未接続なら false/null）。
-      chat: {
-        source: typeof chatSourceStatusImpl === "function" ? (chatSourceStatusImpl()?.source ?? null) : null,
-        connected: chatClient != null,
-        state: chatClient ? chatClient.getState() : null,
-        // この起動で入れた（保存した・Connect した）source があるか（配信の組み直し 仕上げ）。true なら「配信を始める」で
-        // つなぐ。欄に前回の値が戻っているだけなら false（自動ではつながない）。
-        enteredThisBoot: chatSourceThisBoot != null
-      },
+      chat: youtubeComments.snapshot(),
       // 操縦席の作り直し 1 回目（データ側・cockpit-glance-redesign.md §9）: 残量・警告・遅延のしきい値。
       quota: quotaSource ? quotaSnapshotSafe() : null,
       warnings: warningBoard.list(),
@@ -1777,7 +1696,7 @@ export function createCockpitServer(options = {}) {
         : null
     );
     // チャット（繋いでいる間だけ。自分で切ったら警告なし）。
-    const chatState = chatClient ? (lastChatStatus ?? chatClient.getState()) : null;
+    const chatState = youtubeComments.getWarningStatus();
     warningBoard.setCondition(
       "chat",
       chatState === "dead"
@@ -1819,23 +1738,6 @@ export function createCockpitServer(options = {}) {
     });
   }
 
-  // ── SSE ライブチャネル ─────────────────────────────────────────────
-
-  /**
-   * @param {string} event
-   * @param {unknown} data
-   */
-  function broadcast(event, data) {
-    if (sseClients.size === 0) return;
-    const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-    for (const res of sseClients) {
-      try {
-        res.write(frame);
-      } catch {
-        // best-effort（切断済みは req 'close' で除去される）。
-      }
-    }
-  }
 
   /** 現在状態を丸ごと push（ヘッダ/フッタの権威スナップショット）。状態で決まる警告もここで決め直す。 */
   function broadcastState() {
@@ -2005,7 +1907,7 @@ export function createCockpitServer(options = {}) {
       ...venueEarsControl,
       // Discord モード Domain J: 出来事の合図はこの場（開いた世代）のものだけを受ける（前の場の体験から遅れて届いた合図を、
       // 次の場の control・正本に混ぜない）。
-      vcEvent: venueVcEventMouth(streamGeneration),
+      vcEvent: venueVcEventMouth(venueLifecycle.generation),
       createEar: createVenueEar
     });
   }
@@ -2138,7 +2040,7 @@ export function createCockpitServer(options = {}) {
    */
   function venueVcEventMouth(generation) {
     return (event) => {
-      if (generation !== streamGeneration) return;
+      if (generation !== venueLifecycle.generation) return;
       noteVenueVcEvent(event);
     };
   }
@@ -2151,7 +2053,7 @@ export function createCockpitServer(options = {}) {
    * @param {any} event
    */
   function appendVenueEventLine(event) {
-    if (closed || (streamPhase !== "open" && streamPhase !== "opening")) return;
+    if (closed || (venueLifecycle.phase !== "open" && venueLifecycle.phase !== "opening")) return;
     const buffer = venueTranscript;
     if (!buffer) return;
     try {
@@ -2544,10 +2446,10 @@ export function createCockpitServer(options = {}) {
     // 開いたあと（始める 10）: YouTube（Connect 済みなら持ち込む・この起動で入れた URL ならつなぐ。つながらなくても場は開く）。
     // 人間ゲート前の直し: 場を先に open にし、つなぐのは待たない（後ろでつなぐ・reject しない Promise を捨てる）。
     afterOpen: () => {
-      void startChatForStream();
+      void youtubeComments.startForStream();
     },
     // 開いたあとの片付け（閉じる段の最初）: YouTube の器官を畳む。
-    foldAfterOpen: () => foldChatClient(),
+    foldAfterOpen: () => youtubeComments.fold(),
     busyMessage: streamBusyMessageFor,
     wording: null,
     teaching: null,
@@ -2764,7 +2666,7 @@ export function createCockpitServer(options = {}) {
     const hadEars = await foldVenueEars();
     await experience.closeEntrance({
       hadEars, shutdown: false,
-      ...(remoteVenue && streamPhase === "closing" ? { retainGuildLease: true } : {})
+      ...(remoteVenue && venueLifecycle.phase === "closing" ? { retainGuildLease: true } : {})
     }, venueControlContext());
   }
 
@@ -2794,7 +2696,7 @@ export function createCockpitServer(options = {}) {
   function discardJudgments() {
     if (speakNow) speakNow.reset();
     if (commentReact) commentReact.reset();
-    guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が取り出さない（列に無い）。
+    youtubeComments.clearPending();
     backchannelFirePending = false;
     sttLatencyBySeq.clear();
   }
@@ -2922,83 +2824,6 @@ export function createCockpitServer(options = {}) {
   }
 
   /**
-   * YouTube（始める 7・stream-restructure.md §3）。配信の組み直し 仕上げ・Undine の追認（体験の素描 場面 3 の注記）:
-   * **この起動で入れた、または Connect した URL はつなぐ。前回の起動から欄に残っているだけの URL はつながない**
-   * （配信ごとに URL が替わるため）。
-   *  - 場を開く前に Connect してあれば、その器官をそのまま場に持ち込む（作り直さない）。
-   *  - 器官が無く、この起動で入れた source（chatSourceThisBoot）があれば、それへつなぐ（POST /api/chat/connect と同じ
-   *    connectChat）。前の場で入れた source も、同じ起動の間は次の場でまたつなぐ（「配信を終える」は器官を畳むが、入れた
-   *    ことは覚えている）。
-   *  - 起動時に設定から読み戻しただけの前回の source（chatSourceStatus）へは、つなぎにいかない。
-   *  - つながらなくても（器官の生成や start が投げても）場は開く。器官は畳み、ログのタブに 1 行（chatDiagnostic）出す。
-   *
-   * 配信の組み直し 人間ゲート前の直し（Undine・設計 §3 の 7「つながらなくても場は開く」）: **つなぐのは待たない**。場を
-   * open にしてから後ろでつなぐ（YouTube の応答待ちで「開きかけ」が長引き、その間「配信を終える」が断られるのを防ぐ）。
-   * 戻り値の Promise は reject しない（呼び出し側は await しない）。後ろでつないでいる間に:
-   *  - 場が閉じた・別の場になった（世代が替わった・open でない・サーバを閉じた）→ あとからつながった器官は畳んで残さない
-   *    （「配信を終える」の foldStream が先に畳んでいれば stop をもう一度呼ぶだけ・stop は冪等）。警告も出さない。
-   *  - Connect / Disconnect が押された（器官が差し替わった・畳まれた）→ 押した方を優先する。後ろのつなぎは黙って捨てる
-   *    （つながらなかったときも、押した方の器官を畳まない・警告を出さない）。
-   * @returns {Promise<"kept" | "connected" | "none" | "failed" | "stale">}
-   */
-  function startChatForStream() {
-    if (chatClient != null) return Promise.resolve("kept");
-    if (chatSourceThisBoot == null || typeof chatClientFactory !== "function") return Promise.resolve("none");
-    const generation = streamGeneration;
-    // connectChat は await の前（同期の部分）で器官を作って chatClient に入れる。後ろのつなぎが自分の器官かを見分けるため、
-    // 呼んだ直後の chatClient を取っておく（工場が同期で投げたときは null のまま・connectChat は reject を返す）。
-    /** @type {Promise<void>} */
-    let connecting;
-    try {
-      connecting = connectChat(chatSourceThisBoot);
-    } catch (error) {
-      connecting = Promise.reject(error);
-    }
-    const mine = chatClient;
-    /** 後ろのつなぎが片付いた時点で、まだ同じ場が開いていて、器官が自分のままか。 */
-    const stillMine = () => !closed && streamPhase === "open" && streamGeneration === generation && chatClient === mine;
-    /** 自分の器官だけを畳む（差し替わっていれば、自分の器官の stop だけを念のため呼ぶ）。 */
-    const dropMine = () => {
-      if (mine != null && chatClient === mine) {
-        foldChatClient();
-        return;
-      }
-      if (mine != null) {
-        try {
-          mine.stop();
-        } catch {
-          // best-effort（既に畳まれていても冪等）。
-        }
-      }
-    };
-    return connecting.then(
-      () => {
-        if (!stillMine()) {
-          // 場が閉じた・別の場になった・押した操作で差し替わった: あとからつながったものを残さない。
-          dropMine();
-          return /** @type {const} */ ("stale");
-        }
-        broadcastState();
-        return /** @type {const} */ ("connected");
-      },
-      (error) => {
-        if (!stillMine()) {
-          dropMine();
-          return /** @type {const} */ ("stale");
-        }
-        foldChatClient();
-        broadcastChatDiagnostic({
-          kind: "internalError",
-          message: `配信を始めるときに YouTube につなげなかった（${errMessage(error)}・Connect でつなぎ直せる）`,
-          atMs: nowImpl()
-        });
-        broadcastState();
-        return /** @type {const} */ ("failed");
-      }
-    ).catch(() => /** @type {const} */ ("failed")); // 片付けの中の想定外の throw も未処理の reject にしない。
-  }
-
-  /**
    * ロールを選んだ・直した結果の口数・話し始め・声の方式を、サーバの現況（scheduler・話し始め・Start の既定）に入れる
    * （値の出どころはロール・設計 §5・POST /api/role・/api/role/edit・/api/role/new の共通）。
    * @param {{ verbosity?: unknown; speakStartMode?: unknown; ttsEngine?: unknown }} result
@@ -3022,7 +2847,7 @@ export function createCockpitServer(options = {}) {
    * @returns {boolean}  断ったら true。
    */
   function refuseManualFireOutsideStream(res, fire = { vision: false }) {
-    if (streamPhase === "open") {
+    if (venueLifecycle.phase === "open") {
       // Discord モード Domain I（§13.3）: Discord の場で、どの VC にもいない間の手動の発火も断る（出口が無いと声が手元の
       // スピーカーに戻るため）。記録は 1 回だけ（orchestrator へは届けない）。応答は場の外の断りと同じ形。
       if (!venueOutsideVoice()) return false;
@@ -3047,14 +2872,12 @@ export function createCockpitServer(options = {}) {
 
   /** 場が開きかけ・閉じかけ・開いているときの断りの文面（開いている場の体験の口の文面・閉じていれば配信の文面）。 */
   function streamBusyMessage() {
-    return (venueExperience ?? streamExperience).busyMessage(streamPhase);
+    return (venueExperience ?? streamExperience).busyMessage(venueLifecycle.phase);
   }
 
   /** 場を閉じた状態に戻す（体験とロールの一覧も手放す）。 */
-  function markVenueClosed() {
+  function clearVenue() {
     localTaskResults.length = 0;
-    streamPhase = "closed";
-    streamOpenedAtMs = null;
     memoryOrganising = false;
     venueExperience = null;
     venueRoles = null;
@@ -3088,17 +2911,7 @@ export function createCockpitServer(options = {}) {
       : `配信を始められない（想定外のエラー: ${errMessage(error)}）`;
   }
 
-  /**
-   * 配信を始める（stream-restructure.md §3）。場が閉じているときだけ。途中で失敗したら、それまでに起こしたものを畳んで
-   * 閉じた状態に戻し、理由を返す（snapshot の stream.error にも残す・メイン画面から押したときにも見える）。
-   * Discord モード Domain B: request.experience で体験を選ぶ（省けば配信）。Discord の口が無ければ 503 で断る（場は開かない・
-   * stream.error には残さない）。知らない体験は 400。
-   * @param {{ device?: string | null; sttEngine?: any; ttsEngine?: any; experience?: any; discordVenue?: any }} [request]
-   * @returns {Promise<{ ok: true; state: object } | { ok: false; status: number; error: string; state: object }>}
-   */
-  async function openStream(request = {}) {
-    if (closed) return { ok: false, status: 503, error: "cockpit server is closing.", state: snapshot() };
-    if (streamPhase !== "closed") return { ok: false, status: 409, error: streamBusyMessage(), state: snapshot() };
+  function checkOpening(request) {
     const chosen = chooseVenueExperience(request.experience);
     if (!chosen.ok) return { ok: false, status: chosen.status, error: chosen.error, state: snapshot() };
     const experience = chosen.experience;
@@ -3135,38 +2948,56 @@ export function createCockpitServer(options = {}) {
       const venueRole = role && input.noBody ? Object.freeze({ ...role, body: false }) : role;
       discordVenueOptions = { selfFire: input.selfFire ?? true, visionTarget: vision.title, voicePrepared: false, role: venueRole };
     }
-    // 1. ロールの一覧を固める（ここから閉じるまで POST /api/role は断る・一覧も替えない）。
-    streamPhase = "opening";
-    venueExperience = experience;
-    venueRoles = Object.freeze(configuredRoles());
-    streamGeneration += 1;
-    venueTaskResources = createVenueTaskResources();
-    streamError = null;
-    broadcastState();
-    /** @param {string} reason @param {{ ears?: boolean; session?: boolean }} started */
-    const fail = async (reason, started) => {
-      parkRecallDesk();
-      try {
-        await foldStream({ chat: false, ears: started.ears === true, session: started.session === true });
-      } catch {
-        // 畳むのが想定外に投げても、閉じた状態には戻す（下）。
-      }
-      // 会話の正本も手放す（入口を開く前・入口が開かなかったときも。場が閉じている間は正本が無い＝従来どおり）。
-      releaseVenueTranscript();
-      try {
-        await releaseVenueTasks();
-      } catch (error) {
-        reason += `（${errMessage(error)}）`;
-      }
-      markVenueClosed();
-      streamError = reason;
+    return { ok: true, experience, request };
+  }
+
+  // Both closing workflows use the same device, task and transcript operations.
+  const venueClosingOperations = {
+    copyTranscript: () => venueTranscript?.all() ?? [],
+    currentRecallDesk: () => recallDesk,
+    drainVenueTasks,
+    foldVenue: () => foldStream({ chat: true, ears: true, session: true }),
+    parkRecallDesk,
+    releaseVenueTasks,
+    stopAcceptingTasks: () => venueTaskResources?.stopAccepting()
+  };
+
+  const venueLifecycle = createVenueLifecycle({
+    ...venueClosingOperations,
+    broadcastState,
+    checkOpening,
+    clearVenue,
+    createTaskResources: () => { venueTaskResources = createVenueTaskResources(); },
+    currentExperience: () => venueExperience ?? streamExperience,
+    errMessage,
+    foldStream,
+    freezeVenue(experience) {
+      venueExperience = experience;
+      venueRoles = Object.freeze(configuredRoles());
+    },
+    hasTranscript: () => venueTranscript !== null,
+    installEars(ears) {
+      if (ears && pipeline !== ears) pipeline = ears;
+    },
+    normalizeEntranceResult,
+    nowImpl,
+    openVenueTranscript,
+    resolveVoiceKind(prepared) {
+      if (prepared.voiceKind === "aivis" || prepared.voiceKind === "elevenlabs") return prepared.voiceKind;
+      return discordVenueOptions?.role?.voice.engine ?? ttsEngine;
+    },
+    prepareVoices(kind) {
+      if (discordVenueOptions) discordVenueOptions.voicePrepared = true;
+      return prepareVenueVoices(kind);
+    },
+    reportVoiceFailure(kind, reason) {
+      voice.engine = kind;
+      voice.status = "down";
+      voice.reason = clipVoiceReason(reason);
       broadcastState();
-      return { ok: /** @type {const} */ (false), status: 500, error: reason, state: snapshot() };
-    };
-    const steps = async () => {
-      // 2. 場の記録を作り直す（ロールごと: この場の記憶の保存の持ち回り・頭の文脈の記録のファイル・そのロールの置き場の準備）。
-      const renewed = await runRoleHooks("renewRecords");
-      if (!renewed.ok) return fail(`場の記録を作り直せない（${renewed.reason}）`, {});
+    },
+    releaseVenueTranscript,
+    resetConversation() {
       // 3. KILL を OFF に戻す。判定・発火の予定・コメント反応・思い出しの係の積み残しを捨てる。
       killed = false;
       try {
@@ -3181,164 +3012,22 @@ export function createCockpitServer(options = {}) {
       if (venueFixesSpeakNow()) parkFireScheduler();
       else renewFireScheduler();
       renewRecallDesk();
-      // 4. 会話の正本（場の共通の段が作る・Discord モード Domain A）。
-      openVenueTranscript();
-      // 5. 入口を開く（体験の口）。下見（配信: マイク・文字起こしと声の方式・Starting・キーとモデルの確かめ）→ 6 の前半 →
-      //    開く（配信: 耳を起こす）。
-      const prepared = normalizeEntranceResult(await experience.prepareEntrance(request, venueControlContext()), "入口を開けない");
-      if (!prepared.ok) return fail(prepared.reason, {});
-      // 6 の前半. 声の engine の用意（場の共通の段・ロールごと）。今も入口を開く前（配信: 耳を起こす前・文字起こしのキー
-      //    切れの後）。用意できなければ入口を開かずに場を開かない（文字起こしのキー切れと同じ流儀・自動で AivisSpeech に戻さない）。
-      const voiceKind = prepared.voiceKind === "aivis" || prepared.voiceKind === "elevenlabs" ? prepared.voiceKind : (discordVenueOptions?.role?.voice.engine ?? ttsEngine);
-      if (discordVenueOptions) discordVenueOptions.voicePrepared = true;
-      const voiced = await prepareVenueVoices(voiceKind);
-      if (!voiced.ok) {
-        experience.abortEntrance(prepared, venueControlContext());
-        voice.engine = voiceKind;
-        voice.status = "down";
-        voice.reason = clipVoiceReason(voiced.reason);
-        broadcastState();
-        return fail(voiced.reason, {});
-      }
-      // 正本が無ければ入口を開かない（開く段の順の誤り・サーバを閉じた途中など。耳に自前の正本を持たせて隠さない）。
-      if (!venueTranscript) {
-        experience.abortEntrance(prepared, venueControlContext());
-        return fail("会話の正本が無い（入口を開けない）", {});
-      }
-      const opened = normalizeEntranceResult(await experience.openEntrance(prepared.plan, venueEntranceContext()), "入口を開けない");
-      if (!opened.ok) return fail(opened.reason, {});
-      if (opened.ears && pipeline !== opened.ears) pipeline = opened.ears;
-      // 6 の後半. 再生器（場の共通の段・ロールごと）。7. 目（場の共通の段）。待たない・失敗しても場は止めない。
-      startVenueVoiceResources();
-      startVenueEyes();
-      // 8. 頭のセッション（ロールごと）。
-      const session = await runRoleHooks("openSession");
-      if (!session.ok) return fail(session.reason, { ears: true, session: true });
-      // 9. 体があれば器（ロールごと・体なしは cockpit.mjs が何もしない）。つながらなければ場は開かない。
-      const body = await runRoleHooks("connectBody");
-      if (!body.ok) return fail(body.reason, { ears: true, session: true });
-      streamPhase = "open";
-      streamOpenedAtMs = nowImpl();
-      // 10. 開いたあと（体験の口・配信は YouTube を後ろでつなぐ・待たない）。失敗しても場は開いたまま。
-      try {
-        experience.afterOpen();
-      } catch {
-        // best-effort
-      }
-      broadcastState();
-      return { ok: /** @type {const} */ (true), state: snapshot() };
-    };
-    const run = (async () => {
-      try {
-        return await steps();
-      } catch (error) {
-        // 想定外の例外（工場関数・畳むの throw など）でも opening のまま固めない: 起こしたかもしれないものを全部畳んで閉じる。
-        // Discord モード Domain D: 文面は体験の口から（配信は今の文面・Discord は生のエラー文を入れない文面）。
-        return fail(unexpectedVenueErrorMessage(experience, "opening", error), { ears: true, session: true });
-      }
-    })();
-    streamTransition = run;
-    try {
-      return await run;
-    } finally {
-      if (streamTransition === run) streamTransition = null;
-    }
-  }
-
-  /**
-   * 配信を終える（stream-restructure.md §3）。場が開いているときだけ（閉じていれば何もしない）。
-   * @returns {Promise<{ ok: true; state: object } | { ok: false; status: number; error: string; state: object }>}
-   */
-  async function closeStream() {
-    if (streamPhase === "closed") return { ok: true, state: snapshot() };
-    if (streamPhase !== "open") return { ok: false, status: 409, error: streamBusyMessage(), state: snapshot() };
-    streamPhase = "closing";
-    const desk = recallDesk;
-    venueTaskResources?.stopAccepting();
-    parkRecallDesk(true);
-    broadcastState();
-    const saveFinal = async (/** @type {ReadonlyArray<any>} */ transcript) => {
-      await drainVenueTasks(desk);
+    },
+    runRoleHooks,
+    saveRecording(transcript) {
       const resources = venueTaskResources;
-      await runRoleHooksAll("saveFinal", transcript, resources?.writerMaterials(), resources?.retainOnUnconfirmedExit);
-    };
-    const run = (async () => {
-      /** @type {{ ok: true } | { ok: false; status: number; error: string }} */
-      let outcome = { ok: true };
-      /** @type {ReadonlyArray<any> | null} */
-      let transcript = null;
-      // 記憶の最後の保存を頼んだか（想定外の例外の道で二度頼まないため）。
-      let finalSaveRequested = false;
-      try {
-        // 1. 会話の正本の写しを取る（畳むと消える）。
-        transcript = venueTranscript ? venueTranscript.all() : [];
-        // 2. YouTube・判定・発火の予定・目・耳・頭のセッション・器を畳む。後ろでつないでいる YouTube（始める 7）は待たない:
-        //    器官はもう chatClient に入っているのでここで畳む。あとからつながっても場の世代で見分けて残さない（startChatForStream）。
-        await foldStream({ chat: true, ears: true, session: true });
-        // 3. 記憶の最後の保存をして待つ（この間 stream.phase は "closing" = 画面の「記録中」）。
-        finalSaveRequested = true;
-        await saveFinal(transcript);
-      } catch (error) {
-        // 想定外の例外でも closing のまま固めない: 畳み残しをもう一度畳んで（best-effort）から閉じる。
-        // 配信の組み直し 仕上げ・Undine の追認: 記憶を落とさない側に倒す。最後の保存がまだ頼まれていなければ 1 回だけ
-        // 頼む（写しが取れていなければ、耳が残っていればもう一度だけ写しを試す。取れなければ空で頼む）。
-        if (transcript == null) {
-          try {
-            transcript = venueTranscript ? venueTranscript.all() : [];
-          } catch {
-            transcript = [];
-          }
-        }
-        try {
-          await foldStream({ chat: true, ears: true, session: true });
-        } catch {
-          // best-effort
-        }
-        if (!finalSaveRequested) {
-          finalSaveRequested = true;
-          try {
-            await saveFinal(transcript);
-          } catch {
-            // best-effort（保存の口を引くこと自体が投げても閉じる）。
-          }
-        }
-        outcome = { ok: false, status: 500, error: unexpectedVenueErrorMessage(venueExperience ?? streamExperience, "closing", error) };
-      }
-      try {
-        await releaseVenueTasks();
-      } catch (error) {
-        outcome = { ok: false, status: 500, error: errMessage(error) };
-        streamError = outcome.error;
-      }
-      // 4. 場を閉じる（ロールを選び直せる・固めたロールの一覧と体験も手放す）。途中で投げても閉じる。
-      markVenueClosed();
-      if (!closed) broadcastState();
-      return { ...outcome, state: snapshot() };
-    })();
-    streamTransition = run;
-    try {
-      return await run;
-    } finally {
-      if (streamTransition === run) streamTransition = null;
-    }
-  }
-
-  /**
-   * Ctrl+C の「配信を終える」（cockpit.mjs の shutdown）。開きかけ・閉じかけなら終わるのを待ってから、開いていれば
-   * 終える（HTTP の終える は途中を 409 で断るが、Ctrl+C は断らずに待つ）。
-   * @returns {Promise<object>}
-   */
-  async function endStreamForShutdown() {
-    while (streamTransition) {
-      try {
-        await streamTransition;
-      } catch {
-        // best-effort
-      }
-    }
-    if (streamPhase === "open") await closeStream();
-    return snapshot();
-  }
+      return runRoleHooksAll("saveFinal", transcript, resources?.writerMaterials(), resources?.retainOnUnconfirmedExit);
+    },
+    serverClosed: () => closed,
+    snapshot,
+    startVenueEyes,
+    startVenueVoiceResources,
+    streamBusyMessage,
+    unexpectedVenueErrorMessage,
+    venueControlContext,
+    venueEntranceContext
+  });
+  const { closeStream, endStreamForShutdown, openStream } = venueLifecycle;
 
   /**
    * POST の始めるの body を確かめて openStream に渡す（/api/stream/start と /api/ears/start の共通）。
@@ -3347,7 +3036,7 @@ export function createCockpitServer(options = {}) {
    * @param {URL} url
    */
   async function handleStreamStart(req, res, url, remote = false) {
-    if (streamPhase !== "closed") {
+    if (venueLifecycle.phase !== "closed") {
       // 場が開いている間はマイク・文字起こしを替えない（始め直すには終えてから）。
       sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
       return;
@@ -3374,7 +3063,7 @@ export function createCockpitServer(options = {}) {
       return;
     }
     // body を読む間に別の始めるが割り込んでいたら断る。
-    if (streamPhase !== "closed") {
+    if (venueLifecycle.phase !== "closed") {
       sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
       return;
     }
@@ -3484,7 +3173,7 @@ export function createCockpitServer(options = {}) {
    * 開いている途中・閉じる途中・配信の場・閉じている間は触らない（開く段の 7 は保存した窓を読む・閉じる段は目を止める）。
    */
   function syncDiscordVenueEyes() {
-    if (!discordVenueActive() || streamPhase !== "open") return;
+    if (!discordVenueActive() || venueLifecycle.phase !== "open") return;
     try {
       if (venueEyesWanted()) startVenueEyes();
       else stopVenueEyes();
@@ -3589,9 +3278,9 @@ export function createCockpitServer(options = {}) {
   }
 
   function venueOpenGate() {
-    const generation = streamGeneration;
+    const generation = venueLifecycle.generation;
     const experience = venueExperience;
-    return () => !closed && streamPhase === "open" && experience === venueExperience && generation === streamGeneration;
+    return () => !closed && venueLifecycle.phase === "open" && experience === venueExperience && generation === venueLifecycle.generation;
   }
 
   /** @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {string} method */
@@ -3677,7 +3366,7 @@ export function createCockpitServer(options = {}) {
   function remoteVenueStatus() {
     const role = discordVenueOptions?.role;
     let chat = null;
-    if (streamPhase === "open") {
+    if (venueLifecycle.phase === "open") {
       try {
         chat = discordExperience?.chat?.list();
       } catch {
@@ -3688,7 +3377,7 @@ export function createCockpitServer(options = {}) {
     return {
       venueId: remoteVenue?.id,
       stream: snapshot().stream,
-      voice: streamPhase === "open" && !remoteVcRunning ? discordExperience?.vc?.current?.() ?? null : null,
+      voice: venueLifecycle.phase === "open" && !remoteVcRunning ? discordExperience?.vc?.current?.() ?? null : null,
       starting: remoteStartRunning,
       role: role ? { id: role.id, name: role.name.display, model: role.brain } : null,
       chat: chat ? {
@@ -3696,906 +3385,696 @@ export function createCockpitServer(options = {}) {
         selection: chat.selectionStatus, intent: chat.intentStatus,
         listening: Boolean(chat.selectedId && chat.selectionStatus === "available" && chat.intentStatus === "enabled")
       } : null,
-      closing: remoteFinishing || remoteCloseRunning ? "in-progress" : remoteCloseError ? "failed" : null,
-      closeError: remoteCloseError,
-      retryable: remoteCloseError ? !remoteClose?.blocked : null
+      closing: remoteClosing?.finishing || remoteClosing?.running ? "in-progress" : remoteClosing?.error ? "failed" : null,
+      closeError: remoteClosing?.error,
+      retryable: remoteClosing?.error ? !remoteClosing?.blocked : null
     };
   }
 
-  /** Normal folding and save hooks, with each successful step retained for a retry. */
-  async function finishRemoteVenue() {
-    if (!remoteVenue || remoteCloseRunning || remoteFinishing) return;
-    remoteCloseRunning = true;
-    remoteCloseError = null;
+  const remoteClosing = remoteVenue ? createRemoteVenueClose({
+    ...venueClosingOperations,
+    broadcastState,
+    hasFailedOpening: () => remoteStartClaimed && Boolean(venueLifecycle.error),
+    closeFailedEntrance: () => discordExperience?.closeEntrance(
+      { hadEars: false, shutdown: true, retainGuildLease: true }, venueControlContext()
+    ),
+    errMessage,
+    remoteVenue,
+    saveRecording(role, transcript, previous) {
+      const resources = venueTaskResources;
+      return role.hooks?.saveFinal?.(transcript, resources?.writerMaterials(), resources?.retainOnUnconfirmedExit, true, previous);
+    },
+    venueLifecycle,
+    venueRoleList
+  }) : null;
+
+  async function handleRemoteVenueStart(req, res, url) {
+    if (remoteStartClaimed || remoteClosing?.finishing) return sendJson(res, 409, { error: "このプロセスには開場操作が発行済みです" });
+    remoteStartClaimed = true;
+    remoteStartRunning = true;
     try {
-      if (streamPhase === "open") {
-        const transcript = venueTranscript?.all() ?? [];
-        const desk = recallDesk;
-        streamPhase = "closing";
-        venueTaskResources?.stopAccepting();
-        parkRecallDesk(true);
-        const state = /** @type {NonNullable<typeof remoteClose>} */ ({
-          steps: [], recording: null, organising: null, blocked: false
-        });
-        remoteClose = state;
-        state.steps.push(
-          ["退出", () => foldStream({ chat: true, ears: true, session: true })],
-          ["進行中の小タスク", () => drainVenueTasks(desk)],
-          ["記憶の保存・整理", async () => {
-            const resources = venueTaskResources;
-            for (const role of venueRoleList()) {
-              const result = await role.hooks?.saveFinal?.(
-                transcript, resources?.writerMaterials(), resources?.retainOnUnconfirmedExit, true,
-                { recording: state.recording, organising: state.organising }
-              );
-              state.recording = result?.recording ?? null;
-              state.organising = result?.organising ?? null;
-              if (state.recording === "needs-review" || state.organising === "needs-review") state.blocked = true;
-              if (!["saved", "not-needed"].includes(state.recording ?? "") ||
-                  !["organised", "not-due"].includes(state.organising ?? "")) {
-                throw new Error(`記憶: ${state.recording ?? "未確認"} / 整理: ${state.organising ?? "未確認"}`);
-              }
-            }
-          }],
-          ["資料の解放", async () => {
-            try {
-              await releaseVenueTasks();
-            } catch (error) {
-              state.blocked = true;
-              throw error;
-            }
-          }]
-        );
-        broadcastState();
-      }
-      if (!remoteClose && remoteStartClaimed && streamError) {
-        await discordExperience?.closeEntrance({ hadEars: false, shutdown: true, retainGuildLease: true }, venueControlContext());
-      }
-      if (remoteClose) {
-        while (remoteClose.steps.length > 0) {
-          const [label, step] = remoteClose.steps[0];
-          try {
-            await step();
-          } catch (error) {
-            throw new Error(`${label}で停止: ${errMessage(error)}`);
-          }
-          remoteClose.steps.shift();
-        }
-        markVenueClosed();
-      }
-      remoteFinishing = true;
-    } catch (error) {
-      remoteCloseError = errMessage(error);
+      await handleStreamStart(req, res, url, true);
     } finally {
-      remoteCloseRunning = false;
-    }
-    if (remoteFinishing) {
-      await remoteVenue.finish({
-        recording: remoteClose?.recording ?? "not-needed",
-        organising: remoteClose?.organising ?? "not-needed"
-      });
+      remoteStartRunning = false;
     }
   }
 
-  /** @param {import("node:http").IncomingMessage} req @param {import("node:http").ServerResponse} res @param {URL} url */
-  async function handleRemoteVenue(req, res, url) {
-    const pathname = url.pathname;
-    if (req.headers.host !== `127.0.0.1:${boundPort}` || req.headers.origin != null || req.headers["sec-fetch-site"] != null) {
-      return sendJson(res, 403, { error: "ローカル操作コマンドから実行してください" });
-    }
-    if (req.method === "GET" && pathname === "/api/remote-venue") {
+  async function handleRemoteVenueLeave(res) {
+    if (remoteVcRunning || venueLifecycle.phase !== "open") return sendJson(res, 409, { error: "場または VC を操作中です" });
+    if (venueConnectionStatus() === "outside") return sendJson(res, 200, remoteVenueStatus());
+    remoteVcRunning = true;
+    try {
+      const result = await discordExperience?.vc?.leave();
+      if (!result?.ok || venueConnectionStatus() !== "outside") {
+        return sendJson(res, 502, { error: result?.reason ?? "VC 退出を確認できません", state: remoteVenueStatus() });
+      }
       return sendJson(res, 200, remoteVenueStatus());
+    } finally {
+      remoteVcRunning = false;
     }
-    if (req.method !== "POST" || req.headers["x-soul-venue-id"] !== remoteVenue?.id) {
-      return sendJson(res, 409, { error: "この場の所有IDが一致しません" });
+  }
+
+  function handleRemoteVenueClose(res) {
+    if (remoteClosing?.blocked) return sendJson(res, 409, remoteVenueStatus());
+    if (remoteStartRunning || venueLifecycle.phase === "opening" || remoteVcRunning) return sendJson(res, 409, { error: "場または VC を操作中です" });
+    if (!remoteClosing?.running && !remoteClosing?.finishing) {
+      res.once("finish", () => {
+        void remoteClosing?.finishRemoteVenue().catch(() => remoteClosing.failProcessExit());
+      });
     }
-    if (pathname === "/api/stream/start") {
-      if (remoteStartClaimed || remoteFinishing) return sendJson(res, 409, { error: "このプロセスには開場操作が発行済みです" });
-      remoteStartClaimed = true;
-      remoteStartRunning = true;
-      try {
-        await handleStreamStart(req, res, url, true);
-      } finally {
-        remoteStartRunning = false;
-      }
-      return;
-    }
-    if (pathname === "/api/remote-venue/leave") {
-      if (remoteVcRunning || streamPhase !== "open") return sendJson(res, 409, { error: "場または VC を操作中です" });
-      if (venueConnectionStatus() === "outside") return sendJson(res, 200, remoteVenueStatus());
-      remoteVcRunning = true;
-      try {
-        const result = await discordExperience?.vc?.leave();
-        if (!result?.ok || venueConnectionStatus() !== "outside") {
-          return sendJson(res, 502, { error: result?.reason ?? "VC 退出を確認できません", state: remoteVenueStatus() });
-        }
-        return sendJson(res, 200, remoteVenueStatus());
-      } finally {
-        remoteVcRunning = false;
-      }
-    }
-    if (pathname === "/api/remote-venue/close") {
-      if (remoteClose?.blocked) return sendJson(res, 409, remoteVenueStatus());
-      if (remoteStartRunning || streamPhase === "opening" || remoteVcRunning) return sendJson(res, 409, { error: "場または VC を操作中です" });
-      if (!remoteCloseRunning && !remoteFinishing) {
-        res.once("finish", () => {
-          void finishRemoteVenue().catch(() => {
-            remoteFinishing = false;
-            remoteCloseError = "Cockpit の終了処理に失敗しました";
-            if (remoteClose) remoteClose.blocked = true;
-          });
-        });
-      }
-      return sendJson(res, 202, { venueId: remoteVenue?.id, closing: "in-progress" });
-    }
-    return sendJson(res, 404, { error: "unknown remote venue operation" });
+    return sendJson(res, 202, { venueId: remoteVenue?.id, closing: "in-progress" });
   }
 
   // ── HTTP ルーティング ─────────────────────────────────────────────
 
-  const server = options.reservedServer ?? createServer();
-  server.on("request", (req, res) => {
-    handleRequest(req, res).catch((error) => {
-      sendJson(res, 500, { error: `internal error: ${errMessage(error)}` });
-    });
+  const server = createCockpitHttpServer({
+    reservedServer: options.reservedServer,
+    host,
+    isClosed: () => closed,
+    remote: remoteVenue ? {
+      id: remoteVenue.id,
+      getBoundPort: () => boundPort,
+      status: remoteVenueStatus,
+      start: handleRemoteVenueStart,
+      leave: handleRemoteVenueLeave,
+      close: handleRemoteVenueClose
+    } : null,
+    assets,
+    openSse: sse.openSse,
+    snapshot,
+    operations: {
+      handleStreamStart,
+      handleStreamStop,
+      handleDiscordPrep,
+      handleDiscordCatalog,
+      handleDiscordVc,
+      handleDiscordChat,
+      handleDiscordVisionTarget,
+      handleConversationInstruction,
+      handleDevices,
+      handleManualFire,
+      handleWindows,
+      handleVisionTarget,
+      handleVisionFire,
+      handleAudioDevices,
+      handleAudioDevice,
+      handleSelfFire,
+      handleBargeIn,
+      handleVerbosity,
+      handleSpeakStart,
+      handleCommentBusy,
+      handleKill,
+      handleSelectRole,
+      handleEditRole,
+      handleChannel,
+      handleChatConnect,
+      handleChatSource,
+      handleChatDisconnect,
+      handleCompactThreshold,
+      handleCodexFast,
+      handleMemoryRecord
+    }
   });
 
-  /**
-   * @param {import("node:http").IncomingMessage} req
-   * @param {import("node:http").ServerResponse} res
-   */
-  async function handleRequest(req, res) {
-    if (closed) {
-      sendJson(res, 503, { error: "cockpit server is closing." });
+  async function handleConversationInstruction(req, res, method, conversationRoute) {
+    if (!conversationInstructionHooks) {
+      sendJson(res, 503, { error: "conversation instruction control not available" });
       return;
     }
-    const method = req.method ?? "GET";
-    const url = new URL(req.url ?? "/", `http://${host}`);
-    const pathname = url.pathname;
-
-    if (remoteVenue && (pathname.startsWith("/api/remote-venue") || method !== "GET" && pathname === "/api/stream/start")) {
-      await handleRemoteVenue(req, res, url);
+    // 配信の組み直し Domain A: 鍵はロールの id（形を確かめ、hooks が知らないロールは断る）。
+    let brainId;
+    try {
+      brainId = decodeURIComponent(conversationRoute[1]);
+    } catch {
+      sendJson(res, 400, { error: "invalid conversation instruction role id" });
       return;
     }
-    if (remoteVenue && method !== "GET") {
-      sendJson(res, 409, { error: "この場はローカル操作コマンドで操作してください" });
+    const knownRole =
+      isRoleId(brainId) &&
+      (typeof conversationInstructionHooks.isKnownId !== "function" || conversationInstructionHooks.isKnownId(brainId) === true);
+    if (!knownRole) {
+      sendJson(res, 400, { error: "invalid conversation instruction role id" });
       return;
     }
-
-    const conversationRoute = pathname.match(/^\/api\/conversation-instructions\/([^/]+)$/);
-    if (conversationRoute && (method === "GET" || method === "PUT" || method === "DELETE")) {
-      if (!conversationInstructionHooks) {
-        sendJson(res, 503, { error: "conversation instruction control not available" });
-        return;
-      }
-      // 配信の組み直し Domain A: 鍵はロールの id（形を確かめ、hooks が知らないロールは断る）。
-      let brainId;
+    if (method === "GET") {
       try {
-        brainId = decodeURIComponent(conversationRoute[1]);
-      } catch {
-        sendJson(res, 400, { error: "invalid conversation instruction role id" });
-        return;
-      }
-      const knownRole =
-        isRoleId(brainId) &&
-        (typeof conversationInstructionHooks.isKnownId !== "function" || conversationInstructionHooks.isKnownId(brainId) === true);
-      if (!knownRole) {
-        sendJson(res, 400, { error: "invalid conversation instruction role id" });
-        return;
-      }
-      if (method === "GET") {
-        try {
-          sendJson(res, 200, conversationInstructionResponse(brainId));
-        } catch {
-          sendJson(res, 500, { error: "failed to read conversation instruction" });
-        }
-        return;
-      }
-      // 配信の組み直し Domain E: 性格の指示はロールの持ち物。場の途中は書き換えない（POST /api/role/edit と同じ 409）。
-      if (streamPhase !== "closed") {
-        sendJson(res, 409, { error: "配信の途中は性格の指示を直せない（配信を終えてから直す）" });
-        return;
-      }
-      if (method === "PUT") {
-        const parsed = await readJsonBodyStrict(req);
-        if (!parsed.ok) {
-          sendJson(res, 400, { error: "malformed JSON body" });
-          return;
-        }
-        const instruction = parsed.value.instruction;
-        if (typeof instruction !== "string") {
-          sendJson(res, 400, { error: "instruction must be a string" });
-          return;
-        }
-        if (instruction.trim().length === 0) {
-          sendJson(res, 400, { error: "instruction must not be empty" });
-          return;
-        }
-        try {
-          const persisted = await conversationInstructionHooks.save(brainId, instruction);
-          if (persisted !== true) throw new Error("instruction persistence failed");
-          sendJson(res, 200, conversationInstructionResponse(brainId));
-        } catch {
-          // Do not expose the instruction or persistence path. The hook advances revision only after durable
-          // persistence, so a failed save cannot invalidate the existing session.
-          sendJson(res, 500, { error: "failed to persist conversation instruction" });
-        }
-        return;
-      }
-      try {
-        const persisted = await conversationInstructionHooks.reset(brainId);
-        if (persisted !== true) throw new Error("instruction persistence failed");
         sendJson(res, 200, conversationInstructionResponse(brainId));
       } catch {
-        sendJson(res, 500, { error: "failed to reset conversation instruction" });
+        sendJson(res, 500, { error: "failed to read conversation instruction" });
       }
       return;
     }
-
-    if (method === "GET" && pathname === "/") {
-      await serveIndex(res);
+    // 配信の組み直し Domain E: 性格の指示はロールの持ち物。場の途中は書き換えない（POST /api/role/edit と同じ 409）。
+    if (venueLifecycle.phase !== "closed") {
+      sendJson(res, 409, { error: "配信の途中は性格の指示を直せない（配信を終えてから直す）" });
       return;
     }
-    if (method === "GET" && pathname === "/api/devices") {
-      const result = await enumerateDevicesImpl({ inputFormat });
-      sendJson(res, 200, {
-        devices: result.devices,
-        inputFormat: result.inputFormat,
-        lastDevice: await resolveLastDevice(),
-        error: result.error
-      });
-      return;
-    }
-    if (method === "GET" && pathname === "/api/state") {
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "GET" && pathname === "/api/events") {
-      openSse(req, res);
-      return;
-    }
-    // 配信の組み直し Domain D: 「配信を始める / 終える」（場の関数 openStream / closeStream）。/api/ears/start・
-    // /api/ears/stop は後方互換の別名（設定のダイアログの旧 Start / Stop・scripts/preflight-fire.mjs）で、同じ道を通る
-    // （耳だけを起こす・止める道は残さない）。
-    if (method === "POST" && (pathname === "/api/stream/start" || pathname === "/api/ears/start")) {
-      await handleStreamStart(req, res, url);
-      return;
-    }
-    if (method === "POST" && (pathname === "/api/stream/stop" || pathname === "/api/ears/stop")) {
-      await handleStreamStop(res);
-      return;
-    }
-    // Discord モード Domain D: Discord の準備（サーバー・ボイスチャンネル・文字起こしの方式）の読み書きと、サーバーとボイス
-    // チャンネルの一覧の読み込み（Bot がログイン → 取得 → ログアウト）。画面は Domain G。Discord の入口が無ければ 503。
-    if (pathname === "/api/discord/prep" && (method === "GET" || method === "POST")) {
-      await handleDiscordPrep(req, res, method);
-      return;
-    }
-    if (method === "POST" && pathname === "/api/discord/catalog") {
-      await handleDiscordCatalog(res);
-      return;
-    }
-    // Discord モード Domain I: 入る / 抜ける / 移る（POST）と同じサーバーの VC の一覧（GET）。
-    if (pathname === "/api/discord/vc" && (method === "GET" || method === "POST")) {
-      await handleDiscordVc(req, res, method);
-      return;
-    }
-    if (pathname === "/api/discord/chat" && (method === "GET" || method === "POST")) {
-      await handleDiscordChat(req, res, method);
-      return;
-    }
-    // Discord モード Domain G: Discord の場の見る窓（目）の読み書き（配信の見る窓 /api/vision-target とは別）。
-    if (pathname === "/api/discord/vision-target" && (method === "GET" || method === "POST")) {
-      await handleDiscordVisionTarget(req, res, method);
-      return;
-    }
-    if (method === "POST" && pathname === "/api/fire") {
-      if (!fireOrchestrator) {
-        // 未注入（S2.5 単体で立てた等）: 発火は使えない。S2.5 テストはここを叩かない = 無退行。
-        sendJson(res, 503, { error: "fire not available" });
-        return;
-      }
-      // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
-      if (refuseManualFireOutsideStream(res, { vision: false })) return;
-      // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
-      // きっかけ = 手動（操縦席のボタン・AHK のホットキー）。
-      const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ cause: { type: "manual", vision: false } }));
-      // accepted（発火成功）は 202・busy/empty/ears-not-running/error は 200 に {fired:false,...}。
-      const status = /** @type {any} */ (result).fired ? 202 : 200;
-      sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
-      return;
-    }
-    if (method === "GET" && pathname === "/api/windows") {
-      // S5「目が開く」: 対象ウインドウ選択用の一覧取得（実 PowerShell を起動しうる・棚卸し §3-4）。
-      const result = await listWindowsImpl();
-      if (result && Array.isArray(/** @type {any} */ (result).windows)) {
-        sendJson(res, 200, { windows: /** @type {any} */ (result).windows, error: null });
-      } else {
-        const err = /** @type {any} */ (result) && /** @type {any} */ (result).error;
-        sendJson(res, 200, { windows: [], error: err ? err.message ?? String(err) : "unknown error" });
-      }
-      return;
-    }
-    if (method === "POST" && pathname === "/api/vision-target") {
-      if (typeof onSetVisionTarget !== "function") {
-        // 未注入（S2.5/S3/S4 単体で立てた等）: 視覚発火の対象設定は使えない。
-        sendJson(res, 503, { error: "vision target control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      const raw = typeof body.title === "string" ? body.title.trim() : "";
-      const title = raw.length > 0 ? raw : null; // 空 = クリア（対象未設定へ）。
-      // タイトル自体はここに保持/ログしない。フックへ橋渡しし、state は visionTargetStatus() だけを載せる
-      // （責務境界: cockpit-server は永続化実体を知らない・Channel URL と同型）。
-      await onSetVisionTarget(title);
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/vision-fire") {
-      if (!fireOrchestrator) {
-        // 未注入（S2.5/S3/S4 単体で立てた等）: 発火は使えない。既存 /api/fire と同型の 503。
-        sendJson(res, 503, { error: "fire not available" });
-        return;
-      }
-      // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
-      if (refuseManualFireOutsideStream(res, { vision: true })) return;
-      // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
-      const result = await trackFire(() =>
-        /** @type {any} */ (fireOrchestrator).fire({ vision: true, cause: { type: "manual", vision: true } })
-      );
-      // accepted（発火成功）は 202・busy/no-target/capture-failed/empty/error は 200 に {fired:false,...}。
-      const status = /** @type {any} */ (result).fired ? 202 : 200;
-      sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
-      return;
-    }
-    if (method === "GET" && pathname === "/api/audio-devices") {
-      // S6「会話が続く」: 出力デバイス選択用の一覧取得（実 PowerShell を起動しうる・GET /api/windows の写経）。
-      const result = await listAudioDevicesImpl();
-      if (result && Array.isArray(/** @type {any} */ (result).devices)) {
-        sendJson(res, 200, { devices: /** @type {any} */ (result).devices, error: null });
-      } else {
-        const err = /** @type {any} */ (result) && /** @type {any} */ (result).error;
-        sendJson(res, 200, { devices: [], error: err ? err.message ?? String(err) : "unknown error" });
-      }
-      return;
-    }
-    if (method === "POST" && pathname === "/api/audio-device") {
-      if (typeof onSetAudioDevice !== "function") {
-        // 未注入（S2.5〜S5 単体で立てた等）: 出力デバイス設定は使えない。
-        sendJson(res, 503, { error: "audio device control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      const raw = typeof body.name === "string" ? body.name.trim() : "";
-      const name = raw.length > 0 ? raw : null; // 空 = クリア（既定デバイスへ）。
-      // デバイス名自体はここに保持/ログしない。フックへ橋渡しし、state は audioDeviceStatus() だけを
-      // 載せる（責務境界: cockpit-server は永続化・常駐プレイヤーの再起動実体を知らない）。
-      await onSetAudioDevice(name);
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/self-fire") {
-      // S6「会話が続く」: 自発発火 ON/OFF の永続トグル継ぎ目（Domain C が用意した setSelfFireEnabled を
-      // HTTP から叩く）。scheduler 未生成（orchestrator 未注入）なら 503（手動 Fire は無関係・生きたまま）。
-      if (!fireScheduler) {
-        sendJson(res, 503, { error: "self-fire control not available" });
-        return;
-      }
-      const scope = discordVenueOptions;
-      const body = await readJsonBody(req);
-      if (scope !== discordVenueOptions) {
-        sendJson(res, 409, { error: "操作中に場が切り替わりました" });
-        return;
-      }
-      const enabled = body.enabled === true;
-      const selfFireBefore = effectiveSelfFire();
-      setSelfFireEnabled(enabled);
-      // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
-      reportControl({ control: "self-fire", from: selfFireBefore, to: effectiveSelfFire() });
-      if (!discordVenueOptions && typeof onSetSelfFireEnabled === "function") {
-        try {
-          await onSetSelfFireEnabled(fireScheduler.isEnabled());
-        } catch {
-          // 永続化失敗は操作を止めない（onSetVisionTarget と同型の失敗寛容）。
-        }
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/barge-in") {
-      // 「朗読と合いの手」: barge-in ON/OFF の永続トグル継ぎ目（POST /api/self-fire の写経）。
-      // gate 未生成（orchestrator.interrupt 未対応）なら 503（既存 barge-in 結線は無関係・生きたまま）。
-      if (!bargeInGate) {
-        sendJson(res, 503, { error: "barge-in control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      const enabled = body.enabled === true;
-      const bargeInBefore = bargeInGate.isEnabled();
-      bargeInGate.setEnabled(enabled);
-      // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
-      reportControl({ control: "barge-in", from: bargeInBefore, to: bargeInGate.isEnabled() });
-      if (typeof onSetBargeInEnabled === "function") {
-        try {
-          await onSetBargeInEnabled(bargeInGate.isEnabled());
-        } catch {
-          // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
-        }
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/verbosity") {
-      // 口数モードの切替継ぎ目（wave 計画「口数配線」§2 裁定 A・POST /api/self-fire の写経）。
-      // scheduler 未生成（orchestrator 未注入）なら 503（自発発火制御と同型・生きたまま）。
-      if (!fireScheduler) {
-        sendJson(res, 503, { error: "verbosity control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      // 配信の組み直し 仕上げ・Undine の追認: 口数はロールの持ち物。場の途中（開きかけ・開いている・閉じかけ）は替えない
-      // （POST /api/role/edit と同じ 409・何も変えない・設計 §3「ロールを固める」）。
-      if (streamPhase !== "closed") {
-        sendJson(res, 409, { error: "配信の途中は口数を替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
-        return;
-      }
-      const mode = body.mode;
-      // self-fire は boolean 強制だが、verbosity は妥当な mode（quiet/normal/chatty）を要求する
-      // （無効入力を早期に弾く・防御的）。
-      if (typeof mode !== "string" || (mode !== "quiet" && mode !== "normal" && mode !== "chatty")) {
-        sendJson(res, 400, { error: "invalid verbosity mode" });
-        return;
-      }
-      fireScheduler.setVerbosity(mode);
-      if (onSetVerbosity) {
-        try {
-          await onSetVerbosity(fireScheduler.getVerbosity());
-        } catch {
-          // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
-        }
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/speak-start") {
-      // 話し始めの方式（従来 / speak-now）の切替継ぎ目（speak-now 合意 §5・POST /api/verbosity の写経）。
-      // scheduler 未生成（orchestrator 未注入）なら 503。
-      if (!fireScheduler) {
-        sendJson(res, 503, { error: "speak-start control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      // Discord モード Domain F: Discord の場では話し始めは speak-now に固定（選べない）。何も変えない（ロールの保存値も書かない）。
-      if (venueFixesSpeakNow()) {
-        sendJson(res, 409, { error: DISCORD_SPEAK_START_FIXED_MESSAGE, state: snapshot() });
-        return;
-      }
-      // 配信の組み直し 仕上げ: 話し始めもロールの持ち物（POST /api/verbosity と同じ 409・何も変えない）。
-      if (streamPhase !== "closed") {
-        sendJson(res, 409, { error: "配信の途中は話し始めを替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
-        return;
-      }
-      const mode = body.mode;
-      if (mode !== "classic" && mode !== "speak-now") {
-        sendJson(res, 400, { error: "invalid speak-start mode" });
-        return;
-      }
-      applySpeakStartMode(mode);
-      if (onSetSpeakStartMode) {
-        try {
-          await onSetSpeakStartMode(speakStartMode);
-        } catch {
-          // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
-        }
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/comment-busy") {
-      // 忙しい間に届いたコメントの扱い（あとで拾う / 見逃す）の切替継ぎ目（コメント反応の合意 §2・
-      // POST /api/speak-start の写経）。scheduler 未生成（orchestrator 未注入）なら 503。
-      if (!fireScheduler) {
-        sendJson(res, 503, { error: "comment-busy control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      const policy = body.policy;
-      if (!COMMENT_BUSY_POLICIES.includes(policy)) {
-        sendJson(res, 400, { error: "invalid comment-busy policy" });
-        return;
-      }
-      commentBusyPolicy = policy;
-      // 見逃すへ切り替えたら、取っておいたコメントも捨てる（以後は忙しい間のコメントを判定しない）。
-      if (commentBusyPolicy === "drop" && commentReact) commentReact.reset();
-      if (onSetCommentBusyPolicy) {
-        try {
-          await onSetCommentBusyPolicy(commentBusyPolicy);
-        } catch {
-          // 永続化失敗は操作を止めない（onSetSpeakStartMode と同型の失敗寛容）。
-        }
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/kill") {
-      // S8「キルスイッチ」: 全発火 OFF + 声の即切断（POST /api/fire の :798 と同型のゲート・orchestrator が
-      // 要る）。キル状態の正本はサーバ側（この関数を囲む `killed` 変数）にあり、ここが唯一の書き手。
-      if (!fireOrchestrator) {
-        sendJson(res, 503, { error: "kill control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      // トグル禁止・明示 boolean のみ受理する（誤 POST での意図しない反転を避ける・verbosity の mode
-      // 検証 :909-912 と同型の早期防御）。
-      if (typeof body.killed !== "boolean") {
-        sendJson(res, 400, { error: "killed must be a boolean" });
-        return;
-      }
-      const killedBefore = killed;
-      killed = body.killed; // 正本更新。
-      // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
-      reportControl({ control: "kill", from: killedBefore, to: killed });
-      // orchestrator へ遷移時伝播（best-effort・onSetSelfFireEnabled :887-893 と同型の失敗寛容）。
-      // POST /api/kill は fire() の Promise には一切依存しない（kill 中の再生を barge-in と見分けられない
-      // ため・レスポンス正本は snapshot + kill() 自身の戻り値のみ・domain-a.md 申し送り）。
-      try {
-        if (killed) {
-          await fireOrchestrator.kill();
-        } else {
-          fireOrchestrator.revive();
-        }
-      } catch {
-        // best-effort（失敗しても操作は止めない・killed フラグはサーバ側で既に反映済み）。
-      }
-      broadcastState();
-      if (!killed) deliverLocalTaskResult();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/role") {
-      // 配信の組み直し Domain A: ロールの選択の継ぎ目（旧 POST /api/brain の置き換え・POST /api/verbosity の写経）。
-      // ロールの中身・永続化・頭のホットスワップは cockpit.mjs の onSetRole が担う（責務境界: cockpit-server は
-      // ロールの中身を知らない）。未注入（S2.5 単体等）なら 503。
-      if (typeof onSetRole !== "function") {
-        sendJson(res, 503, { error: "role control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      // トグル禁止・明示値のみ受理する（形はロールの id・中身の有無は onSetRole が答える）。
-      if (!isRoleId(body.role)) {
-        sendJson(res, 400, { error: "invalid role" });
-        return;
-      }
-      // 場の途中でロールは替えない（stream-restructure.md §2.1・§3「ロールを固める」）。配信の組み直し Domain D: 場が
-      // 開いている間・開きかけ・閉じかけ（記録中）は断る（名前・声・口数・記憶の置き場が配信の途中で替わらないように）。
-      if (streamPhase !== "closed") {
-        sendJson(res, 409, { error: "配信の途中はロールを替えられない（配信を終えてから選ぶ）", state: snapshot() });
-        return;
-      }
-      /** @type {any} */
-      let result;
-      try {
-        result = await onSetRole(body.role);
-      } catch (error) {
-        result = { ok: false, reason: `ロールを選べない（${errMessage(error)}）` };
-      }
-      if (!result || result.ok !== true) {
-        sendJson(res, 400, { error: (result && typeof result.reason === "string" && result.reason) || "unknown role" });
-        return;
-      }
-      applyRoleResult(result);
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && (pathname === "/api/role/edit" || pathname === "/api/role/new")) {
-      // 配信の組み直し Domain E: ロールの編集（今のロール）と、今のロールを写して新しいロールを作る口。中身の確かめと
-      // 永続化は cockpit.mjs（onUpdateRole / onCreateRole）。場の途中はロールの持ち物を替えない（POST /api/role と同じ 409）。
-      const isEdit = pathname === "/api/role/edit";
-      const hook = isEdit ? onUpdateRole : onCreateRole;
-      if (!hook) {
-        sendJson(res, 503, { error: "role edit not available" });
-        return;
-      }
+    if (method === "PUT") {
       const parsed = await readJsonBodyStrict(req);
-      if (!parsed.ok || !parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
+      if (!parsed.ok) {
         sendJson(res, 400, { error: "malformed JSON body" });
         return;
       }
-      if (streamPhase !== "closed") {
-        sendJson(res, 409, { error: "配信の途中はロールを直せない（配信を終えてから直す）", state: snapshot() });
+      const instruction = parsed.value.instruction;
+      if (typeof instruction !== "string") {
+        sendJson(res, 400, { error: "instruction must be a string" });
         return;
       }
-      const body = /** @type {Record<string, any>} */ (parsed.value);
-      if (!isEdit) {
-        if (!isRoleId(body.id)) {
-          sendJson(res, 400, { error: "ロールの id は英小文字で始まる 32 字までの英小文字・数字・-（Windows の予約名は使えない）" });
-          return;
-        }
-        if (body.name != null && typeof body.name !== "string") {
-          sendJson(res, 400, { error: "invalid role name" });
-          return;
-        }
-      }
-      /** @type {any} */
-      let result;
-      try {
-        result = isEdit
-          ? await /** @type {any} */ (hook)(body)
-          : await /** @type {any} */ (hook)({ id: body.id, name: typeof body.name === "string" ? body.name : null });
-      } catch (error) {
-        sendJson(res, 500, { error: `ロールを書けない（${errMessage(error)}）` });
-        return;
-      }
-      if (!result || result.ok !== true) {
-        const reason = (result && typeof result.reason === "string" && result.reason) || "ロールを直せない";
-        sendJson(res, result && result.conflict === true ? 409 : 400, { error: reason });
-        return;
-      }
-      applyRoleResult(result);
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/channel") {
-      if (typeof onSetChannelUrl !== "function") {
-        // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
-        sendJson(res, 503, { error: "channel control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      const raw = typeof body.url === "string" ? body.url.trim() : "";
-      const url = raw.length > 0 ? raw : null; // 空 = クリア（未設定へ）。
-      // URL 自体はここに保持/ログしない（token を含む）。フックへ橋渡しし、state は redact 済みの
-      // channelStatus() だけを載せる（責務境界: cockpit-server は channel の中身を知らない）。
-      await onSetChannelUrl(url);
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/chat/connect") {
-      // S7「視聴者が混ざる」: 実チャット器官を Connect（POST 駆動遅延起動・ear-pipeline の流儀）。
-      if (typeof chatClientFactory !== "function") {
-        // 未注入（S2.5〜S6 単体で立てた等）: チャット合流は使えない（POST /api/fire と同型の 503）。
-        sendJson(res, 503, { error: "chat not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      // Discord モード Domain G（F の追認 (2)）: Discord の場（開きかけ・開いている・閉じかけ）の間は Connect を断る（Discord の場には
-      // コメントが無い・設計 §4.3）。何も変えない。画面も Discord の場の間は Connect を出さない。
-      if (discordVenueActive()) {
-        sendJson(res, 409, { error: DISCORD_CHAT_CONNECT_REFUSED_MESSAGE, state: snapshot() });
-        return;
-      }
-      // 配信の組み直し 仕上げ（全体の突き合わせの持ち越し 2）: 場の開きかけ・閉じかけの間は Connect を断る（閉じかけの
-      // 間につないだ器官が場の外に残り、次の場へ持ち込まれるのを防ぐ）。何も変えない。開いている間に押されたら、後ろでつないでいる
-      // 始める 7 のつなぎより押した方を優先する（後ろのつなぎは黙って捨てる・startChatForStream）。
-      // 閉じている間と開いている間は今のまま通す（YouTube の欄は場が開いている間も触れる・設計 §3）。
-      if (streamPhase === "opening" || streamPhase === "closing") {
-        sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
-        return;
-      }
-      const raw = typeof body.source === "string" ? body.source.trim() : "";
-      if (raw.length === 0) {
-        // Connect には配信 source が要る（空はクリアではなくエラー・停止は disconnect で行う）。
-        sendJson(res, 400, { error: "chat source is required (stream URL / video ID / channel /live URL)." });
+      if (instruction.trim().length === 0) {
+        sendJson(res, 400, { error: "instruction must not be empty" });
         return;
       }
       try {
-        await connectChat(raw);
-      } catch (error) {
-        // 器官生成/start の想定外 throw（factory 自体の throw 等）。器官内エラーは Domain A が診断へ
-        // 落とすので通常ここには来ないが、防波堤として畳んで正直に返す（盲目の「接続済み」を残さない）。
-        foldChatClient();
-        sendJson(res, 500, { error: `chat connect failed: ${errMessage(error)}`, state: snapshot() });
-        return;
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/chat/source") {
-      // 配信の組み直し 仕上げ（体験の素描 場面 3: 「URL を入れるだけで、Connect は配信を始めるがやる」）: YouTube の欄に
-      // 入れた source を保存し、この起動で入れたことを覚える（つなぎはしない・つなぐのは「配信を始める」か Connect）。
-      // 空（または null）は「つながない」: 保存した値を消し、覚えたことも消す。場のどの状態でも通す（欄は場の間も触れる）。
-      const body = await readJsonBody(req);
-      if (body.source !== null && typeof body.source !== "string") {
-        sendJson(res, 400, { error: "chat source must be a string (or null to clear)." });
-        return;
-      }
-      const raw = typeof body.source === "string" ? body.source.trim() : "";
-      const source = raw.length > 0 ? raw : null;
-      chatSourceThisBoot = source;
-      if (typeof onSetChatSource === "function") {
-        try {
-          await onSetChatSource(source);
-        } catch {
-          // 永続化の失敗は止めない（この起動の間は覚えている・connectChat と同じ失敗寛容）。
-        }
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/chat/disconnect") {
-      // 稼働中のチャット器官を停止して畳む（冪等・器官が無くても 200）。配信の組み直し 仕上げ: 自分で切った source は
-      // 次の「配信を始める」でつなぎ直さない（この起動で入れたことを忘れる・欄の値と保存した値はそのまま）。
-      chatSourceThisBoot = null;
-      foldChatClient();
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/compact-threshold") {
-      // 圧縮を始める大きさの変更継ぎ目（POST /api/barge-in の写経）。保存 + 走っている compactor の差し替えは
-      // cockpit.mjs の onSetCompactThresholdTokens が担う。未注入なら 503。値は整数で 5 万〜45 万だけ受ける。
-      if (typeof onSetCompactThresholdTokens !== "function") {
-        sendJson(res, 503, { error: "compaction control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      const tokens = normalizeCompactThresholdTokens(body.tokens);
-      if (tokens == null) {
-        sendJson(res, 400, { error: "tokens must be an integer from 50000 to 450000" });
-        return;
-      }
-      try {
-        await onSetCompactThresholdTokens(tokens);
+        const persisted = await conversationInstructionHooks.save(brainId, instruction);
+        if (persisted !== true) throw new Error("instruction persistence failed");
+        sendJson(res, 200, conversationInstructionResponse(brainId));
       } catch {
-        // 永続化 / 差し替えの失敗は操作を止めない（onSetBargeInEnabled と同型の失敗寛容）。
+        // Do not expose the instruction or persistence path. The hook advances revision only after durable
+        // persistence, so a failed save cannot invalidate the existing session.
+        sendJson(res, 500, { error: "failed to persist conversation instruction" });
       }
-      broadcastState();
-      sendJson(res, 200, snapshot());
       return;
     }
-    if (method === "POST" && pathname === "/api/codex-fast") {
-      // ①の Codex の頭の fast の切り替え継ぎ目（POST /api/compact-threshold の写経）。保存と次の受理への反映は
-      // cockpit.mjs の onSetCodexFastMode が担う（次の返事から効く・セッションは作り直さない）。未注入なら 503。
-      if (typeof onSetCodexFastMode !== "function") {
-        sendJson(res, 503, { error: "codex fast control not available" });
-        return;
-      }
-      const body = await readJsonBody(req);
-      // トグル禁止・明示の boolean だけ受ける（verbosity の mode 検証と同型）。
-      if (typeof body.enabled !== "boolean") {
-        sendJson(res, 400, { error: "enabled must be a boolean" });
-        return;
-      }
-      try {
-        await onSetCodexFastMode(body.enabled);
-      } catch {
-        // 永続化の失敗は操作を止めない（onSetCompactThresholdTokens と同型の失敗寛容）。
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-    if (method === "POST" && pathname === "/api/memory-record") {
-      // 配信間記憶: 手動「今日を記録」継ぎ目。onMemoryRecord 未注入なら 503。
-      if (typeof onMemoryRecord !== "function") {
-        sendJson(res, 503, { error: "memory record control not available" });
-        return;
-      }
-      // 配信の組み直し Domain D: 「今日を記録」は場が開いている間だけ（stream-restructure.md §3。閉じかけは「配信を終える」の
-      // 最後の保存が走っている）。
-      if (streamPhase !== "open") {
-        sendJson(res, 409, { error: "配信を始めている間だけ記録できる（記録は「配信を終える」でも行う）", state: snapshot() });
-        return;
-      }
-      try {
-        await onMemoryRecord();
-      } catch {
-        // 記録失敗（②書き出し役・コミットの失敗を含む）は 500 にせず握って続行する
-        // （手動記録が失敗しても操縦席の他の操作を止めない・failure-tolerant）。
-      }
-      broadcastState();
-      sendJson(res, 200, snapshot());
-      return;
-    }
-
-    // 操縦席 UI アセットの静的配信（vendor/ui/view-logic の .mjs ツリー）。**追加ルートのみ**——
-    // 既存 22 エンドポイント×13 SSE のワイヤ契約は一切変えない（上の分岐で全て return 済みで、ここに
-    // 落ちてくる GET は非 API・非 root だけ）。UI アセットサブツリー宛のみ握り、その他は既存 404 へ。
-    if (method === "GET" && (await tryServeUiAsset(res, pathname))) {
-      return;
-    }
-
-    sendJson(res, 404, { error: `not found: ${method} ${pathname}` });
-  }
-
-  /**
-   * 操縦席 UI アセット（vendor/ui/view-logic 配下の `.mjs`）を配る静的ルート（serveIndex 同型の readFile→
-   * JS MIME）。**トラバーサル防止**: `..` を含んでも path.relative で UI ルート脱出を弾き、正規化後の第一区画が
-   * 許可サブツリー（vendor/ui/view-logic）に収まり、かつ拡張子が `.mjs` のものだけ 200 で返す。それ以外は 404。
-   *
-   * @param {import("node:http").ServerResponse} res
-   * @param {string} pathname  リクエストパス（先頭 "/"）。
-   * @returns {Promise<boolean>}  UI アセット宛として応答を握ったら true（握らなければ既存 404 へフォールスルー）。
-   */
-  async function tryServeUiAsset(res, pathname) {
-    let rel;
     try {
-      rel = decodeURIComponent(pathname);
+      const persisted = await conversationInstructionHooks.reset(brainId);
+      if (persisted !== true) throw new Error("instruction persistence failed");
+      sendJson(res, 200, conversationInstructionResponse(brainId));
     } catch {
-      return false; // 不正な %エンコードは UI アセットとして扱わない（既存 404 へ委譲）。
+      sendJson(res, 500, { error: "failed to reset conversation instruction" });
     }
-    rel = rel.replace(/^\/+/, "");
-    const firstSeg = rel.split("/")[0];
-    // このハンドラが「握る」のは第一区画が UI アセットサブツリーのリクエストのみ。それ以外（/api/... 等）は
-    // false を返し、既存の 404 フォールスルーに委ねる（他ルートの 404 レスポンス形を 1 バイトも変えない）。
-    if (!UI_ASSET_SUBDIRS.has(firstSeg)) return false;
-
-    const notFound = () => sendJson(res, 404, { error: `not found: GET ${pathname}` });
-
-    // 解決して UI ルート脱出とサブツリー逸脱を弾く（`..` / URL エンコードのトラバーサル防止）。
-    const resolved = path.resolve(uiRootPath, rel);
-    const relFromRoot = path.relative(uiRootPath, resolved);
-    if (relFromRoot === "" || relFromRoot.startsWith("..") || path.isAbsolute(relFromRoot)) {
-      notFound(); // UI ルートの外に出た（脱出）。
-      return true;
-    }
-    // 正規化後の第一区画が許可サブツリー外なら拒否（例: /vendor/../cockpit-server.mjs → 第一区画が cockpit-server.mjs）。
-    if (!UI_ASSET_SUBDIRS.has(relFromRoot.split(path.sep)[0])) {
-      notFound();
-      return true;
-    }
-    if (!resolved.endsWith(".mjs")) {
-      notFound(); // 許可拡張子は .mjs のみ（module script は JS MIME 必須・他拡張子は配らない）。
-      return true;
-    }
-    let body;
-    try {
-      body = await readFile(resolved);
-    } catch {
-      notFound(); // 存在しない .mjs。
-      return true;
-    }
-    res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
-    res.end(body);
-    return true;
   }
 
-  async function serveIndex(res) {
-    let htmlBody = options.indexHtml;
-    if (htmlBody == null && options.indexHtmlPath != null) {
+  async function handleDevices(res) {
+    const result = await enumerateDevicesImpl({ inputFormat });
+    sendJson(res, 200, {
+      devices: result.devices,
+      inputFormat: result.inputFormat,
+      lastDevice: await resolveLastDevice(),
+      error: result.error
+    });
+  }
+
+  async function handleManualFire(res) {
+    if (!fireOrchestrator) {
+      // 未注入（S2.5 単体で立てた等）: 発火は使えない。S2.5 テストはここを叩かない = 無退行。
+      sendJson(res, 503, { error: "fire not available" });
+      return;
+    }
+    // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
+    if (refuseManualFireOutsideStream(res, { vision: false })) return;
+    // busy 保護は orchestrator の状態機械が担う（2 発目は即 reason:"busy"）。
+    // きっかけ = 手動（操縦席のボタン・AHK のホットキー）。
+    const result = await trackFire(() => /** @type {any} */ (fireOrchestrator).fire({ cause: { type: "manual", vision: false } }));
+    // accepted（発火成功）は 202・busy/empty/ears-not-running/error は 200 に {fired:false,...}。
+    const status = /** @type {any} */ (result).fired ? 202 : 200;
+    sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
+  }
+
+  async function handleWindows(res) {
+    // S5「目が開く」: 対象ウインドウ選択用の一覧取得（実 PowerShell を起動しうる・棚卸し §3-4）。
+    const result = await listWindowsImpl();
+    if (result && Array.isArray(/** @type {any} */ (result).windows)) {
+      sendJson(res, 200, { windows: /** @type {any} */ (result).windows, error: null });
+    } else {
+      const err = /** @type {any} */ (result) && /** @type {any} */ (result).error;
+      sendJson(res, 200, { windows: [], error: err ? err.message ?? String(err) : "unknown error" });
+    }
+  }
+
+  async function handleVisionTarget(req, res) {
+    if (typeof onSetVisionTarget !== "function") {
+      // 未注入（S2.5/S3/S4 単体で立てた等）: 視覚発火の対象設定は使えない。
+      sendJson(res, 503, { error: "vision target control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const raw = typeof body.title === "string" ? body.title.trim() : "";
+    const title = raw.length > 0 ? raw : null; // 空 = クリア（対象未設定へ）。
+    // タイトル自体はここに保持/ログしない。フックへ橋渡しし、state は visionTargetStatus() だけを載せる
+    // （責務境界: cockpit-server は永続化実体を知らない・Channel URL と同型）。
+    await onSetVisionTarget(title);
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleVisionFire(req, res) {
+    if (!fireOrchestrator) {
+      // 未注入（S2.5/S3/S4 単体で立てた等）: 発火は使えない。既存 /api/fire と同型の 503。
+      sendJson(res, 503, { error: "fire not available" });
+      return;
+    }
+    // 配信の組み直し Domain E: 場が開いていない間の手動の発火は断る（頭のセッションは「配信を始める」で作る）。
+    if (refuseManualFireOutsideStream(res, { vision: true })) return;
+    // busy 保護は orchestrator の状態機械が担う（通常 Fire と共有・2 発目は即 reason:"busy"）。
+    const result = await trackFire(() =>
+      /** @type {any} */ (fireOrchestrator).fire({ vision: true, cause: { type: "manual", vision: true } })
+    );
+    // accepted（発火成功）は 202・busy/no-target/capture-failed/empty/error は 200 に {fired:false,...}。
+    const status = /** @type {any} */ (result).fired ? 202 : 200;
+    sendJson(res, status, { ...result, state: /** @type {any} */ (result).state ?? fireOrchestrator.getState() });
+  }
+
+  async function handleAudioDevices(res) {
+    // S6「会話が続く」: 出力デバイス選択用の一覧取得（実 PowerShell を起動しうる・GET /api/windows の写経）。
+    const result = await listAudioDevicesImpl();
+    if (result && Array.isArray(/** @type {any} */ (result).devices)) {
+      sendJson(res, 200, { devices: /** @type {any} */ (result).devices, error: null });
+    } else {
+      const err = /** @type {any} */ (result) && /** @type {any} */ (result).error;
+      sendJson(res, 200, { devices: [], error: err ? err.message ?? String(err) : "unknown error" });
+    }
+  }
+
+  async function handleAudioDevice(req, res) {
+    if (typeof onSetAudioDevice !== "function") {
+      // 未注入（S2.5〜S5 単体で立てた等）: 出力デバイス設定は使えない。
+      sendJson(res, 503, { error: "audio device control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const raw = typeof body.name === "string" ? body.name.trim() : "";
+    const name = raw.length > 0 ? raw : null; // 空 = クリア（既定デバイスへ）。
+    // デバイス名自体はここに保持/ログしない。フックへ橋渡しし、state は audioDeviceStatus() だけを
+    // 載せる（責務境界: cockpit-server は永続化・常駐プレイヤーの再起動実体を知らない）。
+    await onSetAudioDevice(name);
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleSelfFire(req, res) {
+    // S6「会話が続く」: 自発発火 ON/OFF の永続トグル継ぎ目（Domain C が用意した setSelfFireEnabled を
+    // HTTP から叩く）。scheduler 未生成（orchestrator 未注入）なら 503（手動 Fire は無関係・生きたまま）。
+    if (!fireScheduler) {
+      sendJson(res, 503, { error: "self-fire control not available" });
+      return;
+    }
+    const scope = discordVenueOptions;
+    const body = await readJsonBody(req);
+    if (scope !== discordVenueOptions) {
+      sendJson(res, 409, { error: "操作中に場が切り替わりました" });
+      return;
+    }
+    const enabled = body.enabled === true;
+    const selfFireBefore = effectiveSelfFire();
+    setSelfFireEnabled(enabled);
+    // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
+    reportControl({ control: "self-fire", from: selfFireBefore, to: effectiveSelfFire() });
+    if (!discordVenueOptions && typeof onSetSelfFireEnabled === "function") {
       try {
-        htmlBody = await readFile(options.indexHtmlPath, "utf8");
-      } catch (error) {
-        sendText(res, 500, `failed to read index html: ${errMessage(error)}`);
+        await onSetSelfFireEnabled(fireScheduler.isEnabled());
+      } catch {
+        // 永続化失敗は操作を止めない（onSetVisionTarget と同型の失敗寛容）。
+      }
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleBargeIn(req, res) {
+    // 「朗読と合いの手」: barge-in ON/OFF の永続トグル継ぎ目（POST /api/self-fire の写経）。
+    // gate 未生成（orchestrator.interrupt 未対応）なら 503（既存 barge-in 結線は無関係・生きたまま）。
+    if (!bargeInGate) {
+      sendJson(res, 503, { error: "barge-in control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const enabled = body.enabled === true;
+    const bargeInBefore = bargeInGate.isEnabled();
+    bargeInGate.setEnabled(enabled);
+    // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
+    reportControl({ control: "barge-in", from: bargeInBefore, to: bargeInGate.isEnabled() });
+    if (typeof onSetBargeInEnabled === "function") {
+      try {
+        await onSetBargeInEnabled(bargeInGate.isEnabled());
+      } catch {
+        // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+      }
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleVerbosity(req, res) {
+    // 口数モードの切替継ぎ目（wave 計画「口数配線」§2 裁定 A・POST /api/self-fire の写経）。
+    // scheduler 未生成（orchestrator 未注入）なら 503（自発発火制御と同型・生きたまま）。
+    if (!fireScheduler) {
+      sendJson(res, 503, { error: "verbosity control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    // 配信の組み直し 仕上げ・Undine の追認: 口数はロールの持ち物。場の途中（開きかけ・開いている・閉じかけ）は替えない
+    // （POST /api/role/edit と同じ 409・何も変えない・設計 §3「ロールを固める」）。
+    if (venueLifecycle.phase !== "closed") {
+      sendJson(res, 409, { error: "配信の途中は口数を替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
+      return;
+    }
+    const mode = body.mode;
+    // self-fire は boolean 強制だが、verbosity は妥当な mode（quiet/normal/chatty）を要求する
+    // （無効入力を早期に弾く・防御的）。
+    if (typeof mode !== "string" || (mode !== "quiet" && mode !== "normal" && mode !== "chatty")) {
+      sendJson(res, 400, { error: "invalid verbosity mode" });
+      return;
+    }
+    fireScheduler.setVerbosity(mode);
+    if (onSetVerbosity) {
+      try {
+        await onSetVerbosity(fireScheduler.getVerbosity());
+      } catch {
+        // 永続化失敗は操作を止めない（onSetSelfFireEnabled と同型の失敗寛容）。
+      }
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleSpeakStart(req, res) {
+    // 話し始めの方式（従来 / speak-now）の切替継ぎ目（speak-now 合意 §5・POST /api/verbosity の写経）。
+    // scheduler 未生成（orchestrator 未注入）なら 503。
+    if (!fireScheduler) {
+      sendJson(res, 503, { error: "speak-start control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    // Discord モード Domain F: Discord の場では話し始めは speak-now に固定（選べない）。何も変えない（ロールの保存値も書かない）。
+    if (venueFixesSpeakNow()) {
+      sendJson(res, 409, { error: DISCORD_SPEAK_START_FIXED_MESSAGE, state: snapshot() });
+      return;
+    }
+    // 配信の組み直し 仕上げ: 話し始めもロールの持ち物（POST /api/verbosity と同じ 409・何も変えない）。
+    if (venueLifecycle.phase !== "closed") {
+      sendJson(res, 409, { error: "配信の途中は話し始めを替えられない（ロールの持ち物・配信を終えてから直す）", state: snapshot() });
+      return;
+    }
+    const mode = body.mode;
+    if (mode !== "classic" && mode !== "speak-now") {
+      sendJson(res, 400, { error: "invalid speak-start mode" });
+      return;
+    }
+    applySpeakStartMode(mode);
+    if (onSetSpeakStartMode) {
+      try {
+        await onSetSpeakStartMode(speakStartMode);
+      } catch {
+        // 永続化失敗は操作を止めない（onSetVerbosity と同型の失敗寛容）。
+      }
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleCommentBusy(req, res) {
+    // 忙しい間に届いたコメントの扱い（あとで拾う / 見逃す）の切替継ぎ目（コメント反応の合意 §2・
+    // POST /api/speak-start の写経）。scheduler 未生成（orchestrator 未注入）なら 503。
+    if (!fireScheduler) {
+      sendJson(res, 503, { error: "comment-busy control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const policy = body.policy;
+    if (!COMMENT_BUSY_POLICIES.includes(policy)) {
+      sendJson(res, 400, { error: "invalid comment-busy policy" });
+      return;
+    }
+    commentBusyPolicy = policy;
+    // 見逃すへ切り替えたら、取っておいたコメントも捨てる（以後は忙しい間のコメントを判定しない）。
+    if (commentBusyPolicy === "drop" && commentReact) commentReact.reset();
+    if (onSetCommentBusyPolicy) {
+      try {
+        await onSetCommentBusyPolicy(commentBusyPolicy);
+      } catch {
+        // 永続化失敗は操作を止めない（onSetSpeakStartMode と同型の失敗寛容）。
+      }
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleKill(req, res) {
+    // S8「キルスイッチ」: 全発火 OFF + 声の即切断（POST /api/fire の :798 と同型のゲート・orchestrator が
+    // 要る）。キル状態の正本はサーバ側（この関数を囲む `killed` 変数）にあり、ここが唯一の書き手。
+    if (!fireOrchestrator) {
+      sendJson(res, 503, { error: "kill control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    // トグル禁止・明示 boolean のみ受理する（誤 POST での意図しない反転を避ける・verbosity の mode
+    // 検証 :909-912 と同型の早期防御）。
+    if (typeof body.killed !== "boolean") {
+      sendJson(res, 400, { error: "killed must be a boolean" });
+      return;
+    }
+    const killedBefore = killed;
+    killed = body.killed; // 正本更新。
+    // Discord モード Domain H: つまみの切り替えを記録へ（前後の真偽だけ）。
+    reportControl({ control: "kill", from: killedBefore, to: killed });
+    // orchestrator へ遷移時伝播（best-effort・onSetSelfFireEnabled :887-893 と同型の失敗寛容）。
+    // POST /api/kill は fire() の Promise には一切依存しない（kill 中の再生を barge-in と見分けられない
+    // ため・レスポンス正本は snapshot + kill() 自身の戻り値のみ・domain-a.md 申し送り）。
+    try {
+      if (killed) {
+        await fireOrchestrator.kill();
+      } else {
+        fireOrchestrator.revive();
+      }
+    } catch {
+      // best-effort（失敗しても操作は止めない・killed フラグはサーバ側で既に反映済み）。
+    }
+    broadcastState();
+    if (!killed) deliverLocalTaskResult();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleSelectRole(req, res) {
+    // 配信の組み直し Domain A: ロールの選択の継ぎ目（旧 POST /api/brain の置き換え・POST /api/verbosity の写経）。
+    // ロールの中身・永続化・頭のホットスワップは cockpit.mjs の onSetRole が担う（責務境界: cockpit-server は
+    // ロールの中身を知らない）。未注入（S2.5 単体等）なら 503。
+    if (typeof onSetRole !== "function") {
+      sendJson(res, 503, { error: "role control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    // トグル禁止・明示値のみ受理する（形はロールの id・中身の有無は onSetRole が答える）。
+    if (!isRoleId(body.role)) {
+      sendJson(res, 400, { error: "invalid role" });
+      return;
+    }
+    // 場の途中でロールは替えない（stream-restructure.md §2.1・§3「ロールを固める」）。配信の組み直し Domain D: 場が
+    // 開いている間・開きかけ・閉じかけ（記録中）は断る（名前・声・口数・記憶の置き場が配信の途中で替わらないように）。
+    if (venueLifecycle.phase !== "closed") {
+      sendJson(res, 409, { error: "配信の途中はロールを替えられない（配信を終えてから選ぶ）", state: snapshot() });
+      return;
+    }
+    /** @type {any} */
+    let result;
+    try {
+      result = await onSetRole(body.role);
+    } catch (error) {
+      result = { ok: false, reason: `ロールを選べない（${errMessage(error)}）` };
+    }
+    if (!result || result.ok !== true) {
+      sendJson(res, 400, { error: (result && typeof result.reason === "string" && result.reason) || "unknown role" });
+      return;
+    }
+    applyRoleResult(result);
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleEditRole(req, res, pathname) {
+    // 配信の組み直し Domain E: ロールの編集（今のロール）と、今のロールを写して新しいロールを作る口。中身の確かめと
+    // 永続化は cockpit.mjs（onUpdateRole / onCreateRole）。場の途中はロールの持ち物を替えない（POST /api/role と同じ 409）。
+    const isEdit = pathname === "/api/role/edit";
+    const hook = isEdit ? onUpdateRole : onCreateRole;
+    if (!hook) {
+      sendJson(res, 503, { error: "role edit not available" });
+      return;
+    }
+    const parsed = await readJsonBodyStrict(req);
+    if (!parsed.ok || !parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
+      sendJson(res, 400, { error: "malformed JSON body" });
+      return;
+    }
+    if (venueLifecycle.phase !== "closed") {
+      sendJson(res, 409, { error: "配信の途中はロールを直せない（配信を終えてから直す）", state: snapshot() });
+      return;
+    }
+    const body = /** @type {Record<string, any>} */ (parsed.value);
+    if (!isEdit) {
+      if (!isRoleId(body.id)) {
+        sendJson(res, 400, { error: "ロールの id は英小文字で始まる 32 字までの英小文字・数字・-（Windows の予約名は使えない）" });
+        return;
+      }
+      if (body.name != null && typeof body.name !== "string") {
+        sendJson(res, 400, { error: "invalid role name" });
         return;
       }
     }
-    if (htmlBody == null) htmlBody = PLACEHOLDER_HTML;
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-    res.end(htmlBody);
+    /** @type {any} */
+    let result;
+    try {
+      result = isEdit
+        ? await /** @type {any} */ (hook)(body)
+        : await /** @type {any} */ (hook)({ id: body.id, name: typeof body.name === "string" ? body.name : null });
+    } catch (error) {
+      sendJson(res, 500, { error: `ロールを書けない（${errMessage(error)}）` });
+      return;
+    }
+    if (!result || result.ok !== true) {
+      const reason = (result && typeof result.reason === "string" && result.reason) || "ロールを直せない";
+      sendJson(res, result && result.conflict === true ? 409 : 400, { error: reason });
+      return;
+    }
+    applyRoleResult(result);
+    broadcastState();
+    sendJson(res, 200, snapshot());
   }
 
-  /**
-   * SSE 接続を開き、購読者集合へ加える。接続が切れても pipeline は畳まない（UI は使い捨て）。
-   * @param {import("node:http").IncomingMessage} req
-   * @param {import("node:http").ServerResponse} res
-   */
-  function openSse(req, res) {
-    res.writeHead(200, {
-      "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": "no-store",
-      connection: "keep-alive"
-    });
-    // 接続直後に現在状態を 1 発（タブ開き直しの復元）。
-    res.write(": connected\n\n");
-    res.write(`event: state\ndata: ${JSON.stringify(snapshot())}\n\n`);
-    sseClients.add(res);
-    // クライアント切断 = 購読解除のみ。魂は生き続ける（blocking 基準 5）。
-    req.on("close", () => {
-      sseClients.delete(res);
-    });
+  async function handleChannel(req, res) {
+    if (typeof onSetChannelUrl !== "function") {
+      // 未注入（S2.5 単体で立てた等）: channel 制御は使えない。
+      sendJson(res, 503, { error: "channel control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const raw = typeof body.url === "string" ? body.url.trim() : "";
+    const url = raw.length > 0 ? raw : null; // 空 = クリア（未設定へ）。
+    // URL 自体はここに保持/ログしない（token を含む）。フックへ橋渡しし、state は redact 済みの
+    // channelStatus() だけを載せる（責務境界: cockpit-server は channel の中身を知らない）。
+    await onSetChannelUrl(url);
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleChatConnect(req, res) {
+    // S7「視聴者が混ざる」: 実チャット器官を Connect（POST 駆動遅延起動・ear-pipeline の流儀）。
+    if (typeof chatClientFactory !== "function") {
+      // 未注入（S2.5〜S6 単体で立てた等）: チャット合流は使えない（POST /api/fire と同型の 503）。
+      sendJson(res, 503, { error: "chat not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    // Discord モード Domain G（F の追認 (2)）: Discord の場（開きかけ・開いている・閉じかけ）の間は Connect を断る（Discord の場には
+    // コメントが無い・設計 §4.3）。何も変えない。画面も Discord の場の間は Connect を出さない。
+    if (discordVenueActive()) {
+      sendJson(res, 409, { error: DISCORD_CHAT_CONNECT_REFUSED_MESSAGE, state: snapshot() });
+      return;
+    }
+    // 配信の組み直し 仕上げ（全体の突き合わせの持ち越し 2）: 場の開きかけ・閉じかけの間は Connect を断る（閉じかけの
+    // 間につないだ器官が場の外に残り、次の場へ持ち込まれるのを防ぐ）。何も変えない。開いている間に押されたら、後ろでつないでいる
+    // 始める 7 のつなぎより押した方を優先する（後ろのつなぎは黙って捨てる・startChatForStream）。
+    // 閉じている間と開いている間は今のまま通す（YouTube の欄は場が開いている間も触れる・設計 §3）。
+    if (venueLifecycle.phase === "opening" || venueLifecycle.phase === "closing") {
+      sendJson(res, 409, { error: streamBusyMessage(), state: snapshot() });
+      return;
+    }
+    const raw = typeof body.source === "string" ? body.source.trim() : "";
+    if (raw.length === 0) {
+      // Connect には配信 source が要る（空はクリアではなくエラー・停止は disconnect で行う）。
+      sendJson(res, 400, { error: "chat source is required (stream URL / video ID / channel /live URL)." });
+      return;
+    }
+    try {
+      await youtubeComments.connect(raw);
+    } catch (error) {
+      // 器官生成/start の想定外 throw（factory 自体の throw 等）。器官内エラーは Domain A が診断へ
+      // 落とすので通常ここには来ないが、防波堤として畳んで正直に返す（盲目の「接続済み」を残さない）。
+      youtubeComments.fold();
+      sendJson(res, 500, { error: `chat connect failed: ${errMessage(error)}`, state: snapshot() });
+      return;
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleChatSource(req, res) {
+    // 配信の組み直し 仕上げ（体験の素描 場面 3: 「URL を入れるだけで、Connect は配信を始めるがやる」）: YouTube の欄に
+    // 入れた source を保存し、この起動で入れたことを覚える（つなぎはしない・つなぐのは「配信を始める」か Connect）。
+    // 空（または null）は「つながない」: 保存した値を消し、覚えたことも消す。場のどの状態でも通す（欄は場の間も触れる）。
+    const body = await readJsonBody(req);
+    if (body.source !== null && typeof body.source !== "string") {
+      sendJson(res, 400, { error: "chat source must be a string (or null to clear)." });
+      return;
+    }
+    const raw = typeof body.source === "string" ? body.source.trim() : "";
+    const source = raw.length > 0 ? raw : null;
+    const saving = youtubeComments.setSource(source);
+    if (saving) await saving;
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  function handleChatDisconnect(res) {
+    // 稼働中のチャット器官を停止して畳む（冪等・器官が無くても 200）。配信の組み直し 仕上げ: 自分で切った source は
+    // 次の「配信を始める」でつなぎ直さない（この起動で入れたことを忘れる・欄の値と保存した値はそのまま）。
+    youtubeComments.disconnect();
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleCompactThreshold(req, res) {
+    // 圧縮を始める大きさの変更継ぎ目（POST /api/barge-in の写経）。保存 + 走っている compactor の差し替えは
+    // cockpit.mjs の onSetCompactThresholdTokens が担う。未注入なら 503。値は整数で 5 万〜45 万だけ受ける。
+    if (typeof onSetCompactThresholdTokens !== "function") {
+      sendJson(res, 503, { error: "compaction control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    const tokens = normalizeCompactThresholdTokens(body.tokens);
+    if (tokens == null) {
+      sendJson(res, 400, { error: "tokens must be an integer from 50000 to 450000" });
+      return;
+    }
+    try {
+      await onSetCompactThresholdTokens(tokens);
+    } catch {
+      // 永続化 / 差し替えの失敗は操作を止めない（onSetBargeInEnabled と同型の失敗寛容）。
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleCodexFast(req, res) {
+    // ①の Codex の頭の fast の切り替え継ぎ目（POST /api/compact-threshold の写経）。保存と次の受理への反映は
+    // cockpit.mjs の onSetCodexFastMode が担う（次の返事から効く・セッションは作り直さない）。未注入なら 503。
+    if (typeof onSetCodexFastMode !== "function") {
+      sendJson(res, 503, { error: "codex fast control not available" });
+      return;
+    }
+    const body = await readJsonBody(req);
+    // トグル禁止・明示の boolean だけ受ける（verbosity の mode 検証と同型）。
+    if (typeof body.enabled !== "boolean") {
+      sendJson(res, 400, { error: "enabled must be a boolean" });
+      return;
+    }
+    try {
+      await onSetCodexFastMode(body.enabled);
+    } catch {
+      // 永続化の失敗は操作を止めない（onSetCompactThresholdTokens と同型の失敗寛容）。
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleMemoryRecord(res) {
+    // 配信間記憶: 手動「今日を記録」継ぎ目。onMemoryRecord 未注入なら 503。
+    if (typeof onMemoryRecord !== "function") {
+      sendJson(res, 503, { error: "memory record control not available" });
+      return;
+    }
+    // 配信の組み直し Domain D: 「今日を記録」は場が開いている間だけ（stream-restructure.md §3。閉じかけは「配信を終える」の
+    // 最後の保存が走っている）。
+    if (venueLifecycle.phase !== "open") {
+      sendJson(res, 409, { error: "配信を始めている間だけ記録できる（記録は「配信を終える」でも行う）", state: snapshot() });
+      return;
+    }
+    try {
+      await onMemoryRecord();
+    } catch {
+      // 記録失敗（②書き出し役・コミットの失敗を含む）は 500 にせず握って続行する
+      // （手動記録が失敗しても操縦席の他の操作を止めない・failure-tolerant）。
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
   }
 
   async function resolveLastDevice() {
@@ -4686,8 +4165,8 @@ export function createCockpitServer(options = {}) {
   if (typeof options.fireOrchestratorFactory === "function") {
     fireOrchestrator = options.fireOrchestratorFactory({
       getBuffer: () => venueTranscript,
-      canRequestRecall: (buffer) => streamPhase === "open" && buffer === venueTranscript,
-      getChatMaterials: (buffer) => buffer === venueTranscript && streamPhase === "open" && venueExperience?.kind === "discord"
+      canRequestRecall: (buffer) => venueLifecycle.phase === "open" && buffer === venueTranscript,
+      getChatMaterials: (buffer) => buffer === venueTranscript && venueLifecycle.phase === "open" && venueExperience?.kind === "discord"
         ? venueExperience.getChatMaterials?.() ?? null
         : null,
       getTaskDocuments: (buffer) => options.localTaskRunner && buffer === venueTranscript
@@ -4763,7 +4242,7 @@ export function createCockpitServer(options = {}) {
       onUsage: (info) => broadcast("usage", { ...info, brain: typeof brainStatusImpl === "function" ? (brainStatusImpl()?.brain ?? null) : null }),
       // 記憶の作り直し Wave 3: 返事の中の思い出しの目印（返事が終わったあとに 1 つずつ）を思い出しの係へ。
       onRecallRequest: (info) => {
-        if (!closed && streamPhase === "open" && recallDesk && typeof info?.request === "string") recallDesk.request(info.request);
+        if (!closed && venueLifecycle.phase === "open" && recallDesk && typeof info?.request === "string") recallDesk.request(info.request);
       },
       onLocalTaskRequest: (info) => {
         const resources = getActiveVenueTaskResources();
@@ -4855,13 +4334,8 @@ export function createCockpitServer(options = {}) {
         : {}),
       speakNowMode: speakStartMode === "speak-now",
       onFireRequest: (req) => {
-        // S6 追撃（Domain E）: silence は従来どおり視覚発火（見えなければ中止）。call/turn-end および
-        // S7 の comment/comment-call は視覚優先（対象あれば画像付き・無/失敗なら画像なしの通常発火へ
-        // 劣化）。手動 Fire は scheduler 非経由で無関係。
         const kind = req && req.kind;
-        // きっかけ = スケジューラの語彙（silence = 沈黙・call / turn-end / interjection / comment / comment-call）。
-        const cause = { type: typeof kind === "string" ? kind : "unknown" };
-        requestSelfFire(kind, req && req.kind === "silence" ? { vision: true, cause } : { vision: "preferred", cause });
+        requestSelfFire(kind, scheduledFireOptions(kind));
       }
     });
     fireScheduler = makeFireScheduler({ enabled: selfFireInitialEnabled, verbosity: verbosityInitialMode });
@@ -4899,24 +4373,14 @@ export function createCockpitServer(options = {}) {
         getVerbosity: effectiveVerbosity,
         nowImpl,
         backchannelMinIntervalMs,
-        onFire: ({ choice, probability, trigger, triggerSeq, latencyMs }) => {
-          // きっかけ = 判定（応答 / 自発 / 相槌 / 画面を見る + 確率 + きっかけの配信者の行の seq + 判定の遅延）。
-          const cause = {
-            type: "speak-now",
-            choice,
-            probability: probability ?? null,
-            trigger: trigger ?? null,
-            triggerSeq: triggerSeq ?? null,
-            judgeLatencyMs: latencyMs ?? null
-          };
-          if (choice !== "backchannel") {
-            // 応答・自発・画面を見る（look）は同じ発火（画面付き・指示なし）。
-            requestSelfFire("speak-now", { vision: "preferred", cause });
+        onFire: (judgment) => {
+          const fireOptions = speakNowFireOptions(judgment, speakNowQuestions);
+          if (judgment.choice !== "backchannel") {
+            requestSelfFire("speak-now", fireOptions);
             return;
           }
           backchannelFirePending = true;
-          // 相槌も画面を見る（2026-10-17 ユーザー判断: 常駐撮影で応答時間がほぼ変わらないため）。
-          requestSelfFire("speak-now", { vision: "preferred", instruction: speakNowQuestions.backchannelInstruction, cause }).finally(() => {
+          requestSelfFire("speak-now", fireOptions).finally(() => {
             backchannelFirePending = false;
           });
         },
@@ -4978,23 +4442,10 @@ export function createCockpitServer(options = {}) {
       getBusyPolicy: () => commentBusyPolicy,
       getHoldLimits: () => ({ maxAgeMs: commentHoldMaxAgeMs, maxCount: commentHoldMaxCount }),
       nowImpl,
-      onFire: ({ comments, probabilities, latencyMs }) =>
-        requestSelfFire(
-          "comment-react",
-          {
-            vision: "preferred",
-            instruction: buildCommentReactFireInstruction(comments, currentSoulName()),
-            // きっかけ = コメント反応（どのコメントか: ID と転写の seq・反応するの確率・判定の遅延）。
-            cause: {
-              type: "comment-react",
-              commentIds: comments.map((c) => c.id),
-              commentSeqs: comments.map((c) => (typeof c.seq === "number" ? c.seq : null)),
-              probabilities: Array.isArray(probabilities) ? probabilities : comments.map(() => null),
-              judgeLatencyMs: typeof latencyMs === "number" ? latencyMs : null
-            }
-          },
-          { commentIds: comments.map((c) => c.id) }
-        ),
+      onFire: (judgment) => {
+        const fireOptions = commentReactionFireOptions(judgment, currentSoulName());
+        return requestSelfFire("comment-react", fireOptions, { commentIds: fireOptions.cause.commentIds.slice() });
+      },
       onJudgment: (j) => {
         if (j.choice === "react") {
           broadcast("selfFire", {
@@ -5118,7 +4569,7 @@ export function createCockpitServer(options = {}) {
     // 思い出しの係には受理しなかった結果を返す（busy ではないので届けは「見送り」になる）。
     // Discord モード Domain H（discord-mode.md §13.7）: ここで捨てた要求は今どこにも出ないので、記録の口にだけ渡す
     // （画面・フィードには今までどおり出さない）。
-    if (streamPhase !== "open") {
+    if (venueLifecycle.phase !== "open") {
       const requestCause = fireOptions && fireOptions.cause && typeof fireOptions.cause === "object" ? /** @type {any} */ (fireOptions.cause) : null;
       reportFireRefused({
         cause: requestCause && typeof requestCause.type === "string" ? requestCause.type : typeof kind === "string" ? kind : null,
@@ -5272,285 +4723,6 @@ export function createCockpitServer(options = {}) {
     }
   }
 
-  // ── チャット器官（S7「視聴者が混ざる」）の取り込み経路（プラミング + attach 点）─────────────
-  //
-  //  Domain A のチャット器官（src/chat/・独立）は魂の他部位を知らない。合流はこの取り込み経路が
-  //  **器官の外から** hooks 経由で行う（逆方向 import を作らない）。Domain C が実チャット器官を生成し、
-  //  client.onMessage → server.ingestChatMessage / client.onStatus → server.broadcastChatStatus /
-  //  client.onDiagnostic → server.broadcastChatDiagnostic を繋ぐ（クライアント生成と Connect/停止
-  //  ライフサイクルは Domain C の領分）。ingestChatMessage は 1 コメントを:
-  //   (a) 転写バッファへ speaker:"viewer"+displayName で append（単一タイムライン・startMs/endMs=0）、
-  //   (b) SSE "transcript"（speaker:"viewer"+displayName）を 1 本放送（Domain C が `viewer(名前):` を描く）、
-  //   (c) fireScheduler.handleChatMessage（comment / comment-call 判定）を回す。
-  //
-  //  ★ 二重発火/二重放送の断ち: (a) の append は正本の onAppend（場の購読）を通るが、そこでは
-  //  viewer は handleTranscript（scheduler 内で no-op）で無害化済み（耳ごとの口は viewer を放送しない）。発火は
-  //  handleChatMessage だけ・放送はこの経路だけが担う。
-  //
-  //  バッファ生存（Discord モード Domain A で正本は場の所有に替わった・discord-mode.md §3.1）: 正本は場が開く
-  //  ときに作り、閉じるときに手放す。場が閉じていれば正本が無い（耳の有無ではなく場の有無）。その場合は**合流先が無い**ので append/scheduler をスキップし、ゴースト行の
-  //  診断（chatBufferAbsent）だけ出す（バッファ無しで発火しても会話ログにコメントが載らず盲目発火に
-  //  なるため scheduler も回さない）。バッファ所有権の巻き上げ（耳非依存化）は S1〜S6 挙動・器不変を
-  //  脅かしうる構造変更ゆえ v0 では実装せず domain-b.md §質問で escalate する。
-
-  //  ── コメント判定（discussion/ai-cohost/decisions/comment-react/integration.md §1）──────────────
-  //  (a) の前に**弾く判定**（commentGuard）を挟む。全モード（KILL 中・自発 OFF・従来モードも）で動く。
-  //   - 弾いたら: 積まない（LLM・記憶・履歴のどれにも入らない）・発火判定にも渡さない・場の活動にも数えない。
-  //     フィードには chatDiagnostic kind:"commentRejected"（種類だけ・本文は送らない）。
-  //   - 通ったら: (a)(b)(c) を今と同じく行い、speak-now モードなら (d) 反応する判定（commentReact）へ回す。
-  //   - 判定は並行に走らせるが、積むのは届いた順（guardQueue の先頭から、判定が付いたものだけ取り出す）。
-  //   - 判定がテスト注入の同期値なら、その場で (a)(b)(c) まで終える（従来の同期の追記と放送を保つ）。
-  //  コメント ID（チャット器官の messageId・無ければ操縦席内の連番）を viewer 行・弾いた行・判定行・発火結果に
-  //  載せ、どのコメントで判定して発火したかを結べるようにする（合意 §3）。
-
-  /**
-   * チャット器官の 1 コメントを取り込む（Domain C の onMessage フックから呼ぶ attach 点）。best-effort
-   * （throw は握って診断に落とす・器官の常駐を殺さない）。フックは戻り値を見ないので、非同期の判定の
-   * 失敗もここで握る（settleGuard へ「判定できず」として渡す）。
-   * @param {{ text?: string; displayName?: string; messageId?: string | null } | null} msg
-   */
-  function ingestChatMessage(msg) {
-    if (closed) return;
-    // Discord の場（開きかけ・開いている・閉じかけ）にはコメントが無い（discord-mode.md §4.3）。場が閉じている間に Connect した
-    // 器官のコメントは、弾く判定にも正本にも回さずに捨てる（ユーザーの Connect は切らない・器官は畳まない）。名前・本文を出さないため、
-    // 診断もログも出さない。
-    if (discordVenueActive()) return;
-    try {
-      const text = msg && typeof msg.text === "string" ? msg.text : "";
-      const displayName = msg && typeof msg.displayName === "string" ? msg.displayName : undefined;
-      if (text.trim().length === 0) return; // 空コメントは捨てる（バッファも捨てる・二度手間を避ける）。
-      const buffer = venueTranscript;
-      if (!buffer) {
-        // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、判定・append/scheduler はスキップ。
-        handleDiagnostic({
-          type: "chatBufferAbsent",
-          message: CHAT_BUFFER_ABSENT_MESSAGE,
-          reason: displayName ?? null
-        });
-        return;
-      }
-      const id =
-        msg && typeof msg.messageId === "string" && msg.messageId.length > 0 ? msg.messageId : `local-${++localCommentSeq}`;
-      const slot = { id, text, displayName, arrivedAtMs: nowImpl(), decision: null };
-      guardQueue.push(slot);
-      /** @type {any} */
-      let out;
-      try {
-        out = commentGuard({ text, displayName: displayName ?? null, name: currentSoulName() });
-      } catch (error) {
-        out = { pass: false, kind: "error", error: errMessage(error), latencyMs: null };
-      }
-      if (out != null && typeof out.then === "function") {
-        Promise.resolve(out).then(
-          (decision) => settleGuard(slot, decision),
-          (error) => settleGuard(slot, { pass: false, kind: "error", error: errMessage(error), latencyMs: null })
-        );
-      } else {
-        settleGuard(slot, out);
-      }
-    } catch (error) {
-      handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
-    }
-  }
-
-  /**
-   * 弾く判定の結果を付け、届いた順に取り出せる分を処理する。
-   * @param {{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number; decision: any }} slot
-   * @param {any} decision
-   */
-  function settleGuard(slot, decision) {
-    if (closed) return;
-    const pass = !!(decision && decision.pass === true);
-    slot.decision = {
-      pass,
-      kind: pass ? "ok" : decision && typeof decision.kind === "string" && decision.kind !== "ok" ? decision.kind : "error",
-      verdict: decision && typeof decision.verdict === "string" ? decision.verdict : null,
-      hijackProbability: decision && typeof decision.hijackProbability === "number" ? decision.hijackProbability : null,
-      latencyMs: decision && typeof decision.latencyMs === "number" ? decision.latencyMs : null,
-      // 判定できなかった理由に本文が混ざっていたら（サーバの文言が入力を引用した等）理由ごと伏せる（フィードにも
-      // ターミナルにも本文を出さない）。
-      error: decision && typeof decision.error === "string" ? scrubCommentText(decision.error, slot.text) : null
-    };
-    while (guardQueue.length > 0 && guardQueue[0].decision != null) {
-      const head = /** @type {any} */ (guardQueue.shift());
-      try {
-        reportComment({
-          stage: "guard",
-          commentId: head.id,
-          pass: head.decision.pass,
-          kind: head.decision.kind,
-          verdict: head.decision.verdict,
-          hijackProbability: head.decision.hijackProbability,
-          latencyMs: head.decision.latencyMs,
-          error: head.decision.error
-        });
-        if (head.decision.pass) commitComment(head);
-        else rejectComment(head);
-        // 判定できずに弾いた（キー欠落・タイムアウト等）は判定のエラーの警告にも出す（理由は本文を伏せた文言）。
-        if (!head.decision.pass && head.decision.kind === "error") warnJudgeError("comment-guard", head.decision.error);
-      } catch (error) {
-        handleDiagnostic({ type: "chatIngestError", message: errMessage(error) });
-      }
-    }
-  }
-
-  /**
-   * 弾いたコメントをフィードに 1 行だけ知らせる（種類と ID・本文と名前は送らない）。
-   * @param {{ id: string; text: string; decision: any }} slot
-   */
-  function rejectComment(slot) {
-    broadcast("chatDiagnostic", {
-      kind: "commentRejected",
-      message: null,
-      atMs: nowImpl(),
-      delayMs: null,
-      attempt: null,
-      commentId: slot.id,
-      reject: slot.decision.kind,
-      error: slot.decision.error,
-      latencyMs: slot.decision.latencyMs
-    });
-  }
-
-  /**
-   * 通ったコメントを今と同じく積んで放送し、発火判定へ回す（(a)(b)(c)）。speak-now モードなら反応する判定へ（(d)）。
-   * @param {{ id: string; text: string; displayName: string | undefined; arrivedAtMs: number }} slot
-   */
-  function commitComment(slot) {
-    // 守りの 2 層目: Discord の場では積まない（ingestChatMessage の入口で捨てているので今の作りでは届かない。何も出さない）。
-    if (discordVenueActive()) return;
-    const { text, displayName } = slot;
-    const buffer = venueTranscript;
-    if (!buffer) {
-      // 判定を待つ間に耳が止まった = 合流先が無い（取り込み時と同じ扱い）。
-      handleDiagnostic({
-        type: "chatBufferAbsent",
-        message: CHAT_BUFFER_ABSENT_MESSAGE,
-        reason: displayName ?? null
-      });
-      return;
-    }
-    const result = buffer.append({ startMs: 0, endMs: 0, text, speaker: "viewer", displayName });
-    if (!result.appended || !result.entry) return; // blank discard 等。
-    // (b) viewer 行を放送（耳の onTranscript は viewer を除外＝ここが唯一の放送元）。commentId は追加フィールド。
-    const stats = buffer.stats();
-    broadcast("transcript", {
-      ...toWireEntry(result.entry),
-      latencyMs: null,
-      audioCtx: null,
-      appended: stats.appended,
-      discarded: stats.discarded,
-      commentId: slot.id
-    });
-    // (c) 発火スケジューラへ（従来モードは comment / comment-call 判定・speak-now モードは活動の反映だけ）。
-    // scheduler 未生成なら活動反映もスキップ。
-    if (fireScheduler) fireScheduler.handleChatMessage({ text, displayName });
-    // (d) 反応する判定（speak-now モード・自発 ON・KILL でないときだけ・部品内で判定）。
-    if (commentReact) {
-      commentReact.handleComment({
-        id: slot.id,
-        seq: result.entry.seq,
-        text,
-        displayName: displayName ?? null,
-        arrivedAtMs: slot.arrivedAtMs
-      });
-    }
-  }
-
-  /**
-   * チャット器官の状態遷移を SSE "chatStatus" に載せる口（Domain C の onStatus フックから呼ぶ）。
-   * 状態表示（connecting/live/retrying/dead）は Domain C が描く。
-   * @param {string} status
-   */
-  function broadcastChatStatus(status) {
-    if (closed) return;
-    lastChatStatus = typeof status === "string" ? status : String(status);
-    broadcast("chatStatus", { status: lastChatStatus });
-    refreshStateWarnings();
-  }
-
-  /**
-   * チャット器官の診断を SSE "chatDiagnostic" に載せる口（Domain C の onDiagnostic フックから呼ぶ）。
-   * 取得死/抽出失敗のゴースト行は Domain C が描く。診断オブジェクトはそのまま透過（token 等は器官側で
-   * 載せない前提・Domain A は URL/token を診断に含めない）。
-   * @param {any} info
-   */
-  function broadcastChatDiagnostic(info) {
-    if (closed) return;
-    broadcast("chatDiagnostic", {
-      kind: info?.kind ?? null,
-      message: info?.message ?? null,
-      atMs: info?.atMs ?? null,
-      delayMs: info?.delayMs ?? null,
-      attempt: info?.attempt ?? null
-    });
-  }
-
-  /**
-   * 稼働中のチャット器官を畳む（フック購読解除 + stop()・冪等）。器官は dead へ落ち、以後の自動
-   * 再接続タイマを残さない（Domain A の stop() 契約）。connect の作り直し・disconnect・close で使う。
-   */
-  function foldChatClient() {
-    for (const unsub of chatUnsubs) {
-      try {
-        unsub();
-      } catch {
-        // best-effort（購読解除の失敗で畳みを止めない）。
-      }
-    }
-    chatUnsubs = [];
-    lastChatStatus = null;
-    if (chatClient) {
-      const c = chatClient;
-      chatClient = null;
-      try {
-        c.stop();
-      } catch {
-        // best-effort（既に dead でも冪等）。
-      }
-    }
-  }
-
-  /**
-   * チャット器官を生成して Connect する（POST /api/chat/connect の実体・ear-pipeline の遅延起動の流儀）。
-   * 既存器官があれば先に畳んでから**新しい source で作り直す**（ended で dead に落ちた器官の restart は
-   * 無い＝Connect 再操作で新器官を生成する・Domain A §7-2）。onMessage→ingestChatMessage /
-   * onStatus→broadcastChatStatus / onDiagnostic→broadcastChatDiagnostic を繋ぐ（器官の外から hooks
-   * 経由・逆方向 import を作らない）。start() は bootstrap + 初回 poll を await する（notLive/network は
-   * 内部で retrying をスケジュールして即 return するので、ここで無限に待たされない・Domain A）。
-   * @param {string} source  配信 URL / video ID / チャンネル `/live` URL。
-   * @returns {Promise<void>}
-   */
-  async function connectChat(source) {
-    // この起動で Connect した source を覚える（次の「配信を始める」でもつなぐ・配信の組み直し 仕上げ）。
-    chatSourceThisBoot = source;
-    foldChatClient(); // 作り直し: 既存器官を畳んでから新規生成（同一インスタンス restart は無い）。
-    const client = /** @type {any} */ (chatClientFactory)({ source });
-    chatClient = client;
-    // フックを取り込み経路へ結線（購読解除は畳み時に全撤去）。器官のフック throw は器官側が握る（Domain A）。
-    chatUnsubs.push(
-      client.onMessage((/** @type {any} */ msg) =>
-        ingestChatMessage({
-          text: msg && msg.text,
-          displayName: msg && msg.displayName,
-          // コメント ID（器官の messageId）を操縦席まで通す（判定と発火の結び付け・コメント反応の合意 §3）。
-          messageId: msg && typeof msg.messageId === "string" ? msg.messageId : null
-        })
-      )
-    );
-    chatUnsubs.push(client.onStatus((/** @type {any} */ state) => broadcastChatStatus(state)));
-    chatUnsubs.push(client.onDiagnostic((/** @type {any} */ info) => broadcastChatDiagnostic(info)));
-    // 永続化（次回起動で入力欄に復元・失敗寛容）。source は YouTube 公開 URL/ID＝token を含まない。
-    if (typeof onSetChatSource === "function") {
-      try {
-        await onSetChatSource(source);
-      } catch {
-        // 永続化失敗は Connect を止めない（onSetChannelUrl と同型の失敗寛容）。
-      }
-    }
-    await client.start();
-  }
-
   // ── ライフサイクル ─────────────────────────────────────────────────
 
   return {
@@ -5593,7 +4765,7 @@ export function createCockpitServer(options = {}) {
      * Discord モード Domain B: experience = 開いている場の体験の種類（閉じていれば null・snapshot の stream.experience と同じ）。
      * @returns {{ phase: "closed" | "opening" | "open" | "closing"; error: string | null; openedAtMs: number | null; experience: string | null }}
      */
-    streamStatus:() => ({ phase: streamPhase, error: streamError, openedAtMs: streamOpenedAtMs, experience: venueExperienceKind() }),
+    streamStatus:() => ({ phase: venueLifecycle.phase, error: venueLifecycle.error, openedAtMs: venueLifecycle.openedAtMs, experience: venueExperienceKind() }),
     /**
      * 開いている場の言葉（Discord モード Domain C・additive な内部 JS API）。閉じていれば null。wording / teaching が null なら配信の
      * 既定。cockpit.mjs が②の保存を頼んだ時点（語の組）・①のセッションを作る時点と会話指示の編集画面（教えと語の組）で読む。
@@ -5601,7 +4773,7 @@ export function createCockpitServer(options = {}) {
     venueContext: () => venueContext(),
     discordVenueRole: () => discordVenueOptions?.role ?? null,
     discordVisionTitle,
-    venueGeneration: () => venueExperience ? streamGeneration : null,
+    venueGeneration: () => venueExperience ? venueLifecycle.generation : null,
     getActiveVenueTaskResources,
     getVenueTaskResourcePath: () => venueTaskResources?.retainedPath() ?? null,
     /** 配信を始める（POST /api/stream/start と同じ関数・テストと内部用）。 */
@@ -5625,7 +4797,7 @@ export function createCockpitServer(options = {}) {
       const judging =
         (speakNow != null && (speakNow.inFlight() > 0 || speakNow.pendingWhileBusy() > 0)) ||
         (commentReact != null && (commentReact.inFlight() > 0 || commentReact.heldCount() > 0)) ||
-        guardQueue.length > 0;
+        youtubeComments.hasPending();
       return {
         soulIdle: fireInFlight === 0 && fireOrchestrator.getState() === "idle",
         judging,
@@ -5690,7 +4862,7 @@ export function createCockpitServer(options = {}) {
      */
     setMemoryOrganising(organising) {
       // 閉じかけの外の true は持たない（次の閉じかけに古い印を持ち越さない）。
-      const next = organising === true && streamPhase === "closing";
+      const next = organising === true && venueLifecycle.phase === "closing";
       if (memoryOrganising === next) return;
       memoryOrganising = next;
       if (closed) return;
@@ -5759,11 +4931,11 @@ export function createCockpitServer(options = {}) {
     getTranscript: () => (venueTranscript ? venueTranscript.all() : []),
     // ── S7「視聴者が混ざる」: チャット器官の取り込み経路（Domain C の attach 点）───────────────
     /** チャット器官の 1 コメントを取り込む（append + SSE viewer 行放送 + scheduler.handleChatMessage）。 */
-    ingestChatMessage,
+    ingestChatMessage: youtubeComments.ingestChatMessage,
     /** チャット器官の状態遷移を SSE "chatStatus" へ載せる口。 */
-    broadcastChatStatus,
+    broadcastChatStatus: youtubeComments.broadcastChatStatus,
     /** チャット器官の診断を SSE "chatDiagnostic" へ載せる口。 */
-    broadcastChatDiagnostic,
+    broadcastChatDiagnostic: youtubeComments.broadcastChatDiagnostic,
     /**
      * 全畳み（冪等）: 全 SSE 応答を end → orchestrator.dispose → pipeline.dispose → http server close。
      * リークするタイマ/ハンドル/子プロセスを残さない。
@@ -5773,12 +4945,12 @@ export function createCockpitServer(options = {}) {
       closed = true;
       // CLI shutdown uses endStream before server teardown. If HTTP close is already
       // writing, let it finish before tearing down anything it may still use.
-      if (streamPhase === "closing") await endStreamForShutdown();
+      if (venueLifecycle.phase === "closing") await endStreamForShutdown();
       const desk = recallDesk;
       venueTaskResources?.stopAccepting();
       parkRecallDesk(true);
       // S7: 稼働中のチャット器官も畳む（stop()+購読解除・タイマ/プロセスを残さない）。
-      foldChatClient();
+      youtubeComments.fold();
       if (bargeInGate) {
         try {
           bargeInGate.dispose();
@@ -5803,7 +4975,7 @@ export function createCockpitServer(options = {}) {
         commentReact.dispose(); // speakNow と同じ（取っておいたコメントも捨てる）。
         commentReact = null;
       }
-      guardQueue = []; // 返事待ちの弾く判定は後から返っても settleGuard が closed で無視する。
+      youtubeComments.clearPending();
       warningBoard.dispose(); // 一回きりの警告の消えるタイマを残さない。
       if (quotaUnsub) {
         try {
@@ -5820,14 +4992,7 @@ export function createCockpitServer(options = {}) {
           // best-effort
         }
       }
-      for (const res of sseClients) {
-        try {
-          res.end();
-        } catch {
-          // best-effort
-        }
-      }
-      sseClients.clear();
+      sse.close();
       // Discord モード Domain B: 正本を手放す → 耳の束 → 入口（体験）→ 目。
       releaseVenueTranscript();
       const hadEars = await foldVenueEars();
@@ -5842,9 +5007,9 @@ export function createCockpitServer(options = {}) {
         await drainVenueTasks(desk);
         await releaseVenueTasks();
       } catch (error) {
-        streamError = errMessage(error);
+        venueLifecycle.setError(errMessage(error));
       }
-      markVenueClosed();
+      venueLifecycle.markClosed();
       stopVenueEyes();
       await new Promise((resolve) => {
         server.closeAllConnections?.();
@@ -5852,123 +5017,4 @@ export function createCockpitServer(options = {}) {
       });
     }
   };
-}
-
-// ── HTTP レスポンスヘルパ ─────────────────────────────────────────────
-
-/**
- * @param {import("node:http").ServerResponse} res
- * @param {number} status
- * @param {unknown} obj
- */
-function sendJson(res, status, obj) {
-  if (res.headersSent || res.writableEnded) return;
-  const body = JSON.stringify(obj);
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-  res.end(body);
-}
-
-/**
- * @param {import("node:http").ServerResponse} res
- * @param {number} status
- * @param {string} text
- */
-function sendText(res, status, text) {
-  if (res.headersSent || res.writableEnded) return;
-  res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
-  res.end(text);
-}
-
-/**
- * POST の body を JSON として読む（非 JSON / 空は {} にフォールバック・上限 1MiB）。
- * @param {import("node:http").IncomingMessage} req
- * @returns {Promise<Record<string, any>>}
- */
-function readJsonBody(req) {
-  return new Promise((resolve) => {
-    let data = "";
-    let aborted = false;
-    req.on("data", (chunk) => {
-      data += chunk;
-      if (data.length > 1_000_000) {
-        aborted = true;
-        req.destroy();
-        resolve({});
-      }
-    });
-    req.on("end", () => {
-      if (aborted) return;
-      if (data.length === 0) {
-        resolve({});
-        return;
-      }
-      try {
-        const parsed = JSON.parse(data);
-        resolve(parsed && typeof parsed === "object" ? parsed : {});
-      } catch {
-        resolve({});
-      }
-    });
-    req.on("error", () => resolve({}));
-  });
-}
-
-/**
- * Read a JSON object while preserving malformed-body information for strict APIs.
- * Existing routes intentionally use readJsonBody()'s permissive `{}` fallback; the conversation-instruction
- * API uses this helper so malformed JSON is rejected without changing those endpoint contracts.
- * @param {import("node:http").IncomingMessage} req
- * @returns {Promise<{ ok: true; value: Record<string, any> } | { ok: false }>}
- */
-function readJsonBodyStrict(req) {
-  return new Promise((resolve) => {
-    let data = "";
-    let settled = false;
-    const fail = () => {
-      if (settled) return;
-      settled = true;
-      resolve({ ok: false });
-    };
-    req.on("data", (chunk) => {
-      if (settled) return;
-      data += chunk;
-      if (data.length > 1_000_000) {
-        try {
-          req.destroy();
-        } catch {
-          // best-effort
-        }
-        fail();
-      }
-    });
-    req.on("end", () => {
-      if (settled) return;
-      try {
-        const parsed = JSON.parse(data);
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          fail();
-          return;
-        }
-        settled = true;
-        resolve({ ok: true, value: parsed });
-      } catch {
-        fail();
-      }
-    });
-    req.on("error", fail);
-  });
-}
-
-/**
- * 判定の失敗理由にコメント本文が混ざっていたら理由ごと伏せる（本文はサーバから送らない・ログにも書かない）。
- * @param {string} message  @param {string} text
- */
-function scrubCommentText(message, text) {
-  const t = String(text).trim();
-  return t.length > 0 && message.includes(t) ? "理由は伏せた（本文を含むため）" : message;
-}
-
-/** @param {unknown} err */
-function errMessage(err) {
-  return err instanceof Error ? err.message : String(err);
 }

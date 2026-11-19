@@ -175,7 +175,7 @@ export function buildWriterSystemPrompt(wording) {
  */
 export const WRITER_SYSTEM_PROMPT = buildWriterSystemPrompt();
 
-/** @typedef {import("../cockpit/venue-task-resources.mjs").VenueWriterMaterials} WriterMaterials */
+/** @typedef {import("../cockpit/venue/task-resources.mjs").VenueWriterMaterials} WriterMaterials */
 
 /** @param {WriterMaterials | undefined} materials */
 export function hasWriterMaterials(materials) {

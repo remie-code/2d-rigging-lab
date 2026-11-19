@@ -27,6 +27,15 @@
 エージェントは install しない）。既存チェック 3 種（check:soul-zone / check:deps / check:source）は
 いずれもこのサブパッケージに非該当（bare specifier 対象外・node_modules 走査除外）。
 
+## 現在の構造
+
+- **操縦席を起動・操作する**。Windows では [start-cockpit.cmd](../../start-cockpit.cmd)、端末では `agent/` で `npm run cockpit`。どちらも [Cockpit CLI](agent/scripts/cockpit.mjs) から [本番の組み立て](agent/src/cockpit/startup/run-cockpit.mjs) へ進む。Discord のリモート操作は [discord-venue CLI](agent/scripts/discord-venue.mjs) が入口。ブラウザー操作を追加する場合は [HTTP ルート](agent/src/cockpit/http/cockpit-http-server.mjs) から [操作と器官を結ぶサーバー](agent/src/cockpit/cockpit-server.mjs) へ辿る。
+- **画面・状態・診断を変える**。[UI](agent/src/cockpit/ui/) と [表示ロジック](agent/src/cockpit/view-logic/) が [SSE 配信](agent/src/cockpit/http/cockpit-sse.mjs) を受け取る。会話の公開項目は [転写の整形](agent/src/cockpit/cockpit-public-transcript.mjs)、警告の規則は [warnings](agent/src/cockpit/warnings.mjs)、端末ログの文面は [診断の整形](agent/src/cockpit/startup/cockpit-diagnostics.mjs) を読む。
+- **配信中に発話と重なる YouTube コメントの扱いを変える**。speak-now で「忙しい」のは、相方が発話の要求を受け付けてから応答を終えるまで。「あとで拾う／見逃す」は [コメント反応](agent/src/mind/comment-react.mjs)、classic の自発発話は [発話スケジューラ](agent/src/mind/fire-scheduler.mjs) を読む。配信の接続と取り込みは [YouTube コメント](agent/src/chat/youtube-comments.mjs)。Discord のテキストや画像は [Discord のチャットと資料](agent/src/discord/discord-chat-materials.mjs) から入り、この YouTube 経路を通らない。
+- **Discord の VC を抜けて戻る**。[Discord 体験](agent/src/discord/discord-experience.mjs) が音声の入口と出口を畳み、再参加時に結び直す。場の会話や資料、頭のセッションは同じ場に残る。「場を閉じる」操作は [共通の開閉手順](agent/src/cockpit/venue/lifecycle.mjs) または [リモート閉場](agent/src/cockpit/venue/remote-close.mjs) へ進む。
+- **資料を処理している途中で閉場する**。上の開閉手順で新しい仕事の受付を止め、進行中の仕事を待つ。[場の作業と資料](agent/src/cockpit/venue/task-resources.mjs) から結果を渡し、[ロールごとの閉場処理](agent/src/cockpit/venue/role-hooks.mjs) が保存と必要な整理を行う。資料の解放はその後。リモート閉場では確定した段を再実行せず、結果が不明なときは保留する。
+- **器官や保存の実装を変える**。聴覚は [ears](agent/src/ears/)、視覚は [eyes](agent/src/eyes/)、声は [voice](agent/src/voice/)、会話と担当セッションは [mind](agent/src/mind/)、ロールは [roles](agent/src/roles/)。[記憶の配置](agent/src/memory/) はロールごとの Git、[記録](agent/src/mind/venue-memory-recorder.mjs) と [整理](agent/src/mind/venue-memory-organiser.mjs) は別の担当。器との実行時接続は [channel](agent/src/channel/)、器側の制御チャネルを試す入口は [reference-driver](reference-driver/reference-driver.mjs)。
+
 ## 住人
 
 ### `reference-driver/` — 参照ドライバ（特区の最初の住人。C4 Domain D）

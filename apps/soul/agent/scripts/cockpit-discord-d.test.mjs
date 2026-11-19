@@ -131,8 +131,8 @@ test("createVenueRoleBundle: 鍵のファイル名の口（呼んだ時点の今
 // ── main() の結線（ソースの並び）────────────────────────────────────────────
 
 test("場の結線（main）: Discord の体験の口を作って experiences で渡す・鍵は今のロールの指すファイル名", () => {
-  const source = readFileSync(new URL("./cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const main = source.slice(source.indexOf("async function main()"));
+  const source = readFileSync(new URL("../src/cockpit/startup/run-cockpit.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const main = source;
   assert.match(main, /discordBotKeyFile: \(\) => roleDiscordBotKeyFile\(effectiveRole\(\)\),/);
   assert.match(
     main,
