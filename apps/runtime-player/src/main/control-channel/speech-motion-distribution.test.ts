@@ -50,12 +50,12 @@ function fixture() {
 }
 
 describe("speech motion distribution assets", () => {
-  it("resolves 36 adopted pairs from 11 sources with 24 selectable performances", async () => {
-    expect(await readdir(join(profile, "speech-motions"))).toHaveLength(11);
-    expect(snapshot.catalog.pairs).toHaveLength(36);
-    expect(Object.keys(snapshot.catalog.performances)).toHaveLength(24);
+  it("resolves 44 adopted pairs from 12 sources with 28 selectable performances", async () => {
+    expect(await readdir(join(profile, "speech-motions"))).toHaveLength(12);
+    expect(snapshot.catalog.pairs).toHaveLength(44);
+    expect(Object.keys(snapshot.catalog.performances)).toHaveLength(28);
     expect(new Set(snapshot.catalog.pairs.map(({ performanceId, attentionTargetId }) =>
-      clipFor(performanceId, attentionTargetId))).size).toBe(28);
+      clipFor(performanceId, attentionTargetId))).size).toBe(32);
     expect(parseSpeechMotionRequest({ ...key, op: "play", presetId: "receive" }, undefined, snapshot)).toBeNull();
   });
 
@@ -76,7 +76,7 @@ describe("speech motion distribution assets", () => {
     const entries = selectionIds.map((id) => archive.definitions[id]!);
     const { sha256 } = entries[0]!;
     expect(entries).toEqual(selectionIds.map(() => ({ sha256, status: "saved" })));
-    expect(await readdir(archive.directory)).toHaveLength(11);
+    expect(await readdir(archive.directory)).toHaveLength(12);
     const content = await readFile(join(archive.directory, sha256 + ".json"), "utf8");
     expect(createHash("sha256").update(content).digest("hex")).toBe(sha256);
     expect(JSON.parse(content)).toEqual(searchAsset);
@@ -98,6 +98,16 @@ describe("speech motion distribution assets", () => {
           expected.set(id, performance.clips[remake]);
         }
       }
+    }
+    const surpriseStudies: { key: string, clip?: MotionClip }[] = JSON.parse(
+      await readFile(new URL("surprise-nuances-astra-62/studies.json", experiments), "utf8"));
+    for (const { key, clip } of surpriseStudies) {
+      if (!clip) continue; // The existing recoil is already covered by the original takes.
+      const clipId = `surprise-${key}-v1`;
+      expected.set(clipId, clip);
+      const performanceId = `surprise-nuances--${key}`;
+      expect(snapshot.catalog.pairs.filter(pair => pair.performanceId === performanceId))
+        .toEqual(["game", "viewers"].map(attentionTargetId => ({ performanceId, attentionTargetId, clipId })));
     }
     expect(new Set(snapshot.catalog.pairs.map(p => p.clipId))).toEqual(new Set(expected.keys()));
     for (const { performanceId, attentionTargetId, clipId } of snapshot.catalog.pairs) {
