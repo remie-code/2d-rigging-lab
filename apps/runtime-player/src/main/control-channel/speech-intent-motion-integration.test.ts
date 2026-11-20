@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { once } from "node:events";
 
 import { expect, it } from "vitest";
+import { sampleMotionTrack } from "./speech-motion-playback";
 import { loadSpeechMotionSnapshot } from "./speech-motion-assets";
 import type { RuntimePlayerMappingSlot, RuntimePlayerMappingSlotId } from "../../preload/model-mapping-bridge-contract";
 import type { RuntimePlayerLiveParameterFrame } from "../../preload/live-parameter-bridge-contract";
@@ -66,10 +67,19 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
   const assetProfile = await mkdtemp(join(tmpdir(), "speech-intent-assets-"));
   await cp(new URL("../../../assets/speech-motions", import.meta.url), join(assetProfile, "speech-motions"), { recursive: true });
   const speechMotionSnapshot = await loadSpeechMotionSnapshot(assetProfile, () => {});
+  function authored(id: string, target: string, channel: string, elapsed: number) {
+    const result = speechMotionSnapshot.resolve(id, target);
+    if ("reason" in result) throw new Error(result.reason);
+    const track = channel === "stageY" ? result.clip.stage?.y : result.clip.tracks?.[channel];
+    if (!track) throw new Error("Missing test track: " + channel);
+    return sampleMotionTrack(track, elapsed);
+  }
+  const askAt = (time: number) => authored("ask", "partner", "param_face_angle_x", time);
   const gestureParameters = {
     "head-horizontal": "param_face_angle_x", "head-vertical": "param_face_angle_y", "head-tilt": "param_face_angle_z",
     "gaze-horizontal": "param_eyeball_x", "gaze-vertical": "param_eyeball_y",
-    "body-x": "param_body_angle_x", "body-z": "param_body_angle_z"
+    "body-x": "param_body_angle_x", "body-z": "param_body_angle_z",
+    "eye-blink-left": "param_eye_left_open", "eye-blink-right": "param_eye_right_open"
   } as Record<string, string>;
   const mapGestureSlots = (items: RuntimePlayerMappingSlot[]) => items.map((entry) => {
     const parameterId = gestureParameters[entry.slotId];
@@ -162,9 +172,9 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
 
     expect(tick().param_face_angle_x).toBeCloseTo(3);
     const combined = tick(1000);
-    expect(combined.param_face_angle_x).toBeCloseTo(-24);
-    expect(combined.param_eyeball_x).toBeCloseTo(-0.52);
-    expect(combined.param_face_angle_z).toBeCloseTo(-3.9963737994610407);
+    expect(combined.param_face_angle_x).toBeCloseTo(askAt(1000));
+    expect(combined.param_eyeball_x).toBeCloseTo(authored("ask", "partner", "param_eyeball_x", 1000));
+    expect(combined.param_face_angle_z).toBeCloseTo(authored("ask", "partner", "param_face_angle_z", 1000));
     expect(combined["mouth-smile"]).toBeCloseTo(0.8);
     expect(combined["mouth-open"]).toBeGreaterThan(0);
     expect(combined["mouth-vowel-a"]).toBeGreaterThan(0);
@@ -172,22 +182,22 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     expect(await drive("send", { request: { op: "play", generation: 1, sectionIndex: 1, presetId: "invalid" } }))
       .toMatchObject({ result: "rejected", error: { code: "invalidPayload" } });
     await drive("send", { request: { op: "play", generation: 1, sectionIndex: 1, performanceId: "receive", attentionTargetId: "partner" } });
-    expect(tick().param_face_angle_x).toBeCloseTo(-24);
-    expect(tick(2500).param_face_angle_x).toBeCloseTo(-24);
+    expect(tick().param_face_angle_x).toBeCloseTo(askAt(1000));
+    expect(tick(2500).param_face_angle_x).toBeCloseTo(askAt(3500));
     await drive("finish", { id: "ask" });
-    expect(tick(600).param_face_angle_x).toBeCloseTo(-24);
+    expect(tick(600).param_face_angle_x).toBeCloseTo(askAt(4100));
 
     const none = section("none", 1, 2);
     const { text } = none;
     await drive("prepare", { section: none });
     await drive("start", { id: "none" });
-    expect(tick().param_face_angle_x).toBeCloseTo(-24);
+    expect(tick().param_face_angle_x).toBeCloseTo(askAt(4100));
     expect(await drive("decide", { id: "none", choice: "none", attention: "unknown" }))
       .toMatchObject({ kind: "unsupported", reason: "unsupported-performance" });
     expect(await readdir(directory)).toHaveLength(0);
     expect(await drive("finalize", { id: "none", text })).toMatchObject({ kind: "saved" });
     expect(await drive("result", { id: "none" })).toMatchObject({ kind: "no-motion", reason: "unsupported-performance" });
-    expect(tick(200).param_face_angle_x).toBeCloseTo(-10.5);
+    expect(tick(200).param_face_angle_x).toBeCloseTo((askAt(4100) + 3) / 2);
     expect(tick(200).param_face_angle_x).toBeCloseTo(3);
     const files = (await readdir(directory)).filter((name) => name.endsWith(".json"));
     expect(files).toHaveLength(1);
@@ -208,7 +218,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     expect(tick(1000).param_face_angle_x).toBeCloseTo(3);
     await drive("decide", { id: "new-generation", choice: "interest" });
     expect(await drive("result", { id: "new-generation" })).toEqual({ kind: "accepted" });
-    expect(tick(1150).param_face_angle_x).toBeCloseTo(-19.5555555556);
+    expect(tick(1150).param_face_angle_x).toBeCloseTo(authored("interest", "partner", "param_face_angle_x", 1150));
 
     const disconnected = new Promise<void>((resolve) => {
       const unsubscribe = server.onEvent((event) => {
@@ -217,7 +227,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     });
     await drive("close");
     await disconnected;
-    expect(tick().param_face_angle_x).toBeCloseTo(-19.5555555556);
+    expect(tick().param_face_angle_x).toBeCloseTo(authored("interest", "partner", "param_face_angle_x", 1150));
     expect(tick(400).param_face_angle_x).toBeCloseTo(3);
 
     const next = await connect();
@@ -225,7 +235,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     await next("start", { id: "receive" });
     await next("decide", { id: "receive", choice: "receive" });
     expect(await next("result", { id: "receive" })).toEqual({ kind: "accepted" });
-    expect(tick(540).param_face_angle_y).toBeCloseTo(-8);
+    expect(tick(445).param_face_angle_y).toBeCloseTo(-8);
 
     for (const [sectionIndex, reason] of ["refusal", "network"].entries()) {
       const failed = section(reason, 0, sectionIndex + 1);
@@ -236,7 +246,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       expect(await next("result", { id: reason })).toMatchObject({ kind: "failure", source: "decision", reason });
       expect(await next("finalize", { id: reason, text: failed.text })).toBeNull();
     }
-    parameters = parameters.filter(({ parameterId }) => parameterId !== "param_body_angle_x");
+    parameters = parameters.filter(({ parameterId }) => parameterId !== "param_face_angle_y");
     const mismatch = section("mismatch", 0, 3);
     await next("prepare", { section: mismatch });
     await next("start", { id: "mismatch" });
@@ -270,6 +280,7 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     }
 
     parameters = mappingTargets();
+    tick(400); // Let the previous section release its received nod before the next response.
 
     // Wave 2 feeds controlled model deltas into production Fire and SpeechStreamer.
     // The synth and physical audio sink are fixtures. Channel and frame composition are real.
@@ -304,10 +315,10 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       .toMatchObject({ playbackId: secondJob.playbackId });
     expect(await next("fireTrace", { event: "intent.motion.reply", fields: { sectionIndex: 0 } }))
       .toMatchObject({ kind: "accepted" });
-    expect(tick(1000).param_face_angle_x).toBeCloseTo(-24);
+    expect(tick(1000).param_face_angle_x).toBeCloseTo(askAt(1000));
     await next("firePlayer", { type: "ended", id: secondJob.playbackId });
     await next("fireTrace", { event: "voice.player.ended", fields: { playbackId: secondJob.playbackId } });
-    expect(tick(200).param_face_angle_x).toBeCloseTo(-24); // Natural question end retains attention.
+    expect(tick(200).param_face_angle_x).toBeCloseTo(askAt(1200)); // Natural question end retains attention.
 
     const noneJob = await next("fireTrace", { event: "speech.playback.input_completed" }) as { playbackId: string };
     await next("firePlayer", { type: "started", id: noneJob.playbackId });
@@ -327,14 +338,15 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
         performanceId: "brief-relief", attentionTargetId: "partner"
       }
     })).toMatchObject({ result: "accepted" });
-    expect(tick(1320).param_body_angle_x).toBe(-5.8);
+    expect(tick(1320).param_body_angle_z).toBeCloseTo(authored("brief-relief", "partner", "param_body_angle_z", 1320));
     const beforeKill = tick(190);
-    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBe(14);
+    const killY = authored("brief-relief", "partner", "stageY", 1510);
+    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(killY);
     expect(await next("fireKill")).toMatchObject({ killed: true, severed: true });
     await next("expression"); // Round trip after Fire's cancel on the same connection.
-    expect(tick(200).param_body_angle_x).toBeCloseTo(beforeKill.param_body_angle_x! / 2);
-    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBe(7);
-    expect(tick(200).param_body_angle_x ?? 0).toBe(0);
+    expect(tick(200).param_body_angle_z).toBeCloseTo(beforeKill.param_body_angle_z! / 2);
+    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(killY / 2);
+    expect(tick(200).param_body_angle_z ?? 0).toBe(0);
     expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBe(0);
     expect(await next("fireDelta", { text: "<intent 終了後に届いた意図>声に出さない。" }))
       .not.toContain("声に出さない。");
@@ -429,10 +441,10 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       audioPlayback: { ranges: [] }
     });
     await next("expression");
-    expect(tick(1340).param_face_angle_y).toBeCloseTo(-7.6);
-    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(12.5);
-    expect(tick(3160).param_face_angle_y).toBeCloseTo(-1.8);
-    expect(tick(400).param_face_angle_y ?? 0).toBe(0);
+    expect(tick(1340).param_face_angle_y).toBeCloseTo(authored("brief-relief", "game", "param_face_angle_y", 1340));
+    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(authored("brief-relief", "game", "stageY", 1340));
+    expect(tick(1240).param_face_angle_y).toBeCloseTo(-1.5);
+    expect(tick(1700).param_face_angle_y ?? 0).toBe(0);
 
     await next("fireStart");
     const bargeIntent = "見ているみんなに短く安堵を伝える";
@@ -447,12 +459,12 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       event: "intent.motion.reply", fields: { generation: 4, sectionIndex: 0 }
     })).toMatchObject({ kind: "accepted" });
     const beforeBarge = tick(1560);
-    expect(beforeBarge.param_eyeball_y).toBeCloseTo(0.48);
-    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(12);
+    expect(beforeBarge.param_eyeball_y).toBeCloseTo(authored("brief-relief", "viewers", "param_eyeball_y", 1560));
+    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(authored("brief-relief", "viewers", "stageY", 1560));
     expect(await next("fireInterrupt")).toMatchObject({ interrupted: true });
     await next("expression");
     expect(tick(200).param_eyeball_y).toBeCloseTo(beforeBarge.param_eyeball_y! / 2);
-    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(6);
+    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(authored("brief-relief", "viewers", "stageY", 1560) / 2);
     expect(tick(200).param_eyeball_y ?? 0).toBe(0);
     await next("fireReply", { replyText: bargeReply });
     expect(await next("fireDone")).toMatchObject({ fired: false, reason: "barge-in" });
@@ -507,17 +519,18 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       await replacement("mouth");
       await replacement("expression");
       const combinedLaugh = tick(130);
-      expect(combinedLaugh).toMatchObject({ ...fixed, param_shared_laughter: 1 });
+      expect(combinedLaugh).toMatchObject(fixed);
+      expect(combinedLaugh.param_shared_laughter).toBeCloseTo(authored("shared-laughter", attention, "param_shared_laughter", 1480));
       expect(combinedLaugh["mouth-open"]).toBeGreaterThan(0);
       expect(combinedLaugh["mouth-vowel-a"]).toBeGreaterThan(0);
       expect(heart.getLatestStageMotionSignal().stageYOffsetPx).not.toBe(0);
       const interrupted = attention === "partner";
       await replacement("finish", { id, interrupted });
       if (interrupted) {
-        expect(tick(200).param_shared_laughter).toBeCloseTo(0.5);
+        expect(tick(200).param_shared_laughter).toBeCloseTo(combinedLaugh.param_shared_laughter! / 2);
         tick(200);
       } else {
-        expect(tick(400).param_shared_laughter).toBeGreaterThan(0.9);
+        expect(tick(400).param_shared_laughter).toBeCloseTo(authored("shared-laughter", attention, "param_shared_laughter", 1880));
         tick(4720);
       }
       const released = tick();
@@ -561,19 +574,19 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
       expect(decision).toMatchObject({ kind: "selected", performanceId: "startled-recoil" });
       expect(await replacement("result", { id })).toEqual({ kind: "accepted" });
       expect(tick()).toMatchObject({ param_eyeball_y: 0, param_eye_left_open: 1 });
-      tick(1000);
+      tick(520);
       await replacement("mouth");
       const peak = tick(130);
       expect(peak).toMatchObject({ param_startled: 1, param_eyeball_y: 0, param_eye_left_open: 1 });
       expect(peak["mouth-open"]).toBeGreaterThan(0);
       const displaced = stageFrame();
-      expect(displaced.browserSourceTransform.zoomScale).toBeLessThan(0.96);
-      expect(displaced.browserSourceTransform.pan.y).toBeGreaterThan(3);
+      expect(displaced.browserSourceTransform.zoomScale).toBeLessThan(0.98);
+      expect(displaced.browserSourceTransform.pan.y).toBeLessThan(-2);
       expect(displaced.nativeDisplayTransform).toEqual(displaced.browserSourceTransform);
       const interrupted = attention === "game";
       await replacement("finish", { id, interrupted });
       if (interrupted) expect(tick(200).param_startled).toBeCloseTo(0.5);
-      else expect(tick(200).param_startled).toBe(1);
+      else expect(tick(200).param_startled).toBeCloseTo(authored("startled-recoil", attention, "param_startled", 850));
       const released = tick(interrupted ? 200 : 5070);
       expect(released).not.toHaveProperty("param_startled");
       expect(released.param_eyeball_y).toBeCloseTo(baseline.param_eyeball_y!);
