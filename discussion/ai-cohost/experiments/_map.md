@@ -6,6 +6,9 @@
 
 | Path | Scope | Status |
 |---|---|---|
+| [motion-library-astra-62/README.md](motion-library-astra-62/README.md) | 登録済みの全28本を同一モデル・台詞でGPT-6 Astraと6.2 Astraの左右比較にまとめる | 全28本を本人採用。配布定義・現用スロットに配置済み |
+| [smile-astra-62/README.md](smile-astra-62/README.md) | 相方向けの「嬉しさが弾む」「照れながら笑う」で、GPT-6 Astraと6.2 Astraを同じ代表発話で左右比較 | 全28本の比較後に採用・配置済み |
+| [game-curiosity-astra-62/README.md](game-curiosity-astra-62/README.md) | 丸い仕掛けを見つける発話でGPT-6 Astraの登録版と6.2 Astraの新作を同期比較 | 全28本の比較後に採用・配置済み |
 | [speech-motion-wry-nuances-v1/README.md](speech-motion-wry-nuances-v1/README.md) | 既存の苦笑表情で、登録済み「やれやれ」を基準に同調・報われなさ・茶化し・自分への苦笑・柔らかな限界説明を6面比較。原発話・再現定義を保存 | 2026-11-16本人採用。①を保持し②〜⑥を正面のgame/viewers共用で[登録・配置済み](../implementation/waves/wry-nuances-registration/completion.md)。相方版未制作、実会話未確認 |
 | [speech-motion-shy-aversion-v2/README.md](speech-motion-shy-aversion-v2/README.md) | 照れ笑い原案と「相手から一度顔をそらして戻る」改訂の左右比較。既存表情・瞳固定のまま研究を参考に順序を変更 | 2026-11-16本人が改訂を採用。相方向け笑み5案の一つとして[登録済み](../implementation/waves/smile-nuances-registration/completion.md)、実会話未確認 |
 | [speech-motion-smile-nuances-v1/README.md](speech-motion-smile-nuances-v1/README.md) | 既存笑顔で「柔らかい微笑み・弾む喜び・照れ・得意・息を抜いてから微笑む」の5案を同期比較。相方向き統一・Stage固定、再現定義を保存 | 2026-11-16本人採用。照れだけ改訂v2に差し替え、相方向け5案を[登録済み](../implementation/waves/smile-nuances-registration/completion.md)。原試作を保持 |
