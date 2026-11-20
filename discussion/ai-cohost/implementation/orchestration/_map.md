@@ -4,6 +4,7 @@
 
 | Path | Status | Content |
 |---|---|---|
+| [speech-intent-wording-wave-plan.md](speech-intent-wording-wave-plan.md) | 初見レビュー・関連149件合格 (2026-11-20) | 言葉だけの返事も自然に選べる意図タグの説明。効果は次回以降の配信で観察。 |
 | [soul-structure-refactor-wave-plan.md](soul-structure-refactor-wave-plan.md) | 全5 Wave合格、実配信・Discord通話の本人確認済み | Soul全体の責務・場の寿命・Cockpitを整理。[初見での探索と最終回帰](../waves/soul-structure-refactor/wave5-completion.md)・[独立レビュー](../reviews/soul-structure-refactor/wave5-review.md) |
 | [discord-remote-venue-wave-plan.md](discord-remote-venue-wave-plan.md) | 両Wave合格・実Discordで音声会話と閉場を確認 (2026-11-18) | Codexから場を都度起動し退出・閉場。Windows別呼び出しと隔離記憶保存を確認。[操作手順](../waves/discord-remote-venue/wave2-operation.md) |
 | [chappy-gpt-62-models-wave-plan.md](chappy-gpt-62-models-wave-plan.md) | 実機・全回帰合格 (2026-11-18) | SDK 0.169.1で6.2 Astra/Solの選択・再起動後の会話・Windows小タスクを確認 |
