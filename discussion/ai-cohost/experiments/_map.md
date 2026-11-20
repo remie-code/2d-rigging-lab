@@ -6,6 +6,7 @@
 
 | Path | Scope | Status |
 |---|---|---|
+| [surprise-nuances-astra-62/README.md](surprise-nuances-astra-62/README.md) | 実発話に合わせて、目を留める・追う・引く・寄る・笑うの五面比較と個別演技を作成 | 新作4本も採用・登録。ゲーム画面・視聴者向けの驚きは計5種 |
 | [motion-library-astra-62/README.md](motion-library-astra-62/README.md) | 登録済みの全28本を同一モデル・台詞でGPT-6 Astraと6.2 Astraの左右比較にまとめる | 全28本を本人採用。配布定義・現用スロットに配置済み |
 | [smile-astra-62/README.md](smile-astra-62/README.md) | 相方向けの「嬉しさが弾む」「照れながら笑う」で、GPT-6 Astraと6.2 Astraを同じ代表発話で左右比較 | 全28本の比較後に採用・配置済み |
 | [game-curiosity-astra-62/README.md](game-curiosity-astra-62/README.md) | 丸い仕掛けを見つける発話でGPT-6 Astraの登録版と6.2 Astraの新作を同期比較 | 全28本の比較後に採用・配置済み |
