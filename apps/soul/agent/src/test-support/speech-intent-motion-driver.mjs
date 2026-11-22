@@ -6,6 +6,7 @@ import { createSpeechIntentNoneRecorder } from "../mind/speech-intent-none-recor
 import { createSpeechIntentSectionRecorder } from "../mind/speech-intent-section-recorder.mjs";
 import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
 import { createTranscriptBuffer } from "../ears/transcript-buffer.mjs";
+import { createVenueVisionTarget } from "../eyes/cockpit-vision-target.mjs";
 
 const [url, directory, sectionDirectory = join(directory, "all-sections")] = process.argv.slice(2);
 let motion;
@@ -25,7 +26,7 @@ motion = createSpeechIntentMotion({
   judge: ({ input, questions }) => {
     const { promise, resolve, reject } = Promise.withResolvers();
     const parsed = JSON.parse(input);
-    const key = parsed.intent.startsWith("<intent ") ? parsed.intent.slice(8, -1).trim() : parsed.intent;
+    const key = parsed.sentence ?? parsed.intent;
     decisionInputs.set(key, { ...parsed, questions });
     decisions.set(key, (performance, attention) => {
       if (performance === "network") {
@@ -58,6 +59,14 @@ const spoken = [];
 let playerListener = null;
 let ask = null;
 let fireResult = null;
+let brain;
+let venue;
+let venueOpen = true;
+const venueVisionTarget = createVenueVisionTarget({
+  stream: () => "配信のゲーム画面",
+  discord: () => null,
+  experience: () => venue
+});
 const player = {
   onEvent(listener) {
     playerListener = listener;
@@ -98,7 +107,9 @@ const fire = createFireOrchestrator({
   player,
   progressivePlayback: true,
   acquireFireResources: () => ({
-    session, channel, player, engine, speechIntentMotion: motion, speechIntentScene: "fixture"
+    session, channel, player, engine, speechIntentMotion: motion, speechIntentScene: "fixture",
+    configuration: { brain }, gameScreenShared: Boolean(venueVisionTarget()),
+    isSpeechMotionVenueActive: () => venueOpen
   }),
   onTrace(event) {
     traceEvents.push(event);
@@ -109,7 +120,10 @@ const fire = createFireOrchestrator({
 });
 
 const commands = {
-  async fireStart() {
+  async fireStart({ configuredBrain, experience = "discord" } = {}) {
+    brain = configuredBrain;
+    venue = experience;
+    venueOpen = true;
     askReady = Promise.withResolvers();
     fireResult = fire.fire();
     await askReady.promise;
@@ -130,11 +144,11 @@ const commands = {
     playerListener?.({ type, id, atMs: 0 });
     return spoken;
   },
-  async decisionInput({ intent }) {
-    return decisionInputs.get(intent) ?? null;
+  async decisionInput({ sentence }) {
+    return decisionInputs.get(sentence) ?? null;
   },
-  async fireDecide({ intent, choice, attention = "partner" }) {
-    decisions.get(intent)(choice, attention);
+  async fireDecide({ sentence, choice, attention = "partner" }) {
+    decisions.get(sentence)(choice, attention);
     return true;
   },
   async fireDone() {
@@ -149,6 +163,10 @@ const commands = {
   },
   async fireInterrupt() {
     return fire.interrupt();
+  },
+  async venueClosing() {
+    venueOpen = false;
+    return true;
   },
   async prepare({ section }) {
     const decision = motion.prepare(section);

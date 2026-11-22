@@ -22,6 +22,10 @@ const questionsFor = (registry) => [
 ];
 
 export async function decideSpeechIntentMotion({ intent, text, context }, judge, registry) {
+  return decideSpeechMotion({ text, input: { intent, text, context }, questionsFor }, judge, registry);
+}
+
+export async function decideSpeechMotion({ text, input, questionsFor, fallbackAttention }, judge, registry) {
   if (!text.trim()) return { kind: "skipped", reason: "empty-text" };
   if (!registry || !Object.keys(registry.performances).length) {
     return { kind: "unsupported", reason: "speech-motion-catalog-unavailable" };
@@ -29,7 +33,7 @@ export async function decideSpeechIntentMotion({ intent, text, context }, judge,
   const questions = questionsFor(registry);
   try {
     const { answers, latencyMs } = await judge({
-      input: JSON.stringify({ intent, text, context }),
+      input: JSON.stringify(input),
       questions
     });
     const [performance, attention] = questions.map(({ name }) => answers?.[name]);
@@ -44,10 +48,14 @@ export async function decideSpeechIntentMotion({ intent, text, context }, judge,
     if (!(supportedPerformance || performanceId === "none") || !(knownTarget || attentionTargetId === "unknown")) {
       return { kind: "failure", reason: "shape", ...selection };
     }
+    const effectiveAttentionTargetId = knownTarget ? attentionTargetId
+      : supportedPerformance && typeof fallbackAttention === "string" &&
+        Object.hasOwn(registry.attentionTargets, fallbackAttention) ? fallbackAttention : null;
+    if (fallbackAttention !== undefined) selection.effectiveAttentionTargetId = effectiveAttentionTargetId;
     if (!supportedPerformance) return { kind: "unsupported", reason: "unsupported-performance", ...selection };
-    if (!knownTarget) return { kind: "unsupported", reason: "unknown-attention-target", ...selection };
+    if (effectiveAttentionTargetId === null) return { kind: "unsupported", reason: "unknown-attention-target", ...selection };
     const pair = registry.pairs.find((entry) =>
-      entry.performanceId === performanceId && entry.attentionTargetId === attentionTargetId
+      entry.performanceId === performanceId && entry.attentionTargetId === effectiveAttentionTargetId
     );
     return pair
       ? { kind: "selected", ...selection }
@@ -61,10 +69,11 @@ function sectionSnapshot(section) {
   const { sceneId, utteranceId, generation, sectionId, sectionIndex, intent, rawIntentTag } = section;
   if (![sceneId, utteranceId, sectionId].every((id) => typeof id === "string" && id.trim()) ||
       ![generation, sectionIndex].every((index) => Number.isSafeInteger(index) && index >= 0) ||
-      typeof intent !== "string" || !intent.trim()) {
+      (section.kind !== "sentence" && (typeof intent !== "string" || !intent.trim()))) {
     throw new TypeError("Invalid speech intent section.");
   }
-  return { sceneId, utteranceId, generation, sectionId, sectionIndex, intent,
+  return { sceneId, utteranceId, generation, sectionId, sectionIndex,
+    ...(section.kind === "sentence" ? { kind: "sentence" } : { intent }),
     ...(rawIntentTag === undefined ? {} : { rawIntentTag }) };
 }
 
@@ -76,13 +85,15 @@ function key(section) {
   return JSON.stringify([section.generation, section.sectionIndex]);
 }
 
-function definitionFor(decision, catalog) {
+export function definitionFor(decision, catalog) {
   const { performanceId, attentionTargetId } = decision;
   if (!performanceId || !catalog || !Object.hasOwn(catalog.performances, performanceId)) return null;
   const archive = catalog.definitionArchive;
   const entry = Object.hasOwn(archive?.definitions ?? {}, performanceId) ? archive.definitions[performanceId] : null;
   const pair = catalog.pairs.find((match) =>
-    match.performanceId === performanceId && match.attentionTargetId === attentionTargetId);
+    match.performanceId === performanceId &&
+    match.attentionTargetId === (Object.hasOwn(decision, "effectiveAttentionTargetId")
+      ? decision.effectiveAttentionTargetId : attentionTargetId));
   return {
     sha256: entry?.sha256 ?? null,
     archiveDirectory: entry ? archive.directory : null,
@@ -103,6 +114,7 @@ export function createSpeechIntentMotion({
   recordUnsupported
 }) {
   let current = null;
+  let consecutive = null;
   let retired = false;
   const prepared = new Map();
 
@@ -131,7 +143,8 @@ export function createSpeechIntentMotion({
     if (existing) {
       const { sceneId, utteranceId, sectionId } = existing.section;
       if (sceneId !== section.sceneId || utteranceId !== section.utteranceId || sectionId !== section.sectionId ||
-          existing.section.intent !== section.intent || existing.section.rawIntentTag !== section.rawIntentTag) {
+          existing.section.kind !== section.kind || existing.section.intent !== section.intent ||
+          existing.section.rawIntentTag !== section.rawIntentTag) {
         throw new TypeError("Speech intent section key is already assigned.");
       }
       return existing;
@@ -150,7 +163,7 @@ export function createSpeechIntentMotion({
       requests: [],
       terminalRequests: [],
       decisionInput: null,
-      decisionContext: JSON.parse(JSON.stringify(context))
+      decisionContext: section.kind === "sentence" ? null : JSON.parse(JSON.stringify(context))
     };
     prepared.set(key(section), state);
     return state;
@@ -162,17 +175,17 @@ export function createSpeechIntentMotion({
       return !retired;
     },
 
-    prepare(section, { text, context } = section) {
+    prepare(section, { text, context, input, decide } = section) {
       if (retired || (current && compare(section, current.section) < 0)) {
         return Promise.resolve({ kind: "failure", reason: "stale" });
       }
-      if (typeof text !== "string" || context === undefined) {
+      if (typeof text !== "string" || (input ? typeof decide !== "function" : context === undefined)) {
         throw new TypeError("Speech intent decision requires text and context.");
       }
       const state = capture(section, context);
       if (state.decision) return state.decision;
       const snapshot = state.section;
-      state.decisionInput = { text, start: 0, end: text.length };
+      state.decisionInput = input ?? { text, start: 0, end: text.length };
       state.decision = Promise.resolve().then(async () => {
         let catalog;
         try {
@@ -183,17 +196,17 @@ export function createSpeechIntentMotion({
         if (retired || state.status === "interrupted-before-start") {
           return { kind: "skipped", reason: "interrupted-before-decision" };
         }
-        state.catalog = catalog;
-        const decision = await decideSpeechIntentMotion({
+        state.catalog = input && catalog ? structuredClone(catalog) : catalog;
+        const decision = await (decide ? decide(input, judge, state.catalog) : decideSpeechIntentMotion({
           intent: snapshot.rawIntentTag ?? snapshot.intent, text, context: state.decisionContext
-        }, judge, catalog);
+        }, judge, catalog));
         state.decisionPlaybackState = state.status;
         return decision;
       });
       return state.decision;
     },
 
-    start(section, { runWhenPlaying } = {}) {
+    start(section, { runWhenPlaying, isVenueActive = () => true } = {}) {
       if (retired) return null;
       if (current && compare(section, current.section) <= 0) {
         if (compare(section, current.section) === 0) return stateFor(section)?.startResult ?? null;
@@ -209,17 +222,46 @@ export function createSpeechIntentMotion({
       }
       current = state;
       state.status = "playing";
-      const begin = send("begin", state);
+      const sendBegin = () => {
+        state.begin = send("begin", state);
+        return state.begin;
+      };
+      const sentence = section.kind === "sentence";
+      const begin = sentence ? null : sendBegin();
       const playback = Promise.all([begin, state.decision]).then(async ([opened, decision]) => {
-        if (opened.kind !== "accepted") return opened;
+        if (opened && opened.kind !== "accepted") return opened;
         if (current !== state || state.status !== "playing") return { kind: "skipped" };
+        if (!isVenueActive()) return { kind: "skipped", reason: "venue-inactive" };
         if (decision.kind === "failure") return { kind: "failure", source: "decision", reason: decision.reason };
         if (decision.kind !== "selected") return { kind: "no-motion", reason: decision.reason };
-        const play = () => current === state && state.status === "playing"
-          ? send("play", state, {
-            performanceId: decision.performanceId, attentionTargetId: decision.attentionTargetId
-          })
-          : { kind: "skipped" };
+        const attentionTargetId = decision.effectiveAttentionTargetId ?? decision.attentionTargetId;
+        const play = async () => {
+          if (sentence) {
+            const last = consecutive;
+            if (last?.generation === section.generation && last.sectionIndex + 1 === section.sectionIndex &&
+                last.performanceId === decision.performanceId && last.attentionTargetId === attentionTargetId) {
+              consecutive = { ...last, sectionIndex: section.sectionIndex };
+              if ((await last.sent).kind === "accepted") {
+                return { kind: "skipped", reason: "consecutive-motion" };
+              }
+            }
+            if (current !== state || state.status !== "playing" || retired || !isVenueActive()) return { kind: "skipped" };
+            const ready = await sendBegin();
+            if (ready.kind !== "accepted") return ready;
+          }
+          if (current !== state || state.status !== "playing" || retired) return { kind: "skipped" };
+          if (!isVenueActive()) return { kind: "skipped", reason: "venue-inactive" };
+          const sent = send("play", state, { performanceId: decision.performanceId, attentionTargetId });
+          if (sentence) {
+            const selection = { generation: section.generation, sectionIndex: section.sectionIndex,
+              performanceId: decision.performanceId, attentionTargetId, owner: state, sent };
+            consecutive = selection;
+            const result = await sent;
+            if (result.kind !== "accepted" && consecutive?.owner === state) consecutive = null;
+            return result;
+          }
+          return sent;
+        };
         return runWhenPlaying ? runWhenPlaying(play) : play();
       });
       state.startResult = { begin, playback };
@@ -232,7 +274,9 @@ export function createSpeechIntentMotion({
       if (!state) return Promise.resolve(null);
       if (state.recording) return state.recording;
       if (typeof text !== "string") throw new TypeError("Final speech intent section requires text.");
-      const snapshot = { ...state.section, text, context: state.decisionContext, decisionInput: state.decisionInput,
+      const snapshot = { ...state.section, text,
+        ...(section.kind === "sentence" ? {} : { context: state.decisionContext }),
+        decisionInput: state.decisionInput,
         finalPlaybackState: state.status,
         ...(audioPlayback === undefined ? {} : { audioPlayback: structuredClone(audioPlayback) }) };
       const storedDecision = (state.decision ?? Promise.resolve({ kind: "skipped", reason: skippedReason ?? "not-prepared" }))
@@ -263,7 +307,7 @@ export function createSpeechIntentMotion({
             return { kind: "failure", reason: error?.code ?? "storage" };
           }
         });
-      state.recording = recordUnsupported && state.decision ? state.decision.then(async (decision) => {
+      state.recording = section.kind !== "sentence" && recordUnsupported && state.decision ? state.decision.then(async (decision) => {
         const stored = await recording;
         if (stored.kind !== "saved" || decision.kind !== "unsupported") return stored.kind === "saved" ? null : stored;
         try {
@@ -289,6 +333,7 @@ export function createSpeechIntentMotion({
       }
       if (state !== current || (state.status !== "playing" && !(interrupted && state.status === "ended"))) return null;
       state.status = interrupted ? "interrupted" : "ended";
+      if (!state.begin) return null;
       const result = send(interrupted ? "cancel" : "end", state);
       state.terminalRequests.push(result);
       return result;
@@ -298,7 +343,7 @@ export function createSpeechIntentMotion({
       for (const state of prepared.values()) {
         if (state.status === "pending") state.status = "interrupted-before-start";
       }
-      return current ? this.finish(current.section, { interrupted: true }) : null;
+      return this.releaseCurrent();
     },
 
     retire() {
@@ -307,6 +352,11 @@ export function createSpeechIntentMotion({
     },
 
     releaseCurrent() {
+      const owner = consecutive?.owner;
+      consecutive = null;
+      if (owner && owner !== current && owner.status === "ended" && !current?.begin) {
+        return send("cancel", owner);
+      }
       return current ? this.finish(current.section, { interrupted: true }) : null;
     },
 

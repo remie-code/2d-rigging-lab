@@ -282,182 +282,170 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     parameters = mappingTargets();
     tick(400); // Let the previous section release its received nod before the next response.
 
-    // Wave 2 feeds controlled model deltas into production Fire and SpeechStreamer.
-    // The synth and physical audio sink are fixtures. Channel and frame composition are real.
-    const tagged = "答えを待ちたい";
-    const unmatched = "言いよどみを隠したい";
-    expect(await next("fireStart")).toContain("<intent");
-    await next("fireDelta", { text: "<int" });
-    expect(await next("decisionInput", { intent: tagged })).toBeNull();
-    expect(await next("fireDelta", { text: `ent ${tagged}>最初の文。` })).toEqual(["最初の文。"]);
-    expect(await next("decisionInput", { intent: tagged })).toMatchObject({
-      intent: `<intent ${tagged}>`, text: "最初の文。",
-      context: { transcript: expect.stringContaining("合成入力の会話文脈") },
-      questions: [{ name: "speech_intent_performance" }, { name: "speech_intent_attention" }]
+    // Real Fire, streaming queue, Control Channel, and frame composition with an emulated audio sink.
+    const first = "料理が効いてるね。";
+    const second = "お、今の一撃…！";
+    const unsupported = "対応がない文。";
+    const interrupted = "中断した文。";
+    const queued = "未開始の文。";
+    const streamedReply = first + second + "<smile>" + unsupported + interrupted + queued;
+    const input = (sentence: string) => next("decisionInput", { sentence });
+    const decide = (sentence: string, choice: string, attention = "partner") =>
+      next("fireDecide", { sentence, choice, attention });
+    const event = (type: string, id: string) => next("firePlayer", { type, id });
+    const job = async () => (await next("fireTrace", {
+      event: "speech.playback.input_completed"
+    }) as { playbackId: string }).playbackId;
+    const traceMotion = (sectionIndex: number) =>
+      next("fireTrace", { event: "intent.motion.reply", fields: { sectionIndex } });
+    const record = (generation: number, sectionIndex: number) =>
+      next("fireTrace", { event: "intent.recording.completed", fields: { generation, sectionIndex } });
+    const newLogDirectory = join(directory, "all-sections");
+    const readRecords = async () => Promise.all((await readdir(newLogDirectory))
+      .filter((name) => name.endsWith(".json"))
+      .map(async (name) => JSON.parse(await readFile(join(newLogDirectory, name), "utf8"))));
+
+    expect(await next("fireStart")).not.toContain("<intent");
+    await next("fireDelta", { text: "料理が" });
+    expect(await input(first)).toBeNull();
+    await next("fireDelta", { text: "効いてるね。" + second });
+    expect(await input(first)).toMatchObject({
+      sentence: first, precedingSentences: [],
+      recentConversation: expect.stringContaining("合成入力の会話文脈"),
+      questions: [{ name: "speech_sentence_performance" }, { name: "speech_sentence_attention" }]
     });
-    const firstJob = await next("fireTrace", { event: "speech.playback.input_completed" }) as { playbackId: string };
-    await next("firePlayer", { type: "started", id: firstJob.playbackId });
-    await next("expression"); // A later request on this socket also confirms previous mouth frames reached Runtime.
-    const early = tick(180);
-    expect(early["mouth-open"]).toBeGreaterThan(0);
-    expect(early["mouth-smile"]).toBeCloseTo(0.8);
-    expect(early.param_face_angle_x).toBeCloseTo(3);
-    await next("firePlayer", { type: "ended", id: firstJob.playbackId });
-    await next("fireDecide", { intent: tagged, choice: "ask" });
-    await next("fireTrace", { event: "intent.decision.completed", fields: { sectionIndex: 0 } });
-    expect(tick(1000).param_face_angle_x).toBeCloseTo(3); // Still generating, but no active audio job.
-
-    await next("fireDelta", { text: `二文目。<smile><intent ${unmatched}>対応がない文。中断した文。未開始の文。` });
-    const secondJob = await next("fireTrace", { event: "speech.playback.input_completed" }) as { playbackId: string };
-    expect(secondJob.playbackId).not.toBe(firstJob.playbackId);
-    await next("firePlayer", { type: "started", id: secondJob.playbackId });
-    expect(await next("fireTrace", { event: "intent.motion.ready", fields: { sectionIndex: 0 } }))
-      .toMatchObject({ playbackId: secondJob.playbackId });
-    expect(await next("fireTrace", { event: "intent.motion.reply", fields: { sectionIndex: 0 } }))
-      .toMatchObject({ kind: "accepted" });
+    expect(await input(second)).toMatchObject({ sentence: second, precedingSentences: [first] });
+    const firstId = await job();
+    await event("started", firstId);
+    await next("expression");
+    expect(tick(180)["mouth-open"]).toBeGreaterThan(0);
+    expect(tick().param_face_angle_x).toBeCloseTo(3);
+    await event("ended", firstId);
+    const secondId = await job();
+    await event("started", secondId);
+    await decide(second, "ask");
+    expect(await traceMotion(1)).toMatchObject({ kind: "accepted", playbackId: secondId });
     expect(tick(1000).param_face_angle_x).toBeCloseTo(askAt(1000));
-    await next("firePlayer", { type: "ended", id: secondJob.playbackId });
-    await next("fireTrace", { event: "voice.player.ended", fields: { playbackId: secondJob.playbackId } });
-    expect(tick(200).param_face_angle_x).toBeCloseTo(askAt(1200)); // Natural question end retains attention.
+    await decide(first, "brief-relief");
+    expect(await traceMotion(0)).toMatchObject({ kind: "skipped", playbackId: firstId });
+    expect(tick().param_face_angle_x).toBeCloseTo(askAt(1000));
+    await event("ended", secondId);
+    await next("expression");
+    expect(tick(200).param_face_angle_x).toBeCloseTo(askAt(1200));
 
-    const noneJob = await next("fireTrace", { event: "speech.playback.input_completed" }) as { playbackId: string };
-    await next("firePlayer", { type: "started", id: noneJob.playbackId });
-    await next("fireDecide", { intent: unmatched, choice: "none" });
-    const noneMotion = await next("fireTrace", { event: "intent.motion.reply", fields: { sectionIndex: 1 } }) as {
-      kind: string; generation: number; sectionIndex: number;
-    };
-    expect(noneMotion).toMatchObject({ kind: "no-motion", reason: "unsupported-performance" });
-    expect(tick(400).param_face_angle_x).toBeCloseTo(3);
-    await next("firePlayer", { type: "ended", id: noneJob.playbackId });
-    const interruptedJob = await next("fireTrace", { event: "speech.playback.input_completed" }) as { playbackId: string };
-    await next("firePlayer", { type: "started", id: interruptedJob.playbackId });
-    await next("fireDelta", { text: "まだ途中" });
-    expect(await next("send", {
-      request: {
-        op: "play", generation: noneMotion.generation, sectionIndex: noneMotion.sectionIndex,
-        performanceId: "brief-relief", attentionTargetId: "partner"
-      }
-    })).toMatchObject({ result: "accepted" });
-    expect(tick(1320).param_body_angle_z).toBeCloseTo(authored("brief-relief", "partner", "param_body_angle_z", 1320));
-    const beforeKill = tick(190);
+    await next("fireDelta", { text: "<smile>" + unsupported + interrupted + queued });
+    const noneId = await job();
+    await event("started", noneId);
+    await decide(unsupported, "ask", "unknown");
+    expect(await traceMotion(2)).toMatchObject({ kind: "no-motion", reason: "unknown-attention-target" });
+    await event("ended", noneId);
+
+    const interruptedId = await job();
+    await event("started", interruptedId);
+    await decide(interrupted, "brief-relief");
+    expect(await traceMotion(3)).toMatchObject({ kind: "accepted", playbackId: interruptedId });
+    const beforeKill = tick(1510);
     const killY = authored("brief-relief", "partner", "stageY", 1510);
     expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(killY);
     expect(await next("fireKill")).toMatchObject({ killed: true, severed: true });
-    await next("expression"); // Round trip after Fire's cancel on the same connection.
+    await next("expression");
     expect(tick(200).param_body_angle_z).toBeCloseTo(beforeKill.param_body_angle_z! / 2);
     expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(killY / 2);
-    expect(tick(200).param_body_angle_z ?? 0).toBe(0);
-    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBe(0);
-    expect(await next("fireDelta", { text: "<intent 終了後に届いた意図>声に出さない。" }))
-      .not.toContain("声に出さない。");
-    await next("fireReply", {
-      replyText: `<intent ${tagged}>最初の文。二文目。<smile><intent ${unmatched}>対応がない文。中断した文。未開始の文。まだ途中`
-    });
+    await decide(queued, "brief-relief");
+    expect(await next("fireDelta", { text: "声に出さない。" })).not.toContain("声に出さない。");
+    await next("fireReply", { replyText: streamedReply });
     expect(await next("fireDone")).toMatchObject({ fired: false, reason: "killed-inflight" });
-    expect(await next("fireTrace", { event: "intent.recording.completed", fields: { sectionIndex: 1 } }))
-      .toMatchObject({ kind: "saved" });
-    const recordedFile = (await readdir(directory)).find((name) => name.endsWith(".json") && !files.includes(name));
-    expect(recordedFile).toBeDefined();
-    expect(JSON.parse(await readFile(join(directory, recordedFile!), "utf8"))).toMatchObject({
-      version: 3,
-      result: "unsupported",
-      reason: "unsupported-performance",
-      performanceId: "none",
-      attentionTargetId: "partner",
-      intent: unmatched,
-      rawIntentTag: `<intent ${unmatched}>`,
-      text: "対応がない文。中断した文。未開始の文。まだ途中",
-      decisionInput: { text: "対応がない文。", start: 0, end: 7 },
-      context: { transcript: expect.stringContaining("合成入力の会話文脈") },
-      playbackState: "playing",
-      finalPlaybackState: "interrupted",
-      audioPlayback: { ranges: [
-        { start: 0, end: 7, state: "completed" },
-        { start: 7, end: 13, state: "started-incomplete" },
-        { start: 13, end: 19, state: "not-started" },
-        { start: 19, end: 23, state: "not-enqueued" }
-      ] }
+    for (let index = 0; index < 5; index += 1) {
+      expect(await record(1, index)).toMatchObject({ kind: "saved" });
+    }
+    const records = (await readRecords()).filter((entry) => entry.generation === 1 && entry.kind === "sentence");
+    expect(records).toHaveLength(5);
+    expect(records.find((entry) => entry.text === first)).toMatchObject({
+      version: 2, decision: { kind: "selected" },
+      motionPlayback: { result: "skipped", requests: [] },
+      audioPlayback: { ranges: [{ playbackId: firstId, state: "completed" }] }
     });
-    const newLogDirectory = join(directory, "all-sections");
-    await next("fireTrace", { event: "intent.recording.completed", fields: { sectionIndex: 0 } });
-    const recordedSections = await Promise.all((await readdir(newLogDirectory))
-      .filter((name) => name.endsWith(".json"))
-      .map(async (name) => JSON.parse(await readFile(join(newLogDirectory, name), "utf8"))));
-    const selected = recordedSections.find((entry) => entry.intent === tagged);
-    expect(selected).toMatchObject({
-      version: 1,
-      text: "最初の文。二文目。",
-      rawIntentTag: `<intent ${tagged}>`,
-      context: { transcript: expect.stringContaining("合成入力の会話文脈") },
-      decisionInput: { text: "最初の文。" },
+    expect(records.find((entry) => entry.text === second)).toMatchObject({
+      version: 2, decisionInput: { sentence: second, precedingSentences: [first], gameScreenShared: false },
       decision: { kind: "selected", performanceId: "ask", attentionTargetId: "partner" },
       definition: { archiveDirectory: join(assetProfile, "speech-motion-archive"), clipId: expect.any(String) },
       motionPlayback: { result: "accepted", visibility: "unobserved",
         requests: expect.arrayContaining([{ op: "play", status: "accepted" }]) },
-      audioPlayback: { ranges: [{ state: "completed" }, { state: "completed" }] }
+      audioPlayback: { ranges: [{ playbackId: secondId, state: "completed" }] }
     });
-    expect(recordedSections.find((entry) => entry.intent === unmatched)).toMatchObject({
-      decision: { kind: "unsupported", performanceId: "none", attentionTargetId: "partner" },
-      definition: null,
-      interrupted: true
+    expect(records.find((entry) => entry.text === unsupported)).toMatchObject({
+      decision: { kind: "unsupported", reason: "unknown-attention-target", effectiveAttentionTargetId: null }
+    });
+    expect(records.find((entry) => entry.text === interrupted)).toMatchObject({
+      interrupted: true, audioPlayback: { ranges: [{ playbackId: interruptedId, state: "started-incomplete" }] }
+    });
+    expect(records.find((entry) => entry.text === queued)).toMatchObject({
+      interrupted: true, audioPlayback: { ranges: [{ state: "not-started" }] }
     });
 
-    // A full response has the whole section available, including its final
-    // remainder. Its first audio job can start while the decision is held.
     await next("fireRevive");
-    await next("fireStart");
-    const batchIntent = "ゲーム画面を見て短く息を抜く";
-    await next("fireReply", { replyText: `<intent 本文なし><intent ${batchIntent}>間に合った。ふぅ` });
-    const batchFirst = await next("fireTrace", {
-      event: "speech.playback.input_completed", fields: { jobId: "fire-3:sentence-1" }
-    }) as { playbackId: string };
-    expect(await next("decisionInput", { intent: "本文なし" })).toBeNull();
-    expect(await next("decisionInput", { intent: batchIntent })).toMatchObject({
-      intent: `<intent ${batchIntent}>`, text: "間に合った。ふぅ"
-    });
-    await next("firePlayer", { type: "started", id: batchFirst.playbackId });
+    await next("fireStart", { configuredBrain: "claude", experience: "stream" });
+    const batchFirst = "間に合った。";
+    const batchSecond = "ふぅ";
+    await next("fireReply", { replyText: batchFirst + batchSecond });
+    const batchFirstId = await job();
+    expect(await input(batchSecond)).toMatchObject({ sentence: batchSecond, precedingSentences: [batchFirst] });
+    await event("started", batchFirstId);
     await next("expression");
     expect(tick(180)["mouth-open"]).toBeGreaterThan(0);
-    expect(tick().param_face_angle_y ?? 0).toBe(0);
-    await next("fireDecide", { intent: batchIntent, choice: "brief-relief", attention: "game" });
-    expect(await next("fireTrace", {
-      event: "intent.motion.reply", fields: { generation: 3, sectionIndex: 1 }
-    })).toMatchObject({ kind: "accepted" });
-    await next("firePlayer", { type: "ended", id: batchFirst.playbackId });
-    const batchSecond = await next("fireTrace", {
-      event: "speech.playback.input_completed", fields: { jobId: "fire-3:sentence-2" }
-    }) as { playbackId: string };
-    await next("firePlayer", { type: "started", id: batchSecond.playbackId });
-    await next("firePlayer", { type: "ended", id: batchSecond.playbackId });
-    expect(await next("fireDone")).toMatchObject({ fired: true, replyText: "間に合った。ふぅ" });
-    await next("fireTrace", { event: "intent.recording.completed", fields: { generation: 3, sectionIndex: 0 } });
-    const batchRecords = await Promise.all((await readdir(newLogDirectory))
-      .filter((name) => name.endsWith(".json"))
-      .map(async (name) => JSON.parse(await readFile(join(newLogDirectory, name), "utf8"))));
-    expect(batchRecords.find((entry) => entry.intent === "本文なし")).toMatchObject({
-      text: "",
-      decisionInput: null,
-      decision: { kind: "undecided", reason: "empty-text" },
-      audioPlayback: { ranges: [] }
-    });
-    await next("expression");
+    await decide(batchFirst, "brief-relief", "unknown");
+    expect(await traceMotion(0)).toMatchObject({ kind: "accepted", playbackId: batchFirstId });
     expect(tick(1340).param_face_angle_y).toBeCloseTo(authored("brief-relief", "game", "param_face_angle_y", 1340));
-    expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(authored("brief-relief", "game", "stageY", 1340));
+    await event("ended", batchFirstId);
+
+    const batchSecondId = await job();
+    await decide(batchSecond, "brief-relief", "game");
+    await event("started", batchSecondId);
+    expect(await traceMotion(1)).toMatchObject({ kind: "skipped", reason: "consecutive-motion", playbackId: batchSecondId });
+    expect(tick().param_face_angle_y).toBeCloseTo(authored("brief-relief", "game", "param_face_angle_y", 1340));
+    await event("ended", batchSecondId);
+    expect(await next("fireDone")).toMatchObject({ fired: true, replyText: batchFirst + batchSecond });
+    await record(2, 0);
+    await record(2, 1);
+    const batchRecords = await readRecords();
+    expect(batchRecords.find((entry) => entry.text === batchFirst)).toMatchObject({
+      decision: { attentionTargetId: "unknown", effectiveAttentionTargetId: "game" },
+      decisionInput: { gameScreenShared: true }
+    });
+    expect(batchRecords.find((entry) => entry.text === batchSecond)).toMatchObject({
+      motionPlayback: { result: "skipped", reason: "consecutive-motion", requests: [] }
+    });
     expect(tick(1240).param_face_angle_y).toBeCloseTo(-1.5);
     expect(tick(1700).param_face_angle_y ?? 0).toBe(0);
 
     await next("fireStart");
-    const bargeIntent = "見ているみんなに短く安堵を伝える";
-    const bargeReply = `<intent ${bargeIntent}>みんな、ふぅ、間に合ったね。`;
+    const nodFirst = "そこが高台なんだ。";
+    const nodSecond = "だから見晴らしがいいんだね。";
+    await next("fireDelta", { text: nodFirst + nodSecond });
+    const nodFirstId = await job();
+    await decide(nodFirst, "receive");
+    await decide(nodSecond, "receive");
+    await event("started", nodFirstId);
+    expect(await traceMotion(0)).toMatchObject({ kind: "accepted", playbackId: nodFirstId });
+    const nodPose = tick(360).param_face_angle_y;
+    expect(nodPose).toBeCloseTo(authored("receive", "partner", "param_face_angle_y", 360));
+    await event("ended", nodFirstId);
+    const nodSecondId = await job();
+    await event("started", nodSecondId);
+    expect(await traceMotion(1)).toMatchObject({ kind: "skipped", reason: "consecutive-motion", playbackId: nodSecondId });
+    expect(tick().param_face_angle_y).toBeCloseTo(nodPose);
+    await event("ended", nodSecondId);
+    await next("fireReply", { replyText: nodFirst + nodSecond });
+    expect(await next("fireDone")).toMatchObject({ fired: true, replyText: nodFirst + nodSecond });
+    tick(3500);
+
+    await next("fireStart");
+    const bargeReply = "みんな、ふぅ、間に合ったね。";
     await next("fireDelta", { text: bargeReply });
-    const bargeJob = await next("fireTrace", {
-      event: "speech.playback.input_completed", fields: { jobId: "fire-4:sentence-1" }
-    }) as { playbackId: string };
-    await next("firePlayer", { type: "started", id: bargeJob.playbackId });
-    await next("fireDecide", { intent: bargeIntent, choice: "brief-relief", attention: "viewers" });
-    expect(await next("fireTrace", {
-      event: "intent.motion.reply", fields: { generation: 4, sectionIndex: 0 }
-    })).toMatchObject({ kind: "accepted" });
+    const bargeId = await job();
+    await event("started", bargeId);
+    await decide(bargeReply, "brief-relief", "viewers");
+    expect(await traceMotion(0)).toMatchObject({ kind: "accepted", playbackId: bargeId });
     const beforeBarge = tick(1560);
     expect(beforeBarge.param_eyeball_y).toBeCloseTo(authored("brief-relief", "viewers", "param_eyeball_y", 1560));
     expect(heart.getLatestStageMotionSignal().stageYOffsetPx).toBeCloseTo(authored("brief-relief", "viewers", "stageY", 1560));
@@ -469,15 +457,29 @@ it("composes Soul motion, expression and speech through the live WebSocket and f
     await next("fireReply", { replyText: bargeReply });
     expect(await next("fireDone")).toMatchObject({ fired: false, reason: "barge-in" });
 
+    // The venue lease expires at closing, before the asynchronous fold kills audio.
+    await next("fireStart", { experience: "stream" });
+    const closingSentence = "そろそろ終わるね。";
+    await next("fireDelta", { text: closingSentence });
+    const closingId = await job();
+    await event("started", closingId);
+    await next("venueClosing");
+    await decide(closingSentence, "brief-relief", "game");
+    expect(await traceMotion(0)).toMatchObject({ kind: "skipped", reason: "venue-inactive", playbackId: closingId });
+    await next("fireKill");
+    await next("fireReply", { replyText: closingSentence });
+    expect(await next("fireDone")).toMatchObject({ fired: false, reason: "killed-inflight" });
+    expect(await record(5, 0)).toMatchObject({ kind: "saved" });
+
     // A result delivered after normal end may be recorded, but cannot start
     // a new clip, including through a later connection.
-    const afterEnd = section("after-end", 5, 0);
+    const afterEnd = section("after-end", 6, 0);
     await next("prepare", { section: afterEnd });
     await next("start", { id: "after-end" });
     await next("finish", { id: "after-end" });
     await next("decide", { id: "after-end", choice: "brief-relief", attention: "viewers" });
     expect(await next("result", { id: "after-end" })).toEqual({ kind: "skipped" });
-    const afterDisconnect = section("after-disconnect", 5, 1);
+    const afterDisconnect = section("after-disconnect", 6, 1);
     await next("prepare", { section: afterDisconnect });
     await next("start", { id: "after-disconnect" });
     await next("close");

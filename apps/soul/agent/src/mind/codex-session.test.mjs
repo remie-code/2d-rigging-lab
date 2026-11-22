@@ -752,7 +752,7 @@ test("codex-session: conversationKey は thread が続く間は同じ・turn の
   });
 });
 
-test("codex-session: 教示は有効な最初の成功 turn で一度届き、新しい thread に届き直す", async () => {
+test("codex-session: 人格は最初の成功 turn まで再送され、新しい thread に届き直す", async () => {
   await withScratch(async (scratch) => {
     let attempt = 0;
     const harness = makeSpawnHarness(() => ({
@@ -769,17 +769,16 @@ test("codex-session: 教示は有効な最初の成功 turn で一度届き、�
       }
     }));
     const session = createTestSession(harness, scratch, { systemPrompt: "PERSONA" });
-    const teaching = { conversationTeaching: "教示" };
-    await assert.rejects(session.ask("一", teaching), /boom/);
-    await session.ask("二", teaching);
-    await session.ask("三", teaching);
-    await assert.rejects(session.ask("四", teaching), /boom/);
+    await assert.rejects(session.ask("一"), /boom/);
+    await session.ask("二");
+    await session.ask("三");
+    await assert.rejects(session.ask("四"), /boom/);
     await session.ask("五");
-    await session.ask("六", teaching);
-    await session.ask("七", teaching);
+    await session.ask("六");
+    await session.ask("七");
     assert.deepEqual(harness.turnRequests.map((request) => request.params.input[0].text), [
-      "PERSONA\n\n教示\n\n一", "PERSONA\n\n教示\n\n二", "三", "四",
-      "PERSONA\n\n五", "教示\n\n六", "七"
+      "PERSONA\n\n一", "PERSONA\n\n二", "三", "四",
+      "PERSONA\n\n五", "六", "七"
     ]);
     await session.dispose();
   });
@@ -794,8 +793,7 @@ test("codex-session: compact は thread/compact/start → 圧縮の turn の完�
     }));
     const session = createTestSession(harness, scratch, { systemPrompt: "PERSONA", onWarning: (w) => warnings.push(w) });
     assert.deepEqual(await session.compact(), { compacted: false, reason: "no-conversation" });
-    const teaching = { conversationTeaching: "教示" };
-    await session.ask("hello", teaching);
+    await session.ask("hello");
     const threadId = session.conversationKey();
     const result = await session.compact();
     assert.equal(result.compacted, true);
@@ -811,7 +809,7 @@ test("codex-session: compact は thread/compact/start → 圧縮の turn の完�
     assert.equal(injects.length, 1);
     assert.deepEqual(injects[0].params, {
       threadId,
-      items: [{ type: "message", role: "user", content: [{ type: "input_text", text: "PERSONA\n\n教示" }] }]
+      items: [{ type: "message", role: "user", content: [{ type: "input_text", text: "PERSONA" }] }]
     });
     assert.equal(session.getContextUsage(), null, "圧縮前の大きさはもう古い");
     assert.equal(session.conversationKey(), threadId, "圧縮しても会話は同じ thread");
@@ -819,7 +817,7 @@ test("codex-session: compact は thread/compact/start → 圧縮の turn の完�
     // 圧縮の turn の通知は警告に落とさない（ask の外の turn として受ける）。
     assert.equal(warnings.length, 0, warnings.join("\n"));
     // 次の ask は普段どおり（人格の指示を連結しない・同じ thread）。
-    await session.ask("after", teaching);
+    await session.ask("after");
     const lastTurn = harness.turnRequests.at(-1);
     assert.equal(lastTurn.params.threadId, threadId);
     assert.deepEqual(lastTurn.params.input, [{ type: "text", text: "after" }]);

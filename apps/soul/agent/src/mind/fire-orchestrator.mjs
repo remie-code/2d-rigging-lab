@@ -177,14 +177,13 @@ import {
 } from "./barge-in.mjs";
 import { containsNgWord, NG_BLOCKED_NOTE } from "./ng-words.mjs";
 import { createIncrementalSentenceTagBuffer } from "./incremental-sentence-tag-buffer.mjs";
-import { createSpeechIntentDelivery } from "./speech-intent-delivery.mjs";
+import { createSpeechSentenceDelivery } from "./speech-sentence-delivery.mjs";
 import { DEFAULT_MODEL_IDENTITY, normalizeModelIdentity } from "./model-identity.mjs";
 import { createFireTiming } from "./fire-latency.mjs";
 import { appendSoulSkills, loadSoulSkills } from "./soul-skills.mjs";
 import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 
-const SPEECH_INTENT_TEACHING = loadSoulSkills({ names: ["speech-intent"] });
 
 /** 視覚発火の最小指示文（wave 計画 §2 裁定・人格の作り込みはしない＝persona の領分）。 */
 const VISION_INSTRUCTION_TEXT = "今の画面を見て、直近の会話と合わせて自然に反応してください。";
@@ -531,7 +530,6 @@ export function createFireOrchestrator(options) {
    */
   let conversationCursor = null;
   /** @type {WeakMap<object, { key: string | null | undefined }>} */
-  const taughtIntentConversations = new WeakMap();
 
   // 既送信の判定は頭の会話世代と分け、場の正本ごとに保持する。
   /** @type {WeakMap<object, { hasGameScreen: boolean; previousAskAtMs: number; previousAskSeq: number }>} */
@@ -689,6 +687,8 @@ export function createFireOrchestrator(options) {
       engine: supplied?.engine ?? options.engine ?? null,
       speechIntentMotion: supplied?.speechIntentMotion,
       speechIntentScene: supplied?.speechIntentScene,
+      isSpeechMotionVenueActive: supplied?.isSpeechMotionVenueActive,
+      gameScreenShared: supplied?.gameScreenShared === true,
       speakDeps: Object.freeze({ ...speakDeps, ...(supplied?.speakDeps ?? {}) }),
       configuration: Object.freeze({ ...(supplied?.configuration ?? {}) }),
       metadata: Object.freeze({ ...(supplied?.metadata ?? {}) })
@@ -854,7 +854,7 @@ export function createFireOrchestrator(options) {
    * intentionally outside C1.
    */
   const createProgressiveBoundary = (delivery = null, intents = null) => {
-    const incremental = createIncrementalSentenceTagBuffer({ includeIntents: intents !== null });
+    const incremental = createIncrementalSentenceTagBuffer();
     let sawDelta = false;
     let flushed = false;
     let stopped = false;
@@ -863,7 +863,6 @@ export function createFireOrchestrator(options) {
     let sentenceCount = 0;
     let safeChars = 0;
     let intentSpeechText = "";
-    let capturedIntent = false;
 
     /** @param {ReturnType<ReturnType<typeof createIncrementalSentenceTagBuffer>["append"]>} output @param {boolean} final */
     const enqueue = (output, final) => {
@@ -874,14 +873,8 @@ export function createFireOrchestrator(options) {
           for (const task of tag.localTasks ?? []) currentFire.recall.streamed.push({ request: task.request, local: true });
         }
       }
-      for (const item of output.ordered ?? output.sentences.map((text) => ({ text }))) {
+      for (const text of output.sentences) {
         if (stopped) break;
-        if ("intent" in item) {
-          capturedIntent ||= item.intent !== null;
-          intents.tag(item.intent, item.rawIntentTag);
-          continue;
-        }
-        const { text } = item;
         // The sentence was assembled by the pure buffer, so this catches an NG
         // word even when the source word was fragmented across transport deltas.
         if (containsNgWord(text)) {
@@ -889,16 +882,12 @@ export function createFireOrchestrator(options) {
           blocked = true;
           intents?.interrupt();
           delivery?.abort("ng-blocked");
-          intents?.close();
           trace("progressive.boundary.blocked", { sentenceCount, safeChars });
           break;
         }
         if (intents) {
           intentSpeechText += text;
-          if (!text.trim()) {
-            intents.text(text);
-            continue;
-          }
+          if (!text.trim()) continue;
         }
         const index = sentenceCount;
         sentenceCount += 1;
@@ -929,33 +918,28 @@ export function createFireOrchestrator(options) {
         if (flushed) return;
         flushed = true;
         enqueue(incremental.flush(), true);
-        if (!stopped) intents?.endMessage();
         trace("progressive.boundary.flushed", { sentenceCount, safeChars, blocked });
       },
       stop() {
         if (stopped) return;
         stopped = true;
         intents?.interrupt();
-        for (const text of incremental.flush().sentences) {
-          if (!containsNgWord(text)) intents?.text(text);
-        }
-        intents?.close();
       },
       close() {
         sealed = true;
-        intents?.close();
       },
       snapshot() {
         return { sawDelta, flushed, stopped, blocked, sentenceCount, safeChars };
       },
       outcome(outcome) {
-        return intents ? { ...outcome, intentSpeechText, capturedIntent } : outcome;
+        return intents ? { ...outcome, intentSpeechText } : outcome;
       }
     };
   };
 
   const resolveIntentMotion = (resources) =>
-    resources?.body && resources.engine?.kind === "elevenlabs" ? resources.speechIntentMotion ?? null : null;
+    resources?.body && resources.player && resources.channel && resources.engine?.kind === "elevenlabs"
+      ? resources.speechIntentMotion ?? null : null;
 
   const cancelledFire = (reason) => {
     if (currentFire) currentFire.recall.discard = true;
@@ -964,17 +948,17 @@ export function createFireOrchestrator(options) {
     return { fired: false, reason };
   };
 
-  const makeDelivery = (resources, motion, intentContext, batch = false) => {
+  const makeDelivery = (resources, motion, intentContext) => {
     const generation = ++nextProgressiveGeneration;
     const generationId = `fire-${generation}`;
     const originFireId = currentFire?.fireId ?? null;
-    const intents = motion ? createSpeechIntentDelivery({
+    const intents = motion ? createSpeechSentenceDelivery({
       motion,
       sceneId: `${intentSessionId}:${resources.speechIntentScene ?? "local"}`,
       utteranceId: generationId,
       generation,
       context: intentContext,
-      batch,
+      isVenueActive: resources.isSpeechMotionVenueActive,
       trace: (event, fields) => trace(event, { ...fields, originFireId })
     }) : null;
     if (motion) lastIntentMotion = motion;
@@ -1013,7 +997,7 @@ export function createFireOrchestrator(options) {
     const progressiveEligible = configuredBrain !== "claude" && configuredBrain !== "claude-opus-55";
     const motion = resolveIntentMotion(resources);
     const intentContext = motion
-      ? { transcript: formatFireInjection(
+      ? { gameScreenShared: resources.gameScreenShared, recentConversation: formatFireInjection(
           buffer.all().filter((entry) => !isGameScreenEntry(entry)),
           { nowMs: nowImpl(), windowMs, maxChars }
         ).text }
@@ -1058,21 +1042,11 @@ export function createFireOrchestrator(options) {
       // turn/start の直後に知らされ、遅延の行（onLatency）に載せる。載っていない（Claude 等）なら渡さない。
       const configuredServiceTier =
         typeof resources.configuration?.serviceTier === "string" ? resources.configuration.serviceTier : null;
-      // 有効になった最初の ask で会話に教える。頭の作り直しと同じ頭での thread の作り直しを区別できる。
-      const modelTeaching = motion && resources.session.supportsConversationTeaching ? SPEECH_INTENT_TEACHING : "";
-      const intentTeaching = motion && !modelTeaching ? SPEECH_INTENT_TEACHING : "";
-      const intentTeachingKey = intentTeaching ? conversationKeyOf(resources.session) : undefined;
-      const previousTeaching = intentTeaching ? taughtIntentConversations.get(resources.session) : undefined;
-      const teachIntent = intentTeaching &&
-        (intentTeachingKey === null || previousTeaching?.key !== intentTeachingKey || !previousTeaching);
       const askFire = currentFire;
       onWillAsk();
-      const asked = await resources.session.ask(teachIntent
-        ? prependInstruction(askContent, intentTeaching)
-        : askContent, {
+      const asked = await resources.session.ask(askContent, {
         onTextDelta: (delta) => boundary.append(delta),
         onTextDone: () => boundary.flush(),
-        ...(modelTeaching ? { conversationTeaching: modelTeaching } : {}),
         ...(hasChatMaterials ? { redactProviderErrors: true } : {}),
         ...(configuredServiceTier
           ? {
@@ -1083,9 +1057,6 @@ export function createFireOrchestrator(options) {
             }
           : {})
       });
-      if (teachIntent) {
-        taughtIntentConversations.set(resources.session, { key: conversationKeyOf(resources.session) });
-      }
       taskResults?.delivered();
       // delta を出さない頭（Claude）の「LLM 最初の文字」は session が測った ttftMs を使う（fire-latency.mjs）。
       if (currentFire && asked && typeof asked === "object") currentFire.timing.noteTtft(/** @type {any} */ (asked).ttftMs);
@@ -1195,7 +1166,7 @@ export function createFireOrchestrator(options) {
    * @param {object} extra  戻り値へマージする付随情報（injectedChars/includedCount・視覚発火は vision:true も）。
    * @param {any} [progressiveDelivery] C2 settled queue outcome; null keeps legacy one-shot delivery.
    * @param {any} [resources]
-   * @param {{ transcript: string } | null} [intentContext] Conversation window at ask time.
+   * @param {{ recentConversation: string, gameScreenShared: boolean } | null} [intentContext] Conversation window at ask time.
    * @returns {Promise<object>}
    */
   const processAskedReply = async (buffer, asked, vision, extra, progressiveDelivery = null, resources = currentFireResources, intentContext = null) => {
@@ -1269,39 +1240,31 @@ export function createFireOrchestrator(options) {
     const hasEvents = events.length > 0;
 
     let earlyExpressions = null;
-    // A full-result brain can keep the original one-shot path for ordinary replies.
-    // An intentional section needs job boundaries, even when the whole reply arrived at once.
-    const fullMotion = (!progressiveDelivery || progressiveDelivery.status === "completed") &&
-      !(progressiveDelivery?.enqueuedSentenceCount > 0) &&
-      (hasSpeech || !progressiveDelivery?.capturedIntent) ? replyMotion : null;
-    if (fullMotion && replyText.includes("<intent")) {
-      const probe = createIncrementalSentenceTagBuffer({ includeIntents: true });
-      const markers = [...probe.append(replyText).ordered, ...probe.flush().ordered];
-      if (markers.some((item) => "intent" in item && item.intent !== null)) {
-        earlyExpressions = hasEvents ? applyExpressions(events, resources) : Promise.resolve([]);
-        const { delivery, intents } = makeDelivery(resources, fullMotion, intentContext, true);
-        const boundary = createProgressiveBoundary(delivery, intents);
-        currentProgressiveDelivery = delivery;
-        currentProgressiveBoundary = boundary;
-        progressiveProjectionOwners.set(delivery.snapshot().generationId, { buffer, fireId: currentFire?.fireId ?? null });
-        let outcome;
-        try {
-          boundary.append(replyText);
-          boundary.flush();
-          boundary.close();
-          outcome = boundary.outcome(await delivery.finish());
-          emitProgressiveTerminalOnce(outcome);
-        } catch (error) {
-          delivery.abort("llm-failed");
-          boundary.stop();
-          emitProgressiveTerminalOnce(await delivery.finish());
-          throw error;
-        } finally {
-          intents.retire();
-          currentProgressiveBoundary = null;
-          currentProgressiveDelivery = null;
-        }
-        progressiveDelivery = outcome;
+    // Full-result replies use the same sentence jobs as streamed replies.
+    const fullMotion = replyMotion && hasSpeech && (!progressiveDelivery || progressiveDelivery.status === "completed") &&
+      !(progressiveDelivery?.enqueuedSentenceCount > 0);
+    if (fullMotion) {
+      earlyExpressions = hasEvents ? applyExpressions(events, resources) : Promise.resolve([]);
+      const { delivery, intents } = makeDelivery(resources, replyMotion, intentContext);
+      const boundary = createProgressiveBoundary(delivery, intents);
+      currentProgressiveDelivery = delivery;
+      currentProgressiveBoundary = boundary;
+      progressiveProjectionOwners.set(delivery.snapshot().generationId, { buffer, fireId: currentFire?.fireId ?? null });
+      try {
+        boundary.append(replyText);
+        boundary.flush();
+        boundary.close();
+        progressiveDelivery = boundary.outcome(await delivery.finish());
+        emitProgressiveTerminalOnce(progressiveDelivery);
+      } catch (error) {
+        delivery.abort("llm-failed");
+        boundary.stop();
+        emitProgressiveTerminalOnce(await delivery.finish());
+        throw error;
+      } finally {
+        intents.retire();
+        currentProgressiveBoundary = null;
+        currentProgressiveDelivery = null;
       }
     }
 

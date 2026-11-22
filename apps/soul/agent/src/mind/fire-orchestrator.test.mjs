@@ -126,7 +126,7 @@ function progressiveStreamer(prepare) {
     createSpeechStreamer({ ...options, engine: makeProgressiveEngine(prepare), channel: streamChannel(options.channel) });
 }
 
-test("full-result ElevenLabs replies use the same section lifecycle and retain the existing smile", { timeout: 5000 }, async () => {
+test("full-result ElevenLabs replies use the same sentence lifecycle and retain the existing smile", { timeout: 5000 }, async () => {
   const buffer = bufferWithYou();
   const capturedAt = Date.now();
   buffer.addGameScreen({
@@ -169,16 +169,16 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
     judge: async ({ input }) => {
       decisionInputs.push(JSON.parse(input));
       return { answers: {
-        speech_intent_performance: { type: "choice", choice: "ask" },
-        speech_intent_attention: { type: "choice", choice: "partner" }
+        speech_sentence_performance: { type: "choice", choice: "ask" },
+        speech_sentence_attention: { type: "choice", choice: "partner" }
       } };
     }
   });
   const session = {
     async ask(content) {
-      assert.match(content, /<intent/);
+      assert.doesNotMatch(content, /<intent/);
       assert.match(content, /ゲーム固有の文章/);
-      return { replyText: "<smile><intent 相手の答えを待ちたい>一文目。二文目。\n<intent>" };
+      return { replyText: "<smile>一文目。二文目。\n" };
     }
   };
   const orch = createFireOrchestrator({
@@ -186,7 +186,7 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
     session, player, channel,
     progressivePlayback: true,
     acquireFireResources: () => ({ engine, speechIntentMotion: motion, configuration: { brain: "claude" } }),
-    speakImpl: () => assert.fail("a tagged full-result reply must use the section queue"),
+    speakImpl: () => assert.fail("a full-result reply must use the sentence queue"),
     onTrace({ event, kind, jobId, reason }) {
       if (event === "speech.playback.input_completed") ready[jobId.endsWith("-1") ? 0 : 1].resolve();
       if (event === "intent.motion.reply") motionPlayed.resolve(kind);
@@ -207,16 +207,15 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
   allowRecord.resolve();
   assert.deepEqual(await recordCompleted.promise, { kind: "failure", reason: "EACCES" });
   assert.deepEqual(spoken, ["一文目。", "二文目。"]);
-  assert.equal(decisionInputs.length, 1);
-  assert.equal(decisionInputs[0].intent, "<intent 相手の答えを待ちたい>");
-  assert.equal(decisionInputs[0].text, "一文目。二文目。\n");
-  assert.match(decisionInputs[0].context.transcript, /ねえ、今日の予定は？/);
-  assert.doesNotMatch(decisionInputs[0].context.transcript, /ゲーム固有の文章/);
+  assert.deepEqual(decisionInputs.map(({ sentence, precedingSentences }) => [sentence, precedingSentences]),
+    [["一文目。", []], ["二文目。", ["一文目。"]]]);
+  assert.match(decisionInputs[0].recentConversation, /ねえ、今日の予定は？/);
+  assert.doesNotMatch(decisionInputs[0].recentConversation, /ゲーム固有の文章/);
   assert.deepEqual(motionOps, ["begin", "play", "end"]);
   orch.dispose();
 });
 
-test("speech intent teaching travels once through the real session adapter across manual, automatic and visual Fire", async () => {
+test("the real session adapter omits speech motion instructions across manual, automatic and visual Fire", async () => {
   const delivered = [];
   async function* queryImpl({ prompt }) {
     for await (const { message } of prompt) {
@@ -240,10 +239,7 @@ test("speech intent teaching travels once through the real session adapter acros
     getVisionTarget: () => "ゲーム",
     captureImpl: async () => ({ jpegBase64: "AAAA", width: 1, height: 1, elapsedMs: 1 })
   });
-  const teaching = loadSoulSkills({ names: ["speech-intent"] });
   try {
-    assert.match(teaching, /開き山括弧 `<` の直後にゼロ幅スペース（U\+200B）などの不可視文字を挟まず、`intent`/);
-    assert.doesNotMatch(teaching, /\u200B/);
     await orch.fire();
     motion = { isActive: () => true };
     await orch.fire();
@@ -252,13 +248,11 @@ test("speech intent teaching travels once through the real session adapter acros
     session = replacement;
     await orch.fire({ vision: true });
     assert.equal(delivered.length, 5);
-    assert.ok(!delivered[0].includes(teaching));
-    assert.ok(delivered[1].startsWith(teaching));
-    assert.ok(!delivered[2].includes(teaching));
-    assert.equal(delivered[3][0].type, "image");
-    assert.ok(!delivered[3][1].text.includes(teaching));
-    assert.equal(delivered[4][0].type, "image");
-    assert.ok(delivered[4][1].text.startsWith(teaching));
+    for (const content of delivered.slice(0, 3)) assert.doesNotMatch(content, /<intent/);
+    for (const content of delivered.slice(3)) {
+      assert.equal(content[0].type, "image");
+      assert.doesNotMatch(content[1].text, /<intent/);
+    }
   } finally {
     orch.dispose();
     await initial.dispose();
@@ -266,28 +260,34 @@ test("speech intent teaching travels once through the real session adapter acros
   }
 });
 
-test("non-ElevenLabs one-shot replies keep the same voice path and strip residual intent markers", async () => {
-  const fakeSpeak = makeFakeSpeak();
-  const orch = createFireOrchestrator({
-    getBuffer: () => bufferWithYou(),
-    session: {
-      async ask(content) {
-        assert.doesNotMatch(content, /<intent/);
-        return { replyText: "<intent 相手の答えを待ちたい>一文目。二文目。" };
-      }
-    },
-    channel: fakeChannel,
-    player: fakePlayer,
-    acquireFireResources: () => ({
-      engine: { kind: "aivis" },
-      speechIntentMotion: { prepare() { assert.fail("non-ElevenLabs must not prepare motion"); } }
-    }),
-    speakImpl: fakeSpeak.speakImpl
+for (const configuration of [
+  { label: "non-ElevenLabs", body: true, engine: "aivis" },
+  { label: "bodyless ElevenLabs", body: false, engine: "elevenlabs" }
+]) {
+  test(`${configuration.label} one-shot replies keep the same voice path and strip residual intent markers`, async () => {
+    const fakeSpeak = makeFakeSpeak();
+    const orch = createFireOrchestrator({
+      getBuffer: () => bufferWithYou(),
+      session: {
+        async ask(content) {
+          assert.doesNotMatch(content, /<intent/);
+          return { replyText: "<intent 相手の答えを待ちたい>一文目。二文目。" };
+        }
+      },
+      channel: fakeChannel,
+      player: fakePlayer,
+      acquireFireResources: () => ({
+        body: configuration.body,
+        engine: { kind: configuration.engine },
+        speechIntentMotion: { prepare() { assert.fail("ineligible Fire must not prepare motion"); } }
+      }),
+      speakImpl: fakeSpeak.speakImpl
+    });
+    assert.equal((await orch.fire()).replyText, "一文目。二文目。");
+    assert.deepEqual(fakeSpeak.spoken.map(({ text }) => text), ["一文目。二文目。"]);
+    orch.dispose();
   });
-  assert.equal((await orch.fire()).replyText, "一文目。二文目。");
-  assert.deepEqual(fakeSpeak.spoken.map(({ text }) => text), ["一文目。二文目。"]);
-  orch.dispose();
-});
+}
 
 for (const awaiting of ["resource acquisition", "visual capture"]) {
   test(`kill/revive while awaiting ${awaiting} cannot restart an old Fire's intent or audio`, { timeout: 5000 }, async () => {

@@ -599,6 +599,7 @@ export async function runCockpit(args, remoteVenueId) {
     // Discord モード Domain E: Discord の場ではその場の再生器（Bot の接続に結んだもの）。
     const acceptedPlayer = activePlayer();
     const acceptedEngine = voiceEngines.current();
+    const acceptedVenue = server?.venueGeneration();
     return Object.freeze({
       session: acceptedSession,
       channel: fireChannel.channel,
@@ -607,7 +608,10 @@ export async function runCockpit(args, remoteVenueId) {
       engine: acceptedEngine,
       ...(fireChannel.body && acceptedEngine?.kind === "elevenlabs" ? {
         speechIntentMotion: lazyChannel.speechIntentMotion(),
-        speechIntentScene: server?.venueGeneration()
+        speechIntentScene: acceptedVenue,
+        isSpeechMotionVenueActive: () =>
+          server?.venueGeneration() === acceptedVenue && server?.streamStatus().phase === "open",
+        gameScreenShared: Boolean(venueVisionTarget())
       } : {}),
       speakDeps: productionSpeakDeps(),
       configuration: Object.freeze({

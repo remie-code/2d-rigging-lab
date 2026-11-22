@@ -12,7 +12,7 @@ export function createSpeechIntentSectionRecorder({ directory = defaultDirectory
     const id = createHash("sha256").update(key).digest("hex");
     const path = resolve(directory, id + ".json");
     const staging = resolve(directory, randomUUID() + ".tmp");
-    const record = { version: 1, recordedAt: new Date().toISOString(), ...section };
+    const record = { version: section.kind === "sentence" ? 2 : 1, recordedAt: new Date().toISOString(), ...section };
     await mkdir(directory, { recursive: true });
     await writeFile(staging, JSON.stringify(record, null, 2) + "\n", { encoding: "utf8", flag: "wx", mode: 0o600 })
       .catch(async (error) => {
