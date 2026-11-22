@@ -50,12 +50,12 @@ function fixture() {
 }
 
 describe("speech motion distribution assets", () => {
-  it("resolves 44 adopted pairs from 12 sources with 28 selectable performances", async () => {
-    expect(await readdir(join(profile, "speech-motions"))).toHaveLength(12);
-    expect(snapshot.catalog.pairs).toHaveLength(44);
-    expect(Object.keys(snapshot.catalog.performances)).toHaveLength(28);
+  it("resolves 54 adopted pairs from 13 sources with 35 selectable performances", async () => {
+    expect(await readdir(join(profile, "speech-motions"))).toHaveLength(13);
+    expect(snapshot.catalog.pairs).toHaveLength(54);
+    expect(Object.keys(snapshot.catalog.performances)).toHaveLength(35);
     expect(new Set(snapshot.catalog.pairs.map(({ performanceId, attentionTargetId }) =>
-      clipFor(performanceId, attentionTargetId))).size).toBe(32);
+      clipFor(performanceId, attentionTargetId))).size).toBe(42);
     expect(parseSpeechMotionRequest({ ...key, op: "play", presetId: "receive" }, undefined, snapshot)).toBeNull();
   });
 
@@ -76,7 +76,7 @@ describe("speech motion distribution assets", () => {
     const entries = selectionIds.map((id) => archive.definitions[id]!);
     const { sha256 } = entries[0]!;
     expect(entries).toEqual(selectionIds.map(() => ({ sha256, status: "saved" })));
-    expect(await readdir(archive.directory)).toHaveLength(12);
+    expect(await readdir(archive.directory)).toHaveLength(13);
     const content = await readFile(join(archive.directory, sha256 + ".json"), "utf8");
     expect(createHash("sha256").update(content).digest("hex")).toBe(sha256);
     expect(JSON.parse(content)).toEqual(searchAsset);
@@ -108,6 +108,37 @@ describe("speech motion distribution assets", () => {
       const performanceId = `surprise-nuances--${key}`;
       expect(snapshot.catalog.pairs.filter(pair => pair.performanceId === performanceId))
         .toEqual(["game", "viewers"].map(attentionTargetId => ({ performanceId, attentionTargetId, clipId })));
+    }
+    const gameSmiles: Record<string, MotionClip> = JSON.parse(
+      await readFile(new URL("game-smiles-2026-11-22/clips.json", experiments), "utf8"));
+    for (const [key, clip] of Object.entries(gameSmiles)) {
+      const performanceId = `smile-nuances--${key === "fond" ? "soft" : key}`;
+      expected.set(`game-${key}`, clip);
+      expect(snapshot.catalog.pairs).toContainEqual({ performanceId, attentionTargetId: "game", clipId: `game-${key}` });
+    }
+    expected.set("understanding-nod-partner-v1", JSON.parse(await readFile(
+      new URL("partner-understanding-nod-2026-11-22/clip.json", experiments), "utf8")));
+    expect(snapshot.catalog.pairs).toContainEqual({
+      performanceId: "understanding-nod", attentionTargetId: "partner", clipId: "understanding-nod-partner-v1"
+    });
+    const gameJoy: Record<string, MotionClip> = JSON.parse(
+      await readFile(new URL("game-joy-2026-11-22/clips.json", experiments), "utf8"));
+    for (const [key, clip] of Object.entries(gameJoy)) {
+      const clipId = `game-joy-${key}`;
+      const nuanceId = key === "victory" ? "joy" : `joy-${key}`;
+      expected.set(clipId, clip);
+      expect(snapshot.catalog.pairs).toContainEqual({
+        performanceId: `smile-nuances--${nuanceId}`, attentionTargetId: "game", clipId
+      });
+    }
+    const headTilts: Record<string, MotionClip> = JSON.parse(
+      await readFile(new URL("game-head-tilt-2026-11-22/clips.json", experiments), "utf8"));
+    for (const [key, clip] of Object.entries(headTilts)) {
+      const performanceId = `wonder-nuances--${key}`;
+      const clipId = `wonder-${key}-v1`;
+      expected.set(clipId, clip);
+      expect(snapshot.catalog.pairs.filter(pair => pair.performanceId === performanceId))
+        .toEqual([{ performanceId, attentionTargetId: "game", clipId }]);
     }
     expect(new Set(snapshot.catalog.pairs.map(p => p.clipId))).toEqual(new Set(expected.keys()));
     for (const { performanceId, attentionTargetId, clipId } of snapshot.catalog.pairs) {
