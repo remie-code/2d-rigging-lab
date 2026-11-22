@@ -742,8 +742,8 @@ export function createFireScheduler(options) {
       disarmTurnEnd();
       return;
     }
-    if (entry.speaker === "event") {
-      // Discord モード Domain J（§13.5）: 出来事の行（入った・抜けた・人の出入り）は発火のきっかけにも活動にもしない（no-op）。
+    if (entry.speaker === "event" || entry.speaker === "game") {
+      // 場の出来事とゲーム画面の行は発火のきっかけにも活動にもしない（no-op）。
       // 場の購読もここへ回さない（守りの二重化）。
       return;
     }

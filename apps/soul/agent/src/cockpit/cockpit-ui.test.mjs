@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 const COCKPIT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const UI_DIR = path.join(COCKPIT_DIR, "ui");
 
-import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot, StartupNotices } from "./ui/app.mjs";
+import { SSE_EVENT_NAMES, App, mount, initialHealth, settingsFromSnapshot, mergeStreamPrepSnapshot, StartupNotices } from "./ui/app.mjs";
 import { TopBar, HealthLine, HealthStat, identityDisplayName, cockpitDocumentTitle, NEUTRAL_COCKPIT_TITLE } from "./ui/header.mjs";
 import { Feed, FeedRow, isStuckToBottom, STICK_THRESHOLD_PX } from "./ui/feed.mjs";
 import {
@@ -153,6 +153,10 @@ test("speaking 行の規律: transcript/ghost は除去してから積む・マ�
   // マーカー行（fire）は speaking を残したまま後ろに積む（原実装は removeSpeakingRow を呼ばない）。
   feed = feedWithFireMarker(feed, { includedCount: 3, injectedChars: 42 }, T0);
   assert.deepEqual(feed.rows.map((r) => r.kind), ["speaking", "fire-marker"]);
+  const gameFeed = feedWithTranscript(feed, { speaker: "game", text: "名前\n台詞", appendedAtMs: T0 }, T0);
+  assert.deepEqual(gameFeed.rows.map((r) => r.kind), ["speaking", "fire-marker", "transcript"]);
+  assert.equal(gameFeed.rows.at(-1).whoText, "ゲーム画面");
+  assert.equal(gameFeed.rows.at(-1).text, "名前\n台詞");
   // transcript は speaking を除去してから積む（:387）。
   feed = feedWithTranscript(feed, { text: "hello", appendedAtMs: T0 }, T0);
   assert.deepEqual(feed.rows.map((r) => r.kind), ["fire-marker", "transcript"]);
@@ -377,6 +381,8 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     notices: [], // 配信の組み直し Domain A: 起動時の知らせ（無ければ空）。
     memory: null, // 配信間記憶: brain と同型の null 許容（memoryStatus 未注入なら null）。
     compaction: null, // 圧縮の目安: memory と同型の null 許容（contextCompactionStatus 未注入なら null）。
+    streamPrep: null,
+    streamPrepRevision: null,
     codexFast: null, // ①の Codex の頭の fast: compaction と同型の null 許容（codexFastStatus 未注入なら null）。
     stream: null // 配信の組み直し Domain D: 場の状態（無い古いサーバは null）。
   });
@@ -396,10 +402,33 @@ test("settingsFromSnapshot: 設定系現況の取り出し（欠落は null・ap
     notices: ["今の設定をロールへ引っ越した（古い設定のキーは残してある）。"],
     memory: { lastRecordAtMs: 1721234567890, recording: false },
     compaction: { thresholdTokens: 200_000 },
+    streamPrep: { sttEngine: "haas", ocrEnabled: false },
+    streamPrepRevision: 2,
     codexFast: { enabled: true, applicable: true, supported: true },
     stream: { phase: "open", error: null, openedAtMs: 1721234560000 }
   };
   assert.deepEqual(settingsFromSnapshot(s), s);
+});
+
+test("遅れた STT 保存応答は SSE 後の設定や場を巻き戻さない", async () => {
+  const sttResponse = Promise.resolve({
+    streamPrep: { sttEngine: "haas", ocrEnabled: true },
+    streamPrepRevision: 2,
+    stream: { phase: "closed" }
+  });
+  const latest = settingsFromSnapshot({
+    streamPrep: { sttEngine: "haas", ocrEnabled: false },
+    streamPrepRevision: 3,
+    stream: { phase: "open" }
+  });
+  assert.equal(mergeStreamPrepSnapshot(latest, await sttResponse), latest);
+  const newPreference = mergeStreamPrepSnapshot(latest, {
+    streamPrep: { sttEngine: "haas", ocrEnabled: true },
+    streamPrepRevision: 4,
+    stream: { phase: "closed" }
+  });
+  assert.equal(newPreference.streamPrep.ocrEnabled, true);
+  assert.equal(newPreference.stream.phase, "open");
 });
 
 test("Settings modal「ロール」（頭の調整・配信の組み直し Domain E で頭脳・会話から移した）: 圧縮の下に「返事の速さ」の Codex の fast トグルを置き、POST /api/codex-fast → snapshot 反映", () => {
@@ -1065,7 +1094,7 @@ test("声の方式は配信の準備から外れてロールの声になった�
   const source = readFileSync(path.join(UI_DIR, "settings-drawer.mjs"), "utf8");
   assert.doesNotMatch(source, /id="tts-engine-select"/, "配信の準備に声の方式の select は無い");
   assert.doesNotMatch(source, /ttsSelected|ttsEditedRef|ttsEngineSelection/);
-  assert.match(source, /postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)/);
+  assert.match(source, /postJson\("\/api\/stream\/start", \{ device \}\)/);
   const rolePanel = source.slice(source.indexOf('id="cockpit-settings-panel-role"'), source.indexOf('id="cockpit-settings-panel-drive"'));
   assert.match(rolePanel, /<label for="role-voice-engine-select">声<\/label>/);
   assert.match(rolePanel, /options=\$\{ROLE_VOICE_ENGINE_OPTIONS\}/);

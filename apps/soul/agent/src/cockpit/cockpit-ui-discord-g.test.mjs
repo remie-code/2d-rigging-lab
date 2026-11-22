@@ -238,7 +238,7 @@ test("配信の準備のタブ: Discord の場の間は YouTube の Connect を�
   assert.match(src, /const discordVenue = isDiscordVenue\(settings && settings\.stream\);/);
   assert.equal(DISCORD_CHAT_HIDDEN_NOTE.length > 0, true);
   // 配信の始めるは今のまま（選んだマイク・文字起こしで POST /api/stream/start・experience は付けない）。
-  assert.match(src, /postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)/);
+  assert.match(src, /postJson\("\/api\/stream\/start", \{ device \}\)/);
   assert.match(src, /discordVenue \? DISCORD_OPEN_NOTE_IN_STREAM_PREP : "配信中（終えるときは下の帯の「配信を終える」）"/);
 });
 
@@ -248,7 +248,7 @@ test("App: 「Discord の VC に入る」は POST /api/stream/start { experience
   const app = read("app.mjs");
   assert.match(app, /doFetch\("\/api\/stream\/start", \{ method: "POST", headers: \{ "content-type": "application\/json" \}, body: JSON\.stringify\(\{ experience: "discord" \}\) \}\)/);
   assert.match(app, /doFetch\("\/api\/stream\/start", \{ method: "POST", headers: \{ "content-type": "application\/json" \}, body: "\{\}" \}\)/, "配信は今のまま");
-  assert.match(app, /join=\$\{discordJoinView\(settings\.stream, extras\.discordAvailable\)\}/);
+  assert.match(app, /const discordJoin = discordJoinView\(settings\.stream, extras\.discordAvailable\)/);
   assert.match(app, /onJoinDiscord=\$\{joinDiscord\}/);
   // Discord モード Domain K（§13.4）: Discord の場の間は同じ右の領域に Discord の操作パネル（コメントの列は出さない）。
   assert.match(app, /\$\{discordVenue\n\s+\? html`<\$\{DiscordPanel\}[\s\S]*?\/>`\n\s+: html`<\$\{CommentsPanel\} rows=\$\{commentRows\} \/>`\}/);

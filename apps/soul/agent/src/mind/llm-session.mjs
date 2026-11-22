@@ -39,6 +39,7 @@
 import { performance } from "node:perf_hooks";
 import { query as defaultQuery } from "@anthropic-ai/claude-agent-sdk";
 import { assertSubscriptionAuthEnv } from "./env-guard.mjs";
+import { prependInstruction } from "./conversation-content.mjs";
 
 /** 会話相手としての最小 systemPrompt（短い日本語・一文即答）。設定で差し替え可能。 */
 export const DEFAULT_SYSTEM_PROMPT =
@@ -154,7 +155,8 @@ function extractAssistantText(assistantMessage) {
  * @param {(init: any) => void} [options.onInit]  system/init メッセージ観測（tools[]/apiKeySource 記録用）。
  * @param {(warning: string) => void} [options.onWarning]  env ガードの warning（BASE_URL 非既定等）。
  * @returns {{
- *   ask: (content: string | Array<any>, options?: {redactProviderErrors?:boolean}) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>;
+ *   supportsConversationTeaching: true;
+ *   ask: (content: string | Array<any>, options?: {redactProviderErrors?:boolean; conversationTeaching?: string}) => Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>;
  *   dispose: () => Promise<void>;
  *   getInit: () => any;
  * }}
@@ -200,13 +202,15 @@ export function createLlmSession(options = {}) {
   /** @type {any} */
   let initMessage = null;
   let disposed = false;
+  let conversationTeachingDelivered = false;
 
   return {
+    supportsConversationTeaching: true,
     /**
      * 一文（または content ブロック配列）を投げ、応答全文を得る。usage・TTFT・往復所要も返す。
      * @param {string | Array<any>} content  非空文字列、または非空の content ブロック配列
      *   （S5: 視覚発火が `[{type:'image',...}, {type:'text',...}]` を渡す）。
-     * @param {{redactProviderErrors?:boolean}} [askOptions]
+     * @param {{redactProviderErrors?:boolean; conversationTeaching?: string}} [askOptions]
      * @returns {Promise<{ replyText: string; usage: any; ttftMs: number | null; elapsedMs: number }>}
      */
     async ask(content, askOptions) {
@@ -222,9 +226,10 @@ export function createLlmSession(options = {}) {
       }
 
       const askStart = performance.now();
+      const teaching = conversationTeachingDelivered ? "" : askOptions?.conversationTeaching;
       input.push({
         type: "user",
-        message: { role: "user", content },
+        message: { role: "user", content: teaching ? prependInstruction(content, teaching) : content },
         parent_tool_use_id: null
       });
 
@@ -270,6 +275,7 @@ export function createLlmSession(options = {}) {
           if (askOptions?.redactProviderErrors && (providerFailed || message.is_error)) {
             throw new Error("llm-session: provider request failed");
           }
+          if (teaching && !providerFailed && !message.is_error) conversationTeachingDelivered = true;
           usage = message.usage ?? null;
           if (typeof message.ttft_ms === "number") {
             resultTtftMs = message.ttft_ms;

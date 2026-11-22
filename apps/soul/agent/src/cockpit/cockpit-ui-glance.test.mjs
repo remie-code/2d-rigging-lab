@@ -8,7 +8,7 @@ import { ConversationPanel, ConversationRow, LatencyBar } from "./ui/conversatio
 import { CommentsPanel } from "./ui/comments.mjs";
 import { BottomBar } from "./ui/bottom-bar.mjs";
 import { COCKPIT_CSS } from "./ui/styles.mjs";
-import { emptyGlance, glanceAfterSseEvent, conversationRowsView, commentRowsView } from "./view-logic/glance-timeline.mjs";
+import { emptyGlance, glanceFromHistory, glanceAfterSseEvent, conversationRowsView, commentRowsView } from "./view-logic/glance-timeline.mjs";
 import { latencyBarView, quotaGaugeView, streamStartView } from "./view-logic/glance-meters.mjs";
 
 // 操縦席の作り直し（2 回目: 画面・cockpit-glance-redesign.md）の部品の vnode 走査（render 不要・hooks 非使用の部品だけ）。
@@ -86,6 +86,41 @@ test("ConversationPanel: 会話の行・判定の札・遅延の棒・反応の�
     "convo-row soul",
     "convo-row soul latest"
   ]);
+});
+
+test("ConversationPanel: ゲーム画面は確定順、改行を保持し、実際に渡した行に推論範囲の線を表示する", () => {
+  const short = {
+    seq: 1, speaker: "game", text: "ミンホ\nえ？", appendedAtMs: T0 + 2000,
+    startedAt: T0 + 1000, lastSeenAt: T0 + 1000, closedAt: T0 + 2000
+  };
+  const long = {
+    seq: 3, speaker: "game", text: "ティフォロス\n残りの祭壇を探そう。\nこの先だ。", appendedAtMs: T0 + 5000,
+    startedAt: T0, lastSeenAt: T0 + 4000, closedAt: T0 + 5000
+  };
+  let g = glanceFromHistory([short], T0);
+  g = glanceAfterSseEvent(g, "transcript", { seq: 2, speaker: "you", text: "どう思う？", appendedAtMs: T0 + 3000 }, T0);
+  g = glanceAfterSseEvent(g, "transcript", long, T0);
+  const renderRows = () => collectElements(ConversationPanel({ rows: conversationRowsView(g) }))
+    .filter((n) => String(n.props.class).startsWith("convo-row "));
+  const initialRows = renderRows();
+  assert.deepEqual(initialRows.map((n) => n.props.class), ["convo-row game", "convo-row you", "convo-row game"]);
+  assert.equal(collectText(initialRows[2]).includes(long.text), true);
+  assert.equal(collectText(initialRows[2]).includes("ゲーム画面"), true);
+  const time = collectElements(initialRows[2]).find((n) => n.props.class === "time");
+  assert.equal(collectText(time).join(""), "21:34:41");
+  assert.equal(time.props.title, "表示 21:34:36〜21:34:40 · 確定 21:34:41");
+  assert.match(COCKPIT_CSS, /\.convo-row\.game \.body \{ [^}]*white-space: pre-wrap/);
+
+  g = glanceAfterSseEvent(g, "fireAsk", { windowFirstSeq: 1, windowLastSeq: 3, windowSeqs: [1, 2, 3] }, T0);
+  assert.deepEqual(renderRows().map((n) => n.props.class), [
+    "convo-row game in-range range-start", "convo-row you in-range", "convo-row game in-range range-end"
+  ]);
+  g = glanceAfterSseEvent(g, "fireAsk", { windowFirstSeq: 1, windowLastSeq: 3, windowSeqs: [1, 3] }, T0);
+  assert.deepEqual(renderRows().map((n) => n.props.class), [
+    "convo-row game in-range range-start range-end", "convo-row you", "convo-row game in-range range-start range-end"
+  ]);
+  g = glanceAfterSseEvent(g, "fireAsk", { windowSeqs: [] }, T0);
+  assert.deepEqual(renderRows().map((n) => n.props.class), initialRows.map((n) => n.props.class));
 });
 
 test("ConversationPanel: 配信前（場が閉じている間）は会話の場所の中央に「配信を始める」と「準備・設定」（配信の組み直し Domain D）", () => {

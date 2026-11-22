@@ -127,6 +127,37 @@ test("llm-session: 複数 ask が同一常駐 generator を共有する（for-aw
   }
 });
 
+test("llm-session: 会話の教示は通常の SDK エラー後も再試行し、成功後は画像付き ask でも繰り返さない", async () => {
+  const received = [];
+  async function* queryImpl({ prompt }) {
+    for await (const { message } of prompt) {
+      received.push(message.content);
+      if (received.length === 1) yield { type: "assistant", error: "invalid_request" };
+      yield { type: "result", is_error: received.length === 2, result: "返事" };
+    }
+  }
+  const image = { type: "image", source: { type: "base64", data: "AAAA", media_type: "image/jpeg" } };
+  const vision = [image, { type: "text", text: "画像の質問" }];
+  const teaching = { conversationTeaching: "教示" };
+  const session = createLlmSession({ skipEnvGuard: true, queryImpl });
+  const replacement = createLlmSession({ skipEnvGuard: true, queryImpl });
+  try {
+    assert.equal((await session.ask("一", teaching)).replyText, "返事");
+    assert.equal((await session.ask("二", teaching)).replyText, "返事");
+    await session.ask(vision, teaching);
+    await session.ask(vision, teaching);
+    await replacement.ask("新しい会話", teaching);
+    assert.deepEqual(received, [
+      "教示\n\n一", "教示\n\n二",
+      [image, { type: "text", text: "教示\n\n画像の質問" }],
+      vision, "教示\n\n新しい会話"
+    ]);
+  } finally {
+    await session.dispose();
+    await replacement.dispose();
+  }
+});
+
 test("llm-session: options が wave 計画どおり（settingSources:[] / tools:[] / persistSession:false / maxTurns:1 / includePartialMessages）", async () => {
   const { fakeQuery, calls } = makeFakeQuery();
   const session = createLlmSession({

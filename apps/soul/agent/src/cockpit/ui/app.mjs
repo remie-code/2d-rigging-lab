@@ -132,12 +132,28 @@ export function settingsFromSnapshot(s) {
     // 圧縮の目安（{ thresholdTokens }・設定「頭脳・会話」タブの圧縮を始める大きさ）。memory と同型の null 許容
     // （contextCompactionStatus 未注入なら null）。
     compaction: (s && s.compaction) ?? null,
+    streamPrep: (s && s.streamPrep) ?? null,
+    streamPrepRevision: (s && s.streamPrepRevision) ?? null,
     // ①の Codex の頭の fast（{ enabled, applicable, supported }・設定「頭脳・会話」タブ）。compaction と同型の
     // null 許容（codexFastStatus 未注入なら null）。
     codexFast: (s && s.codexFast) ?? null,
     // 配信の組み直し Domain D: 場の状態（{ phase, error, openedAtMs }・メイン画面の「配信を始める / 終える」と、場が開いている
     // 間のマイク・文字起こしの固定）。無い古いサーバは null（画面は耳の状態から読む）。
     stream: (s && s.stream) ?? null
+  };
+}
+
+/**
+ * 配信設定 POST と SSE に共通の版を見て、配信の準備だけを更新する。
+ * @param {ReturnType<typeof settingsFromSnapshot>} current
+ * @param {{ streamPrep?: any; streamPrepRevision?: number | null }} incoming
+ */
+export function mergeStreamPrepSnapshot(current, incoming) {
+  if (!incoming.streamPrep || (incoming.streamPrepRevision ?? -1) < (current.streamPrepRevision ?? -1)) return current;
+  return {
+    ...current,
+    streamPrep: incoming.streamPrep,
+    streamPrepRevision: incoming.streamPrepRevision ?? null
   };
 }
 
@@ -220,6 +236,8 @@ export function App(props) {
   const [fireNote, setFireNote] = useState(""); //        SSE fire accepted:false + Fire 応答（setFireNote :442-444）
   const [chatDisplay, setChatDisplay] = useState(/** @type {string | null} */ (null)); // renderChatStatus 入力（:294-306）
   const [settings, setSettings] = useState(() => settingsFromSnapshot(null));
+  const [streamPrepSaving, setStreamPrepSaving] = useState(false);
+  const streamPrepSavingRef = useRef(false);
   // Discord モード Domain G: Discord の入口の有無と、話し始めの固定（venueExtrasFromSnapshot）。
   const [extras, setExtras] = useState(() => venueExtrasFromSnapshot(null));
   // 準備・設定の開閉（歯車・配信前の「準備・設定を開く」。初回の自動展開はしない・§7・§9.2）。
@@ -244,7 +262,12 @@ export function App(props) {
     setUptime({ baseMs: s.uptimeMs || 0, anchorMs: now() }); // :276-277 再同期
     setNowTick(now()); //                                        :278 renderUptime 即時反映
     setChatDisplay(chatDisplayState(s.chat)); //                 applyChat :307-315 の表示部
-    setSettings(settingsFromSnapshot(s)); //                     設定系現況（表示は Domain C）
+    const nextSettings = settingsFromSnapshot(s);
+    setSettings((previous) => mergeStreamPrepSnapshot({
+      ...nextSettings,
+      streamPrep: previous.streamPrep,
+      streamPrepRevision: previous.streamPrepRevision
+    }, nextSettings));
     setExtras(venueExtrasFromSnapshot(s)); //                    Discord の入口の有無・話し始めの固定（Discord モード Domain G）
     // 操縦席の作り直し 1 回目のキー（無い古いサーバでは前値のまま）。
     if ("quota" in s) setQuota(s.quota ?? null);
@@ -341,6 +364,21 @@ export function App(props) {
   // （applyStateRef は ref なので参照は常に最新・関数自体は不変 = 子の無駄な再 render を作らない）。
   const applySnapshot = useCallback((/** @type {any} */ s) => applyStateRef.current(s), []);
 
+  /** @param {() => Promise<{ ok: boolean; j: any }>} request */
+  const saveStreamPrep = async (request) => {
+    if (streamPrepSavingRef.current) throw new Error("配信設定を保存中");
+    streamPrepSavingRef.current = true;
+    setStreamPrepSaving(true);
+    try {
+      const res = await request();
+      if (!res.ok) throw new Error(res.j?.error);
+      setSettings((current) => mergeStreamPrepSnapshot(current, res.j));
+    } finally {
+      streamPrepSavingRef.current = false;
+      setStreamPrepSaving(false);
+    }
+  };
+
   // The HTML starts with a neutral title. Once current server state arrives,
   // reflect only the additive public identity view; malformed/missing data
   // deliberately returns to the neutral title instead of retaining stale text.
@@ -383,6 +421,7 @@ export function App(props) {
    * 始める（選び直すのは準備・設定）。成功も失敗も応答の snapshot を適用する（失敗の理由は stream.error に載る）。
    */
   const startStream = () => {
+    if (streamPrepSavingRef.current) return;
     const doFetch = props.fetchImpl || globalThis.fetch;
     setStreamRequestError("");
     doFetch("/api/stream/start", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
@@ -406,6 +445,7 @@ export function App(props) {
    * 文字起こしの方式）はサーバが保存した値で入る（選び直すのは準備・設定の「Discord の準備」）。入れなかった理由は stream.error。
    */
   const joinDiscord = () => {
+    if (streamPrepSavingRef.current) return;
     const doFetch = props.fetchImpl || globalThis.fetch;
     setStreamRequestError("");
     doFetch("/api/stream/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ experience: "discord" }) })
@@ -465,6 +505,8 @@ export function App(props) {
   });
   const commentRows = commentRowsView(glance);
   const modelText = settings.brain && settings.brain.brain ? brainLabel(settings.brain) : "";
+  const streamStart = streamStartView(settings.stream, streamRequestError);
+  const discordJoin = discordJoinView(settings.stream, extras.discordAvailable);
 
   return html`
     <div class="cockpit">
@@ -488,8 +530,8 @@ export function App(props) {
         <${ConversationPanel}
           rows=${convoRows}
           preStream=${isPreStream(ears, settings.stream)}
-          start=${streamStartView(settings.stream, streamRequestError)}
-          join=${discordJoinView(settings.stream, extras.discordAvailable)}
+          start=${{ ...streamStart, startDisabled: streamStart.startDisabled || streamPrepSaving }}
+          join=${{ ...discordJoin, disabled: discordJoin.disabled || streamPrepSaving }}
           onStartStream=${startStream}
           onJoinDiscord=${joinDiscord}
           onOpenSettings=${toggleSettings}
@@ -518,9 +560,10 @@ export function App(props) {
         settings=${settings}
         discordAvailable=${extras.discordAvailable}
         speakStartFixed=${extras.speakStartFixed}
-        sttEngine=${stt ? stt.engine : null}
         chatDisplay=${chatDisplay}
         applySnapshot=${applySnapshot}
+        saveStreamPrep=${saveStreamPrep}
+        streamPrepSaving=${streamPrepSaving}
         fetchImpl=${props.fetchImpl}
         closeRequestRef=${settingsCloseRequestRef}
         driveSlot=${html`

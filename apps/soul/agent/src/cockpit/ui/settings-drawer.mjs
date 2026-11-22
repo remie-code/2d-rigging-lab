@@ -12,7 +12,7 @@
  *    器（Channel）の URL。たたんだもの（`<details>`）= マイク・文字起こし・声の出力先・忙しい間のコメント。select は保存した
  *    値を選んだ状態で出す（マイクは lastDevice・ゲームの窓は visionTarget.title・声の出力先は audioDevice.name）。場が開いて
  *    いる間（開きかけ・閉じかけも）はマイク・文字起こしは触れない（YouTube の URL・ゲームの窓は触れる）。声の方式はここから
- *    外した（ロールの声）。いちばん下に「配信を始める」（選んだマイク・文字起こしで POST /api/stream/start）。始められなかった
+ *    外した（ロールの声）。いちばん下に「配信を始める」（選んだマイクと保存済みの文字起こしで開始）。始められなかった
  *    理由の正はメイン画面の中央（snapshot の stream.error）で、ここにも同じ値を出す（ダイアログがメイン画面を覆うため）。
  *    「配信を終える」は下の帯の 2 回押しだけ（ここの Stop は外した）。
  *  - Discord の準備（Discord モード Domain G・discord-mode.md §9）: サーバー・ボイスチャンネル（「読み込む」= POST /api/discord/catalog
@@ -43,7 +43,7 @@
  *
  * props 契約（app.mjs が結線する）:
  *  - open / onClose / settings（settingsFromSnapshot の値）/ discordAvailable / speakStartFixed（Discord モード Domain G・app.mjs の
- *    venueExtrasFromSnapshot）/ sttEngine / chatDisplay / applySnapshot / fetchImpl /
+ *    venueExtrasFromSnapshot）/ chatDisplay / applySnapshot / fetchImpl /
  *    closeRequestRef / driveSlot / logSlot / promptEditorSlot / draftDirty / dirty / onDiscardDraft / onContinueDraft。
  *
  * トップレベル副作用ゼロ（export function/const のみ）。
@@ -266,8 +266,9 @@ const responseOf = (r) => r.json().then((/** @type {any} */ j) => ({ ok: r.ok, s
  * nested dialog or changes existing immediate-setting endpoint handlers.
  *
  * @param {{ open?: boolean; onClose?: () => void; settings: any; discordAvailable?: boolean; speakStartFixed?: boolean | null;
- *   sttEngine?: string | null; chatDisplay?: string | null;
+ *   chatDisplay?: string | null;
  *   applySnapshot: (s: any) => void; fetchImpl?: any; promptEditorSlot?: any;
+ *   saveStreamPrep: (request: () => Promise<{ ok: boolean; j: any }>) => Promise<void>; streamPrepSaving?: boolean;
  *   draftDirty?: boolean; dirty?: boolean; onDiscardDraft?: () => void; onContinueDraft?: () => void;
  *   closeRequestRef?: { current: (() => void) | null }; driveSlot?: any; logSlot?: any }} props
  */
@@ -277,9 +278,10 @@ export function CockpitSettingsModal({
   settings,
   discordAvailable = false,
   speakStartFixed = null,
-  sttEngine = null,
   chatDisplay,
   applySnapshot,
+  saveStreamPrep,
+  streamPrepSaving = false,
   fetchImpl,
   promptEditorSlot,
   draftDirty = false,
@@ -294,9 +296,10 @@ export function CockpitSettingsModal({
   const [micOptions, setMicOptions] = useState(/** @type {Array<{value:string;label:string}>} */ ([]));
   const [micSelected, setMicSelected] = useState("");
   const [micError, setMicError] = useState(""); // マイク一覧の取得の失敗。
-  // ── 配信の準備: 文字起こし（前回の選択は state.stt.engine から復元・選び直したら上書きしない）──
-  const [sttSelected, setSttSelected] = useState("whisper");
-  const sttEditedRef = useRef(false);
+  const [sttSaving, setSttSaving] = useState(/** @type {string | null} */ (null));
+  const [sttSaveError, setSttSaveError] = useState("");
+  const [ocrSaving, setOcrSaving] = useState(/** @type {boolean | null} */ (null));
+  const [ocrSaveError, setOcrSaveError] = useState("");
   // ── 配信の準備: 「配信を始める」（選んだマイク・文字起こしで始める）──
   const [startBusy, setStartBusy] = useState(false);
   const [startRequestError, setStartRequestError] = useState(""); // 要求そのものの失敗（通信・409）。理由の正は stream.error。
@@ -651,28 +654,52 @@ export function CockpitSettingsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discordAvailable]);
 
-  // 文字起こしの選択の復元（state.stt.engine・ユーザーが選び直した後は上書きしない）。
-  const sttRestored = sttEngineSelection(sttEngine ? { engine: sttEngine } : null);
-  useEffect(() => {
-    if (sttRestored != null && !sttEditedRef.current) setSttSelected(sttRestored);
-  }, [sttRestored]);
+  const streamPrep = settings?.streamPrep;
+  const sttSelected = sttSaving ?? sttEngineSelection({ engine: streamPrep?.sttEngine }) ?? "whisper";
+  const ocrEnabled = ocrSaving ?? (streamPrep?.ocrEnabled !== false);
 
   // ── ハンドラ（すべて「POST → view-logic で文言 → snapshot 適用」の同型フロー）──
 
+  /** @param {string} engine */
+  const saveStreamSttEngine = async (engine) => {
+    setSttSaving(engine);
+    setSttSaveError("");
+    try {
+      await saveStreamPrep(() => postJson("/api/stream/stt-engine", { sttEngine: engine }));
+    } catch {
+      setSttSaveError("文字起こしの方式を保存できない");
+    } finally {
+      setSttSaving(null);
+    }
+  };
+
+  /** @param {boolean} enabled */
+  const saveStreamOcrEnabled = async (enabled) => {
+    setOcrSaving(enabled);
+    setOcrSaveError("");
+    try {
+      await saveStreamPrep(() => postJson("/api/stream/ocr-enabled", { enabled }));
+    } catch {
+      setOcrSaveError("画面の文字起こしの設定を保存できない");
+    } finally {
+      setOcrSaving(null);
+    }
+  };
+
   /**
    * 「配信を始める」（配信の準備のタブ）。メイン画面の「配信を始める」と同じ場の関数（POST /api/stream/start）を通り、
-   * ここで選んだマイク・文字起こしを渡す（声の方式はロールの声・サーバが持つ）。始められなかった理由はサーバの
+   * ここで選んだマイクを渡す（文字起こしの方式は保存した配信設定を使う）。始められなかった理由はサーバの
    * stream.error（メイン画面の中央が正・ここにも同じ値を出す）。要求そのものの失敗（通信・409）だけここで持つ。
    */
   const onStart = () => {
+    if (streamPrepSaving) return;
     const device = micSelected || null;
     setStartBusy(true);
     setStartRequestError("");
-    sttEditedRef.current = false; // 始めた後はサーバーの記憶（state.stt.engine）に同期してよい。
     // YouTube の欄に入れた値の保存が走っていれば、それが済んでから始める（この起動で入れた URL へ始めるがつなぐ）。
     Promise.resolve(chatSaveRef.current)
       .catch(() => {})
-      .then(() => postJson("/api/stream/start", { device, sttEngine: sttSelected || "whisper" }))
+      .then(() => postJson("/api/stream/start", { device }))
       .then((/** @type {any} */ res) => {
         if (res.ok) {
           applySnapshot(res.j);
@@ -692,6 +719,7 @@ export function CockpitSettingsModal({
    * { experience: "discord" }）。入れなかった理由はサーバの stream.error（メイン画面の中央が正・ここにも同じ値を出す）。
    */
   const onDiscordJoin = () => {
+    if (streamPrepSaving) return;
     setDiscordJoinBusy(true);
     setDiscordJoinRequestError("");
     postJson("/api/stream/start", { experience: "discord" })
@@ -1126,6 +1154,13 @@ export function CockpitSettingsModal({
           <span class="vision-target-status">${visionTargetLabel(settings && settings.visionTarget)}</span>
           <span class="err">${visionError}</span>
         </div>
+        <div class="drawer-row">
+          <label for="stream-ocr-enabled">ゲーム画面の文字起こし</label>
+          <input id="stream-ocr-enabled" type="checkbox" checked=${ocrEnabled}
+            disabled=${streamPrepSaving}
+            onChange=${(/** @type {any} */ ev) => saveStreamOcrEnabled(ev.target.checked)} />
+        </div>
+        ${ocrSaveError ? html`<div class="drawer-note"><span class="err">${ocrSaveError}</span></div>` : null}
         ${showChannel ? html`
           <div class="drawer-row channel-row">
             <label for="channel-url">器（Channel）</label>
@@ -1170,16 +1205,14 @@ export function CockpitSettingsModal({
               className="drawer-select stt-engine-select"
               options=${STT_ENGINE_OPTIONS}
               value=${sttSelected}
-              disabled=${inputsLocked}
-              onChange=${(/** @type {any} */ ev) => {
-                sttEditedRef.current = true;
-                setSttSelected(ev && ev.target ? ev.target.value : "whisper");
-              }}
+              disabled=${inputsLocked || streamPrepSaving}
+              onChange=${(/** @type {any} */ ev) => saveStreamSttEngine(ev.target.value)}
             />
           </div>
           <div class="drawer-note">
             ${inputsLocked ? html`<span class="drawer-hint">${STREAM_LOCKED_INPUTS_NOTE}</span>` : null}
             <span class="err">${micError}</span>
+            <span class="err">${sttSaveError}</span>
           </div>
           <div class="drawer-row">
             <label for="audio-device-select">声の出力先</label>
@@ -1213,7 +1246,7 @@ export function CockpitSettingsModal({
           </div>
         ` : html`
           <div class="drawer-row prepare-start">
-            <button class="btn-start" type="button" disabled=${startBusy || startView.startDisabled} onClick=${onStart}>
+            <button class="btn-start" type="button" disabled=${startBusy || streamPrepSaving || startView.startDisabled} onClick=${onStart}>
               ${startView.startText}
             </button>
             ${startView.noteText ? html`<span class="drawer-hint">${startView.noteText}</span>` : null}
@@ -1292,7 +1325,7 @@ export function CockpitSettingsModal({
             </div>
           ` : html`
             <div class="drawer-row discord-join">
-              <button class="btn-discord-join" type="button" disabled=${discordJoinBusy || discordJoin.disabled} onClick=${onDiscordJoin}>
+              <button class="btn-discord-join" type="button" disabled=${discordJoinBusy || streamPrepSaving || discordJoin.disabled} onClick=${onDiscordJoin}>
                 ${discordJoin.text}
               </button>
               ${discordJoinErrorView.noteText ? html`<span class="drawer-hint">${discordJoinErrorView.noteText}</span>` : null}

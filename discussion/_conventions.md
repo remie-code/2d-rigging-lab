@@ -88,6 +88,10 @@ discussion/
     persistence/        # WS2: 永続化のnode:fs/IPC化(本丸)
   ai-cohost/            # ユーザー×自律AIの共演配信構想。コンセプト、前提合意、調査事実、設計判断
     _map.md
+    game-dialogue/      # ゲーム画面の台詞をチャッピーとの会話に持ち込む。配信体験と読み取りの課題
+      _map.md
+      shared-reading.md
+      recognition-challenges.md
     real-world-companion/ # 外出先・家でチャッピーと過ごす体験。デバイス・視界・会話の共通境界(2026-11-16)
       _map.md
       scope-and-decisions.md

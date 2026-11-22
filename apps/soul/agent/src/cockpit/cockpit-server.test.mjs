@@ -3,6 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { EventEmitter } from "node:events";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 
 import {
@@ -18,6 +21,9 @@ import { createFireOrchestrator } from "../mind/fire-orchestrator.mjs";
 import { createFireScheduler } from "../mind/fire-scheduler.mjs";
 import { MODEL_IDENTITIES } from "../mind/model-identity.mjs";
 import { BARGE_IN_MIN_SPEECH_MS, BARGE_IN_GRACE_MS } from "../mind/barge-in.mjs";
+import { createFileSettingsStore } from "./cockpit-settings-store.mjs";
+import { createSttEngineHooks } from "./cockpit-device-settings.mjs";
+import { createVisionTargetHooks } from "../eyes/cockpit-vision-target.mjs";
 
 // 魂コクピット・サーバの機械テスト（S2.5 Domain A）。pipeline / デバイス列挙 / spawn を全注入し、
 // 実マイク・実 ffmpeg・実 whisper・実 ONNX を一切使わずに HTTP/SSE/結線/クリーンシャットダウンを固定する。
@@ -187,6 +193,126 @@ function makeFakePipeline() {
   };
   return { factory, record };
 }
+
+test("stream game OCR follows the selected window and open venue without triggering Fire", async () => {
+  const settingsStore = createInMemorySettingsStore();
+  let selectedTitle = null;
+  const vision = createVisionTargetHooks({
+    getVisionTarget: () => selectedTitle,
+    setVisionTarget: (title) => { selectedTitle = title; }
+  });
+  const fakePipe = makeFakePipeline();
+  const fakeScheduler = makeFakeFireSchedulerCapture();
+  const observedByFireScheduler = [];
+  const fakeOrch = makeFakeOrchestrator({
+    drive(hooks, { lastFireOptions }) {
+      if (lastFireOptions.vision) hooks.onVisionCaptured({ jpegBase64: "manual-still", width: 640, height: 480 });
+    }
+  });
+  const captures = [];
+  const timers = new Map();
+  let text = "遠くに鉄塔の明かりが見える。";
+  let pendingOcr;
+  let now = 10_000;
+  const server = createCockpitServer({
+    settingsStore,
+    ...vision,
+    nowImpl: () => now++,
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    fireSchedulerFactory: /** @type {any} */ ((options) => ({
+      ...fakeScheduler.factory(options),
+      handleTranscript: (entry) => observedByFireScheduler.push(entry)
+    })),
+    gameDialogueOcr: {
+      getTarget: vision.getVisionTarget,
+      captureImpl: async (title) => {
+        captures.push(title);
+        return { jpegBase64: text, width: 1474, height: 829, elapsedMs: 0 };
+      },
+      recognizeImpl: async ({ capturedAtMs, jpegBase64 }, { signal }) => {
+        const frame = {
+          capturedAtMs, width: 1474, height: 829,
+          lines: [{ text: jpegBase64, x: 500, y: 600, w: 245, h: 24 }]
+        };
+        if (jpegBase64 === "保留中のフレーム") {
+          return new Promise((resolve) => { pendingOcr = { signal, finish: () => resolve(frame) }; });
+        }
+        return frame;
+      },
+      setIntervalImpl(run) {
+        const id = Symbol();
+        timers.set(id, run);
+        return id;
+      },
+      clearIntervalImpl: (id) => { timers.delete(id); }
+    }
+  });
+  const url = await server.listen(0);
+  const sse = openSseClient(`${url}/api/events`);
+  try {
+    const initial = await getJson(`${url}/api/state`);
+    assert.equal(initial.status, 200, JSON.stringify(initial.json));
+    await sse.waitFor((event) => event.event === "state");
+    assert.equal((await postJson(`${url}/api/stream/ocr-enabled`, { enabled: false })).status, 200);
+    assert.equal((await postJson(`${url}/api/vision-target`, { title: "Game A" })).status, 200);
+    await openStreamForFire(url);
+    assert.equal(timers.size, 0);
+    assert.deepEqual(captures, []);
+
+    assert.equal((await postJson(`${url}/api/vision-target`, { title: null })).status, 200);
+    assert.equal((await postJson(`${url}/api/stream/ocr-enabled`, { enabled: true })).status, 200);
+    assert.equal(timers.size, 0);
+    assert.equal((await postJson(`${url}/api/vision-target`, { title: "Game A" })).status, 200);
+    text = "山小屋の手前で待っている。";
+    await [...timers.values()][0]();
+    assert.equal(server.getTranscript().length, 1);
+    const gameEvent = await sse.waitFor((event) => event.event === "transcript" && event.data.speaker === "game")
+      .catch(() => assert.fail(`Game transcript SSE missing: ${sse.events.map(({ event }) => event)}`));
+    const [gameRow] = (await getJson(`${url}/api/state`)).json.transcripts;
+    assert.equal(gameRow.text, "遠くに鉄塔の明かりが見える。");
+    for (const field of ["seq", "text", "startedAt", "lastSeenAt", "closedAt", "displayOrder", "closeReason"]) {
+      assert.equal(gameRow[field], gameEvent.data[field]);
+    }
+    assert.equal(gameRow.closeReason, "replaced");
+    assert.deepEqual(observedByFireScheduler, []);
+    assert.equal(fakeOrch.record.fireCount, 0);
+
+    text = "保留中のフレーム";
+    const busy = [...timers.values()][0]();
+    await new Promise(setImmediate);
+    assert.equal(pendingOcr.signal.aborted, false);
+    assert.equal((await postJson(`${url}/api/fire`, {})).status, 202);
+    assert.equal((await postJson(`${url}/api/vision-fire`, {})).status, 202);
+    assert.equal(fakeOrch.record.lastFireOptions.vision, true);
+    const still = await sse.waitFor((event) => event.event === "visionCaptured")
+      .catch(() => assert.fail(`Vision capture SSE missing: ${sse.events.map(({ event }) => event)}`));
+    assert.equal(still.data.jpegBase64, "manual-still");
+    assert.equal(fakeOrch.record.fireCount, 2);
+    assert.equal(pendingOcr.signal.aborted, false);
+
+    assert.equal((await postJson(`${url}/api/vision-target`, { title: "Game B" })).status, 200);
+    assert.equal(pendingOcr.signal.aborted, true);
+    pendingOcr.finish();
+    await busy;
+    assert.equal(server.getTranscript().length, 1);
+
+    const closingSample = [...timers.values()][0]();
+    await new Promise(setImmediate);
+    assert.equal(captures.at(-1), "Game B");
+    assert.equal(pendingOcr.signal.aborted, false);
+    assert.equal((await postJson(`${url}/api/stream/stop`, {})).status, 200);
+    assert.equal(timers.size, 0);
+    assert.equal(pendingOcr.signal.aborted, true);
+    await openStreamForFire(url);
+    pendingOcr.finish();
+    await closingSample;
+    assert.deepEqual(server.getTranscript(), []);
+  } finally {
+    sse.close();
+    await server.close();
+  }
+});
 
 /** 決定論 fake ffmpeg 子プロセス（stderr にデバイス一覧を吐いて exit）。 */
 function fakeSpawn(stderrText, { exitCode = 1, emitError = false } = {}) {
@@ -3723,6 +3849,102 @@ test("cockpit onFireRequest: kind:\"interjection\" は selfFire SSE に素通し
 //  ログの口に漏れないことを固定する。
 
 const FAKE_EL_KEY = "sk_fake_elevenlabs_key_do_not_leak";
+
+test("配信設定: 開始前と終了後の再起動で Haas-ja を復元し、保存値で認識器を開く", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cockpit-stream-stt-"));
+  const path = join(dir, "settings.json");
+  try {
+    for (let boot = 0; boot < 3; boot++) {
+      const settings = createFileSettingsStore({ path });
+      const hooks = createSttEngineHooks(settings);
+      const fake = makeFakePipeline();
+      const server = createCockpitServer({
+        settingsStore: settings,
+        sttEngineInitial: hooks.resolveInitialSttEngine(),
+        onSetSttEngine: hooks.onSetSttEngine,
+        pipelineFactory: /** @type {any} */ (fake.factory),
+        localSttModelCheck: () => ({ ok: true })
+      });
+      try {
+        const url = await server.listen(0);
+        const state = await getJson(`${url}/api/state`);
+        assert.equal(state.json.streamPrep.sttEngine, boot === 0 ? "whisper" : "haas");
+        if (boot === 0) {
+          settings.setDiscordPrep({ sttEngine: "zipformer" });
+          assert.equal((await postJson(`${url}/api/stream/stt-engine`, { sttEngine: "unknown" })).status, 400);
+          const saved = await postJson(`${url}/api/stream/stt-engine`, { sttEngine: "haas" });
+          assert.equal(saved.status, 200);
+          assert.ok(saved.json.streamPrepRevision > state.json.streamPrepRevision);
+          assert.equal(saved.json.streamPrep.sttEngine, "haas");
+          assert.equal(saved.json.ears, "stopped");
+          assert.equal(settings.getSttEngine(), "haas");
+          continue;
+        }
+        const started = await postJson(`${url}/api/stream/start`, {});
+        assert.equal(started.status, 200);
+        assert.equal(fake.record.options.stt.engine, "haas");
+        assert.equal(started.json.stt.engine, "haas");
+        assert.equal((await postJson(`${url}/api/stream/stt-engine`, { sttEngine: "whisper" })).status, 409);
+        assert.equal(settings.getDiscordPrep().sttEngine, "zipformer");
+        if (boot === 1) {
+          const stopped = await postJson(`${url}/api/stream/stop`, {});
+          assert.equal(stopped.status, 200);
+          assert.equal(stopped.json.streamPrep.sttEngine, "haas");
+        }
+      } finally {
+        await server.close();
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("配信設定: OCR は既定オンで、オフの保存や窓の更新を独立して復元する", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cockpit-stream-ocr-"));
+  const path = join(dir, "settings.json");
+  try {
+    for (const firstBoot of [true, false]) {
+      const settings = createFileSettingsStore({ path });
+      const server = createCockpitServer({
+        settingsStore: settings,
+        visionTargetStatus: () => ({ title: settings.getVisionTarget() }),
+        onSetVisionTarget: (title) => settings.setVisionTarget(title)
+      });
+      try {
+        const url = await server.listen(0);
+        const initial = await getJson(`${url}/api/state`);
+        assert.equal(initial.json.streamPrep.ocrEnabled, firstBoot);
+        assert.equal(server.streamOcrEnabled(), firstBoot);
+        assert.equal(initial.json.visionTarget.title, firstBoot ? null : "Next Game");
+        if (!firstBoot) {
+          const cleared = await postJson(`${url}/api/vision-target`, { title: null });
+          assert.equal(cleared.json.visionTarget.title, null);
+          assert.equal(cleared.json.streamPrep.ocrEnabled, false);
+          const reenabled = await postJson(`${url}/api/stream/ocr-enabled`, { enabled: true });
+          assert.equal(reenabled.status, 200);
+          assert.equal(settings.getStreamOcrEnabled(), true);
+          continue;
+        }
+        const selected = await postJson(`${url}/api/vision-target`, { title: "Game" });
+        assert.equal(selected.json.streamPrep.ocrEnabled, true);
+        assert.equal((await postJson(`${url}/api/stream/ocr-enabled`, { enabled: "false" })).status, 400);
+        const saved = await postJson(`${url}/api/stream/ocr-enabled`, { enabled: false });
+        assert.equal(saved.status, 200);
+        assert.ok(saved.json.streamPrepRevision > selected.json.streamPrepRevision);
+        assert.equal(saved.json.streamPrep.ocrEnabled, false);
+        assert.equal(saved.json.visionTarget.title, "Game");
+        assert.equal(server.streamOcrEnabled(), false);
+        const next = await postJson(`${url}/api/vision-target`, { title: "Next Game" });
+        assert.equal(next.json.streamPrep.ocrEnabled, false);
+      } finally {
+        await server.close();
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("cockpit 文字起こし選択: Start 直後に ears=starting の state が SSE に流れる（起動中も Stopped のままにしない）", async () => {
   const fake = makeFakePipeline();

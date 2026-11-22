@@ -47,7 +47,7 @@ PSD取込・Canvas/構造編集、mesh/deformer/parameter/keyform、保存再開
 | [mesh-generation/](mesh-generation/) | メッシュ自動生成の商用風改修(v7)の概念設計、現状調査、実装、品質評価、v6系整理 | v6D default + v7 comparison toggle。v6/v7品質 hold と Wave2/v6削除は未決。W108/109 render/data contract は完了 |
 | [render-performance/](render-performance/) | Editor/Viewer 描画パフォーマンス改善(計測基盤、実測、改善設計、実装、再計測) | Editor Perf Wave2 は accepted close。Player W13–19 diagnostics/fast-path/cadence は完了。C7 二体負荷は optional・未計測 |
 | [editor-electron-migration/](editor-electron-migration/) | apps/editor の Web→Electron 移行(why合意、分解、work-stream) | WS1–WS4 + electron-builder packaging は完了。PSD E2E、typecheck/unit、dead branch、metadata warning は残債 |
-| [ai-cohost/](ai-cohost/) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計) | C1–C7（器）完了、S1–S8 実装進行。S8 kill、brain-swap、stream-memory は human gate。D4 YouTube / D6 key-operation / D7 Variant-out-of-scope を保持。LLM/知覚は `apps/soul` 特区内のみ許可 |
+| [ai-cohost/](ai-cohost/_map.md) | ユーザー×自律AIの共演配信構想(コンセプト、前提、調査、設計)。ゲームの台詞を一緒に読む体験もここから辿る | C1–C7（器）完了、S1–S8 実装進行。S8 kill、brain-swap、stream-memory は human gate。D4 YouTube / D6 key-operation / D7 Variant-out-of-scope を保持。LLM/知覚は `apps/soul` 特区内のみ許可 |
 | [expo/](expo/_map.md) | 外部イベントへの出展物(ポスター・LT等)の設計と出典事実 | 既存6面 HTML/PDF完成・外部acceptance未検証。別途7分LTの共通ベースと本編1を視覚確認中 |
 | [reports/](reports/) | 技術調査・成立性調査レポート | Cubism/旧性能資料は private historical archive。現行 performance/runtime は専用 topic map が owner |
 

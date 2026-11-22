@@ -9,6 +9,8 @@ export function createCockpitHttpServer({ reservedServer, host, isClosed, remote
     ["GET /api/devices", (_req, res) => operations.handleDevices(res)],
     ["GET /api/state", (_req, res) => sendJson(res, 200, snapshot())],
     ["GET /api/events", openSse],
+    ["POST /api/stream/stt-engine", operations.handleStreamSttEngine],
+    ["POST /api/stream/ocr-enabled", operations.handleStreamOcrEnabled],
     ["POST /api/stream/start", operations.handleStreamStart],
     ["POST /api/ears/start", operations.handleStreamStart],
     ["POST /api/stream/stop", (_req, res) => operations.handleStreamStop(res)],

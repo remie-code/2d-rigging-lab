@@ -325,7 +325,7 @@ test("配信の準備: ゲームの窓・声の出力先の select は保存し�
 test("配信の準備: 場が開いている間はマイク・文字起こしだけ触れない（YouTube の URL・Connect・ゲームの窓は触れる）", () => {
   const prepare = panel("prepare", "role");
   assert.match(prepare, /id="device-select"[\s\S]{0,200}?disabled=\$\{inputsLocked\}/);
-  assert.match(prepare, /id="stt-engine-select"[\s\S]{0,200}?disabled=\$\{inputsLocked\}/);
+  assert.match(prepare, /id="stt-engine-select"[\s\S]{0,200}?disabled=\$\{inputsLocked \|\| streamPrepSaving\}/);
   assert.match(prepare, /\$\{inputsLocked \? html`<span class="drawer-hint">\$\{STREAM_LOCKED_INPUTS_NOTE\}<\/span>` : null\}/);
   for (const free of ['id="chat-source"', 'class="btn-chat-connect"', 'id="vision-target-select"', 'class="btn-vision-target-set"']) {
     const start = prepare.indexOf(free);
@@ -340,9 +340,32 @@ test("配信の準備: YouTube の欄は離れたら保存する（POST /api/cha
   assert.match(prepare, /id="chat-source"[\s\S]{0,600}?onChange=\$\{onChatSourceCommit\}/, "欄の change（入れ終えて離れた・Enter）で保存する");
   assert.match(source, /const saving = postJson\("\/api\/chat\/source", \{ source \}\)/);
   assert.match(source, /chatSaveRef\.current = saving;/);
-  assert.match(source, /Promise\.resolve\(chatSaveRef\.current\)\n\s+\.catch\(\(\) => \{\}\)\n\s+\.then\(\(\) => postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)\)/, "保存が済んでから始める（この起動で入れた URL をサーバが知っている順）");
+  assert.match(source, /Promise\.resolve\(chatSaveRef\.current\)\n\s+\.catch\(\(\) => \{\}\)\n\s+\.then\(\(\) => postJson\("\/api\/stream\/start", \{ device \}\)\)/, "保存が済んでから始める（この起動で入れた URL をサーバが知っている順）");
   assert.match(source, /const chatHint = chatAutoConnectHint\(settings && settings\.chat, settings && settings\.stream\);/);
   assert.match(prepare, /\$\{chatHint \? html`<span class="drawer-hint chat-auto-connect-hint">\$\{chatHint\}<\/span>` : null\}/);
+});
+
+test("配信の準備: STT は配信設定を表示して選択時に保存し、OCR はゲームの窓の設定と別に保存する", () => {
+  const prepare = panel("prepare", "role");
+  const source = read("settings-drawer.mjs");
+  assert.match(prepare, /id="stt-engine-select"[\s\S]{0,360}?value=\$\{sttSelected\}[\s\S]*?saveStreamSttEngine\(ev.target.value\)/);
+  assert.match(source, /sttEngineSelection\(\{ engine: streamPrep\?\.sttEngine \}\)/);
+  assert.match(source, /postJson\("\/api\/stream\/stt-engine", \{ sttEngine: engine \}\)/);
+  assert.match(prepare, /id="stream-ocr-enabled" type="checkbox" checked=\$\{ocrEnabled\}[\s\S]*?saveStreamOcrEnabled\(ev.target.checked\)/);
+  assert.match(source, /postJson\("\/api\/stream\/ocr-enabled", \{ enabled \}\)/);
+});
+
+test("配信設定の保存中は設定を閉じてもメイン画面と設定画面で開始できない", () => {
+  const app = read("app.mjs");
+  const drawer = read("settings-drawer.mjs");
+  assert.match(app, /startDisabled: streamStart\.startDisabled \|\| streamPrepSaving/);
+  assert.match(app, /disabled: discordJoin\.disabled \|\| streamPrepSaving/);
+  assert.match(app, /const startStream = \(\) => \{\s*if \(streamPrepSavingRef\.current\) return/);
+  assert.match(app, /const joinDiscord = \(\) => \{\s*if \(streamPrepSavingRef\.current\) return/);
+  assert.match(app, /streamPrepSaving=\$\{streamPrepSaving\}/);
+  assert.match(drawer, /discordJoinBusy \|\| streamPrepSaving \|\| discordJoin\.disabled/);
+  assert.match(drawer, /await saveStreamPrep\(\(\) => postJson\("\/api\/stream\/stt-engine"/);
+  assert.match(drawer, /await saveStreamPrep\(\(\) => postJson\("\/api\/stream\/ocr-enabled"/);
 });
 
 test("chatAutoConnectHint: 場が閉じていてつながっていないときだけ — この起動で入れた URL は「配信を始めるとつなぐ」・前回の起動から残っているだけの URL は「自動ではつながない」", () => {
@@ -372,7 +395,7 @@ test("配信の準備: 「配信を始める」は選んだマイク・文字起
   const prepare = panel("prepare", "role");
   assert.match(prepare, /\$\{startView\.phase === "open" \? html`/);
   assert.match(prepare, /配信中（終えるときは下の帯の「配信を終える」）/);
-  assert.match(prepare, /class="btn-start" type="button" disabled=\$\{startBusy \|\| startView\.startDisabled\} onClick=\$\{onStart\}/);
+  assert.match(prepare, /class="btn-start" type="button" disabled=\$\{startBusy \|\| streamPrepSaving \|\| startView\.startDisabled\} onClick=\$\{onStart\}/);
   assert.match(prepare, /\$\{startView\.errorText\}/);
   assert.match(read("settings-drawer.mjs"), /const startView = streamStartView\(settings && settings\.stream, startRequestError\);/);
 });

@@ -52,6 +52,7 @@ export function fireUsageRecord(info) {
   const tokenUsage = info?.tokenUsage ?? null;
   const last = tokenUsage?.last ?? null;
   const total = tokenUsage?.total ?? null;
+  const window = info?.conversationWindow;
   return {
     type: "fire",
     fireId: num(info?.fireId),
@@ -66,6 +67,18 @@ export function fireUsageRecord(info) {
     windowMode: typeof info?.windowMode === "string" ? info.windowMode : null,
     includedCount: num(info?.includedCount),
     injectedChars: num(info?.injectedChars),
+    ...(window ? {
+      conversationWindow: {
+        pendingElapsedMs: num(window.pendingElapsedMs),
+        pendingChars: num(window.pendingChars),
+        windowSeqs: Array.isArray(info.windowSeqs) ? info.windowSeqs.filter(Number.isFinite) : [],
+        droppedUnsentGame: Array.isArray(window.droppedUnsentGame)
+          ? window.droppedUnsentGame
+            .filter((/** @type {any} */ row) => row?.reason === "time" || row?.reason === "chars")
+            .map((/** @type {any} */ row) => ({ seq: num(row.seq), startedAt: num(row.startedAt), reason: row.reason }))
+          : []
+      }
+    } : {}),
     // その返事の turn/start に送った Codex の速さの段（"priority" = fast / "default"・送っていなければ null）。
     serviceTier: typeof info?.serviceTier === "string" ? info.serviceTier : null
   };

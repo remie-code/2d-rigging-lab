@@ -424,7 +424,7 @@ export const CHAT_EMPTY_SOURCE_ERROR = "enter a stream URL / video ID first";
 
 /**
  * 文字起こしの方式の選択肢（配信の準備のタブのたたんだもの・マイクの下・旧「入出力」タブ・cockpit-stt-selection.md §4.2）。
- * value は POST /api/stream/start の body `sttEngine`（サーバー側 STT_ENGINES と同じ語彙）。
+ * value は POST /api/stream/stt-engine の body `sttEngine`（サーバー側 STT_ENGINES と同じ語彙）。
  * @type {ReadonlyArray<{ value: string; label: string }>}
  */
 export const STT_ENGINE_OPTIONS = Object.freeze([
@@ -437,7 +437,7 @@ export const STT_ENGINE_OPTIONS = Object.freeze([
 ]);
 
 /**
- * state.stt.engine を選択肢の値へ（未知/欠落は null = 選択を変えない）。
+ * 保存した文字起こしの方式を選択肢の値へ（未知/欠落は null）。
  * @param {{ engine?: string | null } | null | undefined} stt
  * @returns {string | null}
  */
