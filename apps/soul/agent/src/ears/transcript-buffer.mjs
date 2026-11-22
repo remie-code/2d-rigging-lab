@@ -88,19 +88,25 @@ export function isBlankTranscript(text) {
 }
 
 /**
- * @typedef {"you" | "soul" | "viewer" | "event"} Speaker
+ * @typedef {"you" | "soul" | "viewer" | "event" | "game"} Speaker
+ * @typedef {{text: string; displayOrder: number; startedAt: number; lastSeenAt: number; closedAt: number; closeReason: string}} GameScreenBlock
  */
 
 /**
- * @typedef {Readonly<{ seq: number; startMs: number; endMs: number; text: string; speaker: Speaker; displayName: string | undefined; speakerId: string | undefined; appendedAtMs: number }>} TranscriptEntry
+ * @typedef {Readonly<{ seq: number; startMs: number; endMs: number; text: string; speaker: Speaker; displayName: string | undefined; speakerId: string | undefined; appendedAtMs: number } & Partial<GameScreenBlock>>} TranscriptEntry
  */
 
 /**
- * @typedef {{ startMs: number; endMs: number; text: string; speaker?: Speaker; displayName?: string; speakerId?: string }} TranscriptInput
+ * @typedef {{ startMs: number; endMs: number; text: string; speaker?: Exclude<Speaker, "game">; displayName?: string; speakerId?: string }} TranscriptInput
  */
 
 /** 出来事の行の種類（話者の 3 種類とは別・Discord モード Domain J）。 */
 export const EVENT_SPEAKER = "event";
+
+/** @param {unknown} entry */
+export function isGameScreenEntry(entry) {
+  return entry != null && typeof entry === "object" && /** @type {any} */ (entry).speaker === "game";
+}
 
 /**
  * 出来事の行か（Discord モード Domain J）。判定の入力の組み立て・発火のきっかけはこれで出来事の行を飛ばす。
@@ -127,6 +133,7 @@ const VALID_SPEAKERS = new Set(["you", "soul", "viewer", EVENT_SPEAKER]);
  * @param {() => number} [options.nowImpl]  appendedAtMs の時計（テスト用注入）。既定 Date.now。
  * @returns {{
  *   append: (input: TranscriptInput) => { appended: boolean; entry: TranscriptEntry | null; reason: "appended" | "blank" };
+ *   addGameScreen: (block: GameScreenBlock) => TranscriptEntry;
  *   all: () => TranscriptEntry[];
  *   last: (n: number) => TranscriptEntry[];
  *   inRange: (range: { fromMs?: number; toMs?: number }) => TranscriptEntry[];
@@ -189,6 +196,16 @@ export function createTranscriptBuffer(options = {}) {
     }
   }
 
+  /** @param {Omit<TranscriptEntry, "seq" | "appendedAtMs">} input */
+  function publish(input) {
+    const entry = Object.freeze({ ...input, seq: entries.length, appendedAtMs: nowImpl() });
+    entries.push(entry);
+    for (const listener of appendListeners) {
+      listener(entry);
+    }
+    return entry;
+  }
+
   return {
     /**
      * 転写を積む。空転写（空白のみ）は積まずに捨て、onDiscard で観測可能にする。
@@ -210,21 +227,23 @@ export function createTranscriptBuffer(options = {}) {
         }
         return { appended: false, entry: null, reason: "blank" };
       }
-      const entry = Object.freeze({
-        seq: entries.length,
-        startMs,
-        endMs,
-        text,
-        speaker,
-        displayName,
-        speakerId,
-        appendedAtMs: nowImpl()
-      });
-      entries.push(entry);
-      for (const listener of appendListeners) {
-        listener(entry);
-      }
+      const entry = publish({ startMs, endMs, text, speaker, displayName, speakerId });
       return { appended: true, entry, reason: "appended" };
+    },
+
+    /** @param {GameScreenBlock} block */
+    addGameScreen(block) {
+      const { text, displayOrder, startedAt, lastSeenAt, closedAt, closeReason } = block;
+      if (isBlankTranscript(text) || !Number.isInteger(displayOrder) || displayOrder < 0 ||
+          ![startedAt, lastSeenAt, closedAt].every(Number.isFinite) ||
+          startedAt > lastSeenAt || lastSeenAt > closedAt ||
+          (closeReason !== "disappeared" && closeReason !== "replaced")) {
+        throw new TypeError("transcriptBuffer.addGameScreen: expected a finalized game screen block.");
+      }
+      return publish({
+        speaker: "game", startMs: 0, endMs: 0, displayName: undefined, speakerId: undefined,
+        text, displayOrder, startedAt, lastSeenAt, closedAt, closeReason
+      });
     },
 
     /**

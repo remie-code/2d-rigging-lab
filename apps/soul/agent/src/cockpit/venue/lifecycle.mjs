@@ -19,6 +19,8 @@ export function createVenueLifecycle({
   installEars,
   normalizeEntranceResult,
   nowImpl,
+  onOpened,
+  onClosing,
   openVenueTranscript,
   parkRecallDesk,
   prepareVoices,
@@ -57,6 +59,7 @@ export function createVenueLifecycle({
 
   function markClosing() {
     streamPhase = "closing";
+    onClosing();
   }
 
   async function trackTransition(run) {
@@ -150,6 +153,7 @@ export function createVenueLifecycle({
       if (!body.ok) return fail(body.reason, { ears: true, session: true });
       streamPhase = "open";
       streamOpenedAtMs = nowImpl();
+      onOpened();
       // 10. 開いたあと（体験の口・配信は YouTube を後ろでつなぐ・待たない）。失敗しても場は開いたまま。
       try {
         experience.afterOpen();

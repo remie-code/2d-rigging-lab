@@ -42,6 +42,8 @@ import {
   revertMemoryCommit
 } from "../memory/memory-store.mjs";
 import { resolveVenueWording } from "./venue-wording.mjs";
+import { formatGameScreenLine } from "./fire-injection.mjs";
+import { isGameScreenEntry } from "../ears/transcript-buffer.mjs";
 
 /** ②のコミットの役名（memory-store の buildCommitMessage に渡す固定の語）。 */
 export const WRITER_ROLE = "書き出し役";
@@ -64,10 +66,11 @@ function labelOf(speaker) {
  * にする（空白は 1 つに詰める・空白だけの名前は名前なし）。名前が無ければ今の `you: 本文`（配信では you に名前を入れないので
  * 配信の文字列は変わらない・Discord モード Domain C・設計 discord-mode.md §3.2・Undine の追認 (1)）。
  * soul 行はロールの名前を持っていても `soul: 本文` のまま（ロールが 1 つの間・discord-mode.md §3.2 a）。speakerId は読まない。
- * @param {{ text: string; speaker?: string; displayName?: string }} e
+ * @param {{ text: string; speaker?: string; displayName?: string; displayOrder?: number; startedAt?: number; lastSeenAt?: number }} e
  * @returns {string}
  */
 function formatDigestLine(e) {
+  if (isGameScreenEntry(e)) return formatGameScreenLine(e);
   const label = labelOf(e.speaker);
   if ((label === "viewer" || label === "you") && typeof e.displayName === "string") {
     const name = e.displayName.replace(/\s+/g, " ").trim();

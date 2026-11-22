@@ -16,6 +16,7 @@ Editor本体のauthoring UX、モデル制作そのもの(model-authoring)、Run
 
 | Path | Role | Status |
 |---|---|---|
+| [game-dialogue/](game-dialogue/_map.md) | 配信者が黙読で進めたゲームの台詞を、チャッピーも次の会話で踏まえられるようにする | 2026-11-21 配信の場と接続。録画・Windowsの隔離した場で確認済み、2026-11-22に配信者が文字起こしは概ね意図どおりと確認 |
 | [concept/](concept/) | 目標像、成功基準、非目標、4トラック/MVP境界との関係 | Created |
 | [premises/](premises/) | ユーザー合意済みの前提・制約 | Created |
 | [research/](research/) | 調査事実(外部技術地形、先例、内部統合点、費用試算) | Created |

@@ -34,6 +34,29 @@ test("ファイル名は起動時刻（UTC・記号を - に）・直近 20 個�
   assert.equal(SESSION_USAGE_RETENTION, 20);
 });
 
+test("発火の入力範囲には会話本文を保存せず、経過・投入 seq・未送信の除外理由を残す", async () => {
+  await withDir(async (dir) => {
+    const log = createSessionUsageLog({ dir, nowImpl: () => 1000 });
+    const record = fireUsageRecord({
+      fireId: 7,
+      windowSeqs: [3, 5],
+      conversationWindow: {
+        pendingElapsedMs: 150,
+        pendingChars: 4500,
+        droppedUnsentGame: [{ seq: 1, startedAt: 10, reason: "chars", text: "本文" }]
+      }
+    });
+    log.append(record);
+    await log.flush();
+    const file = readdirSync(dir).find((name) => name.endsWith(".jsonl"));
+    assert.ok(file);
+    assert.deepEqual(readLines(path.join(dir, file)).at(-1).conversationWindow, {
+      pendingElapsedMs: 150, pendingChars: 4500, windowSeqs: [3, 5],
+      droppedUnsentGame: [{ seq: 1, startedAt: 10, reason: "chars" }]
+    });
+  });
+});
+
 test("発火の 1 行: 数字と種類だけ（本文を持つ欄は無い）", () => {
   const record = fireUsageRecord({
     fireId: 7,

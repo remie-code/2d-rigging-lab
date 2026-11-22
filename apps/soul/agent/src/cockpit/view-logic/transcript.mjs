@@ -18,6 +18,8 @@
  * (Ns) のみ＝後方互換）。
  */
 
+export const GAME_SCREEN_LABEL = "ゲーム画面";
+
 /**
  * 話者を解決する（未指定は you・S2 挙動不変）。
  * @param {{ speaker?: string | null }} entry
@@ -35,6 +37,7 @@ export function resolveSpeaker(entry) {
  */
 export function speakerLabel(entry) {
   const speaker = resolveSpeaker(entry);
+  if (speaker === "game") return GAME_SCREEN_LABEL;
   return speaker === "viewer" && entry && entry.displayName
     ? "viewer(" + entry.displayName + ")"
     : speaker;

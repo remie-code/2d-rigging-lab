@@ -37,13 +37,13 @@ export function createAudioDeviceHooks(settings) {
  * 未記憶/未知値は defaultEngine（既定 "whisper"）。選択だけを記憶し、ElevenLabs のキーはここで扱わない
  * （キーは cockpit-server が Start ごとに .env.elevenlabs.local から直接読む）。
  *
- * 既知値は ear-pipeline の STT_ENGINES（whisper / elevenlabs / parakeet / zipformer）。
+ * 既知値は ear-pipeline の STT_ENGINES。
  *
- * @param {{ getSttEngine: () => string | null; setSttEngine: (engine: string | null) => void }} settings
- * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [defaultEngine="whisper"]
+ * @param {{ getSttEngine: () => string | null; setSttEngine: (engine: string | null, options?: { strict?: boolean }) => void }} settings
+ * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas"} [defaultEngine="whisper"]
  * @returns {{
- *   resolveInitialSttEngine: () => "whisper" | "elevenlabs" | "parakeet" | "zipformer";
- *   onSetSttEngine: (engine: string) => void;
+ *   resolveInitialSttEngine: () => "whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas";
+ *   onSetSttEngine: (engine: string, options?: { strict?: boolean }) => void;
  * }}
  */
 export function createSttEngineHooks(settings, defaultEngine = "whisper") {
@@ -52,11 +52,14 @@ export function createSttEngineHooks(settings, defaultEngine = "whisper") {
     resolveInitialSttEngine: () => {
       const remembered = settings.getSttEngine();
       return remembered != null && STT_ENGINES.includes(remembered)
-        ? /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */ (remembered)
+        ? /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas"} */ (remembered)
         : defaultEngine;
     },
-    /** cockpit-server の onSetSttEngine（耳の Start ごとに呼ぶ）。 */
-    onSetSttEngine: (engine) => {
+    onSetSttEngine: (engine, options) => {
+      if (options?.strict) {
+        settings.setSttEngine(engine, options);
+        return;
+      }
       try {
         settings.setSttEngine(engine); // 次回起動で復元（file-backed・失敗寛容）。
       } catch {

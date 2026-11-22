@@ -43,6 +43,7 @@ export const COCKPIT_CSS = `
   --speaker-you: #7fb3ff;
   --speaker-soul: #56d4b0;
   --speaker-viewer: #c99be8;
+  --speaker-game: #e5ba7d;
   --viewer-text: #e9dcf2;
   /* ── 行種色（§7 承認値 + 現 cockpit.html 継承）── */
   --marker-self: #9fe3cd;     /* 自発マーカー = 淡 teal（§7） */
@@ -283,6 +284,7 @@ html, body { overflow: hidden; }
 .convo-row > .who { grid-column: 3; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .convo-row.you > .who { color: var(--who-streamer); }
 .convo-row.soul > .who { color: var(--teal); }
+.convo-row.game > .who { color: var(--speaker-game); }
 .convo-row > .text { grid-column: 4; min-width: 0; display: flex; align-items: baseline; gap: 14px; }
 .convo-row .body {
   min-width: 0;
@@ -291,6 +293,7 @@ html, body { overflow: hidden; }
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+.convo-row.game .body { display: block; -webkit-line-clamp: unset; white-space: pre-wrap; overflow-wrap: anywhere; }
 .react-tag { flex: 0 0 auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .kind-tag {
   flex: 0 0 auto;
@@ -590,6 +593,7 @@ html, body { overflow: hidden; }
 .row.speaker-viewer .text { color: var(--viewer-text); }
 .row.speaker-event .who { color: var(--ghost); }
 .row.speaker-event .text { color: var(--ghost); }
+.row.speaker-game .who { color: var(--speaker-game); }
 /* speaking 行（VAD 連動・出現消滅） */
 .row.speaking .text { color: var(--speaking); font-style: italic; }
 /* ゴースト行（§7: グレー斜体） */

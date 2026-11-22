@@ -260,7 +260,7 @@ function composeRecallAvoidInput(entries, { request, summary, nowMs, soulName, w
     if (typeof e.appendedAtMs === "number" && Number.isFinite(e.appendedAtMs) && e.appendedAtMs < from) continue;
     const speaker = e.speaker ?? "you";
     // 出来事の行（Discord モード Domain J）は判定に渡さない。
-    if (speaker === "event") continue;
+    if (speaker === "event" || speaker === "game") continue;
     if (speaker === "viewer") lines.push(`視聴者: 「${text}」`);
     else if (speaker === "soul") lines.push(`${soulName}: ${text}`);
     else lines.push(youLine(e, text));

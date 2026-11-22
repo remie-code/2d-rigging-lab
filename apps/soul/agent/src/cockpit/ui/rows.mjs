@@ -23,7 +23,7 @@
  *                      （思い出しの係の行「思い出し中: 「…」」・記憶の作り直し Wave 3）
  *
  * speaking 行の規律（現 cockpit.html と機能同値）:
- *  - transcript / ghost の追加は speaking 行を**除去してから**積む（:387 :418 removeSpeakingRow）。
+ *  - 発話の transcript / ghost の追加は speaking 行を**除去してから**積む。ゲーム画面の確定は speaking 行を残す。
  *  - マーカー行（fire/expression/vision/barge-in/self-fire）は除去**しない**（原実装も呼ばない＝
  *    speaking 行がタイムライン途中に残る挙動まで保存）。
  */
@@ -80,7 +80,8 @@ function rowsWithoutSpeaking(rows) {
  * @param {FeedState} feed  @param {any} d  SSE transcript ペイロード。  @param {number} nowMs
  */
 export function feedWithTranscript(feed, d, nowMs) {
-  const base = { ...feed, rows: rowsWithoutSpeaking(feed.rows) };
+  const speaker = resolveSpeaker(d);
+  const base = speaker === "game" ? feed : { ...feed, rows: rowsWithoutSpeaking(feed.rows) };
   return appended(base, {
     kind: "transcript",
     timeText: formatClock((d && d.appendedAtMs) || nowMs),
@@ -89,7 +90,7 @@ export function feedWithTranscript(feed, d, nowMs) {
     text: d && d.text,
     // 多頭化 Domain C: brain 札を additive で latencyLabel へ渡す（d.brain 未搭載の you/viewer 行や
     // brain 未注入時の soul 行は undefined のまま＝従来どおり (Ns) のみ）。
-    latText: resolveSpeaker(d) === "you" ? null : latencyLabel(d && d.latencyMs, d && d.brain)
+    latText: speaker === "you" || speaker === "game" ? null : latencyLabel(d && d.latencyMs, d && d.brain)
   });
 }
 

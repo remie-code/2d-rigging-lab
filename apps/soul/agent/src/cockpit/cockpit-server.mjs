@@ -78,7 +78,7 @@ import { createCockpitSse } from "./http/cockpit-sse.mjs";
 import { errMessage, readJsonBody, readJsonBodyStrict, sendJson } from "./http/http-messages.mjs";
 
 import { createEarPipeline, STT_ENGINES } from "../ears/ear-pipeline.mjs";
-import { createTranscriptBuffer, EVENT_SPEAKER, isEventEntry } from "../ears/transcript-buffer.mjs";
+import { createTranscriptBuffer, EVENT_SPEAKER, isEventEntry, isGameScreenEntry } from "../ears/transcript-buffer.mjs";
 import { createEarBundle } from "../ears/ear-bundle.mjs";
 import { loadElevenLabsApiKey } from "../ears/elevenlabs-stt.mjs";
 import { DEFAULT_WHISPER_PORT } from "../ears/whisper-server.mjs";
@@ -88,6 +88,7 @@ import { createHaasSttPool } from "../ears/local-stt/haas-local-stt.mjs";
 import { resolveFfmpegPath } from "../ears/ffmpeg-capture.mjs";
 import { normalizeDevice } from "../cli/ears-cli.mjs";
 import { listWindows as defaultListWindows } from "../eyes/window-list.mjs";
+import { createGameDialogueOcrScheduler } from "../eyes/game-dialogue-ocr-scheduler.mjs";
 import { listAudioDevices as defaultListAudioDevices } from "../voice/audio-devices.mjs";
 import { createYouTubeComments } from "../chat/youtube-comments.mjs";
 import { toWireEntry } from "./cockpit-public-transcript.mjs";
@@ -564,11 +565,14 @@ export function enumerateDevices(options = {}) {
  *   setLastDevice: (device: string | null) => void;
  *   getLastChannelUrl: () => string | null;
  *   setLastChannelUrl: (url: string | null) => void;
+ *   getStreamOcrEnabled: () => boolean;
+ *   setStreamOcrEnabled: (enabled: boolean) => void;
  * }}
  */
 export function createInMemorySettingsStore(initialDevice = null, initialChannelUrl = null) {
   let lastDevice = initialDevice;
   let lastChannelUrl = initialChannelUrl;
+  let streamOcrEnabled = true;
   return {
     getLastDevice: () => lastDevice,
     setLastDevice: (device) => {
@@ -577,6 +581,10 @@ export function createInMemorySettingsStore(initialDevice = null, initialChannel
     getLastChannelUrl: () => lastChannelUrl,
     setLastChannelUrl: (url) => {
       lastChannelUrl = url;
+    },
+    getStreamOcrEnabled: () => streamOcrEnabled,
+    setStreamOcrEnabled: (enabled) => {
+      streamOcrEnabled = enabled;
     }
   };
 }
@@ -610,7 +618,7 @@ const MAX_PORT_REROLLS = 50;
  *   許可サブツリー限定でこの配下だけを配る（既存 22 エンドポイント×13 SSE のワイヤ契約は不変・追加ルートのみ）。
  * @param {string} [options.inputFormat]    ffmpeg 入力フォーマット（既定 win32→dshow）。
  * @param {number} [options.transcriptHistory=DEFAULT_TRANSCRIPT_HISTORY]  状態に載せる直近転写件数。
- * @param {{ getLastDevice: () => any; setLastDevice: (d: any) => any }} [options.settingsStore]
+ * @param {{ getLastDevice: () => any; setLastDevice: (d: any) => any; getStreamOcrEnabled?: () => boolean; setStreamOcrEnabled?: (enabled: boolean) => void }} [options.settingsStore]
  *   既定は in-memory。get/set は同期でも Promise でもよい（await する）。
  * @param {object} [options.pipelineOptions]  createEarPipeline へ渡す追加設定（whisper/segmenter/asr 等）。
  * @param {typeof createEarPipeline} [options.pipelineFactory]  テスト注入（既定 createEarPipeline）。
@@ -633,6 +641,7 @@ const MAX_PORT_REROLLS = 50;
  * @param {() => (object | null)} [options.visionTargetStatus]
  *   視覚発火の対象ウインドウの現況（`{ title: string | null }`）を返す。state snapshot に載せる。
  *   未注入なら visionTarget:null。
+ * @param {Parameters<typeof createGameDialogueOcrScheduler>[0] & { getTarget: () => string | null }} [options.gameDialogueOcr]
  * @param {(opts?: object) => Promise<{ windows: Array<{ pid: number; processName: string; title: string }> } | { error: { kind: string; message: string } }>} [options.listWindowsImpl]
  *   ウインドウ列挙の差し替え（テスト注入。既定は Domain A の `listWindows`・**実 PowerShell を起動する**）。
  *   GET /api/windows が呼ぶ。
@@ -892,13 +901,12 @@ const MAX_PORT_REROLLS = 50;
  * @param {(() => object | null) | object} [options.localSttSettings]
  *   ローカルの文字起こしの設定（{ threads, preRollMs, silencePadMs, hotwords, hotwordsScore }・範囲外は既定）。関数なら
  *   「配信を始める」ごとに読む（設定ファイルの書き換えが次の場から効く）。pipeline の stt.local へそのまま渡す。
- * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} [options.sttEngineInitial="whisper"]
+ * @param {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas"} [options.sttEngineInitial="whisper"]
  *   文字起こしの方式の初期選択（操縦席の文字起こし選択・cockpit-stt-selection.md）。起動時の値は
  *   呼び出し側（cockpit.mjs）が settings から読んでここへ渡す（selfFireInitialEnabled と同型）。
- *   選択は POST /api/stream/start（旧 /api/ears/start）の body `sttEngine` で受け、「配信を始める」ごとに onSetSttEngine で
- *   永続化する（マイクと同じく場が閉じている間に選ぶ・場の途中は替えられない＝終えてから始め直す・stream-restructure.md §3）。
- * @param {(engine: string) => void | Promise<void>} [options.onSetSttEngine]
- *   文字起こしの方式の永続化フック（「配信を始める」で呼ぶ・失敗寛容）。**cockpit-server は永続化実体を知らない**。
+ *   選択は POST /api/stream/stt-engine で保存する。旧 start API の body `sttEngine` も引き続き受ける。
+ * @param {(engine: string, options?: { strict?: boolean }) => void | Promise<void>} [options.onSetSttEngine]
+ *   文字起こしの方式の永続化フック（設定変更では strict: true、起動時は失敗寛容）。
  * @param {() => ({ ok: true; apiKey: string } | { ok: false; reason: string })} [options.elevenLabsApiKeyProvider]
  *   ElevenLabs のキーを返す（既定 loadElevenLabsApiKey = `apps/soul/agent/.env.elevenlabs.local` を
  *   コード内で直接読む・process.env に入れない）。「配信を始める」ごとに読む。キーは pipeline へ渡すだけで、
@@ -1010,6 +1018,7 @@ const MAX_PORT_REROLLS = 50;
  *   isListening: () => boolean;
  *   earsStatus: () => string;
  *   streamStatus: () => { phase: string; error: string | null; openedAtMs: number | null; experience: string | null };
+ *   streamOcrEnabled: () => boolean;
  *   venueContext: () => { experience: string; wording: any; teaching: string | null } | null;
  *   venueGeneration: () => number | null;
  *   startStream: (request?: object) => Promise<object>;
@@ -1035,9 +1044,26 @@ export function createCockpitServer(options = {}) {
   const inputFormat = options.inputFormat ?? (process.platform === "win32" ? "dshow" : "");
   const transcriptHistory = options.transcriptHistory ?? DEFAULT_TRANSCRIPT_HISTORY;
   const settings = options.settingsStore ?? createInMemorySettingsStore();
+  let ocrEnabled = settings.getStreamOcrEnabled?.() !== false;
+  // SSE と設定 POST の応答が別の順で届いても、配信設定の新旧を比較できるようにする。
+  let streamPrepRevision = Date.now();
+  function streamOcrEnabled() {
+    return ocrEnabled;
+  }
   const pipelineFactory = options.pipelineFactory ?? createEarPipeline;
   const enumerateDevicesImpl = options.enumerateDevicesImpl ?? enumerateDevices;
   const nowImpl = options.nowImpl ?? Date.now;
+  const gameDialogueOcr = options.gameDialogueOcr
+    ? createGameDialogueOcrScheduler({ nowImpl, ...options.gameDialogueOcr })
+    : null;
+
+  function syncGameDialogueOcr() {
+    if (!gameDialogueOcr) return;
+    const buffer = !closed && venueLifecycle.phase === "open" && venueExperience === streamExperience
+      ? venueTranscript : null;
+    const title = buffer && streamOcrEnabled() ? options.gameDialogueOcr?.getTarget() : null;
+    gameDialogueOcr.setSource(buffer, title || null);
+  }
   const onSetChannelUrl = options.onSetChannelUrl;
   const channelStatusImpl = options.channelStatus;
   const onSetVisionTarget = options.onSetVisionTarget;
@@ -1093,11 +1119,10 @@ export function createCockpitServer(options = {}) {
   // 設定の正本は cockpit.mjs（サーバは二重に持たない）。
   const onSetCodexFastMode = options.onSetCodexFastMode;
   const codexFastStatusImpl = options.codexFastStatus;
-  // 操縦席の文字起こし選択: 現在の選択（Start のたびに更新・耳が動いている間は使用中の方式）・
-  // 永続化フック・ElevenLabs キーの読み口・遅延ログの口。
-  /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */
+  // 配信の文字起こし設定。場で実際に使う方式は venueSttEngine が持つ。
+  /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas"} */
   let sttEngine = STT_ENGINES.includes(/** @type {any} */ (options.sttEngineInitial))
-    ? /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer"} */ (options.sttEngineInitial)
+    ? /** @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas"} */ (options.sttEngineInitial)
     : "whisper";
   const localSttModelCheck =
     typeof options.localSttModelCheck === "function" ? options.localSttModelCheck : (engine) => checkLocalSttModel(engine);
@@ -1106,6 +1131,8 @@ export function createCockpitServer(options = {}) {
       ? options.localSttSettings
       : () => (options.localSttSettings && typeof options.localSttSettings === "object" ? options.localSttSettings : null);
   const onSetSttEngine = typeof options.onSetSttEngine === "function" ? options.onSetSttEngine : null;
+  /** @type {Promise<void> | null} */
+  let sttPreferenceSave = null;
   const elevenLabsApiKeyProvider =
     typeof options.elevenLabsApiKeyProvider === "function" ? options.elevenLabsApiKeyProvider : () => loadElevenLabsApiKey();
   const onSttLatency = typeof options.onSttLatency === "function" ? options.onSttLatency : null;
@@ -1381,9 +1408,8 @@ export function createCockpitServer(options = {}) {
    */
   let venueEarsPaused = false;
   /**
-   * 外から渡された体験（Discord）の場の間だけの文字起こしの方式（Discord モード Domain D・discord-mode.md §6.3: Discord の準備で
-   * 配信と別に持つ）。配信の場・閉じている間は null（配信の選択 sttEngine を使う・activeSttEngine）。
-   * @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | null}
+   * 場の入口で確定した文字起こしの方式。
+   * @type {"whisper" | "elevenlabs" | "parakeet" | "zipformer" | "haas" | null}
    */
   let venueSttEngine = null;
   /** 外から渡された Discord の体験の口（Domain D）。渡されていなければ null（"discord" の始めるは 503 で断る）。 */
@@ -1585,9 +1611,10 @@ export function createCockpitServer(options = {}) {
         ffmpeg: { status: health.ffmpeg, reason: health.ffmpegReason }
       },
       // 操縦席の文字起こし選択: 方式（耳が動いている間は使用中、止まっている間は前回 Start の選択）と状態。
-      // ヘッダの `stt: ElevenLabs up` 表示と、設定の選択肢の復元に使う（キーは載せない）。
-      // Discord モード Domain D: Discord の場の間は Discord の準備の方式（activeSttEngine）。
+      // ヘッダは場で使用中の方式、配信の準備は保存した配信設定を使う。
       stt: { engine: activeSttEngine(), status: health.stt, reason: health.sttReason },
+      streamPrep: { sttEngine, ocrEnabled: streamOcrEnabled() },
+      streamPrepRevision,
       // 声の方式（前回 Start の選択・起動直後は記憶の値）と、今の engine の状態（キーは載せない）。
       // 設定の選択肢の復元と、ログのタブの健康 1 行の `tts:` に使う。
       tts: { engine: discordVenueOptions?.role?.voice.engine ?? ttsEngine, status: voice.status, reason: voice.reason },
@@ -2130,8 +2157,13 @@ export function createCockpitServer(options = {}) {
       // 永続化失敗は起動を止めない（B の file-backed 実体の I/O 失敗を握る）。
     }
 
-    // 文字起こしの方式（マイクと同じく場が閉じている間に選ぶ）。「配信を始める」ごとに記憶する（失敗寛容）。
-    if (engineChoice) sttEngine = engineChoice;
+    // 設定変更の保存中に始めた場合も、その結果を読んでから認識器を選ぶ。
+    await sttPreferenceSave?.catch(() => {});
+    // 旧 start API の sttEngine 指定も引き続き設定へ反映する。
+    if (engineChoice && engineChoice !== sttEngine) {
+      sttEngine = engineChoice;
+      streamPrepRevision++;
+    }
     const engine = sttEngine;
     if (onSetSttEngine) {
       try {
@@ -2151,6 +2183,7 @@ export function createCockpitServer(options = {}) {
       }
     }
 
+    venueSttEngine = engine;
     beginEarsStarting(engine);
     const checked = checkEarEngine(engine);
     if (!checked.ok) return checked;
@@ -2578,6 +2611,11 @@ export function createCockpitServer(options = {}) {
     venueTranscript = buffer;
     venueTranscriptUnsubs = [
       buffer.onAppend((entry) => {
+        if (isGameScreenEntry(entry)) {
+          const { appended, discarded } = buffer.stats();
+          broadcast("transcript", { ...toWireEntry(entry), appended, discarded });
+          return;
+        }
         // Discord モード Domain J（§13.5）: 出来事の行は判定にも発火の予定にも回さない（判定のきっかけにしない・発火の流れは
         // 変えない）。チャッピーは次の発火の会話の窓で出来事を見る。
         if (isEventEntry(entry)) return;
@@ -2981,6 +3019,8 @@ export function createCockpitServer(options = {}) {
     },
     normalizeEntranceResult,
     nowImpl,
+    onOpened: syncGameDialogueOcr,
+    onClosing: syncGameDialogueOcr,
     openVenueTranscript,
     resolveVoiceKind(prepared) {
       if (prepared.voiceKind === "aivis" || prepared.voiceKind === "elevenlabs") return prepared.voiceKind;
@@ -3076,6 +3116,52 @@ export function createCockpitServer(options = {}) {
       discordVenue: body.discordVenue
     });
     sendJson(res, result.ok ? 200 : result.status, result.ok ? result.state : { error: result.error, state: result.state });
+  }
+
+  async function handleStreamSttEngine(req, res) {
+    const { sttEngine: engine } = await readJsonBody(req);
+    if (!STT_ENGINES.includes(engine)) {
+      sendJson(res, 400, { error: "invalid stt engine" });
+      return;
+    }
+    if (venueLifecycle.phase !== "closed" || sttPreferenceSave) {
+      sendJson(res, 409, { error: "文字起こしの方式を変更できない" });
+      return;
+    }
+    sttPreferenceSave = Promise.resolve().then(async () => {
+      await onSetSttEngine?.(engine, { strict: true });
+      sttEngine = engine;
+      streamPrepRevision++;
+    });
+    try {
+      await sttPreferenceSave;
+    } catch {
+      sendJson(res, 500, { error: "文字起こしの方式を保存できない" });
+      return;
+    } finally {
+      sttPreferenceSave = null;
+    }
+    broadcastState();
+    sendJson(res, 200, snapshot());
+  }
+
+  async function handleStreamOcrEnabled(req, res) {
+    const { enabled } = await readJsonBody(req);
+    if (typeof enabled !== "boolean") {
+      sendJson(res, 400, { error: "invalid screen OCR setting" });
+      return;
+    }
+    try {
+      settings.setStreamOcrEnabled?.(enabled);
+    } catch {
+      sendJson(res, 500, { error: "画面の文字起こしの設定を保存できない" });
+      return;
+    }
+    ocrEnabled = enabled;
+    streamPrepRevision++;
+    syncGameDialogueOcr();
+    broadcastState();
+    sendJson(res, 200, snapshot());
   }
 
   /**
@@ -3465,6 +3551,8 @@ export function createCockpitServer(options = {}) {
     operations: {
       handleStreamStart,
       handleStreamStop,
+      handleStreamSttEngine,
+      handleStreamOcrEnabled,
       handleDiscordPrep,
       handleDiscordCatalog,
       handleDiscordVc,
@@ -3613,6 +3701,7 @@ export function createCockpitServer(options = {}) {
     // タイトル自体はここに保持/ログしない。フックへ橋渡しし、state は visionTargetStatus() だけを載せる
     // （責務境界: cockpit-server は永続化実体を知らない・Channel URL と同型）。
     await onSetVisionTarget(title);
+    syncGameDialogueOcr();
     broadcastState();
     sendJson(res, 200, snapshot());
   }
@@ -4766,6 +4855,7 @@ export function createCockpitServer(options = {}) {
      * @returns {{ phase: "closed" | "opening" | "open" | "closing"; error: string | null; openedAtMs: number | null; experience: string | null }}
      */
     streamStatus:() => ({ phase: venueLifecycle.phase, error: venueLifecycle.error, openedAtMs: venueLifecycle.openedAtMs, experience: venueExperienceKind() }),
+    streamOcrEnabled,
     /**
      * 開いている場の言葉（Discord モード Domain C・additive な内部 JS API）。閉じていれば null。wording / teaching が null なら配信の
      * 既定。cockpit.mjs が②の保存を頼んだ時点（語の組）・①のセッションを作る時点と会話指示の編集画面（教えと語の組）で読む。
@@ -4943,6 +5033,7 @@ export function createCockpitServer(options = {}) {
     async close() {
       if (closed) return;
       closed = true;
+      syncGameDialogueOcr();
       // CLI shutdown uses endStream before server teardown. If HTTP close is already
       // writing, let it finish before tearing down anything it may still use.
       if (venueLifecycle.phase === "closing") await endStreamForShutdown();

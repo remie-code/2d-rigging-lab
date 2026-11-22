@@ -370,7 +370,11 @@ test("人ごとの購読と耳: 2 人で 2 本・行は you + 名前 + id で正
   const h = await startDiscordServer();
   const sse = openEvents(h.url);
   try {
-    assert.equal((await post(h.url, "/api/stream/start", { experience: "discord" })).status, 200);
+    assert.equal((await post(h.url, "/api/stream/stt-engine", { sttEngine: "haas" })).status, 200);
+    const started = await post(h.url, "/api/stream/start", { experience: "discord" });
+    assert.equal(started.status, 200);
+    assert.equal(started.json.streamPrep.sttEngine, "haas");
+    assert.equal(started.json.stt.engine, "elevenlabs");
     // 1 人目が話し始める → 購読（AfterSilence）・デコーダ・耳 1 本。
     h.fake.speak(USER_A);
     await waitUntil(() => h.ears.ears.length === 1 && h.ears.ears[0].started);

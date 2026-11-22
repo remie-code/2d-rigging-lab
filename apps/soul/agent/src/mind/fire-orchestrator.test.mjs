@@ -24,6 +24,7 @@ import { createFakeStreamPlayer } from "../test-support/fake-stream-player.mjs";
 import { createFakeVoiceEngine, defaultFakeChunks } from "../test-support/fake-voice-engine.mjs";
 import { formatTranscriptForDigest } from "./memory.mjs";
 import { createSpeechIntentMotion } from "./speech-intent-motion.mjs";
+import { createLlmSession } from "./llm-session.mjs";
 import { loadDistributionSpeechMotionCatalog } from "../test-support/distribution-speech-motion-catalog.mjs";
 const speechMotions = await loadDistributionSpeechMotionCatalog();
 
@@ -127,6 +128,15 @@ function progressiveStreamer(prepare) {
 
 test("full-result ElevenLabs replies use the same section lifecycle and retain the existing smile", { timeout: 5000 }, async () => {
   const buffer = bufferWithYou();
+  const capturedAt = Date.now();
+  buffer.addGameScreen({
+    text: "ゲーム固有の文章",
+    displayOrder: 0,
+    startedAt: capturedAt,
+    lastSeenAt: capturedAt,
+    closedAt: capturedAt,
+    closeReason: "replaced"
+  });
   const player = makeProgressivePlayer();
   const ready = [Promise.withResolvers(), Promise.withResolvers()];
   const motionPlayed = Promise.withResolvers();
@@ -167,6 +177,7 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
   const session = {
     async ask(content) {
       assert.match(content, /<intent/);
+      assert.match(content, /ゲーム固有の文章/);
       return { replyText: "<smile><intent 相手の答えを待ちたい>一文目。二文目。\n<intent>" };
     }
   };
@@ -200,8 +211,59 @@ test("full-result ElevenLabs replies use the same section lifecycle and retain t
   assert.equal(decisionInputs[0].intent, "<intent 相手の答えを待ちたい>");
   assert.equal(decisionInputs[0].text, "一文目。二文目。\n");
   assert.match(decisionInputs[0].context.transcript, /ねえ、今日の予定は？/);
+  assert.doesNotMatch(decisionInputs[0].context.transcript, /ゲーム固有の文章/);
   assert.deepEqual(motionOps, ["begin", "play", "end"]);
   orch.dispose();
+});
+
+test("speech intent teaching travels once through the real session adapter across manual, automatic and visual Fire", async () => {
+  const delivered = [];
+  async function* queryImpl({ prompt }) {
+    for await (const { message } of prompt) {
+      delivered.push(message.content);
+      yield { type: "result", is_error: false, result: "" };
+    }
+  }
+  const sessionOptions = { skipEnvGuard: true, queryImpl };
+  const initial = createLlmSession(sessionOptions);
+  const replacement = createLlmSession(sessionOptions);
+  let session = initial;
+  let motion = null;
+  const buffer = bufferWithYou();
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: initial,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    acquireFireResources: () => ({ session, body: true, engine: { kind: "elevenlabs" }, speechIntentMotion: motion }),
+    getVisionTarget: () => "ゲーム",
+    captureImpl: async () => ({ jpegBase64: "AAAA", width: 1, height: 1, elapsedMs: 1 })
+  });
+  const teaching = loadSoulSkills({ names: ["speech-intent"] });
+  try {
+    assert.match(teaching, /開き山括弧 `<` の直後にゼロ幅スペース（U\+200B）などの不可視文字を挟まず、`intent`/);
+    assert.doesNotMatch(teaching, /\u200B/);
+    await orch.fire();
+    motion = { isActive: () => true };
+    await orch.fire();
+    await orch.fire({ cause: { type: "silence" } });
+    await orch.fire({ vision: true });
+    session = replacement;
+    await orch.fire({ vision: true });
+    assert.equal(delivered.length, 5);
+    assert.ok(!delivered[0].includes(teaching));
+    assert.ok(delivered[1].startsWith(teaching));
+    assert.ok(!delivered[2].includes(teaching));
+    assert.equal(delivered[3][0].type, "image");
+    assert.ok(!delivered[3][1].text.includes(teaching));
+    assert.equal(delivered[4][0].type, "image");
+    assert.ok(delivered[4][1].text.startsWith(teaching));
+  } finally {
+    orch.dispose();
+    await initial.dispose();
+    await replacement.dispose();
+  }
 });
 
 test("non-ElevenLabs one-shot replies keep the same voice path and strip residual intent markers", async () => {
@@ -3903,7 +3965,7 @@ test("増えた分だけ: 同じ会話の 2 回目以降は前回渡した最後
   assert.deepEqual([fires[1].includedCount, fires[1].injectedChars], [2, head.inputs[1].length], "受理の行数・文字数も実際に渡した分");
   assert.deepEqual(records.map((r) => r.windowMode), ["full", "delta"]);
   assert.deepEqual(
-    { ...records[1], atMs: null },
+    { ...records[1], atMs: null, conversationWindow: { ...records[1].conversationWindow, pendingElapsedMs: null } },
     {
       fireId: 2,
       brain: null,
@@ -3911,6 +3973,13 @@ test("増えた分だけ: 同じ会話の 2 回目以降は前回渡した最後
       windowMode: "delta",
       includedCount: 2,
       injectedChars: head.inputs[1].length,
+      windowSeqs: [1, 2],
+      conversationWindow: {
+        hasGameScreen: false,
+        pendingElapsedMs: null,
+        pendingChars: head.inputs[1].length,
+        droppedUnsentGame: []
+      },
       usage: { input_tokens: 10 },
       tokenUsage: { last: { inputTokens: 10 }, total: { inputTokens: 30 }, modelContextWindow: 1000 },
       ttftMs: 42,
@@ -3919,6 +3988,113 @@ test("増えた分だけ: 同じ会話の 2 回目以降は前回渡した最後
       atMs: null
     }
   );
+  orch.dispose();
+});
+
+test("game screen uses the existing delta, range and usage records across conversation resets", async () => {
+  let now = 1_000_000;
+  const buffer = createTranscriptBuffer({ nowImpl: () => now });
+  const head = makeConversationSession("");
+  const asks = [];
+  const records = [];
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    nowImpl: () => now,
+    onAsk: (ask) => asks.push(ask),
+    onAskRecord: (record) => records.push(record)
+  });
+  const say = (text) => buffer.append({ startMs: 0, endMs: 0, text });
+  const screen = (text, displayOrder, startedAt = now - 10) =>
+    buffer.addGameScreen({ text, displayOrder, startedAt, lastSeenAt: now - 1, closedAt: now, closeReason: "replaced" });
+
+  say("読む");
+  await orch.fire();
+  now += 10;
+  const lower = screen("下段の名前\n下段の台詞", 1);
+  now += 10;
+  const upper = screen("上段の地の文", 0, lower.startedAt - 10);
+  say("どういう意味？");
+  await orch.fire();
+  assert.deepEqual(asks[1].windowSeqs, [1, 2, 3]);
+  assert.equal(records[1].windowMode, "delta");
+  assert.equal(records[1].conversationWindow.pendingElapsedMs, 20);
+  assert.match(head.inputs[1], /表示順 1.*\n下段の名前\n下段の台詞\n.*表示順 0.*\n上段の地の文\nyou: どういう意味？/);
+  assert.ok(head.inputs[1].includes(new Date(upper.startedAt).toISOString()));
+  assert.ok(head.inputs[1].includes(new Date(lower.lastSeenAt).toISOString()));
+  assert.equal(records[1].conversationWindow.pendingChars, head.inputs[1].length);
+
+  now += 10;
+  const missed = screen("未送信の台詞", 2);
+  now += 5 * 60 * 1000 + 1;
+  head.state.key = "thread-b";
+  say("続きは？");
+  await orch.fire();
+  assert.equal(records[2].windowMode, "full");
+  assert.deepEqual(asks[2].windowSeqs, [5]);
+  assert.deepEqual(records[2].conversationWindow.droppedUnsentGame, [
+    { seq: missed.seq, startedAt: missed.startedAt, reason: "time" }
+  ]);
+  assert.ok(records[2].conversationWindow.pendingChars > head.inputs[2].length);
+
+  now += 10;
+  const crowded = screen("前の台詞", 3);
+  now += 10;
+  const newest = screen("あ".repeat(3870), 4);
+  await orch.fire();
+  assert.equal(records[3].windowMode, "delta");
+  assert.deepEqual(asks[3].windowSeqs, [newest.seq]);
+  assert.deepEqual(records[3].conversationWindow.droppedUnsentGame, [
+    { seq: crowded.seq, startedAt: crowded.startedAt, reason: "chars" }
+  ]);
+  assert.equal(records[3].conversationWindow.pendingElapsedMs, 20);
+  assert.ok(head.inputs[3].length <= 4000);
+
+  now += 10;
+  head.state.key = "thread-c";
+  say("次のページは？");
+  await orch.fire();
+  assert.equal(records[4].windowMode, "full");
+  assert.deepEqual(asks[4].windowSeqs, [5, 8]);
+  assert.equal(head.inputs[4], "you: 続きは？\nyou: 次のページは？");
+  assert.deepEqual(records[4].conversationWindow.droppedUnsentGame, []);
+  orch.dispose();
+});
+
+test("a full conversation reset retains human context, and the next venue may reuse the game seq", async () => {
+  let buffer = createTranscriptBuffer();
+  const head = makeConversationSession("");
+  const asks = [];
+  const addVenueLines = () => {
+    const time = Date.now();
+    buffer.append({ startMs: 0, endMs: 0, text: "最初の発言" });
+    buffer.addGameScreen({ text: "ゲームの台詞", displayOrder: 0, startedAt: time, lastSeenAt: time, closedAt: time, closeReason: "replaced" });
+    buffer.append({ startMs: 0, endMs: 0, text: "次の発言" });
+  };
+  const orch = createFireOrchestrator({
+    getBuffer: () => buffer,
+    session: head.session,
+    speakImpl: makeFakeSpeak().speakImpl,
+    channel: fakeChannel,
+    player: fakePlayer,
+    onAsk: (ask) => asks.push(ask)
+  });
+  addVenueLines();
+  await orch.fire();
+  head.state.key = "thread-b";
+  await orch.fire();
+  assert.deepEqual(asks[0].windowSeqs, [0, 1, 2]);
+  assert.deepEqual(asks[1].windowSeqs, [0, 2]);
+  assert.equal(head.inputs[1], "you: 最初の発言\nyou: 次の発言");
+
+  buffer = createTranscriptBuffer();
+  addVenueLines();
+  await orch.fire();
+  assert.deepEqual(asks[2].windowSeqs, [0, 1, 2]);
+  assert.match(head.inputs[2], /ゲームの台詞/);
   orch.dispose();
 });
 

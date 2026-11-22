@@ -56,7 +56,7 @@ export function ConversationRow({ row }) {
   }
   return html`
     <div class=${cls}>
-      <span class="time">${row.timeText}</span>
+      <span class="time" title=${row.timeDetail}>${row.timeText}</span>
       <span class="who">${row.whoText}</span>
       <span class="text">
         <span class="body">${row.text}</span>

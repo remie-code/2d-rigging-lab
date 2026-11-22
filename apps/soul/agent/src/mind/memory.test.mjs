@@ -44,6 +44,13 @@ function touch(dir, rel, body = "x\n") {
 
 // ── 1. 整形: 話者ラベル + 視聴者の名前 ───────────────────────────
 
+test("記憶の書き出しにはゲーム画面の区別・改行・表示時間が残る", () => {
+  assert.equal(formatTranscriptForDigest([
+    { text: "これは何？", speaker: "you" },
+    { text: "名前\n台詞", speaker: "game", displayOrder: 2, startedAt: 0, lastSeenAt: 1 }
+  ]), "you: これは何？\n［ゲーム画面・表示順 2・表示 1970-01-01T00:00:00.000Z ～ 1970-01-01T00:00:00.001Z］\n名前\n台詞");
+});
+
 test("formatTranscriptForDigest: you/soul/viewer をラベル付き行へ整形する（viewer は名前つき）", () => {
   const entries = [
     { text: "今日はアークナイツやるで", speaker: "you" },

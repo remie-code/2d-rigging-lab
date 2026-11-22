@@ -40,7 +40,13 @@ import {
 
 /** @param {{ text: string } & Record<string, unknown>} r */
 function metaOf(r) {
-  const { text: _text, ...rest } = r;
+  // Keep the baseline metadata pin focused on the original window fields.
+  const {
+    text: _text,
+    includedSeqs: _includedSeqs,
+    conversationWindow: _conversationWindow,
+    ...rest
+  } = r;
   return JSON.stringify(rest);
 }
 

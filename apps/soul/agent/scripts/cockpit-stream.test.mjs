@@ -1587,12 +1587,12 @@ test("Ctrl+C: 場が閉じていても、走っている保存があれば追加
 test("設定のダイアログの「配信を始める」は場の関数（/api/stream/start）を通り、場が開いている間はマイク・文字起こしを触れない（Stop は下の帯の 2 回押しだけ・配信の組み直し Domain E）", async () => {
   const { readFileSync } = await import("node:fs");
   const drawer = readFileSync(new URL("../src/cockpit/ui/settings-drawer.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  assert.match(drawer, /postJson\("\/api\/stream\/start", \{ device, sttEngine: sttSelected \|\| "whisper" \}\)/);
+  assert.match(drawer, /postJson\("\/api\/stream\/start", \{ device \}\)/);
   assert.doesNotMatch(drawer, /\/api\/stream\/stop/, "設定のダイアログから 1 回押しで終える口は外した（下の帯の 2 回押しだけ）");
   assert.doesNotMatch(drawer, /\/api\/ears\/(start|stop)/, "耳だけを起こす・止める道を残さない");
   assert.match(drawer, /const streamLocked = streamLocksInputs\(settings && settings\.stream\);/);
   assert.match(drawer, /id="device-select"[\s\S]{0,200}?disabled=\$\{inputsLocked\}/);
-  assert.match(drawer, /id="stt-engine-select"[\s\S]{0,200}?disabled=\$\{inputsLocked\}/);
+  assert.match(drawer, /id="stt-engine-select"[\s\S]{0,200}?disabled=\$\{inputsLocked \|\| streamPrepSaving\}/);
   const app = readFileSync(new URL("../src/cockpit/ui/app.mjs", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(app, /doFetch\("\/api\/stream\/start", \{ method: "POST"/, "メイン画面の「配信を始める」");
   assert.match(app, /doFetch\("\/api\/stream\/stop", \{ method: "POST"/, "下の帯の「配信を終える」");

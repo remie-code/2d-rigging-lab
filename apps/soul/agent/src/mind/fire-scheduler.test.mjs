@@ -124,6 +124,24 @@ test("textMatchesName: 採用揺れ 4 種 + かな + 連結が命中、非該当
 
 // ── 呼びかけ（call・確実に発火・不応期/確率を掛けない）──────────────────────────
 
+test("ゲーム画面の確定は呼びかけを発火せず、既存の沈黙タイマにも触れない", () => {
+  const clock = makeFakeClock();
+  const requests = [];
+  const scheduler = createFireScheduler({
+    onFireRequest: (request) => requests.push(request),
+    enabled: true,
+    nowImpl: clock.now,
+    rng: rngHit,
+    setTimeoutImpl: clock.setTimeoutImpl,
+    clearTimeoutImpl: clock.clearTimeoutImpl
+  });
+  const pending = clock.pending();
+  scheduler.handleTranscript({ speaker: "game", text: "コーディ、これ見て" });
+  assert.deepEqual(requests, []);
+  assert.equal(clock.pending(), pending);
+  scheduler.dispose();
+});
+
 test("call: 名前照合が命中したら確実に発火要求（不応期も確率も掛けない）", () => {
   const clock = makeFakeClock();
   /** @type {any[]} */

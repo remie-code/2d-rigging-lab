@@ -21,6 +21,23 @@ test("isBlankTranscript: 非文字列は throw", () => {
 
 // ── append と読み取り ───────────────────────────────────────────────
 
+test("game screen appends only finalized blocks and preserves display metadata separately from seq", () => {
+  const buffer = createTranscriptBuffer({ nowImpl: () => 100 });
+  const seen = [];
+  buffer.onAppend((entry) => seen.push(entry));
+  const block = { text: "名前\n台詞", displayOrder: 3, startedAt: 10, lastSeenAt: 70, closedAt: 80, closeReason: "disappeared" };
+  assert.throws(() => buffer.addGameScreen({ ...block, closedAt: /** @type {any} */ (null) }), TypeError);
+  assert.deepEqual(seen, []);
+  buffer.append({ startMs: 2, endMs: 4, text: "うん" });
+  const game = buffer.addGameScreen(block);
+  assert.deepEqual(game, {
+    ...block, speaker: "game", seq: 1, appendedAtMs: 100, startMs: 0, endMs: 0,
+    displayName: undefined, speakerId: undefined
+  });
+  assert.equal(seen[1], game);
+  assert.ok(Object.isFrozen(game));
+});
+
 test("append: 積んだ順に seq が振られ、all() が append 順で返す", () => {
   let clock = 1000;
   const buffer = createTranscriptBuffer({ nowImpl: () => (clock += 1) });

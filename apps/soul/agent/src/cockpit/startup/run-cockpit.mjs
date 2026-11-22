@@ -34,6 +34,7 @@ import {
 } from "../../mind/session-usage-log.mjs";
 import { createQuotaMonitor, fetchElevenLabsSubscription } from "../quota.mjs";
 import { createResidentCapture } from "../../eyes/resident-capture.mjs";
+import { resolveStreamGameOcrInterval } from "../../eyes/game-dialogue-ocr-scheduler.mjs";
 import { FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "../../mind/fire-injection.mjs";
 import { redactToken } from "../../channel/channel-client.mjs";
 import { createStreamPlayer } from "../../voice/stream-player.mjs";
@@ -900,7 +901,9 @@ export async function runCockpit(args, remoteVenueId) {
       },
       // 頭の文脈の記録: ask が返るたびに 1 行（Codex の頭のときだけ・本文なし）。
       onAskRecord: (info) => {
-        if (isCodexBrainId(info?.brain ?? effectiveBrain())) sessionUsageLog.append(fireUsageRecord(info));
+        if (isCodexBrainId(info?.brain ?? effectiveBrain()) || info?.conversationWindow?.hasGameScreen === true) {
+          sessionUsageLog.append(fireUsageRecord(info));
+        }
       },
       onTrace: (trace) => {
         // 発火のたびに Codex の使用率を読む（ask が済んだ直後・失敗したとき。App Server の起動後にしか読めない）。
@@ -1034,6 +1037,10 @@ export async function runCockpit(args, remoteVenueId) {
     // をそのまま使う・差し替え不要）。
     onSetVisionTarget: visionTargetHooks.onSetVisionTarget,
     visionTargetStatus: visionTargetHooks.visionTargetStatus,
+    gameDialogueOcr: {
+      intervalMs: resolveStreamGameOcrInterval(process.env.STREAM_GAME_OCR_INTERVAL_MS),
+      getTarget: visionTargetHooks.getVisionTarget
+    },
     // S6「会話が続く」: 出力デバイス設定の口（GET /api/audio-devices は既定 listAudioDevicesImpl=
     // Domain A listAudioDevices をそのまま使う・差し替え不要）。
     onSetAudioDevice,

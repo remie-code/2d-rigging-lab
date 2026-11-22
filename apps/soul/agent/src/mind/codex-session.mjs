@@ -709,6 +709,12 @@ export function createCodexSession(options = {}) {
   let connectionGeneration = 0;
   let threadId = null;
   let threadHasSuccessfulTurn = false;
+  /** @type {{ threadId: string; text: string } | null} */
+  let conversationTeaching = null;
+  const personaForThread = (/** @type {string} */ targetThreadId) =>
+    conversationTeaching?.threadId === targetThreadId
+      ? `${systemPrompt}\n\n${conversationTeaching.text}`
+      : systemPrompt;
   let resetPromise = Promise.resolve();
   let activeAsk = null;
   let askInProgress = false;
@@ -1126,6 +1132,7 @@ export function createCodexSession(options = {}) {
   };
 
   return {
+    supportsConversationTeaching: true,
     /** Start and initialize the bundled App Server (and read the MCP server list) without creating a thread or turn. */
     async initialize() {
       const ready = await ensureConnection();
@@ -1137,7 +1144,7 @@ export function createCodexSession(options = {}) {
      * Existing one-argument callers remain valid. Wave 2 can opt into the
      * ordered append-only stream through the additive second argument.
      * @param {string | Array<any>} content
-     * @param {{onTextDelta?: (delta: string, meta: {itemId:string;threadId:string;turnId:string;elapsedMs:number}) => void; onTextDone?: (meta: {itemId:string;phase:string|null;threadId:string;turnId:string;elapsedMs:number}) => void; serviceTier?: "default" | "priority" | null; onTurnStarted?: (meta: {threadId:string;turnId:string;serviceTier:string|null}) => void}} [askOptions]
+     * @param {{onTextDelta?: (delta: string, meta: {itemId:string;threadId:string;turnId:string;elapsedMs:number}) => void; onTextDone?: (meta: {itemId:string;phase:string|null;threadId:string;turnId:string;elapsedMs:number}) => void; serviceTier?: "default" | "priority" | null; onTurnStarted?: (meta: {threadId:string;turnId:string;serviceTier:string|null}) => void; conversationTeaching?: string}} [askOptions]
      *   onTextDone: commentary でない agentMessage の本文が揃った（item/completed）ときに呼ぶ（本文は渡さない）。
      *   serviceTier: turn/start の serviceTier（この turn 以降の速さの段）。"priority" はモデルが持つときだけ送り、
      *   持たなければ "default" を送る。省略（null）なら送らない（今までどおり）。
@@ -1183,13 +1190,17 @@ export function createCodexSession(options = {}) {
           pendingPersonaThreadId = null;
           if (pending === ready.threadId && threadHasSuccessfulTurn) {
             try {
-              await ready.connection.request("thread/inject_items", { threadId: pending, items: [personaInjectItem(systemPrompt)] });
+              await ready.connection.request("thread/inject_items", { threadId: pending, items: [personaInjectItem(personaForThread(pending))] });
             } catch {
               diagnose("deferred persona injection failed");
             }
           }
         }
-        const input = threadHasSuccessfulTurn ? snapshotted.input.map((item) => ({ ...item })) : withSystemPrompt(snapshotted.input, systemPrompt);
+        const teaching = conversationTeaching?.threadId !== ready.threadId ? askOptions?.conversationTeaching : "";
+        const prompt = threadHasSuccessfulTurn
+          ? teaching || null
+          : teaching ? `${systemPrompt}\n\n${teaching}` : systemPrompt;
+        const input = prompt === null ? snapshotted.input.map((item) => ({ ...item })) : withSystemPrompt(snapshotted.input, prompt);
         let terminalResolve;
         let terminalReject;
         const terminal = new Promise((resolve, reject) => { terminalResolve = resolve; terminalReject = reject; });
@@ -1225,6 +1236,7 @@ export function createCodexSession(options = {}) {
         }
         const result = await terminal;
         threadHasSuccessfulTurn = true;
+        if (teaching) conversationTeaching = { threadId: ready.threadId, text: teaching };
         if (result.tokenUsage && threadId === ready.threadId) lastContext = { threadId: ready.threadId, tokenUsage: result.tokenUsage };
         return { ...result, elapsedMs: performance.now() - startedAt, serviceTier };
       } catch (error) {
@@ -1331,7 +1343,7 @@ export function createCodexSession(options = {}) {
             personaDeferred = true;
           } else {
             try {
-              await live.request("thread/inject_items", { threadId: targetThreadId, items: [personaInjectItem(systemPrompt)] });
+              await live.request("thread/inject_items", { threadId: targetThreadId, items: [personaInjectItem(personaForThread(targetThreadId))] });
               personaInjected = true;
             } catch {
               // 差し込みに失敗したら、次の turn の前にもう一度だけ試す。

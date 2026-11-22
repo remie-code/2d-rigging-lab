@@ -41,7 +41,8 @@
  *     cockpit-stt-selection.md）。未記憶/未知値のフォールバック（既定 whisper）は呼び出し側（cockpit.mjs）
  *     に委ねる（verbosityMode と同型の文字列キー・asStringOrNull）。キーそのものはここに置かない
  *     （キーは .env.elevenlabs.local・選択だけを記憶する）。
- *   setSttEngine(engine): 耳の Start 時に選んでいた方式を記憶（次回起動で復元）。
+ *   setSttEngine(engine): 配信に使う方式を記憶（次回起動で復元）。
+ *   getStreamOcrEnabled() / setStreamOcrEnabled(enabled): 配信のゲーム画面文字起こしの設定（既定 true）。
  *   getTtsEngine(): 声の方式（aivis / elevenlabs）の初期値（声の差し替え Wave 3 Domain E・
  *     voice-swap-wave-plan.md §3）。未記憶/未知値のフォールバック（既定 aivis）は呼び出し側（cockpit.mjs の
  *     createTtsEngineHooks）に委ねる（sttEngine の写経・asStringOrNull）。キーはここに置かない。
@@ -157,7 +158,9 @@ export const CONVERSATION_INSTRUCTIONS_SETTINGS_KEY = "conversationInstructions"
  *   getRoleChoice: () => string | null;
  *   setRoleChoice: (roleId: string | null) => void;
  *   getSttEngine: () => string | null;
- *   setSttEngine: (engine: string | null) => void;
+ *   setSttEngine: (engine: string | null, options?: { strict?: boolean }) => void;
+ *   getStreamOcrEnabled: () => boolean;
+ *   setStreamOcrEnabled: (enabled: boolean) => void;
  *   getTtsEngine: () => string | null;
  *   setTtsEngine: (engine: string | null) => void;
  *   getSpeakStartMode: () => string | null;
@@ -208,9 +211,7 @@ export function createFileSettingsStore(options = {}) {
   }
 
   /**
-   * Strict variant used by instruction persistence. Existing settings setters
-   * intentionally remain failure-tolerant; instruction revisions must only
-   * advance after this write has completed successfully.
+   * Variant for operations that acknowledge persistence before applying a change.
    * @param {Record<string, any>} patch
    * @returns {boolean}
    */
@@ -340,8 +341,18 @@ export function createFileSettingsStore(options = {}) {
       return asStringOrNull(readAll().sttEngine);
     },
     /** @param {string | null} engine */
-    setSttEngine(engine) {
-      writeMerged({ sttEngine: engine ?? null });
+    setSttEngine(engine, { strict = false } = {}) {
+      const patch = { sttEngine: engine ?? null };
+      if (strict) writeMergedStrict(patch);
+      else writeMerged(patch);
+    },
+
+    getStreamOcrEnabled() {
+      return readAll().streamOcrEnabled !== false;
+    },
+
+    setStreamOcrEnabled(enabled) {
+      writeMergedStrict({ streamOcrEnabled: enabled });
     },
     getTtsEngine() {
       return asStringOrNull(readAll().ttsEngine);

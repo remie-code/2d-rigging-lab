@@ -17,7 +17,7 @@
  *  - コメント反応: cause.type "comment-react" の commentIds で、チャッピーの行に「💬 名前 に反応」、右列の該当
  *    コメントに「反応」の印。
  *  - きっかけの行が無い発火（手動・沈黙など）は、チャッピーの行に小さく種類。
- *  - 推論の範囲は最新の 1 回分（fireAsk の windowFirstSeq〜windowLastSeq）だけ。開き直しても復元しない。
+ *  - 推論の範囲は最新の 1 回分（fireAsk の windowSeqs・旧イベントは windowFirstSeq〜windowLastSeq）。開き直しても復元しない。
  *  - 場の区切り（Discord モード Domain M・gate-3-stale-judgment-chip.md §5）: 正本の seq は場を開くたびに 0 から数え直すので、
  *    seq での結び付け（判定の札・推論の範囲・きっかけの行）は**同じ場の中だけ**。SSE state（snapshot の stream）で新しい場が
  *    開いた（開き始めた）と分かったら、場の番号（venue）を 1 つ進め、前の場の札の覚え（judgments）と推論の範囲（window）を捨てる。
@@ -33,6 +33,7 @@ import { formatClock } from "./format-time.mjs";
 import { SPEAK_NOW_CHOICE_LABELS } from "./markers.mjs";
 import { COMMENT_GUARD_KIND_LABELS } from "./ghost.mjs";
 import { youLabelFor } from "./discord.mjs";
+import { GAME_SCREEN_LABEL } from "./transcript.mjs";
 
 /** 会話の行を持つ上限（画面に入るのは数十行・余裕を持たせる）。 */
 export const CONVO_KEEP = 300;
@@ -65,7 +66,8 @@ export const CAUSE_KIND_LABELS = Object.freeze({
 });
 
 /**
- * @typedef {{ id: number; kind: "you" | "soul" | "note" | "event"; seq: number | null; fireId: number | null; atMs: number;
+ * @typedef {{ id: number; kind: "you" | "soul" | "note" | "event" | "game"; seq: number | null; fireId: number | null; atMs: number;
+ *   startedAt?: number; lastSeenAt?: number; closedAt?: number;
  *   text: string; choice?: string | null; probability?: number | null; displayName?: string | null; venue?: number }} ConvoRow
  *   venue: 行を積んだときの場の番号（GlanceState.venue・Domain M）。seq で結ぶのは今の場の行だけ。
  * @typedef {{ phase: string; openedAtMs: number | null }} VenueMark  最後に見た場の状態（snapshot の stream の phase と openedAtMs）。
@@ -78,7 +80,7 @@ export const CAUSE_KIND_LABELS = Object.freeze({
  *   causes: Record<string, any>;
  *   latencies: Record<string, any>;
  *   reacted: Record<string, true>;
- *   window: { fireId: number | null; firstSeq: number; lastSeq: number } | null;
+ *   window: { fireId: number | null; firstSeq: number | null; lastSeq: number | null; seqs?: number[] } | null;
  *   nextId: number;
  *   venue: number;
  *   venueMark: VenueMark | null;
@@ -178,8 +180,9 @@ function appendCapped(list, item, keep) {
 /**
  * 転写（SSE transcript / snapshot の履歴の 1 件）を会話かコメントへ積む。
  * 配信者（you・speaker 欠落）とチャッピー（soul）は会話、視聴者（viewer）はコメント（会話には混ぜない）。
+ * ゲーム画面（game）は確定順に積み、表示中だった時刻も持つ。
  * 出来事の行（event・Discord モード Domain J・§13.5「左の『会話』の欄には控えめな 1 行」）は会話の列に控えめな 1 行で積む
- * （判定の札・遅延・きっかけは付かない。推論の範囲には seq で入る）。配信には出来事の行が無い。
+ * （判定の札・遅延・きっかけは付かない。推論の範囲には seq で入る）。
  * @param {GlanceState} g  @param {any} d  @param {number} nowMs
  * @returns {GlanceState}
  */
@@ -205,7 +208,7 @@ export function glanceWithTranscript(g, d, nowMs) {
     const eventRow = { id: g.nextId, kind: "event", seq: isNum(d.seq) ? d.seq : null, fireId: null, atMs, text: d.text, venue: currentVenue(g) };
     return { ...g, convo: appendCapped(g.convo, eventRow, CONVO_KEEP), nextId: g.nextId + 1 };
   }
-  if (speaker !== "you" && speaker !== "soul") return g;
+  if (speaker !== "you" && speaker !== "soul" && speaker !== "game") return g;
   /** @type {ConvoRow} */
   const row = {
     id: g.nextId,
@@ -214,6 +217,11 @@ export function glanceWithTranscript(g, d, nowMs) {
     fireId: speaker === "soul" && isNum(d.fireId) ? d.fireId : null,
     atMs,
     text: d.text,
+    ...(speaker === "game" && {
+      startedAt: isNum(d.startedAt) ? d.startedAt : undefined,
+      lastSeenAt: isNum(d.lastSeenAt) ? d.lastSeenAt : undefined,
+      closedAt: isNum(d.closedAt) ? d.closedAt : undefined
+    }),
     // Discord モード Domain G: you の行の名前（Discord の名前・配信では載らない）。表示は体験で選ぶ（conversationRowsView）。
     ...(speaker === "you" && typeof d.displayName === "string" && d.displayName ? { displayName: d.displayName } : {}),
     venue: currentVenue(g)
@@ -322,6 +330,17 @@ export function glanceAfterSseEvent(g, eventName, d, nowMs) {
       return g;
     }
     case "fireAsk":
+      if (Array.isArray(d?.windowSeqs)) {
+        return {
+          ...g,
+          window: {
+            fireId: isNum(d.fireId) ? d.fireId : null,
+            firstSeq: isNum(d.windowFirstSeq) ? d.windowFirstSeq : null,
+            lastSeq: isNum(d.windowLastSeq) ? d.windowLastSeq : null,
+            seqs: d.windowSeqs.filter(isNum)
+          }
+        };
+      }
       if (!d || !isNum(d.windowFirstSeq) || !isNum(d.windowLastSeq)) return g;
       return { ...g, window: { fireId: isNum(d.fireId) ? d.fireId : null, firstSeq: d.windowFirstSeq, lastSeq: d.windowLastSeq } };
     case "latency":
@@ -391,8 +410,9 @@ export function commentReactText(commentIds, comments) {
  * 会話の行の表示（描くだけの形）。
  * @typedef {{
  *   key: number;
- *   kind: "you" | "soul" | "note" | "event";
+ *   kind: "you" | "soul" | "note" | "event" | "game";
  *   timeText: string;
+ *   timeDetail?: string;
  *   whoText: string;
  *   text: string;
  *   chipText: string | null;
@@ -424,17 +444,31 @@ export function conversationRowsView(g, options = {}) {
   const here = (/** @type {ConvoRow} */ r) => rowVenue(r) === venue;
   const seqs = new Set(g.convo.filter((r) => r.seq != null && here(r)).map((r) => r.seq));
 
-  // 推論の範囲（最新の 1 回分）: 範囲に入る最初と最後の行の位置。その間の行（判定の薄い行も）を範囲とする。
+  // 推論の範囲は正本の連番に従う。渡された行の間にある判定の薄い行も線でつなぐ。
+  /** @type {Set<number>} */
+  const rangeRows = new Set();
   let rangeFrom = -1;
   let rangeTo = -1;
   if (g.window) {
-    const { firstSeq, lastSeq } = g.window;
+    const { firstSeq, lastSeq, seqs } = g.window;
+    const includedSeqs = seqs ? new Set(seqs) : null;
+    const addRange = () => {
+      for (let i = rangeFrom; i >= 0 && i <= rangeTo; i++) rangeRows.add(i);
+    };
     g.convo.forEach((r, i) => {
-      if (r.seq != null && here(r) && r.seq >= firstSeq && r.seq <= lastSeq) {
+      const included = r.seq != null && here(r) && (includedSeqs
+        ? includedSeqs.has(r.seq)
+        : firstSeq != null && lastSeq != null && r.seq >= firstSeq && r.seq <= lastSeq);
+      if (included) {
         if (rangeFrom < 0) rangeFrom = i;
         rangeTo = i;
+      } else if (includedSeqs && r.kind !== "note") {
+        addRange();
+        rangeFrom = -1;
+        rangeTo = -1;
       }
     });
+    addRange();
   }
 
   // 最新の返事の行と、そのきっかけの配信者の行（同じ色で淡くつなぐ）。
@@ -452,7 +486,7 @@ export function conversationRowsView(g, options = {}) {
   const linkedSeq = latestCause && latestCause.type === "speak-now" && isNum(latestCause.triggerSeq) ? latestCause.triggerSeq : null;
 
   return g.convo.map((r, i) => {
-    const inRange = rangeFrom >= 0 && i >= rangeFrom && i <= rangeTo;
+    const inRange = rangeRows.has(i);
     /** @type {ConvoRowView} */
     const view = {
       key: r.id,
@@ -465,8 +499,8 @@ export function conversationRowsView(g, options = {}) {
       kindText: null,
       latency: null,
       inRange,
-      rangeStart: inRange && i === rangeFrom,
-      rangeEnd: inRange && i === rangeTo,
+      rangeStart: inRange && !rangeRows.has(i - 1),
+      rangeEnd: inRange && !rangeRows.has(i + 1),
       latest: i === latestIndex,
       linked: linkedSeq != null && r.kind === "you" && here(r) && r.seq === linkedSeq
     };
@@ -476,6 +510,14 @@ export function conversationRowsView(g, options = {}) {
     }
     // 出来事の行（Domain J）: 時刻と本文だけ（話者名・札・遅延・きっかけは付けない）。
     if (r.kind === "event") return view;
+    if (r.kind === "game") {
+      view.whoText = GAME_SCREEN_LABEL;
+      if (r.startedAt != null && r.lastSeenAt != null) {
+        const confirmedAt = formatClock(r.closedAt ?? r.atMs);
+        view.timeDetail = `表示 ${formatClock(r.startedAt)}〜${formatClock(r.lastSeenAt)} · 確定 ${confirmedAt}`;
+      }
+      return view;
+    }
     if (r.kind === "you") {
       // 札は今の場の行だけ（前の場の行は seq で結ばない・Domain M）。
       const j = r.seq != null && here(r) ? g.judgments[String(r.seq)] : null;

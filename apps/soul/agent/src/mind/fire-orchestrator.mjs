@@ -162,6 +162,8 @@
 import { speakOnce as defaultSpeak, createSpeechStreamer } from "../voice/speech-streamer.mjs";
 import { createVoiceEngine, DEFAULT_VOICE_ENGINE_KIND } from "../voice/engines/voice-engine.mjs";
 import { formatFireInjection, formatFireInjectionSince, FIRE_WINDOW_MS, FIRE_MAX_CHARS } from "./fire-injection.mjs";
+import { isGameScreenEntry } from "../ears/transcript-buffer.mjs";
+import { prependInstruction } from "./conversation-content.mjs";
 import { parseExpressionTags } from "./expression-parser.mjs";
 import { translateExpression } from "./expression-translator.mjs";
 import { captureWindow as defaultCaptureWindow } from "../eyes/window-capture.mjs";
@@ -371,12 +373,12 @@ export const FIRE_SYSTEM_PROMPT = appendSoulSkills(buildFireSystemPrompt(), load
  * @param {(outcome: object) => void} [options.onProgressiveTerminal] C3 projection seam.
  * @param {typeof setTimeout} [options.setTimeoutImpl=setTimeout]  発話の見張りタイマの注入（SpeechStreamer へ渡す）。
  * @param {typeof clearTimeout} [options.clearTimeoutImpl=clearTimeout]  見張りタイマの解除（注入）。
- * @param {(info: { fireId: number; windowFirstSeq: number | null; windowLastSeq: number | null; includedCount: number; vision: boolean; atMs: number }) => void} [options.onAsk]
+ * @param {(info: { fireId: number | null; windowFirstSeq: number | null; windowLastSeq: number | null; windowSeqs: number[]; includedCount: number; vision: boolean; atMs: number }) => void} [options.onAsk]
  *   ask の直前の通知（推論に使った会話の窓の始まりと終わりの seq・全経路）。
  * @param {(info: import("./fire-latency.mjs").FireLatency) => void} [options.onLatency]
  *   1 返事 1 回の遅延の通知（発火の中の区間）。声が鳴り始めた時点、鳴らなかったときは発火の終わり（ask した回だけ）。
  * @param {() => number} [options.monotonicNowImpl]  遅延を測る単調時計（既定 performance.now・テスト注入）。
- * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; serviceTier: string | null; atMs: number }) => void} [options.onAskRecord]
+ * @param {(info: { fireId: number | null; brain: string | null; vision: boolean; windowMode: "legacy" | "full" | "delta"; includedCount: number; injectedChars: number; windowSeqs: number[]; conversationWindow: ReturnType<typeof formatFireInjection>["conversationWindow"]; usage: any; tokenUsage: any; ttftMs: number | null; elapsedMs: number | null; serviceTier: string | null; atMs: number }) => void} [options.onAskRecord]
  *   ask が返るたびの記録（本文なし・数字と種類だけ）。windowMode は渡した会話の窓の種類
  *   （legacy = 会話の世代を持たない頭の従来の窓 / full = 新しい会話なので直近 5 分の全部 / delta = 増えた分だけ）。
  * @param {(info: { request: string; fireId: number | null }) => void} [options.onRecallRequest]
@@ -525,9 +527,19 @@ export function createFireOrchestrator(options) {
   /**
    * 増えた分だけ渡すための目印: 前回 ask が返った会話（session と conversationKey）と、そこまでに渡した最後の seq。
    * 会話が替わったら使わない（直近 5 分を全部渡す）。
-   * @type {null | { session: any; key: string; lastSeq: number | null }}
+   * @type {null | { buffer: object; session: any; key: string; lastSeq: number | null }}
    */
   let conversationCursor = null;
+  /** @type {WeakMap<object, { key: string | null | undefined }>} */
+  const taughtIntentConversations = new WeakMap();
+
+  // 既送信の判定は頭の会話世代と分け、場の正本ごとに保持する。
+  /** @type {WeakMap<object, { hasGameScreen: boolean; previousAskAtMs: number; previousAskSeq: number }>} */
+  const venueInjectionHistory = new WeakMap();
+  const injectionEntries = (/** @type {{ all: Function }} */ buffer) => {
+    const previousAskSeq = venueInjectionHistory.get(buffer)?.previousAskSeq ?? -1;
+    return buffer.all().filter((/** @type {any} */ entry) => !isGameScreenEntry(entry) || entry.seq > previousAskSeq);
+  };
 
   /** 受理した発火に番号を振る（冪等・劣化フォールバックで二重に振らない）。 */
   const acceptFireId = () => {
@@ -560,7 +572,7 @@ export function createFireOrchestrator(options) {
   };
   /**
    * ask の直前に、その回の LLM に渡した会話の窓の範囲を通知する。
-   * @param {{ firstSeq: number | null; lastSeq: number | null; includedCount: number }} injection @param {boolean} vision
+   * @param {ReturnType<typeof formatFireInjection>} injection @param {boolean} vision
    */
   const emitAsk = (injection, vision) => {
     if (currentFire) currentFire.vision = vision;
@@ -568,6 +580,7 @@ export function createFireOrchestrator(options) {
       fireId: currentFire?.fireId ?? null,
       windowFirstSeq: injection.firstSeq ?? null,
       windowLastSeq: injection.lastSeq ?? null,
+      windowSeqs: injection.includedSeqs.slice(),
       includedCount: injection.includedCount,
       vision,
       atMs: nowImpl()
@@ -591,31 +604,39 @@ export function createFireOrchestrator(options) {
 
   /**
    * この ask に渡す会話の窓を作る。同じ会話が続いていれば前回より後ろの行だけ、そうでなければ従来の窓。
-   * fullWindow を渡されたら（通常の発火の空窓判定で作ったもの）従来の窓としてそれを使う（同じ時刻で作り直さない）。
    * @param {{ all: Function }} buffer  @param {any} resources  @param {number} nowMs
-   * @param {ReturnType<typeof formatFireInjection>} [fullWindow]
    */
-  const buildInjection = (buffer, resources, nowMs, fullWindow) => {
+  const buildInjection = (buffer, resources, nowMs) => {
     const target = resources?.session;
     const key = conversationKeyOf(target);
     const cursor = conversationCursor;
-    if (typeof key === "string" && cursor && cursor.session === target && cursor.key === key) {
+    const history = venueInjectionHistory.get(buffer);
+    const injectionOptions = { nowMs, windowMs, maxChars, ...history };
+    const entries = injectionEntries(buffer);
+    if (typeof key === "string" && cursor && cursor.buffer === buffer && cursor.session === target && cursor.key === key) {
       return {
-        injection: formatFireInjectionSince(buffer.all(), { nowMs, windowMs, maxChars, afterSeq: cursor.lastSeq }),
+        injection: formatFireInjectionSince(entries, { ...injectionOptions, afterSeq: cursor.lastSeq }),
         windowMode: /** @type {"delta"} */ ("delta")
       };
     }
     return {
-      injection: fullWindow ?? formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars }),
+      injection: formatFireInjection(entries, injectionOptions),
       windowMode: key === undefined ? /** @type {"legacy"} */ ("legacy") : /** @type {"full"} */ ("full")
     };
   };
 
   /**
    * ask が返った後に目印を進める（その会話へ渡した最後の seq）。会話の世代を持たない頭・会話が無くなった頭では消す。
-   * @param {any} resources  @param {{ lastSeq: number | null }} injection  @param {string} windowMode
+   * @param {object} buffer @param {any} resources @param {ReturnType<typeof formatFireInjection>} injection
+   * @param {string} windowMode @param {number} nowMs
    */
-  const commitInjection = (resources, injection, windowMode) => {
+  const commitInjection = (buffer, resources, injection, windowMode, nowMs) => {
+    const history = venueInjectionHistory.get(buffer);
+    venueInjectionHistory.set(buffer, {
+      hasGameScreen: injection.conversationWindow.hasGameScreen,
+      previousAskAtMs: nowMs,
+      previousAskSeq: Math.max(history?.previousAskSeq ?? -1, injection.lastSeq ?? -1)
+    });
     const target = resources?.session;
     const key = conversationKeyOf(target);
     if (typeof key !== "string") {
@@ -623,15 +644,15 @@ export function createFireOrchestrator(options) {
       return;
     }
     const cursor = conversationCursor;
-    const sameConversation = windowMode === "delta" && cursor && cursor.session === target && cursor.key === key;
+    const sameConversation = windowMode === "delta" && cursor && cursor.buffer === buffer && cursor.session === target && cursor.key === key;
     const previous = sameConversation ? cursor.lastSeq : null;
-    conversationCursor = { session: target, key, lastSeq: injection.lastSeq ?? previous };
+    conversationCursor = { buffer, session: target, key, lastSeq: injection.lastSeq ?? previous };
   };
 
   /**
    * ask が返るたびの記録（本文なし）。
    * @param {any} asked  @param {any} resources  @param {boolean} vision  @param {string} windowMode
-   * @param {{ includedCount: number; charCount: number }} injection  @param {number} injectedChars
+   * @param {ReturnType<typeof formatFireInjection>} injection  @param {number} injectedChars
    */
   const emitAskRecord = (asked, resources, vision, windowMode, injection, injectedChars) => {
     if (typeof onAskRecord !== "function") return;
@@ -643,6 +664,8 @@ export function createFireOrchestrator(options) {
       windowMode,
       includedCount: injection.includedCount,
       injectedChars,
+      windowSeqs: injection.includedSeqs.slice(),
+      conversationWindow: injection.conversationWindow,
       usage: asked && asked.usage != null ? asked.usage : null,
       tokenUsage: asked && asked.tokenUsage != null ? asked.tokenUsage : null,
       ttftMs: num(asked?.ttftMs),
@@ -979,8 +1002,9 @@ export function createFireOrchestrator(options) {
    * one-argument implementation ignores them) and reaches App Server through
    * Cockpit's transparent session proxy for the Codex brains.
    * @param {string | Array<any>} content
+   * @param {() => void} onWillAsk
    */
-  const askIncrementally = async (content, resources, buffer) => {
+  const askIncrementally = async (content, resources, buffer, onWillAsk) => {
     // Production snapshots identify Claude explicitly. Its full-result session
     // keeps the legacy one-shot path; the Codex brains own delta delivery.
     // 2026-10-16: Claude Opus 5.5（"claude-opus-55"）も同じ llm-session（onTextDelta を受けない）なので
@@ -989,7 +1013,10 @@ export function createFireOrchestrator(options) {
     const progressiveEligible = configuredBrain !== "claude" && configuredBrain !== "claude-opus-55";
     const motion = resolveIntentMotion(resources);
     const intentContext = motion
-      ? { transcript: formatFireInjection(buffer.all(), { nowMs: nowImpl(), windowMs, maxChars }).text }
+      ? { transcript: formatFireInjection(
+          buffer.all().filter((entry) => !isGameScreenEntry(entry)),
+          { nowMs: nowImpl(), windowMs, maxChars }
+        ).text }
       : null;
     // Acquiring resources and capturing a window can both outlive this Fire.
     if (motion) {
@@ -1031,12 +1058,21 @@ export function createFireOrchestrator(options) {
       // turn/start の直後に知らされ、遅延の行（onLatency）に載せる。載っていない（Claude 等）なら渡さない。
       const configuredServiceTier =
         typeof resources.configuration?.serviceTier === "string" ? resources.configuration.serviceTier : null;
+      // 有効になった最初の ask で会話に教える。頭の作り直しと同じ頭での thread の作り直しを区別できる。
+      const modelTeaching = motion && resources.session.supportsConversationTeaching ? SPEECH_INTENT_TEACHING : "";
+      const intentTeaching = motion && !modelTeaching ? SPEECH_INTENT_TEACHING : "";
+      const intentTeachingKey = intentTeaching ? conversationKeyOf(resources.session) : undefined;
+      const previousTeaching = intentTeaching ? taughtIntentConversations.get(resources.session) : undefined;
+      const teachIntent = intentTeaching &&
+        (intentTeachingKey === null || previousTeaching?.key !== intentTeachingKey || !previousTeaching);
       const askFire = currentFire;
-      const asked = await resources.session.ask(motion && SPEECH_INTENT_TEACHING
-        ? prependInstruction(askContent, SPEECH_INTENT_TEACHING)
+      onWillAsk();
+      const asked = await resources.session.ask(teachIntent
+        ? prependInstruction(askContent, intentTeaching)
         : askContent, {
         onTextDelta: (delta) => boundary.append(delta),
         onTextDone: () => boundary.flush(),
+        ...(modelTeaching ? { conversationTeaching: modelTeaching } : {}),
         ...(hasChatMaterials ? { redactProviderErrors: true } : {}),
         ...(configuredServiceTier
           ? {
@@ -1047,6 +1083,9 @@ export function createFireOrchestrator(options) {
             }
           : {})
       });
+      if (teachIntent) {
+        taughtIntentConversations.set(resources.session, { key: conversationKeyOf(resources.session) });
+      }
       taskResults?.delivered();
       // delta を出さない頭（Claude）の「LLM 最初の文字」は session が測った ttftMs を使う（fire-latency.mjs）。
       if (currentFire && asked && typeof asked === "object") currentFire.timing.noteTtft(/** @type {any} */ (asked).ttftMs);
@@ -1699,7 +1738,6 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     ];
 
     // 以降は従来経路と完全共通（パーサ→speak→soul記録→演出）。
-    emitAsk(injection, true);
     const askStartedAt = performance.now();
     trace("llm.ask.started", { vision: true, injectedChars, includedCount });
     let asked;
@@ -1707,13 +1745,13 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     let deliveryOutcome;
     let intentContext;
     try {
-      const attempt = await askIncrementally(contentBlocks, resources, buffer);
+      const attempt = await askIncrementally(contentBlocks, resources, buffer, () => emitAsk(injection, true));
       if (attempt.cancellation) return cancelledFire(attempt.cancellation);
       ({ asked, progressive, deliveryOutcome, intentContext } = attempt);
     } catch (error) {
       throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
     }
-    commitInjection(resources, injection, windowMode);
+    commitInjection(buffer, resources, injection, windowMode, nowMs);
     emitAskRecord(asked, resources, true, windowMode, injection, injectedChars);
     trace("llm.ask.completed", {
       vision: true,
@@ -1753,7 +1791,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     // 3. 直近窓を収集。空窓なら ask を無駄撃ちしない。
     const nowMs = nowImpl();
     // 空窓の判定は従来どおり直近 5 分の全体で行う（増えた分が 0 でも、窓に行があれば発火する）。
-    const fullWindow = formatFireInjection(buffer.all(), { nowMs, windowMs, maxChars });
+    const fullWindow = formatFireInjection(injectionEntries(buffer), { nowMs, windowMs, maxChars });
     if (fullWindow.includedCount === 0 && /** @type {any} */ (currentFire?.cause)?.type !== "local-task-result") {
       if (!alreadyAccepted) {
         emit(onFire, { accepted: false, reason: "empty-window", ...(currentFire?.cause != null ? { cause: currentFire.cause } : {}) });
@@ -1774,7 +1812,7 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     }
 
     // 実際に渡す窓（同じ会話が続いていれば増えた分だけ・頭のセッションが決まってから作る）。
-    const { injection, windowMode } = buildInjection(buffer, resources, nowMs, fullWindow);
+    const { injection, windowMode } = buildInjection(buffer, resources, nowMs);
     const injectedText = injection.text;
     const injectedChars = injection.charCount;
     const includedCount = injection.includedCount;
@@ -1787,7 +1825,6 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
     }
 
     try {
-      emitAsk(injection, false);
       const askStartedAt = performance.now();
       trace("llm.ask.started", { vision: false, injectedChars, includedCount });
       let asked;
@@ -1795,13 +1832,13 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
       let deliveryOutcome;
       let intentContext;
       try {
-        const attempt = await askIncrementally(injectedText, resources, buffer);
+        const attempt = await askIncrementally(injectedText, resources, buffer, () => emitAsk(injection, false));
         if (attempt.cancellation) return cancelledFire(attempt.cancellation);
         ({ asked, progressive, deliveryOutcome, intentContext } = attempt);
       } catch (error) {
         throw withDiagnostic(error, "llm_ask_failed", "llm.ask");
       }
-      commitInjection(resources, injection, windowMode);
+      commitInjection(buffer, resources, injection, windowMode, nowMs);
       emitAskRecord(asked, resources, false, windowMode, injection, injectedChars);
       trace("llm.ask.completed", {
         vision: false,
@@ -2134,32 +2171,6 @@ ${PROGRESSIVE_INTERRUPTION_NOTE}`;
       }
     }
   };
-}
-
-/**
- * ask の内容の先頭に内部指示を付ける（文字列はそのまま前置・content 配列は最初の text ブロックに前置）。
- * progressive correction とコメント反応の指示が共有する。
- * @param {string | Array<any>} content
- * @param {string} instruction
- * @returns {string | Array<any>}
- */
-function prependInstruction(content, instruction) {
-  if (typeof content === "string") {
-    return `${instruction}
-
-${content}`;
-  }
-  if (Array.isArray(content)) {
-    let applied = false;
-    return content.map((block) => {
-      if (applied || block?.type !== "text" || typeof block.text !== "string") return block;
-      applied = true;
-      return { ...block, text: `${instruction}
-
-${block.text}` };
-    });
-  }
-  return content;
 }
 
 /**

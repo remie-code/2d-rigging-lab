@@ -62,6 +62,28 @@ test("parseCaptureStdout: CAPTURE_OK を正しくパース", () => {
   assert.equal(parsed.jpegBase64, PLAUSIBLE_BASE64);
 });
 
+test("OCR capture can return a process and window identity for the selected title", () => {
+  const stdout = `CAPTURE_OK\n800\n600\n${PLAUSIBLE_BASE64}\n313:5044\n`;
+  assert.deepEqual(parseCaptureStdout(stdout), {
+    width: 800, height: 600, jpegBase64: PLAUSIBLE_BASE64, windowIdentity: "313:5044"
+  });
+  assert.match(buildCaptureScriptText("Title", { includeWindowIdentity: true }), /\$proc\.Id.*\$hwnd\.ToInt64/);
+  assert.doesNotMatch(buildCaptureScriptText("Title"), /\$hwnd\.ToInt64/);
+});
+
+test("cancelling capture terminates the PowerShell child", async () => {
+  const controller = new AbortController();
+  const child = makeFakeChild();
+  let killed = false;
+  /** @type {any} */ (child).kill = () => { killed = true; };
+  const capture = captureWindow("Title", { spawnImpl: () => child, signal: controller.signal });
+  controller.abort();
+  const result = await capture;
+  assert.ok("error" in result);
+  assert.equal(result.error.kind, "aborted");
+  assert.equal(killed, true);
+});
+
 test("parseCaptureStdout: notFound", () => {
   const parsed = parseCaptureStdout("CAPTURE_FAIL\nnotFound\nwindow not found: Foo\n");
   assert.deepEqual(parsed, { error: { kind: "notFound", message: "window not found: Foo" } });

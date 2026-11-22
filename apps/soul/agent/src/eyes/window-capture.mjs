@@ -61,6 +61,7 @@ export function escapePsSingleQuoted(s) {
  * @param {object} [opts]
  * @param {number} [opts.maxSide]
  * @param {number} [opts.jpegQuality]
+ * @param {boolean} [opts.includeWindowIdentity]
  * @returns {string}
  */
 export function buildCaptureScriptText(title, opts = {}) {
@@ -134,6 +135,7 @@ export function buildCaptureScriptText(title, opts = {}) {
     "  Write-Output $outW",
     "  Write-Output $outH",
     "  Write-Output $b64",
+    ...(opts.includeWindowIdentity ? ['  Write-Output "$($proc.Id):$($hwnd.ToInt64())"'] : []),
     "} catch {",
     "  Write-Output 'CAPTURE_FAIL'",
     "  Write-Output 'failed'",
@@ -146,7 +148,7 @@ export function buildCaptureScriptText(title, opts = {}) {
  * captureWindow の stdout を解釈する純関数（powershell を起動せずテストできる）。
  * @param {string} stdout
  * @returns {
- *   { jpegBase64: string; width: number; height: number } |
+ *   { jpegBase64: string; width: number; height: number; windowIdentity?: string } |
  *   { error: { kind: "notFound"|"minimized"|"failed"; message: string } }
  * }
  */
@@ -172,7 +174,8 @@ export function parseCaptureStdout(stdout) {
         }
       };
     }
-    return { jpegBase64, width, height };
+    const windowIdentity = lines[4];
+    return { jpegBase64, width, height, ...(/^\d+:-?\d+$/.test(windowIdentity ?? "") ? { windowIdentity } : {}) };
   }
 
   if (lines[0] === "CAPTURE_FAIL") {
@@ -200,9 +203,11 @@ export function parseCaptureStdout(stdout) {
  * @param {() => number} [options.nowImpl]
  * @param {*} [options.setTimeoutImpl]
  * @param {*} [options.clearTimeoutImpl]
+ * @param {AbortSignal} [options.signal]
+ * @param {boolean} [options.includeWindowIdentity]
  * @returns {Promise<
- *   { jpegBase64: string; width: number; height: number; elapsedMs: number } |
- *   { error: { kind: "notFound"|"minimized"|"failed"|"timeout"; message: string } }
+ *   { jpegBase64: string; width: number; height: number; elapsedMs: number; windowIdentity?: string } |
+ *   { error: { kind: "notFound"|"minimized"|"failed"|"timeout"|"aborted"; message: string } }
  * >}
  */
 export async function captureWindow(title, options = {}) {
@@ -213,7 +218,8 @@ export async function captureWindow(title, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_CAPTURE_TIMEOUT_MS;
   const scriptText = buildCaptureScriptText(title, {
     maxSide: options.maxSide,
-    jpegQuality: options.jpegQuality
+    jpegQuality: options.jpegQuality,
+    includeWindowIdentity: options.includeWindowIdentity
   });
 
   const result = await runPowerShellScript(scriptText, {
@@ -222,11 +228,15 @@ export async function captureWindow(title, options = {}) {
     spawnImpl: options.spawnImpl,
     nowImpl: options.nowImpl,
     setTimeoutImpl: options.setTimeoutImpl,
-    clearTimeoutImpl: options.clearTimeoutImpl
+    clearTimeoutImpl: options.clearTimeoutImpl,
+    signal: options.signal
   });
 
   if (result.timedOut) {
     return { error: { kind: "timeout", message: `capture timed out after ${timeoutMs}ms` } };
+  }
+  if (result.aborted) {
+    return { error: { kind: "aborted", message: "capture was cancelled" } };
   }
 
   if (result.code !== 0 && result.stdout.trim().length === 0) {
