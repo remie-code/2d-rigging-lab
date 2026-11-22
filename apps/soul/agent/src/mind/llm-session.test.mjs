@@ -127,7 +127,7 @@ test("llm-session: 複数 ask が同一常駐 generator を共有する（for-aw
   }
 });
 
-test("llm-session: 会話の教示は通常の SDK エラー後も再試行し、成功後は画像付き ask でも繰り返さない", async () => {
+test("llm-session: 通常の SDK エラー後も画像とテキストをそのまま渡す", async () => {
   const received = [];
   async function* queryImpl({ prompt }) {
     for await (const { message } of prompt) {
@@ -138,20 +138,15 @@ test("llm-session: 会話の教示は通常の SDK エラー後も再試行し�
   }
   const image = { type: "image", source: { type: "base64", data: "AAAA", media_type: "image/jpeg" } };
   const vision = [image, { type: "text", text: "画像の質問" }];
-  const teaching = { conversationTeaching: "教示" };
   const session = createLlmSession({ skipEnvGuard: true, queryImpl });
   const replacement = createLlmSession({ skipEnvGuard: true, queryImpl });
   try {
-    assert.equal((await session.ask("一", teaching)).replyText, "返事");
-    assert.equal((await session.ask("二", teaching)).replyText, "返事");
-    await session.ask(vision, teaching);
-    await session.ask(vision, teaching);
-    await replacement.ask("新しい会話", teaching);
-    assert.deepEqual(received, [
-      "教示\n\n一", "教示\n\n二",
-      [image, { type: "text", text: "教示\n\n画像の質問" }],
-      vision, "教示\n\n新しい会話"
-    ]);
+    assert.equal((await session.ask("一")).replyText, "返事");
+    assert.equal((await session.ask("二")).replyText, "返事");
+    await session.ask(vision);
+    await session.ask(vision);
+    await replacement.ask("新しい会話");
+    assert.deepEqual(received, ["一", "二", vision, vision, "新しい会話"]);
   } finally {
     await session.dispose();
     await replacement.dispose();

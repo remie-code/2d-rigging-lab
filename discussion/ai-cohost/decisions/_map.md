@@ -10,6 +10,8 @@
 
 ## 2. Directory Map
 
+- 発話のどこで仕草を選ぶかは[読み上げる一文からの演技判定](../concept/sentence-motion-decision.md)。2026-11-22に作業ブランチで文脈つきの毎文判定を実装・検証。配信者の実会話確認待ち。
+
 | Path | Role | Status |
 |---|---|---|
 | [research/](research/) | Decisions API の公式事実・課金境界(子トピック共有)。知人のトークアバターの判定の組み立て方(6 つの型・答えの使い方 4 つ)と、先読みをいったん置く判断([research/talk-avatar-patterns-2026-10.md](research/talk-avatar-patterns-2026-10.md)) | Created |

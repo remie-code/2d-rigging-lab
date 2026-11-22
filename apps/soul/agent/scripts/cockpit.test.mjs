@@ -47,6 +47,7 @@ import {
 import { createTranscriptBuffer } from "../src/ears/transcript-buffer.mjs";
 import { createFireOrchestrator, resolveConversationInstructionProfile } from "../src/mind/fire-orchestrator.mjs";
 import { createSpeechIntentMotion } from "../src/mind/speech-intent-motion.mjs";
+import { decideSpeechSentenceMotion } from "../src/mind/speech-sentence-motion.mjs";
 import { loadDistributionSpeechMotionCatalog } from "../src/test-support/distribution-speech-motion-catalog.mjs";
 const speechMotions = await loadDistributionSpeechMotionCatalog();
 import { MCP_CONFIG_READ_FAILED_WARNING } from "../src/mind/codex-session.mjs";
@@ -139,6 +140,7 @@ test("speech motion is pinned to the connection that owned the Fire", async () =
   const requests = [];
   const connections = [];
   const advertisedDescriptions = [];
+  const judgeStarted = [Promise.withResolvers(), Promise.withResolvers()];
   const lazy = createLazyChannel("ws://127.0.0.1:1/channel?token=fixture", {
     async connectImpl(_url, { onTrace, connectionGeneration }) {
       connections.push(onTrace);
@@ -158,9 +160,10 @@ test("speech motion is pinned to the connection that owned the Fire", async () =
         judge({ questions }) {
           advertisedDescriptions.push(questions[0].choices.find(({ value }) => value === "receive").description);
           const reply = Promise.withResolvers();
+          judgeStarted[decide.length].resolve();
           decide.push(() => reply.resolve({ answers: {
-            speech_intent_performance: { type: "choice", choice: "receive" },
-            speech_intent_attention: { type: "choice", choice: "partner" }
+            speech_sentence_performance: { type: "choice", choice: "receive" },
+            speech_sentence_attention: { type: "choice", choice: "partner" }
           } }));
           return reply.promise;
         }
@@ -168,28 +171,30 @@ test("speech motion is pinned to the connection that owned the Fire", async () =
     }
   });
   const section = {
-    sceneId: "one", utteranceId: "one", sectionId: "one", generation: 0, sectionIndex: 0,
-    intent: "受け取る", text: "なるほど。", context: {}
+    kind: "sentence", sceneId: "one", utteranceId: "one", sectionId: "one", generation: 0, sectionIndex: 0
   };
+  const context = { recentConversation: [], gameScreenShared: false };
+  const parameters = { text: "なるほど。", context, input: { ...context, sentence: "なるほど。", precedingSentences: [] },
+    decide: decideSpeechSentenceMotion };
   await lazy.connect();
   const old = lazy.speechIntentMotion();
-  void old.prepare(section);
+  void old.prepare(section, parameters);
   const oldStart = old.start(section);
-  await oldStart.begin;
+  await judgeStarted[0].promise;
   connections[0]("channel.close");
   assert.equal(old.isActive(), false);
-  assert.deepEqual(await old.prepare({ ...section, sectionIndex: 1 }), { kind: "failure", reason: "stale" });
+  assert.deepEqual(await old.prepare({ ...section, sectionIndex: 1 }, parameters), { kind: "failure", reason: "stale" });
   const fresh = lazy.speechIntentMotion();
   await lazy.connect();
-  void fresh.prepare(section);
+  void fresh.prepare(section, parameters);
   const freshStart = fresh.start(section);
-  await freshStart.begin;
+  await judgeStarted[1].promise;
   decide[1]();
   assert.deepEqual(await freshStart.playback, { kind: "accepted" });
   decide[0]();
   assert.deepEqual(await oldStart.playback, { kind: "skipped" });
   assert.deepEqual(requests.map(({ op, connectionGeneration }) => [op, connectionGeneration]),
-    [["begin", 1], ["begin", 2], ["play", 2]]);
+    [["begin", 2], ["play", 2]]);
   assert.deepEqual(advertisedDescriptions, ["世代1", "世代2"]);
   await lazy.close();
   assert.equal(fresh.isActive(), false);

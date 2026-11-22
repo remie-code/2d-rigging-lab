@@ -4,6 +4,7 @@
 
 | Path | Status | Content |
 |---|---|---|
+| [sentence-motion-decision-wave-plan.md](sentence-motion-decision-wave-plan.md) | 両Wave実装・独立レビュー合格、実会話確認待ち（2026-11-22） | 読み上げ文からの演技判定と記録、音声を待たせない再生と連続演技。[完了記録](../waves/sentence-motion-decision/wave2-completion.md) |
 | [game-dialogue-ocr-wave-plan.md](game-dialogue-ocr-wave-plan.md) | 両Wave独立レビュー合格・文字起こしを配信者が確認（2026-11-22） | ゲーム画面の継続OCRと配信STT設定の保存。[録画](../waves/game-dialogue-ocr/wave-1a-completion.md)・[配信設定](../waves/game-dialogue-ocr/wave-1b-completion.md)・[Windows検証と本人確認手順](../waves/game-dialogue-ocr/wave-2-completion.md) |
 | [speech-intent-wording-wave-plan.md](speech-intent-wording-wave-plan.md) | 初見レビュー・関連149件合格 (2026-11-20) | 言葉だけの返事も自然に選べる意図タグの説明。効果は次回以降の配信で観察。 |
 | [soul-structure-refactor-wave-plan.md](soul-structure-refactor-wave-plan.md) | 全5 Wave合格、実配信・Discord通話の本人確認済み | Soul全体の責務・場の寿命・Cockpitを整理。[初見での探索と最終回帰](../waves/soul-structure-refactor/wave5-completion.md)・[独立レビュー](../reviews/soul-structure-refactor/wave5-review.md) |

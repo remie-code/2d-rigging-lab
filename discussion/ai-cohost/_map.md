@@ -34,6 +34,7 @@ AIのキャラクター・声・身体の設計を始める段階で `persona/` 
 ## 3. Reading Routes
 
 - 「チャッピーと出かける／家で話す」「安全に視界を共有できるデバイス」は [real-world-companion/_map.md](real-world-companion/_map.md)。二つの体験と共通境界を合意(2026-11-16)。機器・映像経路・実装は未決。
+- 「チャッピーの台詞からどう仕草を選ぶ？」は[読み上げる一文からの演技判定](concept/sentence-motion-decision.md)。意図タグの配信頻度、25文での比較、[声を待たせない実装と検証](implementation/waves/sentence-motion-decision/wave2-completion.md)を辿れる。配信者の実会話確認待ち。
 - 「次にどのモーションを作る？」は [意味の分解と頻度の目安（2026-11-15）](concept/speech-motion-next-candidates-2026-11-15.md)。関心ゲーム版・理解頷き登録後の候補、既存集計の範囲、対象別の未制作を分けて読む。次の一本は未決。
 - 「記憶整理はもう動いている？」は [memory/_map.md](memory/_map.md) から実装・マージ判断と自然実行の確認結果を読む。下記 8 月の状態要約だけで現在の記憶方式を答えない。
 - 「咳払いが文字起こしに出る対処はどこまで？」は [research/_map.md](research/_map.md) の咳払いの導線から、実測・採用条件・実装と人のゲートを辿る(2026-11-06 更新)。
