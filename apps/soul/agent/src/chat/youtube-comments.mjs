@@ -21,6 +21,8 @@ export function createYouTubeComments({
     onDecision: handleCommentGuardDecision,
     onError: (error) => handleDiagnostic({ type: "chatIngestError", message: errMessage(error) })
   });
+  /** @type {Set<string>} 場の間に受け付けた動画IDと投稿IDの組。 */
+  const receivedComments = new Set();
   /** @type {{ start: () => Promise<void>; stop: () => void; getState: () => string; getSource: () => string } | null} */
   let chatClient = null;
   /** @type {Array<() => void>} チャット器官フックの購読解除（破棄時に全撤去）。 */
@@ -118,7 +120,7 @@ export function createYouTubeComments({
    * チャット器官の 1 コメントを取り込む（Domain C の onMessage フックから呼ぶ attach 点）。best-effort
    * （throw は握って診断に落とす・器官の常駐を殺さない）。フックは戻り値を見ないので、非同期の判定の
    * 失敗もここで握る（取り込み処理へ「判定できず」として渡す）。
-   * @param {{ text?: string; displayName?: string; messageId?: string | null } | null} msg
+   * @param {{ text?: string; displayName?: string; messageId?: string | null; videoId?: string | null } | null} msg
    */
   function ingestChatMessage(msg) {
     if (isClosed()) return;
@@ -132,13 +134,20 @@ export function createYouTubeComments({
       if (text.trim().length === 0) return; // 空コメントは捨てる（バッファも捨てる・二度手間を避ける）。
       const buffer = getTranscript();
       if (!buffer) {
-        // 耳未起動 = 合流先の正本バッファが無い。UI にゴースト行を出し、判定・append/scheduler はスキップ。
+        // 合流先の正本バッファが無い。UI にゴースト行を出し、判定・append/scheduler はスキップ。
         handleDiagnostic({
           type: "chatBufferAbsent",
           message: CHAT_BUFFER_ABSENT_MESSAGE,
           reason: displayName ?? null
         });
         return;
+      }
+      const { videoId, messageId } = msg ?? {};
+      if (typeof videoId === "string" && videoId.length > 0 && typeof messageId === "string" && messageId.length > 0) {
+        const key = JSON.stringify([videoId, messageId]);
+        if (receivedComments.has(key)) return;
+        // ガード判定を待つ間の再着も、ここで止める。
+        receivedComments.add(key);
       }
       commentIntake.submit(msg, text, displayName);
     } catch (error) {
@@ -295,16 +304,7 @@ export function createYouTubeComments({
     const client = /** @type {any} */ (chatClientFactory)({ source });
     chatClient = client;
     // フックを取り込み経路へ結線（購読解除は畳み時に全撤去）。器官のフック throw は器官側が握る（Domain A）。
-    chatUnsubs.push(
-      client.onMessage((/** @type {any} */ msg) =>
-        ingestChatMessage({
-          text: msg && msg.text,
-          displayName: msg && msg.displayName,
-          // コメント ID（器官の messageId）を操縦席まで通す（判定と発火の結び付け・コメント反応の合意 §3）。
-          messageId: msg && typeof msg.messageId === "string" ? msg.messageId : null
-        })
-      )
-    );
+    chatUnsubs.push(client.onMessage(ingestChatMessage));
     chatUnsubs.push(client.onStatus((/** @type {any} */ state) => broadcastChatStatus(state)));
     chatUnsubs.push(client.onDiagnostic((/** @type {any} */ info) => broadcastChatDiagnostic(info)));
     // 永続化（次回起動で入力欄に復元・失敗寛容）。source は YouTube 公開 URL/ID＝token を含まない。
@@ -347,6 +347,7 @@ export function createYouTubeComments({
     broadcastChatStatus,
     broadcastChatDiagnostic,
     clearPending: commentIntake.clear,
+    clearReceived: () => receivedComments.clear(),
     hasPending: commentIntake.hasPending,
     getWarningStatus: () => chatClient ? (lastChatStatus ?? chatClient.getState()) : null,
     snapshot: () => ({

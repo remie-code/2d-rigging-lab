@@ -1028,7 +1028,7 @@ const MAX_PORT_REROLLS = 50;
  *   setSelfFireEnabled: (enabled: boolean) => boolean;
  *   selfFireStatus: () => { enabled: boolean } | null;
  *   bargeInStatus: () => { enabled: boolean } | null;
- *   ingestChatMessage: (msg: { text?: string; displayName?: string; messageId?: string | null } | null) => void;
+ *   ingestChatMessage: (msg: { text?: string; displayName?: string; messageId?: string | null; videoId?: string | null } | null) => void;
  *   broadcastChatStatus: (status: string) => void;
  *   broadcastChatDiagnostic: (info: any) => void;
  *   getTranscript: () => Array<any>;
@@ -2915,6 +2915,7 @@ export function createCockpitServer(options = {}) {
 
   /** 場を閉じた状態に戻す（体験とロールの一覧も手放す）。 */
   function clearVenue() {
+    youtubeComments.clearReceived();
     localTaskResults.length = 0;
     memoryOrganising = false;
     venueExperience = null;
