@@ -24,6 +24,8 @@ import { BARGE_IN_MIN_SPEECH_MS, BARGE_IN_GRACE_MS } from "../mind/barge-in.mjs"
 import { createFileSettingsStore } from "./cockpit-settings-store.mjs";
 import { createSttEngineHooks } from "./cockpit-device-settings.mjs";
 import { createVisionTargetHooks } from "../eyes/cockpit-vision-target.mjs";
+import { createLiveChatClient } from "../chat/live-chat-client.mjs";
+import { watchHtmlLive, liveChatResponse, textAction } from "../chat/fixtures-innertube.mjs";
 
 // 魂コクピット・サーバの機械テスト（S2.5 Domain A）。pipeline / デバイス列挙 / spawn を全注入し、
 // 実マイク・実 ffmpeg・実 whisper・実 ONNX を一切使わずに HTTP/SSE/結線/クリーンシャットダウンを固定する。
@@ -2153,6 +2155,138 @@ function makeFakeChatClientFactory() {
   };
   return { factory, record, get last() { return record.clients[record.clients.length - 1]; } };
 }
+
+test("YouTube 再配信: 自動復帰後は既読4件を除き新着だけを順に取り込む", async () => {
+  const old = ["挨拶", "二番目", "三番目", "四番目"];
+  const batches = [old, null, [...old, "切断中の新着"], ["次の新着", "最後の新着"]];
+  const g = makeManualGuard();
+  const chatCalls = [];
+  const fakePipe = makeOnAppendPipeline();
+  const fakeOrch = makeFakeOrchestrator();
+  let watchCalls = 0;
+  /** @type {Map<number, () => void>} */
+  const timers = new Map();
+  let timerId = 0;
+  const chat = createLiveChatClient({
+    source: "vid00000001",
+    fetchImpl: async (url) => {
+      if (!String(url).includes("get_live_chat")) {
+        watchCalls += 1;
+        return new Response(watchHtmlLive());
+      }
+      const batch = batches.shift();
+      if (!batch) throw new Error("模擬切断");
+      return Response.json(liveChatResponse({
+        continuation: "NEXT",
+        actions: batch.map((name) => textAction({ author: "視聴者", runs: [name], id: name }))
+      }));
+    },
+    setTimeoutImpl: /** @type {any} */ ((fn) => (timers.set(++timerId, fn), timerId)),
+    clearTimeoutImpl: /** @type {any} */ ((id) => timers.delete(id))
+  });
+  async function runNextPoll() {
+    assert.equal(timers.size, 1);
+    const [id, run] = [...timers][0];
+    timers.delete(id);
+    run();
+    await chat.idle();
+  }
+  const server = createCockpitServer({
+    commentGuard: g.guard,
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    fireOrchestratorFactory: /** @type {any} */ (fakeOrch.factory),
+    fireSchedulerFactory: recordingSchedulerFactory(chatCalls),
+    chatClientFactory: () => chat
+  });
+  try {
+    const url = await server.listen(0);
+    assert.equal((await postJson(`${url}/api/stream/start`, { device: "Mic" })).status, 200);
+    assert.equal((await postJson(`${url}/api/chat/connect`, { source: chat.getSource() })).status, 200);
+    assert.deepEqual(g.calls.map((c) => c.comment.text), old);
+    for (const call of g.calls) call.resolve(passAllGuard());
+    await settle();
+
+    await runNextPoll();
+    assert.equal(chat.getState(), "retrying");
+    await runNextPoll();
+    assert.equal(chat.getState(), "live");
+    assert.equal(watchCalls, 2);
+    assert.deepEqual(g.calls.map((c) => c.comment.text), [...old, "切断中の新着"]);
+    g.calls[4].resolve(passAllGuard());
+    await settle();
+    assert.deepEqual(fakePipe.record.buffer.all().map((entry) => entry.text), [...old, "切断中の新着"]);
+
+    await runNextPoll();
+    g.calls[6].resolve(passAllGuard());
+    await settle();
+    assert.equal(fakePipe.record.buffer.all().length, 5);
+    g.calls[5].resolve(passAllGuard());
+    await settle();
+    const expected = [...old, "切断中の新着", "次の新着", "最後の新着"];
+    assert.deepEqual(g.calls.map((c) => c.comment.text), expected);
+    assert.deepEqual(fakePipe.record.buffer.all().map((entry) => entry.text), expected);
+    assert.deepEqual(chatCalls.map((entry) => entry.text), expected);
+  } finally {
+    await server.close();
+  }
+});
+
+test("YouTube 再配信: 場外、判定待ち、手動再接続、動画と投稿の識別、閉場", async () => {
+  const fakePipe = makeOnAppendPipeline();
+  const fakeChat = makeFakeChatClientFactory();
+  const g = makeManualGuard();
+  const server = createCockpitServer({
+    commentGuard: g.guard,
+    pipelineFactory: /** @type {any} */ (fakePipe.factory),
+    chatClientFactory: fakeChat.factory
+  });
+  const message = { text: "同じ本文", videoId: "vid00000001", messageId: "m1" };
+  try {
+    const url = await server.listen(0);
+    const post = (path, body = {}) => postJson(`${url}${path}`, body);
+    assert.equal((await post("/api/chat/connect", { source: "https://www.youtube.com/watch?v=vid00000001" })).status, 200);
+    fakeChat.last.emitMessage(message);
+    assert.equal(g.calls.length, 0, "場外では受付しない");
+    assert.equal((await post("/api/stream/start", { device: "Mic" })).status, 200);
+    fakeChat.last.emitMessage(message);
+    fakeChat.last.emitMessage(message);
+    assert.equal(g.calls.length, 1, "判定待ちの再着は受付しない");
+    g.calls[0].resolve(passAllGuard());
+    await settle();
+
+    assert.equal((await post("/api/chat/disconnect")).status, 200);
+    fakeChat.last.emitMessage({ ...message, messageId: "while-disconnected" });
+    assert.equal(g.calls.length, 1, "切断した器官のイベントは受付しない");
+    assert.equal((await post("/api/chat/connect", { source: "https://youtu.be/vid00000001" })).status, 200);
+    fakeChat.last.emitMessage(message);
+    assert.equal(g.calls.length, 1, "同じ動画はURL表記を変えても再着を受付しない");
+    fakeChat.last.emitMessage({ ...message, messageId: "while-disconnected" });
+    assert.equal(g.calls.length, 2);
+    fakeChat.last.emitMessage({ ...message, messageId: "m2" });
+    assert.equal(g.calls.length, 3, "同じ本文でも投稿IDが異なれば受け付ける");
+    assert.equal((await post("/api/chat/connect", { source: "https://youtu.be/vid00000002" })).status, 200);
+    fakeChat.last.emitMessage({ ...message, videoId: "vid00000002" });
+    assert.equal(g.calls.length, 4, "別動画で同じ投稿IDなら受け付ける");
+    for (const partial of [{ messageId: null }, { videoId: null }]) {
+      fakeChat.last.emitMessage({ ...message, ...partial });
+      fakeChat.last.emitMessage({ ...message, ...partial });
+    }
+    assert.equal(g.calls.length, 8, "識別できない投稿は従来どおり受け付ける");
+    for (const call of g.calls.slice(1)) call.resolve(passAllGuard());
+    await settle();
+    assert.equal(fakePipe.record.buffer.all().length, 8);
+
+    assert.equal((await post("/api/stream/stop")).status, 200);
+    assert.equal((await post("/api/stream/start", { device: "Mic" })).status, 200);
+    fakeChat.last.emitMessage({ ...message, videoId: "vid00000002" });
+    assert.equal(g.calls.length, 9, "場を開き直すと受け付ける");
+    g.calls[8].resolve(passAllGuard());
+    await settle();
+    assert.equal(fakePipe.record.buffer.all().length, 1);
+  } finally {
+    await server.close();
+  }
+});
 
 test("cockpit S7 chat Connect: factory から器官生成・start・onMessage→viewer 行・onStatus→chatStatus・onDiagnostic→chatDiagnostic を結線", async () => {
   const fakePipe = makeOnAppendPipeline();
