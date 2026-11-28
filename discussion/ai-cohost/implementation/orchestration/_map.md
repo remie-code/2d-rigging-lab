@@ -4,6 +4,7 @@
 
 | Path | Status | Content |
 |---|---|---|
+| [発話モーションの演技一覧キャッシュ](sentence-motion-catalog-cache-wave-plan.md) | 実装・実API確認・独立レビュー合格（2026-11-28） | 毎文の一括判定で、配布中の演技説明3,938トークンを次の台詞でも再利用できた。[検証結果](../reviews/sentence-motion-catalog-cache.md) |
 | [YouTubeコメントの再取り込み](youtube-comment-redelivery-wave-plan.md) | 実装・独立レビュー合格（2026-11-25） | 再接続時に既読の挨拶が重なる現象と、場単位の既読管理。[検証結果](../reviews/youtube-comment-redelivery.md) |
 | [sentence-motion-decision-wave-plan.md](sentence-motion-decision-wave-plan.md) | 両Wave実装・独立レビュー合格、実会話確認待ち（2026-11-22） | 読み上げ文からの演技判定と記録、音声を待たせない再生と連続演技。[完了記録](../waves/sentence-motion-decision/wave2-completion.md) |
 | [game-dialogue-ocr-wave-plan.md](game-dialogue-ocr-wave-plan.md) | 両Wave独立レビュー合格・文字起こしを配信者が確認（2026-11-22） | ゲーム画面の継続OCRと配信STT設定の保存。[録画](../waves/game-dialogue-ocr/wave-1a-completion.md)・[配信設定](../waves/game-dialogue-ocr/wave-1b-completion.md)・[Windows検証と本人確認手順](../waves/game-dialogue-ocr/wave-2-completion.md) |

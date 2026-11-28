@@ -157,8 +157,8 @@ test("speech motion is pinned to the connection that owned the Fire", async () =
       return createSpeechIntentMotion({
         channel,
         getCatalog,
-        judge({ questions }) {
-          advertisedDescriptions.push(questions[0].choices.find(({ value }) => value === "receive").description);
+        judge({ cachedPrefix }) {
+          advertisedDescriptions.push(cachedPrefix.split("\n").find((line) => line.startsWith("receive\t")));
           const reply = Promise.withResolvers();
           judgeStarted[decide.length].resolve();
           decide.push(() => reply.resolve({ answers: {
@@ -195,7 +195,7 @@ test("speech motion is pinned to the connection that owned the Fire", async () =
   assert.deepEqual(await oldStart.playback, { kind: "skipped" });
   assert.deepEqual(requests.map(({ op, connectionGeneration }) => [op, connectionGeneration]),
     [["begin", 2], ["play", 2]]);
-  assert.deepEqual(advertisedDescriptions, ["世代1", "世代2"]);
+  assert.deepEqual(advertisedDescriptions, ['receive\t"世代1"', 'receive\t"世代2"']);
   await lazy.close();
   assert.equal(fresh.isActive(), false);
 });

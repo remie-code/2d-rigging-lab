@@ -22,21 +22,21 @@ const questionsFor = (registry) => [
 ];
 
 export async function decideSpeechIntentMotion({ intent, text, context }, judge, registry) {
-  return decideSpeechMotion({ text, input: { intent, text, context }, questionsFor }, judge, registry);
+  return decideSpeechMotion({ text, requestFor: (catalog) => ({
+    input: JSON.stringify({ intent, text, context }),
+    questions: questionsFor(catalog)
+  }) }, judge, registry);
 }
 
-export async function decideSpeechMotion({ text, input, questionsFor, fallbackAttention }, judge, registry) {
+export async function decideSpeechMotion({ text, requestFor, fallbackAttention }, judge, registry) {
   if (!text.trim()) return { kind: "skipped", reason: "empty-text" };
   if (!registry || !Object.keys(registry.performances).length) {
     return { kind: "unsupported", reason: "speech-motion-catalog-unavailable" };
   }
-  const questions = questionsFor(registry);
   try {
-    const { answers, latencyMs } = await judge({
-      input: JSON.stringify(input),
-      questions
-    });
-    const [performance, attention] = questions.map(({ name }) => answers?.[name]);
+    const request = requestFor(registry);
+    const { answers, latencyMs } = await judge(request);
+    const [performance, attention] = request.questions.map(({ name }) => answers?.[name]);
     const performanceId = performance?.type === "choice" ? performance.choice : null;
     const attentionTargetId = attention?.type === "choice" ? attention.choice : null;
     const selection = { performanceId, attentionTargetId, latencyMs };

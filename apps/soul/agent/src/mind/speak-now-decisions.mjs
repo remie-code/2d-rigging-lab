@@ -27,6 +27,7 @@
  *  （コメント判定は 5 秒・comment-guard.mjs）。
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -122,6 +123,7 @@ function redactKey(text, apiKey) {
 
 /**
  * @typedef {{ value: string; description: string }} SpeakNowChoice
+ * @typedef {{ input: string; questions: ReadonlyArray<object>; cachedPrefix?: string }} DecisionsRequest
  * @typedef {{ input: string; instructions: string; choices: ReadonlyArray<SpeakNowChoice> }} JudgeRequest
  * @typedef {{ choice: string; probs: Record<string, number>; latencyMs: number }} JudgeResult
  */
@@ -159,12 +161,11 @@ function createDecisionsTransport(options = {}) {
 
   /**
    * @template T
-   * @param {string} input
-   * @param {ReadonlyArray<object>} questions
+   * @param {DecisionsRequest} request
    * @param {(json: any, elapsed: () => number) => T} parse
    * @returns {Promise<T>}
    */
-  return async function send(input, questions, parse) {
+  return async function send({ input, questions, cachedPrefix }, parse) {
     /** @type {{ ok: boolean; apiKey?: string; reason?: string }} */
     let key;
     try {
@@ -176,7 +177,16 @@ function createDecisionsTransport(options = {}) {
       throw new SpeakNowJudgeError((key && key.reason) || "Decisions API のキーが見つからない", null, { kind: "no-key" });
     }
     const apiKey = key.apiKey;
-    const body = JSON.stringify({ model, input, questions });
+    const body = JSON.stringify(cachedPrefix === undefined ? { model, input, questions } : {
+      model,
+      input: [
+        { role: "developer", content: [{ type: "input_text", text: cachedPrefix, prompt_cache_breakpoint: { mode: "explicit" } }] },
+        { role: "user", content: input }
+      ],
+      questions,
+      prompt_cache_options: { mode: "explicit", ttl: "30m" },
+      prompt_cache_key: `chappy-motion-${createHash("sha256").update(cachedPrefix).digest("hex").slice(0, 32)}`
+    });
 
     const started = nowImpl();
     const elapsed = () => Math.round(nowImpl() - started);
@@ -261,7 +271,7 @@ export function createDecisionsJudge(options = {}) {
     const choices = request.choices.map((c) => ({ value: c.value, description: c.description }));
     const allowed = new Set(choices.map((c) => c.value));
     const questions = [{ type: "choice", name: DECISIONS_QUESTION_NAME, instructions: request.instructions, choices }];
-    return send(request.input, questions, (json, elapsed) => {
+    return send({ input: request.input, questions }, (json, elapsed) => {
       const answers = json && Array.isArray(json.answers) ? json.answers : [];
       const answer = answers.find((/** @type {any} */ a) => a && a.name === DECISIONS_QUESTION_NAME) ?? null;
       const choice = answer && typeof answer.choice === "string" ? answer.choice : null;
@@ -274,7 +284,7 @@ export function createDecisionsJudge(options = {}) {
 }
 
 /**
- * @typedef {{ type: "choice"; name: string; instructions: string; choices: ReadonlyArray<SpeakNowChoice> } |
+ * @typedef {{ type: "choice"; name: string; instructions: string; choices: ReadonlyArray<{ value: string; description?: string }> } |
  *   { type: "predicate"; name: string; instructions: string }} DecisionsQuestion
  * @typedef {{ type: "choice"; choice: string; probs: Record<string, number> } |
  *   { type: "predicate"; probability: number } |
@@ -289,7 +299,7 @@ export function createDecisionsJudge(options = {}) {
  * 選択肢外・probability が数でない等）は answers に載せない（どう扱うかは呼び出し側が決める）。
  * answers 配列そのものが無い応答は失敗（SpeakNowJudgeError）。
  * @param {DecisionsTransportOptions} [options]
- * @returns {(request: { input: string; questions: ReadonlyArray<DecisionsQuestion> }) => Promise<DecisionsQuestionsResult>}
+ * @returns {(request: { input: string; questions: ReadonlyArray<DecisionsQuestion>; cachedPrefix?: string }) => Promise<DecisionsQuestionsResult>}
  */
 export function createDecisionsQuestionsJudge(options = {}) {
   const send = createDecisionsTransport(options);
@@ -304,7 +314,7 @@ export function createDecisionsQuestionsJudge(options = {}) {
           }
         : { type: "predicate", name: q.name, instructions: q.instructions }
     );
-    return send(request.input, questions, (json, elapsed) => {
+    return send({ input: request.input, questions, cachedPrefix: request.cachedPrefix }, (json, elapsed) => {
       if (!json || !Array.isArray(json.answers)) {
         throw new SpeakNowJudgeError("応答の形が想定外（answers が無い）", elapsed(), { kind: "shape" });
       }
