@@ -123,10 +123,20 @@ function redactKey(text, apiKey) {
 
 /**
  * @typedef {{ value: string; description: string }} SpeakNowChoice
- * @typedef {{ input: string; questions: ReadonlyArray<object>; cachedPrefix?: string }} DecisionsRequest
- * @typedef {{ input: string; instructions: string; choices: ReadonlyArray<SpeakNowChoice> }} JudgeRequest
+ * @typedef {{ input: string | ReadonlyArray<object>; questions: ReadonlyArray<object>; cacheKey?: string }} DecisionsRequest
+ * @typedef {{ input: string; instructions: string; choices: ReadonlyArray<SpeakNowChoice>; historyPrefixLength?: number }} JudgeRequest
  * @typedef {{ choice: string; probs: Record<string, number>; latencyMs: number }} JudgeResult
  */
+
+/** @param {string} text */
+function cachedText(text) {
+  return { type: "input_text", text, prompt_cache_breakpoint: { mode: "explicit" } };
+}
+
+/** @param {string} purpose @param {string} prefix */
+function promptCacheKey(purpose, prefix) {
+  return `chappy-${purpose}-${createHash("sha256").update(prefix).digest("hex").slice(0, 32)}`;
+}
 
 /**
  * @typedef {object} DecisionsTransportOptions
@@ -165,7 +175,7 @@ function createDecisionsTransport(options = {}) {
    * @param {(json: any, elapsed: () => number) => T} parse
    * @returns {Promise<T>}
    */
-  return async function send({ input, questions, cachedPrefix }, parse) {
+  return async function send({ input, questions, cacheKey }, parse) {
     /** @type {{ ok: boolean; apiKey?: string; reason?: string }} */
     let key;
     try {
@@ -177,15 +187,9 @@ function createDecisionsTransport(options = {}) {
       throw new SpeakNowJudgeError((key && key.reason) || "Decisions API のキーが見つからない", null, { kind: "no-key" });
     }
     const apiKey = key.apiKey;
-    const body = JSON.stringify(cachedPrefix === undefined ? { model, input, questions } : {
-      model,
-      input: [
-        { role: "developer", content: [{ type: "input_text", text: cachedPrefix, prompt_cache_breakpoint: { mode: "explicit" } }] },
-        { role: "user", content: input }
-      ],
-      questions,
-      prompt_cache_options: { mode: "explicit", ttl: "30m" },
-      prompt_cache_key: `chappy-motion-${createHash("sha256").update(cachedPrefix).digest("hex").slice(0, 32)}`
+    const body = JSON.stringify({
+      model, input, questions,
+      ...(cacheKey === undefined ? {} : { prompt_cache_options: { mode: "explicit", ttl: "30m" }, prompt_cache_key: cacheKey })
     });
 
     const started = nowImpl();
@@ -270,8 +274,27 @@ export function createDecisionsJudge(options = {}) {
   return async function judge(request) {
     const choices = request.choices.map((c) => ({ value: c.value, description: c.description }));
     const allowed = new Set(choices.map((c) => c.value));
-    const questions = [{ type: "choice", name: DECISIONS_QUESTION_NAME, instructions: request.instructions, choices }];
-    return send({ input: request.input, questions }, (json, elapsed) => {
+    const question = { type: "choice", name: DECISIONS_QUESTION_NAME, instructions: request.instructions, choices };
+    /** @type {DecisionsRequest} */
+    let payload = { input: request.input, questions: [question] };
+    if (request.historyPrefixLength !== undefined) {
+      const rubric = [request.instructions, ...choices.map((c) => `${c.value}：${c.description}`)].join("\n");
+      const history = request.input.slice(0, request.historyPrefixLength);
+      const current = request.input.slice(request.historyPrefixLength);
+      /** @type {Array<{ type: string; text: string; prompt_cache_breakpoint?: { mode: string } }>} */
+      const conversation = history ? [cachedText(history)] : [];
+      if (current) conversation.push({ type: "input_text", text: current });
+      payload = {
+        input: [{ role: "developer", content: rubric }, { role: "user", content: conversation }],
+        questions: [{
+          ...question,
+          instructions: "会話を読み、冒頭の判定基準に従って、今とる反応を一つ選んでください。",
+          choices: choices.map(({ value }) => ({ value }))
+        }],
+        ...(history ? { cacheKey: promptCacheKey("speak-now", JSON.stringify([rubric, history])) } : {})
+      };
+    }
+    return send(payload, (json, elapsed) => {
       const answers = json && Array.isArray(json.answers) ? json.answers : [];
       const answer = answers.find((/** @type {any} */ a) => a && a.name === DECISIONS_QUESTION_NAME) ?? null;
       const choice = answer && typeof answer.choice === "string" ? answer.choice : null;
@@ -314,7 +337,13 @@ export function createDecisionsQuestionsJudge(options = {}) {
           }
         : { type: "predicate", name: q.name, instructions: q.instructions }
     );
-    return send({ input: request.input, questions, cachedPrefix: request.cachedPrefix }, (json, elapsed) => {
+    const prefix = request.cachedPrefix;
+    const payload = prefix === undefined ? { input: request.input, questions } : {
+      input: [{ role: "developer", content: [cachedText(prefix)] }, { role: "user", content: request.input }],
+      questions,
+      cacheKey: promptCacheKey("motion", prefix)
+    };
+    return send(payload, (json, elapsed) => {
       if (!json || !Array.isArray(json.answers)) {
         throw new SpeakNowJudgeError("応答の形が想定外（answers が無い）", elapsed(), { kind: "shape" });
       }

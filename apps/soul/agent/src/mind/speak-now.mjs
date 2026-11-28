@@ -15,7 +15,7 @@
  *    （discussion/ai-cohost/decisions/speak-now/experiments/04-look-request.md・e2・2026-10-22 採用）。チャッピーの目は
  *    発火したときにだけ画面を撮るので、「画面見て」に応えるには発火が要る。説明は「今の画面を見てから反応する。」
  *    だけで、事情の一文やキーワードのルールは足さない。
- *  - 入力: 直近 3 分の会話（「配信者: …」「{名前}: …」）。行数の上限なし。視聴者コメントは入れない。
+ *  - 入力: 直前の完了した 3 分間と現在の分の会話（「配信者: …」「{名前}: …」）。行数の上限なし。視聴者コメントは入れない。
  *  - 結果は最大確率の選択（judge が返す choice）をそのまま使う（しきい値なし）。
  *
  * ── 動き（合意 §2）と タイミング（合意 §3）─────────────────────────────────────
@@ -52,8 +52,9 @@
  * 全分岐をテストする。
  */
 
-/** 判定の入力に入れる会話の幅（直近 3 分・合意 §1）。 */
+/** 現在の分の開始時刻からさかのぼる幅。 */
 export const SPEAK_NOW_CONTEXT_MS = 180_000;
+const MINUTE_MS = 60_000;
 
 /** 会話の配信者側のラベル（合意 §1）。 */
 export const SPEAK_NOW_HOST_LABEL = "配信者";
@@ -179,7 +180,7 @@ export function buildSpeakNowInput(entries, { nowMs, soulName, windowMs = SPEAK_
  *   hostLabel: string;
  *   buildInstructions: (p: { name: string; verbosity?: string | null }) => string;
  *   buildChoices: (name: string) => SpeakNowChoices;
- *   buildInput: (entries: ReadonlyArray<any>, p: { nowMs: number; soulName: string; hostLabel: string }) => string;
+ *   buildInput: (entries: ReadonlyArray<any>, p: { nowMs: number; soulName: string; hostLabel: string; windowMs?: number }) => string;
  *   backchannelInstruction: string;
  * }} SpeakNowQuestions
  *   speak-now の問いの組（Discord モード Domain C・discord-mode.md §8 の b）。
@@ -322,9 +323,31 @@ function lastHostSeq(entries) {
 }
 
 /**
+ * 判定には窓の会話全体と、その中の直前3分の末尾位置を渡す。
+ * @param {ReadonlyArray<any>} entries
+ * @param {SpeakNowQuestions} questions
+ * @param {number} nowMs
+ * @param {string} soulName
+ */
+function buildConversationWindow(entries, questions, nowMs, soulName) {
+  const minuteStart = Math.floor(nowMs / MINUTE_MS) * MINUTE_MS;
+  const from = minuteStart - SPEAK_NOW_CONTEXT_MS;
+  const window = entries.filter((e) => !Number.isFinite(e?.appendedAtMs) || (e.appendedAtMs >= from && e.appendedAtMs <= nowMs));
+  const format = (/** @type {ReadonlyArray<any>} */ rows) => questions.buildInput(rows, {
+    nowMs, windowMs: nowMs - from, soulName, hostLabel: questions.hostLabel
+  });
+  const input = format(window);
+  const completed = window.filter((e) => Number.isFinite(e?.appendedAtMs) && e.appendedAtMs < minuteStart);
+  const prefix = completed.length ? format(completed) : "";
+  // 場ごとの整形を許すので、同じ文面が実際の入力の先頭にあるときだけ境界を置く。
+  const historyPrefixLength = prefix && typeof input === "string" && (input === prefix || input.startsWith(prefix + "\n")) ? prefix.length : 0;
+  return { input, historyPrefixLength };
+}
+
+/**
  * speak-now の判定を回す部品を作る。
  * @param {object} options
- * @param {(request: { input: string; instructions: string; choices: ReadonlyArray<{ value: string; description: string }> }) =>
+ * @param {(request: import("./speak-now-decisions.mjs").JudgeRequest) =>
  *   Promise<{ choice: string; probs?: Record<string, number>; latencyMs?: number }>} options.judge  判定エンジン（差し替え可能）。
  * @param {() => ReadonlyArray<any>} options.getEntries  転写バッファの全エントリ（耳未起動なら空）。
  * @param {() => boolean} options.isBusy  チャッピーが考えて喋り終わるまでの間か。
@@ -397,11 +420,12 @@ export function createSpeakNowController(options) {
   const runJudge = (trigger, seqHint = null) => {
     const name = getName();
     const entries = getEntries() ?? [];
-    const input = questions.buildInput(entries, { nowMs: nowImpl(), soulName: name, hostLabel: questions.hostLabel });
+    const { input, historyPrefixLength } = buildConversationWindow(entries, questions, nowImpl(), name);
     if (typeof input !== "string" || input.length === 0) return; // 窓に会話が無い（判定する材料が無い）。
     const triggerSeq = typeof seqHint === "number" && Number.isFinite(seqHint) ? seqHint : lastHostSeq(entries);
     const request = {
       input,
+      historyPrefixLength,
       instructions: questions.buildInstructions({ name, verbosity: getVerbosity() }),
       choices: questions.buildChoices(name)
     };

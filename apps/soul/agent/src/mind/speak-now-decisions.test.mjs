@@ -12,7 +12,7 @@ import {
   DECISIONS_TIMEOUT_MS,
   DEFAULT_DECISIONS_ENV_PATH
 } from "./speak-now-decisions.mjs";
-import { buildSpeakNowChoices } from "./speak-now.mjs";
+import { buildSpeakNowChoices, createSpeakNowController, STREAM_SPEAK_NOW_QUESTIONS, DISCORD_SPEAK_NOW_QUESTIONS } from "./speak-now.mjs";
 
 // Decisions API 判定エンジンの機械テスト。fetch・タイマ・時計は全部 fake（実 API には繋がない）。
 
@@ -77,6 +77,50 @@ const okResponse = (choice = "initiate") => ({
 });
 
 const request = () => ({ input: "配信者: やばい\nチャッピー: どうしたの", instructions: "問い", choices: buildSpeakNowChoices("チャッピー") });
+
+for (const questions of [STREAM_SPEAK_NOW_QUESTIONS, DISCORD_SPEAK_NOW_QUESTIONS]) {
+  test(`発話判定の送信（${questions.hostLabel}）: 短い初回、直前の会話と新しい発言、場の問いと5択`, async () => {
+    const { fetchImpl, calls } = makeFetch(okResponse("wait"));
+    let now = 599_999;
+    const entries = [{ speaker: "you", displayName: "ミオ", text: "最初の一言", appendedAtMs: now }];
+    const ctl = createSpeakNowController({
+      questions, judge: createDecisionsJudge({ apiKeyProvider: keyOk, fetchImpl }),
+      getEntries: () => entries, getName: () => "コーディ", getVerbosity: () => "quiet",
+      isActive: () => true, isBusy: () => false, nowImpl: () => now, onFire: () => {}
+    });
+    ctl.handleTranscript(entries[0]);
+    now++;
+    const line = (text, displayName = "ミオ") => {
+      const entry = { speaker: "you", displayName, text, appendedAtMs: now };
+      entries.push(entry);
+      ctl.handleTranscript(entry);
+    };
+    line("続き");
+    line("今の質問", "レン");
+    await new Promise((resolve) => setImmediate(resolve));
+    const [first, second, third] = calls.map(({ body }) => body);
+    const firstText = `${questions.hostLabel}(ミオ): 最初の一言`;
+    assert.deepEqual(first.input[1], { role: "user", content: [{ type: "input_text", text: firstText }] });
+    assert.equal(first.prompt_cache_options, undefined);
+    const choices = questions.buildChoices("コーディ");
+    const rubric = [questions.buildInstructions({ name: "コーディ", verbosity: "quiet" }), ...choices.map((c) => `${c.value}：${c.description}`)].join("\n");
+    for (const body of [first, second, third]) {
+      assert.deepEqual(body.input[0], { role: "developer", content: rubric });
+      assert.equal(body.input.length, 2);
+      assert.deepEqual(body.questions[0].choices, choices.map(({ value }) => ({ value })));
+      assert.equal(body.questions[0].name, "reaction");
+    }
+    assert.deepEqual(third.input[1], { role: "user", content: [
+      { type: "input_text", text: firstText, prompt_cache_breakpoint: { mode: "explicit" } },
+      { type: "input_text", text: `\n${questions.hostLabel}(ミオ): 続き\n${questions.hostLabel}(レン): 今の質問` }
+    ] });
+    assert.deepEqual(second.input[1].content[0], third.input[1].content[0]);
+    assert.deepEqual(third.prompt_cache_options, { mode: "explicit", ttl: "30m" });
+    assert.match(third.prompt_cache_key, /^chappy-speak-now-/);
+    assert.equal(second.prompt_cache_key, third.prompt_cache_key);
+    ctl.dispose();
+  });
+}
 
 test("loadDecisionsApiKey: env ファイルから OPENAI_DECISIONS_API_KEY を読む（process.env には入れない）", () => {
   const before = process.env.OPENAI_DECISIONS_API_KEY;

@@ -946,7 +946,7 @@ const MAX_PORT_REROLLS = 50;
  *   scheduler が無ければ意味を持たない。
  * @param {(mode: string) => void | Promise<void>} [options.onSetSpeakStartMode]
  *   話し始めの方式の永続化フック（POST /api/speak-start が呼ぶ・onSetVerbosity と同型の失敗寛容）。
- * @param {(request: { input: string; instructions: string; choices: ReadonlyArray<{ value: string; description: string }> }) =>
+ * @param {(request: import("../mind/speak-now-decisions.mjs").JudgeRequest) =>
  *   Promise<{ choice: string; probs?: Record<string, number>; latencyMs?: number }>} [options.speakNowJudge]
  *   speak-now の判定エンジン（テスト注入用）。既定は Decisions API 実装（createDecisionsJudge・キーは
  *   decisionsApiKeyProvider で判定ごとに読む・タイムアウト 3 秒）。

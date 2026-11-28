@@ -557,6 +557,7 @@ test("Domain C 問いの組: 渡さなければ判定に渡る問い・選択肢
   const { controller, env } = makeController();
   controller.handleTranscript({ speaker: "you", seq: 1 });
   assert.deepEqual(env.requests[0], {
+    historyPrefixLength: "配信者(たろう): どう思う？".length,
     input: buildSpeakNowInput([{ speaker: "you", text: "どう思う？", displayName: "たろう", appendedAtMs: NOW - 1000 }], { nowMs: NOW, soulName: "チャッピー" }),
     instructions: buildSpeakNowInstructions({ name: "チャッピー", verbosity: "normal" }),
     choices: buildSpeakNowChoices("チャッピー")
