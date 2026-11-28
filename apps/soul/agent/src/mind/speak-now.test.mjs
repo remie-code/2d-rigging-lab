@@ -275,6 +275,7 @@ test("判定の失敗は onError（発火しない）・reset で積み残しを
 
 test("窓に会話が無ければ判定しない（材料なし）", () => {
   const h = makeHarness();
+  h.state.now = 240_000;
   const old = { speaker: "you", text: "昔の話", appendedAtMs: 0 };
   h.entries.push(old);
   h.state.busy = true;
@@ -282,6 +283,47 @@ test("窓に会話が無ければ判定しない（材料なし）", () => {
   h.state.busy = false;
   h.ctl.notifyIdle();
   assert.equal(h.calls.length, 0);
+});
+
+test("現在の分の開始を基準に直前3分を取り、分替わりで欠落や重複がない", () => {
+  const h = makeHarness();
+  const minute = 600_000;
+  for (const [at, text] of [[minute - 180_001, "期限外"], [minute - 180_000, "窓の先頭"], [minute - 120_000, "次の窓の先頭"], [minute - 1, "直前"]]) {
+    h.entries.push({ speaker: "you", text, appendedAtMs: at });
+  }
+  h.state.now = minute;
+  h.say("分の先頭");
+  h.state.now = minute + 59_999;
+  h.say("分の末尾");
+  h.state.now++;
+  h.say("次の分");
+  const parts = h.calls.map(({ request }) => [request.input.slice(0, request.historyPrefixLength), request.input.slice(request.historyPrefixLength)]);
+  const past = "配信者: 窓の先頭\n配信者: 次の窓の先頭\n配信者: 直前";
+  assert.deepEqual(parts, [
+    [past, "\n配信者: 分の先頭"],
+    [past, "\n配信者: 分の先頭\n配信者: 分の末尾"],
+    ["配信者: 次の窓の先頭\n配信者: 直前\n配信者: 分の先頭\n配信者: 分の末尾", "\n配信者: 次の分"]
+  ]);
+});
+
+test("busy解除時に現在分が空でも、保留された人の声を直前の分に含め、一度だけ判定する", async () => {
+  const h = makeHarness();
+  h.state.busy = true;
+  h.state.now = 599_999;
+  h.say("手伝ってほしい");
+  h.state.now++;
+  h.state.busy = false;
+  h.ctl.notifyIdle();
+  h.ctl.notifyIdle();
+  assert.equal(h.calls.length, 1);
+  const { request } = h.calls[0];
+  assert.equal(request.input, "配信者: 手伝ってほしい");
+  assert.equal(request.historyPrefixLength, request.input.length);
+  h.calls[0].resolve(result("respond"));
+  await flush();
+  assert.equal(h.fires.length, 1);
+  assert.equal(h.fires[0].trigger, "after-busy");
+  assert.equal(h.fires[0].triggerSeq, 0);
 });
 
 // ── 画面を見る（discussion/ai-cohost/decisions/speak-now/experiments/04-look-request.md）──────────────
